@@ -5,6 +5,7 @@ import BrowserEngine
 @MainActor
 enum BrowserDailyCommands {
     static func install<Engine: BrowserEngine>(in registry: BrowserCommandRegistry<BrowserWindowController<Engine>>) {
+        BrowserPasswordCommands.install(in: registry)
         try! registry.register(.manageExtensions, validate: {
             $0.engine.extensionManagement != nil && $0.session.selectedSurface != nil
         }) { controller, _ in

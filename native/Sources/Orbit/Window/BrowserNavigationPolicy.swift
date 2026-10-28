@@ -1,3 +1,4 @@
+import BrowserCore
 import BrowserEngine
 import Foundation
 
@@ -29,6 +30,35 @@ enum BrowserNavigationPolicy {
 
     static func allowsChromiumSettings(_ url: URL, surface: AnyObject) -> Bool {
         isChromiumSettingsURL(url) && settings[ObjectIdentifier(surface)]?.surface === surface
+    }
+
+    private final class PasswordManagerGrant {
+        weak var surface: AnyObject?
+        let profileID: ProfileID
+        @MainActor init<Surface: BrowserEngineSurface>(_ surface: Surface) {
+            self.surface = surface
+            profileID = surface.profileID
+        }
+    }
+    private static var passwordManagers: [ObjectIdentifier: PasswordManagerGrant] = [:]
+
+    /// Only an explicit shell command grants this surface access. Initial page-created targets
+    /// and typed URLs do not acquire a grant. No credential values cross this boundary.
+    static func authorizePasswordManager<Surface: BrowserEngineSurface>(for surface: Surface) {
+        passwordManagers = passwordManagers.filter { $0.value.surface != nil }
+        passwordManagers[ObjectIdentifier(surface)] = PasswordManagerGrant(surface)
+    }
+
+    static func isPasswordManagerURL(_ url: URL) -> Bool {
+        url.scheme == "chrome" && url.host == "password-manager"
+            && url.user == nil && url.password == nil && url.port == nil
+            && (["", "/", "/passwords", "/settings", "/checkup"].contains(url.path)
+                || url.path.hasPrefix("/passwords/") || url.path.hasPrefix("/checkup/"))
+    }
+
+    static func allowsPasswordManager<Surface: BrowserEngineSurface>(_ url: URL, surface: Surface) -> Bool {
+        guard isPasswordManagerURL(url), let grant = passwordManagers[ObjectIdentifier(surface)] else { return false }
+        return grant.surface === surface && grant.profileID == surface.profileID
     }
 
     private static var files: [ObjectIdentifier: FileGrant] = [:]
@@ -75,10 +105,14 @@ enum BrowserNavigationPolicy {
         held: Bool, routesEnabled: Bool, hooks: BrowserSurfaceEventHooks<Surface>,
         extensionDocuments: Bool = false) -> BrowserNavigationActionPolicy {
         guard held, let url = action.url, let scheme = url.scheme?.lowercased() else { return .cancel }
+        if action.isMainFrame != false, !isPasswordManagerURL(url) {
+            passwordManagers[ObjectIdentifier(surface)] = nil
+        }
+        if isPasswordManagerURL(url), action.isMainFrame == false { return .cancel }
         if action.shouldPerformDownload { return ["http", "https", "blob", "data"].contains(scheme) ? .download : .cancel }
         if extensionDocuments, isExtensionDocument(url) { return .allow }
         guard ["http", "https", "about", "blob", "data"].contains(scheme)
-                || allowsViewSource(url) || allowsChromiumSettings(url, surface: surface) || allowsFile(url, surface: surface, kind: action.kind) else { return .cancel }
+                || allowsViewSource(url) || allowsChromiumSettings(url, surface: surface) || allowsPasswordManager(url, surface: surface) || allowsFile(url, surface: surface, kind: action.kind) else { return .cancel }
         if routesEnabled, case .handled(let policy) = hooks.routeNavigation(from: surface, action: action) { return policy }
         return .allow
     }
@@ -86,7 +120,7 @@ enum BrowserNavigationPolicy {
     static func response<Surface: BrowserEngineSurface>(_ response: BrowserNavigationResponse, surface: Surface,
                                                         held: Bool, extensionDocuments: Bool = false) -> BrowserNavigationResponsePolicy {
         guard held, let url = response.response.url, let scheme = url.scheme?.lowercased() else { return .cancel }
-        return ["http", "https", "about", "blob", "data"].contains(scheme) || allowsViewSource(url) || allowsChromiumSettings(url, surface: surface) || allowsFile(url, surface: surface)
+        return ["http", "https", "about", "blob", "data"].contains(scheme) || allowsViewSource(url) || allowsChromiumSettings(url, surface: surface) || allowsPasswordManager(url, surface: surface) || allowsFile(url, surface: surface)
             || extensionDocuments && isExtensionDocument(url) ? .allow : .cancel
     }
 }

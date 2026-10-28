@@ -1244,6 +1244,47 @@ extension NativeWebKitTests.NativeSettingsTests {
         #expect(BrowserNavigationPolicy.allowsChromiumSettings(URL(string: "chrome://settings/downloads")!, surface: recreated))
     }
 
+    @Test("Password manager grants are shell-only, per surface and profile, and expire on departure")
+    func passwordManagerBoundary() async throws {
+        NSApplication.shared.setActivationPolicy(.prohibited)
+        let engine = SettingsFixtureEngine()
+        engine.reportedKind = .chromium
+        let environment = BrowserEnvironment(engine: engine)
+        let controller = try await environment.makeWindow()
+        defer { controller.window?.close(); environment.autoArchive.scheduler.stop() }
+        let profile = try #require(controller.session.activeProfileID)
+        let target = URL(string: "chrome://password-manager/passwords")!
+        controller.session.openTab(url: target)
+        await controller.session.waitForPendingCommands()
+        let ungranted = try #require(controller.session.selectedSurface)
+        #expect(!BrowserNavigationPolicy.allowsPasswordManager(target, surface: ungranted))
+        try await controller.openPasswordManager(profile: profile)
+        let opened = try #require(controller.session.selectedSurface)
+        #expect(opened !== ungranted && opened.profileID == profile)
+        #expect(opened.navigationState.url == target)
+        for path in ["passwords", "settings", "checkup", "passwords/example.test", "checkup/compromised"] {
+            #expect(BrowserNavigationPolicy.allowsPasswordManager(URL(string: "chrome://password-manager/" + path)!, surface: opened))
+        }
+        for text in ["chrome://settings/", "chrome://flags/", "chrome://password-manager.evil/passwords",
+                     "chrome://user@password-manager/passwords", "chrome://password-manager:80/passwords",
+                     "chrome://password-manager/unrelated"] {
+            #expect(!BrowserNavigationPolicy.allowsPasswordManager(URL(string: text)!, surface: opened))
+        }
+        #expect(!BrowserNavigationPolicy.allowsPasswordManager(target, surface: ungranted))
+        let hooks = controller.engineEventHooks
+        #expect(BrowserNavigationPolicy.action(.init(url: target, isMainFrame: false), surface: opened,
+            held: true, routesEnabled: false, hooks: hooks) == .cancel)
+        #expect(BrowserNavigationPolicy.action(.init(url: URL(string: "https://example.test/")!, isMainFrame: true),
+            surface: opened, held: true, routesEnabled: false, hooks: hooks) == .allow)
+        #expect(!BrowserNavigationPolicy.allowsPasswordManager(target, surface: opened))
+        await #expect(throws: BrowserEngineError.unsupportedOperation) {
+            try await controller.openPasswordManager(profile: ProfileID())
+        }
+        let definition = try #require(OrbitCommandCatalog.definitions.first { $0.id == .openPasswordManager })
+        #expect(definition.title == "Manage Passwords" && definition.menu == "Command Bar")
+        #expect(OrbitCommandCatalog.isCommandBarAction(definition))
+    }
+
     @Test("Settings lists installed shortcuts and omits unsupported or out-of-scope AI actions")
     func settingsShortcutAvailability() {
         let model = settingsModel(BrowserEnvironment(engine: SettingsFixtureEngine()))
