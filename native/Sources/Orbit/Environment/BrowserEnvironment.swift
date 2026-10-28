@@ -63,6 +63,7 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
     var shortcutPreferences = BrowserShortcutPreferences()
     var settings = BrowserSettingsRuntime(store: try! BrowserSettingsStore())
     var boosts = BrowserBoostsRuntime()
+    var lastBoostsEnabled = true
     private var history = BrowserHistoryRecorder()
     var favoriteIcons: FavoriteIconStore?
     let sidebarIconMemory = SidebarIconMemoryCache()
@@ -157,6 +158,16 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
         }
         // Failure remains a visible, retryable cleanup job; it never resurrects the retired model.
         if !pendingRemovals.isEmpty { try? await environment.retrySettingsProfileRemovals() }
+        environment.lastBoostsEnabled = environment.settings.document.enablesBoostsOnWebsites
+        if engine.capabilities.contains(.boosts) {
+            _ = try await environment.initialContext.value
+            for profile in await store.catalogSnapshot().profiles {
+                do {
+                    try await environment.boosts.synchronize(profileID: profile.id,
+                        enabled: environment.settings.document.enablesBoostsOnWebsites, engine: engine)
+                } catch { environment.onPersistenceError?(error) }
+            }
+        }
         if migratesThemes { environment.scheduleSave() }
         return environment
     }

@@ -1,0 +1,517 @@
+diff --git a/BUILD.gn b/BUILD.gn
+index 9b7d215..ee6ad02 100644
+--- a/BUILD.gn
++++ b/BUILD.gn
+@@ -914,6 +914,8 @@ source_set("libcef_static") {
+     "libcef/renderer/browser_config.h",
+     "libcef/renderer/browser_impl.cc",
+     "libcef/renderer/browser_impl.h",
++    "libcef/renderer/orbit_boost_renderer.cc",
++    "libcef/renderer/orbit_boosts.h",
+     "libcef/renderer/chrome/chrome_content_renderer_client_cef.cc",
+     "libcef/renderer/chrome/chrome_content_renderer_client_cef.h",
+     "libcef/renderer/dom_document_impl.cc",
+@@ -1120,6 +1122,9 @@ source_set("libcef_static") {
+       "libcef/browser/orbit/orbit_modal_dialog_host.h",
+       "libcef/browser/orbit/orbit_cef_api.h",
+       "libcef/browser/orbit/orbit_cef_api.mm",
++      "libcef/common/orbit_boosts.h",
++      "libcef/browser/orbit/orbit_boosts.h",
++      "libcef/browser/orbit/orbit_boosts.cc",
+       "libcef/browser/orbit/orbit_password_prompt.h",
+       "libcef/browser/orbit/orbit_password_prompt.mm",
+       "libcef/browser/orbit/orbit_hosted.h",
+diff --git a/libcef/browser/browser_manager.cc b/libcef/browser/browser_manager.cc
+index a9ba929..0b86eeb 100644
+--- a/libcef/browser/browser_manager.cc
++++ b/libcef/browser/browser_manager.cc
+@@ -3,6 +3,8 @@
+ // found in the LICENSE file.
+
+ #include "cef/libcef/browser/browser_manager.h"
++#include "cef/libcef/browser/orbit/orbit_boosts.h"
++#include "cef/libcef/browser/thread_util.h"
+
+ #include "cef/libcef/browser/browser_info_manager.h"
+ #include "cef/libcef/browser/origin_whitelist_impl.h"
+@@ -58,3 +60,17 @@ void CefBrowserManager::GetNewBrowserInfo(
+                                           render_frame_token),
+       std::move(callback));
+ }
++
++void CefBrowserManager::GetBoosts(GetBoostsCallback callback) {
++  // This receiver runs on IO. BrowserContext and process-host lookup belong to UI;
++  // the reply returns to the receiver sequence without retaining this connection.
++  CEF_TASK_RUNNER<CEF_UIT>()->PostTaskAndReplyWithResult(
++      FROM_HERE,
++      base::BindOnce([](content::ChildProcessId id) {
++        auto* host = content::RenderProcessHost::FromID(id);
++        return orbit::BoostSnapshot(host ? host->GetBrowserContext() : nullptr);
++      }, render_process_id_),
++      base::BindOnce([](GetBoostsCallback cb, std::string snapshot) {
++        std::move(cb).Run(snapshot);
++      }, std::move(callback)));
++}
+diff --git a/libcef/browser/browser_manager.h b/libcef/browser/browser_manager.h
+index f3c8baa..ed5491e 100644
+--- a/libcef/browser/browser_manager.h
++++ b/libcef/browser/browser_manager.h
+@@ -42,6 +42,7 @@ class CefBrowserManager : public cef::mojom::BrowserManager {
+       content::RenderProcessHost* host);
+
+  private:
++  void GetBoosts(GetBoostsCallback callback) override;
+   // cef::mojom::BrowserManager methods:
+   void GetNewRenderThreadInfo(
+       cef::mojom::BrowserManager::GetNewRenderThreadInfoCallback callback)
+diff --git a/libcef/browser/orbit/orbit_boosts.cc b/libcef/browser/orbit/orbit_boosts.cc
+new file mode 100644
+index 0000000..c6e6eb2
+--- /dev/null
++++ b/libcef/browser/orbit/orbit_boosts.cc
+@@ -0,0 +1,81 @@
++// Copyright 2026 Orbit. BSD-style license; see LICENSE.
++#include "cef/libcef/browser/orbit/orbit_boosts.h"
++#include "cef/libcef/common/orbit_boosts.h"
++#include "cef/libcef/browser/browser_manager.h"
++#include "cef/libcef/browser/thread_util.h"
++#include "base/supports_user_data.h"
++#include "base/task/single_thread_task_runner.h"
++#include "chrome/browser/browser_process.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/profiles/profile_manager.h"
++#include "content/public/browser/browser_context.h"
++#include "content/public/browser/render_process_host.h"
++namespace orbit {
++namespace {
++const char kRegistry = 0;
++struct Registry : base::SupportsUserData::Data {
++  uint64_t revision = 0;
++  std::string json;
++  base::DictValue snapshot;
++};
++// Completion owns its pipes until every live renderer installs the revision.
++struct Completion : std::enable_shared_from_this<Completion> {
++  orbit_boost_ack_t callback; void* context; uint64_t revision; size_t remaining = 1;
++  bool finished = false;
++  std::vector<mojo::Remote<cef::mojom::RenderManager>> pipes;
++  void Done(bool ok) {
++    if (finished) return;
++    if (ok && --remaining) return;
++    finished = true;
++    auto cb = callback; callback = nullptr;
++    pipes.clear();
++    cb(context, revision, ok ? 1 : 0);
++  }
++};
++}
++std::string BoostSnapshot(content::BrowserContext* context) {
++  if (!context || context->IsOffTheRecord()) return {};
++  auto* registry = static_cast<Registry*>(context->GetUserData(&kRegistry));
++  return registry ? registry->json : std::string();
++}
++int32_t ReplaceBoosts(const char* path, const char* json, uint64_t revision,
++                     orbit_boost_ack_t callback, void* context) {
++  CEF_REQUIRE_UIT_RETURN(0);
++  if (!path || path[0] != '/' || !json || !callback || !g_browser_process ||
++      !g_browser_process->profile_manager()) return 0;
++  auto* profile = g_browser_process->profile_manager()->GetProfileByPath(base::FilePath(path));
++  if (!profile || profile->IsOffTheRecord()) return 0;
++  auto parsed = ParseBoosts(json); uint64_t parsed_revision;
++  if (!parsed || !BoostRevision(*parsed, parsed_revision) || revision != parsed_revision) return 0;
++  auto* registry = static_cast<Registry*>(profile->GetUserData(&kRegistry));
++  if (registry) {
++    if (revision < registry->revision || (revision == registry->revision && *parsed != registry->snapshot)) return 0;
++    for (const auto& b : *parsed->FindList("boosts")) {
++      for (const auto& old : *registry->snapshot.FindList("boosts")) {
++        if (*b.GetDict().FindString("id") != *old.GetDict().FindString("id")) continue;
++        uint64_t next, prev; BoostRevision(b.GetDict(), next); BoostRevision(old.GetDict(), prev);
++        if (next < prev || (next == prev && b != old)) return 0;
++      }
++    }
++  } else {
++    auto owned = std::make_unique<Registry>(); registry = owned.get();
++    profile->SetUserData(&kRegistry, std::move(owned));
++  }
++  registry->revision = revision; registry->json = json; registry->snapshot = std::move(*parsed);
++  auto completion = std::make_shared<Completion>();
++  completion->callback = callback; completion->context = context; completion->revision = revision;
++  for (auto it = content::RenderProcessHost::AllHostsIterator(); !it.IsAtEnd(); it.Advance()) {
++    auto* host = it.GetCurrentValue();
++    if (host->GetBrowserContext() != profile || !host->IsInitializedAndNotDead()) continue;
++    auto pipe = CefBrowserManager::GetRenderManagerForProcess(host);
++    ++completion->remaining;
++    pipe.set_disconnect_handler(base::BindOnce([](std::shared_ptr<Completion> c) { c->Done(false); }, completion));
++    pipe->UpdateBoosts(json, base::BindOnce([](std::shared_ptr<Completion> c) { c->Done(true); }, completion));
++    completion->pipes.push_back(std::move(pipe));
++  }
++  auto runner = base::SingleThreadTaskRunner::GetCurrentDefault();
++  runner->PostTask(FROM_HERE, base::BindOnce([](std::shared_ptr<Completion> c) { c->Done(true); }, completion));
++  runner->PostDelayedTask(FROM_HERE, base::BindOnce([](std::shared_ptr<Completion> c) { c->Done(false); }, completion), base::Seconds(5));
++  return 1;
++}
++}  // namespace orbit
+diff --git a/libcef/browser/orbit/orbit_boosts.h b/libcef/browser/orbit/orbit_boosts.h
+new file mode 100644
+index 0000000..79e0e7b
+--- /dev/null
++++ b/libcef/browser/orbit/orbit_boosts.h
+@@ -0,0 +1,11 @@
++// Copyright 2026 Orbit. BSD-style license; see LICENSE.
++#ifndef CEF_LIBCEF_BROWSER_ORBIT_ORBIT_BOOSTS_H_
++#define CEF_LIBCEF_BROWSER_ORBIT_ORBIT_BOOSTS_H_
++#include <string>
++#include "cef/libcef/browser/orbit/orbit_cef_api.h"
++namespace content { class BrowserContext; }
++namespace orbit {
++std::string BoostSnapshot(content::BrowserContext*);
++int32_t ReplaceBoosts(const char*, const char*, uint64_t, orbit_boost_ack_t, void*);
++}
++#endif
+diff --git a/libcef/browser/orbit/orbit_cef_api.h b/libcef/browser/orbit/orbit_cef_api.h
+index 4bf1340..a7a2c3f 100644
+--- a/libcef/browser/orbit/orbit_cef_api.h
++++ b/libcef/browser/orbit/orbit_cef_api.h
+@@ -26,7 +26,10 @@ extern "C" {
+ // Version 3 (CHROMIUM-APP-R3): additive, hold_window/release_window. Earlier
+ // versions keep their layout as the prefix of the table.
+ // Version 4 (EXTENSIONS-PRODUCT-R1): additive, native per-profile extension services.
+-#define ORBIT_CEF_API_VERSION 7u
++#define ORBIT_CEF_API_VERSION 8u
++
++// Version 8. Callback once after live renderer CSS installation (1), or failure (0).
++typedef void (*orbit_boost_ack_t)(void*, uint64_t revision, int32_t installed);
+
+ typedef struct {
+   uint32_t struct_size;
+@@ -187,6 +190,9 @@ typedef struct {
+   // One shot per generation. 1 save/update, 2 never (save only), 3 not now/nope update.
+   int32_t (*password_prompt_decide)(int32_t, const char*, uint64_t, int32_t);
+   int32_t (*password_prompt_reopen)(int32_t, const char*, uint64_t);
++  // Atomic profile snapshot, omitted IDs are removed; empty list retains a tombstone.
++  // Strictly monotonic generations; identical retries are accepted. Private profiles refused.
++  int32_t (*boosts_replace)(const char*, const char*, uint64_t, orbit_boost_ack_t, void*);
+ } orbit_cef_api_t;
+
+ // Returns the API table for `version`, or NULL when unsupported.
+diff --git a/libcef/browser/orbit/orbit_cef_api.mm b/libcef/browser/orbit/orbit_cef_api.mm
+index 8d80c98..98b7351 100644
+--- a/libcef/browser/orbit/orbit_cef_api.mm
++++ b/libcef/browser/orbit/orbit_cef_api.mm
+@@ -4,6 +4,7 @@
+
+ #include "cef/libcef/browser/orbit/orbit_cef_api.h"
+ #include "cef/libcef/browser/orbit/orbit_password_prompt.h"
++#include "cef/libcef/browser/orbit/orbit_boosts.h"
+
+ #import <AppKit/AppKit.h>
+
+@@ -341,6 +342,7 @@ int32_t ReleaseWindow(uint64_t window_token) {
+
+ const orbit_cef_api_t kApiV7 = [] {
+   auto api = kApiV6;
++  api.struct_size = offsetof(orbit_cef_api_t, boosts_replace);
+   api.version = 7u;
+   api.password_prompt_observe = &orbit::PasswordPromptObserve;
+   api.password_prompt_snapshot = &orbit::PasswordPromptSnapshot;
+@@ -349,6 +351,11 @@ int32_t ReleaseWindow(uint64_t window_token) {
+   return api;
+ }();
+
++const orbit_cef_api_t kApiV8 = [] {
++  auto api = kApiV7; api.struct_size = sizeof(orbit_cef_api_t); api.version = 8u;
++  api.boosts_replace = &orbit::ReplaceBoosts; return api;
++}();
++
+ }  // namespace
+
+ extern "C" CEF_EXPORT const orbit_cef_api_t* orbit_cef_get_api(uint32_t version);
+@@ -379,6 +386,8 @@ int32_t ReleaseWindow(uint64_t window_token) {
+       return &kApiV6;
+     case 7u:
+       return &kApiV7;
++    case 8u:
++      return &kApiV8;
+     default:
+       return nullptr;
+   }
+diff --git a/libcef/common/mojom/cef.mojom b/libcef/common/mojom/cef.mojom
+index 46aa48d..c987dc7 100644
+--- a/libcef/common/mojom/cef.mojom
++++ b/libcef/common/mojom/cef.mojom
+@@ -130,6 +130,8 @@ struct NewBrowserInfo {
+
+ // Interface for communicating with browser management in the browser process.
+ interface BrowserManager {
++  [Sync]
++  GetBoosts() => (string snapshot);
+   // Retrieve info for a new RenderThread.
+   [Sync]
+   GetNewRenderThreadInfo() => (NewRenderThreadInfo info);
+@@ -142,6 +144,7 @@ interface BrowserManager {
+
+ // Interface for communicating with browser management to the render process.
+ interface RenderManager {
++  UpdateBoosts(string snapshot) => ();
+   // Manage cross-origin whitelist contents during the render process lifespan.
+   ModifyCrossOriginWhitelistEntry(bool add, CrossOriginWhiteListEntry entry);
+   ClearCrossOriginWhitelist();
+diff --git a/libcef/common/orbit_boosts.h b/libcef/common/orbit_boosts.h
+new file mode 100644
+index 0000000..5031521
+--- /dev/null
++++ b/libcef/common/orbit_boosts.h
+@@ -0,0 +1,64 @@
++// Copyright 2026 Orbit. BSD-style license; see LICENSE.
++#ifndef CEF_LIBCEF_COMMON_ORBIT_BOOSTS_H_
++#define CEF_LIBCEF_COMMON_ORBIT_BOOSTS_H_
++#include <set>
++#include <string>
++#include "base/json/json_reader.h"
++#include "base/strings/string_number_conversions.h"
++#include "base/strings/string_util.h"
++#include "base/strings/string_split.h"
++#include "base/uuid.h"
++#include "base/values.h"
++#include "url/gurl.h"
++namespace orbit {
++inline bool BoostRevision(const base::DictValue& row, uint64_t& revision) {
++  auto* value = row.FindString("revision");
++  return value && base::StringToUint64(*value, &revision) && revision > 0;
++}
++inline std::optional<base::DictValue> ParseBoosts(const std::string& json) {
++  if (json.size() > 4 * 1024 * 1024) return std::nullopt;
++  auto row = base::JSONReader::ReadDict(json, base::JSON_PARSE_RFC);
++  uint64_t generation;
++  if (!row || !BoostRevision(*row, generation)) return std::nullopt;
++  auto* boosts = row->FindList("boosts");
++  if (!boosts || boosts->size() > 256) return std::nullopt;
++  size_t bytes = 0;
++  std::set<std::string> ids;
++  for (const auto& value : *boosts) {
++    auto* b = value.GetIfDict();
++    if (!b) return std::nullopt;
++    auto* id = b->FindString("id"); auto* host = b->FindString("host");
++    auto* css = b->FindString("css"); auto* js = b->FindString("js");
++    auto* schemes = b->FindList("schemes"); auto port = b->FindInt("port");
++    uint64_t revision;
++    if (!id || !base::Uuid::ParseLowercase(*id).is_valid() || !ids.insert(*id).second ||
++        !BoostRevision(*b, revision) || !host || host->empty() || host->size() > 253 ||
++        !base::ContainsOnlyChars(*host, "abcdefghijklmnopqrstuvwxyz0123456789.-") ||
++        GURL("https://" + *host).host() != *host || !css || !js ||
++        js->size() > 65536 || !schemes || schemes->empty() || schemes->size() > 2 ||
++        !b->FindBool("subdomains") || !port || *port < 0 || *port > 65535) return std::nullopt;
++    size_t label = 0;
++    for (const auto& part : base::SplitStringPiece(*host, ".", base::KEEP_WHITESPACE, base::SPLIT_WANT_ALL)) {
++      if (part.empty() || part.size() > 63 || part.front() == '-' || part.back() == '-') return std::nullopt;
++      ++label;
++    }
++    if (!label || (*b->FindBool("subdomains") && base::ContainsOnlyChars(*host, "0123456789."))) return std::nullopt;
++    for (const auto& scheme : *schemes)
++      if (!scheme.is_string() || (scheme.GetString() != "http" && scheme.GetString() != "https")) return std::nullopt;
++    bytes += css->size() + js->size();
++    if (bytes > 2 * 1024 * 1024) return std::nullopt;
++  }
++  return row;
++}
++inline bool BoostMatches(const base::DictValue& b, const GURL& url) {
++  if (!url.is_valid() || !url.SchemeIsHTTPOrHTTPS() || url.has_username() || url.has_password()) return false;
++  const auto& host = *b.FindString("host");
++  if (url.host() != host && (!*b.FindBool("subdomains") ||
++      !base::EndsWith(url.host(), "." + host))) return false;
++  bool scheme = false;
++  for (const auto& s : *b.FindList("schemes")) scheme |= s.GetString() == url.scheme();
++  int port = *b.FindInt("port");
++  return scheme && url.EffectiveIntPort() == (port ? port : url.SchemeIs("https") ? 443 : 80);
++}
++}  // namespace orbit
++#endif
+diff --git a/libcef/renderer/chrome/chrome_content_renderer_client_cef.cc b/libcef/renderer/chrome/chrome_content_renderer_client_cef.cc
+index 1cb197c..4234dac 100644
+--- a/libcef/renderer/chrome/chrome_content_renderer_client_cef.cc
++++ b/libcef/renderer/chrome/chrome_content_renderer_client_cef.cc
+@@ -7,6 +7,7 @@
+
+ #include "cef/libcef/renderer/render_frame_observer.h"
+ #include "cef/libcef/renderer/render_manager.h"
++#include "cef/libcef/renderer/orbit_boosts.h"
+ #include "cef/libcef/renderer/thread_util.h"
+ #include "chrome/renderer/printing/chrome_print_render_frame_helper_delegate.h"
+ #include "content/public/renderer/render_frame.h"
+@@ -62,6 +63,7 @@ void ChromeContentRendererClientCef::RenderFrameCreated(
+   }
+
+   ChromeContentRendererClient::RenderFrameCreated(render_frame);
++  orbit::BoostFrameCreated(render_frame);
+ }
+
+ void ChromeContentRendererClientCef::WebViewCreated(
+@@ -120,3 +122,8 @@ void ChromeContentRendererClientCef::OnBrowserCreated(
+   web_view->SetAllowPictureInPictureWithoutUserActivation(
+       config.allow_pip_without_user_activation);
+ }
++
++void ChromeContentRendererClientCef::RunScriptsAtDocumentStart(content::RenderFrame* frame) {
++  orbit::BoostDocumentStart(frame);
++  ChromeContentRendererClient::RunScriptsAtDocumentStart(frame);
++}
+diff --git a/libcef/renderer/chrome/chrome_content_renderer_client_cef.h b/libcef/renderer/chrome/chrome_content_renderer_client_cef.h
+index 7275eae..45a95e4 100644
+--- a/libcef/renderer/chrome/chrome_content_renderer_client_cef.h
++++ b/libcef/renderer/chrome/chrome_content_renderer_client_cef.h
+@@ -43,6 +43,7 @@ class ChromeContentRendererClientCef : public ChromeContentRendererClient {
+   void RenderThreadStarted() override;
+   void RenderThreadConnected() override;
+   void RenderFrameCreated(content::RenderFrame* render_frame) override;
++  void RunScriptsAtDocumentStart(content::RenderFrame* render_frame) override;
+   void WebViewCreated(blink::WebView* web_view,
+                       bool was_created_by_renderer,
+                       const url::Origin* outermost_origin) override;
+diff --git a/libcef/renderer/orbit_boost_renderer.cc b/libcef/renderer/orbit_boost_renderer.cc
+new file mode 100644
+index 0000000..4f5cdd0
+--- /dev/null
++++ b/libcef/renderer/orbit_boost_renderer.cc
+@@ -0,0 +1,93 @@
++// Copyright 2026 Orbit. BSD-style license; see LICENSE.
++#include "cef/libcef/renderer/orbit_boosts.h"
++#include "cef/libcef/common/orbit_boosts.h"
++#include "cef/libcef/renderer/render_manager.h"
++#include "content/public/renderer/render_frame.h"
++#include "content/public/renderer/render_frame_observer.h"
++#include "extensions/renderer/isolated_world_manager.h"
++#include "third_party/blink/public/platform/web_isolated_world_info.h"
++#include "third_party/blink/public/platform/web_security_origin.h"
++#include "third_party/blink/public/web/web_document.h"
++#include "third_party/blink/public/web/web_local_frame.h"
++#include "third_party/blink/public/web/web_script_source.h"
++#include <map>
++#include "base/no_destructor.h"
++#include "base/memory/weak_ptr.h"
++namespace orbit {
++namespace {
++class Frame;
++std::map<content::RenderFrame*, Frame*>& Frames() { static base::NoDestructor<std::map<content::RenderFrame*, Frame*>> frames; return *frames; }
++int World(const std::string& id) {
++  static base::NoDestructor<std::map<std::string, int>> worlds;
++  auto [it, fresh] = worlds->try_emplace(id, 0);
++  if (fresh) it->second = extensions::IsolatedWorldManager::AllocateWorldId();
++  return it->second;
++}
++class Frame final : public content::RenderFrameObserver {
++ public:
++  explicit Frame(content::RenderFrame* frame) : RenderFrameObserver(frame) { Frames()[frame] = this; }
++  void OnDestruct() override { Frames().erase(render_frame()); delete this; }
++  void DidCreateNewDocument() override { keys_.clear(); started_ = false; revision_ = 0; ++document_; }
++  void StartWithoutRegistry() { started_ = true; }
++  void Apply(const base::DictValue& snapshot, bool start) {
++    if (start && started_) return;
++    if (!start && !started_) return;
++    uint64_t revision; BoostRevision(snapshot, revision);
++    if (!start && revision < revision_) return;
++    revision_ = revision;
++    started_ = true;
++    auto weak = weak_factory_.GetWeakPtr();
++    const auto document_id = document_;
++    auto* frame = render_frame()->GetWebFrame(); auto document = frame->GetDocument();
++    // A single renderer task replaces the ordered sheet set without a paint between revisions.
++    for (const auto& key : keys_) document.RemoveInsertedStyleSheet(key, blink::WebCssOrigin::kUser);
++    keys_.clear();
++    const GURL url(document.Url());
++    if (document.GetSecurityOrigin().IsOpaque() || !url.SchemeIsHTTPOrHTTPS()) return;
++    std::vector<const base::DictValue*> scripts;
++    for (const auto& value : *snapshot.FindList("boosts")) {
++      const auto& boost = value.GetDict();
++      if (!BoostMatches(boost, url)) continue;
++      const auto& css = *boost.FindString("css");
++      if (!css.empty()) keys_.push_back(document.InsertStyleSheet(blink::WebString::FromUtf8(css), nullptr, blink::WebCssOrigin::kUser));
++      scripts.push_back(&boost);
++    }
++    for (const auto* b : scripts) {
++      if (!weak || document_ != document_id) return;
++      const auto& boost = *b;
++      const auto& js = *boost.FindString("js");
++      // Editing JS never re-executes it in an existing document.
++      if (!start || js.empty()) continue;
++      const int world = World(*boost.FindString("id"));
++      blink::WebIsolatedWorldInfo info;
++      info.security_origin = document.GetSecurityOrigin();
++      info.human_readable_name = blink::WebString::FromUtf8("Orbit Boost");
++      info.content_security_policy = blink::WebString::FromUtf8("default-src 'none'; script-src 'unsafe-eval'; connect-src 'none'; object-src 'none'");
++      blink::SetIsolatedWorldInfo(world, info);
++      frame->ExecuteScriptInIsolatedWorld(world, blink::WebScriptSource(blink::WebString::FromUtf8(js)), blink::BackForwardCacheAware::kPossiblyDisallow);
++    }
++  }
++ private:
++  uint64_t document_ = 0;
++  uint64_t revision_ = 0;
++  bool started_ = false;
++  std::vector<blink::WebStyleSheetKey> keys_;
++  base::WeakPtrFactory<Frame> weak_factory_{this};
++};
++}
++void BoostFrameCreated(content::RenderFrame* frame) { new Frame(frame); }
++void BoostDocumentStart(content::RenderFrame* frame) {
++  auto it = Frames().find(frame); if (it == Frames().end()) return;
++  // Native in-memory snapshot barrier; never calls the shell, disk or network.
++  // This also closes navigation/update races on existing renderer processes.
++  std::string json;
++  CefRenderManager::Get()->GetBrowserManager()->GetBoosts(&json);
++  auto snapshot = ParseBoosts(json);
++  if (snapshot) it->second->Apply(*snapshot, true);
++  else it->second->StartWithoutRegistry();
++}
++void BoostUpdate(const std::string& json) {
++  auto snapshot = ParseBoosts(json); if (!snapshot) return;
++  for (auto& [frame, observer] : Frames()) observer->Apply(*snapshot, false);
++}
++}  // namespace orbit
+diff --git a/libcef/renderer/orbit_boosts.h b/libcef/renderer/orbit_boosts.h
+new file mode 100644
+index 0000000..f93e453
+--- /dev/null
++++ b/libcef/renderer/orbit_boosts.h
+@@ -0,0 +1,11 @@
++// Copyright 2026 Orbit. BSD-style license; see LICENSE.
++#ifndef CEF_LIBCEF_RENDERER_ORBIT_BOOSTS_H_
++#define CEF_LIBCEF_RENDERER_ORBIT_BOOSTS_H_
++#include <string>
++namespace content { class RenderFrame; }
++namespace orbit {
++void BoostFrameCreated(content::RenderFrame*);
++void BoostDocumentStart(content::RenderFrame*);
++void BoostUpdate(const std::string&);
++}
++#endif
+diff --git a/libcef/renderer/render_manager.cc b/libcef/renderer/render_manager.cc
+index 5012d60..a3b1e3e 100644
+--- a/libcef/renderer/render_manager.cc
++++ b/libcef/renderer/render_manager.cc
+@@ -3,6 +3,7 @@
+ // be found in the LICENSE file.
+
+ #include "cef/libcef/renderer/render_manager.h"
++#include "cef/libcef/renderer/orbit_boosts.h"
+
+ #include <tuple>
+
+@@ -388,3 +389,7 @@ void CefRenderManager::OnExcludedViewDestroyed(CefExcludedView* excluded_view) {
+ #pragma warning(pop)
+ #endif
+ #endif
++
++void CefRenderManager::UpdateBoosts(const std::string& json, UpdateBoostsCallback callback) {
++  orbit::BoostUpdate(json); std::move(callback).Run();
++}
+diff --git a/libcef/renderer/render_manager.h b/libcef/renderer/render_manager.h
+index c6dc124..8a334e7 100644
+--- a/libcef/renderer/render_manager.h
++++ b/libcef/renderer/render_manager.h
+@@ -80,6 +80,7 @@ class CefRenderManager : public cef::mojom::RenderManager {
+   // Binds receivers for the RenderManager interface.
+   void BindReceiver(mojo::PendingReceiver<cef::mojom::RenderManager> receiver);
+
++  void UpdateBoosts(const std::string&, UpdateBoostsCallback) override;
+   // cef::mojom::RenderManager methods:
+   void ModifyCrossOriginWhitelistEntry(
+       bool add,

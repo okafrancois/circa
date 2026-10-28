@@ -4,6 +4,21 @@ import Foundation
 
 extension BrowserEnvironment {
     func settingsDidChange() {
+        let enabled = settings.document.enablesBoostsOnWebsites
+        if enabled != lastBoostsEnabled {
+            lastBoostsEnabled = enabled
+            if engine.capabilities.contains(.boosts) {
+                Task { [weak self] in
+                    guard let self else { return }
+                    for profile in await store.catalogSnapshot().profiles {
+                        do { try await boosts.synchronize(profileID: profile.id,
+                            enabled: settings.document.enablesBoostsOnWebsites, engine: engine) }
+                        catch BrowserBoostError.staleRevision { /* A newer setting already won. */ }
+                        catch { onPersistenceError?(error) }
+                    }
+                }
+            }
+        }
         for little in quickWindows.values {
             little.applyPreferences(searchEngine: settings.document.profile(little.profileID).searchEngine,
                 theme: spaceTheme(for: little.sourceSpaceID))

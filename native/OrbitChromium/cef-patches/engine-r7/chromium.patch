@@ -1,0 +1,47 @@
+diff --git a/extensions/renderer/isolated_world_manager.cc b/extensions/renderer/isolated_world_manager.cc
+index 824fbeefad..d8a29f487f 100644
+--- a/extensions/renderer/isolated_world_manager.cc
++++ b/extensions/renderer/isolated_world_manager.cc
+@@ -138,8 +138,6 @@ int IsolatedWorldManager::GetOrCreateIsolatedWorldForHost(
+       "You've added a new execution world! Does this code need to be updated?");
+   CHECK_NE(mojom::ExecutionWorld::kMain, execution_world);
+
+-  static int g_next_blink_world_id =
+-      ExtensionsRendererClient::Get()->GetLowestIsolatedWorldId();
+
+   const std::string& host_id = injection_host.id().id;
+
+@@ -147,7 +145,7 @@ int IsolatedWorldManager::GetOrCreateIsolatedWorldForHost(
+       FindIsolatedWorldInfo(host_id, execution_world, world_id);
+
+   if (!world_info) {
+-    int blink_world_id = g_next_blink_world_id++;
++    int blink_world_id = AllocateWorldId();
+     // This map will tend to pile up over time, but realistically, you're never
+     // going to have enough injection hosts for it to matter.
+     // TODO(crbug.com/40262660): Are we sure about that? Processes can stick
+@@ -248,3 +246,11 @@ void IsolatedWorldManager::UpdateBlinkIsolatedWorldInfo(
+ }
+
+ }  // namespace extensions
++
++namespace extensions {
++int IsolatedWorldManager::AllocateWorldId() {
++  static int next = ExtensionsRendererClient::Get()->GetLowestIsolatedWorldId();
++  CHECK(!blink::IsEqualOrExceedEmbedderWorldIdLimit(next));
++  return next++;
++}
++}
+diff --git a/extensions/renderer/isolated_world_manager.h b/extensions/renderer/isolated_world_manager.h
+index a11faad77c..71fc5e39fe 100644
+--- a/extensions/renderer/isolated_world_manager.h
++++ b/extensions/renderer/isolated_world_manager.h
+@@ -85,6 +85,8 @@ class IsolatedWorldManager {
+   // Returns true if `blink_world_id` corresponds to the ID for an extension
+   // isolated world (either a content script world or user script world).
+   static bool IsExtensionIsolatedWorld(int blink_world_id);
++  // Reserve a DOM-only world without registering an extension injection host.
++  static int AllocateWorldId();
+
+  private:
+   // A structure to track existing isolated world information, where an

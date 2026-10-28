@@ -26,7 +26,10 @@ extern "C" {
 // Version 3 (CHROMIUM-APP-R3): additive, hold_window/release_window. Earlier
 // versions keep their layout as the prefix of the table.
 // Version 4 (EXTENSIONS-PRODUCT-R1): additive, native per-profile extension services.
-#define ORBIT_CEF_API_VERSION 7u
+#define ORBIT_CEF_API_VERSION 8u
+
+// Version 8. Callback once after live renderer CSS installation (1), or failure (0).
+typedef void (*orbit_boost_ack_t)(void*, uint64_t revision, int32_t installed);
 
 typedef struct {
   uint32_t struct_size;
@@ -187,6 +190,9 @@ typedef struct {
   // One shot per generation. 1 save/update, 2 never (save only), 3 not now/nope update.
   int32_t (*password_prompt_decide)(int32_t, const char*, uint64_t, int32_t);
   int32_t (*password_prompt_reopen)(int32_t, const char*, uint64_t);
+  // Atomic profile snapshot, omitted IDs are removed; empty list retains a tombstone.
+  // Strictly monotonic generations; identical retries are accepted. Private profiles refused.
+  int32_t (*boosts_replace)(const char*, const char*, uint64_t, orbit_boost_ack_t, void*);
 } orbit_cef_api_t;
 
 // Returns the API table for `version`, or NULL when unsupported.
