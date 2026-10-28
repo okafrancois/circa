@@ -124,6 +124,11 @@ struct LibraryMotionTests {
         #expect(sidebar.spaceSwipe.handleScroll(try event(2, 80), inside: true))
         #expect(abs(drawer.animation.value * 420 - 40) < 0.001)
         #expect(!drawer.animation.isAnimating && swipe.ownsGesture)
+        let widthBeforeWheel = drawer.animation.value
+        #expect(!swipe.handleOpening(try event(0, -100, y: -30), inside: false))
+        #expect(!sidebar.spaceSwipe.handleScroll(try event(0, 100, y: -30), inside: true))
+        #expect(drawer.animation.value == widthBeforeWheel && swipe.ownsGesture)
+
         #expect(sidebar.spaceSwipe.handleScroll(try event(8), inside: true))
         #expect(cancelledVelocity == 0)
         time = 12

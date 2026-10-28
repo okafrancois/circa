@@ -68,7 +68,7 @@ final class BrowserLibraryHistoryView: NSView, NSTableViewDataSource, NSTableVie
         table.onReturn = { [weak self] in self?.openSelected() }
         table.onDelete = { [weak self] in self?.deleteSelected() }
         table.onEscape = { [weak self] in self?.onBack?() }
-        let scroll = NSScrollView(); scroll.documentView = table
+        let scroll = BrowserGestureScrollView(); scroll.documentView = table
         BrowserLibraryStyle.configure(scroll)
         let header = NSStackView(views: [title, NSView(), reload, deleteOptions])
         let actions = NSStackView(views: [open, remove, removeSite, NSView(), more])

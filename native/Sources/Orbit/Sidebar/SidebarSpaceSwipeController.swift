@@ -242,6 +242,7 @@ final class SidebarSpaceSwipeController {
             if isActive || scrollInput.hasOwnedSequence || recognitionAuthority != nil { cancel() }
             return event
         }
+        guard !event.phase.isEmpty || !event.momentumPhase.isEmpty else { return event }
         if isActive && !environmentIsCurrent { cancel(); return event }
         let inside = sidebar.swipeContains(event.locationInWindow)
         guard inside || isActive || scrollInput.hasOwnedSequence else { return event }
@@ -260,7 +261,8 @@ final class SidebarSpaceSwipeController {
     }
 
     private func arbitrateScroll(_ event: NSEvent, inside: Bool, buffered: Bool = false) -> Bool {
-        guard event.hasPreciseScrollingDeltas else { return false }
+        guard event.hasPreciseScrollingDeltas,
+              !event.phase.isEmpty || !event.momentumPhase.isEmpty else { return false }
         if event.phase.contains(.began), !buffered {
             scrollInput.retireConsumedRecognition()
             recognitionAuthority = nil
@@ -292,6 +294,7 @@ final class SidebarSpaceSwipeController {
 
     /// The monitor and synthetic phased-event tests share this handler after window hit testing.
     func handleScroll(_ event: NSEvent, inside: Bool) -> Bool {
+        guard !event.phase.isEmpty || !event.momentumPhase.isEmpty else { return false }
         if !isCreationPageVisible, !presentsCreation, handleLibraryBoundary?(event, inside) == true { return true }
         guard let sidebar, event.hasPreciseScrollingDeltas else { return false }
         SpaceSwipeTrace.input(phase: event.phase.rawValue, momentum: event.momentumPhase.rawValue, deltaX: event.scrollingDeltaX)

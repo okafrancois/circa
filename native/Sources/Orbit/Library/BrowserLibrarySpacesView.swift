@@ -11,7 +11,7 @@ final class BrowserLibrarySpacesView: NSView, NSSearchFieldDelegate {
         var icon: String? { if case .grapheme(let value) = iconSelection { value } else { nil } }
     }
     let searchField = BrowserLibrarySearchField()
-    let scroll = NSScrollView()
+    let scroll = BrowserGestureScrollView()
     private let grid = LibraryFlippedView()
     private(set) var tiles: [BrowserLibrarySpaceTile] = []
     private var items: [Item] = []

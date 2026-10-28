@@ -53,7 +53,8 @@ final class BrowserLibrarySwipeController {
     }
 
     func handleOpening(_ event: NSEvent, inside: Bool) -> Bool {
-        guard event.hasPreciseScrollingDeltas, let drawer else { return false }
+        guard event.hasPreciseScrollingDeltas,
+              !event.phase.isEmpty || !event.momentumPhase.isEmpty, let drawer else { return false }
         if ownsGesture { return handle(event) }
         if !event.momentumPhase.isEmpty {
             let consumed = swallowMomentum
@@ -94,6 +95,8 @@ final class BrowserLibrarySwipeController {
             if gesture != nil { cancel() }
             return event
         }
+        guard event.hasPreciseScrollingDeltas,
+              !event.phase.isEmpty || !event.momentumPhase.isEmpty else { return event }
         if ownsGesture { return handle(event) ? nil : event }
         guard let view, let drawer else { return event }
         switch scrollInput.replay(event) {
