@@ -654,7 +654,7 @@ struct NativeCommandTests {
           View Downloads [viewDownloads] ⇧⌘J
           View Easels & Notes [viewEaselsNotes]
           View Media [viewMedia]
-          View Boosts [viewBoosts]
+          View Boosts [viewBoosts] (hidden)
           ---
           Bring All to Front [bringAllToFront]
         Help

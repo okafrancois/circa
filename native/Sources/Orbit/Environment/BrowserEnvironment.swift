@@ -62,6 +62,7 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
     private var rescueWindowRequests: Set<ProfileID> = []
     var shortcutPreferences = BrowserShortcutPreferences()
     var settings = BrowserSettingsRuntime(store: try! BrowserSettingsStore())
+    var boosts = BrowserBoostsRuntime()
     private var history = BrowserHistoryRecorder()
     var favoriteIcons: FavoriteIconStore?
     let sidebarIconMemory = SidebarIconMemoryCache()
@@ -132,6 +133,8 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
         }
         environment.shortcutPreferences = BrowserShortcutPreferences(destination: sessionFile.appendingPathExtension("shortcuts.json"))
         environment.sessionFile = sessionFile
+        environment.boosts = BrowserBoostsRuntime(directory: sessionFile.deletingLastPathComponent()
+            .appendingPathComponent("Boosts", isDirectory: true))
         environment.favoriteIcons = FavoriteIconStore(directory: sessionFile.deletingLastPathComponent()
             .appendingPathComponent("Favorite Icons", isDirectory: true))
         if let effectiveDocument, let icons = environment.favoriteIcons {
@@ -550,6 +553,7 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
         try await permissions.set(setting, for: [permission], origin: origin, profileID: profile)
     }
     func removeSettingsPermissions(profile: ProfileID) async throws {
+        try await boosts.removeProfile(profile, engine: engine)
         try await permissions.clear(profileID: profile)
         try sitePreferences.clear(profileID: profile)
     }

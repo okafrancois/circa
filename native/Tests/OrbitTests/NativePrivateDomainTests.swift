@@ -70,6 +70,11 @@ struct NativePrivateDomainTests {
             from: memory.store.captureContext(in: window), activate: true)
         try await memory.settings.store.setLastActiveWindow(window, spaceID: privateSpace)
         try await memory.permissions.set(.allow, for: [.camera], origin: origin, profileID: privateProfile)
+        let privateBoosts = try memory.boosts.store(for: privateProfile)
+        try await privateBoosts.save(.init(title: sentinel, hostPattern: try .init(host: "private.example.test")))
+        try await memory.settings.setEnablesBoostsOnWebsites(false)
+        #expect(normal.settings.document.enablesBoostsOnWebsites)
+        #expect(try await normal.boosts.store(for: privateProfile).snapshot().boosts.isEmpty)
         let observer = PrivateTestDelegate()
         observer.downloads = memory.downloads
         let surface = try scope.makeSurface(for: lease, delegate: observer)
