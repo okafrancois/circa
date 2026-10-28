@@ -47,6 +47,7 @@ extension BrowserWindowController: BrowserEngineSurfaceDelegate {
     /// Records where this window shows a surface, for engines that expose it to extensions. The
     /// engine learns the NSWindow of the model window first (`shellWindowDidOpen`).
     func surfaceMembershipDidChange(_ surface: Surface, _ membership: BrowserSurfaceMembership?) {
+        if membership == nil { passwordPrompt.surfaceDidLeave(surface) }
         if let membership { announceEngineWindow(membership.windowID) }
         surface.placement = membership.map { .tab(windowID: $0.windowID, occurrenceID: $0.occurrenceID) } ?? .detached
     }

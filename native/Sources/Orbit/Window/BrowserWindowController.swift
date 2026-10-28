@@ -45,6 +45,7 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
     // MARK: Sidebar
     let sidebar = BrowserSidebarView()
     lazy var extensionControls = BrowserExtensionsController(owner: self)
+    lazy var passwordPrompt = BrowserPasswordPromptPresenter(owner: self)
     let sidebarIcons = FavoriteIconPipeline<Surface>()
     var sidebarActivityObserver: BrowserHookRegistration?
     let folderPreview = FolderPreviewController<Surface>()
@@ -263,9 +264,12 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
 
     // MARK: Window lifetime
 
-    func windowDidBecomeKey(_ notification: Notification) { onActivate() }
+    func windowDidBecomeKey(_ notification: Notification) { onActivate(); passwordPrompt.render() }
+
+    func windowDidResignKey(_ notification: Notification) { passwordPrompt.close() }
 
     func windowWillClose(_ notification: Notification) {
+        passwordPrompt.close()
         developerTintSurface?.setPageTintObservationEnabled(false)
         developerTintSurface = nil
         capture.cancel()
@@ -309,6 +313,7 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
     }
 
     func freezeCommandsForTermination() {
+        passwordPrompt.close()
         extensionControls.close()
         bookmarkTransfer?.cancel()
         library.revokeSelections()
@@ -393,6 +398,7 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
         refreshNavigation(for: surface)
         engineEventHooks.emit(.stateChanged, for: surface)
         palette.renderContext()
+        passwordPrompt.render()
     }
 
     // MARK: Session projection
@@ -466,6 +472,7 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
         tabSwitcher.renderSession()
         palette.renderContext()
         settingsPreferences?.renderSession(in: self)
+        passwordPrompt.render()
     }
 
     // MARK: Objective-C entry points (forwarders only)
