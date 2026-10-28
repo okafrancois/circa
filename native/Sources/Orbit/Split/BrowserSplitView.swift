@@ -5,7 +5,7 @@ import QuartzCore
 /// Places engine-neutral host views. It never owns, reloads or disposes a document.
 @MainActor
 final class BrowserSplitView: NSView {
-    enum NavigationAction { case back, forward, reload, address, siteControls, separate }
+    enum NavigationAction { case back, forward, reload, address, siteControls, menu }
     struct Pane {
         let id: TabID
         /// Nil while the tab has no live surface in this window: the pane keeps its slot with a
@@ -358,6 +358,7 @@ final class BrowserSplitPaneView: NSView {
     private var isActive = false
     private var isBlank = false
     private var accent = OrbitTokens.ThemeAccent.defaultPurple
+    private var keyObservers: [NSObjectProtocol] = []
     var onFocus: (() -> Void)?
     var onClose: (() -> Void)?
     var onNavigate: ((BrowserSplitView.NavigationAction) -> Void)?
@@ -401,7 +402,7 @@ final class BrowserSplitPaneView: NSView {
         for (button, image, label, action) in [
             (siteControls, Optional(siteImage), uiText("Site Controls"), #selector(showSiteControls)),
             (splitToggle, OrbitGlyph.symbol("square.split.2x1", pointSize: 15, weight: .medium),
-             uiText("Separate Page from Split View"), #selector(separatePage))
+             uiText("Split View"), #selector(showSplitMenu))
         ] {
             button.image = image
             button.imageScaling = .scaleNone
@@ -442,9 +443,9 @@ final class BrowserSplitPaneView: NSView {
         guard isActive, !isBlank else { return }
         onNavigate?(.siteControls)
     }
-    @objc private func separatePage() {
+    @objc private func showSplitMenu() {
         guard isActive, !isBlank else { return }
-        onNavigate?(.separate)
+        onNavigate?(.menu)
     }
     override func mouseDown(with event: NSEvent) { onFocus?() }
 
@@ -479,6 +480,20 @@ final class BrowserSplitPaneView: NSView {
 
     var isShowingPlaceholder: Bool { page.subviews.first === placeholder }
 
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        for observer in keyObservers { NotificationCenter.default.removeObserver(observer) }
+        keyObservers = []
+        if let window {
+            keyObservers = [NSWindow.didBecomeKeyNotification, NSWindow.didResignKeyNotification].map { name in
+                NotificationCenter.default.addObserver(forName: name, object: window, queue: nil) { [weak self] _ in
+                    MainActor.assumeIsolated { self?.refreshAppearance() }
+                }
+            }
+        }
+        refreshAppearance()
+    }
+
     override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
         refreshAppearance()
@@ -486,9 +501,15 @@ final class BrowserSplitPaneView: NSView {
 
     private func refreshAppearance() {
         CATransaction.begin(); CATransaction.setDisableActions(true)
-        clip.layer?.backgroundColor = isBlank ? NSColor.clear.cgColor : OrbitTokens.Color.Surface.preview.resolvedCGColor(for: effectiveAppearance)
+        let emphasized = isActive && window?.isKeyWindow == true
+        clip.layer?.backgroundColor = isBlank ? NSColor.clear.cgColor
+            : (emphasized ? NSColor.white : NSColor(white: 0.31, alpha: 1)).cgColor
+        let foreground = emphasized ? NSColor.black.withAlphaComponent(0.55) : NSColor.white.withAlphaComponent(0.65)
+        for button in [back, forward, reload, siteControls, splitToggle, close, address] {
+            button.contentTintColor = foreground
+        }
         line.layer?.backgroundColor = OrbitTokens.Color.Line.floatingScrimBorder.resolvedCGColor(for: effectiveAppearance)
-        focusBorder.borderColor = accent.strong.resolvedCGColor(for: effectiveAppearance)
+        focusBorder.borderColor = NSColor(srgbRed: 41/255, green: 50/255, blue: 254/255, alpha: 1).cgColor
         if let layer {
             let shadow = isActive ? OrbitTokens.Shadow.splitActiveHalo : OrbitTokens.Shadow.contentCard
             shadow.apply(to: layer, isFlipped: isFlipped, appearance: effectiveAppearance)
@@ -509,6 +530,7 @@ final class BrowserSplitPaneView: NSView {
             animation.fromValue = focusBorder.presentation()?.opacity ?? focusBorder.opacity
             animation.toValue = active ? 1 : 0
             animation.duration = BrowserSplitTokens.focusFade
+            animation.timingFunction = CAMediaTimingFunction(name: .default)
             focusBorder.add(animation, forKey: "splitFocus")
         } else { focusBorder.removeAnimation(forKey: "splitFocus") }
         CATransaction.begin(); CATransaction.setDisableActions(true)

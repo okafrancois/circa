@@ -1,6 +1,7 @@
 import AppKit
 import BrowserCore
 import BrowserEngine
+import UserNotifications
 
 /// Window-owned feature object. Every delayed action is tied to the exact surface, committed
 /// document generation and selection epoch; switching A → B → A never revives old actions.
@@ -28,6 +29,16 @@ final class BrowserSiteControls<Engine: BrowserEngine> {
     private weak var presentationAnchor: NSView?
     private var sharePicker: NSSharingServicePicker?
     private let permissionPanel = BrowserSitePopover()
+    private(set) var notificationSettingsPrompt: NotificationSettingsPromptView?
+    var notificationsAuthorized: () async -> Bool = {
+        let settings = await UNUserNotificationCenter.current().notificationSettings()
+        return [.authorized, .provisional].contains(settings.authorizationStatus)
+    }
+    var openNotificationSettings: () -> Void = {
+        if let url = URL(string: "x-apple.systempreferences:com.apple.Notifications-Settings.extension") {
+            NSWorkspace.shared.open(url)
+        }
+    }
     private var pendingPermission: ((BrowserSitePermissionChoice) -> Void)?
     /// The document whose request the pending prompt answers.
     private var pendingPermissionSurface: ObjectIdentifier?
@@ -164,6 +175,7 @@ final class BrowserSiteControls<Engine: BrowserEngine> {
               BrowserSiteOrigin(requestOrigin: request.origin) == committedOrigin else { return .deny }
         let generation = surface.findDocumentGeneration
         let epoch = epoch
+        var allowedNotifications = false
         let decision = await policy.resolve(request, profileID: surface.profileID,
             isCurrent: { [weak self, weak surface] in
                 guard let self, let surface else { return false }
@@ -174,13 +186,31 @@ final class BrowserSiteControls<Engine: BrowserEngine> {
                 let key = surface.map(ObjectIdentifier.init)
                 pendingPermissionSurface = key
                 defer { if pendingPermissionSurface == key { pendingPermissionSurface = nil } }
-                if let presenter = self.permissionPrompt { return await presenter(origin, permissions) }
-                return await self.prompt(origin: origin, permissions: permissions)
+                let choice: BrowserSitePermissionChoice
+                if let presenter = self.permissionPrompt { choice = await presenter(origin, permissions) }
+                else { choice = await self.prompt(origin: origin, permissions: permissions) }
+                allowedNotifications = permissions == [.notifications] && choice == .alwaysAllow
+                return choice
             })
         if decision == .deny, let message = statusMessage, isCurrent(surface, generation: generation, epoch: epoch), owner.window?.isKeyWindow == true {
             showMessage(message)
         }
         if decision == .grant || !isCurrent(surface, generation: generation, epoch: epoch) { statusMessage = nil }
+        if decision == .grant, allowedNotifications {
+            Task { [weak self, weak surface] in
+                guard let self, let surface, owner.window?.isKeyWindow == true,
+                      !(await notificationsAuthorized()) else { return }
+                try? await Task.sleep(for: .milliseconds(500))
+                guard isCurrent(surface, generation: generation, epoch: epoch),
+                      owner.window?.isKeyWindow == true, let root = owner.window?.contentView else { return }
+                notificationSettingsPrompt?.cancel()
+                let prompt = NotificationSettingsPromptView { [weak self] openSettings in
+                    if openSettings { self?.openNotificationSettings() }
+                }
+                notificationSettingsPrompt = prompt
+                prompt.show(over: root)
+            }
+        }
         return decision
     }
 
@@ -191,11 +221,9 @@ final class BrowserSiteControls<Engine: BrowserEngine> {
             pendingPermission = { continuation.resume(returning: $0) }
             permissionPanel.onClose = { [weak self] in self?.finishPermission(.dismiss) }
             let prompt = SitePermissionPromptView(origin: origin, permissions: permissions) { [weak self] choice in
-                // Notification refusal removes the prompt immediately; other choices retain
-                // the native dismissal. Appearance continues to use the native animation.
-                let immediate: Bool
-                if case .block = choice { immediate = permissions == [.notifications] }
-                else { immediate = false }
+                // Notification choices remove the prompt before the follow-up presentation.
+                // Appearance continues to use the native animation.
+                let immediate = permissions == [.notifications] && (choice == .block || choice == .alwaysAllow)
                 self?.finishPermission(choice, animating: immediate ? false : nil)
             }
             present(permissionPanel, rows: [prompt])
@@ -210,7 +238,12 @@ final class BrowserSiteControls<Engine: BrowserEngine> {
         completion?(choice)
     }
 
-    func cancelPermission() { invalidateSitePresentation(); finishPermission(.dismiss) }
+    func cancelPermission() {
+        invalidateSitePresentation()
+        finishPermission(.dismiss)
+        notificationSettingsPrompt?.cancel()
+        notificationSettingsPrompt = nil
+    }
 
     /// True while a prompt is open for a request of `surface` (a tab or the window's Peek).
     func hasPendingPermission(for surface: Surface) -> Bool {

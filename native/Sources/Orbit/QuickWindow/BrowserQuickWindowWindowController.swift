@@ -60,12 +60,14 @@ final class BrowserQuickWindowWindowController<Engine: BrowserEngine>: NSWindowC
     private var unresponsivePageRequests: [ObjectIdentifier: UUID] = [:]
     var opensWithDocument = false
     var spaceChooser: BrowserQuickWindowSearchPanel?
+    private(set) var isEditingAddress = false
     private(set) var compactInput: BrowserQuickWindowSearchPanel?
     var suggestionProvider: ((String) async -> [BrowserHistorySuggestion])?
     var inputHistory: [BrowserHistorySuggestion] = []
     var inputCandidates: [BrowserPaletteResult] = []
     private var inputQueryTask: Task<Void, Never>?
     private var inputQueryRevision = UUID()
+    private var compactQuery = ""
     private let inputFavicons = BrowserPaletteFaviconCache()
     let sourceSpaceBadge = NSButton()
     let extensionsButton = NSButton()
@@ -231,7 +233,19 @@ final class BrowserQuickWindowWindowController<Engine: BrowserEngine>: NSWindowC
         if compactInput == nil {
             let input = BrowserQuickWindowSearchPanel(kind: .address)
             compactInput = input
-            input.onCancel = { [weak self] in self?.window?.performClose(nil) }
+            input.onCancel = { [weak self] in
+                guard let self else { return }
+                if isEditingAddress {
+                    isEditingAddress = false
+                    inputQueryTask?.cancel()
+                    let restoreFocus = compactInput?.window.isKeyWindow == true
+                    compactInput?.hide()
+                    if restoreFocus, NSApp.activationPolicy() != .prohibited {
+                        window?.makeKeyAndOrderFront(nil)
+                        surface?.focusDocument()
+                    }
+                } else { window?.performClose(nil) }
+            }
             input.onQuery = { [weak self] in self?.queryCompactInput($0) }
             input.onSubmit = { [weak self] text in
                 guard let self, let url = try? resolver.resolve(text).url else { return }
@@ -244,6 +258,7 @@ final class BrowserQuickWindowWindowController<Engine: BrowserEngine>: NSWindowC
     }
 
     func queryCompactInput(_ query: String) {
+        compactQuery = query
         inputQueryTask?.cancel()
         inputQueryRevision = UUID()
         inputHistory = BrowserPaletteRanking.rankedHistory(inputHistory.filter {
@@ -262,14 +277,19 @@ final class BrowserQuickWindowWindowController<Engine: BrowserEngine>: NSWindowC
 
     private func renderCompactInput() {
         guard let compactInput else { return }
-        let query = compactInput.input.stringValue
-        let results = BrowserPaletteRanking.results(query: query, mode: .newTab, resolver: resolver,
+        let query = compactQuery
+        var results = BrowserPaletteRanking.results(query: query, mode: .newTab, resolver: resolver,
             candidates: inputCandidates, history: inputHistory, actions: [], limit: 5)
+        if isEditingAddress, case .page = try? resolver.resolve(query), !results.isEmpty {
+            results.insert(.init(id: "search-address", title: query, detail: "", section: .search,
+                                 action: .navigate(resolver.searchEngine.searchURL(for: query))), at: 1)
+            results = Array(results.prefix(5))
+        }
         compactInput.render(results.compactMap { result in
             guard let url = result.url else { return nil }
             let image = result.faviconReference.flatMap { inputFavicons.image(for: $0) }
                 ?? NSImage(systemSymbolName: result.symbol, accessibilityDescription: nil)
-            return BrowserQuickWindowSearchRow(id: result.id, title: result.title,
+            return BrowserQuickWindowSearchRow(id: result.id, title: isEditingAddress && result.section == .address ? query : result.title,
                 detail: result.section == .address || result.section == .search ? "" : BrowserSuggestionText.displayURL(url), image: image) { [weak self] in
                     self?.acceptCompactURL(url, typed: result.section == .address)
                 }
@@ -277,14 +297,16 @@ final class BrowserQuickWindowWindowController<Engine: BrowserEngine>: NSWindowC
     }
 
     func acceptCompactURL(_ url: URL, typed: Bool) {
-        guard acceptsCommands, !opensWithDocument, let surface, container.owns(surface), !isClosed else { return }
+        guard acceptsCommands, (!opensWithDocument || isEditingAddress), let surface, container.owns(surface), !isClosed else { return }
+        let editing = isEditingAddress
+        isEditingAddress = false
         inputQueryTask?.cancel()
         let screen = compactInput?.window.screen ?? window?.screen ?? NSScreen.main
         compactInput?.hide()
         opensWithDocument = true
         if typed { historyObserver.markTypedNavigation(surface, url: url) }
         surface.navigate(to: url)
-        if let screen {
+        if !editing, let screen {
             window?.setFrame(BrowserQuickWindowMetrics.frame(size: BrowserQuickWindowMetrics.initialPageSize,
                                                                visibleFrame: screen.visibleFrame), display: false)
         }
@@ -313,7 +335,18 @@ final class BrowserQuickWindowWindowController<Engine: BrowserEngine>: NSWindowC
         if let compactInput, compactInput.window.isVisible {
             compactInput.window.makeFirstResponder(compactInput.input)
             compactInput.input.selectText(nil)
-        } else { window?.makeFirstResponder(addressField); addressField.selectText(nil) }
+        } else if opensWithDocument, let input = prepareAddressEditing(), let window {
+            if NSApp.activationPolicy() != .prohibited { input.showCentered(over: window) }
+        } else { showCompactInput() }
+    }
+
+    func prepareAddressEditing() -> BrowserQuickWindowSearchPanel? {
+        guard opensWithDocument, let input = prepareCompactInput() else { return nil }
+        isEditingAddress = true
+        input.input.stringValue = surface?.navigationState.url?.absoluteString ?? ""
+        input.setEditingDocument(true)
+        queryCompactInput("")
+        return input
     }
 
     @discardableResult
@@ -395,6 +428,7 @@ final class BrowserQuickWindowWindowController<Engine: BrowserEngine>: NSWindowC
         addressField.wantsLayer = true
         addressField.setAccessibilityLabel(uiText("Address"))
         addressField.identifier = NSUserInterfaceItemIdentifier("little-orbit-address")
+        addressField.onActivate = { [weak self] in self?.focusAddress() }
         addressField.target = self
         addressField.action = #selector(submitAddress(_:))
         openButton.isBordered = false

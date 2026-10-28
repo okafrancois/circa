@@ -108,13 +108,70 @@ struct NativeSplitTests {
         #expect(settings != nil)
         window.siteControls.cancelPermission()
         settings?.resume(returning: [:]); settings = nil
-        active.splitToggle.performClick(nil)
+        let menu = window.makeSplitPaneMenu(rightID)
+        #expect(menu.items.map(\.title) == [uiText("Move Left"), uiText("Move Right"), "", uiText("Add Right Split"),
+            uiText("Add Left Split"), "", uiText("Separate Tab from Split"), uiText("Convert to Vertical Split View"), "", uiText("Share Split View…")])
+        #expect(menu.items[0].isEnabled && !menu.items[1].isEnabled)
+        let separate = menu.items[6]
+        _ = (separate.target as? NSObject)?.perform(separate.action, with: separate)
         await settle(window)
         #expect(window.session.activeSplit == nil)
         #expect(window.session.ownedSurfaces.contains { $0 === left })
         #expect(window.session.ownedSurfaces.contains { $0 === right })
         #expect(left.requestedURLs.count == 1 && right.requestedURLs.count == 1)
         #expect(window.session.selectedSurface === right)
+    }
+
+    @Test("Three equal columns preserve documents through focus and closing a pane")
+    func threePaneClose() async throws {
+        let (_, window, first) = try await makeWindow()
+        defer { window.session.close(); window.window?.close() }
+        for path in ["middle", "right"] {
+            window.session.addSplitPane(url: URL(string: "https://split.test/" + path)!)
+            await settle(window)
+        }
+        let split = try #require(window.session.activeSplit)
+        #expect(split.group.orientation == .horizontal)
+        let equalRatios = Array(repeating: 1.0 / 3.0, count: 3)
+        #expect(split.group.ratios == equalRatios)
+        let ids = split.group.tabIDs
+        let middle = try #require(window.session.surface(for: split.tabs[1].occurrenceID!))
+        let right = try #require(window.session.selectedSurface)
+        window.split.view.onFocus?(ids[1])
+        await settle(window)
+        #expect(window.session.selectedSurface === middle)
+        let view = window.split.view
+        window.session.closeSplitPane(ids[1])
+        await settle(window)
+        #expect(window.split.view === view)
+        #expect(window.session.activeSplit?.group.tabIDs == [ids[0], ids[2]])
+        #expect(!first.isDisposed && !right.isDisposed && middle.isDisposed)
+        #expect(first.requestedURLs.count == 1 && right.requestedURLs.count == 1)
+        window.session.closeSplitPane(ids[2])
+        await settle(window)
+        #expect(window.session.activeSplit == nil)
+        #expect(window.session.selectedSurface === first)
+    }
+
+    @Test("The pane menu inserts on either side of its target and old menu actions expire")
+    func menuInsertion() async throws {
+        let (_, window, _) = try await makeWindow()
+        defer { window.session.close(); window.window?.close() }
+        window.session.addSplitPane(url: URL(string: "https://split.test/right")!)
+        await settle(window)
+        let original = try #require(window.session.activeSplit).group.tabIDs
+        let menu = window.makeSplitPaneMenu(original[1])
+        let addLeft = menu.items[4]
+        _ = (addLeft.target as? NSObject)?.perform(addLeft.action, with: addLeft)
+        await settle(window)
+        let group = try #require(window.session.activeSplit)
+        #expect(group.tabs.count == 3)
+        #expect(group.group.tabIDs.first == original[0] && group.group.tabIDs.last == original[1])
+        #expect(group.tabs[1].url.absoluteString == "about:blank")
+        let oldMove = menu.items[0]
+        _ = (oldMove.target as? NSObject)?.perform(oldMove.action, with: oldMove)
+        await settle(window)
+        #expect(window.session.activeSplit?.group == group.group)
     }
 
     @Test("An empty focused pane keeps only back, forward, address and close controls")

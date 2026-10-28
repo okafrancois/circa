@@ -34,7 +34,7 @@ extension BrowserStore {
     }
 
     /// Adds a new blank pane, in one undoable graph transaction; no orphan tab on refusal.
-    public func splitWithNewTab(url: URL, orientation: BrowserSplitOrientation = .horizontal,
+    public func splitWithNewTab(url: URL, orientation: BrowserSplitOrientation = .horizontal, at index: Int? = nil,
                                 from context: BrowserContext) throws -> BrowserWindowState {
         _ = try organizationWindow(context)
         try BrowserSessionDocument.validateDestination(url)
@@ -57,7 +57,8 @@ extension BrowserStore {
                 next.insert(.split(groupID), into: location.container, at: location.index)
                 next.insert(.tab(selected), into: .split(groupID), at: 0)
             }
-            next.addTab(entry, into: .split(groupID), at: next.children(of: .split(groupID)).count)
+            let count = next.children(of: .split(groupID)).count
+            next.addTab(entry, into: .split(groupID), at: min(count, max(0, index ?? count)))
             next.updateSplit(groupID) { $0.ratios = Array(repeating: 1 / Double($0.tabIDs.count), count: $0.tabIDs.count) }
         }
         ensureSplitOccurrences(groupID, in: context)

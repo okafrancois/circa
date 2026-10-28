@@ -1304,3 +1304,23 @@
 "← Click to unzap" = "← Click to unzap";
 
 "{}" = "{}";
+"Orbit Needs Notifications Permission" = "Orbit Needs Notifications Permission";
+
+"You need to open System Preferences to give Orbit permission to show you Notifications." = "You need to open System Preferences to give Orbit permission to show you Notifications.";
+
+"Never Mind" = "Never Mind";
+
+
+"Open System Preferences" = "Open System Preferences";
+
+"Add Right Split" = "Add Right Split";
+
+"Add Left Split" = "Add Left Split";
+
+"Separate Tab from Split" = "Separate Tab from Split";
+
+"Convert to Vertical Split View" = "Convert to Vertical Split View";
+
+"Convert to Horizontal Split View" = "Convert to Horizontal Split View";
+
+"Share Split View…" = "Share Split View…";

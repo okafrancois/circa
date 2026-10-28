@@ -76,6 +76,22 @@ struct PermissionPromptTests {
         }
     }
 
+    @Test("The app notification follow-up dismisses once and leaves the site decision alone")
+    func notificationFollowUp() {
+        let root = NSView(frame: NSRect(x: 0, y: 0, width: 1000, height: 800))
+        var choices: [Bool] = []
+        let prompt = NotificationSettingsPromptView { choices.append($0) }
+        prompt.show(over: root)
+        #expect(prompt.card.frame.size == NSSize(width: 450, height: 290))
+        #expect(prompt.card.frame.midX == root.bounds.midX)
+        #expect(prompt.dismissButton.title == uiText("Never Mind"))
+        #expect(prompt.settingsButton.title == uiText("Open System Preferences"))
+        prompt.finish(openSettings: false)
+        prompt.finish(openSettings: true)
+        #expect(choices == [false])
+        #expect(prompt.superview == nil)
+    }
+
     @Test("Immediate dismissal invalidates before closing and preserves later motion preferences")
     func immediateDismissal() {
         for animates in [true, false] {

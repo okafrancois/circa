@@ -51,6 +51,7 @@ final class BrowserQuickWindowSearchPanel: NSObject, NSWindowDelegate, NSTextFie
     var onSubmit: ((String) -> Void)?
     private var ending = false
     private var anchor: NSRect?
+    private var editingDocument = false
 
     init(kind: Kind) {
         self.kind = kind
@@ -104,7 +105,7 @@ final class BrowserQuickWindowSearchPanel: NSObject, NSWindowDelegate, NSTextFie
 
     private var header: CGFloat { kind == .address ? 64 : 46 }
     private var pitch: CGFloat { kind == .address ? 50 : 46 }
-    private var width: CGFloat { kind == .address ? 490 : 244 }
+    private var width: CGFloat { kind == .address ? (editingDocument ? 500 : 490) : 244 }
     var preferredSize: NSSize {
         let listHeight = CGFloat(min(rows.count, 7)) * pitch
         return NSSize(width: width, height: kind == .address ? header + (rows.isEmpty ? 0 : 6) + listHeight + 8 : header + listHeight)
@@ -113,7 +114,7 @@ final class BrowserQuickWindowSearchPanel: NSObject, NSWindowDelegate, NSTextFie
     private func applyAppearance() {
         root.effectiveAppearance.performAsCurrentDrawingAppearance {
             let dark = root.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-            root.layer?.backgroundColor = (dark ? (kind == .address ? NSColor(srgbRed: 20/255, green: 18/255, blue: 22/255, alpha: 1)
+            root.layer?.backgroundColor = (dark ? (kind == .address ? (editingDocument ? NSColor(white: 23/255, alpha: 1) : NSColor(srgbRed: 20/255, green: 18/255, blue: 22/255, alpha: 1))
                 : NSColor(srgbRed: 4/255, green: 3/255, blue: 29/255, alpha: 1)) : OrbitTokens.Color.Surface.commandBar).cgColor
             root.layer?.borderColor = (dark ? NSColor.white.withAlphaComponent(0.22) : OrbitTokens.Color.Line.commandBarHairline).cgColor
             divider.layer?.backgroundColor = NSColor.labelColor.withAlphaComponent(0.12).cgColor
@@ -127,6 +128,20 @@ final class BrowserQuickWindowSearchPanel: NSObject, NSWindowDelegate, NSTextFie
         let dark = root.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
         placeholder.textColor = dark ? NSColor.white.withAlphaComponent(0.5) : .secondaryLabelColor
         for view in rowViews.values { view.needsDisplay = true }
+    }
+
+    func setEditingDocument(_ editing: Bool) {
+        editingDocument = editing
+        searchIcon.image = NSImage(systemSymbolName: editing ? "globe" : "magnifyingglass", accessibilityDescription: nil)
+        closeButton.setAccessibilityLabel(editing ? uiText("Close") : uiText("Close Little Orbit"))
+    }
+
+    func showCentered(over parent: NSWindow) {
+        let size = preferredSize
+        let frame = NSRect(x: parent.frame.midX - size.width / 2,
+                           y: parent.frame.midY - size.height / 2 + 20, width: size.width, height: size.height)
+        show(anchor: NSRect(x: frame.maxX - 3, y: frame.maxY - 4.5, width: 0, height: 0), screen: parent.screen)
+        input.selectText(nil)
     }
 
     func show(anchor: NSRect? = nil, screen: NSScreen? = nil) {
@@ -143,7 +158,7 @@ final class BrowserQuickWindowSearchPanel: NSObject, NSWindowDelegate, NSTextFie
         (input.currentEditor() as? NSTextView)?.drawsBackground = false
         root.addSubview(placeholder, positioned: .above, relativeTo: nil)
         placeholder.isHidden = !input.stringValue.isEmpty
-        if kind == .address, !OrbitMotionPreferences.prefersReducedMotion, let layer = root.layer {
+        if kind == .address, !editingDocument, !OrbitMotionPreferences.prefersReducedMotion, let layer = root.layer {
             layer.anchorPoint = NSPoint(x: 0.5, y: 0.5)
             layer.position = NSPoint(x: root.bounds.midX, y: root.bounds.midY)
             let entry = CAKeyframeAnimation(keyPath: "transform.scale")
@@ -191,7 +206,7 @@ final class BrowserQuickWindowSearchPanel: NSObject, NSWindowDelegate, NSTextFie
         for (index, row) in rows.enumerated() {
             let view = rowViews[row.id] ?? QuickWindowSearchRowButton()
             rowViews[row.id] = view
-            view.row = row; view.kind = kind
+            view.row = row; view.kind = kind; view.editingDocument = editingDocument
             view.onHover = { [weak self] in self?.selectedIndex = index; self?.refreshSelection() }
             if view.superview == nil { list.addSubview(view) }
         }
@@ -248,6 +263,7 @@ private final class QuickWindowSearchRowButton: NSButton {
     var row: BrowserQuickWindowSearchRow? { didSet { title = row?.title ?? ""; setAccessibilityLabel(row?.title); needsDisplay = true } }
     var selected = false { didSet { needsDisplay = true } }
     var kind = BrowserQuickWindowSearchPanel.Kind.address
+    var editingDocument = false
     var onHover: (() -> Void)?
     private var tracking: NSTrackingArea?
     init() { super.init(frame: .zero); title = ""; isBordered = false; target = self; action = #selector(accept) }
@@ -267,7 +283,8 @@ private final class QuickWindowSearchRowButton: NSButton {
         if selected {
             let dark = effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
             let selection = isAddress
-                ? (dark ? NSColor(srgbRed: 58/255, green: 53/255, blue: 202/255, alpha: 1) : OrbitTokens.ThemeAccent.defaultPurple.selection)
+                ? (dark ? (editingDocument ? NSColor(srgbRed: 56/255, green: 61/255, blue: 212/255, alpha: 1)
+                    : NSColor(srgbRed: 58/255, green: 53/255, blue: 202/255, alpha: 1)) : OrbitTokens.ThemeAccent.defaultPurple.selection)
                 : OrbitTokens.Color.State.commandBarRowHover
             selection.setFill()
             NSBezierPath(roundedRect: bounds, xRadius: isAddress ? 8 : 0, yRadius: isAddress ? 8 : 0).fill()

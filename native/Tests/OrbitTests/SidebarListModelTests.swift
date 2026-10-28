@@ -48,17 +48,20 @@ extension NativeWebKitTests {
 @Suite
 @MainActor
 struct SidebarListModelTests {
-    @Test("Split rows keep group identity, pane order and cached icons across focus updates")
-    func splitRowIdentityAndContent() throws {
+    @Test("Split rows keep group identity, pane order and cached icons across focus updates", arguments: [2, 3])
+    func splitRowIdentityAndContent(count: Int) throws {
         let org = SyntheticOrganization()
-        let first = TabID(), second = TabID()
-        let group = BrowserSplitGroup(tabIDs: [first, second])
+        let first = TabID(), second = TabID(), third = TabID()
+        let group = BrowserSplitGroup(tabIDs: count == 2 ? [first, second] : [first, second, third])
         let icon = NSImage(size: NSSize(width: 16, height: 16))
         let list = SidebarListView(frame: CGRect(x: 0, y: 0, width: 260, height: 500))
-        for focused: TabID? in [first, second, nil, first] {
+        for focused: TabID? in group.tabIDs.map(Optional.some) + [nil, first] {
             guard case let .tab(left) = org.tab(first, title: "First page", selected: focused == first),
                   case let .tab(right) = org.tab(second, title: "Second page", selected: focused == second) else { return }
-            let snapshot = org.snapshot(today: [.split(.init(group: group, tabs: [left, right]))])
+            var tabs = [left, right]
+            if count == 3, case let .tab(tab) = org.tab(third, title: "Third page", selected: focused == third) { tabs.append(tab) }
+            let titles = count == 2 ? ["First page", "Live second"] : ["First page", "Live second", "Live second"]
+            let snapshot = org.snapshot(today: [.split(.init(group: group, tabs: tabs))])
             let content = SidebarListContent(snapshot: snapshot, liveTitle: { $0.id == first ? "" : "Live second" },
                                              liveActivity: { _ in .init(favicon: icon) })
             list.apply(content, animated: false)
@@ -67,13 +70,13 @@ struct SidebarListModelTests {
             #expect(row.node == .split(group.id))
             if focused != nil {
                 #expect(row.titleLabel.isHidden)
-                #expect(row.paneCells.map { $0.label.stringValue } == ["First page", "Live second"])
+                #expect(row.paneCells.map { $0.label.stringValue } == titles)
                 #expect(row.paneCells.allSatisfy { $0.icon.image === icon })
                 #expect(row.paneCells[0].frame.maxX + 4 == row.paneCells[1].frame.minX)
             } else {
                 #expect(row.paneCells.isEmpty)
                 #expect(!row.titleLabel.isHidden)
-                #expect(row.titleLabel.stringValue == "First page | Live second")
+                #expect(row.titleLabel.stringValue == titles.joined(separator: " | "))
             }
             #expect(content.entries[0].tab?.id == (focused ?? first))
         }

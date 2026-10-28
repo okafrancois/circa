@@ -30,7 +30,7 @@ extension BrowserEnvironment {
         // Use the snapshot read for this creation, even when an observer's publication is older.
         controller.applyPreferences(searchEngine: settings.document.profile(space.profileID).searchEngine,
                                     theme: spaceTheme(for: space.id, in: catalog))
-        if url == nil {
+        do {
             await controller.historyObserver.prepareSuggestions(for: space.profileID)
             let candidates = BrowserPaletteRanking.candidates(document: document, profileID: space.profileID,
                 windowID: document.windows.first?.id ?? WindowID(), spaceID: space.id, windowIDs: Dictionary(uniqueKeysWithValues: document.windows.map { ($0.id, $0.id.rawValue) }))

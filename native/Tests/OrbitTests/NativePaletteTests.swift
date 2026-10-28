@@ -97,6 +97,8 @@ struct NativePaletteTests {
         #expect(h.window.palette.isPresented)
         #expect(h.window.palette.mode == .currentTab)
         #expect(h.window.palette.view.input.stringValue.isEmpty)
+        #expect(!h.window.palette.results.contains { if case .command = $0.action { true } else { false } })
+        #expect(!h.window.palette.results.contains { $0.url?.absoluteString == "about:blank" })
         h.window.palette.query("https://split.test/target")
         await h.window.palette.waitForResults()
         h.window.palette.accept()
