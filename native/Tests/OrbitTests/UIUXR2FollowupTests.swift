@@ -38,9 +38,13 @@ struct UIUXR2FollowupTests {
             controls.append(control)
             next = control.nextKeyView
         }
-        for required in [picker.modes, picker.search, picker.paletteButton, picker.removeButton] as [NSView] {
+        for required in [picker.modes, picker.search] as [NSView] {
             #expect(controls.contains(where: { $0 === required }))
         }
+        // Emoji & Symbols and Remove Icon live in the grid's context menu, not in the key-view loop.
+        let menuTitles = picker.grid.menu?.items.map(\.title) ?? []
+        #expect(menuTitles.contains(picker.paletteButton.title))
+        #expect(menuTitles.contains(picker.removeButton.title))
     }
 
     @Test("Disabled mode revokes retained AX cells across a switch back to Emoji")
