@@ -32,22 +32,20 @@ extension ChromiumSurface {
                 scroll = (x, y)
             }
         }
-        let history: [URL]
-        let historyIndex: Int
-        if !suspendedHistory.isEmpty {
-            history = suspendedHistory
-            historyIndex = suspendedHistoryIndex
-        } else {
-            let size = ACRNavigationHistory(token, nil, 0)
-            guard size > 0, size < 1_048_576 else { return refuseSuspension("history-size") }
-            var bytes = [CChar](repeating: 0, count: Int(size) + 1)
-            guard ACRNavigationHistory(token, &bytes, bytes.count) == size,
-                  let json = try? JSONSerialization.jsonObject(with: Data(bytes: bytes, count: Int(size))) as? [String: Any],
-                  let entries = json["entries"] as? [String], let index = json["currentIndex"] as? Int else { return refuseSuspension("history-read") }
-            history = entries.compactMap(URL.init(string:))
-            historyIndex = index
-            guard history.count == entries.count, history.indices.contains(index), history[index] == url else { return refuseSuspension("history-state") }
-        }
+        // Recheck native entries even after a previous wake: the page may have submitted a
+        // new request since its URL overlay was restored.
+        guard suspendedHistory.count <= 1 else { return refuseSuspension("non-replayable-history") }
+        let size = ACRNavigationHistory(token, nil, 0)
+        guard size > 0, size < 1_048_576 else { return refuseSuspension("history-size") }
+        var bytes = [CChar](repeating: 0, count: Int(size) + 1)
+        guard ACRNavigationHistory(token, &bytes, bytes.count) == size,
+              let json = try? JSONSerialization.jsonObject(with: Data(bytes: bytes, count: Int(size))) as? [String: Any],
+              let entries = json["entries"] as? [String], let historyIndex = json["currentIndex"] as? Int else { return refuseSuspension("history-read") }
+        // URL replay cannot reconstruct opaque session history or resubmit a request body.
+        // Keep these renderers alive until the engine supports lossless discard/restore.
+        guard json["hasPostData"] as? Bool == false, entries.count == 1 else { return refuseSuspension("non-replayable-history") }
+        let history = entries.compactMap(URL.init(string:))
+        guard history.count == entries.count, history.indices.contains(historyIndex), history[historyIndex] == url else { return refuseSuspension("history-state") }
         guard canSuspendDocument, documentGeneration == generation, navigationState.committedURL == url else { return refuseSuspension("changed-document") }
         return BrowserSuspensionState(url: url, documentGeneration: generation, scrollX: scroll.0, scrollY: scroll.1,
                                       history: history, historyIndex: historyIndex)
@@ -59,7 +57,7 @@ extension ChromiumSurface {
     }
 
     private var canSuspendDocument: Bool {
-        !isDisposed && isReady && !navigationState.isLoading && !isProtectedFromSuspension
+        !isDisposed && isReady && !navigationState.isLoading && !isProtectedFromSuspension && !hasNonReplayableNavigation
     }
 
     private func suspensionWorld(frameID: String) async -> Int? {
@@ -94,6 +92,7 @@ extension ChromiumSurface {
     private static let suspensionCheck = #"""
     (() => {
       if (!globalThis.orbitSuspension) return {safe:false,reason:'uninitialized-observer',documentURL:location.href};
+      if (history.state !== null || history.length !== 1) return {safe:false,reason:'session-history',documentURL:location.href};
       const roots = [document];
       let unsafe = orbitSuspension.edited;
       let changedField = false;

@@ -3,6 +3,8 @@ import BrowserCore
 import BrowserEngine
 import ChromiumEngine
 import Darwin
+import QuartzCore
+import OSLog
 
 /// Explicit synthetic measurement endpoint. Normal product startup and personal roots never
 /// enable it. Results contain counters and timestamps, never page content or destinations.
@@ -73,7 +75,9 @@ enum OrbitPerformanceProbe {
                let command = try? JSONSerialization.jsonObject(with: data) as? [String: String] {
                 try? FileManager.default.removeItem(at: commandFile)
                 let name = command["command"] ?? ""
-                if name == "url-pill-fixture" {
+                if name == "benchmark" {
+                    result["benchmark"] = await benchmark(owner, command: command, store: environment.store)
+                } else if name == "url-pill-fixture" {
                     let document = await environment.store.sessionDocument()
                     if let index = Int(command["statusSpace"] ?? ""), document.spaces.indices.contains(index) {
                         let target = document.spaces[index].id, message = command["status"]
@@ -168,7 +172,7 @@ enum OrbitPerformanceProbe {
         var refusalReasons: [String: String] = [:]
         var occurrences: [String: TabOccurrenceID] = [:]
         var trustedToggleChanged = false
-        for name in ["clean", "dirty", "dirty-toggle", "pinned", "audio", "visible"] {
+        for name in ["clean", "history", "state", "post", "frame-post", "dirty", "dirty-toggle", "pinned", "audio", "visible"] {
             owner.session.openTab(url: fixture.appendingPathComponent(name))
             await owner.session.waitForQueuedCommands()
             guard let surface = owner.session.selectedSurface, let id = owner.session.snapshot?.selectedOccurrenceID else { return ["created": false] }
@@ -179,6 +183,20 @@ enum OrbitPerformanceProbe {
             }
             occurrences[name] = id
             if name == "clean" {
+                _ = await evaluate(surface, "(() => { scrollTo(0,1200); return {}; })()")
+            } else if name == "state" {
+                _ = await evaluate(surface, "(() => { history.replaceState({token:42}, ''); return {}; })()")
+            } else if name == "frame-post" {
+                _ = await evaluate(surface, "(() => { const frame=document.createElement('iframe'); frame.name='perf-frame'; document.body.append(frame); const f=document.createElement('form'); f.target=frame.name; f.method='POST'; f.action='/posted-child'; f.innerHTML='<input name=token value=synthetic>'; document.body.append(f); f.submit(); return {}; })()")
+                try? await Task.sleep(for: .milliseconds(300))
+                await waitForLoad(surface)
+                _ = await surface.devToolsCall("Page.resetNavigationHistory")
+            } else if name == "post" {
+                _ = await evaluate(surface, "(() => { const f=document.createElement('form'); f.method='POST'; f.action='/posted'; f.innerHTML='<input name=token value=synthetic>'; document.body.append(f); f.submit(); return {}; })()")
+                try? await Task.sleep(for: .milliseconds(250))
+                await waitForLoad(surface)
+                _ = await surface.devToolsCall("Page.resetNavigationHistory")
+            } else if name == "history" {
                 surface.navigate(to: fixture.appendingPathComponent("clean-second"))
                 await waitForLoad(surface)
                 _ = await evaluate(surface, "(() => { scrollTo(0,1200); return {}; })()")
@@ -216,6 +234,18 @@ enum OrbitPerformanceProbe {
             result["cleanEngineCheck"] = await clean.captureStateForSuspension() != nil
             if let reason = refusalReasons["clean"] { result["cleanRefused:" + reason] = false }
         }
+        result["historyProtected"] = surfaces["history"]?.isDisposed == false
+        result["stateProtected"] = surfaces["state"]?.isDisposed == false
+        result["framePostProtected"] = surfaces["frame-post"]?.isDisposed == false && surfaces["frame-post"]?.allowsSuspension == false
+        result["postProtected"] = surfaces["post"]?.isDisposed == false
+        result["postRequestRecognized"] = surfaces["post"]?.allowsSuspension == false
+        result["opaqueStateRecognized"] = refusalReasons["state"] == "session-history"
+        if let state = surfaces["state"], !state.isDisposed {
+            result["statePreserved"] = await evaluate(state, "({ok:history.state?.token===42})")?["ok"] as? Bool == true
+        }
+        if let post = surfaces["post"], !post.isDisposed {
+            result["postDocumentPreserved"] = post.navigationState.committedURL?.path == "/posted"
+        }
         result["cleanDisposed"] = surfaces["clean"]?.isDisposed == true
         result["dirtyProtected"] = surfaces["dirty"]?.isDisposed == false
         result["trustedToggleProtected"] = surfaces["dirty-toggle"]?.isDisposed == false
@@ -235,12 +265,126 @@ enum OrbitPerformanceProbe {
                 result["recreated"] = surface !== surfaces["clean"] && !surface.isDisposed
                 let state = await evaluate(surface, "({y:scrollY})")
                 result["scrollRestored"] = (state?["y"] as? Double ?? 0) >= 1100
-                result["backHistoryPreserved"] = surface.goBack() == fixture.appendingPathComponent("clean")
-                await waitForLoad(surface)
-                result["forwardHistoryPreserved"] = surface.goForward() == fixture.appendingPathComponent("clean-second")
-                await waitForLoad(surface)
+                if let history = surfaces["history"], !history.isDisposed {
+                    result["backHistoryPreserved"] = history.goBack() == fixture.appendingPathComponent("history")
+                    await waitForLoad(history)
+                    result["forwardHistoryPreserved"] = history.goForward() == fixture.appendingPathComponent("clean-second")
+                    await waitForLoad(history)
+                }
             }
         }
         return result
+    }
+}
+
+
+extension OrbitPerformanceProbe {
+    private static func nextPageFrame(_ surface: ChromiumSurface) async -> Bool {
+        let (ok, _) = await surface.devToolsCall("Runtime.evaluate", params: #"{"expression":"new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(()=>r(true))))", "awaitPromise":true,"returnByValue":true}"#, timeout: .seconds(2))
+        return ok
+    }
+
+    /// Synthetic diagnostics report renderer frame opportunities / AppKit commits, not scanout.
+    private static func benchmark(_ owner: OrbitWindowController, command: [String: String], store: BrowserStore) async -> [String: Any] {
+        let kind = command["kind"] ?? "latency"
+        let poster = OSSignposter(subsystem: "local.orbit", category: "performance")
+        var measurements: [String: [Double]] = [:]
+        let document = await store.sessionDocument()
+        if kind == "load" {
+            for space in document.spaces {
+                owner.session.activateSpace(space.id)
+                await owner.session.waitForQueuedCommands()
+                for tab in owner.session.snapshot?.tabs ?? [] {
+                    owner.session.selectOccurrence(tab.occurrenceID)
+                    await owner.session.waitForQueuedCommands()
+                }
+            }
+            if let space = document.windows.first?.activeSpaceID {
+                owner.session.activateSpace(space)
+                await owner.session.waitForQueuedCommands()
+            }
+            var loaded = 0
+            for surface in owner.session.ownedSurfaces {
+                await waitForLoad(surface)
+                if await evaluate(surface, "({loaded:document.readyState==='complete' && location.hostname==='127.0.0.1'})")?["loaded"] as? Bool == true { loaded += 1 }
+            }
+            return ["loaded": loaded, "surfaces":owner.session.ownedSurfaces.count]
+        }
+        if kind == "close" {
+            for space in document.spaces {
+                owner.session.activateSpace(space.id)
+                await owner.session.waitForQueuedCommands()
+                let tabs = owner.session.snapshot?.tabs ?? []
+                for tab in tabs.dropLast() { owner.session.closeOccurrence(tab.occurrenceID) }
+                await owner.session.waitForQueuedCommands()
+            }
+            return ["surfaces":owner.session.ownedSurfaces.count]
+        }
+        if kind == "scroll" {
+            let clip = owner.sidebar.page.pageScrollView.contentView
+            let height = max(1, (clip.documentView?.bounds.height ?? 1) - clip.bounds.height)
+            let origin = ProcessInfo.processInfo.systemUptime
+            for i in 0..<600 {
+                let interval = poster.beginInterval("SidebarScrollCommit")
+                let start = ProcessInfo.processInfo.systemUptime
+                clip.scroll(to: NSPoint(x:0, y:height * CGFloat(i % 240) / 239))
+                owner.sidebar.page.pageScrollView.reflectScrolledClipView(clip)
+                owner.window?.displayIfNeeded()
+                CATransaction.flush()
+                measurements["scrollCommitMs", default:[]].append((ProcessInfo.processInfo.systemUptime-start)*1000)
+                measurements["scrollTickMs", default:[]].append((start-origin)*1000)
+                poster.endInterval("SidebarScrollCommit", interval)
+                let remaining = origin + Double(i+1)/120 - ProcessInfo.processInfo.systemUptime
+                if remaining > 0 { try? await Task.sleep(for: .seconds(remaining)) }
+            }
+            return measurements
+        }
+        for space in document.spaces.prefix(2) {
+            owner.session.activateSpace(space.id)
+            await owner.session.waitForQueuedCommands()
+            for tab in (owner.session.snapshot?.tabs ?? []).prefix(2) {
+                owner.session.selectOccurrence(tab.occurrenceID)
+                await owner.session.waitForQueuedCommands()
+                if let surface = owner.session.selectedSurface { await waitForLoad(surface) }
+            }
+        }
+        for i in 0..<(Int(command["count"] ?? "25") ?? 25) {
+            for task in ["tab", "space", "palette", "typing"] {
+                let interval = poster.beginInterval("Interaction", id: poster.makeSignpostID(), "kind=\(task, privacy: .public)")
+                let start = ProcessInfo.processInfo.systemUptime
+                var valid = true
+                if task == "tab", let tabs = owner.session.snapshot?.tabs, tabs.count > 1 {
+                    owner.session.selectOccurrence(tabs[i % 2].occurrenceID)
+                    await owner.session.waitForQueuedCommands()
+                    if let surface = owner.session.selectedSurface { valid = await nextPageFrame(surface) }
+                } else if task == "space", document.spaces.count > 1 {
+                    owner.session.activateSpace(document.spaces[i % 2].id)
+                    await owner.session.waitForQueuedCommands()
+                    if let surface = owner.session.selectedSurface { valid = await nextPageFrame(surface) }
+                } else if task == "palette" {
+                    owner.palette.present(.newTab)
+                    owner.window?.displayIfNeeded()
+                    CATransaction.flush()
+                    measurements["paletteFirstMs", default:[]].append((ProcessInfo.processInfo.systemUptime-start)*1000)
+                    await owner.palette.waitForResults()
+                    owner.window?.displayIfNeeded()
+                    CATransaction.flush()
+                    valid = owner.palette.isPresented && !owner.palette.results.isEmpty
+                } else if task == "typing", let surface = owner.session.selectedSurface {
+                    _ = await evaluate(surface, "(() => { document.querySelector('input').focus(); return {}; })()")
+                    // Start at dispatch, excluding fixture focus setup.
+                    let inputStart = ProcessInfo.processInfo.systemUptime
+                    let (ok, _) = await surface.devToolsCall("Input.insertText", params: #"{"text":"x"}"#)
+                    let frame = await nextPageFrame(surface)
+                    valid = ok && frame
+                    measurements["typingMs", default:[]].append((ProcessInfo.processInfo.systemUptime-inputStart)*1000)
+                }
+                if task != "typing" { measurements[task+"Ms", default:[]].append((ProcessInfo.processInfo.systemUptime-start)*1000) }
+                if !valid { measurements["failures", default:[]].append(1) }
+                poster.endInterval("Interaction", interval)
+                if task == "palette" { owner.palette.dismiss(returnFocus: true) }
+            }
+        }
+        return measurements
     }
 }

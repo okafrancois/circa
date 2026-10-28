@@ -326,18 +326,26 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
         let visible = clipped.isEmpty ? bounds : clipped
         let band = visible.insetBy(dx: 0, dy: -overscan)
         let half = Metrics.rowHeight / 2
-        var needed: Set<BrowserOrganizationNode> = []
-        for placement in displayedLayout.rows {
-            let y = animator.value(of: .node(placement.node), at: time) ?? placement.centerY
-            if (y + half >= band.minY && y - half <= band.maxY) || placement.node == renamingNode {
-                needed.insert(placement.node)
+        var placements: [SidebarListLayout.Placement]
+        if animator.isAnimating {
+            // Moving rows can cross the viewport out of resolved order.
+            placements = displayedLayout.rows.filter { placement in
+                let y = animator.value(of: .node(placement.node), at: time) ?? placement.centerY
+                return y + half >= band.minY && y - half <= band.maxY
             }
+        } else {
+            placements = Array(displayedLayout.rows(from: band.minY - half, through: band.maxY + half))
         }
+        if let renamingNode, !placements.contains(where: { $0.node == renamingNode }),
+           let placement = displayedLayout.rows.first(where: { $0.node == renamingNode }) {
+            placements.append(placement)
+        }
+        let needed = Set(placements.map(\.node))
         for (node, row) in rowViews where !needed.contains(node) {
             rowViews[node] = nil
             recycle(row)
         }
-        for placement in displayedLayout.rows where needed.contains(placement.node) {
+        for placement in placements {
             guard let entry = entriesByNode[placement.node] else { continue }
             if let row = rowViews[placement.node] {
                 configure(row, with: entry)

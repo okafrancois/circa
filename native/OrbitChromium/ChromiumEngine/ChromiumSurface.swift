@@ -159,6 +159,7 @@ public final class ChromiumSurface: BrowserEngineSurface {
     private var capture: (video: Bool, audio: Bool) = (false, false)
     private var find: (token: UUID, generation: UInt64, update: @MainActor (BrowserFindUpdate) -> Void)?
     private var devTools: [Int32: CheckedContinuation<(Bool, Data), Never>] = [:]
+    private var devToolsTimeouts: [Int32: Task<Void, Never>] = [:]
     var mediaActivity = ChromiumMediaActivity()
     var automaticPiPTask: Task<Void, Never>?
     var automaticPiPShouldEnter = false
@@ -168,6 +169,9 @@ public final class ChromiumSurface: BrowserEngineSurface {
     /// Destinations retained when the old renderer and its native navigation controller ended.
     /// Traversals reload, as discarded documents do; no DOM, form or history.state is serialized.
     var suspendedHistory: [URL] = []
+    // Native history metadata does not expose every frame's request body. Retain any
+    // surface that has seen a non-replayable navigation, including child frames.
+    var hasNonReplayableNavigation = false
     var suspendedHistoryIndex = 0
     private var traversingSuspendedHistory = false
     var isProtectedFromSuspension: Bool {
@@ -478,13 +482,17 @@ public final class ChromiumSurface: BrowserEngineSurface {
         let (success, data) = await devToolsCall("Page.captureScreenshot", params: String(decoding: json, as: UTF8.self))
         guard !isDisposed else { throw BrowserEngineError.surfaceDisposed }
         guard generation == documentGeneration else { throw BrowserEngineError.documentChanged }
-        guard success, let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let base64 = object["data"] as? String, let png = Data(base64Encoded: base64),
-              let source = CGImageSourceCreateWithData(png as CFData, nil),
-              let image = CGImageSourceCreateImageAtIndex(source, 0, nil) else {
-            throw BrowserEngineError.snapshotUnavailable
-        }
-        return BrowserSurfaceSnapshot(image: Self.scaled(image, to: request.width), documentGeneration: generation)
+        guard success else { throw BrowserEngineError.snapshotUnavailable }
+        let width = request.width
+        let decoded = await Task.detached(priority: .utility) {
+            ChromiumSnapshotDecoder.decode(data, width: width, generation: generation)
+        }.value
+        // Decoding yields the main actor: a close, navigation or cancellation may win meanwhile.
+        try Task.checkCancellation()
+        guard !isDisposed else { throw BrowserEngineError.surfaceDisposed }
+        guard generation == documentGeneration else { throw BrowserEngineError.documentChanged }
+        guard let decoded else { throw BrowserEngineError.snapshotUnavailable }
+        return decoded
     }
 
     /// Runs Chromium's native save pipeline. The shell may continue using archivePage for MHTML.
@@ -505,17 +513,6 @@ public final class ChromiumSurface: BrowserEngineSurface {
         return Data(archive.utf8)
     }
 
-    static func scaled(_ image: CGImage, to width: CGFloat?) -> CGImage {
-        guard let width, width > 0, Int(width) != image.width else { return image }
-        let height = Int((CGFloat(image.height) * width / CGFloat(image.width)).rounded())
-        guard let context = CGContext(data: nil, width: Int(width), height: max(1, height), bitsPerComponent: 8,
-                                      bytesPerRow: 0, space: CGColorSpaceCreateDeviceRGB(),
-                                      bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return image }
-        context.interpolationQuality = .high
-        context.draw(image, in: CGRect(x: 0, y: 0, width: Int(width), height: max(1, height)))
-        return context.makeImage() ?? image
-    }
-
     /// Executes a DevTools protocol method on this browser. Native-side only; pages never see it.
     public func devToolsCall(_ method: String, params: String = "", timeout: Duration = .seconds(8)) async -> (Bool, Data) {
         guard !isDisposed, isBrowserCreated else { return (false, Data()) }
@@ -523,8 +520,9 @@ public final class ChromiumSurface: BrowserEngineSurface {
         guard identifier != 0 else { return (false, Data()) }
         return await withCheckedContinuation { continuation in
             devTools[identifier] = continuation
-            Task { @MainActor [weak self] in
-                try? await Task.sleep(for: timeout)
+            devToolsTimeouts[identifier] = Task { @MainActor [weak self] in
+                do { try await Task.sleep(for: timeout) } catch { return }
+                self?.devToolsTimeouts[identifier] = nil
                 self?.devTools.removeValue(forKey: identifier)?.resume(returning: (false, Data()))
             }
         }
@@ -590,6 +588,8 @@ public final class ChromiumSurface: BrowserEngineSurface {
         pendingPermissions.removeAll()
         for continuation in devTools.values { continuation.resume(returning: (false, Data())) }
         devTools.removeAll()
+        for task in devToolsTimeouts.values { task.cancel() }
+        devToolsTimeouts.removeAll()
         hostView.removeFromSuperview()
         // A download belongs to the application, not to this tab. Retain its detached native
         // browser until the last terminal callback, otherwise CEF silently drops those updates.
@@ -767,6 +767,9 @@ public final class ChromiumSurface: BrowserEngineSurface {
             return ACR_POLICY_ALLOW
         }
         guard !isDisposed else { return ACR_POLICY_CANCEL }
+        if request.hasBody || !["GET", "HEAD"].contains(request.method?.uppercased() ?? "") {
+            hasNonReplayableNavigation = true
+        }
         let destination = request.url.flatMap(URL.init(string:))
         let shellStarted = destination != nil && destination == requestedDestination
         let kind = Self.navigationKind(request, shellStarted: shellStarted, pendingKind: pendingKind)
@@ -826,6 +829,7 @@ public final class ChromiumSurface: BrowserEngineSurface {
                 documentObserverRequest = 0
                 return
             }
+            devToolsTimeouts.removeValue(forKey: identifier)?.cancel()
             devTools.removeValue(forKey: identifier)?
                 .resume(returning: (event.value == 1, event.payload ?? Data()))
             return

@@ -2385,10 +2385,12 @@ class HistoryVisitor final : public CefNavigationEntryVisitor {
  public:
   bool Visit(CefRefPtr<CefNavigationEntry> entry, bool current, int index, int) override {
     urls.push_back(entry->GetURL());
+    has_post_data |= entry->HasPostData();
     if (current) current_index = index;
     return true;
   }
   std::vector<std::string> urls;
+  bool has_post_data = false;
   int current_index = -1;
  private:
   IMPLEMENT_REFCOUNTING(HistoryVisitor);
@@ -2446,6 +2448,7 @@ extern "C" int32_t ACRNavigationHistory(uint64_t token, char* buffer, size_t cap
   if (visitor->current_index < 0) return -1;
   auto value = CefDictionaryValue::Create();
   value->SetInt("currentIndex", visitor->current_index);
+  value->SetBool("hasPostData", visitor->has_post_data);
   auto entries = CefListValue::Create();
   for (size_t i = 0; i < visitor->urls.size(); ++i) entries->SetString(i, visitor->urls[i]);
   value->SetList("entries", entries);
