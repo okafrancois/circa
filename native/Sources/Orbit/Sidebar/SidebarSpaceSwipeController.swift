@@ -42,8 +42,13 @@ final class SidebarSpaceSwipeController {
     private var creationSource: SpaceID?
     private var beganOnCreationPage = false
     private var presentsCreation = false
+    private var trackingCreationEdge = false
+    private var creationEdgeProgress: CGFloat = 0
+    private var creationEdgeY: CGFloat = 0
+    private var creationConfirmationStart: CFTimeInterval?
+    private var creationSettlement: SpaceCreationSettlement?
 
-    /// Commands and overscroll enter the same trailing page and use the same pager spring.
+    /// Commands and overscroll enter the same trailing creation page.
     func presentCreationPage() {
         guard let sidebar, !isCreationPageVisible, let context = sidebar.swipeContext,
               environmentCanBegin(sidebar) else { return }
@@ -178,6 +183,7 @@ final class SidebarSpaceSwipeController {
             self.preparedDocument = document
             SpaceSwipeTrace.interval("SwipePrepareNeighbors") {
                 sidebar.prepareSpaceSwipeNeighbors(document: document, active: active, resolveTheme: resolveTheme)
+                sidebar.prepareNewSpaceSwipePage()
             }
         }
     }
@@ -319,7 +325,7 @@ final class SidebarSpaceSwipeController {
             swallowingMomentum = false
             guard environmentCanBegin(sidebar), inside,
                   let context = sidebar.swipeContext else { return false }
-            let retained = isSettling ? motion?.state(at: motionTime ?? clock()) : nil
+            let retained = isSettling ? (creationSettlement?.state(at: motionTime ?? clock()) ?? motion?.state(at: motionTime ?? clock())) : nil
             let retainedOffset = isSettling ? offset : nil
             let retainedDocument = document
             let retainedThemes = capturedThemes
@@ -332,6 +338,7 @@ final class SidebarSpaceSwipeController {
             sourceWindow = sidebar.window
             size = sidebar.bounds.size
             beganOnCreationPage = isCreationPageVisible || (retainedOffset != nil && sidebar.newSpaceSwipePage != nil)
+            creationEdgeY = sidebar.convert(event.locationInWindow, from: nil).y
             presentsCreation = beganOnCreationPage || (retainedOffset != nil && sidebar.newSpaceSwipePage != nil)
             let presentationOffset = rebased ?? retainedOffset ?? (beganOnCreationPage ? -sidebar.swipeWidth : 0)
             offset = presentationOffset
@@ -416,6 +423,14 @@ final class SidebarSpaceSwipeController {
             return
         }
         let adjacent = neighbors()
+        if !presentsCreation, adjacent.1 == nil, canCreateNextSpace, gesture.displacement < 0 {
+            trackingCreationEdge = true
+            creationEdgeProgress = SpaceCreationMotion.edgeProgress(displacement: CGFloat(gesture.displacement), width: sidebar.swipeWidth)
+            offset = SpaceCreationMotion.edgeOffset(displacement: CGFloat(gesture.displacement))
+            sidebar.showNewSpaceEdge(offset: offset, progress: creationEdgeProgress, at: creationEdgeY)
+            return
+        }
+        trackingCreationEdge = false
         offset = CGFloat(gesture.offset(width: Double(sidebar.swipeWidth), hasPrevious: adjacent.0 != nil,
                                        hasNext: adjacent.1 != nil || canCreateNextSpace))
         show(offset: offset)
@@ -428,6 +443,11 @@ final class SidebarSpaceSwipeController {
     private func present(offset: CGFloat) {
         guard let sidebar else { return }
         let adjacent = neighbors()
+        if trackingCreationEdge {
+            let fraction = creationConfirmationStart.map { min(1, max(0, ((motionTime ?? clock()) - $0) / SpaceCreationMotion.confirmationDuration)) } ?? 0
+            sidebar.showNewSpaceEdge(offset: offset, progress: creationEdgeProgress, at: creationEdgeY, confirmation: fraction)
+            return
+        }
         if presentsCreation || (offset < 0 && programmaticTarget == nil && adjacent.1 == nil && canCreateNextSpace) {
             presentsCreation = true
             if let source, let theme = capturedThemes[source] {
@@ -435,6 +455,9 @@ final class SidebarSpaceSwipeController {
                 onThemeProgress?(.init(source: theme, destination: destination, progress: abs(offset) / max(1, sidebar.swipeWidth)))
             }
             sidebar.showNewSpaceSwipe(offset: offset)
+            if beganOnCreationPage, !createsSpaceOnSettlement, offset > -60 {
+                sidebar.showNewSpaceEdge(offset: offset, progress: 1, at: creationEdgeY, confirmation: 1)
+            }
             return
         }
         let target = programmaticTarget ?? (offset > 0 ? adjacent.0 : adjacent.1)
@@ -475,8 +498,16 @@ final class SidebarSpaceSwipeController {
         isSettling = true
         let end: CGFloat = createsSpace ? -sidebar.swipeWidth : destination == nil ? 0 : (offset > 0 ? sidebar.swipeWidth : -sidebar.swipeWidth)
         motionTime = clock()
-        motion = SidebarSlotMotion(from: offset, to: end, at: motionTime!,
-                                   spring: OrbitTokens.Motion.spaceSwitchSidebar, velocity: velocity)
+        let confirmsEdge = trackingCreationEdge && createsSpace
+        creationConfirmationStart = confirmsEdge ? motionTime : nil
+        let start = motionTime! + (confirmsEdge ? SpaceCreationMotion.confirmationDuration : 0)
+        motion = SidebarSlotMotion(from: offset, to: end, at: start,
+                                   spring: presentsCreation || trackingCreationEdge ? SpaceCreationMotion.spring : OrbitTokens.Motion.spaceSwitchSidebar,
+                                   velocity: trackingCreationEdge ? 0 : velocity)
+        if createsSpace || beganOnCreationPage {
+            creationSettlement = SpaceCreationSettlement(from: offset, target: end, start: start)
+        }
+        if confirmsEdge { creationEdgeProgress = 1 }
         // Only an explicit ended event reaches a non-nil destination. Dispatch before settlement.
         if let destination, !commitDispatched, let catalog {
             if let source, let document { onRelease?(source, destination, document) }
@@ -501,6 +532,7 @@ final class SidebarSpaceSwipeController {
         }
         guard isSettling else { return }
         if OrbitMotionPreferences.prefersReducedMotion || sidebar.window?.isVisible != true {
+            trackingCreationEdge = false
             offset = end
             show(offset: end)
             completeSettlement()
@@ -515,7 +547,10 @@ final class SidebarSpaceSwipeController {
         let link = OrbitCoreVideoMotionDriver(time: motionTime ?? clock())
         link.onFrame = { [weak self, weak link] in
             guard let self, let link else { return }
-            _ = self.advance(to: link.time)
+            // Creation samples are measured wall time. The ordinary pager's driver clock
+            // accumulates current-to-target video intervals and can advance twice as fast.
+            let creation = self.presentsCreation || self.trackingCreationEdge || self.beganOnCreationPage
+            _ = self.advance(to: creation ? self.clock() + SpaceCreationMotion.presentationLead : link.time)
         }
         self.link = link
         if !link.start() {
@@ -539,23 +574,33 @@ final class SidebarSpaceSwipeController {
     func advance(to time: CFTimeInterval) -> Bool {
         guard environmentIsCurrent, let motion else { cancel(); return false }
         motionTime = time
-        offset = OrbitMotionPreferences.prefersReducedMotion ? motion.target : motion.value(at: time)
+        if let start = creationConfirmationStart {
+            if time < start + SpaceCreationMotion.confirmationDuration {
+                show(offset: offset); return true
+            }
+            trackingCreationEdge = false
+            presentsCreation = true
+        }
+        offset = OrbitMotionPreferences.prefersReducedMotion ? motion.target : (creationSettlement?.state(at: time).value ?? motion.value(at: time))
+        if trackingCreationEdge, !createsSpaceOnSettlement {
+            creationEdgeProgress = max(0, min(creationEdgeProgress, abs(offset) / 18))
+        }
         show(offset: offset)
-        if OrbitMotionPreferences.prefersReducedMotion || motion.isSettled(at: time) {
+        if OrbitMotionPreferences.prefersReducedMotion || (creationSettlement?.isSettled(at: time) ?? motion.isSettled(at: time)) {
             completeSettlement(); return false
         }
         return true
     }
 
     private func completeSettlement() {
-        link?.stop(); link = nil; motion = nil; motionTime = nil
+        link?.stop(); link = nil; motion = nil; motionTime = nil; creationSettlement = nil
         releaseSettlementWaiters()
         if createsSpaceOnSettlement {
             isCreationPageVisible = true
             creationSource = source
             cancel(preservePresentation: true)
             sidebar?.showNewSpaceSwipe(offset: -(sidebar?.swipeWidth ?? 0))
-            sidebar?.newSpaceSwipePage?.focusName()
+            sidebar?.settleNewSpacePage()
             return
         }
         if beganOnCreationPage {
@@ -628,10 +673,11 @@ final class SidebarSpaceSwipeController {
         token = UUID()
         documentTask?.cancel(); documentTask = nil; document = nil; previewContents.removeAll(); favoritePreviews.removeAll()
         documentIsStale = false
-        link?.stop(); link = nil; motion = nil; motionTime = nil
+        link?.stop(); link = nil; motion = nil; motionTime = nil; creationSettlement = nil
         gesture = nil; isSettling = false; releaseTarget = nil
         createsSpaceOnSettlement = false
         beganOnCreationPage = false; presentsCreation = false
+        trackingCreationEdge = false; creationEdgeProgress = 0; creationConfirmationStart = nil
         programmaticTarget = nil
         sourceWindow = nil; source = nil; catalog = nil; offset = 0
         commitDispatched = false; selectionPublished = false; capturedThemes.removeAll()

@@ -112,6 +112,12 @@ final class BrowserSidebarView: NSView, SidebarListHost {
     private var swipePreviewContent: SidebarListContent?
     private var swipeOffset: CGFloat?
     private(set) var newSpaceSwipePage: SidebarNewSpacePageView?
+    private var creationViewport: SidebarFlippedView?
+    private var creationBackdrop: OrbitThemeFillView?
+    private var creationRaster: SpaceSwipeRaster?
+    private var preparedCreation: (page: SidebarNewSpacePageView, raster: SpaceSwipeRaster?, catalog: BrowserCatalogSnapshot, source: SpaceID)?
+    private(set) var creationEdge: SpaceCreationEdgeView?
+    private var creationEdgeViewport: SpaceCreationEdgeViewport?
     private var swipeSourceGeometry: OrbitSidebarGeometry?
     private var swipeDestinationGeometry: OrbitSidebarGeometry?
     private var swipePreviewFavorites: FavoritesGridView?
@@ -1255,9 +1261,21 @@ extension BrowserSidebarView {
         if let creation = newSpaceSwipePage {
             CATransaction.begin(); CATransaction.setDisableActions(true)
             let sourceGeometry = swipeSourceGeometry ?? geometry
+            creationBackdrop?.frame = bounds
+            if creationBackdrop?.windowFillSize != window?.contentView?.bounds.size {
+                creationBackdrop?.windowFillSize = window?.contentView?.bounds.size
+            }
+            creationBackdrop?.applyInteractiveTheme(OrbitSpaceThemes.rendered(creation.theme))
+            creationBackdrop?.alphaValue = min(1, abs(offset) / max(1, swipeWidth))
             positionSpaceSwipeView(page, frame: contentFrame(sourceGeometry.pageFrame), x: offset)
             positionSpaceSwipeView(favoritesContainer, frame: contentFrame(sourceGeometry.favoritesFrame), x: offset)
-            creation.frame = pageContainer.bounds.offsetBy(dx: offset + swipeWidth, dy: 0)
+            let top = geometry.addressFrame.minY
+            creationViewport?.frame = CGRect(x: 0, y: top, width: bounds.width, height: max(0, geometry.footerFrame.minY - top))
+            creation.frame = (creationViewport?.bounds ?? .zero).offsetBy(dx: offset + swipeWidth, dy: 0)
+            creation.layoutSubtreeIfNeeded()
+            addressContainer.frame = geometry.addressFrame.offsetBy(dx: offset, dy: 0)
+            footer.creationProgress = min(1, abs(offset) / max(1, swipeWidth))
+            footer.apply(geometry)
             CATransaction.commit()
             return
         }
@@ -1324,7 +1342,15 @@ extension BrowserSidebarView {
     func showSpaceSwipe(offset: CGFloat, space: BrowserSpace?, content: SidebarListContent?,
                         destinationAccent: OrbitTokens.ThemeAccent? = nil, favorites: SpaceSwipeFavoritesPreview? = nil) {
         newSpaceSwipePage?.closePickers()
+        creationRaster?.restore(); creationRaster = nil
         newSpaceSwipePage?.removeFromSuperview(); newSpaceSwipePage = nil
+        creationViewport?.removeFromSuperview(); creationViewport = nil
+        creationBackdrop?.removeFromSuperview(); creationBackdrop = nil
+        creationEdge?.removeFromSuperview(); creationEdge = nil
+        addressContainer.frame = geometry.addressFrame
+        footer.creationProgress = 0
+        footer.apply(geometry)
+        creationEdgeViewport?.removeFromSuperview(); creationEdgeViewport = nil
         if swipeSourceGeometry == nil { swipeSourceGeometry = geometry }
         if swipeOutgoing == nil {
             swipeSharesFavorites = space != nil && space?.profileID == organization?.profileID
@@ -1394,15 +1420,80 @@ extension BrowserSidebarView {
         layoutSpaceSwipePages()
     }
 
+    func showNewSpaceEdge(offset: CGFloat, progress: CGFloat, at y: CGFloat, confirmation: CGFloat = 0) {
+        if swipeSourceGeometry == nil { swipeSourceGeometry = geometry }
+        swipeOffset = offset
+        let sourceGeometry = swipeSourceGeometry ?? geometry
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        positionSpaceSwipeView(page, frame: contentFrame(sourceGeometry.pageFrame), x: offset)
+        positionSpaceSwipeView(favoritesContainer, frame: contentFrame(sourceGeometry.favoritesFrame), x: offset)
+        if creationEdge == nil {
+            let edge = SpaceCreationEdgeView()
+            let viewport = SpaceCreationEdgeViewport(frame: bounds)
+            viewport.wantsLayer = true; viewport.layer?.masksToBounds = true
+            addSubview(viewport, positioned: .above, relativeTo: footer)
+            viewport.addSubview(edge)
+            creationEdgeViewport = viewport
+            creationEdge = edge
+        }
+        let reveal = min(1, progress * 3)
+        creationEdge?.frame = NSRect(x: bounds.width + 1 - 40 * reveal, y: y - 16, width: 32, height: 32)
+        creationEdge?.alphaValue = reveal
+        creationEdge?.progress = progress
+        creationEdge?.confirmation = confirmation
+        CATransaction.commit()
+    }
+
+    /// Like neighboring Space pages, creation artwork and text are prepainted while idle.
+    /// The detached draft is never exposed to accessibility or input before entry.
+    func prepareNewSpaceSwipePage() {
+        guard let context = swipeContext, newSpaceSwipePage == nil else { return }
+        let creation = SidebarNewSpacePageView(frame: NSRect(x: 0, y: 0, width: bounds.width,
+            height: max(0, geometry.footerFrame.minY - geometry.addressFrame.minY)))
+        creation.appearance = effectiveAppearance
+        configureNewSpacePage?(creation)
+        creation.layoutSubtreeIfNeeded()
+        let raster = SpaceSwipeRaster(view: creation, scale: window?.backingScaleFactor ?? 2)
+        preparedCreation = (creation, raster, context.0, context.1)
+    }
+
+    func settleNewSpacePage() {
+        creationRaster?.restore(); creationRaster = nil
+        newSpaceSwipePage?.appearance = nil
+        newSpaceSwipePage?.needsLayout = true
+        newSpaceSwipePage?.layoutSubtreeIfNeeded()
+        newSpaceSwipePage?.focusName()
+    }
+
     func showNewSpaceSwipe(offset: CGFloat) {
+        creationEdge?.removeFromSuperview(); creationEdge = nil
+        creationEdgeViewport?.removeFromSuperview(); creationEdgeViewport = nil
         if swipeSourceGeometry == nil { swipeSourceGeometry = geometry }
         swipeOffset = offset
         swipePreview?.removeFromSuperview(); swipePreview = nil; swipePreviewContent = nil
         swipePreviewFavorites?.removeFromSuperview(); swipePreviewFavorites = nil
         if newSpaceSwipePage == nil {
-            let creation = SidebarNewSpacePageView()
-            configureNewSpacePage?(creation)
-            pageContainer.addSubview(creation)
+            let cached = preparedCreation
+            let valid = cached?.catalog == swipeContext?.0 && cached?.source == swipeContext?.1
+                && cached?.page.bounds.width == bounds.width
+                && cached?.page.bounds.height == max(0, geometry.footerFrame.minY - geometry.addressFrame.minY)
+                && cached?.page.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == effectiveAppearance.bestMatch(from: [.aqua, .darkAqua])
+            let creation: SidebarNewSpacePageView
+            if valid, let cached {
+                creation = cached.page; creationRaster = cached.raster
+            } else {
+                creation = SidebarNewSpacePageView()
+                configureNewSpacePage?(creation)
+            }
+            preparedCreation = nil
+            let backdrop = OrbitThemeFillView()
+            addSubview(backdrop, positioned: .below, relativeTo: nil)
+            creationBackdrop = backdrop
+            let viewport = SidebarFlippedView()
+            viewport.wantsLayer = true; viewport.layer?.masksToBounds = true
+            addSubview(viewport, positioned: .above, relativeTo: pageContainer)
+            viewport.addSubview(creation)
+            creationViewport = viewport
             newSpaceSwipePage = creation
         }
         layoutSpaceSwipePages()
@@ -1447,7 +1538,15 @@ extension BrowserSidebarView {
 
     func finishSpaceSwipe(committed: SpaceID?) {
         newSpaceSwipePage?.closePickers()
+        creationRaster?.restore(); creationRaster = nil
         newSpaceSwipePage?.removeFromSuperview(); newSpaceSwipePage = nil
+        creationViewport?.removeFromSuperview(); creationViewport = nil
+        creationBackdrop?.removeFromSuperview(); creationBackdrop = nil
+        creationEdge?.removeFromSuperview(); creationEdge = nil
+        addressContainer.frame = geometry.addressFrame
+        footer.creationProgress = 0
+        footer.apply(geometry)
+        creationEdgeViewport?.removeFromSuperview(); creationEdgeViewport = nil
         if let committed { adoptSpaceSwipeDestination(committed) }
         retainSpaceSwipePreview()
         swipeOutgoing?.removeFromSuperview()
