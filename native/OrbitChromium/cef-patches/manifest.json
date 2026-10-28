@@ -1,0 +1,60 @@
+{
+  "cef_branch": "orbit/8078",
+  "cef_branch_sha": "0e3b767d39fa37f61101c2e31e945489789ed75d",
+  "cef_base": "4fa4ab516dacf6c49fc7e6e70d2b7ebce29fa35f",
+  "chromium_tag": "156.0.8078.48",
+  "patch_cfg_sha256": "6e92913b34a1780e96709a6fcb26248193ce51327261fadce1746fd4c8e6e0b0",
+  "patch_condition": "ORBIT_CEF_PATCHES",
+  "orbit_patches": [
+    {
+      "name": "orbit_ext_window.patch",
+      "sha256": "50a051260ebaef3ee28c10477961aec1ad8f45aa3d5fccbb584f7ca00ab40ff6"
+    },
+    {
+      "name": "orbit_native_side_panel.patch",
+      "sha256": "6f94106cb39771556cb00edf448dd05d533dedc8cf4c5202291658d27d3473b9"
+    }
+  ],
+  "commits": [
+    "0e3b767d39fa37f61101c2e31e945489789ed75d Orbit side API v3: transfer holds keep an emptied logical Browser alive; a destroyed one is replaced (CHROMIUM-APP-R3)",
+    "99e5115ce0e2bf5e48a3c7a48ddb37210d56c0da Orbit side API v2: profile_loaded, so that a removed profile directory is deleted only after Chrome unloaded it",
+    "065b7e9d7cde2519e1239272d26f8f2e63900094 Close an unused new logical Browser through BrowserWindowInterface::GetWindow (Chromium 156)",
+    "73351e085180d1838d54e1f22415dafdcc00a05c Orbit side API v2: move_tab between logical Browsers and within a tab strip (CHROMIUM-APP-R2)",
+    "0054741e73f25f544801ccc5b9cc47670b05be73 Include CEF feature flags before the hosted side panel guard",
+    "5b33b640bcd260f75b4dd2c431478eca8b841c78 Handle final native-hosted tab detach without Chromium side panel UI",
+    "a47332364769a380ff3db5e7aea2a838b85a6da1 Preserve hosted creation intent across asynchronous cancellation",
+    "00ef674db7636389459e07f9f90ecda3a2bdf418 Fix hosted window prerequisites for Chromium syntax validation",
+    "ab2f0087a642a3cc6bfd27a3021ee8ed62f425d8 WIP orbit hosted Chrome style (X2.1)"
+  ],
+  "chromium_patch_files": [
+    "chrome/browser/ui/browser_window/internal/browser_window_features.cc",
+    "chrome/browser/ui/read_anything/read_anything_side_panel_controller.cc"
+  ],
+  "chromium_changed_lines": 24,
+  "libcef_numstat": [
+    "12\t0\tBUILD.gn",
+    "261\t0\tlibcef/browser/orbit/orbit_browser_window.h",
+    "451\t0\tlibcef/browser/orbit/orbit_browser_window.mm",
+    "131\t0\tlibcef/browser/orbit/orbit_cef_api.h",
+    "314\t0\tlibcef/browser/orbit/orbit_cef_api.mm",
+    "90\t0\tlibcef/browser/orbit/orbit_hosted.h",
+    "257\t0\tlibcef/browser/orbit/orbit_hosted.mm",
+    "77\t0\tlibcef/browser/orbit/orbit_hosted_intent.h",
+    "20\t0\tlibcef/browser/orbit/orbit_hosted_mac.h",
+    "62\t0\tlibcef/browser/orbit/browser_platform_delegate_chrome_hosted.h",
+    "161\t0\tlibcef/browser/orbit/browser_platform_delegate_chrome_hosted.mm",
+    "13\t0\tlibcef/browser/browser_host_base.h",
+    "45\t15\tlibcef/browser/browser_host_create.cc",
+    "11\t0\tlibcef/browser/browser_platform_delegate_create.cc",
+    "4\t0\tlibcef/browser/chrome/browser_delegate.h",
+    "32\t6\tlibcef/browser/chrome/chrome_browser_delegate.cc",
+    "1\t0\tlibcef/browser/chrome/chrome_browser_delegate.h",
+    "155\t2\tlibcef/browser/chrome/chrome_browser_host_impl.cc",
+    "20\t0\tlibcef/browser/chrome/chrome_browser_host_impl.h",
+    "16\t0\tpatch/patch.cfg",
+    "30\t0\tpatch/patches/orbit_ext_window.patch",
+    "29\t0\tpatch/patches/orbit_native_side_panel.patch"
+  ],
+  "libcef_diff_sha256": "90e036cf922ea9189c6a805737b7cc0205e720fbecf3ca81fb5081f0af6cc253",
+  "side_api_header": "libcef/browser/orbit/orbit_cef_api.h (copied as native/OrbitChromium/Bridge/OrbitCefApi.h)"
+}

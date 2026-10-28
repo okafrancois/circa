@@ -1,0 +1,38 @@
+--- a/libcef/browser/chrome/chrome_browser_host_impl.cc
++++ b/libcef/browser/chrome/chrome_browser_host_impl.cc
+@@ -67,12 +67,12 @@
+   // Add a new tab. This will indirectly create a new tab WebContents and
+   // call ChromeBrowserDelegate::OnWebContentsCreated to create the associated
+   // ChromeBrowserHostImpl.
+-  chrome::AddTabAt(browser, url, /*index=*/tab_index,
+-                   /*foreground=*/true);
+-
+-  // The new tab WebContents.
+-  auto web_contents = browser->tab_strip_model()->GetActiveWebContents();
+-  CHECK(web_contents);
+-
++  auto* web_contents = chrome::AddAndReturnTabAt(
++      browser, url, /*index=*/tab_index, /*foreground=*/true);
++  if (!web_contents) {
++    LOG(ERROR) << "Chrome refused to create the tab WebContents";
++    return nullptr;
++  }
++
+   // The associated ChromeBrowserHostImpl.
+   auto browser_host =
+@@ -536,8 +536,14 @@
+   auto* profile = CefRequestContextImpl::GetProfile(params.request_context);
+   if (auto* existing =
+           orbit::GetLogicalBrowser(params.orbit_window_token, profile)) {
++    // The registry outlives TabStripEmpty until the posted Browser deletion.
++    // Never revive a Browser that has already committed to destruction.
++    if (existing->IsDeleteScheduled() ||
++        existing->tab_strip_model()->closing_all() || profile->ShutdownStarted()) {
++      return nullptr;
++    }
+     return existing;
+   }
+-  if (!orbit::IsKnownWindow(params.orbit_window_token)) {
++  if (profile->ShutdownStarted() || !orbit::IsKnownWindow(params.orbit_window_token)) {
+     return nullptr;
+   }

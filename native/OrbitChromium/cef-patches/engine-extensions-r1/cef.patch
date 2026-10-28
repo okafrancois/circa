@@ -1,0 +1,1243 @@
+diff --git a/BUILD.gn b/BUILD.gn
+index c45c84f..478b24d 100644
+--- a/BUILD.gn
++++ b/BUILD.gn
+@@ -410,6 +410,9 @@ if (is_win) {
+ # that is limited in scope (e.g. utility classes/methods).
+ source_set("libcef_static_unittested") {
+   sources = [
++    # Orbit (EXT-OUTCOME-R2): native Web Store installer transfer ownership.
++    "libcef/browser/orbit/orbit_installer_downloads.cc",
++    "libcef/browser/orbit/orbit_installer_downloads.h",
+     "libcef/browser/devtools/devtools_util.cc",
+     "libcef/browser/devtools/devtools_util.h",
+     "libcef/browser/geometry_util.h",
+@@ -417,7 +420,9 @@ source_set("libcef_static_unittested") {
+   ]
+ 
+   deps = [
++    "//components/download/public/common:public",
+     "//ui/gfx/geometry",
++    "//url",
+   ]
+ 
+   public_deps = [
+@@ -437,6 +442,7 @@ test("libcef_static_unittests") {
+   testonly = true
+ 
+   sources = [
++    "libcef/browser/orbit/orbit_installer_downloads_unittest.cc",
+     "libcef/browser/devtools/devtools_util_unittest.cc",
+     "libcef/browser/geometry_util_unittest.cc",
+   ]
+@@ -447,6 +453,14 @@ test("libcef_static_unittests") {
+     "//testing/gtest",
+   ]
+ 
++  if (is_mac) {
++    sources += [ "libcef/browser/orbit/orbit_modal_dialog_host_unittest.mm" ]
++    deps += [
++      "//components/web_modal",
++      "//ui/gfx:test_support",
++    ]
++  }
++
+   configs += [
+     "libcef/features:config",
+     "//build/config:precompiled_headers",
+@@ -1100,12 +1114,16 @@ source_set("libcef_static") {
+       # Orbit hosted Chrome style (ENG-X2, branch orbit/8078).
+       "libcef/browser/orbit/orbit_browser_window.h",
+       "libcef/browser/orbit/orbit_browser_window.mm",
++      "libcef/browser/orbit/orbit_modal_dialog_host.h",
+       "libcef/browser/orbit/orbit_cef_api.h",
+       "libcef/browser/orbit/orbit_cef_api.mm",
+       "libcef/browser/orbit/orbit_hosted.h",
+       "libcef/browser/orbit/orbit_hosted_intent.h",
+       "libcef/browser/orbit/orbit_hosted.mm",
+       "libcef/browser/orbit/orbit_hosted_mac.h",
++      "libcef/browser/orbit/orbit_unowned_tabs.h",
++      "libcef/browser/orbit/orbit_unowned_tabs.mm",
++      "libcef/browser/orbit/orbit_unowned_tabs_api.h",
+       "libcef/browser/orbit/browser_platform_delegate_chrome_hosted.h",
+       "libcef/browser/orbit/browser_platform_delegate_chrome_hosted.mm",
+ 
+@@ -1133,7 +1151,10 @@ source_set("libcef_static") {
+       "//chrome/app/chrome_main_mac.mm",
+     ]
+ 
+-    deps += [ "//components/os_crypt/common:keychain_password_mac" ]
++    deps += [
++      "//components/os_crypt/common:keychain_password_mac",
++      "//components/remote_cocoa/app_shim",
++    ]
+   } else {
+     sources += [
+       "libcef/browser/chrome/chrome_web_contents_view_delegate_cef.cc",
+@@ -1910,7 +1931,10 @@ if (is_mac) {
+       "Resources",
+     ]
+ 
+-    sources = libcef_sources_common + includes_mac
++    sources = libcef_sources_common + includes_mac + [
++      # Orbit (EXT-OUTCOME-R1): framework side of orbit_unowned_tabs_api.h.
++      "libcef/browser/orbit/orbit_unowned_tabs_entry.cc",
++    ]
+ 
+     deps = libcef_deps_common + [
+       ":cef_framework_cef_binaries",
+diff --git a/include/internal/cef_types.h b/include/internal/cef_types.h
+index 8c2c81f..ef9d282 100644
+--- a/include/internal/cef_types.h
++++ b/include/internal/cef_types.h
+@@ -2664,6 +2664,14 @@ typedef enum {
+   FILE_DIALOG_SAVE,
+ 
++  ///
++  /// Orbit maintained extension: select one existing directory, without web
++  /// upload enumeration or confirmation. Emitted only by OnFileDialog for
++  /// SELECT_EXISTING_FOLDER. RunFileDialog rejects this callback-only mode.
++  /// Existing mode values remain unchanged. Requires a matching SDK/framework.
++  ///
++  FILE_DIALOG_OPEN_EXISTING_FOLDER,
++
+   FILE_DIALOG_NUM_VALUES,
+ } cef_file_dialog_mode_t;
+ 
+diff --git a/libcef/browser/orbit/orbit_browser_window.h b/libcef/browser/orbit/orbit_browser_window.h
+index 413640d..c0fc771 100644
+--- a/libcef/browser/orbit/orbit_browser_window.h
++++ b/libcef/browser/orbit/orbit_browser_window.h
+@@ -32,7 +32,7 @@ namespace orbit {
+ // Geometry, activation and visibility are read from the Orbit NSWindow
+ // registered under |window_token|; Orbit places the tab content NSViews
+ // itself. Chrome UI that has no Orbit equivalent yet (bubbles, toolbar, find
+-// bar, dialogs host) is a no-op or null, following TestBrowserWindow
++// bar) is a no-op or null, following TestBrowserWindow
+ // (chrome/test/base/test_browser_window.*) and WebUIBrowserWindow
+ // (chrome/browser/ui/webui_browser/webui_browser_window.*).
+ class OrbitBrowserWindow : public BrowserWindow, public ExclusiveAccessContext {
+@@ -262,6 +262,7 @@ class OrbitBrowserWindow : public BrowserWindow, public ExclusiveAccessContext {
+   // CH-ESSENTIALS: a tab of this logical Browser is in element fullscreen.
+   bool content_fullscreen_ = false;
+   void NotifyFullscreenStateChanged();
++  std::unique_ptr<web_modal::WebContentsModalDialogHost> modal_dialog_host_;
+   StubLocationBar location_bar_;
+   base::WeakPtrFactory<OrbitBrowserWindow> weak_factory_{this};
+ };
+diff --git a/libcef/browser/orbit/orbit_browser_window.mm b/libcef/browser/orbit/orbit_browser_window.mm
+index 972181d..4d32b25 100644
+--- a/libcef/browser/orbit/orbit_browser_window.mm
++++ b/libcef/browser/orbit/orbit_browser_window.mm
+@@ -11,6 +11,7 @@
+ #include "base/functional/bind.h"
+ #include "base/task/single_thread_task_runner.h"
+ #include "cef/libcef/browser/orbit/orbit_hosted.h"
++#include "cef/libcef/browser/orbit/orbit_modal_dialog_host.h"
+ #include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/themes/theme_service.h"
+ #include "chrome/browser/ui/browser.h"
+@@ -20,6 +21,7 @@
+ #include "chrome/browser/ui/find_bar/find_bar.h"
+ #include "chrome/browser/ui/views/bubble_anchor_util_views.h"
+ #include "components/input/native_web_keyboard_event.h"
++#include "components/remote_cocoa/app_shim/appkit_modal_parent.h"
+ #include "content/public/browser/keyboard_event_processing_result.h"
+ #include "ui/base/mojom/window_show_state.mojom.h"
+ #include "ui/color/color_provider_key.h"
+@@ -37,6 +39,49 @@
+   return window ? window.GetNativeNSWindow() : nil;
+ }
+ 
++// Keep the AppKit parent alive until every dialog observer has been notified.
++// The registry can lose its window before the logical Browser's final tab
++// closes.
++class OrbitNativeModalDialogHost final : public OrbitModalDialogHost {
++ public:
++  explicit OrbitNativeModalDialogHost(NSWindow* window)
++      : OrbitModalDialogHost(base::BindRepeating(
++            [](NSWindow* window,
++               std::shared_ptr<remote_cocoa::ScopedAppKitModalParent>) {
++              NSView* view = [window contentView];
++              const NSSize size = [view bounds].size;
++              return Geometry{gfx::NativeView(view),
++                              gfx::Size(size.width, size.height),
++                              static_cast<bool>([window isVisible] &&
++                                                [window isKeyWindow])};
++            },
++            window,
++            std::make_shared<remote_cocoa::ScopedAppKitModalParent>(
++                gfx::NativeWindow(window)))) {
++    CHECK(window);
++    // Delivery is synchronous on AppKit's UI thread. Remove the block before
++    // destruction so it cannot access a destroyed C++ host.
++    for (NSNotificationName name in
++         @[ NSWindowDidResizeNotification, NSWindowDidMoveNotification ]) {
++      bounds_observers_.push_back([[NSNotificationCenter defaultCenter]
++          addObserverForName:name
++                      object:window
++                       queue:nil
++                  usingBlock:^(NSNotification*) {
++                    NotifyPositionRequiresUpdate();
++                  }]);
++    }
++  }
++  ~OrbitNativeModalDialogHost() override {
++    for (id observer : bounds_observers_) {
++      [[NSNotificationCenter defaultCenter] removeObserver:observer];
++    }
++  }
++
++ private:
++  std::vector<id> bounds_observers_;
++};
++
+ }  // namespace
+ 
+ // StubLocationBar -------------------------------------------------------------
+@@ -146,6 +191,8 @@
+ OrbitBrowserWindow::OrbitBrowserWindow(uint64_t window_token, Profile* profile)
+     : window_token_(window_token), profile_(profile) {
+   CHECK(profile_);
++  modal_dialog_host_ =
++      std::make_unique<OrbitNativeModalDialogHost>(OrbitNSWindow(window_token_));
+ }
+ 
+ OrbitBrowserWindow::~OrbitBrowserWindow() {
+@@ -157,6 +204,7 @@
+     location_bar_.browser_ = nullptr;
+     browser_ = nullptr;
+   }
++  modal_dialog_host_.reset();
+ }
+ 
+ void OrbitBrowserWindow::SetBrowser(Browser* browser) {
+@@ -442,13 +490,13 @@
+ 
+ web_modal::WebContentsModalDialogHost*
+ OrbitBrowserWindow::GetWebContentsModalDialogHost() {
+-  return nullptr;
++  return modal_dialog_host_.get();
+ }
+ 
+ web_modal::WebContentsModalDialogHost*
+ OrbitBrowserWindow::GetWebContentsModalDialogHostFor(
+     content::WebContents* web_contents) {
+-  return nullptr;
++  return modal_dialog_host_.get();
+ }
+ 
+ ExclusiveAccessContext* OrbitBrowserWindow::GetExclusiveAccessContext() {
+diff --git a/libcef/browser/orbit/orbit_installer_downloads.cc b/libcef/browser/orbit/orbit_installer_downloads.cc
+new file mode 100644
+index 0000000..a088aaa
+--- /dev/null
++++ b/libcef/browser/orbit/orbit_installer_downloads.cc
+@@ -0,0 +1,30 @@
++// Copyright 2026 Orbit. Portions copyright The Chromium Embedded Framework
++// Authors. Use of this source code is governed by a BSD-style license that can
++// be found in the LICENSE file.
++
++#include "cef/libcef/browser/orbit/orbit_installer_downloads.h"
++
++namespace orbit {
++
++bool IsWebstoreInstallerTransfer(const InstallerTransferFacts& facts) {
++  if (facts.source != download::DownloadSource::EXTENSION_INSTALLER ||
++      !facts.chrome_style || !facts.same_browser_context ||
++      facts.off_the_record || facts.user_data_dir.empty() ||
++      facts.forced_target.empty() || facts.forced_target.ReferencesParent() ||
++      !facts.forced_target.IsAbsolute() ||
++      facts.forced_target.Extension() != FILE_PATH_LITERAL(".crx") ||
++      facts.forced_target.DirName() !=
++          facts.user_data_dir.Append(kWebstoreDownloadFolder)) {
++    return false;
++  }
++  // Secondary, native comparison (extension_urls::IsWebstoreUpdateUrl):
++  // scheme, host and path only; the source above is the authority.
++  const GURL& url = facts.original_url;
++  const GURL& store = facts.webstore_update_url;
++  return url.is_valid() && store.is_valid() && url.SchemeIs("https") &&
++         url.scheme() == store.scheme() && url.host() == store.host() &&
++         url.path() == store.path() && !url.has_username() &&
++         !url.has_password() && !url.has_ref();
++}
++
++}  // namespace orbit
+diff --git a/libcef/browser/orbit/orbit_installer_downloads.h b/libcef/browser/orbit/orbit_installer_downloads.h
+new file mode 100644
+index 0000000..c84d4f2
+--- /dev/null
++++ b/libcef/browser/orbit/orbit_installer_downloads.h
+@@ -0,0 +1,44 @@
++// Copyright 2026 Orbit. Portions copyright The Chromium Embedded Framework
++// Authors. Use of this source code is governed by a BSD-style license that can
++// be found in the LICENSE file.
++
++#ifndef CEF_LIBCEF_BROWSER_ORBIT_ORBIT_INSTALLER_DOWNLOADS_H_
++#define CEF_LIBCEF_BROWSER_ORBIT_ORBIT_INSTALLER_DOWNLOADS_H_
++#pragma once
++
++#include "base/files/file_path.h"
++#include "components/download/public/common/download_source.h"
++#include "url/gurl.h"
++
++namespace orbit {
++
++// EXT-OUTCOME-R2. The Chrome Web Store installer downloads its CRX through the
++// download manager (extensions::WebstoreInstaller::StartDownload): source
++// EXTENSION_INSTALLER, a forced target "<user data>/Webstore Downloads/<id>_
++// <n>.crx", the Store update URL, the Store tab's own browser context. CEF
++// would offer that transfer to the embedder's CefDownloadHandler like any
++// download. Native facts only: no URL query, MIME type or page is trusted.
++struct InstallerTransferFacts {
++  download::DownloadSource source = download::DownloadSource::UNKNOWN;
++  base::FilePath forced_target;
++  GURL original_url;
++  GURL webstore_update_url;  // extension_urls::GetWebstoreUpdateUrl().
++  base::FilePath user_data_dir;  // ExtensionsBrowserClient::GetUserDataDir().
++  bool chrome_style = false;  // Unhandled means Chrome handling, not cancel.
++  bool same_browser_context = false;  // Item context is the browser's own.
++  bool off_the_record = true;
++};
++
++// The folder WebstoreInstaller::DownloadCrx uses (kWebstoreDownloadFolder,
++// file-local in extensions/browser/webstore_installer.cc).
++inline constexpr base::FilePath::CharType kWebstoreDownloadFolder[] =
++    FILE_PATH_LITERAL("Webstore Downloads");
++
++// True only for the installer's own transfer, which CEF then keeps away from
++// the embedder's download handler entirely: Chrome's target determination,
++// hidden download UI, approval and CrxInstaller verification apply unchanged.
++bool IsWebstoreInstallerTransfer(const InstallerTransferFacts& facts);
++
++}  // namespace orbit
++
++#endif  // CEF_LIBCEF_BROWSER_ORBIT_ORBIT_INSTALLER_DOWNLOADS_H_
+diff --git a/libcef/browser/orbit/orbit_installer_downloads_unittest.cc b/libcef/browser/orbit/orbit_installer_downloads_unittest.cc
+new file mode 100644
+index 0000000..ff7af4a
+--- /dev/null
++++ b/libcef/browser/orbit/orbit_installer_downloads_unittest.cc
+@@ -0,0 +1,102 @@
++// Copyright 2026 Orbit. Portions copyright The Chromium Embedded Framework
++// Authors. Use of this source code is governed by a BSD-style license that can
++// be found in the LICENSE file.
++
++#include "cef/libcef/browser/orbit/orbit_installer_downloads.h"
++
++#include "testing/gtest/include/gtest/gtest.h"
++
++namespace orbit {
++namespace {
++
++InstallerTransferFacts Installer() {
++  InstallerTransferFacts facts;
++  facts.source = download::DownloadSource::EXTENSION_INSTALLER;
++  facts.user_data_dir = base::FilePath(FILE_PATH_LITERAL("/synthetic/root"));
++  facts.forced_target = facts.user_data_dir.Append(kWebstoreDownloadFolder)
++                            .Append(FILE_PATH_LITERAL(
++                                "abcdefghijklmnopabcdefghijklmnop_42.crx"));
++  facts.webstore_update_url =
++      GURL("https://clients2.google.com/service/update2/crx");
++  facts.original_url = GURL(
++      "https://clients2.google.com/service/update2/crx?response=redirect&x=id%"
++      "3Dabcdefghijklmnopabcdefghijklmnop%26installsource%3Dondemand%26uc");
++  facts.chrome_style = true;
++  facts.same_browser_context = true;
++  facts.off_the_record = false;
++  return facts;
++}
++
++TEST(OrbitInstallerDownloadsTest, InstallerOwnTransferIsRecognized) {
++  EXPECT_TRUE(IsWebstoreInstallerTransfer(Installer()));
++}
++
++// The review's counterexample: identical public URL/MIME/document facts but an
++// ordinary download source stays the embedder's ordinary download.
++TEST(OrbitInstallerDownloadsTest, OrdinarySourceWithStoreShapeIsNotOwned) {
++  for (auto source : {download::DownloadSource::UNKNOWN,
++                      download::DownloadSource::NAVIGATION,
++                      download::DownloadSource::DRAG_AND_DROP,
++                      download::DownloadSource::FROM_RENDERER,
++                      download::DownloadSource::EXTENSION_API,
++                      download::DownloadSource::CONTEXT_MENU,
++                      download::DownloadSource::WEB_CONTENTS_API,
++                      download::DownloadSource::INTERNAL_API,
++                      download::DownloadSource::RETRY}) {
++    InstallerTransferFacts facts = Installer();
++    facts.source = source;
++    EXPECT_FALSE(IsWebstoreInstallerTransfer(facts));
++  }
++}
++
++TEST(OrbitInstallerDownloadsTest, ForcedInternalTargetIsRequired) {
++  const base::FilePath::CharType* targets[] = {
++      FILE_PATH_LITERAL(""),
++      FILE_PATH_LITERAL("/synthetic/root/Downloads/x.crx"),
++      FILE_PATH_LITERAL("/synthetic/root/Webstore Downloads/x.zip"),
++      FILE_PATH_LITERAL("/synthetic/root/Webstore Downloads/sub/x.crx"),
++      FILE_PATH_LITERAL("/synthetic/root/Webstore Downloads/../x.crx"),
++      FILE_PATH_LITERAL("/synthetic/other/Webstore Downloads/x.crx"),
++      FILE_PATH_LITERAL("Webstore Downloads/x.crx"),
++  };
++  for (const auto* target : targets) {
++    InstallerTransferFacts facts = Installer();
++    facts.forced_target = base::FilePath(target);
++    EXPECT_FALSE(IsWebstoreInstallerTransfer(facts)) << target;
++  }
++  InstallerTransferFacts facts = Installer();
++  facts.user_data_dir = base::FilePath();
++  EXPECT_FALSE(IsWebstoreInstallerTransfer(facts));
++}
++
++TEST(OrbitInstallerDownloadsTest, ContextStyleAndProfileAreRequired) {
++  InstallerTransferFacts alloy = Installer();
++  alloy.chrome_style = false;  // Unhandled would cancel on Alloy.
++  EXPECT_FALSE(IsWebstoreInstallerTransfer(alloy));
++  InstallerTransferFacts foreign = Installer();
++  foreign.same_browser_context = false;
++  EXPECT_FALSE(IsWebstoreInstallerTransfer(foreign));
++  InstallerTransferFacts incognito = Installer();
++  incognito.off_the_record = true;
++  EXPECT_FALSE(IsWebstoreInstallerTransfer(incognito));
++}
++
++TEST(OrbitInstallerDownloadsTest, UpdateUrlIsASecondaryNativeCheck) {
++  for (const char* url :
++       {"http://clients2.google.com/service/update2/crx?x=1",
++        "https://clients2.google.com.example/service/update2/crx",
++        "https://clients2.google.com/service/update2/crxx",
++        "https://user@clients2.google.com/service/update2/crx",
++        "https://clients2.google.com/service/update2/crx#fragment",
++        "https://example.invalid/extension.crx", "not a url"}) {
++    InstallerTransferFacts facts = Installer();
++    facts.original_url = GURL(url);
++    EXPECT_FALSE(IsWebstoreInstallerTransfer(facts)) << url;
++  }
++  InstallerTransferFacts facts = Installer();
++  facts.webstore_update_url = GURL();
++  EXPECT_FALSE(IsWebstoreInstallerTransfer(facts));
++}
++
++}  // namespace
++}  // namespace orbit
+diff --git a/libcef/browser/orbit/orbit_modal_dialog_host.h b/libcef/browser/orbit/orbit_modal_dialog_host.h
+new file mode 100644
+index 0000000..42ea19c
+--- /dev/null
++++ b/libcef/browser/orbit/orbit_modal_dialog_host.h
+@@ -0,0 +1,63 @@
++// Copyright 2026 Orbit. Use of this source code is governed by a BSD-style
++// license that can be found in the LICENSE file.
++
++#ifndef CEF_LIBCEF_BROWSER_ORBIT_ORBIT_MODAL_DIALOG_HOST_H_
++#define CEF_LIBCEF_BROWSER_ORBIT_ORBIT_MODAL_DIALOG_HOST_H_
++
++#include <algorithm>
++#include <utility>
++
++#include "base/functional/callback.h"
++#include "base/observer_list.h"
++#include "components/web_modal/web_contents_modal_dialog_host.h"
++#include "ui/gfx/geometry/point.h"
++#include "ui/gfx/geometry/size.h"
++
++namespace orbit {
++
++// One host per logical Browser, owned by OrbitBrowserWindow. Read geometry at
++// use time: the AppKit content view can resize without Chrome's BrowserView.
++class OrbitModalDialogHost : public web_modal::WebContentsModalDialogHost {
++ public:
++  struct Geometry {
++    gfx::NativeView view;
++    gfx::Size size;
++    bool active = false;
++  };
++
++  explicit OrbitModalDialogHost(base::RepeatingCallback<Geometry()> geometry)
++      : geometry_(std::move(geometry)) {}
++  OrbitModalDialogHost(const OrbitModalDialogHost&) = delete;
++  OrbitModalDialogHost& operator=(const OrbitModalDialogHost&) = delete;
++  ~OrbitModalDialogHost() override {
++    // Child widgets must close while the geometry callback still owns the
++    // native parent. Observers may unregister themselves during notification.
++    observers_.Notify(&web_modal::ModalDialogHostObserver::OnHostDestroying);
++  }
++
++  gfx::NativeView GetHostView() const override { return geometry_.Run().view; }
++  gfx::Size GetMaximumDialogSize() override { return geometry_.Run().size; }
++  gfx::Point GetDialogPosition(const gfx::Size& size) override {
++    const auto bounds = GetMaximumDialogSize();
++    return gfx::Point(std::max(0, (bounds.width() - size.width()) / 2), 0);
++  }
++  bool ShouldActivateDialog() const override { return geometry_.Run().active; }
++  void NotifyPositionRequiresUpdate() override {
++    observers_.Notify(
++        &web_modal::ModalDialogHostObserver::OnPositionRequiresUpdate);
++  }
++  void AddObserver(web_modal::ModalDialogHostObserver* observer) override {
++    observers_.AddObserver(observer);
++  }
++  void RemoveObserver(web_modal::ModalDialogHostObserver* observer) override {
++    observers_.RemoveObserver(observer);
++  }
++
++ private:
++  const base::RepeatingCallback<Geometry()> geometry_;
++  base::ObserverList<web_modal::ModalDialogHostObserver> observers_;
++};
++
++}  // namespace orbit
++
++#endif  // CEF_LIBCEF_BROWSER_ORBIT_ORBIT_MODAL_DIALOG_HOST_H_
+diff --git a/libcef/browser/orbit/orbit_modal_dialog_host_unittest.mm b/libcef/browser/orbit/orbit_modal_dialog_host_unittest.mm
+new file mode 100644
+index 0000000..b63a360
+--- /dev/null
++++ b/libcef/browser/orbit/orbit_modal_dialog_host_unittest.mm
+@@ -0,0 +1,153 @@
++// Copyright 2026 Orbit. Use of this source code is governed by a BSD-style
++// license that can be found in the LICENSE file.
++
++#include "cef/libcef/browser/orbit/orbit_modal_dialog_host.h"
++
++#import <Foundation/Foundation.h>
++
++#include <memory>
++
++#include "base/functional/bind.h"
++#include "testing/gtest/include/gtest/gtest.h"
++
++namespace orbit {
++namespace {
++
++class DialogObserver : public web_modal::ModalDialogHostObserver {
++ public:
++  explicit DialogObserver(OrbitModalDialogHost* host,
++                          base::RepeatingClosure on_destroy = {})
++      : host_(host), on_destroy_(std::move(on_destroy)) {
++    host_->AddObserver(this);
++  }
++  ~DialogObserver() override {
++    if (host_) {
++      host_->RemoveObserver(this);
++    }
++  }
++  void OnPositionRequiresUpdate() override { ++position_updates; }
++  void OnHostDestroying() override {
++    ++destroying;
++    if (on_destroy_) {
++      on_destroy_.Run();
++    }
++    // This is how ModalDialogHostObserverViews closes its scoped observation.
++    host_->RemoveObserver(this);
++    host_ = nullptr;
++  }
++
++  int position_updates = 0;
++  int destroying = 0;
++
++ private:
++  raw_ptr<OrbitModalDialogHost> host_;
++  base::RepeatingClosure on_destroy_;
++};
++
++TEST(OrbitModalDialogHostTest, ReadsCurrentBoundsAndActivation) {
++  OrbitModalDialogHost::Geometry geometry{gfx::NativeView(),
++                                         gfx::Size(1000, 700), false};
++  OrbitModalDialogHost host(base::BindRepeating(
++      [](OrbitModalDialogHost::Geometry* value) { return *value; },
++      base::Unretained(&geometry)));
++  EXPECT_EQ(gfx::Point(200, 0), host.GetDialogPosition(gfx::Size(600, 300)));
++  EXPECT_EQ(gfx::Size(1000, 700), host.GetMaximumDialogSize());
++  EXPECT_FALSE(host.ShouldActivateDialog());
++
++  geometry.size = gfx::Size(480, 360);
++  geometry.active = true;
++  EXPECT_EQ(gfx::Size(480, 360), host.GetMaximumDialogSize());
++  EXPECT_EQ(gfx::Point(0, 0), host.GetDialogPosition(gfx::Size(600, 300)));
++  EXPECT_TRUE(host.ShouldActivateDialog());
++}
++
++TEST(OrbitModalDialogHostTest, DestroyingHostNotifiesAllSelfRemovingObservers) {
++  auto host = std::make_unique<OrbitModalDialogHost>(
++      base::BindRepeating([]() { return OrbitModalDialogHost::Geometry{}; }));
++  DialogObserver first(host.get());
++  DialogObserver second(host.get());
++  host->NotifyPositionRequiresUpdate();
++  EXPECT_EQ(1, first.position_updates);
++  EXPECT_EQ(1, second.position_updates);
++  host.reset();
++  EXPECT_EQ(1, first.destroying);
++  EXPECT_EQ(1, second.destroying);
++}
++
++TEST(OrbitModalDialogHostTest, CancelAndRetryUnregisterOldDialog) {
++  OrbitModalDialogHost host(
++      base::BindRepeating([]() { return OrbitModalDialogHost::Geometry{}; }));
++  {
++    DialogObserver cancelled(&host);
++    host.NotifyPositionRequiresUpdate();
++    EXPECT_EQ(1, cancelled.position_updates);
++  }
++  DialogObserver retry(&host);
++  host.NotifyPositionRequiresUpdate();
++  EXPECT_EQ(1, retry.position_updates);
++}
++
++TEST(OrbitModalDialogHostTest, SeparateLogicalBrowsersHaveSeparateObservers) {
++  auto geometry =
++      base::BindRepeating([]() { return OrbitModalDialogHost::Geometry{}; });
++  auto first_host = std::make_unique<OrbitModalDialogHost>(geometry);
++  auto second_host = std::make_unique<OrbitModalDialogHost>(geometry);
++  DialogObserver first(first_host.get());
++  DialogObserver second(second_host.get());
++  first_host.reset();
++  EXPECT_EQ(1, first.destroying);
++  EXPECT_EQ(0, second.destroying);
++  second_host->NotifyPositionRequiresUpdate();
++  EXPECT_EQ(1, second.position_updates);
++}
++
++TEST(OrbitModalDialogHostTest, NativeParentLifetimeExtendsThroughNotification) {
++  auto parent_lifetime = std::make_shared<int>(0);
++  std::weak_ptr<int> weak_parent = parent_lifetime;
++  auto host = std::make_unique<OrbitModalDialogHost>(base::BindRepeating(
++      [](std::shared_ptr<int>) { return OrbitModalDialogHost::Geometry{}; },
++      parent_lifetime));
++  parent_lifetime.reset();
++  EXPECT_FALSE(weak_parent.expired());
++  DialogObserver dialog(host.get(), base::BindRepeating(
++                                        [](std::weak_ptr<int> parent) {
++                                          EXPECT_FALSE(parent.expired());
++                                        },
++                                        weak_parent));
++  host.reset();
++  EXPECT_EQ(1, dialog.destroying);
++  EXPECT_TRUE(weak_parent.expired());
++}
++
++class NativeParentObserver : public DialogObserver {
++ public:
++  NativeParentObserver(OrbitModalDialogHost* host, NSObject* parent)
++      : DialogObserver(host), parent_(parent) {}
++  void OnHostDestroying() override {
++    EXPECT_NE(nil, parent_);
++    DialogObserver::OnHostDestroying();
++  }
++
++ private:
++  NSObject* __weak parent_;
++};
++
++TEST(OrbitModalDialogHostTest, OrbitBindingRetainsNativeParentUntilDialogsClose) {
++  NSObject* __weak weak_parent;
++  std::unique_ptr<OrbitModalDialogHost> host;
++  std::unique_ptr<NativeParentObserver> observer;
++  @autoreleasepool {
++    NSObject* parent = [[NSObject alloc] init];
++    weak_parent = parent;
++    host = std::make_unique<OrbitModalDialogHost>(base::BindRepeating(
++        [](NSObject*) { return OrbitModalDialogHost::Geometry{}; }, parent));
++    observer = std::make_unique<NativeParentObserver>(host.get(), parent);
++  }
++  EXPECT_NE(nil, weak_parent);
++  host.reset();
++  EXPECT_EQ(1, observer->destroying);
++  EXPECT_EQ(nil, weak_parent);
++}
++
++}  // namespace
++}  // namespace orbit
+diff --git a/libcef/browser/orbit/orbit_unowned_tabs.h b/libcef/browser/orbit/orbit_unowned_tabs.h
+new file mode 100644
+index 0000000..1b88cb0
+--- /dev/null
++++ b/libcef/browser/orbit/orbit_unowned_tabs.h
+@@ -0,0 +1,65 @@
++// Copyright 2026 Orbit. Portions copyright The Chromium Embedded Framework
++// Authors. Use of this source code is governed by a BSD-style license that can
++// be found in the LICENSE file.
++
++#ifndef CEF_LIBCEF_BROWSER_ORBIT_ORBIT_UNOWNED_TABS_H_
++#define CEF_LIBCEF_BROWSER_ORBIT_ORBIT_UNOWNED_TABS_H_
++#pragma once
++
++#include <cstdint>
++#include <string>
++
++#include "base/functional/callback.h"
++#include "cef/include/cef_client.h"
++
++class Browser;
++struct CefBrowserCreateParams;
++
++namespace content {
++class WebContents;
++}
++
++namespace orbit {
++
++// EXT-OUTCOME-R1. A tab that Chrome creates by itself in an Orbit logical
++// Browser: an extension's tabs.create, an options page opened in a tab,
++// onboarding after an install. Without an embedder answer it would get a CEF
++// host with no client and no parent view (ChromeBrowserDelegate::SetAsDelegate).
++struct UnownedTab {
++  uint64_t window_token = 0;
++  std::string profile_path;
++  std::string url;
++  int index = -1;
++  // 1 Chrome activates the tab, 0 it opens in the background, -1 unknown
++  // (never guessed: the embedder treats unknown as background).
++  int active = -1;
++};
++
++// The embedder's answer: a client and the parent view of one of its own
++// surfaces, or a null client. Installed by orbit_cef_set_unowned_tab_handler
++// (orbit_unowned_tabs_entry.cc, framework side of the C API). UI thread only.
++using UnownedTabAdopter =
++    base::RepeatingCallback<CefRefPtr<CefClient>(const UnownedTab& tab,
++                                                 CefWindowHandle* parent)>;
++void SetUnownedTabAdopter(UnownedTabAdopter adopter);
++// Changes with every SetUnownedTabAdopter call: an offer revalidates it after
++// the embedder returns, so a cleared or replaced handler never publishes.
++uint64_t UnownedTabAdopterGeneration();
++
++// Offers |contents|, a tab Chrome is creating or inserting in the logical
++// Browser |browser|, to the embedder. URL, index and activation come from the
++// creating Navigate() request when its hook is running (orbit_navigate_intent.h,
++// published before the tab is loaded or inserted), otherwise from the tab
++// strip once the tab is inserted; activation stays unknown otherwise. After the
++// embedder returns, the Browser, contents, logical Browser registration,
++// window generation and handler generation are verified again. On acceptance
++// sets the client, parent view, window generation and tab index of |params| and
++// returns true; |params| is unchanged otherwise, and a client the embedder
++// returned is released (the embedder aborts its pending surface on release).
++bool OfferUnownedTab(Browser* browser,
++                     content::WebContents* contents,
++                     CefBrowserCreateParams* params);
++
++}  // namespace orbit
++
++#endif  // CEF_LIBCEF_BROWSER_ORBIT_ORBIT_UNOWNED_TABS_H_
+diff --git a/libcef/browser/orbit/orbit_unowned_tabs.mm b/libcef/browser/orbit/orbit_unowned_tabs.mm
+new file mode 100644
+index 0000000..92fdbcc
+--- /dev/null
++++ b/libcef/browser/orbit/orbit_unowned_tabs.mm
+@@ -0,0 +1,116 @@
++// Copyright 2026 Orbit. Portions copyright The Chromium Embedded Framework
++// Authors. Use of this source code is governed by a BSD-style license that can
++// be found in the LICENSE file.
++
++#include "cef/libcef/browser/orbit/orbit_unowned_tabs.h"
++
++#include <memory>
++#include <utility>
++
++#include "base/no_destructor.h"
++#include "cef/libcef/browser/orbit/orbit_hosted.h"
++#include "cef/libcef/browser/browser_host_base.h"
++#include "cef/libcef/browser/thread_util.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/ui/browser.h"
++#include "chrome/browser/ui/navigator/orbit_navigate_intent.h"
++#include "chrome/browser/ui/tabs/tab_strip_model.h"
++#include "content/public/browser/web_contents.h"
++
++namespace orbit {
++
++namespace {
++
++UnownedTabAdopter& Adopter() {
++  static base::NoDestructor<UnownedTabAdopter> adopter;
++  return *adopter;
++}
++
++uint64_t& AdopterGeneration() {
++  static uint64_t generation = 0;
++  return generation;
++}
++
++}  // namespace
++
++void SetUnownedTabAdopter(UnownedTabAdopter adopter) {
++  CEF_REQUIRE_UIT();
++  ++AdopterGeneration();
++  Adopter() = std::move(adopter);
++}
++
++uint64_t UnownedTabAdopterGeneration() {
++  return AdopterGeneration();
++}
++
++bool OfferUnownedTab(Browser* browser,
++                     content::WebContents* contents,
++                     CefBrowserCreateParams* params) {
++  CEF_REQUIRE_UIT();
++  if (!Adopter() || !browser || !contents || !params ||
++      !params->orbit_window_token || !IsLogicalBrowser(browser)) {
++    return false;
++  }
++  const uint64_t window_token = params->orbit_window_token;
++  const auto generation = GetWindowGeneration(window_token);
++  if (!generation) {
++    return false;
++  }
++  Profile* const profile = browser->GetProfile();
++  UnownedTab tab;
++  tab.window_token = window_token;
++  tab.profile_path = profile->GetPath().value();
++  const NavigateIntent* intent = CurrentNavigateIntent();
++  TabStripModel* model = browser->tab_strip_model();
++  const int inserted = model ? model->GetIndexOfWebContents(contents) : -1;
++  if (intent &&
++      intent->browser.get() ==
++          static_cast<const BrowserWindowInterface*>(browser) &&
++      intent->contents.get() == contents) {
++    // Pre-insertion creation (Navigate: tabs.create, options pages): the
++    // request is the authority.
++    tab.url = intent->url.spec();
++    tab.index = intent->tabstrip_index;
++    tab.active = intent->active;
++  } else if (inserted >= 0) {
++    // Already inserted: the tab strip is the authority.
++    tab.url = contents->GetVisibleURL().spec();
++    tab.index = inserted;
++    tab.active = model->active_index() == inserted ? 1 : 0;
++  } else {
++    tab.url = contents->GetVisibleURL().spec();
++  }
++
++  // The embedder may close the window, remove the profile, clear the handler
++  // or destroy this Browser while it answers; nothing below dereferences
++  // |browser| or |contents| before they are verified alive again.
++  const base::WeakPtr<BrowserWindowInterface> weak_browser =
++      browser->GetWeakPtr();
++  const base::WeakPtr<content::WebContents> weak_contents =
++      contents->GetWeakPtr();
++  const uint64_t adopter_generation = AdopterGeneration();
++  UnownedTabAdopter adopter = Adopter();  // The call may clear the original.
++  CefWindowHandle parent = kNullWindowHandle;
++  CefRefPtr<CefClient> client = adopter.Run(tab, &parent);
++  if (!client || !parent) {
++    return false;
++  }
++  if (!weak_browser || !weak_contents ||
++      weak_browser.get() != static_cast<BrowserWindowInterface*>(browser) ||
++      AdopterGeneration() != adopter_generation ||
++      !IsLogicalBrowser(browser) || browser->GetProfile() != profile ||
++      GetLogicalBrowser(window_token, profile) != browser ||
++      GetWindowGeneration(window_token) != generation) {
++    return false;  // |client| is released: the embedder aborts its surface.
++  }
++  params->client = client;
++  if (!params->window_info) {
++    params->window_info = std::make_unique<CefWindowInfo>();
++  }
++  params->window_info->parent_view = parent;
++  params->orbit_window_generation = *generation;
++  params->orbit_tab_index = tab.index;
++  return true;
++}
++
++}  // namespace orbit
+diff --git a/libcef/browser/orbit/orbit_unowned_tabs_api.h b/libcef/browser/orbit/orbit_unowned_tabs_api.h
+new file mode 100644
+index 0000000..a8b34d2
+--- /dev/null
++++ b/libcef/browser/orbit/orbit_unowned_tabs_api.h
+@@ -0,0 +1,44 @@
++// Copyright 2026 Orbit. BSD-style license; see LICENSE.
++// EXT-OUTCOME-R1: tabs that Chrome creates by itself in an Orbit logical Browser
++// (an extension's tabs.create, an options page opened in a tab, onboarding).
++//
++// Shared C contract between this patched CEF framework
++// (native/OrbitChromium/Bridge/OrbitUnownedTabsApi.h in Orbit)
++// and the bridge. The bridge resolves the single exported symbol
++// `orbit_cef_set_unowned_tab_handler` optionally: frameworks without the patch
++// keep such tabs without client or view. UI thread only.
++#ifndef CEF_LIBCEF_BROWSER_ORBIT_ORBIT_UNOWNED_TABS_API_H_
++#define CEF_LIBCEF_BROWSER_ORBIT_ORBIT_UNOWNED_TABS_API_H_
++#include <stdint.h>
++
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++struct _cef_client_t;
++
++typedef struct {
++  uint32_t struct_size;
++  uint64_t window_token;     // Orbit window of the logical Browser.
++  const char* profile_path;  // Its profile directory (never NULL or empty).
++  const char* url;           // The document being loaded; may be empty.
++  int32_t index;             // Tab strip index, -1 when unknown.
++  int32_t active;            // 1 foreground, 0 background, -1 unknown.
++} orbit_unowned_tab_t;
++
++// Called synchronously before the tab's CEF host is created. Returns a client
++// (a new reference that the framework adopts) and, through |parent_nsview|,
++// the embedder view the tab is placed in. NULL keeps the tab without client or
++// view. Never called after the handler is cleared.
++typedef struct _cef_client_t* (*orbit_unowned_tab_handler_t)(
++    void* context, const orbit_unowned_tab_t* tab, void** parent_nsview);
++
++// Installs |handler| (NULL clears it). Returns 1 on the UI thread, 0 otherwise.
++typedef int32_t (*orbit_cef_set_unowned_tab_handler_t)(
++    orbit_unowned_tab_handler_t handler, void* context);
++
++#ifdef __cplusplus
++}
++#endif
++
++#endif  // CEF_LIBCEF_BROWSER_ORBIT_ORBIT_UNOWNED_TABS_API_H_
+diff --git a/libcef/browser/orbit/orbit_unowned_tabs_entry.cc b/libcef/browser/orbit/orbit_unowned_tabs_entry.cc
+new file mode 100644
+index 0000000..260a96f
+--- /dev/null
++++ b/libcef/browser/orbit/orbit_unowned_tabs_entry.cc
+@@ -0,0 +1,56 @@
++// Copyright 2026 Orbit. Portions copyright The Chromium Embedded Framework
++// Authors. Use of this source code is governed by a BSD-style license that can
++// be found in the LICENSE file.
++//
++// Framework side of the C API (compiled with the libcef_dll sources): the only
++// place where the embedder's C client is adopted as a C++ CefClient, exactly as
++// cef_browser_host_create_browser does.
++
++#include "base/functional/bind.h"
++#include "cef/include/internal/cef_export.h"
++#include "cef/libcef/browser/orbit/orbit_unowned_tabs.h"
++#include "cef/libcef/browser/orbit/orbit_unowned_tabs_api.h"
++#include "cef/libcef/browser/thread_util.h"
++#include "cef/libcef_dll/ctocpp/client_ctocpp.h"
++
++namespace {
++
++CefRefPtr<CefClient> AdoptFromEmbedder(orbit_unowned_tab_handler_t handler,
++                                       void* context,
++                                       const orbit::UnownedTab& tab,
++                                       CefWindowHandle* parent) {
++  orbit_unowned_tab_t value = {};
++  value.struct_size = sizeof(value);
++  value.window_token = tab.window_token;
++  value.profile_path = tab.profile_path.c_str();
++  value.url = tab.url.c_str();
++  value.index = tab.index;
++  value.active = tab.active;
++  void* view = nullptr;
++  struct _cef_client_t* client = handler(context, &value, &view);
++  if (!client) {
++    return nullptr;
++  }
++  // Takes the new reference the embedder returned, even when it is refused.
++  CefRefPtr<CefClient> adopted = CefClientCToCpp_Wrap(
++      reinterpret_cast<struct _cef_client_0_t*>(client));
++  if (!view) {
++    return nullptr;
++  }
++  *parent = static_cast<CefWindowHandle>(view);
++  return adopted;
++}
++
++}  // namespace
++
++extern "C" CEF_EXPORT int32_t
++orbit_cef_set_unowned_tab_handler(orbit_unowned_tab_handler_t handler,
++                                 void* context) {
++  if (!CEF_CURRENTLY_ON_UIT()) {
++    return 0;
++  }
++  orbit::SetUnownedTabAdopter(
++      handler ? base::BindRepeating(&AdoptFromEmbedder, handler, context)
++              : orbit::UnownedTabAdopter());
++  return 1;
++}
+diff --git a/libcef/browser/chrome/chrome_browser_delegate.cc b/libcef/browser/chrome/chrome_browser_delegate.cc
+index 0c63a97..b2e4fe0 100644
+--- a/libcef/browser/chrome/chrome_browser_delegate.cc
++++ b/libcef/browser/chrome/chrome_browser_delegate.cc
+@@ -9,6 +9,7 @@
+ #include "cef/libcef/browser/browser_contents_delegate.h"
+ #if BUILDFLAG(IS_MAC)
+ #include "cef/libcef/browser/orbit/orbit_hosted.h"
++#include "cef/libcef/browser/orbit/orbit_unowned_tabs.h"
+ #endif
+ #include "cef/libcef/browser/browser_host_base.h"
+ #include "cef/libcef/browser/browser_info_manager.h"
+@@ -271,6 +272,10 @@ void ChromeBrowserDelegate::SetAsDelegate(content::WebContents* web_contents,
+     if (orbit_tab_params.window_info) {
+       orbit_tab_params.window_info->parent_view = kNullWindowHandle;
+     }
++    // EXT-OUTCOME-R1/R2: the embedder may adopt it as one of its own
++    // surfaces (client and parent view); otherwise it keeps neither. The offer
++    // re-verifies this Browser and |web_contents| after the embedder returns.
++    orbit::OfferUnownedTab(browser_.get(), web_contents, &orbit_tab_params);
+     params = &orbit_tab_params;
+   }
+ #endif
+diff --git a/libcef/browser/download_manager_delegate_impl.cc b/libcef/browser/download_manager_delegate_impl.cc
+index e5363cc..b409671 100644
+--- a/libcef/browser/download_manager_delegate_impl.cc
++++ b/libcef/browser/download_manager_delegate_impl.cc
+@@ -13,6 +13,7 @@
+ #include "base/strings/string_util.h"
+ #include "base/strings/utf_string_conversions.h"
+ #include "cef/include/cef_download_handler.h"
++#include "cef/libcef/browser/orbit/orbit_installer_downloads.h"
+ #include "cef/libcef/browser/browser_host_base.h"
+ #include "cef/libcef/browser/context.h"
+ #include "cef/libcef/browser/download_item_impl.h"
+@@ -23,6 +24,8 @@
+ #include "content/public/browser/browser_context.h"
+ #include "content/public/browser/download_item_utils.h"
+ #include "content/public/browser/web_contents.h"
++#include "extensions/browser/extensions_browser_client.h"
++#include "extensions/common/extension_urls.h"
+ #include "net/base/filename_util.h"
+ #include "net/http/http_response_headers.h"
+ #include "third_party/blink/public/mojom/choosers/file_chooser.mojom.h"
+@@ -327,6 +330,9 @@ CefDownloadManagerDelegateImpl::~CefDownloadManagerDelegateImpl() {
+ }
+ 
+ void CefDownloadManagerDelegateImpl::OnDownloadUpdated(DownloadItem* download) {
++  if (IsInstallerTransfer(download)) {
++    return;  // Orbit: the installer owns it; the client never sees it.
++  }
+   CefRefPtr<CefBrowserHostBase> browser = GetBrowser(download);
+   CefRefPtr<CefDownloadHandler> handler;
+   if (browser.get()) {
+@@ -347,6 +353,7 @@ void CefDownloadManagerDelegateImpl::OnDownloadUpdated(DownloadItem* download) {
+ 
+ void CefDownloadManagerDelegateImpl::OnDownloadDestroyed(DownloadItem* item) {
+   item->RemoveObserver(this);
++  installer_items_.erase(item);
+ 
+   CefBrowserHostBase* browser = nullptr;
+ 
+@@ -410,6 +417,13 @@ bool CefDownloadManagerDelegateImpl::DetermineDownloadTarget(
+     return false;
+   }
+ 
++  if (IsInstallerTransfer(item)) {
++    // Orbit: Chrome's own target determination keeps the installer's forced
++    // internal target, hidden UI and approval (Chrome style only, see
++    // ClassifyInstallerTransfer).
++    return false;
++  }
++
+   bool handled = false;
+   CefRefPtr<CefDownloadHandler> handler = GetDownloadHandler(browser);
+   if (handler) {
+@@ -502,6 +516,9 @@ CefDownloadManagerDelegateImpl::GetOrAssociateBrowser(
+   item->AddObserver(this);
+ 
+   item_browser_map_.insert(std::make_pair(item, browser.get()));
++  // First association, from OnDownloadCreated or DetermineDownloadTarget:
++  // every fact below is fixed when the installer creates the item.
++  ClassifyInstallerTransfer(item, browser.get());
+ 
+   // Register as an observer so that we can cancel associated DownloadItems when
+   // the browser is destroyed.
+@@ -512,6 +529,37 @@ CefDownloadManagerDelegateImpl::GetOrAssociateBrowser(
+   return browser;
+ }
+ 
++bool CefDownloadManagerDelegateImpl::ClassifyInstallerTransfer(
++    DownloadItem* item,
++    CefBrowserHostBase* browser) {
++  content::BrowserContext* item_context =
++      content::DownloadItemUtils::GetBrowserContext(item);
++  content::WebContents* contents =
++      browser ? browser->GetWebContents() : nullptr;
++  auto* extensions_client = extensions::ExtensionsBrowserClient::Get();
++  orbit::InstallerTransferFacts facts;
++  facts.source = item->GetDownloadSource();
++  facts.forced_target = item->GetForcedFilePath();
++  facts.original_url = item->GetOriginalUrl();
++  facts.webstore_update_url = extension_urls::GetWebstoreUpdateUrl();
++  facts.user_data_dir =
++      extensions_client ? extensions_client->GetUserDataDir() : base::FilePath();
++  facts.chrome_style = browser && browser->IsChromeStyle();
++  facts.same_browser_context =
++      item_context && contents && contents->GetBrowserContext() == item_context;
++  facts.off_the_record = !item_context || item_context->IsOffTheRecord();
++  if (!orbit::IsWebstoreInstallerTransfer(facts)) {
++    return false;
++  }
++  installer_items_.insert(item);
++  return true;
++}
++
++bool CefDownloadManagerDelegateImpl::IsInstallerTransfer(
++    DownloadItem* item) const {
++  return installer_items_.contains(item);
++}
++
+ CefRefPtr<CefBrowserHostBase> CefDownloadManagerDelegateImpl::GetBrowser(
+     DownloadItem* item) {
+   ItemBrowserMap::const_iterator it = item_browser_map_.find(item);
+diff --git a/libcef/browser/download_manager_delegate_impl.h b/libcef/browser/download_manager_delegate_impl.h
+index 5843c0d..ae97005 100644
+--- a/libcef/browser/download_manager_delegate_impl.h
++++ b/libcef/browser/download_manager_delegate_impl.h
+@@ -57,6 +57,14 @@ class CefDownloadManagerDelegateImpl
+ 
+   void ResetManager();
+ 
++  // Orbit (EXT-OUTCOME-R2): true when |item| is the Web Store installer's own
++  // CRX transfer for |browser| (orbit::IsWebstoreInstallerTransfer). Decided
++  // once per item, when it is first associated; such items never reach the
++  // client's CefDownloadHandler and keep Chrome's own handling.
++  bool ClassifyInstallerTransfer(download::DownloadItem* item,
++                                 CefBrowserHostBase* browser);
++  bool IsInstallerTransfer(download::DownloadItem* item) const;
++
+   raw_ptr<content::DownloadManager> manager_;
+   base::WeakPtrFactory<content::DownloadManager> manager_ptr_factory_;
+ 
+@@ -66,6 +74,9 @@ class CefDownloadManagerDelegateImpl
+   using ItemBrowserMap =
+       std::map<raw_ptr<download::DownloadItem>, raw_ptr<CefBrowserHostBase>>;
+   ItemBrowserMap item_browser_map_;
++
++  // Installer-owned items (Orbit); erased with the item.
++  std::set<raw_ptr<download::DownloadItem>> installer_items_;
+ };
+ 
+ #endif  // CEF_LIBCEF_BROWSER_DOWNLOAD_MANAGER_DELEGATE_IMPL_H_
+diff --git a/libcef/browser/file_dialog_manager.cc b/libcef/browser/file_dialog_manager.cc
+index 3497dc7..e89fad5 100644
+--- a/libcef/browser/file_dialog_manager.cc
++++ b/libcef/browser/file_dialog_manager.cc
+@@ -123,11 +123,19 @@ FileChooserParams SelectFileToFileChooserParams(
+     const base::FilePath& default_path,
+     const ui::SelectFileDialog::FileTypeInfo* file_types,
+     std::vector<std::vector<base::FilePath::StringType>>* extensions,
+-    std::vector<std::u16string>* descriptions) {
++    std::vector<std::u16string>* descriptions,
++    bool* select_existing_folder) {
+   FileChooserParams params;
++  *select_existing_folder = false;
+ 
+   std::optional<FileChooserParams::Mode> mode;
+   switch (type) {
++    case ui::SelectFileDialog::Type::SELECT_EXISTING_FOLDER:
++      // Blink has no existing-directory mode. Keep its transport mode separate
++      // from the native chooser purpose; never use kUploadFolder for this.
++      mode = FileChooserParams::Mode::kOpen;
++      *select_existing_folder = true;
++      break;
+     case ui::SelectFileDialog::Type::SELECT_UPLOAD_FOLDER:
+       mode = FileChooserParams::Mode::kUploadFolder;
+       break;
+@@ -180,6 +188,27 @@ FileChooserParams SelectFileToFileChooserParams(
+   return params;
+ }
+ 
++// Native directory selection is not a renderer folder upload.
++cef_file_dialog_mode_t CefFileDialogMode(const FileChooserParams& params,
++                                        bool select_existing_folder) {
++  if (select_existing_folder) {
++    return FILE_DIALOG_OPEN_EXISTING_FOLDER;
++  }
++  switch (params.mode) {
++    case FileChooserParams::Mode::kOpen:
++      return FILE_DIALOG_OPEN;
++    case FileChooserParams::Mode::kOpenMultiple:
++      return FILE_DIALOG_OPEN_MULTIPLE;
++    case FileChooserParams::Mode::kUploadFolder:
++      return FILE_DIALOG_OPEN_FOLDER;
++    case FileChooserParams::Mode::kSave:
++      return FILE_DIALOG_SAVE;
++    default:
++      DCHECK(false);
++      return FILE_DIALOG_OPEN;
++  }
++}
++
+ class CefFileSelectListener : public content::FileSelectListener {
+  public:
+   using CallbackType = CefFileDialogManager::RunFileChooserCallback;
+@@ -318,6 +347,11 @@ void CefFileDialogManager::RunFileDialog(
+     case FILE_DIALOG_SAVE:
+       params.mode = blink::mojom::FileChooserParams::Mode::kSave;
+       break;
++    case FILE_DIALOG_OPEN_EXISTING_FOLDER:
++      // This callback-only mode originates in RunSelectFile, not Blink's
++      // renderer chooser pipeline. Do not reinterpret it as a file or upload.
++      callback->OnFileDialogDismissed({});
++      return;
+     case FILE_DIALOG_NUM_VALUES:
+       DCHECK(false);
+       return;
+@@ -398,13 +432,15 @@ void CefFileDialogManager::RunSelectFile(
+ 
+   Extensions extensions;
+   Descriptions descriptions;
++  bool select_existing_folder = false;
+   auto chooser_params = SelectFileToFileChooserParams(
+-      type, title, default_path, file_types, &extensions, &descriptions);
++      type, title, default_path, file_types, &extensions, &descriptions,
++      &select_existing_folder);
+   auto callback = base::BindOnce(
+       &CefFileDialogManager::SelectFileDoneByDelegateCallback,
+       weak_ptr_factory_.GetWeakPtr(), base::UnsafeDangling(listener));
+   callback = MaybeRunDelegate(chooser_params, extensions, descriptions,
+-                              std::move(callback));
++                              std::move(callback), select_existing_folder);
+   if (callback.is_null()) {
+     // The delegate kept the callback.
+     return;
+@@ -491,7 +527,8 @@ CefFileDialogManager::MaybeRunDelegate(
+     const blink::mojom::FileChooserParams& params,
+     const Extensions& extensions,
+     const Descriptions& descriptions,
+-    RunFileChooserCallback callback) {
++    RunFileChooserCallback callback,
++    bool select_existing_folder) {
+   // |extensions| and |descriptions| may be empty, or will contain 1 entry for
+   // each value in |params.accept_types|.
+   DCHECK(extensions.empty() || extensions.size() == params.accept_types.size());
+@@ -500,24 +537,7 @@ CefFileDialogManager::MaybeRunDelegate(
+ 
+   if (auto client = browser_->client()) {
+     if (auto handler = browser_->client()->GetDialogHandler()) {
+-      int mode = FILE_DIALOG_OPEN;
+-      switch (params.mode) {
+-        case blink::mojom::FileChooserParams::Mode::kOpen:
+-          mode = FILE_DIALOG_OPEN;
+-          break;
+-        case blink::mojom::FileChooserParams::Mode::kOpenMultiple:
+-          mode = FILE_DIALOG_OPEN_MULTIPLE;
+-          break;
+-        case blink::mojom::FileChooserParams::Mode::kUploadFolder:
+-          mode = FILE_DIALOG_OPEN_FOLDER;
+-          break;
+-        case blink::mojom::FileChooserParams::Mode::kSave:
+-          mode = FILE_DIALOG_SAVE;
+-          break;
+-        default:
+-          DCHECK(false);
+-          break;
+-      }
++      const auto mode = CefFileDialogMode(params, select_existing_folder);
+ 
+       std::vector<CefString> accept_filters;
+       for (auto& accept_type : params.accept_types) {
+diff --git a/libcef/browser/file_dialog_manager.h b/libcef/browser/file_dialog_manager.h
+index 2003d4b..4c01e26 100644
+--- a/libcef/browser/file_dialog_manager.h
++++ b/libcef/browser/file_dialog_manager.h
+@@ -78,7 +78,8 @@ class CefFileDialogManager {
+       const blink::mojom::FileChooserParams& params,
+       const Extensions& extensions,
+       const Descriptions& descriptions,
+-      RunFileChooserCallback callback);
++      RunFileChooserCallback callback,
++      bool select_existing_folder = false);
+ 
+   void SelectFileDoneByDelegateCallback(
+       MayBeDangling<ui::SelectFileDialog::Listener> listener,

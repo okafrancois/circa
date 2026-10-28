@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>CFBundleIdentifier</key><string>io.github.okatech.orbit.test.orbit-chromium.synthetic</string>
+  <key>CFBundleExecutable</key><string>OrbitChromium</string>
+  <key>CFBundleName</key><string>Orbit Chromium Synthetic</string>
+  <key>CFBundlePackageType</key><string>APPL</string>
+  <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
+  <key>CFBundleVersion</key><string>1</string>
+  <key>CFBundleShortVersionString</key><string>0.1</string>
+  <key>LSMinimumSystemVersion</key><string>15.0</string>
+  <key>NSPrincipalClass</key><string>ACRApplication</string>
+  <!-- Hidden laboratory bundle: declared as an agent so that LaunchServices never reverts it to a
+       regular (Dock, menu bar) application. R2: runs 20261025T105255Z and 105627Z saw the
+       prohibited policy revert to regular without any setActivationPolicy: call;
+       LSBackgroundOnly instead hangs CefShutdown (Chromium's shutdown watchdog exits with 2). -->
+  <key>LSUIElement</key><true/>
+  <key>NSHighResolutionCapable</key><true/>
+  <key>NSSupportsAutomaticGraphicsSwitching</key><true/>
+  <key>LSEnvironment</key><dict><key>MallocNanoZone</key><string>0</string></dict>
+</dict></plist>

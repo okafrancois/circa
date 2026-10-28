@@ -1,0 +1,1191 @@
+// English development localization. See docs/native-port/localization-2026-10-25.md.
+"Secure connection" = "Secure connection";
+" or " = " or ";
+"%@\n%@\n→ %@" = "%@\n%@\n→ %@";
+"%@ %@" = "%@ %@";
+"%@ %ld" = "%@ %ld";
+"%@ of %@" = "%@ of %@";
+"%@ · %@\n%@" = "%@ · %@\n%@";
+"%@, %@, %@, %ld of %ld" = "%@, %@, %@, %ld of %ld";
+"%ld results" = "%ld results";
+"%ld saved links from this profile’s Favorites and Spaces will be exported. Today tabs and other profiles are excluded. %ld unsupported links were skipped." = "%ld saved links from this profile’s Favorites and Spaces will be exported. Today tabs and other profiles are excluded. %ld unsupported links were skipped.";
+"%ld saved links will be added to a new folder in this Space. Existing links stay unchanged. No pages will open. %ld unsupported links were skipped." = "%ld saved links will be added to a new folder in this Space. Existing links stay unchanged. No pages will open. %ld unsupported links were skipped.";
+"%ld%%" = "%ld%%";
+"%ld/%ld" = "%ld/%ld";
+"12 Hours" = "12 Hours";
+"12 hours" = "12 hours";
+"24 Hours" = "24 Hours";
+"24 hours" = "24 hours";
+"30 Days" = "30 Days";
+"30 days" = "30 days";
+"7 Days" = "7 Days";
+"7 days" = "7 days";
+"A Split View is named after its pages. Rename a page instead." = "A Split View is named after its pages. Rename a page instead.";
+"A browser operation is still in progress. Your windows and session are kept. Try quitting again when it finishes." = "A browser operation is still in progress. Your windows and session are kept. Try quitting again when it finishes.";
+"A file of Orbit’s session or history has several links. Nothing was imported." = "A file of Orbit’s session or history has several links. Nothing was imported.";
+"A folder used by the import is a symbolic link. Nothing was imported." = "A folder used by the import is a symbolic link. Nothing was imported.";
+"A previous import was interrupted; importing again completes it." = "A previous import was interrupted; importing again completes it.";
+"A profile must keep at least one Space." = "A profile must keep at least one Space.";
+"A removed profile still needs local cleanup." = "A removed profile still needs local cleanup.";
+"A restore of this session was interrupted and its journal cannot be read. Orbit did not open the session and kept every file. Run “orbit-import recover-restore”, or open a temporary session meanwhile." = "A restore of this session was interrupted and its journal cannot be read. Orbit did not open the session and kept every file. Run “orbit-import recover-restore”, or open a temporary session meanwhile.";
+"A restore of this session was interrupted and its journal cannot be read. Nothing was changed; run “orbit-import recover-restore”." = "A restore of this session was interrupted and its journal cannot be read. Nothing was changed; run “orbit-import recover-restore”.";
+"Aa" = "Aa";
+"About Orbit" = "About Orbit";
+"Active pane" = "Active pane";
+"Actual Size" = "Actual Size";
+"Add Color" = "Add Color";
+"Add Extension…" = "Add Extension…";
+"Add Split Pane" = "Add Split Pane";
+"Add Split View" = "Add Split View";
+"Add to Favorites" = "Add to Favorites";
+"Added %@ history visits." = "Added %@ history visits.";
+"Added %@ tabs and folders, %@ Spaces and %@ archived tabs." = "Added %@ tabs and folders, %@ Spaces and %@ archived tabs.";
+"Adding Spaces and tabs…" = "Adding Spaces and tabs…";
+"Address" = "Address";
+"Address Changed" = "Address Changed";
+"Advanced" = "Advanced";
+"All History" = "All History";
+"All Time…" = "All Time…";
+"All websites" = "All websites";
+"Allow" = "Allow";
+"Allow %@?" = "Allow %@?";
+"Allow JavaScript from Apple Events" = "Allow JavaScript from Apple Events";
+"Allow Once" = "Allow Once";
+"Already imported and kept as they are: %@" = "Already imported and kept as they are: %@";
+"Always Allow" = "Always Allow";
+"Amber & Coral" = "Amber & Coral";
+"An Orbit import or restore is using this session. Open Orbit again when it finishes; meanwhile you can open a temporary session." = "An Orbit import or restore is using this session. Open Orbit again when it finishes; meanwhile you can open a temporary session.";
+"An import is already in progress." = "An import is already in progress.";
+"An import record of this session cannot be read. Nothing was changed." = "An import record of this session cannot be read. Nothing was changed.";
+"Animations" = "Animations";
+"Appearance" = "Appearance";
+"Applies to browser interface animations immediately." = "Applies to browser interface animations immediately.";
+"Apply" = "Apply";
+"Orbit" = "Orbit";
+"Orbit action" = "Orbit action";
+"Orbit actions" = "Orbit actions";
+"Arc is open. Quit Arc, then try again." = "Arc is open. Quit Arc, then try again.";
+"Archive" = "Archive";
+"Archive Tab" = "Archive Tab";
+"Archive Tabs" = "Archive Tabs";
+"Archived Spaces" = "Archived Spaces";
+"Archived Tabs" = "Archived Tabs";
+"Archived Tabs, grouped by day" = "Archived Tabs, grouped by day";
+"Archived tabs from other profiles will be kept." = "Archived tabs from other profiles will be kept.";
+"Archived tabs: %@" = "Archived tabs: %@";
+"Orbit can copy your Spaces, profiles, Favorites, pinned tabs and folders, Today tabs and history from Arc. Arc must be closed during the copy; Orbit never quits it." = "Orbit can copy your Spaces, profiles, Favorites, pinned tabs and folders, Today tabs and history from Arc. Arc must be closed during the copy; Orbit never quits it.";
+"Orbit is not your default browser" = "Orbit is not your default browser";
+"Orbit is your default browser" = "Orbit is your default browser";
+"Orbit keeps a backup of its current session and history. Nothing opens automatically." = "Orbit keeps a backup of its current session and history. Nothing opens automatically.";
+"Orbit reads a consistent copy of your Arc data, which requires Arc to be closed. Quit Arc (⌘Q), then choose Check Again. Orbit never quits Arc for you." = "Orbit reads a consistent copy of your Arc data, which requires Arc to be closed. Quit Arc (⌘Q), then choose Check Again. Orbit never quits Arc for you.";
+"Arc’s Spaces and tabs would make Orbit’s session too large to open (%@ of %@ allowed). Nothing was imported." = "Arc’s Spaces and tabs would make Orbit’s session too large to open (%@ of %@ allowed). Nothing was imported.";
+"Arc’s data changed while Orbit was reading it. Quit Arc, then try again." = "Arc’s data changed while Orbit was reading it. Quit Arc, then try again.";
+"Arc’s data folder and Orbit’s data folder overlap. Choose a separate copy of Arc’s data." = "Arc’s data folder and Orbit’s data folder overlap. Choose a separate copy of Arc’s data.";
+"Ask" = "Ask";
+"Auto Archive — Temporary Profile Setting" = "Auto Archive — Temporary Profile Setting";
+"Automatic" = "Automatic";
+"Automatic Appearance" = "Automatic Appearance";
+"Automatic Downloads" = "Automatic Downloads";
+"Automatically archive inactive tabs after" = "Automatically archive inactive tabs after";
+"Autoplay" = "Autoplay";
+"Available in the signed Chromium Orbit product. macOS may ask you to confirm the change." = "Available in the signed Chromium Orbit product. macOS may ask you to confirm the change.";
+"Back" = "Back";
+"Back to Tabs" = "Back to Tabs";
+"Backing up Orbit…" = "Backing up Orbit…";
+"Bing" = "Bing";
+"Blank Window" = "Blank Window";
+"Block" = "Block";
+"Blocked for this session, but the setting could not be saved. The previous setting may return after relaunch." = "Blocked for this session, but the setting could not be saved. The previous setting may return after relaunch.";
+"Bold" = "Bold";
+"Bookmarks Could Not Be Transferred" = "Bookmarks Could Not Be Transferred";
+"Bookmarks.html" = "Bookmarks.html";
+"Boost Gallery" = "Boost Gallery";
+"Brand" = "Brand";
+"Bring All to Front" = "Bring All to Front";
+"Bring Your Arc Spaces to Orbit?" = "Bring Your Arc Spaces to Orbit?";
+"Browsing Profile" = "Browsing Profile";
+"Camera" = "Camera";
+"Camera in use" = "Camera in use";
+"Camera paused" = "Camera paused";
+"Cancel" = "Cancel";
+"Cancel Trace" = "Cancel Trace";
+"Canceled" = "Canceled";
+"Capitalize" = "Capitalize";
+"Capture Full Page" = "Capture Full Page";
+"Capture in Portrait Mode" = "Capture in Portrait Mode";
+"Capture…" = "Capture…";
+"Cast" = "Cast";
+"Certificate details are not available with this engine adapter." = "Certificate details are not available with this engine adapter.";
+"Change Profile" = "Change Profile";
+"Change Split Orientation" = "Change Split Orientation";
+"Change Theme" = "Change Theme";
+"Changing a profile requires an empty Space that is not open in a window." = "Changing a profile requires an empty Space that is not open in a window.";
+"Check Again" = "Check Again";
+"Check Document Now" = "Check Document Now";
+"Check Grammar With Spelling" = "Check Grammar With Spelling";
+"Check Spelling While Typing" = "Check Spelling While Typing";
+"Check for Updates…" = "Check for Updates…";
+"Choose a UTF-8 bookmark HTML file and an available destination. The browser’s existing saved links have not been replaced." = "Choose a UTF-8 bookmark HTML file and an available destination. The browser’s existing saved links have not been replaced.";
+"Choose" = "Choose";
+"Choose Arc’s data folder, or a copy of it." = "Choose Arc’s data folder, or a copy of it.";
+"Choose Space" = "Choose Space";
+"Choose a Destination…" = "Choose a Destination…";
+"Choose a name and browsing profile for this Space." = "Choose a name and browsing profile for this Space.";
+"Choose a single character or emoji for the Space icon." = "Choose a single character or emoji for the Space icon.";
+"Choose an available name in a folder you can access." = "Choose an available name in a folder you can access.";
+"Choose an available profile." = "Choose an available profile.";
+"Clear" = "Clear";
+"Clear Archive" = "Clear Archive";
+"Clear Archive for This Profile?" = "Clear Archive for This Profile?";
+"Clear Archive…" = "Clear Archive…";
+"Clear Cache and Refresh" = "Clear Cache and Refresh";
+"Clear Cookies and Refresh" = "Clear Cookies and Refresh";
+"Clear History…" = "Clear History…";
+"Clear Site Data for This Profile…" = "Clear Site Data for This Profile…";
+"Clear Site Data?" = "Clear Site Data?";
+"Clear Site Data…" = "Clear Site Data…";
+"Clear This Data" = "Clear This Data";
+"Clear Today" = "Clear Today";
+"Clear Unpinned Tabs" = "Clear Unpinned Tabs";
+"Clearing covers every origin and subdomain of these domains, in this profile only. Connections to these sites may close. Permissions are kept." = "Clearing covers every origin and subdomain of these domains, in this profile only. Connections to these sites may close. Permissions are kept.";
+"Close %@" = "Close %@";
+"Close Find" = "Close Find";
+"Close Little Orbit" = "Close Little Orbit";
+"Close Pane" = "Close Pane";
+"Close Peek" = "Close Peek";
+"Close Peek (Escape)" = "Close Peek (Escape)";
+"Close Selected Switcher Tab" = "Close Selected Switcher Tab";
+"Close Split Pane" = "Close Split Pane";
+"Close Tab" = "Close Tab";
+"Close Tabs" = "Close Tabs";
+"Close Window" = "Close Window";
+"Close this Space and remove its tabs, folders and archived tabs before changing its profile." = "Close this Space and remove its tabs, folders and archived tabs before changing its profile.";
+"Close this Split Pane" = "Close this Split Pane";
+"Close windows and tabs using this profile before deleting it." = "Close windows and tabs using this profile before deleting it.";
+"Collapse All Folders" = "Collapse All Folders";
+"Collapse Pinned Section" = "Collapse Pinned Section";
+"Collapsed" = "Collapsed";
+"Color %ld" = "Color %ld";
+"Command" = "Command";
+"Command Bar" = "Command Bar";
+"Command Bar Results" = "Command Bar Results";
+"Complete" = "Complete";
+"Complete · File Unavailable" = "Complete · File Unavailable";
+"Connection is not secure" = "Connection is not secure";
+"Connection status unavailable" = "Connection status unavailable";
+"Contact the Team" = "Contact the Team";
+"Continue" = "Continue";
+"Continue Downloads" = "Continue Downloads";
+"Control" = "Control";
+"Cookies and Site Data…" = "Cookies and Site Data…";
+"Copy" = "Copy";
+"Copy Orbit Info" = "Copy Orbit Info";
+"Copy Link" = "Copy Link";
+"Copy URL" = "Copy URL";
+"Copy URL as Markdown" = "Copy URL as Markdown";
+"Copy URL as Quote" = "Copy URL as Quote";
+"Copying Arc data…" = "Copying Arc data…";
+"Correct Spelling Automatically" = "Correct Spelling Automatically";
+"Could Not Restore the Local Session" = "Could Not Restore the Local Session";
+"Could Not Save the Session" = "Could Not Save the Session";
+"Could not change the tab’s sound." = "Could not change the tab’s sound.";
+"Create" = "Create";
+"Create Profile" = "Create Profile";
+"Create Space" = "Create Space";
+"Create Split View" = "Create Split View";
+"Create a Profile" = "Create a Profile";
+"Create a Space" = "Create a Space";
+"Current Space" = "Current Space";
+"Custom Date Range (start included, end excluded)" = "Custom Date Range (start included, end excluded)";
+"Custom Delay" = "Custom Delay";
+"Cut" = "Cut";
+"Cycle Pinned Extensions" = "Cycle Pinned Extensions";
+"Cycle Tab Backward" = "Cycle Tab Backward";
+"Cycle Tab Forward" = "Cycle Tab Forward";
+"Dark" = "Dark";
+"Dark Appearance" = "Dark Appearance";
+"Data Detectors" = "Data Detectors";
+"Data cleared. Reload the site to refresh its session." = "Data cleared. Reload the site to refresh its session.";
+"Date Range…" = "Date Range…";
+"Default" = "Default";
+"Default Browser" = "Default Browser";
+"Delete" = "Delete";
+"Delete Archived Tabs" = "Delete Archived Tabs";
+"Delete Folder" = "Delete Folder";
+"Delete Folder and Archive Its Tabs" = "Delete Folder and Archive Its Tabs";
+"Delete History — %@" = "Delete History — %@";
+"Delete Profile?" = "Delete Profile?";
+"Delete Profile…" = "Delete Profile…";
+"Delete Space…" = "Delete Space…";
+"Delete This Site…" = "Delete This Site…";
+"Delete Visit" = "Delete Visit";
+"Delete this Profile" = "Delete this Profile";
+"Delete your “%@” Space?" = "Delete your “%@” Space?";
+"Deleting this Profile will permanently remove any cookies, history, preferences, and logins that belong to this Profile." = "Deleting this Profile will permanently remove any cookies, history, preferences, and logins that belong to this Profile.";
+"Destination Unavailable" = "Destination Unavailable";
+"Developer" = "Developer";
+"Developer Tools" = "Developer Tools";
+"Domains: %@" = "Domains: %@";
+"Down Arrow" = "Down Arrow";
+"Download" = "Download";
+"Download Failed" = "Download Failed";
+"Downloads" = "Downloads";
+"Downloads Are Still in Progress" = "Downloads Are Still in Progress";
+"Drab" = "Drab";
+"DuckDuckGo" = "DuckDuckGo";
+"Duplicate" = "Duplicate";
+"Each profile keeps its own search engine, link behavior, history, permissions and website data." = "Each profile keeps its own search engine, link behavior, history, permissions and website data.";
+"Edit" = "Edit";
+"Edit Boost" = "Edit Boost";
+"Edit Theme Color" = "Edit Theme Color";
+"Edit Theme Color…" = "Edit Theme Color…";
+"Edit Theme…" = "Edit Theme…";
+"Export Bookmarks" = "Export Bookmarks";
+"Export Bookmarks…" = "Export Bookmarks…";
+"Import Bookmarks?" = "Import Bookmarks?";
+"Import Bookmarks…" = "Import Bookmarks…";
+"Imported Bookmarks" = "Imported Bookmarks";
+"Requires an active Space in a browser window with theme editing available." = "Requires an active Space in a browser window with theme editing available.";
+"Enter a name without control characters." = "Enter a name without control characters.";
+"Enter/Exit Full Screen" = "Enter/Exit Full Screen";
+"Escape" = "Escape";
+"Essential Keyboard Shortcuts" = "Essential Keyboard Shortcuts";
+"Exit" = "Exit";
+"Expand All Folders" = "Expand All Folders";
+"Expand Current Split" = "Expand Current Split";
+"Expand Pinned Section" = "Expand Pinned Section";
+"Expanded" = "Expanded";
+"Export Orbit Notes" = "Export Orbit Notes";
+"Extensions" = "Extensions";
+"Favorite" = "Favorite";
+"Favorite Name" = "Favorite Name";
+"Favorites" = "Favorites";
+"Favorites: %@" = "Favorites: %@";
+"File" = "File";
+"Find" = "Find";
+"Find Next" = "Find Next";
+"Find Previous" = "Find Previous";
+"Find Unavailable" = "Find Unavailable";
+"Find and Replace" = "Find and Replace";
+"Find in Page" = "Find in Page";
+"Find…" = "Find…";
+"Finishing…" = "Finishing…";
+"Focus Next Split Pane" = "Focus Next Split Pane";
+"Focus Previous Split Pane" = "Focus Previous Split Pane";
+"Folder %@" = "Folder %@";
+"Follow System" = "Follow System";
+"Font" = "Font";
+"Force Refresh the Page" = "Force Refresh the Page";
+"Format" = "Format";
+"Forward" = "Forward";
+"Found" = "Found";
+"From %@ to %@ (end excluded)" = "From %@ to %@ (end excluded)";
+"From (inclusive)" = "From (inclusive)";
+"Full Motion" = "Full Motion";
+"General" = "General";
+"Getting Started" = "Getting Started";
+"Go Back" = "Go Back";
+"Go Forward" = "Go Forward";
+"Go to" = "Go to";
+"Go to URL" = "Go to URL";
+"Google" = "Google";
+"Grain" = "Grain";
+"Greyscale" = "Greyscale";
+"Help" = "Help";
+"Hide Orbit" = "Hide Orbit";
+"Hide Other Windows" = "Hide Other Windows";
+"History" = "History";
+"History is unavailable. Try Refresh." = "History is unavailable. Try Refresh.";
+"History visits: %@" = "History visits: %@";
+"History, grouped by day" = "History, grouped by day";
+"Icon (one character or emoji)" = "Icon (one character or emoji)";
+"Import" = "Import";
+"Import Complete" = "Import Complete";
+"Import Without Archived Tabs?" = "Import Without Archived Tabs?";
+"Import Without Archived and Today Tabs?" = "Import Without Archived and Today Tabs?";
+"Import from Another Browser…" = "Import from Another Browser…";
+"Import Bookmarks" = "Import Bookmarks";
+"Import from Arc" = "Import from Arc";
+"Import from Arc Failed" = "Import from Arc Failed";
+"Import from Arc?" = "Import from Arc?";
+"Import from Arc…" = "Import from Arc…";
+"Import the Rest" = "Import the Rest";
+"Imported Profile" = "Imported Profile";
+"Importing everything would make Orbit’s session too large to open (%@ of %@ allowed). Orbit can import everything except: %@." = "Importing everything would make Orbit’s session too large to open (%@ of %@ allowed). Orbit can import everything except: %@.";
+"Importing history…" = "Importing history…";
+"Inspect Elements" = "Inspect Elements";
+"Intensity" = "Intensity";
+"Internal Page" = "Internal Page";
+"Internal page" = "Internal page";
+"Interrupted" = "Interrupted";
+"Italic" = "Italic";
+"Item 1" = "Item 1";
+"Item 2" = "Item 2";
+"Item 3" = "Item 3";
+"JavaScript Console" = "JavaScript Console";
+"Join Meeting" = "Join Meeting";
+"Jump to Selection" = "Jump to Selection";
+"Keyboard shortcuts are shown from the command registry. Customization is coming later." = "Keyboard shortcuts are shown from the command registry. Customization is coming later.";
+"Last 24 Hours…" = "Last 24 Hours…";
+"Last Hour…" = "Last Hour…";
+"Lavender" = "Lavender";
+"Left Arrow" = "Left Arrow";
+"Left out with your agreement: %@" = "Left out with your agreement: %@";
+"Library" = "Library";
+"Library Categories" = "Library Categories";
+"Light" = "Light";
+"Light Appearance" = "Light Appearance";
+"Lime & Citrus" = "Lime & Citrus";
+"Little Orbit" = "Little Orbit";
+"Load More" = "Load More";
+"Loading" = "Loading";
+"Loading…" = "Loading…";
+"Location" = "Location";
+"MIDI" = "MIDI";
+"MIDI SysEx" = "MIDI SysEx";
+"Main Menu" = "Main Menu";
+"Make Lower Case" = "Make Lower Case";
+"Make Upper Case" = "Make Upper Case";
+"Manage Extensions…" = "Manage Extensions…";
+"Manage Spaces…" = "Manage Spaces…";
+"Match Case" = "Match Case";
+"Microphone" = "Microphone";
+"Microphone in use" = "Microphone in use";
+"Microphone paused" = "Microphone paused";
+"Minimize Window" = "Minimize Window";
+"More" = "More";
+"Move" = "Move";
+"Move Left" = "Move Left";
+"Move Right" = "Move Right";
+"Mute Tab" = "Mute Tab";
+"Muted" = "Muted";
+"Name" = "Name";
+"Network Inspector" = "Network Inspector";
+"Never" = "Never";
+"New" = "New";
+"New Boost" = "New Boost";
+"New ChatGPT Message…" = "New ChatGPT Message…";
+"New Easel" = "New Easel";
+"New Folder" = "New Folder";
+"New Folder with Selection" = "New Folder with Selection";
+"New Folder…" = "New Folder…";
+"New Incognito Window" = "New Incognito Window";
+"New Legacy Boost (Advanced)" = "New Legacy Boost (Advanced)";
+"New Little Orbit Window" = "New Little Orbit Window";
+"New Note" = "New Note";
+"New Note (in Split)" = "New Note (in Split)";
+"New Profile" = "New Profile";
+"New Profile Name" = "New Profile Name";
+"New Profile…" = "New Profile…";
+"New Space" = "New Space";
+"New Space…" = "New Space…";
+"New Tab" = "New Tab";
+"New Tab…" = "New Tab…";
+"New Window" = "New Window";
+"Next Colors" = "Next Colors";
+"Next Match" = "Next Match";
+"Next Space" = "Next Space";
+"Next Tab" = "Next Tab";
+"No Arc data was found in this folder. Choose Arc’s data folder (Library › Application Support › Arc)." = "No Arc data was found in this folder. Choose Arc’s data folder (Library › Application Support › Arc).";
+"No Archived Tabs" = "No Archived Tabs";
+"No Downloads" = "No Downloads";
+"No History for This Profile" = "No History for This Profile";
+"No Results" = "No Results";
+"No saved site permissions for this profile." = "No saved site permissions for this profile.";
+"No stored data." = "No stored data.";
+"Not Loaded" = "Not Loaded";
+"Not Now" = "Not Now";
+"Not enough free disk space: %@ needed, %@ available. Nothing was changed." = "Not enough free disk space: %@ needed, %@ available. Nothing was changed.";
+"Not implemented — %@" = "Not implemented — %@";
+"Not imported: passwords, sign-ins (cookies), extensions, site data and settings." = "Not imported: passwords, sign-ins (cookies), extensions, site data and settings.";
+"Notifications" = "Notifications";
+"OK" = "OK";
+"Only Profiles not assigned to any Spaces can be deleted." = "Only Profiles not assigned to any Spaces can be deleted.";
+"Only permissions supported by the current engine are editable. Some changes require reloading the website." = "Only permissions supported by the current engine are editable. Some changes require reloading the website.";
+"Open" = "Open";
+"Open Command Bar" = "Open Command Bar";
+"Open File" = "Open File";
+"Open Links" = "Open Links";
+"Open Little Orbit in Last Space" = "Open Little Orbit in Last Space";
+"Open Little Orbit in Space…" = "Open Little Orbit in Space…";
+"Open Little Orbit or Peek in…" = "Open Little Orbit or Peek in…";
+"Open Task Manager" = "Open Task Manager";
+"Open a Copy in Orbit" = "Open a Copy in Orbit";
+"Open a tab to get started." = "Open a tab to get started.";
+"Open in %@" = "Open in %@";
+"Open in %@  %@" = "Open in %@  %@";
+"Open in %@  ⌘O" = "Open in %@  ⌘O";
+"Open in %@ (%@)" = "Open in %@ (%@)";
+"Open in Another Window" = "Open in Another Window";
+"Open in Orbit" = "Open in Orbit";
+"Open in Orbit (⌘O)" = "Open in Orbit (⌘O)";
+"Open in Split View" = "Open in Split View";
+"Open in Tab" = "Open in Tab";
+"Open in another window" = "Open in another window";
+"Open links from Pinned tabs and Favorites in Peek" = "Open links from Pinned tabs and Favorites in Peek";
+"Open links from other apps in Little Orbit" = "Open links from other apps in Little Orbit";
+"Open links in Peek with Shift-click" = "Open links in Peek with Shift-click";
+"Option" = "Option";
+"Other Space" = "Other Space";
+"Other Window" = "Other Window";
+"Page Title" = "Page Title";
+"Page not loaded yet" = "Page not loaded yet";
+"Paste" = "Paste";
+"Paste and Match Style" = "Paste and Match Style";
+"Paste as New Tab" = "Paste as New Tab";
+"Pastel" = "Pastel";
+"Pause" = "Pause";
+"Paused" = "Paused";
+"Peek" = "Peek";
+"Peek Email…" = "Peek Email…";
+"Permissions unavailable — session kept" = "Permissions unavailable — session kept";
+"Permissions unavailable. Access is denied and the existing file is kept. Windows and tabs are still saved." = "Permissions unavailable. Access is denied and the existing file is kept. Windows and tabs are still saved.";
+"Permissions were reset for this session, but could not be saved. The previous settings may return after relaunch." = "Permissions were reset for this session, but could not be saved. The previous settings may return after relaunch.";
+"Pin Tab" = "Pin Tab";
+"Pin Tabs" = "Pin Tabs";
+"Pin/Unpin Tab" = "Pin/Unpin Tab";
+"Pinned & Favorites" = "Pinned & Favorites";
+"Pinned tabs: %@ in %@ folders" = "Pinned tabs: %@ in %@ folders";
+"Playing Audio" = "Playing Audio";
+"Playing audio" = "Playing audio";
+"Playing media" = "Playing media";
+"Pop-ups and Redirects" = "Pop-ups and Redirects";
+"Preferences…" = "Preferences…";
+"Preview" = "Preview";
+"Previous Colors" = "Previous Colors";
+"Previous Match" = "Previous Match";
+"Previous Space" = "Previous Space";
+"Previous Tab" = "Previous Tab";
+"Print" = "Print";
+"Privacy & Site Settings" = "Privacy & Site Settings";
+"Privacy Policy" = "Privacy Policy";
+"Profile" = "Profile";
+"Profile Name" = "Profile Name";
+"Profiles" = "Profiles";
+"Profiles: %@ (%@ new)" = "Profiles: %@ (%@ new)";
+"Quit" = "Quit";
+"Quit Arc" = "Quit Arc";
+"Quit Arc to Import" = "Quit Arc to Import";
+"Quit Orbit" = "Quit Orbit";
+"Quit and Cancel Downloads" = "Quit and Cancel Downloads";
+"Quitting will cancel your downloads." = "Quitting will cancel your downloads.";
+"Read Clipboard" = "Read Clipboard";
+"Reading Spaces and tabs…" = "Reading Spaces and tabs…";
+"Reading history…" = "Reading history…";
+"Record Trace" = "Record Trace";
+"Redo" = "Redo";
+"Reduce Motion" = "Reduce Motion";
+"Refresh" = "Refresh";
+"Refresh the Page" = "Refresh the Page";
+"Release Notes" = "Release Notes";
+"Reload" = "Reload";
+"Reload Little Orbit" = "Reload Little Orbit";
+"Remove Color" = "Remove Color";
+"Remove Suggestion" = "Remove Suggestion";
+"Remove from Favorites" = "Remove from Favorites";
+"Remove from List" = "Remove from List";
+"Rename" = "Rename";
+"Rename Current Item" = "Rename Current Item";
+"Rename Favorite" = "Rename Favorite";
+"Rename Folder" = "Rename Folder";
+"Rename Space" = "Rename Space";
+"Rename Space…" = "Rename Space…";
+"Rename Tab" = "Rename Tab";
+"Rename…" = "Rename…";
+"Reset %@ to Original URL" = "Reset %@ to Original URL";
+"Reset Permissions" = "Reset Permissions";
+"Reset Tab to Original URL" = "Reset Tab to Original URL";
+"Reset all tabs in this Space" = "Reset all tabs in this Space";
+"Resize Split View" = "Resize Split View";
+"Resize panes %d and %d" = "Resize panes %d and %d";
+"Restore" = "Restore";
+"Restore Data" = "Restore Data";
+"Restore Last Closed Tab" = "Restore Last Closed Tab";
+"Restore Space" = "Restore Space";
+"Restore Tab" = "Restore Tab";
+"Resume" = "Resume";
+"Retry Cleanup" = "Retry Cleanup";
+"Return" = "Return";
+"Reveal Orbit Data" = "Reveal Orbit Data";
+"Reveal Current Tab" = "Reveal Current Tab";
+"Reveal Tab in Sidebar" = "Reveal Tab in Sidebar";
+"Revoked for this session, but the setting could not be saved. The previous setting may return after relaunch." = "Revoked for this session, but the setting could not be saved. The previous setting may return after relaunch.";
+"Right Arrow" = "Right Arrow";
+"Rose & Plum" = "Rose & Plum";
+"Save" = "Save";
+"Save Download" = "Save Download";
+"Save Page As" = "Save Page As";
+"Saved permissions could not be opened. The existing file is kept and access remains restricted." = "Saved permissions could not be opened. The existing file is kept and access remains restricted.";
+"Saved settings are unavailable. The existing file is kept and changes cannot be saved." = "Saved settings are unavailable. The existing file is kept and changes cannot be saved.";
+"Saved settings could not be opened. Defaults are in use and changes cannot be saved. The existing file is kept." = "Saved settings could not be opened. Defaults are in use and changes cannot be saved. The existing file is kept.";
+"Screen Sharing" = "Screen Sharing";
+"Search" = "Search";
+"Search Archived Tabs" = "Search Archived Tabs";
+"Search Downloads" = "Search Downloads";
+"Search Engine" = "Search Engine";
+"Search History" = "Search History";
+"Search or Enter URL" = "Search or Enter URL";
+"Search or Enter URL…" = "Search or Enter URL…";
+"Search with %@" = "Search with %@";
+"Searching…" = "Searching…";
+"Secure connection (HTTPS)" = "Secure connection (HTTPS)";
+"Select All" = "Select All";
+"Select Space 1" = "Select Space 1";
+"Select Space 2" = "Select Space 2";
+"Select Space 3" = "Select Space 3";
+"Select Space 4" = "Select Space 4";
+"Select Space 5" = "Select Space 5";
+"Select Space 6" = "Select Space 6";
+"Select Space 7" = "Select Space 7";
+"Select Space 8" = "Select Space 8";
+"Select Space 9" = "Select Space 9";
+"Select Tab 1" = "Select Tab 1";
+"Select Tab 2" = "Select Tab 2";
+"Select Tab 3" = "Select Tab 3";
+"Select Tab 4" = "Select Tab 4";
+"Select Tab 5" = "Select Tab 5";
+"Select Tab 6" = "Select Tab 6";
+"Select Tab 7" = "Select Tab 7";
+"Select Tab 8" = "Select Tab 8";
+"Select Tab 9" = "Select Tab 9";
+"Selected" = "Selected";
+"Selected Profile" = "Selected Profile";
+"Send to Dia" = "Send to Dia";
+"Separate All Split Pages" = "Separate All Split Pages";
+"Separate Page from Split View" = "Separate Page from Split View";
+"Services" = "Services";
+"Session loading is still in progress." = "Session loading is still in progress.";
+"Session loading must succeed before automatic saving is enabled." = "Session loading must succeed before automatic saving is enabled.";
+"Set as Default" = "Set as Default";
+"Set as Default Browser" = "Set as Default Browser";
+"Settings" = "Settings";
+"Share Orbit" = "Share Orbit";
+"Share…" = "Share…";
+"Shift" = "Shift";
+"Shortcuts" = "Shortcuts";
+"Show All" = "Show All";
+"Show Spelling and Grammar" = "Show Spelling and Grammar";
+"Show Substitutions" = "Show Substitutions";
+"Show in Finder" = "Show in Finder";
+"Show/Hide Sidebar" = "Show/Hide Sidebar";
+"Show/Hide Toolbar" = "Show/Hide Toolbar";
+"Sidebar" = "Sidebar";
+"Sign Out" = "Sign Out";
+"Since %@ (last 24 hours)" = "Since %@ (last 24 hours)";
+"Since %@ (last hour)" = "Since %@ (last hour)";
+"Site Controls" = "Site Controls";
+"Site Controls…" = "Site Controls…";
+"Site Permissions" = "Site Permissions";
+"Site extensions: waiting for the Chromium adapter." = "Site extensions: waiting for the Chromium adapter.";
+"Site: %@" = "Site: %@";
+"Smart Copy/Paste" = "Smart Copy/Paste";
+"Smart Dashes" = "Smart Dashes";
+"Smart Links" = "Smart Links";
+"Smart Quotes" = "Smart Quotes";
+"Some settings need an engine hook or a secure origin. Revoking stops an active camera and microphone. Location in use may need a reload." = "Some settings need an engine hook or a secure origin. Revoking stops an active camera and microphone. Location in use may need a reload.";
+"Sound" = "Sound";
+"Sound control is not available with this engine adapter." = "Sound control is not available with this engine adapter.";
+"Space" = "Space";
+"Space %@" = "Space %@";
+"Space Name" = "Space Name";
+"Spaces" = "Spaces";
+"Spaces: %@ (%@ new)" = "Spaces: %@ (%@ new)";
+"Speech" = "Speech";
+"Spelling" = "Spelling";
+"Spelling and Grammar" = "Spelling and Grammar";
+"Split View" = "Split View";
+"Start Speaking" = "Start Speaking";
+"Stop Loading" = "Stop Loading";
+"Stop Speaking" = "Stop Speaking";
+"Substitutions" = "Substitutions";
+"Swap Split Panes" = "Swap Split Panes";
+"Switch to Tab" = "Switch to Tab";
+"Switch to Tab ↩" = "Switch to Tab ↩";
+"Tab" = "Tab";
+"Tab Switcher" = "Tab Switcher";
+"Tab Switcher (backward)" = "Tab Switcher (backward)";
+"Tab Switcher (forward)" = "Tab Switcher (forward)";
+"Tab Switcher, %ld of %ld" = "Tab Switcher, %ld of %ld";
+"Tabs" = "Tabs";
+"Tap to pick a color for this space" = "Tap to pick a color for this space";
+"Temporary Session" = "Temporary Session";
+"Temporary setting · Use Default Timing" = "Temporary setting · Use Default Timing";
+"Text Replacement" = "Text Replacement";
+"The Default Profile cannot be deleted." = "The Default Profile cannot be deleted.";
+"The change could not be completed. Some cleanup or browser associations may have changed. Check the current values before retrying." = "The change could not be completed. Some cleanup or browser associations may have changed. Check the current values before retrying.";
+"The current engine does not expose website data management." = "The current engine does not expose website data management.";
+"The current engine does not support changing this permission." = "The current engine does not support changing this permission.";
+"The current engine does not support deleting profiles." = "The current engine does not support deleting profiles.";
+"The engine could not confirm removal of all requested website data. Review the site data and retry." = "The engine could not confirm removal of all requested website data. Review the site data and retry.";
+"The final session save is still in progress." = "The final session save is still in progress.";
+"The import could not be completed. Orbit’s session was kept; import again to retry." = "The import could not be completed. Orbit’s session was kept; import again to retry.";
+"The import was stopped. Import again to complete it." = "The import was stopped. Import again to complete it.";
+"The last Space cannot be deleted." = "The last Space cannot be deleted.";
+"The last complete session file was kept. Keep your windows open and check the available disk space and folder permissions before trying again." = "The last complete session file was kept. Keep your windows open and check the available disk space and folder permissions before trying again.";
+"The last profile cannot be deleted." = "The last profile cannot be deleted.";
+"The new session file was saved, but its durability on disk could not be confirmed. Keep your windows open and try again before quitting." = "The new session file was saved, but its durability on disk could not be confirmed. Keep your windows open and try again before quitting.";
+"The permission could not be confirmed as saved. Check the setting after relaunch." = "The permission could not be confirmed as saved. Check the setting after relaunch.";
+"The setting could not be saved. The new access was denied." = "The setting could not be saved. The new access was denied.";
+"The site data changed. Reopen Site Data before confirming." = "The site data changed. Reopen Site Data before confirming.";
+"The website data scope changed. Review the affected domains again before clearing data." = "The website data scope changed. Review the affected domains again before clearing data.";
+"Theme Color" = "Theme Color";
+"Theme Colors" = "Theme Colors";
+"This Space" = "This Space";
+"This action requires the Orbit product with its stable local signature." = "This action requires the Orbit product with its stable local signature.";
+"This cannot be undone. Other profiles, downloads, cookies and archived tabs are kept." = "This cannot be undone. Other profiles, downloads, cookies and archived tabs are kept.";
+"This profile has no Spaces. Create a Space to start browsing with it." = "This profile has no Spaces. Create a Space to start browsing with it.";
+"This profile is being removed. Finish its pending cleanup before trying again." = "This profile is being removed. Finish its pending cleanup before trying again.";
+"This removes this profile’s Spaces, tabs, archive, history, permissions and site data. Close its browser windows first. This cannot be undone." = "This removes this profile’s Spaces, tabs, archive, history, permissions and site data. Close its browser windows first. This cannot be undone.";
+"This signs you out of the affected websites and removes their stored data. Other profiles are kept." = "This signs you out of the affected websites and removes their stored data. Other profiles are kept.";
+"This version of Arc’s data could not be read. Nothing was imported." = "This version of Arc’s data could not be read. Nothing was imported.";
+"This will archive all the tabs and folders inside it." = "This will archive all the tabs and folders inside it.";
+"To (exclusive)" = "To (exclusive)";
+"To continue, please type the name of this Profile:" = "To continue, please type the name of this Profile:";
+"Today tabs" = "Today tabs";
+"Today tabs: %@" = "Today tabs: %@";
+"Toggle Developer Mode" = "Toggle Developer Mode";
+"Transformations" = "Transformations";
+"Troubleshooting" = "Troubleshooting";
+"Underline" = "Underline";
+"Undo" = "Undo";
+"Unmute Tab" = "Unmute Tab";
+"Unpin Tab" = "Unpin Tab";
+"Unpin Tabs" = "Unpin Tabs";
+"Unsplit All Tabs" = "Unsplit All Tabs";
+"Untitled" = "Untitled";
+"Up Arrow" = "Up Arrow";
+"Use Default" = "Use Default";
+"Use Selection to Find" = "Use Selection to Find";
+"Use the menu to reset the favorite to its original URL." = "Use the menu to reset the favorite to its original URL.";
+"View" = "View";
+"View Archive" = "View Archive";
+"View Boosts" = "View Boosts";
+"View Downloads" = "View Downloads";
+"View Easels & Notes" = "View Easels & Notes";
+"View History" = "View History";
+"View Library" = "View Library";
+"View Media" = "View Media";
+"View Source" = "View Source";
+"Visible pane" = "Visible pane";
+"Visit Help Center" = "Visit Help Center";
+"Website Data" = "Website Data";
+"Website data belongs to this profile. Clearing it does not remove your browsing history or saved permission choices." = "Website data belongs to this profile. Clearing it does not remove your browsing history or saved permission choices.";
+"Websites, Easels, and Notes will use:" = "Websites, Easels, and Notes will use:";
+"Window" = "Window";
+"Write Clipboard" = "Write Clipboard";
+"Your existing session file is kept. You can open a temporary session without changing it." = "Your existing session file is kept. You can open a temporary session without changing it.";
+"Zoom" = "Zoom";
+"Zoom In" = "Zoom In";
+"Zoom Out" = "Zoom Out";
+"Zoom to Actual Size" = "Zoom to Actual Size";
+"Zoom: %@ — Reset" = "Zoom: %@ — Reset";
+"archived tabs" = "archived tabs";
+"macOS may ask for an additional system permission." = "macOS may ask for an additional system permission.";
+
+/* CH-ESSENTIALS page surfaces: Chromium strings packaged in (OrbitCore locale.pak), see docs/native-port/ch-essentials-2026-10-25.md. */
+"%@ requires a username and password." = "%@ requires a username and password.";
+"%@ says" = "%@ says";
+"%@ wants to open this application." = "%@ wants to open this application.";
+"A website wants to open this application." = "A website wants to open this application.";
+"Add to Dictionary" = "Add to Dictionary";
+"Aw, Snap!" = "Aw, Snap!";
+"Changes you made may not be saved." = "Changes you made may not be saved.";
+"Copy Audio Address" = "Copy Audio Address";
+"Copy Email Address" = "Copy Email Address";
+"Copy Image" = "Copy Image";
+"Copy Image Address" = "Copy Image Address";
+"Copy Link Address" = "Copy Link Address";
+"Copy Video Address" = "Copy Video Address";
+"Emoji & Symbols" = "Emoji & Symbols";
+"Exit page" = "Exit page";
+"Inspect" = "Inspect";
+"Leave" = "Leave";
+"Leave site?" = "Leave site?";
+"Look Up" = "Look Up";
+"Look Up “%@”" = "Look Up “%@”";
+"Loop" = "Loop";
+"Open %@" = "Open %@";
+"Open %@?" = "Open %@?";
+"Open Audio in New Tab" = "Open Audio in New Tab";
+"Open Image in New Tab" = "Open Image in New Tab";
+"Open Link in New Tab" = "Open Link in New Tab";
+"Open Link in Split View" = "Open Link in Split View";
+"Open Video in New Tab" = "Open Video in New Tab";
+"Page Unresponsive" = "Page Unresponsive";
+"Password" = "Password";
+"Picture in Picture" = "Picture in Picture";
+"Prevent this page from creating additional dialogs" = "Prevent this page from creating additional dialogs";
+"Print…" = "Print…";
+"Reload site?" = "Reload site?";
+"Save Audio As…" = "Save Audio As…";
+"Save Image As…" = "Save Image As…";
+"Save Link As…" = "Save Link As…";
+"Save Video As…" = "Save Video As…";
+"Search %@ for “%@”" = "Search %@ for “%@”";
+"Show All Controls" = "Show All Controls";
+"Sign in" = "Sign in";
+"Something went wrong while displaying this webpage." = "Something went wrong while displaying this webpage.";
+"Spelling Suggestion" = "Spelling Suggestion";
+"The proxy %@ requires a username and password." = "The proxy %@ requires a username and password.";
+"This page says" = "This page says";
+"This will upload all files from “%@”. Only do this if you trust the site." = "This will upload all files from “%@”. Only do this if you trust the site.";
+"Upload" = "Upload";
+"Upload %ld files to this site?" = "Upload %ld files to this site?";
+"Upload 1 file to this site?" = "Upload 1 file to this site?";
+"Username" = "Username";
+"View Page Source" = "View Page Source";
+"Wait" = "Wait";
+"You can wait for it to become responsive or exit the page." = "You can wait for it to become responsive or exit the page.";
+"Your connection to this site is not private" = "Your connection to this site is not private";
+
+/* ORBIT-THEMES: theme editor */
+"Safe Browsing" = "Safe Browsing";
+"Warnings for dangerous sites and downloads are on." = "Warnings for dangerous sites and downloads are on.";
+"Unavailable in this build. Orbit does not warn about dangerous sites or downloads." = "Unavailable in this build. Orbit does not warn about dangerous sites or downloads.";
+
+/* Orbit secondary-screen identity and isolated appearance draft. */
+"A little clarity in your browsing." = "A little clarity in your browsing.";
+"Appearance draft" = "Appearance draft";
+"Built for macOS. Your profiles and browsing data stay on this Mac." = "Built for macOS. Your profiles and browsing data stay on this Mac.";
+"Development build" = "Development build";
+"Frosted and Liquid Glass are saved intentions for a future material implementation. This build does not preview native glass." = "Frosted and Liquid Glass are saved intentions for a future material implementation. This build does not preview native glass.";
+"Frosted — prepared" = "Frosted — prepared";
+"Illustrative color sample only. No native glass effect is applied." = "Illustrative color sample only. No native glass effect is applied.";
+"Liquid Glass — prepared" = "Liquid Glass — prepared";
+"Material" = "Material";
+"Orbit Settings" = "Orbit Settings";
+"Reduce Transparency is enabled: the sample stays opaque." = "Reduce Transparency is enabled: the sample stays opaque.";
+"Saved for these settings only. The browser window and Space themes are unchanged." = "Saved for these settings only. The browser window and Space themes are unchanged.";
+"Settings preview" = "Settings preview";
+"Solid" = "Solid";
+"Transparency" = "Transparency";
+"Transparency sample" = "Transparency sample";
+
+"Orbit Live" = "Orbit Live";
+"About %@" = "About %@";
+"Hide %@" = "Hide %@";
+"Quit %@" = "Quit %@";
+"Chrome Web Store…" = "Chrome Web Store…";
+"Could not open the extension manager." = "Could not open the extension manager.";
+"Disable" = "Disable";
+"Enable" = "Enable";
+"Extension action popups are not available in this build." = "Extension action popups are not available in this build.";
+"Extensions are not ready for this profile. Try again shortly." = "Extensions are not ready for this profile. Try again shortly.";
+"Folder preview" = "Folder preview";
+"Last access unavailable" = "Last access unavailable";
+"No extensions in this profile." = "No extensions in this profile.";
+"No tabs" = "No tabs";
+"Open Extension" = "Open Extension";
+"Remove" = "Remove";
+"Remove %@?" = "Remove %@?";
+"Remove…" = "Remove…";
+"Search folder" = "Search folder";
+"The extension action could not be opened." = "The extension action could not be opened.";
+"The extension could not be changed. Open Manage Extensions for details." = "The extension could not be changed. Open Manage Extensions for details.";
+"This removes the extension from this profile." = "This removes the extension from this profile.";
+
+"Current profile" = "Current profile";
+
+"Chrome Web Store" = "Chrome Web Store";
+
+"Change Icon or Emoji…" = "Change Icon or Emoji…";
+
+"Change Space Icon or Emoji" = "Change Space Icon or Emoji";
+
+"Choose one character or emoji, or clear the icon to show a dot." = "Choose one character or emoji, or clear the icon to show a dot.";
+
+"Clear Icon" = "Clear Icon";
+
+"Open Space" = "Open Space";
+
+"Search Spaces" = "Search Spaces";
+
+"No Spaces Found" = "No Spaces Found";
+
+"Select a Space to open it." = "Select a Space to open it.";
+
+"Space appearance" = "Space appearance";
+
+"Applies to this Space in every window. Other Spaces keep their own themes." = "Applies to this Space in every window. Other Spaces keep their own themes.";
+
+"This Space keeps its existing material until you change a control." = "This Space keeps its existing material until you change a control.";
+
+"Transparency reveals the blurred desktop through the theme. Reduce Transparency and Increase Contrast use an opaque theme. Choose Solid for full opacity." = "Transparency reveals the blurred desktop through the theme. Reduce Transparency and Increase Contrast use an opaque theme. Choose Solid for full opacity.";
+
+"Choose a profile with an available Space." = "Choose a profile with an available Space.";
+
+"This Space · captured profile" = "This Space · captured profile";
+
+"Material for this Space" = "Material for this Space";
+
+"Transparency for this Space" = "Transparency for this Space";
+
+"Existing material until changed. " = "Existing material until changed. ";
+
+"Transparency reveals the blurred desktop through the theme. Solid is opaque." = "Transparency reveals the blurred desktop through the theme. Solid is opaque.";
+
+"Frosted" = "Frosted";
+
+"Liquid Glass" = "Liquid Glass";
+
+"Native Liquid Glass (macOS 26+). Accessibility may make the frame opaque." = "Native Liquid Glass (macOS 26+). Accessibility may make the frame opaque.";
+
+"Native frosted fallback on this macOS. Liquid Glass requires macOS 26." = "Native frosted fallback on this macOS. Liquid Glass requires macOS 26.";
+
+"Extensions require an updated Chromium build." = "Extensions require an updated Chromium build.";
+
+"Emoji" = "Emoji";
+
+"Icons" = "Icons";
+
+"Remove Icon" = "Remove Icon";
+
+"Emoji & Symbols…" = "Emoji & Symbols…";
+
+"Search Emoji" = "Search Emoji";
+
+
+"Use typed emoji" = "Use typed emoji";
+
+"Smileys & Emotion" = "Smileys & Emotion";
+
+"People & Body" = "People & Body";
+
+"Animals & Nature" = "Animals & Nature";
+
+"Food & Drink" = "Food & Drink";
+
+"Activities" = "Activities";
+
+"Travel & Places" = "Travel & Places";
+
+"Objects" = "Objects";
+
+"Symbols" = "Symbols";
+
+"Flags" = "Flags";
+
+"Space Settings" = "Space Settings";
+
+"Globe" = "Globe";
+
+"Home" = "Home";
+
+"Work" = "Work";
+
+"Person" = "Person";
+
+"People" = "People";
+
+"Heart" = "Heart";
+
+"Star" = "Star";
+
+"Bookmark" = "Bookmark";
+
+"Flag" = "Flag";
+
+"Folder" = "Folder";
+
+"Inbox" = "Inbox";
+
+"Books" = "Books";
+
+"Study" = "Study";
+
+"Pencil" = "Pencil";
+
+"Art" = "Art";
+
+"Photo" = "Photo";
+
+"Music" = "Music";
+
+"Headphones" = "Headphones";
+
+"Games" = "Games";
+
+"Film" = "Film";
+
+"Leaf" = "Leaf";
+
+"Tree" = "Tree";
+
+"Sun" = "Sun";
+
+"Moon" = "Moon";
+
+"Cloud" = "Cloud";
+
+"Lightning" = "Lightning";
+
+"Fire" = "Fire";
+
+"Water" = "Water";
+
+"Mountains" = "Mountains";
+
+"Travel" = "Travel";
+
+"Car" = "Car";
+
+"Bicycle" = "Bicycle";
+
+"Sailing" = "Sailing";
+
+"Map" = "Map";
+
+"Coffee" = "Coffee";
+
+"Food" = "Food";
+
+"Shopping" = "Shopping";
+
+"Gift" = "Gift";
+
+"Bag" = "Bag";
+
+"Finance" = "Finance";
+
+"Tools" = "Tools";
+
+"Wrench" = "Wrench";
+
+"Terminal" = "Terminal";
+
+"Code" = "Code";
+
+"Computer" = "Computer";
+
+"Ideas" = "Ideas";
+
+"Research" = "Research";
+
+"Puzzle" = "Puzzle";
+
+"Sport" = "Sport";
+
+"Trophy" = "Trophy";
+
+"Medal" = "Medal";
+
+"Lock" = "Lock";
+
+"Key" = "Key";
+
+"Shield" = "Shield";
+
+"Bell" = "Bell";
+
+"Calendar" = "Calendar";
+
+"Clock" = "Clock";
+
+"Checkmark" = "Checkmark";
+
+"Send" = "Send";
+
+"Mail" = "Mail";
+
+"Chat" = "Chat";
+
+"Search Icons" = "Search Icons";
+
+"No Icon" = "No Icon";
+
+"Current Icon" = "Current Icon";
+
+"Icon" = "Icon";
+"Add %ld HTTP(S) links and %ld folders to a new folder in Space “%@” of profile “%@”. Existing links stay unchanged. No pages will open. %ld unsupported links were skipped. Titles are trimmed and limited to 1,024 characters." = "Add %ld HTTP(S) links and %ld folders to a new folder in Space “%@” of profile “%@”. Existing links stay unchanged. No pages will open. %ld unsupported links were skipped. Titles are trimmed and limited to 1,024 characters.";
+
+"Choose UTF-8 bookmark HTML. Only HTTP and HTTPS links are supported; other links are counted and skipped." = "Choose UTF-8 bookmark HTML. Only HTTP and HTTPS links are supported; other links are counted and skipped.";
+
+"Export %ld HTTP(S) links and %ld folders from profile “%@” (Favorites and all Spaces’ Pinned links). Today, history and other profiles are excluded. %ld unsupported links were skipped." = "Export %ld HTTP(S) links and %ld folders from profile “%@” (Favorites and all Spaces’ Pinned links). Today, history and other profiles are excluded. %ld unsupported links were skipped.";
+
+"Media" = "Media";
+"Easels & Notes" = "Easels & Notes";
+"No Media" = "No Media";
+"No Easels or Notes" = "No Easels or Notes";
+"Put inactive tabs to sleep after" = "Put inactive tabs to sleep after";
+"Memory Saver" = "Memory Saver";
+"5 minutes" = "5 minutes";
+"15 minutes" = "15 minutes";
+"30 minutes" = "30 minutes";
+"1 hour" = "1 hour";
+"Keeps pinned tabs, edited forms and active media awake. Sleeping tabs reload when selected." = "Keeps pinned tabs, edited forms and active media awake. Sleeping tabs reload when selected.";
+"2 hours" = "2 hours";
+"4 hours" = "4 hours";
+"6 hours" = "6 hours";
+
+/* Product additions from the October 27 integration batches. */
+"%@ is not your default web browser." = "%@ is not your default web browser.";
+"%@ is your default web browser." = "%@ is your default web browser.";
+"%@ uses its current app icon." = "%@ uses its current app icon.";
+"A smaller, simpler window for quick lookups and links from other apps." = "A smaller, simpler window for quick lookups and links from other apps.";
+"Air Traffic Control" = "Air Traffic Control";
+"Air Traffic Control…" = "Air Traffic Control…";
+"App Icon" = "App Icon";
+"Arc must be closed to copy its connections. Orbit will then save your tabs and restart. Allow access to Arc Safe Storage when macOS asks. Existing Orbit connections are backed up before importing." = "Arc must be closed to copy its connections. Orbit will then save your tabs and restart. Allow access to Arc Safe Storage when macOS asks. Existing Orbit connections are backed up before importing.";
+"Archive Folder" = "Archive Folder";
+"Archive Other Tabs" = "Archive Other Tabs";
+"Archive tabs after" = "Archive tabs after";
+"Orbit will save your tabs and restart. Allow access to Arc Safe Storage when macOS asks. Arc connections replace matching cookies and site storage in the corresponding profiles. A backup lets you undo the import." = "Orbit will save your tabs and restart. Allow access to Arc Safe Storage when macOS asks. Arc connections replace matching cookies and site storage in the corresponding profiles. A backup lets you undo the import.";
+"Orbit will save your tabs and restart. Cookies and site storage will return to their state before the last import." = "Orbit will save your tabs and restart. Cookies and site storage will return to their state before the last import.";
+"Automatically update my %@" = "Automatically update my %@";
+"Change Space Icon…" = "Change Space Icon…";
+"Choose an Icon…" = "Choose an Icon…";
+"Choose where links open inside %@." = "Choose where links open inside %@.";
+"Coming soon" = "Coming soon";
+"Connections Could Not Be Imported" = "Connections Could Not Be Imported";
+"Copied" = "Copied";
+"Copy All Links" = "Copy All Links";
+"Copy All Links as Markdown" = "Copy All Links as Markdown";
+"Copy Link as Markdown" = "Copy Link as Markdown";
+"Create a Space to start browsing with this Profile." = "Create a Space to start browsing with this Profile.";
+"Create a route to send links to a Space automatically." = "Create a route to send links to a Space automatically.";
+"Default Shortcuts" = "Default Shortcuts";
+"Default destination" = "Default destination";
+"Destination Space" = "Destination Space";
+"Done" = "Done";
+"Don’t Allow" = "Don’t Allow";
+"Extension Shortcuts…" = "Extension Shortcuts…";
+"If URL" = "If URL";
+"Import Connections from Arc?" = "Import Connections from Arc?";
+"Import Connections from Arc…" = "Import Connections from Arc…";
+"Keyboard Shortcuts…" = "Keyboard Shortcuts…";
+"Links" = "Links";
+"Links from other apps open in Little Orbit" = "Links from other apps open in Little Orbit";
+"Make Default" = "Make Default";
+"Manage your default search engine, Auto-Archive, and downloads in Profile Settings." = "Manage your default search engine, Auto-Archive, and downloads in Profile Settings.";
+"Manage…" = "Manage…";
+"More Settings…" = "More Settings…";
+"Most Recent Space" = "Most Recent Space";
+"Move route down" = "Move route down";
+"Move route up" = "Move route up";
+"Move to" = "Move to";
+"New Nested Folder…" = "New Nested Folder…";
+"New Route" = "New Route";
+"No matching shortcuts." = "No matching shortcuts.";
+"Note: This only affects Favorites and Pinned tabs" = "Note: This only affects Favorites and Pinned tabs";
+"Open a Peek window when clicking on links to other sites" = "Open a Peek window when clicking on links to other sites";
+"Open a Peek window when clicking on links with Shift held" = "Open a Peek window when clicking on links with Shift held";
+"Open in" = "Open in";
+"Pin" = "Pin";
+"Pinned" = "Pinned";
+"Pinned tabs and Favorites are never auto-archived." = "Pinned tabs and Favorites are never auto-archived.";
+"Play %@ sound effects" = "Play %@ sound effects";
+"Private" = "Private";
+"Profile Settings" = "Profile Settings";
+"Quit Arc to Import Your Connections" = "Quit Arc to Import Your Connections";
+"Remove route" = "Remove route";
+"Restore Connections Before Last Import…" = "Restore Connections Before Last Import…";
+"Restore Connections Before the Last Import?" = "Restore Connections Before the Last Import?";
+"Routes apply to links from other apps. The first matching route wins." = "Routes apply to links from other apps. The first matching route wins.";
+"Routes let you choose where specific sites open inside %@. For example, you can route Spotify links to always open inside your Personal space." = "Routes let you choose where specific sites open inside %@. For example, you can route Spotify links to always open inside your Personal space.";
+"Safe Browsing is unavailable in this build." = "Safe Browsing is unavailable in this build.";
+"Search engine" = "Search engine";
+"Search shortcuts" = "Search shortcuts";
+"Shortcut customization is coming soon." = "Shortcut customization is coming soon.";
+"Today" = "Today";
+"URL match" = "URL match";
+"Unpin" = "Unpin";
+"Would like to send you notifications" = "Would like to send you notifications";
+"You can change this anytime in Site Controls." = "You can change this anytime in Site Controls.";
+"Your browsing history is not saved." = "Your browsing history is not saved.";
+"Your existing connections were kept. Check that Arc is closed and allow Keychain access, then try again." = "Your existing connections were kept. Check that Arc is closed and allow Keychain access, then try again.";
+"contains" = "contains";
+"cookies imported." = "cookies imported.";
+"example.org" = "example.org";
+"host is" = "host is";
+"is equal to" = "is equal to";
+"profiles and" = "profiles and";
+"profiles could not be imported; their previous data was kept." = "profiles could not be imported; their previous data was kept.";
+"profiles restored." = "profiles restored.";
+
+/* Keyboard shortcut customization. */
+"a macOS or another app shortcut" = "a macOS or another app shortcut";
+"Use a modifier key with a character, or a function key." = "Use a modifier key with a character, or a function key.";
+"Shortcut already used by" = "Shortcut already used by";
+"Saved shortcuts are unavailable. The existing file has been kept." = "Saved shortcuts are unavailable. The existing file has been kept.";
+"Prefer Orbit" = "Prefer Orbit";
+"Prefer Websites" = "Prefer Websites";
+"Use Both" = "Use Both";
+"Type shortcut…" = "Type shortcut…";
+"Record shortcut" = "Record shortcut";
+"Keyboard Shortcuts" = "Keyboard Shortcuts";
+"Reset All" = "Reset All";
+"Click a shortcut and press new keys. Escape cancels; Delete removes it." = "Click a shortcut and press new keys. Escape cancels; Delete removes it.";
+"Include Favorites in Ordering" = "Include Favorites in Ordering";
+"⌘9 selects the last tab" = "⌘9 selects the last tab";
+"Open Little Orbit from other apps" = "Open Little Orbit from other apps";
+"Uses the New Little Orbit Window shortcut, even when Orbit is in the background." = "Uses the New Little Orbit Window shortcut, even when Orbit is in the background.";
+"Remove Shortcut" = "Remove Shortcut";
+"Reset to Default" = "Reset to Default";
+"Shortcut options" = "Shortcut options";
+"%@ · %@" = "%@ · %@";
+
+/* Site controls defaults referenced by the existing product. */
+"Allow %@ to access your location?" = "Allow %@ to access your location?";
+"Changes apply to this profile. Revoking camera, microphone or location access may reload the site to stop its current use." = "Changes apply to this profile. Revoking camera, microphone or location access may reload the site to stop its current use.";
+"Loading site data…" = "Loading site data…";
+"Site data could not be fully cleared. Reopen Site Data and try again." = "Site data could not be fully cleared. Reopen Site Data and try again.";
+"Site data is unavailable. Try again when the site has loaded." = "Site data is unavailable. Try again when the site has loaded.";
+"1 cookie" = "1 cookie";
+"%ld cookies" = "%ld cookies";
+"Site storage is present" = "Site storage is present";
+"No site storage" = "No site storage";
+"Cookies for %@ and its subdomains, and storage for this origin, will be cleared in this profile. The site will reload and you may be signed out. Permissions are kept." = "Cookies for %@ and its subdomains, and storage for this origin, will be cleared in this profile. The site will reload and you may be signed out. Permissions are kept.";
+
+"Easels" = "Easels";
+
+"Exit Library" = "Exit Library";
+
+"No Easels" = "No Easels";
+
+"Search Media…" = "Search Media…";
+
+"Search Easels…" = "Search Easels…";
+
+"Search Downloads…" = "Search Downloads…";
+
+"Search Spaces…" = "Search Spaces…";
+
+"Search Archived Tabs…" = "Search Archived Tabs…";
+
+"No results found for\n“%@”" = "No results found for\n“%@”";
+// URL pill and control center.
+"Add Extension" = "Add Extension";
+"Manage" = "Manage";
+"Manage Extension" = "Manage Extension";
+"Not Secure" = "Not Secure";
+"Remove from Orbit" = "Remove from Orbit";
+"Secure" = "Secure";
+"Share" = "Share";
+"Site Settings…" = "Site Settings…";
+"View Web Permissions" = "View Web Permissions";
+"Developer Mode" = "Developer Mode";
+"On" = "On";
+"Off" = "Off";
+"The site preference could not be saved." = "The site preference could not be saved.";
+"Automatic Picture-In-Picture" = "Automatic Picture-In-Picture";
+"Allowed" = "Allowed";
+"Blocked" = "Blocked";
+"Toggle Console" = "Toggle Console";
+"Toggle Network Panel" = "Toggle Network Panel";
+"Inspect Element" = "Inspect Element";
+"Extensions Menu" = "Extensions Menu";
+"Split View Menu" = "Split View Menu";
+
+"Allow %@ to send you notifications?" = "Allow %@ to send you notifications?";
+
+"Allow %@ to access your camera?" = "Allow %@ to access your camera?";
+
+"Allow %@ to access your microphone?" = "Allow %@ to access your microphone?";
+
+"Allow %@ to access your camera, microphone?" = "Allow %@ to access your camera, microphone?";
+
+"Allow %@ to access your clipboard?" = "Allow %@ to access your clipboard?";
+
+"Allow %@ to access %@?" = "Allow %@ to access %@?";
+
+"Separate your tabs for life, work, projects, and more." = "Separate your tabs for life, work, projects, and more.";

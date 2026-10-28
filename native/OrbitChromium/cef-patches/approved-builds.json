@@ -1,0 +1,164 @@
+{
+  "schema": 1,
+  "chromium_head": "d0c02bfad08ec92a6ffcf989e53cd995e6381a4c",
+  "patch_targets": [
+    "chrome/browser/ui/browser_window/internal/browser_window_features.cc",
+    "chrome/browser/ui/read_anything/read_anything_side_panel_controller.cc"
+  ],
+  "baseline_diff": {
+    "path": "initial-apply-20261025T133420Z/chromium-before.diff",
+    "sha256": "1a3920e6c872391bd9199b5f08afea1da590a36bba7f0de32e2a68f8886a76e1"
+  },
+  "builds": [
+    {
+      "gn_args_sha256": "21183481352602c36127695b7ea0e96d12bd56014914e5f9e5acd112bccbb22a",
+      "unaffected_diff_sha256": "7de147a0db5a8f6b4cf0776b80d65688b6320b76ee4498011d55796f1fb7af11",
+      "kind": "stock",
+      "source_head": "4fa4ab516dacf6c49fc7e6e70d2b7ebce29fa35f",
+      "framework_sha256": "3947ca53c51a43c39bcd9b22541e5b6e6a0baa98b0a55db607d660d11686ab21",
+      "chromium_files": {
+        "chrome/browser/ui/browser_window/internal/browser_window_features.cc": "531f27291020ee1a7305f8f66294afb78678fc50c7920bf33fdfa68ea24b8965",
+        "chrome/browser/ui/read_anything/read_anything_side_panel_controller.cc": "e2f2802eaf7913049e848a92d3a9e7b3035a4a73301482df47251e0a282ff965"
+      },
+      "proofs": {
+        "baseline_manifest": {
+          "path": "baseline-preservation-20261025T125958Z/manifest.json",
+          "sha256": "2f4ffe8a2c001c9889aa6755f2471d617b089328d91ad09dc6e3e3ca8206c5e2"
+        }
+      },
+      "runtime_status": "bounded stock replay passed: 20261025T131037Z-stock"
+    },
+    {
+      "gn_args_sha256": "21183481352602c36127695b7ea0e96d12bd56014914e5f9e5acd112bccbb22a",
+      "unaffected_diff_sha256": "7de147a0db5a8f6b4cf0776b80d65688b6320b76ee4498011d55796f1fb7af11",
+      "kind": "orbit",
+      "source_head": "a47332364769a380ff3db5e7aea2a838b85a6da1",
+      "framework_sha256": "e5d3c76c73f4132caacce7f97117ddf8c9b681d64c1e4d7c3dd835248a651d2c",
+      "chromium_files": {
+        "chrome/browser/ui/browser_window/internal/browser_window_features.cc": "19dfeb0f82cc663b5916b4d2bd9ed921b8d0ce9cd9d606e2f8dba812261856da",
+        "chrome/browser/ui/read_anything/read_anything_side_panel_controller.cc": "e2f2802eaf7913049e848a92d3a9e7b3035a4a73301482df47251e0a282ff965"
+      },
+      "proofs": {
+        "terminal": {
+          "path": "initial-apply-20261025T133420Z/build-complete.json",
+          "sha256": "1a6f13a0bdc15e164e8585c823accecbf36ec2a3c576ba6171f879630248a5b1"
+        },
+        "source_preflight": {
+          "path": "initial-apply-20261025T133420Z/preflight.json",
+          "sha256": "c83b013c70a6cc0f6683abe9a95c753e5c38660429a9b12dab39eed7ef2dd681"
+        },
+        "build_verified": {
+          "path": "initial-apply-20261025T133420Z/build-verified.json",
+          "sha256": "957450d3d3194e9d1e1bc3932f6bea1e1c581a0bba93d0c5052d36a4ae98113d"
+        }
+      },
+      "runtime_status": "failed: 20261025T134117Z-orbit-x2only"
+    },
+    {
+      "gn_args_sha256": "21183481352602c36127695b7ea0e96d12bd56014914e5f9e5acd112bccbb22a",
+      "unaffected_diff_sha256": "7de147a0db5a8f6b4cf0776b80d65688b6320b76ee4498011d55796f1fb7af11",
+      "kind": "orbit",
+      "source_head": "0054741e73f25f544801ccc5b9cc47670b05be73",
+      "framework_sha256": "8d3722a2434e33acbc4c89470f92ad0238991e11302a3686930ef08471c13134",
+      "chromium_files": {
+        "chrome/browser/ui/browser_window/internal/browser_window_features.cc": "19dfeb0f82cc663b5916b4d2bd9ed921b8d0ce9cd9d606e2f8dba812261856da",
+        "chrome/browser/ui/read_anything/read_anything_side_panel_controller.cc": "9a06567507804e9fd632d2da4130baf2b92fc79ae191556e4b773f2d810e7b77"
+      },
+      "proofs": {
+        "terminal": {
+          "path": "reader-detach-apply-20261025T142715Z/build-complete.json",
+          "sha256": "5274da2ebb7abeab6b96f1bea01828f1c0ac0dfa0b10070509ae5c3bfdea2322"
+        },
+        "source_preflight": {
+          "path": "reader-detach-apply-20261025T142715Z/preflight.json",
+          "sha256": "bb0f7ef2c6e71dd583d2cdc726c1c84e42221bab446490925c68aa954c806b7b"
+        },
+        "build_verified": {
+          "path": "reader-detach-apply-20261025T142715Z/build-verified.json",
+          "sha256": "439d9c281ed58889badf6310c2dac5f9ec6899bca02d8d5c69b08f35be09ef73"
+        }
+      },
+      "runtime_status": "CHROMIUM-APP hidden smoke 4/4: native-orbit-chromium-app/20261025T170602Z-orbit; reviewed for reapplication by CHROMIUM-APP-R2 (BL-ENG-X2-REAPPLY-PROVENANCE)"
+    },
+    {
+      "gn_args_sha256": "21183481352602c36127695b7ea0e96d12bd56014914e5f9e5acd112bccbb22a",
+      "unaffected_diff_sha256": "7de147a0db5a8f6b4cf0776b80d65688b6320b76ee4498011d55796f1fb7af11",
+      "kind": "orbit",
+      "source_head": "065b7e9d7cde2519e1239272d26f8f2e63900094",
+      "framework_sha256": "618192ea50ee5cd1343c806e4d2ddcf92cc881a53e307225c3913d01b018b480",
+      "chromium_files": {
+        "chrome/browser/ui/browser_window/internal/browser_window_features.cc": "19dfeb0f82cc663b5916b4d2bd9ed921b8d0ce9cd9d606e2f8dba812261856da",
+        "chrome/browser/ui/read_anything/read_anything_side_panel_controller.cc": "9a06567507804e9fd632d2da4130baf2b92fc79ae191556e4b773f2d810e7b77"
+      },
+      "proofs": {
+        "terminal": {
+          "path": "r2-move-tab-apply-20261025T181357Z/build-complete.json",
+          "sha256": "377f6ea78f434964e717c214b008e7a158134597d17ad9a274f80fc5267b6561"
+        },
+        "source_preflight": {
+          "path": "r2-move-tab-apply-20261025T181357Z/preflight.json",
+          "sha256": "38c9a331fd00f171d126d4d4ab5c8d30bf9265e13db71f8a06bf40153b4a61b0"
+        },
+        "build_verified": {
+          "path": "r2-move-tab-apply-20261025T181357Z/build-verified.json",
+          "sha256": "05f3e6cc0caeda0f72eb28662f7209783c1bd55ed5577123e85f1cf932b64184"
+        }
+      },
+      "runtime_status": "CHROMIUM-APP-R2 hidden smoke 5/5 on orbit-next: native-orbit-chromium-app/20261025T181129Z-orbit-next"
+    },
+    {
+      "gn_args_sha256": "21183481352602c36127695b7ea0e96d12bd56014914e5f9e5acd112bccbb22a",
+      "unaffected_diff_sha256": "7de147a0db5a8f6b4cf0776b80d65688b6320b76ee4498011d55796f1fb7af11",
+      "kind": "orbit",
+      "source_head": "99e5115ce0e2bf5e48a3c7a48ddb37210d56c0da",
+      "framework_sha256": "870f37e22278ca61c736e60f00e0f9888998c086e27e5d41c180cc22005996df",
+      "chromium_files": {
+        "chrome/browser/ui/browser_window/internal/browser_window_features.cc": "19dfeb0f82cc663b5916b4d2bd9ed921b8d0ce9cd9d606e2f8dba812261856da",
+        "chrome/browser/ui/read_anything/read_anything_side_panel_controller.cc": "9a06567507804e9fd632d2da4130baf2b92fc79ae191556e4b773f2d810e7b77"
+      },
+      "proofs": {
+        "terminal": {
+          "path": "r2-profile-loaded-apply-20261025T182105Z/build-complete.json",
+          "sha256": "1776d80b468b064848aaf4b4761d5ddee3eaaf72ec120a2645f408afb1cd4a50"
+        },
+        "source_preflight": {
+          "path": "r2-profile-loaded-apply-20261025T182105Z/preflight.json",
+          "sha256": "9107abf4749de0a9763f79ed5c68c13767bc63972cb052cf1ee3bcf18a386ee4"
+        },
+        "build_verified": {
+          "path": "r2-profile-loaded-apply-20261025T182105Z/build-verified.json",
+          "sha256": "c5cdaaea87da2a63a7022da3e7850a8c38dfbf7987f135fb599fcbc759d341f9"
+        }
+      },
+      "runtime_status": "CHROMIUM-APP-R2 hidden smoke on orbit-next (move_tab, profile removal conformance)"
+    },
+    {
+      "gn_args_sha256": "21183481352602c36127695b7ea0e96d12bd56014914e5f9e5acd112bccbb22a",
+      "unaffected_diff_sha256": "7de147a0db5a8f6b4cf0776b80d65688b6320b76ee4498011d55796f1fb7af11",
+      "kind": "orbit",
+      "source_head": "0e3b767d39fa37f61101c2e31e945489789ed75d",
+      "framework_sha256": "f8cee68b2079326026b1cfd3e6ac40d5e772007f98ecd1cba6459b42f83396d2",
+      "chromium_files": {
+        "chrome/browser/ui/browser_window/internal/browser_window_features.cc": "19dfeb0f82cc663b5916b4d2bd9ed921b8d0ce9cd9d606e2f8dba812261856da",
+        "chrome/browser/ui/read_anything/read_anything_side_panel_controller.cc": "9a06567507804e9fd632d2da4130baf2b92fc79ae191556e4b773f2d810e7b77"
+      },
+      "proofs": {
+        "terminal": {
+          "path": "r3-transfer-hold-apply-20261025T211104Z/build-complete.json",
+          "sha256": "9f0af06209df926f54e0062068ed85abd37ee791b24465c75791d027f46f791f"
+        },
+        "source_preflight": {
+          "path": "r3-transfer-hold-apply-20261025T211104Z/preflight.json",
+          "sha256": "82c72048af5d2e9dd89a9cd56d3f03d9c7ff4de6611c016a4995bf61284927dc"
+        },
+        "build_verified": {
+          "path": "r3-transfer-hold-apply-20261025T211104Z/build-verified.json",
+          "sha256": "8f888bada8a5e2e161751caddc135fc358fcd45ac1eb7c9bd81e126146ad9743"
+        }
+      },
+      "runtime_status": "CHROMIUM-APP-R3 hidden smoke 5/5 on orbit-r3: native-orbit-chromium-app/20261025T211008Z-orbit-r3"
+    }
+  ],
+  "purpose": "Source admission provenance only; this is not runtime or product acceptance.",
+  "approval_policy": "Versioned records require review; worker JSON alone never approves a binary."
+}

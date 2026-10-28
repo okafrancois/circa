@@ -1,0 +1,21 @@
+{
+  "schema": 1,
+  "status": "prepared-unbuilt-product-runtime-unverified",
+  "patch_file": "cef.patch",
+  "patch_sha256": "685f0172a181deace19ce98e127d40608bcb9986a2ea571dd34b598ad172ac23",
+  "input_sha256": {
+    "BUILD.gn": "9b084ed7b4759768ce19857d87803a286deba99332e271a6fbd6217e1637bc4a",
+    "libcef/browser/download_manager_delegate_impl.cc": "93327bbf93d9edaf023908f7240abe6e0ccd70cd331fed061fc380129e75ba0d",
+    "libcef/browser/download_manager_delegate_impl.h": "a15e9d8f30c2ce79fda523da7be41f9f1b46d87861c16e0fbcbf962574bd302a"
+  },
+  "output_sha256": {
+    "BUILD.gn": "8d54bce7c8011073b3e4cef08c7f96e2d376351a21a0ae6235a1231e842c3dea",
+    "libcef/browser/orbit/orbit_installer_downloads.cc": "0608ef0030e611ac99625ce55de9a5f8555acf6adde5eb78e5973d2786a0f217",
+    "libcef/browser/orbit/orbit_installer_downloads.h": "957f746003a24f83c1899928d8c8490e49e0bab87877e8dcbad276b8391d9a27",
+    "libcef/browser/orbit/orbit_installer_downloads_unittest.cc": "a9c695f5a9dc128c2ecb5cefe1effc428b1ca8685f5666171002399e26ee9321",
+    "libcef/browser/download_manager_delegate_impl.cc": "b7a29e1c0ce266eeb2779ab90f3ccf0e789aedbf19e50cca9663d2a26239869f",
+    "libcef/browser/download_manager_delegate_impl.h": "2790ca7548fd667fe257e65f8cf60711129598683dbfe56afdd88dc986cda2ef"
+  },
+  "source_reference": "0e5315e2fd06795cafe7e83bf6bf94a3ab405e8f",
+  "stacked_on": "unowned-tabs-r2 BUILD.gn output"
+}

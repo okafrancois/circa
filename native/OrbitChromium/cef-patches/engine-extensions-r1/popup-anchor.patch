@@ -1,0 +1,13 @@
+diff --git a/chrome/browser/ui/views/extensions/extension_popup.cc b/chrome/browser/ui/views/extensions/extension_popup.cc
+index 38e850c..fad2265 100644
+--- a/chrome/browser/ui/views/extensions/extension_popup.cc
++++ b/chrome/browser/ui/views/extensions/extension_popup.cc
+@@ -88,7 +88,7 @@ void ExtensionPopup::ShowPopupWithNativeParent(
+   if (!native_parent || !invocation || !invocation->IsValid()) return;
+   auto* popup = new ExtensionPopup(
+       browser, std::move(host), views::BubbleAnchor(),
+-      views::BubbleBorder::TOP_RIGHT, PopupShowAction::kShow,
++      views::BubbleBorder::TOP_LEFT, PopupShowAction::kShow,
+       ShowPopupCallback(), native_parent, screen_anchor, std::move(invocation));
+   if (popup->orbit_cancelled_) { delete popup; return; }
+   auto weak = popup->deferred_close_weak_ptr_factory_.GetWeakPtr();

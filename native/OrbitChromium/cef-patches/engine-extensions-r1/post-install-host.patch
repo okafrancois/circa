@@ -1,0 +1,13 @@
+diff --git a/chrome/browser/ui/extensions/extension_install_ui_desktop.cc b/chrome/browser/ui/extensions/extension_install_ui_desktop.cc
+index c9e2a59..3959e16 100644
+--- a/chrome/browser/ui/extensions/extension_install_ui_desktop.cc
++++ b/chrome/browser/ui/extensions/extension_install_ui_desktop.cc
+@@ -160,7 +160,7 @@ void ExtensionInstallUIDesktop::OnInstallSuccess(
+               }
+               BrowserView* browser_view =
+                   BrowserView::GetBrowserViewForBrowser(browser_interface);
+-              if (!browser_view->toolbar()) {
++              if (!browser_view || !browser_view->toolbar()) {
+                 return;
+               }
+               ExtensionsToolbarDesktop* extensions_toolbar =

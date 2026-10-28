@@ -1,0 +1,101 @@
+cmake_minimum_required(VERSION 3.26)
+
+# Packaging of the Orbit application bundles (CHROMIUM-APP): product and hidden smoke. Copies the
+# pinned private CEF framework and the five helpers. No launch, installation or signing here.
+foreach(REQUIRED APP EXECUTABLE INFO_PLIST BUILD_DIRECTORY HELPER_DIRECTORY CEF_ROOT CEF_FRAMEWORK_SHA256 HELPER_NAMES)
+  if(NOT DEFINED ${REQUIRED} OR "${${REQUIRED}}" STREQUAL "")
+    message(FATAL_ERROR "Missing packaging argument: ${REQUIRED}")
+  endif()
+endforeach()
+cmake_path(IS_PREFIX BUILD_DIRECTORY "${APP}" NORMALIZE APP_INSIDE)
+if(NOT APP_INSIDE OR NOT APP MATCHES "/Orbit\\.app$")
+  message(FATAL_ERROR "Packaging is confined to an Orbit.app of the isolated build directory")
+endif()
+find_program(PYTHON_EXECUTABLE python3 REQUIRED)
+set(BUNDLE_POLICY "${CMAKE_CURRENT_LIST_DIR}/../../scripts/orbit_bundle_policy.py")
+# Refuse compiler outputs in copied directory trees before copying anything into the bundle.
+foreach(SOURCE "${CEF_ROOT}/Release/Chromium Embedded Framework.framework"
+    "${HELPER_DIRECTORY}" "${BUILD_DIRECTORY}/OrbitLabNative_BrowserShell.bundle")
+  execute_process(COMMAND "${PYTHON_EXECUTABLE}" "${BUNDLE_POLICY}" "${SOURCE}" --reject-build-artifacts
+    COMMAND_ERROR_IS_FATAL ANY)
+endforeach()
+# Fresh explicit staging prevents old Swift dependency/module outputs from surviving rebuilds.
+# The build root is isolated and the bundle is unsigned; never point this at an installed app.
+if(IS_SYMLINK "${APP}")
+  message(FATAL_ERROR "A staging bundle must not be a symlink")
+endif()
+file(REMOVE_RECURSE "${APP}")
+file(MAKE_DIRECTORY "${APP}/Contents/MacOS" "${APP}/Contents/Resources")
+file(COPY_FILE "${EXECUTABLE}" "${APP}/Contents/MacOS/Orbit")
+file(COPY_FILE "${INFO_PLIST}" "${APP}/Contents/Info.plist")
+file(COPY "${BUILD_DIRECTORY}/OrbitLabNative_BrowserShell.bundle" DESTINATION "${APP}/Contents/Resources")
+file(COPY "${CMAKE_CURRENT_LIST_DIR}/App/Branding/Orbit.icns"
+    "${CMAKE_CURRENT_LIST_DIR}/App/Branding/en.lproj"
+    "${CMAKE_CURRENT_LIST_DIR}/App/Branding/fr.lproj" DESTINATION "${APP}/Contents/Resources")
+file(CHMOD "${APP}/Contents/Resources/Orbit.icns"
+    PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ)
+set(FRAMEWORKS "${APP}/Contents/Frameworks")
+set(FRAMEWORK "${FRAMEWORKS}/Chromium Embedded Framework.framework")
+foreach(PATH "${APP}" "${APP}/Contents" "${FRAMEWORKS}" "${FRAMEWORK}"
+    "${FRAMEWORK}/Versions" "${FRAMEWORK}/Versions/A")
+  if(IS_SYMLINK "${PATH}")
+    message(FATAL_ERROR "A staging directory must not be a symlink")
+  endif()
+endforeach()
+if(IS_SYMLINK "${FRAMEWORKS}/libOrbitNetworkQoS.dylib")
+  message(FATAL_ERROR "The private QoS library destination must not be a symlink")
+endif()
+file(MAKE_DIRECTORY "${FRAMEWORKS}")
+file(COPY_FILE "${BUILD_DIRECTORY}/libOrbitNetworkQoS.dylib" "${FRAMEWORKS}/libOrbitNetworkQoS.dylib")
+if(DEFINED SPARKLE_ROOT AND NOT "${SPARKLE_ROOT}" STREQUAL "")
+  file(COPY "${SPARKLE_ROOT}/Sparkle.framework" DESTINATION "${FRAMEWORKS}")
+endif()
+set(SOURCE_FRAMEWORK "${CEF_ROOT}/Release/Chromium Embedded Framework.framework")
+file(SHA256 "${SOURCE_FRAMEWORK}/Chromium Embedded Framework" SOURCE_HASH)
+if(NOT SOURCE_HASH STREQUAL CEF_FRAMEWORK_SHA256)
+  message(FATAL_ERROR "Pinned framework hash mismatch")
+endif()
+file(MAKE_DIRECTORY "${FRAMEWORK}/Versions")
+if(EXISTS "${FRAMEWORK}/Versions/A/Chromium Embedded Framework")
+  # A previous signature rewrote the private copy (never the distribution): restage it.
+  file(SHA256 "${FRAMEWORK}/Versions/A/Chromium Embedded Framework" PREVIOUS_HASH)
+  if(NOT PREVIOUS_HASH STREQUAL SOURCE_HASH)
+    file(REMOVE_RECURSE "${FRAMEWORK}/Versions/A")
+  endif()
+endif()
+if(NOT EXISTS "${FRAMEWORK}/Versions/A")
+  # APFS clone: independent files, no hardlinks or links into the distribution.
+  execute_process(COMMAND /bin/cp -cR -P "${SOURCE_FRAMEWORK}" "${FRAMEWORK}/Versions/A"
+    COMMAND_ERROR_IS_FATAL ANY)
+endif()
+file(SHA256 "${FRAMEWORK}/Versions/A/Chromium Embedded Framework" STAGED_HASH)
+if(NOT STAGED_HASH STREQUAL SOURCE_HASH)
+  message(FATAL_ERROR "Private framework copy mismatch; do not repair a shared distribution in place")
+endif()
+file(CREATE_LINK "Versions/A/Chromium Embedded Framework" "${FRAMEWORK}/Chromium Embedded Framework" SYMBOLIC)
+file(CREATE_LINK "Versions/A/Resources" "${FRAMEWORK}/Resources" SYMBOLIC)
+file(CREATE_LINK "Versions/A/Libraries" "${FRAMEWORK}/Libraries" SYMBOLIC)
+file(CREATE_LINK "A" "${FRAMEWORK}/Versions/Current" SYMBOLIC)
+
+string(REPLACE "|" ";" HELPERS "${HELPER_NAMES}")
+list(LENGTH HELPERS HELPER_COUNT)
+if(NOT HELPER_COUNT EQUAL 5)
+  message(FATAL_ERROR "Expected all five helper bundles")
+endif()
+foreach(HELPER IN LISTS HELPERS)
+  set(SOURCE "${HELPER_DIRECTORY}/${HELPER}.app")
+  set(DESTINATION "${FRAMEWORKS}/${HELPER}.app")
+  if(NOT EXISTS "${SOURCE}/Contents/MacOS/${HELPER}" OR IS_SYMLINK "${DESTINATION}")
+    message(FATAL_ERROR "Missing helper or unsafe destination")
+  endif()
+  file(REMOVE_RECURSE "${DESTINATION}")
+  execute_process(COMMAND "${CMAKE_COMMAND}" -E copy_directory "${SOURCE}" "${DESTINATION}"
+    COMMAND_ERROR_IS_FATAL ANY)
+endforeach()
+execute_process(COMMAND "${PYTHON_EXECUTABLE}" "${BUNDLE_POLICY}" "${APP}" --set-helper-identifiers
+  COMMAND_ERROR_IS_FATAL ANY)
+file(MAKE_DIRECTORY "${APP}/Contents/Resources")
+file(COPY "${CEF_ROOT}/LICENSE.txt" DESTINATION "${APP}/Contents/Resources")
+execute_process(COMMAND "${PYTHON_EXECUTABLE}" "${BUNDLE_POLICY}" "${APP}"
+  COMMAND_ERROR_IS_FATAL ANY)
+message(STATUS "Orbit bundle packaged (unsigned): ${APP}")

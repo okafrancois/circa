@@ -1,0 +1,29 @@
+diff --git chrome/browser/ui/read_anything/read_anything_side_panel_controller.cc chrome/browser/ui/read_anything/read_anything_side_panel_controller.cc
+--- chrome/browser/ui/read_anything/read_anything_side_panel_controller.cc
++++ chrome/browser/ui/read_anything/read_anything_side_panel_controller.cc
+@@ -9,6 +9,10 @@
+ 
+ #include "base/check_is_test.h"
+ #include "base/functional/bind.h"
++#include "cef/libcef/features/features.h"
++#if BUILDFLAG(ENABLE_CEF)
++#include "cef/libcef/browser/chrome/browser_delegate.h"
++#endif
+ #include "chrome/browser/dom_distiller/tab_utils.h"
+ #include "chrome/browser/ui/browser_window/public/browser_window_features.h"
+ #include "chrome/browser/ui/read_anything/read_anything_contents_wrapper.h"
+@@ -241,6 +245,14 @@
+   // not create a SidePanelCoordinator. This block will be unnecessary once that
+   // changes.
+   if (!side_panel_ui) {
++#if BUILDFLAG(ENABLE_CEF)
++    // Native hosted windows intentionally supply no Chromium side-panel UI.
++    // Preserve the invariant for ordinary Chrome and the path when UI exists.
++    if (auto* delegate = browser_window_interface->cef_delegate();
++        delegate && delegate->UsesNativeHostedWindow()) {
++      return;
++    }
++#endif
+     // TODO(webium): create a SidePanelCoordinator for WebUIBrowser.
+     // This is a temporary solution to avoid a crash.
+     if (!webui_browser::IsWebUIBrowserEnabled()) {

@@ -1,0 +1,18 @@
+{
+  "schema": 1,
+  "status": "prepared-unbuilt-product-runtime-unverified",
+  "patch_file": "chromium.patch",
+  "patch_sha256": "607c6c860d917603adf19a178af46e686c584290cd2a4d029e223ccc97ed059a",
+  "input_sha256": {
+    "chrome/browser/ui/navigator/BUILD.gn": "40dba9884f123d262086c9c168e61a77c3ee1790b51fd2f3fbf8b9a98d55ec2e",
+    "chrome/browser/ui/navigator/browser_navigator.cc": "20cbb888d9fb4665e16c91643db74af1b9ffd5f5d109af96db00f75149439e98"
+  },
+  "output_sha256": {
+    "chrome/browser/ui/navigator/BUILD.gn": "2aa0e530bb6dcea8b25acca129f9174d5a5ee480950429f98728307d13d138a5",
+    "chrome/browser/ui/navigator/orbit_navigate_intent.h": "3fd5993fa9d092b0c0c477162a43c8bb7286ceb60a0655318884a09b1bc79bc0",
+    "chrome/browser/ui/navigator/browser_navigator.cc": "f0f44a053320fcf5605f352c88f6970a74ff04606a155e5fdb65fbb1f3946881"
+  },
+  "source_reference": "d0c02bfad08ec92a6ffcf989e53cd995e6381a4c",
+  "working_inputs_are_pinned": true,
+  "note": "browser_navigator.cc input is the CEF-patched working file"
+}

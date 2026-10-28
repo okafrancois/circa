@@ -1,0 +1,420 @@
+--- chrome/browser/ui/views/extensions/extension_popup.h
++++ chrome/browser/ui/views/extensions/extension_popup.h
+@@ -5,6 +5,7 @@
+ #ifndef CHROME_BROWSER_UI_VIEWS_EXTENSIONS_EXTENSION_POPUP_H_
+ #define CHROME_BROWSER_UI_VIEWS_EXTENSIONS_EXTENSION_POPUP_H_
+
++#include <memory>
+ #include "base/functional/callback.h"
+ #include "base/memory/raw_ptr.h"
+ #include "base/scoped_observation.h"
+@@ -67,6 +68,24 @@
+                         PopupShowAction show_action,
+                         ShowPopupCallback callback);
+
++  // Owned native authorization. No asynchronous callback may borrow an embedder
++  // object. Cancellation is synchronous even when widget destruction is deferred.
++  class NativeInvocation {
++   public:
++    virtual ~NativeInvocation() = default;
++    virtual bool IsValid() = 0;
++    virtual void SetCancellation(base::RepeatingClosure callback) = 0;
++    virtual void Cancel() = 0;
++  };
++
++  // Orbit: a genuine extension host in a bubble parented to an embedder NSView.
++  // The caller must validate the hosted Browser, active tab and native anchor.
++  static void ShowPopupWithNativeParent(
++      BrowserWindowInterface* browser,
++      std::unique_ptr<extensions::ExtensionViewHost> host,
++      gfx::NativeView native_parent, const gfx::Rect& screen_anchor,
++      std::shared_ptr<NativeInvocation> invocation);
++
+   ExtensionPopup(const ExtensionPopup&) = delete;
+   ExtensionPopup& operator=(const ExtensionPopup&) = delete;
+   ~ExtensionPopup() override;
+@@ -120,7 +139,14 @@
+                  views::BubbleAnchor anchor,
+                  views::BubbleBorder::Arrow arrow,
+                  PopupShowAction show_action,
+-                 ShowPopupCallback callback);
++                 ShowPopupCallback callback,
++                 gfx::NativeView native_parent = {},
++                 const gfx::Rect& screen_anchor = {},
++                 std::shared_ptr<NativeInvocation> invocation = {});
++
++  bool CheckNativeInvocation();
++  void CancelNativeInvocation();
++  void OnTabStripModelDestroyed(TabStripModel* model) override;
+
+   // Shows the bubble, focuses its content, and registers listeners.
+   void ShowBubble();
+@@ -138,6 +164,12 @@
+   void HandleCloseExtensionHost(extensions::ExtensionHost* host);
+
+   raw_ptr<BrowserWindowInterface> browser_;
++  raw_ptr<TabStripModel> observed_tab_strip_ = nullptr;
++  std::shared_ptr<NativeInvocation> native_invocation_;
++  bool orbit_native_ = false;
++  bool orbit_cancelled_ = false;
++  bool orbit_constructing_ = true;
++  bool orbit_destroying_ = false;
+
+   // The contained host for the view.
+   std::unique_ptr<extensions::ExtensionViewHost> host_;
+@@ -147,7 +179,7 @@
+       performance_manager::PageLiveStateDecorator::ScopedWithheldFromView>
+       withheld_from_view_;
+
+-  raw_ptr<ExtensionViewViews> extension_view_;
++  raw_ptr<ExtensionViewViews> extension_view_ = nullptr;
+
+   base::ScopedObservation<extensions::ExtensionRegistry,
+                           extensions::ExtensionRegistryObserver>
+@@ -166,6 +198,8 @@
+       anchor_widget_observation_{this};
+
+   base::WeakPtrFactory<ExtensionPopup> deferred_close_weak_ptr_factory_;
++  // Cancellation authority must survive invalidation of ordinary deferred-close tasks.
++  base::WeakPtrFactory<ExtensionPopup> native_invocation_weak_ptr_factory_{this};
+ };
+
+ #endif  // CHROME_BROWSER_UI_VIEWS_EXTENSIONS_EXTENSION_POPUP_H_
+--- chrome/browser/ui/views/extensions/extension_popup.cc
++++ chrome/browser/ui/views/extensions/extension_popup.cc
+@@ -80,7 +80,27 @@
+ #endif
+ }
+
++void ExtensionPopup::ShowPopupWithNativeParent(
++    BrowserWindowInterface* browser,
++    std::unique_ptr<extensions::ExtensionViewHost> host,
++    gfx::NativeView native_parent, const gfx::Rect& screen_anchor,
++    std::shared_ptr<NativeInvocation> invocation) {
++  if (!native_parent || !invocation || !invocation->IsValid()) return;
++  auto* popup = new ExtensionPopup(
++      browser, std::move(host), views::BubbleAnchor(),
++      views::BubbleBorder::TOP_RIGHT, PopupShowAction::kShow,
++      ShowPopupCallback(), native_parent, screen_anchor, std::move(invocation));
++  if (popup->orbit_cancelled_) { delete popup; return; }
++  auto weak = popup->deferred_close_weak_ptr_factory_.GetWeakPtr();
++  views::BubbleDialogDelegateView::CreateBubble(popup);
++  if (!weak) return;
++  if (popup->CheckNativeInvocation() && popup->host_->has_loaded_once()) popup->ShowBubble();
++}
++
+ ExtensionPopup::~ExtensionPopup() {
++  orbit_destroying_ = true;
++  if (orbit_native_) CancelNativeInvocation();
++  if (observed_tab_strip_) observed_tab_strip_->RemoveObserver(this);
+   // The ExtensionPopup may close before it was ever shown. If so, indicate such
+   // through the callback.
+   if (shown_callback_) {
+@@ -103,6 +123,7 @@
+
+ void ExtensionPopup::AddedToWidget() {
+   BubbleDialogDelegateView::AddedToWidget();
++  if (orbit_native_ && !CheckNativeInvocation()) return;
+
+   // Remove the Escape accelerator from DialogClientView so that key events for
+   // Escape are passed to the contained WebContents / ExtensionViewHost rather
+@@ -128,6 +149,12 @@
+ }
+
+ void ExtensionPopup::OnWidgetDestroying(views::Widget* widget) {
++  orbit_destroying_ = true;
++  if (orbit_native_) CancelNativeInvocation();
++  if (observed_tab_strip_) {
++    observed_tab_strip_->RemoveObserver(this);
++    observed_tab_strip_ = nullptr;
++  }
+   BubbleDialogDelegateView::OnWidgetDestroying(widget);
+   anchor_widget_observation_.Reset();
+   extension_registry_observation_.Reset();
+@@ -139,6 +166,7 @@
+
+ void ExtensionPopup::OnWidgetTreeActivated(views::Widget* root_widget,
+                                            views::Widget* active_widget) {
++  if (orbit_native_ && !CheckNativeInvocation()) return;
+   // The widget is shown asynchronously and may take a long time to appear, so
+   // only close if it's actually been shown.
+   if (!GetWidget()->IsVisible()) {
+@@ -159,8 +187,11 @@
+       return;
+     }
+
+-    if (extensions::SecurityDialogTracker::GetInstance()
+-            ->BrowserHasVisibleSecurityDialogs(browser_, GetWidget())) {
++    auto weak = deferred_close_weak_ptr_factory_.GetWeakPtr();
++    const bool blocked = extensions::SecurityDialogTracker::GetInstance()
++        ->BrowserHasVisibleSecurityDialogs(browser_, GetWidget());
++    if (!weak || (orbit_native_ && !CheckNativeInvocation())) return;
++    if (blocked) {
+       // Defer to avoid reentrant focus and window activation changes in
+       // FocusController while the security dialog is in the middle of being
+       // shown.
+@@ -191,6 +222,7 @@
+   }
+ #endif
+
++  if (GetAnchor().IsNull()) return kMaxSize;
+   gfx::Size max_size = kMaxSize;
+   max_size.SetToMin(
+       BubbleDialogDelegate::GetMaxAvailableScreenSpaceToPlaceBubble(
+@@ -205,6 +237,7 @@
+     content::BrowserContext* browser_context,
+     const extensions::Extension* extension,
+     extensions::UnloadedExtensionReason reason) {
++  if (orbit_native_ && !CheckNativeInvocation()) return;
+   CHECK(host_);
+   if (extension->id() == host_->extension_id()) {
+     // To ensure |extension_view_| cannot receive any messages that cause it to
+@@ -223,20 +256,23 @@
+
+ void ExtensionPopup::DocumentOnLoadCompletedInPrimaryMainFrame() {
+   // Show when the content finishes loading and its width is computed.
++  auto weak = deferred_close_weak_ptr_factory_.GetWeakPtr();
+   ShowBubble();
+-  Observe(nullptr);
++  if (weak) Observe(nullptr);
+ }
+
+ void ExtensionPopup::OnTabStripModelChanged(
+     TabStripModel* tab_strip_model,
+     const TabStripModelChange& change,
+     const TabStripSelectionChange& selection) {
++  if (orbit_native_) { CancelNativeInvocation(); return; }
+   if (!tab_strip_model->empty() && selection.active_tab_changed()) {
+     CloseDeferredIfNecessary();
+   }
+ }
+
+ void ExtensionPopup::OnSecurityDialogAdded(views::Widget* widget) {
++  if (orbit_native_ && !CheckNativeInvocation()) return;
+   // Don't close if the security dialog belongs to this popup.
+   if (extensions::SecurityDialogTracker::IsWidgetOrDescendantOf(widget,
+                                                                 GetWidget())) {
+@@ -256,16 +292,42 @@
+     views::BubbleAnchor anchor,
+     views::BubbleBorder::Arrow arrow,
+     PopupShowAction show_action,
+-    ShowPopupCallback callback)
++    ShowPopupCallback callback,
++    gfx::NativeView native_parent,
++    const gfx::Rect& screen_anchor,
++    std::shared_ptr<NativeInvocation> invocation)
+     : BubbleDialogDelegateView(anchor,
+                                arrow,
+                                views::BubbleBorder::STANDARD_SHADOW,
+                                /*autosize=*/true),
+       browser_(browser),
++      native_invocation_(std::move(invocation)),
++      orbit_native_(native_invocation_ != nullptr),
+       host_(std::move(host)),
+       show_action_(show_action),
+       shown_callback_(std::move(callback)),
+       deferred_close_weak_ptr_factory_(this) {
++  if (native_parent) {
++    set_parent_window(native_parent);
++    SetAnchorRect(screen_anchor);
++  }
++  if (orbit_native_ && !native_invocation_->IsValid()) {
++    orbit_constructing_ = false;
++    CancelNativeInvocation();
++    return;
++  }
++  observed_tab_strip_ = browser_->GetTabStripModel();
++  observed_tab_strip_->AddObserver(this);
++  if (native_invocation_) {
++    native_invocation_->SetCancellation(base::BindRepeating(
++        &ExtensionPopup::CancelNativeInvocation,
++        native_invocation_weak_ptr_factory_.GetWeakPtr()));
++  }
++  if (orbit_native_ && !CheckNativeInvocation()) {
++    orbit_constructing_ = false;
++    CancelNativeInvocation();
++    return;
++  }
+   g_last_popup_for_testing = this;
+   SetButtons(static_cast<int>(ui::mojom::DialogButton::kNone));
+   set_use_round_corners(false);
+@@ -292,14 +354,18 @@
+       browser_->GetProfile(), host_.get()));
+   extension_view_->SetContainer(this);
+   extension_view_->Init();
++  orbit_constructing_ = false;
++  if (orbit_native_ && !CheckNativeInvocation()) { CancelNativeInvocation(); return; }
+
+   // See comments in OnWidgetActivationChanged().
+-  set_close_on_deactivate(false);
+-
+-  browser_->GetTabStripModel()->AddObserver(this);
+-
+-  CHECK(anchor_widget());
+-  anchor_widget_observation_.Observe(anchor_widget()->GetPrimaryWindowWidget());
++  set_close_on_deactivate(static_cast<bool>(native_parent));
++
++
++  if (anchor_widget()) {
++    anchor_widget_observation_.Observe(anchor_widget()->GetPrimaryWindowWidget());
++  } else {
++    CHECK(native_parent);
++  }
+
+   security_dialog_tracker_observation_.Observe(
+       extensions::SecurityDialogTracker::GetInstance());
+@@ -316,52 +382,94 @@
+   // If the host had somehow finished loading, then we'd miss the notification
+   // and not show.  This seems to happen in single-process mode.
+   if (host_->has_loaded_once()) {
+-    ShowBubble();
++    if (!orbit_native_) ShowBubble();
+   } else {
+     // Wait to show the popup until the contained host finishes loading.
+     Observe(host_->host_contents());
+   }
+ }
+
++bool ExtensionPopup::CheckNativeInvocation() {
++  if (!orbit_native_) return true;
++  if (orbit_cancelled_) return false;
++  if (native_invocation_ && native_invocation_->IsValid()) return true;
++  CancelNativeInvocation();
++  return false;
++}
++
++void ExtensionPopup::CancelNativeInvocation() {
++  orbit_cancelled_ = true;
++  native_invocation_weak_ptr_factory_.InvalidateWeakPtrs();
++  deferred_close_weak_ptr_factory_.InvalidateWeakPtrs();
++  Observe(nullptr);
++  extension_registry_observation_.Reset();
++  security_dialog_tracker_observation_.Reset();
++  anchor_widget_observation_.Reset();
++  if (observed_tab_strip_) {
++    observed_tab_strip_->RemoveObserver(this);
++    observed_tab_strip_ = nullptr;
++  }
++  browser_ = nullptr; // Revoke before calling external/native cancellation code.
++  auto invocation = std::move(native_invocation_);
++  if (invocation) { invocation->SetCancellation({}); invocation->Cancel(); }
++  if (orbit_constructing_) return;
++  auto weak = deferred_close_weak_ptr_factory_.GetWeakPtr();
++  if (extension_view_) RemoveChildViewT(extension_view_.ExtractAsDangling());
++  if (!weak) return;
++  host_.reset();
++  if (!weak) return;
++  withheld_from_view_.reset();
++  if (!orbit_destroying_ && GetWidget()) CloseDeferredIfNecessary();
++}
++
++void ExtensionPopup::OnTabStripModelDestroyed(TabStripModel*) {
++  observed_tab_strip_ = nullptr;
++  browser_ = nullptr;
++  if (orbit_native_) CancelNativeInvocation();
++  else if (GetWidget()) CloseDeferredIfNecessary();
++}
++
+ void ExtensionPopup::ShowBubble() {
+-  // Don't show the popup if there are visible security dialogs. This protects
+-  // the security dialogs from spoofing.
+-  if (extensions::SecurityDialogTracker::GetInstance()
+-          ->BrowserHasVisibleSecurityDialogs(browser_, GetWidget())) {
+-    withheld_from_view_.reset();
+-    CloseDeferredIfNecessary();
+-    return;
+-  }
+-
++  if (orbit_native_ && !CheckNativeInvocation()) return;
++  if (!GetWidget() || !browser_ || !host_) return;
++  auto weak = deferred_close_weak_ptr_factory_.GetWeakPtr();
++  const bool blocked = extensions::SecurityDialogTracker::GetInstance()
++      ->BrowserHasVisibleSecurityDialogs(browser_, GetWidget());
++  if (!weak || (orbit_native_ && !CheckNativeInvocation())) return;
++  if (blocked) { withheld_from_view_.reset(); CloseDeferredIfNecessary(); return; }
++  // Recheck immediately before Show, then after every safety/focus callback.
++  if (orbit_native_ && !CheckNativeInvocation()) return;
+   GetWidget()->Show();
++  if (!weak || (orbit_native_ && !CheckNativeInvocation())) return;
+   withheld_from_view_.reset();
+-
+-  // Focus on the host contents when the bubble is first shown.
+   host_->host_contents()->Focus();
+-
++  if (!weak || (orbit_native_ && !CheckNativeInvocation())) return;
+   if (show_action_ == PopupShowAction::kShowAndInspect) {
+-    DevToolsWindow::OpenDevToolsWindow(
+-        host_->host_contents(), DevToolsToggleAction::ShowConsolePanel(),
+-        DevToolsOpenedByAction::kContextMenuInspect);
+-  }
+-
+-  if (shown_callback_) {
+-    std::move(shown_callback_).Run(host_.get());
+-  }
++    DevToolsWindow::OpenDevToolsWindow(host_->host_contents(),
++        DevToolsToggleAction::ShowConsolePanel(), DevToolsOpenedByAction::kContextMenuInspect);
++  }
++  if (!weak || (orbit_native_ && !CheckNativeInvocation())) return;
++  if (shown_callback_) std::move(shown_callback_).Run(host_.get());
+ }
+
+ void ExtensionPopup::CloseIfSecurityDialogPresent() {
++  if (orbit_native_ && !CheckNativeInvocation()) return;
+   if (!browser_ || !host_) {
+     return;
+   }
+
+-  if (extensions::SecurityDialogTracker::GetInstance()
+-          ->BrowserHasVisibleSecurityDialogs(browser_, GetWidget())) {
++  auto weak = deferred_close_weak_ptr_factory_.GetWeakPtr();
++  const bool blocked = extensions::SecurityDialogTracker::GetInstance()
++      ->BrowserHasVisibleSecurityDialogs(browser_, GetWidget());
++  if (!weak || (orbit_native_ && !CheckNativeInvocation())) return;
++  if (blocked) {
+     CloseDeferredIfNecessary(views::Widget::ClosedReason::kLostFocus);
+   }
+ }
+
+ void ExtensionPopup::CloseUnlessBlockedByInspectionOrJSDialog() {
++  auto weak = deferred_close_weak_ptr_factory_.GetWeakPtr();
++  if (orbit_native_ && !CheckNativeInvocation()) return;
+   if (!browser_ || !host_) {
+     return;
+   }
+@@ -370,19 +478,24 @@
+   javascript_dialogs::AppModalDialogQueue* app_modal_queue =
+       javascript_dialogs::AppModalDialogQueue::GetInstance();
+   CHECK(app_modal_queue);
+-  if (app_modal_queue->HasActiveDialog()) {
++  const bool app_modal = app_modal_queue->HasActiveDialog();
++  if (!weak || (orbit_native_ && !CheckNativeInvocation())) return;
++  if (app_modal) {
+     return;
+   }
+
+   // Don't close if a web modal dialog (e.g. webauthn security key dialog) is
+   // showing.
+-  if (web_modal::WebContentsHasActiveWebModal(host_->host_contents())) {
++  const bool has_web_modal = web_modal::WebContentsHasActiveWebModal(host_->host_contents());
++  if (!weak || (orbit_native_ && !CheckNativeInvocation())) return;
++  if (has_web_modal) {
+     return;
+   }
+
+   // Don't close if the extension page is under inspection in a DevTools window.
+-  if (DevToolsWindow::GetInstanceForInspectedWebContents(
+-          host_->host_contents())) {
++  const bool inspected = DevToolsWindow::GetInstanceForInspectedWebContents(host_->host_contents()) != nullptr;
++  if (!weak || (orbit_native_ && !CheckNativeInvocation())) return;
++  if (inspected) {
+     return;
+   }
+
+@@ -410,6 +523,7 @@
+ }
+
+ void ExtensionPopup::HandleCloseExtensionHost(extensions::ExtensionHost* host) {
++  if (orbit_native_ && !CheckNativeInvocation()) return;
+   DCHECK_EQ(host, host_.get());
+   CloseDeferredIfNecessary();
+ }

@@ -1,0 +1,219 @@
+diff --git a/libcef/browser/orbit/orbit_cef_api.mm b/libcef/browser/orbit/orbit_cef_api.mm
+index 7a2c78e..d613228 100644
+--- a/libcef/browser/orbit/orbit_cef_api.mm
++++ b/libcef/browser/orbit/orbit_cef_api.mm
+@@ -337,3 +337,5 @@ int32_t ReleaseWindow(uint64_t window_token) {
+       return nullptr;
+   }
+ }
++
++#include "cef/libcef/browser/orbit/orbit_extension_toolbar.inc"
+diff --git a/libcef/browser/orbit/orbit_extension_toolbar.inc b/libcef/browser/orbit/orbit_extension_toolbar.inc
+new file mode 100644
+index 0000000..60c33d4
+--- /dev/null
++++ b/libcef/browser/orbit/orbit_extension_toolbar.inc
+@@ -0,0 +1,74 @@
++// Product toolbar services; included once by orbit_cef_api.mm.
++#include "chrome/browser/extensions/commands/command_service.h"
++#include "chrome/browser/extensions/extension_keybinding_registry.h"
++#include "chrome/browser/tab_list/tab_list_interface.h"
++#include "extensions/common/command.h"
++#include "ui/events/event_constants.h"
++
++namespace {
++class OrbitCommandDispatcher final : public extensions::ExtensionKeybindingRegistry {
++ public:
++  explicit OrbitCommandDispatcher(Browser* browser)
++      : ExtensionKeybindingRegistry(browser->GetProfile(), TabListInterface::From(browser), ALL_EXTENSIONS) {}
++  void Dispatch(const std::string& id, const std::string& name, const ui::Accelerator& accelerator) {
++    CommandExecuted(id, name, accelerator);
++  }
++ private:
++  bool PopulateCommands(const extensions::Extension*, ui::CommandMap*) override { return false; }
++  bool RegisterAccelerator(const ui::Accelerator&, const extensions::ExtensionId&,
++                           const std::string&) override { return false; }
++};
++}  // namespace
++
++extern "C" CEF_EXPORT int32_t orbit_cef_extension_set_pinned(const char* path, const char* id, int32_t pinned) {
++  Profile* profile = ExtensionProfile(path);
++  if (!profile || !id || (pinned != 0 && pinned != 1)) return 0;
++  auto* toolbar = ToolbarActionsModel::Get(profile);
++  if (!toolbar || !toolbar->HasAction(id) || toolbar->IsActionForcePinned(id)) return 0;
++  toolbar->SetActionVisibility(id, pinned == 1);
++  return toolbar->IsActionPinned(id) == (pinned == 1) ? 1 : 0;
++}
++
++// 1: named command dispatched through Chrome's registry; 2: native action ID
++// returned to the bridge, which owns the shell anchor and invocation lifetime.
++extern "C" CEF_EXPORT int32_t orbit_cef_extension_shortcut(int32_t browser_id,
++    int32_t key_code, uint32_t flags, char* action_id, uint32_t capacity) {
++  if (!OnValidUIThread() || !action_id || capacity < 33) return 0;
++  auto host = GetChromeHost(browser_id);
++  if (!host || !host->browser() || !host->GetWebContents()) return 0;
++  Browser* browser = host->browser();
++  Profile* profile = browser->GetProfile();
++  if (profile->IsOffTheRecord() || browser->tab_strip_model()->GetActiveWebContents() != host->GetWebContents()) return 0;
++  auto* commands = extensions::CommandService::Get(profile);
++  auto* registry = extensions::ExtensionRegistry::Get(profile);
++  auto* actions = extensions::ExtensionActionManager::Get(profile);
++  if (!commands || !registry || !actions) return 0;
++  int modifiers = 0;
++  if (flags & EVENTFLAG_SHIFT_DOWN) modifiers |= ui::EF_SHIFT_DOWN;
++  if (flags & EVENTFLAG_CONTROL_DOWN) modifiers |= ui::EF_CONTROL_DOWN;
++  if (flags & EVENTFLAG_ALT_DOWN) modifiers |= ui::EF_ALT_DOWN;
++  if (flags & EVENTFLAG_COMMAND_DOWN) modifiers |= ui::EF_COMMAND_DOWN;
++  if (!modifiers) return 0;
++  const ui::Accelerator accelerator(static_cast<ui::KeyboardCode>(key_code), modifiers);
++  for (const auto& extension : registry->enabled_extensions()) {
++    auto* action = actions->GetExtensionAction(*extension);
++    extensions::Command command;
++    if (action && commands->GetExtensionActionCommand(extension->id(), action->action_type(),
++          extensions::CommandService::ACTIVE, &command, nullptr) && command.accelerator() == accelerator) {
++      std::memcpy(action_id, extension->id().c_str(), 33);
++      return 2;
++    }
++    ui::CommandMap named;
++    if (!commands->GetNamedCommands(extension->id(), extensions::CommandService::ACTIVE,
++          extensions::CommandService::REGULAR, &named)) continue;
++    for (const auto& [name, entry] : named) {
++      if (entry.accelerator() != accelerator) continue;
++      // Retain the extension until synchronous callbacks have finished.
++      scoped_refptr<const extensions::Extension> retained = extension;
++      OrbitCommandDispatcher dispatcher(browser);
++      dispatcher.Dispatch(retained->id(), name, accelerator);
++      return 1;
++    }
++  }
++  return 0;
++}
+diff --git a/libcef/browser/orbit/orbit_extensions.inc b/libcef/browser/orbit/orbit_extensions.inc
+index 0d0532e..b451bea 100644
+--- a/libcef/browser/orbit/orbit_extensions.inc
++++ b/libcef/browser/orbit/orbit_extensions.inc
+@@ -1,6 +1,12 @@
+ // Copyright 2026 Orbit. BSD-style license; see LICENSE.
+ // Included inside orbit_cef_api.mm before its anonymous namespace.
+ #include <cstring>
++#include "base/base64.h"
++#include "chrome/browser/ui/toolbar/toolbar_actions_model.h"
++#include "extensions/browser/extension_action.h"
++#include "extensions/browser/extension_icon_image.h"
++#include "extensions/common/manifest_handlers/icons_handler.h"
++#include "ui/gfx/image/image.h"
+ #include <limits>
+ #include <map>
+ #include <memory>
+@@ -31,6 +37,9 @@ Profile* ExtensionProfile(const char* path) {
+   return profile && !profile->IsOffTheRecord() ? profile : nullptr;
+ }
+ 
++std::string ExtensionIconPNG(Profile* profile, const extensions::Extension& extension,
++                             extensions::ExtensionAction* action);
++
+ int32_t ExtensionsSnapshot(const char* path, char* output, uint32_t capacity) {
+   Profile* profile = ExtensionProfile(path);
+   if (!profile) return -1;
+@@ -46,7 +55,11 @@ int32_t ExtensionsSnapshot(const char* path, char* output, uint32_t capacity) {
+     row.Set("name", extension->name());
+     row.Set("version", extension->version().GetString());
+     row.Set("isEnabled", registry->enabled_extensions().Contains(extension->id()));
+-    row.Set("hasAction", actions->GetExtensionAction(*extension) != nullptr);
++    auto* action = actions->GetExtensionAction(*extension);
++    row.Set("hasAction", action != nullptr);
++    auto* toolbar = ToolbarActionsModel::Get(profile);
++    row.Set("isPinned", toolbar && toolbar->IsActionPinned(extension->id()));
++    if (action) row.Set("iconPNGBase64", ExtensionIconPNG(profile, *extension, action));
+     rows.Append(std::move(row));
+   }
+   const auto json = base::WriteJson(rows);
+@@ -85,19 +98,51 @@ int32_t ExtensionRemove(const char* path, const char* id) {
+ }
+ 
+ class OrbitExtensionObservation final : public extensions::ExtensionRegistryObserver,
++                                       public ToolbarActionsModel::Observer,
++                                       public extensions::IconImage::Observer,
+                                        public std::enable_shared_from_this<OrbitExtensionObservation> {
+  public:
+-  OrbitExtensionObservation(extensions::ExtensionRegistry* registry,
++  OrbitExtensionObservation(Profile* profile, extensions::ExtensionRegistry* registry,
+                           void (*changed)(void*), void* context)
+-      : changed_(changed), context_(context) { observation_.Observe(registry); }
++       : changed_(changed), context_(context) {
++    observation_.Observe(registry);
++    if (auto* toolbar = ToolbarActionsModel::Get(profile)) toolbar_observation_.Observe(toolbar);
++  }
++  std::string Icon(Profile* profile, const extensions::Extension& extension) {
++    // Inventory is profile-scoped, so use the extension's native manifest icon.
++    // IconImage owns sandboxed decoding and notifies when its lazy reps arrive.
++    auto& icon = icons_[extension.id()];
++    if (!icon) icon = std::make_unique<extensions::IconImage>(
++        profile, &extension, extensions::IconsInfo::GetIcons(&extension),
++        16, gfx::ImageSkia(), this);
++    auto image = icon->image();
++    if (image.IsEmpty()) return {};
++    // PNG conversion caches its representation. Use fresh storage so a lazy
++    // IconImage update cannot leave the initial placeholder PNG cached.
++    gfx::Image png_image(image.AsImageSkia());
++    const auto png = png_image.As1xPNGBytes();
++    return png ? base::Base64Encode(base::span(*png)) : std::string();
++  }
++  void OnExtensionIconImageChanged(extensions::IconImage*) override { Notify(); }
++  void OnToolbarActionAdded(const std::string&) override { Notify(); }
++  void OnToolbarActionRemoved(const std::string& id) override { icons_.erase(id); Notify(); }
++  void OnToolbarActionUpdated(const std::string&) override { Notify(); }
++  void OnToolbarModelInitialized() override { Notify(); }
++  void OnToolbarPinnedActionsChanged() override { Notify(); }
++  void OnToolbarActionsModelShutdown() override { toolbar_observation_.Reset(); icons_.clear(); }
+   void OnExtensionLoaded(content::BrowserContext*, const extensions::Extension*) override { Notify(); }
+   void OnExtensionReady(content::BrowserContext*, const extensions::Extension*) override { Notify(); }
+-  void OnExtensionUnloaded(content::BrowserContext*, const extensions::Extension*,
+-                           extensions::UnloadedExtensionReason) override { Notify(); }
++  void OnExtensionUnloaded(content::BrowserContext*, const extensions::Extension* extension,
++                           extensions::UnloadedExtensionReason) override { icons_.erase(extension->id()); Notify(); }
+   void OnExtensionInstalled(content::BrowserContext*, const extensions::Extension*, bool) override { Notify(); }
+   void OnExtensionUninstalled(content::BrowserContext*, const extensions::Extension*,
+                               extensions::UninstallReason) override { Notify(); }
+-  void OnShutdown(extensions::ExtensionRegistry*) override { observation_.Reset(); }
++  void OnShutdown(extensions::ExtensionRegistry*) override {
++    changed_ = nullptr;
++    toolbar_observation_.Reset();
++    icons_.clear();
++    observation_.Reset();
++  }
+  private:
+   void Notify() {
+     // A synchronous observer may unregister/remove its profile or shut down.
+@@ -106,6 +151,8 @@ class OrbitExtensionObservation final : public extensions::ExtensionRegistryObser
+     void* context = context_;
+     if (callback) callback(context);
+   }
++  std::map<std::string, std::unique_ptr<extensions::IconImage>> icons_;
++  base::ScopedObservation<ToolbarActionsModel, ToolbarActionsModel::Observer> toolbar_observation_{this};
+   void (*changed_)(void*);
+   void* context_;
+   base::ScopedObservation<extensions::ExtensionRegistry, extensions::ExtensionRegistryObserver> observation_{this};
+@@ -117,6 +164,13 @@ ExtensionObservationMap& GetExtensionObservations() {
+   static base::NoDestructor<ExtensionObservationMap> observations;
+   return *observations;
+ }
++std::string ExtensionIconPNG(Profile* profile, const extensions::Extension& extension,
++                             extensions::ExtensionAction* action) {
++  const auto found = GetExtensionObservations().find(profile->GetPath().value());
++  if (found == GetExtensionObservations().end()) return {};
++  auto observer = found->second;
++  return observer->Icon(profile, extension);
++}
+ int32_t ExtensionsObserve(const char* path, void (*changed)(void*), void* context) {
+   if (!OnValidUIThread() || !path) return 0;
+   GetExtensionObservations().erase(path);
+@@ -124,7 +178,7 @@ int32_t ExtensionsObserve(const char* path, void (*changed)(void*), void* contex
+   Profile* profile = ExtensionProfile(path);
+   auto* registry = profile ? extensions::ExtensionRegistry::Get(profile) : nullptr;
+   if (!registry) return 0;
+-  GetExtensionObservations()[path] = std::make_shared<OrbitExtensionObservation>(registry, changed, context);
++  GetExtensionObservations()[path] = std::make_shared<OrbitExtensionObservation>(profile, registry, changed, context);
+   return 1;
+ }
+ }  // namespace

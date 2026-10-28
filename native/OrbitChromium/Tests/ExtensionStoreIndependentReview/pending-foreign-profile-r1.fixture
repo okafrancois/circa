@@ -1,0 +1,21 @@
+    @Test("Characterize Store host retargeting across a queued foreign-profile Space change")
+    func pendingForeignProfile() async throws {
+        let f = try await StoreReviewFixture()
+        let profile = await f.environment.store.createProfile(name: "Review queued foreign profile")
+        let space = try await f.environment.store.createSpace(name: "Review queued foreign Space", profileID: profile)
+        f.owner.session.activateSpace(space)
+        #expect(f.owner.session.hasPendingCommands)
+        #expect(f.owner.isSitePermissionTarget(f.source))
+        // The row's source is still current at this synchronous host boundary.
+        f.owner.openExtensionStore(from: f.source)
+        await f.settle()
+        let target = try #require(f.owner.session.selectedSurface)
+        #expect(target.currentURL?.absoluteString == "https://chromewebstore.google.com/")
+        #expect(target.profileID == profile && profile != f.source.profileID)
+        #expect(f.source.requestedURLs == f.requests)
+        if ProcessInfo.processInfo.environment["ORBIT_REVIEW_REQUIRE_ORIGIN_PROFILE"] == "1" {
+            #expect(target.profileID == f.source.profileID,
+                    "REVIEW Store must retain originating profile across pending Space change")
+        }
+        try await f.finish()
+    }

@@ -1,0 +1,96 @@
+--- a/chrome/services/mac_notifications/mac_notification_provider_impl.mm
++++ b/chrome/services/mac_notifications/mac_notification_provider_impl.mm
+@@ -31,18 +31,11 @@
+     mojo::PendingRemote<mojom::MacNotificationActionHandler> handler) {
+   DCHECK(!service_);
+
+-// MacNotificationServiceNS implements the Chromium interface to the
+-// NSUserNotificationCenter deprecated API. It is in the process of being
+-// replaced by UNNotification, above, and warnings about its deprecation are not
+-// helpful. https://crbug.com/40148499
+-#pragma clang diagnostic push
+-#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+-
+-  service_ = std::make_unique<MacNotificationServiceNS>(
+-      std::move(service), std::move(handler),
+-      [NSUserNotificationCenter defaultUserNotificationCenter]);
+-
+-#pragma clang diagnostic pop
++  auto notification_service = std::make_unique<MacNotificationServiceUN>(
++      std::move(handler), base::DoNothing(),
++      [UNUserNotificationCenter currentNotificationCenter]);
++  notification_service->Bind(std::move(service));
++  service_ = std::move(notification_service);
+ }
+
+ }  // namespace mac_notifications
+--- a/chrome/services/mac_notifications/mac_notification_service_un.h
++++ b/chrome/services/mac_notifications/mac_notification_service_un.h
+@@ -72,6 +72,7 @@
+   bool DidRecentlyHandleClickAction() const;
+
+  private:
++  void DisplayAuthorizedNotification(mojom::NotificationPtr notification);
+   void DoDisplayNotification(mojom::NotificationPtr notification);
+
+   void ReportRequestPermissionResult(mojom::RequestPermissionResult result);
+--- a/chrome/services/mac_notifications/mac_notification_service_un.mm
++++ b/chrome/services/mac_notifications/mac_notification_service_un.mm
+@@ -150,6 +150,23 @@
+ }
+
+ void MacNotificationServiceUN::DisplayNotification(
++    mojom::NotificationPtr notification) {
++  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
++  // Ask macOS only after a site with a web grant actually sends a notification.
++  // Do not ask at provider creation: Chrome creates its provider during startup.
++  RequestPermission(base::BindOnce(
++      [](base::WeakPtr<MacNotificationServiceUN> service,
++         mojom::NotificationPtr notification,
++         mojom::RequestPermissionResult result) {
++        using Result = mojom::RequestPermissionResult;
++        if (service && (result == Result::kPermissionGranted ||
++                        result == Result::kPermissionPreviouslyGranted)) {
++          service->DisplayAuthorizedNotification(std::move(notification));
++        }
++      }, weak_factory_.GetWeakPtr(), std::move(notification)));
++}
++
++void MacNotificationServiceUN::DisplayAuthorizedNotification(
+     mojom::NotificationPtr notification) {
+   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+   std::string notification_id = DeriveMacNotificationId(notification->meta->id);
+--- a/content/public/browser/content_browser_client.h
++++ b/content/public/browser/content_browser_client.h
+@@ -350,6 +350,10 @@
+
+   virtual ~ContentBrowserClient() = default;
+
++  // A user clicked a non-persistent notification of this still-live document.
++  // The embedder may foreground its native shell before the renderer click event.
++  virtual void OnNonPersistentNotificationClick(RenderFrameHost* frame) {}
++
+   // Allows the embedder to set any number of custom BrowserMainParts
+   // implementations for the browser startup code. See comments in
+   // browser_main_parts.h.
+--- a/content/browser/notifications/notification_event_dispatcher_impl.cc
++++ b/content/browser/notifications/notification_event_dispatcher_impl.cc
+@@ -16,6 +16,8 @@
+ #include "content/browser/service_worker/service_worker_context_wrapper.h"
+ #include "content/browser/service_worker/service_worker_registration.h"
+ #include "content/public/browser/browser_context.h"
++#include "content/public/browser/content_browser_client.h"
++#include "content/public/common/content_client.h"
+ #include "content/public/browser/browser_task_traits.h"
+ #include "content/public/browser/browser_thread.h"
+ #include "content/public/browser/render_frame_host.h"
+@@ -563,6 +565,9 @@
+     NotificationClickEventCallback callback) {
+   auto listener = GetListenerIfNotifiable(notification_id);
+   if (listener.has_value()) {
++    if (auto* frame = listener->document.AsRenderFrameHostIfValid()) {
++      GetContentClient()->browser()->OnNonPersistentNotificationClick(frame);
++    }
+     listener->remote->OnClick(
+         base::BindOnce(std::move(callback), true /* success */));
+   } else {

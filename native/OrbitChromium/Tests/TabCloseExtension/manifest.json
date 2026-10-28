@@ -1,0 +1,8 @@
+{
+  "manifest_version": 3,
+  "name": "Orbit Tab Close Fixture",
+  "version": "1.0",
+  "permissions": ["tabs"],
+  "background": { "service_worker": "worker.js" },
+  "action": { "default_popup": "dashboard.html" }
+}

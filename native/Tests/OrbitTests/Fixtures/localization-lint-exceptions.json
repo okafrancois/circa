@@ -1,0 +1,189 @@
+{
+  "FindBar/BrowserFindBarView.swift": [
+    "\"\"",
+    "\"chevron.down\"",
+    "\"chevron.up\"",
+    "\"page-find-query\"",
+    "\"page-find-status\"",
+    "\"xmark\""
+  ],
+  "FindBar/BrowserWindowController+Find.swift": [
+    "\"\""
+  ],
+  "Downloads/BrowserDownloadsPane.swift": [
+    "\"\"",
+    "\"arrow.down.circle.fill\"",
+    "\"arrow.left\"",
+    "\"downloads-search\""
+  ],
+  "Downloads/BrowserDownloadsView.swift": [
+    "\"\"",
+    "\"arrow.clockwise\"",
+    "\"arrow.up.right.square\"",
+    "\"doc\"",
+    "\"magnifyingglass\"",
+    "\"pause\"",
+    "\"trash\"",
+    "\"xmark\""
+  ],
+  "Downloads/BrowserDownloadsController.swift": [],
+  "Downloads/BrowserWindowController+Downloads.swift": [
+    "\"\""
+  ],
+  "Favorites/FavoriteTileView.swift": [
+    "\"\"",
+    "\", \"",
+    "\"?\"",
+    "\"arrow.trianglehead.2.clockwise\"",
+    "\"arrow.uturn.backward\"",
+    "\"speaker.slash.fill\"",
+    "\"speaker.wave.2.fill\"",
+    "\"www.\""
+  ],
+  "Favorites/FavoritesGridView.swift": [
+    "\"bounds.size\"",
+    "\"favorites.insert\"",
+    "\"favorites.remove\"",
+    "\"favorites.reorder\"",
+    "\"favorites.resize\"",
+    "\"opacity\"",
+    "\"position\""
+  ],
+  "Favorites/BrowserFavoritesController.swift": [
+    "\"\""
+  ],
+  "Sidebar/BrowserWindowController+Sidebar.swift": [],
+  "Switcher/BrowserSwitcherView.swift": [
+    "\"\"",
+    "\"globe\""
+  ],
+  "Switcher/BrowserTabSwitcher.swift": [
+    "\"w\""
+  ],
+  "Peek/BrowserPeekOverlayView.swift": [
+    "\"\"",
+    "\"/\"",
+    "\"\\n\"",
+    "\"arrow.up.left.and.arrow.down.right\"",
+    "\"bounds\"",
+    "\"cornerRadius\"",
+    "\"opacity\"",
+    "\"peek-address\"",
+    "\"peek-close\"",
+    "\"peek-open-in-split\"",
+    "\"peek-open-in-tab\"",
+    "\"peek-overlay\"",
+    "\"peek.\"",
+    "\"peek.dismiss.scale\"",
+    "\"peek.expand\"",
+    "\"peek.fade\"",
+    "\"peek.opacity\"",
+    "\"peek.present.scale\"",
+    "\"peek.promote.\"",
+    "\"position\"",
+    "\"rectangle.split.2x1\"",
+    "\"shadowPath\"",
+    "\"transform\"",
+    "\"xmark\""
+  ],
+  "Palette/BrowserPaletteView.swift": [
+    "\"\"",
+    "\", \"",
+    "\"globe\"",
+    "\"magnifyingglass\"",
+    "\"opacity\"",
+    "\"palette-dismiss\"",
+    "\"palette-input\"",
+    "\"palette-result\"",
+    "\"palette-result-\\(index)\"",
+    "\"palette-results\"",
+    "\"palette-row\"",
+    "\"palette-section\"",
+    "\"palette-section-\\(row)\"",
+    "\"result\"",
+    "\"↩\"",
+    "\"↵\"",
+    "\"⏎\""
+  ],
+  "Archive/BrowserArchiveView.swift": [
+    "\"\"",
+    "\"AXHeading\"",
+    "\"archive\"",
+    "\"archive-day\"",
+    "\"archive-search\"",
+    "\"archive-tab\""
+  ],
+  "Library/BrowserLibraryHistoryView.swift": [
+    "\"\"",
+    "\"AXHeading\"",
+    "\"history\"",
+    "\"history-day\"",
+    "\"history-visit\"",
+    "\"library-history-list\"",
+    "\"library-history-search\""
+  ],
+  "App/OrbitApplication.swift": [
+    "\"--window-diagnostics\"",
+    "\"orbit-window event=present visible=\\(window.isVisible) key=\\(window.isKeyWindow) active=\\(NSApp.isActive) number=\\(window.windowNumber) width=\\(Int(window.frame.width)) height=\\(Int(window.frame.height))\"",
+    "\"orbit-window event=route-error\"",
+    "\"orbit: engine shutdown timed out; quitting with the saved session\\n\""
+  ],
+  "Import/Arc/ArcImportText.swift": [
+    "\"\"",
+    "\"\\n\""
+  ],
+  "Import/Arc/ArcImportAlertPresenter.swift": [
+    "\"\""
+  ],
+  "Split/BrowserSplitStrings.swift": [],
+  "Split/BrowserSplitView.swift": [
+    "\"\"",
+    "\"/\"",
+    "\"arrow.clockwise\"",
+    "\"arrow.left\"",
+    "\"arrow.right\"",
+    "\"http://\"",
+    "\"https://\"",
+    "\"link\"",
+    "\"opacity\"",
+    "\"splitFocus\"",
+    "\"xmark\""
+  ],
+  "ThemeEditor/OrbitThemeEditorView.swift": [
+    "\"\"",
+    "\"Orbit.ThemeEditor.\"",
+    "\"chevron.left\"",
+    "\"chevron.right\"",
+    "\"dot\"",
+    "\"field\"",
+    "\"minus\"",
+    "\"modeHighlight\"",
+    "\"moon.stars\"",
+    "\"plus\"",
+    "\"sparkles\"",
+    "\"sun.max.fill\"",
+    "\"track\"",
+    "\"waveActive\"",
+    "\"theme-surface-material\"",
+    "\"theme-surface-transparency\"",
+    "\" \""
+  ],
+  "ThemeEditor/OrbitThemeEditorController.swift": [
+    "\"orbit.themeEditor.opacity\"",
+    "\"orbit.themeEditor.scale\"",
+    "\"orbit-theme-editor\"",
+    "\"opacity\"",
+    "\"transform\""
+  ],
+  "ThemeEditor/OrbitThemeEditorMetrics.swift": [
+    "\"drab\"",
+    "\"greyscale\"",
+    "\"pastel\""
+  ],
+  "ThemeEditor/OrbitThemeEditorState.swift": [
+    "\"legacy.\\(rawValue.lowercased())\""
+  ],
+  "ThemeEditor/BrowserWindowController+ThemeEditor.swift": [
+    "\" · \""
+  ]
+}

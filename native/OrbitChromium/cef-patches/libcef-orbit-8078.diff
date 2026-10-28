@@ -1,0 +1,2431 @@
+diff --git a/BUILD.gn b/BUILD.gn
+index dd0a558..c45c84f 100644
+--- a/BUILD.gn
++++ b/BUILD.gn
+@@ -1097,6 +1097,18 @@ source_set("libcef_static") {
+ 
+   if (is_mac) {
+     sources += includes_mac + [
++      # Orbit hosted Chrome style (ENG-X2, branch orbit/8078).
++      "libcef/browser/orbit/orbit_browser_window.h",
++      "libcef/browser/orbit/orbit_browser_window.mm",
++      "libcef/browser/orbit/orbit_cef_api.h",
++      "libcef/browser/orbit/orbit_cef_api.mm",
++      "libcef/browser/orbit/orbit_hosted.h",
++      "libcef/browser/orbit/orbit_hosted_intent.h",
++      "libcef/browser/orbit/orbit_hosted.mm",
++      "libcef/browser/orbit/orbit_hosted_mac.h",
++      "libcef/browser/orbit/browser_platform_delegate_chrome_hosted.h",
++      "libcef/browser/orbit/browser_platform_delegate_chrome_hosted.mm",
++
+       "libcef/browser/chrome/chrome_content_browser_client_cef_mac.mm",
+       "libcef/browser/chrome/chrome_web_contents_view_delegate_cef_mac.mm",
+       "libcef/browser/native/browser_platform_delegate_native_mac.h",
+diff --git a/libcef/browser/orbit/orbit_browser_window.h b/libcef/browser/orbit/orbit_browser_window.h
+new file mode 100644
+index 0000000..2a74dde
+--- /dev/null
++++ b/libcef/browser/orbit/orbit_browser_window.h
+@@ -0,0 +1,261 @@
++// Copyright 2026 Orbit. Portions copyright The Chromium Authors and The
++// Chromium Embedded Framework Authors. Use of this source code is governed by a
++// BSD-style license that can be found in the LICENSE file.
++
++#ifndef CEF_LIBCEF_BROWSER_ORBIT_ORBIT_BROWSER_WINDOW_H_
++#define CEF_LIBCEF_BROWSER_ORBIT_ORBIT_BROWSER_WINDOW_H_
++#pragma once
++
++#include <memory>
++#include <string>
++#include <vector>
++
++#include "base/memory/raw_ptr.h"
++#include "chrome/browser/ui/browser_window.h"
++#include "chrome/browser/ui/dialogs/browser_dialogs.h"
++#include "chrome/browser/ui/exclusive_access/exclusive_access_context.h"
++#include "chrome/browser/ui/location_bar/location_bar.h"
++#include "chrome/browser/ui/translate/partial_translate_bubble_model.h"
++#include "chrome/browser/ui/unload_controller.h"
++#include "components/apps/link_capturing/intent_picker_info.h"
++#include "content/public/browser/web_contents.h"
++#include "ui/base/mojom/window_show_state.mojom-forward.h"
++
++class Browser;
++
++namespace orbit {
++
++// BrowserWindow of an Orbit logical Browser (ENG-X2, D-chrome).
++//
++// An AppKit, Views-free window model: it never creates or shows any window.
++// Geometry, activation and visibility are read from the Orbit NSWindow
++// registered under |window_token|; Orbit places the tab content NSViews
++// itself. Chrome UI that has no Orbit equivalent yet (bubbles, toolbar, find
++// bar, dialogs host) is a no-op or null, following TestBrowserWindow
++// (chrome/test/base/test_browser_window.*) and WebUIBrowserWindow
++// (chrome/browser/ui/webui_browser/webui_browser_window.*).
++class OrbitBrowserWindow : public BrowserWindow, public ExclusiveAccessContext {
++ public:
++  OrbitBrowserWindow(uint64_t window_token, Profile* profile);
++  OrbitBrowserWindow(const OrbitBrowserWindow&) = delete;
++  OrbitBrowserWindow& operator=(const OrbitBrowserWindow&) = delete;
++  ~OrbitBrowserWindow() override;
++
++  // Called once Browser::Create() returned.
++  void SetBrowser(Browser* browser);
++  uint64_t window_token() const { return window_token_; }
++
++  // Side API v3 (CHROMIUM-APP-R3): while its Orbit window is held for a tab
++  // transfer, an emptied Browser is not closed (as during Chrome's own tab
++  // drags) so that a rollback finds it with the same window id. Called when the
++  // last hold is released: closes it now if it is still empty.
++  void CloseIfDeferred();
++
++  // ui::BaseWindow / BrowserWindow:
++  void Show() override {}
++  void ShowInactive() override {}
++  void Hide() override {}
++  bool IsVisible() const override;
++  void SetBounds(const gfx::Rect& bounds) override {}
++  void Close() override;
++  void Activate() override {}
++  void Deactivate() override {}
++  bool IsActive() const override;
++  void FlashFrame(bool flash) override {}
++  ui::ZOrderLevel GetZOrderLevel() const override;
++  void SetZOrderLevel(ui::ZOrderLevel order) override {}
++  gfx::NativeWindow GetNativeWindow() const override;
++  bool IsOnCurrentWorkspace() const override;
++  bool IsVisibleOnScreen() const override;
++  void SetTopControlsShownRatio(content::WebContents* web_contents,
++                                float ratio) override {}
++  bool DoBrowserControlsShrinkRendererSize(
++      const content::WebContents* contents) const override;
++  ui::NativeTheme* GetNativeTheme() override;
++  const ui::ThemeProvider* GetThemeProvider() const override;
++  const ui::ColorProvider* GetColorProvider() const override;
++  int GetTopControlsHeight() const override;
++  void SetTopControlsGestureScrollInProgress(bool in_progress) override {}
++  std::vector<StatusBubble*> GetStatusBubbles() override;
++  void UpdateTitleBar() override {}
++  void UpdateLoadingAnimations(bool is_visible) override {}
++  void OnActiveTabChanged(content::WebContents* old_contents,
++                          content::WebContents* new_contents,
++                          int index,
++                          int reason) override {}
++  void OnTabDetached(content::WebContents* contents, bool was_active) override {
++  }
++  gfx::Rect GetRestoredBounds() const override;
++  ui::mojom::WindowShowState GetRestoredState() const override;
++  gfx::Rect GetBounds() const override;
++  gfx::Size GetContentsSize() const override;
++  void SetContentsSize(const gfx::Size& size) override {}
++  bool IsMaximized() const override;
++  bool IsMinimized() const override;
++  void Maximize() override {}
++  void Minimize() override {}
++  void Restore() override {}
++  bool GetCanResize() override;
++  ui::mojom::WindowShowState GetWindowShowState() const override;
++  bool IsFullscreen() const override;
++  LocationBar* GetLocationBar() const override;
++  ui::AcceleratorProvider* GetAcceleratorProvider() override;
++  PinnedToolbarActions* GetPinnedToolbarActions() override;
++  autofill::AutofillBubbleHandler* GetAutofillBubbleHandler() override;
++  void SetFocusToLocationBar(bool is_user_initiated) override {}
++  void UpdateReloadStopState(bool is_loading, bool force) override {}
++  void UpdateToolbar(content::WebContents* contents) override {}
++  bool UpdateToolbarSecurityState() override;
++  void UpdateCustomTabBarVisibility(bool visible, bool animate) override {}
++  void ResetToolbarTabState(content::WebContents* contents) override {}
++  void FocusToolbar() override {}
++  void ToolbarSizeChanged(bool is_animating) override {}
++  void TabDraggingStatusChanged(bool is_dragging) override {}
++  void LinkOpeningFromGesture(WindowOpenDisposition disposition) override {}
++  void FocusAppMenu() override {}
++  void ShowAppMenu() override {}
++  void PreHandleDragUpdate(const content::DropData& drop_data,
++                           const gfx::PointF& point) override {}
++  void PreHandleDragExit() override {}
++  void HandleDragEnded() override {}
++  content::KeyboardEventProcessingResult PreHandleKeyboardEvent(
++      const input::NativeWebKeyboardEvent& event) override;
++  bool HandleKeyboardEvent(const input::NativeWebKeyboardEvent& event) override;
++  bool IsTabStripEditable() const override;
++  void DisableTabStripEditingForTesting() override {}
++  bool IsToolbarVisible() const override;
++  bool IsLocationBarVisible() const override;
++  bool IsToolbarShowing() const override;
++  bool IsUnframedModeEnabled() const override;
++  void ShowChromeLabs() override {}
++  BrowserView* AsBrowserView() override;
++  void ShowUpdateChromeDialog() override {}
++  void ShowBookmarkBubble(const GURL& url, bool already_bookmarked) override {}
++  void ShowIntentPickerBubble(
++      std::vector<apps::IntentPickerAppInfo> app_info,
++      bool show_stay_in_chrome,
++      bool show_remember_selection,
++      apps::IntentPickerBubbleType bubble_type,
++      const std::optional<url::Origin>& initiating_origin,
++      IntentPickerResponse callback) override;
++  ShowTranslateBubbleResult ShowTranslateBubble(
++      content::WebContents* contents,
++      translate::TranslateStep step,
++      const std::string& source_language,
++      const std::string& target_language,
++      translate::TranslateErrors error_type,
++      bool is_user_gesture) override;
++  DownloadBubbleUIController* GetDownloadBubbleUIController() override;
++  void ConfirmBrowserCloseWithPendingDownloads(
++      int download_count,
++      UnloadController::DownloadCloseType dialog_type,
++      base::OnceCallback<void(bool)> callback) override;
++  std::unique_ptr<FindBar> CreateFindBar() override;
++  web_modal::WebContentsModalDialogHost* GetWebContentsModalDialogHost()
++      override;
++  web_modal::WebContentsModalDialogHost* GetWebContentsModalDialogHostFor(
++      content::WebContents* web_contents) override;
++  void ShowAvatarBubbleFromAvatarButton(bool is_source_keyboard) override {}
++  void MaybeShowProfileSwitchIPH() override {}
++  void MaybeShowSupervisedUserProfileSignInIPH() override {}
++  void ShowHatsDialog(
++      const std::string& site_id,
++      const std::optional<std::string>& hats_histogram_name,
++      const std::optional<uint64_t> hats_survey_ukm_id,
++      base::OnceClosure success_callback,
++      base::OnceClosure failure_callback,
++      const SurveyBitsData& product_specific_bits_data,
++      const SurveyStringData& product_specific_string_data) override {}
++  void ShowIncognitoClearBrowsingDataDialog() override {}
++  void ShowIncognitoHistoryDisclaimerDialog() override {}
++  ExclusiveAccessContext* GetExclusiveAccessContext() override;
++  std::string GetWorkspace() const override;
++  bool IsVisibleOnAllWorkspaces() const override;
++  void ShowEmojiPanel() override {}
++  void ShowCaretBrowsingDialog() override {}
++  std::unique_ptr<content::EyeDropper> OpenEyeDropper(
++      content::RenderFrameHost* frame,
++      content::EyeDropperListener* listener) override;
++  void CreateTabSearchBubble() override {}
++  void CloseTabSearchBubble() override {}
++
++  // A non-null context is required by Chrome during tab activation. Fullscreen
++  // and lock UI remain disabled until the AppKit exclusive-access host exists.
++  Profile* GetProfile() override;
++  void EnterFullscreen(const url::Origin& origin,
++                       ExclusiveAccessBubbleType bubble_type,
++                       FullscreenTabParams fullscreen_tab_params) override {}
++  void ExitFullscreen() override {}
++  void UpdateExclusiveAccessBubble(
++      const ExclusiveAccessBubbleParams& params,
++      ExclusiveAccessBubbleHideCallback first_hide_callback) override;
++  bool IsExclusiveAccessBubbleDisplayed() const override { return false; }
++  void OnExclusiveAccessUserInput() override {}
++  content::WebContents* GetWebContentsForExclusiveAccess() override;
++  bool CanUserEnterFullscreen() const override { return false; }
++  bool CanUserExitFullscreen() const override { return true; }
++
++ protected:
++  void DeleteBrowserWindow() final;
++
++ private:
++  // Location bar stub: Browser and Chrome UI dereference GetLocationBar()
++  // (e.g. browser.cc in Browser::UpdateUIForNavigationInTab paths).
++  class StubLocationBar : public LocationBar {
++   public:
++    StubLocationBar() : LocationBar(/*command_updater=*/nullptr) {}
++    StubLocationBar(const StubLocationBar&) = delete;
++    StubLocationBar& operator=(const StubLocationBar&) = delete;
++    ~StubLocationBar() override = default;
++
++    void FocusLocation(bool select_all, bool clear_focus_if_failed) override {}
++    void FocusSearch() override {}
++    void UpdateFocusBehavior(bool toolbar_visible) override {}
++    void UpdateContentSettingsIcons() override {}
++    void SaveStateToContents(content::WebContents* contents) override {}
++    void Revert() override {}
++    OmniboxView* GetOmniboxView() override;
++    OmniboxPopupView* GetOmniboxPopupView() override;
++    OmniboxController* GetOmniboxController() override;
++    bool ShouldCloseOmniboxPopup(ui::MouseEvent* event) override;
++    ChipController* GetChipController() override;
++    LocationBarTesting* GetLocationBarForTesting() override;
++    LocationBarModel* GetLocationBarModel() override;
++    content::WebContents* GetWebContents() override;
++    std::optional<bubble_anchor_util::AnchorConfiguration> GetChipAnchor()
++        override;
++    void OnChanged() override {}
++    void UpdateWithoutTabRestore() override {}
++    ui::TrackedElement* GetAnchorOrNull() override;
++    BrowserWindowInterface* GetBrowser() override;
++    Profile* GetProfile() override;
++    bool IsInitialized() const override;
++    bool IsVisible() const override;
++    bool IsDrawn() const override;
++    bool IsFullscreen() const override;
++    bool IsEditingOrEmpty() const override;
++    bool IsMouseHovered() const override;
++    bool IsFocusWithin() const override;
++    void InvalidateLayout() override {}
++    gfx::Rect Bounds() const override;
++    gfx::Rect BoundsInScreen() const override;
++    gfx::Size MinimumSize() const override;
++    gfx::Size PreferredSize() const override;
++    void Update(content::WebContents* contents) override {}
++    void ResetTabState(content::WebContents* contents) override {}
++    bool HasSecurityStateChanged() override;
++    void AnnounceAlert(const std::u16string& announcement) override {}
++
++    raw_ptr<Browser> browser_ = nullptr;
++  };
++
++  const uint64_t window_token_;
++  const raw_ptr<Profile> profile_;
++  raw_ptr<Browser> browser_ = nullptr;
++  bool close_deferred_ = false;
++  StubLocationBar location_bar_;
++};
++
++}  // namespace orbit
++
++#endif  // CEF_LIBCEF_BROWSER_ORBIT_ORBIT_BROWSER_WINDOW_H_
+diff --git a/libcef/browser/orbit/orbit_browser_window.mm b/libcef/browser/orbit/orbit_browser_window.mm
+new file mode 100644
+index 0000000..ef10561
+--- /dev/null
++++ b/libcef/browser/orbit/orbit_browser_window.mm
+@@ -0,0 +1,451 @@
++// Copyright 2026 Orbit. Portions copyright The Chromium Authors and The
++// Chromium Embedded Framework Authors. Use of this source code is governed by a
++// BSD-style license that can be found in the LICENSE file.
++
++#include "cef/libcef/browser/orbit/orbit_browser_window.h"
++
++#import <AppKit/AppKit.h>
++
++#include <utility>
++
++#include "cef/libcef/browser/orbit/orbit_hosted.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/themes/theme_service.h"
++#include "chrome/browser/ui/browser.h"
++#include "chrome/browser/ui/browser_window/public/browser_window_features.h"
++#include "chrome/browser/ui/find_bar/find_bar.h"
++#include "chrome/browser/ui/views/bubble_anchor_util_views.h"
++#include "components/input/native_web_keyboard_event.h"
++#include "content/public/browser/keyboard_event_processing_result.h"
++#include "ui/base/mojom/window_show_state.mojom.h"
++#include "ui/color/color_provider_key.h"
++#include "ui/color/color_provider_manager.h"
++#include "ui/gfx/geometry/rect.h"
++#include "ui/gfx/mac/coordinate_conversion.h"
++#include "ui/native_theme/native_theme.h"
++
++namespace orbit {
++
++namespace {
++
++NSWindow* OrbitNSWindow(uint64_t window_token) {
++  const gfx::NativeWindow window = GetNativeWindow(window_token);
++  return window ? window.GetNativeNSWindow() : nil;
++}
++
++}  // namespace
++
++// StubLocationBar -------------------------------------------------------------
++
++OmniboxView* OrbitBrowserWindow::StubLocationBar::GetOmniboxView() {
++  return nullptr;
++}
++
++OmniboxPopupView* OrbitBrowserWindow::StubLocationBar::GetOmniboxPopupView() {
++  return nullptr;
++}
++
++OmniboxController* OrbitBrowserWindow::StubLocationBar::GetOmniboxController() {
++  return nullptr;
++}
++
++bool OrbitBrowserWindow::StubLocationBar::ShouldCloseOmniboxPopup(
++    ui::MouseEvent* event) {
++  return false;
++}
++
++ChipController* OrbitBrowserWindow::StubLocationBar::GetChipController() {
++  return nullptr;
++}
++
++LocationBarTesting*
++OrbitBrowserWindow::StubLocationBar::GetLocationBarForTesting() {
++  return nullptr;
++}
++
++LocationBarModel* OrbitBrowserWindow::StubLocationBar::GetLocationBarModel() {
++  return nullptr;
++}
++
++content::WebContents* OrbitBrowserWindow::StubLocationBar::GetWebContents() {
++  return browser_ ? browser_->tab_strip_model()->GetActiveWebContents()
++                  : nullptr;
++}
++
++std::optional<bubble_anchor_util::AnchorConfiguration>
++OrbitBrowserWindow::StubLocationBar::GetChipAnchor() {
++  return {};
++}
++
++ui::TrackedElement* OrbitBrowserWindow::StubLocationBar::GetAnchorOrNull() {
++  return nullptr;
++}
++
++BrowserWindowInterface* OrbitBrowserWindow::StubLocationBar::GetBrowser() {
++  return browser_;
++}
++
++Profile* OrbitBrowserWindow::StubLocationBar::GetProfile() {
++  return browser_ ? browser_->GetProfile() : nullptr;
++}
++
++bool OrbitBrowserWindow::StubLocationBar::IsInitialized() const {
++  return true;
++}
++
++bool OrbitBrowserWindow::StubLocationBar::IsVisible() const {
++  return false;
++}
++
++bool OrbitBrowserWindow::StubLocationBar::IsDrawn() const {
++  return false;
++}
++
++bool OrbitBrowserWindow::StubLocationBar::IsFullscreen() const {
++  return false;
++}
++
++bool OrbitBrowserWindow::StubLocationBar::IsEditingOrEmpty() const {
++  return false;
++}
++
++bool OrbitBrowserWindow::StubLocationBar::IsMouseHovered() const {
++  return false;
++}
++
++bool OrbitBrowserWindow::StubLocationBar::IsFocusWithin() const {
++  return false;
++}
++
++gfx::Rect OrbitBrowserWindow::StubLocationBar::Bounds() const {
++  return gfx::Rect();
++}
++
++gfx::Rect OrbitBrowserWindow::StubLocationBar::BoundsInScreen() const {
++  return gfx::Rect();
++}
++
++gfx::Size OrbitBrowserWindow::StubLocationBar::MinimumSize() const {
++  return gfx::Size();
++}
++
++gfx::Size OrbitBrowserWindow::StubLocationBar::PreferredSize() const {
++  return gfx::Size();
++}
++
++bool OrbitBrowserWindow::StubLocationBar::HasSecurityStateChanged() {
++  return false;
++}
++
++// OrbitBrowserWindow -----------------------------------------------------------
++
++OrbitBrowserWindow::OrbitBrowserWindow(uint64_t window_token, Profile* profile)
++    : window_token_(window_token), profile_(profile) {
++  CHECK(profile_);
++}
++
++OrbitBrowserWindow::~OrbitBrowserWindow() {
++  if (browser_) {
++    // BrowserWindow implementations tear down the window features before
++    // destruction (as TestBrowserWindow and WebUIBrowserWindow do).
++    browser_->GetFeatures().TearDownPreBrowserWindowDestruction();
++    LogicalBrowserDestroyed(window_token_, browser_);
++    location_bar_.browser_ = nullptr;
++    browser_ = nullptr;
++  }
++}
++
++void OrbitBrowserWindow::SetBrowser(Browser* browser) {
++  CHECK(!browser_);
++  browser_ = browser;
++  location_bar_.browser_ = browser;
++}
++
++bool OrbitBrowserWindow::IsVisible() const {
++  NSWindow* window = OrbitNSWindow(window_token_);
++  return window && [window isVisible];
++}
++
++void OrbitBrowserWindow::Close() {
++  // Never closes the Orbit NSWindow. Called by Browser::TabStripEmpty() when
++  // the last tab left, or by Chrome (windows.remove, shutdown) to close every
++  // tab of this logical Browser. As in WebUIBrowserWindow, unload handlers may
++  // cancel; once the tab strip is empty UnloadController schedules the
++  // Browser destruction, which deletes this object.
++  if (!browser_) {
++    return;
++  }
++  // A transfer in progress keeps the emptied Browser (side API v3).
++  if (browser_->tab_strip_model()->empty() && IsWindowHeld(window_token_)) {
++    close_deferred_ = true;
++    return;
++  }
++  close_deferred_ = false;
++  UnloadController::From(browser_)->OnWindowClosing();
++}
++
++void OrbitBrowserWindow::CloseIfDeferred() {
++  const bool deferred = close_deferred_;
++  close_deferred_ = false;
++  if (deferred && browser_ && browser_->tab_strip_model()->empty()) {
++    UnloadController::From(browser_)->OnWindowClosing();
++  }
++}
++
++bool OrbitBrowserWindow::IsActive() const {
++  NSWindow* window = OrbitNSWindow(window_token_);
++  return window && [window isKeyWindow];
++}
++
++ui::ZOrderLevel OrbitBrowserWindow::GetZOrderLevel() const {
++  return ui::ZOrderLevel::kNormal;
++}
++
++gfx::NativeWindow OrbitBrowserWindow::GetNativeWindow() const {
++  return orbit::GetNativeWindow(window_token_);
++}
++
++bool OrbitBrowserWindow::IsOnCurrentWorkspace() const {
++  NSWindow* window = OrbitNSWindow(window_token_);
++  return window && [window isOnActiveSpace];
++}
++
++bool OrbitBrowserWindow::IsVisibleOnScreen() const {
++  NSWindow* window = OrbitNSWindow(window_token_);
++  return window && [window isVisible] &&
++         ([window occlusionState] & NSWindowOcclusionStateVisible);
++}
++
++bool OrbitBrowserWindow::DoBrowserControlsShrinkRendererSize(
++    const content::WebContents* contents) const {
++  return false;
++}
++
++ui::NativeTheme* OrbitBrowserWindow::GetNativeTheme() {
++  return ui::NativeTheme::GetInstanceForNativeUi();
++}
++
++const ui::ThemeProvider* OrbitBrowserWindow::GetThemeProvider() const {
++  return &ThemeService::GetThemeProviderForProfile(profile_);
++}
++
++const ui::ColorProvider* OrbitBrowserWindow::GetColorProvider() const {
++  return ui::ColorProviderManager::Get().GetColorProviderFor(
++      ui::ColorProviderKey());
++}
++
++int OrbitBrowserWindow::GetTopControlsHeight() const {
++  return 0;
++}
++
++std::vector<StatusBubble*> OrbitBrowserWindow::GetStatusBubbles() {
++  return {};
++}
++
++gfx::Rect OrbitBrowserWindow::GetRestoredBounds() const {
++  return GetBounds();
++}
++
++ui::mojom::WindowShowState OrbitBrowserWindow::GetRestoredState() const {
++  return ui::mojom::WindowShowState::kNormal;
++}
++
++gfx::Rect OrbitBrowserWindow::GetBounds() const {
++  NSWindow* window = OrbitNSWindow(window_token_);
++  return window ? gfx::ScreenRectFromNSRect([window frame]) : gfx::Rect();
++}
++
++gfx::Size OrbitBrowserWindow::GetContentsSize() const {
++  NSWindow* window = OrbitNSWindow(window_token_);
++  if (!window) {
++    return gfx::Size();
++  }
++  const NSSize size = [[window contentView] bounds].size;
++  return gfx::Size(size.width, size.height);
++}
++
++bool OrbitBrowserWindow::IsMaximized() const {
++  NSWindow* window = OrbitNSWindow(window_token_);
++  return window && [window isZoomed];
++}
++
++bool OrbitBrowserWindow::IsMinimized() const {
++  NSWindow* window = OrbitNSWindow(window_token_);
++  return window && [window isMiniaturized];
++}
++
++bool OrbitBrowserWindow::GetCanResize() {
++  NSWindow* window = OrbitNSWindow(window_token_);
++  return window && ([window styleMask] & NSWindowStyleMaskResizable);
++}
++
++ui::mojom::WindowShowState OrbitBrowserWindow::GetWindowShowState() const {
++  if (IsFullscreen()) {
++    return ui::mojom::WindowShowState::kFullscreen;
++  }
++  if (IsMinimized()) {
++    return ui::mojom::WindowShowState::kMinimized;
++  }
++  if (IsMaximized()) {
++    return ui::mojom::WindowShowState::kMaximized;
++  }
++  return ui::mojom::WindowShowState::kNormal;
++}
++
++bool OrbitBrowserWindow::IsFullscreen() const {
++  NSWindow* window = OrbitNSWindow(window_token_);
++  return window && ([window styleMask] & NSWindowStyleMaskFullScreen);
++}
++
++LocationBar* OrbitBrowserWindow::GetLocationBar() const {
++  return const_cast<StubLocationBar*>(&location_bar_);
++}
++
++ui::AcceleratorProvider* OrbitBrowserWindow::GetAcceleratorProvider() {
++  return nullptr;
++}
++
++PinnedToolbarActions* OrbitBrowserWindow::GetPinnedToolbarActions() {
++  return nullptr;
++}
++
++autofill::AutofillBubbleHandler* OrbitBrowserWindow::GetAutofillBubbleHandler() {
++  // X2 risk list: password/autofill bubbles need an Orbit host.
++  return nullptr;
++}
++
++bool OrbitBrowserWindow::UpdateToolbarSecurityState() {
++  return false;
++}
++
++content::KeyboardEventProcessingResult
++OrbitBrowserWindow::PreHandleKeyboardEvent(
++    const input::NativeWebKeyboardEvent& event) {
++  return content::KeyboardEventProcessingResult::NOT_HANDLED;
++}
++
++bool OrbitBrowserWindow::HandleKeyboardEvent(
++    const input::NativeWebKeyboardEvent& event) {
++  // Unhandled page keys go to the Orbit menu bar, as Alloy-style CEF does
++  // (CefBrowserPlatformDelegateNativeMac::HandleKeyboardEvent).
++  NSEvent* ns_event = event.os_event.Get();
++  if (ns_event && ns_event.type == NSEventTypeKeyDown) {
++    return [[NSApp mainMenu] performKeyEquivalent:ns_event];
++  }
++  return false;
++}
++
++bool OrbitBrowserWindow::IsTabStripEditable() const {
++  return true;
++}
++
++bool OrbitBrowserWindow::IsToolbarVisible() const {
++  // X2.6 will return true with an Orbit ExtensionsContainer
++  // (action.openPopup requires it).
++  return false;
++}
++
++bool OrbitBrowserWindow::IsLocationBarVisible() const {
++  return false;
++}
++
++bool OrbitBrowserWindow::IsToolbarShowing() const {
++  return false;
++}
++
++bool OrbitBrowserWindow::IsUnframedModeEnabled() const {
++  return false;
++}
++
++BrowserView* OrbitBrowserWindow::AsBrowserView() {
++  return nullptr;
++}
++
++void OrbitBrowserWindow::ShowIntentPickerBubble(
++    std::vector<apps::IntentPickerAppInfo> app_info,
++    bool show_stay_in_chrome,
++    bool show_remember_selection,
++    apps::IntentPickerBubbleType bubble_type,
++    const std::optional<url::Origin>& initiating_origin,
++    IntentPickerResponse callback) {}
++
++ShowTranslateBubbleResult OrbitBrowserWindow::ShowTranslateBubble(
++    content::WebContents* contents,
++    translate::TranslateStep step,
++    const std::string& source_language,
++    const std::string& target_language,
++    translate::TranslateErrors error_type,
++    bool is_user_gesture) {
++  return ShowTranslateBubbleResult::kBrowserWindowNotValid;
++}
++
++DownloadBubbleUIController* OrbitBrowserWindow::GetDownloadBubbleUIController() {
++  return nullptr;
++}
++
++void OrbitBrowserWindow::ConfirmBrowserCloseWithPendingDownloads(
++    int download_count,
++    UnloadController::DownloadCloseType dialog_type,
++    base::OnceCallback<void(bool)> callback) {
++  // Downloads belong to the Orbit profile, not to this logical Browser; the
++  // shell owns any confirmation. Proceed with the close.
++  std::move(callback).Run(true);
++}
++
++std::unique_ptr<FindBar> OrbitBrowserWindow::CreateFindBar() {
++  // Orbit drives find through CefBrowserHost::Find (WebContents::Find).
++  return nullptr;
++}
++
++web_modal::WebContentsModalDialogHost*
++OrbitBrowserWindow::GetWebContentsModalDialogHost() {
++  return nullptr;
++}
++
++web_modal::WebContentsModalDialogHost*
++OrbitBrowserWindow::GetWebContentsModalDialogHostFor(
++    content::WebContents* web_contents) {
++  return nullptr;
++}
++
++ExclusiveAccessContext* OrbitBrowserWindow::GetExclusiveAccessContext() {
++  return this;
++}
++
++Profile* OrbitBrowserWindow::GetProfile() {
++  return profile_;
++}
++
++void OrbitBrowserWindow::UpdateExclusiveAccessBubble(
++    const ExclusiveAccessBubbleParams& params,
++    ExclusiveAccessBubbleHideCallback first_hide_callback) {
++  if (first_hide_callback) {
++    std::move(first_hide_callback).Run(ExclusiveAccessBubbleHideReason::kNotShown);
++  }
++}
++
++content::WebContents* OrbitBrowserWindow::GetWebContentsForExclusiveAccess() {
++  return browser_ ? browser_->tab_strip_model()->GetActiveWebContents() : nullptr;
++}
++
++std::string OrbitBrowserWindow::GetWorkspace() const {
++  return std::string();
++}
++
++bool OrbitBrowserWindow::IsVisibleOnAllWorkspaces() const {
++  NSWindow* window = OrbitNSWindow(window_token_);
++  return window && ([window collectionBehavior] &
++                    NSWindowCollectionBehaviorCanJoinAllSpaces);
++}
++
++std::unique_ptr<content::EyeDropper> OrbitBrowserWindow::OpenEyeDropper(
++    content::RenderFrameHost* frame,
++    content::EyeDropperListener* listener) {
++  return nullptr;
++}
++
++void OrbitBrowserWindow::DeleteBrowserWindow() {
++  delete this;
++}
++
++}  // namespace orbit
+diff --git a/libcef/browser/orbit/orbit_cef_api.h b/libcef/browser/orbit/orbit_cef_api.h
+new file mode 100644
+index 0000000..16887a6
+--- /dev/null
++++ b/libcef/browser/orbit/orbit_cef_api.h
+@@ -0,0 +1,131 @@
++// Copyright 2026 Orbit. Portions copyright The Chromium Embedded Framework
++// Authors. Use of this source code is governed by a BSD-style license that can
++// be found in the LICENSE file.
++//
++// Orbit side API of the patched CEF (branch orbit/8078). This header is plain C
++// and is copied verbatim into the Orbit bridge; it is not part of the public
++// CEF API (cef/include is unchanged, so no translator.py and no API hash).
++//
++// The bridge resolves the single exported symbol `orbit_cef_get_api` with
++// dlsym() on the loaded framework. A stock CEF build does not export it, which
++// is how the bridge tells the two apart (ACRPatchLevel() == 0).
++//
++// Threading: every function must be called on the CEF UI thread (the main
++// thread on macOS) after CefInitialize() and before CefShutdown().
++
++#ifndef CEF_LIBCEF_BROWSER_ORBIT_ORBIT_CEF_API_H_
++#define CEF_LIBCEF_BROWSER_ORBIT_ORBIT_CEF_API_H_
++
++#include <stdint.h>
++
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++// Version 1 (ENG-X2.1): one logical Chrome Browser per (Orbit window, profile),
++// Chrome-style tabs whose content NSView is placed by Orbit.
++// Version 2 (CHROMIUM-APP-R2): additive, move_tab. A table requested as version
++// 1 reports version 1 and keeps the version 1 layout as its prefix.
++// Version 3 (CHROMIUM-APP-R3): additive, hold_window/release_window. Earlier
++// versions keep their layout as the prefix of the table.
++#define ORBIT_CEF_API_VERSION 3u
++
++typedef struct {
++  uint32_t struct_size;
++  // Extension tab id (SessionTabHelper), -1 when the tab has none.
++  int32_t tab_id;
++  // Extension window id (SessionID of the logical Browser), -1 when the tab is
++  // not in a Browser.
++  int32_t window_id;
++  // Index in the Browser's TabStripModel, -1 when absent.
++  int32_t index;
++  // 1 when the tab is the active tab of its Browser.
++  int32_t active;
++  // 1 when the browser is an Orbit hosted Chrome-style tab.
++  int32_t hosted;
++  // Orbit window token of the Browser, 0 when none.
++  uint64_t window_token;
++} orbit_tab_info_t;
++
++typedef struct {
++  uint32_t struct_size;
++  uint32_t version;
++
++  // Registers an Orbit window. `nswindow` is a borrowed NSWindow* that must
++  // outlive the registration (call window_destroyed before releasing it).
++  // Returns 1 on success, 0 if the token is in use or invalid.
++  int32_t (*window_created)(uint64_t window_token, void* nswindow);
++  // Unregisters an Orbit window. Logical Browsers that still own tabs lose
++  // their native window and close when their last tab closes. Returns the
++  // number of logical Browsers that were still alive, or -1 if unknown.
++  int32_t (*window_destroyed)(uint64_t window_token);
++  // Key-window state: DidBecomeActive/DidBecomeInactive on every logical
++  // Browser of the window (windows.onFocusChanged). Returns 1 if known.
++  int32_t (*window_activation_changed)(uint64_t window_token, int32_t active);
++  // Notifies extension listeners of new window bounds
++  // (windows.onBoundsChanged). Returns 1 if known.
++  int32_t (*window_bounds_changed)(uint64_t window_token);
++
++  // Marks `parent_nsview` so that the next CefBrowserHost::CreateBrowser[Sync]
++  // or OnBeforePopup whose CefWindowInfo.parent_view equals it creates a
++  // Chrome-style tab at `index` (-1 appends) in the logical Browser of
++  // (window_token, request context profile). The mark is consumed by that
++  // creation. Returns 1 when registered.
++  int32_t (*prepare_hosted_tab)(void* parent_nsview,
++                                uint64_t window_token,
++                                int32_t index);
++  // Removes a mark that was not consumed. Returns 1 if a mark was removed.
++  int32_t (*cancel_hosted_tab)(void* parent_nsview);
++
++  // Moves the content NSView of a hosted tab under `parent_nsview` (same
++  // logical Browser). Returns 1 on success.
++  int32_t (*attach_view)(int32_t browser_id, void* parent_nsview);
++  // Activates a hosted tab in its TabStripModel (tabs.onActivated).
++  int32_t (*activate_tab)(int32_t browser_id);
++  // Fills `info` for any CEF browser id. Returns 1 when the browser exists.
++  int32_t (*get_tab_info)(int32_t browser_id, orbit_tab_info_t* info);
++
++  // Diagnostics: live logical Browsers of a window (all profiles), or -1.
++  int32_t (*window_browser_count)(uint64_t window_token);
++
++  // Version 2. Moves a hosted tab to `index` (-1 or past the end appends) of
++  // the logical Browser of (window_token, the tab's profile), created when
++  // needed, through TabStripModel::DetachTabAtForInsertion and
++  // InsertDetachedTabAt (the path of tabs.move and of Chrome's tab dragging).
++  // The WebContents, CEF browser and browser id, extension tab id, opener,
++  // history, form and script state are kept; extensions see tabs.onDetached
++  // and tabs.onAttached. The source logical Browser closes with its last tab.
++  // When the tab already is in that Browser, it is reordered to `index`
++  // instead (tabs.onMoved). Then, when `parent_nsview` is not NULL, the
++  // content NSView is placed under it. Never activates the tab. Returns 1 on
++  // success; 0, with nothing changed, when the browser is not a hosted tab of
++  // a logical Browser, is closing, or the window is unknown.
++  int32_t (*move_tab)(int32_t browser_id,
++                      uint64_t window_token,
++                      int32_t index,
++                      void* parent_nsview);
++  // Version 2. 1 while Chrome's ProfileManager still has a loaded Profile for
++  // the absolute profile directory `path` (it unloads it after the last
++  // CefRequestContext and browser of the profile are gone), 0 when none is
++  // loaded, -1 when unknown. Never loads a profile. Lets a profile directory be
++  // removed only once Chrome no longer writes to it.
++  int32_t (*profile_loaded)(const char* path);
++
++  // Version 3. Holds the logical Browsers of an Orbit window for a tab transfer:
++  // while held, a Browser whose last tab moved away stays alive (same window
++  // id) so that a rollback can return the tab to it; releasing the last hold
++  // closes those still empty. Returns the hold count after the call, -1 for an
++  // unknown (or, for release, unheld) window. Destroying the window releases
++  // every hold.
++  int32_t (*hold_window)(uint64_t window_token);
++  int32_t (*release_window)(uint64_t window_token);
++} orbit_cef_api_t;
++
++// Returns the API table for `version`, or NULL when unsupported.
++typedef const orbit_cef_api_t* (*orbit_cef_get_api_t)(uint32_t version);
++
++#ifdef __cplusplus
++}
++#endif
++
++#endif  // CEF_LIBCEF_BROWSER_ORBIT_ORBIT_CEF_API_H_
+diff --git a/libcef/browser/orbit/orbit_cef_api.mm b/libcef/browser/orbit/orbit_cef_api.mm
+new file mode 100644
+index 0000000..c92848a
+--- /dev/null
++++ b/libcef/browser/orbit/orbit_cef_api.mm
+@@ -0,0 +1,314 @@
++// Copyright 2026 Orbit. Portions copyright The Chromium Embedded Framework
++// Authors. Use of this source code is governed by a BSD-style license that can
++// be found in the LICENSE file.
++
++#include "cef/libcef/browser/orbit/orbit_cef_api.h"
++
++#import <AppKit/AppKit.h>
++
++#include "cef/include/internal/cef_export.h"
++#include "cef/libcef/browser/orbit/orbit_hosted.h"
++#include "cef/libcef/browser/orbit/orbit_hosted_mac.h"
++#include "cef/libcef/browser/orbit/browser_platform_delegate_chrome_hosted.h"
++#include "cef/libcef/browser/browser_host_base.h"
++#include "cef/libcef/browser/chrome/chrome_browser_host_impl.h"
++#include "cef/libcef/browser/context.h"
++#include "cef/libcef/browser/thread_util.h"
++#include "base/files/file_path.h"
++#include "chrome/browser/browser_process.h"
++#include "chrome/browser/extensions/browser_extension_window_controller.h"
++#include "chrome/browser/profiles/profile_manager.h"
++#include "chrome/browser/extensions/extension_tab_util.h"
++#include "chrome/browser/ui/browser.h"
++#include "chrome/browser/ui/browser_active_state_manager/browser_active_state_manager.h"
++#include "chrome/browser/ui/tabs/tab_strip_model.h"
++
++namespace {
++
++bool OnValidUIThread() {
++  return CONTEXT_STATE_VALID() && CEF_CURRENTLY_ON_UIT();
++}
++
++int32_t WindowCreated(uint64_t window_token, void* nswindow) {
++  if (!OnValidUIThread() || !nswindow) {
++    return 0;
++  }
++  NSWindow* window = (__bridge NSWindow*)nswindow;
++  if (![window isKindOfClass:[NSWindow class]]) {
++    return 0;
++  }
++  return orbit::WindowCreated(window_token, window) ? 1 : 0;
++}
++
++int32_t WindowDestroyed(uint64_t window_token) {
++  if (!OnValidUIThread()) {
++    return -1;
++  }
++  return orbit::WindowDestroyed(window_token);
++}
++
++int32_t WindowActivationChanged(uint64_t window_token, int32_t active) {
++  if (!OnValidUIThread() || !orbit::IsKnownWindow(window_token)) {
++    return 0;
++  }
++  for (Browser* browser : orbit::GetLogicalBrowsers(window_token)) {
++    auto* manager = BrowserActiveStateManager::From(browser);
++    if (!manager) {
++      continue;
++    }
++    if (active) {
++      manager->DidBecomeActive();
++    } else {
++      manager->DidBecomeInactive();
++    }
++  }
++  return 1;
++}
++
++int32_t WindowBoundsChanged(uint64_t window_token) {
++  if (!OnValidUIThread() || !orbit::IsKnownWindow(window_token)) {
++    return 0;
++  }
++  for (Browser* browser : orbit::GetLogicalBrowsers(window_token)) {
++    // Same notification as BrowserView::TryNotifyWindowBoundsChanged().
++    if (auto* controller =
++            extensions::BrowserExtensionWindowController::From(browser)) {
++      controller->NotifyWindowBoundsChanged();
++    }
++  }
++  return 1;
++}
++
++int32_t PrepareHostedTab(void* parent_nsview,
++                         uint64_t window_token,
++                         int32_t index) {
++  if (!OnValidUIThread()) {
++    return 0;
++  }
++  return orbit::PrepareHostedTab(
++             CAST_NSVIEW_TO_CEF_WINDOW_HANDLE((__bridge NSView*)parent_nsview),
++             window_token, index)
++             ? 1
++             : 0;
++}
++
++int32_t CancelHostedTab(void* parent_nsview) {
++  if (!OnValidUIThread()) {
++    return 0;
++  }
++  return orbit::CancelHostedTab(CAST_NSVIEW_TO_CEF_WINDOW_HANDLE(
++             (__bridge NSView*)parent_nsview))
++             ? 1
++             : 0;
++}
++
++int32_t AttachView(int32_t browser_id, void* parent_nsview) {
++  if (!OnValidUIThread()) {
++    return 0;
++  }
++  auto* delegate =
++      CefBrowserPlatformDelegateChromeHosted::FromBrowserId(browser_id);
++  if (!delegate) {
++    return 0;
++  }
++  return delegate->AttachToParent(CAST_NSVIEW_TO_CEF_WINDOW_HANDLE(
++             (__bridge NSView*)parent_nsview))
++             ? 1
++             : 0;
++}
++
++CefRefPtr<ChromeBrowserHostImpl> GetChromeHost(int32_t browser_id) {
++  auto host = CefBrowserHostBase::GetBrowserForBrowserId(browser_id);
++  if (!host || !host->IsChromeStyle()) {
++    return nullptr;
++  }
++  return ChromeBrowserHostImpl::FromBaseChecked(host);
++}
++
++int32_t ActivateTab(int32_t browser_id) {
++  if (!OnValidUIThread()) {
++    return 0;
++  }
++  auto host = GetChromeHost(browser_id);
++  if (!host || !host->browser() ||
++      !CefBrowserPlatformDelegateChromeHosted::FromBrowserId(browser_id)) {
++    return 0;
++  }
++  auto* model = host->browser()->tab_strip_model();
++  const int index = model->GetIndexOfWebContents(host->GetWebContents());
++  if (index == TabStripModel::kNoTab) {
++    return 0;
++  }
++  model->ActivateTabAt(index);
++  return 1;
++}
++
++int32_t GetTabInfo(int32_t browser_id, orbit_tab_info_t* info) {
++  if (!OnValidUIThread() || !info ||
++      info->struct_size < sizeof(orbit_tab_info_t)) {
++    return 0;
++  }
++  auto host = CefBrowserHostBase::GetBrowserForBrowserId(browser_id);
++  if (!host) {
++    return 0;
++  }
++  info->tab_id = -1;
++  info->window_id = -1;
++  info->index = -1;
++  info->active = 0;
++  info->hosted = 0;
++  info->window_token = 0;
++  auto* contents = host->GetWebContents();
++  if (!contents) {
++    return 1;
++  }
++  info->tab_id = extensions::ExtensionTabUtil::GetTabId(contents);
++  info->window_id = extensions::ExtensionTabUtil::GetWindowIdOfTab(contents);
++  if (auto* delegate =
++          CefBrowserPlatformDelegateChromeHosted::FromBrowserId(browser_id)) {
++    info->hosted = 1;
++    info->window_token = delegate->window_token();
++  }
++  if (host->IsChromeStyle()) {
++    auto chrome_host = ChromeBrowserHostImpl::FromBaseChecked(host);
++    if (Browser* browser = chrome_host->browser()) {
++      auto* model = browser->tab_strip_model();
++      info->index = model->GetIndexOfWebContents(contents);
++      info->active = info->index != TabStripModel::kNoTab &&
++                             info->index == model->active_index()
++                         ? 1
++                         : 0;
++    }
++  }
++  return 1;
++}
++
++int32_t WindowBrowserCount(uint64_t window_token) {
++  if (!OnValidUIThread()) {
++    return -1;
++  }
++  return static_cast<int32_t>(orbit::GetLogicalBrowsers(window_token).size());
++}
++
++int32_t MoveTab(int32_t browser_id,
++                uint64_t window_token,
++                int32_t index,
++                void* parent_nsview) {
++  if (!OnValidUIThread()) {
++    return 0;
++  }
++  auto host = GetChromeHost(browser_id);
++  if (!host || !host->OrbitMoveToWindow(window_token, index)) {
++    return 0;
++  }
++  if (parent_nsview) {
++    if (auto* delegate =
++            CefBrowserPlatformDelegateChromeHosted::FromBrowserId(browser_id)) {
++      delegate->AttachToParent(CAST_NSVIEW_TO_CEF_WINDOW_HANDLE(
++          (__bridge NSView*)parent_nsview));
++    }
++  }
++  return 1;
++}
++
++int32_t ProfileLoaded(const char* path) {
++  if (!OnValidUIThread() || !path || path[0] != '/' || !g_browser_process) {
++    return -1;
++  }
++  ProfileManager* manager = g_browser_process->profile_manager();
++  if (!manager) {
++    return -1;
++  }
++  return manager->GetProfileByPath(base::FilePath(path)) ? 1 : 0;
++}
++
++int32_t HoldWindow(uint64_t window_token) {
++  if (!OnValidUIThread()) {
++    return -1;
++  }
++  return orbit::HoldWindow(window_token);
++}
++
++int32_t ReleaseWindow(uint64_t window_token) {
++  if (!OnValidUIThread()) {
++    return -1;
++  }
++  return orbit::ReleaseWindow(window_token);
++}
++
++// Version 1 callers check `version == 1` and a size of at least their layout;
++// later versions keep the earlier layouts as their prefix.
++const orbit_cef_api_t kApiV1 = {
++    sizeof(orbit_cef_api_t),
++    1u,
++    &WindowCreated,
++    &WindowDestroyed,
++    &WindowActivationChanged,
++    &WindowBoundsChanged,
++    &PrepareHostedTab,
++    &CancelHostedTab,
++    &AttachView,
++    &ActivateTab,
++    &GetTabInfo,
++    &WindowBrowserCount,
++    &MoveTab,
++    &ProfileLoaded,
++    &HoldWindow,
++    &ReleaseWindow,
++};
++
++const orbit_cef_api_t kApiV2 = {
++    sizeof(orbit_cef_api_t),
++    2u,
++    &WindowCreated,
++    &WindowDestroyed,
++    &WindowActivationChanged,
++    &WindowBoundsChanged,
++    &PrepareHostedTab,
++    &CancelHostedTab,
++    &AttachView,
++    &ActivateTab,
++    &GetTabInfo,
++    &WindowBrowserCount,
++    &MoveTab,
++    &ProfileLoaded,
++    &HoldWindow,
++    &ReleaseWindow,
++};
++
++const orbit_cef_api_t kApiV3 = {
++    sizeof(orbit_cef_api_t),
++    3u,
++    &WindowCreated,
++    &WindowDestroyed,
++    &WindowActivationChanged,
++    &WindowBoundsChanged,
++    &PrepareHostedTab,
++    &CancelHostedTab,
++    &AttachView,
++    &ActivateTab,
++    &GetTabInfo,
++    &WindowBrowserCount,
++    &MoveTab,
++    &ProfileLoaded,
++    &HoldWindow,
++    &ReleaseWindow,
++};
++
++}  // namespace
++
++extern "C" CEF_EXPORT const orbit_cef_api_t* orbit_cef_get_api(uint32_t version);
++
++extern "C" CEF_EXPORT const orbit_cef_api_t* orbit_cef_get_api(
++    uint32_t version) {
++  switch (version) {
++    case 1u:
++      return &kApiV1;
++    case 2u:
++      return &kApiV2;
++    case 3u:
++      return &kApiV3;
++    default:
++      return nullptr;
++  }
++}
+diff --git a/libcef/browser/orbit/orbit_hosted.h b/libcef/browser/orbit/orbit_hosted.h
+new file mode 100644
+index 0000000..403e59d
+--- /dev/null
++++ b/libcef/browser/orbit/orbit_hosted.h
+@@ -0,0 +1,90 @@
++// Copyright 2026 Orbit. Portions copyright The Chromium Embedded Framework
++// Authors. Use of this source code is governed by a BSD-style license that can
++// be found in the LICENSE file.
++
++#ifndef CEF_LIBCEF_BROWSER_ORBIT_ORBIT_HOSTED_H_
++#define CEF_LIBCEF_BROWSER_ORBIT_ORBIT_HOSTED_H_
++#pragma once
++
++#include <cstdint>
++#include <optional>
++#include <vector>
++
++#include "cef/include/cef_browser.h"
++#include "cef/libcef/browser/orbit/orbit_hosted_intent.h"
++#include "ui/gfx/native_ui_types.h"
++
++class Browser;
++class Profile;
++struct CefBrowserCreateParams;
++
++// Orbit "hosted Chrome" mode (ENG-X2, variant D-chrome).
++//
++// Every Orbit window x profile owns one invisible logical Chrome Browser
++// (TYPE_NORMAL) whose BrowserWindow is an AppKit, Views-free
++// OrbitBrowserWindow. Orbit tabs are Chrome-style CEF browsers living in that
++// Browser's TabStripModel; Orbit keeps placing their content NSView. All state
++// is UI-thread only.
++namespace orbit {
++
++// Parent marks (see orbit_cef_api_t::prepare_hosted_tab).
++bool PrepareHostedTab(CefWindowHandle parent_view,
++                      uint64_t window_token,
++                      int index);
++bool CancelHostedTab(CefWindowHandle parent_view);
++// Consumes the mark for |parent_view|.
++std::optional<HostedTabRequest> TakeHostedTab(CefWindowHandle parent_view);
++
++// Orbit windows. WindowCreated(token, NSWindow*) is declared in
++// orbit_hosted_mac.h.
++int WindowDestroyed(uint64_t window_token);
++bool IsKnownWindow(uint64_t window_token);
++// Generation of a known (registered, not destroyed) window, for a moved tab.
++std::optional<uint64_t> GetWindowGeneration(uint64_t window_token);
++bool IsHostedRequestLive(const HostedTabRequest& request);
++gfx::NativeWindow GetNativeWindow(uint64_t window_token);
++
++// Transfer holds (side API v3). While a window is held, its emptied logical
++// Browsers stay alive; releasing the last hold closes those still empty.
++// Return the remaining hold count, or -1 for an unknown window.
++int HoldWindow(uint64_t window_token);
++int ReleaseWindow(uint64_t window_token);
++bool IsWindowHeld(uint64_t window_token);
++// Drops a logical Browser that Chrome is already destroying from its window
++// record, so that a new one can take its place (it unregisters itself later).
++void ForgetLogicalBrowser(uint64_t window_token, Browser* browser);
++
++// Logical Browsers, one per (window, profile).
++Browser* GetLogicalBrowser(uint64_t window_token, Profile* profile);
++void RegisterLogicalBrowser(uint64_t window_token,
++                            Profile* profile,
++                            Browser* browser);
++// Called by OrbitBrowserWindow when its Browser goes away.
++void LogicalBrowserDestroyed(uint64_t window_token, Browser* browser);
++std::vector<Browser*> GetLogicalBrowsers(uint64_t window_token);
++
++// Per-tab creation parameters. A logical Browser is shared by several Orbit
++// surfaces with different CefClients and parent views, while
++// ChromeBrowserDelegate keeps the parameters of the Browser's first tab. The
++// hosted creation path publishes the parameters of the tab being inserted;
++// ChromeBrowserDelegate::SetAsDelegate consumes them.
++class ScopedPendingTab {
++ public:
++  ScopedPendingTab(Browser* browser, const CefBrowserCreateParams& params);
++  ScopedPendingTab(const ScopedPendingTab&) = delete;
++  ScopedPendingTab& operator=(const ScopedPendingTab&) = delete;
++  ~ScopedPendingTab();
++
++ private:
++  Browser* const browser_;
++};
++
++// Returns true and fills |params| when |browser| has a pending Orbit tab.
++bool TakePendingTab(Browser* browser, CefBrowserCreateParams* params);
++
++// True when |browser| is a logical Browser owned by an Orbit window.
++bool IsLogicalBrowser(const Browser* browser);
++
++}  // namespace orbit
++
++#endif  // CEF_LIBCEF_BROWSER_ORBIT_ORBIT_HOSTED_H_
+diff --git a/libcef/browser/orbit/orbit_hosted.mm b/libcef/browser/orbit/orbit_hosted.mm
+new file mode 100644
+index 0000000..b6f62b7
+--- /dev/null
++++ b/libcef/browser/orbit/orbit_hosted.mm
+@@ -0,0 +1,257 @@
++// Copyright 2026 Orbit. Portions copyright The Chromium Embedded Framework
++// Authors. Use of this source code is governed by a BSD-style license that can
++// be found in the LICENSE file.
++
++#include "cef/libcef/browser/orbit/orbit_hosted.h"
++#include "cef/libcef/browser/orbit/orbit_hosted_mac.h"
++
++#import <AppKit/AppKit.h>
++
++#include <map>
++#include <vector>
++#include <utility>
++
++#include "base/check.h"
++#include "base/no_destructor.h"
++#include "cef/libcef/browser/orbit/orbit_browser_window.h"
++#include "cef/libcef/browser/browser_host_base.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/ui/browser.h"
++
++namespace orbit {
++
++namespace {
++
++struct WindowRecord {
++  __weak NSWindow* window = nil;
++  std::map<Profile*, Browser*> browsers;
++  int holds = 0;
++};
++
++// Every logical Browser's BrowserWindow is an OrbitBrowserWindow.
++OrbitBrowserWindow* OrbitWindowOf(Browser* browser) {
++  return static_cast<OrbitBrowserWindow*>(static_cast<BrowserWindow*>(browser->GetWindow()));
++}
++
++void CloseDeferred(const std::map<Profile*, Browser*>& browsers) {
++  std::vector<Browser*> snapshot;
++  for (const auto& [profile, browser] : browsers) {
++    snapshot.push_back(browser);
++  }
++  for (Browser* browser : snapshot) {
++    OrbitWindowOf(browser)->CloseIfDeferred();
++  }
++}
++
++struct Registry {
++  std::map<uint64_t, WindowRecord> windows;
++  HostedCreationPolicy creation_policy;
++  std::map<Browser*, CefBrowserCreateParams> pending_tabs;
++  std::map<const Browser*, uint64_t> logical_browsers;
++};
++
++Registry& GetRegistry() {
++  static base::NoDestructor<Registry> registry;
++  return *registry;
++}
++
++}  // namespace
++
++bool PrepareHostedTab(CefWindowHandle parent_view,
++                      uint64_t window_token,
++                      int index) {
++  return GetRegistry().creation_policy.Prepare(parent_view, window_token, index);
++}
++
++bool CancelHostedTab(CefWindowHandle parent_view) {
++  return GetRegistry().creation_policy.Cancel(parent_view);
++}
++
++std::optional<HostedTabRequest> TakeHostedTab(CefWindowHandle parent_view) {
++  return GetRegistry().creation_policy.Take(parent_view);
++}
++
++bool IsHostedRequestLive(const HostedTabRequest& request) {
++  return GetRegistry().creation_policy.IsLive(request) &&
++         IsKnownWindow(request.window_token);
++}
++
++bool WindowCreated(uint64_t window_token, NSWindow* window) {
++  auto& windows = GetRegistry().windows;
++  if (!window_token || !window || windows.contains(window_token)) {
++    return false;
++  }
++  CHECK(GetRegistry().creation_policy.RegisterWindow(window_token));
++  windows[window_token].window = window;
++  return true;
++}
++
++int WindowDestroyed(uint64_t window_token) {
++  auto& registry = GetRegistry();
++  auto it = registry.windows.find(window_token);
++  if (it == registry.windows.end()) {
++    return -1;
++  }
++  const int live = static_cast<int>(it->second.browsers.size());
++  // Browsers that still own tabs keep their window token; they report a null
++  // native window from now on and close with their last tab. Emptied Browsers
++  // kept by a transfer hold close now.
++  it->second.window = nil;
++  it->second.holds = 0;
++  if (live == 0) {
++    registry.windows.erase(it);
++  } else {
++    CloseDeferred(std::map<Profile*, Browser*>(it->second.browsers));
++  }
++  // Do not erase an unconsumed mark: it still identifies a cancelled hosted
++  // request and must never be reinterpreted as an ordinary Alloy request.
++  registry.creation_policy.UnregisterWindow(window_token);
++  return live;
++}
++
++bool IsKnownWindow(uint64_t window_token) {
++  auto& windows = GetRegistry().windows;
++  auto it = windows.find(window_token);
++  return it != windows.end() && it->second.window != nil;
++}
++
++std::optional<uint64_t> GetWindowGeneration(uint64_t window_token) {
++  if (!IsKnownWindow(window_token)) {
++    return std::nullopt;
++  }
++  return GetRegistry().creation_policy.Generation(window_token);
++}
++
++gfx::NativeWindow GetNativeWindow(uint64_t window_token) {
++  auto& windows = GetRegistry().windows;
++  auto it = windows.find(window_token);
++  if (it == windows.end() || it->second.window == nil) {
++    return gfx::NativeWindow();
++  }
++  return gfx::NativeWindow(it->second.window);
++}
++
++int HoldWindow(uint64_t window_token) {
++  auto& windows = GetRegistry().windows;
++  auto it = windows.find(window_token);
++  if (it == windows.end() || it->second.window == nil) {
++    return -1;
++  }
++  return ++it->second.holds;
++}
++
++int ReleaseWindow(uint64_t window_token) {
++  auto& windows = GetRegistry().windows;
++  auto it = windows.find(window_token);
++  if (it == windows.end() || it->second.holds <= 0) {
++    return -1;
++  }
++  const int remaining = --it->second.holds;
++  if (remaining == 0) {
++    // May destroy Browsers later (UnloadController); the record stays valid.
++    CloseDeferred(std::map<Profile*, Browser*>(it->second.browsers));
++  }
++  return remaining;
++}
++
++bool IsWindowHeld(uint64_t window_token) {
++  auto& windows = GetRegistry().windows;
++  auto it = windows.find(window_token);
++  return it != windows.end() && it->second.holds > 0;
++}
++
++void ForgetLogicalBrowser(uint64_t window_token, Browser* browser) {
++  auto& windows = GetRegistry().windows;
++  auto it = windows.find(window_token);
++  if (it == windows.end()) {
++    return;
++  }
++  for (auto entry = it->second.browsers.begin(); entry != it->second.browsers.end(); ++entry) {
++    if (entry->second == browser) {
++      it->second.browsers.erase(entry);
++      return;
++    }
++  }
++}
++
++Browser* GetLogicalBrowser(uint64_t window_token, Profile* profile) {
++  auto& windows = GetRegistry().windows;
++  auto it = windows.find(window_token);
++  if (it == windows.end()) {
++    return nullptr;
++  }
++  auto browser = it->second.browsers.find(profile);
++  return browser == it->second.browsers.end() ? nullptr : browser->second;
++}
++
++void RegisterLogicalBrowser(uint64_t window_token,
++                            Profile* profile,
++                            Browser* browser) {
++  auto& registry = GetRegistry();
++  auto it = registry.windows.find(window_token);
++  CHECK(it != registry.windows.end());
++  CHECK(!it->second.browsers.contains(profile));
++  it->second.browsers[profile] = browser;
++  registry.logical_browsers[browser] = window_token;
++}
++
++void LogicalBrowserDestroyed(uint64_t window_token, Browser* browser) {
++  auto& registry = GetRegistry();
++  registry.logical_browsers.erase(browser);
++  registry.pending_tabs.erase(browser);
++  auto it = registry.windows.find(window_token);
++  if (it == registry.windows.end()) {
++    return;
++  }
++  for (auto entry = it->second.browsers.begin();
++       entry != it->second.browsers.end(); ++entry) {
++    if (entry->second == browser) {
++      it->second.browsers.erase(entry);
++      break;
++    }
++  }
++  if (it->second.window == nil && it->second.browsers.empty()) {
++    registry.windows.erase(it);
++  }
++}
++
++std::vector<Browser*> GetLogicalBrowsers(uint64_t window_token) {
++  std::vector<Browser*> result;
++  auto& windows = GetRegistry().windows;
++  auto it = windows.find(window_token);
++  if (it != windows.end()) {
++    for (const auto& [profile, browser] : it->second.browsers) {
++      result.push_back(browser);
++    }
++  }
++  return result;
++}
++
++ScopedPendingTab::ScopedPendingTab(Browser* browser,
++                                   const CefBrowserCreateParams& params)
++    : browser_(browser) {
++  auto& pending = GetRegistry().pending_tabs;
++  pending.erase(browser_);
++  pending.emplace(browser_, params);
++}
++
++ScopedPendingTab::~ScopedPendingTab() {
++  GetRegistry().pending_tabs.erase(browser_);
++}
++
++bool TakePendingTab(Browser* browser, CefBrowserCreateParams* params) {
++  auto& pending = GetRegistry().pending_tabs;
++  auto it = pending.find(browser);
++  if (it == pending.end()) {
++    return false;
++  }
++  *params = it->second;
++  pending.erase(it);
++  return true;
++}
++
++bool IsLogicalBrowser(const Browser* browser) {
++  return GetRegistry().logical_browsers.contains(browser);
++}
++
++}  // namespace orbit
+diff --git a/libcef/browser/orbit/orbit_hosted_intent.h b/libcef/browser/orbit/orbit_hosted_intent.h
+new file mode 100644
+index 0000000..0fc3d06
+--- /dev/null
++++ b/libcef/browser/orbit/orbit_hosted_intent.h
+@@ -0,0 +1,77 @@
++// Copyright 2026 Orbit. Use of this source code is governed by a BSD-style
++// license that can be found in the LICENSE file.
++#ifndef CEF_LIBCEF_BROWSER_ORBIT_ORBIT_HOSTED_INTENT_H_
++#define CEF_LIBCEF_BROWSER_ORBIT_ORBIT_HOSTED_INTENT_H_
++
++#include <cstdint>
++#include <map>
++#include <optional>
++
++namespace orbit {
++
++// Value captured before any asynchronous creation. A recycled window token or
++// parent address cannot change an already accepted request's destination.
++struct HostedTabRequest {
++  uint64_t window_token = 0;
++  int index = -1;
++  uint64_t window_generation = 0;
++};
++
++// UI-thread-only policy, independent of AppKit and CEF for deterministic tests.
++class HostedCreationPolicy {
++ public:
++  bool RegisterWindow(uint64_t token) {
++    if (!token || windows_.contains(token)) {
++      return false;
++    }
++    windows_[token] = next_generation_++;
++    return true;
++  }
++
++  void UnregisterWindow(uint64_t token) { windows_.erase(token); }
++
++  bool Prepare(void* parent, uint64_t token, int index) {
++    auto found = windows_.find(token);
++    if (!parent || found == windows_.end() || marks_.contains(parent)) {
++      return false;
++    }
++    marks_.emplace(parent, HostedTabRequest{token, index < 0 ? -1 : index,
++                                          found->second});
++    return true;
++  }
++
++  bool Cancel(void* parent) { return marks_.erase(parent) > 0; }
++
++  std::optional<HostedTabRequest> Take(void* parent) {
++    auto found = marks_.find(parent);
++    if (found == marks_.end()) {
++      return std::nullopt;
++    }
++    const auto request = found->second;
++    marks_.erase(found);
++    return request;
++  }
++
++  // Generation of a registered window, used to re-target a moved tab.
++  std::optional<uint64_t> Generation(uint64_t token) const {
++    auto found = windows_.find(token);
++    if (found == windows_.end()) {
++      return std::nullopt;
++    }
++    return found->second;
++  }
++
++  bool IsLive(const HostedTabRequest& request) const {
++    auto found = windows_.find(request.window_token);
++    return found != windows_.end() &&
++           found->second == request.window_generation;
++  }
++
++ private:
++  uint64_t next_generation_ = 1;
++  std::map<uint64_t, uint64_t> windows_;
++  std::map<void*, HostedTabRequest> marks_;
++};
++
++}  // namespace orbit
++#endif  // CEF_LIBCEF_BROWSER_ORBIT_ORBIT_HOSTED_INTENT_H_
+diff --git a/libcef/browser/orbit/orbit_hosted_mac.h b/libcef/browser/orbit/orbit_hosted_mac.h
+new file mode 100644
+index 0000000..6d10b6b
+--- /dev/null
++++ b/libcef/browser/orbit/orbit_hosted_mac.h
+@@ -0,0 +1,20 @@
++// Copyright 2026 Orbit. Portions copyright The Chromium Embedded Framework
++// Authors. Use of this source code is governed by a BSD-style license that can
++// be found in the LICENSE file.
++
++#ifndef CEF_LIBCEF_BROWSER_ORBIT_ORBIT_HOSTED_MAC_H_
++#define CEF_LIBCEF_BROWSER_ORBIT_ORBIT_HOSTED_MAC_H_
++#pragma once
++
++#include "cef/libcef/browser/orbit/orbit_hosted.h"
++
++@class NSWindow;
++
++namespace orbit {
++
++// Registers a borrowed Orbit NSWindow under |window_token|.
++bool WindowCreated(uint64_t window_token, NSWindow* window);
++
++}  // namespace orbit
++
++#endif  // CEF_LIBCEF_BROWSER_ORBIT_ORBIT_HOSTED_MAC_H_
+diff --git a/libcef/browser/orbit/browser_platform_delegate_chrome_hosted.h b/libcef/browser/orbit/browser_platform_delegate_chrome_hosted.h
+new file mode 100644
+index 0000000..5e7a04f
+--- /dev/null
++++ b/libcef/browser/orbit/browser_platform_delegate_chrome_hosted.h
+@@ -0,0 +1,62 @@
++// Copyright 2026 Orbit. Portions copyright The Chromium Embedded Framework
++// Authors. Use of this source code is governed by a BSD-style license that can
++// be found in the LICENSE file.
++
++#ifndef CEF_LIBCEF_BROWSER_ORBIT_BROWSER_PLATFORM_DELEGATE_CHROME_HOSTED_H_
++#define CEF_LIBCEF_BROWSER_ORBIT_BROWSER_PLATFORM_DELEGATE_CHROME_HOSTED_H_
++#pragma once
++
++#include <cstdint>
++
++#include "cef/libcef/browser/chrome/browser_platform_delegate_chrome.h"
++
++// Chrome-style browser whose content NSView is placed by Orbit (ENG-X2,
++// D-chrome). No Views widget is created (CEF issue #3294 forbids nesting a
++// Views widget in a foreign NSView); the WebContents NSView is added directly
++// to the Orbit parent view, as the Alloy native delegate does with its
++// CefBrowserHostView. The tab lives in the TabStripModel of the logical
++// Browser of its Orbit window.
++class CefBrowserPlatformDelegateChromeHosted
++    : public CefBrowserPlatformDelegateChrome {
++ public:
++  CefBrowserPlatformDelegateChromeHosted(
++      std::unique_ptr<CefBrowserPlatformDelegateNative> native_delegate,
++      CefWindowHandle parent_view,
++      uint64_t window_token,
++      uint64_t window_generation);
++  ~CefBrowserPlatformDelegateChromeHosted() override;
++
++  // Returns the hosted delegate of a live browser, or nullptr.
++  static CefBrowserPlatformDelegateChromeHosted* FromBrowserId(int browser_id);
++
++  // CefBrowserPlatformDelegate overrides.
++  void WebContentsDestroyed(content::WebContents* web_contents) override;
++  void BrowserCreated(CefBrowserHostBase* browser) override;
++  void BrowserDestroyed(CefBrowserHostBase* browser) override;
++  void CloseHostWindow() override {}  // Orbit owns the NSWindow.
++  CefWindowHandle GetHostWindowHandle() const override;
++  void SetFocus(bool setFocus) override;
++  gfx::Point GetScreenPoint(const gfx::Point& view,
++                            bool want_dip_coords) const override;
++
++  // Moves the content NSView under |parent_view| (may be null to detach).
++  bool AttachToParent(CefWindowHandle parent_view);
++
++  uint64_t window_token() const { return window_token_; }
++  uint64_t window_generation() const { return window_generation_; }
++  bool IsRequestLive() const;
++
++  // The tab moved to the logical Browser of another Orbit window (side API v2,
++  // move_tab): later placements and the liveness check follow that window.
++  void SetWindow(uint64_t window_token, uint64_t window_generation);
++
++ private:
++  void PlaceContentView();
++
++  CefWindowHandle parent_view_;
++  uint64_t window_token_;
++  uint64_t window_generation_;
++  int browser_id_ = 0;
++};
++
++#endif  // CEF_LIBCEF_BROWSER_ORBIT_BROWSER_PLATFORM_DELEGATE_CHROME_HOSTED_H_
+diff --git a/libcef/browser/orbit/browser_platform_delegate_chrome_hosted.mm b/libcef/browser/orbit/browser_platform_delegate_chrome_hosted.mm
+new file mode 100644
+index 0000000..88b79d4
+--- /dev/null
++++ b/libcef/browser/orbit/browser_platform_delegate_chrome_hosted.mm
+@@ -0,0 +1,161 @@
++// Copyright 2026 Orbit. Portions copyright The Chromium Embedded Framework
++// Authors. Use of this source code is governed by a BSD-style license that can
++// be found in the LICENSE file.
++
++#include "cef/libcef/browser/orbit/browser_platform_delegate_chrome_hosted.h"
++
++#import <AppKit/AppKit.h>
++
++#include <map>
++
++#include "base/no_destructor.h"
++#include "cef/libcef/browser/browser_host_base.h"
++#include "cef/libcef/browser/orbit/orbit_hosted.h"
++#include "content/public/browser/web_contents.h"
++
++namespace {
++
++using DelegateMap = std::map<int, CefBrowserPlatformDelegateChromeHosted*>;
++
++DelegateMap& GetDelegates() {
++  static base::NoDestructor<DelegateMap> delegates;
++  return *delegates;
++}
++
++}  // namespace
++
++CefBrowserPlatformDelegateChromeHosted::CefBrowserPlatformDelegateChromeHosted(
++    std::unique_ptr<CefBrowserPlatformDelegateNative> native_delegate,
++    CefWindowHandle parent_view,
++    uint64_t window_token,
++    uint64_t window_generation)
++    : CefBrowserPlatformDelegateChrome(std::move(native_delegate)),
++      parent_view_(parent_view),
++      window_token_(window_token),
++      window_generation_(window_generation) {}
++
++CefBrowserPlatformDelegateChromeHosted::
++    ~CefBrowserPlatformDelegateChromeHosted() {
++  if (browser_id_) {
++    GetDelegates().erase(browser_id_);
++  }
++}
++
++// static
++CefBrowserPlatformDelegateChromeHosted*
++CefBrowserPlatformDelegateChromeHosted::FromBrowserId(int browser_id) {
++  auto& delegates = GetDelegates();
++  auto it = delegates.find(browser_id);
++  return it == delegates.end() ? nullptr : it->second;
++}
++
++void CefBrowserPlatformDelegateChromeHosted::WebContentsDestroyed(
++    content::WebContents* web_contents) {
++  // Leave no WebContents view behind in the Orbit hierarchy.
++  NSView* content = web_contents->GetNativeView().GetNativeNSView();
++  [content removeFromSuperview];
++  CefBrowserPlatformDelegateChrome::WebContentsDestroyed(web_contents);
++}
++
++void CefBrowserPlatformDelegateChromeHosted::BrowserCreated(
++    CefBrowserHostBase* browser) {
++  CefBrowserPlatformDelegateChrome::BrowserCreated(browser);
++  browser_id_ = browser->GetIdentifier();
++  GetDelegates()[browser_id_] = this;
++  // Place the content view before OnAfterCreated() so that
++  // CefBrowserHost::GetWindowHandle() is valid in client callbacks.
++  PlaceContentView();
++}
++
++void CefBrowserPlatformDelegateChromeHosted::BrowserDestroyed(
++    CefBrowserHostBase* browser) {
++  if (browser_id_) {
++    GetDelegates().erase(browser_id_);
++    browser_id_ = 0;
++  }
++  CefBrowserPlatformDelegateChrome::BrowserDestroyed(browser);
++}
++
++CefWindowHandle CefBrowserPlatformDelegateChromeHosted::GetHostWindowHandle()
++    const {
++  // The content NSView itself: it is what Orbit sizes, focuses and moves.
++  if (!web_contents_) {
++    return kNullWindowHandle;
++  }
++  return CAST_NSVIEW_TO_CEF_WINDOW_HANDLE(
++      web_contents_->GetNativeView().GetNativeNSView());
++}
++
++void CefBrowserPlatformDelegateChromeHosted::SetFocus(bool setFocus) {
++  native_delegate_->SetFocus(setFocus);
++}
++
++gfx::Point CefBrowserPlatformDelegateChromeHosted::GetScreenPoint(
++    const gfx::Point& view,
++    bool want_dip_coords) const {
++  if (!IsRequestLive()) {
++    return gfx::Point();
++  }
++  // Relative to the Orbit parent view, as for Alloy native browsers; macOS
++  // always operates in DIP coordinates.
++  NSView* parent = CAST_CEF_WINDOW_HANDLE_TO_NSVIEW(parent_view_);
++  if (!parent || ![parent window]) {
++    return gfx::Point();
++  }
++  const NSRect bounds = [parent bounds];
++  const NSPoint view_point = {static_cast<CGFloat>(view.x()),
++                              bounds.size.height - static_cast<CGFloat>(view.y())};
++  const NSPoint window_point = [parent convertPoint:view_point toView:nil];
++  const NSPoint screen_point =
++      [[parent window] convertPointToScreen:window_point];
++  return gfx::Point(screen_point.x, screen_point.y);
++}
++
++bool CefBrowserPlatformDelegateChromeHosted::AttachToParent(
++    CefWindowHandle parent_view) {
++  if (!IsRequestLive()) {
++    return false;
++  }
++  parent_view_ = parent_view;
++  if (!web_contents_) {
++    return false;
++  }
++  if (!parent_view_) {
++    [web_contents_->GetNativeView().GetNativeNSView() removeFromSuperview];
++    return true;
++  }
++  PlaceContentView();
++  return true;
++}
++
++void CefBrowserPlatformDelegateChromeHosted::SetWindow(
++    uint64_t window_token,
++    uint64_t window_generation) {
++  window_token_ = window_token;
++  window_generation_ = window_generation;
++}
++
++bool CefBrowserPlatformDelegateChromeHosted::IsRequestLive() const {
++  return orbit::IsHostedRequestLive({window_token_, -1, window_generation_});
++}
++
++void CefBrowserPlatformDelegateChromeHosted::PlaceContentView() {
++  if (!IsRequestLive()) {
++    return;
++  }
++  NSView* parent = CAST_CEF_WINDOW_HANDLE_TO_NSVIEW(parent_view_);
++  if (!parent || !web_contents_) {
++    return;
++  }
++  NSView* content = web_contents_->GetNativeView().GetNativeNSView();
++  if (!content) {
++    return;
++  }
++  if ([content superview] != parent) {
++    [content removeFromSuperview];
++    [parent addSubview:content];
++  }
++  [content setFrame:[parent bounds]];
++  [content setAutoresizingMask:(NSViewWidthSizable | NSViewHeightSizable)];
++  [content setNeedsDisplay:YES];
++}
+diff --git a/libcef/browser/browser_host_base.h b/libcef/browser/browser_host_base.h
+index f984a15..2b20227 100644
+--- a/libcef/browser/browser_host_base.h
++++ b/libcef/browser/browser_host_base.h
+@@ -44,6 +44,11 @@ struct CefBrowserCreateParams {
+     settings = that.settings;
+     request_context = that.request_context;
+     extra_info = that.extra_info;
++    // Orbit hosted Chrome style (ENG-X2): copied first, MaybeSetWindowInfo
++    // relies on it.
++    orbit_window_token = that.orbit_window_token;
++    orbit_tab_index = that.orbit_tab_index;
++    orbit_window_generation = that.orbit_window_generation;
+     if (that.window_info) {
+       MaybeSetWindowInfo(*that.window_info, /*allow_alloy_style=*/false,
+                          /*allow_chrome_style=*/true);
+@@ -103,6 +108,14 @@ struct CefBrowserCreateParams {
+   // Extra information that will be passed to
+   // CefRenderProcessHandler::OnBrowserCreated.
+   CefRefPtr<CefDictionaryValue> extra_info;
++
++  // Orbit hosted Chrome style (ENG-X2, macOS): non-zero when the parent view
++  // was marked through orbit_cef_api_t::prepare_hosted_tab. The browser is then
++  // a Chrome-style tab of the logical Browser of this Orbit window, at
++  // |orbit_tab_index| (-1 appends), with its content NSView in the parent view.
++  uint64_t orbit_window_token = 0;
++  uint64_t orbit_window_generation = 0;
++  int orbit_tab_index = -1;
+ };
+ 
+ // Base class for CefBrowserHost implementations. Includes functionality that is
+diff --git a/libcef/browser/browser_host_create.cc b/libcef/browser/browser_host_create.cc
+index 1d1f4b4..36b8240 100644
+--- a/libcef/browser/browser_host_create.cc
++++ b/libcef/browser/browser_host_create.cc
+@@ -5,6 +5,9 @@
+ 
+ #include "cef/include/cef_browser.h"
+ #include "cef/libcef/browser/alloy/alloy_browser_host_impl.h"
++#if BUILDFLAG(IS_MAC)
++#include "cef/libcef/browser/orbit/orbit_hosted.h"
++#endif
+ #include "cef/libcef/browser/chrome/chrome_browser_host_impl.h"
+ #include "cef/libcef/browser/chrome/views/chrome_child_window.h"
+ #include "cef/libcef/browser/context.h"
+@@ -20,24 +23,31 @@ class CreateBrowserHelper {
+                       const CefBrowserSettings& settings,
+                       CefRefPtr<CefDictionaryValue> extra_info,
+                       CefRefPtr<CefRequestContext> request_context)
+-      : window_info_(windowInfo),
+-        client_(client),
+-        url_(url),
+-        settings_(settings),
+-        extra_info_(extra_info),
+-        request_context_(request_context) {}
++  {
++    // Snapshot the complete request before waiting for context initialization.
++    // In particular, never look up a mutable parent-view mark in the posted Run.
++    params_.MaybeSetWindowInfo(windowInfo, /*allow_alloy_style=*/true,
++                              /*allow_chrome_style=*/true);
++    params_.client = client;
++    params_.url = url;
++    params_.settings = settings;
++    params_.extra_info = extra_info;
++    params_.request_context = request_context;
++  }
+ 
+   void Run() {
+-    CefBrowserHost::CreateBrowserSync(window_info_, client_, url_, settings_,
+-                                      extra_info_, request_context_);
++    if (!CONTEXT_STATE_VALID()) {
++      return;
++    }
++    auto* context =
++        static_cast<CefRequestContextImpl*>(params_.request_context.get());
++    if (!context->VerifyBrowserContext()) {
++      return;
++    }
++    CefBrowserHostBase::Create(params_);
+   }
+ 
+-  CefWindowInfo window_info_;
+-  CefRefPtr<CefClient> client_;
+-  CefString url_;
+-  CefBrowserSettings settings_;
+-  CefRefPtr<CefDictionaryValue> extra_info_;
+-  CefRefPtr<CefRequestContext> request_context_;
++  CefBrowserCreateParams params_;
+ };
+ 
+ }  // namespace
+@@ -229,7 +239,17 @@ void CefBrowserCreateParams::MaybeSetWindowInfo(
+   }
+ 
+ #if BUILDFLAG(IS_MAC)
+-  if (allow_chrome_style &&
++  // Orbit hosted Chrome style (ENG-X2): a parent NSView marked by the Orbit side
++  // API keeps Chrome style. No Views widget is created; the WebContents NSView
++  // is placed directly in the parent (CefBrowserPlatformDelegateChromeHosted).
++  if (CEF_CURRENTLY_ON_UIT() && !orbit_window_token) {
++    if (auto request = orbit::TakeHostedTab(new_window_info.parent_view)) {
++      orbit_window_token = request->window_token;
++      orbit_tab_index = request->index;
++      orbit_window_generation = request->window_generation;
++    }
++  }
++  if (allow_chrome_style && !orbit_window_token &&
+       chrome_child_window::HasParentHandle(new_window_info)) {
+     // Chrome style is not supported with native parent on MacOS. See issue
+     // #3294.
+@@ -268,6 +288,16 @@ void CefBrowserCreateParams::MaybeSetWindowInfo(
+ // static
+ CefRefPtr<CefBrowserHostBase> CefBrowserHostBase::Create(
+     CefBrowserCreateParams& create_params) {
++#if BUILDFLAG(IS_MAC)
++  if (create_params.orbit_window_token &&
++      (!create_params.IsChromeStyle() ||
++       !orbit::IsHostedRequestLive({create_params.orbit_window_token,
++                                   create_params.orbit_tab_index,
++                                   create_params.orbit_window_generation}))) {
++    // A cancelled hosted request must never reach Alloy or Chrome window UI.
++    return nullptr;
++  }
++#endif
+   if (create_params.IsChromeStyle()) {
+     if (auto browser =
+             chrome_child_window::MaybeCreateChildBrowser(create_params)) {
+diff --git a/libcef/browser/browser_platform_delegate_create.cc b/libcef/browser/browser_platform_delegate_create.cc
+index b2f30ae..7b5b134 100644
+--- a/libcef/browser/browser_platform_delegate_create.cc
++++ b/libcef/browser/browser_platform_delegate_create.cc
+@@ -19,6 +19,7 @@
+ #include "cef/libcef/browser/native/browser_platform_delegate_native_win.h"
+ #include "cef/libcef/browser/osr/browser_platform_delegate_osr_win.h"
+ #elif BUILDFLAG(IS_MAC)
++#include "cef/libcef/browser/orbit/browser_platform_delegate_chrome_hosted.h"
+ #include "cef/libcef/browser/native/browser_platform_delegate_native_mac.h"
+ #include "cef/libcef/browser/osr/browser_platform_delegate_osr_mac.h"
+ #elif BUILDFLAG(IS_LINUX)
+@@ -79,6 +80,16 @@ std::unique_ptr<CefBrowserPlatformDelegate> CefBrowserPlatformDelegate::Create(
+     std::unique_ptr<CefBrowserPlatformDelegateNative> native_delegate =
+         CreateNativeDelegate(window_info, background_color);
+ 
++#if BUILDFLAG(IS_MAC)
++    if (create_params.orbit_window_token) {
++      // Orbit hosted Chrome style (ENG-X2).
++      return std::make_unique<CefBrowserPlatformDelegateChromeHosted>(
++          std::move(native_delegate), window_info.parent_view,
++          create_params.orbit_window_token,
++          create_params.orbit_window_generation);
++    }
++#endif
++
+     if (create_params.window_info) {
+       // CefWindowInfo should only be set if a parent handle was specified.
+       DCHECK(chrome_child_window::HasParentHandle(window_info));
+diff --git a/libcef/browser/chrome/browser_delegate.h b/libcef/browser/chrome/browser_delegate.h
+index e65325e..1bc87ec 100644
+--- a/libcef/browser/chrome/browser_delegate.h
++++ b/libcef/browser/chrome/browser_delegate.h
+@@ -191,6 +191,10 @@ class BrowserDelegate {
+   // Called at the end of a fullscreen transition.
+   virtual void WindowFullscreenStateChanged() {}
+ 
++  // True for a native host whose window UI is supplied outside Chromium Views.
++  // Captured creation intent; remains true throughout final tab detachment.
++  virtual bool UsesNativeHostedWindow() const { return false; }
++
+   // Returns true if this browser is Views-hosted.
+   virtual bool IsViewsHosted() const { return false; }
+ 
+diff --git a/libcef/browser/chrome/chrome_browser_delegate.cc b/libcef/browser/chrome/chrome_browser_delegate.cc
+index 3c4eead..0c63a97 100644
+--- a/libcef/browser/chrome/chrome_browser_delegate.cc
++++ b/libcef/browser/chrome/chrome_browser_delegate.cc
+@@ -7,6 +7,9 @@
+ #include <memory>
+ 
+ #include "cef/libcef/browser/browser_contents_delegate.h"
++#if BUILDFLAG(IS_MAC)
++#include "cef/libcef/browser/orbit/orbit_hosted.h"
++#endif
+ #include "cef/libcef/browser/browser_host_base.h"
+ #include "cef/libcef/browser/browser_info_manager.h"
+ #include "cef/libcef/browser/browser_platform_delegate.h"
+@@ -253,7 +256,26 @@ void ChromeBrowserDelegate::SetAsDelegate(content::WebContents* web_contents,
+   // CreateDevToolsBrowser should have already created the browser host.
+   DCHECK(!is_devtools_popup || !opener_host_);
+ 
+-  auto platform_delegate = CefBrowserPlatformDelegate::Create(create_params_);
++  // Orbit hosted Chrome style (ENG-X2): every tab of a logical Browser has its
++  // own client and parent view, published by ChromeBrowserHostImpl::Create.
++  // A tab that Chrome creates by itself in a logical Browser (tabs.create, an
++  // extension page) gets neither: it has no Orbit surface yet and no view.
++  const CefBrowserCreateParams* params = &create_params_;
++#if BUILDFLAG(IS_MAC)
++  CefBrowserCreateParams orbit_tab_params;
++  if (orbit::TakePendingTab(browser_, &orbit_tab_params)) {
++    params = &orbit_tab_params;
++  } else if (create_params_.orbit_window_token) {
++    orbit_tab_params = create_params_;
++    orbit_tab_params.client = nullptr;
++    if (orbit_tab_params.window_info) {
++      orbit_tab_params.window_info->parent_view = kNullWindowHandle;
++    }
++    params = &orbit_tab_params;
++  }
++#endif
++
++  auto platform_delegate = CefBrowserPlatformDelegate::Create(*params);
+   CHECK(platform_delegate);
+ 
+   // Expect runtime style to match.
+@@ -261,15 +283,15 @@ void ChromeBrowserDelegate::SetAsDelegate(content::WebContents* web_contents,
+ 
+   auto browser_info = CefBrowserInfoManager::GetInstance()->CreateBrowserInfo(
+       is_devtools_popup, platform_delegate->GetBrowserConfig(),
+-      create_params_.extra_info);
++      params->extra_info);
+ 
+   auto request_context_impl =
+       CefRequestContextImpl::GetOrCreateForRequestContext(
+-          create_params_.request_context);
++          params->request_context);
+ 
+-  CreateBrowserHost(browser_, web_contents, create_params_.settings,
+-                    create_params_.client, std::move(platform_delegate),
+-                    browser_info, is_devtools_popup, /*opener=*/nullptr,
++  CreateBrowserHost(browser_, web_contents, params->settings, params->client,
++                    std::move(platform_delegate), browser_info,
++                    is_devtools_popup, /*opener=*/nullptr,
+                     request_context_impl);
+ }
+ 
+@@ -600,6 +622,10 @@ ChromeBrowserDelegate::CreateBrowserHostForPopup(
+                            is_devtools_popup, opener, request_context_impl);
+ }
+ 
++bool ChromeBrowserDelegate::UsesNativeHostedWindow() const {
++  return create_params_.orbit_window_token != 0;
++}
++
+ bool ChromeBrowserDelegate::IsViewsHosted() const {
+   return create_params_.browser_view != nullptr ||
+          create_params_.popup_with_views_hosted_opener;
+diff --git a/libcef/browser/chrome/chrome_browser_delegate.h b/libcef/browser/chrome/chrome_browser_delegate.h
+index 639ecc8..76bc768 100644
+--- a/libcef/browser/chrome/chrome_browser_delegate.h
++++ b/libcef/browser/chrome/chrome_browser_delegate.h
+@@ -85,6 +85,7 @@ class ChromeBrowserDelegate : public cef::BrowserDelegate {
+       content::WebContents* contents) override;
+   const std::optional<SkRegion> GetDraggableRegion() const override;
+   void WindowFullscreenStateChanged() override;
++  bool UsesNativeHostedWindow() const override;
+   bool IsViewsHosted() const override;
+   bool HasViewsHostedOpener() const override;
+ 
+diff --git a/libcef/browser/chrome/chrome_browser_host_impl.cc b/libcef/browser/chrome/chrome_browser_host_impl.cc
+index 8f0c314..0f97c43 100644
+--- a/libcef/browser/chrome/chrome_browser_host_impl.cc
++++ b/libcef/browser/chrome/chrome_browser_host_impl.cc
+@@ -13,6 +13,12 @@
+ #include "cef/libcef/browser/chrome/views/chrome_browser_widget.h"
+ #include "cef/libcef/browser/thread_util.h"
+ #include "cef/libcef/browser/views/browser_view_impl.h"
++#if BUILDFLAG(IS_MAC)
++#include "cef/libcef/browser/orbit/orbit_browser_window.h"
++#include "cef/libcef/browser/orbit/orbit_hosted.h"
++#include "cef/libcef/browser/orbit/browser_platform_delegate_chrome_hosted.h"
++#include "chrome/browser/ui/browser_window/public/create_browser_window.h"
++#endif
+ #include "cef/libcef/common/net/url_util.h"
+ #include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/ui/browser_commands.h"
+@@ -27,7 +33,27 @@
+ // static
+ CefRefPtr<ChromeBrowserHostImpl> ChromeBrowserHostImpl::Create(
+     const CefBrowserCreateParams& params) {
+-  auto browser = CreateBrowser(params, std::nullopt);
++  Browser* browser = nullptr;
++  int tab_index = TabStripModel::kNoTab;
++#if BUILDFLAG(IS_MAC)
++  // Orbit hosted Chrome style (ENG-X2): the tab joins the logical Browser of its
++  // Orbit window and profile; its own client and parent view are published for
++  // ChromeBrowserDelegate::SetAsDelegate.
++  std::optional<orbit::ScopedPendingTab> orbit_pending_tab;
++  if (params.orbit_window_token) {
++    browser = GetOrCreateOrbitBrowser(params);
++    if (!browser) {
++      LOG(ERROR) << "Unknown Orbit window for a hosted Chrome tab";
++      return nullptr;
++    }
++    orbit_pending_tab.emplace(browser, params);
++    tab_index = params.orbit_tab_index < 0 ? TabStripModel::kNoTab
++                                          : params.orbit_tab_index;
++  }
++#endif
++  if (!browser) {
++    browser = CreateBrowser(params, std::nullopt);
++  }
+ 
+   GURL url = url_util::MakeGURL(params.url, /*fixup=*/true);
+   const bool url_is_empty = url.is_empty();
+@@ -41,7 +67,7 @@ CefRefPtr<ChromeBrowserHostImpl> ChromeBrowserHostImpl::Create(
+   // Add a new tab. This will indirectly create a new tab WebContents and
+   // call ChromeBrowserDelegate::OnWebContentsCreated to create the associated
+   // ChromeBrowserHostImpl.
+-  chrome::AddTabAt(browser, url, /*index=*/TabStripModel::kNoTab,
++  chrome::AddTabAt(browser, url, /*index=*/tab_index,
+                    /*foreground=*/true);
+ 
+   // The new tab WebContents.
+@@ -124,6 +150,29 @@ void ChromeBrowserHostImpl::AddNewContents(
+   params.request_context = request_context();
+   params.browser_view = GetBrowserView();
+ 
++#if BUILDFLAG(IS_MAC)
++  // Orbit hosted Chrome style (ENG-X2): a popup of a hosted tab joins the
++  // logical Browser of its Orbit window instead of a new Chrome window.
++  if (!browser_create_params.has_value()) {
++    if (auto* hosted = CefBrowserPlatformDelegateChromeHosted::FromBrowserId(
++            GetIdentifier())) {
++      params.orbit_window_token = hosted->window_token();
++      params.orbit_window_generation = hosted->window_generation();
++      if (auto* orbit_browser = GetOrCreateOrbitBrowser(params)) {
++        orbit_browser->tab_strip_model()->AddWebContents(
++            std::move(contents), /*index=*/TabStripModel::kNoTab,
++            ui::PageTransition::PAGE_TRANSITION_AUTO_TOPLEVEL,
++            AddTabTypes::ADD_ACTIVE);
++        SetBrowser(orbit_browser);
++        return;
++      }
++      // Destruction of the unadopted WebContents completes CEF's normal
++      // OnWebContentsDestroyed/OnBeforeClose path. Do not create Chrome UI.
++      return;
++    }
++  }
++#endif
++
+   // Create the new Browser representation.
+   auto browser = CreateBrowser(params, std::move(browser_create_params));
+ 
+@@ -475,6 +524,110 @@ Browser* ChromeBrowserHostImpl::CreateBrowser(
+   return browser;
+ }
+ 
++#if BUILDFLAG(IS_MAC)
++// static
++Browser* ChromeBrowserHostImpl::GetOrCreateOrbitBrowser(
++    const CefBrowserCreateParams& params) {
++  if (!orbit::IsHostedRequestLive({params.orbit_window_token,
++                                  params.orbit_tab_index,
++                                  params.orbit_window_generation})) {
++    return nullptr;
++  }
++  auto* profile = CefRequestContextImpl::GetProfile(params.request_context);
++  if (auto* existing =
++          orbit::GetLogicalBrowser(params.orbit_window_token, profile)) {
++    if (!existing->IsDeleteScheduled()) {
++      return existing;
++    }
++    // CHROMIUM-APP-R3: the window's previous Browser emptied and is being
++    // destroyed (a transfer without hold). A tab coming back gets a new one.
++    orbit::ForgetLogicalBrowser(params.orbit_window_token, existing);
++  }
++  if (!orbit::IsKnownWindow(params.orbit_window_token)) {
++    return nullptr;
++  }
++
++  BrowserWindowCreateParams chrome_params(profile,
++                                          /*from_user_gesture=*/false);
++  // A real TYPE_NORMAL Browser (tabs, windows and extension APIs see it), but
++  // never restored by Chrome: the session belongs to Orbit.
++  chrome_params.omit_from_session_restore = true;
++  chrome_params.should_trigger_session_restore = false;
++  chrome_params.cef_params = base::MakeRefCounted<DelegateCreateParams>(params);
++
++  // Owned by the Browser (BrowserWindow::DeleteBrowserWindow).
++  auto* window = new orbit::OrbitBrowserWindow(params.orbit_window_token, profile);
++  chrome_params.initial_bounds = window->GetBounds();
++  chrome_params.window = window;
++
++  auto* browser =
++      cef::BrowserForBWI(CreateBrowserWindow(std::move(chrome_params)));
++  window->SetBrowser(browser);
++  orbit::RegisterLogicalBrowser(params.orbit_window_token, profile, browser);
++  // Not shown: Orbit owns the NSWindow.
++  return browser;
++}
++#endif
++
++#if BUILDFLAG(IS_MAC)
++bool ChromeBrowserHostImpl::OrbitMoveToWindow(uint64_t window_token,
++                                             int index) {
++  CEF_REQUIRE_UIT();
++  auto* hosted =
++      CefBrowserPlatformDelegateChromeHosted::FromBrowserId(GetIdentifier());
++  content::WebContents* contents = GetWebContents();
++  if (!hosted || !contents || !browser_ || is_destroying_browser_ ||
++      !orbit::IsLogicalBrowser(browser_) || browser_->IsDeleteScheduled()) {
++    return false;
++  }
++  const auto generation = orbit::GetWindowGeneration(window_token);
++  if (!generation) {
++    return false;
++  }
++  TabStripModel* source = browser_->tab_strip_model();
++  const int from = source->GetIndexOfWebContents(contents);
++  if (from == TabStripModel::kNoTab || source->closing_all()) {
++    return false;
++  }
++
++  CefBrowserCreateParams params;
++  params.request_context = request_context();
++  params.orbit_window_token = window_token;
++  params.orbit_window_generation = *generation;
++  Browser* target = GetOrCreateOrbitBrowser(params);
++  if (!target || target->IsDeleteScheduled()) {
++    return false;
++  }
++
++  if (target == browser_) {
++    // Same logical Browser: mirror Orbit's order (tabs.onMoved).
++    const int last = source->count() - 1;
++    const int to = index < 0 || index > last ? last : index;
++    if (to != from) {
++      source->MoveWebContentsAt(from, to, /*select_after_move=*/false);
++    }
++    return true;
++  }
++
++  TabStripModel* destination = target->tab_strip_model();
++  // The source Browser may close once its last tab left (TabStripEmpty): it is
++  // not used after the detach. Browser::OnTabDetached and OnTabInsertedAt call
++  // SetAsDelegate, which re-parents this host (SetBrowser).
++  std::unique_ptr<tabs::TabModel> tab = source->DetachTabAtForInsertion(from);
++  if (!tab) {
++    if (destination->empty()) {
++      target->GetWindow()->Close();
++    }
++    return false;
++  }
++  hosted->SetWindow(window_token, *generation);
++  const int count = destination->count();
++  const int to = index < 0 || index > count ? count : index;
++  destination->InsertDetachedTabAt(to, std::move(tab), AddTabTypes::ADD_NONE);
++  return true;
++}
++#endif
++
+ void ChromeBrowserHostImpl::Attach(content::WebContents* web_contents,
+                                    bool is_devtools_popup,
+                                    CefRefPtr<CefBrowserHostBase> opener) {
+diff --git a/libcef/browser/chrome/chrome_browser_host_impl.h b/libcef/browser/chrome/chrome_browser_host_impl.h
+index d65742e..6c7c3e4 100644
+--- a/libcef/browser/chrome/chrome_browser_host_impl.h
++++ b/libcef/browser/chrome/chrome_browser_host_impl.h
+@@ -10,6 +10,7 @@
+ 
+ #include "base/memory/raw_ptr.h"
+ #include "base/memory/weak_ptr.h"
++#include "build/build_config.h"
+ #include "cef/libcef/browser/browser_host_base.h"
+ #include "cef/libcef/browser/chrome/browser_delegate.h"
+ #include "chrome/browser/ui/browser.h"
+@@ -111,6 +112,17 @@ class ChromeBrowserHostImpl : public CefBrowserHostBase {
+ 
+   Browser* browser() const { return browser_; }
+ 
++#if BUILDFLAG(IS_MAC)
++  // Orbit hosted Chrome style (CHROMIUM-APP-R2, side API v2 move_tab): moves
++  // this tab to |index| (-1 appends) of the logical Browser of
++  // (|window_token|, its profile), or reorders it to |index| when it already
++  // is there. Keeps the WebContents, the browser id and the extension tab id
++  // (TabStripModel::DetachTabAtForInsertion and InsertDetachedTabAt). Returns
++  // false, with nothing changed, when this is not a hosted tab of a logical
++  // Browser, it is closing, or the window is unknown.
++  bool OrbitMoveToWindow(uint64_t window_token, int index);
++#endif
++
+   // Return the CEF specialization of BrowserView.
+   ChromeBrowserView* chrome_browser_view() const;
+ 
+@@ -137,6 +149,14 @@ class ChromeBrowserHostImpl : public CefBrowserHostBase {
+       const CefBrowserCreateParams& params,
+       std::optional<BrowserWindowCreateParams> browser_create_params);
+ 
++#if BUILDFLAG(IS_MAC)
++  // Orbit hosted Chrome style (ENG-X2): returns the logical Browser of
++  // (|params.orbit_window_token|, profile), creating it with an
++  // OrbitBrowserWindow when needed. The Browser is never shown. Returns nullptr
++  // if the Orbit window is unknown.
++  static Browser* GetOrCreateOrbitBrowser(const CefBrowserCreateParams& params);
++#endif
++
+   // Called from ChromeBrowserDelegate::CreateBrowser when this object is first
+   // created. Must be called on the UI thread.
+   void Attach(content::WebContents* web_contents,
+diff --git a/patch/patch.cfg b/patch/patch.cfg
+index 6f8b8d6..c783654 100644
+--- a/patch/patch.cfg
++++ b/patch/patch.cfg
+@@ -918,5 +918,21 @@ patches = [
+     # request context via CefPreferenceRegistrar::SetDefaultPreference.
+     # https://github.com/chromiumembedded/cef/issues/4276
+     'name': 'signin_allowed_4276',
++  },
++  # Orbit patches (branch orbit/8078). Applied last and only when the
++  # ORBIT_CEF_PATCHES environment variable exists, so that the same tree builds
++  # stock CEF and Orbit CEF for A/B comparison. Design:
++  # docs/native-port/x2-patch-design-2026-10-25.md in the Orbit repository.
++  {
++    # X2-EXT-WINDOW-ID: tolerate a BrowserWindow without BrowserView in the two
++    # CHECKs reached from Navigate() (InitPostTabModelConstruction,
++    # OnWebContentsCreated). Hunks sit on chrome_browser_browser.patch.
++    'name': 'orbit_ext_window',
++    'condition': 'ORBIT_CEF_PATCHES',
+   }
++  # Native hosted Browser detach has no Chromium SidePanelUI (ENG-X2).
++  {
++    'name': 'orbit_native_side_panel',
++    'condition': 'ORBIT_CEF_PATCHES',
++  },
+ ]

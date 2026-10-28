@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Hidden smoke build of the real Orbit composition (CHROMIUM-APP): never installed, never
+     registered, launched only by scripts/orbit-chromium-app.py with a synthetic root. Declared as an
+     agent like the laboratory bundle (LaunchServices otherwise reverts the prohibited policy). -->
+<plist version="1.0"><dict>
+  <key>CFBundleIdentifier</key><string>io.github.okatech.orbit.test.orbit-chromium.app-smoke</string>
+  <key>OrbitDataRoot</key><string>@ORBIT_SYNTHETIC_ROOT@</string>
+  <key>OrbitUseMockKeychain</key><true/>
+  <key>OrbitSyntheticBundle</key><true/>
+  <key>CFBundleExecutable</key><string>@ORBIT_PRODUCT_NAME@</string>
+  <key>CFBundleName</key><string>Orbit Smoke Synthetic</string>
+  <key>CFBundlePackageType</key><string>APPL</string>
+  <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
+  <key>CFBundleVersion</key><string>1</string>
+  <key>CFBundleShortVersionString</key><string>0.1</string>
+  <key>LSMinimumSystemVersion</key><string>15.0</string>
+  <key>NSPrincipalClass</key><string>ACRApplication</string>
+  <key>LSUIElement</key><true/>
+  <key>NSHighResolutionCapable</key><true/>
+  <key>NSSupportsAutomaticGraphicsSwitching</key><true/>
+  <key>LSEnvironment</key><dict><key>MallocNanoZone</key><string>0</string></dict>
+</dict></plist>

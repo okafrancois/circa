@@ -1,0 +1,80 @@
+{
+  "geometry": "Original SVG path/currentColor, rounded rect and circle; cubic circle approximation k=0.5522847498307936",
+  "icns_sha256": "c9bc46ba5ed601cb8ba3460fdc6d6467d2e456af3542effc763b90a9ce90fb62",
+  "pdf_sha256": "028c6330dc38efad3b69e829f1ca2375245a5ab2c53083fb19e6d9a7669fcd8d",
+  "renderer": "CoreGraphics sRGB RGBA8, direct PDF at each size; no fonts",
+  "representations": {
+    "ic04": {
+      "encoding": "ARGB premultiplied, literal RLE planes",
+      "payload_sha256": "f6b76f0cf050aa30e05f3e096793749b1c81a3dec7ca08691c8e9dc8e768d1d6",
+      "pixels": 16,
+      "png_sha256": "a0dade689cc279091fee8157e4e7fa0595a000da6a69740631ad34f17cb1b68f",
+      "rgba_sha256": "124487fe8094289b86f91f2f4f713abf825c7137e4c2286b677527e69059314b"
+    },
+    "ic05": {
+      "encoding": "ARGB premultiplied, literal RLE planes",
+      "payload_sha256": "58d1e3f279a7b97dd8af0410168ffd36b6290f12d3b5278c8025a2255fedb839",
+      "pixels": 32,
+      "png_sha256": "bc140f5d653ce9ddb71eae1a8b035aa066d62c9768b0dc024415ca1dfc359f45",
+      "rgba_sha256": "715bfb5aa270f8f725d98a3011ef38b308ce1ce82125e147c2cf1aa9f46d9103"
+    },
+    "ic07": {
+      "encoding": "PNG",
+      "payload_sha256": "a572b1f3828a4fe4d553b1f5c213163732c2efddb9c1b453565e5d9029a9fa01",
+      "pixels": 128,
+      "png_sha256": "a572b1f3828a4fe4d553b1f5c213163732c2efddb9c1b453565e5d9029a9fa01",
+      "rgba_sha256": "8fcc48808f07413f8e239b39bdc66edfecb102a5ec32955f6b03ff8c4d179388"
+    },
+    "ic08": {
+      "encoding": "PNG",
+      "payload_sha256": "08156bb955017afed535972f675e6db5f808b0372c9b2b78eb9e01ded7a54f1d",
+      "pixels": 256,
+      "png_sha256": "08156bb955017afed535972f675e6db5f808b0372c9b2b78eb9e01ded7a54f1d",
+      "rgba_sha256": "cd187cac3fe559ba0610efd527ddcae4c59180e67b8c494d648363f17234cbf7"
+    },
+    "ic09": {
+      "encoding": "PNG",
+      "payload_sha256": "d8aa6e5f83535fc5a8af1bd7ad74113756be889b1b4907de7d1c5b0ed4090c6f",
+      "pixels": 512,
+      "png_sha256": "d8aa6e5f83535fc5a8af1bd7ad74113756be889b1b4907de7d1c5b0ed4090c6f",
+      "rgba_sha256": "e08ba5339e89f2acd8cec53735e7d2cacb94b43415804b8602542d2cfdeb2f7c"
+    },
+    "ic10": {
+      "encoding": "PNG",
+      "payload_sha256": "d8f9066f6d08024db2536c1d3c8e60f63051336f00a714aac4baa56716f31b89",
+      "pixels": 1024,
+      "png_sha256": "d8f9066f6d08024db2536c1d3c8e60f63051336f00a714aac4baa56716f31b89",
+      "rgba_sha256": "cf38bb021f2abc773138a5780a88a3410e9bdcf8d7dd81e6d52ae0d54a0f1871"
+    },
+    "ic11": {
+      "encoding": "PNG",
+      "payload_sha256": "bc140f5d653ce9ddb71eae1a8b035aa066d62c9768b0dc024415ca1dfc359f45",
+      "pixels": 32,
+      "png_sha256": "bc140f5d653ce9ddb71eae1a8b035aa066d62c9768b0dc024415ca1dfc359f45",
+      "rgba_sha256": "715bfb5aa270f8f725d98a3011ef38b308ce1ce82125e147c2cf1aa9f46d9103"
+    },
+    "ic12": {
+      "encoding": "PNG",
+      "payload_sha256": "dd09ef378c1870b95d8d8651763c623722c72d1f76564f448682626612a6ec11",
+      "pixels": 64,
+      "png_sha256": "dd09ef378c1870b95d8d8651763c623722c72d1f76564f448682626612a6ec11",
+      "rgba_sha256": "5250cfb4185439d3b588f933f701ff14c077310928f5b621f8219e8ba6b54c1f"
+    },
+    "ic13": {
+      "encoding": "PNG",
+      "payload_sha256": "08156bb955017afed535972f675e6db5f808b0372c9b2b78eb9e01ded7a54f1d",
+      "pixels": 256,
+      "png_sha256": "08156bb955017afed535972f675e6db5f808b0372c9b2b78eb9e01ded7a54f1d",
+      "rgba_sha256": "cd187cac3fe559ba0610efd527ddcae4c59180e67b8c494d648363f17234cbf7"
+    },
+    "ic14": {
+      "encoding": "PNG",
+      "payload_sha256": "d8aa6e5f83535fc5a8af1bd7ad74113756be889b1b4907de7d1c5b0ed4090c6f",
+      "pixels": 512,
+      "png_sha256": "d8aa6e5f83535fc5a8af1bd7ad74113756be889b1b4907de7d1c5b0ed4090c6f",
+      "rgba_sha256": "e08ba5339e89f2acd8cec53735e7d2cacb94b43415804b8602542d2cfdeb2f7c"
+    }
+  },
+  "source": "tools/orbit-brand/app-icon.svg",
+  "source_sha256": "592f9024697446674aa46648dd75f324f89faf94b0e6a9d6dfbc65ae1ebaf47b"
+}

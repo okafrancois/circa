@@ -1,0 +1,28 @@
+diff --git a/chrome/browser/ui/extensions/extension_post_install_dialog.cc b/chrome/browser/ui/extensions/extension_post_install_dialog.cc
+index bc61086..5cbb8b6 100644
+--- a/chrome/browser/ui/extensions/extension_post_install_dialog.cc
++++ b/chrome/browser/ui/extensions/extension_post_install_dialog.cc
+@@ -39,6 +39,7 @@
+ 
+ #if !BUILDFLAG(IS_CHROMEOS) && !BUILDFLAG(IS_ANDROID)
+ #include "chrome/browser/ui/views/extensions/extension_post_install_dialog_view_utils.h"
++#include "chrome/browser/ui/views/extensions/extension_view_utils.h"
+ #endif
+ 
+ namespace extensions {
+@@ -169,6 +170,15 @@ void ShowExtensionPostInstallDialog(
+                                   weak_delegate->model(),
+                                   manage_shortcuts_callback);
+ 
++#if BUILDFLAG(IS_MAC)
++  // An AppKit embedder has no toolbar bubble anchor. Its fallback is a
++  // window-modal sheet, so provide an explicit dismissal instead of relying
++  // on the outside-click behaviour of a Chrome toolbar bubble.
++  if (!GetExtensionsContainerViews(native_window)) {
++    dialog_model_builder.AddOkButton(base::DoNothing());
++  }
++#endif
++
+ #if !BUILDFLAG(IS_CHROMEOS) && !BUILDFLAG(IS_ANDROID)
+   // Add a sync or sign in promo in the footer if it should be shown.
+   extensions::ExtensionRegistry* registry =

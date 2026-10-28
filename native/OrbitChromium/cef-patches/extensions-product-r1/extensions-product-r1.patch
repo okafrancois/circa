@@ -1,0 +1,1057 @@
+diff --git a/libcef/browser/orbit/orbit_cef_api.h b/libcef/browser/orbit/orbit_cef_api.h
+--- a/libcef/browser/orbit/orbit_cef_api.h
++++ b/libcef/browser/orbit/orbit_cef_api.h
+@@ -28,7 +28,8 @@
+ // 1 reports version 1 and keeps the version 1 layout as its prefix.
+ // Version 3 (CHROMIUM-APP-R3): additive, hold_window/release_window. Earlier
+ // versions keep their layout as the prefix of the table.
+-#define ORBIT_CEF_API_VERSION 3u
++// Version 4 (EXTENSIONS-PRODUCT-R1): additive, native per-profile extension services.
++#define ORBIT_CEF_API_VERSION 4u
+
+ typedef struct {
+   uint32_t struct_size;
+@@ -119,6 +120,33 @@
+   // every hold.
+   int32_t (*hold_window)(uint64_t window_token);
+   int32_t (*release_window)(uint64_t window_token);
++  // Version 4 (EXTENSIONS-PRODUCT-R1). Paths come only from the embedder's
++  // admitted request contexts. Never loads a Profile; refuses off-the-record.
++  // Snapshot: UTF-8 JSON, returns required bytes excluding NUL, -1 unavailable.
++  // A buffer is written only when capacity exceeds the returned size.
++  int32_t (*extensions_snapshot)(const char* profile_path, char* json, uint32_t capacity);
++  // enabled must be 0 or 1. Chrome's registrar enforces policy/permission state.
++  int32_t (*extension_set_enabled)(const char* profile_path, const char* id, int32_t enabled);
++  // Caller must obtain a native user confirmation first. 1 means accepted,
++  // not completion of asynchronous site data removal.
++  int32_t (*extension_remove)(const char* profile_path, const char* id);
++  // One subscription per profile path; callback is synchronous on the UI thread.
++  // Null callback unregisters. Shutdown of the registry revokes observation.
++  int32_t (*extensions_observe)(const char* profile_path,
++                               void (*changed)(void*), void* context);
++  // Version 4. Native user action only. Anchor must belong to this hosted
++  // tab's shell window; no URLs or script supplied by the caller. 1 accepted,
++  // 0 refused, -2 side panel requested (not yet hosted by this adapter).
++  int32_t (*extension_action)(int32_t browser_id, const char* id, void* anchor_nsview,
++                              uint64_t invocation, uint64_t surface_token,
++                              uint64_t profile_token, uint64_t selection_epoch);
++  // Unpublished v4, R2: publish exact shell selection before invoking an action.
++  // browser_id -1 revokes selection. Epochs never repeat during this runtime.
++  int32_t (*extension_selection_changed)(uint64_t window_token, int32_t browser_id,
++                                        uint64_t surface_token, uint64_t profile_token,
++                                        uint64_t selection_epoch);
++  // Idempotent; revokes before notifying the popup, including before first load.
++  void (*extension_cancel)(uint64_t invocation);
+ } orbit_cef_api_t;
+
+ // Returns the API table for `version`, or NULL when unsupported.
+diff --git a/libcef/browser/orbit/orbit_cef_api.mm b/libcef/browser/orbit/orbit_cef_api.mm
+--- a/libcef/browser/orbit/orbit_cef_api.mm
++++ b/libcef/browser/orbit/orbit_cef_api.mm
+@@ -22,6 +22,9 @@
+ #include "chrome/browser/ui/browser.h"
+ #include "chrome/browser/ui/browser_active_state_manager/browser_active_state_manager.h"
+ #include "chrome/browser/ui/tabs/tab_strip_model.h"
++
++// Private additive extension services; no public CEF API change.
++#include "cef/libcef/browser/orbit/orbit_extensions.inc"
+
+ namespace {
+
+@@ -255,6 +258,7 @@
+     &ProfileLoaded,
+     &HoldWindow,
+     &ReleaseWindow,
++    nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
+ };
+
+ const orbit_cef_api_t kApiV2 = {
+@@ -274,6 +278,7 @@
+     &ProfileLoaded,
+     &HoldWindow,
+     &ReleaseWindow,
++    nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
+ };
+
+ const orbit_cef_api_t kApiV3 = {
+@@ -293,6 +298,15 @@
+     &ProfileLoaded,
+     &HoldWindow,
+     &ReleaseWindow,
++    nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
++};
++
++const orbit_cef_api_t kApiV4 = {
++    sizeof(orbit_cef_api_t), 4u,
++    &WindowCreated, &WindowDestroyed, &WindowActivationChanged, &WindowBoundsChanged,
++    &PrepareHostedTab, &CancelHostedTab, &AttachView, &ActivateTab, &GetTabInfo,
++    &WindowBrowserCount, &MoveTab, &ProfileLoaded, &HoldWindow, &ReleaseWindow,
++    &ExtensionsSnapshot, &ExtensionSetEnabled, &ExtensionRemove, &ExtensionsObserve, &ExtensionAction, &ExtensionSelectionChanged, &ExtensionCancel,
+ };
+
+ }  // namespace
+@@ -317,6 +331,8 @@
+       return &kApiV2;
+     case 3u:
+       return &kApiV3;
++    case 4u:
++      return &kApiV4;
+     default:
+       return nullptr;
+   }
+diff --git a/patch/patch.cfg b/patch/patch.cfg
+--- a/patch/patch.cfg
++++ b/patch/patch.cfg
+@@ -946,4 +946,5 @@
+     'name': 'orbit_essentials_folder_upload',
+     'condition': 'ORBIT_CEF_PATCHES',
+   },
++  { 'name': 'orbit_extension_popup', 'condition': 'ORBIT_CEF_PATCHES' },
+ ]
+diff --git a/patch/patches/orbit_extension_popup.patch b/patch/patches/orbit_extension_popup.patch
+new file mode 100644
+--- /dev/null
++++ b/patch/patches/orbit_extension_popup.patch
+@@ -0,0 +1,420 @@
++--- chrome/browser/ui/views/extensions/extension_popup.h
+++++ chrome/browser/ui/views/extensions/extension_popup.h
++@@ -5,6 +5,7 @@
++ #ifndef CHROME_BROWSER_UI_VIEWS_EXTENSIONS_EXTENSION_POPUP_H_
++ #define CHROME_BROWSER_UI_VIEWS_EXTENSIONS_EXTENSION_POPUP_H_
++
+++#include <memory>
++ #include "base/functional/callback.h"
++ #include "base/memory/raw_ptr.h"
++ #include "base/scoped_observation.h"
++@@ -67,6 +68,24 @@
++                         PopupShowAction show_action,
++                         ShowPopupCallback callback);
++
+++  // Owned native authorization. No asynchronous callback may borrow an embedder
+++  // object. Cancellation is synchronous even when widget destruction is deferred.
+++  class NativeInvocation {
+++   public:
+++    virtual ~NativeInvocation() = default;
+++    virtual bool IsValid() = 0;
+++    virtual void SetCancellation(base::RepeatingClosure callback) = 0;
+++    virtual void Cancel() = 0;
+++  };
+++
+++  // Orbit: a genuine extension host in a bubble parented to an embedder NSView.
+++  // The caller must validate the hosted Browser, active tab and native anchor.
+++  static void ShowPopupWithNativeParent(
+++      BrowserWindowInterface* browser,
+++      std::unique_ptr<extensions::ExtensionViewHost> host,
+++      gfx::NativeView native_parent, const gfx::Rect& screen_anchor,
+++      std::shared_ptr<NativeInvocation> invocation);
+++
++   ExtensionPopup(const ExtensionPopup&) = delete;
++   ExtensionPopup& operator=(const ExtensionPopup&) = delete;
++   ~ExtensionPopup() override;
++@@ -120,7 +139,14 @@
++                  views::BubbleAnchor anchor,
++                  views::BubbleBorder::Arrow arrow,
++                  PopupShowAction show_action,
++-                 ShowPopupCallback callback);
+++                 ShowPopupCallback callback,
+++                 gfx::NativeView native_parent = {},
+++                 const gfx::Rect& screen_anchor = {},
+++                 std::shared_ptr<NativeInvocation> invocation = {});
+++
+++  bool CheckNativeInvocation();
+++  void CancelNativeInvocation();
+++  void OnTabStripModelDestroyed(TabStripModel* model) override;
++
++   // Shows the bubble, focuses its content, and registers listeners.
++   void ShowBubble();
++@@ -138,6 +164,12 @@
++   void HandleCloseExtensionHost(extensions::ExtensionHost* host);
++
++   raw_ptr<BrowserWindowInterface> browser_;
+++  raw_ptr<TabStripModel> observed_tab_strip_ = nullptr;
+++  std::shared_ptr<NativeInvocation> native_invocation_;
+++  bool orbit_native_ = false;
+++  bool orbit_cancelled_ = false;
+++  bool orbit_constructing_ = true;
+++  bool orbit_destroying_ = false;
++
++   // The contained host for the view.
++   std::unique_ptr<extensions::ExtensionViewHost> host_;
++@@ -147,7 +179,7 @@
++       performance_manager::PageLiveStateDecorator::ScopedWithheldFromView>
++       withheld_from_view_;
++
++-  raw_ptr<ExtensionViewViews> extension_view_;
+++  raw_ptr<ExtensionViewViews> extension_view_ = nullptr;
++
++   base::ScopedObservation<extensions::ExtensionRegistry,
++                           extensions::ExtensionRegistryObserver>
++@@ -166,6 +198,8 @@
++       anchor_widget_observation_{this};
++
++   base::WeakPtrFactory<ExtensionPopup> deferred_close_weak_ptr_factory_;
+++  // Cancellation authority must survive invalidation of ordinary deferred-close tasks.
+++  base::WeakPtrFactory<ExtensionPopup> native_invocation_weak_ptr_factory_{this};
++ };
++
++ #endif  // CHROME_BROWSER_UI_VIEWS_EXTENSIONS_EXTENSION_POPUP_H_
++--- chrome/browser/ui/views/extensions/extension_popup.cc
+++++ chrome/browser/ui/views/extensions/extension_popup.cc
++@@ -80,7 +80,27 @@
++ #endif
++ }
++
+++void ExtensionPopup::ShowPopupWithNativeParent(
+++    BrowserWindowInterface* browser,
+++    std::unique_ptr<extensions::ExtensionViewHost> host,
+++    gfx::NativeView native_parent, const gfx::Rect& screen_anchor,
+++    std::shared_ptr<NativeInvocation> invocation) {
+++  if (!native_parent || !invocation || !invocation->IsValid()) return;
+++  auto* popup = new ExtensionPopup(
+++      browser, std::move(host), views::BubbleAnchor(),
+++      views::BubbleBorder::TOP_RIGHT, PopupShowAction::kShow,
+++      ShowPopupCallback(), native_parent, screen_anchor, std::move(invocation));
+++  if (popup->orbit_cancelled_) { delete popup; return; }
+++  auto weak = popup->deferred_close_weak_ptr_factory_.GetWeakPtr();
+++  views::BubbleDialogDelegateView::CreateBubble(popup);
+++  if (!weak) return;
+++  if (popup->CheckNativeInvocation() && popup->host_->has_loaded_once()) popup->ShowBubble();
+++}
+++
++ ExtensionPopup::~ExtensionPopup() {
+++  orbit_destroying_ = true;
+++  if (orbit_native_) CancelNativeInvocation();
+++  if (observed_tab_strip_) observed_tab_strip_->RemoveObserver(this);
++   // The ExtensionPopup may close before it was ever shown. If so, indicate such
++   // through the callback.
++   if (shown_callback_) {
++@@ -103,6 +123,7 @@
++
++ void ExtensionPopup::AddedToWidget() {
++   BubbleDialogDelegateView::AddedToWidget();
+++  if (orbit_native_ && !CheckNativeInvocation()) return;
++
++   // Remove the Escape accelerator from DialogClientView so that key events for
++   // Escape are passed to the contained WebContents / ExtensionViewHost rather
++@@ -128,6 +149,12 @@
++ }
++
++ void ExtensionPopup::OnWidgetDestroying(views::Widget* widget) {
+++  orbit_destroying_ = true;
+++  if (orbit_native_) CancelNativeInvocation();
+++  if (observed_tab_strip_) {
+++    observed_tab_strip_->RemoveObserver(this);
+++    observed_tab_strip_ = nullptr;
+++  }
++   BubbleDialogDelegateView::OnWidgetDestroying(widget);
++   anchor_widget_observation_.Reset();
++   extension_registry_observation_.Reset();
++@@ -139,6 +166,7 @@
++
++ void ExtensionPopup::OnWidgetTreeActivated(views::Widget* root_widget,
++                                            views::Widget* active_widget) {
+++  if (orbit_native_ && !CheckNativeInvocation()) return;
++   // The widget is shown asynchronously and may take a long time to appear, so
++   // only close if it's actually been shown.
++   if (!GetWidget()->IsVisible()) {
++@@ -159,8 +187,11 @@
++       return;
++     }
++
++-    if (extensions::SecurityDialogTracker::GetInstance()
++-            ->BrowserHasVisibleSecurityDialogs(browser_, GetWidget())) {
+++    auto weak = deferred_close_weak_ptr_factory_.GetWeakPtr();
+++    const bool blocked = extensions::SecurityDialogTracker::GetInstance()
+++        ->BrowserHasVisibleSecurityDialogs(browser_, GetWidget());
+++    if (!weak || (orbit_native_ && !CheckNativeInvocation())) return;
+++    if (blocked) {
++       // Defer to avoid reentrant focus and window activation changes in
++       // FocusController while the security dialog is in the middle of being
++       // shown.
++@@ -191,6 +222,7 @@
++   }
++ #endif
++
+++  if (GetAnchor().IsNull()) return kMaxSize;
++   gfx::Size max_size = kMaxSize;
++   max_size.SetToMin(
++       BubbleDialogDelegate::GetMaxAvailableScreenSpaceToPlaceBubble(
++@@ -205,6 +237,7 @@
++     content::BrowserContext* browser_context,
++     const extensions::Extension* extension,
++     extensions::UnloadedExtensionReason reason) {
+++  if (orbit_native_ && !CheckNativeInvocation()) return;
++   CHECK(host_);
++   if (extension->id() == host_->extension_id()) {
++     // To ensure |extension_view_| cannot receive any messages that cause it to
++@@ -223,20 +256,23 @@
++
++ void ExtensionPopup::DocumentOnLoadCompletedInPrimaryMainFrame() {
++   // Show when the content finishes loading and its width is computed.
+++  auto weak = deferred_close_weak_ptr_factory_.GetWeakPtr();
++   ShowBubble();
++-  Observe(nullptr);
+++  if (weak) Observe(nullptr);
++ }
++
++ void ExtensionPopup::OnTabStripModelChanged(
++     TabStripModel* tab_strip_model,
++     const TabStripModelChange& change,
++     const TabStripSelectionChange& selection) {
+++  if (orbit_native_) { CancelNativeInvocation(); return; }
++   if (!tab_strip_model->empty() && selection.active_tab_changed()) {
++     CloseDeferredIfNecessary();
++   }
++ }
++
++ void ExtensionPopup::OnSecurityDialogAdded(views::Widget* widget) {
+++  if (orbit_native_ && !CheckNativeInvocation()) return;
++   // Don't close if the security dialog belongs to this popup.
++   if (extensions::SecurityDialogTracker::IsWidgetOrDescendantOf(widget,
++                                                                 GetWidget())) {
++@@ -256,16 +292,42 @@
++     views::BubbleAnchor anchor,
++     views::BubbleBorder::Arrow arrow,
++     PopupShowAction show_action,
++-    ShowPopupCallback callback)
+++    ShowPopupCallback callback,
+++    gfx::NativeView native_parent,
+++    const gfx::Rect& screen_anchor,
+++    std::shared_ptr<NativeInvocation> invocation)
++     : BubbleDialogDelegateView(anchor,
++                                arrow,
++                                views::BubbleBorder::STANDARD_SHADOW,
++                                /*autosize=*/true),
++       browser_(browser),
+++      native_invocation_(std::move(invocation)),
+++      orbit_native_(native_invocation_ != nullptr),
++       host_(std::move(host)),
++       show_action_(show_action),
++       shown_callback_(std::move(callback)),
++       deferred_close_weak_ptr_factory_(this) {
+++  if (native_parent) {
+++    set_parent_window(native_parent);
+++    SetAnchorRect(screen_anchor);
+++  }
+++  if (orbit_native_ && !native_invocation_->IsValid()) {
+++    orbit_constructing_ = false;
+++    CancelNativeInvocation();
+++    return;
+++  }
+++  observed_tab_strip_ = browser_->GetTabStripModel();
+++  observed_tab_strip_->AddObserver(this);
+++  if (native_invocation_) {
+++    native_invocation_->SetCancellation(base::BindRepeating(
+++        &ExtensionPopup::CancelNativeInvocation,
+++        native_invocation_weak_ptr_factory_.GetWeakPtr()));
+++  }
+++  if (orbit_native_ && !CheckNativeInvocation()) {
+++    orbit_constructing_ = false;
+++    CancelNativeInvocation();
+++    return;
+++  }
++   g_last_popup_for_testing = this;
++   SetButtons(static_cast<int>(ui::mojom::DialogButton::kNone));
++   set_use_round_corners(false);
++@@ -292,14 +354,18 @@
++       browser_->GetProfile(), host_.get()));
++   extension_view_->SetContainer(this);
++   extension_view_->Init();
+++  orbit_constructing_ = false;
+++  if (orbit_native_ && !CheckNativeInvocation()) { CancelNativeInvocation(); return; }
++
++   // See comments in OnWidgetActivationChanged().
++-  set_close_on_deactivate(false);
++-
++-  browser_->GetTabStripModel()->AddObserver(this);
++-
++-  CHECK(anchor_widget());
++-  anchor_widget_observation_.Observe(anchor_widget()->GetPrimaryWindowWidget());
+++  set_close_on_deactivate(static_cast<bool>(native_parent));
+++
+++
+++  if (anchor_widget()) {
+++    anchor_widget_observation_.Observe(anchor_widget()->GetPrimaryWindowWidget());
+++  } else {
+++    CHECK(native_parent);
+++  }
++
++   security_dialog_tracker_observation_.Observe(
++       extensions::SecurityDialogTracker::GetInstance());
++@@ -316,52 +382,94 @@
++   // If the host had somehow finished loading, then we'd miss the notification
++   // and not show.  This seems to happen in single-process mode.
++   if (host_->has_loaded_once()) {
++-    ShowBubble();
+++    if (!orbit_native_) ShowBubble();
++   } else {
++     // Wait to show the popup until the contained host finishes loading.
++     Observe(host_->host_contents());
++   }
++ }
++
+++bool ExtensionPopup::CheckNativeInvocation() {
+++  if (!orbit_native_) return true;
+++  if (orbit_cancelled_) return false;
+++  if (native_invocation_ && native_invocation_->IsValid()) return true;
+++  CancelNativeInvocation();
+++  return false;
+++}
+++
+++void ExtensionPopup::CancelNativeInvocation() {
+++  orbit_cancelled_ = true;
+++  native_invocation_weak_ptr_factory_.InvalidateWeakPtrs();
+++  deferred_close_weak_ptr_factory_.InvalidateWeakPtrs();
+++  Observe(nullptr);
+++  extension_registry_observation_.Reset();
+++  security_dialog_tracker_observation_.Reset();
+++  anchor_widget_observation_.Reset();
+++  if (observed_tab_strip_) {
+++    observed_tab_strip_->RemoveObserver(this);
+++    observed_tab_strip_ = nullptr;
+++  }
+++  browser_ = nullptr; // Revoke before calling external/native cancellation code.
+++  auto invocation = std::move(native_invocation_);
+++  if (invocation) { invocation->SetCancellation({}); invocation->Cancel(); }
+++  if (orbit_constructing_) return;
+++  auto weak = deferred_close_weak_ptr_factory_.GetWeakPtr();
+++  if (extension_view_) RemoveChildViewT(extension_view_.ExtractAsDangling());
+++  if (!weak) return;
+++  host_.reset();
+++  if (!weak) return;
+++  withheld_from_view_.reset();
+++  if (!orbit_destroying_ && GetWidget()) CloseDeferredIfNecessary();
+++}
+++
+++void ExtensionPopup::OnTabStripModelDestroyed(TabStripModel*) {
+++  observed_tab_strip_ = nullptr;
+++  browser_ = nullptr;
+++  if (orbit_native_) CancelNativeInvocation();
+++  else if (GetWidget()) CloseDeferredIfNecessary();
+++}
+++
++ void ExtensionPopup::ShowBubble() {
++-  // Don't show the popup if there are visible security dialogs. This protects
++-  // the security dialogs from spoofing.
++-  if (extensions::SecurityDialogTracker::GetInstance()
++-          ->BrowserHasVisibleSecurityDialogs(browser_, GetWidget())) {
++-    withheld_from_view_.reset();
++-    CloseDeferredIfNecessary();
++-    return;
++-  }
++-
+++  if (orbit_native_ && !CheckNativeInvocation()) return;
+++  if (!GetWidget() || !browser_ || !host_) return;
+++  auto weak = deferred_close_weak_ptr_factory_.GetWeakPtr();
+++  const bool blocked = extensions::SecurityDialogTracker::GetInstance()
+++      ->BrowserHasVisibleSecurityDialogs(browser_, GetWidget());
+++  if (!weak || (orbit_native_ && !CheckNativeInvocation())) return;
+++  if (blocked) { withheld_from_view_.reset(); CloseDeferredIfNecessary(); return; }
+++  // Recheck immediately before Show, then after every safety/focus callback.
+++  if (orbit_native_ && !CheckNativeInvocation()) return;
++   GetWidget()->Show();
+++  if (!weak || (orbit_native_ && !CheckNativeInvocation())) return;
++   withheld_from_view_.reset();
++-
++-  // Focus on the host contents when the bubble is first shown.
++   host_->host_contents()->Focus();
++-
+++  if (!weak || (orbit_native_ && !CheckNativeInvocation())) return;
++   if (show_action_ == PopupShowAction::kShowAndInspect) {
++-    DevToolsWindow::OpenDevToolsWindow(
++-        host_->host_contents(), DevToolsToggleAction::ShowConsolePanel(),
++-        DevToolsOpenedByAction::kContextMenuInspect);
++-  }
++-
++-  if (shown_callback_) {
++-    std::move(shown_callback_).Run(host_.get());
++-  }
+++    DevToolsWindow::OpenDevToolsWindow(host_->host_contents(),
+++        DevToolsToggleAction::ShowConsolePanel(), DevToolsOpenedByAction::kContextMenuInspect);
+++  }
+++  if (!weak || (orbit_native_ && !CheckNativeInvocation())) return;
+++  if (shown_callback_) std::move(shown_callback_).Run(host_.get());
++ }
++
++ void ExtensionPopup::CloseIfSecurityDialogPresent() {
+++  if (orbit_native_ && !CheckNativeInvocation()) return;
++   if (!browser_ || !host_) {
++     return;
++   }
++
++-  if (extensions::SecurityDialogTracker::GetInstance()
++-          ->BrowserHasVisibleSecurityDialogs(browser_, GetWidget())) {
+++  auto weak = deferred_close_weak_ptr_factory_.GetWeakPtr();
+++  const bool blocked = extensions::SecurityDialogTracker::GetInstance()
+++      ->BrowserHasVisibleSecurityDialogs(browser_, GetWidget());
+++  if (!weak || (orbit_native_ && !CheckNativeInvocation())) return;
+++  if (blocked) {
++     CloseDeferredIfNecessary(views::Widget::ClosedReason::kLostFocus);
++   }
++ }
++
++ void ExtensionPopup::CloseUnlessBlockedByInspectionOrJSDialog() {
+++  auto weak = deferred_close_weak_ptr_factory_.GetWeakPtr();
+++  if (orbit_native_ && !CheckNativeInvocation()) return;
++   if (!browser_ || !host_) {
++     return;
++   }
++@@ -370,19 +478,24 @@
++   javascript_dialogs::AppModalDialogQueue* app_modal_queue =
++       javascript_dialogs::AppModalDialogQueue::GetInstance();
++   CHECK(app_modal_queue);
++-  if (app_modal_queue->HasActiveDialog()) {
+++  const bool app_modal = app_modal_queue->HasActiveDialog();
+++  if (!weak || (orbit_native_ && !CheckNativeInvocation())) return;
+++  if (app_modal) {
++     return;
++   }
++
++   // Don't close if a web modal dialog (e.g. webauthn security key dialog) is
++   // showing.
++-  if (web_modal::WebContentsHasActiveWebModal(host_->host_contents())) {
+++  const bool has_web_modal = web_modal::WebContentsHasActiveWebModal(host_->host_contents());
+++  if (!weak || (orbit_native_ && !CheckNativeInvocation())) return;
+++  if (has_web_modal) {
++     return;
++   }
++
++   // Don't close if the extension page is under inspection in a DevTools window.
++-  if (DevToolsWindow::GetInstanceForInspectedWebContents(
++-          host_->host_contents())) {
+++  const bool inspected = DevToolsWindow::GetInstanceForInspectedWebContents(host_->host_contents()) != nullptr;
+++  if (!weak || (orbit_native_ && !CheckNativeInvocation())) return;
+++  if (inspected) {
++     return;
++   }
++
++@@ -410,6 +523,7 @@
++ }
++
++ void ExtensionPopup::HandleCloseExtensionHost(extensions::ExtensionHost* host) {
+++  if (orbit_native_ && !CheckNativeInvocation()) return;
++   DCHECK_EQ(host, host_.get());
++   CloseDeferredIfNecessary();
++ }
+diff --git a/libcef/browser/orbit/orbit_extension_lease.h b/libcef/browser/orbit/orbit_extension_lease.h
+new file mode 100644
+--- /dev/null
++++ b/libcef/browser/orbit/orbit_extension_lease.h
+@@ -0,0 +1,27 @@
++// Copyright 2026 Orbit. BSD-style license; see LICENSE.
++#ifndef ORBIT_EXTENSION_LEASE_H_
++#define ORBIT_EXTENSION_LEASE_H_
++#include <cstdint>
++namespace orbit_extensions {
++// Immutable identity of a single native invocation, never just an NSWindow.
++struct InvocationIdentity {
++  uint64_t window = 0, generation = 0, surface = 0, profile = 0, epoch = 0;
++  int32_t browser = 0;
++  uintptr_t contents = 0;
++  bool operator==(const InvocationIdentity&) const = default;
++};
++class InvocationLease {
++ public:
++  explicit InvocationLease(InvocationIdentity identity) : identity_(identity) {}
++  bool Authorizes(const InvocationIdentity& current) const {
++    return !revoked_ && identity_ == current;
++  }
++  // Revocation precedes all cancellation callbacks and cannot be undone by ABA.
++  bool Revoke() { const bool first = !revoked_; revoked_ = true; return first; }
++  const InvocationIdentity& identity() const { return identity_; }
++ private:
++  const InvocationIdentity identity_;
++  bool revoked_ = false;
++};
++}
++#endif
+diff --git a/libcef/browser/orbit/orbit_extensions.inc b/libcef/browser/orbit/orbit_extensions.inc
+new file mode 100644
+--- /dev/null
++++ b/libcef/browser/orbit/orbit_extensions.inc
+@@ -0,0 +1,334 @@
++// Copyright 2026 Orbit. BSD-style license; see LICENSE.
++// Included inside orbit_cef_api.mm before its anonymous namespace.
++#include <cstring>
++#include <limits>
++#include <map>
++#include <memory>
++#include <string>
++#include <vector>
++#include "base/no_destructor.h"
++#include "base/json/json_writer.h"
++#include "base/callback_list.h"
++#include "base/functional/bind.h"
++#include "base/values.h"
++#include "base/scoped_observation.h"
++#include "chrome/browser/profiles/profile.h"
++#include "extensions/browser/disable_reason.h"
++#include "extensions/browser/extension_action_manager.h"
++#include "extensions/browser/extension_registrar.h"
++#include "extensions/browser/extension_prefs.h"
++#include "extensions/browser/extension_registry.h"
++#include "extensions/browser/extension_registry_observer.h"
++#include "extensions/common/extension.h"
++
++namespace {
++bool OnValidUIThread();
++CefRefPtr<ChromeBrowserHostImpl> GetChromeHost(int32_t browser_id);
++Profile* ExtensionProfile(const char* path) {
++  if (!OnValidUIThread() || !path || path[0] != '/' || !g_browser_process ||
++      !g_browser_process->profile_manager()) return nullptr;
++  Profile* profile = g_browser_process->profile_manager()->GetProfileByPath(base::FilePath(path));
++  return profile && !profile->IsOffTheRecord() ? profile : nullptr;
++}
++
++int32_t ExtensionsSnapshot(const char* path, char* output, uint32_t capacity) {
++  Profile* profile = ExtensionProfile(path);
++  if (!profile) return -1;
++  auto* registry = extensions::ExtensionRegistry::Get(profile);
++  auto* actions = extensions::ExtensionActionManager::Get(profile);
++  if (!registry || !actions) return -1;
++  base::ListValue rows;
++  for (const auto& extension : registry->GenerateInstalledExtensionsSet()) {
++    // Component extensions are not user-managed products.
++    if (extensions::Manifest::IsComponentLocation(extension->location())) continue;
++    base::DictValue row;
++    row.Set("id", extension->id());
++    row.Set("name", extension->name());
++    row.Set("version", extension->version().GetString());
++    row.Set("isEnabled", registry->enabled_extensions().Contains(extension->id()));
++    row.Set("hasAction", actions->GetExtensionAction(*extension) != nullptr);
++    rows.Append(std::move(row));
++  }
++  const auto json = base::WriteJson(rows);
++  if (!json || json->size() > static_cast<size_t>(std::numeric_limits<int32_t>::max())) return -1;
++  if (output && capacity > json->size()) std::memcpy(output, json->c_str(), json->size() + 1);
++  return static_cast<int32_t>(json->size());
++}
++
++int32_t ExtensionSetEnabled(const char* path, const char* id, int32_t enabled) {
++  Profile* profile = ExtensionProfile(path);
++  if (!profile || !id || (enabled != 0 && enabled != 1)) return 0;
++  auto* registry = extensions::ExtensionRegistry::Get(profile);
++  auto* registrar = extensions::ExtensionRegistrar::Get(profile);
++  const auto* extension = registry ? registry->GetInstalledExtension(id) : nullptr;
++  if (!extension || !registrar || extensions::Manifest::IsComponentLocation(extension->location())) return 0;
++  // Never grant additional permissions or clear security/policy disable reasons here.
++  if (enabled) {
++    if (registry->enabled_extensions().Contains(id)) return 1;
++    auto* prefs = extensions::ExtensionPrefs::Get(profile);
++    if (!prefs || !prefs->HasOnlyDisableReason(id, extensions::disable_reason::DISABLE_USER_ACTION)) return 0;
++    registrar->EnableExtension(id);
++  }
++  else registrar->DisableExtension(id, {extensions::disable_reason::DISABLE_USER_ACTION});
++  return registry->enabled_extensions().Contains(id) == (enabled == 1) ? 1 : 0;
++}
++
++int32_t ExtensionRemove(const char* path, const char* id) {
++  Profile* profile = ExtensionProfile(path);
++  if (!profile || !id) return 0;
++  auto* registry = extensions::ExtensionRegistry::Get(profile);
++  auto* registrar = extensions::ExtensionRegistrar::Get(profile);
++  const auto* extension = registry ? registry->GetInstalledExtension(id) : nullptr;
++  if (!extension || !registrar || extensions::Manifest::IsComponentLocation(extension->location())) return 0;
++  std::u16string error;
++  return registrar->UninstallExtension(id, extensions::UNINSTALL_REASON_USER_INITIATED, &error) ? 1 : 0;
++}
++
++class OrbitExtensionObservation final : public extensions::ExtensionRegistryObserver,
++                                       public std::enable_shared_from_this<OrbitExtensionObservation> {
++ public:
++  OrbitExtensionObservation(extensions::ExtensionRegistry* registry,
++                          void (*changed)(void*), void* context)
++      : changed_(changed), context_(context) { observation_.Observe(registry); }
++  void OnExtensionLoaded(content::BrowserContext*, const extensions::Extension*) override { Notify(); }
++  void OnExtensionReady(content::BrowserContext*, const extensions::Extension*) override { Notify(); }
++  void OnExtensionUnloaded(content::BrowserContext*, const extensions::Extension*,
++                           extensions::UnloadedExtensionReason) override { Notify(); }
++  void OnExtensionInstalled(content::BrowserContext*, const extensions::Extension*, bool) override { Notify(); }
++  void OnExtensionUninstalled(content::BrowserContext*, const extensions::Extension*,
++                              extensions::UninstallReason) override { Notify(); }
++  void OnShutdown(extensions::ExtensionRegistry*) override { observation_.Reset(); }
++ private:
++  void Notify() {
++    // A synchronous observer may unregister/remove its profile or shut down.
++    auto keep_alive = shared_from_this();
++    const auto callback = changed_;
++    void* context = context_;
++    if (callback) callback(context);
++  }
++  void (*changed_)(void*);
++  void* context_;
++  base::ScopedObservation<extensions::ExtensionRegistry, extensions::ExtensionRegistryObserver> observation_{this};
++};
++
++using ExtensionObservationMap =
++    std::map<std::string, std::shared_ptr<OrbitExtensionObservation>>;
++ExtensionObservationMap& GetExtensionObservations() {
++  static base::NoDestructor<ExtensionObservationMap> observations;
++  return *observations;
++}
++int32_t ExtensionsObserve(const char* path, void (*changed)(void*), void* context) {
++  if (!OnValidUIThread() || !path) return 0;
++  GetExtensionObservations().erase(path);
++  if (!changed) return 1;
++  Profile* profile = ExtensionProfile(path);
++  auto* registry = profile ? extensions::ExtensionRegistry::Get(profile) : nullptr;
++  if (!registry) return 0;
++  GetExtensionObservations()[path] = std::make_shared<OrbitExtensionObservation>(registry, changed, context);
++  return 1;
++}
++}  // namespace
++
++#include "chrome/browser/extensions/extension_action_runner.h"
++#include "chrome/browser/extensions/extension_view_host_factory.h"
++#include "chrome/browser/extensions/extension_view_host.h"
++#include "chrome/browser/ui/views/extensions/extension_popup.h"
++#include "extensions/browser/extension_action.h"
++#include "ui/gfx/mac/coordinate_conversion.h"
++
++#include "cef/libcef/browser/orbit/orbit_extension_lease.h"
++#include "content/public/browser/web_contents_observer.h"
++
++namespace {
++struct ExtensionSelection {
++  int32_t browser;
++  uint64_t surface, profile, epoch;
++};
++using ExtensionSelectionMap = std::map<uint64_t, ExtensionSelection>;
++ExtensionSelectionMap& GetExtensionSelections() {
++  static base::NoDestructor<ExtensionSelectionMap> selections;
++  return *selections;
++}
++class OrbitNativePopupLease;
++using ExtensionInvocationMap =
++    std::map<uint64_t, std::weak_ptr<OrbitNativePopupLease>>;
++ExtensionInvocationMap& GetExtensionInvocations() {
++  static base::NoDestructor<ExtensionInvocationMap> invocations;
++  return *invocations;
++}
++
++// No retained embedder callbacks or opaque Swift pointers. The popup owns this
++// native context; every engine object is observed and nulled before cancellation.
++class OrbitNativePopupLease final : public ExtensionPopup::NativeInvocation,
++                                  public content::WebContentsObserver,
++                                  public TabStripModelObserver,
++                                  public extensions::ExtensionRegistryObserver,
++                                  public std::enable_shared_from_this<OrbitNativePopupLease> {
++ public:
++  uint64_t window() const { return lease_.identity().window; }
++  OrbitNativePopupLease(orbit_extensions::InvocationIdentity identity, Browser* browser,
++                      content::WebContents* contents, NSView* anchor, const char* extension_id)
++      : content::WebContentsObserver(contents), lease_(identity), browser_(browser),
++        model_(browser->tab_strip_model()), profile_(browser->GetProfile()), anchor_(anchor), extension_id_(extension_id) {
++    model_->AddObserver(this);
++    registry_.Observe(extensions::ExtensionRegistry::Get(profile_));
++  }
++  ~OrbitNativePopupLease() override { Detach(); }
++  void ObserveBrowserClose() {
++    browser_close_ = browser_->RegisterBrowserDidClose(base::BindRepeating(
++        [](std::weak_ptr<OrbitNativePopupLease> weak, BrowserWindowInterface*) {
++          if (auto lease = weak.lock()) lease->Cancel();
++        }, weak_from_this()));
++  }
++  bool IsValid() override {
++    if (!browser_ || !model_ || !profile_ || !web_contents()) return false;
++    const auto& id = lease_.identity();
++    const auto generation = orbit::GetWindowGeneration(id.window);
++    const auto selection = GetExtensionSelections().find(id.window);
++    if (!generation || selection == GetExtensionSelections().end()) return false;
++    const auto& current = selection->second;
++    auto host = GetChromeHost(id.browser);
++    if (!host || host->browser() != browser_ || host->GetWebContents() != web_contents()) return false;
++    orbit_extensions::InvocationIdentity live{id.window, *generation, current.surface,
++        current.profile, current.epoch, current.browser,
++        reinterpret_cast<uintptr_t>(host->GetWebContents())};
++    if (!lease_.Authorizes(live) || browser_->IsDeleteScheduled() || browser_->GetProfile() != profile_ ||
++        model_->GetActiveWebContents() != web_contents()) return false;
++    NSView* anchor = anchor_.GetNativeNSView();
++    NSWindow* window = orbit::GetNativeWindow(id.window).GetNativeNSWindow();
++    NSView* source = web_contents()->GetNativeView().GetNativeNSView();
++    return anchor && window && window.isVisible && anchor.window == window &&
++        !anchor.isHiddenOrHasHiddenAncestor && !NSIsEmptyRect(anchor.visibleRect) &&
++        source && source.window == window && !source.isHiddenOrHasHiddenAncestor;
++  }
++  void SetCancellation(base::RepeatingClosure callback) override {
++    cancellation_ = std::move(callback);
++    if (!IsValid()) {
++      auto notification = std::move(cancellation_);
++      Cancel();
++      if (notification) notification.Run();
++    }
++  }
++  void Cancel() override {
++    auto keep_alive = shared_from_this();
++    if (!lease_.Revoke()) return;
++    // No Browser, Profile, source contents or model access is possible from a
++    // later callback, even if destroying a widget is deferred by AppKit.
++    Detach();
++    auto callback = std::move(cancellation_);
++    if (callback) callback.Run();
++  }
++  void WebContentsDestroyed() override { Cancel(); }
++  void OnTabStripModelChanged(TabStripModel*, const TabStripModelChange&,
++                              const TabStripSelectionChange&) override { Cancel(); }
++  void OnTabStripModelDestroyed(TabStripModel*) override {
++    model_ = nullptr;
++    browser_ = nullptr;
++    Cancel();
++  }
++  void OnShutdown(extensions::ExtensionRegistry*) override { registry_.Reset(); Cancel(); }
++  void OnExtensionUnloaded(content::BrowserContext*, const extensions::Extension* extension,
++                           extensions::UnloadedExtensionReason) override {
++    if (extension->id() == extension_id_) Cancel();
++  }
++  void OnExtensionUninstalled(content::BrowserContext*, const extensions::Extension* extension,
++                              extensions::UninstallReason) override {
++    if (extension->id() == extension_id_) Cancel();
++  }
++ private:
++  void Detach() {
++    browser_close_ = {};
++    browser_ = nullptr;
++    profile_ = nullptr;
++    if (model_) { model_->RemoveObserver(this); model_ = nullptr; }
++    Observe(nullptr);
++    registry_.Reset();
++  }
++  orbit_extensions::InvocationLease lease_;
++  raw_ptr<Browser> browser_;
++  raw_ptr<TabStripModel> model_;
++  raw_ptr<Profile> profile_;
++  gfx::NativeView anchor_;
++  const std::string extension_id_;
++  base::RepeatingClosure cancellation_;
++  base::CallbackListSubscription browser_close_;
++  base::ScopedObservation<extensions::ExtensionRegistry, extensions::ExtensionRegistryObserver> registry_{this};
++};
++
++void ExtensionCancel(uint64_t invocation) {
++  if (!OnValidUIThread()) return;
++  auto found = GetExtensionInvocations().find(invocation);
++  if (found == GetExtensionInvocations().end()) return;
++  auto lease = found->second.lock();
++  GetExtensionInvocations().erase(found);
++  if (lease) lease->Cancel();
++}
++int32_t ExtensionSelectionChanged(uint64_t window, int32_t browser, uint64_t surface,
++                                 uint64_t profile, uint64_t epoch) {
++  if (!OnValidUIThread()) return 0;
++  auto existing = GetExtensionSelections().find(window);
++  if (existing != GetExtensionSelections().end() && existing->second.epoch >= epoch) return 0;
++  GetExtensionSelections()[window] = {-1, 0, 0, epoch}; // Revoke before cancellation.
++  std::vector<std::shared_ptr<OrbitNativePopupLease>> cancelled;
++  for (auto it = GetExtensionInvocations().begin(); it != GetExtensionInvocations().end();) {
++    auto lease = it->second.lock();
++    if (!lease || lease->window() == window) {
++      if (lease) cancelled.push_back(std::move(lease));
++      it = GetExtensionInvocations().erase(it);
++    } else { ++it; }
++  }
++  for (auto& lease : cancelled) lease->Cancel();
++  const auto final = GetExtensionSelections().find(window);
++  if (final != GetExtensionSelections().end() && final->second.epoch == epoch) {
++    if (browser >= 0 && surface && profile && epoch && orbit::IsKnownWindow(window))
++      final->second = {browser, surface, profile, epoch};
++    else GetExtensionSelections().erase(final);
++  }
++  return 1;
++}
++int32_t ExtensionAction(int32_t browser_id, const char* id, void* anchor_nsview,
++                        uint64_t invocation, uint64_t surface, uint64_t profile, uint64_t epoch) {
++  if (!OnValidUIThread() || !id || !anchor_nsview || !invocation) return 0;
++  auto* delegate = CefBrowserPlatformDelegateChromeHosted::FromBrowserId(browser_id);
++  auto host = GetChromeHost(browser_id);
++  if (!delegate || !host || !host->browser() || !host->GetWebContents()) return 0;
++  Browser* browser = host->browser();
++  auto* contents = host->GetWebContents();
++  if (browser->GetProfile()->IsOffTheRecord() ||
++      browser->tab_strip_model()->GetActiveWebContents() != contents) return 0;
++  NSView* anchor = (__bridge NSView*)anchor_nsview;
++  if (![anchor isKindOfClass:[NSView class]]) return 0;
++  const uint64_t window = delegate->window_token();
++  const auto generation = orbit::GetWindowGeneration(window);
++  if (!generation) return 0;
++  auto lease = std::make_shared<OrbitNativePopupLease>(
++      orbit_extensions::InvocationIdentity{window, *generation, surface, profile, epoch,
++                                         browser_id, reinterpret_cast<uintptr_t>(contents)},
++      browser, contents, anchor, id);
++  lease->ObserveBrowserClose();
++  if (!lease->IsValid()) return 0;
++  GetExtensionInvocations()[invocation] = lease;
++  auto* registry = extensions::ExtensionRegistry::Get(browser->GetProfile());
++  auto* manager = extensions::ExtensionActionManager::Get(browser->GetProfile());
++  scoped_refptr<const extensions::Extension> extension = registry ? registry->enabled_extensions().GetByID(id) : nullptr;
++  auto* action = extension && manager ? manager->GetExtensionAction(*extension) : nullptr;
++  auto* runner = extensions::ExtensionActionRunner::GetForWebContents(contents);
++  const int tab_id = extensions::ExtensionTabUtil::GetTabId(contents);
++  if (!action || !runner || !action->GetIsVisible(tab_id)) { ExtensionCancel(invocation); return 0; }
++  const auto result = runner->RunAction(extension.get(), /*grant_tab_permissions=*/true);
++  if (!lease->IsValid()) { ExtensionCancel(invocation); return 0; }
++  if (result != extensions::ExtensionAction::ShowAction::kShowPopup) {
++    ExtensionCancel(invocation);
++    return result == extensions::ExtensionAction::ShowAction::kToggleSidePanel ? -2 : 1;
++  }
++  if (registry->enabled_extensions().GetByID(id) != extension.get()) { ExtensionCancel(invocation); return 0; }
++  action = manager->GetExtensionAction(*extension);
++  if (!action || !action->HasPopup(tab_id)) { ExtensionCancel(invocation); return 0; }
++  auto popup = extensions::ExtensionViewHostFactory::CreatePopupHost(*extension, action->GetPopupUrl(tab_id), browser);
++  if (!popup || !lease->IsValid()) { ExtensionCancel(invocation); return 0; }
++  const NSRect screen_rect = [anchor.window convertRectToScreen:[anchor convertRect:anchor.bounds toView:nil]];
++  ExtensionPopup::ShowPopupWithNativeParent(browser, std::move(popup),
++      gfx::NativeView(anchor.window.contentView), gfx::ScreenRectFromNSRect(screen_rect), lease);
++  return 1;
++}
++}  // namespace
+diff --git a/include/internal/cef_types.h b/include/internal/cef_types.h
+index 8c2c81f..ef9d282 100644
+--- a/include/internal/cef_types.h
++++ b/include/internal/cef_types.h
+@@ -2664,6 +2664,14 @@ typedef enum {
+   FILE_DIALOG_SAVE,
+
++  ///
++  /// Orbit maintained extension: select one existing directory, without web
++  /// upload enumeration or confirmation. Emitted only by OnFileDialog for
++  /// SELECT_EXISTING_FOLDER. RunFileDialog rejects this callback-only mode.
++  /// Existing mode values remain unchanged. Requires a matching SDK/framework.
++  ///
++  FILE_DIALOG_OPEN_EXISTING_FOLDER,
++
+   FILE_DIALOG_NUM_VALUES,
+ } cef_file_dialog_mode_t;
+
+diff --git a/libcef/browser/file_dialog_manager.cc b/libcef/browser/file_dialog_manager.cc
+index 3497dc7..e89fad5 100644
+--- a/libcef/browser/file_dialog_manager.cc
++++ b/libcef/browser/file_dialog_manager.cc
+@@ -123,11 +123,19 @@ FileChooserParams SelectFileToFileChooserParams(
+     const base::FilePath& default_path,
+     const ui::SelectFileDialog::FileTypeInfo* file_types,
+     std::vector<std::vector<base::FilePath::StringType>>* extensions,
+-    std::vector<std::u16string>* descriptions) {
++    std::vector<std::u16string>* descriptions,
++    bool* select_existing_folder) {
+   FileChooserParams params;
++  *select_existing_folder = false;
+
+   std::optional<FileChooserParams::Mode> mode;
+   switch (type) {
++    case ui::SelectFileDialog::Type::SELECT_EXISTING_FOLDER:
++      // Blink has no existing-directory mode. Keep its transport mode separate
++      // from the native chooser purpose; never use kUploadFolder for this.
++      mode = FileChooserParams::Mode::kOpen;
++      *select_existing_folder = true;
++      break;
+     case ui::SelectFileDialog::Type::SELECT_UPLOAD_FOLDER:
+       mode = FileChooserParams::Mode::kUploadFolder;
+       break;
+@@ -180,6 +188,27 @@ FileChooserParams SelectFileToFileChooserParams(
+   return params;
+ }
+
++// Native directory selection is not a renderer folder upload.
++cef_file_dialog_mode_t CefFileDialogMode(const FileChooserParams& params,
++                                        bool select_existing_folder) {
++  if (select_existing_folder) {
++    return FILE_DIALOG_OPEN_EXISTING_FOLDER;
++  }
++  switch (params.mode) {
++    case FileChooserParams::Mode::kOpen:
++      return FILE_DIALOG_OPEN;
++    case FileChooserParams::Mode::kOpenMultiple:
++      return FILE_DIALOG_OPEN_MULTIPLE;
++    case FileChooserParams::Mode::kUploadFolder:
++      return FILE_DIALOG_OPEN_FOLDER;
++    case FileChooserParams::Mode::kSave:
++      return FILE_DIALOG_SAVE;
++    default:
++      DCHECK(false);
++      return FILE_DIALOG_OPEN;
++  }
++}
++
+ class CefFileSelectListener : public content::FileSelectListener {
+  public:
+   using CallbackType = CefFileDialogManager::RunFileChooserCallback;
+@@ -318,6 +347,11 @@ void CefFileDialogManager::RunFileDialog(
+     case FILE_DIALOG_SAVE:
+       params.mode = blink::mojom::FileChooserParams::Mode::kSave;
+       break;
++    case FILE_DIALOG_OPEN_EXISTING_FOLDER:
++      // This callback-only mode originates in RunSelectFile, not Blink's
++      // renderer chooser pipeline. Do not reinterpret it as a file or upload.
++      callback->OnFileDialogDismissed({});
++      return;
+     case FILE_DIALOG_NUM_VALUES:
+       DCHECK(false);
+       return;
+@@ -398,13 +432,15 @@ void CefFileDialogManager::RunSelectFile(
+
+   Extensions extensions;
+   Descriptions descriptions;
++  bool select_existing_folder = false;
+   auto chooser_params = SelectFileToFileChooserParams(
+-      type, title, default_path, file_types, &extensions, &descriptions);
++      type, title, default_path, file_types, &extensions, &descriptions,
++      &select_existing_folder);
+   auto callback = base::BindOnce(
+       &CefFileDialogManager::SelectFileDoneByDelegateCallback,
+       weak_ptr_factory_.GetWeakPtr(), base::UnsafeDangling(listener));
+   callback = MaybeRunDelegate(chooser_params, extensions, descriptions,
+-                              std::move(callback));
++                              std::move(callback), select_existing_folder);
+   if (callback.is_null()) {
+     // The delegate kept the callback.
+     return;
+@@ -491,7 +527,8 @@ CefFileDialogManager::MaybeRunDelegate(
+     const blink::mojom::FileChooserParams& params,
+     const Extensions& extensions,
+     const Descriptions& descriptions,
+-    RunFileChooserCallback callback) {
++    RunFileChooserCallback callback,
++    bool select_existing_folder) {
+   // |extensions| and |descriptions| may be empty, or will contain 1 entry for
+   // each value in |params.accept_types|.
+   DCHECK(extensions.empty() || extensions.size() == params.accept_types.size());
+@@ -500,24 +537,7 @@ CefFileDialogManager::MaybeRunDelegate(
+
+   if (auto client = browser_->client()) {
+     if (auto handler = browser_->client()->GetDialogHandler()) {
+-      int mode = FILE_DIALOG_OPEN;
+-      switch (params.mode) {
+-        case blink::mojom::FileChooserParams::Mode::kOpen:
+-          mode = FILE_DIALOG_OPEN;
+-          break;
+-        case blink::mojom::FileChooserParams::Mode::kOpenMultiple:
+-          mode = FILE_DIALOG_OPEN_MULTIPLE;
+-          break;
+-        case blink::mojom::FileChooserParams::Mode::kUploadFolder:
+-          mode = FILE_DIALOG_OPEN_FOLDER;
+-          break;
+-        case blink::mojom::FileChooserParams::Mode::kSave:
+-          mode = FILE_DIALOG_SAVE;
+-          break;
+-        default:
+-          DCHECK(false);
+-          break;
+-      }
++      const auto mode = CefFileDialogMode(params, select_existing_folder);
+
+       std::vector<CefString> accept_filters;
+       for (auto& accept_type : params.accept_types) {
+diff --git a/libcef/browser/file_dialog_manager.h b/libcef/browser/file_dialog_manager.h
+index 2003d4b..4c01e26 100644
+--- a/libcef/browser/file_dialog_manager.h
++++ b/libcef/browser/file_dialog_manager.h
+@@ -78,7 +78,8 @@ class CefFileDialogManager {
+       const blink::mojom::FileChooserParams& params,
+       const Extensions& extensions,
+       const Descriptions& descriptions,
+-      RunFileChooserCallback callback);
++      RunFileChooserCallback callback,
++      bool select_existing_folder = false);
+
+   void SelectFileDoneByDelegateCallback(
+       MayBeDangling<ui::SelectFileDialog::Listener> listener,

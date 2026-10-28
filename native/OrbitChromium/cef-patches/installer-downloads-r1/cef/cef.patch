@@ -1,0 +1,356 @@
+diff --git a/BUILD.gn b/BUILD.gn
+index 6246d3ab80b9f617865144885120141a11cd4e20..478b24db7a2f27610ba81de4f5c3e4e5dec12574 100644
+--- a/BUILD.gn
++++ b/BUILD.gn
+@@ -410,6 +410,9 @@ if (is_win) {
+ # that is limited in scope (e.g. utility classes/methods).
+ source_set("libcef_static_unittested") {
+   sources = [
++    # Orbit (EXT-OUTCOME-R2): native Web Store installer transfer ownership.
++    "libcef/browser/orbit/orbit_installer_downloads.cc",
++    "libcef/browser/orbit/orbit_installer_downloads.h",
+     "libcef/browser/devtools/devtools_util.cc",
+     "libcef/browser/devtools/devtools_util.h",
+     "libcef/browser/geometry_util.h",
+@@ -417,7 +420,9 @@ source_set("libcef_static_unittested") {
+   ]
+ 
+   deps = [
++    "//components/download/public/common:public",
+     "//ui/gfx/geometry",
++    "//url",
+   ]
+ 
+   public_deps = [
+@@ -437,6 +442,7 @@ test("libcef_static_unittests") {
+   testonly = true
+ 
+   sources = [
++    "libcef/browser/orbit/orbit_installer_downloads_unittest.cc",
+     "libcef/browser/devtools/devtools_util_unittest.cc",
+     "libcef/browser/geometry_util_unittest.cc",
+   ]
+diff --git a/libcef/browser/orbit/orbit_installer_downloads.cc b/libcef/browser/orbit/orbit_installer_downloads.cc
+new file mode 100644
+index 0000000000000000000000000000000000000000..a088aaaeb761b5a438c09d77213fa758a467b2ad
+--- /dev/null
++++ b/libcef/browser/orbit/orbit_installer_downloads.cc
+@@ -0,0 +1,30 @@
++// Copyright 2026 Orbit. Portions copyright The Chromium Embedded Framework
++// Authors. Use of this source code is governed by a BSD-style license that can
++// be found in the LICENSE file.
++
++#include "cef/libcef/browser/orbit/orbit_installer_downloads.h"
++
++namespace orbit {
++
++bool IsWebstoreInstallerTransfer(const InstallerTransferFacts& facts) {
++  if (facts.source != download::DownloadSource::EXTENSION_INSTALLER ||
++      !facts.chrome_style || !facts.same_browser_context ||
++      facts.off_the_record || facts.user_data_dir.empty() ||
++      facts.forced_target.empty() || facts.forced_target.ReferencesParent() ||
++      !facts.forced_target.IsAbsolute() ||
++      facts.forced_target.Extension() != FILE_PATH_LITERAL(".crx") ||
++      facts.forced_target.DirName() !=
++          facts.user_data_dir.Append(kWebstoreDownloadFolder)) {
++    return false;
++  }
++  // Secondary, native comparison (extension_urls::IsWebstoreUpdateUrl):
++  // scheme, host and path only; the source above is the authority.
++  const GURL& url = facts.original_url;
++  const GURL& store = facts.webstore_update_url;
++  return url.is_valid() && store.is_valid() && url.SchemeIs("https") &&
++         url.scheme() == store.scheme() && url.host() == store.host() &&
++         url.path() == store.path() && !url.has_username() &&
++         !url.has_password() && !url.has_ref();
++}
++
++}  // namespace orbit
+diff --git a/libcef/browser/orbit/orbit_installer_downloads.h b/libcef/browser/orbit/orbit_installer_downloads.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..c84d4f21843da88f5990df354137710c7e57d8a3
+--- /dev/null
++++ b/libcef/browser/orbit/orbit_installer_downloads.h
+@@ -0,0 +1,44 @@
++// Copyright 2026 Orbit. Portions copyright The Chromium Embedded Framework
++// Authors. Use of this source code is governed by a BSD-style license that can
++// be found in the LICENSE file.
++
++#ifndef CEF_LIBCEF_BROWSER_ORBIT_ORBIT_INSTALLER_DOWNLOADS_H_
++#define CEF_LIBCEF_BROWSER_ORBIT_ORBIT_INSTALLER_DOWNLOADS_H_
++#pragma once
++
++#include "base/files/file_path.h"
++#include "components/download/public/common/download_source.h"
++#include "url/gurl.h"
++
++namespace orbit {
++
++// EXT-OUTCOME-R2. The Chrome Web Store installer downloads its CRX through the
++// download manager (extensions::WebstoreInstaller::StartDownload): source
++// EXTENSION_INSTALLER, a forced target "<user data>/Webstore Downloads/<id>_
++// <n>.crx", the Store update URL, the Store tab's own browser context. CEF
++// would offer that transfer to the embedder's CefDownloadHandler like any
++// download. Native facts only: no URL query, MIME type or page is trusted.
++struct InstallerTransferFacts {
++  download::DownloadSource source = download::DownloadSource::UNKNOWN;
++  base::FilePath forced_target;
++  GURL original_url;
++  GURL webstore_update_url;  // extension_urls::GetWebstoreUpdateUrl().
++  base::FilePath user_data_dir;  // ExtensionsBrowserClient::GetUserDataDir().
++  bool chrome_style = false;  // Unhandled means Chrome handling, not cancel.
++  bool same_browser_context = false;  // Item context is the browser's own.
++  bool off_the_record = true;
++};
++
++// The folder WebstoreInstaller::DownloadCrx uses (kWebstoreDownloadFolder,
++// file-local in extensions/browser/webstore_installer.cc).
++inline constexpr base::FilePath::CharType kWebstoreDownloadFolder[] =
++    FILE_PATH_LITERAL("Webstore Downloads");
++
++// True only for the installer's own transfer, which CEF then keeps away from
++// the embedder's download handler entirely: Chrome's target determination,
++// hidden download UI, approval and CrxInstaller verification apply unchanged.
++bool IsWebstoreInstallerTransfer(const InstallerTransferFacts& facts);
++
++}  // namespace orbit
++
++#endif  // CEF_LIBCEF_BROWSER_ORBIT_ORBIT_INSTALLER_DOWNLOADS_H_
+diff --git a/libcef/browser/orbit/orbit_installer_downloads_unittest.cc b/libcef/browser/orbit/orbit_installer_downloads_unittest.cc
+new file mode 100644
+index 0000000000000000000000000000000000000000..ff7af4ad19eae72bf753e0ca42fadea82d55ca0c
+--- /dev/null
++++ b/libcef/browser/orbit/orbit_installer_downloads_unittest.cc
+@@ -0,0 +1,102 @@
++// Copyright 2026 Orbit. Portions copyright The Chromium Embedded Framework
++// Authors. Use of this source code is governed by a BSD-style license that can
++// be found in the LICENSE file.
++
++#include "cef/libcef/browser/orbit/orbit_installer_downloads.h"
++
++#include "testing/gtest/include/gtest/gtest.h"
++
++namespace orbit {
++namespace {
++
++InstallerTransferFacts Installer() {
++  InstallerTransferFacts facts;
++  facts.source = download::DownloadSource::EXTENSION_INSTALLER;
++  facts.user_data_dir = base::FilePath(FILE_PATH_LITERAL("/synthetic/root"));
++  facts.forced_target = facts.user_data_dir.Append(kWebstoreDownloadFolder)
++                            .Append(FILE_PATH_LITERAL(
++                                "abcdefghijklmnopabcdefghijklmnop_42.crx"));
++  facts.webstore_update_url =
++      GURL("https://clients2.google.com/service/update2/crx");
++  facts.original_url = GURL(
++      "https://clients2.google.com/service/update2/crx?response=redirect&x=id%"
++      "3Dabcdefghijklmnopabcdefghijklmnop%26installsource%3Dondemand%26uc");
++  facts.chrome_style = true;
++  facts.same_browser_context = true;
++  facts.off_the_record = false;
++  return facts;
++}
++
++TEST(OrbitInstallerDownloadsTest, InstallerOwnTransferIsRecognized) {
++  EXPECT_TRUE(IsWebstoreInstallerTransfer(Installer()));
++}
++
++// The review's counterexample: identical public URL/MIME/document facts but an
++// ordinary download source stays the embedder's ordinary download.
++TEST(OrbitInstallerDownloadsTest, OrdinarySourceWithStoreShapeIsNotOwned) {
++  for (auto source : {download::DownloadSource::UNKNOWN,
++                      download::DownloadSource::NAVIGATION,
++                      download::DownloadSource::DRAG_AND_DROP,
++                      download::DownloadSource::FROM_RENDERER,
++                      download::DownloadSource::EXTENSION_API,
++                      download::DownloadSource::CONTEXT_MENU,
++                      download::DownloadSource::WEB_CONTENTS_API,
++                      download::DownloadSource::INTERNAL_API,
++                      download::DownloadSource::RETRY}) {
++    InstallerTransferFacts facts = Installer();
++    facts.source = source;
++    EXPECT_FALSE(IsWebstoreInstallerTransfer(facts));
++  }
++}
++
++TEST(OrbitInstallerDownloadsTest, ForcedInternalTargetIsRequired) {
++  const base::FilePath::CharType* targets[] = {
++      FILE_PATH_LITERAL(""),
++      FILE_PATH_LITERAL("/synthetic/root/Downloads/x.crx"),
++      FILE_PATH_LITERAL("/synthetic/root/Webstore Downloads/x.zip"),
++      FILE_PATH_LITERAL("/synthetic/root/Webstore Downloads/sub/x.crx"),
++      FILE_PATH_LITERAL("/synthetic/root/Webstore Downloads/../x.crx"),
++      FILE_PATH_LITERAL("/synthetic/other/Webstore Downloads/x.crx"),
++      FILE_PATH_LITERAL("Webstore Downloads/x.crx"),
++  };
++  for (const auto* target : targets) {
++    InstallerTransferFacts facts = Installer();
++    facts.forced_target = base::FilePath(target);
++    EXPECT_FALSE(IsWebstoreInstallerTransfer(facts)) << target;
++  }
++  InstallerTransferFacts facts = Installer();
++  facts.user_data_dir = base::FilePath();
++  EXPECT_FALSE(IsWebstoreInstallerTransfer(facts));
++}
++
++TEST(OrbitInstallerDownloadsTest, ContextStyleAndProfileAreRequired) {
++  InstallerTransferFacts alloy = Installer();
++  alloy.chrome_style = false;  // Unhandled would cancel on Alloy.
++  EXPECT_FALSE(IsWebstoreInstallerTransfer(alloy));
++  InstallerTransferFacts foreign = Installer();
++  foreign.same_browser_context = false;
++  EXPECT_FALSE(IsWebstoreInstallerTransfer(foreign));
++  InstallerTransferFacts incognito = Installer();
++  incognito.off_the_record = true;
++  EXPECT_FALSE(IsWebstoreInstallerTransfer(incognito));
++}
++
++TEST(OrbitInstallerDownloadsTest, UpdateUrlIsASecondaryNativeCheck) {
++  for (const char* url :
++       {"http://clients2.google.com/service/update2/crx?x=1",
++        "https://clients2.google.com.example/service/update2/crx",
++        "https://clients2.google.com/service/update2/crxx",
++        "https://user@clients2.google.com/service/update2/crx",
++        "https://clients2.google.com/service/update2/crx#fragment",
++        "https://example.invalid/extension.crx", "not a url"}) {
++    InstallerTransferFacts facts = Installer();
++    facts.original_url = GURL(url);
++    EXPECT_FALSE(IsWebstoreInstallerTransfer(facts)) << url;
++  }
++  InstallerTransferFacts facts = Installer();
++  facts.webstore_update_url = GURL();
++  EXPECT_FALSE(IsWebstoreInstallerTransfer(facts));
++}
++
++}  // namespace
++}  // namespace orbit
+diff --git a/libcef/browser/download_manager_delegate_impl.cc b/libcef/browser/download_manager_delegate_impl.cc
+index e5363cc4648d19d47bdf0e03b97ac4cba4c825b1..b409671d412d8bf5820d2e1c3387bf3cc5deb879 100644
+--- a/libcef/browser/download_manager_delegate_impl.cc
++++ b/libcef/browser/download_manager_delegate_impl.cc
+@@ -13,6 +13,7 @@
+ #include "base/strings/string_util.h"
+ #include "base/strings/utf_string_conversions.h"
+ #include "cef/include/cef_download_handler.h"
++#include "cef/libcef/browser/orbit/orbit_installer_downloads.h"
+ #include "cef/libcef/browser/browser_host_base.h"
+ #include "cef/libcef/browser/context.h"
+ #include "cef/libcef/browser/download_item_impl.h"
+@@ -23,6 +24,8 @@
+ #include "content/public/browser/browser_context.h"
+ #include "content/public/browser/download_item_utils.h"
+ #include "content/public/browser/web_contents.h"
++#include "extensions/browser/extensions_browser_client.h"
++#include "extensions/common/extension_urls.h"
+ #include "net/base/filename_util.h"
+ #include "net/http/http_response_headers.h"
+ #include "third_party/blink/public/mojom/choosers/file_chooser.mojom.h"
+@@ -327,6 +330,9 @@ CefDownloadManagerDelegateImpl::~CefDownloadManagerDelegateImpl() {
+ }
+ 
+ void CefDownloadManagerDelegateImpl::OnDownloadUpdated(DownloadItem* download) {
++  if (IsInstallerTransfer(download)) {
++    return;  // Orbit: the installer owns it; the client never sees it.
++  }
+   CefRefPtr<CefBrowserHostBase> browser = GetBrowser(download);
+   CefRefPtr<CefDownloadHandler> handler;
+   if (browser.get()) {
+@@ -347,6 +353,7 @@ void CefDownloadManagerDelegateImpl::OnDownloadUpdated(DownloadItem* download) {
+ 
+ void CefDownloadManagerDelegateImpl::OnDownloadDestroyed(DownloadItem* item) {
+   item->RemoveObserver(this);
++  installer_items_.erase(item);
+ 
+   CefBrowserHostBase* browser = nullptr;
+ 
+@@ -410,6 +417,13 @@ bool CefDownloadManagerDelegateImpl::DetermineDownloadTarget(
+     return false;
+   }
+ 
++  if (IsInstallerTransfer(item)) {
++    // Orbit: Chrome's own target determination keeps the installer's forced
++    // internal target, hidden UI and approval (Chrome style only, see
++    // ClassifyInstallerTransfer).
++    return false;
++  }
++
+   bool handled = false;
+   CefRefPtr<CefDownloadHandler> handler = GetDownloadHandler(browser);
+   if (handler) {
+@@ -502,6 +516,9 @@ CefDownloadManagerDelegateImpl::GetOrAssociateBrowser(
+   item->AddObserver(this);
+ 
+   item_browser_map_.insert(std::make_pair(item, browser.get()));
++  // First association, from OnDownloadCreated or DetermineDownloadTarget:
++  // every fact below is fixed when the installer creates the item.
++  ClassifyInstallerTransfer(item, browser.get());
+ 
+   // Register as an observer so that we can cancel associated DownloadItems when
+   // the browser is destroyed.
+@@ -512,6 +529,37 @@ CefDownloadManagerDelegateImpl::GetOrAssociateBrowser(
+   return browser;
+ }
+ 
++bool CefDownloadManagerDelegateImpl::ClassifyInstallerTransfer(
++    DownloadItem* item,
++    CefBrowserHostBase* browser) {
++  content::BrowserContext* item_context =
++      content::DownloadItemUtils::GetBrowserContext(item);
++  content::WebContents* contents =
++      browser ? browser->GetWebContents() : nullptr;
++  auto* extensions_client = extensions::ExtensionsBrowserClient::Get();
++  orbit::InstallerTransferFacts facts;
++  facts.source = item->GetDownloadSource();
++  facts.forced_target = item->GetForcedFilePath();
++  facts.original_url = item->GetOriginalUrl();
++  facts.webstore_update_url = extension_urls::GetWebstoreUpdateUrl();
++  facts.user_data_dir =
++      extensions_client ? extensions_client->GetUserDataDir() : base::FilePath();
++  facts.chrome_style = browser && browser->IsChromeStyle();
++  facts.same_browser_context =
++      item_context && contents && contents->GetBrowserContext() == item_context;
++  facts.off_the_record = !item_context || item_context->IsOffTheRecord();
++  if (!orbit::IsWebstoreInstallerTransfer(facts)) {
++    return false;
++  }
++  installer_items_.insert(item);
++  return true;
++}
++
++bool CefDownloadManagerDelegateImpl::IsInstallerTransfer(
++    DownloadItem* item) const {
++  return installer_items_.contains(item);
++}
++
+ CefRefPtr<CefBrowserHostBase> CefDownloadManagerDelegateImpl::GetBrowser(
+     DownloadItem* item) {
+   ItemBrowserMap::const_iterator it = item_browser_map_.find(item);
+diff --git a/libcef/browser/download_manager_delegate_impl.h b/libcef/browser/download_manager_delegate_impl.h
+index 5843c0d8ee94f6310fbd1d34de61521993abb192..ae970058ecb32f658207ca8dbb08c641352d028c 100644
+--- a/libcef/browser/download_manager_delegate_impl.h
++++ b/libcef/browser/download_manager_delegate_impl.h
+@@ -57,6 +57,14 @@ class CefDownloadManagerDelegateImpl
+ 
+   void ResetManager();
+ 
++  // Orbit (EXT-OUTCOME-R2): true when |item| is the Web Store installer's own
++  // CRX transfer for |browser| (orbit::IsWebstoreInstallerTransfer). Decided
++  // once per item, when it is first associated; such items never reach the
++  // client's CefDownloadHandler and keep Chrome's own handling.
++  bool ClassifyInstallerTransfer(download::DownloadItem* item,
++                                 CefBrowserHostBase* browser);
++  bool IsInstallerTransfer(download::DownloadItem* item) const;
++
+   raw_ptr<content::DownloadManager> manager_;
+   base::WeakPtrFactory<content::DownloadManager> manager_ptr_factory_;
+ 
+@@ -66,6 +74,9 @@ class CefDownloadManagerDelegateImpl
+   using ItemBrowserMap =
+       std::map<raw_ptr<download::DownloadItem>, raw_ptr<CefBrowserHostBase>>;
+   ItemBrowserMap item_browser_map_;
++
++  // Installer-owned items (Orbit); erased with the item.
++  std::set<raw_ptr<download::DownloadItem>> installer_items_;
+ };
+ 
+ #endif  // CEF_LIBCEF_BROWSER_DOWNLOAD_MANAGER_DELEGATE_IMPL_H_

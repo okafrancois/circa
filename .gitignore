@@ -1,0 +1,84 @@
+# Local tools, dependencies and worktrees
+.tools/
+.taste-skill/
+node_modules/
+worktrees/
+.worktrees/
+artlab-worktrees/
+.t3/
+
+# Swift, Xcode, CMake and packaging outputs
+.build*/
+**/.build*/
+.review-build*/
+native/**/build/
+native/**/build-*/
+build/
+build-*/
+dist/
+DerivedData/
+.swiftpm/
+*.xcuserstate
+xcuserdata/
+CMakeCache.txt
+CMakeFiles/
+compile_commands.json
+.ninja_*
+build.ninja
+*.app/
+*.xctest/
+*.dSYM/
+*.o
+*.a
+*.dylib
+*.swiftmodule
+*.swiftdoc
+*.swiftsourceinfo
+*.dmg
+*.pkg
+*.zip
+
+# Local state, signing material and environment overrides
+.env
+.env.*
+!.env.example
+*.p12
+*.pfx
+*.keychain*
+*.key
+*.pem
+*.mobileprovision
+local.properties
+
+# Temporary captures, fixtures and logs
+artifacts/
+evidence/
+captures/
+screenshots/
+tmp/
+temp/
+*.log
+*.trace
+*.profraw
+*.profdata
+*.tmp
+*.temp
+*.swp
+*.swo
+Screenshot*.png
+Screen\ Shot*.png
+Screen\ Recording*.mov
+capture-*.png
+capture-*.mov
+
+# Python and platform metadata
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.DS_Store
+.AppleDouble
+._*
+
+# Private investigation archive; never stage or publish
+/lab/

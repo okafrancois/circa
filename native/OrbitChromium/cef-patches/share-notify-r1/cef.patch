@@ -1,0 +1,30 @@
+--- a/libcef/browser/chrome/chrome_content_browser_client_cef.h
++++ b/libcef/browser/chrome/chrome_content_browser_client_cef.h
+@@ -25,6 +25,8 @@
+       const ChromeContentBrowserClientCef&) = delete;
+
+   ~ChromeContentBrowserClientCef() override;
++
++  void OnNonPersistentNotificationClick(content::RenderFrameHost* frame) override;
+
+ #if BUILDFLAG(IS_MAC)
+   base::FilePath GetChildProcessPath(int flags) override;
+--- a/libcef/browser/chrome/chrome_content_browser_client_cef.cc
++++ b/libcef/browser/chrome/chrome_content_browser_client_cef.cc
+@@ -190,6 +190,16 @@
+ ChromeContentBrowserClientCef::ChromeContentBrowserClientCef() = default;
+ ChromeContentBrowserClientCef::~ChromeContentBrowserClientCef() = default;
+
++void ChromeContentBrowserClientCef::OnNonPersistentNotificationClick(
++    content::RenderFrameHost* frame) {
++  auto* contents = content::WebContents::FromRenderFrameHost(frame);
++  if (auto browser = CefBrowserHostBase::GetBrowserForContents(contents)) {
++    // CefFocusHandler receives FOCUS_SOURCE_SYSTEM. Orbit selects this live surface
++    // in its owning native window and Space; the hidden Chrome window stays hidden.
++    browser->SetFocus(true);
++  }
++}
++
+ #if BUILDFLAG(IS_MAC)
+ base::FilePath ChromeContentBrowserClientCef::GetChildProcessPath(int flags) {
+   if (flags !=

@@ -1,0 +1,42 @@
+ // Independent review: revoke each authority after activation, with the same token still live.
+ state.orbit=api;
+ auto& current=state.hosts.at(1);
+ current.extension_manager_route = {};
+ browser->host->context.reset(); refuse(); browser->host->context=context;
+ auto browser_host=browser->host;
+ browser->host.reset(); refuse(); browser->host=browser_host;
+ current.browser.reset(); refuse(); current.browser=browser;
+ state.profiles[2].reset(); refuse(); state.profiles[2]=context;
+ context->path="/synthetic/foreign"; refuse(); context->path="/synthetic/profile";
+ state.profile_paths[2].first=""; refuse(); state.profile_paths[2].first="/synthetic/profile";
+ state.profile_paths[2].second=""; refuse(); state.profile_paths[2].second="/synthetic/profile";
+ info.tab_id=-1; refuse(); info.tab_id=1;
+ info.window_id=-1; refuse(); info.window_id=2;
+ // A rejected native command must not create a page-consumable route grant.
+ assert(BeforeBrowseRoute(frame,"chrome://extensions/","GET",false));
+ activation=[&]{state.ready_profiles.erase(2);}; refuse(); state.ready_profiles.insert(2);
+ activation=[&]{browser->host->context=std::make_shared<Context>();}; refuse(); browser->host->context=context;
+ activation=[&]{info.hosted=0;}; refuse(); info.hosted=1;
+ activation=[&]{info.window_token=99;}; refuse(); info.window_token=3;
+ activation=[&]{info.index=-1;}; refuse(); info.index=0;
+ activation=[&]{info.tab_id=-1;}; refuse(); info.tab_id=1;
+ activation=[&]{info.window_id=-1;}; refuse(); info.window_id=2;
+ activation=[&]{info_available=false;}; refuse(); info_available=true;
+ activation=[&]{state.hosts.at(1).browser=std::make_shared<Browser>();}; refuse(); state.hosts.at(1).browser=browser;
+ activation=[&]{state.initialized=false;}; refuse(); state.initialized=true;
+ activation=[&]{state.orbit=nullptr;}; refuse(); state.orbit=api;
+ activation=[&]{state.shell_window_handles.erase(3);}; refuse(); state.shell_window_handles[3]=(__bridge void*)window;
+ activation=[&]{window.isVisible=NO;}; refuse(); window.isVisible=YES;
+ activation=[&]{view.window=nil;}; refuse(); view.window=window;
+ activation=[&]{g_state=nullptr;}; refuse(); g_state=&state;
+ activation=nullptr;
+ auto main_frame=browser->frame;
+ browser->frame.reset(); assert(!ACROpenExtensionManager(1)); browser->frame=main_frame;
+ assert(BeforeBrowseRoute(frame,"chrome://extensions/","GET",false));
+ assert(ACROpenExtensionManager(1)==1);
+ assert(!BeforeBrowseRoute(frame,"chrome://extensions/","GET",false));
+ // Leaving the exact trusted document, even for another ordinary URL, revokes reload authority.
+ frame->url="chrome://extensions/";
+ assert(BeforeBrowseRoute(frame,"https://synthetic.invalid/next","GET",false));
+ assert(BeforeBrowseRoute(frame,"chrome://extensions/","GET",false));
+ puts("PASS independent actual native body: null dependencies, activation revocations, no denied grant, departure revocation");

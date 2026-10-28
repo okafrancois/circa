@@ -1,0 +1,605 @@
+diff --git a/components/constrained_window/constrained_window_appkit_parent_unittest.mm b/components/constrained_window/constrained_window_appkit_parent_unittest.mm
+index 8703c625b0443d0d946a892a25ac46be5aea9f36..ab61c46a0b855dc4f6e8ba60ab6deaffb127d3f6 100644
+--- a/components/constrained_window/constrained_window_appkit_parent_unittest.mm
++++ b/components/constrained_window/constrained_window_appkit_parent_unittest.mm
+@@ -39,9 +39,10 @@
+   }
+ 
+   struct Dialog {
+-    explicit Dialog(NSWindow* parent) {
++    explicit Dialog(NSWindow* parent,
++                    ui::mojom::ModalType type = ui::mojom::ModalType::kChild) {
+       delegate = std::make_unique<views::DialogDelegate>();
+-      delegate->SetModalType(ui::mojom::ModalType::kChild);
++      delegate->SetModalType(type);
+       delegate->SetOwnershipOfNewWidget(
+           views::Widget::InitParams::CLIENT_OWNS_WIDGET);
+       auto contents = std::make_unique<views::StaticSizedView>();
+@@ -269,5 +270,174 @@ explicit Dialog(NSWindow* parent) {
+   }
+ }
+ 
++// Browser-modal dialogs (extension install/uninstall/post-install prompts and
++// other kWindow constrained windows) on a registered ordinary AppKit parent.
++// Without registration Chromium falls back to an unparented, immovable
++// top-level window. These tests show and activate their synthetic windows.
++TEST_F(ConstrainedWindowAppKitParentTest,
++       BrowserModalDialogIsSheetOfRegisteredParent) {
++  NSWindow* parent = MakeParent();
++  remote_cocoa::ScopedAppKitModalParent registration{gfx::NativeWindow(parent)};
++  [NSApp activateIgnoringOtherApps:YES];
++  [parent makeKeyAndOrderFront:nil];
++  {
++    Dialog dialog(parent, ui::mojom::ModalType::kWindow);
++    auto* host = views::NativeWidgetMacNSWindowHost::GetFromNativeWindow(
++        dialog.widget->GetNativeWindow());
++    ASSERT_NE(nullptr, host);
++    EXPECT_EQ(nullptr, host->parent());
++    EXPECT_TRUE(host->HasAppKitModalParent());
++    NSWindow* sheet = dialog.widget->GetNativeWindow().GetNativeNSWindow();
++    EXPECT_FALSE(sheet.movable);
++    dialog.widget->Show();
++    base::RunLoop().RunUntilIdle();
++    EXPECT_EQ(sheet, parent.attachedSheet);
++    EXPECT_EQ(parent, sheet.sheetParent);
++    EXPECT_EQ(nil, sheet.parentWindow);
++    EXPECT_EQ(1u, parent.sheets.count);
++    // Sheets move with their parent.
++    const NSPoint before = sheet.frame.origin;
++    [parent setFrameOrigin:NSMakePoint(parent.frame.origin.x + 60,
++                                       parent.frame.origin.y - 40)];
++    EXPECT_EQ(before.x + 60, sheet.frame.origin.x);
++  }
++  base::RunLoop().RunUntilIdle();
++  EXPECT_EQ(nil, parent.attachedSheet);
++  [parent close];
++}
++
++TEST_F(ConstrainedWindowAppKitParentTest,
++       BrowserModalSheetWaitsForHiddenParentAndBeginsOnce) {
++  NSWindow* parent = MakeParent();
++  remote_cocoa::ScopedAppKitModalParent registration{gfx::NativeWindow(parent)};
++  {
++    Dialog dialog(parent, ui::mojom::ModalType::kWindow);
++    NSWindow* sheet = dialog.widget->GetNativeWindow().GetNativeNSWindow();
++    dialog.widget->Show();
++    base::RunLoop().RunUntilIdle();
++    EXPECT_EQ(nil, parent.attachedSheet);
++    EXPECT_FALSE(sheet.visible);
++    [NSApp activateIgnoringOtherApps:YES];
++    [parent makeKeyAndOrderFront:nil];
++    // Repeated parent notifications must not queue a second begin.
++    [NSNotificationCenter.defaultCenter
++        postNotificationName:NSWindowDidBecomeKeyNotification
++                      object:parent];
++    base::RunLoop().RunUntilIdle();
++    EXPECT_EQ(sheet, parent.attachedSheet);
++    EXPECT_EQ(1u, parent.sheets.count);
++  }
++  [parent close];
++}
++
++TEST_F(ConstrainedWindowAppKitParentTest,
++       EscapeEndsBrowserModalSheetAndParentKeepsFocus) {
++  NSWindow* parent = MakeParent();
++  remote_cocoa::ScopedAppKitModalParent registration{gfx::NativeWindow(parent)};
++  [NSApp activateIgnoringOtherApps:YES];
++  [parent makeKeyAndOrderFront:nil];
++  {
++    Dialog dialog(parent, ui::mojom::ModalType::kWindow);
++    dialog.widget->Show();
++    base::RunLoop().RunUntilIdle();
++    ASSERT_EQ(dialog.widget->GetNativeWindow().GetNativeNSWindow(),
++              parent.attachedSheet);
++    ui::KeyEvent escape(ui::EventType::kKeyPressed, ui::VKEY_ESCAPE,
++                        ui::EF_NONE);
++    dialog.widget->OnKeyEvent(&escape);
++    base::RunLoop().RunUntilIdle();
++    EXPECT_TRUE(dialog.widget->IsClosed());
++    EXPECT_EQ(nil, parent.attachedSheet);
++    EXPECT_TRUE(parent.keyWindow);
++  }
++  [parent close];
++}
++
++TEST_F(ConstrainedWindowAppKitParentTest,
++       ParentCloseClosesItsBrowserModalSheetOnly) {
++  NSWindow* parent = MakeParent();
++  NSWindow* other = MakeParent();
++  remote_cocoa::ScopedAppKitModalParent registration{gfx::NativeWindow(parent)};
++  remote_cocoa::ScopedAppKitModalParent other_registration{
++      gfx::NativeWindow(other)};
++  [parent orderFront:nil];
++  [other orderFront:nil];
++  Dialog dialog(parent, ui::mojom::ModalType::kWindow);
++  Dialog other_dialog(other, ui::mojom::ModalType::kWindow);
++  dialog.widget->ShowInactive();
++  other_dialog.widget->ShowInactive();
++  base::RunLoop().RunUntilIdle();
++  [parent close];
++  base::RunLoop().RunUntilIdle();
++  EXPECT_TRUE(dialog.widget->IsClosed());
++  EXPECT_FALSE(other_dialog.widget->IsClosed());
++  [other close];
++  base::RunLoop().RunUntilIdle();
++  EXPECT_TRUE(other_dialog.widget->IsClosed());
++}
++
++TEST_F(ConstrainedWindowAppKitParentTest,
++       UnregisteredOrdinaryParentKeepsChromiumFallback) {
++  NSWindow* parent = MakeParent();
++  [parent orderFront:nil];
++  {
++    Dialog dialog(parent, ui::mojom::ModalType::kWindow);
++    auto* host = views::NativeWidgetMacNSWindowHost::GetFromNativeWindow(
++        dialog.widget->GetNativeWindow());
++    EXPECT_FALSE(host->HasAppKitModalParent());
++    EXPECT_EQ(nullptr, host->parent());
++  }
++  [parent close];
++}
++
++// A non-modal bubble explicitly parented to the shell's view (the native
++// extension action popup) is an ordered child window of that window: it moves
++// with it, stays in its Space and closes with it.
++TEST_F(ConstrainedWindowAppKitParentTest,
++       ParentedBubbleIsOrderedChildWindowOfRegisteredParent) {
++  NSWindow* parent = MakeParent();
++  remote_cocoa::ScopedAppKitModalParent registration{gfx::NativeWindow(parent)};
++  [NSApp activateIgnoringOtherApps:YES];
++  [parent makeKeyAndOrderFront:nil];
++  auto widget = std::make_unique<views::Widget>();
++  views::Widget::InitParams params(
++      views::Widget::InitParams::CLIENT_OWNS_WIDGET,
++      views::Widget::InitParams::TYPE_BUBBLE);
++  params.parent = gfx::NativeView(parent.contentView);
++  params.bounds = gfx::Rect(500, 300, 220, 160);
++  widget->Init(std::move(params));
++  auto* host = views::NativeWidgetMacNSWindowHost::GetFromNativeWindow(
++      widget->GetNativeWindow());
++  ASSERT_NE(nullptr, host);
++  EXPECT_TRUE(host->HasAppKitModalParent());
++  widget->Show();
++  NSWindow* popup = widget->GetNativeWindow().GetNativeNSWindow();
++  EXPECT_EQ(parent, popup.parentWindow);
++  const NSPoint before = popup.frame.origin;
++  [parent setFrameOrigin:NSMakePoint(parent.frame.origin.x + 30,
++                                     parent.frame.origin.y + 20)];
++  EXPECT_EQ(before.x + 30, popup.frame.origin.x);
++  EXPECT_EQ(before.y + 20, popup.frame.origin.y);
++  [parent close];
++  EXPECT_TRUE(widget->IsClosed());
++}
++
++TEST_F(ConstrainedWindowAppKitParentTest,
++       UnparentedBubbleKeepsChromiumTopLevelPath) {
++  NSWindow* parent = MakeParent();
++  remote_cocoa::ScopedAppKitModalParent registration{gfx::NativeWindow(parent)};
++  auto widget = std::make_unique<views::Widget>();
++  views::Widget::InitParams params(
++      views::Widget::InitParams::CLIENT_OWNS_WIDGET,
++      views::Widget::InitParams::TYPE_BUBBLE);
++  params.bounds = gfx::Rect(500, 300, 220, 160);
++  widget->Init(std::move(params));
++  auto* host = views::NativeWidgetMacNSWindowHost::GetFromNativeWindow(
++      widget->GetNativeWindow());
++  EXPECT_FALSE(host->HasAppKitModalParent());
++  widget->CloseNow();
++  [parent close];
++}
++
+ }  // namespace
+ }  // namespace constrained_window
+diff --git a/components/remote_cocoa/app_shim/appkit_modal_parent.h b/components/remote_cocoa/app_shim/appkit_modal_parent.h
+index bc780c3340778d212a3e98fcbe382c704b39fc75..59d525c65eaf1584155205bfe44206bb8806dfc1 100644
+--- a/components/remote_cocoa/app_shim/appkit_modal_parent.h
++++ b/components/remote_cocoa/app_shim/appkit_modal_parent.h
+@@ -32,16 +32,26 @@ class REMOTE_COCOA_APP_SHIM_EXPORT ScopedAppKitModalParent {
+   std::shared_ptr<AppKitModalParentState> state_;
+ };
+ 
+-// Actual native relationship used by an in-process kChild widget bridge.
+-// Chromium still owns the child widget, compositor, keyboard routing and
+-// WebContents input blocking. This adapter owns its ordinary AppKit parent
++// Actual native relationship used by an in-process kChild or kWindow widget
++// bridge. Chromium still owns the child widget, compositor, keyboard routing
++// and WebContents input blocking. This adapter owns its ordinary AppKit parent
+ // contract: visibility, z-order, coordinate origin and parent-close handling.
+ class REMOTE_COCOA_APP_SHIM_EXPORT AppKitModalDialogParent {
+  public:
++  // kChild (web-modal) dialogs are ordered native child windows positioned by
++  // the constrained-window host. kWindow (browser-modal) dialogs are window-
++  // modal sheets, as for a Chromium parent on macOS: AppKit attaches, positions
++  // and moves them with the parent, and blocks the parent while they show.
++  enum class Presentation { kChildWindow, kSheet };
++
++  // |show_sheet| begins the sheet once a deferred kSheet show becomes possible
++  // (hidden, minimized or other-Space parent). Unused for kChildWindow.
+   static std::unique_ptr<AppKitModalDialogParent> Create(
+       gfx::NativeView parent_view,
+       gfx::NativeWindow child,
+-      base::RepeatingClosure close_child);
++      base::RepeatingClosure close_child,
++      Presentation presentation = Presentation::kChildWindow,
++      base::RepeatingClosure show_sheet = base::RepeatingClosure());
+   ~AppKitModalDialogParent();
+   AppKitModalDialogParent(const AppKitModalDialogParent&) = delete;
+   AppKitModalDialogParent& operator=(const AppKitModalDialogParent&) = delete;
+@@ -50,6 +60,7 @@ class REMOTE_COCOA_APP_SHIM_EXPORT AppKitModalDialogParent {
+   void OnChildClosing();
+   bool PrepareToShow();
+   bool ParentIsClosed() const;
++  bool IsSheet() const;
+   gfx::Rect ContentBoundsInScreen() const;
+   gfx::NativeWindow native_parent() const;
+ 
+diff --git a/components/remote_cocoa/app_shim/appkit_modal_parent.mm b/components/remote_cocoa/app_shim/appkit_modal_parent.mm
+index 3fcf7000c0db9d7dddba1484ee5e9eaaceacb9b1..ea8710764ebfab3759ea920fcdc110b6d793330d 100644
+--- a/components/remote_cocoa/app_shim/appkit_modal_parent.mm
++++ b/components/remote_cocoa/app_shim/appkit_modal_parent.mm
+@@ -91,8 +91,14 @@ explicit AppKitModalParentState(NSWindow* parent) : window(parent) {
+  public:
+   Impl(std::shared_ptr<AppKitModalParentState> parent,
+        NSWindow* child,
+-       base::RepeatingClosure close_child)
+-      : parent_(std::move(parent)), child_(child), close_child_(close_child) {
++       base::RepeatingClosure close_child,
++       AppKitModalDialogParent::Presentation presentation,
++       base::RepeatingClosure show_sheet)
++      : parent_(std::move(parent)),
++        child_(child),
++        close_child_(close_child),
++        presentation_(presentation),
++        show_sheet_(std::move(show_sheet)) {
+     auto* center = NSNotificationCenter.defaultCenter;
+     for (NSNotificationName name in @[
+            NSWindowDidChangeOcclusionStateNotification,
+@@ -153,11 +159,25 @@ bool CanShow() const {
+            !parent_->window.miniaturized && parent_->window.onActiveSpace;
+   }
+ 
++  bool IsSheet() const {
++    return presentation_ == AppKitModalDialogParent::Presentation::kSheet;
++  }
++
+   void UpdateVisibility() {
+     NSWindow* child = child_;
+     if (!child || !ready_ || !wants_visible_) {
+       return;
+     }
++    if (IsSheet()) {
++      // AppKit hides, minimizes and moves an attached sheet with its parent.
++      // Only a show deferred while the parent could not present it remains.
++      if (CanShow() && parent_->window.attachedSheet != child &&
++          !child.visible && show_sheet_) {
++        base::RepeatingClosure show = show_sheet_;
++        show.Run();  // May synchronously destroy this adapter.
++      }
++      return;
++    }
+     if (CanShow()) {
+       if (child.parentWindow != parent_->window) {
+         [parent_->window addChildWindow:child ordered:NSWindowAbove];
+@@ -172,6 +192,9 @@ void SetWantsVisible(bool visible) {
+     wants_visible_ = visible;
+     if (!visible) {
+       ready_ = false;
++      if (IsSheet()) {
++        return;  // The bridge ends or orders out its own sheet.
++      }
+       NSWindow* child = child_;
+       if (child && child.parentWindow == parent_->window) {
+         [parent_->window removeChildWindow:child];
+@@ -181,6 +204,10 @@ void SetWantsVisible(bool visible) {
+ 
+   bool PrepareToShow() {
+     ready_ = true;
++    if (IsSheet()) {
++      // The caller begins the sheet now, or UpdateVisibility() does later.
++      return CanShow() && wants_visible_;
++    }
+     UpdateVisibility();
+     return CanShow() && wants_visible_;
+   }
+@@ -188,6 +215,8 @@ bool PrepareToShow() {
+   const std::shared_ptr<AppKitModalParentState> parent_;
+   NSWindow* __weak child_;
+   const base::RepeatingClosure close_child_;
++  const AppKitModalDialogParent::Presentation presentation_;
++  const base::RepeatingClosure show_sheet_;
+   bool wants_visible_ = false;
+   bool ready_ = false;
+   bool restore_key_on_destroy_ = false;
+@@ -197,16 +226,20 @@ bool PrepareToShow() {
+ std::unique_ptr<AppKitModalDialogParent> AppKitModalDialogParent::Create(
+     gfx::NativeView parent_view,
+     gfx::NativeWindow child,
+-    base::RepeatingClosure close_child) {
++    base::RepeatingClosure close_child,
++    Presentation presentation,
++    base::RepeatingClosure show_sheet) {
+   auto state = Resolve(parent_view);
+   if (!state) {
+     return nullptr;
+   }
+   CHECK(child);
+   CHECK(close_child);
++  CHECK(presentation == Presentation::kChildWindow || show_sheet);
+   return std::unique_ptr<AppKitModalDialogParent>(new AppKitModalDialogParent(
+       std::make_unique<Impl>(std::move(state), child.GetNativeNSWindow(),
+-                             std::move(close_child))));
++                             std::move(close_child), presentation,
++                             std::move(show_sheet))));
+ }
+ 
+ AppKitModalDialogParent::AppKitModalDialogParent(std::unique_ptr<Impl> impl)
+@@ -228,6 +261,9 @@ bool PrepareToShow() {
+ bool AppKitModalDialogParent::ParentIsClosed() const {
+   return impl_->parent_->closed;
+ }
++bool AppKitModalDialogParent::IsSheet() const {
++  return impl_->IsSheet();
++}
+ gfx::Rect AppKitModalDialogParent::ContentBoundsInScreen() const {
+   return ContentBounds(impl_->parent_->window);
+ }
+diff --git a/components/remote_cocoa/app_shim/appkit_modal_parent_unittest.mm b/components/remote_cocoa/app_shim/appkit_modal_parent_unittest.mm
+index 834e0cca4fe718fb56e09f4b494a6ed787dc0d8c..dbffd33ebe213e8bcfb1381f7f2074cec327f67d 100644
+--- a/components/remote_cocoa/app_shim/appkit_modal_parent_unittest.mm
++++ b/components/remote_cocoa/app_shim/appkit_modal_parent_unittest.mm
+@@ -137,5 +137,74 @@
+   [child close];
+ }
+ 
++// Browser-modal (kWindow) dialogs are presented as the parent's sheet: the
++// adapter never orders a child window and defers a show the hidden parent
++// cannot present. Every window stays hidden.
++TEST_F(AppKitModalParentTest, SheetPresentationDefersWhileParentCannotShow) {
++  NSWindow* parent = MakeWindow();
++  NSWindow* child = MakeWindow();
++  ScopedAppKitModalParent registration{gfx::NativeWindow(parent)};
++  int shows = 0;
++  auto adapter = AppKitModalDialogParent::Create(
++      gfx::NativeView(parent.contentView), gfx::NativeWindow(child),
++      base::BindRepeating([]() {}),
++      AppKitModalDialogParent::Presentation::kSheet,
++      base::BindRepeating([](int* count) { ++*count; },
++                          base::Unretained(&shows)));
++  ASSERT_TRUE(adapter);
++  EXPECT_TRUE(adapter->IsSheet());
++  adapter->SetWantsVisible(true);
++  EXPECT_FALSE(adapter->PrepareToShow());
++  [NSNotificationCenter.defaultCenter
++      postNotificationName:NSWindowDidBecomeKeyNotification
++                    object:parent];
++  EXPECT_EQ(0, shows);
++  EXPECT_EQ(nil, child.parentWindow);
++  EXPECT_EQ(nil, parent.attachedSheet);
++  EXPECT_FALSE(child.visible);
++  adapter->SetWantsVisible(false);
++  EXPECT_EQ(nil, child.parentWindow);
++  adapter.reset();
++  [child close];
++  [parent close];
++}
++
++TEST_F(AppKitModalParentTest, ChildWindowPresentationRemainsTheDefault) {
++  NSWindow* parent = MakeWindow();
++  NSWindow* child = MakeWindow();
++  ScopedAppKitModalParent registration{gfx::NativeWindow(parent)};
++  auto adapter = AppKitModalDialogParent::Create(
++      gfx::NativeView(parent.contentView), gfx::NativeWindow(child),
++      base::BindRepeating([]() {}));
++  ASSERT_TRUE(adapter);
++  EXPECT_FALSE(adapter->IsSheet());
++  adapter.reset();
++  [child close];
++  [parent close];
++}
++
++TEST_F(AppKitModalParentTest, SheetParentCloseClosesChildAndStaysTerminal) {
++  NSWindow* parent = MakeWindow();
++  NSWindow* child = MakeWindow();
++  ScopedAppKitModalParent registration{gfx::NativeWindow(parent)};
++  int closes = 0, shows = 0;
++  auto adapter = AppKitModalDialogParent::Create(
++      gfx::NativeView(parent.contentView), gfx::NativeWindow(child),
++      base::BindRepeating([](int* count) { ++*count; },
++                          base::Unretained(&closes)),
++      AppKitModalDialogParent::Presentation::kSheet,
++      base::BindRepeating([](int* count) { ++*count; },
++                          base::Unretained(&shows)));
++  adapter->SetWantsVisible(true);
++  EXPECT_FALSE(adapter->PrepareToShow());
++  [parent close];
++  EXPECT_EQ(1, closes);
++  EXPECT_TRUE(adapter->ParentIsClosed());
++  EXPECT_FALSE(adapter->PrepareToShow());
++  EXPECT_EQ(0, shows);
++  adapter.reset();
++  [child close];
++}
++
+ }  // namespace
+ }  // namespace remote_cocoa
+diff --git a/components/remote_cocoa/app_shim/native_widget_ns_window_bridge.h b/components/remote_cocoa/app_shim/native_widget_ns_window_bridge.h
+index aca49cb776d360727755155b8fd50c98625b52fb..7193021a5b8deed1453685bd782d4baa92489abf 100644
+--- a/components/remote_cocoa/app_shim/native_widget_ns_window_bridge.h
++++ b/components/remote_cocoa/app_shim/native_widget_ns_window_bridge.h
+@@ -210,9 +210,10 @@ class REMOTE_COCOA_APP_SHIM_EXPORT NativeWidgetNSWindowBridge
+   // parent will close children before the parent closes, and children will be
+   // raised above their parent when window z-order changes.
+   NativeWidgetNSWindowBridge* parent() { return parent_; }
+-  // In-process kChild dialogs may have an explicitly registered AppKit parent
+-  // without fabricating a NativeWidgetMacNSWindowHost for that parent.
+-  void SetAppKitModalParent(gfx::NativeView parent);
++  // In-process kChild and kWindow dialogs may have an explicitly registered
++  // AppKit parent without fabricating a NativeWidgetMacNSWindowHost for that
++  // parent. |as_sheet| presents a kWindow dialog as the parent's sheet.
++  void SetAppKitModalParent(gfx::NativeView parent, bool as_sheet = false);
+   bool HasAppKitModalParent() const { return appkit_modal_parent_ != nullptr; }
+   gfx::Rect AppKitModalParentBoundsInScreen() const;
+   const std::vector<NativeWidgetNSWindowBridge*>& child_windows() {
+@@ -430,6 +431,8 @@ class REMOTE_COCOA_APP_SHIM_EXPORT NativeWidgetNSWindowBridge
+ 
+   // Show the window using -[NSApp beginSheet:..], modal for the parent window.
+   void ShowAsModalSheet();
++  // A kWindow sheet deferred while its AppKit parent could not present it.
++  void ShowDeferredAppKitSheet();
+ 
+   // Returns true if capture exists and is currently active.
+   bool HasCapture();
+diff --git a/components/remote_cocoa/app_shim/native_widget_ns_window_bridge.mm b/components/remote_cocoa/app_shim/native_widget_ns_window_bridge.mm
+index 14f2c21402cb89ab6b86b51eebe2b0e7dc389a3e..9389f3cc78ab1721f500d8503e21e71d72f84224 100644
+--- a/components/remote_cocoa/app_shim/native_widget_ns_window_bridge.mm
++++ b/components/remote_cocoa/app_shim/native_widget_ns_window_bridge.mm
+@@ -483,11 +483,16 @@ NSUInteger CountBridgedWindows(NSArray* child_windows) {
+   [window_ setCommandHandler:command_handler];
+ }
+ 
+-void NativeWidgetNSWindowBridge::SetAppKitModalParent(gfx::NativeView parent) {
++void NativeWidgetNSWindowBridge::SetAppKitModalParent(gfx::NativeView parent,
++                                                      bool as_sheet) {
+   CHECK(!parent_);
+   appkit_modal_parent_ = AppKitModalDialogParent::Create(
+       parent, gfx::NativeWindow(window_),
+       base::BindRepeating(&NativeWidgetNSWindowBridge::CloseWindowNow,
++                          factory_.GetWeakPtr()),
++      as_sheet ? AppKitModalDialogParent::Presentation::kSheet
++               : AppKitModalDialogParent::Presentation::kChildWindow,
++      base::BindRepeating(&NativeWidgetNSWindowBridge::ShowDeferredAppKitSheet,
+                           factory_.GetWeakPtr()));
+   CHECK(appkit_modal_parent_);
+   window_.collectionBehavior =
+@@ -497,12 +502,23 @@ NSUInteger CountBridgedWindows(NSArray* child_windows) {
+   if (wants_to_be_visible_) {
+     if (appkit_modal_parent_->ParentIsClosed()) {
+       CloseWindow();
+-    } else {
+-      appkit_modal_parent_->PrepareToShow();
++    } else if (appkit_modal_parent_->PrepareToShow() &&
++               IsWindowModalSheet() && !window_visible_) {
++      ShowAsModalSheet();
+     }
+   }
+ }
+ 
++void NativeWidgetNSWindowBridge::ShowDeferredAppKitSheet() {
++  // ShowAsModalSheet() marks the window visible before its posted begin, so a
++  // parent notification arriving meanwhile cannot begin the sheet twice.
++  if (!appkit_modal_parent_ || !IsWindowModalSheet() || window_visible_ ||
++      !wants_to_be_visible_ || appkit_modal_parent_->ParentIsClosed()) {
++    return;
++  }
++  ShowAsModalSheet();
++}
++
+ gfx::Rect NativeWidgetNSWindowBridge::AppKitModalParentBoundsInScreen() const {
+   CHECK(appkit_modal_parent_);
+   return appkit_modal_parent_->ContentBoundsInScreen();
+@@ -2426,7 +2442,8 @@ NSUInteger CountBridgedWindows(NSArray* child_windows) {
+ }
+ 
+ bool NativeWidgetNSWindowBridge::IsWindowModalSheet() const {
+-  return parent_ && modal_type_ == ui::mojom::ModalType::kWindow;
++  return modal_type_ == ui::mojom::ModalType::kWindow &&
++         (parent_ || (appkit_modal_parent_ && appkit_modal_parent_->IsSheet()));
+ }
+ 
+ void NativeWidgetNSWindowBridge::ShowAsModalSheet() {
+@@ -2437,7 +2454,9 @@ NSUInteger CountBridgedWindows(NSArray* child_windows) {
+   window_visible_ = true;
+   host_->OnVisibilityChanged(window_visible_);
+ 
+-  NSWindow* parent_window = parent_->ns_window();
++  NSWindow* parent_window =
++      parent_ ? parent_->ns_window()
++              : appkit_modal_parent_->native_parent().GetNativeNSWindow();
+   if (NativeWidgetMacNSWindow* parent_widget_window =
+           base::apple::ObjCCast<NativeWidgetMacNSWindow>(parent_window)) {
+     parent_window = [parent_widget_window preferredSheetParent];
+diff --git a/ui/views/cocoa/native_widget_mac_ns_window_host.h b/ui/views/cocoa/native_widget_mac_ns_window_host.h
+index dc8fc3567ce56945de570640eff1f03fa0aade23..2c948aa2b1df9806f60d9f7da10fa07d64ebc1db 100644
+--- a/ui/views/cocoa/native_widget_mac_ns_window_host.h
++++ b/ui/views/cocoa/native_widget_mac_ns_window_host.h
+@@ -240,7 +240,7 @@ class VIEWS_EXPORT NativeWidgetMacNSWindowHost
+   // Set |parent_| and update the old and new parents' |children_|. It is valid
+   // to set |new_parent| to nullptr. Propagate this to the BridgedNativeWidget.
+   void SetParent(NativeWidgetMacNSWindowHost* new_parent);
+-  void SetAppKitModalParent(gfx::NativeView parent);
++  void SetAppKitModalParent(gfx::NativeView parent, bool as_sheet = false);
+   bool HasAppKitModalParent() const;
+   gfx::Rect AppKitModalParentBoundsInScreen() const;
+ 
+diff --git a/ui/views/cocoa/native_widget_mac_ns_window_host.mm b/ui/views/cocoa/native_widget_mac_ns_window_host.mm
+index a1c2d8d1b11c71a8b5fb23e693fcb99072855b86..ab98d793ba2908156f0d309c5d85c532cf2c3a96 100644
+--- a/ui/views/cocoa/native_widget_mac_ns_window_host.mm
++++ b/ui/views/cocoa/native_widget_mac_ns_window_host.mm
+@@ -802,14 +802,15 @@ void HandleAccelerator(const ui::Accelerator& accelerator,
+   return found->second;
+ }
+ 
+-void NativeWidgetMacNSWindowHost::SetAppKitModalParent(gfx::NativeView parent) {
++void NativeWidgetMacNSWindowHost::SetAppKitModalParent(gfx::NativeView parent,
++                                                       bool as_sheet) {
+   CHECK(!parent_);
+   if (!in_process_ns_window_bridge_) {
+     // Native AppKit objects cannot migrate into a remote Cocoa process.
+     GetNSWindowMojo()->CloseWindow();
+     return;
+   }
+-  in_process_ns_window_bridge_->SetAppKitModalParent(parent);
++  in_process_ns_window_bridge_->SetAppKitModalParent(parent, as_sheet);
+ }
+ 
+ bool NativeWidgetMacNSWindowHost::HasAppKitModalParent() const {
+diff --git a/ui/views/widget/native_widget_mac.mm b/ui/views/widget/native_widget_mac.mm
+index 2453ae22784bfb40869101ca70583f5be100fe9e..042800e8064dfa8d420dc5422b70442ff6c8e379 100644
+--- a/ui/views/widget/native_widget_mac.mm
++++ b/ui/views/widget/native_widget_mac.mm
+@@ -277,10 +277,22 @@ void OnDidChangeFocus(View* focused_before, View* focused_now) override {
+   NativeWidgetMacNSWindowHost* parent_host =
+       NativeWidgetMacNSWindowHost::GetFromNativeView(params.parent);
+ 
++  // kChild (web-modal) dialogs and non-modal bubbles (extension action
++  // popups anchored to the shell's own views) become ordered child windows of
++  // a registered ordinary AppKit parent, as for a Chromium parent; kWindow
++  // (browser-modal) dialogs become its sheets. Without the parent, Chromium
++  // falls back to unparented top-level windows that neither follow the parent
++  // nor stay in its full-screen Space, and modal ones cannot be moved.
++  const ui::mojom::ModalType requested_modal_type =
++      GetWidget()->widget_delegate()->GetModalType();
++  const bool parented_bubble =
++      params.type == Widget::InitParams::TYPE_BUBBLE &&
++      requested_modal_type == ui::mojom::ModalType::kNone;
+   const bool use_appkit_modal_parent =
+       !parent_host &&
+-      GetWidget()->widget_delegate()->GetModalType() ==
+-          ui::mojom::ModalType::kChild &&
++      (requested_modal_type == ui::mojom::ModalType::kChild ||
++       requested_modal_type == ui::mojom::ModalType::kWindow ||
++       parented_bubble) &&
+       remote_cocoa::ScopedAppKitModalParent::IsRegistered(params.parent);
+ 
+   // Determine the factory through which to create the bridge
+@@ -322,7 +334,9 @@ void OnDidChangeFocus(View* focused_before, View* focused_now) override {
+ 
+   ns_window_host_->SetParent(parent_host);
+   if (use_appkit_modal_parent) {
+-    ns_window_host_->SetAppKitModalParent(params.parent);
++    ns_window_host_->SetAppKitModalParent(
++        params.parent,
++        /*as_sheet=*/requested_modal_type == ui::mojom::ModalType::kWindow);
+   }
+   ns_window_host_->InitWindow(params,
+                               ConvertBoundsToScreenIfNeeded(params.bounds));
+@@ -604,7 +618,8 @@ void OnDidChangeFocus(View* focused_before, View* focused_now) override {
+   DCHECK(ns_window_host_->parent() || ns_window_host_->HasAppKitModalParent() ||
+          modal_type == ui::mojom::ModalType::kWindow);
+   if (ns_window_host_->HasAppKitModalParent()) {
+-    CHECK_EQ(modal_type, ui::mojom::ModalType::kChild);
++    CHECK(modal_type == ui::mojom::ModalType::kChild ||
++          modal_type == ui::mojom::ModalType::kWindow);
+   }
+ 
+   // Everything happens upon show.

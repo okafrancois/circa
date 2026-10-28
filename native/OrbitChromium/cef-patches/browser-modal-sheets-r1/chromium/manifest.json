@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "status": "prepared-unbuilt-product-runtime-unverified",
+  "source_reference": "d0c02bfad08ec92a6ffcf989e53cd995e6381a4c",
+  "stacked_on": {
+    "bundle": "modal-dialog-host-r2",
+    "commit": "2f136c6785da724e2ddc93c5e048627de38f13f5",
+    "chromium_patch_sha256": "efba0d1585738598c971b17feec1ba104a20b7aa38d2572fda6520291603b19e",
+    "review": "299484b1af22acdc6a418abcebdb0382e66f543a"
+  },
+  "working_inputs_are_r2_outputs": true,
+  "patch_file": "chromium.patch",
+  "patch_sha256": "25a1413c21dd475d874f0f4a2de98628bcbe516d8ca1393f9f52c68a368264e5",
+  "input_sha256": {
+    "components/constrained_window/constrained_window_appkit_parent_unittest.mm": "9d0b17bad16d300a6f531f24b4aec0b5d3ad1599eacb808ebcdfe0b41f081562",
+    "components/remote_cocoa/app_shim/appkit_modal_parent.h": "fa28e82a8029aba1658464a9fd09bb0fa32c91a5eaaef74ecfb399541d674186",
+    "components/remote_cocoa/app_shim/appkit_modal_parent.mm": "bba4ceb22d104a2c34e8554bd814a877129c4f3b6173b9415a53eaed254caab6",
+    "components/remote_cocoa/app_shim/appkit_modal_parent_unittest.mm": "608a17e6d3e8a318bb141a519337d52fd4fbd463f6e403abd7b58b829a42e116",
+    "components/remote_cocoa/app_shim/native_widget_ns_window_bridge.h": "6c9bc39850c792c2e2862bee6ec4a8723ba15864bf41323c0953eee074c78618",
+    "components/remote_cocoa/app_shim/native_widget_ns_window_bridge.mm": "d9a6275a44f4433ce3a7f099e6d02f8e415b8a090c93f2c60f138f7e0843743b",
+    "ui/views/cocoa/native_widget_mac_ns_window_host.h": "558b489ccaeff196d0739c767f2b5e5aa5995b0a2488f934d7f9f7aa62584344",
+    "ui/views/cocoa/native_widget_mac_ns_window_host.mm": "818abc5acfe776029cef36ade2c75f4d1e7459518f15f202e70ca80770b07947",
+    "ui/views/widget/native_widget_mac.mm": "2b18c4ec88267cf7397b76396f22ea8752984364ff881ee0ecf95620e3aaf8b1"
+  },
+  "output_sha256": {
+    "components/constrained_window/constrained_window_appkit_parent_unittest.mm": "61046f9bee8b307b9d4dae147b9f728cbde3e71366d682201079a04804cb2c64",
+    "components/remote_cocoa/app_shim/appkit_modal_parent.h": "06bdd61d40e2a122516dcbfff7d9ca2cfe0619c4d96e6f4b64ff038ec51ea22b",
+    "components/remote_cocoa/app_shim/appkit_modal_parent.mm": "c6faa1f32d168086b2f6c9455257e8078d016ea2250b520a96425e34fa7a0566",
+    "components/remote_cocoa/app_shim/appkit_modal_parent_unittest.mm": "a3d83f004851e48c5ca49a78b63723aeb6ae6d7d0d68ac70483d157e8e3d3d0b",
+    "components/remote_cocoa/app_shim/native_widget_ns_window_bridge.h": "807b0c99ec127077fdb27d3e8ecb16c17940aaf2494245d377d39344af8facbf",
+    "components/remote_cocoa/app_shim/native_widget_ns_window_bridge.mm": "3fdddb919685d92183cd8758e767e5294ab464687cdb749909146ef045ddfd99",
+    "ui/views/cocoa/native_widget_mac_ns_window_host.h": "abea16fffe04840ed881120efa02e2f11575335cc70cc005afc5c879aa99c311",
+    "ui/views/cocoa/native_widget_mac_ns_window_host.mm": "0641fb13ee39fa2e2ee4c252d76fec51ed6730dbb01382136890d706c8dbfdd1",
+    "ui/views/widget/native_widget_mac.mm": "70dc30ba1c8267409a425df1807dbad125e86126744f03918b36b39387189996"
+  }
+}

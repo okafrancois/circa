@@ -1,0 +1,4 @@
+module ChromiumLifecycleStub {
+  header "LifecycleBridgeStub.h"
+  export *
+}

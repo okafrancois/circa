@@ -1,0 +1,99 @@
+import AppKit
+import BrowserCore
+import BrowserEngine
+import BrowserShell
+
+/// Engine-independent production bindings, also exercised by the hidden integration tests.
+@MainActor
+enum BrowserWindowCommands {
+    static func install<Engine: BrowserEngine>(in registry: BrowserCommandRegistry<BrowserWindowController<Engine>>,
+                                               commandKeyWindow: @escaping () -> NSWindow? = { NSApp.keyWindow }) {
+        BrowserSiteCommands.install(in: registry)
+        BrowserDailyCommands.install(in: registry)
+        BrowserBookmarkCommands.install(in: registry)
+        OrbitShellCommands.install(in: registry)
+        BrowserSwitcherCommands.install(in: registry)
+        BrowserArchiveCommands.install(in: registry)
+        BrowserLibraryCommands.install(in: registry)
+        BrowserFavoritesCommands.install(in: registry)
+        BrowserSpaceCommands.install(in: registry)
+        SidebarListCommands.install(in: registry)
+        BrowserSplitCommands.install(in: registry)
+        BrowserPageContextCommands.install(in: registry)
+        func window(_ id: BrowserCommandID, _ action: @escaping (BrowserWindowController<Engine>) -> Void) {
+            try! registry.register(id) { controller, _ in action(controller) }
+        }
+        window(.newTab) { $0.openTab() }
+        window(.openCommandBar) { $0.focusAddress() }
+        BrowserPaletteCommands.install(in: registry)
+        // SB-LIST: a sidebar multi-selection closes together, else the visible tab.
+        window(.archiveTab) { $0.archiveSelectedTabs() }
+        window(.duplicate) { $0.hideLibrary(); $0.session.duplicateSelectedTab() }
+        window(.goBack) { $0.navigateBack() }
+        window(.goForward) { $0.navigateForward() }
+        window(.refreshThePage) { $0.reload() }
+        window(.stopLoading) { $0.session.performOnSelectedSurface { $0.stopLoading() } }
+        window(.newSpace) { $0.presentNewSpace() }
+        window(.renameSpace) { controller in
+            if let id = controller.session.snapshot?.activeSpaceID { controller.presentRenameSpace(id) }
+        }
+        try! registry.register(.editTheme, validate: { $0.canEditActiveSpaceTheme }) { controller, _ in
+            controller.presentActiveSpaceThemeEditor()
+        }
+        window(.previousSpace) { $0.activateAdjacentSpace(offset: -1) }
+        window(.nextSpace) { $0.activateAdjacentSpace(offset: 1) }
+        window(.find) { $0.findInLibraryOrPage() }
+        window(.findNext) { $0.findNext() }
+        window(.findPrevious) { $0.findPrevious() }
+        window(.zoomIn) { $0.changePageZoom(.increase) }
+        window(.zoomOut) { $0.changePageZoom(.decrease) }
+        window(.zoomToActualSize) { $0.changePageZoom(.reset) }
+        window(.copyURL) { $0.sharing.copyLink() }
+        window(.share) { $0.sharing.sharePage() }
+        window(.closeWindow) { controller in
+            controller.session.performWindowAction { [weak controller] in controller?.window?.performClose(nil) }
+        }
+        window(.enterExitFullScreen) { controller in
+            controller.session.performWindowAction { [weak controller] in controller?.window?.toggleFullScreen(nil) }
+        }
+        window(.minimizeWindow) { controller in
+            controller.session.performWindowAction { [weak controller] in controller?.window?.performMiniaturize(nil) }
+        }
+        window(.zoom) { controller in
+            controller.session.performWindowAction { [weak controller] in controller?.window?.performZoom(nil) }
+        }
+        window(.bringAllToFront) { controller in controller.session.performWindowAction { NSApp.arrangeInFront(nil) } }
+        let responders: [(BrowserCommandID, Selector)] = [
+            (.cut, #selector(NSText.cut(_:))), (.copy, #selector(NSText.copy(_:))),
+            (.paste, #selector(NSText.paste(_:))), (.selectAll, #selector(NSText.selectAll(_:))),
+            (.undo, Selector(("undo:"))), (.redo, Selector(("redo:"))),
+            (.pasteAndMatchStyle, #selector(NSTextView.pasteAsPlainText(_:)))
+        ]
+        for (id, selector) in responders {
+            var pendingPermission: ((BrowserWindowController<Engine>) -> Bool)?
+            if id == .undo || id == .redo {
+                pendingPermission = { controller in
+                    guard !(controller.window?.firstResponder is NSText) else { return false }
+                    guard let responder = controller.commandResponder(for: selector, keyWindow: commandKeyWindow()) else { return false }
+                    // Only these responders submit their accepted intents to the session FIFO.
+                    // Field editors keep native validation and never inherit this permission.
+                    return isSerializedSidebarResponder(responder, in: controller)
+                }
+            }
+            try! registry.register(id, allowsPendingResponder: pendingPermission,
+                                   validate: { $0.commandResponder(for: selector, keyWindow: commandKeyWindow()) != nil }) { controller, _ in
+                guard let responder = controller.commandResponder(for: selector, keyWindow: commandKeyWindow()) else { return }
+                if (id == .undo || id == .redo), controller.session.hasPendingCommands {
+                    guard !(controller.window?.firstResponder is NSText), isSerializedSidebarResponder(responder, in: controller) else { return }
+                }
+                responder.tryToPerform(selector, with: nil)
+            }
+        }
+    }
+
+    private static func isSerializedSidebarResponder<Engine: BrowserEngine>(
+        _ responder: NSResponder, in controller: BrowserWindowController<Engine>
+    ) -> Bool {
+        responder === controller.sidebar.undoRouter || responder === controller.sidebar.page.list
+    }
+}

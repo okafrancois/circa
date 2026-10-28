@@ -1,0 +1,40 @@
+{
+  "status": "R4-existing-directory-source-only-unbuilt-unapproved",
+  "cef_base": "0e5315e2fd06795cafe7e83bf6bf94a3ab405e8f",
+  "flavor_base": "orbit-essentials-r2",
+  "side_api": 4,
+  "bridge_abi": 10,
+  "general_store_capability": false,
+  "actions": true,
+  "chromium": {
+    "input_sha256": {
+      "chrome/browser/ui/views/extensions/extension_popup.h": "8bc8dbd470c52db7138c4c04c5e92d189fb60badc933f46c21c533be728b0e4c",
+      "chrome/browser/ui/views/extensions/extension_popup.cc": "3cd58690bec67df312bcfc4198924901772f46903fa95f1606f7b9e46efcd3a6"
+    },
+    "output_sha256": {
+      "chrome/browser/ui/views/extensions/extension_popup.h": "c70ee5b04936d0e9f5c185320ff10a0a06eb1a9ac113c11b9e1efe3bc9275293",
+      "chrome/browser/ui/views/extensions/extension_popup.cc": "5de8a6f908e9447e4efb42b94ab43b1a22639fc6707e2c4a5121e3676aee259a"
+    }
+  },
+  "input_sha256": {
+    "libcef/browser/orbit/orbit_cef_api.h": "08dcb6fcabe1369bb970423d5b1b655cb04fd56ac10c3f2e6f72cdfca97e4f3e",
+    "libcef/browser/orbit/orbit_cef_api.mm": "5703da4ca3c1c24679b3bbb9c1b388f9dcc7e7d5e53062df7ea153a14fc2cd3f",
+    "patch/patch.cfg": "43cc3838c70fbb3dd0b9ade56a9e498f58c8eadbf3929ef829b41995d65cf104",
+    "libcef/browser/file_dialog_manager.cc": "dadf9118fc147e21f56d7c7a190e95774ce9e7340daf7b26a178094b8f4a1890",
+    "libcef/browser/file_dialog_manager.h": "5b98910a099577fba3204177c3b5239c02bc8d8e14b5db0e2577bb38b593240f",
+    "include/internal/cef_types.h": "2b0a7b464b9c0f0ca1e4ba879ee32beb2a3dd828ad28a33f2f3267757892d6ff"
+  },
+  "output_sha256": {
+    "libcef/browser/orbit/orbit_cef_api.h": "b343d91c46f5bfbdf3dcc3ad0353715336a2957e0777607cb7b99aa6357b04c4",
+    "libcef/browser/orbit/orbit_cef_api.mm": "cb89cc037454a81f677d99a8719cc478f0b583d372b61bfd330368749bc2955b",
+    "patch/patch.cfg": "3319218c7ade1f24d36d2eb5d6828314ed40376a551a3a1fc7c3b6a6ac0b9df4",
+    "patch/patches/orbit_extension_popup.patch": "4475e69ffb4a6c9d006a13383c0bf1d75cbafea84b733a2ce9e59292f50381ba",
+    "libcef/browser/orbit/orbit_extension_lease.h": "3bea76136b134fe6ad71a8a9b017b37dd7713eee2863d57427ba540867cecd0e",
+    "libcef/browser/orbit/orbit_extensions.inc": "2df480683e8db1fcce9a46347217c1f9a7b7faf7250293c116dd326da461d36d",
+    "libcef/browser/file_dialog_manager.cc": "70d1944598fe3dc1969801ac783823c68e987f2042cc3eff3f964afbb5fb84a9",
+    "libcef/browser/file_dialog_manager.h": "cd3bea74ade0a82adaf814dcee6711ba312ff461d831dc0b37c305cc4dfb6902",
+    "include/internal/cef_types.h": "304ce2a23749ef8b1c93cbec35e39854f8eff020eeb29aa18b556aa0389552f8"
+  },
+  "patch_sha256": "52234ad5bd8931bcf0ed5e9a42fb99b40e2c415edb65c92ab512b4fe10b9964a",
+  "file_dialog_api": "callback-only FILE_DIALOG_OPEN_EXISTING_FOLDER=4; matching frozen SDK/framework required"
+}

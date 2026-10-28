@@ -1,0 +1,27 @@
+{
+  "schema": 1,
+  "status": "prepared-unbuilt-product-runtime-unverified",
+  "source_reference": "0e5315e2fd06795cafe7e83bf6bf94a3ab405e8f",
+  "stacked_on": {
+    "bundle": "modal-dialog-host-r2",
+    "commit": "2f136c6785da724e2ddc93c5e048627de38f13f5",
+    "cef_patch_sha256": "ae3cf4548f437145f29eacc70ca271c0284f9c52c289f0ac15e795cabff4bac8",
+    "note": "BUILD.gn input is the R2 output"
+  },
+  "patch_file": "cef.patch",
+  "patch_sha256": "d950ed4dcaa8c01e2efdbd5913e47e5564bd111a19d8037ee78780e5de6e002d",
+  "input_sha256": {
+    "BUILD.gn": "d00bb8291712738a7c6d3cbe84200a0385daa5e8d5b41d94a79ddd8d09be2e43",
+    "libcef/browser/chrome/chrome_browser_delegate.cc": "65fabb6b22cc6ca0a9a13991685a81ba7f242b2445b84e8a0cf037c630fd6bc2"
+  },
+  "output_sha256": {
+    "BUILD.gn": "9b084ed7b4759768ce19857d87803a286deba99332e271a6fbd6217e1637bc4a",
+    "libcef/browser/orbit/orbit_unowned_tabs.h": "7af3f035728f3e2ed43de4e35041ee864a60aee8ea68191825752ca49ca04bf1",
+    "libcef/browser/orbit/orbit_unowned_tabs.mm": "eb55fdc7adca00fe7c3b29a08f07feb0adc6abe09abc5e3145f727d4def799cf",
+    "libcef/browser/orbit/orbit_unowned_tabs_api.h": "e8c152635691d9900410952f797b6bb575c4f2bc15db6fa72450b9ce69951a34",
+    "libcef/browser/orbit/orbit_unowned_tabs_entry.cc": "294d1040e28130bb3c0762f5cb39375c713c0b50287f2765d48d11cae9472417",
+    "libcef/browser/chrome/chrome_browser_delegate.cc": "99766b8a36d22f22b7f288d711024b9e6057d23403a12ab336d977f3c3f39208"
+  },
+  "bridge_contract": "native/OrbitChromium/Bridge/OrbitUnownedTabsApi.h",
+  "exported_symbol": "orbit_cef_set_unowned_tab_handler"
+}

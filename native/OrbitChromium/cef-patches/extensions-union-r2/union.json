@@ -1,0 +1,219 @@
+{
+  "schema": "orbit-extensions-union-request-data-v1",
+  "status": "source-only union; not an executor, not build authority, not a reviewed transaction",
+  "base": {
+    "cef": "0e5315e2fd06795cafe7e83bf6bf94a3ab405e8f",
+    "chromium": "d0c02bfad08ec92a6ffcf989e53cd995e6381a4c",
+    "approved_framework_sha256": "d33dec254bc3f33bccdcf9da4ae4506fd7addbd5239938afd17b799551acf0d7",
+    "approved_wrapper_sha256": "a46cf8504060a5860a855f613a26f91ed8af7ae57e20a977d0561405973b95c2",
+    "api_version": 15600,
+    "macos_api_hash_before": "e01e9208f887490aa249d57f56761ab9c0c3f7ac"
+  },
+  "observed_shared_prestate": {
+    "cef_head": "87a079209971b405b4abdf322f00d8785991cc98 (retained private R4; not approved)",
+    "chromium_popup_files": "retained R4 working bytes; reversed privately to pinned inputs by step 7 reconstruction",
+    "note": "preserve and restore; never promote R4"
+  },
+  "steps": [
+    {
+      "order": 1,
+      "root": "src/cef",
+      "strip": 1,
+      "name": "modal-dialog-host-r2 (CEF)",
+      "source_commit": "2f136c6785da724e2ddc93c5e048627de38f13f5",
+      "review": "299484b1af22acdc6a418abcebdb0382e66f543a",
+      "patch": "modal-dialog-host-r2/cef/cef.patch (in 2f136c6785da)",
+      "patch_sha256": "ae3cf4548f437145f29eacc70ca271c0284f9c52c289f0ac15e795cabff4bac8",
+      "manifest_sha256": "f6488be313444a089378cea23b52347ea258ef08f020986b7ef49142604d9948"
+    },
+    {
+      "order": 2,
+      "root": "src/cef",
+      "strip": 1,
+      "name": "extensions-product-r1 v4 + existing directory",
+      "source_commit": "ca0d53d1d69d73153e8cac3f7b5a2bc8549a11b3",
+      "review": "19ed6a2c90770b72eddd4a151224bdf666785dcf",
+      "patch": "native/OrbitChromium/cef-patches/extensions-product-r1/extensions-product-r1.patch",
+      "patch_sha256": "52234ad5bd8931bcf0ed5e9a42fb99b40e2c415edb65c92ab512b4fe10b9964a",
+      "manifest_sha256": "20bf1ef77c85510cf501c09cd93862f3d8a137266163a425afd05b0b3f3ebf24",
+      "touches_public_api": "include/internal/cef_types.h (FILE_DIALOG_OPEN_EXISTING_FOLDER=4, NUM_VALUES=5)",
+      "touches_patch_cfg": "registers orbit_extension_popup (Chromium, -p0, applied as step 7)"
+    },
+    {
+      "order": 3,
+      "root": "src/cef",
+      "strip": 1,
+      "name": "unowned-tabs-r2 (CEF)",
+      "review": "pending fresh independent review",
+      "patch": "native/OrbitChromium/cef-patches/unowned-tabs-r2/cef/cef.patch",
+      "patch_sha256": "53622badbba2dcaf638e3adb3e857449e11784e05b378e36aeb6846647d404a8",
+      "manifest_sha256": "dcb4618fc33a5aed3ea22c516bdee82c45f28ab6a8e8d1e8a1590d1f248a6052",
+      "exports": "orbit_cef_set_unowned_tab_handler"
+    },
+    {
+      "order": 4,
+      "root": "src/cef",
+      "strip": 1,
+      "name": "installer-downloads-r1",
+      "review": "pending fresh independent review",
+      "patch": "native/OrbitChromium/cef-patches/installer-downloads-r1/cef/cef.patch",
+      "patch_sha256": "685f0172a181deace19ce98e127d40608bcb9986a2ea571dd34b598ad172ac23",
+      "manifest_sha256": "3f9d3128e70662d847ba8ce4e40527ed9a0057f41de62d6a6aed662f041a0cbd"
+    },
+    {
+      "order": 5,
+      "root": "src",
+      "strip": 1,
+      "name": "modal-dialog-host-r2 (Chromium)",
+      "source_commit": "2f136c6785da724e2ddc93c5e048627de38f13f5",
+      "review": "299484b1af22acdc6a418abcebdb0382e66f543a",
+      "patch": "modal-dialog-host-r2/chromium/chromium.patch (in 2f136c6785da)",
+      "patch_sha256": "efba0d1585738598c971b17feec1ba104a20b7aa38d2572fda6520291603b19e",
+      "manifest_sha256": "d5623740cf38a74a66a5d72ae034b2935e74e319521408c1dd3238f7ebc89014"
+    },
+    {
+      "order": 6,
+      "root": "src",
+      "strip": 1,
+      "name": "browser-modal-sheets-r1",
+      "review": "71bae4dad (accepted within scope)",
+      "patch": "native/OrbitChromium/cef-patches/browser-modal-sheets-r1/chromium/chromium.patch",
+      "patch_sha256": "25a1413c21dd475d874f0f4a2de98628bcbe516d8ca1393f9f52c68a368264e5",
+      "manifest_sha256": "73d2b89e279e16d7c989cf08dd9588dd384f38e0b5a04053b6318d8fb7ea651a"
+    },
+    {
+      "order": 7,
+      "root": "src",
+      "strip": 0,
+      "name": "orbit_extension_popup (carried by step 2 as cef/patch/patches/orbit_extension_popup.patch)",
+      "patch_sha256": "4475e69ffb4a6c9d006a13383c0bf1d75cbafea84b733a2ce9e59292f50381ba"
+    },
+    {
+      "order": 8,
+      "root": "src",
+      "strip": 1,
+      "name": "unowned-tabs-r2 (Chromium)",
+      "review": "pending fresh independent review",
+      "patch": "native/OrbitChromium/cef-patches/unowned-tabs-r2/chromium/chromium.patch",
+      "patch_sha256": "607c6c860d917603adf19a178af46e686c584290cd2a4d029e223ccc97ed059a",
+      "manifest_sha256": "dfdcddd8399720b8234c8551a86f447133e4f446ee566266d14fd5b56725cf04"
+    }
+  ],
+  "final": {
+    "files": {
+      "cef": 24,
+      "chromium": 17
+    },
+    "digest_sha256": "549e3903fd76a07e24ab0552bad4adbb55612fbdf02187faba942ef9ec8a3e0b",
+    "per_file_sha256": {
+      "cef": {
+        "BUILD.gn": "8d54bce7c8011073b3e4cef08c7f96e2d376351a21a0ae6235a1231e842c3dea",
+        "include/internal/cef_types.h": "304ce2a23749ef8b1c93cbec35e39854f8eff020eeb29aa18b556aa0389552f8",
+        "libcef/browser/orbit/orbit_browser_window.h": "adb64d6c4b05c8813789d38183803a067a7846aa12abf555bb5ab3c6f269decb",
+        "libcef/browser/orbit/orbit_browser_window.mm": "a66eb8f1c1e11076c6cae986e9c4f436e34c8d7f50d780fcb24944894040eaad",
+        "libcef/browser/orbit/orbit_cef_api.h": "b343d91c46f5bfbdf3dcc3ad0353715336a2957e0777607cb7b99aa6357b04c4",
+        "libcef/browser/orbit/orbit_cef_api.mm": "cb89cc037454a81f677d99a8719cc478f0b583d372b61bfd330368749bc2955b",
+        "libcef/browser/orbit/orbit_extension_lease.h": "3bea76136b134fe6ad71a8a9b017b37dd7713eee2863d57427ba540867cecd0e",
+        "libcef/browser/orbit/orbit_extensions.inc": "2df480683e8db1fcce9a46347217c1f9a7b7faf7250293c116dd326da461d36d",
+        "libcef/browser/orbit/orbit_installer_downloads.cc": "0608ef0030e611ac99625ce55de9a5f8555acf6adde5eb78e5973d2786a0f217",
+        "libcef/browser/orbit/orbit_installer_downloads.h": "957f746003a24f83c1899928d8c8490e49e0bab87877e8dcbad276b8391d9a27",
+        "libcef/browser/orbit/orbit_installer_downloads_unittest.cc": "a9c695f5a9dc128c2ecb5cefe1effc428b1ca8685f5666171002399e26ee9321",
+        "libcef/browser/orbit/orbit_modal_dialog_host.h": "2052ba23f1e4f8b7f206e45345878f58fc23665a34979772a8de756f204ae461",
+        "libcef/browser/orbit/orbit_modal_dialog_host_unittest.mm": "302b6e954877ec657a4cfe10f0b07e7bf700694172149deadbb6b12c308f2746",
+        "libcef/browser/orbit/orbit_unowned_tabs.h": "b11f1ad20c59d1e1711c944b3dfd79b4544bdcc83cd72f6716d08e0b063d9d08",
+        "libcef/browser/orbit/orbit_unowned_tabs.mm": "0129857dd898707d6faf331ed0f073489bda8c0bf7293fc74374b4a85d86524a",
+        "libcef/browser/orbit/orbit_unowned_tabs_api.h": "d7fba76137ab903285452c7fd1218c1c86cb02d4f79c28afb60a55d46259b5b7",
+        "libcef/browser/orbit/orbit_unowned_tabs_entry.cc": "905bb6a4267851164f613f9e9def228f3dcc452a57f1f25a397c4452e141bdb9",
+        "libcef/browser/chrome/chrome_browser_delegate.cc": "9677044fafb058be5592bbb2445821ffbe0f559bbbd5827727e2825bae8892b1",
+        "libcef/browser/download_manager_delegate_impl.cc": "b7a29e1c0ce266eeb2779ab90f3ccf0e789aedbf19e50cca9663d2a26239869f",
+        "libcef/browser/download_manager_delegate_impl.h": "2790ca7548fd667fe257e65f8cf60711129598683dbfe56afdd88dc986cda2ef",
+        "libcef/browser/file_dialog_manager.cc": "70d1944598fe3dc1969801ac783823c68e987f2042cc3eff3f964afbb5fb84a9",
+        "libcef/browser/file_dialog_manager.h": "cd3bea74ade0a82adaf814dcee6711ba312ff461d831dc0b37c305cc4dfb6902",
+        "patch/patch.cfg": "3319218c7ade1f24d36d2eb5d6828314ed40376a551a3a1fc7c3b6a6ac0b9df4",
+        "patch/patches/orbit_extension_popup.patch": "4475e69ffb4a6c9d006a13383c0bf1d75cbafea84b733a2ce9e59292f50381ba"
+      },
+      "chromium": {
+        "chrome/browser/ui/navigator/BUILD.gn": "2aa0e530bb6dcea8b25acca129f9174d5a5ee480950429f98728307d13d138a5",
+        "chrome/browser/ui/navigator/orbit_navigate_intent.h": "3fd5993fa9d092b0c0c477162a43c8bb7286ceb60a0655318884a09b1bc79bc0",
+        "chrome/browser/ui/navigator/browser_navigator.cc": "f0f44a053320fcf5605f352c88f6970a74ff04606a155e5fdb65fbb1f3946881",
+        "chrome/browser/ui/views/extensions/extension_popup.cc": "5de8a6f908e9447e4efb42b94ab43b1a22639fc6707e2c4a5121e3676aee259a",
+        "chrome/browser/ui/views/extensions/extension_popup.h": "c70ee5b04936d0e9f5c185320ff10a0a06eb1a9ac113c11b9e1efe3bc9275293",
+        "components/constrained_window/BUILD.gn": "6a34906fb47a0ca645da561678bac351e0c095e6f97adc1328d73c5cc00ba1ad",
+        "components/constrained_window/constrained_window_appkit_parent_unittest.mm": "61046f9bee8b307b9d4dae147b9f728cbde3e71366d682201079a04804cb2c64",
+        "components/constrained_window/constrained_window_views.cc": "7c3e3fdca0cbdb86f575988b5fc4255ab9a495f8afd39104a6d6df6fd9c64fd8",
+        "components/remote_cocoa/app_shim/BUILD.gn": "df2608f34ef52bd8bc581ba680226b5e154d2054357f936204bd160ee35423af",
+        "components/remote_cocoa/app_shim/appkit_modal_parent.h": "06bdd61d40e2a122516dcbfff7d9ca2cfe0619c4d96e6f4b64ff038ec51ea22b",
+        "components/remote_cocoa/app_shim/appkit_modal_parent.mm": "c6faa1f32d168086b2f6c9455257e8078d016ea2250b520a96425e34fa7a0566",
+        "components/remote_cocoa/app_shim/appkit_modal_parent_unittest.mm": "a3d83f004851e48c5ca49a78b63723aeb6ae6d7d0d68ac70483d157e8e3d3d0b",
+        "components/remote_cocoa/app_shim/native_widget_ns_window_bridge.h": "807b0c99ec127077fdb27d3e8ecb16c17940aaf2494245d377d39344af8facbf",
+        "components/remote_cocoa/app_shim/native_widget_ns_window_bridge.mm": "3fdddb919685d92183cd8758e767e5294ab464687cdb749909146ef045ddfd99",
+        "ui/views/cocoa/native_widget_mac_ns_window_host.h": "abea16fffe04840ed881120efa02e2f11575335cc70cc005afc5c879aa99c311",
+        "ui/views/cocoa/native_widget_mac_ns_window_host.mm": "0641fb13ee39fa2e2ee4c252d76fec51ed6730dbb01382136890d706c8dbfdd1",
+        "ui/views/widget/native_widget_mac.mm": "70dc30ba1c8267409a425df1807dbad125e86126744f03918b36b39387189996"
+      }
+    }
+  },
+  "gn": {
+    "regeneration_required": true,
+    "new_sources": {
+      "//cef:libcef_static": [
+        "orbit_unowned_tabs.h",
+        "orbit_unowned_tabs.mm",
+        "orbit_unowned_tabs_api.h",
+        "orbit_modal_dialog_host.h (R2)"
+      ],
+      "//cef:cef_framework (mac_framework_bundle)": [
+        "orbit_unowned_tabs_entry.cc"
+      ],
+      "//cef:libcef_static_unittested": [
+        "orbit_installer_downloads.cc",
+        "orbit_installer_downloads.h"
+      ],
+      "//cef:libcef_static_unittests": [
+        "orbit_installer_downloads_unittest.cc",
+        "orbit_modal_dialog_host_unittest.mm (R2)"
+      ],
+      "//chrome/browser/ui/navigator:navigator (public)": [
+        "orbit_navigate_intent.h"
+      ],
+      "//components/remote_cocoa/app_shim:app_shim": [
+        "appkit_modal_parent.{h,mm} (R2)"
+      ],
+      "//components/*:unit_tests": [
+        "appkit_modal_parent_unittest.mm, constrained_window_appkit_parent_unittest.mm (R2 + sheets cases)"
+      ]
+    },
+    "new_deps": {
+      "//cef:libcef_static_unittested": [
+        "//components/download/public/common:public",
+        "//url"
+      ]
+    },
+    "unlisted_preexisting": [
+      "libcef/browser/orbit/orbit_extension_lease.h (v4 header, included by orbit_cef_api.mm and tests)"
+    ],
+    "checks": [
+      "gn gen <new out dir> with the frozen args.gn",
+      "gn check //cef:libcef_static //cef:libcef_static_unittested //chrome/browser/ui/navigator:navigator //components/remote_cocoa/app_shim:app_shim",
+      "gn desc deps of //cef:cef_framework includes the libcef_dll ctocpp sources used by orbit_unowned_tabs_entry.cc"
+    ]
+  },
+  "targets": [
+    "cef",
+    "libcef_static_unittests",
+    "components_unittests"
+  ],
+  "jobs": 2,
+  "exported_symbols_expected": [
+    "orbit_cef_get_api (side API v4, 176 bytes)",
+    "orbit_cef_set_unowned_tab_handler",
+    "orbit_cef_essentials_level"
+  ],
+  "api": {
+    "decision_required": "cef_types.h gains FILE_DIALOG_OPEN_EXISTING_FOLDER (=4): regenerate and freeze API hashes for 15600 with an explicit private-fork versioning record; rebuild the wrapper at CEF_API_VERSION=15600; never reuse the approved R2 SDK/wrapper with this framework"
+  },
+  "product": {
+    "bridge_abi": 11,
+    "compiles_against": "approved R2 SDK now (numeric directory mode, optional unowned symbol); must be recompiled against the union SDK/wrapper with their new pins"
+  }
+}

@@ -1,0 +1,354 @@
+diff --git a/BUILD.gn b/BUILD.gn
+index b770af3989fccb82d4c23aca39d5f8174c78bef0..6246d3ab80b9f617865144885120141a11cd4e20 100644
+--- a/BUILD.gn
++++ b/BUILD.gn
+@@ -1115,6 +1115,9 @@ source_set("libcef_static") {
+       "libcef/browser/orbit/orbit_hosted_intent.h",
+       "libcef/browser/orbit/orbit_hosted.mm",
+       "libcef/browser/orbit/orbit_hosted_mac.h",
++      "libcef/browser/orbit/orbit_unowned_tabs.h",
++      "libcef/browser/orbit/orbit_unowned_tabs.mm",
++      "libcef/browser/orbit/orbit_unowned_tabs_api.h",
+       "libcef/browser/orbit/browser_platform_delegate_chrome_hosted.h",
+       "libcef/browser/orbit/browser_platform_delegate_chrome_hosted.mm",
+ 
+@@ -1922,7 +1925,10 @@ if (is_mac) {
+       "Resources",
+     ]
+ 
+-    sources = libcef_sources_common + includes_mac
++    sources = libcef_sources_common + includes_mac + [
++      # Orbit (EXT-OUTCOME-R1): framework side of orbit_unowned_tabs_api.h.
++      "libcef/browser/orbit/orbit_unowned_tabs_entry.cc",
++    ]
+ 
+     deps = libcef_deps_common + [
+       ":cef_framework_cef_binaries",
+diff --git a/libcef/browser/orbit/orbit_unowned_tabs.h b/libcef/browser/orbit/orbit_unowned_tabs.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..1b88cb0008afaad63afe936e54595f208b889046
+--- /dev/null
++++ b/libcef/browser/orbit/orbit_unowned_tabs.h
+@@ -0,0 +1,65 @@
++// Copyright 2026 Orbit. Portions copyright The Chromium Embedded Framework
++// Authors. Use of this source code is governed by a BSD-style license that can
++// be found in the LICENSE file.
++
++#ifndef CEF_LIBCEF_BROWSER_ORBIT_ORBIT_UNOWNED_TABS_H_
++#define CEF_LIBCEF_BROWSER_ORBIT_ORBIT_UNOWNED_TABS_H_
++#pragma once
++
++#include <cstdint>
++#include <string>
++
++#include "base/functional/callback.h"
++#include "cef/include/cef_client.h"
++
++class Browser;
++struct CefBrowserCreateParams;
++
++namespace content {
++class WebContents;
++}
++
++namespace orbit {
++
++// EXT-OUTCOME-R1. A tab that Chrome creates by itself in an Orbit logical
++// Browser: an extension's tabs.create, an options page opened in a tab,
++// onboarding after an install. Without an embedder answer it would get a CEF
++// host with no client and no parent view (ChromeBrowserDelegate::SetAsDelegate).
++struct UnownedTab {
++  uint64_t window_token = 0;
++  std::string profile_path;
++  std::string url;
++  int index = -1;
++  // 1 Chrome activates the tab, 0 it opens in the background, -1 unknown
++  // (never guessed: the embedder treats unknown as background).
++  int active = -1;
++};
++
++// The embedder's answer: a client and the parent view of one of its own
++// surfaces, or a null client. Installed by orbit_cef_set_unowned_tab_handler
++// (orbit_unowned_tabs_entry.cc, framework side of the C API). UI thread only.
++using UnownedTabAdopter =
++    base::RepeatingCallback<CefRefPtr<CefClient>(const UnownedTab& tab,
++                                                 CefWindowHandle* parent)>;
++void SetUnownedTabAdopter(UnownedTabAdopter adopter);
++// Changes with every SetUnownedTabAdopter call: an offer revalidates it after
++// the embedder returns, so a cleared or replaced handler never publishes.
++uint64_t UnownedTabAdopterGeneration();
++
++// Offers |contents|, a tab Chrome is creating or inserting in the logical
++// Browser |browser|, to the embedder. URL, index and activation come from the
++// creating Navigate() request when its hook is running (orbit_navigate_intent.h,
++// published before the tab is loaded or inserted), otherwise from the tab
++// strip once the tab is inserted; activation stays unknown otherwise. After the
++// embedder returns, the Browser, contents, logical Browser registration,
++// window generation and handler generation are verified again. On acceptance
++// sets the client, parent view, window generation and tab index of |params| and
++// returns true; |params| is unchanged otherwise, and a client the embedder
++// returned is released (the embedder aborts its pending surface on release).
++bool OfferUnownedTab(Browser* browser,
++                     content::WebContents* contents,
++                     CefBrowserCreateParams* params);
++
++}  // namespace orbit
++
++#endif  // CEF_LIBCEF_BROWSER_ORBIT_ORBIT_UNOWNED_TABS_H_
+diff --git a/libcef/browser/orbit/orbit_unowned_tabs.mm b/libcef/browser/orbit/orbit_unowned_tabs.mm
+new file mode 100644
+index 0000000000000000000000000000000000000000..92fdbcc90b8a26f82aa938f487d3f526f807b00f
+--- /dev/null
++++ b/libcef/browser/orbit/orbit_unowned_tabs.mm
+@@ -0,0 +1,116 @@
++// Copyright 2026 Orbit. Portions copyright The Chromium Embedded Framework
++// Authors. Use of this source code is governed by a BSD-style license that can
++// be found in the LICENSE file.
++
++#include "cef/libcef/browser/orbit/orbit_unowned_tabs.h"
++
++#include <memory>
++#include <utility>
++
++#include "base/no_destructor.h"
++#include "cef/libcef/browser/orbit/orbit_hosted.h"
++#include "cef/libcef/browser/browser_host_base.h"
++#include "cef/libcef/browser/thread_util.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/ui/browser.h"
++#include "chrome/browser/ui/navigator/orbit_navigate_intent.h"
++#include "chrome/browser/ui/tabs/tab_strip_model.h"
++#include "content/public/browser/web_contents.h"
++
++namespace orbit {
++
++namespace {
++
++UnownedTabAdopter& Adopter() {
++  static base::NoDestructor<UnownedTabAdopter> adopter;
++  return *adopter;
++}
++
++uint64_t& AdopterGeneration() {
++  static uint64_t generation = 0;
++  return generation;
++}
++
++}  // namespace
++
++void SetUnownedTabAdopter(UnownedTabAdopter adopter) {
++  CEF_REQUIRE_UIT();
++  ++AdopterGeneration();
++  Adopter() = std::move(adopter);
++}
++
++uint64_t UnownedTabAdopterGeneration() {
++  return AdopterGeneration();
++}
++
++bool OfferUnownedTab(Browser* browser,
++                     content::WebContents* contents,
++                     CefBrowserCreateParams* params) {
++  CEF_REQUIRE_UIT();
++  if (!Adopter() || !browser || !contents || !params ||
++      !params->orbit_window_token || !IsLogicalBrowser(browser)) {
++    return false;
++  }
++  const uint64_t window_token = params->orbit_window_token;
++  const auto generation = GetWindowGeneration(window_token);
++  if (!generation) {
++    return false;
++  }
++  Profile* const profile = browser->GetProfile();
++  UnownedTab tab;
++  tab.window_token = window_token;
++  tab.profile_path = profile->GetPath().value();
++  const NavigateIntent* intent = CurrentNavigateIntent();
++  TabStripModel* model = browser->tab_strip_model();
++  const int inserted = model ? model->GetIndexOfWebContents(contents) : -1;
++  if (intent &&
++      intent->browser.get() ==
++          static_cast<const BrowserWindowInterface*>(browser) &&
++      intent->contents.get() == contents) {
++    // Pre-insertion creation (Navigate: tabs.create, options pages): the
++    // request is the authority.
++    tab.url = intent->url.spec();
++    tab.index = intent->tabstrip_index;
++    tab.active = intent->active;
++  } else if (inserted >= 0) {
++    // Already inserted: the tab strip is the authority.
++    tab.url = contents->GetVisibleURL().spec();
++    tab.index = inserted;
++    tab.active = model->active_index() == inserted ? 1 : 0;
++  } else {
++    tab.url = contents->GetVisibleURL().spec();
++  }
++
++  // The embedder may close the window, remove the profile, clear the handler
++  // or destroy this Browser while it answers; nothing below dereferences
++  // |browser| or |contents| before they are verified alive again.
++  const base::WeakPtr<BrowserWindowInterface> weak_browser =
++      browser->GetWeakPtr();
++  const base::WeakPtr<content::WebContents> weak_contents =
++      contents->GetWeakPtr();
++  const uint64_t adopter_generation = AdopterGeneration();
++  UnownedTabAdopter adopter = Adopter();  // The call may clear the original.
++  CefWindowHandle parent = kNullWindowHandle;
++  CefRefPtr<CefClient> client = adopter.Run(tab, &parent);
++  if (!client || !parent) {
++    return false;
++  }
++  if (!weak_browser || !weak_contents ||
++      weak_browser.get() != static_cast<BrowserWindowInterface*>(browser) ||
++      AdopterGeneration() != adopter_generation ||
++      !IsLogicalBrowser(browser) || browser->GetProfile() != profile ||
++      GetLogicalBrowser(window_token, profile) != browser ||
++      GetWindowGeneration(window_token) != generation) {
++    return false;  // |client| is released: the embedder aborts its surface.
++  }
++  params->client = client;
++  if (!params->window_info) {
++    params->window_info = std::make_unique<CefWindowInfo>();
++  }
++  params->window_info->parent_view = parent;
++  params->orbit_window_generation = *generation;
++  params->orbit_tab_index = tab.index;
++  return true;
++}
++
++}  // namespace orbit
+diff --git a/libcef/browser/orbit/orbit_unowned_tabs_api.h b/libcef/browser/orbit/orbit_unowned_tabs_api.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..a8b34d28c6146a1984491d97586e67a77c105128
+--- /dev/null
++++ b/libcef/browser/orbit/orbit_unowned_tabs_api.h
+@@ -0,0 +1,44 @@
++// Copyright 2026 Orbit. BSD-style license; see LICENSE.
++// EXT-OUTCOME-R1: tabs that Chrome creates by itself in an Orbit logical Browser
++// (an extension's tabs.create, an options page opened in a tab, onboarding).
++//
++// Shared C contract between this patched CEF framework
++// (native/OrbitChromium/Bridge/OrbitUnownedTabsApi.h in Orbit)
++// and the bridge. The bridge resolves the single exported symbol
++// `orbit_cef_set_unowned_tab_handler` optionally: frameworks without the patch
++// keep such tabs without client or view. UI thread only.
++#ifndef CEF_LIBCEF_BROWSER_ORBIT_ORBIT_UNOWNED_TABS_API_H_
++#define CEF_LIBCEF_BROWSER_ORBIT_ORBIT_UNOWNED_TABS_API_H_
++#include <stdint.h>
++
++#ifdef __cplusplus
++extern "C" {
++#endif
++
++struct _cef_client_t;
++
++typedef struct {
++  uint32_t struct_size;
++  uint64_t window_token;     // Orbit window of the logical Browser.
++  const char* profile_path;  // Its profile directory (never NULL or empty).
++  const char* url;           // The document being loaded; may be empty.
++  int32_t index;             // Tab strip index, -1 when unknown.
++  int32_t active;            // 1 foreground, 0 background, -1 unknown.
++} orbit_unowned_tab_t;
++
++// Called synchronously before the tab's CEF host is created. Returns a client
++// (a new reference that the framework adopts) and, through |parent_nsview|,
++// the embedder view the tab is placed in. NULL keeps the tab without client or
++// view. Never called after the handler is cleared.
++typedef struct _cef_client_t* (*orbit_unowned_tab_handler_t)(
++    void* context, const orbit_unowned_tab_t* tab, void** parent_nsview);
++
++// Installs |handler| (NULL clears it). Returns 1 on the UI thread, 0 otherwise.
++typedef int32_t (*orbit_cef_set_unowned_tab_handler_t)(
++    orbit_unowned_tab_handler_t handler, void* context);
++
++#ifdef __cplusplus
++}
++#endif
++
++#endif  // CEF_LIBCEF_BROWSER_ORBIT_ORBIT_UNOWNED_TABS_API_H_
+diff --git a/libcef/browser/orbit/orbit_unowned_tabs_entry.cc b/libcef/browser/orbit/orbit_unowned_tabs_entry.cc
+new file mode 100644
+index 0000000000000000000000000000000000000000..260a96f723ebe56871f02770c494e69430595517
+--- /dev/null
++++ b/libcef/browser/orbit/orbit_unowned_tabs_entry.cc
+@@ -0,0 +1,56 @@
++// Copyright 2026 Orbit. Portions copyright The Chromium Embedded Framework
++// Authors. Use of this source code is governed by a BSD-style license that can
++// be found in the LICENSE file.
++//
++// Framework side of the C API (compiled with the libcef_dll sources): the only
++// place where the embedder's C client is adopted as a C++ CefClient, exactly as
++// cef_browser_host_create_browser does.
++
++#include "base/functional/bind.h"
++#include "cef/include/internal/cef_export.h"
++#include "cef/libcef/browser/orbit/orbit_unowned_tabs.h"
++#include "cef/libcef/browser/orbit/orbit_unowned_tabs_api.h"
++#include "cef/libcef/browser/thread_util.h"
++#include "cef/libcef_dll/ctocpp/client_ctocpp.h"
++
++namespace {
++
++CefRefPtr<CefClient> AdoptFromEmbedder(orbit_unowned_tab_handler_t handler,
++                                       void* context,
++                                       const orbit::UnownedTab& tab,
++                                       CefWindowHandle* parent) {
++  orbit_unowned_tab_t value = {};
++  value.struct_size = sizeof(value);
++  value.window_token = tab.window_token;
++  value.profile_path = tab.profile_path.c_str();
++  value.url = tab.url.c_str();
++  value.index = tab.index;
++  value.active = tab.active;
++  void* view = nullptr;
++  struct _cef_client_t* client = handler(context, &value, &view);
++  if (!client) {
++    return nullptr;
++  }
++  // Takes the new reference the embedder returned, even when it is refused.
++  CefRefPtr<CefClient> adopted = CefClientCToCpp_Wrap(
++      reinterpret_cast<struct _cef_client_0_t*>(client));
++  if (!view) {
++    return nullptr;
++  }
++  *parent = static_cast<CefWindowHandle>(view);
++  return adopted;
++}
++
++}  // namespace
++
++extern "C" CEF_EXPORT int32_t
++orbit_cef_set_unowned_tab_handler(orbit_unowned_tab_handler_t handler,
++                                 void* context) {
++  if (!CEF_CURRENTLY_ON_UIT()) {
++    return 0;
++  }
++  orbit::SetUnownedTabAdopter(
++      handler ? base::BindRepeating(&AdoptFromEmbedder, handler, context)
++              : orbit::UnownedTabAdopter());
++  return 1;
++}
+diff --git a/libcef/browser/chrome/chrome_browser_delegate.cc b/libcef/browser/chrome/chrome_browser_delegate.cc
+index 0c63a977fc64b681dd1a86f0e4e5ee41d985ef79..b2e4fe017ea5c23a0dda43a2945e4ee8488ff1c0 100644
+--- a/libcef/browser/chrome/chrome_browser_delegate.cc
++++ b/libcef/browser/chrome/chrome_browser_delegate.cc
+@@ -9,6 +9,7 @@
+ #include "cef/libcef/browser/browser_contents_delegate.h"
+ #if BUILDFLAG(IS_MAC)
+ #include "cef/libcef/browser/orbit/orbit_hosted.h"
++#include "cef/libcef/browser/orbit/orbit_unowned_tabs.h"
+ #endif
+ #include "cef/libcef/browser/browser_host_base.h"
+ #include "cef/libcef/browser/browser_info_manager.h"
+@@ -271,6 +272,10 @@ void ChromeBrowserDelegate::SetAsDelegate(content::WebContents* web_contents,
+     if (orbit_tab_params.window_info) {
+       orbit_tab_params.window_info->parent_view = kNullWindowHandle;
+     }
++    // EXT-OUTCOME-R1/R2: the embedder may adopt it as one of its own
++    // surfaces (client and parent view); otherwise it keeps neither. The offer
++    // re-verifies this Browser and |web_contents| after the embedder returns.
++    orbit::OfferUnownedTab(browser_.get(), web_contents, &orbit_tab_params);
+     params = &orbit_tab_params;
+   }
+ #endif

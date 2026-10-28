@@ -1,0 +1,12 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Orbit tab close fixture</title>
+<style>body { font: 20px system-ui; margin: 48px; } button { margin: 12px; padding: 12px; }</style>
+<h1>Chromium tab close fixture</h1>
+<p>Each target closes after three seconds.</p>
+<button data-mode="tabs">chrome.tabs.remove</button>
+<button data-mode="page">window.close</button>
+<button data-mode="windows">chrome.windows.remove</button>
+<button data-mode="dashlane">Dashlane check page</button>
+<pre id="result">Ready</pre>
+<script src="dashboard.js"></script>

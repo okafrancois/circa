@@ -1,0 +1,28 @@
+cmake_minimum_required(VERSION 3.21)
+project(EngineGate LANGUAGES C CXX OBJCXX)
+
+if(NOT APPLE)
+  message(FATAL_ERROR "EngineGate is a macOS-only synthetic laboratory")
+endif()
+if(NOT EXISTS "${CEF_WRAPPER_LIBRARY}")
+  message(FATAL_ERROR "Build the pinned CEF wrapper before configuring EngineGate")
+endif()
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CEF_ROOT}/cmake")
+set(PROJECT_ARCH arm64 CACHE STRING "Pinned laboratory architecture")
+set(USE_SANDBOX ON CACHE BOOL "Sandbox is required by the laboratory" FORCE)
+set(api_version 15600 CACHE STRING "Pinned CEF API" FORCE)
+find_package(CEF REQUIRED)
+add_library(gate_cef_wrapper STATIC IMPORTED)
+set_target_properties(gate_cef_wrapper PROPERTIES IMPORTED_LOCATION "${CEF_WRAPPER_LIBRARY}")
+add_executable(EngineGate MACOSX_BUNDLE main.mm)
+SET_EXECUTABLE_TARGET_PROPERTIES(EngineGate)
+target_compile_options(EngineGate PRIVATE -fobjc-arc)
+target_compile_definitions(EngineGate PRIVATE CEF_API_VERSION=15600 CEF_USE_SANDBOX=1)
+get_filename_component(GATE_REPO_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../.." ABSOLUTE)
+target_compile_definitions(EngineGate PRIVATE ENGINE_GATE_REPO_ROOT="${GATE_REPO_ROOT}")
+target_include_directories(EngineGate PRIVATE "${CEF_ROOT}")
+target_link_libraries(EngineGate PRIVATE gate_cef_wrapper ${CEF_STANDARD_LIBS} "-framework Cocoa")
+set_target_properties(EngineGate PROPERTIES
+  MACOSX_BUNDLE_INFO_PLIST "${CMAKE_CURRENT_SOURCE_DIR}/Info.plist.in"
+  CXX_STANDARD 20
+  OBJCXX_STANDARD 20)

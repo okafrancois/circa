@@ -1,0 +1,586 @@
+import AppKit
+
+/// Transparent hit shield: outside clicks dismiss without reaching the underlying document.
+@MainActor
+final class BrowserPaletteView: NSView, NSTextFieldDelegate, NSTableViewDataSource, NSTableViewDelegate {
+    let input: NSTextField = PaletteInputField()
+    let panel = NSView()
+    private let panelShadow = CALayer()
+    let scroll = NSScrollView()
+    let searchIcon = NSImageView()
+    let divider = NSView()
+    private let innerStroke = NSView()
+    private let list = PaletteTableView()
+    private enum Entry: Equatable {
+        case header(BrowserPaletteSection)
+        case result(Int)
+    }
+    private var entries: [Entry] = []
+    private var results: [BrowserPaletteResult] = []
+    private var resultRows: [Int] = []
+    private var selectedIndex = -1
+    private var selectedResult: BrowserPaletteResult?
+    private var announcedResultCount = 0
+    private var countAnnouncementTask: Task<Void, Never>?
+    var onAccessibilityAnnouncement: ((String) -> Void)?
+    private var symbolImages: [String: NSImage] = [:]
+    var onQuery: ((String) -> Void)?
+    var onMove: ((Int) -> Void)?
+    var onAccept: ((NSEvent.ModifierFlags) -> Void)?
+    var onSelect: ((Int) -> Void)?
+    var onDismiss: (() -> Void)?
+    var accent = OrbitTokens.ThemeAccent.defaultPurple.selection
+    var favicons: [String: NSImage] = [:]
+    override var isFlipped: Bool { true }
+    override var isHidden: Bool {
+        didSet {
+            if isHidden {
+                countAnnouncementTask?.cancel()
+                countAnnouncementTask = nil
+            }
+        }
+    }
+    func waitForAccessibilityAnnouncements() async { await countAnnouncementTask?.value }
+
+    // Orbit's normal Command Bar uses synchronous visibility, layout and row selection.
+    // The separate orbit_commandBarBounce animation belongs to the existing-bar attention path.
+    // See MOTION-A, , , .
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        isHidden = true
+        wantsLayer = true
+        panel.wantsLayer = true
+        panel.layer?.cornerRadius = OrbitTokens.Radius.commandBar
+        panel.layer?.masksToBounds = false
+        layer?.addSublayer(panelShadow)
+        addSubview(panel)
+        innerStroke.wantsLayer = true
+        innerStroke.layer?.cornerRadius = OrbitTokens.Radius.commandBar - 0.5
+        innerStroke.setAccessibilityElement(false)
+        panel.addSubview(innerStroke)
+        input.isBordered = false
+        input.isBezeled = false
+        input.drawsBackground = false
+        input.focusRingType = .none
+        input.font = OrbitTokens.Typography.commandBarInput
+        input.cell?.usesSingleLineMode = true
+        input.cell?.isScrollable = true
+        input.placeholderString = uiText("Search or Enter URL…")
+        input.placeholderAttributedString = NSAttributedString(string: uiText("Search or Enter URL…"), attributes: [
+            .font: OrbitTokens.Typography.commandBarInput, .foregroundColor: OrbitTokens.Color.Text.placeholder
+        ])
+        input.delegate = self
+        input.setAccessibilityLabel(uiText("Search or Enter URL"))
+        input.setAccessibilityIdentifier("palette-input")
+        (input as? PaletteInputField)?.onReturn = { [weak self] event in
+            self?.onAccept?(event.modifierFlags)
+        }
+        panel.setAccessibilityRole(.group)
+        panel.setAccessibilityLabel(uiText("Command Bar"))
+        panel.addSubview(input)
+        searchIcon.image = NSImage(systemSymbolName: "magnifyingglass", accessibilityDescription: nil)
+        searchIcon.setAccessibilityElement(false)
+        panel.addSubview(searchIcon)
+        divider.wantsLayer = true
+        divider.setAccessibilityElement(false)
+        panel.addSubview(divider)
+        scroll.drawsBackground = false
+        scroll.borderType = .noBorder
+        scroll.hasVerticalScroller = true
+        scroll.scrollerStyle = .overlay
+        scroll.autohidesScrollers = true
+        scroll.documentView = list
+        panel.addSubview(scroll)
+        list.style = .plain
+        list.headerView = nil
+        list.backgroundColor = .clear
+        list.focusRingType = .none
+        list.selectionHighlightStyle = .none
+        list.intercellSpacing = .zero
+        list.columnAutoresizingStyle = .lastColumnOnlyAutoresizingStyle
+        list.allowsEmptySelection = true
+        list.allowsMultipleSelection = false
+        list.usesAutomaticRowHeights = false
+        list.floatsGroupRows = false
+        list.setAccessibilityLabel(uiText("Command Bar Results"))
+        list.setAccessibilityIdentifier("palette-results")
+        let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("result"))
+        column.minWidth = 0
+        column.resizingMask = .autoresizingMask
+        list.addTableColumn(column)
+        list.dataSource = self
+        list.delegate = self
+        list.onPressRow = { [weak self] row in self?.press(row: row) }
+        refreshColors()
+    }
+    required init?(coder: NSCoder) { nil }
+
+    static func panelFrame(in size: NSSize, resultCount: Int = 5) -> NSRect {
+        let m = OrbitTokens.Metrics.CommandBar.self
+        let count = min(5, max(0, resultCount))
+        let preferredHeight = m.searchRowHeight + m.firstRowGap + CGFloat(count) * m.rowPitch
+            - (count > 0 ? m.rowPitch - m.rowHeight : 0) + m.bottomPadding
+        let top = max(m.rowInsetX, min(m.top(windowHeight: size.height), size.height - m.searchRowHeight - m.rowInsetX))
+        let height = min(preferredHeight, max(m.searchRowHeight, size.height - top - m.rowInsetX))
+        let width = min(m.width, max(0, size.width - 2 * m.rowInsetX))
+        return NSRect(x: (size.width - width) / 2, y: top, width: width, height: height)
+    }
+
+    override func layout() {
+        super.layout()
+        let m = OrbitTokens.Metrics.CommandBar.self
+        panel.frame = Self.panelFrame(in: bounds.size, resultCount: results.count)
+        panelShadow.frame = panel.frame
+        panelShadow.shadowPath = CGPath(roundedRect: panelShadow.bounds, cornerWidth: OrbitTokens.Radius.commandBar,
+                                       cornerHeight: OrbitTokens.Radius.commandBar, transform: nil)
+        innerStroke.frame = panel.bounds.insetBy(dx: 0.5, dy: 0.5)
+        // Panel uses unflipped coordinates. Its top and input stay fixed while results change.
+        let inputHeight = input.intrinsicContentSize.height
+        input.frame = NSRect(x: m.titleOriginX, y: panel.bounds.height - m.searchRowHeight / 2 - inputHeight / 2,
+                             width: max(0, panel.bounds.width - m.titleOriginX - 22), height: inputHeight)
+        searchIcon.frame = NSRect(x: 23, y: panel.bounds.height - m.searchRowHeight / 2 - 8, width: 16, height: 16)
+        divider.frame = NSRect(x: m.rowInsetX, y: panel.bounds.height - m.searchRowHeight,
+                               width: max(0, panel.bounds.width - 2 * m.rowInsetX), height: 1 / (window?.backingScaleFactor ?? 2))
+        scroll.frame = NSRect(x: m.rowInsetX, y: m.bottomPadding, width: max(0, panel.bounds.width - 2 * m.rowInsetX),
+                              height: max(0, panel.bounds.height - m.searchRowHeight - m.firstRowGap - m.bottomPadding))
+        resizeList()
+    }
+
+    /// Synchronous: the controller can measure render plus layoutSubtreeIfNeeded in one signpost.
+    func render(_ results: [BrowserPaletteResult], selected: Int) {
+        scroll.hasVerticalScroller = results.count > 5
+        let inputSymbol = results.first?.section == .address ? "globe" : "magnifyingglass"
+        searchIcon.image = NSImage(systemSymbolName: inputSymbol, accessibilityDescription: nil)
+        var nextEntries: [Entry] = []
+        var nextRows: [Int] = []
+        nextEntries.reserveCapacity(results.count + BrowserPaletteSection.allCases.count)
+        nextRows.reserveCapacity(results.count)
+        for index in results.indices {
+            nextRows.append(nextEntries.count)
+            nextEntries.append(.result(index))
+        }
+        let countChanged = self.results.count != results.count
+        self.results = results
+        resultRows = nextRows
+        let oldCount = entries.count
+        let sharedCount = zip(entries, nextEntries).prefix { $0 == $1 }.count
+        let structureChanged = sharedCount != max(oldCount, nextEntries.count)
+        entries = nextEntries
+        if countChanged { needsLayout = true; layoutSubtreeIfNeeded() }
+        if structureChanged {
+            // Retain the unchanged prefix, including its live cells, when filtering a section.
+            list.beginUpdates()
+            if sharedCount < oldCount {
+                list.removeRows(at: IndexSet(integersIn: sharedCount..<oldCount), withAnimation: [])
+            }
+            if sharedCount < entries.count {
+                list.insertRows(at: IndexSet(integersIn: sharedCount..<entries.count), withAnimation: [])
+            }
+            list.endUpdates()
+            resizeList()
+        }
+        // Refresh all cached rows, including prepared offscreen views. makeIfNecessary stays false;
+        // no offscreen cell is allocated and the bounded result cap keeps this inexpensive.
+        for row in entries.indices {
+            if let cell = list.view(atColumn: 0, row: row, makeIfNecessary: false) as? PaletteResultCell {
+                configure(cell, at: row, selected: selected)
+            }
+            if let rowView = list.rowView(atRow: row, makeIfNecessary: false) as? PaletteTableRowView {
+                configure(rowView, at: row)
+            }
+        }
+        updateSelection(selected)
+    }
+
+    func updateSelection(_ selected: Int) {
+        let oldIndex = selectedIndex
+        let oldResult = selectedResult
+        let oldCount = announcedResultCount
+        selectedIndex = results.indices.contains(selected) ? selected : -1
+        selectedResult = selectedIndex >= 0 ? results[selectedIndex] : nil
+        announcedResultCount = results.count
+        let row = selectedIndex >= 0 ? resultRows[selectedIndex] : -1
+        list.selectRowIndexes(row >= 0 ? IndexSet(integer: row) : [], byExtendingSelection: false)
+        if oldIndex != selectedIndex { refreshSelection(at: oldIndex) }
+        refreshSelection(at: selectedIndex)
+        if row >= 0 { list.scrollRowToVisible(row) }
+        let selectionChanged = oldIndex != selectedIndex || oldResult?.id != selectedResult?.id
+        if selectionChanged {
+            countAnnouncementTask?.cancel()
+            NSAccessibility.post(element: list, notification: .selectedRowsChanged)
+            if let result = selectedResult {
+                announce(uiFormat("%@, %@, %@, %ld of %ld", result.title, result.section.localizedTitle, result.detail, selectedIndex + 1, results.count))
+                return
+            }
+        }
+        if oldCount != announcedResultCount {
+            countAnnouncementTask?.cancel()
+            countAnnouncementTask = Task { [weak self] in
+                do { try await Task.sleep(for: .milliseconds(300)) } catch { return }
+                guard let self, !isHidden else { return }
+                announce(uiFormat("%ld results", results.count), priority: .low)
+            }
+        }
+    }
+
+    private func announce(_ text: String, priority: NSAccessibilityPriorityLevel = .medium) {
+        onAccessibilityAnnouncement?(text)
+        NSAccessibility.post(element: input, notification: .announcementRequested, userInfo: [
+            .announcement: text, .priority: priority.rawValue
+        ])
+    }
+
+    private func refreshSelection(at index: Int) {
+        guard resultRows.indices.contains(index),
+              let cell = list.view(atColumn: 0, row: resultRows[index], makeIfNecessary: false) as? PaletteResultCell else { return }
+        cell.apply(selected: index == selectedIndex, accent: accent)
+    }
+
+    private var visibleRows: Range<Int> {
+        let range = list.rows(in: list.visibleRect)
+        guard range.location != NSNotFound else { return 0..<0 }
+        return range.location..<min(entries.count, NSMaxRange(range))
+    }
+
+    private func resizeList() {
+        let m = OrbitTokens.Metrics.CommandBar.self
+        let height = entries.reduce(CGFloat.zero) { height, entry in
+            switch entry {
+            case .header: height + m.iconTileSize
+            case .result: height + m.rowPitch
+            }
+        }
+        list.frame.size = NSSize(width: scroll.contentSize.width, height: max(height, scroll.contentSize.height))
+        list.tableColumns.first?.width = list.bounds.width
+    }
+
+    func numberOfRows(in tableView: NSTableView) -> Int { entries.count }
+
+    func tableView(_ tableView: NSTableView, heightOfRow row: Int) -> CGFloat {
+        switch entries[row] {
+        case .header: OrbitTokens.Metrics.CommandBar.iconTileSize
+        case .result: OrbitTokens.Metrics.CommandBar.rowPitch
+        }
+    }
+
+    func tableView(_ tableView: NSTableView, isGroupRow row: Int) -> Bool {
+        if case .header = entries[row] { return true }
+        return false
+    }
+
+    func tableView(_ tableView: NSTableView, shouldSelectRow row: Int) -> Bool {
+        if case .result = entries[row] { return true }
+        return false
+    }
+
+    func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
+        switch entries[row] {
+        case .header(let section):
+            let identifier = NSUserInterfaceItemIdentifier("palette-section")
+            let header = (tableView.makeView(withIdentifier: identifier, owner: nil) as? PaletteSectionCell) ?? PaletteSectionCell()
+            header.identifier = identifier
+            header.label.stringValue = section.localizedTitle
+            return header
+        case .result:
+            let identifier = NSUserInterfaceItemIdentifier("palette-result")
+            let cell = (tableView.makeView(withIdentifier: identifier, owner: nil) as? PaletteResultCell) ?? PaletteResultCell()
+            cell.identifier = identifier
+            configure(cell, at: row, selected: selectedIndex)
+            return cell
+        }
+    }
+
+    func tableView(_ tableView: NSTableView, rowViewForRow row: Int) -> NSTableRowView? {
+        let identifier = NSUserInterfaceItemIdentifier("palette-row")
+        let view = (tableView.makeView(withIdentifier: identifier, owner: nil) as? PaletteTableRowView) ?? PaletteTableRowView()
+        view.identifier = identifier
+        configure(view, at: row)
+        return view
+    }
+
+    private func configure(_ rowView: PaletteTableRowView, at row: Int) {
+        switch entries[row] {
+        case .header(let section):
+            rowView.setAccessibilityRole(.group)
+            rowView.setAccessibilityLabel(section.localizedTitle)
+            rowView.setAccessibilityIdentifier("palette-section-\(row)")
+            rowView.onPress = nil
+        case .result(let index):
+            let result = results[index]
+            rowView.setAccessibilityRole(.row)
+            rowView.setAccessibilityLabel(result.title + ", " + result.section.localizedTitle + ", " + result.detail)
+            rowView.setAccessibilityIdentifier("palette-result-\(index)")
+            rowView.onPress = { [weak self] in self?.press(row: row) }
+        }
+    }
+
+    private func configure(_ cell: PaletteResultCell, at row: Int, selected: Int) {
+        guard case .result(let index) = entries[row] else { return }
+        let result = results[index]
+        var image = favicons[result.id]
+        let usesFavicon = image != nil
+        if image == nil {
+            image = symbolImages[result.symbol]
+            if image == nil {
+                image = NSImage(systemSymbolName: result.symbol, accessibilityDescription: nil)
+                symbolImages[result.symbol] = image
+            }
+        }
+        cell.configure(result: result, image: image, usesFavicon: usesFavicon)
+        cell.apply(selected: index == selected, accent: accent)
+    }
+
+    private func press(row: Int) {
+        guard entries.indices.contains(row), case .result(let index) = entries[row] else { return }
+        updateSelection(index)
+        onSelect?(index)
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        refreshColors()
+        for row in entries.indices {
+            if let cell = list.view(atColumn: 0, row: row, makeIfNecessary: false) as? PaletteResultCell {
+                configure(cell, at: row, selected: selectedIndex)
+            }
+        }
+    }
+    private func refreshColors() {
+        panel.layer?.backgroundColor = OrbitTokens.Color.Surface.commandBar.resolvedCGColor(for: effectiveAppearance)
+        OrbitTokens.Shadow.commandBar.apply(to: panelShadow, isFlipped: true, appearance: effectiveAppearance)
+        input.textColor = OrbitTokens.Color.Text.commandBarPrimary
+        searchIcon.contentTintColor = OrbitTokens.Color.Text.commandBarPrimary
+        divider.layer?.backgroundColor = OrbitTokens.Color.Line.commandBarHairline.resolvedCGColor(for: effectiveAppearance)
+        panel.layer?.borderWidth = 1 / (window?.backingScaleFactor ?? 2)
+        panel.layer?.borderColor = OrbitTokens.Color.Line.commandBarOuterStroke.resolvedCGColor(for: effectiveAppearance)
+        innerStroke.layer?.borderWidth = 1 / (window?.backingScaleFactor ?? 2)
+        innerStroke.layer?.borderColor = OrbitTokens.Color.Line.commandBarInnerStroke.resolvedCGColor(for: effectiveAppearance)
+    }
+    override func mouseDown(with event: NSEvent) {
+        if !panel.frame.contains(convert(event.locationInWindow, from: nil)) { onDismiss?() }
+    }
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        // Command-Return does not reliably become insertNewline in the field editor.
+        if input.currentEditor() != nil, (input as? PaletteInputField)?.acceptReturn(event) == true { return true }
+        return super.performKeyEquivalent(with: event)
+    }
+    func controlTextDidChange(_ notification: Notification) {
+        guard (input.currentEditor() as? NSTextView)?.hasMarkedText() != true else { return }
+        onQuery?(input.stringValue)
+    }
+    func control(_ control: NSControl, textView: NSTextView, doCommandBy selector: Selector) -> Bool {
+        guard control === input, !textView.hasMarkedText() else { return false }
+        switch selector {
+        case #selector(NSResponder.moveDown(_:)): onMove?(1)
+        case #selector(NSResponder.moveUp(_:)): onMove?(-1)
+        case #selector(NSResponder.insertTab(_:)): onMove?(1)
+        case #selector(NSResponder.insertBacktab(_:)): onMove?(-1)
+        case #selector(NSResponder.insertNewline(_:)),
+             #selector(NSResponder.insertNewlineIgnoringFieldEditor(_:)),
+             #selector(NSResponder.insertLineBreak(_:)):
+            // Direct field-editor dispatch need not set NSApp.currentEvent (hidden-window tests).
+            var flags = NSApp.currentEvent.flatMap { $0.type == .keyDown ? $0.modifierFlags : nil } ?? []
+            if selector == #selector(NSResponder.insertNewlineIgnoringFieldEditor(_:)) { flags.insert(.option) }
+            if selector == #selector(NSResponder.insertLineBreak(_:)) { flags.insert(.control) }
+            onAccept?(flags)
+        case #selector(NSResponder.cancelOperation(_:)): onDismiss?()
+        default: return false
+        }
+        return true
+    }
+}
+
+@MainActor
+private final class PaletteInputField: NSTextField {
+    var onReturn: ((NSEvent) -> Void)?
+    func acceptReturn(_ event: NSEvent) -> Bool {
+        guard event.type == .keyDown, event.keyCode == 36 || event.keyCode == 76,
+              (currentEditor() as? NSTextView)?.hasMarkedText() != true else { return false }
+        onReturn?(event)
+        return true
+    }
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        if currentEditor() != nil, acceptReturn(event) { return true }
+        return super.performKeyEquivalent(with: event)
+    }
+    override func keyDown(with event: NSEvent) {
+        if !acceptReturn(event) { super.keyDown(with: event) }
+    }
+}
+
+@MainActor
+private final class PaletteTableView: NSTableView {
+    var onPressRow: ((Int) -> Void)?
+    override var acceptsFirstResponder: Bool { false }
+    override func mouseDown(with event: NSEvent) {
+        // Selection belongs to the input's controller; clicks must not end field editing.
+        let row = row(at: convert(event.locationInWindow, from: nil))
+        if row >= 0 { onPressRow?(row) }
+    }
+}
+
+@MainActor
+private final class PaletteTableRowView: NSTableRowView {
+    var onPress: (() -> Void)?
+    override func drawSelection(in dirtyRect: NSRect) {}
+    override func accessibilityPerformPress() -> Bool {
+        guard let onPress else { return false }
+        onPress()
+        return true
+    }
+}
+
+@MainActor
+private final class PaletteSectionCell: NSTableCellView {
+    let label = NSTextField(labelWithString: "")
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        label.font = OrbitTokens.Typography.commandBarAccessory
+        label.textColor = OrbitTokens.Color.Text.commandBarSecondary
+        label.setAccessibilityElement(false)
+        setAccessibilityElement(false)
+        addSubview(label)
+    }
+    convenience init() { self.init(frame: .zero) }
+    required init?(coder: NSCoder) { nil }
+    override func layout() {
+        super.layout()
+        let inset = OrbitTokens.Metrics.CommandBar.iconTileInsetX
+        label.frame = NSRect(x: inset, y: 0, width: max(0, bounds.width - 2 * inset), height: bounds.height)
+    }
+}
+
+@MainActor
+final class PaletteResultCell: NSTableCellView {
+    let titleLabel = NSTextField(labelWithString: "")
+    let detailLabel = NSTextField(labelWithString: "")
+    let actionLabel = NSTextField(labelWithString: "")
+    let shortcutLabel = NSTextField(labelWithString: "")
+    let hintLabel = NSTextField(labelWithString: "↩")
+    let icon = NSImageView()
+    let background = NSView()
+    let iconTile = NSView()
+    let accessory = NSView()
+    private var usesFavicon = false
+    private var isSelectedResult = false
+    private var isHovered = false
+    private var selectionAccent = NSColor.clear
+    private var hoverArea: NSTrackingArea?
+    private var hintWidth: CGFloat = 0
+    override var isFlipped: Bool { true }
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        background.wantsLayer = true
+        background.layer?.cornerRadius = OrbitTokens.Radius.commandBarRow
+        background.setAccessibilityElement(false)
+        addSubview(background)
+        titleLabel.font = OrbitTokens.Typography.commandBarRowTitle
+        detailLabel.font = OrbitTokens.Typography.commandBarAccessory
+        actionLabel.font = OrbitTokens.Typography.commandBarAccessory
+        shortcutLabel.font = OrbitTokens.Typography.commandBarAccessory
+        hintLabel.font = OrbitTokens.Typography.commandBarAccessory
+        titleLabel.lineBreakMode = .byTruncatingTail
+        detailLabel.lineBreakMode = .byTruncatingMiddle
+        detailLabel.alignment = .left
+        actionLabel.alignment = .right
+        actionLabel.lineBreakMode = .byTruncatingTail
+        shortcutLabel.alignment = .right
+        hintLabel.alignment = .center
+        iconTile.wantsLayer = true
+        iconTile.layer?.cornerRadius = OrbitTokens.Radius.commandBarIconTile
+        accessory.wantsLayer = true
+        accessory.layer?.cornerRadius = OrbitTokens.Radius.commandBarIconTile
+        addSubview(iconTile)
+        addSubview(accessory)
+        setAccessibilityElement(false)
+        for view in [titleLabel, detailLabel, actionLabel, shortcutLabel, hintLabel, icon] {
+            view.setAccessibilityElement(false)
+            addSubview(view)
+        }
+    }
+    convenience init() { self.init(frame: .zero) }
+    required init?(coder: NSCoder) { nil }
+
+    func configure(result: BrowserPaletteResult, image: NSImage?, usesFavicon: Bool) {
+        self.usesFavicon = usesFavicon
+        if titleLabel.stringValue != result.title {
+            titleLabel.stringValue = result.title
+            needsLayout = true
+        }
+        let detail = result.section == .commands ? "" : result.detail
+        if detailLabel.stringValue != detail {
+            detailLabel.stringValue = detail
+            needsLayout = true
+        }
+        actionLabel.stringValue = result.actionLabel
+        shortcutLabel.stringValue = result.shortcut
+        let hint = "⏎"
+        if hintLabel.stringValue != hint || hintWidth == 0 {
+            hintLabel.stringValue = hint
+            hintWidth = max(OrbitTokens.Metrics.CommandBar.accessoryChipSize, hintLabel.intrinsicContentSize.width)
+            needsLayout = true
+        }
+        if icon.image !== image { icon.image = image }
+    }
+    func apply(selected: Bool, accent: NSColor) {
+        isSelectedResult = selected
+        selectionAccent = accent
+        refreshBackground()
+        titleLabel.textColor = selected ? OrbitTokens.Color.Text.onAccent : OrbitTokens.Color.Text.commandBarPrimary
+        detailLabel.textColor = selected ? OrbitTokens.Color.Text.onAccent.withAlphaComponent(0.72) : OrbitTokens.Color.Text.commandBarSecondary
+        actionLabel.textColor = selected ? OrbitTokens.Color.Text.onAccent : OrbitTokens.Color.Text.commandBarSecondary
+        shortcutLabel.textColor = selected ? OrbitTokens.Color.Text.onAccent.withAlphaComponent(0.8) : OrbitTokens.Color.Text.commandBarSecondary
+        hintLabel.textColor = selected ? accent : OrbitTokens.Color.State.commandBarAccessoryForeground
+        hintLabel.isHidden = !selected
+        accessory.isHidden = !selected
+        actionLabel.isHidden = !selected
+        shortcutLabel.isHidden = shortcutLabel.stringValue.isEmpty
+        accessory.layer?.backgroundColor = (selected ? NSColor.white : OrbitTokens.Color.State.commandBarAccessory).resolvedCGColor(for: effectiveAppearance)
+        icon.contentTintColor = usesFavicon ? nil : (selected ? accent : OrbitTokens.Color.Text.commandBarPrimary)
+        iconTile.layer?.backgroundColor = (selected ? NSColor.white : .clear).resolvedCGColor(for: effectiveAppearance)
+        needsLayout = true
+    }
+    private func refreshBackground() {
+        background.layer?.backgroundColor = (isSelectedResult ? selectionAccent :
+            (isHovered ? OrbitTokens.Color.State.commandBarRowHover : .clear)).resolvedCGColor(for: effectiveAppearance)
+    }
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let hoverArea { removeTrackingArea(hoverArea) }
+        let area = NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect], owner: self)
+        addTrackingArea(area)
+        hoverArea = area
+    }
+    override func mouseEntered(with event: NSEvent) { isHovered = true; refreshBackground() }
+    override func mouseExited(with event: NSEvent) { isHovered = false; refreshBackground() }
+    override func layout() {
+        super.layout()
+        let m = OrbitTokens.Metrics.CommandBar.self
+        background.frame = NSRect(x: 0, y: 0, width: bounds.width, height: m.rowHeight)
+        iconTile.frame = NSRect(x: m.iconTileInsetX, y: (m.rowHeight - m.iconTileSize) / 2, width: m.iconTileSize, height: m.iconTileSize)
+        let imageSize: CGFloat = 16
+        icon.frame = NSRect(x: iconTile.frame.midX - imageSize / 2, y: iconTile.frame.midY - imageSize / 2, width: imageSize, height: imageSize)
+        let chipSize = m.accessoryChipSize
+        accessory.frame = NSRect(x: max(0, bounds.width - chipSize - m.rowInsetX), y: (m.rowHeight - chipSize) / 2, width: chipSize, height: chipSize)
+        hintLabel.frame = accessory.frame
+        let x = m.titleOriginX - m.rowInsetX
+        func textWidth(_ label: NSTextField) -> CGFloat {
+            label.stringValue.isEmpty ? 0 : ceil((label.stringValue as NSString).size(withAttributes: [
+                .font: label.font ?? OrbitTokens.Typography.commandBarAccessory
+            ]).width) + 4
+        }
+        let right = isSelectedResult ? accessory.frame.minX - 10 : bounds.width - m.rowInsetX
+        let shortcutWidth = min(textWidth(shortcutLabel), max(0, (right - x) * 0.25))
+        shortcutLabel.frame = NSRect(x: right - shortcutWidth, y: (m.rowHeight - 18) / 2, width: shortcutWidth, height: 18)
+        let actionRight = shortcutLabel.frame.minX - (shortcutWidth > 0 ? 14 : 0)
+        let actionWidth = isSelectedResult ? min(textWidth(actionLabel), max(0, (actionRight - x) * 0.33)) : 0
+        actionLabel.frame = NSRect(x: actionRight - actionWidth, y: (m.rowHeight - 18) / 2, width: actionWidth, height: 18)
+        let usableWidth = max(0, actionLabel.frame.minX - (actionWidth > 0 ? 16 : 0) - x)
+        let hasDetail = !detailLabel.stringValue.isEmpty && detailLabel.stringValue != titleLabel.stringValue
+        let titleWidth = hasDetail ? min(textWidth(titleLabel), usableWidth * 0.62) : usableWidth
+        titleLabel.frame = NSRect(x: x, y: (m.rowHeight - 18) / 2, width: titleWidth, height: 18)
+        let detailX = titleLabel.frame.maxX + (hasDetail ? 10 : 0)
+        detailLabel.frame = NSRect(x: detailX, y: (m.rowHeight - 18) / 2, width: hasDetail ? max(0, x + usableWidth - detailX) : 0, height: 18)
+    }
+}

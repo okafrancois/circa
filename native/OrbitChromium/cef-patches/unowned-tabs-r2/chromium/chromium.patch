@@ -1,0 +1,123 @@
+diff --git a/chrome/browser/ui/navigator/BUILD.gn b/chrome/browser/ui/navigator/BUILD.gn
+index 582c183a4c97111bd32bf4f990a28314690073e4..f0a98726aa099e3ec1eaebf5045a09ac856bcf9a 100644
+--- a/chrome/browser/ui/navigator/BUILD.gn
++++ b/chrome/browser/ui/navigator/BUILD.gn
+@@ -6,6 +6,8 @@ import("//build/config/ui.gni")
+ 
+ source_set("navigator") {
+   public = [
++    # Orbit CEF fork: header-only creation intent read by CEF (EXT-OUTCOME-R2).
++    "orbit_navigate_intent.h",
+     "browser_navigator.h",
+     "browser_navigator_params.h",
+     "browser_navigator_params_utils.h",
+diff --git a/chrome/browser/ui/navigator/orbit_navigate_intent.h b/chrome/browser/ui/navigator/orbit_navigate_intent.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..930752efab4e9b231abde57bf238aa135d61c86d
+--- /dev/null
++++ b/chrome/browser/ui/navigator/orbit_navigate_intent.h
+@@ -0,0 +1,63 @@
++// Copyright 2026 Orbit. Portions copyright The Chromium Authors. Use of this
++// source code is governed by a BSD-style license that can be found in the
++// LICENSE file.
++
++#ifndef CHROME_BROWSER_UI_NAVIGATOR_ORBIT_NAVIGATE_INTENT_H_
++#define CHROME_BROWSER_UI_NAVIGATOR_ORBIT_NAVIGATE_INTENT_H_
++
++#include "base/check.h"
++#include "base/memory/raw_ptr.h"
++#include "url/gurl.h"
++
++class BrowserWindowInterface;
++
++namespace content {
++class WebContents;
++}
++
++namespace orbit {
++
++// Orbit CEF fork (EXT-OUTCOME-R2). Navigate() creates the WebContents of a new
++// tab and runs the Browser's creation hook (CEF's OnWebContentsCreated →
++// SetAsDelegate) before it loads the URL and inserts the tab. At that moment
++// the tab has no visible URL, no tab strip index and no activation state; the
++// request itself is the only authority for them. CreateTargetContents
++// publishes it here for the duration of that hook. UI thread only.
++struct NavigateIntent {
++  raw_ptr<const BrowserWindowInterface> browser = nullptr;
++  raw_ptr<const content::WebContents> contents = nullptr;
++  GURL url;
++  // Requested tab strip index, -1 when Chrome chooses it.
++  int tabstrip_index = -1;
++  // 1 the tab is added active, 0 in the background, -1 not a tab disposition.
++  int active = -1;
++};
++
++inline const NavigateIntent*& CurrentNavigateIntentSlot() {
++  static const NavigateIntent* current = nullptr;
++  return current;
++}
++
++// The intent of the tab whose creation hook is running, or null.
++inline const NavigateIntent* CurrentNavigateIntent() {
++  return CurrentNavigateIntentSlot();
++}
++
++class ScopedNavigateIntent {
++ public:
++  explicit ScopedNavigateIntent(const NavigateIntent* intent)
++      : previous_(CurrentNavigateIntentSlot()) {
++    CHECK(intent);
++    CurrentNavigateIntentSlot() = intent;
++  }
++  ScopedNavigateIntent(const ScopedNavigateIntent&) = delete;
++  ScopedNavigateIntent& operator=(const ScopedNavigateIntent&) = delete;
++  ~ScopedNavigateIntent() { CurrentNavigateIntentSlot() = previous_; }
++
++ private:
++  const NavigateIntent* const previous_;
++};
++
++}  // namespace orbit
++
++#endif  // CHROME_BROWSER_UI_NAVIGATOR_ORBIT_NAVIGATE_INTENT_H_
+diff --git a/chrome/browser/ui/navigator/browser_navigator.cc b/chrome/browser/ui/navigator/browser_navigator.cc
+index 2486722112a44252997c7e8416178ca8078a8f23..6ee56979b62ceafe3fad6ff1f05320f9755eb342 100644
+--- a/chrome/browser/ui/navigator/browser_navigator.cc
++++ b/chrome/browser/ui/navigator/browser_navigator.cc
+@@ -32,6 +32,7 @@
+ #include "chrome/browser/ui/browser_ui_controller/browser_ui_controller.h"
+ #include "chrome/browser/ui/browser_window.h"
+ #include "chrome/browser/ui/browser_window/public/browser_window_features.h"
++#include "chrome/browser/ui/navigator/orbit_navigate_intent.h"
+ #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+ #include "chrome/browser/ui/browser_window/public/create_browser_window.h"
+ #include "chrome/browser/ui/browser_window/public/profile_browser_collection.h"
+@@ -538,6 +539,28 @@ std::unique_ptr<content::WebContents> CreateTargetContents(
+   std::unique_ptr<WebContents> target_contents =
+       WebContents::Create(create_params);
+ 
++#if BUILDFLAG(ENABLE_CEF)
++  // Orbit: the creation hook below runs before this tab has a URL, an index or
++  // an activation state; publish the request's own (NormalizeDisposition has
++  // already settled ADD_ACTIVE for tab dispositions).
++  const bool tab_disposition =
++      params.disposition == WindowOpenDisposition::NEW_FOREGROUND_TAB ||
++      params.disposition == WindowOpenDisposition::NEW_BACKGROUND_TAB ||
++      params.disposition == WindowOpenDisposition::SINGLETON_TAB ||
++      params.disposition == WindowOpenDisposition::SWITCH_TO_TAB ||
++      params.disposition == WindowOpenDisposition::NEW_SPLIT_VIEW;
++  orbit::NavigateIntent orbit_intent;
++  orbit_intent.browser = params.browser;
++  orbit_intent.contents = target_contents.get();
++  orbit_intent.url = url;
++  orbit_intent.tabstrip_index = params.tabstrip_index;
++  orbit_intent.active =
++      !tab_disposition
++          ? -1
++          : ((params.tabstrip_add_types & AddTabTypes::ADD_ACTIVE) ? 1 : 0);
++  orbit::ScopedNavigateIntent orbit_intent_scope(&orbit_intent);
++#endif
++
+   params.browser->GetFeatures().OnWebContentsCreated(params.browser,
+                                                      target_contents.get());
+ 

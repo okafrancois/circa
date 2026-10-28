@@ -1,0 +1,405 @@
+import BrowserCore
+import Foundation
+
+/// The reserved input was not replayed after repeated atomic candidate mismatches.
+public enum BrowserOrganizationReplayError: Error, Equatable, Sendable {
+    case candidateChangedRepeatedly
+}
+
+/// Per-session organization state. A class, so the base session needs one stored property only.
+@MainActor
+final class BrowserOrganizationSessionRuntime {
+    var snapshot: BrowserOrganizationSnapshot?
+    var observation: Task<Void, Never>?
+    var isRefreshQueued = false
+
+    func retire() {
+        observation?.cancel()
+        observation = nil
+        snapshot = nil
+        isRefreshQueued = false
+    }
+}
+
+/// Sidebar organization commands (Favorites, Pinned, Today, folders, archive, undo). Every command
+/// joins the window's command queue, runs against the window's context at execution time and
+/// installs the exact state the store returns, so `organization`, `snapshot` and live surfaces
+/// change together in one publication.
+public extension BrowserWindowSession {
+    /// The active Space as the sidebar shows it, published with `onChange`.
+    var organization: BrowserOrganizationSnapshot? { organizationRuntime.snapshot }
+
+    /// Follows changes made by other windows or by the store (e.g. auto-archiving): the Space's
+    /// shared lists, and occurrences of this window removed or moved by another window's command.
+    /// Idempotent; ends with `close()`.
+    func observeOrganizationChanges() {
+        guard !isClosed, organizationRuntime.observation == nil else { return }
+        organizationRuntime.observation = Task { [weak self, store] in
+            let changes = await store.organizationChanges()
+            // Changes made while subscribing are covered by one initial refresh.
+            self?.queueOrganizationRefresh()
+            for await _ in changes {
+                guard let self, !self.isClosed else { return }
+                self.queueOrganizationRefresh()
+            }
+        }
+    }
+
+    /// Inserts a refresh in command order; its completion is observable with `waitForPendingCommands`.
+    func synchronizeOrganization() {
+        enqueue { session in try await session.refreshOrganizationState() }
+    }
+
+    // MARK: Selection
+
+    /// Clicking a sidebar tab: selects, moves (a Favorite from another Space) or loads it here.
+    func selectTab(_ id: TabID, expecting expected: BrowserOrganizationSnapshot? = nil,
+                   admission: BrowserSidebarSelectionAdmission? = nil,
+                   isCurrent: @escaping @MainActor () -> Bool = { true }) {
+        enqueueOrganization { session, context in
+            guard isCurrent() else { return try await session.store.captureWindowState(in: context.windowID) }
+            return try await session.store.selectTab(id, from: context, expecting: expected, admission: admission)
+        }
+    }
+
+    // MARK: Moves (ORBIT-DRAG, ORBIT-MULTISELECT)
+
+    func moveItems(_ nodes: [BrowserOrganizationNode], to destination: BrowserOrganizationDestination) {
+        enqueueOrganization { session, context in
+            try await session.store.moveItems(nodes, to: destination, from: context)
+        }
+    }
+
+    func pinTabs(_ ids: [TabID]) {
+        enqueueOrganization { session, context in try await session.store.pinTabs(ids, from: context) }
+    }
+
+    func unpinTabs(_ ids: [TabID]) {
+        enqueueOrganization { session, context in try await session.store.unpinTabs(ids, from: context) }
+    }
+
+    func addToFavorites(_ ids: [TabID]) {
+        enqueueOrganization { session, context in try await session.store.addToFavorites(ids, from: context) }
+    }
+
+    func removeFromFavorites(_ ids: [TabID]) {
+        enqueueOrganization { session, context in try await session.store.removeFromFavorites(ids, from: context) }
+    }
+
+    /// ⌘D on the tab visible when the command runs.
+    func togglePinSelectedTab() {
+        enqueueOrganization { session, context in try await session.store.togglePinSelectedTab(from: context) }
+    }
+
+    // MARK: Folders (ORBIT-FOLDERS)
+
+    /// The task resolves to the new folder, e.g. to start editing its title; nil on failure.
+    @discardableResult
+    func createFolder(
+        title: String, at destination: BrowserOrganizationDestination,
+        containing nodes: [BrowserOrganizationNode] = []
+    ) -> Task<FolderID?, Never> {
+        enqueueOrganizationValue { session, context in
+            try await session.store.createFolder(title: title, at: destination, containing: nodes, from: context)
+        }
+    }
+
+    func renameFolder(_ id: FolderID, to title: String) {
+        enqueueOrganization { session, context in try await session.store.renameFolder(id, to: title, from: context) }
+    }
+
+    func setFolderCollapsed(_ id: FolderID, _ collapsed: Bool) {
+        enqueueOrganization { session, context in
+            try await session.store.setFolderCollapsed(id, collapsed, from: context)
+        }
+    }
+
+    func setAllFoldersCollapsed(_ collapsed: Bool) {
+        enqueueOrganization { session, context in try await session.store.setAllFoldersCollapsed(collapsed, from: context) }
+    }
+
+    func setPinnedSectionCollapsed(_ collapsed: Bool) {
+        enqueueOrganization { session, context in
+            try await session.store.setPinnedSectionCollapsed(collapsed, from: context)
+        }
+    }
+
+    func deleteFolder(_ id: FolderID, contents: BrowserFolderDeletion) {
+        enqueueOrganization { session, context in
+            try await session.store.deleteFolder(id, contents: contents, from: context)
+        }
+    }
+
+    // MARK: Titles and pinned URLs (ORBIT-RENAME, ORBIT-RESET-PIN)
+
+    /// A nil or blank title restores the web title.
+    func renameTab(_ id: TabID, to title: String?) {
+        enqueueOrganization { session, context in try await session.store.renameTab(id, to: title, from: context) }
+    }
+
+    /// Records the engine's title for this exact live occurrence; unchanged titles cost no command.
+    /// Late callbacks for a surface this session no longer owns are ignored: its tab may have been
+    /// archived by another window.
+    func updatePageTitle(for surface: Surface, to title: String?) {
+        guard !isClosed, let occurrenceID = occurrenceID(for: surface) else { return }
+        let pageTitle = BrowserOrganizedTab.normalizedPageTitle(title)
+        if let item = organization?.allTabs.first(where: { $0.occurrenceID == occurrenceID }),
+           item.pageTitle == pageTitle { return }
+        enqueue { session in
+            guard let occurrenceID = session.occurrenceID(for: surface),
+                  let authority = session.authorities[occurrenceID] else { return }
+            do {
+                guard try await session.store.updatePageTitle(pageTitle, from: authority) else { return }
+            } catch BrowserStoreError.staleContext, BrowserStoreError.tabMissing,
+                    BrowserStoreError.occurrenceOwnedByAnotherWindow {
+                return
+            }
+            try await session.refreshOrganizationState()
+        }
+    }
+
+    /// Returns the tab to its pinned URL; `navigate` loads it into this window's live surface.
+    func resetTabToPinnedURL(_ id: TabID, navigate: @escaping @MainActor (Surface, URL) -> Void) {
+        enqueue { session in
+            guard let context = try await session.organizationContext() else { return }
+            let (reset, state) = try await session.store.resetTabToPinnedURL(id, from: context)
+            guard !session.isClosed else { return }
+            session.install(state)
+            session.navigate([reset], with: navigate)
+        }
+    }
+
+    /// "Reset all tabs in this Space".
+    func resetPinnedTabs(navigate: @escaping @MainActor (Surface, URL) -> Void) {
+        enqueue { session in
+            guard let context = try await session.organizationContext() else { return }
+            let (resets, state) = try await session.store.resetPinnedTabs(from: context)
+            guard !session.isClosed else { return }
+            session.install(state)
+            session.navigate(resets, with: navigate)
+        }
+    }
+
+    // MARK: Archive (ORBIT-ARCHIVE)
+
+    func archiveTabs(_ ids: [TabID]) {
+        enqueueOrganization { session, context in try await session.store.archiveTabs(ids, from: context) }
+    }
+
+    /// ⌘W on a multi-selection.
+    func closeTabs(_ ids: [TabID]) {
+        enqueueOrganization { session, context in try await session.store.closeTabs(ids, from: context) }
+    }
+
+    /// ⇧⌘K. `protecting` comes from the shell, e.g. tabs playing media.
+    func clearTodayTabs(protecting: Set<TabID> = []) {
+        enqueueOrganization { session, context in
+            try await session.store.clearTodayTabs(protecting: protecting, from: context)
+        }
+    }
+
+    func restoreArchivedTab(_ id: TabID, activate: Bool = true) {
+        enqueueOrganization { session, context in
+            try await session.store.restoreArchivedTab(id, activate: activate, from: context)
+        }
+    }
+
+    /// Archive-backed ⇧⌘T.
+    func restoreMostRecentArchivedTab(preferAlternative: @escaping @MainActor (Date?) -> Bool = { _ in false }) {
+        enqueueOrganization { session, context in
+            let records = try await session.store.archivedTabs(from: context)
+            let newest = records.first { $0.reason != .automatic }
+            guard !preferAlternative(newest?.archivedAt), newest != nil else {
+                return try await session.store.captureWindowState(from: context)
+            }
+            return try await session.store.restoreMostRecentArchivedTab(from: context)
+        }
+    }
+
+    func deleteArchivedTabs(_ ids: [TabID]) {
+        enqueueOrganization { session, context in try await session.store.deleteArchivedTabs(ids, from: context) }
+    }
+
+    func clearArchive() {
+        enqueueOrganization { session, context in try await session.store.clearArchive(from: context) }
+    }
+
+    /// A read boundary in command order, limited to this window's profile.
+    func archivedTabs(matching query: String? = nil) -> Task<[BrowserArchivedTab], Never> {
+        let task = enqueueOrganizationValue { session, context in
+            let records = try await session.store.archivedTabs(from: context, matching: query)
+            return (records, try await session.store.captureWindowState(from: context))
+        }
+        return Task { await task.value ?? [] }
+    }
+
+    // MARK: Undo (UX-UNDO)
+
+    /// Resolves after publication with the record actually replayed (possibly past conflicts).
+    /// Nil means the replay failed or the session retired; callers never have to predict success.
+    @discardableResult
+    func undoOrganization() -> Task<UInt64?, Never> {
+        routeOrganizationReplay(undoing: true)
+    }
+
+    @discardableResult
+    func redoOrganization() -> Task<UInt64?, Never> {
+        routeOrganizationReplay(undoing: false)
+    }
+
+    /// Reserves the input's place immediately, then chooses organization or an external undo
+    /// source after earlier session commands have published. Completion runs after install and
+    /// before the next reserved input; it must not wait for this session's queue to drain.
+    @discardableResult
+    func routeOrganizationReplay(
+        undoing: Bool,
+        choosingOrganization: @escaping @MainActor () -> Bool = { true },
+        completion: @escaping @MainActor (UInt64?) -> Void = { _ in }
+    ) -> Task<UInt64?, Never> {
+        guard !isClosed else { completion(nil); return Task { nil } }
+        let previous = pending
+        pendingCommandCount += 1
+        let replay = Task<UInt64?, Never> { [self] in
+            await previous?.value
+            var replayedID: UInt64?
+            defer {
+                pendingCommandCount -= 1
+                completion(replayedID)
+            }
+            guard !isClosed else { return nil }
+            do {
+                for _ in 0..<maximumOrganizationAdoptions {
+                    // Metadata can change a candidate without changing BrowserContext. Resolve
+                    // again after an atomic mismatch, keeping this input's reserved queue slot.
+                    try await refreshOrganizationState()
+                    let result: (BrowserWindowState?, UInt64?)? = try await runOrganizationCommand { session, context in
+                        let expected = undoing ? session.organization?.undoRecordID : session.organization?.redoRecordID
+                        guard choosingOrganization() else { return (nil, nil) }
+                        guard let expected else {
+                            throw undoing ? BrowserOrganizationError.nothingToUndo : BrowserOrganizationError.nothingToRedo
+                        }
+                        let state = try await undoing
+                            ? session.store.undoOrganization(from: context, expectedRecordID: expected)
+                            : session.store.redoOrganization(from: context, expectedRecordID: expected)
+                        return (state, expected)
+                    }
+                    guard let (state, expected) = result, !isClosed else { return nil }
+                    guard let expected else { return nil } // External source handled the input.
+                    guard let state else { continue } // No mutation: refresh and resolve again.
+                    install(state)
+                    replayedID = expected
+                    return expected
+                }
+                throw BrowserOrganizationReplayError.candidateChangedRepeatedly
+            } catch {
+                if !isClosed { onError?(error) }
+                return nil
+            }
+        }
+        pending = Task { _ = await replay.value }
+        return replay
+    }
+}
+
+extension BrowserWindowSession {
+    func enqueueOrganization(
+        _ command: @escaping @MainActor (BrowserWindowSession, BrowserContext) async throws -> BrowserWindowState
+    ) {
+        enqueue { session in
+            guard let state = try await session.runOrganizationCommand(command) else { return }
+            guard !session.isClosed else { return }
+            session.install(state)
+        }
+    }
+
+    func enqueueOrganizationValue<Value: Sendable>(
+        _ command: @escaping @MainActor (BrowserWindowSession, BrowserContext) async throws -> (Value, BrowserWindowState)
+    ) -> Task<Value?, Never> {
+        guard !isClosed else { return Task { nil } }
+        pendingCommandCount += 1
+        let previous = pending
+        let task = Task<Value?, Never> { [self] in
+            defer { pendingCommandCount -= 1 }
+            await previous?.value
+            guard !isClosed else { return nil }
+            do {
+                guard let (value, state) = try await runOrganizationCommand(command) else { return nil }
+                guard !isClosed else { return nil }
+                install(state)
+                return value
+            } catch {
+                if !isClosed { onError?(error) }
+                return nil
+            }
+        }
+        pending = Task { _ = await task.value }
+        return task
+    }
+
+    /// Runs an organization command (atomic in the store, or a read). When another window's
+    /// organization command makes its context stale while it is in flight, and the store vouches
+    /// for that cause, it runs again on the adopted state, like `withAdoptedContext`.
+    func runOrganizationCommand<Value>(
+        _ command: (BrowserWindowSession, BrowserContext) async throws -> Value
+    ) async throws -> Value? {
+        var attempt = 1
+        while true {
+            guard let context = try await organizationContext() else { return nil }
+            do {
+                return try await command(self, context)
+            } catch BrowserStoreError.staleContext where attempt < maximumOrganizationAdoptions {
+                attempt += 1
+                // `organizationContext()` installs the refreshed state on the next attempt.
+                guard !isClosed, try await store.windowState(adoptingOrganizationChangesSince: context) != nil else {
+                    throw BrowserStoreError.staleContext
+                }
+            }
+        }
+    }
+
+    /// Organization commands of other windows can change this window's selection (archiving or
+    /// moving its tab) without changing its Space or profile. Organization commands target stable
+    /// IDs, so they first adopt such a change instead of failing as stale.
+    func organizationContext() async throws -> BrowserContext? {
+        guard !isClosed, let windowID else { return nil }
+        let state = try await store.captureWindowState(in: windowID)
+        guard !isClosed, let activeContext else { return nil }
+        guard state.context.storeGeneration == activeContext.storeGeneration else { throw BrowserStoreError.staleContext }
+        guard state.context.spaceID == activeContext.spaceID, state.context.profileID == activeContext.profileID else {
+            throw BrowserWindowSessionError.contextChangeRequiresNewSession
+        }
+        if state.context != activeContext { install(state) }
+        guard !isClosed else { return nil }
+        return state.context
+    }
+
+    func queueOrganizationRefresh() {
+        guard !isClosed, !organizationRuntime.isRefreshQueued else { return }
+        organizationRuntime.isRefreshQueued = true
+        enqueue { session in
+            session.organizationRuntime.isRefreshQueued = false
+            try await session.refreshOrganizationState()
+        }
+    }
+
+    /// Publishes only when something visible to this window changed.
+    func refreshOrganizationState() async throws {
+        guard !isClosed, let windowID else { return }
+        let state = try await store.captureWindowState(in: windowID)
+        guard !isClosed, let activeContext else { return }
+        guard state.context.storeGeneration == activeContext.storeGeneration,
+              state.context.spaceID == activeContext.spaceID,
+              state.context.profileID == activeContext.profileID else { return }
+        let hasRevokedSurface = surfaceOrder.contains { authorities[$0] != state.occurrenceAuthorities[$0] }
+        guard state.context != activeContext || state.snapshot != snapshot || state.catalog != catalog
+                || state.organization != organizationRuntime.snapshot || hasRevokedSurface else { return }
+        install(state)
+    }
+
+    func navigate(_ resets: [BrowserOrganizationReset], with navigate: @MainActor (Surface, URL) -> Void) {
+        for reset in resets {
+            guard !isClosed, let occurrenceID = reset.occurrenceID, let surface = surfaces[occurrenceID] else { continue }
+            navigate(surface, reset.url)
+        }
+    }
+}

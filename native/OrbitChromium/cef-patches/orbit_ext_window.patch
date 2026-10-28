@@ -1,0 +1,30 @@
+diff --git chrome/browser/ui/browser_window/internal/browser_window_features.cc chrome/browser/ui/browser_window/internal/browser_window_features.cc
+index 4342bf00084aa90cf2b24ac803e4d9b46dbb8c56..8fa0054a9320f55ee1ccdff325d83ed65707ef25 100644
+--- chrome/browser/ui/browser_window/internal/browser_window_features.cc
++++ chrome/browser/ui/browser_window/internal/browser_window_features.cc
+@@ -1145,7 +1145,11 @@
+ void BrowserWindowFeatures::InitPostTabModelConstruction(
+     BrowserWindowInterface* interface) {
+   auto* browser_view = BrowserView::GetBrowserViewForBrowser(interface);
+-  CHECK(browser_view);
++  if (!browser_view) {
++    // A BrowserWindow without BrowserView (Orbit hosted Chrome style, ENG-X2):
++    // no Views-based tab UI to initialize.
++    return;
++  }
+ 
+   auto* browser = browser_view->browser();
+   const bool supports_toolbar = IsNormalBrowser(browser);
+@@ -1165,10 +1169,8 @@
+     BrowserWindowInterface* interface,
+     content::WebContents* target_contents) {
+ #if BUILDFLAG(ENABLE_CEF)
+-  auto* browser_view = BrowserView::GetBrowserViewForBrowser(interface);
+-  CHECK(browser_view);
+-
+-  if (auto cef_delegate = browser_view->browser()->cef_delegate()) {
++  // Also reached without a BrowserView (Orbit hosted Chrome style, ENG-X2).
++  if (auto cef_delegate = interface->cef_delegate()) {
+     cef_delegate->OnWebContentsCreated(target_contents);
+   }
+ #endif

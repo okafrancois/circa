@@ -1,0 +1,276 @@
+diff --git a/libcef/browser/orbit/orbit_browser_window.h b/libcef/browser/orbit/orbit_browser_window.h
+index 2a74dde..413640d 100644
+--- a/libcef/browser/orbit/orbit_browser_window.h
++++ b/libcef/browser/orbit/orbit_browser_window.h
+@@ -11,6 +11,7 @@
+ #include <vector>
+ 
+ #include "base/memory/raw_ptr.h"
++#include "base/memory/weak_ptr.h"
+ #include "chrome/browser/ui/browser_window.h"
+ #include "chrome/browser/ui/dialogs/browser_dialogs.h"
+ #include "chrome/browser/ui/exclusive_access/exclusive_access_context.h"
+@@ -179,13 +180,18 @@ class OrbitBrowserWindow : public BrowserWindow, public ExclusiveAccessContext {
+   void CreateTabSearchBubble() override {}
+   void CloseTabSearchBubble() override {}
+ 
+-  // A non-null context is required by Chrome during tab activation. Fullscreen
+-  // and lock UI remain disabled until the AppKit exclusive-access host exists.
++  // A non-null context is required by Chrome during tab activation. Lock UI
++  // remains disabled until the AppKit exclusive-access host exists.
++  // CH-ESSENTIALS: Chrome tracks logical element fullscreen independently of
++  // the AppKit shell's native window transition. The embedder presents the tab
++  // via CefDisplayHandler::OnFullscreenModeChange.
++  // Without it FullscreenController::ExitFullscreenModeForTab returns early
++  // and a page can never leave element fullscreen.
+   Profile* GetProfile() override;
+   void EnterFullscreen(const url::Origin& origin,
+                        ExclusiveAccessBubbleType bubble_type,
+-                       FullscreenTabParams fullscreen_tab_params) override {}
+-  void ExitFullscreen() override {}
++                       FullscreenTabParams fullscreen_tab_params) override;
++  void ExitFullscreen() override;
+   void UpdateExclusiveAccessBubble(
+       const ExclusiveAccessBubbleParams& params,
+       ExclusiveAccessBubbleHideCallback first_hide_callback) override;
+@@ -253,7 +259,11 @@ class OrbitBrowserWindow : public BrowserWindow, public ExclusiveAccessContext {
+   const raw_ptr<Profile> profile_;
+   raw_ptr<Browser> browser_ = nullptr;
+   bool close_deferred_ = false;
++  // CH-ESSENTIALS: a tab of this logical Browser is in element fullscreen.
++  bool content_fullscreen_ = false;
++  void NotifyFullscreenStateChanged();
+   StubLocationBar location_bar_;
++  base::WeakPtrFactory<OrbitBrowserWindow> weak_factory_{this};
+ };
+ 
+ }  // namespace orbit
+diff --git a/libcef/browser/orbit/orbit_browser_window.mm b/libcef/browser/orbit/orbit_browser_window.mm
+index ef10561..972181d 100644
+--- a/libcef/browser/orbit/orbit_browser_window.mm
++++ b/libcef/browser/orbit/orbit_browser_window.mm
+@@ -8,11 +8,15 @@
+ 
+ #include <utility>
+ 
++#include "base/functional/bind.h"
++#include "base/task/single_thread_task_runner.h"
+ #include "cef/libcef/browser/orbit/orbit_hosted.h"
+ #include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/themes/theme_service.h"
+ #include "chrome/browser/ui/browser.h"
+ #include "chrome/browser/ui/browser_window/public/browser_window_features.h"
++#include "chrome/browser/ui/exclusive_access/exclusive_access_manager.h"
++#include "chrome/browser/ui/exclusive_access/fullscreen_controller.h"
+ #include "chrome/browser/ui/find_bar/find_bar.h"
+ #include "chrome/browser/ui/views/bubble_anchor_util_views.h"
+ #include "components/input/native_web_keyboard_event.h"
+@@ -293,8 +297,47 @@
+ }
+ 
+ bool OrbitBrowserWindow::IsFullscreen() const {
+-  NSWindow* window = OrbitNSWindow(window_token_);
+-  return window && ([window styleMask] & NSWindowStyleMaskFullScreen);
++  // The AppKit shell owns native window fullscreen independently. Its animated
++  // style-mask transition must not keep Chrome's element fullscreen alive after
++  // ExitFullscreen(), or make an already-fullscreen shell skip EnterFullscreen.
++  return content_fullscreen_;
++}
++
++void OrbitBrowserWindow::EnterFullscreen(
++    const url::Origin& origin,
++    ExclusiveAccessBubbleType bubble_type,
++    FullscreenTabParams fullscreen_tab_params) {
++  if (content_fullscreen_) {
++    return;
++  }
++  content_fullscreen_ = true;
++  NotifyFullscreenStateChanged();
++}
++
++void OrbitBrowserWindow::ExitFullscreen() {
++  if (!content_fullscreen_) {
++    return;
++  }
++  content_fullscreen_ = false;
++  NotifyFullscreenStateChanged();
++}
++
++// As the platform window reports a completed transition: asynchronously, after
++// FullscreenController finished its own state change (browser_view.cc).
++void OrbitBrowserWindow::NotifyFullscreenStateChanged() {
++  base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
++      FROM_HERE, base::BindOnce(
++                     [](base::WeakPtr<OrbitBrowserWindow> self) {
++                       if (!self || !self->browser_) {
++                         return;
++                       }
++                       if (auto* manager =
++                               ExclusiveAccessManager::From(self->browser_)) {
++                         manager->fullscreen_controller()
++                             ->WindowFullscreenStateChanged();
++                       }
++                     },
++                     weak_factory_.GetWeakPtr()));
+ }
+ 
+ LocationBar* OrbitBrowserWindow::GetLocationBar() const {
+diff --git a/libcef/browser/orbit/orbit_cef_api.mm b/libcef/browser/orbit/orbit_cef_api.mm
+index c92848a..e9364df 100644
+--- a/libcef/browser/orbit/orbit_cef_api.mm
++++ b/libcef/browser/orbit/orbit_cef_api.mm
+@@ -299,6 +299,15 @@ int32_t ReleaseWindow(uint64_t window_token) {
+ 
+ extern "C" CEF_EXPORT const orbit_cef_api_t* orbit_cef_get_api(uint32_t version);
+ 
++// CH-ESSENTIALS (Orbit docs/native-port/ch-essentials-2026-10-25.md): level of the
++// essential-surface fixes, independent of the side API version. 1: element
++// fullscreen reported by OrbitBrowserWindow, no sad-tab crash without a
++// BrowserView, embedder-confirmed folder upload only for Orbit hosted tabs.
++extern "C" CEF_EXPORT uint32_t orbit_cef_essentials_level(void);
++extern "C" CEF_EXPORT uint32_t orbit_cef_essentials_level(void) {
++  return 1u;
++}
++
+ extern "C" CEF_EXPORT const orbit_cef_api_t* orbit_cef_get_api(
+     uint32_t version) {
+   switch (version) {
+diff --git a/libcef/browser/file_dialog_manager.cc b/libcef/browser/file_dialog_manager.cc
+index 3e5feef..3497dc7 100644
+--- a/libcef/browser/file_dialog_manager.cc
++++ b/libcef/browser/file_dialog_manager.cc
+@@ -13,6 +13,9 @@
+ #include "cef/include/cef_dialog_handler.h"
+ #include "cef/libcef/browser/browser_host_base.h"
+ #include "cef/libcef/browser/context.h"
++#include "cef/libcef/browser/chrome/browser_delegate.h"
++#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#include "components/tabs/public/tab_interface.h"
+ #include "cef/libcef/browser/thread_util.h"
+ #include "chrome/browser/file_select_helper.h"
+ #include "content/public/browser/file_select_listener.h"
+@@ -407,6 +410,18 @@ void CefFileDialogManager::RunSelectFile(
+     return;
+   }
+ 
++  // Hosted Orbit folder uploads require the embedder's explicit confirmation.
++  // If it declines handling the request, never fall back to an unconfirmed
++  // native picker: FileSelectHelper omits Chrome's Views confirmation here.
++  auto* tab = tabs::TabInterface::MaybeGetFromContents(browser_->GetWebContents());
++  auto* window = tab ? tab->GetBrowserWindowInterface() : nullptr;
++  auto* delegate = window ? window->cef_delegate() : nullptr;
++  if (type == ui::SelectFileDialog::SELECT_UPLOAD_FOLDER && delegate &&
++      delegate->UsesNativeHostedWindow()) {
++    std::move(callback).Run({});
++    return;
++  }
++
+   if (dialog_) {
+     LOG(ERROR) << "Multiple simultaneous dialogs are not supported; "
+                   "canceling the file dialog";
+diff --git a/patch/patch.cfg b/patch/patch.cfg
+index c783654..8bba6de 100644
+--- a/patch/patch.cfg
++++ b/patch/patch.cfg
+@@ -929,10 +929,21 @@ patches = [
+     # OnWebContentsCreated). Hunks sit on chrome_browser_browser.patch.
+     'name': 'orbit_ext_window',
+     'condition': 'ORBIT_CEF_PATCHES',
+-  }
++  },
+   # Native hosted Browser detach has no Chromium SidePanelUI (ENG-X2).
+   {
+     'name': 'orbit_native_side_panel',
+     'condition': 'ORBIT_CEF_PATCHES',
+   },
++  # CH-ESSENTIALS: a crashed renderer of a hosted tab (no BrowserView) must not
++  # crash the browser in SadTabController; Orbit shows its own crashed page.
++  {
++    'name': 'orbit_essentials_sad_tab',
++    'condition': 'ORBIT_CEF_PATCHES',
++  },
++  # CH-ESSENTIALS: Orbit hosted tabs use embedder-confirmed folder uploads.
++  {
++    'name': 'orbit_essentials_folder_upload',
++    'condition': 'ORBIT_CEF_PATCHES',
++  },
+ ]
+diff --git a/patch/patches/orbit_essentials_folder_upload.patch b/patch/patches/orbit_essentials_folder_upload.patch
+new file mode 100644
+index 0000000..ba3956c
+--- /dev/null
++++ b/patch/patches/orbit_essentials_folder_upload.patch
+@@ -0,0 +1,50 @@
++diff --git chrome/browser/file_select_helper.cc chrome/browser/file_select_helper.cc
++index 5c502df..167a179 100644
++--- chrome/browser/file_select_helper.cc
+++++ chrome/browser/file_select_helper.cc
++@@ -21,6 +21,11 @@
++ #include "base/task/thread_pool.h"
++ #include "base/threading/hang_watcher.h"
++ #include "build/build_config.h"
+++#include "cef/libcef/features/features.h"
+++#if BUILDFLAG(ENABLE_CEF)
+++#include "cef/libcef/browser/chrome/browser_delegate.h"
+++#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+++#endif
++ #include "chrome/browser/browser_process.h"
++ #include "chrome/browser/enterprise/connectors/common.h"
++ #include "chrome/browser/platform_util.h"
++@@ -72,6 +77,19 @@ DEFINE_LOCAL_ELEMENT_IDENTIFIER_VALUE(kCancelButtonId);
++ 
++ namespace {
++ 
+++// Only Orbit hosted tabs use the embedder's upload confirmation. Other windows
+++// retain Chrome's tab-modal confirmation, even if their dialog host is absent.
+++bool UsesOrbitUploadConfirmation(content::WebContents* web_contents) {
+++#if BUILDFLAG(ENABLE_CEF)
+++  auto* tab = tabs::TabInterface::MaybeGetFromContents(web_contents);
+++  auto* window = tab ? tab->GetBrowserWindowInterface() : nullptr;
+++  auto* delegate = window ? window->cef_delegate() : nullptr;
+++  return delegate && delegate->UsesNativeHostedWindow();
+++#else
+++  return false;
+++#endif
+++}
+++
++ void DeleteFiles(std::vector<base::FilePath> paths) {
++   for (auto& file_path : paths)
++     base::DeleteFile(file_path);
++@@ -264,9 +282,11 @@ void FileSelectHelper::OnListDone(int error) {
++   }
++ 
++   if (dialog_type_ == ui::SelectFileDialog::SELECT_UPLOAD_FOLDER) {
++-    if (run_from_cef_) {
+++    if (run_from_cef_ || UsesOrbitUploadConfirmation(web_contents_)) {
++       // Don't show the upload confirmation dialog when triggered via CEF
++-      // (initially or recursively).
+++      // (initially or recursively), or via Orbit's hosted dialog handler.
+++      // CefFileDialogManager cancels hosted folder requests if the handler
+++      // declines them. Orbit must confirm before continuing that callback.
++       PerformContentAnalysisIfNeeded(std::move(chooser_files));
++       return;
++     }
+diff --git a/patch/patches/orbit_essentials_sad_tab.patch b/patch/patches/orbit_essentials_sad_tab.patch
+new file mode 100644
+index 0000000..0f80241
+--- /dev/null
++++ b/patch/patches/orbit_essentials_sad_tab.patch
+@@ -0,0 +1,17 @@
++diff --git chrome/browser/ui/sad_tab_controller.cc chrome/browser/ui/sad_tab_controller.cc
++--- chrome/browser/ui/sad_tab_controller.cc
+++++ chrome/browser/ui/sad_tab_controller.cc
++@@ -29,7 +29,12 @@
++     return nullptr;
++   }
++   BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser);
++-  DCHECK(browser_view);
+++  // Orbit (CEF hosted tabs): a logical Browser whose BrowserWindow is an AppKit
+++  // OrbitBrowserWindow has no BrowserView; the embedder shows its own crashed
+++  // page (CefRequestHandler::OnRenderProcessTerminated).
+++  if (!browser_view) {
+++    return nullptr;
+++  }
++ 
++   for (auto* contents_view : browser_view->GetAllVisibleContentsWebViews()) {
++     if (contents_view->web_contents() == web_contents) {

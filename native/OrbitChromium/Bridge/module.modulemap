@@ -1,0 +1,4 @@
+module OrbitChromiumBridge {
+  header "OrbitChromiumBridge.h"
+  export *
+}

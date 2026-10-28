@@ -1,0 +1,10 @@
+{
+  "input_sha256": {
+    "chrome/browser/ui/views/extensions/extension_popup.h": "8bc8dbd470c52db7138c4c04c5e92d189fb60badc933f46c21c533be728b0e4c",
+    "chrome/browser/ui/views/extensions/extension_popup.cc": "3cd58690bec67df312bcfc4198924901772f46903fa95f1606f7b9e46efcd3a6"
+  },
+  "output_sha256": {
+    "chrome/browser/ui/views/extensions/extension_popup.h": "c70ee5b04936d0e9f5c185320ff10a0a06eb1a9ac113c11b9e1efe3bc9275293",
+    "chrome/browser/ui/views/extensions/extension_popup.cc": "5de8a6f908e9447e4efb42b94ab43b1a22639fc6707e2c4a5121e3676aee259a"
+  }
+}

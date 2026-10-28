@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Product build of Orbit on Chromium (CHROMIUM-APP). Unsigned build output: scripts/orbit-app.py
+     completes the declarations (URL schemes, documents, usage descriptions), versions and signs. -->
+<plist version="1.0"><dict>
+  <key>CFBundleIdentifier</key><string>io.github.okatech.orbit.test.orbit.unpackaged</string>
+  <key>CFBundleExecutable</key><string>@ORBIT_PRODUCT_NAME@</string>
+  <key>CFBundleName</key><string>Orbit</string>
+  <key>CFBundleDisplayName</key><string>Orbit</string>
+  <key>CFBundleIconFile</key><string>Orbit.icns</string>
+  <key>CFBundleDevelopmentRegion</key><string>en</string>
+  <key>CFBundleLocalizations</key><array><string>en</string><string>fr</string></array>
+  <key>CFBundlePackageType</key><string>APPL</string>
+  <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
+  <key>CFBundleVersion</key><string>1</string>
+  <key>CFBundleShortVersionString</key><string>0.1</string>
+  <key>LSMinimumSystemVersion</key><string>15.0</string>
+  <key>NSCameraUsageDescription</key><string>Orbit utilise la caméra uniquement pour les sites que vous autorisez.</string>
+  <key>NSMicrophoneUsageDescription</key><string>Orbit utilise le microphone uniquement pour les sites que vous autorisez.</string>
+  <key>NSLocationUsageDescription</key><string>Orbit partage votre localisation uniquement avec les sites que vous autorisez.</string>
+  <key>NSLocationWhenInUseUsageDescription</key><string>Orbit partage votre localisation uniquement avec les sites que vous autorisez.</string>
+  <key>NSBluetoothAlwaysUsageDescription</key><string>Orbit utilise le Bluetooth uniquement pour les sites et les appareils que vous autorisez.</string>
+  <key>NSBluetoothPeripheralUsageDescription</key><string>Orbit utilise le Bluetooth uniquement pour les sites et les appareils que vous autorisez.</string>
+  <key>NSPrincipalClass</key><string>ACRApplication</string>
+  <key>NSHighResolutionCapable</key><true/>
+  <key>NSSupportsAutomaticGraphicsSwitching</key><true/>
+  <key>NSSupportsAutomaticTermination</key><false/>
+  <key>NSSupportsSuddenTermination</key><false/>
+  <key>SUFeedURL</key><string>https://github.com/@ORBIT_RELEASE_REPOSITORY@/releases/latest/download/appcast.xml</string>
+  <key>SUPublicEDKey</key><string>@SPARKLE_PUBLIC_ED_KEY@</string>
+  <key>SUEnableAutomaticChecks</key><true/>
+  <key>SUAutomaticallyUpdate</key><true/>
+  <key>SUScheduledCheckInterval</key><integer>3600</integer>
+  <key>OrbitEngine</key><string>chromium</string>
+</dict></plist>
