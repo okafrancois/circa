@@ -30,7 +30,28 @@ extension BrowserEnvironment {
         // Use the snapshot read for this creation, even when an observer's publication is older.
         controller.applyPreferences(searchEngine: settings.document.profile(space.profileID).searchEngine,
                                     theme: spaceTheme(for: space.id, in: catalog))
+        if url == nil {
+            await controller.historyObserver.prepareSuggestions(for: space.profileID)
+            let candidates = BrowserPaletteRanking.candidates(document: document, profileID: space.profileID,
+                windowID: document.windows.first?.id ?? WindowID(), spaceID: space.id, windowIDs: Dictionary(uniqueKeysWithValues: document.windows.map { ($0.id, $0.id.rawValue) }))
+            let history = controller.historyObserver.cachedSuggestions(for: space.profileID, query: "")
+            let live = liveControllers.flatMap { $0.session.ownedSurfaces }.filter { $0.profileID == space.profileID }
+            controller.inputCandidates = candidates.map { result in
+                let pixels = live.first { $0.currentURL == result.url }?.navigationState.faviconImage
+                let reference = pixels.flatMap { BrowserHistoryFavicon.reference(png: $0.png) } ?? result.faviconReference
+                return BrowserPaletteResult(id: result.id, title: result.title, detail: result.detail,
+                    section: result.section, action: result.action, searchAliases: result.searchAliases,
+                    sourceURL: result.sourceURL, scopePriority: result.scopePriority, faviconReference: reference, shortcut: result.shortcut)
+            }
+            controller.inputHistory = history
+            controller.suggestionProvider = { [weak controller] query in
+                guard let controller else { return [] }
+                return (try? await controller.historyObserver.suggestions(for: space.profileID, query: query)) ?? []
+            }
+        }
+        controller.sourceSpaceBadge.image = (SpaceIconImages.view(settings.document.space(space.id).iconSelection, pointSize: 13) as? NSImageView)?.image
         if startLoading { controller.load(url) }
+        if url == nil { await controller.prepareCompactPresentation() }
         return controller
     }
 

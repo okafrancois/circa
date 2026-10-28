@@ -28,6 +28,7 @@ extension BrowserQuickWindowWindowController: BrowserSiteControlsHost {
     func installSiteControlsButton(_ button: NSView) {
         guard button.superview == nil else { return }
         toolbar.addSubview(button)
+        button.isHidden = true
         button.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
             button.widthAnchor.constraint(equalToConstant: SiteControlTokens.anchorSize),
@@ -38,7 +39,7 @@ extension BrowserQuickWindowWindowController: BrowserSiteControlsHost {
     }
     func presentSiteControls(_ panel: BrowserSitePopover, rows: [NSView], button: NSView) {
         guard window?.isVisible == true else { return }
-        panel.show(rows: rows, anchor: button)
+        panel.show(rows: rows, anchor: sourceSpaceBadge)
     }
     func surface(_ surface: Surface, requestsPermission request: BrowserPermissionRequest) async -> BrowserPermissionDecision {
         await siteControls.request(request, from: surface)
