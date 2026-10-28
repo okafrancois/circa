@@ -1,0 +1,99 @@
+diff --git a/content/public/browser/video_picture_in_picture_window_controller.h b/content/public/browser/video_picture_in_picture_window_controller.h
+--- a/content/public/browser/video_picture_in_picture_window_controller.h
++++ b/content/public/browser/video_picture_in_picture_window_controller.h
+@@ -20,6 +20,15 @@
+ class VideoPictureInPictureWindowController
+     : public PictureInPictureWindowController {
+  public:
++  // Scoped by the browser around its automatic entry request. The overlay
++  // captures this value when shown, so later manual sessions remain unchanged.
++  void SetBrowserInitiatedAutomaticPictureInPicture(bool automatic) {
++    browser_initiated_automatic_picture_in_picture_ = automatic;
++  }
++  bool IsBrowserInitiatedAutomaticPictureInPicture() const {
++    return browser_initiated_automatic_picture_in_picture_;
++  }
++
+   virtual VideoOverlayWindow* GetWindowForTesting() = 0;
+   virtual void UpdateLayerBounds() = 0;
+   virtual bool IsPlayerActive() = 0;
+@@ -91,6 +100,9 @@
+   // Use PictureInPictureWindowController::GetOrCreateForWebContents() to
+   // create an instance.
+   VideoPictureInPictureWindowController() = default;
++
++ private:
++  bool browser_initiated_automatic_picture_in_picture_ = false;
+ };
+
+ }  // namespace content
+diff --git a/chrome/browser/ui/views/overlay/video_overlay_window_views.h b/chrome/browser/ui/views/overlay/video_overlay_window_views.h
+--- a/chrome/browser/ui/views/overlay/video_overlay_window_views.h
++++ b/chrome/browser/ui/views/overlay/video_overlay_window_views.h
+@@ -439,6 +439,8 @@
+
+   // Automatically hides the title view a few seconds after the window is first
+   // shown.
++  // Captured for each show, including when a window is reused for manual PiP.
++  bool browser_initiated_automatic_pip_ = false;
+   base::OneShotTimer initial_title_hide_timer_;
+
+   // Used to track movement of the window. The mouse movement and the window
+diff --git a/chrome/browser/ui/views/overlay/video_overlay_window_views.cc b/chrome/browser/ui/views/overlay/video_overlay_window_views.cc
+--- a/chrome/browser/ui/views/overlay/video_overlay_window_views.cc
++++ b/chrome/browser/ui/views/overlay/video_overlay_window_views.cc
+@@ -821,8 +821,9 @@
+   //   * We are in the initial "show" period, or
+   //   * The overlay window does not meet the user interaction criteria and is
+   //   not trusted for media playback
+-  const bool title_is_visible =
+-      force_title_and_scrim_visible_.has_value()
++  const bool title_is_visible = browser_initiated_automatic_pip_
++      ? wanted_visibility
++      : force_title_and_scrim_visible_.has_value()
+           ? force_title_and_scrim_visible_.value()
+           : wanted_visibility || initial_title_hide_timer_.IsRunning() ||
+                 !can_hide_title_and_scrim;
+@@ -1730,6 +1731,13 @@
+ }
+
+ void VideoOverlayWindowViews::ShowInactive() {
++  browser_initiated_automatic_pip_ =
++      controller_->IsBrowserInitiatedAutomaticPictureInPicture();
++  if (browser_initiated_automatic_pip_) {
++    initial_title_hide_timer_.Stop();
++    // Hide before the first visible frame; hover keeps the native animations.
++    UpdateControlsVisibility(false, false);
++  }
+ // Fade in animation is disabled for Document and Video Picture-in-Picture on
+ // Windows. On Windows, resizable windows can not be translucent. See
+ // crbug.com/425711450.
+@@ -1772,14 +1780,16 @@
+
+   // When the window is first shown, make the title and top controls
+   // visible for a few seconds.
+-  initial_title_hide_timer_.Start(
++  if (!browser_initiated_automatic_pip_) {
++    initial_title_hide_timer_.Start(
+       FROM_HERE, kTitleShowDuration,
+       // base::Unretained() is safe since the callback will not be called
+       // after `initial_title_hide_timer_` is destroyed, and it is owned by
+       // this object.
+       base::BindOnce(&VideoOverlayWindowViews::OnInitialTitleTimerFired,
+                      base::Unretained(this)));
+-  // The controls are not visible, but the title should be.
++  }
++  // Manual entry initially shows the title; automatic entry shows only video.
+   UpdateControlsVisibility(false);
+
+   // Initialize the mute button state from the controller if the button exists.
+@@ -2461,6 +2471,9 @@
+ }
+
+ void VideoOverlayWindowViews::OnInitialTitleTimerFired() {
++  if (browser_initiated_automatic_pip_) {
++    return;
++  }
+   if (user_interacted_before_timer_fired_) {
+     meets_user_interaction_ = true;
+   }

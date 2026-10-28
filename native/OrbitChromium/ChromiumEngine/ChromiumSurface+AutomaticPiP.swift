@@ -55,12 +55,19 @@ extension ChromiumSurface {
             ]) else { continue }
             automaticPiPPresentation?.finish()
             automaticPiPPresentation = ChromiumPictureInPicturePresentation(sourceWindow: automaticPiPSourceWindow)
-            let (evaluated, resultData) = await devToolsCall("Runtime.evaluate", params: String(decoding: evaluation, as: UTF8.self))
+            let (evaluated, resultData) = await evaluateAutomaticPiP(evaluation)
             guard evaluated, let result = try? JSONSerialization.jsonObject(with: resultData) as? [String: Any],
                   result["exceptionDetails"] == nil else { automaticPiPPresentation?.finish(); continue }
             if (result["result"] as? [String: Any])?["value"] as? Bool == true { return }
             automaticPiPPresentation?.finish()
         }
+    }
+
+    private func evaluateAutomaticPiP(_ parameters: Data) async -> (Bool, Data) {
+        let scoped = ACRSetAutomaticPiP(token, 1) == 1
+        guard scoped || ACRPatchLevel() < 9 else { return (false, Data()) }
+        defer { if scoped { _ = ACRSetAutomaticPiP(token, 0) } }
+        return await devToolsCall("Runtime.evaluate", params: String(decoding: parameters, as: UTF8.self))
     }
 
     private static let enterAutomaticPiP = #"""

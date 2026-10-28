@@ -26,7 +26,7 @@ extern "C" {
 // Version 3 (CHROMIUM-APP-R3): additive, hold_window/release_window. Earlier
 // versions keep their layout as the prefix of the table.
 // Version 4 (EXTENSIONS-PRODUCT-R1): additive, native per-profile extension services.
-#define ORBIT_CEF_API_VERSION 8u
+#define ORBIT_CEF_API_VERSION 9u
 
 // Version 8. Callback once after live renderer CSS installation (1), or failure (0).
 typedef void (*orbit_boost_ack_t)(void*, uint64_t revision, int32_t installed);
@@ -193,6 +193,10 @@ typedef struct {
   // Atomic profile snapshot, omitted IDs are removed; empty list retains a tombstone.
   // Strictly monotonic generations; identical retries are accepted. Private profiles refused.
   int32_t (*boosts_replace)(const char*, const char*, uint64_t, orbit_boost_ack_t, void*);
+  // Version 9. Scope browser-initiated automatic video PiP to the embedder's
+  // isolated-world request. Clear after completion or failure. No active PiP
+  // may exist when setting the flag; manual requests use the default false.
+  int32_t (*set_automatic_pip)(int32_t browser_id, int32_t automatic);
 } orbit_cef_api_t;
 
 // Returns the API table for `version`, or NULL when unsupported.

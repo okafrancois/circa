@@ -377,6 +377,9 @@ int32_t ACRIsAudioMuted(uint64_t surface_token);
  * answers it. Used instead of TryCloseBrowser while the source owns active transfers. */
 int32_t ACRRequestDownloadSourceClose(uint64_t surface_token);
 
+/* Scope the automatic-entry intent around the isolated-world PiP request.
+ * Returns 0 on older engines or while a PiP session already exists. */
+int32_t ACRSetAutomaticPiP(uint64_t surface_token, int32_t automatic);
 /* DevTools protocol call on the browser; result in ACR_EVENT_DEVTOOLS_RESULT
  * with the returned message id. Returns the message id or 0. */
 int32_t ACRExecuteDevToolsMethod(uint64_t surface_token, const char *method,
