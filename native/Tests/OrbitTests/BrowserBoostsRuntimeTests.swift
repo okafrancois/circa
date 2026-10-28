@@ -47,6 +47,31 @@ struct BrowserBoostsRuntimeTests {
         }
     }
 
+    @Test func persistentProfilesPreloadBeforeEnvironmentReturns() async throws {
+        let root = URL(fileURLWithPath: "/private/tmp", isDirectory: true)
+            .appendingPathComponent("OrbitBoostPreload-" + UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let seed = BrowserStore()
+        let profile = await seed.createProfile(name: "Synthetic")
+        _ = try await seed.createSpace(name: "Synthetic", profileID: profile)
+        let session = root.appendingPathComponent("session.json")
+        try BrowserSessionFileStore().save(await seed.sessionDocument(), to: session)
+        let saved = try BrowserBoostStore(profileID: profile, persistence: .profileDirectory(root.appendingPathComponent("Boosts")))
+        let boost = try await saved.save(.init(title: "Persisted", hostPattern: try .init(host: "example.test")))
+        let engine = BoostTestEngine()
+        let environment = try await BrowserEnvironment.open(engine: engine, sessionFile: session)
+        #expect(engine.host.profiles[profile]?.boosts.map(\.id) == [boost.id])
+        #expect(environment.boosts.acknowledgements[profile] != nil)
+        try await environment.settings.setEnablesBoostsOnWebsites(false)
+        for _ in 0..<50 {
+            if engine.host.profiles[profile]?.boosts.isEmpty == true { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(engine.host.profiles[profile]?.boosts.isEmpty == true)
+        #expect(await saved.snapshot().boosts.count == 1)
+        await engine.shutdown()
+    }
+
     @Test func privateEnvironmentDoesNotInheritDiskBoosts() async throws {
         let root = URL(fileURLWithPath: "/private/tmp", isDirectory: true)
             .appendingPathComponent("OrbitBoostShell-" + UUID().uuidString)

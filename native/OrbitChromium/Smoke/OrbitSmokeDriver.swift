@@ -300,7 +300,7 @@ final class OrbitSmokeDriver: OrbitLaunchHooks {
             finish(aborted: false)
             return
         }
-        if phase == .fresh && !arguments.contains("--orbit-smoke-password-generation") && !arguments.contains("--orbit-smoke-passwords") && !arguments.contains("--orbit-smoke-engine-r5") && !arguments.contains("--orbit-smoke-extension-only")
+        if phase == .fresh && !arguments.contains("--orbit-smoke-boosts") && !arguments.contains("--orbit-smoke-password-generation") && !arguments.contains("--orbit-smoke-passwords") && !arguments.contains("--orbit-smoke-engine-r5") && !arguments.contains("--orbit-smoke-extension-only")
             && !arguments.contains("--orbit-smoke-relaunch") && !arguments.contains("--orbit-smoke-private-domain")
             && !arguments.contains("--orbit-smoke-profiles") && !arguments.contains("--orbit-smoke-site-data")
             && !arguments.contains("--orbit-smoke-space-profile") && !arguments.contains("--orbit-smoke-archive-auto")
@@ -355,6 +355,11 @@ final class OrbitSmokeDriver: OrbitLaunchHooks {
             return
         }
         check("app.window", true, ["windows": application.windows.windows.count, "restored": restored.count])
+        if arguments.contains("--orbit-smoke-boosts") {
+            await boostScenarios(application, environment, first, engine)
+            finish(aborted: false)
+            return
+        }
         if arguments.contains("--orbit-smoke-passwords") {
             await OrbitPasswordScenario.run(application: application, environment: environment, window: first, fixture: fixture, root: runRoot, record: record)
             finish(aborted: false)

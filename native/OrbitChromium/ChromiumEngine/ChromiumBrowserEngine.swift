@@ -22,9 +22,11 @@ public final class ChromiumBrowserEngine: BrowserPrivateEngine {
     /// The mode in use. `.hosted` requires the patched CEF (`patchLevel >= 1`).
     public let surfaceMode: SurfaceMode
     public let kind = BrowserEngineKind.chromium
-    /// Unavailable until the native profile/renderer registration API is implemented.
-    /// Existing diagnostic script evaluation is not a Boost injection mechanism.
-    public var boosts: (any BrowserBoostHost)? { nil }
+    private lazy var boostHost = ChromiumBoostHost(engine: self)
+    public var boosts: (any BrowserBoostHost)? {
+        guard !isShutDown, persistence == .persistent, ACRBoostsAvailable() == 1 else { return nil }
+        return boostHost
+    }
     /// Claimed only for implemented paths. `chromeWebStoreExtensions` is absent;
     /// `liveSurfaceTransfer` only in `.hosted` mode on side API v2 (`move_tab`, CHROMIUM-APP-R2),
     /// never on the stock SDK.
@@ -40,6 +42,7 @@ public final class ChromiumBrowserEngine: BrowserPrivateEngine {
         // also render extension documents under the extension system's own access checks.
         if surfaceMode == .hosted { capabilities.formUnion([.beforeUnloadOnClose, .extensionDocuments, .pageSaving]) }
         if ACRBrowserStateAvailable() == 1 { capabilities.insert(.audibleState) }
+        if boosts != nil { capabilities.insert(.boosts) }
         if supportsLiveTabMoves { capabilities.insert(.liveSurfaceTransfer) }
         if patchLevel >= 2 { capabilities.insert(.profileRemoval) }
         return capabilities

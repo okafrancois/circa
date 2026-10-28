@@ -1754,7 +1754,8 @@ const orbit_cef_api_t* ResolveOrbitApi() {
   // v1. Each version's layout is the prefix of the next; a function beyond the resolved version
   // is never called.
   const orbit_cef_api_t* api = nullptr;
-  const std::pair<uint32_t, size_t> versions[] = {{7u, sizeof(orbit_cef_api_t)},
+  const std::pair<uint32_t, size_t> versions[] = {{8u, sizeof(orbit_cef_api_t)},
+                                                   {7u, offsetof(orbit_cef_api_t, boosts_replace)},
                                                    {6u, offsetof(orbit_cef_api_t, password_prompt_observe)},
                                                    {5u, offsetof(orbit_cef_api_t, discard_tab)},
                                                    {4u, offsetof(orbit_cef_api_t, extension_action_snapshot)},
@@ -3429,4 +3430,17 @@ extern "C" int32_t ACRPasswordPromptDecide(uint64_t token, uint64_t profile, uin
 extern "C" int32_t ACRPasswordPromptReopen(uint64_t token, uint64_t profile, uint64_t generation) {
   const auto path = PasswordProfilePath(token, profile); if (path.empty()) return 0;
   return g_state->orbit->password_prompt_reopen(g_state->Find(token)->browser->GetIdentifier(), path.c_str(), generation);
+}
+
+extern "C" int32_t ACRBoostsAvailable(void) {
+  return g_state && g_state->orbit && g_state->orbit->version >= 8;
+}
+extern "C" int32_t ACRBoostsReplace(uint64_t profile, const char* json, uint64_t revision,
+                                    orbit_boost_ack_t callback, void* context) {
+  if (!NSThread.isMainThread || !ACRBoostsAvailable() || g_state->quitting) return 0;
+  auto found = g_state->profiles.find(profile);
+  if (found == g_state->profiles.end() || !found->second || found->second->IsGlobal()) return 0;
+  const auto path = found->second->GetCachePath().ToString();
+  if (path.empty()) return 0;
+  return g_state->orbit->boosts_replace(path.c_str(), json, revision, callback, context);
 }

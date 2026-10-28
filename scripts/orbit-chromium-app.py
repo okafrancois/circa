@@ -117,6 +117,17 @@ def essentials_handler(run_root, counters):
 
         def do_GET(self):
             path = urlsplit(self.path).path
+            if path.startswith("/boosts/"):
+                counters[path] = counters.get(path, 0) + 1
+                port = self.server.server_port
+                if path == "/boosts/probe.js":
+                    body = (LAB_DIR / "Smoke/boosts-fixture/probe.js").read_bytes()
+                    return self.reply(200, body, "application/javascript")
+                if path == "/boosts/middle":
+                    body = ('<!doctype html><iframe src="http://localhost:%d/boosts/child"></iframe>' % port).encode()
+                else:
+                    body = ('<!doctype html><title>Boost fixture</title><div id="zap">Hidden by registration</div><p>Document start fixture</p><script src="/boosts/probe.js"></script>' + ('<iframe src="/boosts/middle"></iframe>' if path == "/boosts/main" else '')).encode()
+                return self.reply(200, body, extra=[("Content-Security-Policy", "default-src 'none'; script-src 'self'; style-src 'none'; frame-src http://127.0.0.1:%d http://localhost:%d; require-trusted-types-for 'script'" % (port, port))])
             if path == "/essentials/suspension-post-count":
                 return self.reply(200, str(counters.get("suspension-post", 0)).encode(), "text/plain")
             if not path.startswith("/essentials/"):
@@ -457,6 +468,8 @@ def run_phase(phase, run, data, origin, args, tls_origin=None):
                "--use-fake-device-for-media-stream"]
     if tls_origin and phase == "fresh":
         command.append("--orbit-smoke-tls-fixture=" + tls_origin)
+    if getattr(args, "boosts_only", False):
+        command += ["--orbit-smoke-boosts", "--load-extension=" + str((LAB_DIR / "Smoke/boosts-extension").resolve())]
     if getattr(args, "passwords_only", False):
         command.append("--orbit-smoke-passwords")
     if getattr(args, "engine_r5_only", False):
@@ -520,6 +533,8 @@ def run_phase(phase, run, data, origin, args, tls_origin=None):
     lines = watch_lines(root / "window-watch.jsonl")
     verdict = lab.verdict(root, owned["code"], owned["timed_out"], owned["quit_timed_out"], after, lines, "hidden")
     checks = verdict["checks"]
+    if getattr(args, "boosts_only", False):
+        checks["boostWorldNetworkBlocked"] = args.fixture_counters.get("/boosts/forbidden", 0) == 0
     if getattr(args, "passwords_only", False) and phase == "fresh":
         # Read only after normal engine teardown. Never emit credential values.
         rows = []
@@ -649,7 +664,7 @@ def export(run, stamp, flavor):
         target.mkdir()
         for name in ("verdict.json", "results.json", "events.jsonl", "window-watch.jsonl", "ownership.json",
                      "stderr.log", "witness-stderr.log", "archive-session.json",
-                     "runtime-page.png", "native-save.html"):
+                     "runtime-page.png", "boost-applied.png", "native-save.html"):
             if (phase_root / name).exists():
                 shutil.copy2(phase_root / name, target / name)
         reports = phase_root / "reports"
@@ -662,15 +677,16 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest="command", required=True)
     builder = sub.add_parser("build")
-    builder.add_argument("--flavor", choices=x2.FLAVORS, default="orbit-engine-extensions-r6")
+    builder.add_argument("--flavor", choices=x2.FLAVORS, default="orbit-engine-extensions-r7")
     runner = sub.add_parser("smoke")
-    runner.add_argument("--flavor", choices=x2.FLAVORS, default="orbit-engine-extensions-r6")
+    runner.add_argument("--flavor", choices=x2.FLAVORS, default="orbit-engine-extensions-r7")
     runner.add_argument("--evidence-root", type=Path, default=EVIDENCE)
     runner.add_argument("--timeout", type=int, default=180)
     runner.add_argument("--quit-timeout", type=int, default=30)
     runner.add_argument("--no-extension", action="store_true")
     runner.add_argument("--fresh-only", action="store_true")
     runner.add_argument("--keep-going", action="store_true")
+    runner.add_argument("--boosts-only", action="store_true", help="Hermetic document registration probes")
     runner.add_argument("--passwords-only", action="store_true", help="Hermetic native password controller probes")
     runner.add_argument("--engine-r5-only", action="store_true", help="Hermetic native discard/history/POST scenarios")
     runner.add_argument("--resource-tabs", type=int, choices=(0, 20, 50, 100), default=0)
@@ -693,6 +709,9 @@ def main():
         if args.extension_only or args.private_domain_only or args.profiles_only or args.space_profile_only:
             parser.error("--archive-auto-only excludes other focused probes")
         args.no_extension = True
+    if args.command == "smoke" and args.boosts_only:
+        args.no_extension = True
+        args.fresh_only = True
     if args.command == "smoke" and args.passwords_only:
         args.no_extension = True
         args.fresh_only = True
@@ -713,7 +732,7 @@ def main():
         args.no_extension = True
     if args.command == "smoke" and args.private_domain_only:
         if args.flavor not in ("orbit-essentials-r2", "orbit-engine-extensions", "orbit-engine-extensions-r2",
-                               "orbit-engine-extensions-r3", "orbit-engine-extensions-r4", "orbit-engine-extensions-r5", "orbit-engine-extensions-r6") or args.extension_only:
+                               "orbit-engine-extensions-r3", "orbit-engine-extensions-r4", "orbit-engine-extensions-r5", "orbit-engine-extensions-r6", "orbit-engine-extensions-r7") or args.extension_only:
             parser.error("--private-domain-only requires a product engine and excludes --extension-only")
         args.no_extension = True
         args.fresh_only = True
