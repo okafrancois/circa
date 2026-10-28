@@ -31,7 +31,7 @@ struct NativeLibrarySpacesTests {
         let titles = BrowserLibraryCategory.allCases.map(\.title)
         #expect(titles.contains(uiText("Spaces")))
         let view = BrowserLibraryView()
-        #expect(view.categoryButtons.count == 4)
+        #expect(view.categoryButtons.count == BrowserLibraryCategory.railCategories.count) // Media, Downloads, Spaces, Boosts, Archived Tabs.
     }
 
     @Test("Spaces inventory searches names and profiles without materializing documents")
