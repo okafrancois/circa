@@ -9,8 +9,11 @@ public extension BrowserStore {
         let destination = spaces[record.spaceID]?.profileID == record.profileID ? record.spaceID
             : spaceOrder.first { spaces[$0]?.profileID == record.profileID }
         guard profiles[record.profileID] != nil else { throw BrowserStoreError.profileMissing }
-        let saved = BrowserArchivedTab(tab: record.tab, profileID: record.profileID, spaceID: destination ?? record.spaceID,
+        var saved = BrowserArchivedTab(tab: record.tab, profileID: record.profileID, spaceID: destination ?? record.spaceID,
                                        origin: .today, reason: .closed, archivedAt: record.archivedAt)
+        if destination == nil, let owner = spaces[record.spaceID]?.profileID, owner != record.profileID {
+            saved.spaceProfileWasChanged = true
+        }
         try commitOrganization { state in
             state.archive.removeAll { $0.id == saved.id }
             state.insertArchive(saved)

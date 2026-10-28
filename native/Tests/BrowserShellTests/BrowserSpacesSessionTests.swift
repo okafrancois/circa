@@ -92,6 +92,49 @@ private func spacesFixture() async throws -> SpacesFixture {
         homeTabs: homeTabs, officeTabs: officeTabs, leisureTab: leisureTab)
 }
 
+@Suite("Space profile surface replacement")
+@MainActor
+struct SpaceProfileSessionTests {
+    @Test("Every open moved page is disposed and reloaded in the target profile, including inactive Spaces")
+    func replacesAllSurfaces() async throws {
+        let f = try await spacesFixture(), recorder = SpacesRecorder()
+        let session = recorder.session(f)
+        let second = recorder.session(f, windowID: f.otherWindowID)
+        await session.waitForPendingCommands()
+        await second.waitForPendingCommands()
+        let old = session.ownedSurfaces + second.ownedSurfaces
+        let selected = try #require(session.selectedSurface)
+        selected.formValue = "synthetic old account"
+        session.activateSpace(f.office)
+        await session.waitForPendingCommands()
+        let unaffected = try #require(session.selectedSurface)
+        try await f.store.moveSpaceToProfile(f.home, to: f.work, expectedProfileID: f.personal)
+        session.refreshAfterSpaceProfileMove()
+        second.refreshAfterSpaceProfileMove()
+        await session.waitForPendingCommands()
+        await second.waitForPendingCommands()
+        #expect(old.allSatisfy { $0.disposalCount == 1 })
+        #expect(session.selectedSurface === unaffected)
+        #expect(second.selectedSurface?.profileID == f.work)
+        session.activateSpace(f.home)
+        await session.waitForPendingCommands()
+        let replacement = try #require(session.selectedSurface)
+        #expect(replacement !== selected && replacement.profileID == f.work && replacement.formValue.isEmpty)
+        #expect(session.snapshot?.tabs.count == 2)
+        // Neither shell observes the intermediate move back. IDs must still revoke the B pages.
+        try await f.store.moveSpaceToProfile(f.home, to: f.personal, expectedProfileID: f.work)
+        try await f.store.moveSpaceToProfile(f.home, to: f.work, expectedProfileID: f.personal)
+        session.refreshAfterSpaceProfileMove()
+        await session.waitForPendingCommands()
+        #expect(replacement.disposalCount == 1)
+        #expect(session.selectedSurface !== replacement)
+        #expect(recorder.errors.isEmpty)
+        session.close(); second.close()
+        await session.waitForPendingCommands()
+        await second.waitForPendingCommands()
+    }
+}
+
 @Test("Spaces retain exact live instances and form analogues, restore selection, and lazily materialize inactive profiles")
 @MainActor
 func spacesSessionKeepsLiveIdentityAndRestoresLazily() async throws {

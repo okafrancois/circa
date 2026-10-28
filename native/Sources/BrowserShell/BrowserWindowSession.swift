@@ -417,6 +417,17 @@ public final class BrowserWindowSession<Surface: BrowserSurface> {
         }
     }
 
+    /// Explicit adoption after a profile move. Ordinary queued commands still reject the old
+    /// context; install disposes revoked surfaces before loading pages in the target profile.
+    public func refreshAfterSpaceProfileMove() {
+        enqueue { session in
+            guard let windowID = session.windowID else { return }
+            let state = try await session.store.captureWindowState(in: windowID)
+            guard !session.isClosed else { return }
+            session.install(state)
+        }
+    }
+
     public func renameSpace(_ spaceID: SpaceID, name: String) {
         enqueue { session in
             // Idempotent: a retry after the rename only renames again.

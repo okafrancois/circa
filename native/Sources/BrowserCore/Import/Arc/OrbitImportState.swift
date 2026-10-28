@@ -208,6 +208,13 @@ enum ArcImportFiles {
 
 /// Backups taken before every apply, restorable while Orbit is closed.
 public enum ArcImportBackups {
+    /// Reuses the normal restorable backup format for a session-only catalog mutation.
+    /// Cookies, storage and history are unchanged by a Space profile move.
+    public static func createSessionBackup(at location: ArcImportDataLocation,
+                                          document: BrowserSessionDocument) throws -> String {
+        try create(at: location, session: document.encoded(), historyProfiles: [], now: Date())
+    }
+
     public static func manifests(at location: ArcImportDataLocation) -> [ArcImportBackupManifest] {
         guard let backups = try? OrbitSecureDirectory.open(location.backupsDirectory, create: false) else { return [] }
         return backups.entries().compactMap { name in

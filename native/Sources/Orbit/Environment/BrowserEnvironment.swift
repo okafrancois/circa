@@ -492,13 +492,18 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
 
     private func catalogDidChange(_ catalog: BrowserCatalogSnapshot) {
         guard catalog != publishedCatalog else { return }
+        let previousOwners = Dictionary(uniqueKeysWithValues: (publishedCatalog?.spaces ?? []).map { ($0.id, $0.profileID) })
+        let profileMoved = catalog.spaces.contains { space in
+            previousOwners[space.id].map { $0 != space.profileID } == true
+        }
         publishedCatalog = catalog
         if let lastUsedSpaceID, !catalog.spaces.contains(where: { $0.id == lastUsedSpaceID }) {
             self.lastUsedSpaceID = nil
         }
         controllers = controllers.filter { $0.value.controller != nil }
         for entry in controllers.values {
-            entry.controller?.session.refreshCatalog()
+            if profileMoved { entry.controller?.session.refreshAfterSpaceProfileMove() }
+            else { entry.controller?.session.refreshCatalog() }
         }
         refreshQuickWindowThemes()
     }
