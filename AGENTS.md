@@ -14,6 +14,11 @@ Orbit is a native macOS browser: Swift/AppKit shell (`native/Sources/Orbit`) on 
 - Product: `CMAKE_BUILD_PARALLEL_LEVEL=4 python3 scripts/orbit-chromium-app.py build`. The prebuilt engine lives in `.tools/chromium-fork/distrib/` (not in Git); do not rebuild it unless the brief says so.
 - Synthetic bundle for GUI checks: `python3 scripts/orbit-app.py build --synthetic`. It must never start outside its synthetic data root.
 
+## Disk hygiene
+- Disk space is shared by many parallel agents. When your lot is committed, delete everything you built that is no longer needed: SwiftPM scratch paths, CMake/ninja build directories, packaged synthetic bundles, synthetic data roots, downloaded fixtures and temporary files.
+- Keep only the deliverables the PM reviews (the lot note, comparison images and videos, a short log), at most a few hundred MB, under `/tmp/<lot>/`.
+- The PM removes the whole worktree after merging; never leave large outputs there.
+
 ## GUI runs
 - Take the GUI slot with `/usr/bin/lockf -k /tmp/arcy-gui-slot.lock`, at most 60 s per session.
 - The keyboard layout is French (AZERTY): send shortcuts by character (`osascript … keystroke "a" using command down`), never as US physical keys.
