@@ -388,7 +388,10 @@ struct NativeQuickWindowR2Tests {
                 charactersIgnoringModifiers: key, isARepeat: false, keyCode: 0))
         }
         #expect(keyboard.handle(try event("t")))
-        #expect(little.window?.firstResponder is NSTextView)
+        #expect(little.isEditingAddress)
+        let input = try #require(little.compactInput)
+        #expect(input.input.stringValue == surface.currentURL?.absoluteString)
+        #expect(little.ownsCommandWindow(input.window))
         #expect(router.windows.isEmpty)
         little.window?.makeFirstResponder(nil)
         #expect(!keyboard.handle(try event("[")))

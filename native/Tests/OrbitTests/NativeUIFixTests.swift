@@ -11,32 +11,52 @@ struct NativeUIFixTests {
     @Test("Pane bars re-resolve their layers when attached to a light window and when appearance changes")
     func paneAppearance() throws {
         NSApplication.shared.setActivationPolicy(.prohibited)
-        let window = NSWindow(contentRect: .init(x: 0, y: 0, width: 700, height: 500),
+        let window = PaneAppearanceWindow(contentRect: .init(x: 0, y: 0, width: 700, height: 500),
                               styleMask: [.titled], backing: .buffered, defer: true)
         window.isReleasedWhenClosed = false
         defer { window.close() }
         let pane = BrowserSplitPaneView(id: TabID())
         pane.frame = .init(x: 0, y: 0, width: 500, height: 400)
         pane.appearance = NSAppearance(named: .darkAqua)
-        pane.setActive(true, accent: .defaultPurple)
+        var accent = OrbitTokens.ThemeAccent.defaultPurple
+        accent.strong = OrbitTokens.Color.Text.vibrant
+        pane.setActive(true, accent: accent)
+        #expect(pane.clip.layer?.backgroundColor == OrbitTokens.Color.Surface.splitToolbar.resolvedCGColor(for: pane.effectiveAppearance))
         window.contentView?.addSubview(pane)
         pane.appearance = nil
         for mode in [NSAppearance.Name.aqua, .darkAqua, .aqua] {
             window.appearance = NSAppearance(named: mode)
             pane.layoutSubtreeIfNeeded()
             let appearance = pane.effectiveAppearance
-            #expect(pane.clip.layer?.backgroundColor == OrbitTokens.Color.Surface.preview.resolvedCGColor(for: appearance))
+            #expect(pane.clip.layer?.backgroundColor == OrbitTokens.Color.Surface.splitToolbar.resolvedCGColor(for: appearance))
+            #expect(pane.focusBorder.borderColor == accent.splitFocusBorder.resolvedCGColor(for: appearance))
+            if mode == .aqua {
+                #expect(pane.focusBorder.borderColor == accent.strong.resolvedCGColor(for: appearance))
+            } else {
+                #expect(pane.focusBorder.borderColor == NSColor(srgbRed: 41/255, green: 50/255, blue: 254/255, alpha: 1).cgColor)
+            }
             #expect(pane.line.layer?.backgroundColor == OrbitTokens.Color.Line.floatingScrimBorder.resolvedCGColor(for: appearance))
-            #expect(pane.focusBorder.borderColor == OrbitTokens.ThemeAccent.defaultPurple.strong.resolvedCGColor(for: appearance))
             #expect(pane.focusBorder.borderWidth == OrbitTokens.Metrics.Content.splitFocusBorderWidth)
-            #expect(pane.focusBorder.opacity == 1)
-            #expect(pane.address.contentTintColor == OrbitTokens.Color.Text.baseSecondary)
-            #expect(pane.close.contentTintColor == OrbitTokens.Color.Text.baseSecondary)
-            #expect(pane.layer?.shadowRadius == OrbitTokens.Shadow.splitActiveHalo.blur / 2)
-            #expect(pane.accessibilityValue() as? String == BrowserSplitStrings.activePane)
-            let contrast = contrastRatio(foreground: OrbitTokens.Color.Text.baseSecondary.resolved(for: appearance),
-                                         background: OrbitTokens.Color.Surface.preview.resolved(for: appearance))
-            #expect(contrast >= 4.5)
+            for key in [false, true, false] {
+                window.testIsKey = key
+                NotificationCenter.default.post(name: key ? NSWindow.didBecomeKeyNotification : NSWindow.didResignKeyNotification, object: window)
+                let keyBackground = key ? OrbitTokens.Color.Surface.splitToolbarEmphasized : OrbitTokens.Color.Surface.splitToolbar
+                #expect(pane.clip.layer?.backgroundColor == keyBackground.resolvedCGColor(for: appearance))
+                for active in [false, true] {
+                    pane.setActive(active, accent: accent)
+                    let emphasized = active && key
+                    let background = emphasized ? OrbitTokens.Color.Surface.splitToolbarEmphasized : OrbitTokens.Color.Surface.splitToolbar
+                    let foreground = emphasized ? OrbitTokens.Color.Text.splitToolbarEmphasized : OrbitTokens.Color.Text.splitToolbar
+                    #expect(pane.clip.layer?.backgroundColor == background.resolvedCGColor(for: appearance))
+                    for button in [pane.address, pane.close, pane.back, pane.forward, pane.reload, pane.siteControls, pane.splitToggle] {
+                        #expect(button.contentTintColor?.resolved(for: appearance) == foreground.resolved(for: appearance))
+                    }
+                    #expect(pane.focusBorder.opacity == (active ? 1 : 0))
+                    #expect(pane.layer?.shadowRadius == (active ? OrbitTokens.Shadow.splitActiveHalo : OrbitTokens.Shadow.contentCard).blur / 2)
+                    #expect(pane.accessibilityValue() as? String == (active ? BrowserSplitStrings.activePane : BrowserSplitStrings.visiblePane))
+                    #expect(contrastRatio(foreground: foreground.resolved(for: appearance), background: background.resolved(for: appearance)) >= 4.5)
+                }
+            }
         }
         pane.setActive(false, accent: .defaultPurple)
         #expect(pane.focusBorder.opacity == 0 && pane.layer?.shadowOpacity == 1)
@@ -97,6 +117,12 @@ struct NativeUIFixTests {
         #expect(!window.isVisible)
     }
 }
+}
+
+@MainActor
+private final class PaneAppearanceWindow: NSWindow {
+    var testIsKey = false
+    override var isKeyWindow: Bool { testIsKey }
 }
 
 private func contrastRatio(foreground: NSColor, background: NSColor) -> CGFloat {
