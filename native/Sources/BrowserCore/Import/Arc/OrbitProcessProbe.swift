@@ -36,8 +36,6 @@ public struct ArcSystemRunningProbe: ArcRunningProbe, OrbitTargetUsageProbe {
         return String(cString: resolved)
     }
 
-    /// Chromium's `SingletonLock` is a symbolic link to `<hostname>-<pid>` while the browser runs
-    /// (Chromium `process_singleton_posix.cc`; not observed on Arc's own files).
     static func singletonLockIsLive(_ lock: URL) -> Bool {
         var buffer = [CChar](repeating: 0, count: 1024)
         let length = readlink(lock.path, &buffer, buffer.count)

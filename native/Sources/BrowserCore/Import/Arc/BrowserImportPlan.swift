@@ -101,9 +101,6 @@ public struct BrowserImportPlanSkips: Codable, Equatable, Sendable {
     public init() {}
 }
 
-/// Deterministic native identities for Arc objects: re-importing the same Arc data yields the same
-/// identities, so a re-run adds nothing twice. Arc item and Space ids are opaque strings that are
-/// unique per installation (observed UUID form); `namespace` separates independent sources.
 public struct ArcImportIdentity: Sendable, Equatable {
     public let namespace: String
 

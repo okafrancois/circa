@@ -1,7 +1,6 @@
 import AppKit
 
 /// The edge affordance precedes the creation page: a restrained pull, ring, then a filled plus.
-/// Measurements come from the supplied 2026-10-28 recording, not the ordinary Space pager.
 @MainActor
 final class SpaceCreationEdgeView: NSView {
     var progress: CGFloat = 0 { didSet { needsDisplay = true } }
@@ -29,7 +28,7 @@ final class SpaceCreationEdgeView: NSView {
 
 struct SpaceCreationMotion {
     static let confirmationDuration: Double = 0.15
-    // The captured first-paint path trails delivery by one 60 Hz reference frame.
+    // Lead presentation by one 60 Hz frame.
     static let presentationLead: Double = 1 / 60
     static let spring = OrbitTokens.Spring(response: 0.30, dampingFraction: 1)
     static func edgeOffset(displacement: CGFloat) -> CGFloat {
@@ -46,8 +45,7 @@ final class SpaceCreationEdgeViewport: NSView {
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
 }
 
-/// Normalized remaining distance sampled from the reference's first page movement through rest.
-/// The first displayed step is unusually fast; fitting the ordinary pager spring loses it.
+/// Normalized remaining distance over a 0.30 s settlement with a fast initial step.
 struct SpaceCreationSettlement {
     let from: CGFloat
     let target: CGFloat

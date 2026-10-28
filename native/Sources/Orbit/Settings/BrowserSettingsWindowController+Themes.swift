@@ -3,7 +3,7 @@ import BrowserCore
 import BrowserEngine
 import SwiftUI
 
-/// "Edit Theme Color…" in the Spaces section (ORBIT-THEMES). The editor floats over the Settings window;
+/// "Edit Theme Color…" in the Spaces section. The editor floats over the Settings window;
 /// every browser window showing the Space follows the edit live through the store.
 extension BrowserSettingsWindowController {
     func openThemeEditor(for spaceID: SpaceID, animated: Bool = true) {

@@ -20,7 +20,7 @@ struct MotionATests {
     }
 
     @Test("Peek uses Orbit's distinct CA springs without doubling their Core Animation time")
-    func recoveredSprings() {
+    func springCoefficients() {
         let cases: [(OrbitTokens.Spring, Double, Double)] = [
             (BrowserPeekMotion.present, 0.245, 0.865),
             (BrowserPeekMotion.dismiss, 0.225, 0.895),

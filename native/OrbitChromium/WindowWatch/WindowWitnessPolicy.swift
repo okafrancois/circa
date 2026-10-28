@@ -85,7 +85,6 @@ struct OwnedProcessIdentity: Decodable {
     let observedAtLaunch: ProcessSnapshot?
 }
 
-/// Kernel group enumeration yields only candidate PIDs; every candidate is reobserved.
 final class OwnedSessionSupervisor {
     let identity: OwnedProcessIdentity
     var onObservation: (([String: Any]) -> Void)?

@@ -75,7 +75,6 @@ final class OrbitWindowShell {
     var isHoverHeld: () -> Bool = { false }
     var onPresentationChange: (() -> Void)?
     var onCollapseRequest: (() -> Void)?
-    /// Full-screen layout began or ended (the sidebar toolbar moves its toggle, D39).
     var onFullScreenChange: ((Bool) -> Void)?
     /// Centre spacing of this window's system buttons.
     var trafficLightPitch: CGFloat { trafficLights?.pitch ?? OrbitTrafficLights.pitch }
@@ -143,7 +142,6 @@ final class OrbitWindowShell {
         root.addSubview(loadingIndicator)
     }
 
-    /// Loading phase of the selected page (D46).
     func setLoadingPhase(_ phase: OrbitLoadingIndicatorView.Phase) {
         loadingIndicator.setPhase(phase, animated: canAnimate)
     }
@@ -540,8 +538,6 @@ final class OrbitWindowShell {
         on(NSWindow.didEndLiveResizeNotification) { $0.applyGeometry() }
         on(NSWindow.didBecomeKeyNotification) { $0.applyGeometry() }
         on(NSWindow.didResignKeyNotification) { shell in
-            // Tracking areas are key-window only: a revealed panel would otherwise outlive its pointer
-            // ( C11).
             shell.hoverReveal.dismiss()
             shell.applyGeometry()
         }

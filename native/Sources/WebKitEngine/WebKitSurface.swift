@@ -5,8 +5,6 @@ import BrowserShell
 import Foundation
 import WebKit
 
-/// The WebKit implementation of `BrowserEngineSurface`. Development and fallback backend only:
-/// it is not the production engine (see `docs/native-port/engine-decision-2026-10-25.md`).
 @MainActor
 public final class WebKitSurface: BrowserEngineSurface {
     public let profileID: ProfileID
@@ -464,8 +462,6 @@ final class WebKitNavigationBridge: NSObject, WKNavigationDelegate, WKUIDelegate
         return .newForegroundTab
     }
 
-    /// WebKit reports the mouse button as a mask (none 0, left 1, right 2, middle 4; observed in
-    /// PEEK-R2 with AppKit events); the contract numbers it 0 primary or none, 1 secondary, 2 middle.
     static func contractButtonNumber(_ webKitButton: Int) -> Int {
         switch webKitButton {
         case 2: 1

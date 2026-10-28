@@ -36,7 +36,7 @@ struct OrbitBuildIdentityTests {
     func bundleIdentifierIsExact() {
         let stable = OrbitBuildIdentity.stableProductForTests
         #expect(refusal(stable) == nil)
-        for identifier: String? in [nil, "io.github.okatech.orbit.test.orbit.unpackaged", "io.github.okatech.orbit.test.orbit-chromium.app-smoke", "LAB.ORBIT",
+        for identifier: String? in [nil, "io.github.okatech.orbit.test.orbit.unpackaged", "io.github.okatech.orbit.test.orbit-chromium.app-smoke", "LAB.INVALID.ORBIT",
                                     "io.github.okatech.orbit.test.orbit.dev", "io.github.okatech.orbit.test.orbit-chromium.synthetic"] {
             var build = stable
             build.bundleIdentifier = identifier
@@ -90,7 +90,7 @@ struct OrbitBuildIdentityTests {
                 == "identifier \"io.github.okatech.orbit\" and certificate root = H\"\(fingerprint)\"")
         #expect(OrbitCodeSignature.stableRequirement(rootSHA1: fingerprint, identifier: "io.github.okatech.orbit.test.orbit.live")
                 == "identifier \"io.github.okatech.orbit.test.orbit.live\" and certificate root = H\"\(fingerprint)\"")
-        for identifier in ["io.github.okatech.orbit.test.orbit.live.test", "io.github.okatech.orbit.test.other", "LAB.ORBIT", "io.github.okatech.orbit.test.orbit.unpackaged"] {
+        for identifier in ["io.github.okatech.orbit.test.orbit.live.test", "io.github.okatech.orbit.test.other", "LAB.INVALID.ORBIT", "io.github.okatech.orbit.test.orbit.unpackaged"] {
             #expect(OrbitCodeSignature.stableRequirement(rootSHA1: fingerprint, identifier: identifier) == nil)
         }
         // Same name, another certificate: the requirement decides.

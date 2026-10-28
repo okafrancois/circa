@@ -1,8 +1,6 @@
 import AppKit
 import BrowserCore
 
-/// Shared Split tokens. Geometry/border are measured C19 (DESIGN-R2 §14.6); minimum size and
-/// edge drop bands are reconstruction estimates, pending captures at compact window sizes.
 @MainActor
 enum BrowserSplitTokens {
     static let gap = OrbitTokens.Metrics.Content.splitGap
@@ -11,7 +9,7 @@ enum BrowserSplitTokens {
     static let toolbarHeight = OrbitTokens.Metrics.Content.splitPaneToolbarHeight
     static let minimumPaneExtent: CGFloat = 120 // estimate; scales down at smaller sizes
     static let edgeBand: CGFloat = 48 // estimate
-    static let focusFade = OrbitTokens.Motion.splitFocusCrossfade // bounded C19
+    static let focusFade = OrbitTokens.Motion.splitFocusCrossfade
 }
 
 struct BrowserSplitGeometry {

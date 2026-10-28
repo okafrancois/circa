@@ -29,10 +29,6 @@ public struct ArcHistoryScanCounts: Codable, Equatable, Sendable {
     }
 }
 
-/// Reads Chromium's History schema (`urls`, `visits`; observed in the Electron-era import of
-/// 23 October 2026, columns detected at run time) from the importer's **private snapshot copy**,
-/// never from Arc's live file. Keyset pagination by visit id: each chunk is an independent query,
-/// so no statement survives between chunks. SQLite messages, URLs and titles never leave this type.
 public final class ArcChromiumHistoryReader {
     /// Microseconds from 1601-01-01 to 1970-01-01.
     static let chromeEpochOffset: Double = 11_644_473_600

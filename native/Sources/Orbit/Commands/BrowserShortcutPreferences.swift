@@ -40,6 +40,19 @@ final class BrowserShortcutPreferences: ObservableObject {
         var includeFavorites = true
         var nineSelectsLast = true
         var globalQuickWindowEnabled = false
+
+        /// Preserve saved bindings when the application's sole Quit command is renamed.
+        mutating func normalizeQuitCommandID() {
+            let current = BrowserCommandID.quitOrbit.rawValue
+            let retired = Set(overrides.keys).union(priorities.keys).filter {
+                $0.hasPrefix("quit") && $0 != current && BrowserCommandID(rawValue: $0) == nil
+            }
+            guard retired.count == 1, let previous = retired.first else { return }
+            if overrides[current] == nil { overrides[current] = overrides[previous] }
+            if priorities[current] == nil { priorities[current] = priorities[previous] }
+            overrides[previous] = nil
+            priorities[previous] = nil
+        }
     }
     @Published private(set) var document = Document()
     @Published var errorMessage: String?
@@ -57,6 +70,7 @@ final class BrowserShortcutPreferences: ObservableObject {
                 throw BrowserShortcutPreferenceError.unavailable
             }
             document = decoded
+            document.normalizeQuitCommandID()
         } catch { isUnavailable = true; errorMessage = BrowserShortcutPreferenceError.unavailable.localizedDescription }
     }
 

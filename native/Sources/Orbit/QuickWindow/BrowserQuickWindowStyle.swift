@@ -1,15 +1,12 @@
 import AppKit
 
 extension OrbitTokens.Metrics.QuickWindow {
-    /// : usable lower bound, not measured from Orbit.
     static let minimumSize = NSSize(width: 480, height: 240)
-    /// : C13 masks the address pill's left edge.
     static let addressLeadingInset: CGFloat = 86
     static let controlGap: CGFloat = 8
     static let trailingInset: CGFloat = 7.25
     /// : separate accessible disclosure hit target within the 208 pt button group.
     static let disclosureWidth: CGFloat = 24
-    /// reconstruction: reveal each newly opened window without changing window level.
     static let cascadeOffset: CGFloat = 24
 }
 

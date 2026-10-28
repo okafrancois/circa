@@ -1,11 +1,6 @@
 import AppKit
 import QuartzCore
 
-/// Page-loading indicator of (D46, measured + ): no glow around
-/// the card, but a 4 pt capsule centred on the card in the window's top margin. While the request is
-/// pending it is 47 wide and pulses (period 1.59 s); once the page is in progress it widens to
-/// 127.5 (spring 0.78 / 0.90) with a dark sweep (period 1.12 s). Neutral colours: black 21 % track,
-/// black 78 % fill. Decorative: it never takes events.
 @MainActor
 final class OrbitLoadingIndicatorView: NSView {
     enum Phase: Equatable {

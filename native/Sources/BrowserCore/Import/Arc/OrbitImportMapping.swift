@@ -18,7 +18,6 @@ public struct ArcImportOptions: Sendable {
     public enum UnattributedArchives: Sendable, Equatable {
         /// Counted, not imported: their profile cannot be established (default).
         case skip
-        /// Placed in the first Space of Arc's default profile (reconstruction guess, opt-in).
         case defaultProfile
     }
 
@@ -38,8 +37,6 @@ public struct ArcImportOptions: Sendable {
     public init() {}
 }
 
-/// Maps the parsed Arc graph to native identities and model values (reconstruction choices are
-/// listed in docs/native-port/import-2026-10-25.md).
 public enum ArcImportMapper {
     /// - Parameter profileTargets: mappings recorded by earlier imports into the same target; they
     ///   win over adoption and derivation so a profile never moves between imports.
@@ -81,8 +78,6 @@ public enum ArcImportMapper {
                 customTitle: validTitle(source.customTitle),
                 pinnedURL: keepsPinnedURL ? source.savedURL : nil,
                 createdAt: source.createdAt ?? importedAt,
-                // Like the v1 → v2 migration: inactivity counts from the import, so a sweep right
-                // after import never archives tabs that Arc still shows (reconstruction).
                 lastActiveAt: importedAt)
         }
 
@@ -174,7 +169,6 @@ public enum ArcImportMapper {
         return plan
     }
 
-    /// Arc's reason values were not decoded (field observed only): reconstruction mapping.
     static func reason(_ value: String?) -> BrowserArchivedTab.Reason {
         let text = value?.lowercased() ?? ""
         if text.contains("auto") { return .automatic }

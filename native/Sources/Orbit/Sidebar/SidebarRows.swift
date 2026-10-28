@@ -4,7 +4,6 @@ import BrowserCore
 private typealias Metrics = OrbitTokens.Metrics.Sidebar
 
 extension OrbitGlyph {
-    ///  C26 — reset control shown over the favicon of a Pinned tab moved away from its URL.
     static var resetPinned: NSImage? { symbol("arrow.uturn.backward", pointSize: 10, weight: .semibold) }
     ///  — trailing mark of a tab open in another window.
     static var otherWindow: NSImage? { symbol("macwindow.on.rectangle", pointSize: OrbitTokens.Metrics.Sidebar.otherWindowGlyphSize, weight: .regular) }
@@ -46,10 +45,6 @@ extension SidebarRowEventHandler {
     func rowToggleAudio(_ row: SidebarTabRow) {}
 }
 
-/// Shared anatomy of list rows (design §3.2, §5.3): 36 pt high, radius 11, content indented by
-/// `contentIndent(depth:)`. Fills: selected `tabCurrent` + its short shadow; renaming the same
-/// lifted state ( C25); multi-selected `tabMultiselected`; pressed or context-menu
-/// target `tabPressed`; drop target `dragHint` ( C27); hover `sidebarItem`.
 @MainActor
 class SidebarListRow: NSView, NSTextFieldDelegate {
     let background = OrbitSurfaceBackgroundView(cornerRadius: OrbitTokens.Radius.tabRow)
@@ -232,7 +227,6 @@ class SidebarListRow: NSView, NSTextFieldDelegate {
         else { background.fillColor = nil }
     }
 
-    // MARK: Inline rename (ORBIT-RENAME)
 
     /// Replaces the title by a field holding `text`, all selected. The field editor handles input
     /// methods: Return and Escape reach the field only once a composition is committed.
@@ -304,19 +298,12 @@ class SidebarListRow: NSView, NSTextFieldDelegate {
         return false
     }
 
-    /// Clicking elsewhere or tabbing away validates the edit (reconstruction; capture C25).
     func controlTextDidEndEditing(_ notification: Notification) {
         guard renameField != nil, !isEndingRename else { return }
         finishRename(commit: true)
     }
 }
 
-/// A Pinned or Today tab row (design §3.2): favicon 16 at window x 18, 14 pt regular title at
-/// window x 44, +16 per folder level. Hover shows the close button (× archives a Today tab and
-/// unloads a Pinned one) and the title truncates before it (S-SPL@1s). A Pinned tab away from its
-/// pinned URL shows a slash before its title and, on hover, a reset control over its favicon
-/// (reconstruction of `TabCellSlash`, C26). A tab open in another window keeps a trailing mark and
-/// a secondary title until hovered (reconstruction).
 @MainActor
 final class SidebarTabRow: SidebarListRow {
     private(set) var item: SidebarTabItem
@@ -335,7 +322,6 @@ final class SidebarTabRow: SidebarListRow {
         favicon.setAccessibilityElement(false)
         titleLabel.font = OrbitTokens.Typography.sidebarTabTitle
         closeButton.tint = effectiveAccent.icon
-        // , D07: 24 pt square at 7 % on hover.
         closeButton.hoverFill = .rowClose
         closeButton.target = self
         closeButton.action = #selector(closeTab(_:))
@@ -502,9 +488,6 @@ final class SidebarTabRow: SidebarListRow {
     }
 }
 
-/// A folder row (design §3.2): 18 pt folder glyph tinted with the Space accent where favicons sit,
-/// 14 pt semibold title, no chevron — the glyph switches between closed and open (measured
-/// (S-PIN, S-SW, S-PIMG) [H]). Clicking toggles it.
 @MainActor
 final class SidebarFolderRow: SidebarListRow {
     private(set) var item: SidebarFolderItem
@@ -555,9 +538,6 @@ final class SidebarFolderRow: SidebarListRow {
     }
 }
 
-/// Closed and open folder glyphs, stroked with `accentIcon` and filled with `accentIconFill`
-/// (design §3.2, §5: measured `#503394` / `#FAF7FE` in the default Space). Own drawing: no SF
-/// Symbol matches Orbit's open folder ().
 @MainActor
 final class SidebarFolderGlyphView: NSView {
     var isOpen = false { didSet { if isOpen != oldValue { needsDisplay = true } } }
@@ -622,7 +602,6 @@ final class SidebarFolderGlyphView: NSView {
     }
 }
 
-/// The "/" of a Pinned tab moved away from its pinned URL (reconstruction of `TabCellSlash` [L] C26).
 @MainActor
 final class SidebarPinnedSlashView: NSView {
     var tint = OrbitTokens.ThemeAccent.defaultSpace.icon { didSet { needsDisplay = true } }
@@ -646,8 +625,6 @@ final class SidebarPinnedSlashView: NSView {
     }
 }
 
-/// The "+ New Tab" row at the top of the Today section (design §2): 13 pt "+" centred at x 26,
-/// neutral 45% label, plus and hint; hover shows the row fill and the ⌘T hint (CAP-1c C01, S-NT@1s).
 @MainActor
 final class SidebarNewTabRow: NSButton {
     private let background = OrbitSurfaceBackgroundView(cornerRadius: OrbitTokens.Radius.tabRow)
@@ -718,8 +695,6 @@ final class SidebarNewTabRow: NSButton {
     override func mouseExited(with event: NSEvent) { isHovering = false }
 
     private func refreshAccent() {
-        // CAP-1c C01: New Tab's plus and title use SidebarForegroundDarker (45%),
-        // rather than the opaque foreground of tab titles. Both appearances are dynamic.
         glyph.tint = OrbitTokens.Color.Text.sidebarNewTab
         label.textColor = OrbitTokens.Color.Text.sidebarNewTab
         shortcut.textColor = OrbitTokens.Color.Text.sidebarNewTab
@@ -737,9 +712,6 @@ final class SidebarNewTabRow: NSButton {
     }
 }
 
-/// Pinned/Today separator (design §3.2): 1 device pixel of `line.sidebarSeparator`, inset 18 from
-/// the sidebar edges, aligned on the pixel grid (design rule 5). While the Today zone is hovered
-/// the line stops before the "Clear" control at its right end (S-PIN@2s).
 @MainActor
 final class SidebarSeparatorView: NSView {
     override init(frame frameRect: NSRect) {
@@ -757,10 +729,6 @@ final class SidebarSeparatorView: NSView {
     }
 }
 
-/// Today's "Clear" control (⇧⌘K "Clear Unpinned Tabs", M-498) at the separator's right end,
-/// revealed while the Today zone is hovered (S-PIN@2s); `Typography.sidebarClear` in
-/// the theme's secondary text, ending 19 from the sidebar edge with the separator stopping 10.5 before
-/// it (capture C01, D43); hover square `standaloneButton` ().
 @MainActor
 final class SidebarClearButton: NSButton {
     var accent = OrbitTokens.ThemeAccent.defaultSpace { didSet { needsDisplay = true } }

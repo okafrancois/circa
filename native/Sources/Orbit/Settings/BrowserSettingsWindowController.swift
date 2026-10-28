@@ -34,7 +34,7 @@ final class BrowserSettingsWindowController<Engine: BrowserEngine>: NSWindowCont
     private var sectionObservation: AnyCancellable?
     static var minimumContentSize: NSSize { NSSize(width: 684, height: 400) }
 
-    /// The theme editor opened from the Spaces section (ORBIT-THEMES).
+    /// The theme editor opened from the Spaces section.
     var themeEditor: OrbitThemeEditorController?
     let themeUndoManager = OrbitThemeUndoManager()
 
@@ -362,7 +362,7 @@ struct BrowserSettingsView<Engine: BrowserEngine>: View {
                 BrowserSettingsIconEditor(choice: runtime.document.space(space.id).iconSelection) { value in
                     model.queueSpaceIconEdit(spaceID: space.id, profileID: space.profileID, icon: BrowserSpaceIcon(legacyIcon: value))
                 }.disabled(runtime.isUnavailable)
-                // ORBIT-THEMES: the Space's stored theme, else its legacy palette (no longer editable here).
+                // Space themes: the Space's stored theme, else its legacy palette (no longer editable here).
                 HStack {
                     Text(text("spaceColor", "Theme Color"))
                     Spacer()

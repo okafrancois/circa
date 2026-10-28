@@ -6,7 +6,7 @@ import Testing
 @Suite("URL pill selection presentation", .serialized)
 @MainActor
 struct URLPillSwitchTests {
-    @Test("Transport security uses the existing site state and its glyph inside the moving URL group")
+    @Test("Transport security uses the existing site state and the connection glyph, inside the moving URL group")
     func securityGroup() throws {
         let field = OrbitLocationField(frame: NSRect(x: 0, y: 0, width: 240, height: 24))
         field.font = .systemFont(ofSize: 13)

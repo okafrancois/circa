@@ -4,11 +4,6 @@ import BrowserCore
 import BrowserEngine
 import Foundation
 
-/// Chromium backend on CEF 156. In `.alloy` mode (the stock SDK, ENG-X1) every surface is an
-/// Alloy-style browser parented to an AppKit view owned by the shell; see
-/// `docs/native-port/eng-x1-stock-adapter-2026-10-25.md`. In `.hosted` mode (patched CEF,
-/// ENG-X2 D-chrome, CHROMIUM-APP) every surface is a Chrome-style tab of the invisible logical
-/// Browser of its shell window and profile; see `docs/native-port/chromium-app-2026-10-25.md`.
 @MainActor
 public final class ChromiumBrowserEngine: BrowserPrivateEngine {
     /// How `makeSurface` creates native browsers.
@@ -89,9 +84,6 @@ public final class ChromiumBrowserEngine: BrowserPrivateEngine {
     public func profile(for profileID: ProfileID) -> BrowserEngineProfile {
         if let existing = profiles[profileID] { return existing.profile }
         let token = runtime.makeToken()
-        // One request context per profile, never CreateContext(other). Empty path is in-memory.
-        // The path must be a direct child of root_cache_path: a deeper path was observed to
-        // leave its directory empty (no on-disk profile) in run 20261025T100937Z.
         let path = persistence == .persistent ? profileDirectory(profileID) : ""
         let created = !isShutDown && ACRCreateProfile(token, path, persistence == .persistent ? 1 : 0) == 1
         let profile = BrowserEngineProfile(profileID: profileID, persistence: persistence)
@@ -142,9 +134,6 @@ public final class ChromiumBrowserEngine: BrowserPrivateEngine {
         }
         guard persistence == .persistent else { return }
         let path = profileDirectory(profileID)
-        // Chrome takes the Profile out of its ProfileManager before it is destroyed; its services
-        // still write while it is torn down (observed: GPUCache, DIPS, BudgetDatabase... recreated
-        // within milliseconds). Remove until the directory stays absent for `quiet`.
         let quiet = Duration.seconds(2)
         var absentSince: ContinuousClock.Instant?
         var attempts = 0
@@ -543,11 +532,6 @@ extension ChromiumBrowserEngine {
         return true
     }
 
-    /// Contract hook (CHROMIUM-APP-R2/R3): moves the native tabs into the destination window's
-    /// logical Browsers before the shell releases them, all or none. A surface without a native
-    /// tab yet gets it at its first placement there; one whose creation is in flight refuses. The
-    /// source window is held (side API v3) so that its emptied Browser, and the tab's window id,
-    /// survive until the shell settles the move; the original index is kept for a rollback.
     public func shellWillMoveSurfaces(_ surfaces: [ChromiumSurface], toWindow windowID: WindowID) -> Bool {
         guard surfaceMode == .hosted else { return true }  // Alloy views move with `hostView`.
         guard supportsLiveTabMoves, !isShutDown, let window = shellWindows[windowID], !window.isClosed else { return false }

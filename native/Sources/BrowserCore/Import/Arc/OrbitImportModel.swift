@@ -49,7 +49,6 @@ public enum ArcImportError: Error, Equatable, Sendable {
 }
 
 public enum ArcProfileKey: Hashable, Sendable, Codable {
-    /// A Chromium profile directory under `User Data` (`Default`, `Profile 1`, …). Observed.
     case directory(String)
     /// A descriptor that names no directory (legacy opaque id); digest of its canonical form.
     case unresolved(String)
@@ -76,22 +75,15 @@ public enum ArcProfileKey: Hashable, Sendable, Codable {
 
 public struct ArcImportedProfile: Sendable, Equatable {
     public let key: ArcProfileKey
-    /// `User Data/Local State` → `profile.info_cache[directory].name`. Observed field.
     public let displayName: String?
 }
 
 public struct ArcImportedTab: Sendable, Equatable {
-    /// Arc sidebar item id (observed `id`), or the archive record key.
     public let sourceID: String
-    /// `data.tab.savedURL` (observed). Arc's sidebar does not store a distinct live URL.
     public let savedURL: URL
-    /// `data.tab.savedTitle` (observed): the last web title.
     public let savedTitle: String?
-    /// Item `title` (observed field): non-null when the user renamed the item (interpretation
-    /// consistent with the Electron reconstruction; reconstruction).
     public let customTitle: String?
     public let createdAt: Date?
-    /// `data.tab.timeLastActiveAt` (observed).
     public let lastActiveAt: Date?
 }
 
@@ -113,7 +105,6 @@ public struct ArcSpaceAppearance: Sendable, Equatable, Codable {
     /// `#rrggbb` from `customInfo.windowTheme.primaryColorPalette.tintedLight`, else `midTone`,
     /// else a hexadecimal `color`. Components are converted as-is; no Display P3 → sRGB conversion.
     public var colorHex: String?
-    /// `customInfo.iconType.emoji_v2`, `icon` or `symbol` (observed `emoji_v2`).
     public var icon: String?
     /// Canonical JSON of `customInfo.windowTheme`, bounded; nil when absent or oversized.
     public var theme: String?
@@ -132,14 +123,11 @@ public struct ArcImportedSpace: Sendable, Equatable {
     public let profile: ArcProfileKey
     public let title: String?
     public let appearance: ArcSpaceAppearance
-    /// `containerIDs`/`newContainerIDs` `pinned` root (observed), folders kept.
     public let pinned: [ArcImportedNode]
-    /// `unpinned` root (observed). Native Today holds tabs only; folders are flattened.
     public let today: [ArcImportedTab]
 }
 
 public struct ArcImportedFavorites: Sendable, Equatable {
-    /// `topAppsContainerIDs` pairs a profile descriptor with its container (observed).
     public let profile: ArcProfileKey
     /// Native Favorites hold tabs only; Arc folder wrappers are flattened.
     public let tabs: [ArcImportedTab]
@@ -149,11 +137,8 @@ public struct ArcImportedArchiveRecord: Sendable, Equatable {
     public let key: String
     public let tab: ArcImportedTab
     public let archivedAt: Date?
-    /// `reason` (observed field; values not decoded).
     public let reason: String?
-    /// The source Space when `source.space._0` names one (observed variant).
     public let spaceSourceID: String?
-    /// A profile descriptor carried by the record when no Space is named (reconstruction).
     public let profile: ArcProfileKey?
 }
 

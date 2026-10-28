@@ -4,10 +4,6 @@ import BrowserCore
 import BrowserEngine
 import Foundation
 
-// ABI 9 page surfaces (CH-ESSENTIALS): JavaScript dialogs and beforeunload, HTTP authentication,
-// file choosers, context menus, element fullscreen, unresponsive and terminated renderers, page
-// commands and the beforeunload-aware close. Chrome's own UI for these is Views and crashes or
-// shows nothing in hosted mode; see docs/native-port/ch-essentials-2026-10-25.md.
 extension ChromiumSurface {
     // MARK: Events
 

@@ -12,9 +12,6 @@ private func lerp(_ a: CGRect, _ b: CGRect, _ t: CGFloat) -> CGRect {
            width: lerp(a.width, b.width, t), height: lerp(a.height, b.height, t))
 }
 
-/// Window anatomy of design §2–3 as a pure function. Points, origin at the content view's top-left.
-/// Two progress values describe the sidebar: `dockProgress` (1 = pinned, 0 = hidden, driven by
-/// ⌘S) and `floatProgress` (1 = hover-revealed floating panel). The card only follows the dock.
 struct OrbitShellGeometry: Equatable {
     struct State: Equatable {
         var contentSize: CGSize
@@ -83,9 +80,6 @@ struct OrbitShellGeometry: Equatable {
             isSidebarOnScreen: onScreen)
     }
 
-    /// Drag-resize rule, : the edge follows the pointer 1:1 between the clamps 164
-    /// and 500 [H]; the drag collapses the sidebar, instantly and before the release, once the pointer is
-    /// closer than `collapsePointerX` (82, bound [60, 83] [M]) to the window's left edge.
     enum ResizeOutcome: Equatable { case width(CGFloat), collapse }
 
     /// `pointerX` is the pointer's distance from the window's left edge; it defaults to the proposed
@@ -96,8 +90,6 @@ struct OrbitShellGeometry: Equatable {
     }
 }
 
-/// Sidebar anatomy of design §2 and §3.2 as a pure function. Points, origin at the sidebar's
-/// top-left (the docked sidebar's origin is the window's).
 struct OrbitSidebarGeometry: Equatable {
     struct Content: Equatable {
         var width: CGFloat = SidebarMetrics.widthDefault
@@ -113,11 +105,6 @@ struct OrbitSidebarGeometry: Equatable {
         var isFullScreen = false
     }
 
-    /// Toolbar row of the sidebar, : two states, never a continuous squeeze.
-    /// Wide (W ≥ 224, bound (206, 243] [M]): sidebar toggle 27.25 after the third window button, back /
-    /// forward / reload anchored to the right edge at W − 90.25 / 56.25 / 22 [H]. Compact: toggle and
-    /// reload hidden, back W − 76, forward W − 48 with smaller arrows, "•••" overflow at W − 20 [M].
-    /// Full screen: no window buttons, the toggle at x 28.6 [M].
     struct Toolbar: Equatable {
         var centerY: CGFloat
         var isCompact: Bool
@@ -148,12 +135,6 @@ struct OrbitSidebarGeometry: Equatable {
         }
     }
 
-    /// Vertical rhythm of the Space page in page coordinates,  unless noted:
-    /// title +27.5 below the Favorites (or the address field), first pinned row +36, pitch 41, separator
-    /// 29 after the last pinned row (S-PIN [M]) or 27.25 below the title without pinned rows; New Tab
-    /// 29.25 after the separator; Today rows one pitch apart after New Tab. With neither pinned nor Today
-    /// rows there is no separator and New Tab sits 40.5 below the title. Pinned rows with an empty Today
-    /// were not captured: the separator stays.
     struct PageRhythm: Equatable {
         var spaceTitleCenterY: CGFloat
         var pinnedRowCenters: [CGFloat]
@@ -181,8 +162,6 @@ struct OrbitSidebarGeometry: Equatable {
 
     var width: CGFloat
     var toolbar: Toolbar
-    // Toolbar row (centres; y measured from the sidebar top) — the wide state's positions, kept for
-    // callers that predate `toolbar`; hidden buttons report their wide position.
     var toolbarCenterY: CGFloat
     var sidebarToggleCenterX: CGFloat
     var backCenterX: CGFloat
@@ -295,10 +274,6 @@ struct OrbitSidebarGeometry: Equatable {
     }
 }
 
-/// Space selectors between Library and "+" ( 34 pt pitch while they fit). When the
-/// icons no longer fit, every Space becomes a dot and the dots compress so all Spaces stay visible
-/// and reachable without scrolling (user requirement 2026-10-26; breakpoint, dot pitch and active-dot
-/// treatment are reconstruction choices awaiting an observation).
 struct FooterSpaceLayout: Equatable {
     enum Presentation: Equatable { case icons, dots }
 

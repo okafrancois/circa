@@ -451,7 +451,7 @@ final class BrowserPaletteView: NSView, NSTextFieldDelegate, NSTableViewDataSour
         panelShadow.removeAnimation(forKey: "palette.scoped-search")
         guard changed, animated, !isHidden, !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion,
               panel.frame.maxY < bounds.height - OrbitTokens.Metrics.CommandBar.rowInsetX else { return }
-        // The recovered subscription bounces only on nil <-> scoped state, not each query.
+        // The subscription bounces only on nil <-> scoped state, not each query.
         // Keep the final model transform at identity so interruption and dismissal are immediate.
         for target in [panel.layer, panelShadow].compactMap({ $0 }) {
             let frame = target.frame

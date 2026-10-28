@@ -119,7 +119,7 @@ final class OrbitLocationField: NSTextField {
             NSLayoutConstraint.deactivate([restingAlignment, statusAlignment])
             (visible ? statusAlignment : restingAlignment)?.isActive = true
             // The status enters/leaves through the bottom edge of the text mask.
-            // Top at centerY when visible, half a pill below when hidden.
+            // Top at centerY when visible; 18 pt below when hidden.
             statusPosition.constant = visible ? 0 : 18
             statusLabel.animator().alphaValue = visible ? 1 : 0
         }, animated: animated)
@@ -158,7 +158,6 @@ final class OrbitLocationField: NSTextField {
         let symbol: String?
         switch security {
         case .https: symbol = "lock.fill"
-        // Transport-security symbol: `lock.slash.fill`.
         case .insecure: symbol = "lock.slash.fill"
         case .internalPage, .unavailable: symbol = nil
         }

@@ -1,13 +1,5 @@
 import Foundation
 
-// Orbit semantics and provenance (docs/orbit-import-format.md, docs/orbit-feature-evidence.md):
-// - Orbit's `StorableSidebar.json` stores the sidebar per Space (`pinned`/`unpinned` containers) and
-//   Favorites per profile (`topAppsContainerIDs`), independently of windows. Every window that shows
-//   a Space therefore shows the same Pinned and Today lists; only selection and live documents are
-//   per window. Observed on disk (structure only).
-// - Folders are nested `list` items with `childrenIds`; order comes only from `childrenIds`. Observed.
-// - Archive records carry `archivedAt`, `reason`, `source` and the full sidebar item. Observed.
-// Rules not observed in Orbit are marked "reconstruction choice" where they are implemented.
 
 public struct FolderID: Hashable, Codable, Sendable {
     public let rawValue: UUID
@@ -84,7 +76,6 @@ public enum BrowserOrganizationSection: Hashable, Sendable {
         return true
     }
 
-    /// Reconstruction choice: Orbit evidence shows folders in Pinned; Favorites and Today accept tabs only.
     public var acceptsFolders: Bool {
         if case .pinned = self { return true }
         return false
@@ -143,9 +134,8 @@ public struct BrowserOrganizedTab: Codable, Equatable, Sendable {
     public internal(set) var url: URL
     /// Last web title reported by the engine. Distinct from the user's custom title.
     public internal(set) var pageTitle: String?
-    /// User-chosen title (ORBIT-RENAME). Navigation and title callbacks never overwrite it.
     public internal(set) var customTitle: String?
-    /// Reference URL of a Favorite or Pinned tab (ORBIT-RESET-PIN). Always nil in Today.
+    /// Reference URL of a Favorite or Pinned tab. Always nil in Today.
     public internal(set) var pinnedURL: URL?
     public let createdAt: Date
     /// Last time the tab was the visible selection of a window. Basis of auto-archiving.
@@ -192,11 +182,9 @@ public struct BrowserOrganizedFolder: Codable, Equatable, Sendable {
 /// A tab removed from the sidebar. Distinct from closing a live occurrence of a Pinned tab.
 public struct BrowserArchivedTab: Codable, Equatable, Sendable, Identifiable {
     public enum Reason: String, Codable, Sendable {
-        /// ⌘W on a Today tab ("Archive Tab", Orbit menu M-968).
         case closed
         /// Inactivity threshold reached.
         case automatic
-        /// "Clear Unpinned Tabs" (⇧⌘K, M-498).
         case cleared
         /// Explicit deletion of a Pinned/Favorite tab or of a folder's contents.
         case removed
@@ -274,9 +262,6 @@ extension BrowserAutoArchiveThreshold: Codable {
     }
 }
 
-/// Auto-archive configuration. Orbit stores per-profile thresholds (`autoArchiveTimeThresholdsPerProfile`,
-/// names only observed); its option values and default were not decoded. Reconstruction choices:
-/// global default of 12 hours, optional per-profile override, archive capped at 1 000 records.
 public struct BrowserArchivePolicy: Equatable, Sendable {
     public var defaultThreshold: BrowserAutoArchiveThreshold
     public var profileThresholds: [ProfileID: BrowserAutoArchiveThreshold]
@@ -336,9 +321,7 @@ public enum BrowserOrganizationAction: String, Sendable, Equatable {
     case createSplit, addSplitPane, closeSplitPane, unsplit, swapSplitPanes, orientSplit, resizeSplit
 }
 
-/// Contents of a deleted folder. Orbit's behaviour was not observed; both are explicit choices.
 public enum BrowserFolderDeletion: Sendable, Equatable {
-    /// Children move to the folder's parent at its position (Electron reconstruction rule).
     case keepContents
     /// Every descendant tab is archived with reason `.removed`.
     case archiveContents
@@ -350,8 +333,6 @@ public enum BrowserOrganizationError: Error, Equatable, Sendable {
     /// The item exists but is not in the captured window's Space or profile.
     case notVisibleInContext
     case invalidDestination
-    /// Reconstruction choice: moving between profiles would transfer a document across a session
-    /// boundary and is refused (Orbit behaviour not observed).
     case crossProfileMove
     case cycle
     /// The anchor is not a child of the destination container.

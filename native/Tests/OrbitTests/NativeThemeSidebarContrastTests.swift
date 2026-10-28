@@ -103,7 +103,6 @@ struct NativeThemeSidebarContrastTests {
         #expect(labels.count == 2)
         let label = try #require(labels.first { $0.stringValue == SidebarListStrings.newTab })
         let shortcut = try #require(labels.first { $0.stringValue == "⌘T" })
-        // CAP-1c C01 fixes these captions to neutral alpha roles, independent of tab-title tint.
         #expect(same(label.textColor, OrbitTokens.Color.Text.sidebarNewTab, appearance: appearance))
         #expect(same(shortcut.textColor, OrbitTokens.Color.Text.sidebarNewTab, appearance: appearance))
         let glyph = try #require(descendants(newTab, of: OrbitGlyphButton.self).first)

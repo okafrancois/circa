@@ -4,7 +4,7 @@
 
 Orbit is an independent macOS browser built with Swift and AppKit, with a maintained CEF/Chromium 156 engine fork. Spaces, a vertical sidebar, profiles, pinned tabs, Split View and Peek organize browsing around your work. Browser state is stored locally; a cloud account is not required.
 
-**Status: development preview.** Features, compatibility and performance are still being validated. This is not a stable release or a claim of complete feature equivalence. Some build targets, bundle identifiers and resources retain earlier internal names while the Orbit identity is integrated.
+**Status: development preview.** Features, compatibility and performance are still being validated. This is not a stable release or a claim of complete feature validation. Some build targets, bundle identifiers and resources retain earlier internal names while the Orbit identity is integrated.
 
 The target application bundle identifier is `io.github.okatech.orbit`; its migration is a separate release task.
 

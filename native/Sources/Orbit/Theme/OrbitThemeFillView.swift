@@ -1,11 +1,6 @@
 import AppKit
 import QuartzCore
 
-/// Space gradient and optional grain. The shell opts into a native behind-window material;
-/// opaque remains the default for document shields and standalone gradient rendering. CAP-1c C01
-/// informs the gradient axis and stops, not the runtime material. Glass is a reconstruction choice
-/// requested by the user; see design/glass-design-r1.md.
-/// Decorative: it never takes mouse events or makes sidebar controls vibrant.
 @MainActor
 final class OrbitThemeFillView: NSView {
     private let host = CALayer()
@@ -209,8 +204,6 @@ final class OrbitThemeFillView: NSView {
     /// Colours of the current theme under the current appearance.
     var resolvedStops: [CGColor] { OrbitThemeGradient.normalizedStops(theme.stops, appearance: effectiveAppearance) }
 
-    /// Switches theme; `fade` cross-fades the gradient ( C16: the fill changes with the
-    /// Space list, over the list spring's settling time; reduced motion: 0.12 s).
     func apply(_ newTheme: OrbitTokens.SpaceTheme, fade: TimeInterval? = nil) {
         apply(newTheme, fade: fade, refreshesMaterial: true)
     }
@@ -271,8 +264,6 @@ final class OrbitThemeFillView: NSView {
     }
 }
 
-/// Procedural grain tiled over the fill. Orbit ships grain/denim/sand/tweed bitmaps; they are not
-/// embedded (design §6.1): every texture is approximated by the same seeded noise ().
 final class OrbitGrainLayer: CALayer {
     /// Strength is composited by Core Animation; editing it must not redraw the tiled backing.
     var intensity: CGFloat = 0 {
@@ -329,10 +320,6 @@ final class OrbitGrainLayer: CALayer {
     }()
 }
 
-/// The hover-revealed sidebar's panel (): the window's theme fill darkened by
-/// a black 10 % overlay (≈ −25/255 per channel, D40), rounded 12 and shadowed (black 17.5 %, y 0,
-/// blur 8) above the content, with the 1 pt inner light edge of .
-/// Decorative: the sidebar view above it takes the events.
 @MainActor
 final class OrbitFloatingSidebarBackdrop: NSView {
     let fill = OrbitThemeFillView(materialRole: .floatingSidebar)

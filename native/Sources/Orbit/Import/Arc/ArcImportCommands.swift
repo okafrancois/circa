@@ -8,10 +8,10 @@ enum ArcImportCommands {
     static let definitions: [BrowserCommandDefinition] = [
         .init(id: .importFromArc, title: "Import from Arc…", menu: "File", shortcuts: [], scope: .browser,
               requirement: .application, owner: "IMPORT",
-              sources: ["Reconstruction: CORE-IMPORT entry; Arc lists Import from Another Browser… (menu import command)"]),
+              sources: ["Browser command"]),
         .init(id: .importArcConnections, title: "Import Connections from Arc…", menu: "File", shortcuts: [], scope: .browser,
-              requirement: .application, owner: "IMPORT-SESSIONS", sources: ["Reconstruction: offline session import"]),
+              requirement: .application, owner: "IMPORT-SESSIONS", sources: ["Browser command"]),
         .init(id: .restoreArcConnections, title: "Restore Connections Before Last Import…", menu: "File", shortcuts: [], scope: .browser,
-              requirement: .application, owner: "IMPORT-SESSIONS", sources: ["Reconstruction: restore offline session backup"]),
+              requirement: .application, owner: "IMPORT-SESSIONS", sources: ["Browser command"]),
     ]
 }

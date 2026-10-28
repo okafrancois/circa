@@ -15,8 +15,6 @@ enum OrbitMotionPreferences {
         return launchForcesReducedMotion || NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
     }
 
-    /// Orbit's chrome is opaque, so reduced transparency has no visible effect on it ( C20).
-    /// Exposed for surfaces that add translucency later.
     static var prefersReducedTransparency: Bool { NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency }
 }
 
@@ -26,9 +24,6 @@ extension OrbitTokens.Spring {
     /// Undamped angular frequency ω₀ = 2π / response (mass 1).
     var angularFrequency: Double { 2 * .pi / response }
 
-    /// Displacement from the target and velocity after `time`, for a spring released at
-    /// displacement `x0` with velocity `v0` (units per second). Same model as SwiftUI's
-    /// `spring(response:dampingFraction:)` and `CASpringAnimation` with the stiffness/damping above.
     func state(after time: Double, displacement x0: Double, velocity v0: Double) -> (displacement: Double, velocity: Double) {
         let w = angularFrequency
         let z = Double(dampingFraction)
@@ -206,9 +201,8 @@ private final class OrbitDisplayLinkProxy: NSObject {
 
 // MARK: - Motion policy
 
-/// How a state change is presented (design rule 9,  C20 for the reduced path).
 enum OrbitMotionStyle: Equatable {
-    /// The measured or estimated spring.
+    /// The or estimated spring.
     case spring
     /// "Reduce motion": the spring becomes a 0.12 s cross-fade to the final state.
     case crossfade
@@ -225,8 +219,6 @@ enum OrbitMotionStyle: Equatable {
 
 @MainActor
 enum OrbitTransitions {
-    /// Reduced-motion replacement for a spring ( C20): the next change of `layer`'s
-    /// rendered tree cross-fades over 0.12 s.
     static func crossfade(_ layer: CALayer?, duration: TimeInterval = OrbitTokens.Motion.reducedMotionCrossfade) {
         guard let layer else { return }
         let transition = CATransition()

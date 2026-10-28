@@ -1,7 +1,6 @@
 import AppKit
 import BrowserCore
 
-/// Reconstruction defaults, not measured Orbit timings or recursive presentation semantics.
 @MainActor
 final class FolderPreviewIntent {
     enum Phase { case idle, armed, visible, leaving }
@@ -112,7 +111,6 @@ struct FolderPreviewResult {
     let split: SplitGroupID?
     var title: String { tab.title?.isEmpty == false ? tab.title! : (tab.url.host ?? tab.url.absoluteString) }
 
-    /// Depth-first traversal is a reconstruction choice; split panes retain their stored order.
     static func ordered(_ items: [BrowserOrganizationItem], path: [String] = []) -> [Self] {
         items.flatMap { item -> [Self] in
             switch item {

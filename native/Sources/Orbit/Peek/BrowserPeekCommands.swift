@@ -29,7 +29,6 @@ enum BrowserPeekCommands {
         try! registry.register(.dismissPeek, validate: { $0.isPeekPresented && !$0.isTextFieldEditing }) { controller, _ in
             controller.dismissPeek()
         }
-        // "Open Little Orbit or Peek in…" (⌘O, M-1495). LITTLE extends this handler for Little Orbit.
         try! registry.register(.openQuickWindowOrPeekIn, validate: { $0.isPeekPresented }) { controller, _ in
             controller.promotePeekToTab()
         }

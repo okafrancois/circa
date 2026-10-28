@@ -92,7 +92,7 @@ struct BrowserHistoryReaderTests {
     }
 
     @Test("Memory index membership, bonus and order agree with SQL across query shapes")
-    func memoryIndexParity() async throws {
+    func memoryIndexConsistency() async throws {
         let root = try Self.root(); defer { try? FileManager.default.removeItem(at: root) }
         let store = try BrowserHistoryStore(profileID: ProfileID(), policy: .persistent, directory: root)
         let now = Date(timeIntervalSince1970: 2_000_000)

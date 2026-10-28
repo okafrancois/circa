@@ -157,8 +157,6 @@ extension BrowserWindowController {
         }
     }
 
-    /// The displayed Space renames in place in its header; another Space or a hidden sidebar
-    /// keeps the sheet (Orbit's behaviour for those cases is not observed).
     func presentRenameSpace(_ id: SpaceID) {
         guard acceptsCommands else { return }
         session.performWindowAction { [weak self] in

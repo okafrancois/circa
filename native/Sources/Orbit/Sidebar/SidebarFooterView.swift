@@ -4,12 +4,6 @@ import CoreImage
 
 private typealias Metrics = OrbitTokens.Metrics.Sidebar
 
-/// Sidebar footer (design §2–3.2): Library at 24 from the left edge, Space icons centred at a
-/// 34 pt pitch, "+" at 24 from the right edge, all centred 25 pt above the bottom
-/// (). Spaces without an icon are dots; inactive Spaces are dimmed (estimate
-/// [L] C08). When the icons no longer fit, every Space becomes a compressed dot so all stay
-/// reachable without scrolling (`FooterSpaceLayout`). The "+" turns into "×" while its menu is
-/// open ().
 @MainActor
 final class SidebarFooterView: NSView {
     let libraryButton = OrbitGlyphButton(glyph: OrbitGlyph.library, label: OrbitShellText.library)
@@ -134,7 +128,6 @@ final class SidebarFooterView: NSView {
             button.frame = NSRect(x: centerX - spaceLayout.pitch / 2, y: y, width: spaceLayout.pitch, height: size)
             button.presentation = spaceLayout.presentation
             button.dotDiameter = button.fittedDotDiameter(spaceLayout.dotDiameter)
-            // Compressed targets keep a centred square hover instead of a tall sliver (reconstruction).
             var fill = OrbitGlyphButton.HoverFill.standalone
             if spaceLayout.pitch < size { fill.side = spaceLayout.pitch; fill.radius = min(fill.radius, spaceLayout.pitch / 3) }
             button.hoverFill = fill
@@ -262,9 +255,6 @@ final class SidebarFooterView: NSView {
 
 }
 
-/// A Space in the footer: a dot until Spaces carry icons (: Spaces without
-/// an icon are dots; diameter  C08). Inactive dots target 45 % opacity (
-/// C08), raised when needed to retain 3:1 contrast because the controls remain enabled.
 @MainActor
 final class SidebarSpaceButton: OrbitGlyphButton {
     let space: BrowserSpace
@@ -395,11 +385,8 @@ final class SidebarSpaceButton: OrbitGlyphButton {
     }
 }
 
-/// Orbit's footer hover capsule, observed on dark material, 28 pt height
-/// 12 pt semibold name and separate light keycaps. The profile is intentionally omitted.
 @MainActor
 final class SidebarSpaceTooltip: NSView {
-    // Cold hover: 0.457 s from the first hover frame to the capsule in Orbit's recording.
     static let appearanceDelay: TimeInterval = 0.45
     private let material = NSVisualEffectView()
     private let tint = NSView()

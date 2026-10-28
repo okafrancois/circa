@@ -44,7 +44,7 @@ public struct BrowserSpace: Codable, Equatable, Sendable {
     public let id: SpaceID
     public let profileID: ProfileID
     public let name: String
-    /// Session version 4 (ORBIT-THEMES). nil: never themed — the legacy Settings palette or the default
+    /// Session version 4 (Space themes). nil: never themed — the legacy Settings palette or the default
     /// theme applies. Travels with the Space (rename, profile reassignment).
     public internal(set) var theme: BrowserSpaceTheme? = nil
 }
@@ -330,7 +330,6 @@ public actor BrowserStore {
         return try captureWindowState(in: context.windowID)
     }
 
-    /// Uses catalog order at execution time. Clamping at the ends is a reconstruction choice.
     public func activateAdjacentSpace(offset: Int, from context: BrowserContext) throws -> BrowserWindowState {
         guard isCurrent(context), let index = spaceOrder.firstIndex(of: context.spaceID) else {
             throw BrowserStoreError.staleContext

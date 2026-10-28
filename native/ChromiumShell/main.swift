@@ -525,8 +525,6 @@ private final class ShellModel: NSObject, NSMenuItemValidation, NSWindowDelegate
     private func rememberDownloadRequest(_ handle: ALChromiumDownloadHandle, action: Int32,
                                          source: Int32, sourceLifetime: UInt64,
                                          fixtureCase: ALChromiumDownloadCase) {
-        // Preserve exactly what will be submitted, before entering the C ABI.
-        // Later observations must never reconstruct or replace this context.
         let request = DownloadRequest(handle: handle, command: downloadOperation, action: action,
             source: source, sourceLifetime: sourceLifetime, fixtureCase: fixtureCase)
         downloadRequest = request

@@ -3,11 +3,6 @@ import BrowserCore
 import BrowserEngine
 import BrowserShell
 
-/// Engine-to-window events: navigation policy, new targets, self-closing documents, downloads.
-/// Every handler re-verifies ownership because engine callbacks can outlive the surface's
-/// membership in this window. Policy is answered synchronously from state recorded before the
-/// question (`session.holds`), so it works on engines that cannot suspend a request. Features
-/// observe events and route new targets through `engineEventHooks`, from their own files.
 extension BrowserWindowController: BrowserEngineSurfaceDelegate {
     func surfaceDidStartNavigation(_ surface: Surface) {
         refreshNavigation(for: surface)
@@ -97,8 +92,6 @@ extension BrowserWindowController: BrowserEngineSurfaceDelegate {
     /// Shortcut candidates typed in the selected document go to the page first. The receipt keeps
     /// the command context the key would target if the page declines it.
     func surface(_ surface: Surface, willSendKeyToPage event: NSEvent) -> BrowserKeyRouting {
-        // CH-ESSENTIALS: Escape leaves element fullscreen before the page sees it (Chromium's
-        // ExclusiveAccess handling, absent from hosted tabs).
         if event.keyCode == 53, event.modifierFlags.intersection([.command, .control, .option, .shift]).isEmpty,
            elementFullscreenSurfaceKey == ObjectIdentifier(surface), exitElementFullscreenIfNeeded() {
             return .browser

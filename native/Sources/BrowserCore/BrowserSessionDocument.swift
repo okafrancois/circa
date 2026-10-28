@@ -30,7 +30,7 @@ public enum BrowserSessionError: Error, Equatable, Sendable {
 
 /// Stores model identities and destinations without serializing live engine state.
 /// Version 3 adds split groups to the shared organization; version 4 adds Space themes and the record
-/// of imported Orbit appearances already migrated (ORBIT-THEMES). Versions 1–3 migrate on decode; encoding
+/// of imported Orbit appearances already migrated (Space themes). Versions 1–3 migrate on decode; encoding
 /// always writes the current version; later versions are refused (see BrowserSessionMigration.swift).
 public struct BrowserSessionDocument: Codable, Equatable, Sendable {
     public static let currentVersion = 4

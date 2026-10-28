@@ -1,8 +1,7 @@
 import AppKit
 import QuartzCore
 
-/// Whole-glyph bounds and contrast reconstructed from 's 60 Hz copy recording.
-/// These samples describe the observed transition, not Orbit's original animation API.
+/// Copy-link control drawn with native vector paths.
 @MainActor
 final class PillCopyLinkButton: OrbitGlyphButton {
     private struct Frame {

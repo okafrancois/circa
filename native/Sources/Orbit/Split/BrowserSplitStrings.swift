@@ -1,5 +1,3 @@
-/// Split interface strings use the shared BrowserText resource bundle through the app helpers.
-/// English wording is reconstruction; localization never changes runtime page titles or URLs.
 enum BrowserSplitStrings {
     static var closePane: String { uiText("Close Pane") }
     static var activePane: String { uiText("Active pane") }

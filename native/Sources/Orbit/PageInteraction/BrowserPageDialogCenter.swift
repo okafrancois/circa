@@ -178,8 +178,6 @@ final class BrowserPageDialogCenter {
 /// Localized wording of page dialogs: Chromium's strings as packaged in
 /// (the engine framework en.lproj/locale.pak, static match), Chromium's button order.
 enum BrowserPageDialogText {
-    /// "example.com says", with the port when it is not the scheme's default; "This page says"
-    /// without a usable origin (file, opaque).
     static func javaScriptTitle(origin: String?) -> String {
         guard let display = displayOrigin(origin) else { return uiText("This page says") }
         return uiFormat("%@ says", display)

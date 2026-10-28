@@ -41,7 +41,7 @@ struct CommandBarTests {
         #expect(BrowserPaletteRanking.commandScore("delete everything", result: command(.newWindow)) == nil)
     }
 
-    @Test("Title and host deduplication is restricted to configured hosts and keeps ranking authority")
+    @Test("Title and host deduplication is restricted to supported hosts and keeps ranking authority")
     func titleAndHostDeduplication() {
         func page(_ id: String, _ host: String, _ path: String, title: String = "Design", section: BrowserPaletteSection = .tabs) -> BrowserPaletteResult {
             let url = URL(string: "https://\(host)/\(path)")!

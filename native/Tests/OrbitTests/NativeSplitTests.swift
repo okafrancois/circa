@@ -693,8 +693,6 @@ extension NativeWebKitTests.NativeSplitTests {
         source.session.close(); destination.session.close()
         #expect(await handoff.value == nil)
         for await _ in ready.stream { break }
-        // Disable the container notifications for this retry: only the adoption completion's
-        // explicit rejection path may schedule recovery. No Quit/cancellation participates.
         environment.rescue.onRescue = nil
         environment.rescue.onRescueReadinessChange = nil
         var rejected = false

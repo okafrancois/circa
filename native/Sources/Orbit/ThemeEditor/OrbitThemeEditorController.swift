@@ -51,7 +51,7 @@ final class OrbitThemeEditorPanel: NSPanel {
     override func cancelOperation(_ sender: Any?) { onCancel?() }
 }
 
-/// One editing session of one Space's theme (ORBIT-THEMES).
+/// One editing session of one Space's theme.
 /// Every edit is previewed at once on the presenting window (`onPreview`) and written to the store,
 /// throttled, so every other window showing the Space follows live. Closing writes the final draft
 /// and registers a single undo step ("Change Theme") for the whole session in the presenting
@@ -181,7 +181,6 @@ final class OrbitThemeEditorController {
     private func stateDidChange(_ state: OrbitThemeEditorState) {
         guard !isClosed, !failed else { return }
         isEdited = true
-        // Light ↔ dark repaints the popover with the window, in one frame (C04).
         panel?.appearance = OrbitAppearance.windowAppearance(for: OrbitAppearance.mode(of: state.theme))
         onPreview?(state.theme)
         scheduleCommit(state.theme)

@@ -1,11 +1,5 @@
 import Foundation
 
-/// Maps IMPORT's `Import/space-appearance.json` entries into Space themes (ARC-THEMES import bridge).
-/// Arc's `customInfo.windowTheme` is only partially known (binary strings `windowAppearance`,
-/// `blendedGradient`, `baseColors`, `intensityFactor`; observed on disk: `primaryColorPalette.tintedLight`
-/// / `midTone`). Recognised, in order: `blendedGradient.baseColors[]` (`_0` wrappers and `{color: …}`
-/// items followed), a `basicColor`, then the palette colour IMPORT already extracted (`colorHex`).
-/// Unknown fields are ignored; nothing is invented when no colour is present.
 public enum ArcSpaceThemeImport {
     public static func theme(for appearance: ArcSpaceAppearance) -> BrowserSpaceTheme? {
         let root = appearance.theme.flatMap { try? ArcJSON.parse(Data($0.utf8)) }

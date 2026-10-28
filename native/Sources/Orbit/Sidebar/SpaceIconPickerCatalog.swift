@@ -1,12 +1,6 @@
 import AppKit
 import BrowserCore
 
-/// Emoji offered by the Space icon picker, built from the system's Unicode properties.
-/// ships `EmojiAndIconPicker` with its own emoji table (9 categories) and icon fonts
-/// . Nothing is copied from Orbit: the list, its order and the
-/// block-to-category mapping below are a reconstruction, and search uses the English Unicode names.
-/// Skin tones, ZWJ sequences and keycaps are not listed; any of them can still be entered through
-/// the search field (system Emoji & Symbols palette or typing), which offers the typed grapheme.
 struct SpaceIconPickerCatalog: Sendable {
     enum Category: Int, CaseIterable, Sendable {
         case smileys, people, animals, food, activities, travel, objects, symbols, flags
@@ -163,8 +157,6 @@ struct SpaceIconPickerCatalog: Sendable {
     }
 }
 
-/// Curated native choices, order and names are a reconstruction, not an Orbit icon inventory.
-/// Only images supplied by this OS are offered. English resource keys remain searchable too.
 @MainActor
 enum SpaceSymbolCatalog {
     static let definitions: [(identifier: String, title: String)] = [

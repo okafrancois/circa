@@ -8,8 +8,8 @@ extension NativeWebKitTests {
 @Suite(.serialized)
 @MainActor
 struct SpaceMotionTests {
-    @Test("Space motion uses the recovered critical spring and preserves release velocity")
-    func recoveredSpring() {
+    @Test("Space motion uses the critically damped spring and preserves release velocity")
+    func criticallyDampedSpring() {
         let spring = OrbitTokens.Motion.spaceSwitchSidebar
         #expect(spring.response == 0.4 && spring.dampingFraction == 1)
         #expect(OrbitTokens.Motion.spaceSwipeScrollScale == 0.5)

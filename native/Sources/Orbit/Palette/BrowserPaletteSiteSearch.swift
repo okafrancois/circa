@@ -1,7 +1,5 @@
 import Foundation
 
-/// Functional URL templates for the default site catalog.
-/// No icons, remote suggestions, profile discovery or custom-engine import are needed here.
 struct BrowserPaletteSiteSearch: Equatable {
     let name: String
     let aliases: [String]

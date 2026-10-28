@@ -185,7 +185,6 @@ struct SidebarListModelTests {
         let lifted = SidebarListLayout.resolve(entries: content.entries, spaceTitleCenterY: title,
                                                width: 228, hidden: [.tab(tab)])
         #expect(lifted.rows.isEmpty && !lifted.isSeparatorVisible)
-        // C01/D36: the separator disappears and New Tab moves to title +40.5 on an empty page.
         #expect(lifted.newTabCenterY == title + 40.5)
         #expect(lifted.documentHeight == lifted.newTabCenterY + 26)
         for section in [SidebarListSection.pinned, .today] {

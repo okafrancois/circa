@@ -1,9 +1,5 @@
 import Foundation
 
-/// The theme editor's swatch pages and the default Space theme (ORBIT-THEMES).
-/// Swatch values:
-/// (docs/native-port/design/tokens.json `themePicker`). Page order Brand → Pastel → Drab → Greyscale is a
-/// reconstruction: C06 shows nine swatches between ‹ › chevrons with ‹ dimmed on the Brand page.
 public enum BrowserSpaceThemePresets {
     public struct Family: Equatable, Sendable {
         public let id: String
@@ -12,8 +8,6 @@ public enum BrowserSpaceThemePresets {
 
     public static let defaultID = "orbit.default"
 
-    /// 's default Space — : light #D9DBF5 → #F3E5E5 flat until 20 pt and
-    /// from 1300 pt, dark #252538 → #352337 at 160 / 1380 pt, along a 43° axis of a 1512 × 949 window.
     public static let `default`: BrowserSpaceTheme = {
         let axis = 1512 * cos(43 * Double.pi / 180) + 949 * sin(43 * Double.pi / 180)
         return BrowserSpaceTheme(

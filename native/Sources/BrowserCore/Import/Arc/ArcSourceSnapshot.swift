@@ -39,7 +39,6 @@ public final class ArcSourceSnapshot: @unchecked Sendable {
         if shouldRemove { try? FileManager.default.removeItem(at: directory) }
     }
 
-    /// The default Arc data directory (observed location).
     public static var defaultSourceRoot: URL {
         FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("Arc", isDirectory: true)

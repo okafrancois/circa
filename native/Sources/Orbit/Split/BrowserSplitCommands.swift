@@ -2,12 +2,8 @@ import BrowserCore
 import BrowserEngine
 
 enum BrowserSplitCommands {
-    private static let layoutSource = "Reconstruction: split layout actions; C19 measures two horizontal panes only"
-    // No pane-cycling item or key is declared in 's MainMenu.nib (matrix in
-    // docs/shortcuts-orbit-mapping-2026-10-24.md) and E6 app-focused-methods.json lists only add,
-    // close, separate, maximize and note Split selectors. That does not rule out a dynamic Orbit
-    // binding: the exact shortcut stays unresolved, so these commands ship palette-only.
-    private static let cycleSource = "Reconstruction: keyboard pane cycling; Orbit binding unresolved (none declared in MainMenu.nib 1.170.0)"
+    private static let layoutSource = "Browser command: split layout"
+    private static let cycleSource = "Browser command: palette-only pane cycling"
     // Catalog titles stay English lookup keys. BrowserCommandDefinition.localizedTitle routes
     // them through BrowserText at presentation time, like the other feature catalogs.
     private static let rows: [(BrowserCommandID, String, String)] = [

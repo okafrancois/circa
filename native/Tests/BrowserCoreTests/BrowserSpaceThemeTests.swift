@@ -3,7 +3,7 @@ import Darwin
 import Foundation
 import Testing
 
-// ORBIT-THEMES: per-Space theme model, session version 4, undo replays and the import bridge.
+// Space themes: per-Space theme model, session version 4, undo replays and the import bridge.
 
 private func close(_ a: Double, _ b: Double, _ tolerance: Double) -> Bool { abs(a - b) <= tolerance }
 
@@ -206,9 +206,8 @@ struct BrowserSpaceThemeModelTests {
 
 @Suite("Space themes — composition, presets and accent rule")
 struct BrowserSpaceThemeCompositionTests {
-    @Test("The provisional rule reproduces the C06 frame and the default Space's first dark stop")
+    @Test("The theme rule preserves the default Space frame and first dark stop")
     func calibration() {
-        // : handle #A88EAC painted as the flat frame #AA99AC at the observed intensity.
         #expect(near(BrowserSpaceTheme.lightStop(for: mauve, intensity: BrowserSpaceTheme.defaultIntensity), 0xAA99AC, 3))
         // : the default Space's #D9DBF5 has the dark stop #252538.
         #expect(near(BrowserSpaceTheme.darkStop(for: BrowserThemeColor(hex: 0xD9DBF5), intensity: 1), 0x252538, 4))
@@ -222,7 +221,7 @@ struct BrowserSpaceThemeCompositionTests {
         #expect(close(pale.hsb.saturation, 0, 1e-9) && close(pale.hsb.brightness, coral.hsb.brightness, 1e-9))
     }
 
-    @Test("No picked colour gives the measured default Space theme; mode changes keep designed variants")
+    @Test("No picked colour gives the default Space theme; mode changes keep designed variants")
     func defaultTheme() {
         let none = BrowserSpaceTheme.composed(colors: [], mode: .dark)
         var expected = BrowserSpaceThemePresets.default
@@ -236,7 +235,7 @@ struct BrowserSpaceThemeCompositionTests {
         #expect(preset.recomposed(colors: [mauve]).colors == [mauve])
     }
 
-    @Test("Display P3 swatches convert through linear light (Brand 9 is the measured #666789)")
+    @Test("Display P3 swatches convert through linear light (Brand 9 is #666789)")
     func displayP3() {
         let brand = BrowserSpaceThemePresets.brand.swatches
         #expect(near(brand[8], 0x666789, 2))
@@ -249,7 +248,7 @@ struct BrowserSpaceThemeCompositionTests {
         #expect(close(roundTrip.hsb.hue, 292.0 / 360, 1e-9) && close(roundTrip.hsb.saturation, 0.174, 1e-9))
     }
 
-    @Test("Four swatch families of nine match the measured design swatches")
+    @Test("Four swatch families of nine match the declared swatches")
     func presetsMatchTokens() throws {
         let tokens = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
             .appendingPathComponent("Fixtures/space-theme-swatches.txt")
@@ -312,7 +311,6 @@ struct BrowserSpaceThemeImportTests {
         """
         let basic = try #require(ArcSpaceThemeImport.theme(for: appearance(flat)))
         #expect(basic.colors == [BrowserThemeColor(red: 1, green: 0.5, blue: 0)] && basic.mode == .light)
-        // The observed on-disk form: only the palette colour IMPORT extracted.
         let palette = try #require(ArcSpaceThemeImport.theme(for: appearance(#"{"primaryColorPalette":{}}"#, hex: "#336699")))
         #expect(palette.colors == [BrowserThemeColor(hex: 0x336699)] && palette.mode == .automatic)
         #expect(palette.intensity == BrowserSpaceTheme.defaultIntensity && palette.noise == 0)

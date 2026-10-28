@@ -3,8 +3,6 @@ import BrowserCore
 import BrowserEngine
 import SwiftUI
 
-/// Panel ink comes from 's PreferencesFeature asset catalogue. Geometry is
-/// reconstructed from the official settings image, at its two-pixels-per-point scale.
 enum OrbitSettingsStyle {
     static let foreground = color(light: 0x3d3d3d, dark: 0xf3f3f3)
     static let background = color(light: 0xf2f1f3, dark: 0x272629)

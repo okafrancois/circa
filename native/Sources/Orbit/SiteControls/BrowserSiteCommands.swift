@@ -1,12 +1,11 @@
 import BrowserEngine
 import BrowserCore
 
-/// Reconstruction commands, kept separate from Orbit's serialized menu evidence.
 enum BrowserSiteCommands {
     static let definitions: [BrowserCommandDefinition] = [
         .init(id: .showSiteControls, title: "Site Controls…", menu: "View", shortcuts: [],
               scope: .browser, requirement: .surface, owner: "SITE",
-              sources: ["Reconstruction: native SITE controls; no Orbit shortcut asserted"])
+              sources: ["Browser command"])
     ]
 
     @MainActor

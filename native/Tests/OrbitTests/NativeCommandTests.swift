@@ -39,7 +39,7 @@ struct NativeCommandTests {
         #expect(OrbitCommandCatalog.actionDefinitions.count == 249) // Includes local page sharing.
         #expect(OrbitCommandCatalog.declarations.allSatisfy { $0.localizesKey })
         #expect(OrbitCommandCatalog.declarations.filter { !$0.key.isEmpty }.count == 85)
-        #expect(OrbitCommandCatalog.declarations.filter { !$0.key.isEmpty && $0.modifierMask == nil }.map(\.source) == ["M-285", "M-1324"])
+        #expect(OrbitCommandCatalog.declarations.filter { !$0.key.isEmpty && $0.modifierMask == nil }.map(\.source) == ["menu.declaration.25", "menu.declaration.117"])
         #expect(Set(OrbitCommandCatalog.declarations.map(\.source)).count == 179)
         #expect(OrbitCommandCatalog.supplemental.count == 25)
         #expect(Set(OrbitCommandCatalog.definitions.map(\.id)) == Set(BrowserCommandID.allCases))
@@ -62,15 +62,15 @@ struct NativeCommandTests {
         try registry.register(.newTab, replace: true) { _, _ in }
     }
 
-    @Test("Shift and Option preserve distinct commands and upper-case NIB equivalents")
+    @Test("Shift and Option preserve distinct commands and upper-case key equivalents")
     func modifierVariants() {
         let row: (String) -> BrowserShortcut? = { source in OrbitCommandCatalog.declarations.first { $0.source == source }?.shortcut }
-        #expect(row("M-890") == BrowserShortcut(key: "c", modifiers: [.command, .shift]))
-        #expect(row("M-402") == BrowserShortcut(key: "c", modifiers: [.command, .shift, .option]))
-        #expect(row("M-1465") != row("M-890"))
-        #expect(row("M-704") != row("M-1039"))
-        #expect(row("M-240") != row("M-451"))
-        #expect(row("M-207") == BrowserShortcut(key: "\t", modifiers: [.control, .shift]))
+        #expect(row("menu.declaration.79") == BrowserShortcut(key: "c", modifiers: [.command, .shift]))
+        #expect(row("menu.declaration.36") == BrowserShortcut(key: "c", modifiers: [.command, .shift, .option]))
+        #expect(row("menu.declaration.129") != row("menu.declaration.79"))
+        #expect(row("menu.declaration.62") != row("menu.declaration.93"))
+        #expect(row("menu.declaration.21") != row("menu.declaration.40"))
+        #expect(row("menu.declaration.18") == BrowserShortcut(key: "\t", modifiers: [.control, .shift]))
     }
 
     @Test("Keyboard normalization preserves IME, dead keys, repeats and keyboard-layout boundaries")
@@ -391,7 +391,7 @@ struct NativeCommandTests {
         #expect(bar.items.first { $0.title == "View" }?.submenu?.items.contains { $0.title == "Appearance" } == false)
     }
 
-    @Test("Menu bar reproduces Orbit's serialized NIB order, separators, submenus and native actions")
+    @Test("Menu bar reproduces Orbit's declared order, separators, submenus and native actions")
     func menuStructureSnapshot() throws {
         let registry = try commandRegistry(commandRouter())
         for definition in registry.definitions { try registry.registerApplication(definition.id) {} }

@@ -1,18 +1,11 @@
 import Foundation
 
-/// User-visible strings of the window shell (UX-LOCALIZATION, VIS-1 BL-VIS1-LOCALE).
-/// shows its interface and menus in English whatever the system language, so every
-/// default below is English: Orbit's own string where one was observed (menu titles of the command
-/// catalog, "New Tab" in capture C01, the command-bar placeholder asset), an English reconstruction
-/// otherwise. Each string goes through the shared SwiftPM Localizable table, so a later localization
-/// can override it without touching the views. Feature helpers retain their existing call sites.
+/// English defaults for the window shell, resolved through the shared localization table.
 enum OrbitShellText {
     static func string(_ key: String, _ english: String) -> String {
         uiText(english)
     }
 
-    // Toolbar row (accessibility labels; Orbit shows no tooltips there).
-    /// Orbit menu title (M-33).
     static var toggleSidebar: String { string("toolbar.toggleSidebar", "Show/Hide Sidebar") }
     static var back: String { string("toolbar.back", "Back") }
     static var forward: String { string("toolbar.forward", "Forward") }
@@ -28,9 +21,7 @@ enum OrbitShellText {
     static var sidebar: String { string("sidebar.accessibility", "Sidebar") }
     ///  — "New Tab" row.
     static var newTab: String { string("sidebar.newTab", "New Tab") }
-    /// Orbit menu title (M-1195).
     static var newSpace: String { string("sidebar.newSpace", "New Space…") }
-    /// Orbit menu title (M-442).
     static var renameSpace: String { string("sidebar.renameSpace", "Rename Space…") }
     static var untitledSpace: String { string("sidebar.untitledSpace", "Space") }
     static var moveSpaceLeft: String { string("sidebar.moveSpaceLeft", "Move Left") }

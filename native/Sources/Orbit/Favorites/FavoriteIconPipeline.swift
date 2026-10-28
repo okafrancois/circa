@@ -91,9 +91,6 @@ final class FavoriteIconPipeline<Surface: BrowserEngineSurface> {
                   surface.navigationState.faviconRevision == request.revision,
                   surface.navigationState.faviconURL == url,
                   surface.navigationState.faviconImage == request.image else { return }
-            // Never read `entries` on the right of an optional-chained write to it: the write's
-            // modify access is open while the right side runs (DAILY-1 SIGABRT, exclusivity
-            // conflict when the resolver found no image, as for every remote favicon).
             let retainedImage = image ?? self.entries[tab.id]?.image
             self.entries[tab.id]?.image = retainedImage
             self.entries[tab.id]?.task = nil

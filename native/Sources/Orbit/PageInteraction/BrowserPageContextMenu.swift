@@ -1,13 +1,6 @@
 import AppKit
 import BrowserEngine
 
-/// Page context menu (CH-ESSENTIALS): Chromium's menu, reconstructed in AppKit from the engine's
-/// `BrowserContextMenuRequest`, with Chromium's labels as packaged in (the engine framework
-/// `locale.pak`, including Orbit's "Open Link in Split View"). Items are registry commands (menu
-/// "Page Context", never in the menu bar or the palette) dispatched with a target captured when the
-/// menu opens; page commands go back to the engine for the same document only.
-/// Not offered: Open Link in New Window and Incognito, profiles, Save As (CORE-SAVE-PAGE deferred),
-/// translate, cast, QR code, Copy Link to Highlight, Search Image. No Peek item: no Orbit evidence.
 enum BrowserPageContextMenuModel {
     struct Item: Equatable {
         let command: BrowserCommandID
@@ -264,7 +257,6 @@ enum BrowserPageContextCommands {
                 controller.performPageContextCommand(definition.id)
             }
         }
-        // Menu bar page commands of Orbit's catalog (M-901, M-285/M-1473, M-1380, M-655).
         try! registry.register(.print, validate: { $0.canPerformPageCommand(.print) }) { controller, _ in
             controller.performPageCommand(.print)
         }

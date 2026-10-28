@@ -1,6 +1,5 @@
 import AppKit
 
-/// Quit confirmation uses a dialog and a suppression option.
 enum OrbitQuitDecision { case cancel, quit, quitWithoutWarning }
 
 @MainActor

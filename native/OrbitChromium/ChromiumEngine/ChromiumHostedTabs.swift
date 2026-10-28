@@ -4,12 +4,6 @@ import BrowserCore
 import BrowserEngine
 import Foundation
 
-// ABI 6 — hosted Chrome mode of the patched CEF (ENG-X2.1, variant D-chrome).
-// On the patched build every shell window x profile owns one invisible logical Chrome `Browser`
-// whose `BrowserWindow` is an AppKit, Views-free `OrbitBrowserWindow`; tab surfaces are
-// Chrome-style browsers in its `TabStripModel`, so extensions see real tabs and windows. The
-// shell still places `hostView`. On the stock SDK `patchLevel` is 0 and only Alloy surfaces
-// (`makeSurface`) exist. See docs/native-port/eng-x2-2026-10-25.md.
 
 /// The identity of a surface as extension APIs see it.
 public struct ChromiumTabIdentity: Equatable, Sendable {

@@ -12,8 +12,6 @@ struct SidebarSpaceAction {
     var destructive: Bool { kind == .delete }
 }
 
-/// Product choice: creation-menu typography and 40 pt rows over native popover material.
-/// This composition uses a 24 pt native menu.
 @MainActor
 final class SidebarSpaceMenu: NSViewController {
     let actions: [SidebarSpaceAction]

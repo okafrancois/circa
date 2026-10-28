@@ -2,7 +2,7 @@ import AppKit
 import BrowserCore
 import BrowserEngine
 
-/// Space themes outside a browser window (ORBIT-THEMES): the import bridge at launch and Little Orbit.
+/// Space themes outside a browser window: the import bridge at launch and Little Orbit.
 extension BrowserEnvironment {
     /// One-time migration of IMPORT's `space-appearance.json` into the session's Space themes. Runs
     /// before any window exists; returns whether the session changed (it must then be saved).

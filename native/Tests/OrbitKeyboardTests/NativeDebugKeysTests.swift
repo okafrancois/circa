@@ -7,9 +7,6 @@ import WebKit
 @testable import BrowserEngineConformance
 @testable import WebKitEngine
 
-/// DBG-KEYS (VIS-2 P1 candidate): shortcuts that "do nothing". Event-level, hidden: the
-/// production composition, a real WKWebView, real NSEvent chords. See
-/// `docs/native-port/dbg-keys-2026-10-25.md`.
 @Suite("DBG-KEYS event-level keyboard routing", .serialized)
 @MainActor
 struct NativeDebugKeysTests {

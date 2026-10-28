@@ -3,7 +3,7 @@ import BrowserCore
 import ChromiumEngine
 import Foundation
 
-/// Synthetic-only hook: exercises the internal operation.
+/// Synthetic-only hook: exercises the internal operation through the synthetic driver.
 @MainActor
 enum OrbitSpaceProfileScenario {
     static func run(environment: OrbitEnvironment, window: OrbitWindowController, fixture: URL,

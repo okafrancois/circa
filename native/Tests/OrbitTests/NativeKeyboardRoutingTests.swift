@@ -481,10 +481,10 @@ struct NativeKeyboardRoutingTests {
 
     @Test("Omitted NIB masks retain raw absence and decode F12 and Escape as zero modifiers")
     func omittedMasks() throws {
-        let f12 = try #require(OrbitCommandCatalog.declarations.first { $0.source == "M-285" })
+        let f12 = try #require(OrbitCommandCatalog.declarations.first { $0.source == "menu.declaration.25" })
         #expect(f12.modifierMask == nil)
         #expect(f12.shortcut == .init(key: "\u{F70F}", modifiers: []))
-        let escape = try #require(OrbitCommandCatalog.declarations.first { $0.source == "M-1324" })
+        let escape = try #require(OrbitCommandCatalog.declarations.first { $0.source == "menu.declaration.117" })
         #expect(escape.modifierMask == nil)
         #expect(escape.shortcut == .init(key: "\u{1b}", modifiers: []))
     }

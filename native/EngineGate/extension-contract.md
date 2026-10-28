@@ -1,6 +1,6 @@
 # Synthetic MV3 CEF runtime contract
 
-This unpacked extension is a runtime probe, not an implementation of extension APIs. Its source and Node syntax checks establish no CEF runtime support, Orbit feature equivalence, engine selection, Chrome Web Store installation, or general extension compatibility. The host and runner own actual execution and evidence.
+This unpacked extension is a runtime probe, not an implementation of extension APIs. Its source and Node syntax checks establish no CEF runtime support, product readiness, engine selection, Chrome Web Store installation, or general extension compatibility. The host and runner own actual execution and evidence.
 
 ## Files and permissions
 

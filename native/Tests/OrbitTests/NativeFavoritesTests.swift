@@ -89,7 +89,6 @@ struct NativeFavoritesTests {
         let grid = FavoritesGridView(frame: .init(x: 0, y: 0, width: 212, height: 160))
         grid.render((0..<7).map { _ in favoriteItem(profile: profile) }, profileID: profile)
         grid.layoutSubtreeIfNeeded()
-        // Balanced rows (capture C07): at most 4 columns of ≥ 45 pt in 212, so 7 tiles make 4 + 3.
         #expect(grid.geometry.favoriteColumns == 4)
         #expect(grid.tiles.allSatisfy { $0.frame.height == 47 })
         #expect(grid.tiles[1].frame.minX - grid.tiles[0].frame.maxX == 8)
@@ -606,7 +605,6 @@ struct NativeFavoritesTests {
     @Test("An incoming list tab reserves its extra grid row and cancellation restores the Space page")
     func dropReservesRows() async throws {
         let h = try await FavoritesHarness(); defer { h.close() }
-        // A full row at 228 (4 tiles of 47 ≥ 45, capture C07): the fifth tile needs a second row.
         for index in 0..<4 { try await h.add("https://tile\(index).example.test/") }
         let window = h.window
         window.session.openTab(url: URL(string: "https://incoming.example.test/")!)

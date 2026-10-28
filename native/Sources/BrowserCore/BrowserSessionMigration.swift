@@ -6,7 +6,7 @@ extension CodingUserInfoKey {
 }
 
 extension BrowserSessionDocument {
-    // Version 3 → 4 (ORBIT-THEMES) is additive and lossless: every version 3 field decodes unchanged,
+    // Version 3 → 4 (Space themes) is additive and lossless: every version 3 field decodes unchanged,
     // Spaces start without a theme (`BrowserSpace.theme == nil`, so the legacy Settings palette or the
     // default theme still applies) and no imported appearance is marked as migrated. A version 4
     // document must declare `themeImports`, even empty. Versions above `currentVersion` are refused.

@@ -1,7 +1,6 @@
 import AppKit
 import BrowserCore
 
-/// FAVORITES reconstruction values not established by the measured design tokens.
 enum FavoritesPresentationTokens {
     static let unloadedIconOpacity: CGFloat = 1
     static let placeholderFontSize: CGFloat = 18
@@ -160,7 +159,6 @@ final class FavoriteTileView: NSView {
         background.fillColor = isPressed ? state.tabPressed : item.tab.isSelected ? state.tabCurrent
             : isHovering ? state.sidebarItemHovered : state.sidebarItem
         background.outerShadow = item.tab.isSelected && !isPressed ? OrbitTokens.Shadow.tabSelected : nil
-        // CAP-1c C07/C29: the active Favorite has a two-point ring in the icon's color.
         background.borderWidth = item.tab.isSelected && selectionTint != nil ? OrbitTokens.Metrics.Sidebar.favoriteSelectedRingWidth : 0
         background.borderColor = item.tab.isSelected ? selectionTint : nil
         if item.tab.isSelected, !isPressed, let selectionTint {

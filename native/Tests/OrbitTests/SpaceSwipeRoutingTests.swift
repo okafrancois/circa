@@ -42,7 +42,7 @@ private func rawScroll(_ phase: NSEvent.Phase, x: Int32 = 0, y: Int32 = 0,
     cg.setIntegerValueField(.scrollWheelEventScrollPhase, value: scrollPhase)
     cg.setIntegerValueField(.scrollWheelEventMomentumPhase, value: momentumPhase)
     // CGEvent's unposted fixture defaults to timestamp zero. Real trackpad packets carry
-    // monotonic timestamps, required by the pager's recovered 100 ms velocity buffer.
+    // monotonic timestamps, required by the pager's 100 ms velocity buffer.
     swipePacketTime += 20_000_000
     cg.timestamp = swipePacketTime
     let event = try #require(NSEvent(cgEvent: cg))

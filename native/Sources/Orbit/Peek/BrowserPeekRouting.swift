@@ -13,10 +13,7 @@ enum BrowserPeekSourceRole: Sendable, Equatable {
     case unclassified
 }
 
-/// User settings of Peek. Persistence belongs to ORBIT-SETTINGS; the defaults follow Orbit.
 struct BrowserPeekSettings: Sendable, Equatable {
-    /// "Open links from Pinned tabs and Favorites in Peek" for links leaving the pinned site.
-    /// Official notes 2023-02-16; default on is a reconstruction (prototype `automaticPeek`).
     var opensPinnedLinksInPeek = true
     /// Shift-click opens Peek. Official notes 2023-07-06: on by default, can be turned off.
     var shiftClickOpensPeek = true
@@ -60,7 +57,6 @@ enum BrowserPeekTrigger: Sendable, Equatable {
     case shiftClick
     /// A plain link leaving the site of a Pinned tab or Favorite.
     case pinnedSourceLeavingSite
-    /// An explicit command (reopen a closed Peek, a feature such as ORBIT-MAIL).
     case command
 }
 
@@ -70,12 +66,6 @@ enum BrowserPeekRoutingDecision: Sendable, Equatable {
     case decline
 }
 
-/// The rule that decides whether a link opens in Peek. Pure and engine independent.
-/// Provenance: Pinned/Favorite trigger (official 2023-02-16), Shift-click (official 2023-07-06),
-/// meeting links open in tabs (official 2023-08-03), ⌥⌘-click opens Little Orbit (O22). Sites
-/// follow the Public Suffix List. The user-link-activation requirement, auth exclusions and
-/// modifier precedence are reconstructions (prototype `app/peek-policy.cjs`, PEEK cross-review),
-/// not Orbit observations.
 enum BrowserPeekRouting {
     static func decide(_ request: BrowserPeekLinkRequest, settings: BrowserPeekSettings) -> BrowserPeekRoutingDecision {
         guard let destination = request.destinationURL, isWebURL(destination), destination.user == nil,
@@ -111,7 +101,6 @@ enum BrowserPeekRouting {
         BrowserPublicSuffixList.shared.site(of: url)
     }
 
-    /// Official 2023-08-03: meeting links open in tabs, not in Peek. Host list is a reconstruction.
     static func isMeetingLink(_ url: URL) -> Bool {
         guard let host = url.host?.lowercased() else { return false }
         let path = url.path.lowercased()
@@ -122,8 +111,6 @@ enum BrowserPeekRouting {
         return host == "teams.microsoft.com" || host == "teams.live.com"
     }
 
-    /// Sign-in flows must stay in the tab that started them (reconstruction; Orbit ships the names
-    /// `authSubdomainPrefixes` and `identityProviderHostSuffixes`, values unknown).
     static func isAuthenticationFlow(_ url: URL) -> Bool {
         guard let host = url.host?.lowercased() else { return false }
         let firstLabel = host.split(separator: ".").first.map(String.init) ?? ""

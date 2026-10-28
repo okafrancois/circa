@@ -137,7 +137,7 @@ struct LocalizationTests {
             for node in nodes {
                 switch node {
                 case .item(let spec): check(spec.title)
-                case .header(_, _, let title): check(title)
+                case .header(_, let title): check(title)
                 case .submenu(let spec): check(spec.title); check(spec.menuTitle); walk(spec.children)
                 case .separator: break
                 }

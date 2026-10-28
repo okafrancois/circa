@@ -3,7 +3,7 @@ import BrowserCore
 import BrowserEngine
 import BrowserShell
 
-/// Space themes in a browser window (ORBIT-THEMES): resolution of the painted theme and the editor.
+/// Space themes in a browser window: resolution of the painted theme and the editor.
 extension BrowserWindowController {
     var canEditActiveSpaceTheme: Bool {
         guard !isPrivateWindow, acceptsCommands, !session.isClosed, themeEditors?.isFrozen != true,
@@ -39,7 +39,6 @@ extension BrowserWindowController {
         space.theme ?? settingsPreferences?.runtime.document.space(space.id).palette.themeModel ?? BrowserSpaceThemePresets.default
     }
 
-    /// "Edit Theme Color…" (Space context menu, C24): shows that Space, then opens its editor.
     func presentThemeEditor(for spaceID: SpaceID) {
         guard acceptsCommands else { return }
         if session.snapshot?.activeSpaceID != spaceID { session.activateSpace(spaceID) }

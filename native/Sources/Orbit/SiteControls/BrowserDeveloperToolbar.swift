@@ -2,7 +2,7 @@ import AppKit
 import BrowserCore
 import BrowserEngine
 
-/// Developer toolbar dimensions are expressed in points.
+/// Developer toolbar geometry in points.
 /// The content card supplies the top corner clipping; the page boundary stays square.
 @MainActor
 final class BrowserDeveloperToolbar: NSView {
@@ -69,7 +69,7 @@ final class BrowserDeveloperToolbar: NSView {
             NSPasteboard.general.clearContents(); NSPasteboard.general.setString(address.stringValue, forType: .string)
         }
         captureSeparator = addSeparator()
-        // Portrait capture is not implemented.
+        // This control is reserved for a future portrait capture action.
         captureButton = addButton("camera", label: uiText("Capture…"), id: "developer-capture") { [weak self] in self?.onCapture?() }
         addSeparator()
         addButton("terminal", label: uiText("Toggle Console"), id: "developer-console") { [weak self] in self?.onPanel?(.console) }
@@ -125,7 +125,7 @@ final class BrowserDeveloperToolbar: NSView {
         sized.isTemplate = true
         return sized
     }
-    /// Reference outline: 16.5×12 pt ink, outward left/right tabs, recessed top/bottom.
+    /// Icon outline: 16.5×12 pt ink, outward left/right tabs, recessed top/bottom.
     /// Draw paths at the destination backing scale; no asset copy or bitmap resizing.
     private static var horizontalPuzzle: NSImage {
         let image = NSImage(size: NSSize(width: 17, height: 13), flipped: true) { _ in
@@ -225,7 +225,7 @@ final class BrowserDeveloperToolbar: NSView {
     }
 }
 
-/// The reference's red shield belongs to the extension icon; its badge is a dark rounded tab
+/// The red shield belongs to the extension icon; its badge is a dark rounded tab
 /// overlapping the lower right, with white compact numerals. This view never intercepts clicks.
 @MainActor
 final class BrowserExtensionBadgeView: NSView {
@@ -249,7 +249,7 @@ final class BrowserExtensionBadgeView: NSView {
     }
 }
 
-/// The reference alternates 20 pt bands on a 40 pt period, descending at 45°.
+/// Alternating 20 pt bands on a 40 pt period, descending at 45°.
 @MainActor
 private final class BrowserDeveloperToolbarStripes: NSView {
     override var isFlipped: Bool { true }

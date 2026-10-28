@@ -1,9 +1,6 @@
 import BrowserCore
 import Foundation
 
-/// Serializes automatic session writes to one explicit destination away from the UI thread.
-/// The caller owns privacy policy: omit this coordinator for ephemeral sessions and exclude
-/// private state from the supplied store. This type cannot identify private windows.
 public actor BrowserSessionPersistence {
     public enum SaveResult: Equatable, Sendable {
         case saved(BrowserSessionFileStore.SaveResult)

@@ -2,12 +2,6 @@ import AppKit
 import BrowserCore
 import BrowserShell
 
-// Page-initiated browser surfaces (CH-ESSENTIALS): JavaScript dialogs, HTTP authentication, file
-// choosers, page context menus, element fullscreen and renderer termination, plus the page
-// commands the shell starts (print, DevTools). Engines translate their native hooks into these
-// engine-independent requests; the shell presents AppKit UI attached to the surface's own window
-// and document, never to whatever happens to be selected when an answer arrives.
-// See docs/native-port/ch-essentials-2026-10-25.md.
 
 /// A JavaScript dialog requested by a document: `alert`, `confirm`, `prompt` or a beforeunload
 /// confirmation (navigation, reload or close of a page with a `beforeunload` handler).

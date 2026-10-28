@@ -47,6 +47,33 @@ struct NativeShortcutCustomizationTests {
         #expect(FileManager.default.fileExists(atPath: destination.appendingPathExtension("backup").path))
     }
 
+    @Test("Retired Quit command identifiers preserve shortcuts and priority without overwriting current choices")
+    func quitCommandIdentifierMigration() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let destination = root.appendingPathComponent("shortcuts.json")
+        let previous = "quitPreviousApplication"
+        let shortcut = BrowserShortcut(key: "q", modifiers: [.command, .option])
+        var document = BrowserShortcutPreferences.Document()
+        document.overrides[previous] = [.init(shortcut)]
+        document.priorities[previous] = .both
+        let original = try JSONEncoder().encode(document)
+        try original.write(to: destination)
+        let preferences = BrowserShortcutPreferences(destination: destination)
+        let definition = try #require(OrbitCommandCatalog.definitions.first { $0.id == .quitOrbit })
+        #expect(preferences.bindings(for: definition) == [shortcut])
+        #expect(preferences.priority(for: .quitOrbit) == .both)
+        #expect(preferences.isCustomized(.quitOrbit))
+        #expect(try Data(contentsOf: destination) == original)
+        #expect(preferences.document.overrides[previous] == nil)
+        document.overrides[BrowserCommandID.quitOrbit.rawValue] = []
+        document.priorities[BrowserCommandID.quitOrbit.rawValue] = .browser
+        document.normalizeQuitCommandID()
+        #expect(document.overrides[BrowserCommandID.quitOrbit.rawValue] == [])
+        #expect(document.priorities[BrowserCommandID.quitOrbit.rawValue] == .browser)
+    }
+
     @Test("Conflicts and invalid chords preserve the previous binding; commands without defaults are editable")
     func conflictAndReset() throws {
         let preferences = BrowserShortcutPreferences()

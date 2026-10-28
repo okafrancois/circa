@@ -2,9 +2,6 @@ import BrowserCore
 import Foundation
 
 extension BrowserEnvironment {
-    /// Internal operation only: entry points and confirmation are pending.
-    /// The pre-save and backup precede the callback-free model mutation. A killed writer leaves
-    /// the complete old or new session through BrowserSessionFileStore's atomic replacement.
     func moveSpaceToProfile(_ id: SpaceID, to profile: ProfileID, expectedProfileID: ProfileID) async throws {
         guard !settingsRemovalIsRunning, !isFinalizing else {
             throw BrowserTerminationPreparationError.commandsDidNotSettle

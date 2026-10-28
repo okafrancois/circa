@@ -20,11 +20,6 @@ final class OrbitRunLoopTimer: OrbitCancellable {
     }
 }
 
-/// UX-HOVER state machine for the hidden sidebar (design §8.2, reconstruction [L] C11): the
-/// pointer must rest in the left-edge band for the dwell time before the floating sidebar appears,
-/// so a pointer crossing the edge on its way elsewhere never reveals it; once revealed it stays
-/// while the pointer is over it (or the edge band) and leaves after the leave delay.
-/// Holds (menus, editing inside the sidebar, pressed buttons) keep it open.
 @MainActor
 final class OrbitSidebarHoverReveal {
     enum Phase: Equatable { case disabled, idle, arming, revealed, leaving }

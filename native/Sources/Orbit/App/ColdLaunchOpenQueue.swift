@@ -1,13 +1,6 @@
 import AppKit
 import Carbon.HIToolbox
 
-/// Open requests (URLs, documents) that reach the process before its application delegate exists
-/// (CHROMIUM-APP). A Chromium build sets `NSApp.delegate` only when CEF is ready; AppKit would
-/// otherwise drop a cold-launch `GURL` or `odoc` event sent as the first event of a
-/// default-browser launch. The queue owns both Apple Event handlers from before the runtime starts,
-/// reasserts them after AppKit's `finishLaunching` and after the runtime is ready (in case either
-/// installed its own), keeps requests in arrival order, and forwards them to the delegate's
-/// `application(_:open:)` once `deliver(to:)` names it.
 @MainActor
 final class ColdLaunchOpenQueue: NSObject {
     static let shared = ColdLaunchOpenQueue()

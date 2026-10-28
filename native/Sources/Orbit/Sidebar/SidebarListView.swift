@@ -83,7 +83,6 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
     var onFolderHover: ((SidebarListRow, Bool) -> Void)?
     var onPreviewInvalidated: ((SidebarListRow) -> Void)?
 
-    // Drag state (ORBIT-DRAG).
     private var sourceHidden: Set<BrowserOrganizationNode> = []
     private var hoverHidden: Set<BrowserOrganizationNode> = []
     private var gap: SidebarDropGap?
@@ -368,7 +367,6 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
         let scale = window?.backingScaleFactor ?? 2
         let line = 1 / scale
         let lineY = ((separatorY - line / 2) * scale).rounded() / scale
-        // capture C01 (D43): Clear's text ends 19 from the edge; the line stops 10.5 before the text.
         let clearWidth = clearButton.preferredWidth
         let textMaxX = bounds.width - Metrics.clearTextRightInset
         clearButton.frame = NSRect(x: textMaxX + Metrics.clearHoverPadding - clearWidth,
@@ -587,8 +585,6 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
         window?.makeFirstResponder(self)
         let modifiers = event.modifierFlags.intersection([.command, .shift])
         if event.clickCount == 2, modifiers.isEmpty {
-            // Double-click renames (reconstruction, C25). A folder's first click toggled it: undo
-            // that toggle so a double-click only renames.
             pointerDown = nil
             if row.node.folderID != nil { host?.list(self, activate: row.node, modifiers: []) }
             beginRename(row.node)
@@ -640,7 +636,6 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
 
     func rowToggleAudio(_ row: SidebarTabRow) { host?.list(self, toggleAudio: row.item.id) }
 
-    // MARK: Rename (ORBIT-RENAME)
 
     /// Starts editing `node`'s title; deferred until its row exists (e.g. a folder just created).
     func beginRename(_ node: BrowserOrganizationNode) {
@@ -698,7 +693,6 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
         }
     }
 
-    // MARK: Drag source (ORBIT-DRAG)
 
     /// Nodes lifted by dragging `nodes`: themselves and the visible rows inside dragged folders.
     func liftedRows(for nodes: [BrowserOrganizationNode]) -> [SidebarListEntry] {
@@ -761,7 +755,6 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
         host?.list(self, dragDidChange: nil)
     }
 
-    // MARK: Drop target (ORBIT-DRAG)
 
     var dropTargetView: NSView { self }
 
@@ -886,8 +879,6 @@ extension SidebarListContent {
     }
 }
 
-/// Images of dragged rows: the row lifted on its selected fill; the system adds the drag shadow
-/// ( C27). Rendered eagerly on the main actor into a bitmap.
 @MainActor
 enum SidebarDragImage {
     static func render(_ entry: SidebarListEntry, size: NSSize, accent: OrbitTokens.ThemeAccent,

@@ -1,9 +1,5 @@
 import AppKit
 
-/// AppKit's own editing/text actions. These menu items keep a nil target so the key window's
-/// responder chain (sheets, modal panels, text fields, web views) validates and performs them,
-/// and AppKit updates dynamic titles such as "Undo Typing". They never route through the
-/// browser registry. Orbit's serialized `copyAction:` is replaced by the standard `copy:`.
 enum BrowserStandardActions {
     private static let responderSelectors: [BrowserCommandID: Selector] = [
         .undo: Selector(("undo:")), .redo: Selector(("redo:")),

@@ -47,10 +47,7 @@ extension OrbitTokens {
             public static let tertiary = NSColor.orbitDynamic("Text.tertiary", light: .orbitSRGB(0x000000, 0.30), dark: .orbitSRGB(0xFFFFFF, 0.30))
             ///  — address text, enabled toolbar/footer glyphs.
             public static let baseSecondary = NSColor.orbitDynamic("Text.baseSecondary", light: .orbitSRGB(0x000000, 0.70), dark: .orbitSRGB(0xFFFFFF, 0.70))
-            ///  — reference asset.
             public static let sidebar = NSColor.orbitDynamic("Text.sidebar", light: .orbitSRGB(0x000000, 0.30), dark: .orbitSRGB(0xFFFFFF, 0.45))
-            ///  50 % / 50 % [H] (= asset ForegroundSecondary) — Space title.
-            /// The "New Tab" label uses `sidebarDarker` (45 %, D34).
             public static let sidebarLabel = NSColor.orbitDynamic("Text.sidebarLabel", light: .orbitSRGB(0x000000, 0.50), dark: .orbitSRGB(0xFFFFFF, 0.50))
             ///  +  — "New Tab" label and "+" glyph,
             /// hover-revealed controls.
@@ -67,7 +64,6 @@ extension OrbitTokens {
             ///  — tab and folder titles of the default Space, opaque and identical on a
             /// selected or unselected row. Themed Spaces use their `ThemeAccent.sidebarText`.
             public static var sidebarTitle: NSColor { ThemeAccent.defaultSpace.sidebarText }
-            ///  — the "New Tab" label (D34): `sidebarDarker`.
             public static var sidebarNewTab: NSColor { sidebarDarker }
         }
 
@@ -76,8 +72,6 @@ extension OrbitTokens {
             /// : mid-point of the default Space gradient (SpaceTheme.default).
             /// Flat fallback only — the default Space itself is a two-stop gradient.
             public static let windowDefault = NSColor.orbitDynamic("Surface.windowDefault", light: .orbitSRGB(0xE6E0ED), dark: .orbitSRGB(0x2D2438))
-            ///  light [M] / dark [H]: overlay drawn over the Space theme fill inside the
-            /// card bounds when the Space has no tab (not an opaque colour, D03/D35).
             public static let contentEmptyPage = NSColor.orbitDynamic("Surface.contentEmptyPage", light: .orbitSRGB(0xFFFFFF, 0.70), dark: .orbitSRGB(0xFFFFFF, 0.10))
             ///  — sidebar "+" menu, popovers.
             public static let popover = NSColor.orbitDynamic("Surface.popover", light: .orbitSRGB(0xFAFBFF), dark: .orbitSRGB(0x151C30))
@@ -86,9 +80,6 @@ extension OrbitTokens {
             ///  — Little Orbit input.
             public static let secondaryWindowInput = NSColor.orbitDynamic("Surface.secondaryWindowInput", light: .orbitSRGB(0xFAFBFF), dark: .orbitSRGB(0x0E0F10))
             public static let menu = NSColor.orbitDynamic("Surface.menu", light: .orbitSRGB(0xFAFBFF), dark: .orbitSRGB(0x393841))
-            // THEME lot additions
-            ///  light [M]; dark  — round 1's opaque empty page, kept as the opaque
-            /// background of in-card panels drawn over a page (Library/Archive), which must not show it through.
             public static let libraryBackground = NSColor.orbitDynamic("Surface.libraryBackground", light: .orbitSRGB(0xF7F7F7), dark: .orbitSRGB(0x1E1E1F))
         }
 
@@ -98,14 +89,11 @@ extension OrbitTokens {
             public static let sidebarItem = NSColor.orbitDynamic("State.sidebarItem", light: .orbitP3(0x0E0F10, 0.05), dark: .orbitP3(0xFAFBFF, 0.10))
             ///  — hover on filled items.
             public static let sidebarItemHovered = NSColor.orbitDynamic("State.sidebarItemHovered", light: .orbitP3(0x0E0F10, 0.10), dark: .orbitP3(0xFAFBFF, 0.15))
-            /// light:  0.88 × #F6F6F6 on four themes (asset white 0.85 renders
-            /// too bright); dark:  +  — selected tab/Favorite.
             public static let tabCurrent = NSColor.orbitDynamic("State.tabCurrent", light: .orbitSRGB(0xF6F6F6, 0.88), dark: .orbitP3(0xFAFBFF, 0.20))
             ///  — visible split member.
             public static let tabContentVisible = NSColor.orbitDynamic("State.tabContentVisible", light: .orbitSRGB(0xFFFFFF, 0.70), dark: .orbitP3(0xFAFBFF, 0.15))
             public static let tabPrevious = NSColor.orbitDynamic("State.tabPrevious", light: .orbitSRGB(0xFFFFFF, 0.32), dark: .orbitP3(0xFAFBFF, 0.08))
             public static let tabPreviousHovered = NSColor.orbitDynamic("State.tabPreviousHovered", light: .orbitSRGB(0xFFFFFF, 0.50), dark: .orbitP3(0xFAFBFF, 0.12))
-            /// : pressed row = multi-selected appearance (asset 6.5 % not observed).
             public static let tabPressed = NSColor.orbitDynamic("State.tabPressed", light: .orbitSRGB(0x000000, 0.10), dark: .orbitSRGB(0xFFFFFF, 0.10))
             public static let tabMultiselected = NSColor.orbitDynamic("State.tabMultiselected", light: .orbitSRGB(0x000000, 0.10), dark: .orbitP3(0xFAFBFF, 0.10))
             public static let tabChild = NSColor.orbitDynamic("State.tabChild", light: .orbitSRGB(0x000000, 0.07), dark: .orbitSRGB(0xFFFFFF, 0.07))
@@ -124,11 +112,6 @@ extension OrbitTokens {
             ///  /
             public static let dragHint = NSColor.orbitDynamic("State.dragHint", light: .orbitSRGB(0x000000, 0.20), dark: .orbitSRGB(0xFFFFFF, 0.20))
             public static let dragHintHighlighted = NSColor.orbitDynamic("State.dragHintHighlighted", light: .orbitSRGB(0x000000, 0.50), dark: .orbitSRGB(0xFFFFFF, 0.50))
-            // THEME lot additions
-            /// : the floating sidebar's fill is the theme darkened by ≈25/255 per channel
-            /// (#DFB7E4 → #C69FCC, #AA99AC → #907F92), drawn as a black overlay on the theme fill (D40). 12 % fits
-            /// the lighter theme channel by channel (−20…−25); the greyer theme would need 16 % (the darkening
-            /// looks subtractive). Dark themes not captured (: same overlay).
             public static let floatingSidebarDim = NSColor.orbitSRGB(0x000000, 0.12)
             ///  — split divider handle (2 × 24), white 20 % at rest, 50 % on hover.
             public static let splitDividerHandle = NSColor.orbitSRGB(0xFFFFFF, 0.20)
@@ -148,21 +131,14 @@ extension OrbitTokens {
             ///  — card, Peek, floating sidebar hairline.
             public static let floatingScrimBorder = NSColor.orbitDynamic("Line.floatingScrimBorder", light: .orbitSRGB(0x000000, 0.10), dark: .orbitSRGB(0xFFFFFF, 0.20))
             public static let commandBarHairline = NSColor.orbitDynamic("Line.commandBarHairline", light: .orbitSRGB(0x000000, 0.10), dark: .orbitSRGB(0xFFFFFF, 0.10))
-            ///  — one device pixel outside the command bar; dark adds an inner light pixel (D44).
             public static let commandBarOuterStroke = NSColor.orbitDynamic("Line.commandBarOuterStroke", light: .orbitSRGB(0x000000, 0.25), dark: .orbitSRGB(0x000000, 0.98))
             public static let commandBarInnerStroke = NSColor.orbitDynamic("Line.commandBarInnerStroke", light: .orbitSRGB(0xFFFFFF, 0.0), dark: .orbitSRGB(0xFFFFFF, 0.23))
             public static let popoverBorder = NSColor.orbitDynamic("Line.popoverBorder", light: .orbitSRGB(0xFFFFFF, 0.0), dark: .orbitSRGB(0xD3CEED, 0.20))
         }
 
-        // MARK: Frame brightness (open question C31)
-        /// CAP-1c: 60+ captures show the frame (sidebar and margins, not the card) at 0.95 × the brightness of
-        /// two brighter captures. Key vs non-key window is a hypothesis, not established (capture C31): the
-        /// tokens follow the majority and both factors stay 1. Set `nonKeyWindow` (or `keyWindow`) here once
-        /// C31 shows which state is which; the fill does not read them until then.
         public enum FrameBrightness {
             public static let keyWindow: CGFloat = 1
             public static let nonKeyWindow: CGFloat = 1
-            /// The ratio observed between the two groups of captures.
             public static let observedRatio: CGFloat = 0.95
         }
 
@@ -170,7 +146,6 @@ extension OrbitTokens {
         public enum ShadowColor {
             ///  — none in dark.
             public static let tabSelected = NSColor.orbitDynamic("Shadow.tabSelected", light: .orbitSRGB(0x000000, 0.20), dark: .orbitSRGB(0x000000, 0.0))
-            ///  — asset only; the measured "+" menu shadow is `Shadow.popover`.
             public static let popover = NSColor.orbitDynamic("Shadow.popover", light: .orbitP3(0x151C32, 0.30), dark: .orbitP3(0x151C32, 0.80))
             ///  — neutral black 50 %, identical in both appearances.
             public static let commandBar = NSColor.orbitSRGB(0x000000, 0.50)
@@ -225,16 +200,11 @@ extension OrbitTokens {
 // MARK: - Space themes
 
 extension OrbitTokens {
-    /// A Space theme: 1–3 gradient stops + optional texture, rendered opaque behind the
-    /// sidebar and the window frame. binary(ORBIT_WindowThemeUI default.metallib:
-    /// GradientLayer, colorCount, overlayTexture, overlayRepetitions) [M].
+    /// One to three gradient stops with optional texture, painted behind the sidebar and frame.
     public struct SpaceTheme: Equatable, Sendable {
         public enum Mode: Sendable { case light, dark, automatic }
-        public enum Texture: Sendable { case none, grain, denim, sand, tweed } //  names [H]
+        public enum Texture: Sendable { case none, grain, denim, sand, tweed }
 
-        /// Position of the first and last stop along the gradient axis, as fractions of the window's
-        /// projection on that axis (0 = top-left corner, 1 = bottom-right corner). The fill keeps the
-        /// extreme colours flat outside the range, which reproduces the plateaus measured in C01.
         public struct StopRange: Equatable, Sendable {
             public var light: ClosedRange<CGFloat>
             public var dark: ClosedRange<CGFloat>
@@ -262,7 +232,7 @@ extension OrbitTokens {
         public var textureIntensity: CGFloat   //  0…1
         public var stopRange: StopRange = .fullDiagonal
         public var angle: Angle = .measured
-        /// The stored Space theme this was rendered from (ORBIT-THEMES); nil for built-in token themes.
+        /// The stored Space theme this was rendered from; nil for built-in token themes.
         /// Accent derivation reads it; equality includes it.
         public var model: BrowserSpaceTheme?
         /// Explicit surface survives captured swipe gradients even when their model is nil.
@@ -277,7 +247,6 @@ extension OrbitTokens {
             mode: .automatic, texture: .none, textureIntensity: 0,
             stopRange: StopRange(light: Gradient.startFraction.light...Gradient.endFraction.light,
                                  dark: Gradient.startFraction.dark...Gradient.endFraction.dark))
-        /// Round 1 default from the onboarding videos (older build) — .
         public static let legacyFlat = SpaceTheme(stops: [.orbitSRGB(0xE6E6E8)], mode: .light, texture: .none, textureIntensity: 0)
 
         /// Gradient geometry of the default Space —  at window 1512 × 949.
@@ -298,8 +267,6 @@ extension OrbitTokens {
                 return abs(size.width * cos(angle)) + abs(size.height * sin(angle))
             }
 
-            /// derived [M] — ≈1.1 %/74.2 % (light) and 9.1 %/78.7 % (dark) of the axis, close to the 1 %/75 % and
-            /// 9 %/79 % of a CSS 135° gradient proposed in orbit-design-system §14.2.
             public static var startFraction: (light: CGFloat, dark: CGFloat) {
                 let length = axisLength(for: referenceSize)
                 return (startDistance.light / length, startDistance.dark / length)
@@ -310,19 +277,12 @@ extension OrbitTokens {
             }
         }
 
-        /// Examples measured in S-DEMO [L] (video compression, approximate).
         public static let amberCoral = SpaceTheme(stops: [.orbitSRGB(0xE4AA3B), .orbitSRGB(0xF17C5C), .orbitSRGB(0xF2606B)], mode: .light, texture: .grain, textureIntensity: 0.3)
         public static let lavender = SpaceTheme(stops: [.orbitSRGB(0xBDBEF1), .orbitSRGB(0xCDCDFE)], mode: .light, texture: .grain, textureIntensity: 0.3)
         public static let rosePlum = SpaceTheme(stops: [.orbitSRGB(0xF0848F), .orbitSRGB(0xA85396)], mode: .light, texture: .grain, textureIntensity: 0.3)
         public static let limeCitrus = SpaceTheme(stops: [.orbitSRGB(0xCDEB89), .orbitSRGB(0xDCE97B), .orbitSRGB(0xE6D051)], mode: .light, texture: .grain, textureIntensity: 0.3)
     }
 
-    /// Colours derived from a theme. Round 2 [M]: every role shares the theme hue (237° on the default
-    /// Space, 104° on a green Space). Measured on the default Space ():
-    /// selection #8F95FF / #464DDC, soft #D3D4FF / #2E3391, menu shortcut #A5AAFF (light),
-    /// menu surface #FDFDFF / #050627, sidebar text #080C4E / #DEDFFF.
-    /// For a Space built from one picker swatch, `strong` is the swatch itself (#666789, C19).
-    /// strong / icon / iconFill on the default Space were not captured ().
     public struct ThemeAccent: Equatable, Sendable {
         public var strong: NSColor
         public var icon: NSColor
@@ -332,20 +292,15 @@ extension OrbitTokens {
         public var menuShortcut: NSColor
         public var menuSurface: NSColor
         public var sidebarText: NSColor
-        /// Reconstruction: derived accents carry their painted Space for state-overlay contrast.
-        /// A manually supplied accent has no source theme and retains its explicit colours.
         var contrastTheme: SpaceTheme? = nil
 
-        /// Reconstruction: secondary sidebar labels share the theme-aware icon contrast tier (3:1).
         public var sidebarSecondaryText: NSColor { icon }
 
-        /// Round 1 reference: purple-accented default Space of the onboarding videos () [M].
         public static let defaultPurple = ThemeAccent(
             strong: .orbitSRGB(0x643EBC), icon: .orbitSRGB(0x503394), iconFill: .orbitSRGB(0xFAF7FE),
             selection: .orbitSRGB(0xB49EE4), soft: .orbitSRGB(0xE4DCF6), menuShortcut: .orbitSRGB(0xB49EE4),
             menuSurface: Color.Surface.popover, sidebarText: Color.Text.primary)
 
-        /// Default Space of —  except strong/icon/iconFill [L].
         public static let defaultSpace: ThemeAccent = {
             var accent = derived(hue: 237.0 / 360.0)
             accent.selection = .orbitDynamic("Accent.default.selection", light: .orbitSRGB(0x8F95FF), dark: .orbitSRGB(0x464DDC))
@@ -356,12 +311,8 @@ extension OrbitTokens {
             return accent
         }()
 
-        /// Derive the family from the theme hue (0…1). (S, B) pairs of selection, soft, menuShortcut,
-        /// menuSurface and sidebarText are measured on the default Space [M]; on greyish themes the
-        /// sidebar text is less saturated (S 0.22–0.30, B 0.11–0.13) — mapping for arbitrary themes → C06.
-        /// strong / icon / iconFill keep the round 1 .
         public static func derived(hue: CGFloat) -> ThemeAccent {
-            // sRGB HSB: the pairs were measured on sRGB pixels (calibrated HSB would brighten them, 0.31 → 0.38).
+            // sRGB HSB: the pairs were on sRGB pixels (calibrated HSB would brighten them, 0.31 → 0.38).
             func hsb(_ s: CGFloat, _ b: CGFloat) -> NSColor { NSColor(hue: hue, saturation: s, brightness: b, alpha: 1) }
             // Dynamic colours are named per hue so two derived families never share a name.
             let tag = Int((hue * 3600).rounded())
@@ -378,12 +329,6 @@ extension OrbitTokens {
                                sidebarText: pair("Accent.sidebarText", (0.90, 0.31), (0.13, 1.00)))
         }
 
-        // THEME lot additions (ORBIT-THEMES)
-        /// Stored Space themes — provisional rule, C06 [L]: the hue-derived family; on greyish themes the
-        /// sidebar titles keep the hue at the saturation measured on the mauve, green and grey-mauve Spaces
-        /// (light S 0.26 B 0.12 for #1F1721 / #161B15 / #1E1721, dark S 0.05 B 0.87 for the folder #DADED9);
-        /// below 0.05 the family is neutral. `strong` is the picked colour itself (C19: the split border of a
-        /// swatch Space is the swatch).
         public static func derived(hue: CGFloat, saturation: CGFloat, strong: NSColor?) -> ThemeAccent {
             var accent: ThemeAccent
             if saturation < CGFloat(BrowserSpaceTheme.neutralSaturation) {
@@ -415,7 +360,6 @@ extension OrbitTokens {
     }
 }
 
-// MARK: - Typography (SF Pro through the system font) — measured fits unless noted
 
 extension OrbitTokens {
     /// NSFont is not Sendable: fonts are main-actor tokens.
@@ -431,9 +375,7 @@ extension OrbitTokens {
         public static let sidebarNewTab = NSFont.systemFont(ofSize: 14, weight: .regular)
         ///  13 regular
         public static let addressField = NSFont.systemFont(ofSize: 13, weight: .regular)
-        ///  — Today "Clear" control, cap height 7.5 (D43).
         public static let sidebarClear = NSFont.systemFont(ofSize: 11, weight: .semibold)
-        ///  18 medium; reconstruction used 17/500
         public static let commandBarInput = NSFont.systemFont(ofSize: 18, weight: .medium)
         ///  13 medium
         public static let commandBarRowTitle = NSFont.systemFont(ofSize: 13, weight: .medium)
@@ -445,8 +387,6 @@ extension OrbitTokens {
         ///  — Space tooltip "Work ⌃2"
         public static let tooltip = NSFont.systemFont(ofSize: 11, weight: .medium)
         public static let quickWindowDomain = NSFont.systemFont(ofSize: 12, weight: .medium)
-        // THEME lot additions
-        ///  — content-area empty state (no Orbit reference for an empty Space).
         public static let emptyStateTitle = NSFont.systemFont(ofSize: 13, weight: .semibold)
         public static let emptyStateDetail = NSFont.systemFont(ofSize: 13, weight: .regular)
         ///  — page-zoom percentage shown inside the address field.
@@ -460,13 +400,10 @@ extension OrbitTokens {
     public enum Metrics {
         public enum Window {
             public static let trafficLightDiameter: CGFloat = 12
-            ///  23 on the capture machine, 20 in the older videos. System-defined:
-            /// the shell reads the system spacing of the real buttons (`OrbitTrafficLights.systemPitch`) and
-            /// uses this value only when the system gives none. Never hard-code 20.
             public static let trafficLightPitch: CGFloat = 23
             public static let trafficLightFirstCenterX: CGFloat = 20
             public static let trafficLightCenterY: CGFloat = 24       // , from window top
-            public static let minimumSize = NSSize(width: 600, height: 400) //  C12
+            public static let minimumSize = NSSize(width: 600, height: 400)
             ///  — Little Orbit window buttons at 17 / 40 / 63, y 23.5.
             public static let quickWindowTrafficLightFirstCenterX: CGFloat = 17
             public static let quickWindowTrafficLightCenterY: CGFloat = 23.5
@@ -488,8 +425,6 @@ extension OrbitTokens {
             public static let reloadFromRight: CGFloat = 22
             public static let navPitch: CGFloat = 34
             public static let glyphSize: CGFloat = 15
-            ///  (206, 243] [M]: below this width the toggle and reload hide,
-            /// back/forward move to W − 76 / W − 48 (13 × 10.5 glyphs) and a "•••" overflow sits at W − 20.
             public static let compactBelowWidth: CGFloat = 224
             public static let compactBackFromRight: CGFloat = 76
             public static let compactForwardFromRight: CGFloat = 48
@@ -503,11 +438,9 @@ extension OrbitTokens {
         }
 
         public enum Sidebar {
-            public static let widthDefault: CGFloat = 228             //  (= observed in all onboarding videos; C01/C05 show 343–363 on an older window) C05
+            public static let widthDefault: CGFloat = 228
             public static let widthMin: CGFloat = 164                 //  clamp
             public static let widthMax: CGFloat = 500                 //  clamp
-            ///  [60, 83] [M]: the drag collapses (instantly) once the pointer is this close to
-            /// the window edge; 82 = widthMin / 2 is a hypothesis inside the bound.
             public static let collapsePointerX: CGFloat = 82
             ///  — hover-revealed floating sidebar: 5 pt from the left and top edges.
             public static let floatingInset: CGFloat = 5
@@ -528,7 +461,7 @@ extension OrbitTokens {
             public static let faviconSize: CGFloat = 16
             public static let faviconCenterX: CGFloat = 26            // , window coords
             public static let titleOriginX: CGFloat = 44              // , window coords
-            public static let iconTitleGap: CGFloat = 10              // derived [M]
+            public static let iconTitleGap: CGFloat = 10
             public static let folderIconSize: CGFloat = 18
             public static let folderChildIndent: CGFloat = 16         // ; no chevrons
             public static let closeGlyphSize: CGFloat = 10.5
@@ -549,11 +482,11 @@ extension OrbitTokens {
             public static let separatorInsetX: CGFloat = 18
             public static let separatorCenterToRowCenter: CGFloat = 29 // , last pinned row → separator
             public static let newTabGlyphSize: CGFloat = 13
-            public static let footerCenterFromBottom: CGFloat = 25    //  (C01 masks the footer)
+            public static let footerCenterFromBottom: CGFloat = 25
             public static let footerSideButtonCenterInset: CGFloat = 24
             public static let footerSpaceIconPitch: CGFloat = 34
             public static let footerGlyphSize: CGFloat = 15
-            public static let footerInactiveSpaceOpacity: CGFloat = 0.45 //  C08
+            public static let footerInactiveSpaceOpacity: CGFloat = 0.45
             public static let plusMenuWidth: CGFloat = 210            //  fixed, right edge W − 8
             public static let plusMenuRightInset: CGFloat = 8
             public static let plusMenuArrowSize = NSSize(width: 12, height: 6)
@@ -563,13 +496,8 @@ extension OrbitTokens {
             public static let plusMenuIconSize: CGFloat = 18
             public static let plusMenuTextOriginX: CGFloat = 50       // , from panel left
             public static let plusMenuSeparatorExtraGap: CGFloat = 17
-            ///  — selected Favorite: 2 pt ring in the favicon's dominant colour,
-            /// lightened (#6BD5A8 for a green favicon); dark fills the tile with a favicon tint (D42).
             public static let favoriteSelectedRingWidth: CGFloat = 2
 
-            /// Favorites: tiles stretch to fill the row; when they do not fit, rows are balanced
-            /// (4 tiles → 2 × 2, never 3 + 1). ; minimum tile width in
-            /// (40.75, 49.25] → 45. Counts 5/6/8/12 not captured (C07).
             public static let favoriteMinimumTileWidth: CGFloat = 45
             public static let favoriteMaximumColumns = 4
             public static func favoriteColumns(count: Int, sidebarWidth: CGFloat, minimumTileWidth: CGFloat = favoriteMinimumTileWidth) -> Int {
@@ -584,28 +512,18 @@ extension OrbitTokens {
             // THEME lot additions — every value below is an estimate or derived from the measures above.
             /// Former name of `collapsePointerX` (round 1: proposed width < 90).
             public static var collapseWidth: CGFloat { collapsePointerX }
-            /// derived [M] — the resize target is the theme gap between the rows (W − 8) and the card (W).
             public static var resizeHandleWidth: CGFloat { paddingX }
-            /// derived [M] — footer band symmetric around its measured centre (H − 25).
             public static var footerHeight: CGFloat { 2 * footerCenterFromBottom }
-            ///  C08 — Spaces without an icon are drawn as dots in the footer.
             public static let footerSpaceDotDiameter: CGFloat = 7
-            /// reconstruction — user requirement (2026-10-26): when the Space icons no longer fit the
-            /// footer, every Space is drawn as a dot so all remain reachable without scrolling. The
-            /// breakpoint (each icon keeps at least this pitch) is not yet measured in .
             public static let footerSpaceIconMinimumPitch: CGFloat = 24
-            /// reconstruction — preferred dot pitch in the crowded presentation; not yet measured.
             public static let footerSpaceDotPitch: CGFloat = 18
-            /// reconstruction — dots shrink to this diameter at most when the pitch keeps compressing.
             public static let footerSpaceDotMinimumDiameter: CGFloat = 3
             ///  — hit square of footer glyphs and Space icons (= toolbar hit size).
             public static let footerButtonSize: CGFloat = 28
             ///  — Space-title centre below the address field when there is no Favorite
             /// (bottom of the Favorites + 27.5, the Favorites gap collapsing with them).
             public static var spaceTitleCenterFromAddressWithoutFavorites: CGFloat { spaceTitleCenterFromFavorites }
-            ///  — separator centre below the Space title without pinned rows (D36).
             public static var separatorCenterFromSpaceTitleWithoutPinned: CGFloat { separatorCenterFromSpaceTitle }
-            ///  C07 — Space icon square left of the Space title (16, centre x 26 like favicons).
             public static let spaceIconSize: CGFloat = 16
             ///  — gap kept between the title and the hover-revealed close button.
             public static let titleTrailingGap: CGFloat = 4
@@ -625,8 +543,6 @@ extension OrbitTokens {
             public static let cardHairlineWidth: CGFloat = 0
             ///  — the card corners follow the inset to 0 in full screen with the sidebar hidden.
             public static let cardRadiusFullscreenHidden: CGFloat = 0
-            /// measured +  — loading capsule centred in the top margin over the card:
-            /// 4 high, 47 wide while waiting, 127.5 wide in progress (D46).
             public static let loadingCapsuleHeight: CGFloat = 4
             public static let loadingCapsuleWaitingWidth: CGFloat = 47
             public static let loadingCapsuleProgressWidth: CGFloat = 127.5
@@ -673,8 +589,7 @@ extension OrbitTokens {
             public static let controlPitch: CGFloat = 43.5
             public static let controlGapFromPanel: CGFloat = 13.25
             public static let controlTopInset: CGFloat = 7.5
-            public static let controlGlyphSize: CGFloat = 16          // reconstruction, C14
-            /// : no toolbar inside the panel (round 1 reconstruction: 35).
+            public static let controlGlyphSize: CGFloat = 16
             public static let hasInternalToolbar = false
             /// : page dim ≈63 % of a dark theme tint; the overlay also covers the sidebar.
             public static let cardDimOpacity: CGFloat = 0.63
@@ -692,18 +607,18 @@ extension OrbitTokens {
 
 extension OrbitTokens {
     public enum Radius {
-        public static let contentCard: CGFloat = 6        //  6.0–6.25 [H]
+        public static let contentCard: CGFloat = 6
         public static let splitPane: CGFloat = 6
-        public static let addressField: CGFloat = 12      //  12.2–12.5 [M]
-        public static let favoriteTile: CGFloat = 12      //  10.4–12.1 [L]
-        public static let tabRow: CGFloat = 11            //  10.6–11.6 [L]
-        public static let commandBar: CGFloat = 12        //  11.7–12.7 [H]
-        public static let commandBarRow: CGFloat = 8      //  8.05 [H]
+        public static let addressField: CGFloat = 12
+        public static let favoriteTile: CGFloat = 12
+        public static let tabRow: CGFloat = 11
+        public static let commandBar: CGFloat = 12
+        public static let commandBarRow: CGFloat = 8
         public static let commandBarIconTile: CGFloat = 6
-        public static let plusMenu: CGFloat = 12          //  11.95–12.1 [H]
-        public static let plusMenuRow: CGFloat = 8        //  8.2 [H]
-        public static let floatingSidebar: CGFloat = 12   //  ≈11.5 (10.5–12.3) [M]
-        public static let peek: CGFloat = 8               //  8.35 [H]
+        public static let plusMenu: CGFloat = 12
+        public static let plusMenuRow: CGFloat = 8
+        public static let floatingSidebar: CGFloat = 12
+        public static let peek: CGFloat = 8
         public static let findBar: CGFloat = 6
         public static let zoomHud: CGFloat = 9.5
         public static let toast: CGFloat = 11
@@ -761,7 +676,7 @@ extension OrbitTokens {
     /// Only system-owned surfaces (NSMenu, NSToolTip) keep their native material.
     public enum Material {
         case opaqueThemeFill          // window, docked & floating sidebar —
-        case opaqueSurface(NSColor)   // card, command bar, popovers — measured [M]
+        case opaqueSurface(NSColor)
         case systemMenu               // NSMenu —
     }
 }
@@ -807,7 +722,7 @@ extension OrbitTokens {
         /// Native CASpringAnimation, response 0.18, dampingRatio 0.8; wall-clock time.
         public static let sidebarHoverReveal = Spring(response: 0.18, dampingFraction: 0.8)
         public static let sidebarHoverExit = sidebarHoverReveal
-        public static let sidebarHoverEdgeTrigger: CGFloat = 5    // reconstruction [L]; only 2 pt tested
+        public static let sidebarHoverEdgeTrigger: CGFloat = 5
         public static let sidebarHoverDwell: TimeInterval = 0.10  //  105–157 ms incl. ≤1 frame
         public static let sidebarHoverLeaveDelay: TimeInterval = 0.05 //  0–85 ms (fast exit)
         /// : resize tracks the pointer 1:1; collapse below the threshold is instant.
@@ -818,15 +733,12 @@ extension OrbitTokens {
         public static let tabInsertFade = Spring(response: 0.164, dampingFraction: 0.83)
         public static let tabCloseFade = Spring(response: 0.152, dampingFraction: 0.825)
         public static let tabSelectionIsInstant = true
-        /// Former single insert/remove spring (round 1 estimate 0.25 / 1.0): now the measured neighbour slide.
+        /// Former single insert/remove spring (round 1 estimate 0.25 / 1.0): now the neighbour slide.
         /// Use `tabInsertNeighbourSlide`, `tabInsertFade` and `tabCloseFade`.
         public static var tabInsertRemove: Spring { tabInsertNeighbourSlide }
-        ///  C17 — not captured (only an empty folder was shown).
         public static let folderExpand = Spring(response: 0.25, dampingFraction: 1.0)
         public static let rowReorder = Spring(response: 0.25, dampingFraction: 0.9)
-        ///  C18: AppKit hover fills appear without fade.
         public static let hoverFillDuration: TimeInterval = 0
-        /// Reconstruction: Library category cross-fade, not measured in Orbit.
         public static let libraryCategoryFade: TimeInterval = 0.12
         public static let hoverControlsRevealDuration: TimeInterval = 0.12
         /// : Peek zooms out of the clicked link's rectangle (not a 0.94 scale);
@@ -855,7 +767,6 @@ extension OrbitTokens {
         public static let loadingSweepPeriod: TimeInterval = 1.12
         public static let loadingExpand = Spring(response: 0.78, dampingFraction: 0.90)
         public static let themeModeIconDurations: (sun: TimeInterval, moon: TimeInterval, automatic: TimeInterval) = (1.0, 1.5, 1.5)
-        ///  C20
         public static let reducedMotionCrossfade: TimeInterval = 0.12
         /// Honour "Reduce motion": springs become short cross-fades ().
         /// Reads the system setting each time, plus the `--reduce-motion` validation flag.
@@ -871,6 +782,6 @@ extension OrbitTokens {
         /// : arrow over rows and buttons — never pointingHand.
         public static let rows = NSCursor.arrow
         public static let sidebarEdge = NSCursor.resizeLeftRight
-        public static let tooltipDelay: TimeInterval = 0.5 //  C08
+        public static let tooltipDelay: TimeInterval = 0.5
     }
 }
