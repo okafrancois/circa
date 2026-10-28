@@ -38,6 +38,41 @@ final class SidebarSpaceSwipeController {
     private var motion: SidebarSlotMotion?
     private var releaseTarget: SpaceID?
     private var createsSpaceOnSettlement = false
+    private(set) var isCreationPageVisible = false
+    private var creationSource: SpaceID?
+    private var beganOnCreationPage = false
+    private var presentsCreation = false
+
+    /// Commands and overscroll enter the same trailing page and use the same pager spring.
+    func presentCreationPage() {
+        guard let sidebar, !isCreationPageVisible, let context = sidebar.swipeContext,
+              environmentCanBegin(sidebar) else { return }
+        cancel()
+        source = context.1; catalog = context.0; sourceWindow = sidebar.window
+        size = sidebar.bounds.size
+        capturedThemes = [context.1: resolveTheme(context.1)]
+        presentsCreation = true
+        show(offset: 0)
+        settle(destination: nil, velocity: 0, createsSpace: true)
+    }
+
+    func dismissCreationPage() {
+        guard isCreationPageVisible || presentsCreation, let sidebar, let context = sidebar.swipeContext else { return }
+        let start = isActive ? offset : -sidebar.swipeWidth
+        isCreationPageVisible = true; creationSource = context.1
+        cancel(preservePresentation: true)
+        source = context.1; catalog = context.0; sourceWindow = sidebar.window
+        size = sidebar.bounds.size; offset = start
+        beganOnCreationPage = true; presentsCreation = true
+        capturedThemes = [context.1: resolveTheme(context.1)]
+        sidebar.newSpaceSwipePage?.closePickers()
+        settle(destination: nil, velocity: 0)
+    }
+
+    func retireCreationPage() {
+        isCreationPageVisible = false; creationSource = nil
+        cancel()
+    }
     private var admission: SpaceSwipeAdmission?
     private var commitDispatched = false
     private var selectionPublished = false
@@ -92,7 +127,7 @@ final class SidebarSpaceSwipeController {
 
     func detach() {
         preparationTask?.cancel(); preparationTask = nil; preparationContext = nil
-        cancel()
+        retireCreationPage()
         if let monitor { NSEvent.removeMonitor(monitor) }
         monitor = nil
         for observer in observers { NotificationCenter.default.removeObserver(observer) }
@@ -100,6 +135,9 @@ final class SidebarSpaceSwipeController {
     }
 
     func validate(catalog: BrowserCatalogSnapshot?, active: SpaceID?) {
+        if isCreationPageVisible, active != creationSource || catalog != sidebar?.swipeContext?.0 {
+            retireCreationPage()
+        }
         if !isActive, let catalog, let active { prepareNeighbors(catalog: catalog, active: active) }
         if let authority = recognitionAuthority {
             let ownedPublication = isActive && commitDispatched && !selectionPublished
@@ -149,6 +187,7 @@ final class SidebarSpaceSwipeController {
     /// A cold or invalidated preparation falls back to the session's normal activation path.
     @discardableResult
     func switchToSpace(_ target: SpaceID) -> Bool {
+        if isCreationPageVisible { retireCreationPage() }
         guard let sidebar, !isActive, environmentCanBegin(sidebar), let context = sidebar.swipeContext,
               let from = context.0.spaces.firstIndex(where: { $0.id == context.1 }),
               let to = context.0.spaces.firstIndex(where: { $0.id == target }), from != to,
@@ -186,6 +225,13 @@ final class SidebarSpaceSwipeController {
         case .unrelated: break
         }
         guard let sidebar, event.window === sidebar.window else { return event }
+        if event.type == .keyDown, event.keyCode == 53, isCreationPageVisible || presentsCreation,
+           (sidebar.window?.firstResponder as? NSTextView)?.hasMarkedText() != true {
+            if let page = sidebar.newSpaceSwipePage, page.hasPicker {
+                page.closePickers(); page.focusName()
+            } else { dismissCreationPage() }
+            return nil
+        }
         if event.type != .scrollWheel {
             if isActive || scrollInput.hasOwnedSequence || recognitionAuthority != nil { cancel() }
             return event
@@ -240,7 +286,7 @@ final class SidebarSpaceSwipeController {
 
     /// The monitor and synthetic phased-event tests share this handler after window hit testing.
     func handleScroll(_ event: NSEvent, inside: Bool) -> Bool {
-        if handleLibraryBoundary?(event, inside) == true { return true }
+        if !isCreationPageVisible, !presentsCreation, handleLibraryBoundary?(event, inside) == true { return true }
         guard let sidebar, event.hasPreciseScrollingDeltas else { return false }
         SpaceSwipeTrace.input(phase: event.phase.rawValue, momentum: event.momentumPhase.rawValue, deltaX: event.scrollingDeltaX)
         if isActive && !environmentIsCurrent { cancel(); return false }
@@ -285,9 +331,11 @@ final class SidebarSpaceSwipeController {
             catalog = context.0
             sourceWindow = sidebar.window
             size = sidebar.bounds.size
-            let presentationOffset = rebased ?? retainedOffset ?? 0
+            beganOnCreationPage = isCreationPageVisible || (retainedOffset != nil && sidebar.newSpaceSwipePage != nil)
+            presentsCreation = beganOnCreationPage || (retainedOffset != nil && sidebar.newSpaceSwipePage != nil)
+            let presentationOffset = rebased ?? retainedOffset ?? (beganOnCreationPage ? -sidebar.swipeWidth : 0)
             offset = presentationOffset
-            gesture = SpaceSwipeGesture(displacement: Double(presentationOffset), velocity: retained?.velocity ?? 0)
+            gesture = SpaceSwipeGesture(displacement: Double(presentationOffset + (beganOnCreationPage ? sidebar.swipeWidth : 0)), velocity: retained?.velocity ?? 0)
             // Metadata already prepared while idle must be available to the first contact
             // and to a fast release, before the actor's fresh read has a chance to complete.
             document = retainedDocument ?? (preparationContext?.0 == context.0 && preparationContext?.1 == context.1 ? preparedDocument : nil)
@@ -323,11 +371,15 @@ final class SidebarSpaceSwipeController {
         let horizontal = gesture.intent == .horizontal
         if horizontal { swallowingMomentum = true; draw() }
         if event.phase.contains(.cancelled) || event.phase.contains(.ended), !horizontal {
-            if offset != 0 { settle(destination: nil, velocity: 0) }
+            if offset != 0 { settle(destination: nil, velocity: 0, createsSpace: beganOnCreationPage) }
             else { cancel(preserveScrollInput: true) }
             return false
         }
-        if event.phase.contains(.cancelled) {
+        if beganOnCreationPage, event.phase.contains(.ended) || event.phase.contains(.cancelled) {
+            let back = !event.phase.contains(.cancelled) && gesture.destination(width: Double(sidebar.swipeWidth),
+                hasPrevious: true, hasNext: false, at: event.timestamp) == -1
+            settle(destination: nil, velocity: gesture.releaseVelocity(at: event.timestamp), createsSpace: !back)
+        } else if event.phase.contains(.cancelled) {
             settle(destination: nil, velocity: 0)
         } else if event.phase.contains(.ended) {
             let neighbors = neighbors()
@@ -358,6 +410,11 @@ final class SidebarSpaceSwipeController {
 
     private func draw() {
         guard let sidebar, let gesture, gesture.intent == .horizontal else { return }
+        if beganOnCreationPage {
+            offset = -sidebar.swipeWidth + CGFloat(gesture.offset(width: Double(sidebar.swipeWidth), hasPrevious: true, hasNext: false))
+            show(offset: offset)
+            return
+        }
         let adjacent = neighbors()
         offset = CGFloat(gesture.offset(width: Double(sidebar.swipeWidth), hasPrevious: adjacent.0 != nil,
                                        hasNext: adjacent.1 != nil || canCreateNextSpace))
@@ -371,9 +428,11 @@ final class SidebarSpaceSwipeController {
     private func present(offset: CGFloat) {
         guard let sidebar else { return }
         let adjacent = neighbors()
-        if offset < 0, programmaticTarget == nil, adjacent.1 == nil, canCreateNextSpace {
+        if presentsCreation || (offset < 0 && programmaticTarget == nil && adjacent.1 == nil && canCreateNextSpace) {
+            presentsCreation = true
             if let source, let theme = capturedThemes[source] {
-                onThemeProgress?(.init(source: theme, destination: theme, progress: 0))
+                let destination = sidebar.newSpaceSwipePage.map { OrbitSpaceThemes.rendered($0.theme) } ?? OrbitSpaceThemes.rendered(BrowserSpaceThemePresets.default)
+                onThemeProgress?(.init(source: theme, destination: destination, progress: abs(offset) / max(1, sidebar.swipeWidth)))
             }
             sidebar.showNewSpaceSwipe(offset: offset)
             return
@@ -492,10 +551,16 @@ final class SidebarSpaceSwipeController {
         link?.stop(); link = nil; motion = nil; motionTime = nil
         releaseSettlementWaiters()
         if createsSpaceOnSettlement {
-            let create = sidebar?.onNewSpace
-            cancel()
-            create?()
+            isCreationPageVisible = true
+            creationSource = source
+            cancel(preservePresentation: true)
+            sidebar?.showNewSpaceSwipe(offset: -(sidebar?.swipeWidth ?? 0))
+            sidebar?.newSpaceSwipePage?.focusName()
             return
+        }
+        if beganOnCreationPage {
+            isCreationPageVisible = false; creationSource = nil
+            sidebar?.newSpaceSwipePage?.closePickers()
         }
         if releaseTarget == nil || selectionPublished {
             if nextGestureEvents.isEmpty { cancel(preserveQueuedReplay: true) }
@@ -566,13 +631,18 @@ final class SidebarSpaceSwipeController {
         link?.stop(); link = nil; motion = nil; motionTime = nil
         gesture = nil; isSettling = false; releaseTarget = nil
         createsSpaceOnSettlement = false
+        beganOnCreationPage = false; presentsCreation = false
         programmaticTarget = nil
         sourceWindow = nil; source = nil; catalog = nil; offset = 0
         commitDispatched = false; selectionPublished = false; capturedThemes.removeAll()
         releaseSettlementWaiters()
         if !preservePresentation {
-            sidebar?.finishSpaceSwipe(committed: nil)
-            onThemeProgress?(nil)
+            if isCreationPageVisible {
+                sidebar?.showNewSpaceSwipe(offset: -(sidebar?.swipeWidth ?? 0))
+            } else {
+                sidebar?.finishSpaceSwipe(committed: nil)
+                onThemeProgress?(nil)
+            }
         }
     }
 }

@@ -162,8 +162,8 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
         let existingSpace = document?.spaces.first
         initialContext = Task {
             if let existingSpace { return (existingSpace.id, existingSpace.profileID) }
-            let profileID = await store.createProfile(name: uiText("Preview"))
-            let spaceID = try await store.createSpace(name: uiText("Preview"), profileID: profileID)
+            let profileID = await store.createProfile(name: uiText("Personal"))
+            let spaceID = try await store.createSpace(name: uiText("Personal"), profileID: profileID)
             return (spaceID, profileID)
         }
         catalogObservation = Task { [weak self, store] in

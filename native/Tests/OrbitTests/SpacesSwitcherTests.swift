@@ -100,7 +100,7 @@ struct SpacesSwitcherTests {
         }
     }
 
-    @Test("Fast release uses warm metadata without waiting for an actor read; trailing overscroll opens creation once")
+    @Test("Fast release uses warm metadata without waiting for an actor read; trailing overscroll retains the creation page without mutating the catalog")
     func warmReleaseAndCreation() async throws {
         NSApplication.shared.setActivationPolicy(.prohibited)
         let store = BrowserStore()
@@ -137,14 +137,17 @@ struct SpacesSwitcherTests {
         #expect(sidebar.newSpaceSwipePage != nil && creations == 0)
         _ = swipe.handleScroll(try event(4, time: 2.05), inside: true)
         _ = swipe.advance(to: 12)
-        #expect(creations == 1 && sidebar.newSpaceSwipePage == nil)
+        #expect(creations == 0 && sidebar.newSpaceSwipePage != nil && swipe.isCreationPageVisible)
         _ = swipe.advance(to: 13)
-        #expect(creations == 1)
+        #expect(creations == 0)
+        swipe.dismissCreationPage()
+        _ = swipe.advance(to: 14)
+        #expect(sidebar.newSpaceSwipePage == nil)
         _ = swipe.handleScroll(try event(1, time: 3), inside: true)
         _ = swipe.handleScroll(try event(2, x: -320, time: 3.04), inside: true)
         _ = swipe.handleScroll(try event(8, time: 3.05), inside: true)
         _ = swipe.advance(to: 14)
-        #expect(creations == 1)
+        #expect(creations == 0 && sidebar.newSpaceSwipePage == nil)
     }
 
     @Test("Cold Space contact can release before metadata loading without rejecting its valid destination")
