@@ -140,7 +140,14 @@ extension BrowserWindowController {
         guard acceptsCommands, canAddSplitPane else { return }
         let ids = sidebar.selection.orderedNodes(in: session.organization!).compactMap(\.tabID)
         if ids.count >= 2 { session.createSplit(ids) }
-        else { session.addSplitPane() }
+        else {
+            session.addSplitPane()
+            session.performWindowAction { [weak self] in
+                guard let self, session.activeSplit != nil,
+                      session.organization?.selectedTab?.url.absoluteString == "about:blank" else { return }
+                palette.present(.currentTab, emptyAddress: true)
+            }
+        }
     }
 
     func canDropIntoSplit(_ payload: SidebarDragPayload) -> Bool {

@@ -42,7 +42,8 @@ enum BrowserSplitCommands {
                 controller.focusSplitPane(offset: offset)
             }
         }
-        try! registry.register(.addSplitView, validate: { $0.canAddSplitPane && !$0.isPeekPresented }) { controller, _ in
+        try! registry.register(.addSplitView, validate: { $0.canAddSplitPane && !$0.isPeekPresented }) { [weak registry] controller, _ in
+            controller.palette.registry = registry
             controller.addSplitFromSelection()
         }
         group(.closeThisSplitPane) { controller, split in

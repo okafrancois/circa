@@ -144,6 +144,7 @@
   "Split/BrowserSplitStrings.swift": [],
   "Split/BrowserSplitView.swift": [
     "\"\"",
+    "\"about:blank\"",
     "\"/\"",
     "\"arrow.clockwise\"",
     "\"arrow.left\"",

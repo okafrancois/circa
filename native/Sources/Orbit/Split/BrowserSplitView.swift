@@ -354,6 +354,7 @@ final class BrowserSplitPaneView: NSView {
     let focusBorder = CALayer()
     private let placeholder = BrowserSplitPlaceholderView()
     private var isActive = false
+    private var isBlank = false
     private var accent = OrbitTokens.ThemeAccent.defaultPurple
     var onFocus: (() -> Void)?
     var onClose: (() -> Void)?
@@ -371,11 +372,12 @@ final class BrowserSplitPaneView: NSView {
         clip.layer?.backgroundColor = OrbitTokens.Color.Surface.preview.resolvedCGColor(for: effectiveAppearance)
         addSubview(clip)
         clip.addSubview(page)
-        address.font = NSFont.systemFont(ofSize: 12)
+        address.font = NSFont.systemFont(ofSize: 14, weight: .semibold)
         address.contentTintColor = OrbitTokens.Color.Text.baseSecondary
         address.isBordered = false
         address.image = NSImage(systemSymbolName: "link", accessibilityDescription: nil)
         address.imagePosition = .imageLeading
+        address.imageHugsTitle = true
         address.target = self
         address.action = #selector(editAddress)
         for (button, symbol, label, action) in [
@@ -392,7 +394,7 @@ final class BrowserSplitPaneView: NSView {
             clip.addSubview(button)
         }
         close.contentTintColor = OrbitTokens.Color.Text.baseSecondary
-        address.lineBreakMode = .byTruncatingMiddle
+        address.lineBreakMode = .byTruncatingTail
         clip.addSubview(address)
         close.image = NSImage(systemSymbolName: "xmark", accessibilityDescription: BrowserSplitStrings.closePane)
         close.isBordered = false
@@ -421,6 +423,8 @@ final class BrowserSplitPaneView: NSView {
     /// A nil host keeps this pane's slot with a placeholder; the live host replaces it when the
     /// surface becomes available, without any navigation from the Split layer.
     func present(_ host: NSView?, address text: String, title: String? = nil, isOpenInAnotherWindow: Bool = false) {
+        isBlank = text.isEmpty || text == "about:blank"
+        page.isHidden = isBlank && host != nil
         let content = host ?? placeholder
         if page.subviews.first !== content {
             page.subviews.forEach { $0.removeFromSuperview() }
@@ -434,7 +438,8 @@ final class BrowserSplitPaneView: NSView {
         var displayed = text
         for prefix in ["https://", "http://"] where displayed.hasPrefix(prefix) { displayed = String(displayed.dropFirst(prefix.count)) }
         if displayed.hasSuffix("/"), URL(string: text)?.path == "/" { displayed.removeLast() }
-        address.title = displayed
+        address.title = isBlank ? uiText("Search or Enter URL…") : displayed
+        address.imagePosition = isBlank ? .noImage : .imageLeading
         address.setAccessibilityLabel(uiText("Address"))
         address.toolTip = text
         let label = title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
@@ -451,7 +456,7 @@ final class BrowserSplitPaneView: NSView {
 
     private func refreshAppearance() {
         CATransaction.begin(); CATransaction.setDisableActions(true)
-        clip.layer?.backgroundColor = OrbitTokens.Color.Surface.preview.resolvedCGColor(for: effectiveAppearance)
+        clip.layer?.backgroundColor = isBlank ? NSColor.clear.cgColor : OrbitTokens.Color.Surface.preview.resolvedCGColor(for: effectiveAppearance)
         line.layer?.backgroundColor = OrbitTokens.Color.Line.floatingScrimBorder.resolvedCGColor(for: effectiveAppearance)
         focusBorder.borderColor = accent.strong.resolvedCGColor(for: effectiveAppearance)
         if let layer {
@@ -466,7 +471,7 @@ final class BrowserSplitPaneView: NSView {
         self.accent = accent
         isActive = active
         refreshAppearance()
-        reload.isHidden = !active
+        reload.isHidden = !active || isBlank
         if active != wasActive, window?.isVisible == true, !OrbitMotionPreferences.prefersReducedMotion {
             let animation = CABasicAnimation(keyPath: "opacity")
             animation.fromValue = focusBorder.presentation()?.opacity ?? focusBorder.opacity

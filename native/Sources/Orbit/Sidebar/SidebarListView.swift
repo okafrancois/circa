@@ -417,7 +417,11 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
     private func dequeue(for entry: SidebarListEntry) -> SidebarListRow {
         let row: SidebarListRow
         switch entry.content {
-        case let .tab(item), let .split(item, _):
+        case let .split(item, _):
+            let created = SidebarSplitRow(item: item, node: entry.node, depth: entry.depth)
+            addSubview(created, positioned: .below, relativeTo: separator)
+            row = created
+        case let .tab(item):
             if let reused = tabPool.popLast() {
                 reused.update(item, depth: entry.depth)
                 row = reused
@@ -452,7 +456,9 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
     private func configure(_ row: SidebarListRow, with entry: SidebarListEntry) {
         row.leavingEntry = entry
         switch (row, entry.content) {
-        case let (row as SidebarTabRow, .tab(item)), let (row as SidebarTabRow, .split(item, _)):
+        case let (row as SidebarSplitRow, .split(item, _)):
+            row.updateSplit(item, node: entry.node, depth: entry.depth)
+        case let (row as SidebarTabRow, .tab(item)):
             if row.item != item || row.depth != entry.depth { row.update(item, depth: entry.depth) }
         case let (row as SidebarFolderRow, .folder(item)):
             if row.item != item || row.depth != entry.depth { row.update(item, depth: entry.depth) }
@@ -472,6 +478,7 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
         row.isDropTarget = false
         row.events = nil
         switch row {
+        case let row as SidebarSplitRow: row.removeFromSuperview()
         case let row as SidebarTabRow: tabPool.append(row)
         case let row as SidebarFolderRow: folderPool.append(row)
         default: row.removeFromSuperview()
