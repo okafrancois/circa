@@ -248,7 +248,7 @@ enum OrbitMenuTree {
             .item(.init(command: .viewDownloads, title: "View Downloads", key: "J", modifierMask: 1048576)),
             .item(.init(command: .viewEaselsNotes, title: "View Easels & Notes")),
             .item(.init(command: .viewMedia, title: "View Media")),
-            .item(.init(command: .viewBoosts, title: "View Boosts")),
+            .item(.init(command: .viewBoosts, title: "View Boosts", isHidden: true)),
             .separator,
             .item(.init(command: .bringAllToFront, title: "Bring All to Front")),
         ])),

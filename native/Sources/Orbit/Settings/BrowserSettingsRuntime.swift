@@ -44,6 +44,15 @@ final class BrowserSettingsRuntime: ObservableObject {
         await refresh()
     }
 
+    // Localization key reserved for the future Advanced control; S1 adds no visible surface.
+    static var enablesBoostsTitle: String { uiText("Enable Boosts on websites you visit") }
+
+    func setEnablesBoostsOnWebsites(_ enabled: Bool) async throws {
+        do { try await store.setEnablesBoostsOnWebsites(enabled) }
+        catch { await refresh(); throw error }
+        await refresh()
+    }
+
     func updateProfile(_ id: ProfileID, _ edit: @Sendable (inout BrowserProfileSettings) -> Void) async throws {
         do { try await store.updateProfile(id, edit) }
         catch { await refresh(); throw error }

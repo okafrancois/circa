@@ -31,7 +31,8 @@ enum BrowserPermissionFile {
         }
     }
 
-    static func save(_ data: Data, to url: URL, maximumBytes: Int = 4 * 1024 * 1024, access: Access = .standard) throws {
+    static func save(_ data: Data, to url: URL, maximumBytes: Int = 4 * 1024 * 1024, access: Access = .standard,
+                     beforeReplace: () throws -> Void = {}) throws {
         guard maximumBytes > 0 else { throw Failure.tooLarge }
         guard data.count <= maximumBytes else { throw Failure.tooLarge }
         let (parent, name, privateDirectory) = try openParent(url, create: true, access: access)
@@ -67,6 +68,7 @@ enum BrowserPermissionFile {
         guard fsync(file) == 0 else { throw Failure.io }
         if fcntl(file, F_FULLFSYNC) != 0, ![EINVAL, ENOTSUP, ENOTTY].contains(errno) { throw Failure.io }
         guard try identity(parent: parent, name: name) == original else { throw Failure.unsafeFile }
+        try beforeReplace()
         guard renameat(parent, temporary, parent, name) == 0 else { throw Failure.io }
         if fsync(parent) != 0, ![EINVAL, ENOTSUP, ENOTTY].contains(errno) { throw Failure.committedButNotDurable }
     }

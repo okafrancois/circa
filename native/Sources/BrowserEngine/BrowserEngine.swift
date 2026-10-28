@@ -47,6 +47,8 @@ public struct BrowserEngineCapabilities: OptionSet, Sendable {
     public static let fullPageSnapshots = Self(rawValue: 1 << 25)
     /// Reloads the current document while bypassing the HTTP cache.
     public static let cacheBypassingReload = Self(rawValue: 1 << 26)
+    /// Profile-scoped, acknowledged document-start Boost registration through `boosts`.
+    public static let boosts = Self(rawValue: 1 << 27)
     /// A policy question can stay open after the delegate returns (`BrowserPolicyDecision.suspend()`):
     /// the engine holds the original request natively and resumes it, never replays it. Without
     /// this capability the delegate answers synchronously from state it prepared ahead, as stock
@@ -154,6 +156,8 @@ public protocol BrowserEngine: AnyObject {
     var extensions: (any BrowserExtensionHost)? { get }
     /// Narrow native manager route; does not imply inventory, actions or Store compatibility.
     var extensionManagement: (any BrowserExtensionManagement)? { get }
+    /// Nil without native document-start registration support. The shell must gate on both.
+    var boosts: (any BrowserBoostHost)? { get }
 
     /// Shell windows (CHROMIUM-APP). The shell shows the surfaces whose `placement.windowID` is
     /// `windowID` in `window`. Engines that model windows natively (hosted Chromium: one logical
@@ -202,6 +206,7 @@ public protocol BrowserEngine: AnyObject {
 }
 
 public extension BrowserEngine {
+    var boosts: (any BrowserBoostHost)? { nil }
     var extensionManagement: (any BrowserExtensionManagement)? { nil }
     var conformanceProbe: (any BrowserEngineConformanceProbe<Surface>)? { nil }
     /// Source-compatible migration only; absence is never treated as successful cleanup.
