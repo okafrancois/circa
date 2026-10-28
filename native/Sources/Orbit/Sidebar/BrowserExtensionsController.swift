@@ -117,6 +117,7 @@ final class BrowserExtensionsController<Engine: BrowserEngine> {
             }
             pinned = order.compactMap { id in availablePins.first { $0.id == id } }
         } else { pinned = [] }
+        owner.developerToolbar.updateExtensions(pinned)
         var existing: [String: NSButton] = [:]
         for view in pinnedButtons {
             existing[view.accessibilityIdentifier()] = view
