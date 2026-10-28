@@ -13,6 +13,14 @@ final class OrbitApplication: NSObject, NSApplicationDelegate {
     var updater: OrbitUpdater { environment?.settings.updater ?? inactiveUpdater }
     var quitPreferenceSave: Task<Void, Error>?
     var confirmQuit: @MainActor () -> OrbitQuitDecision = OrbitQuitConfirmation.present
+    var confirmDownloadQuit: @MainActor () -> Bool = {
+        let alert = NSAlert()
+        alert.messageText = uiText("Downloads Are Still in Progress")
+        alert.informativeText = uiText("Quitting will cancel your downloads.")
+        alert.addButton(withTitle: uiText("Continue Downloads"))
+        alert.addButton(withTitle: uiText("Quit and Cancel Downloads"))
+        return alert.runModal() == .alertSecondButtonReturn
+    }
     private var startupTask: Task<Void, Never>?
     private var isStartingUp = false
     private var externalURLStartupComplete = false
@@ -259,12 +267,7 @@ final class OrbitApplication: NSObject, NSApplicationDelegate {
         guard settingsWindow?.model.isRequestingDefaultBrowser != true else { return .terminateCancel }
         guard confirmQuitIfNeeded() else { return .terminateCancel }
         if environment?.downloads.hasActiveTransfers == true {
-            let alert = NSAlert()
-            alert.messageText = uiText("Downloads Are Still in Progress")
-            alert.informativeText = uiText("Quitting will cancel your downloads.")
-            alert.addButton(withTitle: uiText("Continue Downloads"))
-            alert.addButton(withTitle: uiText("Quit and Cancel Downloads"))
-            guard alert.runModal() == .alertSecondButtonReturn else { return .terminateCancel }
+            guard confirmDownloadQuit() else { return .terminateCancel }
         }
         isPreparingToQuit = true
         for controller in windows.windows.values { controller.freezeCommandsForTermination() }

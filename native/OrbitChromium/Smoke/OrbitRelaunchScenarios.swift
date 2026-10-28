@@ -135,7 +135,7 @@ enum OrbitRelaunchScenarios {
     /// The same real session is saved and reopened across process launches. Little Orbit is
     /// transient by product design: recreate and exercise it on every launch, keep it through quit.
     static func session(application: OrbitApplication, environment: OrbitEnvironment,
-                        engine: ChromiumBrowserEngine, fixture: URL, root: URL, restored: Int, restoring: Bool, record: Record) async {
+                        engine: ChromiumBrowserEngine, fixture: URL, root: URL, restored: Int, restoring: Bool, archiveRoundTrip: Bool = false, record: Record) async {
         func page(_ name: String) -> URL { URL(string: "/page?case=\(name)", relativeTo: fixture)!.absoluteURL }
         func check(_ name: String, _ ok: Bool, _ fields: [String: Any] = [:]) {
             record("relaunch." + name, ok ? "proven" : "failed", fields)
@@ -144,6 +144,12 @@ enum OrbitRelaunchScenarios {
             check("window", false); return
         }
         if restoring && restored != 2 { check("restore-count", false, ["restored": restored]); return }
+        if restoring {
+            let favorite = first.favorites.grid.items.first?.tab
+            check("favicon-before-navigation", favorite.map {
+                environment.sidebarIconMemory.image(profile: first.session.activeProfileID!, home: $0.pinnedURL ?? $0.url) != nil
+            } ?? false)
+        }
         if !restoring {
             first.submitAddress(page("relaunch-favorite").absoluteString)
             let loaded = await until {
@@ -237,8 +243,43 @@ enum OrbitRelaunchScenarios {
         check("split-documents", splitDocuments)
         let favorite = await until { windows.contains { !$0.favorites.grid.items.isEmpty } }
         check("favorites", favorite)
-        check("hosted", windows.allSatisfy { $0.session.selectedSurface?.tabIdentity?.isHosted == true }
-              && engine.holdingWindowTabCount == 0)
+        check("favicon-cache", await until {
+            windows.contains { window in
+                guard let tab = window.favorites.grid.items.first?.tab, let profile = window.session.activeProfileID else { return false }
+                return environment.sidebarIconMemory.image(profile: profile, home: tab.pinnedURL ?? tab.url) != nil
+            }
+        })
+        if archiveRoundTrip, let window = windows.first(where: { $0.session.activeSplit != nil }),
+           let organization = window.session.organization {
+            let before = await environment.store.sessionDocument().organization
+            let ids = organization.allTabs.filter { tab in
+                if case .favorites = tab.section { return false }
+                return true
+            }.map(\.id)
+            window.session.archiveTabs(ids)
+            await window.session.waitForPendingCommands()
+            let records = await window.session.archivedTabs().value
+            check("archive-identities", Set(records.map(\.id)).isSuperset(of: ids))
+            for id in ids { window.session.restoreArchivedTab(id, activate: false) }
+            await window.session.waitForPendingCommands()
+            let reopened = await environment.store.sessionDocument().organization
+            check("archive-reopen-titles", ids.allSatisfy { id in
+                reopened.tabs.first { $0.id == id }?.customTitle == before.tabs.first { $0.id == id }?.customTitle
+                    && reopened.tabs.first { $0.id == id }?.url == before.tabs.first { $0.id == id }?.url
+            })
+            for _ in 0...ids.count { _ = await window.session.undoOrganization().value }
+            await window.session.waitForPendingCommands()
+            let undone = await environment.store.sessionDocument().organization
+            check("archive-undo-layout", undone.spaces == before.spaces && undone.folders == before.folders && undone.splits == before.splits)
+        }
+        check(archiveRoundTrip ? "archive-undo-hosted" : "hosted",
+              await until { windows.allSatisfy { $0.session.selectedSurface?.tabIdentity?.isHosted == true }
+                  && engine.holdingWindowTabCount == 0 },
+              ["holdingTabs": engine.holdingWindowTabCount, "selected": windows.map {
+                  ["surface": $0.session.selectedSurface != nil, "ready": $0.session.selectedSurface?.isReady == true,
+                   "hosted": $0.session.selectedSurface?.tabIdentity?.isHosted == true,
+                   "occurrence": $0.session.snapshot?.selectedOccurrenceID != nil]
+              }])
         check("private-not-restored", application.privateWindows.isEmpty && windows.count == 2)
         application.createPrivateCommandWindow()
         await application.waitForPrivateWindowCommands()
