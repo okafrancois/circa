@@ -75,11 +75,11 @@ final class BrowserSidebarView: NSView, SidebarListHost {
     private var creationMenu: SidebarCreationMenu?
     var hasFooterPresentation: Bool { creationMenu != nil || footer.contextMenu != nil || footer.iconPicker != nil }
     var onFooterPresentationChange: (() -> Void)?
-    func cancelFooterPresentations() {
+    func cancelFooterPresentations(preservingSpaceDismissal: Bool = false) {
         creationMenu?.popover.performClose(nil)
         footer.cancelContextMenu()
         footer.cancelIconPicker()
-        spaceHoverDidChange(nil)
+        if !preservingSpaceDismissal { spaceHoverDidChange(nil) }
     }
     var onDeleteSpace: ((SpaceID) -> Void)?
     var onRenameSpace: ((SpaceID) -> Void)?
@@ -131,6 +131,9 @@ final class BrowserSidebarView: NSView, SidebarListHost {
     private let tooltip = SidebarSpaceTooltip()
     private var tooltipTimer: (any OrbitCancellable)?
     private var tooltipIsWarm = false
+    var scheduleSpaceHover: (TimeInterval, @escaping @MainActor () -> Void) -> any OrbitCancellable = {
+        OrbitRunLoopTimer(after: $0, $1)
+    }
     private var renderedCatalog: BrowserCatalogSnapshot?
     private var activeSpaceID: SpaceID?
     private var commandsEnabled = true
@@ -193,6 +196,9 @@ final class BrowserSidebarView: NSView, SidebarListHost {
             self?.spaceHoverDidChange(nil)
         }
         footer.onMenuPresentationChange = { [weak self] in self?.onFooterPresentationChange?() }
+        footer.onPressSpace = { [weak self] in
+            self?.spaceHoverDidChange(nil, dismissalDuration: SidebarSpaceTooltip.clickDismissalDuration)
+        }
         footer.onHoverSpace = { [weak self] button in self?.spaceHoverDidChange(button, allowsHandoff: true) }
         registerForDraggedTypes([SidebarDragPayload.pasteboardType, FavoritesDragPayload.pasteboardType])
     }
@@ -261,7 +267,9 @@ final class BrowserSidebarView: NSView, SidebarListHost {
     /// Projects the catalog and the active Space's organization. A snapshot of another Space (a
     /// switch in flight) renders as empty until the matching one arrives.
     func render(catalog: BrowserCatalogSnapshot?, activeSpaceID: SpaceID?, organization: BrowserOrganizationSnapshot?) {
-        if catalog != renderedCatalog || activeSpaceID != self.activeSpaceID { cancelFooterPresentations() }
+        if catalog != renderedCatalog || activeSpaceID != self.activeSpaceID {
+            cancelFooterPresentations(preservingSpaceDismissal: catalog == renderedCatalog && tooltip.isDismissing)
+        }
         let wasCreating = spaceSwipe.isCreationPageVisible
         spaceSwipe.validate(catalog: catalog, active: activeSpaceID)
         let consumedSwipe = spaceSwipe.willRender(active: activeSpaceID) || wasCreating
@@ -664,7 +672,7 @@ final class BrowserSidebarView: NSView, SidebarListHost {
         menu.show(relativeTo: sender)
     }
 
-    private func spaceHoverDidChange(_ button: SidebarSpaceButton?, allowsHandoff: Bool = false) {
+    private func spaceHoverDidChange(_ button: SidebarSpaceButton?, allowsHandoff: Bool = false, dismissalDuration: TimeInterval = 0) {
         // Orbit keeps the capsule visible when moving directly to an adjacent Space.
         // Only pointer exits within the icon strip qualify; hide/menu/model invalidation
         // still dismiss synchronously, even when the pointer has not moved.
@@ -677,20 +685,25 @@ final class BrowserSidebarView: NSView, SidebarListHost {
         tooltipTimer?.cancel()
         tooltipTimer = nil
         let immediate = tooltipIsWarm
-        tooltip.isHidden = true
-        guard !hasFooterPresentation, let button else { tooltipIsWarm = false; return }
+        guard commandsEnabled, !isPresentationHidden, !hasFooterPresentation, let button else {
+            tooltip.dismiss(duration: allowsHandoff ? SidebarSpaceTooltip.departureDuration : dismissalDuration)
+            tooltipIsWarm = false
+            return
+        }
         let present: @MainActor @Sendable () -> Void = { [weak self, weak button] in
-            guard let self, let button, button.window != nil else { return }
-            let size = self.tooltip.configure(name: button.space.name, shortcut: self.spaceShortcutLabel(button.index), maximumWidth: max(40, self.bounds.width - 2 * Metrics.paddingX))
+            guard let self, let button, button.window != nil, self.commandsEnabled,
+                  !self.isPresentationHidden, !self.hasFooterPresentation,
+                  self.footer.spaceButtons.contains(where: { $0 === button }) else { return }
+            let size = self.tooltip.configure(name: button.space.name, shortcut: self.spaceShortcutLabel(button.index), profileName: self.renderedCatalog?.profiles.first { $0.id == button.space.profileID }?.name, maximumWidth: max(40, self.bounds.width - 2 * Metrics.paddingX))
             let anchor = button.convert(button.bounds, to: self)
             var x = (anchor.midX - size.width / 2).rounded()
             x = min(max(Metrics.paddingX, x), self.bounds.width - Metrics.paddingX - size.width)
-            self.tooltip.frame = NSRect(x: x, y: anchor.minY - size.height - 6, width: size.width, height: size.height)
-            self.tooltip.isHidden = false
+            self.tooltip.frame = NSRect(x: x, y: anchor.minY - size.height - 4, width: size.width, height: size.height)
+            self.tooltip.present()
             self.tooltipIsWarm = true
         }
         if immediate { present() }
-        else { tooltipTimer = OrbitRunLoopTimer(after: SidebarSpaceTooltip.appearanceDelay, present) }
+        else { tooltipTimer = scheduleSpaceHover(SidebarSpaceTooltip.appearanceDelay, present) }
     }
 }
 

@@ -514,7 +514,7 @@ extension OrbitTokens {
             public static var collapseWidth: CGFloat { collapsePointerX }
             public static var resizeHandleWidth: CGFloat { paddingX }
             public static var footerHeight: CGFloat { 2 * footerCenterFromBottom }
-            public static let footerSpaceDotDiameter: CGFloat = 7
+            public static let footerSpaceDotDiameter: CGFloat = 8
             public static let footerSpaceIconMinimumPitch: CGFloat = 24
             public static let footerSpaceDotPitch: CGFloat = 18
             public static let footerSpaceDotMinimumDiameter: CGFloat = 3
