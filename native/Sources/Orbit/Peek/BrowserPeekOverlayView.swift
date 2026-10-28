@@ -18,6 +18,11 @@ final class BrowserPeekOverlayView: NSView {
     var scrimCornerRadius: CGFloat = 10 { didSet { scrim.layer?.cornerRadius = scrimCornerRadius } }
     var isSplitAvailable = false { didSet { toolbar.splitButton.isEnabled = isSplitAvailable } }
 
+    /// Library pages use the full window and expose only close and tab promotion.
+    var isLibraryBoost = false {
+        didSet { toolbar.splitButton.isHidden = isLibraryBoost; needsLayout = true }
+    }
+
     private let scrim = NSView()
     /// Carries the shadow; the clip view inside it rounds the page.
     private let cardShadow = PeekContainerView()
@@ -35,7 +40,7 @@ final class BrowserPeekOverlayView: NSView {
     /// The page geometry stays anchored to the content card while the scrim covers the sidebar.
     weak var contentAnchor: NSView?
     var presentationBounds: NSRect {
-        guard let contentAnchor else { return bounds }
+        guard !isLibraryBoost, let contentAnchor else { return bounds }
         let leading = convert(contentAnchor.bounds, from: contentAnchor).minX
         return NSRect(x: leading, y: bounds.minY, width: max(0, bounds.maxX - leading), height: bounds.height)
     }
@@ -245,7 +250,7 @@ final class BrowserPeekOverlayView: NSView {
         cardShadow.alphaValue = 1
         toolbar.alphaValue = 1
         scrim.alphaValue = 1
-        let spring = BrowserPeekStyle.presentSpring
+        let spring = isLibraryBoost ? BrowserPeekMotion.libraryPresent : BrowserPeekStyle.presentSpring
         animateCard(fromSource: true, spring: spring)
         springOpacity(scrim.layer, from: 0, to: 1, spring: spring)
         springOpacity(toolbar.layer, from: 0, to: 1, spring: spring)

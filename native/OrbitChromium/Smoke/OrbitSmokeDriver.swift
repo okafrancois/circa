@@ -55,7 +55,7 @@ final class OrbitSmokeDriver: OrbitLaunchHooks {
             (arguments.contains("--orbit-smoke-site-data") ? ["--use-fake-device-for-media-stream"] : [])
     }
     private var visibleSmoke: Bool {
-        arguments.contains("--orbit-smoke-password-prompt") || arguments.contains("--orbit-smoke-password-generation") ||
+        arguments.contains("--orbit-smoke-library-boost") || arguments.contains("--orbit-smoke-password-prompt") || arguments.contains("--orbit-smoke-password-generation") ||
             (arguments.contains("--orbit-smoke-extension-update") && arguments.contains("--orbit-smoke-extension-update-manual"))
             || arguments.contains("--orbit-smoke-passwords")
     }
@@ -148,7 +148,7 @@ final class OrbitSmokeDriver: OrbitLaunchHooks {
         let guardSummary = HiddenGuard.shared
         let visibleWindows = NSApp.windows.filter { $0.isVisible || $0.occlusionState.contains(.visible) }.count
         if visibleSmoke {
-            check((arguments.contains("--orbit-smoke-passwords") || arguments.contains("--orbit-smoke-password-prompt")) ? "passwords.visible-window" : "update.visible-window", visibleWindows > 0, ["visibleWindows": visibleWindows])
+            check((arguments.contains("--orbit-smoke-passwords") || arguments.contains("--orbit-smoke-password-prompt")) ? "passwords.visible-window" : arguments.contains("--orbit-smoke-library-boost") ? "library-boost.visible-window" : "update.visible-window", visibleWindows > 0, ["visibleWindows": visibleWindows])
         } else {
             check("hidden.monitor", guardSummary.ticks > 0 && guardSummary.violations.isEmpty,
                   ["ticks": guardSummary.ticks, "violations": guardSummary.violations.count])
@@ -300,7 +300,7 @@ final class OrbitSmokeDriver: OrbitLaunchHooks {
             finish(aborted: false)
             return
         }
-        if phase == .fresh && !arguments.contains("--orbit-smoke-password-prompt") && !arguments.contains("--orbit-smoke-boosts") && !arguments.contains("--orbit-smoke-password-generation") && !arguments.contains("--orbit-smoke-passwords") && !arguments.contains("--orbit-smoke-engine-r5") && !arguments.contains("--orbit-smoke-extension-only")
+        if phase == .fresh && !arguments.contains("--orbit-smoke-library-boost") && !arguments.contains("--orbit-smoke-password-prompt") && !arguments.contains("--orbit-smoke-boosts") && !arguments.contains("--orbit-smoke-password-generation") && !arguments.contains("--orbit-smoke-passwords") && !arguments.contains("--orbit-smoke-engine-r5") && !arguments.contains("--orbit-smoke-extension-only")
             && !arguments.contains("--orbit-smoke-relaunch") && !arguments.contains("--orbit-smoke-private-domain")
             && !arguments.contains("--orbit-smoke-profiles") && !arguments.contains("--orbit-smoke-site-data")
             && !arguments.contains("--orbit-smoke-space-profile") && !arguments.contains("--orbit-smoke-archive-auto")
@@ -357,6 +357,11 @@ final class OrbitSmokeDriver: OrbitLaunchHooks {
         check("app.window", true, ["windows": application.windows.windows.count, "restored": restored.count])
         if arguments.contains("--orbit-smoke-password-prompt") {
             await OrbitPasswordPromptScenario.run(window: first, fixture: fixture, root: runRoot, record: record)
+            finish(aborted: false)
+            return
+        }
+        if arguments.contains("--orbit-smoke-library-boost") {
+            await libraryBoostScenario(environment, first, engine)
             finish(aborted: false)
             return
         }
