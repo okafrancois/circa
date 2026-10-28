@@ -17,6 +17,7 @@ extension OrbitSmokeDriver {
         do {
             // Compile the actual model, including declarative Zap and explicit JS opt-in.
             var content = BrowserBoostContent()
+            content.textZoom = 1.1
             content.customCSS = ":root { --boost: installed; background-color: rgb(40, 90, 120) !important; }"
             content.zapSelectors = ["#zap"]
             content.customJavaScript = "globalThis.boostSecret = 42; document.documentElement.dataset.binding = String(typeof chrome === 'undefined' || !chrome.runtime || !chrome.runtime.id); document.documentElement.dataset.started = 'yes'; fetch('/boosts/forbidden').then(()=>document.documentElement.dataset.network='escaped',()=>document.documentElement.dataset.network='blocked');"
@@ -36,6 +37,7 @@ extension OrbitSmokeDriver {
             let (_, diagnostics) = await tab.devToolsCall("Runtime.evaluate", params: "{\"expression\":\"JSON.stringify({url:location.href,early:window.early,isolation:window.pageIsolation,binding:window.chromeBinding,attributes:document.documentElement.dataset,html:document.documentElement.outerHTML})\",\"returnByValue\":true}")
             check("boosts.fixture-page-script", await evaluate("String(document.documentElement.dataset.pageProbe)", tab) == "loaded", ["diagnostic": String(decoding: diagnostics, as: UTF8.self)])
             check("boosts.document-start", await evaluate("String(early === 'installed' && document.documentElement.dataset.started === 'yes' && getComputedStyle(document.querySelector('#zap')).display === 'none')", tab) == "true")
+            check("boosts.layout-zoom", await evaluate("(()=>{const e=document.createElement('div');e.style.cssText='height:40px;width:60px';document.body.append(e);const height=e.getBoundingClientRect().height;e.remove();return String(Math.abs(height-44)<0.1)})()", tab) == "true")
             check("boosts.world-per-registration", await evaluate("String(Object.hasOwn(document.documentElement.dataset, 'otherWorld') && document.documentElement.dataset.otherWorld === 'undefined')", tab) == "true")
             check("boosts.isolated-dom-only", await evaluate("String(pageIsolation === 'undefined' && chromeBinding === 'true')", tab) == "true")
             for _ in 0..<50 {

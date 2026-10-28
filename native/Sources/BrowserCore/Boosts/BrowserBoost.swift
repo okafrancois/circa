@@ -61,6 +61,10 @@ public struct BrowserBoostColorScheme: Codable, Equatable, Sendable {
     public var hue: Double?
     public var saturation: Double?
     public var invertLightness: Bool?
+    /// Normalized control intentions; the engine owns colour mapping.
+    public var contrast: Double?
+    public var brightness: Double?
+    public var originalSaturation: Double?
     public init() {}
 }
 
@@ -68,7 +72,7 @@ public struct BrowserBoostContent: Codable, Equatable, Sendable {
     public enum TextTransform: String, Codable, Sendable { case capitalize, uppercase, lowercase }
     public var colorScheme: BrowserBoostColorScheme?
     public var fontFamily: String?
-    /// Root font-size multiplier, not engine page zoom. Orbit policy bounds: 0.25...5.
+    /// Root layout zoom multiplier. Bounds: 0.25...5; fixed-pixel text and media scale together.
     public var textZoom: Double?
     public var textTransform: TextTransform?
     public var zapSelectors: [String] = []

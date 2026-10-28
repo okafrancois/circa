@@ -296,6 +296,10 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
                 liveToggle("Enable Picture in Picture when you leave a video tab",
                            value: runtime.document.automaticPictureInPicture,
                            identifier: "settings-automatic-pip", save: model.setAutomaticPictureInPicture)
+                Toggle(BrowserSettingsRuntime.enablesBoostsTitle, isOn: Binding(
+                    get: { runtime.document.enablesBoostsOnWebsites },
+                    set: { value in model.perform { try await runtime.setEnablesBoostsOnWebsites(value) } }
+                )).padding(12).accessibilityIdentifier("settings-enables-boosts")
             }
             panel {
                 settingRow("Put inactive tabs to sleep after") {

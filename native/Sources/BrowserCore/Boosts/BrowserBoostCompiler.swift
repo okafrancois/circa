@@ -23,7 +23,7 @@ public enum BrowserBoostCompiler {
               content.customJavaScript.utf8.count <= maximumSourceBytes,
               content.zapSelectors.count <= 256 else { throw BrowserBoostError.limitExceeded }
         if let scheme = content.colorScheme {
-            guard [scheme.hue, scheme.saturation].allSatisfy({ $0?.isFinite ?? true }) else {
+            guard [scheme.hue, scheme.saturation, scheme.contrast, scheme.brightness, scheme.originalSaturation].allSatisfy({ $0?.isFinite ?? true }) else {
                 throw BrowserBoostError.invalidContent
             }
         }
@@ -45,7 +45,7 @@ public enum BrowserBoostCompiler {
         }
         if let zoom = content.textZoom {
             guard zoom.isFinite, (0.25...5).contains(zoom) else { throw BrowserBoostError.invalidContent }
-            rules.append(":root { font-size: \(zoom * 100)% !important; }")
+            rules.append(":root { zoom: \(zoom) !important; }")
         }
         // Custom CSS is intentionally unrestricted source and has final cascade order.
         if !content.customCSS.isEmpty { rules.append(content.customCSS) }

@@ -16,6 +16,7 @@ enum BrowserWindowCommands {
         BrowserSwitcherCommands.install(in: registry)
         BrowserArchiveCommands.install(in: registry)
         BrowserLibraryCommands.install(in: registry)
+        BrowserBoostCommands.install(in: registry)
         BrowserFavoritesCommands.install(in: registry)
         BrowserSpaceCommands.install(in: registry)
         SidebarListCommands.install(in: registry)

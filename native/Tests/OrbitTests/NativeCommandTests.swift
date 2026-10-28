@@ -298,7 +298,8 @@ struct NativeCommandTests {
         // + site-session/bookmark import and export (4), and private-window routing (1).
         // + local Share and page-context Share (2), sidebar tab navigation (4), Select Space 1–9 (9).
         let implemented = system.registry.definitions.filter { system.registry.isImplemented($0.id) }.map(\.id.rawValue)
-        #expect(implemented.count == 183, "\(implemented.count): \(implemented.sorted())")
+        // Boost creation and the Library destination add two executable bindings.
+        #expect(implemented.count == 185, "\(implemented.count): \(implemented.sorted())")
         #expect(system.registry.isImplemented(.checkForUpdates))
         #expect(system.registry.isImplemented(.toggleDeveloperMode))
         #expect(system.registry.isImplemented(.newIncognitoWindow))
@@ -359,7 +360,7 @@ struct NativeCommandTests {
             #expect(!OrbitCommandCatalog.isCommandBarAction(definition))
         }
         let file = try #require(bar.items.first { $0.title == "File" }?.submenu)
-        #expect(file.items.filter { !$0.isSeparatorItem }.compactMap(\.identifier?.rawValue) == [
+        #expect(file.items.filter { !$0.isSeparatorItem && !$0.isHidden }.compactMap(\.identifier?.rawValue) == [
             "newTab", "newWindow", "newIncognitoWindow", "newQuickWindowWindow", "restoreLastClosedTab", "openCommandBar", "newProfile",
             "closeWindow", "archiveTab", "share", "capture", "captureFullPage", "savePageAs", "print", "importFromArc"
         ])

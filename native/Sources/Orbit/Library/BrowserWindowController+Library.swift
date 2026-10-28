@@ -65,6 +65,16 @@ extension BrowserWindowController {
             spacesView.leadingAnchor.constraint(equalTo: view.body.leadingAnchor), spacesView.trailingAnchor.constraint(equalTo: view.body.trailingAnchor),
             spacesView.topAnchor.constraint(equalTo: view.body.topAnchor), spacesView.bottomAnchor.constraint(equalTo: view.body.bottomAnchor)
         ])
+        let boostsView = library.boostsView
+        boostsView.translatesAutoresizingMaskIntoConstraints = false
+        boostsView.isHidden = true
+        view.body.addSubview(boostsView)
+        NSLayoutConstraint.activate([
+            boostsView.leadingAnchor.constraint(equalTo: view.body.leadingAnchor), boostsView.trailingAnchor.constraint(equalTo: view.body.trailingAnchor),
+            boostsView.topAnchor.constraint(equalTo: view.body.topAnchor), boostsView.bottomAnchor.constraint(equalTo: view.body.bottomAnchor)
+        ])
+        boostsView.onBack = view.onBack
+        boostsView.onOpen = { [weak self] boost, profile in self?.openLibraryBoost(boost, profile: profile) }
         let mediaView = library.mediaView
         mediaView.translatesAutoresizingMaskIntoConstraints = false
         mediaView.isHidden = true
@@ -218,6 +228,7 @@ extension BrowserWindowController {
         case .history: library.historyView.searchField
         case .spaces: library.spacesView
         case .media: library.mediaView.searchField
+        case .boosts: library.boostsView.searchField
         }
     }
 
@@ -253,6 +264,8 @@ extension BrowserWindowController {
         library.spacesTask?.cancel(); library.spacesTask = nil
         library.spacesView.clear()
         library.mediaView.clear()
+        library.boostsTask?.cancel(); library.boostsTask = nil
+        library.boostsView.clear()
     }
 
     func renderLibrary() {
@@ -272,6 +285,9 @@ extension BrowserWindowController {
         library.historyView.isHidden = library.category != .history
         library.spacesView.isHidden = library.category != .spaces
         library.mediaView.isHidden = library.category != .media
+        library.boostsView.isHidden = library.category != .boosts
+        if library.category == .boosts { renderLibraryBoosts() }
+        else { library.boostsTask?.cancel(); library.boostsView.clear() }
         if library.category == .media { renderLibraryMedia() } else { library.mediaView.clear() }
         if library.category == .spaces, let catalog = session.catalog {
             var icons: [SpaceID: BrowserSpaceIcon] = [:]

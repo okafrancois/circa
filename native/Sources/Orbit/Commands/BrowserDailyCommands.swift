@@ -48,6 +48,8 @@ enum BrowserDailyCommands {
 
     static func aliases(_ id: BrowserCommandID) -> String {
         switch id {
+        case .newBoost: "New Boost|Create Boost"
+        case .viewBoosts: "View Boosts"
         case .newWindow: "New Window|Nouvelle fenêtre|Ouvrir une nouvelle fenêtre"
         case .newIncognitoWindow: "New Incognito Window|New Private Window|Nouvelle fenêtre privée|Navigation privée"
         case .newQuickWindowWindow: "New Little Orbit|New Little Orbit Window|Nouveau Little Orbit|Nouvelle fenêtre Little Orbit"

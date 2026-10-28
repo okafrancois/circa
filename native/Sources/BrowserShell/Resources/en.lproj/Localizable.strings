@@ -1270,3 +1270,37 @@
 
 "Save this password?" = "Save this password?";
 "Enable Picture in Picture when you leave a video tab" = "Enable Picture in Picture when you leave a video tab";
+"%ld %%" = "%ld %%";
+"AA" = "AA";
+"Advanced color controls" = "Advanced color controls";
+"Boost" = "Boost";
+"Boosts" = "Boosts";
+"Brightness" = "Brightness";
+"CSS" = "CSS";
+"Case" = "Case";
+"Change text case" = "Change text case";
+"Change text size" = "Change text size";
+"Click elements on the page to Zap them" = "Click elements on the page to Zap them";
+"Click to unzap" = "Click to unzap";
+"Contrast" = "Contrast";
+"Edit the Internet with Boosts" = "Edit the Internet with Boosts";
+"Internal debugging pages are currently disabled." = "Internal debugging pages are currently disabled.";
+"Invert lightness" = "Invert lightness";
+"JS" = "JS";
+"Make %@ your own!" = "Make %@ your own!";
+"Make a Boost" = "Make a Boost";
+"Maybe Later" = "Maybe Later";
+"My Boost" = "My Boost";
+"Nothing Boosted Yet!" = "Nothing Boosted Yet!";
+"Original Saturation" = "Original Saturation";
+"Reset to original colors" = "Reset to original colors";
+"Search Boosts…" = "Search Boosts…";
+"Size" = "Size";
+"Zap" = "Zap";
+"Zap all related elements" = "Zap all related elements";
+"Zap this" = "Zap this";
+"aa" = "aa";
+"←  Back" = "←  Back";
+"← Click to unzap" = "← Click to unzap";
+
+"{}" = "{}";
