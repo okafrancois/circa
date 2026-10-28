@@ -1199,3 +1199,9 @@
 "Your tabs will be here when you return." = "Your tabs will be here when you return.";
 "Quit, and don’t ask again" = "Quit, and don’t ask again";
 "Drag to capture a portion of this page. Press Escape to cancel." = "Drag to capture a portion of this page. Press Escape to cancel.";
+
+/* Command Bar ranking and site-scoped search. */
+"Tab to search" = "Tab to search";
+"About suggestions" = "About suggestions";
+"Search %@" = "Search %@";
+"Suggestions come from your open tabs, bookmarks, and history. Web searches use your selected search engine." = "Suggestions come from your open tabs, bookmarks, and history. Web searches use your selected search engine.";
