@@ -14,6 +14,15 @@ enum OrbitPerformanceProbe {
     }
     static func start(application: OrbitApplication, configuration: OrbitProductConfiguration) {
         guard configuration.syntheticGuard != nil, CommandLine.arguments.contains("--perf-probe") else { return }
+        let log = configuration.dataRoot.appendingPathComponent("download-events.jsonl")
+        ChromiumRuntime.shared.trace = { name, fields in
+            guard name == "download", let data = try? JSONSerialization.data(withJSONObject: fields, options: [.sortedKeys]) else { return }
+            if !FileManager.default.fileExists(atPath: log.path) { FileManager.default.createFile(atPath: log.path, contents: nil) }
+            guard let handle = try? FileHandle(forWritingTo: log) else { return }
+            defer { try? handle.close() }
+            _ = try? handle.seekToEnd()
+            try? handle.write(contentsOf: data + Data([10]))
+        }
         Task { await run(application, root: configuration.dataRoot) }
     }
 

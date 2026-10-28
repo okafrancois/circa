@@ -264,6 +264,11 @@ public final class ChromiumRuntime {
     }
 
     private func receive(_ event: ChromiumEvent) {
+        if event.kind == ACR_EVENT_DOWNLOAD {
+            trace?("download", ["id": String(event.downloadID), "request": String(event.requestID),
+                                "status": String(event.downloadStatus.rawValue), "reason": String(event.interruptReason),
+                                "bytes": String(event.receivedBytes)])
+        }
         switch event.kind {
         case ACR_EVENT_READY:
             isReady = true

@@ -41,7 +41,7 @@ public struct BrowserDownloadContext: Equatable, Sendable {
     }
 }
 
-public enum BrowserDownloadState: String, Equatable, Sendable {
+public enum BrowserDownloadState: String, Codable, Equatable, Sendable {
     case awaitingDestination
     case running
     case paused
@@ -61,7 +61,7 @@ public enum BrowserDownloadState: String, Equatable, Sendable {
     }
 }
 
-public enum BrowserDownloadAction: String, Equatable, Sendable {
+public enum BrowserDownloadAction: String, Codable, Equatable, Sendable {
     case cancel
     case pause
     case resume
@@ -87,14 +87,14 @@ public struct BrowserDownloadCapabilities: OptionSet, Equatable, Sendable {
 }
 
 /// Missing or moved output is independent of whether the engine completed the transfer.
-public enum BrowserDownloadFileAvailability: String, Equatable, Sendable {
+public enum BrowserDownloadFileAvailability: String, Codable, Equatable, Sendable {
     case unknown
     case available
     case missing
 }
 
 /// Deliberately contains no engine message, URL, path, suggested filename, or resume data.
-public enum BrowserDownloadFailure: String, Error, Equatable, Sendable {
+public enum BrowserDownloadFailure: String, Codable, Error, Equatable, Sendable {
     case network
     case destinationUnavailable
     case permissionDenied
@@ -102,7 +102,7 @@ public enum BrowserDownloadFailure: String, Error, Equatable, Sendable {
 }
 
 /// Rejections are technical categories safe to display in default diagnostic logs.
-public enum BrowserDownloadError: String, Error, Equatable, Sendable {
+public enum BrowserDownloadError: String, Codable, Error, Equatable, Sendable {
     case coordinatorStopped
     case duplicateID
     case duplicateTransfer

@@ -17,12 +17,26 @@ final class BrowserDownloadsController {
     private var transfers: [UUID: any BrowserEngineDownloadTransfer] = [:]
     private var pickers: [UUID: DownloadDestinationPicker] = [:]
 
-    init() { coordinator.onChange = { [weak self] in self?.publish() } }
+    private var history: BrowserDownloadHistoryStore?
+    var onHistoryError: ((any Error) -> Void)?
+
+    init(history: BrowserDownloadHistoryStore? = nil) {
+        self.history = history
+        if let history {
+            profiles = Set(history.records.map(\.profileID))
+            try? coordinator.restore(history.records)
+        }
+        coordinator.onChange = { [weak self] in self?.publish() }
+    }
 
     func observe(_ id: UUID, _ callback: @escaping () -> Void) { observers[id] = callback }
     func stopObserving(_ id: UUID) { observers.removeValue(forKey: id) }
 
     private func publish() {
+        if let history {
+            let records = coordinator.allSnapshots.filter { $0.state.isTerminal }.map(BrowserDownloadHistoryRecord.init)
+            do { try history.save(records) } catch { onHistoryError?(error) }
+        }
         for callback in Array(observers.values) { callback() }
     }
 
@@ -88,6 +102,10 @@ final class BrowserDownloadsController {
 
     func snapshots(profileID: ProfileID) -> [BrowserDownloadSnapshot] {
         profiles.insert(profileID)
+        for item in coordinator.snapshots(profileID: profileID) where item.state == .complete {
+            let availability: BrowserDownloadFileAvailability = item.destinationURL.flatMap(BrowserDownloadPaths.regularFileSize) == nil ? .missing : .available
+            if item.fileAvailability != availability { try? coordinator.setFileAvailability(availability, in: item.context) }
+        }
         return coordinator.snapshots(profileID: profileID)
     }
 
