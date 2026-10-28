@@ -117,6 +117,8 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
         /// belong to the target itself, and the target is promoted then (never on a response).
         var hasCommitted = false
     }
+    var onMoveSpaceToProfile: ((SpaceID, ProfileID, ProfileID) async throws -> Void)?
+    var onCreateSpaceProfile: ((String) async throws -> ProfileID)?
     var onDeleteSpace: ((SpaceID, ProfileID) async throws -> Void)?
     var nativeCreations: [ObjectIdentifier: NativeCreation] = [:]
     var pendingNativeClosures: Set<ObjectIdentifier> = []

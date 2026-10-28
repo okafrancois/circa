@@ -245,6 +245,13 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
                 self?.onQuickWindowDestinationChange?()
             }
         )
+        controller.onMoveSpaceToProfile = { [weak self] id, target, source in
+            try await self?.moveSpaceToProfile(id, to: target, expectedProfileID: source)
+        }
+        controller.onCreateSpaceProfile = { [weak self] name in
+            guard let self, !isFinalizing, !settingsRemovalIsRunning else { throw CancellationError() }
+            return try await store.createSettingsProfile(name: name)
+        }
         controller.onDeleteSpace = { [weak self] id, profile in try await self?.removeSpaceFromSettings(id, expectedProfileID: profile) }
         controller.themeEditors = themeEditors
         controller.settingsPreferences = BrowserWindowSettings(runtime: settings)

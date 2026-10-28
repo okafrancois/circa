@@ -23,6 +23,11 @@ final class OrbitCommandSystem {
 
 extension OrbitApplication {
     func installMenus() {
+        commands.menus.profileMenuProvider = { [weak self] in
+            guard let controller = self?.activeBrowserWindow,
+                  let id = controller.session.snapshot?.activeSpaceID else { return nil }
+            return controller.makeSpaceProfileMenu(for: id)
+        }
         let bar = commands.menus.makeMenuBar()
         NSApp.mainMenu = bar
         NSApp.windowsMenu = bar.items.first { $0.title == uiText("Window") }?.submenu

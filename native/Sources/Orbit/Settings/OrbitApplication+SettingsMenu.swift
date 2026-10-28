@@ -10,9 +10,7 @@ extension OrbitApplication {
             self?.showSettings(section: .profiles)
             self?.settingsWindow?.model.focusNewProfile = true
         }
-        try! registry.register(.changeProfile) { [weak self] controller, _ in
-            self?.showSettings(section: .spaces, profileID: controller.session.activeProfileID)
-        }
+        try! registry.register(.changeProfile) { controller, _ in controller.presentSpaceProfileMenu() }
         try! registry.registerApplication(.manageSpaces) { [weak self] in
             guard let self else { return }
             showSettings(section: .spaces, profileID: activeBrowserWindow?.session.activeProfileID)

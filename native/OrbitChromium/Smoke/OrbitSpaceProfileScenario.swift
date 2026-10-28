@@ -3,7 +3,7 @@ import BrowserCore
 import ChromiumEngine
 import Foundation
 
-/// Synthetic-only hook: exercises the internal operation through the synthetic driver.
+/// Synthetic-only probe of native menu actions and Chromium profile isolation.
 @MainActor
 enum OrbitSpaceProfileScenario {
     static func run(environment: OrbitEnvironment, window: OrbitWindowController, fixture: URL,
@@ -51,7 +51,19 @@ enum OrbitSpaceProfileScenario {
             let aCookie = try await probe.readSiteDataMarker(for: origin, through: source)
             check("source-cookie-before", aCookie == "synthetic-A" && source.profileID == a)
             let retired = window.session.ownedSurfaces.filter { $0.profileID == a }
-            try await environment.moveSpaceToProfile(space, to: b, expectedProfileID: a)
+            await environment.refreshSettingsCatalog()
+            await window.session.waitForPendingCommands()
+            guard let menu = window.makeSpaceProfileMenu(for: space),
+                  let profiles = window.session.catalog?.profiles,
+                  let targetIndex = profiles.firstIndex(where: { $0.id == b }),
+                  let currentIndex = profiles.firstIndex(where: { $0.id == a }) else { check("menu-ready", false); return }
+            check("menu-current-profile", menu.items[currentIndex].state == .on && menu.items[targetIndex].state == .off)
+            menu.presentAlert = { _, completion in completion(.alertSecondButtonReturn) }
+            menu.performActionForItem(at: targetIndex)
+            check("menu-cancel", menu.pending == nil && window.session.activeProfileID == a)
+            menu.presentAlert = { _, completion in completion(.alertFirstButtonReturn) }
+            menu.performActionForItem(at: targetIndex)
+            await menu.pending?.value
             guard await ready(window, page), let moved = window.session.selectedSurface else { check("move-ready", false); return }
             let cookie = try await probe.readSiteDataMarker(for: origin, through: moved)
             let storage = try await probe.evaluateScript("localStorage.getItem('space-profile')", in: moved)
@@ -64,7 +76,16 @@ enum OrbitSpaceProfileScenario {
                 && after.organization.spaces.first { $0.spaceID == space } == before.organization.spaces.first { $0.spaceID == space }
                 && after.tabs.filter { $0.spaceID == space }.count == before.tabs.filter { $0.spaceID == space }.count)
             // Switch back to prove the source account still exists and no data was copied/erased.
-            try await environment.moveSpaceToProfile(space, to: a, expectedProfileID: b)
+            await environment.refreshSettingsCatalog()
+            await window.session.waitForPendingCommands()
+            _ = await OrbitRelaunchScenarios.until { window.makeSpaceProfileMenu(for: space) != nil }
+            guard let back = window.makeSpaceProfileMenu(for: space),
+                  let backIndex = window.session.catalog?.profiles.firstIndex(where: { $0.id == a }) else {
+                check("return-menu-ready", false); return
+            }
+            back.presentAlert = { _, completion in completion(.alertFirstButtonReturn) }
+            back.performActionForItem(at: backIndex)
+            await back.pending?.value
             guard await ready(window, page), let returned = window.session.selectedSurface else { check("return-ready", false); return }
             let returnedCookie = try await probe.readSiteDataMarker(for: origin, through: returned)
             check("source-cookie-preserved", returnedCookie == "synthetic-A" && returned.profileID == a)

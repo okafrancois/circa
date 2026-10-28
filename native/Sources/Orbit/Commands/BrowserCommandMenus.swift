@@ -18,6 +18,7 @@ final class BrowserCommandMenus<Window: AnyObject>: NSObject, NSMenuItemValidati
 
     static var suppressedKeyEquivalents: Set<BrowserCommandID> { [.newFolder] }
 
+    var profileMenuProvider: (() -> NSMenu?)?
     let registry: BrowserCommandRegistry<Window>
     private let target: BrowserCommandTarget?
     private let keyWindowProvider: () -> NSWindow?
@@ -130,6 +131,10 @@ final class BrowserCommandMenus<Window: AnyObject>: NSObject, NSMenuItemValidati
     private func configure(_ item: NSMenuItem, command id: BrowserCommandID) {
         item.identifier = NSUserInterfaceItemIdentifier(id.rawValue)
         applyOrbitKeyEquivalentAdaptation(item)
+        if id == .changeProfile, let profileMenuProvider {
+            item.submenu = BrowserDynamicProfileMenu(provider: profileMenuProvider)
+            return
+        }
         if let selector = BrowserStandardActions.selector(for: id) {
             item.action = selector
             item.target = BrowserStandardActions.target(for: id)
