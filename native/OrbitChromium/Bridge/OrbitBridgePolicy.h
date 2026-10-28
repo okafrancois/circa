@@ -170,6 +170,18 @@ struct ArgumentFilter {
   bool refused = false;
 };
 
+// The update smoke can enable the real scheduler only behind a rejecting loopback proxy.
+// Accept a port, never caller-controlled proxy rules, hosts, URLs or networking switches.
+inline bool IsExtensionUpdateTestPort(const std::string& value) {
+  if (value.empty() || value.size() > 5 || value.front() == '0') return false;
+  unsigned port = 0;
+  for (char c : value) {
+    if (c < '0' || c > '9') return false;
+    port = port * 10 + (c - '0');
+  }
+  return port >= 1024 && port <= 65535;
+}
+
 // `extension_path_ok` validates one unpacked test extension directory (real directory, no link,
 // a manifest), and is only consulted in hermetic runs.
 template <typename PathCheck>
@@ -187,6 +199,10 @@ ArgumentFilter FilterBrowserArguments(const std::vector<std::string>& arguments,
       continue;
     }
     if (!policy_is_product) {
+      if (parsed.name == "orbit-test-extension-updates" && parsed.has_value && IsExtensionUpdateTestPort(parsed.value)) {
+        result.kept.push_back("--orbit-test-extension-updates=" + parsed.value);
+        continue;
+      }
       if (parsed.name == "use-fake-device-for-media-stream" && !parsed.has_value) {
         result.kept.push_back("--use-fake-device-for-media-stream");
         continue;
