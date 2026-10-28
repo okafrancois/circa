@@ -117,7 +117,6 @@ final class BrowserLibraryCategoryButton: NSButton {
         self.category = category
         super.init(frame: .zero)
         title = category.title
-        image = NSImage(systemSymbolName: category.symbol, accessibilityDescription: nil)
         imagePosition = .imageAbove
         imageScaling = .scaleProportionallyDown
         font = .systemFont(ofSize: 11, weight: .bold)
@@ -149,8 +148,7 @@ final class BrowserLibraryCategoryButton: NSButton {
         let foreground = ink.withAlphaComponent(state == .on ? 1 : 0.65)
         let groupTop = (bounds.height - 45) / 2
         let glyphRect = NSRect(x: (bounds.width - 28) / 2, y: isFlipped ? groupTop : bounds.height - groupTop - 28, width: 28, height: 28)
-        let glyph = image?.withSymbolConfiguration(.init(pointSize: 24, weight: .regular))
-        glyph?.withSymbolConfiguration(.init(paletteColors: [foreground]))?.draw(in: glyphRect)
+        BrowserEntryArtwork.drawLibrary(category, in: glyphRect, foreground: foreground, selected: state == .on, flipped: isFlipped)
         let paragraph = NSMutableParagraphStyle()
         paragraph.alignment = .center
         paragraph.lineBreakMode = .byWordWrapping

@@ -1,5 +1,10 @@
 import AppKit
+import BrowserCore
 import BrowserEngine
+
+enum BrowserSiteTopAction: CaseIterable {
+    case newBoost, captureRegion, captureFullPage
+}
 
 /// The same SITE coordinator serves tabs, Peek and Little Orbit. Hosts supply only ownership,
 /// document selection and an anchor; permission policy and persistence remain shared.
@@ -21,15 +26,47 @@ protocol BrowserSiteControlsHost<Engine>: AnyObject {
     func installSiteControlsButton(_ button: NSView)
     func presentSiteControls(_ panel: BrowserSitePopover, rows: [NSView], button: NSView)
     func openExtensionStore(from surface: Engine.Surface)
+    func canPerformSiteAction(_ action: BrowserSiteTopAction, on surface: Engine.Surface) -> Bool
+    func performSiteAction(_ action: BrowserSiteTopAction, on surface: Engine.Surface)
 }
 
 // Hosts without a Space sidebar (Little Orbit) have no interactive presentation to retire.
 extension BrowserSiteControlsHost {
     func prepareForSiteControlsPresentation() {}
     var allowsAutomaticPictureInPicture: Bool { true }
+    func canPerformSiteAction(_ action: BrowserSiteTopAction, on surface: Engine.Surface) -> Bool { false }
+    func performSiteAction(_ action: BrowserSiteTopAction, on surface: Engine.Surface) {}
 }
 
 extension BrowserWindowController: BrowserSiteControlsHost {
+    func canPerformSiteAction(_ action: BrowserSiteTopAction, on surface: Surface) -> Bool {
+        guard acceptsCommands, owns(surface), !surface.isDisposed, siteControlSurface === surface else { return false }
+        switch action {
+        case .newBoost:
+            guard settingsPreferences?.runtime.document.enablesBoostsOnWebsites != false,
+                  !isPrivateWindow, boostsRuntime != nil, let url = surface.navigationState.url,
+                  let parts = URLComponents(url: url, resolvingAgainstBaseURL: false),
+                  parts.user == nil, parts.password == nil, let scheme = parts.scheme,
+                  ["http", "https"].contains(scheme), let host = parts.encodedHost else { return false }
+            return (try? BrowserBoostHostPattern(host: host, schemes: [scheme == "https" ? .https : .http], port: parts.port)) != nil
+        case .captureRegion: return engine.capabilities.contains(.snapshots)
+        case .captureFullPage: return engine.capabilities.contains(.fullPageSnapshots)
+        }
+    }
+
+    func performSiteAction(_ action: BrowserSiteTopAction, on surface: Surface) {
+        guard canPerformSiteAction(action, on: surface) else { return }
+        switch action {
+        case .newBoost:
+            // Establish the panel's tab as page authority before the existing editor command.
+            surface.focusDocument()
+            guard pageCommandSurface() === surface else { return }
+            createBoost()
+        case .captureRegion: capture.begin(on: surface)
+        case .captureFullPage: capture.begin(fullPage: true, on: surface)
+        }
+    }
+
     var allowsAutomaticPictureInPicture: Bool { settingsPreferences?.runtime.document.automaticPictureInPicture ?? true }
     func openExtensionStore(from surface: Surface) {
         guard acceptsCommands, isSitePermissionTarget(surface), let context = session.paletteContext,

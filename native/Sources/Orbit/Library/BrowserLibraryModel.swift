@@ -15,14 +15,13 @@ enum BrowserLibraryCategory: Int, CaseIterable {
         }
     }
     static let railCategories: [Self] = [.media, .downloads, .spaces, .boosts, .archive]
+    /// Symbols for empty result pages. Destination buttons draw their own outline artwork.
     var symbol: String {
         switch self {
-        case .media: "photo.on.rectangle"
-        case .boosts: "paintbrush.pointed"
         case .downloads: "arrow.down.circle"
-        case .spaces: "rectangle.on.rectangle"
         case .archive: "archivebox"
         case .history: "clock"
+        default: "magnifyingglass"
         }
     }
 }
