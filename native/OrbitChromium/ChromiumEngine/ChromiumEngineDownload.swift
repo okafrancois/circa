@@ -148,7 +148,10 @@ final class ChromiumDownloadTransfer: BrowserEngineDownloadTransfer {
         }
         guard state.canTransition(to: next) || (next == state && !next.isTerminal) else { return }
         if next == .complete {
-            do { try staging?.finish(); staging = nil }
+            do {
+                if let landed = try staging?.finish() { destinationURL = landed }
+                staging = nil
+            }
             catch {
                 staging?.discard(); staging = nil
                 report(.failed, failure: .destinationUnavailable)

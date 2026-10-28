@@ -76,9 +76,11 @@ struct DownloadHistoryTests {
         let conflict = try BrowserDownloadStagingFile(destination: target)
         try Data([6]).write(to: conflict.file)
         try Data([7]).write(to: target)
-        #expect(throws: (any Error).self) { try conflict.finish() }
-        conflict.discard()
+        let landed = try conflict.finish()
+        #expect(landed.lastPathComponent == "complete (1).bin")
+        #expect(try Data(contentsOf: landed) == Data([6]))
         #expect(try Data(contentsOf: target) == Data([7]))
+        #expect(!FileManager.default.fileExists(atPath: conflict.file.deletingLastPathComponent().path))
     }
 
     @Test("Moved and deleted files revoke Open and Finder and update availability")

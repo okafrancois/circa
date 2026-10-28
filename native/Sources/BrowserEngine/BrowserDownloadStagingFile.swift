@@ -20,14 +20,35 @@ public final class BrowserDownloadStagingFile {
         file = directory.appendingPathComponent(destination.lastPathComponent)
     }
 
-    public func finish() throws {
-        guard !discarded, BrowserDownloadPaths.regularFileSize(file) != nil,
-              BrowserDownloadPaths.isValidDestination(destination) else {
+    /// Moves the finished bytes into place and returns where they landed. A file that appeared at
+    /// the destination during the transfer is never overwritten: the download takes the next free
+    /// "name (n).ext" sibling instead, so completed bytes are never thrown away.
+    @discardableResult
+    public func finish() throws -> URL {
+        guard !discarded, BrowserDownloadPaths.regularFileSize(file) != nil else {
             throw CocoaError(.fileWriteFileExists)
         }
-        // Same-volume move, without overwriting a file created while the transfer was running.
-        try FileManager.default.moveItem(at: file, to: destination)
-        discard()
+        for candidate in Self.candidates(for: destination) where BrowserDownloadPaths.isValidDestination(candidate) {
+            do {
+                // Same-volume move; fails rather than replacing a file created in the meantime.
+                try FileManager.default.moveItem(at: file, to: candidate)
+                discard()
+                return candidate
+            } catch CocoaError.fileWriteFileExists {
+                continue
+            }
+        }
+        throw CocoaError(.fileWriteFileExists)
+    }
+
+    static func candidates(for destination: URL) -> [URL] {
+        let directory = destination.deletingLastPathComponent()
+        let ext = destination.pathExtension
+        let base = ext.isEmpty ? destination.lastPathComponent : destination.deletingPathExtension().lastPathComponent
+        return [destination] + (1...999).map { index in
+            let name = "\(base) (\(index))"
+            return directory.appendingPathComponent(ext.isEmpty ? name : name + "." + ext)
+        }
     }
 
     public func discard() {
