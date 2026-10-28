@@ -213,6 +213,9 @@ public struct BrowserArchivedTab: Codable, Equatable, Sendable, Identifiable {
     public let origin: Origin
     public let reason: Reason
     public let archivedAt: Date
+    /// Optional for existing sessions. Explicitly retains a historical origin after its Space
+    /// changes profile, without accepting an unmarked cross-profile archive reference.
+    public internal(set) var spaceProfileWasChanged: Bool? = nil
 
     public init(tab: BrowserOrganizedTab, profileID: ProfileID, spaceID: SpaceID,
                 origin: Origin, reason: Reason, archivedAt: Date) {

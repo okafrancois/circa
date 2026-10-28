@@ -432,6 +432,8 @@ def run_phase(phase, run, data, origin, args, tls_origin=None):
         command.append("--orbit-smoke-private-domain")
     if getattr(args, "profiles_only", False):
         command.append("--orbit-smoke-profiles")
+    if getattr(args, "space_profile_only", False):
+        command.append("--orbit-smoke-space-profile")
     command.append("--orbit-smoke-extension-timeout=" + str(getattr(args, "extension_timeout", 25)))
     if phase == "restore-after-crash":
         command.append("--orbit-smoke-expect-crash-tab")
@@ -619,9 +621,16 @@ def main():
                         help="Hidden mock-only private domain coexistence/release probe on approved EssentialsR2")
     runner.add_argument("--profiles-only", action="store_true",
                         help="Two persistent product profiles across normal and crash relaunches, without extensions")
+    runner.add_argument("--space-profile-only", action="store_true",
+                        help="Synthetic Space profile move hook and real Chromium cookie isolation, without UI")
     runner.add_argument("--extension-timeout", type=int, default=25,
                         help="Bounded wait for an extension report (25..180 seconds; does not alter probe deadlines)")
     args = parser.parse_args()
+    if args.command == "smoke" and args.space_profile_only:
+        if args.extension_only or args.private_domain_only or args.profiles_only:
+            parser.error("--space-profile-only excludes other focused probes")
+        args.no_extension = True
+        args.fresh_only = True
     if args.command == "smoke" and args.profiles_only:
         if args.extension_only or args.private_domain_only:
             parser.error("--profiles-only excludes extension and private-domain probes")

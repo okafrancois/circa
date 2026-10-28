@@ -636,10 +636,11 @@ struct BrowserOrganizationState: Sendable {
             guard archived.insert(record.id).inserted, tabs[record.id] == nil else {
                 throw BrowserSessionError.duplicateIdentity
             }
-            // A deleted Space remains a historical archive origin; restoration uses a surviving
-            // Space of this profile. An existing Space must still match the archived profile.
+            // Origins are historical: a Space may have been deleted or moved to another profile.
+            // Restoration checks current ownership and falls back within the archive's profile.
             guard profiles.contains(record.profileID),
-                  spaces[record.spaceID] == nil || spaces[record.spaceID] == record.profileID else {
+                  spaces[record.spaceID] == nil || spaces[record.spaceID] == record.profileID
+                    || record.spaceProfileWasChanged == true else {
                 throw BrowserSessionError.organizationInvalidArchive
             }
             try Self.validateTab(record.tab)

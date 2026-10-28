@@ -300,7 +300,8 @@ final class OrbitSmokeDriver: OrbitLaunchHooks {
         }
         if phase == .fresh && !arguments.contains("--orbit-smoke-extension-only")
             && !arguments.contains("--orbit-smoke-relaunch") && !arguments.contains("--orbit-smoke-private-domain")
-            && !arguments.contains("--orbit-smoke-profiles") && !arguments.contains("--orbit-smoke-site-data") {
+            && !arguments.contains("--orbit-smoke-profiles") && !arguments.contains("--orbit-smoke-site-data")
+            && !arguments.contains("--orbit-smoke-space-profile") {
             if arguments.contains("--orbit-smoke-isolated-application") {
                 // Supplemental lane only: the original conformance result remains separate.
                 // No application assertion below is omitted or relaxed.
@@ -358,6 +359,11 @@ final class OrbitSmokeDriver: OrbitLaunchHooks {
         }
         if arguments.contains("--orbit-smoke-site-data") {
             await OrbitSiteDataScenarios.run(environment: environment, window: first, fixture: fixture, record: record)
+            finish(aborted: false)
+            return
+        }
+        if arguments.contains("--orbit-smoke-space-profile") {
+            await OrbitSpaceProfileScenario.run(environment: environment, window: first, fixture: fixture, record: record)
             finish(aborted: false)
             return
         }
