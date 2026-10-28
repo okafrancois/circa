@@ -48,6 +48,25 @@ extension NativeWebKitTests {
 @Suite
 @MainActor
 struct SidebarListModelTests {
+    @Test("Viewport row lookup includes boundaries across sections, gaps and empty ranges")
+    func viewportRowLookup() {
+        let org = SyntheticOrganization()
+        let content = SidebarListContent(snapshot: org.snapshot(
+            pinned: (0..<40).map { _ in org.tab(pinned: true) },
+            today: (0..<160).map { _ in org.tab() }))
+        let layout = SidebarListLayout.resolve(entries: content.entries, spaceTitleCenterY: 28, width: 228)
+        for minimum in stride(from: CGFloat(-100), through: layout.documentHeight + 100, by: 37) {
+            for height in [CGFloat(0), 1, 200, 800] {
+                let expected = layout.rows.filter { $0.centerY >= minimum && $0.centerY <= minimum + height }
+                #expect(Array(layout.rows(from: minimum, through: minimum + height)) == expected)
+            }
+        }
+        for row in layout.rows {
+            #expect(Array(layout.rows(from: row.centerY, through: row.centerY)) == [row])
+        }
+        #expect(SidebarListLayout().rows(from: 0, through: 100).isEmpty)
+    }
+
     @Test("The actual separator follows empty, Pinned-only, Today-only and combined content updates")
     func separatorVisibilityAcrossContentUpdates() {
         let org = SyntheticOrganization()

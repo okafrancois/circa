@@ -223,6 +223,23 @@ struct SidebarListLayout: Equatable {
 
     func rows(in section: SidebarListSection) -> [Placement] { rows.filter { $0.section == section } }
 
+    /// Resolved row centers are ordered; steady scrolling only visits the viewport band.
+    func rows(from minimum: CGFloat, through maximum: CGFloat) -> ArraySlice<Placement> {
+        var low = 0
+        var high = rows.count
+        while low < high {
+            let middle = low + (high - low) / 2
+            if rows[middle].centerY < minimum { low = middle + 1 } else { high = middle }
+        }
+        let start = low
+        high = rows.count
+        while low < high {
+            let middle = low + (high - low) / 2
+            if rows[middle].centerY <= maximum { low = middle + 1 } else { high = middle }
+        }
+        return rows[start..<low]
+    }
+
     static func resolve(entries: [SidebarListEntry], spaceTitleCenterY title: CGFloat, width: CGFloat,
                         hidden: Set<BrowserOrganizationNode> = [], gap: SidebarDropGap? = nil) -> SidebarListLayout {
         var layout = SidebarListLayout()
