@@ -11,6 +11,11 @@ final class BrowserExtensionsController<Engine: BrowserEngine> {
     private var toolbarProfile: ProfileID?
     private var registryRetry: Task<Void, Never>?
     private var pinnedButtons: [NSButton] = []
+    private var buttonsByProfile: [ProfileID: [NSButton]] = [:]
+    private var previewProfile: ProfileID?
+    /// Optional metadata injection for the confined Chromium presentation probe. Production
+    /// always reads the engine registry; fixture buttons never dispatch engine actions.
+    var presentationInventory: ((ProfileID) -> [BrowserExtensionSummary])?
     private var pinOrder: [ProfileID: [String]] = [:]
     private weak var selectedSurface: Engine.Surface?
     private var generation: UInt64?
@@ -30,36 +35,49 @@ final class BrowserExtensionsController<Engine: BrowserEngine> {
     func render() {
         guard let owner else { return }
         let surface = owner.session.selectedSurface
+        if let previewProfile, previewProfile != owner.session.activeProfileID { return }
+        let profile = surface?.profileID ?? owner.session.activeProfileID
+        let liveProfiles = Set(owner.session.catalog?.profiles.map(\.id) ?? [])
+        buttonsByProfile = buttonsByProfile.filter { liveProfiles.contains($0.key) }
         if selectedSurface !== surface || generation != surface?.documentGeneration || !owner.acceptsCommands {
             selectionEpoch &+= 1
             selectedSurface = surface
             generation = surface?.documentGeneration
         }
         owner.sidebar.extensionsContainer.isAvailable = owner.engine.extensionManagement != nil && !owner.isPrivateWindow
-        if toolbarProfile != surface?.profileID {
+        if toolbarProfile != profile {
             registryRetry?.cancel()
             registryRetry = nil
             toolbarObservation?.cancel()
             toolbarObservation = nil
-            toolbarProfile = surface?.profileID
-            owner.sidebar.extensionsContainer.setPinnedButtons([])
-            pinnedButtons = []
+            toolbarProfile = profile
         }
         // Chromium creates the profile asynchronously. A refused startup subscription must
         // be retried once navigation makes the registry ready, even in the same profile.
         if toolbarObservation == nil, owner.acceptsCommands,
-           let surface, let host = owner.engine.extensions, host.supportsPinning {
-            let profile = surface.profileID
+           let profile, let host = owner.engine.extensions, host.supportsPinning {
             let observation = try? host.observeChanges(in: profile) { [weak self] in
                 guard self?.toolbarProfile == profile else { return }
                 self?.renderPinnedIcons()
             }
-            if toolbarProfile == profile, owner.session.selectedSurface?.profileID == profile {
+            if toolbarProfile == profile, owner.session.activeProfileID == profile {
                 toolbarObservation = observation
                 if observation == nil { retryRegistry(in: profile) }
             } else { observation?.cancel() }
         }
         renderPinnedIcons()
+    }
+
+    /// Metadata is synchronous and profile scoped; prepare the destination's known icons before
+    /// deferred CEF activation. A source registry callback cannot overwrite this presentation.
+    func preview(in profile: ProfileID) {
+        previewProfile = profile
+        renderPinnedIcons()
+    }
+
+    func finishPreview() {
+        previewProfile = nil
+        render()
     }
 
     private func retryRegistry(in profile: ProfileID) {
@@ -71,7 +89,7 @@ final class BrowserExtensionsController<Engine: BrowserEngine> {
                 guard !Task.isCancelled else { return }
                 guard let self else { return }
                 guard let owner, owner.acceptsCommands, toolbarProfile == profile,
-                      owner.session.selectedSurface?.profileID == profile else { registryRetry = nil; return }
+                      owner.session.activeProfileID == profile else { registryRetry = nil; return }
                 render()
                 guard !Task.isCancelled else { return }
                 if toolbarObservation != nil {
@@ -93,16 +111,24 @@ final class BrowserExtensionsController<Engine: BrowserEngine> {
     private func renderPinnedIcons() {
         guard let owner else { return }
         let surface = owner.session.selectedSurface
+        let profile = previewProfile ?? surface?.profileID ?? owner.session.activeProfileID
         let items: [BrowserExtensionSummary]
-        if let surface, let host = owner.engine.extensions, host.supportsPinning {
-            do { items = try host.installedExtensions(in: surface.profileID) }
-            catch { return } // A pending registry does not erase an already displayed snapshot.
+        if let profile, let presentationInventory { items = presentationInventory(profile) }
+        else if let profile, let host = owner.engine.extensions, host.supportsPinning {
+            do { items = try host.installedExtensions(in: profile) }
+            catch {
+                // Never show another profile's icons while this registry is starting. Previously
+                // decoded destination pixels remain usable without a clear/recreate frame.
+                pinnedButtons = buttonsByProfile[profile] ?? []
+                owner.sidebar.extensionsContainer.setPinnedButtons(pinnedButtons)
+                return
+            }
         } else {
             items = []
         }
         let availablePins = items.filter { $0.isEnabled && $0.hasAction && $0.isPinned == true }
         let pinned: [BrowserExtensionSummary]
-        if let profile = surface?.profileID {
+        if let profile {
             let ids = Set(availablePins.map(\.id))
             let runtime = owner.settingsPreferences?.runtime
             let saved = runtime?.extensionPinOrder(for: profile) ?? pinOrder[profile] ?? []
@@ -119,7 +145,7 @@ final class BrowserExtensionsController<Engine: BrowserEngine> {
         } else { pinned = [] }
         owner.developerToolbar.updateExtensions(pinned)
         var existing: [String: NSButton] = [:]
-        for view in pinnedButtons {
+        for view in profile.flatMap({ buttonsByProfile[$0] }) ?? [] {
             existing[view.accessibilityIdentifier()] = view
         }
         let identifiers = Set(pinned.map { "pinned-extension-" + $0.id })
@@ -135,9 +161,9 @@ final class BrowserExtensionsController<Engine: BrowserEngine> {
                 action = current
             } else {
                 let created = SiteControlButton("", identifier: identifier) { [weak self] in
-                    guard let self, let owner = self.owner, owner.acceptsCommands,
-                          let surface = owner.session.selectedSurface,
-                          let anchor = self.pinnedButtons.first(where: {
+                    guard let self, self.presentationInventory == nil, let owner = self.owner, owner.acceptsCommands,
+                          let surface = owner.session.selectedSurface, surface.profileID == profile,
+                          self.previewProfile == nil, let anchor = self.pinnedButtons.first(where: {
                               $0.accessibilityIdentifier() == identifier
                           }) else { return }
                     do { try owner.engine.extensions?.performAction(extensionID: item.id, on: surface, anchor: anchor) }
@@ -153,6 +179,8 @@ final class BrowserExtensionsController<Engine: BrowserEngine> {
             else if action.image == nil {
                 action.image = NSImage(systemSymbolName: "puzzlepiece.extension", accessibilityDescription: item.name)
             }
+            // Pending selection blocks actions without washing out already decoded pixels.
+            (action.cell as? NSButtonCell)?.imageDimsWhenDisabled = false
             action.toolTip = item.name
             action.setAccessibilityLabel(item.name)
             if let action = action as? SiteControlButton {
@@ -163,7 +191,8 @@ final class BrowserExtensionsController<Engine: BrowserEngine> {
             }
             return action
         }
-        for view in pinnedButtons { view.isEnabled = surface != nil && owner.acceptsCommands }
+        if let profile { buttonsByProfile[profile] = pinnedButtons }
+        for view in pinnedButtons { view.isEnabled = surface?.profileID == profile && surface != nil && previewProfile == nil && owner.acceptsCommands }
         owner.sidebar.extensionsContainer.setPinnedButtons(pinnedButtons)
         owner.sidebar.addressContainer.needsLayout = true
         if let surface { owner.engine.extensions?.setActionAnchor(owner.siteControls.actionAnchor, on: surface) }
@@ -175,6 +204,9 @@ final class BrowserExtensionsController<Engine: BrowserEngine> {
         toolbarObservation?.cancel()
         toolbarObservation = nil
         toolbarProfile = nil
+        buttonsByProfile.removeAll()
+        previewProfile = nil
+        presentationInventory = nil
     }
 
     private func contextMenu(for item: BrowserExtensionSummary, surface: Engine.Surface) -> NSMenu? {

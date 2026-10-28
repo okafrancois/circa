@@ -1,5 +1,6 @@
 import AppKit
 import BrowserCore
+import BrowserEngine
 import ChromiumEngine
 import Darwin
 
@@ -72,7 +73,30 @@ enum OrbitPerformanceProbe {
                let command = try? JSONSerialization.jsonObject(with: data) as? [String: String] {
                 try? FileManager.default.removeItem(at: commandFile)
                 let name = command["command"] ?? ""
-                if name == "load-all" {
+                if name == "url-pill-fixture" {
+                    let document = await environment.store.sessionDocument()
+                    if let index = Int(command["statusSpace"] ?? ""), document.spaces.indices.contains(index) {
+                        let target = document.spaces[index].id, message = command["status"]
+                        owner.addressField.statusForSpace = { $0 == target ? message : nil }
+                    }
+                    // Hermetic runs intentionally disable installed extensions. This explicit
+                    // metadata fixture exercises the native presentation on real Chromium pages.
+                    let icons = (1...2).compactMap { index in
+                        try? Data(contentsOf: root.appendingPathComponent("extension-\(index)/icon.png"))
+                    }
+                    let second = document.profiles.dropFirst().first?.id
+                    owner.extensionControls.presentationInventory = { profile in
+                        icons.prefix(profile == second ? 2 : 1).enumerated().map { n, data in
+                            BrowserExtensionSummary(id: String(repeating: n == 0 ? "a" : "b", count: 32),
+                                name: "Synthetic \(n + 1)", version: "1", isEnabled: true, hasAction: true,
+                                isPinned: true, iconPNGBase64: data.base64EncodedString())
+                        }
+                    }
+                    owner.extensionControls.render()
+                    owner.sidebar.addressContainer.holdsAccessoriesVisible = true
+                    result["pillFixtureReady"] = true
+                    result["pillPinCount"] = owner.sidebar.extensionsContainer.visiblePinCount
+                } else if name == "load-all" {
                     let document = await environment.store.sessionDocument()
                     var verified = 0
                     var pausedVideos = 0

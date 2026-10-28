@@ -1026,6 +1026,8 @@ final class SidebarAddressField: SidebarFlippedView {
     }
     var isEditing = false { didSet { if isEditing != oldValue { refresh() } } }
     private var isHovering = false { didSet { if isHovering != oldValue { refresh() } } }
+    private var hasPage = true
+    private var selectionWidth: CGFloat?
     private var hoverArea: NSTrackingArea?
 
     override init(frame frameRect: NSRect) {
@@ -1049,10 +1051,43 @@ final class SidebarAddressField: SidebarFlippedView {
     /// Places the address text field; it takes the remaining width.
     func installField(_ field: NSView) {
         self.field = field as? NSTextField
+        if let address = field as? OrbitLocationField {
+            hasPage = !address.stringValue.isEmpty
+            address.onAddressChange = { [weak self] hasPage in
+                guard let self, self.hasPage != hasPage else { return }
+                self.hasPage = hasPage
+                self.refresh()
+            }
+        }
         field.setContentHuggingPriority(.defaultLow, for: .horizontal)
         field.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         controls.insertArrangedSubview(field, at: 0)
         refreshAccent()
+    }
+
+    /// Capture the whole accessory container, including native popup anchors. In the
+    /// 28 Oct F119–125 / F185–191, contraction keeps the new contents at the old leading
+    /// edge, then moves them right. Expansion installs its complete layout immediately.
+    func beginSelectionUpdate() {
+        guard selectionWidth == nil else { return }
+        layoutSubtreeIfNeeded()
+        selectionWidth = accessoryWidth
+    }
+
+    func endSelectionUpdate(animated: Bool = true) {
+        guard let previous = selectionWidth else { return }
+        selectionWidth = nil
+        refresh()
+        layoutSubtreeIfNeeded()
+        let contraction = previous - accessoryWidth
+        for accessory in accessories where !accessory.isHidden {
+            if animated { AddressStatusMotion.translate(accessory, from: -max(0, contraction)) }
+            else { accessory.layer?.removeAnimation(forKey: "address-reflow") }
+        }
+    }
+
+    private var accessoryWidth: CGFloat {
+        accessories.filter { !$0.isHidden }.reduce(0) { $0 + $1.fittingSize.width }
     }
 
     /// Trailing icons use neutral secondary grey; AppKit retains disabled-state rendering.
@@ -1133,7 +1168,7 @@ final class SidebarAddressField: SidebarFlippedView {
             // a menu or an extension popup. Editing alone reclaims their layout width.
             view.alphaValue = revealed ? 1 : 0
             view.setAccessibilityHidden(!revealed)
-            view.isHidden = isEditing || (view === extensions && !extensions.isAvailable)
+            view.isHidden = isEditing || (view === extensions ? !extensions.isAvailable : !hasPage)
         }
         if isEditing {
             background.fillColor = OrbitTokens.Color.State.tabCurrent
