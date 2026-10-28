@@ -9,7 +9,7 @@ Orbit is a native macOS browser: Swift/AppKit shell (`native/Sources/Orbit`) on 
 - Code, comments, test descriptions, commit messages and docs are in English. User-facing strings go through `uiText` and stay localizable.
 
 ## Building and testing
-- Targeted tests: `swift test --package-path native --scratch-path <path owned by your worktree> --filter <Suite>`.
+- Targeted tests: `swift test --package-path native --scratch-path <path owned by your worktree> --filter <Suite>`. Always add `LocalizationTests` to the filter: it checks every new user-facing string and literal.
 - Full suite: always behind the shared lock, `/usr/bin/lockf -k /tmp/arcy-native-full-suite.lock swift test --package-path native --scratch-path <path> --jobs 6`. A timeout in an unrelated test is rerun in isolation before blaming the lot.
 - Product: `CMAKE_BUILD_PARALLEL_LEVEL=4 python3 scripts/orbit-chromium-app.py build`. The prebuilt engine lives in `.tools/chromium-fork/distrib/` (not in Git); do not rebuild it unless the brief says so.
 - Synthetic bundle for GUI checks: `python3 scripts/orbit-app.py build --synthetic`. It must never start outside its synthetic data root.
