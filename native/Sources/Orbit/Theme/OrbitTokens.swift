@@ -47,6 +47,8 @@ extension OrbitTokens {
             public static let tertiary = NSColor.orbitDynamic("Text.tertiary", light: .orbitSRGB(0x000000, 0.30), dark: .orbitSRGB(0xFFFFFF, 0.30))
             ///  — address text, enabled toolbar/footer glyphs.
             public static let baseSecondary = NSColor.orbitDynamic("Text.baseSecondary", light: .orbitSRGB(0x000000, 0.70), dark: .orbitSRGB(0xFFFFFF, 0.70))
+            public static let splitToolbar = NSColor.orbitDynamic("Text.splitToolbar", light: baseSecondary, dark: .orbitSRGB(0xFFFFFF, 0.65))
+            public static let splitToolbarEmphasized = NSColor.orbitDynamic("Text.splitToolbarEmphasized", light: baseSecondary, dark: .orbitSRGB(0x000000, 0.55))
             public static let sidebar = NSColor.orbitDynamic("Text.sidebar", light: .orbitSRGB(0x000000, 0.30), dark: .orbitSRGB(0xFFFFFF, 0.45))
             public static let sidebarLabel = NSColor.orbitDynamic("Text.sidebarLabel", light: .orbitSRGB(0x000000, 0.50), dark: .orbitSRGB(0xFFFFFF, 0.50))
             ///  +  — "New Tab" label and "+" glyph,
@@ -77,6 +79,8 @@ extension OrbitTokens {
             public static let popover = NSColor.orbitDynamic("Surface.popover", light: .orbitSRGB(0xFAFBFF), dark: .orbitSRGB(0x151C30))
             public static let commandBar = NSColor.orbitDynamic("Surface.commandBar", light: .orbitSRGB(0xF9F9F9), dark: .orbitSRGB(0x313131))
             public static let preview = NSColor.orbitDynamic("Surface.preview", light: .orbitSRGB(0xFFFFFF), dark: .orbitSRGB(0x212222))
+            public static let splitToolbar = NSColor.orbitDynamic("Surface.splitToolbar", light: preview, dark: NSColor(white: 0.31, alpha: 1))
+            public static let splitToolbarEmphasized = NSColor.orbitDynamic("Surface.splitToolbarEmphasized", light: preview, dark: .orbitSRGB(0xFFFFFF))
             ///  — Little Orbit input.
             public static let secondaryWindowInput = NSColor.orbitDynamic("Surface.secondaryWindowInput", light: .orbitSRGB(0xFAFBFF), dark: .orbitSRGB(0x0E0F10))
             public static let menu = NSColor.orbitDynamic("Surface.menu", light: .orbitSRGB(0xFAFBFF), dark: .orbitSRGB(0x393841))
@@ -295,6 +299,11 @@ extension OrbitTokens {
         var contrastTheme: SpaceTheme? = nil
 
         public var sidebarSecondaryText: NSColor { icon }
+
+        /// Light panes retain the Space accent; dark panes use a blue focus outline.
+        public var splitFocusBorder: NSColor {
+            .orbitDynamic("Accent.splitFocusBorder", light: strong, dark: .orbitSRGB(0x2932FE))
+        }
 
         public static let defaultPurple = ThemeAccent(
             strong: .orbitSRGB(0x643EBC), icon: .orbitSRGB(0x503394), iconFill: .orbitSRGB(0xFAF7FE),

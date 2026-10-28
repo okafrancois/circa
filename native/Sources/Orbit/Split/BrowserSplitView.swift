@@ -372,7 +372,7 @@ final class BrowserSplitPaneView: NSView {
         clip.wantsLayer = true
         clip.layer?.masksToBounds = true
         clip.layer?.cornerRadius = BrowserSplitTokens.radius
-        clip.layer?.backgroundColor = OrbitTokens.Color.Surface.preview.resolvedCGColor(for: effectiveAppearance)
+        clip.layer?.backgroundColor = OrbitTokens.Color.Surface.splitToolbar.resolvedCGColor(for: effectiveAppearance)
         addSubview(clip)
         clip.addSubview(page)
         address.font = NSFont.systemFont(ofSize: 14, weight: .semibold)
@@ -502,14 +502,14 @@ final class BrowserSplitPaneView: NSView {
     private func refreshAppearance() {
         CATransaction.begin(); CATransaction.setDisableActions(true)
         let emphasized = isActive && window?.isKeyWindow == true
-        clip.layer?.backgroundColor = isBlank ? NSColor.clear.cgColor
-            : (emphasized ? NSColor.white : NSColor(white: 0.31, alpha: 1)).cgColor
-        let foreground = emphasized ? NSColor.black.withAlphaComponent(0.55) : NSColor.white.withAlphaComponent(0.65)
+        let background = emphasized ? OrbitTokens.Color.Surface.splitToolbarEmphasized : OrbitTokens.Color.Surface.splitToolbar
+        clip.layer?.backgroundColor = (isBlank ? NSColor.clear : background).resolvedCGColor(for: effectiveAppearance)
+        let foreground = emphasized ? OrbitTokens.Color.Text.splitToolbarEmphasized : OrbitTokens.Color.Text.splitToolbar
         for button in [back, forward, reload, siteControls, splitToggle, close, address] {
             button.contentTintColor = foreground
         }
         line.layer?.backgroundColor = OrbitTokens.Color.Line.floatingScrimBorder.resolvedCGColor(for: effectiveAppearance)
-        focusBorder.borderColor = NSColor(srgbRed: 41/255, green: 50/255, blue: 254/255, alpha: 1).cgColor
+        focusBorder.borderColor = accent.splitFocusBorder.resolvedCGColor(for: effectiveAppearance)
         if let layer {
             let shadow = isActive ? OrbitTokens.Shadow.splitActiveHalo : OrbitTokens.Shadow.contentCard
             shadow.apply(to: layer, isFlipped: isFlipped, appearance: effectiveAppearance)

@@ -71,7 +71,10 @@ struct NativeQuickWindowTests {
         defer { environment.retireQuickWindows(); main.window?.close() }
         let empty = try await environment.makeQuickWindow()
         empty.focusInitialContent()
-        #expect(empty.window?.firstResponder === empty.addressField.currentEditor())
+        let input = try #require(empty.compactInput)
+        #expect(input.window.firstResponder === input.input.currentEditor())
+        #expect(input.input.currentEditor() is NSTextView)
+        input.hide()
         let loaded = try await environment.makeQuickWindow(url: URL(string: "https://little.test/focus")!)
         let surface = try #require(loaded.surface)
         loaded.focusInitialContent()

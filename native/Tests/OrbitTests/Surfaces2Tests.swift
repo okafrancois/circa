@@ -53,7 +53,14 @@ struct Surfaces2Tests {
         little.copyAddressButton.performClick(nil)
         #expect(copied == url)
         little.focusAddress()
-        #expect(little.addressField.currentEditor()?.string == url.absoluteString)
+        let input = try #require(little.compactInput)
+        // Keep the application hidden while exercising the panel's real field editor.
+        #expect(input.window.makeFirstResponder(input.input))
+        input.input.selectText(nil)
+        let editor = try #require(input.input.currentEditor() as? NSTextView)
+        #expect(editor.string == url.absoluteString)
+        #expect(editor.selectedRange() == NSRange(location: 0, length: url.absoluteString.utf16.count))
+        #expect(little.isEditingAddress)
     }
 
     @Test("Split header actions target their own document and preserve the other pane")
