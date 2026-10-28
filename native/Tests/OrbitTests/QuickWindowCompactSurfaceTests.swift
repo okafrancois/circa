@@ -7,6 +7,35 @@ extension NativeWebKitTests {
 @Suite("Little Orbit compact surfaces", .serialized)
 @MainActor
 struct QuickWindowCompactSurfaceTests {
+    @Test("Little Orbit keeps dark chrome and input over light and automatic source Spaces",
+          arguments: [OrbitTokens.SpaceTheme.Mode.light, .automatic, .dark])
+    func fixedDarkAppearance(mode: OrbitTokens.SpaceTheme.Mode) async throws {
+        NSApplication.shared.setActivationPolicy(.prohibited)
+        let applicationAppearance = NSApp.appearance
+        NSApp.appearance = NSAppearance(named: .aqua)
+        defer { NSApp.appearance = applicationAppearance }
+        let environment = BrowserEnvironment(engine: PeekSyntheticEngine())
+        let little = try await environment.makeQuickWindow()
+        defer { environment.retireQuickWindows() }
+        var theme = OrbitTokens.SpaceTheme.default
+        theme.mode = mode
+        little.applyPreferences(searchEngine: .google, theme: theme)
+        let window = try #require(little.window)
+        #expect(OrbitAppearance.isDark(window.effectiveAppearance))
+        #expect(OrbitAppearance.isDark(little.toolbar.fill.effectiveAppearance))
+        #expect(little.toolbar.fill.theme == theme)
+        #expect(little.addressField.font == NSFont.systemFont(ofSize: 13, weight: .medium))
+        let input = try #require(little.prepareCompactInput())
+        #expect(OrbitAppearance.isDark(input.window.effectiveAppearance))
+        #expect(OrbitAppearance.isDark(input.input.effectiveAppearance))
+        #expect(input.input.textColor?.resolved(for: input.input.effectiveAppearance)
+            == NSColor.labelColor.resolved(for: NSAppearance(named: .darkAqua)!))
+        little.showSpaceChooser([])
+        #expect(little.spaceChooser != nil)
+        #expect(OrbitAppearance.isDark(try #require(little.spaceChooser?.window.effectiveAppearance)))
+        #expect(!input.window.isVisible && little.spaceChooser?.window.isVisible == false)
+    }
+
     @Test("The compact input is a separate, bounded surface with five suggestions and no browser navigation")
     func compactInput() async throws {
         NSApplication.shared.setActivationPolicy(.prohibited)
