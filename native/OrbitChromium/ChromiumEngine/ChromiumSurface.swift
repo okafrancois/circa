@@ -145,7 +145,6 @@ public final class ChromiumSurface: BrowserEngineSurface {
     private var faviconRevision: UInt64 = 0
     private var requestedDestination: URL?
     /// Kind of the next main-frame navigation the shell started (history traversal, reload).
-    /// The ABI does not pass `CefRequest::GetTransitionType()` yet (CONTRACT-R2 follow-up).
     private var pendingKind: BrowserNavigationKind?
     /// Commands issued before `OnAfterCreated`, replayed in call order once the browser exists.
     private enum PendingCommand {
@@ -281,6 +280,7 @@ public final class ChromiumSurface: BrowserEngineSurface {
     public func navigate(to url: URL) {
         guard !isDisposed else { return }
         requestedDestination = url
+        pendingKind = nil
         if creationFailed { reportFailedNavigationLater(); return }
         guard isBrowserCreated else { pendingCommands.append(.navigate(url)); needBrowser(); return }
         _ = ACRNavigate(token, url.absoluteString)
@@ -296,9 +296,15 @@ public final class ChromiumSurface: BrowserEngineSurface {
         var buffer = [CChar](repeating: 0, count: 8192)
         guard ACRHistoryURL(token, offset, &buffer, buffer.count) >= 0,
               let url = URL(string: String(nulTerminated: buffer)) else { return nil }
-        guard (offset < 0 ? ACRGoBack(token) : ACRGoForward(token)) == 1 else { return nil }
+        let previousDestination = requestedDestination
+        let previousKind = pendingKind
         requestedDestination = url
         pendingKind = .backForward
+        guard (offset < 0 ? ACRGoBack(token) : ACRGoForward(token)) == 1 else {
+            requestedDestination = previousDestination
+            pendingKind = previousKind
+            return nil
+        }
         return url
     }
 
@@ -639,10 +645,18 @@ public final class ChromiumSurface: BrowserEngineSurface {
 
     func decideNewSurface(url: String?, disposition: Int32, userGesture: Bool, keepsOpener: Bool) -> ChromiumSurface? {
         guard !isDisposed, let delegate, let engine else { return nil }
+        var metadata = orbit_navigation_metadata_t()
+        metadata.struct_size = UInt32(MemoryLayout<orbit_navigation_metadata_t>.size)
+        let known = keepsOpener && ACRPopupNavigationMetadata(token, &metadata) == 1
+        let method = known ? metadata.method.map { String(cString: $0) } : nil
+        let kind = known ? Self.navigationKind(.init(url: url, isMainFrame: true, userGesture: userGesture,
+            isRedirect: false, transitionType: metadata.transition_type), shellStarted: false, pendingKind: nil)
+            : (userGesture ? .linkActivation : .other)
         // The new browser is created by CEF after OnBeforePopup returns; it is not ready yet.
         let request = BrowserNewSurfaceRequest(url: url.flatMap(URL.init(string:)),
                                                modifiers: Self.modifiers(disposition),
-                                               kind: userGesture ? .linkActivation : .other,
+                                               kind: kind, httpMethod: method,
+                                               hasBody: known ? metadata.has_body != 0 : nil,
                                                isUserGesture: userGesture,
                                                disposition: Self.disposition(disposition))
         var created: ChromiumSurface?

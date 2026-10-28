@@ -129,10 +129,28 @@ public enum BrowserEngineConformance {
         let secondDocument = page("second")
         surface.navigate(to: secondDocument)
         require(await eventually { surface.navigationState.committedURL == secondDocument }, "a second navigation must commit")
+        let actionsBeforeBack = receiver.actions.count
+        let commitsBeforeBack = receiver.count("commit")
+        receiver.actionPolicy = .cancel
+        surface.goBack()
+        require(await eventually { receiver.actions.count > actionsBeforeBack },
+                "a cached history traversal must ask for navigation policy")
+        await settle()
+        require(surface.navigationState.committedURL == secondDocument && receiver.count("commit") == commitsBeforeBack,
+                "a refused history traversal must keep the current document")
+        receiver.actionPolicy = .allow
         surface.goBack()
         require(await eventually { surface.navigationState.committedURL == firstDocument }, "goBack must return to the previous document")
         require(receiver.actions.contains { $0.kind == .backForward && $0.url == firstDocument },
                 "a history traversal must report kind .backForward")
+        surface.goForward()
+        require(await eventually { surface.navigationState.committedURL == secondDocument },
+                "goForward must restore the next document")
+        require(receiver.actions.contains { $0.kind == .backForward && $0.url == secondDocument },
+                "a forward traversal must report kind .backForward")
+        surface.goBack()
+        require(await eventually { surface.navigationState.committedURL == firstDocument },
+                "a repeated back traversal must return to the first document")
         let commitsBeforeReload = receiver.count("commit")
         surface.reload()
         require(await eventually { receiver.count("commit") > commitsBeforeReload }, "reload must commit the document again")
@@ -334,7 +352,7 @@ public enum BrowserEngineConformance {
             if let request = receiver.newTargetRequests.first {
                 require(request.kind == .formSubmission, "a form posted to a named target must report kind .formSubmission")
                 require(request.httpMethod == "POST", "a posted new target must report method POST")
-                require(request.hasBody != false, "a posted new target must not report a missing body")
+                require(request.hasBody == true, "a posted new target must report its body")
                 require(request.disposition != .currentTab, "a new target must not report the current tab")
             }
             if let popup = receiver.createdTargets.first {
@@ -345,6 +363,23 @@ public enum BrowserEngineConformance {
                         "a popup POST must carry its original body")
                 let opener = try? await probe.evaluateScript("String(window.opener !== null)", in: popup)
                 require(opener == "true", "a named-target popup must keep its opener")
+                popup.dispose()
+            }
+            let targetsBeforeGET = receiver.createdTargets.count
+            _ = try? await probe.evaluateScript("""
+                (() => { const form = document.createElement('form');
+                  form.method = 'GET'; form.action = '/page'; form.target = 'conformance-get-target';
+                  document.body.append(form); form.submit(); })()
+                """, in: surface)
+            require(await eventually {
+                receiver.createdTargets.count > targetsBeforeGET && receiver.createdTargets.last?.navigationState.committedURL != nil
+            }, "a GET form target must open and commit a new surface")
+            if receiver.createdTargets.count > targetsBeforeGET, let popup = receiver.createdTargets.last {
+                created.append(popup)
+                if let request = receiver.newTargetRequests.last {
+                    require(request.kind == .formSubmission && request.httpMethod == "GET" && request.hasBody == false,
+                            "a GET form target must report its own form kind and bodyless GET")
+                }
                 popup.dispose()
             }
             receiver.newTargetDelegate = nil

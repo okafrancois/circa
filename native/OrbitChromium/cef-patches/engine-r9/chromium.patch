@@ -1,0 +1,92 @@
+diff --git a/content/public/browser/window_creation_metadata.h b/content/public/browser/window_creation_metadata.h
+new file mode 100644
+--- /dev/null
++++ b/content/public/browser/window_creation_metadata.h
+@@ -0,0 +1,20 @@
++// Copyright 2026 Orbit. All rights reserved.
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++#ifndef CONTENT_PUBLIC_BROWSER_WINDOW_CREATION_METADATA_H_
++#define CONTENT_PUBLIC_BROWSER_WINDOW_CREATION_METADATA_H_
++
++#include "content/common/content_export.h"
++
++namespace content {
++class RenderFrameHost;
++struct WindowCreationMetadata {
++  bool is_form_submission;
++  bool has_post_data;
++};
++// UI thread only. Borrowed metadata exists only during CanCreateWindow for the
++// matching opener. The original request and body remain owned by Chromium.
++CONTENT_EXPORT const WindowCreationMetadata* GetWindowCreationMetadata(
++    RenderFrameHost* opener);
++}  // namespace content
++#endif
+diff --git a/content/browser/renderer_host/render_frame_host_impl.cc b/content/browser/renderer_host/render_frame_host_impl.cc
+--- a/content/browser/renderer_host/render_frame_host_impl.cc
++++ b/content/browser/renderer_host/render_frame_host_impl.cc
+@@ -3,6 +3,7 @@
+ // found in the LICENSE file.
+
+ #include "content/browser/renderer_host/render_frame_host_impl.h"
++#include "content/public/browser/window_creation_metadata.h"
+
+ #include <algorithm>
+ #include <cstdint>
+@@ -10569,6 +10570,20 @@
+   return weak_ptr_factory_.GetSafeRef();
+ }
+
++namespace {
++struct PendingWindowCreationMetadata {
++  RenderFrameHost* opener;
++  WindowCreationMetadata metadata;
++};
++const PendingWindowCreationMetadata* g_pending_window_creation = nullptr;
++}  // namespace
++
++const WindowCreationMetadata* GetWindowCreationMetadata(RenderFrameHost* opener) {
++  DCHECK_CURRENTLY_ON(BrowserThread::UI);
++  return g_pending_window_creation && g_pending_window_creation->opener == opener
++             ? &g_pending_window_creation->metadata : nullptr;
++}
++
+ void RenderFrameHostImpl::CreateNewWindow(
+     mojom::CreateNewWindowParamsPtr params,
+     CreateNewWindowCallback callback) {
+@@ -10646,8 +10661,13 @@
+
+   // Ignore window creation when sent from a frame that's not active or
+   // created.
+-  bool can_create_window =
+-      IsActive() && is_render_frame_created() &&
++  const PendingWindowCreationMetadata pending_creation{
++      this, {params->is_form_submission,
++             params->form_submission_post_data != nullptr}};
++  bool can_create_window = [&] {
++    base::AutoReset<const PendingWindowCreationMetadata*> scope(
++        &g_pending_window_creation, &pending_creation);
++    return IsActive() && is_render_frame_created() &&
+       GetContentClient()->browser()->CanCreateWindow(
+           this, GetLastCommittedURL(),
+           GetOutermostMainFrame()->GetLastCommittedURL(),
+@@ -10656,6 +10676,7 @@
+           params->frame_name, params->disposition, *params->features,
+           effective_transient_activation_state, params->opener_suppressed,
+           &no_javascript_access);
++  }();
+
+   // If this frame isn't allowed to create a window, return early (before we
+   // consume transient user activation).
+diff --git a/content/public/browser/BUILD.gn b/content/public/browser/BUILD.gn
+--- a/content/public/browser/BUILD.gn
++++ b/content/public/browser/BUILD.gn
+@@ -550,6 +550,7 @@
+     "webui_config.h",
+     "webui_config_map.cc",
+     "webui_config_map.h",
++    "window_creation_metadata.h",
+     "zoom_level_delegate.h",
+   ]
+   configs += [

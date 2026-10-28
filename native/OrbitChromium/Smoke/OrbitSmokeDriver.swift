@@ -425,7 +425,7 @@ final class OrbitSmokeDriver: OrbitLaunchHooks {
         let began = ContinuousClock.now
         let failures = await BrowserEngineConformance.check(engine)
         let seconds = Double(Int(began.duration(to: .now) / .milliseconds(1))) / 1000
-        record("conformance.hosted", failures.isEmpty ? "proven" : "partial", [
+        record("conformance.hosted", failures.isEmpty ? "proven" : "failed", [
             "failures": failures, "failureCount": failures.count, "seconds": seconds,
             "mode": "\(engine.surfaceMode)", "holdingWindowTabs": engine.holdingWindowTabCount,
             "shutdown": engine.shutdownOutcome.map { "\($0)" } ?? "none"])

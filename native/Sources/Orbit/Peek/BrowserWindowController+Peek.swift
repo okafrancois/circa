@@ -157,7 +157,7 @@ extension BrowserWindowController {
                                    buttonNumber: request.buttonNumber, isMainFrame: nil,
                                    metadata: pendingNavigationMetadata(on: source) ?? BrowserNavigationMetadata(
                                     kind: request.kind == .linkActivation && request.isUserGesture != false ? .linkActivation : .other,
-                                    httpMethod: nil, hasBody: true))
+                                    httpMethod: request.httpMethod, hasBody: request.hasBody != false))
         guard case .peek(let trigger) = BrowserPeekRouting.decide(link, settings: peek.settings) else { return .declined }
         let child = make()
         guard peek.claim(child) else { return .handled(nil) }

@@ -150,7 +150,7 @@ PATCHED_FLAVORS += ("orbit-engine-extensions-hosted",)
 PATCHED_FLAVORS += ("orbit-engine-extensions-sidebar",)
 PATCHED_FLAVORS += ("orbit-engine-extensions",)
 PATCHED_FLAVORS += ("orbit-engine-extensions-r2",)
-PATCHED_FLAVORS += ("orbit-engine-extensions-r3", "orbit-engine-extensions-r4", "orbit-engine-extensions-r5", "orbit-engine-extensions-r6", "orbit-engine-extensions-r7", "orbit-engine-extensions-r8")
+PATCHED_FLAVORS += ("orbit-engine-extensions-r3", "orbit-engine-extensions-r4", "orbit-engine-extensions-r5", "orbit-engine-extensions-r6", "orbit-engine-extensions-r7", "orbit-engine-extensions-r8", "orbit-engine-extensions-r9")
 FLAVORS = ("sdk", "stock") + PATCHED_FLAVORS
 
 
