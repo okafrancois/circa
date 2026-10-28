@@ -183,7 +183,8 @@
     "\"waveActive\"",
     "\"theme-surface-material\"",
     "\"theme-surface-transparency\"",
-    "\" \""
+    "\" \"",
+    "\"inactive\""
   ],
   "ThemeEditor/OrbitThemeEditorController.swift": [
     "\"orbit.themeEditor.opacity\"",

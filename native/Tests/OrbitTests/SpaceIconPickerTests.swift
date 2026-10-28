@@ -9,6 +9,41 @@ extension NativeWebKitTests {
 @Suite("Space icon picker", .serialized)
 @MainActor
 struct SpaceIconPickerTests {
+    @Test("Compact picker retains the complete catalog and eight-column keyboard navigation")
+    func compactPresentation() throws {
+        let picker = SpaceIconPicker(currentIcon: "", accent: .defaultSpace)
+        picker.loadViewIfNeeded()
+        #expect(picker.view.frame.size == NSSize(width: 270, height: 270))
+        #expect(picker.search.placeholderString == uiText("Search"))
+        #expect(picker.modes.label(forSegment: 1) == uiText("Icon"))
+        #expect(picker.popup.popover.behavior == .transient)
+        #expect(Array(picker.visibleItems.prefix(8)).map(\.emoji) == Array("😀😃😄😁😆😅🤣😂").map(String.init))
+        #expect(Set(picker.visibleItems.map(\.choice)) == Set(SpaceIconPickerCatalog.shared.items.map(\.choice)))
+        picker.handle(#selector(NSResponder.moveDown(_:)))
+        #expect(picker.grid.selectedIndex == 8, "grid width: \(picker.grid.frame.width), scroll width: \(picker.grid.enclosingScrollView?.contentSize.width ?? 0), choice: \(picker.grid.selectedItem?.emoji ?? "")")
+        let gridScroll = try #require(picker.grid.enclosingScrollView)
+        #expect(gridScroll.frame == NSRect(x: 10, y: 74, width: 250, height: 154))
+        #expect(picker.grid.menu?.items.map(\.title) == [uiText("Emoji & Symbols…"), uiText("Remove Icon")])
+    }
+
+    @Test("Compact theme viewport retains material editing below the initial color controls")
+    func compactThemeViewport() throws {
+        let editor = OrbitThemeEditorView(state: OrbitThemeEditorState(theme: BrowserSpaceThemePresets.default))
+        let scroll = editor.makePickerViewport()
+        scroll.layoutSubtreeIfNeeded()
+        #expect(scroll.frame.size == NSSize(width: 356, height: 508))
+        #expect(scroll.documentView === editor)
+        #expect(editor.visibleRect.minY == 0)
+        #expect(!editor.visibleRect.intersects(editor.surfaceMaterial.frame))
+        #expect(!editor.visibleRect.intersects(editor.surfaceScope.frame))
+        #expect(editor.material.isHidden)
+        scroll.contentView.scroll(to: NSPoint(x: 0, y: 142))
+        #expect(editor.visibleRect.intersects(editor.surfaceMaterial.frame))
+        editor.surfaceMaterial.selectItem(at: BrowserThemeSurface.Material.allCases.firstIndex(of: .solid)!)
+        _ = editor.surfaceMaterial.sendAction(editor.surfaceMaterial.action!, to: editor.surfaceMaterial.target)
+        #expect(editor.state.theme.surface?.material == .solid)
+    }
+
     @Test("The catalog lists valid single-grapheme emoji in every category, flags as pairs, no bare components")
     func catalog() {
         let catalog = SpaceIconPickerCatalog.shared

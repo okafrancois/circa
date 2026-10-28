@@ -14,10 +14,10 @@ private enum OrbitThemeEditorColors {
     static let field = dynamic("field", light: NSColor(white: 0, alpha: 0.05), dark: NSColor(white: 0, alpha: 0.04))
     static let dot = dynamic("dot", light: NSColor(white: 0, alpha: 0.12), dark: NSColor(white: 1, alpha: 0.16))
     static let modeHighlight = dynamic("modeHighlight", light: NSColor(white: 0, alpha: 0.10), dark: NSColor(white: 1, alpha: 0.15))
-    static let track = dynamic("track", light: NSColor(white: 0, alpha: 0.05), dark: NSColor(white: 0, alpha: 0.06))
+    static let track = dynamic("track", light: NSColor(white: 0, alpha: 0.05), dark: NSColor(white: 1, alpha: 0.07))
     static let waveActive = dynamic("waveActive", light: NSColor(white: 0, alpha: 0.30), dark: NSColor(white: 1, alpha: 0.75))
     static let control = OrbitTokens.Color.Text.secondary
-    static let inactive = OrbitTokens.Color.Text.tertiary
+    static let inactive = dynamic("inactive", light: NSColor(white: 0, alpha: 0.16), dark: NSColor(white: 1, alpha: 0.16))
     static let swatchRing = OrbitTokens.Color.Text.primary
 }
 
@@ -147,6 +147,26 @@ final class OrbitThemeEditorView: NSView {
         setAccessibilityLabel(OrbitThemeEditorText.title)
         layoutControls()
         render()
+    }
+
+    /// The compact picker opens at the color controls; existing material controls remain scrollable.
+    func makePickerViewport() -> NSScrollView {
+        // The native popover supplies its own material. Avoid compositing it twice.
+        material.isHidden = true
+        if frame.height == M.size.height {
+            for control in [surfaceScope, surfaceMaterialLabel, surfaceMaterial, surfaceTransparencyLabel,
+                            surfaceTransparency, surfaceCapability] as [NSView] {
+                control.frame.origin.y += 22
+            }
+            setFrameSize(NSSize(width: M.size.width, height: M.size.height + 22))
+        }
+        let scroll = NSScrollView(frame: NSRect(origin: .zero, size: M.pickerSize))
+        scroll.drawsBackground = false
+        scroll.hasVerticalScroller = true
+        scroll.scrollerStyle = .overlay
+        scroll.documentView = self
+        scroll.contentView.scroll(to: .zero)
+        return scroll
     }
 
     required init?(coder: NSCoder) { nil }
@@ -480,7 +500,7 @@ final class OrbitThemeEditorButton: NSButton {
     @objc private func press(_ sender: Any?) { onPress?() }
 }
 
-/// One swatch: a 20 pt disc; the one the theme came from gets a 2 pt ring 1.5 pt outside it.
+/// One swatch: a 24 pt bordered disc; the one the theme came from gets a 2 pt ring 1.5 pt outside it.
 @MainActor
 final class OrbitThemeSwatchButton: NSButton {
     var onPress: (() -> Void)?
@@ -519,6 +539,8 @@ final class OrbitThemeSwatchButton: NSButton {
         disc.frame = CGRect(x: bounds.midX - side / 2, y: bounds.midY - side / 2, width: side, height: side)
         disc.cornerRadius = side / 2
         disc.backgroundColor = color.cgColor
+        disc.borderWidth = 1.5
+        disc.borderColor = color.blended(withFraction: 0.15, of: .black)?.cgColor
         let ringInset = OrbitThemeEditorMetrics.swatchRing / 2
         ring.frame = bounds
         ring.path = CGPath(ellipseIn: bounds.insetBy(dx: ringInset, dy: ringInset), transform: nil)
@@ -589,7 +611,7 @@ final class OrbitThemeWaveSlider: NSView {
         track.backgroundColor = OrbitThemeEditorColors.track.resolvedCGColor(for: appearance)
         let path = CGMutablePath()
         let amplitude = OrbitThemeEditorMetrics.waveAmplitude, period = OrbitThemeEditorMetrics.wavePeriod
-        let start = OrbitThemeEditorMetrics.waveLineWidth, end = bounds.width - OrbitThemeEditorMetrics.waveLineWidth
+        let start: CGFloat = 8, end = bounds.width - 8
         var x = start
         path.move(to: CGPoint(x: x, y: midY))
         while x < end {
@@ -701,7 +723,7 @@ final class OrbitThemeGrainDial: NSView {
         for index in 0..<OrbitThemeEditorMetrics.dialDotCount {
             let angle = CGFloat(index) / CGFloat(OrbitThemeEditorMetrics.dialDotCount) * 2 * .pi
             let point = CGPoint(x: center.x + radius * sin(angle), y: center.y - radius * cos(angle))
-            path.addEllipse(in: CGRect(x: point.x - 1.5, y: point.y - 1.5, width: 3, height: 3))
+            path.addEllipse(in: CGRect(x: point.x - 2, y: point.y - 2, width: 4, height: 4))
         }
         dots.frame = bounds
         dots.path = path

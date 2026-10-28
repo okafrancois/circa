@@ -25,6 +25,7 @@ final class SidebarNewSpacePageView: NSView, NSTextFieldDelegate {
     private(set) var iconPicker: SpaceIconPicker?
     private(set) var themePicker: NSPopover?
     private(set) var themeView: OrbitThemeEditorView?
+    private var themePresentation: SpacePickerPopover?
     private var submitted = false
     var onCreate: ((String, ProfileID?, String?, BrowserSpaceIcon, BrowserSpaceTheme) -> Void)?
     var onBack: (() -> Void)?
@@ -108,7 +109,7 @@ final class SidebarNewSpacePageView: NSView, NSTextFieldDelegate {
     func focusName() { window?.makeFirstResponder(name) }
     func closePickers() {
         iconPicker?.popup.performClose(nil); iconPicker = nil
-        themePicker?.performClose(nil); themePicker = nil; themeView = nil
+        themePicker?.performClose(nil); themePicker = nil; themeView = nil; themePresentation = nil
     }
     var hasPicker: Bool { iconPicker != nil || themePicker?.isShown == true }
 
@@ -151,6 +152,7 @@ final class SidebarNewSpacePageView: NSView, NSTextFieldDelegate {
         iconButton.imageScaling = .scaleProportionallyDown
     }
     @objc func chooseIcon() {
+        closePickers()
         let picker = SpaceIconPicker(currentChoice: icon, accent: OrbitSpaceThemes.accent(for: OrbitSpaceThemes.rendered(theme)))
         picker.onChooseIcon = { [weak self] in self?.setIcon($0) }
         picker.onClose = { [weak self] in self?.iconPicker = nil }
@@ -158,20 +160,26 @@ final class SidebarNewSpacePageView: NSView, NSTextFieldDelegate {
         if !picker.show(relativeTo: iconButton) { iconPicker = nil }
     }
     @objc func chooseTheme() {
+        closePickers()
         let editor = OrbitThemeEditorView(state: OrbitThemeEditorState(theme: theme))
         editor.surfaceScope.stringValue = uiText("New Space")
-        let popup = NSPopover()
-        popup.behavior = .transient
-        popup.contentSize = OrbitThemeEditorMetrics.size
-        let controller = NSViewController(); controller.view = editor
-        popup.contentViewController = controller
+        let presentation = SpacePickerPopover()
+        let popup = presentation.popover
+        popup.contentSize = OrbitThemeEditorMetrics.pickerSize
+        popup.appearance = effectiveAppearance
+        let controller = NSViewController(); controller.view = editor.makePickerViewport()
+        presentation.contentViewController = controller
         editor.onChange = { [weak self] state in
             self?.theme = state.theme; self?.onTheme?(state.theme)
             self?.superview?.superview?.needsLayout = true
         }
-        editor.onDismiss = { [weak popup] in popup?.performClose(nil) }
+        editor.onDismiss = { [weak presentation] in presentation?.performClose(nil) }
+        presentation.onClose = { [weak self] in
+            self?.themePicker = nil; self?.themeView = nil; self?.themePresentation = nil
+        }
+        themePresentation = presentation
         themePicker = popup; themeView = editor
-        popup.show(relativeTo: themeButton.bounds, of: themeButton, preferredEdge: .maxX)
+        presentation.show(relativeTo: themeButton.bounds, of: themeButton, preferredEdge: .maxX)
     }
 
     private static func emptyIcon() -> NSImage {
