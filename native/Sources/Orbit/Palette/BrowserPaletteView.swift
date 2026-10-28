@@ -43,8 +43,8 @@ final class BrowserPaletteView: NSView, NSTextFieldDelegate, NSTableViewDataSour
     func waitForAccessibilityAnnouncements() async { await countAnnouncementTask?.value }
 
     // Orbit's normal Command Bar uses synchronous visibility, layout and row selection.
-    // The separate orbit_commandBarBounce animation belongs to the existing-bar attention path.
-    // See MOTION-A, , , .
+    // A separate bounce observes scoped-search transitions in the container.
+    // Orbit has no scoped-search state yet; normal presentation must not trigger that spring.
     override init(frame: NSRect) {
         super.init(frame: frame)
         isHidden = true
@@ -326,7 +326,8 @@ final class BrowserPaletteView: NSView, NSTextFieldDelegate, NSTableViewDataSour
                 symbolImages[result.symbol] = image
             }
         }
-        cell.configure(result: result, image: image, usesFavicon: usesFavicon)
+        cell.configure(result: result, image: image, usesFavicon: usesFavicon,
+                       showsDetails: !input.stringValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         cell.apply(selected: index == selected, accent: accent)
     }
 
@@ -456,17 +457,19 @@ final class PaletteResultCell: NSTableCellView {
     let detailLabel = NSTextField(labelWithString: "")
     let actionLabel = NSTextField(labelWithString: "")
     let shortcutLabel = NSTextField(labelWithString: "")
-    let hintLabel = NSTextField(labelWithString: "↩")
+    let actionIcon = NSImageView()
     let icon = NSImageView()
     let background = NSView()
     let iconTile = NSView()
     let accessory = NSView()
+    private var resultID: String?
     private var usesFavicon = false
     private var isSelectedResult = false
     private var isHovered = false
     private var selectionAccent = NSColor.clear
     private var hoverArea: NSTrackingArea?
-    private var hintWidth: CGFloat = 0
+    private var showsTabAction = false
+    private var showsRestoreAction = false
     override var isFlipped: Bool { true }
 
     override init(frame: NSRect) {
@@ -479,14 +482,13 @@ final class PaletteResultCell: NSTableCellView {
         detailLabel.font = OrbitTokens.Typography.commandBarAccessory
         actionLabel.font = OrbitTokens.Typography.commandBarAccessory
         shortcutLabel.font = OrbitTokens.Typography.commandBarAccessory
-        hintLabel.font = OrbitTokens.Typography.commandBarAccessory
+        actionIcon.image = NSImage(systemSymbolName: "arrow.right", accessibilityDescription: nil)
         titleLabel.lineBreakMode = .byTruncatingTail
         detailLabel.lineBreakMode = .byTruncatingMiddle
         detailLabel.alignment = .left
         actionLabel.alignment = .right
         actionLabel.lineBreakMode = .byTruncatingTail
         shortcutLabel.alignment = .right
-        hintLabel.alignment = .center
         iconTile.wantsLayer = true
         iconTile.layer?.cornerRadius = OrbitTokens.Radius.commandBarIconTile
         accessory.wantsLayer = true
@@ -494,7 +496,7 @@ final class PaletteResultCell: NSTableCellView {
         addSubview(iconTile)
         addSubview(accessory)
         setAccessibilityElement(false)
-        for view in [titleLabel, detailLabel, actionLabel, shortcutLabel, hintLabel, icon] {
+        for view in [titleLabel, detailLabel, actionLabel, shortcutLabel, icon, actionIcon] {
             view.setAccessibilityElement(false)
             addSubview(view)
         }
@@ -502,25 +504,23 @@ final class PaletteResultCell: NSTableCellView {
     convenience init() { self.init(frame: .zero) }
     required init?(coder: NSCoder) { nil }
 
-    func configure(result: BrowserPaletteResult, image: NSImage?, usesFavicon: Bool) {
+    func configure(result: BrowserPaletteResult, image: NSImage?, usesFavicon: Bool, showsDetails: Bool = true) {
+        if resultID != result.id { isHovered = false; resultID = result.id }
         self.usesFavicon = usesFavicon
         if titleLabel.stringValue != result.title {
             titleLabel.stringValue = result.title
             needsLayout = true
         }
-        let detail = result.section == .commands ? "" : result.detail
+        showsTabAction = result.section == .tabs || { if case .tab = result.action { return true }; return false }()
+        showsRestoreAction = result.section == .archive
+        let detail = showsDetails && result.section != .commands && result.detail != result.title
+            ? "— " + result.detail : ""
         if detailLabel.stringValue != detail {
             detailLabel.stringValue = detail
             needsLayout = true
         }
         actionLabel.stringValue = result.actionLabel
         shortcutLabel.stringValue = result.shortcut
-        let hint = "⏎"
-        if hintLabel.stringValue != hint || hintWidth == 0 {
-            hintLabel.stringValue = hint
-            hintWidth = max(OrbitTokens.Metrics.CommandBar.accessoryChipSize, hintLabel.intrinsicContentSize.width)
-            needsLayout = true
-        }
         if icon.image !== image { icon.image = image }
     }
     func apply(selected: Bool, accent: NSColor) {
@@ -531,14 +531,16 @@ final class PaletteResultCell: NSTableCellView {
         detailLabel.textColor = selected ? OrbitTokens.Color.Text.onAccent.withAlphaComponent(0.72) : OrbitTokens.Color.Text.commandBarSecondary
         actionLabel.textColor = selected ? OrbitTokens.Color.Text.onAccent : OrbitTokens.Color.Text.commandBarSecondary
         shortcutLabel.textColor = selected ? OrbitTokens.Color.Text.onAccent.withAlphaComponent(0.8) : OrbitTokens.Color.Text.commandBarSecondary
-        hintLabel.textColor = selected ? accent : OrbitTokens.Color.State.commandBarAccessoryForeground
-        hintLabel.isHidden = !selected
-        accessory.isHidden = !selected
-        actionLabel.isHidden = !selected
+        let showsAction = showsTabAction || (showsRestoreAction && selected)
+        actionIcon.contentTintColor = selected ? accent : OrbitTokens.Color.State.commandBarAccessoryForeground
+        actionIcon.isHidden = !showsAction
+        accessory.isHidden = !showsAction
+        actionLabel.isHidden = !showsAction
         shortcutLabel.isHidden = shortcutLabel.stringValue.isEmpty
         accessory.layer?.backgroundColor = (selected ? NSColor.white : OrbitTokens.Color.State.commandBarAccessory).resolvedCGColor(for: effectiveAppearance)
-        icon.contentTintColor = usesFavicon ? nil : (selected ? accent : OrbitTokens.Color.Text.commandBarPrimary)
-        iconTile.layer?.backgroundColor = (selected ? NSColor.white : .clear).resolvedCGColor(for: effectiveAppearance)
+        let hasWhiteTile = selected && (showsTabAction || !shortcutLabel.stringValue.isEmpty)
+        icon.contentTintColor = usesFavicon ? nil : (selected ? (hasWhiteTile ? accent : .white) : OrbitTokens.Color.Text.commandBarPrimary)
+        iconTile.layer?.backgroundColor = (hasWhiteTile ? NSColor.white : .clear).resolvedCGColor(for: effectiveAppearance)
         needsLayout = true
     }
     private func refreshBackground() {
@@ -563,24 +565,24 @@ final class PaletteResultCell: NSTableCellView {
         icon.frame = NSRect(x: iconTile.frame.midX - imageSize / 2, y: iconTile.frame.midY - imageSize / 2, width: imageSize, height: imageSize)
         let chipSize = m.accessoryChipSize
         accessory.frame = NSRect(x: max(0, bounds.width - chipSize - m.rowInsetX), y: (m.rowHeight - chipSize) / 2, width: chipSize, height: chipSize)
-        hintLabel.frame = accessory.frame
+        actionIcon.frame = accessory.frame.insetBy(dx: 4, dy: 4)
         let x = m.titleOriginX - m.rowInsetX
         func textWidth(_ label: NSTextField) -> CGFloat {
             label.stringValue.isEmpty ? 0 : ceil((label.stringValue as NSString).size(withAttributes: [
                 .font: label.font ?? OrbitTokens.Typography.commandBarAccessory
             ]).width) + 4
         }
-        let right = isSelectedResult ? accessory.frame.minX - 10 : bounds.width - m.rowInsetX
+        let right = !accessory.isHidden ? accessory.frame.minX - 10 : bounds.width - m.rowInsetX
         let shortcutWidth = min(textWidth(shortcutLabel), max(0, (right - x) * 0.25))
         shortcutLabel.frame = NSRect(x: right - shortcutWidth, y: (m.rowHeight - 18) / 2, width: shortcutWidth, height: 18)
         let actionRight = shortcutLabel.frame.minX - (shortcutWidth > 0 ? 14 : 0)
-        let actionWidth = isSelectedResult ? min(textWidth(actionLabel), max(0, (actionRight - x) * 0.33)) : 0
+        let actionWidth = !actionLabel.isHidden ? min(textWidth(actionLabel), max(0, (actionRight - x) * 0.33)) : 0
         actionLabel.frame = NSRect(x: actionRight - actionWidth, y: (m.rowHeight - 18) / 2, width: actionWidth, height: 18)
         let usableWidth = max(0, actionLabel.frame.minX - (actionWidth > 0 ? 16 : 0) - x)
-        let hasDetail = !detailLabel.stringValue.isEmpty && detailLabel.stringValue != titleLabel.stringValue
+        let hasDetail = !detailLabel.stringValue.isEmpty
         let titleWidth = hasDetail ? min(textWidth(titleLabel), usableWidth * 0.62) : usableWidth
         titleLabel.frame = NSRect(x: x, y: (m.rowHeight - 18) / 2, width: titleWidth, height: 18)
-        let detailX = titleLabel.frame.maxX + (hasDetail ? 10 : 0)
+        let detailX = titleLabel.frame.maxX + (hasDetail ? 4 : 0)
         detailLabel.frame = NSRect(x: detailX, y: (m.rowHeight - 18) / 2, width: hasDetail ? max(0, x + usableWidth - detailX) : 0, height: 18)
     }
 }

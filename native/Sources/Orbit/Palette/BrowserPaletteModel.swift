@@ -65,6 +65,28 @@ struct BrowserPaletteSelection {
 
 /// Policy is intentionally local and deterministic; no network requests or remote images.
 enum BrowserPaletteRanking {
+    // This command-bar policy is deliberately host-specific:
+    // do not merge arbitrary sites, subdomains, differently named documents or typed input.
+    static let titleAndHostDeduplicationHosts: Set<String> = [
+        "figma.com", "maps.google.com", "notion.so", "app.notion.com", "zoom.us",
+        "opentable.com", "zillow.com", "github.com", "app.mode.com", "console.cloud.google.com"
+    ]
+
+    private struct TitleAndHost: Hashable {
+        let title: String
+        let host: String
+    }
+
+    static func deduplicatingTitlesAndHosts(_ results: [BrowserPaletteResult]) -> [BrowserPaletteResult] {
+        var seen: Set<TitleAndHost> = []
+        return results.filter { result in
+            guard result.section != .commands, result.section != .address, result.section != .search,
+                  !result.title.isEmpty, let host = result.url?.host?.lowercased(),
+                  titleAndHostDeduplicationHosts.contains(host) else { return true }
+            return seen.insert(TitleAndHost(title: result.title, host: host)).inserted
+        }
+    }
+
     static func results(query: String, mode: BrowserPaletteMode, resolver: AddressResolver,
                         candidates: [BrowserPaletteResult], history: [BrowserHistorySuggestion],
                         actions: [BrowserPaletteResult], limit: Int = 40) -> [BrowserPaletteResult] {
@@ -111,6 +133,7 @@ enum BrowserPaletteRanking {
             rows = basic + rows + commandRows.filter { !basic.contains($0) }
         } else { rows += commandRows }
         rows += matches.filter { $0.section == .archive }
+        rows = deduplicatingTitlesAndHosts(rows)
         // The explicit input is always present, including after truncating broad matches.
         if let typed {
             let strong = mode == .newTab && limit > 1 ? rows.firstIndex { isStrongMatch($0, query: input, destination: destination) } : nil

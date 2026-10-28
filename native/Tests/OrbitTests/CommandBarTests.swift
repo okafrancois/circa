@@ -41,6 +41,35 @@ struct CommandBarTests {
         #expect(BrowserPaletteRanking.commandScore("delete everything", result: command(.newWindow)) == nil)
     }
 
+    @Test("Title and host deduplication is restricted to configured hosts and keeps ranking authority")
+    func titleAndHostDeduplication() {
+        func page(_ id: String, _ host: String, _ path: String, title: String = "Design", section: BrowserPaletteSection = .tabs) -> BrowserPaletteResult {
+            let url = URL(string: "https://\(host)/\(path)")!
+            return .init(id: id, title: title, detail: host, section: section, action: .navigate(url), sourceURL: url)
+        }
+        for host in BrowserPaletteRanking.titleAndHostDeduplicationHosts {
+            let first = page("first", host, "a")
+            let duplicate = page("duplicate", host, "b", section: .history)
+            let otherTitle = page("other-title", host, "c", title: "Other design")
+            #expect(BrowserPaletteRanking.deduplicatingTitlesAndHosts([first, duplicate, otherTitle]).map(\.id) == ["first", "other-title"])
+            let ranked = BrowserPaletteRanking.results(query: "Design", mode: .newTab, resolver: .init(),
+                candidates: [first, otherTitle], history: [
+                    .init(profileID: ProfileID(), url: duplicate.url!, title: duplicate.title, faviconReference: nil,
+                          visitCount: 5, typedCount: 2, lastVisitedAt: Date(), score: 10)
+                ], actions: [], limit: 40)
+            #expect(ranked.first?.id == "first")
+            #expect(ranked.contains { $0.id == "search" })
+            #expect(!ranked.contains { $0.section == .history })
+        }
+        let rows = [page("a", "github.com", "a"), page("b", "github.com", "b"),
+            page("subdomain", "gist.github.com", "b"), page("lookalike", "github.com.example.org", "b"),
+            page("other-host", "figma.com", "b"), page("case", "github.com", "c", title: "design"),
+            page("outside-a", "example.org", "a"), page("outside-b", "example.org", "b"),
+            page("typed", "github.com", "c", section: .address)]
+        #expect(BrowserPaletteRanking.deduplicatingTitlesAndHosts(rows).map(\.id) == rows.filter { $0.id != "b" }.map(\.id))
+        #expect(BrowserPaletteRanking.deduplicatingTitlesAndHosts(Array(rows.reversed())).contains { $0.id == "b" })
+    }
+
     @Test("Only installed actions are offered, with catalog shortcuts and distinct command icons")
     func installedCommands() async throws {
         NSApplication.shared.setActivationPolicy(.prohibited)
