@@ -24,7 +24,9 @@
     "\"magnifyingglass\"",
     "\"pause\"",
     "\"trash\"",
-    "\"xmark\""
+    "\"xmark\"",
+    "\"AXHeading\"",
+    "\"MMMMd\""
   ],
   "Downloads/BrowserDownloadsController.swift": [],
   "Downloads/BrowserWindowController+Downloads.swift": [
@@ -117,7 +119,9 @@
     "\"archive\"",
     "\"archive-day\"",
     "\"archive-search\"",
-    "\"archive-tab\""
+    "\"archive-tab\"",
+    "\"MMMMd\"",
+    "\"globe\""
   ],
   "Library/BrowserLibraryHistoryView.swift": [
     "\"\"",

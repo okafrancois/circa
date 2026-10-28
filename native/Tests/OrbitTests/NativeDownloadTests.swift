@@ -627,7 +627,7 @@ struct NativeDownloadTests {
         #expect(try Data(contentsOf: #require(records[1].destinationURL)) == DownloadFixtureServer.payload)
         first.showDownloads()
         await first.session.waitForPendingCommands()
-        #expect(first.downloadsPane.list.displayedTitles == ["payload-1.bin", "payload-2.bin"])
+        #expect(first.downloadsPane.list.displayedTitles == ["payload-2.bin", "payload-1.bin"])
         #expect(first.session.selectedSurface?.webView.title == "Synthetic Downloads")
         try await captureSyntheticWindow(first)
         var opened = false

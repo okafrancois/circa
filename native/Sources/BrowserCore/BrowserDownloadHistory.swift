@@ -10,6 +10,8 @@ public struct BrowserDownloadHistoryRecord: Codable, Equatable, Sendable {
     public let totalBytes: Int64?
     public let destinationURL: URL?
     public let failure: BrowserDownloadFailure?
+    public let startedAt: Date?
+    public let completedAt: Date?
 
     public init(_ snapshot: BrowserDownloadSnapshot) {
         id = snapshot.key.id
@@ -20,6 +22,8 @@ public struct BrowserDownloadHistoryRecord: Codable, Equatable, Sendable {
         totalBytes = snapshot.totalBytes
         destinationURL = snapshot.destinationURL
         failure = snapshot.failure
+        startedAt = snapshot.startedAt
+        completedAt = snapshot.completedAt
     }
 
     public var isValid: Bool {

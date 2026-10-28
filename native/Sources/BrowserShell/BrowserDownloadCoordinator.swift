@@ -57,6 +57,8 @@ public final class BrowserDownloadCoordinator {
         var state: BrowserDownloadState = .awaitingDestination
         var receivedBytes: Int64 = 0
         var totalBytes: Int64?
+        var startedAt: Date?
+        var completedAt: Date?
         var capabilities: BrowserDownloadCapabilities = [.cancel]
         var currentURL: URL?
         var destinationURL: URL?
@@ -88,7 +90,8 @@ public final class BrowserDownloadCoordinator {
                 totalBytes: totalBytes, capabilities: capabilities, currentURL: currentURL,
                 destinationURL: destinationURL, fileAvailability: fileAvailability, failure: failure,
                 pendingAction: pendingAction, isCancellationRequested: isCancellationRequested,
-                controlError: controlError, isCancellationAccepted: isCancellationAccepted
+                controlError: controlError, isCancellationAccepted: isCancellationAccepted,
+                startedAt: startedAt, completedAt: completedAt
             )
         }
     }
@@ -114,7 +117,9 @@ public final class BrowserDownloadCoordinator {
     private var isDrainingEffects = false
     private var publicationDepth = 0
 
-    public init() {}
+    private let clock: @MainActor () -> Date
+
+    public init(clock: @escaping @MainActor () -> Date = { Date() }) { self.clock = clock }
 
     /// Inserts before publication and performs no engine startup or callback installation.
     /// Configure the adapter with the returned registration before starting any engine work.
@@ -135,6 +140,7 @@ public final class BrowserDownloadCoordinator {
             key: key, owner: owner, suggestedFilename: suggestedFilename,
             sourceURL: sourceURL, transfer: transfer
         )
+        entries[id]?.startedAt = clock()
         order.append(id)
         let registration = BrowserDownloadRegistration(key: key) { [weak self] update in
             guard let self else { return .failure(.coordinatorStopped) }
@@ -162,6 +168,8 @@ public final class BrowserDownloadCoordinator {
             let key = BrowserDownloadKey(id: record.id, profileID: record.profileID, lifetime: UUID())
             let entry = Entry(key: key, owner: .init(profileID: record.profileID),
                               suggestedFilename: record.filename, sourceURL: nil, transfer: nil)
+            entry.startedAt = record.startedAt
+            entry.completedAt = record.completedAt
             entry.state = record.state
             entry.receivedBytes = record.receivedBytes
             entry.totalBytes = record.totalBytes
@@ -329,6 +337,7 @@ public final class BrowserDownloadCoordinator {
         try advance(entry)
         entry.sequence = update.sequence
         entry.state = update.state
+        if update.state == .complete { entry.completedAt = clock() }
         entry.receivedBytes = update.receivedBytes
         entry.totalBytes = update.totalBytes
         entry.capabilities = update.state.isTerminal ? [] : update.capabilities
