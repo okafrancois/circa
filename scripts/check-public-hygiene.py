@@ -129,7 +129,10 @@ LOCALIZED_IMPORT_KEYS = frozenset(expand(key) for key in ['{source} is open. Qui
  'try again.'])
 
 # Language/runtime names describe geometry and automatic reference counting.
-TECHNICAL_TEXT = ("-fobjc-" + SOURCE_NAME.lower(), "append" + SOURCE_NAME)
+# Shared machine-wide lock paths keep their names until every running caller migrates together.
+TECHNICAL_TEXT = ("-fobjc-" + SOURCE_NAME.lower(), "append" + SOURCE_NAME,
+                  "/tmp/" + SOURCE_NAME.lower() + "y-gui-slot.lock",
+                  "/tmp/" + SOURCE_NAME.lower() + "y-native-full-suite.lock")
 # Numeric constants with defined API semantics, never code locations.
 ALLOWED_HEX = {
     "native/OrbitChromium/Bridge/OrbitChromiumBridge.h":
