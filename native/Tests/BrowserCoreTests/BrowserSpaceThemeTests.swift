@@ -249,10 +249,10 @@ struct BrowserSpaceThemeCompositionTests {
         #expect(close(roundTrip.hsb.hue, 292.0 / 360, 1e-9) && close(roundTrip.hsb.saturation, 0.174, 1e-9))
     }
 
-    @Test("Four swatch families of nine match docs/native-port/design/tokens.json")
+    @Test("Four swatch families of nine match the measured design swatches")
     func presetsMatchTokens() throws {
-        let tokens = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
-            .deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("docs/native-port/design/tokens.json")
+        let tokens = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+            .appendingPathComponent("Fixtures/space-theme-swatches.txt")
         let text = try String(contentsOf: tokens, encoding: .utf8)
         for family in BrowserSpaceThemePresets.families {
             #expect(family.swatches.count == 9)

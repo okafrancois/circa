@@ -1,0 +1,4 @@
+"brand":     ["srgb #F2EAE4 1.0", "srgb #F29BBB 1.0", "srgb #A6729D 1.0", "srgb #F25E6B 1.0", "extendedLinearSRGB #FF3C19 1.0 (≈ sRGB #FF8558)", "displayP3 #F2D66D 1.0", "displayP3 #73E59C 1.0", "displayP3 #7EB8D6 1.0", "displayP3 #666786 1.0"],
+"pastel":    ["displayP3 #FDFBFA 1.0", "displayP3 #FBEAF3 1.0", "displayP3 #ECD2EA 1.0", "displayP3 #F7CDD2 1.0", "displayP3 #FAE1D5 1.0", "displayP3 #FEF9E7 1.0", "displayP3 #E4FCEC 1.0", "displayP3 #E0F2FB 1.0", "displayP3 #C5C6E2 1.0"],
+"drab":      ["displayP3 #4B3B58 1.0", "displayP3 #623856 1.0", "displayP3 #854444 1.0", "displayP3 #A77048 1.0", "displayP3 #D1B46A 1.0", "displayP3 #CDCCA8 1.0", "displayP3 #84A885 1.0", "displayP3 #34604B 1.0", "displayP3 #2D4468 1.0"],
+"greyscale": ["displayP3 #FFFFFF 1.0", "displayP3 #E5E5E5 1.0", "displayP3 #CCCCCC 1.0", "displayP3 #B2B2B2 1.0", "displayP3 #808080 1.0", "displayP3 #666666 1.0", "displayP3 #333333 1.0", "displayP3 #1A1A1A 1.0", "displayP3 #000000 1.0"],
