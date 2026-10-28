@@ -257,8 +257,8 @@ extension OrbitSmokeDriver {
         let editMenu = await until(10) { observed }
         if editMenu?.request.availableCommands.contains(.selectAll) == true { window.performPageContextCommand(.pageSelectAll) }
         let selection = await value("[document.getElementById('field').selectionStart, document.getElementById('field').selectionEnd].join(',')",
-                                    tab, equals: "0,4")
-        check("essentials.context-menu-editable", editMenu?.request.isEditable == true && selection == "0,4",
+                                    tab, equals: "0,5")
+        check("essentials.context-menu-editable", editMenu?.request.isEditable == true && selection == "0,5",
               ["editable": editMenu?.request.isEditable ?? false,
                "commands": editMenu.map { $0.request.availableCommands.map(\.rawValue).sorted() } ?? [],
                "selectionAfterSelectAll": selection ?? "none"])

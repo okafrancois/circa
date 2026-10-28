@@ -23,6 +23,28 @@ extension NativeWebKitTests {
 @Suite(.serialized)
 @MainActor
 struct NativePageToolsTests {
+    @Test("Closing Find after hiding the sidebar returns keyboard focus to the document")
+    func findDoesNotRestoreHiddenAddressFocus() async throws {
+        NSApplication.shared.setActivationPolicy(.prohibited)
+        let server = try LocalFixtureServer()
+        let port = try await server.start()
+        defer { server.stop() }
+        let controller = try await PreviewEnvironment().makeWindow()
+        defer { controller.window?.close() }
+        let surface = try await loadPageTools(controller, port: port)
+        controller.focusAddress()
+        controller.showFind()
+        await controller.session.waitForPendingCommands()
+        let editor = try #require(controller.findBar.searchField.currentEditor() as? NSTextView)
+        controller.setSidebarVisible(false, animated: false)
+        #expect(controller.findBar.control(controller.findBar.searchField, textView: editor,
+                                          doCommandBy: #selector(NSResponder.cancelOperation(_:))))
+        await controller.session.waitForPendingCommands()
+        #expect(controller.findBar.isHidden)
+        let responder = try #require(controller.window?.firstResponder as? NSView)
+        #expect(responder.isDescendant(of: surface.hostView))
+    }
+
     @Test("A same-surface commit reconciles rejected pending find options before the next search")
     func navigationReconcilesPendingCaseChoice() async throws {
         NSApplication.shared.setActivationPolicy(.prohibited)

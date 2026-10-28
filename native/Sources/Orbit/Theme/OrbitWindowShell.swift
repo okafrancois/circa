@@ -77,6 +77,7 @@ final class OrbitWindowShell {
     /// Editing inside the sidebar keeps a revealed sidebar open.
     var isHoverHeld: () -> Bool = { false }
     var onPresentationChange: (() -> Void)?
+    var onSidebarWidthChange: (() -> Void)?
     var onCollapseRequest: (() -> Void)?
     var onFullScreenChange: ((Bool) -> Void)?
     /// Centre spacing of this window's system buttons.
@@ -234,9 +235,11 @@ final class OrbitWindowShell {
     /// Column width from the resize edge; the downloads column bypasses this.
     func setSidebarWidth(_ value: CGFloat) {
         guard allowsResize(), let width else { return }
+        let changed = preferredSidebarWidth != value
         preferredSidebarWidth = value
         if width.constant != value { width.constant = value }
         applyGeometry()
+        if changed { onSidebarWidthChange?() }
     }
 
     /// Returns the column to the user's width after a temporary override (downloads).

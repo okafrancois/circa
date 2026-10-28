@@ -52,11 +52,13 @@ public struct BrowserSessionDocument: Codable, Equatable, Sendable {
         public let id: WindowID
         public let activeSpaceID: SpaceID
         public let spaces: [SpaceTabs]
+        public let placement: BrowserWindowPlacement?
 
-        public init(id: WindowID, activeSpaceID: SpaceID, spaces: [SpaceTabs]) {
+        public init(id: WindowID, activeSpaceID: SpaceID, spaces: [SpaceTabs], placement: BrowserWindowPlacement? = nil) {
             self.id = id
             self.activeSpaceID = activeSpaceID
             self.spaces = spaces
+            self.placement = placement
         }
     }
 

@@ -261,6 +261,10 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
                 self?.onQuickWindowDestinationChange?()
             }
         )
+        if let restoredID {
+            let placement = await store.sessionDocument().windows.first { $0.id == restoredID }?.placement
+            controller.restoreWindowPlacement(placement)
+        }
         controller.onMoveSpaceToProfile = { [weak self] id, target, source in
             try await self?.moveSpaceToProfile(id, to: target, expectedProfileID: source)
         }
@@ -581,6 +585,15 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
         }
     }
 
+    private func captureWindowPlacements() async {
+        guard persistence != nil else { return }
+        let placements = Dictionary(uniqueKeysWithValues: liveControllers.compactMap { controller -> (WindowID, BrowserWindowPlacement)? in
+            guard let id = controller.session.snapshot?.id, let placement = controller.windowPlacement else { return nil }
+            return (id, placement)
+        })
+        await store.updateWindowPlacements(placements)
+    }
+
     func scheduleSave() {
         guard persistence != nil, !isFinalizing else { return }
         saveTask?.cancel()
@@ -588,6 +601,7 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
             do {
                 try await Task.sleep(for: .milliseconds(150))
                 guard let self, !isFinalizing, let persistence else { return }
+                await captureWindowPlacements()
                 let result = try await persistence.saveCurrentState(from: store)
                 if case .saved = result { onPersistenceSuccess?() }
             } catch is CancellationError {
@@ -603,6 +617,7 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
     /// which records its ledger only after the merged session is on disk).
     func saveNow() async throws {
         guard let persistence, !isFinalizing else { throw BrowserSessionPersistence.PersistenceError.finalizationInProgress }
+        await captureWindowPlacements()
         for _ in 0..<5 {
             switch try await persistence.saveCurrentState(from: store) {
             case .saved: return
@@ -628,6 +643,7 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
             for controller in liveControllers { await controller.session.waitForPendingCommands() }
             guard await themeEditors.finishAll() else { throw BrowserTerminationPreparationError.themeCommitFailed }
             try await flushQuickWindowArchives()
+            await captureWindowPlacements()
             if let persistence { try await persistence.finalize(from: store) }
         } catch {
             autoArchive.scheduler.start()

@@ -151,6 +151,7 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
     private let onInput: ((@escaping @MainActor (BrowserWindowController) -> Void) -> Void)?
     private var publishedCatalog: BrowserCatalogSnapshot?
     private let onRetire: (BrowserWindowSession<Surface>) -> Void
+    var windowedFrame: NSRect?
     let savesSessionLocally: Bool
     let isPrivateWindow: Bool
     private(set) var isPreparingForTermination = false
@@ -267,6 +268,16 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
     }
 
     // MARK: Window lifetime
+
+    func windowDidMove(_ notification: Notification) { windowPlacementDidChange() }
+    func windowDidResize(_ notification: Notification) { windowPlacementDidChange() }
+    func windowWillEnterFullScreen(_ notification: Notification) { windowedFrame = window?.frame }
+
+    func windowPlacementDidChange() {
+        guard session != nil, let window, !window.styleMask.contains(.fullScreen), !windowShell.isFullScreen else { return }
+        windowedFrame = window.frame
+        onStateChange()
+    }
 
     func windowDidBecomeKey(_ notification: Notification) { onActivate(); passwordPrompt.render() }
 

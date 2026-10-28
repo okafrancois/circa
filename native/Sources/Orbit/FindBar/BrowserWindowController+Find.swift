@@ -97,12 +97,11 @@ extension BrowserWindowController {
     func returnFocusAfterFind(on surface: Surface) {
         guard shouldReturnFindFocus, pageCommandSurface() === surface else { return }
         let responder = focusBeforeFind
-        if let view = responder as? NSView, view.window === window, !view.isDescendant(of: surface.hostView) {
-            window?.makeFirstResponder(view)
-        } else {
-            surface.focusDocument()
-        }
         focusBeforeFind = nil
+        if let view = responder as? NSView, view.window === window,
+           !view.isHiddenOrHasHiddenAncestor, !view.isDescendant(of: surface.hostView),
+           window?.makeFirstResponder(view) == true { return }
+        surface.focusDocument()
     }
 
     func renderFind() {

@@ -54,6 +54,37 @@ struct NativeRestorationTests {
         try await waitForRestoration { view.title == "Second" }
     }
 
+    @Test("Disk restoration preserves each window frame and preferred sidebar width")
+    func windowPlacementRelaunch() async throws {
+        NSApplication.shared.setActivationPolicy(.prohibited)
+        let directory = try restorationDirectory()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let file = directory.appendingPathComponent("session.json")
+        let environment = try await PreviewEnvironment.open(sessionFile: file)
+        let first = try await environment.makeWindow()
+        let second = try await environment.makeWindow()
+        let expected: [(PreviewWindowController, NSRect, CGFloat)] = [
+            (first, NSRect(x: 70, y: 80, width: 850, height: 610), 280),
+            (second, NSRect(x: 100, y: 100, width: 890, height: 630), 310)
+        ]
+        for (controller, frame, width) in expected {
+            controller.window?.setFrame(frame, display: false)
+            controller.windowShell.setSidebarWidth(width)
+        }
+        try await environment.finalize()
+        let reopened = try await PreviewEnvironment.open(sessionFile: file)
+        for (controller, frame, width) in expected {
+            let restored = try await reopened.makeWindow(id: try #require(controller.session.snapshot?.id.rawValue))
+            #expect(restored.window?.frame == frame)
+            #expect(restored.windowShell.preferredSidebarWidth == width)
+            restored.prepareForTermination()
+            restored.window?.close()
+            controller.prepareForTermination()
+            controller.window?.close()
+        }
+        try await reopened.finalize()
+    }
+
     @Test("Disk restoration recreates exact window identities, selected tabs and isolated WebKit profiles")
     func restoredWindowsAndProfiles() async throws {
         NSApplication.shared.setActivationPolicy(.prohibited)
