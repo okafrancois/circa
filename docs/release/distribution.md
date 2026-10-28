@@ -1,9 +1,11 @@
-# Preview distribution
+# Distribution
 
-Orbit is a development preview. The initial public source snapshot does not include a downloadable engine or a signed installer. Public builds are intended for GitHub Releases in `okafrancois/orbit-browser`.
+Orbit ships through [GitHub Releases](https://github.com/okafrancois/orbit-browser/releases) in `okafrancois/orbit-browser`. Each release provides a notarized DMG for first installs, a ZIP archive, delta updates and a signed Sparkle appcast at `releases/latest/download/appcast.xml`.
 
-Before the first binary release, finish the Orbit bundle branding, produce the matching patched CEF distribution, sign and notarize the app and its helpers, and test installation using a synthetic profile. Keep a stable signing identity across releases so secure storage remains accessible.
+- Bundle identifier: `io.github.okatech.orbit`. Data lives in `~/Library/Application Support/Orbit/`.
+- Signing: Developer ID Application (team 5Y39TTNCM7), hardened runtime, notarized and stapled. The signing identity stays stable across releases so secure storage remains accessible.
+- Updates: Sparkle 2 with EdDSA signatures; checks at launch and hourly, silent download, install on quit. Build numbers strictly increase; published versions are never replaced.
+- Releases are produced by `scripts/release.py` on the project's self-hosted runner when a `vX.Y.Z` tag is pushed. See [the release pipeline](pipeline.md).
+- Private keys and signing credentials never enter this repository.
 
-Sparkle automatic updates are planned. The signed appcast, update-signing configuration, release hosting and a real upgrade/rollback test are still required. No active public update feed is promised by this snapshot. Private keys and signing credentials must stay outside this repository.
-
-The project license is MIT, Copyright (c) 2026 Okatech. Preserve all dependency notices listed in `THIRD_PARTY_NOTICES.md`. The target bundle identifier is `io.github.okatech.orbit`; its code/signing migration remains a separate lot. Private investigation material belongs under the ignored `lab/` directory, which must never be staged or published. Remaining former-product identifiers and investigation references must be removed before publication, except the user-facing import command.
+The project license is MIT, Copyright (c) 2026 Okatech. Preserve all dependency notices listed in `THIRD_PARTY_NOTICES.md`.

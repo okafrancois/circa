@@ -4,17 +4,15 @@
 
 Orbit is an independent macOS browser built with Swift and AppKit, with a maintained CEF/Chromium 156 engine fork. Spaces, a vertical sidebar, profiles, pinned tabs, Split View and Peek organize browsing around your work. Browser state is stored locally; a cloud account is not required.
 
-**Status: development preview.** Features, compatibility and performance are still being validated. This is not a stable release or a claim of complete feature equivalence. Some build targets, bundle identifiers and resources retain earlier internal names while the Orbit identity is integrated.
-
-The target application bundle identifier is `io.github.okatech.orbit`; its migration is a separate release task.
-
-The identity uses Ink `#0D0B1E`, Chalk `#F5F0E8`, Halo `#9D8CFF`, Dawn `#FF7A59` and Sun `#FFC56E`. The small mark above uses the ring and satellite geometry from the Orbit identity study.
+**Status: preview.** Orbit is used daily and ships signed, notarized releases with automatic updates. Features, compatibility and performance keep evolving between releases.
 
 ## Installation and updates
 
-Signed preview downloads will be published through [GitHub Releases](https://github.com/okafrancois/orbit-browser/releases). No public installer is available from this source snapshot. Once a signed release is available, its release notes will describe installation and supported macOS versions.
+1. Download the latest `Orbit-x.y.z.dmg` from [GitHub Releases](https://github.com/okafrancois/orbit-browser/releases/latest).
+2. Open it and drag Orbit to Applications. Builds are signed with a Developer ID and notarized by Apple.
+3. To make Orbit your default browser, choose it in System Settings › Desktop & Dock › Default web browser.
 
-Automatic updates using Sparkle are planned. The public update feed, signing, notarization and end-to-end update validation are not ready in this snapshot. Do not expect automatic updates yet. See [distribution status](docs/release/distribution.md).
+Orbit checks for updates at launch and every hour, downloads them in the background and installs them the next time it quits. Use Orbit › Check for Updates… to update right away. Updates are signed with an EdDSA key and verified by [Sparkle](https://sparkle-project.org). Supported systems: macOS 15 or later on Apple Silicon.
 
 ## Build
 
@@ -32,6 +30,6 @@ See [building Orbit](docs/release/building.md) for the Chromium configuration an
 
 ## Source and licensing
 
-This snapshot contains the native application, tests, engine patch sources and selected build tools. Private investigation material and browser data are kept outside the public source tree.
+This repository contains the native application, tests, engine patch sources, build and release tools. Browser data and credentials are never part of it.
 
 Orbit's original code is licensed under the [MIT License](LICENSE), Copyright (c) 2026 Okatech. Dependencies retain their own licenses; see [third-party notices](THIRD_PARTY_NOTICES.md).
