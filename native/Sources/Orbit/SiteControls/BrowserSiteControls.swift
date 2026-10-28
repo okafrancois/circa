@@ -513,8 +513,7 @@ final class BrowserSiteControls<Engine: BrowserEngine> {
 }
 
 extension BrowserSiteControls {
-    /// The compact Orbit surface uses the same validated operations as the detailed SITE-DATA
-    /// presentation. Deferred Boost and Capture controls have no tiles.
+    /// The compact surface uses the captured document and the host's existing operations.
     private func makeControlCenter(model: BrowserSiteControlsModel, surface: Surface, rows: [NSView], detailRows: [NSView],
                                    installed: [BrowserExtensionSummary], relevantPermissions: Set<BrowserSitePermission>,
                                    valid: @escaping @MainActor () -> Bool) -> OrbitSiteControlCenterView {
@@ -523,7 +522,7 @@ extension BrowserSiteControls {
             actions.first { $0.accessibilityIdentifier() == identifier }
         }
         let share = SiteControlButton("", identifier: "site-share", onPress: {})
-        share.image = OrbitGlyph.symbol("square.and.arrow.up", pointSize: 19, weight: .regular)
+        share.image = OrbitGlyph.symbol("square.and.arrow.up", pointSize: 16, weight: .regular)
         share.setAccessibilityLabel(uiText("Share"))
         share.toolTip = uiText("Share")
         share.onPress = { [weak self, weak surface] in
@@ -532,6 +531,35 @@ extension BrowserSiteControls {
             let picker = NSSharingServicePicker(items: [url])
             sharePicker = picker
             picker.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+        }
+        var topActions = [ControlCenterActionTile(button: share, dark: true)]
+        for operation in BrowserSiteTopAction.allCases {
+            let label: String
+            let identifier: String
+            let glyph: NSImage?
+            switch operation {
+            case .newBoost:
+                label = uiText("New Boost"); identifier = "site-new-boost"
+                glyph = BrowserEntryArtwork.boostAction
+            case .captureRegion:
+                label = uiText("Capture a portion of this page"); identifier = "site-capture-region"
+                glyph = OrbitGlyph.symbol("camera", pointSize: 16, weight: .regular)
+            case .captureFullPage:
+                label = uiText("Capture the full page"); identifier = "site-capture-full-page"
+                glyph = BrowserEntryArtwork.fullPageCapture
+            }
+            let entry = SiteControlButton("", identifier: identifier, onPress: {})
+            entry.image = glyph
+            entry.setAccessibilityLabel(label)
+            entry.toolTip = label
+            entry.isEnabled = owner?.canPerformSiteAction(operation, on: surface) == true
+            entry.onPress = { [weak self, weak surface] in
+                guard valid(), let self, let surface, let owner,
+                      owner.canPerformSiteAction(operation, on: surface) else { return }
+                panel.close()
+                owner.performSiteAction(operation, on: surface)
+            }
+            topActions.append(ControlCenterActionTile(button: entry, dark: true))
         }
         var tiles: [NSView] = []
         extensionTiles = [:]
@@ -644,7 +672,7 @@ extension BrowserSiteControls {
             }
             menu.popUp(positioning: nil, at: NSPoint(x: 0, y: more.bounds.maxY), in: more)
         }
-        return OrbitSiteControlCenterView(topActions: [ControlCenterActionTile(button: share, dark: true)],
+        return OrbitSiteControlCenterView(topActions: topActions,
             tiles: tiles, settings: settings, manage: manage, secure: secure, more: more,
             status: permissionsUnavailable ? siteText("permissions.unavailable", "Permissions unavailable. Access is denied and the existing file is kept. Windows and tabs are still saved.") : statusMessage)
     }

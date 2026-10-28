@@ -17,10 +17,16 @@ final class BrowserCaptureController<Engine: BrowserEngine> {
 
     init(owner: BrowserWindowController<Engine>) { self.owner = owner }
 
-    func begin(fullPage: Bool = false) {
-        guard overlay == nil, task == nil, let owner, let surface = owner.pageCommandSurface(),
+    func begin(fullPage: Bool = false, on requestedSurface: Engine.Surface? = nil) {
+        guard overlay == nil, task == nil, let owner, let surface = requestedSurface ?? owner.pageCommandSurface(),
               !surface.isDisposed, owner.window?.attachedSheet == nil,
               !fullPage || owner.engine.capabilities.contains(.fullPageSnapshots) else { return }
+        let explicitTarget = requestedSurface != nil
+        let isCurrent: @MainActor () -> Bool = { [weak owner, weak surface] in
+            guard let owner, let surface else { return false }
+            return explicitTarget ? owner.siteControlSurface === surface && owner.owns(surface) : owner.pageCommandSurface() === surface
+        }
+        guard isCurrent() else { return }
         let requestID = UUID()
         captureID = requestID
         source = surface
@@ -29,7 +35,7 @@ final class BrowserCaptureController<Engine: BrowserEngine> {
             defer { if self?.captureID == requestID { self?.task = nil } }
             do {
                 guard let snapshot = try await surface?.captureSnapshot(.init(documentGeneration: generation, fullPage: fullPage)),
-                      !Task.isCancelled, let self, let owner, let surface, owner.pageCommandSurface() === surface,
+                      !Task.isCancelled, let self, let owner, let surface, isCurrent(),
                       !surface.isDisposed, surface.documentGeneration == generation else { return }
                 if fullPage {
                     self.finish(image: snapshot.image, normalizedRect: CGRect(x: 0, y: 0, width: 1, height: 1))
@@ -41,7 +47,7 @@ final class BrowserCaptureController<Engine: BrowserEngine> {
                 view.onFinish = { [weak self, weak surface, weak owner] rect in
                     self?.overlay?.removeFromSuperview()
                     self?.overlay = nil
-                    guard let owner, let surface, owner.pageCommandSurface() === surface, !surface.isDisposed,
+                    guard owner != nil, let surface, isCurrent(), !surface.isDisposed,
                           surface.documentGeneration == generation else { return }
                     surface.focusDocument()
                     guard let self, let rect else { return }
@@ -51,7 +57,7 @@ final class BrowserCaptureController<Engine: BrowserEngine> {
                 surface.hostView.addSubview(view)
                 owner.window?.makeFirstResponder(view)
             } catch {
-                guard !Task.isCancelled, let owner, let surface, owner.pageCommandSurface() === surface,
+                guard !Task.isCancelled, let owner, let surface, isCurrent(),
                       !surface.isDisposed, surface.documentGeneration == generation else { return }
                 owner.session.onError?(error)
             }

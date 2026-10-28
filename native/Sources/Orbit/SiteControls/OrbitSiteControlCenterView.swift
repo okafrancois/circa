@@ -131,6 +131,7 @@ final class ControlCenterActionTile: NSView {
         button.isBordered = false
         button.imagePosition = .imageOnly
         button.imageScaling = .scaleProportionallyDown
+        if dark { button.contentTintColor = NSColor(white: 0.8, alpha: 1) }
         button.frame = NSRect(x: 0, y: 0, width: 48, height: 32)
         addSubview(button)
         if let pin {
