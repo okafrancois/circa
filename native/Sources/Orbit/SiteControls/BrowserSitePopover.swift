@@ -175,7 +175,15 @@ final class BrowserSitePopover: NSObject, NSPopoverDelegate {
         scroll.reflectScrolledClipView(scroll.contentView)
     }
 
-    func close() { onWillClose?(); onCloseRequest?(); popover.close() }
+    /// An immediate dismissal must not disable the next presentation's native animation.
+    func close(animating: Bool? = nil) {
+        let previous = popover.animates
+        if let animating { popover.animates = animating }
+        defer { popover.animates = previous }
+        onWillClose?()
+        onCloseRequest?()
+        popover.close()
+    }
     func popoverWillClose(_ notification: Notification) { onWillClose?() }
     func popoverDidClose(_ notification: Notification) { onClose?(); onVisibilityChange?() }
 

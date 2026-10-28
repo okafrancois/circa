@@ -186,17 +186,22 @@ final class BrowserSiteControls<Engine: BrowserEngine> {
             pendingPermission = { continuation.resume(returning: $0) }
             permissionPanel.onClose = { [weak self] in self?.finishPermission(.dismiss) }
             let prompt = SitePermissionPromptView(origin: origin, permissions: permissions) { [weak self] choice in
-                self?.finishPermission(choice)
+                // Notification refusal removes the prompt immediately; other choices retain
+                // the native dismissal. Appearance continues to use the native animation.
+                let immediate: Bool
+                if case .block = choice { immediate = permissions == [.notifications] }
+                else { immediate = false }
+                self?.finishPermission(choice, animating: immediate ? false : nil)
             }
             present(permissionPanel, rows: [prompt])
         }
     }
 
-    private func finishPermission(_ choice: BrowserSitePermissionChoice) {
+    private func finishPermission(_ choice: BrowserSitePermissionChoice, animating: Bool? = nil) {
         let completion = pendingPermission
         pendingPermission = nil
         permissionPanel.onClose = nil
-        permissionPanel.close()
+        permissionPanel.close(animating: animating)
         completion?(choice)
     }
 
