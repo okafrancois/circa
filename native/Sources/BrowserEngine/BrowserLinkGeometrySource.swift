@@ -14,5 +14,11 @@ public struct BrowserLinkGeometry: Sendable {
 /// Engines return geometry only; no page object or script bridge is exposed to the shell.
 @MainActor
 public protocol BrowserLinkGeometrySource: AnyObject {
+    /// The most recent mouse activation, captured before asynchronous engine policy delivery.
+    var linkActivationPoint: NSPoint? { get }
     func linkGeometry(at point: NSPoint) async -> BrowserLinkGeometry?
+}
+
+public extension BrowserLinkGeometrySource {
+    var linkActivationPoint: NSPoint? { nil }
 }

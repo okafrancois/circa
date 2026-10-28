@@ -17,7 +17,9 @@ enum BrowserPeekMotion {
     static let backgroundInset: CGFloat = 9
     static let widthFraction: CGFloat = 0.8
     static let verticalInset: CGFloat = 12
-    static let fallbackExtraWidth: CGFloat = 300
+    static func pointerFallback(at point: NSPoint) -> NSRect {
+        NSRect(x: point.x - 60, y: point.y - 10, width: 120, height: 20)
+    }
 
     static func sourceGeometry(source: NSRect, card: NSRect) -> (scale: CGFloat, height: CGFloat) {
         let scale = max(0.001, source.width / max(1, card.width))
