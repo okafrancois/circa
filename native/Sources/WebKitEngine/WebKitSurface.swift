@@ -250,6 +250,7 @@ public final class WebKitSurface: BrowserEngineSurface {
     }
 
     public func captureSnapshot(_ request: BrowserSnapshotRequest) async throws -> BrowserSurfaceSnapshot {
+        guard !request.fullPage else { throw BrowserEngineError.unsupportedOperation }
         guard !isDisposed else { throw BrowserEngineError.surfaceDisposed }
         let generation = findDocumentGeneration
         if let expected = request.documentGeneration, expected != generation { throw BrowserEngineError.documentChanged }

@@ -1205,3 +1205,9 @@
 "About suggestions" = "About suggestions";
 "Search %@" = "Search %@";
 "Suggestions come from your open tabs, bookmarks, and history. Web searches use your selected search engine." = "Suggestions come from your open tabs, bookmarks, and history. Web searches use your selected search engine.";
+
+/* Menu actions. */
+"Archive Tabs Above" = "Archive Tabs Above";
+"Archive Tabs Below" = "Archive Tabs Below";
+"Save Page As…" = "Save Page As…";
+"Page" = "Page";

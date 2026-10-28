@@ -28,6 +28,7 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
     let reloadButton = OrbitGlyphButton(glyph: nil, label: OrbitShellText.reload)
     var addressResolver = AddressResolver()
     lazy var capture = BrowserCaptureController(owner: self)
+    lazy var pageSaver = BrowserPageSaveController(owner: self)
     var settingsPreferences: BrowserWindowSettings?
     /// The open theme editor of this window (ORBIT-THEMES), previewing its draft on the window.
     var themeEditor: OrbitThemeEditorController?

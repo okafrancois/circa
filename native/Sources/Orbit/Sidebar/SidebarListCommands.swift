@@ -6,6 +6,12 @@ import BrowserEngine
 /// ContextMenus strings; dynamic ordering is reconstructed (see menus-2026-10-27.md).
 enum SidebarListCommands {
     static let definitions: [BrowserCommandDefinition] = [
+        .init(id: .sidebarArchiveTabsAbove, title: "Archive Tabs Above", menu: "Sidebar", shortcuts: [], scope: .browser,
+              requirement: .window, owner: "MENUS", sources: ["context menu declaration"]),
+        .init(id: .sidebarArchiveTabsBelow, title: "Archive Tabs Below", menu: "Sidebar", shortcuts: [], scope: .browser,
+              requirement: .window, owner: "MENUS", sources: ["context menu declaration"]),
+        .init(id: .sidebarMuteTab, title: "Mute Tab", menu: "Sidebar", shortcuts: [], scope: .browser,
+              requirement: .window, owner: "MENUS", sources: ["context menu declaration"]),
         .init(id: .sidebarCopyLinks, title: "Copy URL", menu: "Sidebar", shortcuts: [], scope: .browser,
               requirement: .window, owner: "MENUS", sources: ["Orbit 1.170 ContextMenus strings; object action"]),
         .init(id: .sidebarCopyMarkdownLinks, title: "Copy Link as Markdown", menu: "Sidebar", shortcuts: [], scope: .browser,
@@ -47,6 +53,12 @@ enum SidebarListCommands {
         window(.sidebarArchiveOtherTabs, validate: { !$0.sidebarOtherTodayTabs.isEmpty }) { controller in
             controller.closeSidebarTabs(controller.sidebarOtherTodayTabs)
         }
+        for (command, above) in [(BrowserCommandID.sidebarArchiveTabsAbove, true), (.sidebarArchiveTabsBelow, false)] {
+            window(command, validate: { !$0.sidebarRelativeTodayTabs(above: above).isEmpty }) { controller in
+                controller.closeSidebarTabs(controller.sidebarRelativeTodayTabs(above: above))
+            }
+        }
+        window(.sidebarMuteTab, validate: { $0.sidebarMuteSurface != nil }) { $0.toggleSidebarMute() }
         // Tabs › Rename Current Item (M-142): inline rename of the targeted row.
         window(.renameCurrentItem, validate: { $0.sidebarRenameTarget != nil }) { $0.renameSidebarTarget() }
         // Tabs › Pin/Unpin Tab, ⌘D (M-181).
@@ -74,7 +86,9 @@ enum SidebarListCommands {
         // Tabs › Clear Unpinned Tabs, ⇧⌘K (M-498) is ARCHIVE-UI's binding; Today's Clear control
         // calls the same hook (`clearTodayFromArchiveCommand`).
         // Tabs › Reveal Tab in Sidebar (M-752).
-        window(.revealTabInSidebar, validate: { $0.session.organization?.selectedTab != nil }) { $0.revealSelectedTabInSidebar() }
+        for command in [BrowserCommandID.revealTabInSidebar, .revealCurrentTab] {
+            window(command, validate: { $0.session.organization?.selectedTab != nil }) { $0.revealSelectedTabInSidebar() }
+        }
         window(.sidebarAddToFavorites, validate: { !$0.sidebarListTabTargets.isEmpty && !$0.sidebar.commandTargets().contains(where: { $0.splitID != nil }) }) { controller in
             controller.session.addToFavorites(controller.sidebarListTabTargets)
         }
@@ -109,6 +123,7 @@ enum SidebarListCommands {
         groups.append([.sidebarCopyLinks, .sidebarCopyMarkdownLinks])
         if nodes.count == 1, nodes[0].splitID == nil { groups.append([.renameCurrentItem, .sidebarDuplicate]) }
         groups.append([.pinUnpinTab, .newFolder])
+        if tabs.count == 1 { groups.append([.sidebarMuteTab]) }
         if nodes.count == 1, nodes[0].splitID != nil {
             groups.append([.separatePageFromSplitView, .unsplitAllPanes, .toggleSplitOrientation, .swapSplitPanes])
         }
@@ -116,7 +131,7 @@ enum SidebarListCommands {
         if !tabs.isEmpty {
             groups.append([.sidebarCloseItems])
             if tabs.allSatisfy({ if case .today = organization.tab($0)?.section { return true }; return false }) {
-                groups.append([.sidebarArchiveOtherTabs])
+                groups.append([.sidebarArchiveOtherTabs, .sidebarArchiveTabsAbove, .sidebarArchiveTabsBelow])
             }
         }
         return groups

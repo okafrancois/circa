@@ -209,7 +209,7 @@ enum BrowserCommandID: String, CaseIterable, Sendable {
     case sidebarCopyLinks
     case sidebarCopyMarkdownLinks
     case sidebarDuplicate
-    case sidebarArchiveOtherTabs
+    case sidebarArchiveOtherTabs, sidebarArchiveTabsAbove, sidebarArchiveTabsBelow, sidebarMuteTab
     case sidebarAddToFavorites
     case sidebarCloseItems
     case sidebarDeleteFolder
@@ -257,6 +257,14 @@ enum OrbitCommandCatalog {
         .font, .appearance, .websitesEaselsAndNotesWillUse, .developer, .troubleshooting,
         .item1, .item2, .item3
     ]
+    /// Hidden on every command surface even if an internal workflow retains a handler.
+    static let hiddenCommands: Set<BrowserCommandID> = [.importArcConnections, .restoreArcConnections, .importBookmarks, .exportBookmarks]
+
+    static func isCommandBarAction(_ definition: BrowserCommandDefinition) -> Bool {
+        definition.scope == .browser && !hiddenCommands.contains(definition.id) && !structuralIDs.contains(definition.id)
+            && !["Sidebar", "FavoritesContext", "Page Context"].contains(definition.menu)
+    }
+
     static var actionDefinitions: [BrowserCommandDefinition] { definitions.filter { !structuralIDs.contains($0.id) } }
 
     static let declarations: [OrbitMenuDeclaration] = [
@@ -501,8 +509,8 @@ enum OrbitCommandCatalog {
     private static func requirement(for id: BrowserCommandID) -> BrowserCommandRequirement {
         switch id {
         case .checkForUpdates, .aboutOrbit, .openCommandBar, .showAll, .hideOrbit, .newWindow, .newIncognitoWindow, .hideOtherWindows, .newTab, .quitOrbit: return .application
-        case .zoomOut, .findPrevious, .duplicate, .zoomToActualSize, .find, .zoomIn, .findNext: return .surface
-        case .refreshThePage, .copyURL, .share: return .url
+        case .zoomOut, .findPrevious, .duplicate, .zoomToActualSize, .find, .zoomIn, .findNext, .capture, .captureFullPage, .savePageAs: return .surface
+        case .refreshThePage, .copyURL, .copyURLAsMarkdown, .share: return .url
         case .goBack: return .back
         case .goForward: return .forward
         case .stopLoading: return .loading

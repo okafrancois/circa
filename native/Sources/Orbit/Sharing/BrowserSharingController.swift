@@ -23,6 +23,18 @@ final class BrowserSharingController<Engine: BrowserEngine>: NSObject, NSSharing
         owner?.sidebar.addressContainer.installAccessory(button, onHover: true)
     }
 
+    func copyMarkdownLink() {
+        guard let owner, let surface = owner.pageCommandSurface() else { return }
+        let generation = surface.documentGeneration
+        owner.session.performWindowAction { [weak owner, weak surface] in
+            guard let owner, let surface, owner.pageCommandSurface() === surface,
+                  !surface.isDisposed, surface.documentGeneration == generation,
+                  let url = surface.navigationState.url else { return }
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(BrowserMarkdownLink.format(title: surface.navigationState.title, url: url), forType: .string)
+        }
+    }
+
     func copyLink() {
         owner?.session.performOnSelectedSurface { [weak self] surface in
             guard let self, let url = surface.navigationState.url else { return }

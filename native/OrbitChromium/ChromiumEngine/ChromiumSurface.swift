@@ -448,7 +448,22 @@ public final class ChromiumSurface: BrowserEngineSurface {
         let generation = request.documentGeneration ?? documentGeneration
         guard generation == documentGeneration else { throw BrowserEngineError.documentChanged }
         guard isBrowserCreated else { throw BrowserEngineError.snapshotUnavailable }
-        let (success, data) = await devToolsCall("Page.captureScreenshot", params: #"{"format":"png"}"#)
+        var parameters: [String: Any] = ["format": "png"]
+        if request.fullPage {
+            let (ok, metrics) = await devToolsCall("Page.getLayoutMetrics")
+            guard !isDisposed, generation == documentGeneration else { throw BrowserEngineError.documentChanged }
+            guard ok, let object = try? JSONSerialization.jsonObject(with: metrics) as? [String: Any],
+                  let size = object["cssContentSize"] as? [String: Any],
+                  let width = size["width"] as? Double, let height = size["height"] as? Double,
+                  width.isFinite, height.isFinite, width > 0, height > 0,
+                  width <= 32768, height <= 32768, width * height <= 100_000_000 else {
+                throw BrowserEngineError.snapshotUnavailable
+            }
+            parameters["captureBeyondViewport"] = true
+            parameters["clip"] = ["x": 0, "y": 0, "width": width, "height": height, "scale": 1]
+        }
+        let json = try JSONSerialization.data(withJSONObject: parameters)
+        let (success, data) = await devToolsCall("Page.captureScreenshot", params: String(decoding: json, as: UTF8.self))
         guard !isDisposed else { throw BrowserEngineError.surfaceDisposed }
         guard generation == documentGeneration else { throw BrowserEngineError.documentChanged }
         guard success, let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
@@ -458,6 +473,17 @@ public final class ChromiumSurface: BrowserEngineSurface {
             throw BrowserEngineError.snapshotUnavailable
         }
         return BrowserSurfaceSnapshot(image: Self.scaled(image, to: request.width), documentGeneration: generation)
+    }
+
+    public func archivePage(documentGeneration generation: UInt64) async throws -> Data {
+        guard !isDisposed else { throw BrowserEngineError.surfaceDisposed }
+        guard generation == documentGeneration else { throw BrowserEngineError.documentChanged }
+        let (ok, data) = await devToolsCall("Page.captureSnapshot", params: #"{"format":"mhtml"}"#)
+        guard !isDisposed else { throw BrowserEngineError.surfaceDisposed }
+        guard generation == documentGeneration else { throw BrowserEngineError.documentChanged }
+        guard ok, let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let archive = object["data"] as? String, !archive.isEmpty else { throw BrowserEngineError.unsupportedOperation }
+        return Data(archive.utf8)
     }
 
     static func scaled(_ image: CGImage, to width: CGFloat?) -> CGImage {

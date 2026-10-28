@@ -36,7 +36,7 @@ struct NativeCommandTests {
     func catalogCoverage() throws {
         #expect(OrbitCommandCatalog.declarations.count == 179)
         #expect(OrbitCommandCatalog.structuralIDs.count == 14)
-        #expect(OrbitCommandCatalog.actionDefinitions.count == 246) // Includes local page sharing.
+        #expect(OrbitCommandCatalog.actionDefinitions.count == 249) // Includes local page sharing.
         #expect(OrbitCommandCatalog.declarations.allSatisfy { $0.localizesKey })
         #expect(OrbitCommandCatalog.declarations.filter { !$0.key.isEmpty }.count == 85)
         #expect(OrbitCommandCatalog.declarations.filter { !$0.key.isEmpty && $0.modifierMask == nil }.map(\.source) == ["M-285", "M-1324"])
@@ -298,7 +298,7 @@ struct NativeCommandTests {
         // + site-session/bookmark import and export (4), and private-window routing (1).
         // + local Share and page-context Share (2), sidebar tab navigation (4), Select Space 1–9 (9).
         let implemented = system.registry.definitions.filter { system.registry.isImplemented($0.id) }.map(\.id.rawValue)
-        #expect(implemented.count == 172, "\(implemented.count): \(implemented.sorted())")
+        #expect(implemented.count == 179, "\(implemented.count): \(implemented.sorted())")
         #expect(system.registry.isImplemented(.checkForUpdates))
         #expect(system.registry.isImplemented(.toggleDeveloperMode))
         #expect(system.registry.isImplemented(.newIncognitoWindow))
@@ -316,6 +316,52 @@ struct NativeCommandTests {
         #expect(system.registry.isImplemented(.addSplitView))
         #expect(system.registry.isImplemented(.newQuickWindowWindow))
         #expect(!system.registry.isImplemented(.newChatGPTMessage))
+    }
+
+    @Test("MENUS-WORK audits every visible action and keeps unsupported commands out of every presentation")
+    func menusWorkAudit() throws {
+        let system = OrbitApplication().makeCommandSystem()
+        let registry = system.registry
+        let bar = system.menus.makeMenuBar()
+        func audit(_ menu: NSMenu) {
+            for item in menu.items where !item.isHidden && !item.isSeparatorItem {
+                if let submenu = item.submenu { audit(submenu) }
+                else if let raw = item.identifier?.rawValue, let id = BrowserCommandID(rawValue: raw), item.action != nil {
+                    #expect(registry.isImplemented(id) || BrowserStandardActions.selector(for: id) != nil)
+                    #expect(!OrbitCommandCatalog.hiddenCommands.contains(id))
+                }
+            }
+        }
+        audit(bar)
+        let omitted = OrbitCommandCatalog.actionDefinitions.filter {
+            !registry.isImplemented($0.id) && BrowserStandardActions.selector(for: $0.id) == nil
+        }
+        print("MENUS-WORK omitted: " + omitted.map { $0.id.rawValue }.sorted().joined(separator: ", "))
+        for id in [BrowserCommandID.findAndReplace, .useSelectionToFind, .jumpToSelection, .copyURLAsQuote, .captureInPortraitMode] {
+            #expect(!registry.isImplemented(id))
+        }
+        for id in OrbitCommandCatalog.hiddenCommands {
+            #expect(!OrbitCommandCatalog.isCommandBarAction(try #require(registry.definition(id))))
+            #expect(system.menus.makeContextMenu(commands: [id]).items.isEmpty)
+        }
+        for definition in registry.definitions where definition.scope != .browser {
+            #expect(!OrbitCommandCatalog.isCommandBarAction(definition))
+        }
+        let file = try #require(bar.items.first { $0.title == "File" }?.submenu)
+        #expect(file.items.filter { !$0.isSeparatorItem }.compactMap(\.identifier?.rawValue) == [
+            "newTab", "newWindow", "newIncognitoWindow", "newQuickWindowWindow", "restoreLastClosedTab", "openCommandBar", "newProfile",
+            "closeWindow", "archiveTab", "share", "capture", "captureFullPage", "savePageAs", "print", "importFromArc"
+        ])
+        let edit = try #require(bar.items.first { $0.title == "Edit" }?.submenu)
+        #expect(edit.items.contains { $0.identifier?.rawValue == "copyURLAsMarkdown" && $0.keyEquivalent == "C" && $0.keyEquivalentModifierMask == [.command, .option] })
+        let view = try #require(bar.items.first { $0.title == "View" }?.submenu)
+        #expect(view.items.contains { $0.identifier?.rawValue == "revealCurrentTab" && $0.keyEquivalent == " " && $0.keyEquivalentModifierMask == [.control] })
+    }
+
+    @Test("Markdown copies preserve a valid title and URL with Markdown metacharacters")
+    func markdownLinkEscaping() {
+        #expect(BrowserMarkdownLink.format(title: "A [title]\nline", url: URL(string: "https://example.test/a(b)")!)
+            == "[A \\[title\\] line](https://example.test/a%28b%29)")
     }
 
     @Test("Product menus omit unavailable commands and empty groups; File keeps Orbit transfer commands")
@@ -337,7 +383,7 @@ struct NativeCommandTests {
         let file = bar.items.first { $0.title == "File" }?.submenu
         #expect(file?.items.contains { $0.identifier?.rawValue == "newProfile" } == true)
         #expect(file?.items.contains { $0.identifier?.rawValue == "newEasel" } == false)
-        // A single Orbit import command; the finer transfer commands live in the Command Bar.
+        // A single Orbit import command; separate transfer actions are hidden everywhere.
         #expect(file?.items.contains { $0.identifier?.rawValue == "importFromArc" } == true)
         for id in ["importArcConnections", "restoreArcConnections", "importBookmarks", "exportBookmarks"] {
             #expect(file?.items.contains { $0.identifier?.rawValue == id } == false)
