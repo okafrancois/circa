@@ -90,7 +90,7 @@ struct NativeThemeSidebarContrastTests {
         }
 
         let tooltip = try #require(descendants(sidebar, of: SidebarSpaceTooltip.self).first)
-        for label in descendants(tooltip, of: NSTextField.self) {
+        for label in tooltip.subviews.compactMap({ $0 as? NSTextField }) {
             #expect(label.textColor == NSColor(white: 0.96, alpha: 1), "The Space capsule keeps its observed dark material palette")
         }
         #expect(sidebar.window == nil, "The synthetic view never belongs to a visible window")

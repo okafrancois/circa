@@ -62,7 +62,7 @@ struct SidebarFooterRegressionTests {
         let compressed = FooterSpaceLayout.resolve(count: 6, libraryCenterX: 24, plusCenterX: 204)
         #expect(compressed.presentation == .icons && compressed.pitch == 24)
         let crowded = FooterSpaceLayout.resolve(count: 7, libraryCenterX: 24, plusCenterX: 204)
-        #expect(crowded.presentation == .dots && crowded.pitch == 18 && crowded.dotDiameter == 7)
+        #expect(crowded.presentation == .dots && crowded.pitch == 18 && crowded.dotDiameter == 8)
         let dense = FooterSpaceLayout.resolve(count: 30, libraryCenterX: 24, plusCenterX: 204)
         #expect(dense.presentation == .dots && dense.pitch * 30 <= 144.001)
         #expect(dense.dotDiameter >= 3 && dense.dotDiameter <= dense.pitch)
@@ -93,15 +93,18 @@ struct SidebarFooterRegressionTests {
             return (count, colored, maxAlpha)
         }
         let a = opaqueStats(raster(active)), i = opaqueStats(raster(inactive))
-        // A 7 pt dot covers about 38 px; a 15 pt emoji glyph covers far more and is coloured.
+        // An 8 pt dot covers about 50 px; an emoji glyph covers far more and is coloured.
         #expect(a.count > 0 && a.count < 70 && a.colored == 0)
         #expect(i.count > 0 && i.count < 70 && i.colored == 0)
         #expect(a.maxAlpha > 0.95 && i.maxAlpha < 0.8)
+        inactive.hoverAmount = 1
+        let hovered = opaqueStats(raster(inactive))
+        #expect(hovered.maxAlpha > i.maxAlpha && hovered.maxAlpha < a.maxAlpha)
         active.presentation = .icons
         #expect(opaqueStats(raster(active)).colored > 0)
     }
 
-    @Test("Active state changes rebuild the emoji policy and icon updates invalidate cached drawing")
+    @Test("Active state changes retain hovered controls and icon updates invalidate cached drawing")
     func activeStateChanges() {
         let items = spaces(2)
         let footer = SidebarFooterView()
@@ -114,7 +117,7 @@ struct SidebarFooterRegressionTests {
         #expect(raster(old).tiffRepresentation != previousPixels)
         footer.render(spaces: items, activeSpaceID: items[1].id)
         #expect(!footer.spaceButtons[0].isActive && footer.spaceButtons[1].isActive)
-        #expect(footer.spaceButtons[0] !== old)
+        #expect(footer.spaceButtons[0] === old)
     }
 
     private func raster(_ button: SidebarSpaceButton) -> NSBitmapImageRep {
