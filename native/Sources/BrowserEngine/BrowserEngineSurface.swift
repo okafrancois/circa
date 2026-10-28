@@ -176,6 +176,8 @@ public struct BrowserMediaState: Sendable, Equatable {
 @MainActor
 public protocol BrowserEngineSurface: BrowserFindSurface {
     var profileID: ProfileID { get }
+    /// Dedicated opt-in metadata channel, absent on engines without a native manager.
+    var passwordPrompts: (any BrowserPasswordPromptSource)? { get }
     var hostView: NSView { get }
     var isDisposed: Bool { get }
     /// True once the engine finished closing the native document after `dispose()` (CEF:
@@ -273,6 +275,7 @@ public protocol BrowserEngineSurface: BrowserFindSurface {
 }
 
 public extension BrowserEngineSurface {
+    var passwordPrompts: (any BrowserPasswordPromptSource)? { nil }
     func setPageTintObservationEnabled(_ enabled: Bool) {}
     func reloadIgnoringCache() throws { throw BrowserEngineError.unsupportedOperation }
     func archivePage(documentGeneration: UInt64) async throws -> Data { throw BrowserEngineError.unsupportedOperation }

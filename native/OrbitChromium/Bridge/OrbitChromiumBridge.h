@@ -600,6 +600,11 @@ int32_t ACROpenExtensionManagerPage(uint64_t surface_token, int32_t page, const 
 int32_t ACRBrowserStateAvailable(void);
 int32_t ACRExtensionActionSnapshot(uint64_t surface_token, char* json, uint32_t capacity);
 
+/* Dedicated structured password callback; disabled until explicitly registered. */
+int32_t ACRPasswordPromptObserve(uint64_t surface, uint64_t profile, orbit_password_prompt_callback_t callback, void* context);
+int32_t ACRPasswordPromptSnapshot(uint64_t surface, uint64_t profile, orbit_password_prompt_t* snapshot);
+int32_t ACRPasswordPromptDecide(uint64_t surface, uint64_t profile, uint64_t generation, int32_t decision);
+int32_t ACRPasswordPromptReopen(uint64_t surface, uint64_t profile, uint64_t generation);
 #ifdef __cplusplus
 }
 #endif

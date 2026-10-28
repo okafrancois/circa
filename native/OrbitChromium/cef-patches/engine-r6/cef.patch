@@ -1,0 +1,355 @@
+diff --git a/BUILD.gn b/BUILD.gn
+index 4b751ec..9b7d215 100644
+--- a/BUILD.gn
++++ b/BUILD.gn
+@@ -960,6 +960,9 @@ source_set("libcef_static") {
+   ]
+ 
+   deps = [
++    "//chrome/browser/profiles:profile",
++    "//chrome/browser/ui/passwords",
++
+     ":cef_make_headers",
+     "libcef/common/mojom",
+ 
+@@ -1117,6 +1120,8 @@ source_set("libcef_static") {
+       "libcef/browser/orbit/orbit_modal_dialog_host.h",
+       "libcef/browser/orbit/orbit_cef_api.h",
+       "libcef/browser/orbit/orbit_cef_api.mm",
++      "libcef/browser/orbit/orbit_password_prompt.h",
++      "libcef/browser/orbit/orbit_password_prompt.mm",
+       "libcef/browser/orbit/orbit_hosted.h",
+       "libcef/browser/orbit/orbit_hosted_intent.h",
+       "libcef/browser/orbit/orbit_hosted.mm",
+diff --git a/libcef/browser/orbit/orbit_cef_api.h b/libcef/browser/orbit/orbit_cef_api.h
+index 49c364e..4bf1340 100644
+--- a/libcef/browser/orbit/orbit_cef_api.h
++++ b/libcef/browser/orbit/orbit_cef_api.h
+@@ -26,7 +26,7 @@ extern "C" {
+ // Version 3 (CHROMIUM-APP-R3): additive, hold_window/release_window. Earlier
+ // versions keep their layout as the prefix of the table.
+ // Version 4 (EXTENSIONS-PRODUCT-R1): additive, native per-profile extension services.
+-#define ORBIT_CEF_API_VERSION 6u
++#define ORBIT_CEF_API_VERSION 7u
+ 
+ typedef struct {
+   uint32_t struct_size;
+@@ -54,6 +54,23 @@ typedef struct {
+   uint64_t window_token;
+ } orbit_tab_info_t;
+ 
++// Version 7. Dedicated password metadata, borrowed for the callback/query only.
++// Password bytes are never exposed. Generations are unique for the runtime.
++typedef struct {
++  uint32_t struct_size;
++  uint32_t version;
++  int32_t browser_id;
++  int32_t state;  // 0 none, 1 pending save, 2 pending update, 3 generated autosave.
++  uint64_t generation;
++  const char* profile_path;
++  const char* origin;
++  const char* username;
++  int32_t password_masked;
++  int32_t can_reopen;
++} orbit_password_prompt_t;
++// event: 1 show, 2 hide, 3 state changed. Never sent through generic events.
++typedef void (*orbit_password_prompt_callback_t)(void*, int32_t, const orbit_password_prompt_t*);
++
+ typedef struct {
+   uint32_t struct_size;
+   uint32_t version;
+@@ -163,6 +180,13 @@ typedef struct {
+   // Chromium's history navigation uses cache-only recovery for POST entries.
+   int32_t (*discard_tab)(int32_t browser_id);
+   int32_t (*restore_discarded_tab)(int32_t browser_id);
++  // Version 7. Exact admitted profile path is required; off-record is refused.
++  // Null callback disables presentation without declining a pending credential.
++  int32_t (*password_prompt_observe)(int32_t, const char*, orbit_password_prompt_callback_t, void*);
++  int32_t (*password_prompt_snapshot)(int32_t, const char*, orbit_password_prompt_t*);
++  // One shot per generation. 1 save/update, 2 never (save only), 3 not now/nope update.
++  int32_t (*password_prompt_decide)(int32_t, const char*, uint64_t, int32_t);
++  int32_t (*password_prompt_reopen)(int32_t, const char*, uint64_t);
+ } orbit_cef_api_t;
+ 
+ // Returns the API table for `version`, or NULL when unsupported.
+diff --git a/libcef/browser/orbit/orbit_cef_api.mm b/libcef/browser/orbit/orbit_cef_api.mm
+index 49086b9..8d80c98 100644
+--- a/libcef/browser/orbit/orbit_cef_api.mm
++++ b/libcef/browser/orbit/orbit_cef_api.mm
+@@ -3,6 +3,7 @@
+ // be found in the LICENSE file.
+ 
+ #include "cef/libcef/browser/orbit/orbit_cef_api.h"
++#include "cef/libcef/browser/orbit/orbit_password_prompt.h"
+ 
+ #import <AppKit/AppKit.h>
+ 
+@@ -50,6 +51,10 @@ int32_t WindowDestroyed(uint64_t window_token) {
+   if (!OnValidUIThread()) {
+     return -1;
+   }
++  for (Browser* browser : orbit::GetLogicalBrowsers(window_token)) {
++    for (int i = 0; i < browser->tab_strip_model()->count(); ++i)
++      orbit::HidePasswordPrompt(browser->tab_strip_model()->GetWebContentsAt(i));
++  }
+   return orbit::WindowDestroyed(window_token);
+ }
+ 
+@@ -62,6 +67,10 @@ int32_t WindowActivationChanged(uint64_t window_token, int32_t active) {
+     if (!manager) {
+       continue;
+     }
++    if (!active) {
++      for (int i = 0; i < browser->tab_strip_model()->count(); ++i)
++        orbit::HidePasswordPrompt(browser->tab_strip_model()->GetWebContentsAt(i));
++    }
+     if (active) {
+       manager->DidBecomeActive();
+     } else {
+@@ -207,6 +216,7 @@ int32_t MoveTab(int32_t browser_id,
+   if (!host || !host->OrbitMoveToWindow(window_token, index)) {
+     return 0;
+   }
++  orbit::HidePasswordPrompt(host->GetWebContents());
+   if (parent_nsview) {
+     if (auto* delegate =
+             CefBrowserPlatformDelegateChromeHosted::FromBrowserId(browser_id)) {
+@@ -329,6 +339,16 @@ int32_t ReleaseWindow(uint64_t window_token) {
+   return api;
+ }();
+ 
++const orbit_cef_api_t kApiV7 = [] {
++  auto api = kApiV6;
++  api.version = 7u;
++  api.password_prompt_observe = &orbit::PasswordPromptObserve;
++  api.password_prompt_snapshot = &orbit::PasswordPromptSnapshot;
++  api.password_prompt_decide = &orbit::PasswordPromptDecide;
++  api.password_prompt_reopen = &orbit::PasswordPromptReopen;
++  return api;
++}();
++
+ }  // namespace
+ 
+ extern "C" CEF_EXPORT const orbit_cef_api_t* orbit_cef_get_api(uint32_t version);
+@@ -357,6 +377,8 @@ int32_t ReleaseWindow(uint64_t window_token) {
+       return &kApiV5;
+     case 6u:
+       return &kApiV6;
++    case 7u:
++      return &kApiV7;
+     default:
+       return nullptr;
+   }
+diff --git a/libcef/browser/orbit/orbit_password_prompt.h b/libcef/browser/orbit/orbit_password_prompt.h
+new file mode 100644
+index 0000000..39bf00c
+--- /dev/null
++++ b/libcef/browser/orbit/orbit_password_prompt.h
+@@ -0,0 +1,15 @@
++// Copyright 2026 Orbit. BSD-style license; see LICENSE.
++#ifndef CEF_LIBCEF_BROWSER_ORBIT_ORBIT_PASSWORD_PROMPT_H_
++#define CEF_LIBCEF_BROWSER_ORBIT_ORBIT_PASSWORD_PROMPT_H_
++#include "cef/libcef/browser/orbit/orbit_cef_api.h"
++namespace content { class WebContents; }
++namespace orbit {
++bool UpdatePasswordPrompt(content::WebContents*, bool show);
++bool HidePasswordPrompt(content::WebContents*);
++void ResetPasswordPrompt(content::WebContents*);
++int32_t PasswordPromptObserve(int32_t, const char*, orbit_password_prompt_callback_t, void*);
++int32_t PasswordPromptSnapshot(int32_t, const char*, orbit_password_prompt_t*);
++int32_t PasswordPromptDecide(int32_t, const char*, uint64_t, int32_t);
++int32_t PasswordPromptReopen(int32_t, const char*, uint64_t);
++}
++#endif
+diff --git a/libcef/browser/orbit/orbit_password_prompt.mm b/libcef/browser/orbit/orbit_password_prompt.mm
+new file mode 100644
+index 0000000..658aca4
+--- /dev/null
++++ b/libcef/browser/orbit/orbit_password_prompt.mm
+@@ -0,0 +1,186 @@
++// Copyright 2026 Orbit. BSD-style license; see LICENSE.
++#include "cef/libcef/browser/orbit/orbit_password_prompt.h"
++#include <map>
++#include <memory>
++#include "base/no_destructor.h"
++#include "base/strings/utf_string_conversions.h"
++#include "cef/libcef/browser/browser_host_base.h"
++#include "cef/libcef/browser/orbit/browser_platform_delegate_chrome_hosted.h"
++#include "cef/libcef/browser/thread_util.h"
++#include "chrome/browser/profiles/profile.h"
++#include "chrome/browser/ui/passwords/manage_passwords_ui_controller.h"
++#include "content/public/browser/web_contents.h"
++#include "content/public/browser/web_contents_observer.h"
++#include "url/origin.h"
++
++namespace orbit {
++namespace {
++uint64_t NextGeneration() { static uint64_t value = 0; return ++value; }
++class Prompt;
++using Prompts = std::map<content::WebContents*, std::shared_ptr<Prompt>>;
++Prompts& Entries() { static base::NoDestructor<Prompts> entries; return *entries; }
++auto* Controller(content::WebContents* contents) {
++  return ManagePasswordsUIController::FromWebContents(contents);
++}
++bool Hosted(content::WebContents* contents) {
++  auto host = CefBrowserHostBase::GetBrowserForContents(contents);
++  return host && CefBrowserPlatformDelegateChromeHosted::FromBrowserId(host->GetIdentifier());
++}
++class Prompt final : public content::WebContentsObserver,
++                     public std::enable_shared_from_this<Prompt> {
++ public:
++  explicit Prompt(content::WebContents* contents) : WebContentsObserver(contents) {
++    auto host = CefBrowserHostBase::GetBrowserForContents(contents);
++    id_ = host->GetIdentifier();
++    profile_ = Profile::FromBrowserContext(contents->GetBrowserContext());
++    path_ = profile_->GetPath().value();
++  }
++  orbit_password_prompt_t Snapshot() const {
++    return {sizeof(orbit_password_prompt_t), 1, id_, state_, generation_,
++            path_.c_str(), origin_.c_str(), username_.c_str(), 1,
++            (state_ == 1 || state_ == 2) && !consumed_ ? 1 : 0};
++  }
++  void Emit(int event) {
++    auto keep_alive = shared_from_this();
++    if (!callback_) return;
++    const auto snapshot = Snapshot();
++    callback_(context_, event, &snapshot);
++  }
++  uint64_t Hide() {
++    const auto generation = generation_ = NextGeneration();
++    held_ = false;
++    if (shown_) { shown_ = false; Emit(2); }
++    return generation;
++  }
++  void Reset() {
++    Hide(); state_ = 0; held_ = false; consumed_ = false;
++    origin_.clear(); username_.clear();
++  }
++  void Update(bool show) {
++    auto* controller = Controller(web_contents());
++    if (!controller) return;
++    using namespace password_manager::ui;
++    const auto native_state = controller->GetState();
++    int state = native_state == PENDING_PASSWORD_STATE ? 1 :
++                native_state == PENDING_PASSWORD_UPDATE_STATE ? 2 :
++                native_state == SAVE_CONFIRMATION_STATE ? 3 : 0;
++    std::string origin, username;
++    if (state) {
++      const auto& pending = controller->GetPendingPassword();
++      origin = url::Origin::Create(pending.url).Serialize();
++      username = base::UTF16ToUTF8(pending.username_value);
++    }
++    const bool changed = state != state_ || origin != origin_ || username != username_;
++    if (changed) {
++      Hide();
++      if (!web_contents()) return;
++      state_ = state; origin_ = std::move(origin); username_ = std::move(username);
++      consumed_ = false; held_ = false;
++      generation_ = NextGeneration();
++      Emit(3);
++    }
++    if (!web_contents() || !state_ || consumed_) return;
++    controller = Controller(web_contents());
++    if (!controller) return;
++    if (show) {
++      // Keep the existing model alive even with presentation disabled. No decision
++      // is inferred from an absent shell UI or observer.
++      held_ = true;
++      controller->OnBubbleShown();
++    }
++    if (held_ && callback_ && !shown_ && web_contents()->GetVisibility() == content::Visibility::VISIBLE) {
++      shown_ = true;
++      Emit(1);
++    }
++  }
++  void OnVisibilityChanged(content::Visibility visibility) override {
++    if (visibility != content::Visibility::VISIBLE) Hide();
++  }
++  void WebContentsDestroyed() override {
++    auto keep_alive = shared_from_this();
++    Reset(); callback_ = nullptr;
++    Entries().erase(web_contents());
++  }
++  int id_ = 0, state_ = 0;
++  uint64_t generation_ = NextGeneration();
++  raw_ptr<Profile> profile_ = nullptr;
++  std::string path_, origin_, username_;
++  bool shown_ = false, held_ = false, consumed_ = false;
++  orbit_password_prompt_callback_t callback_ = nullptr;
++  void* context_ = nullptr;
++};
++std::shared_ptr<Prompt> Entry(content::WebContents* contents) {
++  auto& value = Entries()[contents];
++  if (!value) value = std::make_shared<Prompt>(contents);
++  return value;
++}
++std::shared_ptr<Prompt> Find(int id, const char* path) {
++  if (!CEF_CURRENTLY_ON_UIT() || !path) return nullptr;
++  auto host = CefBrowserHostBase::GetBrowserForBrowserId(id);
++  if (!host || !host->GetWebContents() || !Hosted(host->GetWebContents())) return nullptr;
++  auto* profile = Profile::FromBrowserContext(host->GetWebContents()->GetBrowserContext());
++  if (profile->IsOffTheRecord() || profile->GetPath().value() != path) return nullptr;
++  return Entry(host->GetWebContents());
++}
++}
++bool UpdatePasswordPrompt(content::WebContents* contents, bool show) {
++  if (!Hosted(contents)) return false;
++  auto* profile = Profile::FromBrowserContext(contents->GetBrowserContext());
++  if (!profile->IsOffTheRecord()) Entry(contents)->Update(show);
++  return true;
++}
++bool HidePasswordPrompt(content::WebContents* contents) {
++  if (!Hosted(contents)) return false;
++  auto found = Entries().find(contents);
++  if (found != Entries().end()) found->second->Hide();
++  return true;
++}
++void ResetPasswordPrompt(content::WebContents* contents) {
++  auto found = Entries().find(contents);
++  if (found != Entries().end()) found->second->Reset();
++}
++int32_t PasswordPromptObserve(int32_t id, const char* path, orbit_password_prompt_callback_t cb, void* context) {
++  auto entry = Find(id, path); if (!entry) return 0;
++  entry->Hide(); entry->callback_ = cb; entry->context_ = context;
++  entry->Update(false);
++  return 1;
++}
++int32_t PasswordPromptSnapshot(int32_t id, const char* path, orbit_password_prompt_t* out) {
++  auto entry = Find(id, path);
++  if (!entry || !out || out->struct_size < sizeof(*out)) return 0;
++  *out = entry->Snapshot(); return 1;
++}
++int32_t PasswordPromptDecide(int32_t id, const char* path, uint64_t generation, int32_t decision) {
++  auto entry = Find(id, path);
++  if (!entry || generation != entry->generation_ || entry->consumed_ ||
++      (entry->state_ != 1 && entry->state_ != 2) || decision < 1 || decision > 3 ||
++      (decision == 2 && entry->state_ != 1)) return 0;
++  auto* controller = Controller(entry->web_contents());
++  if (!controller || (controller->GetState() != password_manager::ui::PENDING_PASSWORD_STATE &&
++                      controller->GetState() != password_manager::ui::PENDING_PASSWORD_UPDATE_STATE)) return 0;
++  const int state = entry->state_;
++  // Revoke before calling the model, but notify dismissal only after the
++  // decision has taken effect. A UI may unregister itself from its hide callback.
++  const bool was_shown = entry->shown_;
++  entry->consumed_ = true; entry->held_ = false; entry->shown_ = false;
++  entry->generation_ = NextGeneration();
++  if (decision == 1) {
++    const auto pending = controller->GetPendingPassword();
++    controller->SavePassword(pending.username_value, pending.password_value);
++  } else if (decision == 2) controller->NeverSavePassword();
++  else if (state == 2) controller->OnNopeUpdateClicked();
++  else controller->OnNotNowClicked();
++  if (was_shown) entry->Emit(2);
++  if (entry->web_contents()) {
++    if (auto* live = Controller(entry->web_contents())) live->OnBubbleHidden();
++    entry->Update(false);
++  }
++  return 1;
++}
++int32_t PasswordPromptReopen(int32_t id, const char* path, uint64_t generation) {
++  auto entry = Find(id, path);
++  if (!entry || entry->generation_ != generation || entry->consumed_ ||
++      (entry->state_ != 1 && entry->state_ != 2)) return 0;
++  entry->Update(true); return 1;
++}
++}

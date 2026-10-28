@@ -26,7 +26,7 @@ extern "C" {
 // Version 3 (CHROMIUM-APP-R3): additive, hold_window/release_window. Earlier
 // versions keep their layout as the prefix of the table.
 // Version 4 (EXTENSIONS-PRODUCT-R1): additive, native per-profile extension services.
-#define ORBIT_CEF_API_VERSION 6u
+#define ORBIT_CEF_API_VERSION 7u
 
 typedef struct {
   uint32_t struct_size;
@@ -53,6 +53,23 @@ typedef struct {
   // Orbit window token of the Browser, 0 when none.
   uint64_t window_token;
 } orbit_tab_info_t;
+
+// Version 7. Dedicated password metadata, borrowed for the callback/query only.
+// Password bytes are never exposed. Generations are unique for the runtime.
+typedef struct {
+  uint32_t struct_size;
+  uint32_t version;
+  int32_t browser_id;
+  int32_t state;  // 0 none, 1 pending save, 2 pending update, 3 generated autosave.
+  uint64_t generation;
+  const char* profile_path;
+  const char* origin;
+  const char* username;
+  int32_t password_masked;
+  int32_t can_reopen;
+} orbit_password_prompt_t;
+// event: 1 show, 2 hide, 3 state changed. Never sent through generic events.
+typedef void (*orbit_password_prompt_callback_t)(void*, int32_t, const orbit_password_prompt_t*);
 
 typedef struct {
   uint32_t struct_size;
@@ -163,6 +180,13 @@ typedef struct {
   // Chromium's history navigation uses cache-only recovery for POST entries.
   int32_t (*discard_tab)(int32_t browser_id);
   int32_t (*restore_discarded_tab)(int32_t browser_id);
+  // Version 7. Exact admitted profile path is required; off-record is refused.
+  // Null callback disables presentation without declining a pending credential.
+  int32_t (*password_prompt_observe)(int32_t, const char*, orbit_password_prompt_callback_t, void*);
+  int32_t (*password_prompt_snapshot)(int32_t, const char*, orbit_password_prompt_t*);
+  // One shot per generation. 1 save/update, 2 never (save only), 3 not now/nope update.
+  int32_t (*password_prompt_decide)(int32_t, const char*, uint64_t, int32_t);
+  int32_t (*password_prompt_reopen)(int32_t, const char*, uint64_t);
 } orbit_cef_api_t;
 
 // Returns the API table for `version`, or NULL when unsupported.
