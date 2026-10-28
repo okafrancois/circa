@@ -304,7 +304,7 @@ struct NativeSpaceThemeWindowTests {
         #expect(view.modeButtons.map { $0.frame.midX } == [138, 178, 218] && view.modeButtons.allSatisfy { $0.frame.midY == 48 })
         #expect(view.modeHighlight.frame == view.modeButtons[0].frame, "a never-themed Space is automatic")
         #expect(view.swatches.map { $0.frame.midX } == (0..<9).map { 60 + CGFloat($0) * 29.5 })
-        #expect(view.swatches.allSatisfy { $0.frame.midY == 380 && $0.discFrame.width == 20 })
+        #expect(view.swatches.allSatisfy { $0.frame.midY == 380 && $0.discFrame.width == 24 })
         #expect([view.removeButton, view.addButton].map { $0.frame.midX } == [158, 198])
         #expect(!view.placeholder.isHidden && view.placeholder.stringValue == "Tap to pick a color for this space")
         #expect(!view.intensitySlider.isActive && view.intensitySlider.thumb.isHidden && view.grainDial.tick.isHidden)

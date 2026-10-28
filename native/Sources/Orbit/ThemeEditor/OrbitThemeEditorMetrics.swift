@@ -3,15 +3,16 @@ import BrowserCore
 
 @MainActor
 enum OrbitThemeEditorMetrics {
-    ///  356 × 508, radius 20.45.
+    /// Compact color viewport; the extended editor retains the applied-material controls.
     // The original 508 pt color editor is retained above an applied-material section (26 Oct request).
+    static let pickerSize = NSSize(width: 356, height: 508)
     static let size = NSSize(width: 356, height: 650)
     static let cornerRadius: CGFloat = 20
     static let offsetFromCard = CGPoint(x: 13, y: 13)
 
     static let field = NSRect(x: 8, y: 8, width: 340, height: 339)
     static let fieldCornerRadius: CGFloat = 14
-    static let dotPitch: CGFloat = 6
+    static let dotPitch: CGFloat = 4.25
     static let dotDiameter: CGFloat = 1.2
 
     static let modeCenterY: CGFloat = 48
@@ -33,7 +34,7 @@ enum OrbitThemeEditorMetrics {
     static let swatchRowCenterY: CGFloat = 380
     static let swatchFirstCenterX: CGFloat = 60
     static let swatchPitch: CGFloat = 29.5
-    static let swatchDiameter: CGFloat = 20
+    static let swatchDiameter: CGFloat = 24
     static let swatchRing: CGFloat = 2
     static let chevronCenterXs: [CGFloat] = [24, 332]
 
@@ -41,8 +42,8 @@ enum OrbitThemeEditorMetrics {
     static let sliderTrackX: ClosedRange<CGFloat> = 19...243
     static let sliderTrackHeight: CGFloat = 18
     static let waveAmplitude: CGFloat = 11
-    static let wavePeriod: CGFloat = 32
-    static let waveLineWidth: CGFloat = 3.5
+    static let wavePeriod: CGFloat = 38
+    static let waveLineWidth: CGFloat = 6
     static let sliderThumb = NSSize(width: 22, height: 54)
     static let dialCenterX: CGFloat = 298
     static let dialRadius: CGFloat = 34

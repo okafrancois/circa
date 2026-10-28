@@ -5,9 +5,9 @@ import BrowserCore
 final class SpaceIconPicker: NSViewController, NSSearchFieldDelegate {
     enum Mode: Int { case emoji, icons }
 
-    static let size = NSSize(width: 320, height: 372)
-    let popup = SidebarCreationPopup()
-    let modes = NSSegmentedControl(labels: [uiText("Emoji"), uiText("Icons")], trackingMode: .selectOne, target: nil, action: nil)
+    static let size = NSSize(width: 270, height: 270)
+    let popup = SpacePickerPopover()
+    let modes = NSSegmentedControl(labels: [uiText("Emoji"), uiText("Icon")], trackingMode: .selectOne, target: nil, action: nil)
     let search = NSSearchField()
     let grid: SpaceIconGridView
     let removeButton = NSButton(title: uiText("Remove Icon"), target: nil, action: nil)
@@ -38,7 +38,6 @@ final class SpaceIconPicker: NSViewController, NSSearchFieldDelegate {
         self.catalog = catalog
         grid = SpaceIconGridView(accent: accent)
         super.init(nibName: nil, bundle: nil)
-        popup.usesGlass = true
         popup.contentViewController = self
         popup.onClose = { [weak self] in
             guard let self else { return }
@@ -57,27 +56,29 @@ final class SpaceIconPicker: NSViewController, NSSearchFieldDelegate {
         content.setAccessibilityRole(.popover)
         content.setAccessibilityLabel(uiText("Change Space Icon or Emoji"))
         content.onKey = { [weak self] in self?.handle($0) ?? false }
-        let width = Self.size.width, inset: CGFloat = 12
+        let width = Self.size.width, inset: CGFloat = 10
 
         modes.selectedSegment = mode.rawValue
-        modes.segmentStyle = .automatic
+        modes.segmentStyle = .rounded
+        modes.setWidth(57, forSegment: 0)
+        modes.setWidth(57, forSegment: 1)
         modes.target = self
         modes.action = #selector(modeChanged(_:))
-        modes.frame = NSRect(x: inset, y: 10, width: width - 2 * inset, height: 24)
+        modes.frame = NSRect(x: (width - 114) / 2, y: 12, width: 114, height: 24)
         modes.setAccessibilityIdentifier("space-icon-picker-mode")
 
-        search.placeholderString = uiText("Search Emoji")
+        search.placeholderString = uiText("Search")
         search.delegate = self
         search.sendsSearchStringImmediately = true
-        search.frame = NSRect(x: inset, y: 42, width: width - 2 * inset, height: 24)
+        search.frame = NSRect(x: inset, y: 46, width: width - 2 * inset, height: 22)
         search.setAccessibilityIdentifier("space-icon-picker-search")
 
-        let categories = SpaceIconPickerCatalog.Category.allCases
+        let categories: [SpaceIconPickerCatalog.Category] = [.smileys, .animals, .food, .activities, .travel, .objects, .symbols, .flags]
         let pitch = (width - 2 * inset) / CGFloat(categories.count)
         for (index, category) in categories.enumerated() {
-            let button = NSButton(frame: NSRect(x: inset + CGFloat(index) * pitch, y: 72, width: pitch, height: 26))
+            let button = NSButton(frame: NSRect(x: inset + CGFloat(index) * pitch, y: 232, width: pitch, height: 26))
             button.isBordered = false
-            button.image = NSImage(systemSymbolName: category.symbol, accessibilityDescription: category.title)
+            button.image = NSImage(systemSymbolName: Self.categorySymbol(category), accessibilityDescription: category.title)
             button.contentTintColor = OrbitTokens.Color.Text.secondary
             button.toolTip = category.title
             button.tag = category.rawValue
@@ -87,10 +88,13 @@ final class SpaceIconPicker: NSViewController, NSSearchFieldDelegate {
             content.addSubview(button)
         }
 
-        scroll.frame = NSRect(x: 4, y: 102, width: width - 8, height: 222)
+        scroll.frame = NSRect(x: inset, y: 74, width: width - 2 * inset, height: 154)
         scroll.drawsBackground = false
         scroll.hasVerticalScroller = true
         scroll.scrollerStyle = .overlay
+        scroll.autohidesScrollers = true
+        scroll.borderType = .noBorder
+        scroll.tile()
         scroll.documentView = grid
         grid.frame = NSRect(x: 0, y: 0, width: scroll.contentSize.width, height: 10)
         grid.onHover = { [weak self] item in self?.showDetail(item) }
@@ -101,30 +105,24 @@ final class SpaceIconPicker: NSViewController, NSSearchFieldDelegate {
         }
         grid.onPick = { [weak self] choice in self?.choose(choice) }
 
-        detail.font = OrbitTokens.Typography.tooltip
-        detail.textColor = OrbitTokens.Color.Text.secondary
-        detail.lineBreakMode = .byTruncatingTail
-        detail.frame = NSRect(x: inset, y: 336, width: 96, height: 18)
-
-        paletteButton.bezelStyle = .accessoryBarAction
-        paletteButton.controlSize = .small
-        paletteButton.target = self
-        paletteButton.action = #selector(showCharacterPalette(_:))
-        paletteButton.sizeToFit()
-        removeButton.bezelStyle = .accessoryBarAction
-        removeButton.controlSize = .small
         removeButton.target = self
         removeButton.action = #selector(removeIcon(_:))
         removeButton.isEnabled = currentChoice != .none
         removeButton.setAccessibilityIdentifier("space-icon-picker-remove")
-        removeButton.sizeToFit()
-        removeButton.frame.origin = NSPoint(x: width - inset - removeButton.frame.width, y: 333)
-        paletteButton.frame.origin = NSPoint(x: removeButton.frame.minX - 6 - paletteButton.frame.width, y: 333)
-        detail.frame.size.width = max(40, paletteButton.frame.minX - 8 - inset)
-
-        for view in [modes, search, scroll, detail, paletteButton, removeButton] as [NSView] {
-            content.addSubview(view)
+        paletteButton.target = self
+        paletteButton.action = #selector(showCharacterPalette(_:))
+        let menu = NSMenu()
+        menu.autoenablesItems = false
+        for button in [paletteButton, removeButton] {
+            let item = NSMenuItem(title: button.title, action: button.action, keyEquivalent: "")
+            item.target = self
+            item.isEnabled = button.isEnabled
+            menu.addItem(item)
         }
+        grid.menu = menu
+        let separator = NSBox(frame: NSRect(x: inset, y: 228, width: width - 2 * inset, height: 1))
+        separator.boxType = .separator
+        for view in [modes, search, scroll, separator] as [NSView] { content.addSubview(view) }
         view = content
         updateModeControls()
         reload()
@@ -140,7 +138,7 @@ final class SpaceIconPicker: NSViewController, NSSearchFieldDelegate {
         previousResponder = window.firstResponder
         sourceWindow = window
         popup.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
-        guard let panel = popup.window, panel.isVisible, panel.parent === window, !finished else {
+        guard let panel = popup.window, panel.isVisible, !finished else {
             popup.performClose(nil)
             return false
         }
@@ -232,12 +230,13 @@ final class SpaceIconPicker: NSViewController, NSSearchFieldDelegate {
 
     private func updateModeControls() {
         let icons = mode == .icons
-        search.placeholderString = uiText(icons ? "Search Icons" : "Search Emoji")
+        search.placeholderString = uiText("Search")
         search.isEnabled = true
         grid.setAccessibilityLabel(uiText(icons ? "Icons" : "Emoji"))
         for button in categoryButtons { button.isHidden = icons }
         paletteButton.isHidden = icons
-        let keyViews: [NSView] = [modes, search] + (icons ? [] : categoryButtons) + (icons ? [] : [paletteButton]) + [removeButton]
+        grid.menu?.items.first?.isHidden = icons
+        let keyViews: [NSView] = [modes, search] + (icons ? [] : categoryButtons)
         for (index, control) in keyViews.enumerated() {
             control.nextKeyView = keyViews[(index + 1) % keyViews.count]
         }
@@ -246,7 +245,7 @@ final class SpaceIconPicker: NSViewController, NSSearchFieldDelegate {
     @objc private func jumpToCategory(_ sender: NSButton) {
         guard mode == .emoji, !isComposing, let category = SpaceIconPickerCatalog.Category(rawValue: sender.tag) else { return }
         if !search.stringValue.isEmpty { setSearch("") }
-        grid.scrollToSection(category)
+        grid.reveal(category: category)
     }
 
     @objc private func showCharacterPalette(_ sender: Any?) {
@@ -262,7 +261,7 @@ final class SpaceIconPicker: NSViewController, NSSearchFieldDelegate {
             grid.setSections([(nil, results)], selecting: query.isEmpty ? currentChoice : results.first?.choice)
         } else if query.trimmingCharacters(in: .whitespaces).isEmpty {
             var sections: [(SpaceIconPickerCatalog.Category?, [SpaceIconPickerCatalog.Item])] =
-                SpaceIconPickerCatalog.Category.allCases.map { ($0, catalog.items(in: $0)) }
+                SpaceIconPickerCatalog.Category.allCases.map { (nil, orderedItems(in: $0)) }
             if case .grapheme(let value) = currentChoice, !catalog.items.contains(where: { $0.choice == currentChoice }) {
                 sections.insert((nil, [.init(emoji: value, name: uiText("Current Icon"), category: .symbols)]), at: 0)
             }
@@ -276,6 +275,29 @@ final class SpaceIconPicker: NSViewController, NSSearchFieldDelegate {
             grid.setSections([(nil, results)], selecting: results.first?.choice)
         }
         showDetail(grid.selectedItem)
+    }
+
+    private static func categorySymbol(_ category: SpaceIconPickerCatalog.Category) -> String {
+        switch category {
+        case .smileys, .people: "face.smiling.inverse"
+        case .animals: "sun.max"
+        case .food: "mug"
+        case .activities: "rosette"
+        case .travel: "box.truck"
+        case .objects: "gift"
+        case .symbols: "heart"
+        case .flags: "flag"
+        }
+    }
+
+    /// Familiar face order in the initial viewport; the catalog remains the search authority.
+    private func orderedItems(in category: SpaceIconPickerCatalog.Category) -> [SpaceIconPickerCatalog.Item] {
+        let items = catalog.items(in: category)
+        guard category == .smileys else { return items }
+        let leading = Array("😀😃😄😁😆😅🤣😂🙂🙃🫠😉😊😇🥰😍🤩😘😗☺️😚😙🥲😋😛😜🤪😝🤑🤗🫢🤭🫣🤫🤔🫡🤐🤨😐😑").map(String.init)
+        let first = leading.compactMap { value in items.first { $0.emoji == value } }
+        let choices = Set(first.map(\.emoji))
+        return first + items.filter { !choices.contains($0.emoji) }
     }
 
     private func showDetail(_ item: SpaceIconPickerCatalog.Item?) {
@@ -297,7 +319,8 @@ private final class SpaceIconPickerContent: NSView {
 /// Sectioned typed icon grid drawn in one view; each cell is exposed to accessibility as a button.
 @MainActor
 final class SpaceIconGridView: NSView {
-    static let cell: CGFloat = 34
+    static let cell: CGFloat = 31
+    static let rowHeight: CGFloat = 33
     static let headerHeight: CGFloat = 24
     private let accent: OrbitTokens.ThemeAccent
     private(set) var items: [SpaceIconPickerCatalog.Item] = []
@@ -306,6 +329,7 @@ final class SpaceIconGridView: NSView {
     private var columns = 8
     private(set) var selectedIndex: Int?
     private var hoveredIndex: Int?
+    private var showsKeyboardSelection = false
     private var tracking: NSTrackingArea?
     private var elements: [NSAccessibilityElement]?
     private var generation: UInt64 = 0
@@ -333,8 +357,8 @@ final class SpaceIconGridView: NSView {
 
     func setSections(_ sections: [(SpaceIconPickerCatalog.Category?, [SpaceIconPickerCatalog.Item])], selecting choice: BrowserSpaceIcon?) {
         generation &+= 1
-        let width = max(Self.cell, enclosingScrollView?.contentSize.width ?? frame.width)
-        columns = max(1, Int((width - 8) / Self.cell))
+        let width = max(250, enclosingScrollView?.contentSize.width ?? frame.width)
+        columns = 8
         let originX = (width - CGFloat(columns) * Self.cell) / 2
         items = []; cellFrames = []; headers = []
         var y: CGFloat = 0
@@ -345,15 +369,16 @@ final class SpaceIconGridView: NSView {
             }
             for (index, item) in sectionItems.enumerated() {
                 let row = index / columns, column = index % columns
-                cellFrames.append(NSRect(x: originX + CGFloat(column) * Self.cell, y: y + CGFloat(row) * Self.cell,
-                                         width: Self.cell, height: Self.cell))
+                cellFrames.append(NSRect(x: originX + CGFloat(column) * Self.cell, y: y + CGFloat(row) * Self.rowHeight,
+                                         width: Self.cell, height: Self.rowHeight))
                 items.append(item)
             }
-            y += CGFloat((sectionItems.count + columns - 1) / columns) * Self.cell
+            y += CGFloat((sectionItems.count + columns - 1) / columns) * Self.rowHeight
         }
         setFrameSize(NSSize(width: width, height: max(y + 4, enclosingScrollView?.contentSize.height ?? 0)))
         selectedIndex = choice.flatMap { choice in items.firstIndex { $0.choice == choice } } ?? (items.isEmpty ? nil : 0)
         hoveredIndex = nil
+        showsKeyboardSelection = choice != nil && choice != BrowserSpaceIcon.none
         elements = nil
         needsDisplay = true
     }
@@ -361,6 +386,12 @@ final class SpaceIconGridView: NSView {
     func revealSelection() {
         guard let selectedIndex else { return }
         scrollToVisible(cellFrames[selectedIndex].insetBy(dx: 0, dy: -Self.headerHeight))
+    }
+
+    func reveal(category: SpaceIconPickerCatalog.Category) {
+        guard let index = items.firstIndex(where: { $0.category == category }), let clip = enclosingScrollView?.contentView else { return }
+        clip.scroll(to: NSPoint(x: 0, y: min(cellFrames[index].minY, max(0, frame.height - clip.bounds.height))))
+        enclosingScrollView?.reflectScrolledClipView(clip)
     }
 
     func scrollToSection(_ category: SpaceIconPickerCatalog.Category) {
@@ -387,6 +418,7 @@ final class SpaceIconGridView: NSView {
     }
 
     private func select(_ index: Int) {
+        showsKeyboardSelection = true
         selectedIndex = index
         scrollToVisible(cellFrames[index])
         onHover?(items[index])
@@ -433,7 +465,7 @@ final class SpaceIconGridView: NSView {
     }
 
     override func draw(_ dirtyRect: NSRect) {
-        let font = NSFont.systemFont(ofSize: 22)
+        let font = NSFont.systemFont(ofSize: 20)
         let headerAttributes: [NSAttributedString.Key: Any] = [
             .font: NSFont.systemFont(ofSize: 11, weight: .semibold), .foregroundColor: OrbitTokens.Color.Text.secondary
         ]
@@ -441,7 +473,7 @@ final class SpaceIconGridView: NSView {
             NSAttributedString(string: header.title, attributes: headerAttributes).draw(in: header.frame)
         }
         for (index, frame) in cellFrames.enumerated() where frame.intersects(dirtyRect) {
-            if index == selectedIndex || index == hoveredIndex {
+            if (index == selectedIndex && showsKeyboardSelection) || index == hoveredIndex {
                 (index == selectedIndex ? accent.soft : OrbitTokens.Color.State.sidebarItemHovered).setFill()
                 NSBezierPath(roundedRect: frame.insetBy(dx: 2, dy: 2), xRadius: 6, yRadius: 6).fill()
             }
