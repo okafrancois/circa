@@ -63,6 +63,71 @@ struct NativeSplitTests {
         window.window?.contentView?.layoutSubtreeIfNeeded()
     }
 
+    @Test("Focused pane header routes site controls and separation without replacing live documents")
+    func focusedHeaderActions() async throws {
+        let (_, window, left) = try await makeWindow()
+        defer { window.session.close(); window.window?.close() }
+        window.session.addSplitPane(url: URL(string: "https://right.split.test/page")!)
+        await settle(window)
+        let right = try #require(window.session.selectedSurface)
+        let group = try #require(window.session.activeSplit)
+        let leftID = group.group.tabIDs[0], rightID = group.group.tabIDs[1]
+        for focused in [leftID, rightID] {
+            window.split.view.onFocus?(focused)
+            await settle(window)
+            for (id, pane) in window.split.view.panes {
+                let inactive = id != focused
+                #expect(pane.reload.isHidden == inactive)
+                #expect(pane.siteControls.isHidden == inactive)
+                #expect(pane.splitToggle.isHidden == inactive)
+                #expect(!pane.back.isHidden && !pane.forward.isHidden && !pane.close.isHidden)
+                if !inactive {
+                    #expect(pane.splitToggle.frame.midX - pane.siteControls.frame.midX == 36)
+                    #expect(pane.close.frame.midX - pane.splitToggle.frame.midX == 32)
+                    #expect(pane.address.frame.maxX < pane.siteControls.frame.minX)
+                    #expect(pane.siteControls.contentTintColor == pane.close.contentTintColor)
+                }
+            }
+        }
+        let active = try #require(window.split.view.panes[rightID])
+        var origin: BrowserSiteOrigin?
+        var settings: CheckedContinuation<[BrowserSitePermission: BrowserSitePermissionSetting], Never>?
+        window.siteControls.presentationSettings = { requested, _ in
+            origin = requested
+            return await withCheckedContinuation { settings = $0 }
+        }
+        defer {
+            window.siteControls.cancelPermission()
+            settings?.resume(returning: [:])
+        }
+        active.siteControls.performClick(nil)
+        await settle(window)
+        let deadline = ContinuousClock.now.advanced(by: .seconds(2))
+        while settings == nil, ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(10)) }
+        #expect(try #require(origin).value == "https://right.split.test")
+        #expect(settings != nil)
+        window.siteControls.cancelPermission()
+        settings?.resume(returning: [:]); settings = nil
+        active.splitToggle.performClick(nil)
+        await settle(window)
+        #expect(window.session.activeSplit == nil)
+        #expect(window.session.ownedSurfaces.contains { $0 === left })
+        #expect(window.session.ownedSurfaces.contains { $0 === right })
+        #expect(left.requestedURLs.count == 1 && right.requestedURLs.count == 1)
+        #expect(window.session.selectedSurface === right)
+    }
+
+    @Test("An empty focused pane keeps only back, forward, address and close controls")
+    func emptyPaneHeader() {
+        let pane = BrowserSplitPaneView(id: TabID())
+        pane.frame = CGRect(x: 0, y: 0, width: 410, height: 760)
+        pane.present(NSView(), address: "about:blank")
+        pane.setActive(true, accent: .defaultPurple)
+        pane.layoutSubtreeIfNeeded()
+        #expect(pane.reload.isHidden && pane.siteControls.isHidden && pane.splitToggle.isHidden)
+        #expect(!pane.back.isHidden && !pane.forward.isHidden && !pane.close.isHidden)
+    }
+
     @Test("Hidden split surfaces retain their documents and commands follow the focused pane")
     func focusRouting() async throws {
         let (_, window, left) = try await makeWindow()

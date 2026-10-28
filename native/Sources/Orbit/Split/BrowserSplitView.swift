@@ -5,7 +5,7 @@ import QuartzCore
 /// Places engine-neutral host views. It never owns, reloads or disposes a document.
 @MainActor
 final class BrowserSplitView: NSView {
-    enum NavigationAction { case back, forward, reload, address }
+    enum NavigationAction { case back, forward, reload, address, siteControls, separate }
     struct Pane {
         let id: TabID
         /// Nil while the tab has no live surface in this window: the pane keeps its slot with a
@@ -349,6 +349,8 @@ final class BrowserSplitPaneView: NSView {
     let back = NSButton()
     let forward = NSButton()
     let reload = NSButton()
+    let siteControls = NSButton()
+    let splitToggle = NSButton()
     let close = NSButton()
     let line = NSView()
     let focusBorder = CALayer()
@@ -394,6 +396,24 @@ final class BrowserSplitPaneView: NSView {
             clip.addSubview(button)
         }
         close.contentTintColor = OrbitTokens.Color.Text.baseSecondary
+        let siteImage = OrbitGlyph.siteControlCenter
+        siteImage.size = NSSize(width: 17, height: 17)
+        for (button, image, label, action) in [
+            (siteControls, Optional(siteImage), uiText("Site Controls"), #selector(showSiteControls)),
+            (splitToggle, OrbitGlyph.symbol("square.split.2x1", pointSize: 15, weight: .medium),
+             uiText("Separate Page from Split View"), #selector(separatePage))
+        ] {
+            button.image = image
+            button.imageScaling = .scaleNone
+            button.isBordered = false
+            button.contentTintColor = OrbitTokens.Color.Text.baseSecondary
+            button.target = self
+            button.action = action
+            button.isHidden = true
+            button.setAccessibilityLabel(label)
+            button.toolTip = label
+            clip.addSubview(button)
+        }
         address.lineBreakMode = .byTruncatingTail
         clip.addSubview(address)
         close.image = NSImage(systemSymbolName: "xmark", accessibilityDescription: BrowserSplitStrings.closePane)
@@ -418,12 +438,22 @@ final class BrowserSplitPaneView: NSView {
     @objc private func goForward() { onNavigate?(.forward) }
     @objc private func reloadPage() { onNavigate?(.reload) }
     @objc private func editAddress() { onNavigate?(.address) }
+    @objc private func showSiteControls() {
+        guard isActive, !isBlank else { return }
+        onNavigate?(.siteControls)
+    }
+    @objc private func separatePage() {
+        guard isActive, !isBlank else { return }
+        onNavigate?(.separate)
+    }
     override func mouseDown(with event: NSEvent) { onFocus?() }
 
     /// A nil host keeps this pane's slot with a placeholder; the live host replaces it when the
     /// surface becomes available, without any navigation from the Split layer.
     func present(_ host: NSView?, address text: String, title: String? = nil, isOpenInAnotherWindow: Bool = false) {
         isBlank = text.isEmpty || text == "about:blank"
+        siteControls.isEnabled = host != nil && !isBlank
+        splitToggle.isEnabled = host != nil && !isBlank
         page.isHidden = isBlank && host != nil
         let content = host ?? placeholder
         if page.subviews.first !== content {
@@ -472,6 +502,8 @@ final class BrowserSplitPaneView: NSView {
         isActive = active
         refreshAppearance()
         reload.isHidden = !active || isBlank
+        siteControls.isHidden = !active || isBlank
+        splitToggle.isHidden = !active || isBlank
         if active != wasActive, window?.isVisible == true, !OrbitMotionPreferences.prefersReducedMotion {
             let animation = CABasicAnimation(keyPath: "opacity")
             animation.fromValue = focusBorder.presentation()?.opacity ?? focusBorder.opacity
@@ -496,8 +528,11 @@ final class BrowserSplitPaneView: NSView {
         forward.frame = back.frame.offsetBy(dx: step, dy: 0)
         reload.frame = back.frame.offsetBy(dx: step * 2, dy: 0)
         let leading: CGFloat = isActive ? 8 + step * 2 + 24 : 8 + step + 24
-        address.frame = CGRect(x: leading, y: 3, width: max(0, bounds.width - leading - 36), height: max(0, toolbar - 6))
-        close.frame = CGRect(x: max(0, bounds.width - 29), y: 4, width: 24, height: min(24, toolbar))
+        let trailing: CGFloat = isActive && !isBlank ? 108 : 36
+        address.frame = CGRect(x: leading, y: 3, width: max(0, bounds.width - leading - trailing), height: max(0, toolbar - 6))
+        close.frame = CGRect(x: max(0, bounds.width - 33), y: 4, width: 24, height: min(24, toolbar))
+        splitToggle.frame = close.frame.offsetBy(dx: -32, dy: 0)
+        siteControls.frame = splitToggle.frame.offsetBy(dx: -36, dy: 0)
         line.frame = CGRect(x: 0, y: toolbar - 0.5, width: bounds.width, height: 0.5)
         page.frame = CGRect(x: 0, y: toolbar, width: bounds.width, height: max(0, bounds.height - toolbar))
         CATransaction.begin(); CATransaction.setDisableActions(true)

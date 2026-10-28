@@ -69,6 +69,13 @@ extension BrowserWindowController {
                         if let url = surface.goForward() { controller.session.updateDestination(for: surface, to: url) }
                     case .reload: surface.reload()
                     case .address: controller.focusAddress()
+                    case .siteControls:
+                        guard controller.session.selectedSurface === surface,
+                              let pane = controller.split.view.panes[id] else { return }
+                        controller.siteControls.toggle(presentationAnchor: pane.siteControls)
+                    case .separate:
+                        guard controller.session.selectedSurface === surface else { return }
+                        controller.session.separateSplitPane(id)
                     }
                 }
             }
