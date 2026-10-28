@@ -54,7 +54,10 @@ final class OrbitSmokeDriver: OrbitLaunchHooks {
         ["--disable-features=MacAppCodeSignClone"] +
             (arguments.contains("--orbit-smoke-site-data") ? ["--use-fake-device-for-media-stream"] : [])
     }
-    var hiddenApplication: Bool { true }
+    private var visibleUpdateSmoke: Bool {
+        arguments.contains("--orbit-smoke-extension-update") && arguments.contains("--orbit-smoke-extension-update-manual")
+    }
+    var hiddenApplication: Bool { !visibleUpdateSmoke }
 
     // MARK: Launch hooks
 
@@ -97,7 +100,7 @@ final class OrbitSmokeDriver: OrbitLaunchHooks {
             self?.record("hidden.violation", "failed", ["kind": kind, "detail": detail.description])
             self?.finish(aborted: true)
         }
-        HiddenGuard.shared.install()
+        if !visibleUpdateSmoke { HiddenGuard.shared.install() }
         // The witness and the runner end a run with SIGTERM: finish through the real termination.
         signal(SIGTERM, SIG_IGN)
         let source = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .main)
@@ -108,7 +111,7 @@ final class OrbitSmokeDriver: OrbitLaunchHooks {
     }
 
     func runtimeDidBecomeReady(_ configuration: OrbitProductConfiguration) {
-        HiddenGuard.shared.startMonitoring()
+        if !visibleUpdateSmoke { HiddenGuard.shared.startMonitoring() }
         ChromiumRuntime.shared.trace = { name, fields in
             MainActor.assumeIsolated { OrbitSmokeDriver.shared.event("runtime-" + name, fields) }
         }
@@ -142,12 +145,16 @@ final class OrbitSmokeDriver: OrbitLaunchHooks {
         // Hidden-mode audit in the laboratory's vocabulary (scripts/orbit-chromium-lab.py verdict).
         let guardSummary = HiddenGuard.shared
         let visibleWindows = NSApp.windows.filter { $0.isVisible || $0.occlusionState.contains(.visible) }.count
-        check("hidden.monitor", guardSummary.ticks > 0 && guardSummary.violations.isEmpty,
-              ["ticks": guardSummary.ticks, "violations": guardSummary.violations.count])
-        check("hidden.final-audit", visibleWindows == 0 && !NSApp.isActive && NSApp.keyWindow == nil
-              && guardSummary.blockedAttempts.isEmpty,
-              ["visibleWindows": visibleWindows, "blockedAttempts": guardSummary.blockedAttempts.count,
-               "appKitWindows": NSApp.windows.count])
+        if visibleUpdateSmoke {
+            check("update.visible-window", visibleWindows > 0, ["visibleWindows": visibleWindows])
+        } else {
+            check("hidden.monitor", guardSummary.ticks > 0 && guardSummary.violations.isEmpty,
+                  ["ticks": guardSummary.ticks, "violations": guardSummary.violations.count])
+            check("hidden.final-audit", visibleWindows == 0 && !NSApp.isActive && NSApp.keyWindow == nil
+                  && guardSummary.blockedAttempts.isEmpty,
+                  ["visibleWindows": visibleWindows, "blockedAttempts": guardSummary.blockedAttempts.count,
+                   "appKitWindows": NSApp.windows.count])
+        }
         let document: [String: Any] = [
             "phase": phase.rawValue, "aborted": aborted, "results": results,
             "hidden": HiddenGuard.shared.summary, "extensionLoaded": extensionLoaded,
@@ -344,6 +351,11 @@ final class OrbitSmokeDriver: OrbitLaunchHooks {
             return
         }
         check("app.window", true, ["windows": application.windows.windows.count, "restored": restored.count])
+        if arguments.contains("--orbit-smoke-extension-update") {
+            await OrbitExtensionUpdateScenario.run(environment: environment, window: first, fixture: fixture, record: record)
+            finish(aborted: false)
+            return
+        }
         if arguments.contains("--orbit-smoke-site-data") {
             await OrbitSiteDataScenarios.run(environment: environment, window: first, fixture: fixture, record: record)
             finish(aborted: false)

@@ -225,6 +225,20 @@ void ArgumentsAreAllowListed() {
   }
 }
 
+void ExtensionUpdateSmokeIsConfined() {
+  for (const char* port : {"1024", "65535", "32145"}) {
+    const std::string flag = "--orbit-test-extension-updates=" + std::string(port);
+    Check(orbit_bridge::FilterBrowserArguments({flag}, 0, ExtensionOk).kept == std::vector<std::string>{flag},
+          "only a loopback proxy port is admitted in synthetic mode");
+    Check(orbit_bridge::FilterBrowserArguments({flag}, 1, ExtensionOk).kept.empty(),
+          "product never admits the update smoke switch");
+  }
+  for (const char* port : {"", "0", "80", "65536", "01234", "1234;DIRECT", "127.0.0.1:1234", "-1234", "1234/path"}) {
+    Check(orbit_bridge::FilterBrowserArguments({"--orbit-test-extension-updates=" + std::string(port)}, 0, ExtensionOk).kept.empty(),
+          "update smoke rejects malformed or privileged ports");
+  }
+}
+
 // --- CHROMIUM-APP-R3: descriptor-anchored root (review HIGH 2, MEDIUM 5, MEDIUM 6) ---
 
 void AnchoredRootRemovesOnlyItsOwnChildren() {
@@ -298,6 +312,7 @@ int main() {
   InitialProfileStaysPinned();
   EssentialSurfacePolicies();
   ArgumentsAreAllowListed();
+  ExtensionUpdateSmokeIsConfined();
   AnchoredRootRemovesOnlyItsOwnChildren();
   if (failures) return EXIT_FAILURE;
   std::printf("BridgePolicyTests: PASS\n");

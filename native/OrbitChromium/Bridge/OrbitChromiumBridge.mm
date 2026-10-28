@@ -1829,6 +1829,19 @@ class App final : public CefApp, public CefBrowserProcessHandler {
       command->AppendSwitch("disable-extensions");
       command->AppendSwitch("disable-component-extensions-with-background-pages");
     }
+    // EXT-UPDATE-VERIFY: retain mock storage, profile confinement and disabled components.
+    // All non-loopback HTTP(S) goes to the smoke server, which rejects proxy requests;
+    // DNS also fails closed (including requests from contexts that bypass the proxy).
+    const std::string update_test_port = command->GetSwitchValue("orbit-test-extension-updates").ToString();
+    if (policy == orbit_bridge::NetworkPolicy::kHermetic && g_state &&
+        g_state->secure_storage == ACR_SECURE_STORAGE_MOCK && !g_state->auth_synthetic &&
+        orbit_bridge::IsExtensionUpdateTestPort(update_test_port)) {
+      command->RemoveSwitch("disable-background-networking");
+      command->AppendSwitchWithValue("proxy-server", "http://127.0.0.1:" + update_test_port);
+      command->AppendSwitchWithValue("proxy-bypass-list", "127.0.0.1");
+      command->AppendSwitchWithValue("host-resolver-rules", "MAP * ~NOTFOUND, EXCLUDE 127.0.0.1");
+      command->AppendSwitch("disable-quic");
+    }
     for (const auto& feature : orbit_bridge::DisabledFeatures(policy)) disabled.push_back(feature);
     const std::string merged = orbit_bridge::MergeFeatureLists(disabled);
     if (!merged.empty()) command->AppendSwitchWithValue("disable-features", merged);
