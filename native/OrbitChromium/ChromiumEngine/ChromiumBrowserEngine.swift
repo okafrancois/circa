@@ -29,7 +29,7 @@ public final class ChromiumBrowserEngine: BrowserPrivateEngine {
     /// `liveSurfaceTransfer` only in `.hosted` mode on side API v2 (`move_tab`, CHROMIUM-APP-R2),
     /// never on the stock SDK.
     public var capabilities: BrowserEngineCapabilities {
-        var capabilities: BrowserEngineCapabilities = [
+        var capabilities: BrowserEngineCapabilities = [.cacheBypassingReload,
             .exactFindCount, .nativeSiteZoom, .downloadPause, .downloadResume, .snapshots,
             .mediaCaptureState, .audioMuting, .favicons, .mediaCapturePermissions, .persistentProfiles,
             // CH-ESSENTIALS (ABI 9): context menus reported to the shell (CefContextMenuHandler),

@@ -45,6 +45,8 @@ public struct BrowserEngineCapabilities: OptionSet, Sendable {
     public static let pageSaving = Self(rawValue: 1 << 24)
     /// Snapshots can include the complete scrollable document.
     public static let fullPageSnapshots = Self(rawValue: 1 << 25)
+    /// Reloads the current document while bypassing the HTTP cache.
+    public static let cacheBypassingReload = Self(rawValue: 1 << 26)
     /// A policy question can stay open after the delegate returns (`BrowserPolicyDecision.suspend()`):
     /// the engine holds the original request natively and resumes it, never replays it. Without
     /// this capability the delegate answers synchronously from state it prepared ahead, as stock

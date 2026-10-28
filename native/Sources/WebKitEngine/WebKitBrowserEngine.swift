@@ -9,7 +9,7 @@ import WebKit
 public final class WebKitBrowserEngine: BrowserPrivateEngine {
     public let persistence = BrowserWebsiteDataPersistence.ephemeral
     public let kind = BrowserEngineKind.webKit
-    public let capabilities: BrowserEngineCapabilities = [
+    public let capabilities: BrowserEngineCapabilities = [.cacheBypassingReload,
         .downloadResume, .snapshots, .mediaPlaybackState, .mediaCaptureState,
         .mediaCapturePermissions, .liveSurfaceTransfer, .suspendablePolicyDecisions,
         .navigationResponsePolicy, .navigationDownloadConversion, .profileRemoval,

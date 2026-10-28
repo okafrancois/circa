@@ -151,7 +151,7 @@ public final class ChromiumSurface: BrowserEngineSurface {
     private var pendingKind: BrowserNavigationKind?
     /// Commands issued before `OnAfterCreated`, replayed in call order once the browser exists.
     private enum PendingCommand {
-        case navigate(URL), reload, stop, zoom(BrowserPageZoomCommand), focus, hostChanged(hidden: Bool), mute(Bool)
+        case navigate(URL), reload, reloadIgnoringCache, stop, zoom(BrowserPageZoomCommand), focus, hostChanged(hidden: Bool), mute(Bool)
     }
     private var pendingCommands: [PendingCommand] = []
     /// Replayed zooms that followed a replayed navigation: they apply to that navigation's
@@ -328,6 +328,13 @@ public final class ChromiumSurface: BrowserEngineSurface {
         guard isBrowserCreated else { pendingCommands.append(.reload); needBrowser(); return }
         pendingKind = .reload
         _ = ACRReload(token)
+    }
+
+    public func reloadIgnoringCache() throws {
+        guard !isDisposed else { throw BrowserEngineError.surfaceDisposed }
+        guard isBrowserCreated else { pendingCommands.append(.reloadIgnoringCache); needBrowser(); return }
+        pendingKind = .reload
+        guard ACRReloadIgnoringCache(token) == 1 else { throw BrowserEngineError.unsupportedOperation }
     }
 
     public func stopLoading() {
@@ -621,6 +628,10 @@ public final class ChromiumSurface: BrowserEngineSurface {
             case .reload:
                 pendingKind = .reload
                 _ = ACRReload(token)
+                navigationIssued = true
+            case .reloadIgnoringCache:
+                pendingKind = .reload
+                _ = ACRReloadIgnoringCache(token)
                 navigationIssued = true
             case .stop:
                 _ = ACRStopLoad(token)

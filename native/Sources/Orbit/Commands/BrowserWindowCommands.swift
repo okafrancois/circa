@@ -7,7 +7,8 @@ import BrowserShell
 @MainActor
 enum BrowserWindowCommands {
     static func install<Engine: BrowserEngine>(in registry: BrowserCommandRegistry<BrowserWindowController<Engine>>,
-                                               commandKeyWindow: @escaping () -> NSWindow? = { NSApp.keyWindow }) {
+                                               commandKeyWindow: @escaping () -> NSWindow? = { NSApp.keyWindow },
+                                               pasteboardString: @escaping () -> String? = { NSPasteboard.general.string(forType: .string) }) {
         BrowserSiteCommands.install(in: registry)
         BrowserDailyCommands.install(in: registry)
         BrowserBookmarkCommands.install(in: registry)
@@ -41,6 +42,21 @@ enum BrowserWindowCommands {
         window(.goBack) { $0.navigateBack() }
         window(.goForward) { $0.navigateForward() }
         window(.refreshThePage) { $0.reload() }
+        try! registry.register(.forceRefreshThePage, validate: {
+            $0.engine.capabilities.contains(.cacheBypassingReload) && $0.pageCommandSurface() != nil
+        }) { controller, _ in
+            controller.performDocumentCommand { try $0.reloadIgnoringCache() }
+        }
+        try! registry.register(.javascriptConsole, validate: { $0.canPerformPageCommand(.showDevTools) }) { controller, _ in
+            controller.performDocumentCommand { try $0.showDeveloperPanel(.console) }
+        }
+        try! registry.register(.pasteAsNewTab, validate: { $0.session.paletteContext != nil }) { controller, _ in
+            guard let text = pasteboardString(),
+                  let destination = try? controller.addressResolver.resolve(text),
+                  let context = controller.session.paletteContext else { return }
+            controller.hideLibrary()
+            controller.session.openTab(url: destination.url, from: context)
+        }
         window(.stopLoading) { $0.session.performOnSelectedSurface { $0.stopLoading() } }
         window(.newSpace) { $0.presentNewSpace() }
         window(.renameSpace) { controller in

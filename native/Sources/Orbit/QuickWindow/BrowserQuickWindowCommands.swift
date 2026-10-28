@@ -25,6 +25,9 @@ enum BrowserQuickWindowCommands {
         }
         command(.closeQuickWindow) { $0.window?.performClose(nil) }
         command(.focusQuickWindowAddress) { $0.focusAddress() }
+        try! registry.registerScopedApplication(.newTab, scope: .quickWindow, validate: {
+            active()?.acceptsCommands == true
+        }) { active()?.focusAddress() }
         command(.reloadQuickWindow) { controller in
             guard let surface = controller.surface, controller.container.owns(surface) else { return }
             surface.reload()
@@ -40,6 +43,18 @@ enum BrowserQuickWindowCommands {
                       controller.owns(surface) else { return }
                 action(controller, surface)
             }
+        }
+        page(.forceRefreshThePage, enabled: { controller, _ in controller.engine.capabilities.contains(.cacheBypassingReload) }) { controller, surface in
+            do { try surface.reloadIgnoringCache() } catch { NSSound.beep() }
+        }
+        page(.developerTools, enabled: { controller, _ in controller.engine.capabilities.contains(.devTools) }) { _, surface in
+            try? surface.perform(.showDevTools)
+        }
+        page(.inspectElements, enabled: { controller, _ in controller.engine.capabilities.contains(.devTools) }) { _, surface in
+            try? surface.perform(.inspectElements)
+        }
+        page(.javascriptConsole, enabled: { controller, _ in controller.engine.capabilities.contains(.devTools) }) { controller, surface in
+            do { try surface.showDeveloperPanel(.console) } catch { NSSound.beep() }
         }
         page(.goBack, enabled: { _, surface in surface.navigationState.canGoBack }) { _, surface in surface.goBack() }
         page(.goForward, enabled: { _, surface in surface.navigationState.canGoForward }) { _, surface in surface.goForward() }
