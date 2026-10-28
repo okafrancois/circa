@@ -163,6 +163,11 @@ typedef void *(*ACRDecideNewSurface)(void *context, uint64_t source_surface_toke
                                      int32_t user_gesture, int32_t source_kind,
                                      uint64_t *surface_token);
 
+/* Original popup request metadata, borrowed only during decide_new_surface.
+ * Returns 0 outside that source's popup callback or on older engines. */
+int32_t ACRPopupNavigationMetadata(uint64_t source_surface_token,
+                                  orbit_navigation_metadata_t *metadata);
+
 /* (ABI 7) The request of an OnBeforeBrowse question. Borrowed, valid during
  * the callback only. */
 typedef struct {

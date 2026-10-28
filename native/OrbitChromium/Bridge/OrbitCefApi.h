@@ -26,10 +26,19 @@ extern "C" {
 // Version 3 (CHROMIUM-APP-R3): additive, hold_window/release_window. Earlier
 // versions keep their layout as the prefix of the table.
 // Version 4 (EXTENSIONS-PRODUCT-R1): additive, native per-profile extension services.
-#define ORBIT_CEF_API_VERSION 9u
+#define ORBIT_CEF_API_VERSION 10u
 
 // Version 8. Callback once after live renderer CSS installation (1), or failure (0).
 typedef void (*orbit_boost_ack_t)(void*, uint64_t revision, int32_t installed);
+
+// Version 10. Metadata only, never request body bytes. Unknown outside the
+// synchronous popup decision; all strings are borrowed for that call.
+typedef struct {
+  uint32_t struct_size;
+  uint32_t transition_type;
+  const char* method;
+  int32_t has_body;
+} orbit_navigation_metadata_t;
 
 typedef struct {
   uint32_t struct_size;
@@ -197,6 +206,10 @@ typedef struct {
   // isolated-world request. Clear after completion or failure. No active PiP
   // may exist when setting the flag; manual requests use the default false.
   int32_t (*set_automatic_pip)(int32_t browser_id, int32_t automatic);
+  // Version 10. OnBeforePopup only, matched to the opener browser and frame.
+  // Returns 1 when known, 0 otherwise. Does not retain or replay the request.
+  int32_t (*popup_navigation_metadata)(int32_t browser_id, const char* frame_id,
+                                      orbit_navigation_metadata_t* metadata);
 } orbit_cef_api_t;
 
 // Returns the API table for `version`, or NULL when unsupported.

@@ -91,3 +91,11 @@ foreach(TARGET OrbitEngineBinaryCompatibilityTests)
   set_target_properties(${TARGET} PROPERTIES CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON)
   target_compile_options(${TARGET} PRIVATE -UNDEBUG)
 endforeach()
+
+# Navigation actions and original popup metadata through the production Swift adapter, no CEF.
+add_executable(ChromiumNavigationMetadataTests NavigationMetadataTests.swift ${LIFECYCLE_ENGINE_SOURCES})
+set_target_properties(ChromiumNavigationMetadataTests PROPERTIES Swift_LANGUAGE_VERSION 6)
+target_compile_options(ChromiumNavigationMetadataTests PRIVATE ${ORBIT_SWIFT_FLAGS} -parse-as-library -assert-config Debug)
+target_include_directories(ChromiumNavigationMetadataTests PRIVATE
+  "${CMAKE_BINARY_DIR}/swift-modules" "${CMAKE_CURRENT_SOURCE_DIR}/../Bridge" "${CMAKE_CURRENT_SOURCE_DIR}")
+target_link_libraries(ChromiumNavigationMetadataTests PRIVATE BrowserEngine ChromiumLifecycleBridgeStub)

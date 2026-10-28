@@ -5,6 +5,7 @@
 void ACRStubAbortCreation(uint64_t token);
 /* The next ACRCreateProfile is refused; surfaces of that profile token are refused too. */
 void ACRStubRefuseNextProfile(void);
+void ACRStubPopupMetadata(int32_t known, uint32_t transition, const char *method, int32_t has_body);
 /* Advertise a synthetic side API version without loading a CEF framework. */
 void ACRStubSetPatchLevel(uint32_t version);
 /* ABI 9 (CH-ESSENTIALS): synthesized page events and the last recorded answer. */

@@ -427,6 +427,30 @@ struct SyntheticEngineShellTests {
         #expect(routed.last?.kind == .reload)
     }
 
+    @Test("A posted new target keeps the engine request in a tab instead of routing it as a link")
+    func postedNewTargetIsNotRoutedAsLink() async throws {
+        NSApplication.shared.setActivationPolicy(.prohibited)
+        let environment = SyntheticEnvironment(engine: SyntheticEngine())
+        let (controller, source) = try await loadedWindow(environment, "https://routes.test/source")
+        defer { controller.window?.close() }
+        controller.peek.sourceClassifier = { _ in (.pinned, nil) }
+        var routed: BrowserNewSurfaceRequest?
+        let registration = controller.engineEventHooks.routeNewTargets { _, request, _ in
+            routed = request
+            return .declined
+        }
+        defer { registration.cancel() }
+        let destination = URL(string: "https://other.test/posted")!
+        let child = try #require(source.openNewTarget(destination, modifiers: [.shift],
+            kind: .formSubmission, httpMethod: "POST", hasBody: true))
+        await controller.session.waitForPendingCommands()
+        #expect(!controller.isPeekPresented)
+        #expect(controller.session.occurrenceID(for: child) != nil)
+        #expect(routed?.kind == .formSubmission && routed?.httpMethod == "POST" && routed?.hasBody == true)
+        #expect(child.requestedURLs == [destination] && child.documentGeneration == 1)
+        #expect(source.currentURL == URL(string: "https://routes.test/source"))
+    }
+
     @Test("A session whose surface factory fails reports it instead of crashing")
     func factoryFailureIsExplicit() async throws {
         let store = BrowserStore()

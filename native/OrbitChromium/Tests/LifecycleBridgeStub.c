@@ -65,6 +65,19 @@ int32_t ACRCreateSurface(uint64_t token, uint64_t profile, void *view, const cha
   return profile && profile == refused_profile ? 0 : 1;
 }
 int32_t ACRCloseSurface(uint64_t token) { return 1; }
+static int popup_metadata_known;
+static orbit_navigation_metadata_t popup_metadata;
+static char popup_method[16];
+void ACRStubPopupMetadata(int32_t known, uint32_t transition, const char *method, int32_t has_body) {
+  popup_metadata_known = known;
+  snprintf(popup_method, sizeof(popup_method), "%s", method ? method : "");
+  popup_metadata = (orbit_navigation_metadata_t){sizeof(popup_metadata), transition, method ? popup_method : NULL, has_body};
+}
+int32_t ACRPopupNavigationMetadata(uint64_t source, orbit_navigation_metadata_t *metadata) {
+  if (!popup_metadata_known || !metadata || metadata->struct_size < sizeof(*metadata)) return 0;
+  *metadata = popup_metadata;
+  return 1;
+}
 int32_t ACRNavigate(uint64_t token, const char *url) { return 1; }
 int32_t ACRGoBack(uint64_t token) { return 0; }
 int32_t ACRGoForward(uint64_t token) { return 0; }
@@ -317,3 +330,15 @@ int32_t ACRExtensionActionSnapshot(uint64_t token, char* json, uint32_t capacity
 
 int32_t ACRDiscardTab(uint64_t token) { return 0; }
 int32_t ACRRestoreDiscardedTab(uint64_t token) { return 0; }
+
+/* Optional engine services are absent in this source-only navigation fixture. */
+int32_t ACRBoostsAvailable(void) { return 0; }
+int32_t ACRBoostsReplace(uint64_t profile, const char *json, uint64_t revision,
+                       orbit_boost_ack_t callback, void *context) { return 0; }
+int32_t ACRPasswordPromptObserve(uint64_t surface, uint64_t profile,
+                               orbit_password_prompt_callback_t callback, void *context) { return 0; }
+int32_t ACRPasswordPromptSnapshot(uint64_t surface, uint64_t profile,
+                                orbit_password_prompt_t *snapshot) { return 0; }
+int32_t ACRPasswordPromptDecide(uint64_t surface, uint64_t profile, uint64_t generation, int32_t decision) { return 0; }
+int32_t ACRPasswordPromptReopen(uint64_t surface, uint64_t profile, uint64_t generation) { return 0; }
+int32_t ACRSetAutomaticPiP(uint64_t surface, int32_t automatic) { return 0; }

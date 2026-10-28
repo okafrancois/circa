@@ -78,6 +78,21 @@
 
 namespace {
 
+// A popup decision can reenter the shell. Keep metadata scoped to this exact
+// source and restore the previous scope after nested decisions.
+struct PopupNavigationScope {
+  static inline const PopupNavigationScope* current = nullptr;
+  const PopupNavigationScope* previous = current;
+  uint64_t token;
+  orbit_navigation_metadata_t metadata{};
+  bool known = false;
+  explicit PopupNavigationScope(uint64_t source) : token(source) {
+    metadata.struct_size = sizeof(metadata);
+    current = this;
+  }
+  ~PopupNavigationScope() { current = previous; }
+};
+
 class FunctionTask final : public CefTask {
  public:
   explicit FunctionTask(std::function<void()> function) : function_(std::move(function)) {}
@@ -1086,7 +1101,7 @@ class Client final : public CefClient, public CefLifeSpanHandler, public CefDisp
   }
 
   // Life span.
-  bool OnBeforePopup(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame>, int popup_id,
+  bool OnBeforePopup(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, int popup_id,
                      const CefString& target_url, const CefString&, WindowOpenDisposition disposition,
                      bool user_gesture, const CefPopupFeatures&, CefWindowInfo& info,
                      CefRefPtr<CefClient>& client, CefBrowserSettings&, CefRefPtr<CefDictionaryValue>&,
@@ -1094,6 +1109,13 @@ class Client final : public CefClient, public CefLifeSpanHandler, public CefDisp
     CEF_REQUIRE_UI_THREAD();
     if (!g_state || g_state->quitting || !g_state->callbacks.decide_new_surface) return true;
     if (!g_state->hosts.contains(token_)) return true;  // Opener already closing on the shell side.
+    PopupNavigationScope navigation(token_);
+    if (frame && g_state->orbit && g_state->orbit->version >= 10u &&
+        g_state->orbit->popup_navigation_metadata) {
+      const std::string frame_id = frame->GetIdentifier();
+      navigation.known = g_state->orbit->popup_navigation_metadata(
+          browser->GetIdentifier(), frame_id.c_str(), &navigation.metadata) == 1;
+    }
     const std::string url = target_url;
     uint64_t token = 0;
     void* parent = g_state->callbacks.decide_new_surface(g_state->context, token_, url.c_str(),
@@ -1754,7 +1776,8 @@ const orbit_cef_api_t* ResolveOrbitApi() {
   // v1. Each version's layout is the prefix of the next; a function beyond the resolved version
   // is never called.
   const orbit_cef_api_t* api = nullptr;
-  const std::pair<uint32_t, size_t> versions[] = {{9u, sizeof(orbit_cef_api_t)},
+  const std::pair<uint32_t, size_t> versions[] = {{10u, sizeof(orbit_cef_api_t)},
+                                                   {9u, offsetof(orbit_cef_api_t, popup_navigation_metadata)},
                                                    {8u, offsetof(orbit_cef_api_t, set_automatic_pip)},
                                                    {7u, offsetof(orbit_cef_api_t, boosts_replace)},
                                                    {6u, offsetof(orbit_cef_api_t, password_prompt_observe)},
@@ -2337,6 +2360,14 @@ extern "C" int32_t ACRRemoveProfileDirectory(const char* cache_path) {
   Host* host = g_state->Find(token); \
   if (!host) return 0
 
+extern "C" int32_t ACRPopupNavigationMetadata(uint64_t source,
+                                               orbit_navigation_metadata_t* metadata) {
+  if (!NSThread.isMainThread || !metadata || metadata->struct_size < sizeof(*metadata)) return 0;
+  const auto* scope = PopupNavigationScope::current;
+  if (!scope || scope->token != source || !scope->known) return 0;
+  *metadata = scope->metadata;
+  return 1;
+}
 extern "C" int32_t ACRNavigate(uint64_t token, const char* url) {
   ACR_HOST(token);
   if (!url) return 0;
