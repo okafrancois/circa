@@ -36,8 +36,6 @@ final class BrowserPeekOverlayView: NSView {
     var presentationBounds: NSRect {
         guard let contentAnchor else { return bounds }
         let leading = convert(contentAnchor.bounds, from: contentAnchor).minX
-        // ModalV2HostView occupies the window's document column, including the outer card's
-        // top/bottom/right margins , rather than its inset web viewport.
         return NSRect(x: leading, y: bounds.minY, width: max(0, bounds.maxX - leading), height: bounds.height)
     }
     var scrimColor = BrowserPeekStyle.scrim { didSet { applyAppearanceColors() } }
@@ -421,9 +419,6 @@ final class BrowserPeekOverlayView: NSView {
             animation.isRemovedOnCompletion = fromSource
             layer.add(animation, forKey: "peek." + key)
         }
-        // Orbit translates and scales around the centre of the changing clip .
-        // Its position follows that clip's centre, not the activated link's centre. Together
-        // these animations produce the curved top-edge path visible in the reference video.
         add(layer, key: "transform", source: NSValue(caTransform3D: sourceScale),
             destination: NSValue(caTransform3D: CATransform3DIdentity),
             current: layer.presentation().map { NSValue(caTransform3D: $0.transform) })
@@ -476,7 +471,6 @@ private final class PeekContainerView: NSView {
     override var isFlipped: Bool { true }
 }
 
-/// C14: close, expand and split form a vertical rail outside the page.
 @MainActor
 final class BrowserPeekToolbarView: NSView {
     override var isFlipped: Bool { true }
@@ -527,8 +521,6 @@ final class BrowserPeekToolbarView: NSView {
     }
 }
 
-/// A borderless glyph button with Orbit's square hover fill. The cursor stays an arrow
-/// (measured: Orbit never shows a pointing hand on controls).
 @MainActor
 final class BrowserPeekToolbarButton: NSButton {
     private var isHovered = false { didSet { needsDisplay = true } }

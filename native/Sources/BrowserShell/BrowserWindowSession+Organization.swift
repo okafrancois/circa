@@ -29,9 +29,6 @@ public extension BrowserWindowSession {
     /// The active Space as the sidebar shows it, published with `onChange`.
     var organization: BrowserOrganizationSnapshot? { organizationRuntime.snapshot }
 
-    /// Follows changes made by other windows or by the store (e.g. auto-archiving): the Space's
-    /// shared lists, and occurrences of this window removed or moved by another window's command.
-    /// Idempotent; ends with `close()`.
     func observeOrganizationChanges() {
         guard !isClosed, organizationRuntime.observation == nil else { return }
         organizationRuntime.observation = Task { [weak self, store] in
@@ -62,7 +59,6 @@ public extension BrowserWindowSession {
         }
     }
 
-    // MARK: Moves (ORBIT-DRAG, ORBIT-MULTISELECT)
 
     func moveItems(_ nodes: [BrowserOrganizationNode], to destination: BrowserOrganizationDestination) {
         enqueueOrganization { session, context in
@@ -91,7 +87,6 @@ public extension BrowserWindowSession {
         enqueueOrganization { session, context in try await session.store.togglePinSelectedTab(from: context) }
     }
 
-    // MARK: Folders (ORBIT-FOLDERS)
 
     /// The task resolves to the new folder, e.g. to start editing its title; nil on failure.
     @discardableResult
@@ -130,7 +125,6 @@ public extension BrowserWindowSession {
         }
     }
 
-    // MARK: Titles and pinned URLs (ORBIT-RENAME, ORBIT-RESET-PIN)
 
     /// A nil or blank title restores the web title.
     func renameTab(_ id: TabID, to title: String?) {
@@ -180,7 +174,6 @@ public extension BrowserWindowSession {
         }
     }
 
-    // MARK: Archive (ORBIT-ARCHIVE)
 
     func archiveTabs(_ ids: [TabID]) {
         enqueueOrganization { session, context in try await session.store.archiveTabs(ids, from: context) }
@@ -336,9 +329,6 @@ extension BrowserWindowSession {
         return task
     }
 
-    /// Runs an organization command (atomic in the store, or a read). When another window's
-    /// organization command makes its context stale while it is in flight, and the store vouches
-    /// for that cause, it runs again on the adopted state, like `withAdoptedContext`.
     func runOrganizationCommand<Value>(
         _ command: (BrowserWindowSession, BrowserContext) async throws -> Value
     ) async throws -> Value? {

@@ -1,8 +1,6 @@
 import AppKit
 import QuartzCore
 
-/// Chrome glyphs. Our own SF Symbols, never Orbit's bitmaps; point sizes chosen so the rendered
-/// glyph boxes match the measured ink sizes of design §3.1–3.2 ().
 @MainActor
 enum OrbitGlyph {
     static func symbol(_ name: String, pointSize: CGFloat, weight: NSFont.Weight = .medium) -> NSImage? {
@@ -10,9 +8,9 @@ enum OrbitGlyph {
             .withSymbolConfiguration(.init(pointSize: pointSize, weight: weight))
     }
 
-    /// 19×14 for the measured ≈18.7×14.9 toggle.
+    /// 19×14 for the ≈18.7×14.9 toggle.
     static var sidebarToggle: NSImage? { symbol("sidebar.left", pointSize: 13) }
-    /// 15×12 for the measured 14.4×11.7 arrows.
+    /// 15×12 for the 14.4×11.7 arrows.
     static var back: NSImage? { symbol("arrow.left", pointSize: 12) }
     static var forward: NSImage? { symbol("arrow.right", pointSize: 12) }
     /// 13×10.5 arrows of the compact toolbar ().
@@ -20,11 +18,11 @@ enum OrbitGlyph {
     static var forwardCompact: NSImage? { symbol("arrow.right", pointSize: 10.5) }
     /// ≈13×3 "•••" overflow of the compact toolbar ().
     static var toolbarOverflow: NSImage? { symbol("ellipsis", pointSize: 12, weight: .bold) }
-    /// 15×17 for the measured 14.4×17.6 reload glyph.
+    /// 15×17 for the 14.4×17.6 reload glyph.
     static var reload: NSImage? { symbol("arrow.clockwise", pointSize: 14) }
-    /// 10×10 for the measured 10.5 close cross.
+    /// 10×10 for the 10.5 close cross.
     static var close: NSImage? { symbol("xmark", pointSize: 10, weight: .semibold) }
-    /// 13 for the measured New Tab "+".
+    /// 13 for the New Tab "+".
     static var newTab: NSImage? { symbol("plus", pointSize: 12) }
     /// ≈14 for the footer "+", and the "×" it becomes while its menu is open ().
     static var footerPlus: NSImage? { symbol("plus", pointSize: 13) }
@@ -34,8 +32,6 @@ enum OrbitGlyph {
     /// Placeholder until the engine publishes favicons ().
     static var faviconPlaceholder: NSImage? { symbol("globe", pointSize: 12, weight: .regular) }
 
-    /// Own vector drawing of the 18 pt control-center asset: rounded frame
-    /// two horizontal sliders. asset inventory and URL-PILL runtime crops, 27 October 2026.
     static var siteControlCenter: NSImage {
         let image = NSImage(size: NSSize(width: 18, height: 18), flipped: false) { _ in
             NSColor.black.setStroke()
@@ -74,11 +70,6 @@ enum OrbitGlyph {
     }
 }
 
-/// Toolbar and footer glyph button: a 28 pt hit square () with the
-/// `standaloneButton` hover square (radius 6, ), appearing without fade (
-/// C18). Enabled glyphs use `text.baseSecondary`, disabled `text.tertiary` (measured + asset [M]).
-/// The cursor stays the arrow (measured, design §9). A row's × uses `HoverFill.rowClose`: a 24 × 24
-/// square of `rowCloseButtonHover` (, D07).
 @MainActor
 class OrbitGlyphButton: NSButton {
     var glyph: NSImage? { didSet { needsDisplay = true } }
@@ -157,9 +148,6 @@ class OrbitGlyphButton: NSButton {
     }
 }
 
-/// A rounded state overlay (design §5.3 and rule 3: states are semi-transparent layers over the
-/// Space fill, never pre-mixed colours), with an optional outer shadow. The shadow is masked to
-/// the outside of the shape, like a CSS box-shadow, so it never darkens a translucent fill.
 @MainActor
 final class OrbitSurfaceBackgroundView: NSView {
     private let host = CALayer()

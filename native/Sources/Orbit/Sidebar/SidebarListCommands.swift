@@ -2,33 +2,31 @@ import AppKit
 import BrowserCore
 import BrowserEngine
 
-/// Object commands use the captured sidebar rows. Labels are backed by Orbit's shipped
-/// ContextMenus strings; dynamic ordering is reconstructed (see menus-2026-10-27.md).
 enum SidebarListCommands {
     static let definitions: [BrowserCommandDefinition] = [
         .init(id: .sidebarArchiveTabsAbove, title: "Archive Tabs Above", menu: "Sidebar", shortcuts: [], scope: .browser,
-              requirement: .window, owner: "MENUS", sources: ["context menu declaration"]),
+              requirement: .window, owner: "MENUS", sources: ["Browser command"]),
         .init(id: .sidebarArchiveTabsBelow, title: "Archive Tabs Below", menu: "Sidebar", shortcuts: [], scope: .browser,
-              requirement: .window, owner: "MENUS", sources: ["context menu declaration"]),
+              requirement: .window, owner: "MENUS", sources: ["Browser command"]),
         .init(id: .sidebarMuteTab, title: "Mute Tab", menu: "Sidebar", shortcuts: [], scope: .browser,
-              requirement: .window, owner: "MENUS", sources: ["context menu declaration"]),
+              requirement: .window, owner: "MENUS", sources: ["Browser command"]),
         .init(id: .sidebarCopyLinks, title: "Copy URL", menu: "Sidebar", shortcuts: [], scope: .browser,
-              requirement: .window, owner: "MENUS", sources: ["Orbit 1.170 ContextMenus strings; object action"]),
+              requirement: .window, owner: "MENUS", sources: ["Browser command"]),
         .init(id: .sidebarCopyMarkdownLinks, title: "Copy Link as Markdown", menu: "Sidebar", shortcuts: [], scope: .browser,
-              requirement: .window, owner: "MENUS", sources: ["Orbit 1.170 ContextMenus strings; object action"]),
+              requirement: .window, owner: "MENUS", sources: ["Browser command"]),
         .init(id: .sidebarDuplicate, title: "Duplicate", menu: "Sidebar", shortcuts: [], scope: .browser,
-              requirement: .window, owner: "MENUS", sources: ["M-566; object action"]),
+              requirement: .window, owner: "MENUS", sources: ["menu.declaration.context"]),
         .init(id: .sidebarArchiveOtherTabs, title: "Archive Other Tabs", menu: "Sidebar", shortcuts: [], scope: .browser,
-              requirement: .window, owner: "MENUS", sources: ["Orbit 1.170 ContextMenus strings"]),
+              requirement: .window, owner: "MENUS", sources: ["Browser command"]),
         .init(id: .sidebarAddToFavorites, title: "Add to Favorites", menu: "Sidebar", shortcuts: [], scope: .browser,
-              requirement: .window, owner: "SB-LIST", sources: ["Reconstruction: sidebar row context menu (C24)"]),
+              requirement: .window, owner: "SB-LIST", sources: ["Browser command"]),
         .init(id: .sidebarCloseItems, title: "Close Tabs", menu: "Sidebar", shortcuts: [], scope: .browser,
-              requirement: .window, owner: "SB-LIST", sources: ["Reconstruction: sidebar row context menu (C24)"]),
+              requirement: .window, owner: "SB-LIST", sources: ["Browser command"]),
         .init(id: .sidebarDeleteFolder, title: "Delete Folder", menu: "Sidebar", shortcuts: [], scope: .browser,
-              requirement: .window, owner: "SB-LIST", sources: ["Reconstruction: folder context menu (C24)"]),
+              requirement: .window, owner: "SB-LIST", sources: ["Browser command"]),
         .init(id: .sidebarDeleteFolderAndTabs, title: "Delete Folder and Archive Its Tabs", menu: "Sidebar", shortcuts: [],
               scope: .browser, requirement: .window, owner: "SB-LIST",
-              sources: ["Reconstruction: folder context menu (C24)"])
+              sources: ["Browser command"])
     ]
 
     @MainActor
@@ -59,23 +57,17 @@ enum SidebarListCommands {
             }
         }
         window(.sidebarMuteTab, validate: { $0.sidebarMuteSurface != nil }) { $0.toggleSidebarMute() }
-        // Tabs › Rename Current Item (M-142): inline rename of the targeted row.
         window(.renameCurrentItem, validate: { $0.sidebarRenameTarget != nil }) { $0.renameSidebarTarget() }
-        // Tabs › Pin/Unpin Tab, ⌘D (M-181).
         window(.pinUnpinTab, validate: { $0.canTogglePinFromSidebar }) { $0.togglePinSidebarTargets() }
-        // Tabs › New Folder…, ⇧⌘N (M-959): groups the targeted rows, then renames the folder.
         window(.newFolder, validate: { $0.session.organization != nil }) { $0.createSidebarFolder() }
-        // Tabs › Collapse/Expand All Folders (M-134, M-164).
         window(.collapseAllFolders, validate: { $0.sidebarHasFolders(collapsed: false) }) { $0.session.setAllFoldersCollapsed(true) }
         window(.expandAllFolders, validate: { $0.sidebarHasFolders(collapsed: true) }) { $0.session.setAllFoldersCollapsed(false) }
-        // View › Collapse/Expand Pinned Section (M-840, M-617).
         window(.collapsePinnedSection, validate: { $0.session.organization?.isPinnedSectionCollapsed == false }) {
             $0.session.setPinnedSectionCollapsed(true)
         }
         window(.expandPinnedSection, validate: { $0.session.organization?.isPinnedSectionCollapsed == true }) {
             $0.session.setPinnedSectionCollapsed(false)
         }
-        // Tabs › Reset Tab to Original URL (M-1348), Reset all tabs in this Space (M-334).
         window(.resetTabToOriginalURL, validate: { !$0.sidebarAwayPinnedTargets.isEmpty }) { controller in
             for id in controller.sidebarAwayPinnedTargets { controller.resetSidebarTab(id) }
         }
@@ -83,9 +75,6 @@ enum SidebarListCommands {
             controller.hideLibrary()
             controller.session.resetPinnedTabs { surface, url in surface.navigate(to: url) }
         }
-        // Tabs › Clear Unpinned Tabs, ⇧⌘K (M-498) is ARCHIVE-UI's binding; Today's Clear control
-        // calls the same hook (`clearTodayFromArchiveCommand`).
-        // Tabs › Reveal Tab in Sidebar (M-752).
         for command in [BrowserCommandID.revealTabInSidebar, .revealCurrentTab] {
             window(command, validate: { $0.session.organization?.selectedTab != nil }) { $0.revealSelectedTabInSidebar() }
         }
@@ -137,9 +126,6 @@ enum SidebarListCommands {
         return groups
     }
 
-    /// Contextual labels of the menu items, English like Orbit's interface (THEME-R2): Orbit's menu
-    /// titles where they exist (M-n), English reconstructions otherwise (C24). The registry keeps
-    /// creating and dispatching the items.
     static func title(for id: BrowserCommandID, nodes: [BrowserOrganizationNode],
                       in organization: BrowserOrganizationSnapshot?) -> String? {
         let tabs = nodes.flatMap { node -> [BrowserOrganizationTabItem] in

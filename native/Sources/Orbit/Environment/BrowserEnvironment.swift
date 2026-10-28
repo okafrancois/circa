@@ -100,7 +100,7 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
         let pendingRemovals = await removals.pending()
         // Quarantine durable intents before initialContext or restored windows can use a profile.
         for removal in pendingRemovals { await store.recoverSettingsProfileRemoval(removal.profileID) }
-        // ORBIT-THEMES import bridge: imported Orbit appearances become Space themes once, before any window.
+        // Space themes import bridge: imported Orbit appearances become Space themes once, before any window.
         let migratesThemes = await migrateImportedSpaceThemes(store: store, location: location)
         let effectiveDocument = pendingRemovals.isEmpty && !migratesThemes ? document : await store.sessionDocument()
         let environment = BrowserEnvironment(engine: engine, store: store, document: effectiveDocument, persistence: persistence)

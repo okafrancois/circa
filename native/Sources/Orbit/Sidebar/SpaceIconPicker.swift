@@ -1,11 +1,6 @@
 import AppKit
 import BrowserCore
 
-/// Space icon picker anchored above the footer Space ( ships `EmojiAndIconPicker`
-/// `IconPickerGrid` and an `iconPickerPopover`: shell, binary symbols only). Its layout, sizes and
-/// behaviours below are a reconstruction pending a reference observation: Emoji / Icons modes,
-/// search, category bar, sectioned grid, Remove Icon and the system Emoji & Symbols palette.
-/// Icons use a curated native SF Symbol catalog; no Orbit font assets are used.
 @MainActor
 final class SpaceIconPicker: NSViewController, NSSearchFieldDelegate {
     enum Mode: Int { case emoji, icons }

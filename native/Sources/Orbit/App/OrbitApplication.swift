@@ -256,7 +256,6 @@ final class OrbitApplication: NSObject, NSApplicationDelegate {
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         guard !isPreparingToQuit else { return .terminateLater }
         defer { if !isPreparingToQuit { pendingSiteSessionRequest = nil } }
-        // Leave macOS's default-browser confirmation in charge; do not stack a save-error alert.
         guard settingsWindow?.model.isRequestingDefaultBrowser != true else { return .terminateCancel }
         guard confirmQuitIfNeeded() else { return .terminateCancel }
         if environment?.downloads.hasActiveTransfers == true {

@@ -195,7 +195,6 @@ final class SidebarNewSpacePageView: NSView, NSTextFieldDelegate {
 
     override func layout() {
         super.layout()
-        // Points measured from the 500 × 950 pt reference sidebar, below its 44 pt toolbar.
         let inset: CGFloat = 14, width = max(0, bounds.width - 2 * inset)
         illustration.frame = NSRect(x: (bounds.width - 70) / 2, y: 39, width: 70, height: 44)
         title.frame = NSRect(x: inset, y: 95, width: width, height: 23)
@@ -217,7 +216,7 @@ final class SidebarNewSpacePageView: NSView, NSTextFieldDelegate {
     }
 }
 
-/// Native drawing equivalents; no external reference resource is bundled.
+/// Native vector drawings for the creation page.
 @MainActor
 final class SpaceCreationIllustration: NSView {
     override var isFlipped: Bool { true }
@@ -244,7 +243,7 @@ final class SpaceCreationButton: NSButton {
     override func draw(_ dirtyRect: NSRect) {
         let dark = effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
         if !link {
-            // Blue components in the display P3 color space.
+            // Blue accent in the Display P3 color space.
             let fill = primary ? NSColor(displayP3Red: 49 / 255, green: 57 / 255, blue: 251 / 255, alpha: isEnabled ? 1 : 0.4)
                 : (dark ? NSColor.white.withAlphaComponent(0.12) : OrbitTokens.Color.State.sidebarItem)
             fill.withAlphaComponent(fill.alphaComponent * (isHighlighted ? 0.8 : 1)).setFill()

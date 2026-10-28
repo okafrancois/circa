@@ -163,12 +163,6 @@ public protocol BrowserEngine: AnyObject {
     func shellWindowDidOpen(_ windowID: WindowID, window: NSWindow)
     /// The shell window closes. Its surfaces were disposed or moved away before. Default: nothing.
     func shellWindowWillClose(_ windowID: WindowID)
-    /// (EXT-OUTCOME-R1) Tabs the engine creates by itself in a shell window — an extension's
-    /// `chrome.tabs.create`, an options page opened in a tab, onboarding after an install —
-    /// are offered to `adopt`, synchronously, before they exist natively. `adopt` returns the
-    /// surface made through its `make` closure once the shell recorded it, or nil to leave the
-    /// tab unhosted. Nil removes the handler (call it before `shellWindowWillClose`). Engines
-    /// without such tabs ignore it. Default: nothing.
     func setEngineTabAdoption(for windowID: WindowID,
                               _ adopt: (@MainActor (BrowserEngineTabRequest, () -> Surface) -> Surface?)?)
     /// (CHROMIUM-APP-R2) The shell is about to move live surfaces of one window into the tabs of

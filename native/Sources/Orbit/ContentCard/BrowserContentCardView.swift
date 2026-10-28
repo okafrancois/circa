@@ -1,14 +1,6 @@
 import AppKit
 import QuartzCore
 
-/// The rounded card that hosts the selected surface's engine view, or the empty state of the
-/// active Space. Split panes, Peek and card transitions extend this view, not the window
-/// controller. It never owns a surface: it only places the host view it is given.
-/// Material (design §7.1, §7.3): page clipped to radius 6 (), no border
-/// and a soft shadow only (black 24 %, y 1, blur 6,
-/// [H]) cast outside the shape only, so the empty Space — the theme fill seen through a white overlay
-/// (, D35) — is never darkened from below. The window shell sets the radius
-/// (0 edge to edge in full screen with the sidebar hidden).
 @MainActor
 final class BrowserContentCardView: NSView {
     private let clip = BrowserContentCardClipView()
@@ -242,9 +234,6 @@ final class BrowserContentCardView: NSView {
     }
 }
 
-/// Rounded clip of the card. Behind a page it shows the opaque `surface.preview` (asset [H]) while the
-/// engine paints; the empty Space shows the translucent `surface.contentEmptyPage` overlay over the
-/// window's theme fill (: white 70 % / 10 %, D03/D35).
 @MainActor
 private final class BrowserContentCardClipView: NSView {
     var isTransparent = false { didSet { refresh() } }

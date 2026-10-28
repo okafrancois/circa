@@ -7,7 +7,6 @@ import Testing
 import BrowserEngine
 import WebKitEngine
 
-// THEME-R2: round 2 design deltas (docs/native-port/design/theme-deltas-r2.md) and VIS-1 defects.
 
 private let reference = CGSize(width: 1024, height: 640)
 
@@ -38,7 +37,7 @@ extension NativeWebKitTests {
 @Suite("Theme R2 — default Space gradient and appearance")
 @MainActor
 struct ThemeR2GradientTests {
-    @Test("The default Space is Orbit 1.170.0's two-stop gradient; the round 1 flat fill is kept as legacyFlat")
+    @Test("The default Space uses a two-stop gradient and keeps legacyFlat for older sessions")
     func defaultTheme() throws {
         let light = try #require(NSAppearance(named: .aqua))
         let dark = try #require(NSAppearance(named: .darkAqua))
@@ -87,7 +86,7 @@ struct ThemeR2GradientTests {
         #expect(zip(pixel(Int(a.x), Int(a.y)), pixel(Int(b.x.rounded()), Int(b.y.rounded()))).allSatisfy { close($0, $1, 1.5) })
     }
 
-    @Test("Light ↔ dark is instant: an appearance change drops a Space cross-fade in flight (C04)")
+    @Test("Light ↔ dark is instant: an appearance change drops a Space cross-fade in flight")
     func appearanceSwitchIsInstant() throws {
         let view = OrbitThemeFillView(frame: NSRect(x: 0, y: 0, width: 200, height: 100))
         view.appearance = NSAppearance(named: .aqua)
@@ -147,7 +146,7 @@ extension NativeWebKitTests {
 @Suite("Theme R2 — loading capsule and VIS-1 defects")
 @MainActor
 struct ThemeR2BehaviourTests {
-    @Test("Loading maps to a waiting pulse before commit and a progress sweep after (estimate of the C15 phases)")
+    @Test("Loading maps to a waiting pulse before commit and a progress sweep after")
     func loadingPhases() throws {
         let a = try #require(URL(string: "https://a.example/"))
         let b = try #require(URL(string: "https://b.example/"))

@@ -1,13 +1,11 @@
 import BrowserEngine
 
-/// Portable-file commands are an explicit reconstruction for CORE-BOOKMARKS;
-/// they do not change Orbit's serialized menu observations or claim Orbit fidelity.
 enum BrowserBookmarkCommands {
     static let definitions: [BrowserCommandDefinition] = [
         .init(id: .importBookmarks, title: "Import Bookmarks…", menu: "File", shortcuts: [], scope: .browser,
-              requirement: .window, owner: "BOOKMARKS", sources: ["Reconstruction: portable Netscape HTML import"]),
+              requirement: .window, owner: "BOOKMARKS", sources: ["Browser command"]),
         .init(id: .exportBookmarks, title: "Export Bookmarks…", menu: "File", shortcuts: [], scope: .browser,
-              requirement: .window, owner: "BOOKMARKS", sources: ["Reconstruction: profile-scoped saved links export"])
+              requirement: .window, owner: "BOOKMARKS", sources: ["Browser command"])
     ]
 
     @MainActor

@@ -19,8 +19,6 @@ struct OrbitSidebarLayerTransition {
             let positionIsAnimating = layer.animation(forKey: "orbit.sidebar.position") != nil
             let boundsAreAnimating = layer.animation(forKey: "orbit.sidebar.bounds") != nil
             let displayed = positionIsAnimating || boundsAreAnimating ? layer.presentation() : nil
-            // A newly unhidden/offscreen-prepared layer can still expose the previous commit's
-            // presentation. Only an interrupted flight needs that value; otherwise use the model.
             states.append(State(layer: layer, position: layer.position, bounds: layer.bounds,
                 displayedPosition: positionIsAnimating ? (displayed?.position ?? layer.position) : layer.position,
                 displayedBounds: boundsAreAnimating ? (displayed?.bounds ?? layer.bounds) : layer.bounds))

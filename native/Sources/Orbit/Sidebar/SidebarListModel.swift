@@ -26,7 +26,6 @@ struct SidebarTabItem: Equatable {
     /// Part of a ⌘/⇧-click selection of two rows or more (`tabMultiselected`).
     var isMultiSelected = false
     var isPinned = false
-    /// ORBIT-RESET-PIN: a Pinned tab whose live address differs from its pinned URL.
     var isAwayFromPinnedURL = false
     /// Open in another window and not here: selecting it opens a second occurrence here.
     var isOpenInAnotherWindow = false
@@ -105,11 +104,6 @@ struct SidebarListContent: Equatable {
         entries.first { $0.node == node }
     }
 
-    /// Builds the visible rows of Pinned (unless collapsed) and Today, in display order, in one
-    /// pass over the trees (no per-row lookup, so 500 rows stay linear).
-    /// Titles: the custom title wins (ORBIT-RENAME), then the engine's live title when the tab is
-    /// loaded here (newer than the stored copy), the stored web title, the host, and finally the
-    /// localized "New Tab" fallback used by the shell for blank documents.
     init(snapshot: BrowserOrganizationSnapshot?, selection: BrowserOrganizationSelection = .init(),
          liveTitle: (BrowserOrganizationTabItem) -> String? = { _ in nil },
          liveActivity: (BrowserOrganizationTabItem) -> SidebarTabActivity = { _ in .init() }) {
@@ -170,13 +164,11 @@ enum SidebarListStrings {
 
     static var newTab: String { OrbitShellText.newTab }
     static var newFolder: String { string("list.newFolder", "New Folder") }
-    /// Orbit's Today control (S-PIN@2s); the menu command is "Clear Unpinned Tabs" (M-498).
     static var clear: String { string("list.clear", "Clear") }
     static var selected: String { OrbitShellText.selected }
     static var expanded: String { string("list.expanded", "Expanded") }
     static var collapsed: String { string("list.collapsed", "Collapsed") }
     static var otherWindow: String { string("list.otherWindow", "Open in Another Window") }
-    /// Orbit menu title (M-1348).
     static var resetPinned: String { string("list.resetPinned", "Reset Tab to Original URL") }
     static func close(_ title: String) -> String { OrbitShellText.closeTab(title) }
     static func reset(_ title: String) -> String { String(format: string("list.resetTab", "Reset %@ to Original URL"), title) }
@@ -193,8 +185,6 @@ enum SidebarListSlot: Hashable {
     case newTab
 }
 
-/// A gap opened under a drag (ORBIT-DRAG placeholder): `rows` pitches inserted before the row at
-/// `index` of `section` (indices count rows laid out, i.e. excluding hidden dragged rows).
 struct SidebarDropGap: Equatable {
     let section: SidebarListSection
     let index: Int
@@ -203,10 +193,6 @@ struct SidebarDropGap: Equatable {
     var depth: Int = 0
 }
 
-/// Vertical rhythm of the page document: `OrbitSidebarGeometry.PageRhythm` (THEME-R2, capture C01 —
-/// first row 36 below the Space title, pitch 41, separator 29 after the last pinned row or 27.25
-/// below the title, New Tab 29.25 after it, none of them with an empty page) applied to the rows
-/// actually laid out: hidden dragged rows close up and a drag gap adds whole pitches.
 struct SidebarListLayout: Equatable {
     struct Placement: Equatable {
         let node: BrowserOrganizationNode
@@ -217,7 +203,6 @@ struct SidebarListLayout: Equatable {
 
     var rows: [Placement] = []
     var separatorCenterY: CGFloat = 0
-    /// No separator on a page with neither pinned nor Today rows (capture C01, D36).
     var isSeparatorVisible = false
     var newTabCenterY: CGFloat = 0
     /// Placeholder of the drag gap, in document coordinates (row box, full width before indent).
@@ -267,7 +252,6 @@ struct SidebarListLayout: Equatable {
         }
         let pinnedSlots = slots(pinned, section: .pinned)
         let todaySlots = slots(today, section: .today)
-        // THEME-R2's measured rhythm (capture C01), shifted to this page's title position.
         let rhythm = OrbitSidebarGeometry.PageRhythm.resolve(pinnedRowCount: pinnedSlots.count, todayRowCount: todaySlots.count)
         let offset = title - rhythm.spaceTitleCenterY
         let firstRow = title + Metrics.firstRowCenterFromSpaceTitle
@@ -303,7 +287,6 @@ struct SidebarListLayout: Equatable {
     }
 }
 
-// MARK: - Drop resolution (ORBIT-DRAG)
 
 /// Where a drag hovering the list would land, and how to show it.
 struct SidebarDropProposal: Equatable {
@@ -314,12 +297,6 @@ struct SidebarDropProposal: Equatable {
     let folderTarget: FolderID?
 }
 
-/// Maps a pointer position to a destination. Reconstruction choices (Orbit's rules are capture C27):
-/// a tab row splits into halves (before/after; dropping onto a tab to create a split view belongs
-/// to the Split lot); a folder row's top and bottom quarters insert around it and its middle
-/// drops into it (at the end); the indentation of an insertion follows the dragged row's icon, so
-/// a row leaves a folder by moving left past the folder's own icon; above the separator is
-/// Pinned, below is Today (New Tab included, landing first).
 enum SidebarDropResolver {
     /// - Parameters:
     ///   - y: pointer in document coordinates of `layout` (resting, or presented positions).
@@ -465,7 +442,6 @@ extension BrowserOrganizationSnapshot {
     }
 }
 
-// MARK: - Auto-scroll (ORBIT-DRAG)
 
 enum SidebarAutoScroll {
     /// Scroll step for one dragging update: proportional to the pointer's depth into the edge band,

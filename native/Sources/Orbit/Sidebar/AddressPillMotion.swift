@@ -1,9 +1,7 @@
 import AppKit
 import QuartzCore
 
-/// Address pill motion: 0.12 s ease-out,
-/// 22 pt loupe exit, aligned status baseline.
-/// The 28 Oct recording shows selection-triggered reflow, not a second pager spring.
+/// Selection-triggered reflow: 0.12 s ease-out, 22 pt icon exit and a −4 pt status baseline.
 enum AddressStatusMotion {
     static let duration: TimeInterval = 0.12
     static let baseline: CGFloat = -4

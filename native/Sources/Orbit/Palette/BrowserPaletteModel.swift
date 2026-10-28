@@ -67,8 +67,6 @@ struct BrowserPaletteSelection {
 
 /// Policy is intentionally local and deterministic; no network requests or remote images.
 enum BrowserPaletteRanking {
-    // This command-bar policy is deliberately host-specific:
-    // do not merge arbitrary sites, subdomains, differently named documents or typed input.
     static let titleAndHostDeduplicationHosts: Set<String> = [
         "figma.com", "maps.google.com", "notion.so", "app.notion.com", "zoom.us",
         "opentable.com", "zillow.com", "github.com", "app.mode.com", "console.cloud.google.com"

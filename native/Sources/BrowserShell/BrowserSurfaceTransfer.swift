@@ -91,8 +91,6 @@ public final class BrowserSurfaceTransfer<Surface: BrowserSurface> {
 
     public let surface: Surface
     public let profileID: ProfileID
-    /// The live document's address when released. A receiving window records the surface's
-    /// address at the time it records the tab, which may be newer. Neither is ever loaded.
     public let url: URL
     /// The sidebar tab moving with the document, when the releasing owner had one.
     public let tabID: TabID?
@@ -214,7 +212,6 @@ public enum BrowserSurfaceTransfers {
     private static var inFlight: [ObjectIdentifier: AnyObject] = [:]
     private static var stranded: [ObjectIdentifier: StrandedOwner] = [:]
 
-    /// Transfers that are pending or accepted and not recorded yet.
     public static var inFlightCount: Int { inFlight.count }
 
     static func begin(_ transfer: AnyObject) { inFlight[ObjectIdentifier(transfer)] = transfer }
@@ -477,13 +474,6 @@ struct SurfaceTransit<Surface: BrowserSurface> {
 }
 
 public extension BrowserWindowSession {
-    /// Takes this exact live surface out of the window, without disposing it, for a move into
-    /// another window, Peek or Little Orbit. Ownership and membership leave the session now, but the
-    /// tab's model occurrence stays as a placeholder until the receiver records the surface; only
-    /// then is it released, in command order, keeping its logical tab (never archived). Should the move fail, the surface comes back to the
-    /// same occurrence and `rebind` runs synchronously (restore the delegate and observers). The
-    /// factory never recreates a placeholder. Nil when the surface is not one of this window's
-    /// occurrences.
     func releaseSurface(
         _ surface: Surface, rebind: ((Surface) -> Void)? = nil
     ) -> BrowserSurfaceTransfer<Surface>? {
@@ -513,14 +503,6 @@ public extension BrowserWindowSession {
         return transfer
     }
 
-    /// Accepts a transferred live surface as a tab of the active Space without reloading it.
-    /// Ownership changes and `bind` (the receiver's engine delegate and observers) runs before
-    /// this method returns; the model tab follows in command order, recording the surface's
-    /// address at that time. Nil, leaving the transfer pending, when the active profile differs.
-    /// Should recording fail later (the window closed, the Space changed profile), the surface
-    /// returns to its source or is rescued; it is never disposed or replayed. With an explicit
-    /// replacement, an existing occurrence of the same logical tab remains live until recording
-    /// succeeds; installing that state retires its surface exactly once.
     func acceptTransfer(
         _ transfer: BrowserSurfaceTransfer<Surface>, activate: Bool = true, replacingExisting: Bool = false,
         bind: (Surface) -> Void = { _ in }

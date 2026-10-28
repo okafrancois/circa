@@ -738,7 +738,7 @@
 "You can wait for it to become responsive or exit the page." = "You can wait for it to become responsive or exit the page.";
 "Your connection to this site is not private" = "Your connection to this site is not private";
 
-/* ORBIT-THEMES: theme editor */
+/* Space themes: theme editor */
 "Safe Browsing" = "Safe Browsing";
 "Warnings for dangerous sites and downloads are on." = "Warnings for dangerous sites and downloads are on.";
 "Unavailable in this build. Orbit does not warn about dangerous sites or downloads." = "Unavailable in this build. Orbit does not warn about dangerous sites or downloads.";

@@ -3,8 +3,6 @@ import BrowserCore
 import BrowserEngine
 import BrowserShell
 
-/// Sidebar visibility (ORBIT-SIDEBAR ⌘S semantics, UX-HOVER) and the Space theme of the window.
-/// The Commands lot binds its registry entry to `toggleSidebar()`; the menu item already calls it.
 extension BrowserWindowController {
     func installSidebarPresentation() {
         windowShell.onPresentationChange = { [weak self] in self?.updateSidebarColumnVisibility() }
@@ -47,7 +45,6 @@ extension BrowserWindowController {
         }
     }
 
-    /// Drag-to-hide from the sidebar edge: instant, before the release (, D55).
     func hideSidebar() {
         guard acceptsCommands else { return }
         session.performWindowAction { [weak self] in
@@ -122,7 +119,6 @@ extension BrowserWindowController {
         renderLoadingIndicator()
     }
 
-    /// Loading capsule of the selected page in the top margin (D46).
     func renderLoadingIndicator() {
         let state = session.selectedSurface?.navigationState
         windowShell.setLoadingPhase(.resolve(isLoading: state?.isLoading ?? false, url: state?.url,

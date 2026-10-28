@@ -53,11 +53,6 @@ final class BrowserKeyEquivalentMatcher: NSObject {
         _ = validateNativeLookup()
     }
 
-    /// The disabled-item query order is an observed macOS behavior. Verify it once rather
-    /// than turning a platform change into dead browser shortcuts in a shipped build. Both event
-    /// origins are checked: a synthesized NSEvent, and a window-server (CGEvent-backed) event as
-    /// produced by a physical keyboard or an injected key, whose disabled match AppKit reports
-    /// differently (DBG-KEYS-R2).
     private func validateNativeLookup() -> Bool {
         if let supported = nativeLookupSupported { return supported }
         if let lookupValidation {

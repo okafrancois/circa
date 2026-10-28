@@ -115,8 +115,7 @@ struct BrowserShortcutEvent {
     }
 }
 
-/// Browser-first policy chosen in CMD-R2; the provenance and Orbit-specific additions are
-/// recorded in shortcuts.md. All other commands retain the native page-first menu path.
+/// Reserved browser commands run before page handlers; other commands use AppKit's page-first path.
 enum BrowserShortcutPriority {
     static let reserved: Set<BrowserCommandID> = [
         .newTab, .newWindow, .newIncognitoWindow, .newQuickWindowWindow, .blankWindow,

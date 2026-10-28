@@ -534,8 +534,6 @@ final class BrowserSplitDividerView: NSView {
         case by(CGFloat)
         case center
     }
-    /// Arrow 10 pt, Shift+arrow 30 pt, Home recentres the pair: reconstruction carried from the
-    /// archived lab divider (LAB-B `app/ui/split.js`), not an observed Orbit value.
     static let keyboardStep: CGFloat = 10
     static let largeKeyboardStep: CGFloat = 30
     let index: Int

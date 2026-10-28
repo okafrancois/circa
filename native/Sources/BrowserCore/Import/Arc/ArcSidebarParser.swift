@@ -1,16 +1,7 @@
 import CryptoKit
 import Foundation
 
-/// Pure parser of Arc's `StorableSidebar.json`, `StorableArchiveItems.json` and the profile names
-/// of `User Data/Local State`. Opens no file, loads no page, touches no credential. Defensive:
-/// unknown fields are ignored, malformed records, missing/repeated references and cycles are
-/// bounded and counted, and nothing ambiguous is reported as imported.
-/// Port of the Electron reconstruction (`app/arc-sidebar.cjs`, `docs/arc-import-format.md`), with
-/// two deliberate differences: items reachable from no root are counted, not recovered into a
-/// neutral profile (Arc does not display them), and split groups are flattened (no native split
-/// model on main yet).
 public enum ArcSidebarParser {
-    /// `StorableSidebar.json` versions whose structure was observed. Others are parsed best-effort.
     public static let observedFormatVersions: Set<Int> = [1]
     public static let maximumThemeBytes = 64 * 1024
     static let maximumDepth = 400
@@ -80,7 +71,6 @@ public enum ArcSidebarParser {
             if !profileOrder.contains(key) { profileOrder.append(key) }
         }
 
-        /// `{default:{}}` → `Default`; `{custom:{_0:{directoryBasename:}}}` → that directory (observed).
         mutating func profileKey(for reference: ArcJSON?) -> ArcProfileKey {
             guard let reference, reference != .null else { return .unresolved("unknown") }
             if reference.has("default") { return .directory("Default") }
@@ -107,7 +97,6 @@ public enum ArcSidebarParser {
                     if let date = formatter.date(from: text) { return date }
                 }
             }
-            // Arc numbers are seconds since 1 January 2001 (observed); a Unix epoch is never guessed.
             guard let seconds, seconds.isFinite, abs(seconds) < 8.64e12 else {
                 diagnostics.invalidTimestamps += 1
                 return nil
@@ -189,7 +178,6 @@ public enum ArcSidebarParser {
                 note(profile)
                 if case let .unresolved(key) = profile, unresolved.insert(key).inserted { diagnostics.unresolvedProfiles += 1 }
                 var roots: [String: String] = [:]
-                // `newContainerIDs` encodes keys as Swift enums and wins over `containerIDs` (observed).
                 for (tag, root) in ArcRecordCollection.pairs(record["containerIDs"], malformed: { diagnostics.malformedRecords += 1 })
                     + ArcRecordCollection.pairs(record["newContainerIDs"], malformed: { diagnostics.malformedRecords += 1 }) {
                     let kind = tag.string ?? (tag.has("pinned") ? "pinned" : tag.has("unpinned") ? "unpinned" : nil)
@@ -255,7 +243,6 @@ public enum ArcSidebarParser {
         }
     }
 
-    /// Order comes only from `childrenIds` (observed); `parentID` links recover omitted children.
     private struct TreeWalker {
         var items: [String: ArcJSON] = [:]
         var order: [String] = []

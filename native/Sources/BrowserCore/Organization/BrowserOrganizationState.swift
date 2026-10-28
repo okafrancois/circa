@@ -869,8 +869,6 @@ struct BrowserOrganizationPatch: Sendable {
         return result
     }
 
-    /// Adds the archive records a replay of `applied` evicted through the cap (beyond the patch's
-    /// own records), as if the command had evicted them: the opposite replay reinserts them.
     mutating func recordEvictions(
         from old: BrowserOrganizationState, to new: BrowserOrganizationState,
         replaying applied: BrowserOrganizationPatch, undoing: Bool
@@ -1229,10 +1227,6 @@ extension BrowserOrganizationState {
         return sortedInSidebarOrder(roots)
     }
 
-    /// Moves nodes as one block to the destination. Callers validate visibility and profiles.
-    /// Moving into Favorites or Pinned records the current destination as the pinned URL if none
-    /// exists; moving into Today clears it (Electron reconstruction rule, Orbit not observed).
-    /// One detach per source container and one splice: O(n log n) for n moved nodes.
     mutating func move(
         _ nodes: [BrowserOrganizationNode], to destination: BrowserOrganizationDestination,
         destinationSection: BrowserOrganizationSection

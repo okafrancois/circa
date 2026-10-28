@@ -89,7 +89,6 @@ enum BrowserSurfaceProvenance {
         return true
     }
 
-    /// Owned, or reserved for an adoption or transfer that this owner has not recorded yet.
     static func isHeld(_ surface: any BrowserSurface, by owner: AnyObject) -> Bool {
         guard let record = record(for: surface), record.owner === owner, !record.wasDisposed else { return false }
         return record.state == .owned || record.state == .reserved
@@ -333,9 +332,6 @@ public final class BrowserWindowSession<Surface: BrowserSurface> {
         return id
     }
 
-    /// True when the surface is one of this window's occurrences or is reserved by an adoption or
-    /// transfer this window accepted and has not recorded yet. Synchronous engine policy uses it:
-    /// a held surface may navigate; one that is rejected later is disposed, never replayed.
     public func holds(_ surface: Surface) -> Bool {
         !isClosed && BrowserSurfaceProvenance.isHeld(surface, by: self)
     }
@@ -957,9 +953,6 @@ public final class BrowserWindowSession<Surface: BrowserSurface> {
         }
     }
 
-    /// Accepts only the exact state produced by this command, never a newly observed active Space.
-    /// With `adoptingOrganizationChanges`, a later change made only by organization reconciliation
-    /// (another window archiving or moving this window's tab) is accepted with the state.
     func stateAfterMutation(
         _ context: BrowserContext, revision: UInt64, selection: TabOccurrenceID?,
         adoptingOrganizationChanges: Bool = false

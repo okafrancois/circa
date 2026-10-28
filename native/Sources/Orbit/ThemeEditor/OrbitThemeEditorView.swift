@@ -4,7 +4,6 @@ import QuartzCore
 
 private typealias M = OrbitThemeEditorMetrics
 
-/// Colours of the editor's own controls, drawn over the popover material (estimates [L], C04/C06).
 @MainActor
 private enum OrbitThemeEditorColors {
     static func dynamic(_ name: String, light: NSColor, dark: NSColor) -> NSColor {
@@ -22,7 +21,7 @@ private enum OrbitThemeEditorColors {
     static let swatchRing = OrbitTokens.Color.Text.primary
 }
 
-/// Orbit's theme editor content (ORBIT-THEMES): a 356 × 508 flipped view laid out from measured geometry.
+/// Orbit's theme editor content: a 356 × 508 flipped view laid out from geometry.
 /// It renders `state` and reports every user edit through `onChange`; the controller owns the draft.
 @MainActor
 final class OrbitThemeEditorView: NSView {
@@ -257,7 +256,6 @@ final class OrbitThemeEditorView: NSView {
             handle.onNudge = { [weak self] hue, saturation in
                 self?.edit { $0.nudge(handle: index, hueDegrees: hue, saturation: saturation) }
             }
-            // Handles sit above the mode buttons and steppers, as in C06.
             addSubview(handle, positioned: .above, relativeTo: nil)
             handles.append(handle)
         }
@@ -374,7 +372,6 @@ final class OrbitThemeFieldView: NSView {
     }
 }
 
-/// One picked colour: 44 pt disc with a 3 pt white ring (C06). VoiceOver adjusts its hue.
 @MainActor
 final class OrbitThemeHandleView: NSView {
     var color = BrowserThemeColor(hex: 0x808080)
@@ -537,8 +534,6 @@ final class OrbitThemeSwatchButton: NSButton {
 
 // MARK: - Wavy slider (intensity) and dial (grain)
 
-/// Wavy-track slider of C06: a sine stroke over a capsule track, brighter left of the white capsule
-/// thumb. Inactive (no colour picked, C04): no thumb, dim wave.
 @MainActor
 final class OrbitThemeWaveSlider: NSView {
     var value: Double = BrowserSpaceTheme.defaultIntensity { didSet { if value != oldValue { refresh() } } }
@@ -659,8 +654,6 @@ final class OrbitThemeWaveSlider: NSView {
     override var focusRingMaskBounds: NSRect { track.frame }
 }
 
-/// Grain dial of C06: a dotted ring around a thin circle; a white tick shows the value, turning
-/// clockwise from 12 o'clock. Inactive (no colour picked): no tick.
 @MainActor
 final class OrbitThemeGrainDial: NSView {
     var value: Double = 0 { didSet { if value != oldValue { refresh() } } }

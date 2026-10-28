@@ -72,7 +72,7 @@ extension NativeWebKitTests {
 @Suite("Theme tokens and motion")
 @MainActor
 struct ThemeMotionTests {
-    @Test("The recovered Space-switch spring converts to Core Animation coefficients")
+    @Test("The Space-switch spring converts to Core Animation coefficients")
     func spaceSwitchSpringConversion() {
         let spring = OrbitTokens.Motion.spaceSwitchSidebar
         #expect(spring.response == 0.4 && spring.dampingFraction == 1)
@@ -80,7 +80,7 @@ struct ThemeMotionTests {
         #expect(close(spring.damping, 31.41593, 0.0001))
         let animation = spring.animation(keyPath: "transform.translation.x")
         #expect(animation.mass == 1 && close(animation.stiffness, spring.stiffness) && close(animation.damping, spring.damping))
-        // Nominal spring time; the recovered CoreVideo driver advances faster than wall time.
+        // Nominal spring time; the animation driver advances faster than wall time.
         #expect(spring.settlingDuration > 0.58 && spring.settlingDuration < 0.60)
     }
 
@@ -200,7 +200,7 @@ struct ThemeAppearanceTests {
         #expect(OrbitAppearance.override(in: ["Orbit", "--appearance", "sepia"]) == nil)
     }
 
-    @Test("Dynamic tokens resolve to their exact light and dark asset values")
+    @Test("Dynamic tokens resolve to their exact light and dark values")
     func dynamicColours() throws {
         let light = try #require(NSAppearance(named: .aqua))
         let dark = try #require(NSAppearance(named: .darkAqua))
@@ -246,7 +246,7 @@ struct ThemeAppearanceTests {
         #expect(OrbitThemeGradient.normalizedStops(OrbitTokens.SpaceTheme.amberCoral.stops, appearance: appearance).count == 3)
     }
 
-    @Test("The default Space uses the accent measured on Orbit 1.170.0; themed Spaces derive theirs from their hue")
+    @Test("The default Space uses its declared accent; themed Spaces derive theirs from their hue")
     func accents() throws {
         var defaultColors = OrbitSpaceThemes.accent(for: .default)
         defaultColors.contrastTheme = nil // The provenance is not a measured colour role.
@@ -302,13 +302,12 @@ struct ThemeAppearanceTests {
 
 @Suite("Window and sidebar geometry")
 struct ShellGeometryTests {
-    @Test("Pinned sidebar at the reference size: column 228, card inset 10, radius 6, window buttons at x 20 + n × the system pitch, y 24")
+    @Test("Pinned sidebar at 1024 × 640: column 228, card inset 10, radius 6, window buttons at x 20 + n × the system pitch, y 24")
     func dockedReference() {
         let geometry = OrbitShellGeometry.resolve(.init(contentSize: reference))
         #expect(close(geometry.sidebarFrame, CGRect(x: 0, y: 0, width: 228, height: 640)))
         #expect(close(geometry.cardFrame, CGRect(x: 228, y: 10, width: 786, height: 620)))
         #expect(geometry.cardRadius == 6 && geometry.floatingChrome == 0)
-        // Fallback pitch 23 (capture C01); the older videos' 20 when the system says so.
         #expect(geometry.trafficLightCenters == [CGPoint(x: 20, y: 24), CGPoint(x: 43, y: 24), CGPoint(x: 66, y: 24)])
         let older = OrbitShellGeometry.resolve(.init(contentSize: reference, trafficLightPitch: 20))
         #expect(older.trafficLightCenters == [CGPoint(x: 20, y: 24), CGPoint(x: 40, y: 24), CGPoint(x: 60, y: 24)])
@@ -374,10 +373,8 @@ struct ShellGeometryTests {
 
     @Test("Sidebar anatomy matches the specimen at 228 × 640 (one Favorites row, 4 pinned, 3 Today, 3 Spaces)")
     func sidebarReference() {
-        // S-NT shows 2 Favorites at 228; the column rule itself is the Organisation lot's (C07).
         let geometry = OrbitSidebarGeometry.resolve(.init(height: 640, favoriteCount: 2, pinnedRowCount: 4, todayRowCount: 3, spaceCount: 3))
         #expect(geometry.toolbarCenterY == 24)
-        // Toggle 27.25 after the third window button (pitch 23), navigation anchored right (C05/C07).
         #expect([geometry.sidebarToggleCenterX, geometry.backCenterX, geometry.forwardCenterX, geometry.reloadCenterX] == [93.25, 137.75, 171.75, 206])
         #expect(!geometry.toolbar.isCompact && geometry.toolbar.overflowCenterX == nil)
         #expect(geometry.toolbarHitWidth == 28)
@@ -388,7 +385,6 @@ struct ShellGeometryTests {
         // Orbit caps the grid at 4 per row, however wide the sidebar (10 → 4 + 4 + 2).
         #expect(OrbitTokens.Metrics.Sidebar.favoriteColumns(count: 10, sidebarWidth: 400) == 4)
         #expect(OrbitTokens.Metrics.Sidebar.favoriteColumns(count: 5, sidebarWidth: 400) == 3)
-        // Balanced rows (C07): 4 tiles at 243 stay on one row, at 203 become 2 × 2, never 3 + 1.
         #expect(OrbitTokens.Metrics.Sidebar.favoriteColumns(count: 4, sidebarWidth: 243) == 4)
         #expect(OrbitTokens.Metrics.Sidebar.favoriteColumns(count: 4, sidebarWidth: 203) == 2)
         #expect(OrbitTokens.Metrics.Sidebar.favoriteMinimumTileWidth == 45)
@@ -407,7 +403,7 @@ struct ShellGeometryTests {
         #expect(geometry.pageFrame.maxY == geometry.footerFrame.minY)
     }
 
-    @Test("Without pinned rows the separator sits 27.25 below the title and only shows with Today rows (C01)")
+    @Test("Without pinned rows the separator sits 27.25 below the title and only shows with Today rows")
     func emptySections() {
         let geometry = OrbitSidebarGeometry.resolve(.init(height: 640, todayRowCount: 1))
         #expect(geometry.favoritesFrame.height == 0 && geometry.pageFrame.minY == 82)
@@ -441,7 +437,7 @@ struct ShellGeometryTests {
         #expect(three.favoriteColumns == 3 && three.favoriteTileFrame(index: 4).minY == 55)
     }
 
-    @Test("The toolbar has two states: full row anchored right from 224, compact row below (C05/C07)",
+    @Test("The toolbar has two states: full row anchored right from 224, compact row below",
           arguments: [164.0, 180.0, 206.0, 223.0, 224.0, 228.0, 243.0, 334.0, 500.0])
     func toolbarAtWidths(width: Double) {
         let w = CGFloat(width)
@@ -465,7 +461,6 @@ struct ShellGeometryTests {
 
     @Test("The toggle follows the system pitch and moves to x 28.6 in full screen")
     func toolbarPitchAndFullScreen() {
-        // Round 1 measured 87 with a pitch of 20 (the rule gives 87.25).
         #expect(OrbitSidebarGeometry.Toolbar.resolve(width: 228, trafficLightPitch: 20).sidebarToggleCenterX == 87.25)
         #expect(OrbitSidebarGeometry.Toolbar.resolve(width: 228, trafficLightPitch: 23).sidebarToggleCenterX == 93.25)
         let fullScreen = OrbitSidebarGeometry.Toolbar.resolve(width: 228, isFullScreen: true)
@@ -512,7 +507,7 @@ struct HoverRevealTests {
         #expect(events() == [true] && reveal.phase == .revealed)
     }
 
-    @Test("Leaving waits 50 ms (C11 fast exit) and coming back cancels the dismissal")
+    @Test("Leaving waits 50 ms and coming back cancels the dismissal")
     func leaveDelay() {
         let (reveal, clock, events) = makeReveal()
         reveal.pointerEnteredEdge()
@@ -594,7 +589,6 @@ struct NativeThemeShellTests {
         #expect(controller.contentCard.cornerRadius == 6)
         let centers = try trafficLightCenters(window)
         #expect(centers.count == 3)
-        // The spacing is the system's own (23 on the capture machine, 20 on older macOS), never hard-coded.
         let pitch = controller.windowShell.trafficLightPitch
         #expect(pitch >= 18 && pitch <= 30)
         for (index, center) in centers.enumerated() {
@@ -656,7 +650,6 @@ struct NativeThemeShellTests {
         #expect(!controller.windowShell.floatingBackdrop.isHidden)
         #expect(close(controller.windowShell.floatingBackdrop.frame, CGRect(x: 5, y: 5, width: 228, height: 630)))
         #expect(controller.windowShell.floatingBackdrop.cornerRadius == 12)
-        // The panel's fill is the theme darkened by ≈25/255 per channel: a black 12 % overlay (C11).
         let dim = try #require(controller.windowShell.floatingBackdrop.dimColor.flatMap { NSColor(cgColor: $0) })
         #expect(close(dim.alphaComponent, 0.12, 0.001))
         let centers = try trafficLightCenters(window)

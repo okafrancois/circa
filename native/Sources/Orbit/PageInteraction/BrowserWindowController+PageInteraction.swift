@@ -3,11 +3,6 @@ import BrowserCore
 import BrowserEngine
 import BrowserShell
 
-/// Page-initiated surfaces of a browser window's documents (tabs and Split panes; the Peek forwards
-/// its own): tab-modal JavaScript dialogs and sign-in, file choosers, external application links,
-/// the page context menu, element fullscreen, unresponsive and crashed pages, page commands and the
-/// beforeunload-aware tab close. Every handler re-verifies that this window holds the surface.
-/// See docs/native-port/ch-essentials-2026-10-25.md.
 extension BrowserWindowController {
     /// The window shows `surface` as one of its documents (tab, Split pane or Peek).
     func showsPageSurface(_ surface: Surface) -> Bool {

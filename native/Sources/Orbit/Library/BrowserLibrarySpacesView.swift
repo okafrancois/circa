@@ -1,7 +1,6 @@
 import AppKit
 import BrowserCore
 
-/// Local inventory reconstruction. It reads catalog metadata, never materializes a site's surface.
 @MainActor
 final class BrowserLibrarySpacesView: NSView, NSTableViewDataSource, NSTableViewDelegate, NSSearchFieldDelegate {
     struct Item: Equatable {

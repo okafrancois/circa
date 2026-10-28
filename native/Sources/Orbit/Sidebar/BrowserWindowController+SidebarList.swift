@@ -117,8 +117,6 @@ extension BrowserWindowController {
         }
     }
 
-    /// ⌘W "Archive Tab" (M-968). A sidebar multi-selection closes as one command (Orbit 2022 notes:
-    /// ⌘W closes a multi-selected group); otherwise the visible tab closes as before.
     func archiveSelectedTabs() {
         guard acceptsCommands else { return }
         if library.isPresented { hideLibrary(); return }
@@ -164,18 +162,7 @@ extension BrowserWindowController {
         }
     }
 
-    // MARK: Drag and drop (ORBIT-DRAG)
 
-    /// Commits a drop validated by the sidebar.
-    /// Rule between windows of one Space (SB-LIST-R2, reconstruction: ORG-MODEL allows one
-    /// occurrence per window, Orbit's exact rule is BL-ORG-ORBIT-CHECKS): a drop from window A into
-    /// window B *moves* its tabs. Afterwards each dropped tab that A had loaded is loaded in B
-    /// with A's live document (process, history, forms — `BrowserSurfaceTransfer`) and no longer
-    /// loaded in A. If B already had its own occurrence, that one is unloaded (not archived) in
-    /// favour of the dragged document. When a live transfer is impossible, B shows the tab (loading
-    /// it if needed) and A unloads it: a tab is never left loaded in both windows by a drag. Tabs
-    /// A had not loaded are simply shown here. The first dropped tab becomes visible in B; tabs
-    /// inside a dragged folder stay where they are loaded.
     func performSidebarDrop(_ payload: SidebarDragPayload, to destination: BrowserOrganizationDestination,
                             changesOrganization: Bool) {
         guard acceptsCommands, let snapshot = session.organization, let catalog = session.catalog,
@@ -448,8 +435,6 @@ extension BrowserWindowController {
         }
     }
 
-    /// Reveal Tab in Sidebar (M-752): shows the sidebar, opens the folders and the Pinned section
-    /// holding the selected tab, and scrolls it into view.
     func revealSelectedTabInSidebar() {
         guard acceptsCommands, let selected = session.organization?.selectedTab else { return }
         revealInSidebar(session.organization!.rowNode(for: selected.id))
@@ -467,7 +452,6 @@ extension BrowserWindowController {
 }
 
 extension BrowserOrganizationContainer {
-    /// Pinned and the folders inside it hold folders (ORG-MODEL reconstruction choice).
     func acceptsFolders(in snapshot: BrowserOrganizationSnapshot) -> Bool {
         switch self {
         case .pinned: return true

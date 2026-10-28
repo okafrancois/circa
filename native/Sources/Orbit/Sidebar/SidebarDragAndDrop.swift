@@ -43,13 +43,6 @@ struct SidebarDragPayload: Codable, Equatable {
     }
 }
 
-/// A sidebar region that accepts dragged rows (ORBIT-DRAG). `BrowserSidebarView` is the single
-/// AppKit dragging destination: it asks the frontmost target under the pointer for a proposal,
-/// validates it against the window's organization snapshot (`validateMove`), shows the verdict
-/// through the target and commits with the session. Targets only map points to destinations and
-/// draw feedback, so every region shares validation, invalid-drop feedback and cross-window
-/// commits. The list implements it for Pinned/Today; the FAVORITES lot implements it for the grid
-/// and registers it with `BrowserSidebarView.addDropTarget(_:)`.
 @MainActor
 protocol SidebarDropTarget: AnyObject {
     /// The view whose coordinates proposals use.
@@ -171,10 +164,6 @@ final class SidebarDropCoordinator {
     }
 }
 
-/// Bridges the FAVORITES lot's `FavoritesDropTarget` adapter into the shared coordinator: the
-/// potential Favorites zone (between the address field and the Space title, the grid itself when
-/// it has tiles) reveals the empty drop row on entry, previews through the adapter, and the
-/// adapter commits the drop with FAVORITES' own revalidation (docs/native-port/favorites-2026-10-25.md).
 @MainActor
 final class SidebarFavoritesDropTarget: SidebarDropTarget {
     private weak var grid: FavoritesGridView?

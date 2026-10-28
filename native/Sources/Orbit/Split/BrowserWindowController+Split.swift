@@ -120,8 +120,6 @@ extension BrowserWindowController {
         return (session.activeSplit?.tabs.count ?? 1) < BrowserSplitGroup.maximumPanes
     }
 
-    /// A Split row has no stored name (its label joins the pane titles), so an edited title is
-    /// refused audibly and announced instead of being silently dropped. Reconstruction choice.
     func refuseSplitRename() { BrowserSplitFeedback.refuseRename(window) }
 
     var canCycleSplitPanes: Bool { (session.activeSplit?.tabs.count ?? 0) > 1 }

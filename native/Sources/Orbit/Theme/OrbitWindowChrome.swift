@@ -1,10 +1,5 @@
 import AppKit
 
-/// Window frame of UX-CHROME: full-size content under a transparent, title-less title bar, so the
-/// Space fill paints the whole window; the real system window buttons move into the sidebar's
-/// toolbar row (first centre x 20, y 24, at the system's own spacing: 23 on the capture machine,
-/// ) and follow the sidebar when it hides or floats. No fake system control
-/// is drawn.
 @MainActor
 enum OrbitWindowChrome {
     static func configure(_ window: NSWindow) {
@@ -19,12 +14,6 @@ enum OrbitWindowChrome {
     }
 }
 
-/// Places the three standard window buttons. The buttons stay the system's own (hover glyphs,
-/// accessibility, full-screen menu); only their frames and visibility change. In full screen the
-/// system owns them (they reveal with the menu bar).
-/// The spacing between the buttons belongs to macOS (20 pt in the onboarding videos, 23 pt on the
-/// capture machine, D10): it is read from the system's own layout of a fresh window, before the
-/// shell moves the buttons, and the token is only the fallback.
 @MainActor
 final class OrbitTrafficLights {
     private weak var window: NSWindow?
@@ -35,7 +24,6 @@ final class OrbitTrafficLights {
 
     /// Last spacing read from the system; nil until a window was measured.
     private(set) static var systemPitch: CGFloat?
-    /// The system spacing, or the token fallback ( 23 [H]).
     static var pitch: CGFloat { systemPitch ?? OrbitTokens.Metrics.Window.trafficLightPitch }
 
     init(window: NSWindow) {
@@ -147,7 +135,7 @@ final class OrbitWindowRootView: NSView {
 
 /// The sidebar/card boundary: `resizeLeftRight` cursor (tokens.json cursor.sidebarEdge), live
 /// resize 1:1 between 164 and 500, instant drag-to-hide once the pointer passes 82 pt from the window
-/// edge (measured + ).
+/// edge (+ ).
 @MainActor
 final class OrbitSidebarResizeHandle: NSView {
     var currentWidth: () -> CGFloat = { OrbitTokens.Metrics.Sidebar.widthDefault }

@@ -232,7 +232,7 @@ struct NativeOrbitImportTests {
         let restored = await environment.store.sessionDocument().spaces
         #expect(restored.map(\.id) == imported.spaces.map(\.id) && restored.map(\.name) == imported.spaces.map(\.name))
         #expect(restored.map(\.profileID) == imported.spaces.map(\.profileID))
-        // ARC-THEMES: launching also turns the imported Space appearances into themes, once.
+        // Space themes: launching also turns the imported Space appearances into themes, once.
         #expect(restored.contains { $0.theme != nil } && imported.spaces.allSatisfy { $0.theme == nil })
         #expect(!FileManager.default.fileExists(atPath: location.importDirectory.appendingPathComponent("arc-import-restore.json").path))
         _ = try? await environment.finalize()
@@ -257,7 +257,7 @@ struct NativeOrbitImportTests {
         let report = try ArcImportBackups.recoverRestore(at: location, usage: NoOrbitRunning())
         #expect(!report.journalReadable && report.restoredEntries >= 1)
         let environment = try await BrowserEnvironment.open(engine: ImportPersistentEngine(), sessionFile: harness.sessionFile)
-        // ARC-THEMES: opening converts imported Space appearances into themes, so compare identity.
+        // Space themes: opening converts imported Space appearances into themes, so compare identity.
         let recovered = await environment.store.sessionDocument().spaces
         #expect(recovered.map(\.id) == imported.spaces.map(\.id) && recovered.map(\.name) == imported.spaces.map(\.name))
         #expect(recovered.map(\.profileID) == imported.spaces.map(\.profileID))

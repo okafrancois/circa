@@ -50,7 +50,6 @@ public enum BrowserSitePermission: String, CaseIterable, Codable, Sendable {
     case fileSystem, paymentHandler, idleDetection, windowManagement, localFonts, vr, ar
     case insecureContent, automaticPictureInPicture, capturedSurfaceControl, localNetwork
 
-    /// Reconstruction defaults. Chromium must reconcile these with its content-settings map.
     public var defaultDecision: BrowserSitePermissionSetting {
         switch self {
         case .sound, .cookies, .javascript, .images, .backgroundSync, .sensors, .clipboardWrite: .allow

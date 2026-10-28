@@ -3,10 +3,6 @@ import BrowserCore
 import BrowserEngine
 import BrowserShell
 
-/// Peek in a browser window: routing of links into Peek, presentation over the content card,
-/// dismissal, promotion to a tab without reload, the Split seam, and attribution of downloads,
-/// permissions and popups of the Peek document to the tab that opened it.
-/// See `docs/native-port/peek-2026-10-25.md`.
 extension BrowserWindowController {
     // MARK: Installation
 
@@ -151,8 +147,6 @@ extension BrowserWindowController {
 
     // MARK: Routing
 
-    /// The `routeNewTargets` hook: engine-created targets of a tab that qualify open in Peek with
-    /// their original request and opener; others go to the window's default tab adoption.
     func routeNewTargetToPeek(from source: Surface, request: BrowserNewSurfaceRequest,
                               make: () -> Surface) -> BrowserNewTargetRouting<Surface> {
         guard !peek.isForwardingNewTarget, acceptsCommands,
@@ -213,8 +207,6 @@ extension BrowserWindowController {
         (engine as? any BrowserNavigationMetadataSource)?.pendingNavigationMetadata(for: surface)
     }
 
-    /// Opens `url` in a new Peek over the selected tab, in that tab's profile. Used by commands
-    /// (⇧⌘T reopening a closed Peek) and by features such as ORBIT-MAIL once arbitrated.
     @discardableResult
     func openPeek(_ url: URL, trigger: BrowserPeekTrigger = .command, activationPoint: NSPoint? = nil) -> Surface? {
         guard acceptsCommands, !session.isClosed, BrowserPeekRouting.isWebURL(url),

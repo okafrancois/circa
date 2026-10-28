@@ -1,15 +1,5 @@
 import Foundation
 
-/// Chromium's rules for JavaScript dialogs, reconstructed (CH-ESSENTIALS; no Orbit-specific rule was
-/// found, Orbit runs Chromium's dialog manager):
-/// - one dialog at a time per document: a request while one is shown is suppressed (CEF's default
-///   manager: "suppress any additional dialog requests until the displayed dialog is dismissed");
-/// - a document that opens a new dialog within `expectedDelay` of closing the previous one gets the
-///   "Prevent this page from creating additional dialogs" checkbox (Chromium
-///   `kJavaScriptMessageExpectedDelay`, 1 s, app-modal dialog manager); checked, every later
-///   dialog of that document is suppressed, and a suppressed beforeunload proceeds;
-/// - a new document starts with a clean state.
-/// Engine-independent and pure: time and document identities are inputs.
 struct BrowserJavaScriptDialogRules {
     static let expectedDelay: Duration = .seconds(1)
 

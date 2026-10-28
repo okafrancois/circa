@@ -134,7 +134,6 @@ final class BrowserLibraryView: NSView, NSSearchFieldDelegate {
     }
 }
 
-/// HomeButton Background/Background2, measured statically in navy 7/12%, white 10/15%.
 @MainActor
 final class BrowserLibraryCategoryButton: NSButton {
     override var alignmentRectInsets: NSEdgeInsets { .init() }

@@ -1,44 +1,35 @@
 import AppKit
 import BrowserCore
 
-/// Geometry of Orbit's theme editor popover, top-left origin, points.  at 2 px/pt
-/// [M] unless tagged: docs/native-port/design/orbit-design-system.md §14.6 and themes-2026-10-25.md.
 @MainActor
 enum OrbitThemeEditorMetrics {
     ///  356 × 508, radius 20.45.
     // The original 508 pt color editor is retained above an applied-material section (26 Oct request).
     static let size = NSSize(width: 356, height: 650)
     static let cornerRadius: CGFloat = 20
-    /// Placed at the content card's left edge + 13 and 13 below the window's top [M].
     static let offsetFromCard = CGPoint(x: 13, y: 13)
 
-    /// Dotted field: the upper area, 8 pt inside the popover [M]; radius and dot pitch .
     static let field = NSRect(x: 8, y: 8, width: 340, height: 339)
     static let fieldCornerRadius: CGFloat = 14
     static let dotPitch: CGFloat = 6
     static let dotDiameter: CGFloat = 1.2
 
-    /// Mode buttons auto / sun / moon over the field, pitch 40 [H], highlight 32 × 32 [M], radius [L].
     static let modeCenterY: CGFloat = 48
     static let modeCenterXs: [CGFloat] = [138, 178, 218]
     static let modeHighlight = NSSize(width: 32, height: 32)
     static let modeHighlightRadius: CGFloat = 7
     static let modeGlyphPointSize: CGFloat = 15
 
-    /// "Tap to pick a color for this space" [M], semibold 13 ().
     static let placeholderCenterY: CGFloat = 178
     static let placeholderFont = NSFont.systemFont(ofSize: 13, weight: .semibold)
 
-    /// − and + centred at the bottom of the field [M].
     static let stepperCenterY: CGFloat = 316
     static let stepperCenterXs: [CGFloat] = [158, 198]
     static let stepperSize = NSSize(width: 28, height: 28)
 
-    /// Colour handles: 44 pt with a 3 pt white ring [M].
     static let handleDiameter: CGFloat = 44
     static let handleRing: CGFloat = 3
 
-    /// Nine swatches at a 29.5 pitch (≈20 pt + 2 pt ring) between ‹ › chevrons [H]/[M].
     static let swatchRowCenterY: CGFloat = 380
     static let swatchFirstCenterX: CGFloat = 60
     static let swatchPitch: CGFloat = 29.5
@@ -46,7 +37,6 @@ enum OrbitThemeEditorMetrics {
     static let swatchRing: CGFloat = 2
     static let chevronCenterXs: [CGFloat] = [24, 332]
 
-    /// Wavy-track slider (left) and grain dial (right) on one row [M]; wave shape .
     static let controlRowCenterY: CGFloat = 451
     static let sliderTrackX: ClosedRange<CGFloat> = 19...243
     static let sliderTrackHeight: CGFloat = 18
@@ -65,8 +55,6 @@ enum OrbitThemeEditorMetrics {
         CGPoint(x: swatchFirstCenterX + CGFloat(index) * swatchPitch, y: swatchRowCenterY)
     }
 
-    /// Opening — : zoom from the anchor (response 0.305, damping 0.80) with a
-    /// fade (0.25, 0.94). Closing was not recorded: a 0.12 s fade (). Reduced motion: fades only.
     static let presentScale = OrbitTokens.Spring(response: 0.305, dampingFraction: 0.80)
     static let presentOpacity = OrbitTokens.Spring(response: 0.25, dampingFraction: 0.94)
     static let presentInitialScale: CGFloat = 0.9
@@ -75,8 +63,6 @@ enum OrbitThemeEditorMetrics {
     static let commitInterval: Duration = .milliseconds(120)
 }
 
-/// User-facing strings of the theme editor. Labels other than the context-menu item, the
-/// placeholder and "Dark Appearance" (seen in C24/C04/C06) are reconstructions.
 @MainActor
 enum OrbitThemeEditorText {
     static var menuItem: String { uiText("Edit Theme Color…") }

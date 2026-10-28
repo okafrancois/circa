@@ -15,8 +15,6 @@ enum BrowserSurfaceEvent: Equatable, Sendable {
 
 /// What a new-target route did with an engine request.
 enum BrowserNewTargetRouting<Surface> {
-    /// Not handled: the next route, then the window's default tab adoption, decides. A route
-    /// that called `make` must not decline.
     case declined
     /// Handled: give this surface to the engine, or nil to refuse the target.
     case handled(Surface?)

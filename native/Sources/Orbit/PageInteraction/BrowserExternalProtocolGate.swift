@@ -1,13 +1,6 @@
 import AppKit
 import BrowserEngine
 
-/// Links to other applications (`mailto:`, `tel:`, `zoommtg:`…) from any Orbit surface
-/// (CH-ESSENTIALS). The engine never launches them itself: the navigation is cancelled and, when an
-/// application handles the scheme, the page shows Chromium's confirmation ("Open Mail?"); only
-/// Open hands the URL to `NSWorkspace`. Never silent, never automatic (no "always allow" yet).
-/// Chromium's rules kept (reconstruction of external_protocol_handler.cc): denied schemes are never
-/// offered; a request from a subframe without a user gesture is dropped; one confirmation per
-/// surface at a time, later requests meanwhile are dropped.
 @MainActor
 final class BrowserExternalProtocolGate {
     static let shared = BrowserExternalProtocolGate()

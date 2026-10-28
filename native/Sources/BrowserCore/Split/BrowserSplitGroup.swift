@@ -5,8 +5,6 @@ public struct SplitGroupID: Hashable, Codable, Sendable {
     public init(_ rawValue: UUID = UUID()) { self.rawValue = rawValue }
 }
 
-/// Linear arrangements, in visual order. Horizontal means side by side, vertical means stacked.
-/// A four-pane limit and flat arrangements are reconstruction choices, not measured Orbit limits.
 public enum BrowserSplitOrientation: String, Codable, Sendable { case horizontal, vertical }
 
 public struct BrowserSplitGroup: Codable, Equatable, Sendable {

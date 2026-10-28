@@ -50,7 +50,7 @@ final class BrowserSettingsModel<Engine: BrowserEngine>: ObservableObject {
     var shortcutIsImplemented: ((BrowserCommandID) -> Bool)?
     var settingsShortcuts: [BrowserCommandDefinition] {
         shortcuts.filter { $0.owner != "OUT-OF-SCOPE-AI" && !OrbitCommandCatalog.structuralIDs.contains($0.id)
-            && $0.scope == .browser && ($0.sources.contains(where: { $0.hasPrefix("M-") }) || $0.owner == "ORG")
+            && $0.scope == .browser && ($0.sources.contains(where: { $0.hasPrefix("menu.declaration.") }) || $0.owner == "ORG")
             && (shortcutIsImplemented?($0.id) ?? true) }
             .sorted { $0.localizedTitle.localizedStandardCompare($1.localizedTitle) == .orderedAscending }
     }
@@ -92,8 +92,6 @@ final class BrowserSettingsModel<Engine: BrowserEngine>: ObservableObject {
         canOpenChromiumSettings(profile: profile) && environment.engine.extensionManagement != nil
     }
 
-    /// Create a separate tab in the explicitly selected profile. Never navigate the user's
-    /// existing document to a manager, or follow a later Settings/profile selection.
     func openBrowserSettings(_ page: BrowserSettingsPage, profile: ProfileID) async throws {
         try await requireProfile(profile)
         guard (page == .chromium ? canOpenChromiumSettings(profile: profile) : canOpenExtensionSettings(profile: profile)),

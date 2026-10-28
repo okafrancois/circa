@@ -1,8 +1,6 @@
 import AppKit
 
-/// Menu bar built from `OrbitMenuTree`, the display order, separators and submenus serialized
-/// in Orbit's MainMenu.nib. Browser commands route through the registry; AppKit's editing and
-/// text actions keep a nil target (`BrowserStandardActions`) so sheets and panels work.
+/// Builds the declared menu tree and routes commands through the shared registry.
 @MainActor
 final class BrowserCommandMenus<Window: AnyObject>: NSObject, NSMenuItemValidation {
     static func applicationDisplayName(bundleIdentifier: String?) -> String {
@@ -18,8 +16,6 @@ final class BrowserCommandMenus<Window: AnyObject>: NSObject, NSMenuItemValidati
         }
     }
 
-    /// Collision losers keep their item but not the key equivalent: ⇧⌘N is New Incognito
-    /// Window (File, M-1029), never New Folder (Tabs, M-959). Product decision of CMD-R2.
     static var suppressedKeyEquivalents: Set<BrowserCommandID> { [.newFolder] }
 
     let registry: BrowserCommandRegistry<Window>
@@ -61,7 +57,6 @@ final class BrowserCommandMenus<Window: AnyObject>: NSObject, NSMenuItemValidati
         return menu
     }
 
-    /// One import entry brings over Spaces, tabs and connections from the source browser.
     private static var fileAppendix: [BrowserCommandID] {
         [.importFromArc]
     }
@@ -103,7 +98,7 @@ final class BrowserCommandMenus<Window: AnyObject>: NSObject, NSMenuItemValidati
             let item = NSMenuItem.separator()
             applyOrbitKeyEquivalentAdaptation(item)
             return item
-        case .header(_, let command, let title):
+        case .header(let command, let title):
             let item = NSMenuItem(title: localizedTitle(command, fallback: title), action: nil, keyEquivalent: "")
             item.identifier = NSUserInterfaceItemIdentifier(command.rawValue)
             item.isEnabled = false
@@ -120,7 +115,6 @@ final class BrowserCommandMenus<Window: AnyObject>: NSObject, NSMenuItemValidati
             let override = registry.shortcutPreferences.document.overrides[spec.command.rawValue]
             let custom = override?.first?.shortcut
             let key = suppressed ? "" : (override != nil ? custom?.key ?? "" : spec.key)
-            // Exact duplicates (Zoom In ⌘= is serialized twice, M-2083/M-2070) render once.
             guard key.isEmpty || emitted.insert("\(spec.command.rawValue)|\(key)|\(spec.modifierMask)").inserted else { return nil }
             let item = NSMenuItem(title: displayTitle(spec), action: nil, keyEquivalent: key)
             item.keyEquivalentModifierMask = key.isEmpty ? [] : (override != nil ? custom?.modifiers ?? [] : NSEvent.ModifierFlags(rawValue: spec.modifierMask))

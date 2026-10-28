@@ -2,7 +2,6 @@ import AppKit
 import BrowserCore
 
 extension OrbitTokens {
-    /// Reconstruction [L]: no calibrated Orbit switcher capture exists yet.
     enum Switcher {
         static let visibleCards = 7
         static let thumbnailWidth: CGFloat = 200

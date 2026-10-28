@@ -1,6 +1,6 @@
 import Foundation
 
-/// A theme colour as Orbit stores it: encoded components in a named RGB space (ORBIT-THEMES).
+/// A theme colour as Orbit stores it: encoded components in a named RGB space.
 /// Engine- and AppKit-independent; the shell builds its `NSColor`s from these components.
 public struct BrowserThemeColor: Codable, Hashable, Sendable {
     public enum Space: String, Codable, Sendable { case sRGB, displayP3 }
@@ -94,7 +94,6 @@ public struct BrowserThemeColor: Codable, Hashable, Sendable {
         value <= 0.0031308 ? value * 12.92 : 1.055 * pow(value, 1 / 2.4) - 0.055
     }
 
-    /// Linear Display P3 → linear sRGB (both D65): sRGB(XYZ) × P3(XYZ).
     static let displayP3ToSRGB: [[Double]] = {
         let p3ToXYZ = [[0.4865709486, 0.2656676932, 0.1982172852],
                        [0.2289745641, 0.6917385218, 0.0792869141],
@@ -119,13 +118,6 @@ public struct BrowserThemeSurface: Codable, Hashable, Sendable {
     public var isValid: Bool { transparency.isFinite && (0...1).contains(transparency) }
 }
 
-/// A Space's theme, stored in the session document since version 4 (ORBIT-THEMES).
-/// `light` and `dark` are the gradients actually painted under each appearance; `colors` are the
-/// colours the user picked in the theme editor (its handles), from which the editor recomposes both
-/// variants with `intensity`. A preset with designed variants (the default Space) has no picked
-/// colour. `mode` chooses the window appearance: `automatic` follows the system.
-/// Orbit's own representation (`customInfo.windowTheme`: `blendedGradient.baseColors`, `intensityFactor`,
-/// ) is only partially known; this is a reconstruction.
 public struct BrowserSpaceTheme: Codable, Hashable, Sendable {
     public static let maximumColors = 3
     /// : the default gradient's axis runs at 43° from the top-left corner.
@@ -164,9 +156,7 @@ public struct BrowserSpaceTheme: Codable, Hashable, Sendable {
     public var presetID: String?
     public var mode: Mode
     public var colors: [BrowserThemeColor]
-    /// 0…1. The wavy slider of the editor (reconstruction label "Intensity").
     public var intensity: Double
-    /// 0…1. The dial of the editor (reconstruction label "Grain"): procedural grain opacity factor.
     public var noise: Double
     public var light: Gradient
     public var dark: Gradient
@@ -202,21 +192,10 @@ public struct BrowserSpaceTheme: Codable, Hashable, Sendable {
     public func gradient(isDark: Bool) -> Gradient { isDark ? dark : light }
 }
 
-// MARK: - Composition from picked colours (provisional rule, ORBIT-THEMES / C06)
 
 extension BrowserSpaceTheme {
-    /// Thumb position of the wavy slider in capture C06 (≈0.78 of its track) — the only observed value,
-    /// used as the intensity of a newly picked colour. .
     public static let defaultIntensity = 0.78
 
-    /// Builds both painted variants from picked colours. Provisional reconstruction, documented in
-    /// `docs/native-port/themes-2026-10-25.md`:
-    /// - light stop: same hue and brightness, saturation × 0.8 × intensity. :
-    ///   handle #A88EAC painted as the flat frame #AA99AC (S 0.174 → 0.110 at intensity ≈ 0.78);
-    /// - dark stop: same hue, saturation 0.25 + 0.8 × intensity × S, brightness 0.12 + 0.10 × B,
-    ///   calibrated so the default Space's first stop #D9DBF5 gives its measured dark stop #252538 [L];
-    /// - one colour paints a flat fill, several colours a corner-to-corner gradient at 43° (S-DEMO [L]).
-    /// No picked colour gives the default Space theme with the requested mode.
     public static func composed(colors: [BrowserThemeColor], intensity: Double = defaultIntensity, noise: Double = 0,
                                 mode: Mode = .automatic, presetID: String? = nil) -> BrowserSpaceTheme {
         let colors = Array(colors.prefix(maximumColors))
@@ -262,27 +241,22 @@ extension BrowserSpaceTheme {
     }
 }
 
-// MARK: - Accent derivation (provisional rule, C06)
 
 /// Which accent family a theme gets; the shell maps it to its colour tokens.
 public enum BrowserThemeAccentFamily: Equatable, Sendable {
-    /// The default Space's measured family (C01–C03).
     case defaultSpace
-    /// Hue-derived family. `saturation` is the theme's (most saturated light stop): the shell keeps
-    /// the hue with a low title saturation on greyish themes and neutral greys below 0.05 (DS §14.7).
-    /// `strong` is the most saturated picked colour (a swatch Space's split border is the swatch, C19).
     case derived(hue: Double, saturation: Double, strong: BrowserThemeColor?)
 }
 
 extension BrowserSpaceTheme {
-    /// Below this light-variant saturation, sidebar titles use the greyish pair measured on the mauve,
+    /// Below this light-variant saturation, sidebar titles use the greyish pair on the mauve,
     /// green and grey-mauve Spaces (S 0.22–0.30, B 0.11–0.13). .
     public static let greyishSaturation = 0.2
     /// Below this, a theme has no usable hue: accents are neutral greys. .
     public static let neutralSaturation = 0.05
 
     /// Provisional rule: hue of the most saturated painted stop of the light variant; the default
-    /// preset keeps its measured family.
+    /// preset keeps its family.
     public var accentFamily: BrowserThemeAccentFamily {
         if colors.isEmpty, presetID == BrowserSpaceThemePresets.defaultID { return .defaultSpace }
         let stops = light.stops.map(\.hsb)

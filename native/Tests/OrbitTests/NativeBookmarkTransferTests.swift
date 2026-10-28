@@ -177,7 +177,6 @@ struct NativeBookmarkTransferTests {
         let menus = BrowserCommandMenus(registry: registry)
         let menu = try #require(menus.makeMenuBar().items.first { $0.title == "File" }?.submenu)
         for id in [BrowserCommandID.importBookmarks, .exportBookmarks] {
-            // Reached from the Command Bar; File keeps a single browser import entry.
             #expect(!menu.items.contains { $0.identifier?.rawValue == id.rawValue })
             #expect(registry.isImplemented(id) && registry.isEnabled(id))
         }

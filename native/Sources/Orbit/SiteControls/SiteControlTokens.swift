@@ -1,7 +1,7 @@
 import AppKit
 
 /// Site Controls typography and fallback geometry. The system popover supplies its material:
-/// Orbit's opaque PopoverBackground asset is not the background of its permission prompts.
+/// Permission prompts use native popover material.
 @MainActor
 enum SiteControlTokens {
     // , confidence high.
@@ -17,7 +17,6 @@ enum SiteControlTokens {
     static let body = NSFont.systemFont(ofSize: 13)
     static let caption = NSFont.systemFont(ofSize: 11, weight: .medium)
     static let title = NSFont.systemFont(ofSize: 13, weight: .semibold)
-    // Reconstructed geometry; centralized for the PM's visual calibration.
     static let width: CGFloat = 360
     static let maximumHeight: CGFloat = 580
     static let inset: CGFloat = 16

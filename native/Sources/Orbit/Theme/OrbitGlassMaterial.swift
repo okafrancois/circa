@@ -1,8 +1,6 @@
 import AppKit
 import BrowserCore
 
-/// Reconstruction requested in GLASS-DESIGN-R1. CAP-1c establishes the theme and card geometry,
-/// not Orbit's runtime compositing stack. Only the shell opts in; document shields stay opaque.
 enum OrbitGlassRole: Sendable {
     case opaque
     case windowShell

@@ -4,9 +4,6 @@ import BrowserEngine
 import Foundation
 import WebKitEngine
 
-// Composition root: the only Orbit file allowed to name a concrete engine. Every other Orbit
-// file must stay generic over `BrowserEngine` (enforced by `EngineBoundaryTests`). A Chromium
-// build replaces this file; see `docs/native-port/engine-decision-2026-10-25.md`.
 
 /// The engine this build hosts. WebKit is the development and fallback backend.
 typealias ActiveEngine = WebKitBrowserEngine

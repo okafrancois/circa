@@ -758,10 +758,6 @@ struct NativeDownloadTests {
         #expect(try Data(contentsOf: #require(complete.destinationURL)) == DownloadFixtureServer.payload)
     }
 
-    /// DBG-DL: under host CPU saturation the background networking role delayed the final bytes,
-    /// progress and `downloadDidFinish` beyond 30 s. The gate keeps the transfer active, so the
-    /// role change is observed deterministically. Completion still runs at the natural priority;
-    /// this test must fail honestly if host contention prevents the background transfer finishing.
     @Test("A download that outlives its source window survives WebKit's background networking role")
     func backgroundNetworkingRole() async throws {
         NSApplication.shared.setActivationPolicy(.prohibited)

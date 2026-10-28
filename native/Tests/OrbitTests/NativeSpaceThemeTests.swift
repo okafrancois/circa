@@ -5,7 +5,7 @@ import Foundation
 import Testing
 @testable import Orbit
 
-// ORBIT-THEMES: stored Space themes in the shell, the theme editor and its undo step. Hidden windows only.
+// Space themes: stored Space themes in the shell, the theme editor and its undo step. Hidden windows only.
 
 private func close(_ a: CGFloat, _ b: CGFloat, _ tolerance: CGFloat) -> Bool { abs(a - b) <= tolerance }
 
@@ -162,7 +162,7 @@ extension NativeWebKitTests {
 @Suite("Space themes — editor model", .serialized)
 @MainActor
 struct NativeSpaceThemeEditorStateTests {
-    @Test("Field mapping is calibrated on C06 and inverts for handles")
+    @Test("Field mapping inverts the declared handle colors")
     func fieldMapping() {
         let picked = OrbitThemeFieldMapping.color(at: CGPoint(x: 0.606, y: 0.118))
         #expect(near(components(picked), components(0xA88EAC), 4))
@@ -178,7 +178,7 @@ struct NativeSpaceThemeEditorStateTests {
         #expect(!state.hasColor && !state.canAddColor && !state.canRemoveColor && state.familyIndex == 0)
         state.setIntensity(0.2)
         state.setNoise(0.5)
-        #expect(state.theme == BrowserSpaceThemePresets.default, "intensity and grain wait for a colour (C04)")
+        #expect(state.theme == BrowserSpaceThemePresets.default, "intensity and grain wait for a colour")
         state.setMode(.dark)
         #expect(state.theme.mode == .dark && state.theme.colors.isEmpty)
         state.pick(at: CGPoint(x: 0.606, y: 0.118))
@@ -293,7 +293,6 @@ struct NativeSpaceThemeWindowTests {
         controller.openThemeEditor(for: space, animated: false)
         let editor = try #require(controller.themeEditor)
         let view = editor.view
-        // C04/C06 color controls stay in place; the applied-material section extends the panel to 650 pt.
         #expect(view.frame.size == CGSize(width: 356, height: 650) && editor.panel?.isVisible == false)
         let content = try #require(window.contentView)
         let card = controller.contentCard.convert(controller.contentCard.bounds, to: content)
@@ -311,7 +310,6 @@ struct NativeSpaceThemeWindowTests {
         #expect(!view.intensitySlider.isActive && view.intensitySlider.thumb.isHidden && view.grainDial.tick.isHidden)
         #expect(!view.addButton.isEnabled && !view.removeButton.isEnabled && !view.previousButton.isEnabled && view.nextButton.isEnabled)
 
-        // Tap at the C06 handle position: the window previews at once, other windows follow the store.
         view.field.onPick?(CGPoint(x: 0.606, y: 0.118))
         let draft = editor.draft
         #expect(draft.colors.count == 1 && near(components(draft.colors[0]), components(0xA88EAC), 4))

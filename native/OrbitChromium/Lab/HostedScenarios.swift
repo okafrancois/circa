@@ -16,8 +16,6 @@ enum X2Options {
 }
 
 extension Laboratory {
-    /// Hosted scenarios (patched CEF only). Hidden mode is enforced and witnessed by the lab's
-    /// HiddenGuard (X1-R2) for the whole run.
     func x2Phase(_ profile: ProfileID) async {
         await hostedScenarios(profile)
     }

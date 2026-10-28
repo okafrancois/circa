@@ -1,9 +1,6 @@
 import BrowserCore
 import Foundation
 
-/// Decides when to sweep inactive Today tabs (ORBIT-AUTO-ARCHIVE); thresholds and the clock live in
-/// the store. The sleep is injectable so tests advance time without waiting. Windows learn about
-/// archived tabs through `BrowserWindowSession.observeOrganizationChanges()`.
 @MainActor
 public final class BrowserAutoArchiveScheduler {
     public typealias Sleep = @Sendable (Duration) async throws -> Void
@@ -18,7 +15,6 @@ public final class BrowserAutoArchiveScheduler {
     private let sleep: Sleep
     private var loop: Task<Void, Never>?
 
-    /// Reconstruction choice: one sweep per minute bounds lateness to a minute past the threshold.
     public init(
         store: BrowserStore, interval: Duration = .seconds(60),
         protectedTabs: @escaping @MainActor () -> Set<TabID> = { [] },

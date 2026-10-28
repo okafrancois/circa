@@ -1,9 +1,6 @@
 import Foundation
 
 public extension BrowserStore {
-    /// Moves the Space's organization in one actor turn. Favorites and historical archive
-    /// records belong to their profile; no website data is copied between profiles.
-    /// Renewing occurrence identities also revokes leases across an unobserved A→B→A move.
     func moveSpaceToProfile(_ id: SpaceID, to profile: ProfileID, expectedProfileID: ProfileID) throws {
         guard let space = spaces[id] else { throw BrowserStoreError.spaceMissing }
         guard space.profileID == expectedProfileID else { throw BrowserStoreError.staleContext }

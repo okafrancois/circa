@@ -1,7 +1,7 @@
 import BrowserCore
 
 /// An admission query that must not create a profile or access secure storage. This is an
-/// engine-instance policy, not a private-window sharing policy or a claim of Orbit feature equivalence.
+/// engine-instance policy, not a private-window sharing policy or a claim of product readiness.
 @MainActor
 public protocol BrowserPrivateEngine: BrowserEngine {
     var persistence: BrowserWebsiteDataPersistence { get }

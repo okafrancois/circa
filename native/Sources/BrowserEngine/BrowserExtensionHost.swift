@@ -63,13 +63,6 @@ public extension BrowserExtensionManagement {
     }
 }
 
-/// Engine-owned extension services. Individual services may be unavailable.
-/// The final contract must let extensions see the shell's own windows and tabs as real
-/// `chrome.windows`/`chrome.tabs` objects, host action popups and side panels in shell views,
-/// route permission and install prompts to native UI, and keep everything per profile. Window
-/// and tab identities follow each surface's `BrowserSurfacePlacement`. See
-/// `docs/native-port/engine-decision-2026-10-25.md`. Callers must treat a nil host as
-/// "native inventory/actions unavailable", never emulate extension APIs with page scripts.
 @MainActor
 public protocol BrowserExtensionHost: BrowserExtensionManagement {
     func installedExtensions(on surface: any BrowserEngineSurface) throws -> [BrowserExtensionSummary]

@@ -7,9 +7,6 @@ import Foundation
 import ImageIO
 import OSLog
 
-/// The container view of a surface. Layer-backed; CEF adds its browser view (Alloy) or the tab's
-/// WebContents view (hosted) as the only subview. Tells a hosted surface when the shell shows it
-/// or the user clicks into it, so that its tab becomes the active tab of its logical Browser.
 @MainActor
 final class ChromiumHostView: NSView {
     weak var surface: ChromiumSurface?
@@ -154,8 +151,6 @@ public final class ChromiumSurface: BrowserEngineSurface {
         case navigate(URL), reload, reloadIgnoringCache, stop, zoom(BrowserPageZoomCommand), focus, hostChanged(hidden: Bool), mute(Bool)
     }
     private var pendingCommands: [PendingCommand] = []
-    /// Replayed zooms that followed a replayed navigation: they apply to that navigation's
-    /// document (Chromium keys zoom by host), so they wait for its commit.
     private var zoomsAwaitingCommit: [BrowserPageZoomCommand] = []
     private var pendingMute: Bool?
     /// Permission requests handed to the delegate and not answered yet.
@@ -396,8 +391,6 @@ public final class ChromiumSurface: BrowserEngineSurface {
         _ = ACRZoom(token, 0, &before)
         var result = ACRZoom(token, code, &level)
         if result == 1, command != .reset, abs(level - before) < 0.000_001 {
-            // Accepted but without effect (observed before the first committed document).
-            // Measure whether an explicit level applies.
             _ = ACRSetZoomLevel(token, Self.presetLevel(after: before, command))
             result = ACRZoom(token, 0, &level) == 1 ? -3 : -1
         } else if result == -1 {

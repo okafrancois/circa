@@ -3,13 +3,6 @@ import BrowserCore
 import BrowserEngine
 import BrowserShell
 
-/// One window's Peek: the owner (`BrowserSurfaceContainer`) and engine delegate of the previewed
-/// surface, and its overlay. Window-specific decisions (routing, attribution, promotion) are made
-/// by `BrowserWindowController+Peek.swift` through the hooks below; this object never reaches
-/// into the window session.
-/// At most one Peek is presented per window (): presenting a new
-/// one disposes the previous one. A dismissed surface stays alive, inert, until the overlay's
-/// exit animation ends, then it is disposed exactly once by the container.
 @MainActor
 final class BrowserPeekController<Surface: BrowserEngineSurface>: BrowserEngineSurfaceDelegate {
     struct Presentation {

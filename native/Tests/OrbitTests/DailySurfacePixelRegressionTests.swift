@@ -4,7 +4,7 @@ import Testing
 @testable import Orbit
 
 extension NativeWebKitTests {
-@Suite("Recovered daily surface pixel regressions", .serialized)
+@Suite("Daily surface pixel regressions", .serialized)
 @MainActor
 struct DailySurfacePixelRegressionTests {
     @Test("The Library shares the window background and receives input", arguments: [false, true])

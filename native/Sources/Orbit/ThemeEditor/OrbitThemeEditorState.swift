@@ -1,10 +1,9 @@
 import BrowserCore
 import Foundation
 
-/// Position ↔ colour of the editor's dotted field (ORBIT-THEMES). Reconstruction calibrated on the only
-/// observed handle — : a handle at 60.6 % across and 11.8 % down the field is
-/// #A88EAC (H 292°, S 0.174, B 0.675). Horizontal position is the hue (offset 74°), vertical position
-/// the saturation (S = v^0.8, grey at the top), brightness constant. Orbit's real mapping is not established.
+/// Position ↔ colour of the editor's dotted field. Horizontal position controls hue
+/// with a 74° offset; vertical position controls saturation (S = v^0.8, grey at the top).
+/// Brightness stays at 0.675.
 enum OrbitThemeFieldMapping {
     static let hueOffset = 74.0 / 360
     static let saturationExponent = 0.8
@@ -76,7 +75,6 @@ struct OrbitThemeEditorState: Equatable {
         replaceColor(at: index, with: OrbitThemeFieldMapping.color(at: unit))
     }
 
-    /// "+": an analogous colour, 30° further around the hue circle (reconstruction).
     mutating func addColor() {
         guard canAddColor, let index = selectedIndex ?? theme.colors.indices.last else { return }
         let (hue, saturation, brightness) = theme.colors[index].hsb
@@ -178,8 +176,6 @@ struct OrbitThemeEditorState: Equatable {
 }
 
 extension BrowserSpacePalette {
-    /// The Settings palette of a never-themed Space as a designed theme, so the editor starts from what
-    /// the window shows (S-DEMO stops [L], grain 0.3, light — the token themes).
     var themeModel: BrowserSpaceTheme? {
         let stops: [UInt32]
         switch self {

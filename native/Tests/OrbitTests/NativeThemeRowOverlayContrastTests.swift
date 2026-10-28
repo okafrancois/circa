@@ -258,7 +258,6 @@ struct NativeThemeRowOverlayContrastTests {
                 if state == "hover" { newTab.mouseEntered(with: event); clear.mouseEntered(with: event) }
                 newTab.isHighlighted = state == "pressed"
                 clear.isHighlighted = state == "pressed"
-                // sidebar-polish-2026-10-27.md: New Tab uses the measured neutral 45% role in every state.
                 for label in descendants(newTab, of: NSTextField.self) {
                     #expect(label.textColor == OrbitTokens.Color.Text.sidebarNewTab)
                 }

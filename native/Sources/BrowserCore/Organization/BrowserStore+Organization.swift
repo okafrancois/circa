@@ -16,8 +16,6 @@ struct BrowserOrganizationUndoRecord: Sendable {
     let selectedTab: TabID?
 }
 
-/// In-memory per-window journal. Saving the session never clears it; closing the window does.
-/// Reconstruction choice: 100 records per window (Orbit's depth was not observed).
 struct BrowserOrganizationJournal: Sendable {
     static let limit = 100
     var undo: [BrowserOrganizationUndoRecord] = []
@@ -40,8 +38,7 @@ public struct BrowserOrganizationReset: Equatable, Sendable {
 }
 
 extension BrowserStore {
-    /// Reconstruction choice: new Today tabs are inserted at the top, under Orbit's "New Tab" row.
-    /// The Electron reconstruction appended them; Orbit evidence is silent. Needs a visual check.
+    /// New Today tabs appear at the top, below the New Tab row.
     static let insertsNewTodayTabsAtTop = true
 
     // MARK: Observation
@@ -387,9 +384,6 @@ extension BrowserStore {
         }
     }
 
-    /// Closing a Today tab archives its logical tab for every window ("Archive Tab", ⌘W, observed
-    /// menu title). Closing a Favorite or Pinned occurrence only unloads it; reconstruction choice
-    /// (Electron rule, not observed): its next activation starts again from the pinned URL.
     func organizationDidClose(_ tab: BrowserTab, wasVisibleSelection: Bool, journalingIn context: BrowserContext?) {
         var published = false
         switch organization.section(of: .tab(tab.id)) {
@@ -442,13 +436,11 @@ extension BrowserStore {
         try performMove(nodes, to: destination, action: nil, from: context)
     }
 
-    /// ⌘D on Today pins to the end of Pinned (reconstruction choice for the position).
     public func pinTabs(_ ids: [TabID], from context: BrowserContext) throws -> BrowserWindowState {
         try performMove(organization.groupedNodes(for: ids), to: .init(.pinned(context.spaceID), position: .end),
                         action: .pinTabs, from: context)
     }
 
-    /// Unpinned tabs return to the top of Today (reconstruction choice for the position).
     public func unpinTabs(_ ids: [TabID], from context: BrowserContext) throws -> BrowserWindowState {
         try performMove(organization.groupedNodes(for: ids), to: .init(.today(context.spaceID), position: .start),
                         action: .unpinTabs, from: context)
@@ -459,13 +451,11 @@ extension BrowserStore {
                         action: .addToFavorites, from: context)
     }
 
-    /// Reconstruction choice: a removed Favorite goes to the top of Today in the current Space.
     public func removeFromFavorites(_ ids: [TabID], from context: BrowserContext) throws -> BrowserWindowState {
         try performMove(organization.groupedNodes(for: ids), to: .init(.today(context.spaceID), position: .start),
                         action: .removeFromFavorites, from: context)
     }
 
-    /// ⌘D (Pin/Unpin, Orbit menu M-181) on the visible tab.
     public func togglePinSelectedTab(from context: BrowserContext) throws -> BrowserWindowState {
         let window = try organizationWindow(context)
         guard let tabID = visibleSelectedTabID(in: window) else { throw BrowserOrganizationError.itemMissing }
@@ -544,7 +534,6 @@ extension BrowserStore {
         return try captureWindowState(in: context.windowID)
     }
 
-    /// "Collapse/Expand All Folders" (Orbit menu M-134/M-164) for the captured Space.
     public func setAllFoldersCollapsed(_ collapsed: Bool, from context: BrowserContext) throws -> BrowserWindowState {
         _ = try organizationWindow(context)
         try commitOrganization(validating: false) { state in
@@ -587,7 +576,6 @@ extension BrowserStore {
 
     // MARK: Titles and pinned URLs
 
-    /// Sets or clears (nil or blank) the custom title of a tab (ORBIT-RENAME).
     public func renameTab(_ id: TabID, to title: String?, from context: BrowserContext) throws -> BrowserWindowState {
         _ = try organizationWindow(context)
         _ = try visibleSection(of: .tab(id), in: context)
@@ -625,8 +613,6 @@ extension BrowserStore {
         } != nil
     }
 
-    /// "Reset Tab to Original URL" (Orbit menu M-1348): the logical tab and this window's occurrence
-    /// return to the pinned URL; the shell navigates the live surface. Not undoable (navigation).
     public func resetTabToPinnedURL(
         _ id: TabID, from context: BrowserContext
     ) throws -> (BrowserOrganizationReset, BrowserWindowState) {
@@ -636,8 +622,6 @@ extension BrowserStore {
         return (reset, try captureWindowState(in: context.windowID))
     }
 
-    /// "Reset all tabs in this Space" (Orbit menu M-334): every Pinned tab of the captured Space that
-    /// is away from its pinned URL. Favorites are profile-wide and excluded (reconstruction choice).
     public func resetPinnedTabs(from context: BrowserContext) throws -> ([BrowserOrganizationReset], BrowserWindowState) {
         let window = try organizationWindow(context)
         let local = Dictionary(occurrences(in: window).map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
@@ -709,8 +693,6 @@ extension BrowserStore {
         return try captureWindowState(in: context.windowID)
     }
 
-    /// "Clear Unpinned Tabs" (⇧⌘K, Orbit menu M-498) for the captured Space. The shell passes tabs
-    /// it protects, e.g. those playing media (Orbit 2022 release notes).
     public func clearTodayTabs(protecting protected: Set<TabID> = [], from context: BrowserContext) throws -> BrowserWindowState {
         _ = try organizationWindow(context)
         let now = clock()
@@ -745,7 +727,6 @@ extension BrowserStore {
         return try captureWindowState(in: context.windowID)
     }
 
-    /// "Restore Last Closed Tab" (⇧⌘T, M-717) backed by the archive; auto-archived tabs are skipped.
     public func restoreMostRecentArchivedTab(from context: BrowserContext) throws -> BrowserWindowState {
         _ = try organizationWindow(context)
         guard let record = organization.archive.first(where: {
@@ -766,7 +747,6 @@ extension BrowserStore {
         return try captureWindowState(in: context.windowID)
     }
 
-    /// "Clear Archive" (M-1171) for the context's profile only.
     public func clearArchive(from context: BrowserContext) throws -> BrowserWindowState {
         _ = try organizationWindow(context)
         let ids = organization.archive.filter { $0.profileID == context.profileID }.map(\.id)
@@ -928,12 +908,7 @@ extension BrowserStore {
         return nil
     }
 
-    /// Undo semantics for concurrent edits (reconstruction choice, Orbit not observed): a replay only
-    /// writes the keys its command touched, and only while each still holds what the command (or
-    /// the previous replay) left there — placement versions for position and parent, values for
-    /// titles and pinned URLs, record identity for the archive. It must also leave every other
-    /// window as it is now: it neither removes a tab live in another window nor takes another
-    /// window's visible tab out of that window's Space. Otherwise the record is unavailable.
+    /// Replays only keys still holding this command’s values and preserves other windows’ live tabs.
     func canReplay(_ patch: BrowserOrganizationPatch, issuedIn windowID: WindowID) -> Bool {
         guard organization.canApply(patch) else { return false }
         let removed = Set(patch.removedTabIDs)
@@ -1005,12 +980,8 @@ extension BrowserStore {
         return try captureWindowState(in: context.windowID)
     }
 
-    /// Records a transferred live document as an occurrence of its logical tab when this window
-    /// can show it: in place when visible in the captured Space or profile, otherwise moved to the
-    /// top of this Space's Today within the same profile (reconstruction choice). Without a usable
-    /// logical tab (none, another profile, or already open in this window) it is a new Today tab.
-    /// An explicit replacement removes this window's old occurrence only when the same logical
-    /// tab can be recorded, in this actor turn. Its selected state follows the replacement.
+    /// Reuses a same-profile occurrence when possible; otherwise creates a new Today tab.
+    /// Replacements remove the old occurrence only after the transferred document can be recorded.
     public func openTransferredOccurrence(
         of tabID: TabID?, url: URL, from context: BrowserContext, activate: Bool,
         replacingExisting: Bool = false, expectedExistingOccurrenceID: TabOccurrenceID? = nil

@@ -1,10 +1,8 @@
 import AppKit
 import BrowserEngine
 
-/// The shell state a page-first key would target, carried by its `BrowserKeyReceipt`
-/// (BL-CONTRACT-KEY-RECEIPT, proposal of `docs/native-port/shortcuts.md`, "Routage clavier
-/// CMD-R2"). It is compared, not trusted: the command runs only for the same window, selection
-/// revision, document and focus.
+/// Shell state carried by a page-first key receipt. Commands run only while the
+/// window, selection revision, document and focus still match.
 struct BrowserPageKeyContext {
     let windowID: UUID
     let context: BrowserCommandContext

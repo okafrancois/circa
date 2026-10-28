@@ -3,15 +3,6 @@ import BrowserCore
 
 private typealias Metrics = OrbitTokens.Metrics.Sidebar
 
-/// Projects the engine-independent window selection without owning browser state.
-/// Anatomy of design §2, from the top: toolbar row (window buttons, sidebar toggle, back,
-/// forward, reload), address field, Favorites, then the scrollable Space page (Space title, pinned
-/// rows and folders, separator, New Tab, Today rows) and the footer. The visual layer belongs to
-/// the Themes & motion lot; the Pinned/Today list (SB-LIST) lives in the page's
-/// `SidebarListView`, fed by `render(catalog:activeSpaceID:organization:)`; the Favorites grid
-/// (FAVORITES lot) fills `favoritesContainer` and joins drag and drop through `addDropTarget(_:)`.
-/// The view keeps the window's list selection (ORBIT-MULTISELECT, `BrowserOrganizationSelection`)
-/// and is the single AppKit dragging destination of the sidebar (ORBIT-DRAG).
 @MainActor
 final class BrowserSidebarView: NSView, SidebarListHost {
     var isLibraryInputSuppressed = false
@@ -479,7 +470,6 @@ final class BrowserSidebarView: NSView, SidebarListHost {
         undoRouter.validate(item, preferringOrganization: true)
     }
 
-    // MARK: Drag destination (ORBIT-DRAG)
 
     override func draggingEntered(_ sender: any NSDraggingInfo) -> NSDragOperation { draggingUpdated(sender) }
 
@@ -728,8 +718,6 @@ final class SidebarSpacePageView: NSView, NSTextFieldDelegate {
             needsLayout = true
         }
     }
-    /// In-place Space name editor ( symbols `isEditingSpaceHeader`, `didBeginEditingSpaceName`
-    /// shell; presentation is a reconstruction). Return, Tab or leaving the field commit; Escape cancels.
     private var titleEditor: NSTextField?
     private var titleCommit: ((String) -> Void)?
     var isRenamingSpace: Bool { titleEditor != nil }
@@ -874,7 +862,6 @@ final class SidebarSpacePageView: NSView, NSTextFieldDelegate {
             list.frame = NSRect(x: 0, y: 0, width: width, height: documentHeight)
         }
         let titleHeight = ceil(titleLabel.intrinsicContentSize.height)
-        // THEME-R2 D37: x 16 without a Space icon, 44 with one.
         let titleX = iconSelection == .none ? geometry.spaceTitleOriginX : Metrics.titleOriginX
         iconButton.frame = NSRect(x: Metrics.faviconCenterX - 12, y: geometry.spaceTitleCenterY - 12,
                                   width: 24, height: 24)
@@ -884,7 +871,6 @@ final class SidebarSpacePageView: NSView, NSTextFieldDelegate {
         if isPrivate { titleLabel.isHidden = true; iconButton.isHidden = true }
     }
 
-    /// Auto-scroll while a drag hovers near the page's top or bottom edge ( C27).
     func autoscrollDuringDrag(at point: NSPoint) {
         let clip = scrollView.contentView
         let visible = clip.documentVisibleRect
@@ -925,11 +911,6 @@ final class SidebarSpacePageView: NSView, NSTextFieldDelegate {
     var pageScrollView: NSScrollView { scrollView }
 }
 
-/// Toolbar row of the sidebar (design §3.1, `OrbitSidebarGeometry.Toolbar`): the window buttons sit
-/// at x 20 + n × the system spacing (placed by the shell), the sidebar toggle 27.25 after the third,
-/// back/forward/reload anchored right at W − 90.25 / 56.25 / 22, all centred on y 24. Below 224 pt
-/// the row turns compact: toggle and reload hide, smaller arrows at W − 76 / 48 and a "•••" overflow
-/// at W − 20 (measured + ). In full screen the toggle moves to x 28.6 (C09).
 @MainActor
 final class SidebarToolbarRow: SidebarFlippedView {
     private(set) var buttons: [NSButton] = []
@@ -1005,10 +986,6 @@ final class SidebarToolbarRow: SidebarFlippedView {
     func setCommandsEnabled(_ enabled: Bool) {}
 }
 
-/// Address field of the sidebar (design §3.2): y 46, h 36, radius 12, `sidebarItem` at rest and
-/// `sidebarItemHovered` on hover (assets [H/M]); 13 pt text inset 12. While the field is edited in
-/// place it lifts to `tabCurrent` with the selected-row shadow (: in Orbit the click
-/// opens the command bar, which belongs to the Palette lot).
 @MainActor
 final class SidebarAddressField: SidebarFlippedView {
     private let background = OrbitSurfaceBackgroundView(cornerRadius: OrbitTokens.Radius.addressField)
@@ -1041,7 +1018,6 @@ final class SidebarAddressField: SidebarFlippedView {
         addSubview(controls)
         NSLayoutConstraint.activate([
             controls.leadingAnchor.constraint(equalTo: leadingAnchor, constant: OrbitTokens.Metrics.Sidebar.addressTextInsetX),
-            // Align the 18 pt site glyph with the center measured in Orbit’s trailing 30 pt cell.
             controls.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
             controls.centerYAnchor.constraint(equalTo: centerYAnchor)
         ])
@@ -1065,9 +1041,9 @@ final class SidebarAddressField: SidebarFlippedView {
         refreshAccent()
     }
 
-    /// Capture the whole accessory container, including native popup anchors. In the
-    /// 28 Oct F119–125 / F185–191, contraction keeps the new contents at the old leading
-    /// edge, then moves them right. Expansion installs its complete layout immediately.
+    /// Capture the accessory container, including native popup anchors. Contraction keeps
+    /// the new contents at the old leading edge, then moves them right. Expansion
+    /// installs its complete layout immediately.
     func beginSelectionUpdate() {
         guard selectionWidth == nil else { return }
         layoutSubtreeIfNeeded()

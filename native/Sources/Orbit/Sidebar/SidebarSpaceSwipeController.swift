@@ -547,8 +547,6 @@ final class SidebarSpaceSwipeController {
         let link = OrbitCoreVideoMotionDriver(time: motionTime ?? clock())
         link.onFrame = { [weak self, weak link] in
             guard let self, let link else { return }
-            // Creation samples are measured wall time. The ordinary pager's driver clock
-            // accumulates current-to-target video intervals and can advance twice as fast.
             let creation = self.presentsCreation || self.trackingCreationEdge || self.beganOnCreationPage
             _ = self.advance(to: creation ? self.clock() + SpaceCreationMotion.presentationLead : link.time)
         }

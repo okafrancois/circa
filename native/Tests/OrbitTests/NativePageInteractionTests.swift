@@ -24,7 +24,7 @@ private func waitForPage(_ phase: String, _ predicate: () -> Bool) async throws 
     }
 }
 
-/// Records WebKit page requests (CH-ESSENTIALS coverage) and answers them as configured.
+/// Records WebKit page requests (engine contract) and answers them as configured.
 @MainActor
 private final class WebKitPageDelegate: BrowserEngineSurfaceDelegate {
     var dialogs: [BrowserJavaScriptDialog] = []
@@ -556,7 +556,7 @@ struct NativePageInteractionTests {
         #expect(controller.session.snapshot?.tabs.contains { $0.url.absoluteString == "view-source:https://page.test/" } == true)
     }
 
-    @Test("WebKit coverage: alert, confirm and prompt reach the same contract callback")
+    @Test("WebKit dialogs: alert, confirm and prompt reach the same contract callback")
     func webKitDialogs() async throws {
         let engine = WebKitBrowserEngine()
         let delegate = WebKitPageDelegate()

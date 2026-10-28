@@ -1,19 +1,6 @@
 import AppKit
 import BrowserCore
 
-/// ⌘Z / ⇧⌘Z for sidebar organization in the whole browser window (UX-UNDO).
-/// Routing rule (SB-LIST-R2, to align with CMD-R3; Orbit's exact behaviour is BL-ORG-ORBIT-CHECKS):
-/// 1. A focused text control (address field, rename field, find bar: the field editor is the
-///    first responder) owns ⌘Z: it goes to the window's undo manager, as AppKit does.
-/// 2. Otherwise ⌘Z undoes the window's **most recent undoable action**, whichever source it came
-///    from: an organization command of this window (pin, move, archive, rename… — the store's
-///    per-window journal) or an edit registered in the window's undo manager (page editing in the
-///    web view shares it). ⇧⌘Z redoes the most recently undone one. With the sidebar list
-///    focused, organization comes first.
-/// AppKit sends nil-target `undo:`/`redo:` (Edit menu, CMD-R2's standard actions) along the
-/// responder chain; no view above implements them, so this responder, inserted between the
-/// window's content view and the window, receives them before `NSWindow`, and forwards window
-/// edits to it (its validation keeps the native "Undo Typing" titles).
 @MainActor
 final class SidebarUndoRouter: NSResponder, NSUserInterfaceValidations {
     enum Source: Equatable { case organization, window }
@@ -24,7 +11,6 @@ final class SidebarUndoRouter: NSResponder, NSUserInterfaceValidations {
         case nativeManagerChanged
     }
 
-    /// Reconstruction policy: signal a revoked boundary without exposing page or field contents.
     var onSuperseded: (SupersessionReason) -> Void = { _ in NSSound.beep() }
     private(set) var supersededRequestCount = 0
 

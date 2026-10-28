@@ -5,8 +5,6 @@ import ChromiumEngine
 import Darwin
 import Foundation
 
-// Composition root of the Chromium product build of Orbit (CHROMIUM-APP): replaces
-// `App/EngineComposition.swift`. See docs/native-port/chromium-app-2026-10-25.md.
 
 typealias ActiveEngine = ChromiumBrowserEngine
 typealias OrbitEnvironment = BrowserEnvironment<ActiveEngine>

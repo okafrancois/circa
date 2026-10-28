@@ -16,7 +16,6 @@ public struct BrowserOrganizationDocument: Codable, Equatable, Sendable {
         public let spaceID: SpaceID
         public let pinned: [BrowserOrganizationNode]
         public let today: [BrowserOrganizationNode]
-        /// "Collapse Pinned Section" (Orbit menu M-617/M-840). Reconstruction choice: stored per Space.
         public let isPinnedCollapsed: Bool
 
         public init(spaceID: SpaceID, pinned: [BrowserOrganizationNode], today: [BrowserOrganizationNode],
@@ -90,7 +89,6 @@ public struct BrowserOrganizationTabItem: Equatable, Sendable {
     public var lastActiveAt: Date? = nil
 
     public var title: String? { customTitle ?? pageTitle }
-    /// ORBIT-RESET-PIN availability. Exact URL comparison is a reconstruction choice.
     public var isAwayFromPinnedURL: Bool { pinnedURL.map { $0 != url } ?? false }
 }
 
@@ -289,9 +287,6 @@ public struct BrowserOrganizationSnapshot: Equatable, Sendable {
     }
 }
 
-/// List selection of sidebar rows (ORBIT-MULTISELECT). ⌘-click toggles and ⇧-click selects the
-/// range from the anchor; both are reconstruction choices, Orbit's exact rules were not observed.
-/// A selection belongs to one window/Space/profile and drops rows that leave that context.
 public struct BrowserOrganizationSelection: Equatable, Sendable {
     public private(set) var nodes: Set<BrowserOrganizationNode> = []
     public private(set) var anchor: BrowserOrganizationNode?

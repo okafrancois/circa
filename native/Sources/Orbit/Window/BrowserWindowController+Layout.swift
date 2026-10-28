@@ -3,9 +3,6 @@ import BrowserCore
 import BrowserEngine
 import BrowserShell
 
-/// Window composition: Space fill, content card, sidebar column and overlays. Owned by the
-/// Themes & motion lot; features add their views through their own `install<Feature>(in:)`
-/// helpers. Geometry lives in `OrbitWindowShell` / `OrbitShellGeometry` (design §2–3).
 extension BrowserWindowController {
     func configureContent() {
         guard let window else { return }

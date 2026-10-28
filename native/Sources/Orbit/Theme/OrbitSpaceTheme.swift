@@ -1,12 +1,6 @@
 import AppKit
 import BrowserCore
 
-/// Hook between the Space model and the window fill (ORBIT-THEMES).
-/// A Space's stored theme (`BrowserSpace.theme`, session version 4) wins; a never-themed Space falls
-/// back to its legacy Settings palette, then to `resolver` — `SpaceTheme.default` ('s
-/// default two-stop gradient, ). The `--theme-preview` validation flag cycles
-/// the examples measured in S-DEMO across never-themed Spaces so the gradient, grain and Space-switch
-/// fade can be checked visibly.
 @MainActor
 enum OrbitSpaceThemes {
     typealias Resolver = @MainActor (_ space: BrowserSpace, _ index: Int) -> OrbitTokens.SpaceTheme
@@ -93,10 +87,6 @@ enum OrbitSpaceThemes {
 
     // MARK: Accent
 
-    /// Accent family of a theme. The default Space uses the family measured on 's default
-    /// Space (, D32). A stored theme follows its model's provisional rule
-    /// (`BrowserSpaceTheme.accentFamily`, C06 [L]); other token themes derive theirs from the hue of
-    /// their most saturated stop (S/B pairs measured on the default Space, mapping  C06).
     private static var accentThemes: [(theme: OrbitTokens.SpaceTheme, accent: OrbitTokens.ThemeAccent)] = []
 
     static func accent(for theme: OrbitTokens.SpaceTheme) -> OrbitTokens.ThemeAccent {
@@ -116,9 +106,6 @@ enum OrbitSpaceThemes {
     }
     private static var overlayAccents: [OverlayAccent] = []
 
-    /// Reconstruction: foregrounds follow the actual source-over background, preserving measured fills.
-    /// The extra button hover is included in the icon range without changing the row's text tier.
-    /// Cache both appearances together; pointer state changes never repeat the gradient optimisation.
     static func accent(_ source: OrbitTokens.ThemeAccent, over overlays: [NSColor],
                        iconHover: NSColor? = nil) -> OrbitTokens.ThemeAccent {
         guard let theme = source.contrastTheme, !overlays.isEmpty || iconHover != nil else { return source }
@@ -139,7 +126,7 @@ enum OrbitSpaceThemes {
     }
     private static var inactiveIconOpacities: [InactiveIconOpacity] = []
 
-    /// Inactive Space buttons remain enabled. Keep their measured dimming only when the painted
+    /// Inactive Space buttons remain enabled. Keep their dimming only when the painted
     /// result still reaches the secondary contrast tier, including the button's hover background.
     static func inactiveSpaceIconOpacity(for accent: OrbitTokens.ThemeAccent, appearance: NSAppearance,
                                          minimum: CGFloat) -> CGFloat {
@@ -294,7 +281,7 @@ enum OrbitSpaceThemes {
         let white = NSColor(srgbRed: 1, green: 1, blue: 1, alpha: 1)
         let extreme = ratio(black) >= ratio(white) ? black : white
         // A custom gradient can have no uniform foreground meeting the tier (the legacy rosePlum
-        // preview also has this limitation). Keep the strongest polarity and preserve measured fills;
+        // preview also has this limitation). Keep the strongest polarity and preserve fills;
         // the default and all picker swatches meet their tiers on the tested row overlays.
         guard ratio(extreme) >= minimum + 0.02 else { return extreme }
         var start: CGFloat = 0, end: CGFloat = 1
@@ -313,7 +300,7 @@ enum OrbitThemeGradient {
     /// window-sized fill of `size`. : the axis runs at 43° in points from the
     /// top-left corner; the first stop sits at `range.lowerBound` and the last at `range.upperBound` of the
     /// window's projection on the axis, the layer keeping the extreme colours flat beyond them. Other
-    /// angles start from the window corner with the lowest projection (stored themes, ORBIT-THEMES).
+    /// angles start from the window corner with the lowest projection (stored themes).
     /// `CAGradientLayer` interpolates in its unit square stretched over the bounds (isolines are
     /// perpendicular in unit space), so the points-space axis is converted: with u = x / W, v = y / H,
     /// the axis coordinate f = (W·cos a·u + H·sin a·v − min) / L is linear in unit space along g.

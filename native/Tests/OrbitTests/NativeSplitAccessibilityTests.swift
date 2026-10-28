@@ -48,13 +48,13 @@ struct NativeSplitAccessibilityTests {
         return (view, group, hosts)
     }
 
-    @Test("Pane cycling commands are palette-only reconstructions without an invented Orbit shortcut")
+    @Test("Pane cycling commands are available in the palette without a keyboard shortcut")
     func cycleCatalog() {
         for id in [BrowserCommandID.focusNextSplitPane, .focusPreviousSplitPane] {
             let definition = OrbitCommandCatalog.actionDefinitions.first { $0.id == id }
             #expect(definition?.shortcuts.isEmpty == true)
             #expect(definition?.owner == "SPLIT")
-            #expect(definition?.sources.allSatisfy { $0.hasPrefix("Reconstruction:") } == true)
+            #expect(definition?.sources.allSatisfy { $0.hasPrefix("Browser command:") } == true)
             #expect(!OrbitCommandCatalog.declarations.contains { $0.command == id })
         }
     }

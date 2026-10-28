@@ -5,12 +5,6 @@ import BrowserShell
 import ChromiumEngine
 import Foundation
 
-// CH-ESSENTIALS hidden scenarios: page-initiated surfaces of the real Orbit composition on the
-// patched CEF, through the real bridge (ABI 9). Pages come from the runner's /essentials/ fixture
-// (scripts/orbit-chromium-app.py). Dialogs are answered through BrowserPageDialogCenter as their
-// buttons would; the file chooser, the external opener, the native window fullscreen and the
-// context menu presentation are replaced by recorders, since a hidden run shows no window, panel
-// or menu. Credentials, files and addresses are synthetic. See docs/native-port/ch-essentials-2026-10-25.md.
 extension OrbitSmokeDriver {
     static let essentialsUser = "orbit-synthetic-user"
     static let essentialsPassword = "orbit-synthetic-password"

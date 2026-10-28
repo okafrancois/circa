@@ -1,7 +1,6 @@
 import AppKit
 import QuartzCore
 
-/// capture C14; asset colours and bounded motion live in OrbitTokens.
 @MainActor
 enum BrowserPeekStyle {
     static let cardRadius = OrbitTokens.Radius.peek

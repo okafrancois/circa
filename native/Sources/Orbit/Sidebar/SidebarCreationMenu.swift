@@ -9,8 +9,6 @@ struct SidebarCreationAction {
     let perform: () -> Void
 }
 
-/// Measured Orbit content geometry, anchored above the footer without a backdrop veil.
-/// The AppKit window shadow remains a reconstruction pending signed visual comparison.
 @MainActor
 final class SidebarCreationMenu: NSViewController {
     let actions: [SidebarCreationAction]
@@ -193,7 +191,7 @@ final class CreationMenuRow: NSView {
     }
 }
 
-/// A child panel keeps the measured right alignment even when the sidebar is far from a screen
+/// A child panel keeps the right alignment even when the sidebar is far from a screen
 /// edge. NSPopover centres its bubble on the anchor and cannot reproduce that Orbit placement.
 @MainActor
 final class SidebarCreationPopup: NSObject, NSWindowDelegate {
@@ -218,8 +216,6 @@ final class SidebarCreationPopup: NSObject, NSWindowDelegate {
         let buttonRect = source.convertToScreen(button.convert(button.bounds, to: nil))
         let width = content.frame.width
         let height = content.frame.height + 6
-        // The footer plus centre is 24 pt from the sidebar edge. The panel's right edge is 8 pt
-        // from that edge; its measured tail centre is 27 pt from the right (C03).
         var frame = Self.panelFrame(buttonFrameOnScreen: buttonRect, size: NSSize(width: width, height: height))
         if usesGlass, let screen = source.screen?.visibleFrame {
             frame.origin.x = max(screen.minX + 8, min(frame.minX, screen.maxX - width - 8))

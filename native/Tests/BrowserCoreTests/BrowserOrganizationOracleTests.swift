@@ -2,17 +2,6 @@ import Foundation
 import Testing
 @testable import BrowserCore
 
-// An independent reference model for the organization. It never reads the store's patches,
-// change sets or placement versions: it works on plain arrays rebuilt from the saved document,
-// predicts each command from its meaning, and predicts undo/redo from the observed states before
-// and after each journaled command. A semantic bug (lost archive record, undo overwriting another
-// window's edit, forgotten selection) makes the store disagree with it.
-// Split groups are part of the same model: a group is a row whose ordered panes live in
-// `lists[.split(id)]`, with an orientation and one size fraction per pane slot. The model states
-// the layout rules itself rather than replaying the store's arithmetic: creation and adding a
-// pane give equal slots; a pane leaving (moved, separated, closed, archived) keeps the survivors'
-// relative sizes; a group left with one pane dissolves in place; swapping exchanges the occupants
-// of two slots and keeps the slot sizes; moving the group's row keeps its layout untouched.
 
 private typealias Node = BrowserOrganizationNode
 private typealias Container = BrowserOrganizationContainer

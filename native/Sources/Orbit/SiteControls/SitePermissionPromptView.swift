@@ -1,9 +1,6 @@
 import AppKit
 import BrowserCore
 
-/// observed on localhost on 2026-10-28: the same compact native popover
-/// for notifications, camera, microphone, location and clipboard. AppKit supplies the
-/// arrow, corner radius, material and presentation animation; this view stays transparent.
 @MainActor
 final class SitePermissionPromptView: NSView {
     static let width: CGFloat = 236

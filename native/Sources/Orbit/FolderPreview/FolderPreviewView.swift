@@ -1,7 +1,6 @@
 import AppKit
 import BrowserCore
 
-/// Compact reconstruction of the icon/title/last-visit list; exact Orbit metrics remain unverified.
 enum FolderPreviewMetrics {
     static let width: CGFloat = 320
     static let rowHeight: CGFloat = 40
@@ -9,7 +8,6 @@ enum FolderPreviewMetrics {
     static let headerHeight: CGFloat = 76
     static let bottomInset: CGFloat = 8
     static let cornerRadius: CGFloat = 12
-    /// Bounded reconstruction pending a folder-specific the engine framework timing export.
     static let fadeDuration: TimeInterval = 0.11
 }
 

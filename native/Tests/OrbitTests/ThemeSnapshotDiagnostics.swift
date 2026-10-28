@@ -7,7 +7,7 @@ import WebKitEngine
 
 /// Offscreen renders of the window shell for the lot's own visual checks. Disabled unless
 /// `ORBIT_THEME_SNAPSHOT_DIR` names an output directory. Layer rendering omits masks and remote
-/// (web) layers, so these images are a geometry/colour aid, never an equivalence proof.
+/// (web) layers, so these images are a geometry/colour aid, do not validate web rendering.
 extension NativeWebKitTests {
 @Suite(.serialized, .enabled(if: ProcessInfo.processInfo.environment["ORBIT_THEME_SNAPSHOT_DIR"] != nil))
 @MainActor

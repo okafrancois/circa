@@ -30,7 +30,7 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
     lazy var capture = BrowserCaptureController(owner: self)
     lazy var pageSaver = BrowserPageSaveController(owner: self)
     var settingsPreferences: BrowserWindowSettings?
-    /// The open theme editor of this window (ORBIT-THEMES), previewing its draft on the window.
+    /// The open theme editor of this window, previewing its draft on the window.
     var themeEditor: OrbitThemeEditorController?
     let themeUndoManager = OrbitThemeUndoManager()
     var themeEditors: OrbitThemeEditorRegistry? {
@@ -129,9 +129,6 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
     var nativePromotion: NativePromotion?
     var promotionsAwaitingAdoption = 0
 
-    // MARK: Surfaces held but not recorded yet
-    /// Engine events of a surface this window holds while its tab is still being recorded (a move
-    /// in flight), reconciled when recording resolves; see `…+Transfer.swift`.
     var provisionalCloses: Set<ObjectIdentifier> = []
     var provisionalDownloads: [ObjectIdentifier: [BrowserDownloadKey]] = [:]
 
