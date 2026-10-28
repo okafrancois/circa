@@ -5,7 +5,7 @@ Orbit is a native macOS browser: Swift/AppKit shell (`native/Sources/Orbit`) on 
 ## Roles and definition of done
 - The PM (Claude) splits work, writes briefs, decides and merges into `main`. Implementation agents work in their own worktree and branch; only the PM merges and pushes.
 - Done means: the feature works in the real Chromium product (synthetic test bundle), compiled, with targeted tests passing and a capture or real run. A proof that nothing can go wrong is not a deliverable.
-- No review chains, hash receipts or handoff documents. One lot note of at most 60 lines in `docs/`: what works, how to try it, limits.
+- No review chains, hash receipts or handoff documents. One lot note of at most 60 lines: what works, how to try it, limits. Lot notes are local lab material: write them to `/Users/bernyitoutou/Developer/artlab/lab/notes/<lot>.md` (outside Git), never under `docs/`.
 - Code, comments, test descriptions, commit messages and docs are in English. User-facing strings go through `uiText` and stay localizable.
 
 ## Building and testing
@@ -32,6 +32,11 @@ Orbit is a native macOS browser: Swift/AppKit shell (`native/Sources/Orbit`) on 
 ## Releases
 - `scripts/release.py` builds, signs, notarizes (`orbit-notary` profile), packages and publishes. It runs on the self-hosted runner when a `vX.Y.Z` tag is pushed. Never trigger releases from pull requests or forks.
 - Release cadence: after merging one or more user-visible features or fixes, the PM pushes `main` and tags the next version (patch for fixes, minor for new features). Installed copies update through Sparkle.
+
+## Public repository hygiene
+- This repository is public. Tracked files (code, comments, tests, docs, commit messages) never name or describe the design reference product, its binary, symbols, addresses, assets or recordings. Write neutral facts instead: "0.12 s ease-out", not where the value came from.
+- The only exception is the user-facing import feature for that browser's data and the code that implements it.
+- Reference evidence, comparisons and lot notes stay in `lab/` or `/tmp`.
 
 ## Local lab material
 - Research notes and historical references are kept outside Git in the main checkout's ignored `lab/` folder. Read them only when a brief points to them; never copy them into tracked files.
