@@ -298,7 +298,7 @@ struct NativeCommandTests {
         // + site-session/bookmark import and export (4), and private-window routing (1).
         // + local Share and page-context Share (2), sidebar tab navigation (4), Select Space 1–9 (9).
         let implemented = system.registry.definitions.filter { system.registry.isImplemented($0.id) }.map(\.id.rawValue)
-        #expect(implemented.count == 171, "\(implemented.count): \(implemented.sorted())")
+        #expect(implemented.count == 172, "\(implemented.count): \(implemented.sorted())")
         #expect(system.registry.isImplemented(.checkForUpdates))
         #expect(system.registry.isImplemented(.toggleDeveloperMode))
         #expect(system.registry.isImplemented(.newIncognitoWindow))

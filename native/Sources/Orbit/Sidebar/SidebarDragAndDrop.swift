@@ -98,6 +98,7 @@ final class SidebarDropCoordinator {
         var isValid: Bool { error == nil }
     }
 
+    var onReorderSnap: (() -> Void)?
     private(set) var payload: SidebarDragPayload?
     private(set) var verdict: Verdict?
     private weak var target: (any SidebarDropTarget)?
@@ -110,10 +111,13 @@ final class SidebarDropCoordinator {
                 targets: [any SidebarDropTarget], snapshot: BrowserOrganizationSnapshot?,
                 catalog: BrowserCatalogSnapshot?) -> Verdict? {
         self.payload = payload
+        let previousTarget = target
+        let previousVerdict = verdict
         let hit = targets.first { $0.acceptsDrag(at: point, in: container) }
         if hit !== target {
             target?.showDropFeedback(nil, isValid: false, payload: nil)
             target = hit
+            verdict = nil
         }
         guard let hit, let snapshot, let catalog else {
             verdict = nil
@@ -129,6 +133,10 @@ final class SidebarDropCoordinator {
         let next = Verdict(proposal: proposal, error: error)
         if next != verdict { hit.showDropFeedback(proposal, isValid: error == nil, payload: payload) }
         verdict = next
+        if next.isValid, previousTarget !== hit || previousVerdict?.proposal.destination != proposal.destination
+            || previousVerdict?.isValid != true {
+            onReorderSnap?()
+        }
         return next
     }
 

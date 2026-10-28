@@ -83,6 +83,7 @@ extension BrowserWindowController {
     /// A new document of `surface` replaces the crashed page and any dialog of the previous one
     /// (sign-in and application-link questions included, as Chromium closes them on navigation).
     func pageSurfaceDidCommit(_ surface: Surface) {
+        capture.documentDidCommit(surface)
         let key = ObjectIdentifier(surface)
         BrowserPageDialogCenter.shared.hideCrashedPage(for: key)
         BrowserPageDialogCenter.shared.resetJavaScriptDialogs(for: key, keepingGeneration: surface.documentGeneration)

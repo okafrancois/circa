@@ -10,6 +10,27 @@ enum BrowserNavigationPolicy {
         let url: URL
         init(surface: AnyObject, url: URL) { self.surface = surface; self.url = url }
     }
+    private final class SettingsGrant {
+        weak var surface: AnyObject?
+        init(_ surface: AnyObject) { self.surface = surface }
+    }
+    private static var settings: [ObjectIdentifier: SettingsGrant] = [:]
+
+    /// The explicit Settings handoff and shell-created/restored settings tabs grant access to
+    /// this hierarchy. A page cannot grant itself arbitrary privileged chrome:// navigation.
+    static func authorizeChromiumSettings(for surface: AnyObject) {
+        settings = settings.filter { $0.value.surface != nil }
+        settings[ObjectIdentifier(surface)] = SettingsGrant(surface)
+    }
+
+    static func isChromiumSettingsURL(_ url: URL) -> Bool {
+        url.scheme == "chrome" && url.host == "settings" && url.user == nil && url.password == nil && url.port == nil
+    }
+
+    static func allowsChromiumSettings(_ url: URL, surface: AnyObject) -> Bool {
+        isChromiumSettingsURL(url) && settings[ObjectIdentifier(surface)]?.surface === surface
+    }
+
     private static var files: [ObjectIdentifier: FileGrant] = [:]
 
     static func authorizeLocalDocument(_ url: URL, for surface: AnyObject) {
@@ -57,7 +78,7 @@ enum BrowserNavigationPolicy {
         if action.shouldPerformDownload { return ["http", "https", "blob", "data"].contains(scheme) ? .download : .cancel }
         if extensionDocuments, isExtensionDocument(url) { return .allow }
         guard ["http", "https", "about", "blob", "data"].contains(scheme)
-                || allowsViewSource(url) || allowsFile(url, surface: surface, kind: action.kind) else { return .cancel }
+                || allowsViewSource(url) || allowsChromiumSettings(url, surface: surface) || allowsFile(url, surface: surface, kind: action.kind) else { return .cancel }
         if routesEnabled, case .handled(let policy) = hooks.routeNavigation(from: surface, action: action) { return policy }
         return .allow
     }
@@ -65,7 +86,7 @@ enum BrowserNavigationPolicy {
     static func response<Surface: BrowserEngineSurface>(_ response: BrowserNavigationResponse, surface: Surface,
                                                         held: Bool, extensionDocuments: Bool = false) -> BrowserNavigationResponsePolicy {
         guard held, let url = response.response.url, let scheme = url.scheme?.lowercased() else { return .cancel }
-        return ["http", "https", "about", "blob", "data"].contains(scheme) || allowsViewSource(url) || allowsFile(url, surface: surface)
+        return ["http", "https", "about", "blob", "data"].contains(scheme) || allowsViewSource(url) || allowsChromiumSettings(url, surface: surface) || allowsFile(url, surface: surface)
             || extensionDocuments && isExtensionDocument(url) ? .allow : .cancel
     }
 }

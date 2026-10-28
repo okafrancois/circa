@@ -23,6 +23,7 @@ enum BrowserWindowCommands {
         func window(_ id: BrowserCommandID, _ action: @escaping (BrowserWindowController<Engine>) -> Void) {
             try! registry.register(id) { controller, _ in action(controller) }
         }
+        window(.capture) { $0.capture.begin() }
         window(.newTab) { $0.openTab() }
         window(.openCommandBar) { $0.focusAddress() }
         BrowserPaletteCommands.install(in: registry)

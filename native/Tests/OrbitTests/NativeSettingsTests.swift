@@ -1211,6 +1211,39 @@ extension NativeWebKitTests.NativeSettingsTests {
         #expect(controller.session.snapshot?.tabs.count == 4)
     }
 
+    @Test("More Settings opens a separate Chromium settings tab in the captured profile without an extension manager")
+    func moreChromiumSettings() async throws {
+        NSApplication.shared.setActivationPolicy(.prohibited)
+        let engine = SettingsFixtureEngine()
+        engine.reportedKind = .chromium
+        let environment = BrowserEnvironment(engine: engine)
+        let controller = try await environment.makeWindow()
+        defer { controller.window?.close(); environment.autoArchive.scheduler.stop() }
+        let profile = try #require(controller.session.activeProfileID)
+        let model = settingsModel(environment, profile: profile)
+        await model.reload()
+        model.presentBrowserForProfile = { requested in
+            #expect(requested == profile)
+            return controller
+        }
+        let original = try #require(controller.session.selectedSurface)
+        #expect(!BrowserNavigationPolicy.allowsChromiumSettings(URL(string: "chrome://settings/")!, surface: original))
+        #expect(model.canOpenChromiumSettings(profile: profile))
+        #expect(!model.canOpenExtensionSettings(profile: profile))
+        try await model.openBrowserSettings(.chromium, profile: profile)
+        let opened = try #require(controller.session.selectedSurface)
+        #expect(opened !== original && opened.profileID == profile)
+        #expect(opened.navigationState.url?.absoluteString == "chrome://settings/")
+        #expect(BrowserNavigationPolicy.allowsChromiumSettings(URL(string: "chrome://settings/languages")!, surface: opened))
+        #expect(!BrowserNavigationPolicy.allowsChromiumSettings(URL(string: "chrome://flags/")!, surface: opened))
+        // Restored/model-created tabs use the same factory/start path as this new shell tab.
+        controller.session.openTab(url: URL(string: "chrome://settings/downloads")!)
+        await controller.session.waitForPendingCommands()
+        let recreated = try #require(controller.session.selectedSurface)
+        #expect(recreated !== opened)
+        #expect(BrowserNavigationPolicy.allowsChromiumSettings(URL(string: "chrome://settings/downloads")!, surface: recreated))
+    }
+
     @Test("Settings lists installed shortcuts and omits unsupported or out-of-scope AI actions")
     func settingsShortcutAvailability() {
         let model = settingsModel(BrowserEnvironment(engine: SettingsFixtureEngine()))

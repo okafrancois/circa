@@ -4,7 +4,7 @@ import BrowserShell
 import Combine
 import Foundation
 
-enum BrowserSettingsPage { case extensions, extensionShortcuts }
+enum BrowserSettingsPage { case extensions, extensionShortcuts, chromium }
 
 struct BrowserSettingsSiteDataRequest: Identifiable {
     let id = UUID()
@@ -83,17 +83,21 @@ final class BrowserSettingsModel<Engine: BrowserEngine>: ObservableObject {
     var permissionsUnavailable: Bool { environment.permissionsUnavailable }
     var canRequestDefaultBrowser: Bool { environment.engine.kind == .chromium && defaultBrowser.canRequest() }
 
-    func canOpenExtensionSettings(profile: ProfileID) -> Bool {
+    func canOpenChromiumSettings(profile: ProfileID) -> Bool {
         environment.engine.kind == .chromium && presentBrowserForProfile != nil
-            && environment.engine.extensionManagement != nil
             && catalog.spaces.contains { $0.profileID == profile }
+    }
+
+    func canOpenExtensionSettings(profile: ProfileID) -> Bool {
+        canOpenChromiumSettings(profile: profile) && environment.engine.extensionManagement != nil
     }
 
     /// Create a separate tab in the explicitly selected profile. Never navigate the user's
     /// existing document to a manager, or follow a later Settings/profile selection.
     func openBrowserSettings(_ page: BrowserSettingsPage, profile: ProfileID) async throws {
         try await requireProfile(profile)
-        guard canOpenExtensionSettings(profile: profile), let presentBrowserForProfile else {
+        guard (page == .chromium ? canOpenChromiumSettings(profile: profile) : canOpenExtensionSettings(profile: profile)),
+              let presentBrowserForProfile else {
             throw BrowserEngineError.unsupportedOperation
         }
         let controller = try await presentBrowserForProfile(profile)
@@ -109,11 +113,17 @@ final class BrowserSettingsModel<Engine: BrowserEngine>: ObservableObject {
             try await Task.sleep(for: .milliseconds(25))
         }
         guard !surface.isDisposed, surface.isReady, controller.owns(surface),
-              controller.session.selectedSurface === surface, surface.profileID == profile,
-              let manager = environment.engine.extensionManagement else {
+              controller.session.selectedSurface === surface, surface.profileID == profile else {
             throw BrowserEngineError.unsupportedOperation
         }
+        if page == .chromium {
+            BrowserNavigationPolicy.authorizeChromiumSettings(for: surface)
+            surface.navigate(to: URL(string: "chrome://settings/")!)
+            return
+        }
+        guard let manager = environment.engine.extensionManagement else { throw BrowserEngineError.unsupportedOperation }
         switch page {
+        case .chromium: break
         case .extensions: try manager.openManagement(on: surface)
         case .extensionShortcuts: try manager.openShortcuts(on: surface)
         }
@@ -242,6 +252,18 @@ final class BrowserSettingsModel<Engine: BrowserEngine>: ObservableObject {
     func setArchiveThreshold(_ threshold: BrowserAutoArchiveThreshold?, profile: ProfileID) async throws {
         try await environment.store.setAutoArchiveThreshold(threshold, forProfile: profile)
         await environment.refreshSettingsCatalog()
+    }
+
+    func setWarnBeforeQuitting(_ value: Bool) async throws {
+        try await runtime.updateInteraction { $0.warnBeforeQuitting = value }
+    }
+
+    func setPlaySoundEffects(_ value: Bool) async throws {
+        try await runtime.updateInteraction { $0.playSoundEffects = value }
+    }
+
+    func setHapticFeedback(_ value: Bool) async throws {
+        try await runtime.updateInteraction { $0.hapticFeedback = value }
     }
 
     func setReducedMotion(_ value: BrowserReducedMotionSetting) async throws {

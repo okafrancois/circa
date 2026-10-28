@@ -144,11 +144,19 @@ public struct BrowserSecondaryAppearanceDraft: Codable, Equatable, Sendable {
     public var isValid: Bool { transparency.isFinite && (0...1).contains(transparency) }
 }
 
+public struct BrowserInteractionPreferences: Codable, Equatable, Sendable {
+    public var warnBeforeQuitting = true
+    public var playSoundEffects = true
+    public var hapticFeedback = true
+    public init() {}
+}
+
 public struct BrowserSettingsDocument: Codable, Equatable, Sendable {
     public static let currentVersion = 1
     public var version = Self.currentVersion
     public var secondaryAppearanceDraft = BrowserSecondaryAppearanceDraft()
     public var reducedMotion: BrowserReducedMotionSetting = .system
+    public var interaction = BrowserInteractionPreferences()
     public var memorySaver: BrowserMemorySaverSetting = .fourHours
     public var opensExternalLinksInQuickWindow = true {
         didSet {
@@ -167,13 +175,14 @@ public struct BrowserSettingsDocument: Codable, Equatable, Sendable {
     public var spaces: [SpaceID: BrowserSpaceSettings] = [:]
     public init() {}
     private enum CodingKeys: String, CodingKey {
-        case memorySaver, linkRouting, secondaryAppearanceDraft, version, reducedMotion, profiles, spaces, opensExternalLinksInQuickWindow, lastActiveWindowID, lastActiveSpaceID
+        case interaction, memorySaver, linkRouting, secondaryAppearanceDraft, version, reducedMotion, profiles, spaces, opensExternalLinksInQuickWindow, lastActiveWindowID, lastActiveSpaceID
     }
     public init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
         secondaryAppearanceDraft = (try? values.decode(BrowserSecondaryAppearanceDraft.self, forKey: .secondaryAppearanceDraft)) ?? .init()
         version = try values.decode(Int.self, forKey: .version)
         reducedMotion = try values.decode(BrowserReducedMotionSetting.self, forKey: .reducedMotion)
+        interaction = try values.decodeIfPresent(BrowserInteractionPreferences.self, forKey: .interaction) ?? .init()
         memorySaver = (try? values.decode(BrowserMemorySaverSetting.self, forKey: .memorySaver)) ?? .fourHours
         profiles = try values.decode([ProfileID: BrowserProfileSettings].self, forKey: .profiles)
         spaces = try values.decode([SpaceID: BrowserSpaceSettings].self, forKey: .spaces)
@@ -231,6 +240,12 @@ public actor BrowserSettingsStore {
     }
 
     public func snapshot() -> BrowserSettingsDocument { document }
+
+    public func updateInteraction(_ edit: @Sendable (inout BrowserInteractionPreferences) -> Void) throws {
+        var next = document
+        edit(&next.interaction)
+        try publish(next)
+    }
 
     public func setProfile(_ settings: BrowserProfileSettings, for id: ProfileID) throws {
         var next = document
