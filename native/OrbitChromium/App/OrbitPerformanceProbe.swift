@@ -137,6 +137,8 @@ enum OrbitPerformanceProbe {
                     result["suspensionRefusals"] = reasons
                 } else if name == "verify-suspension", let fixture = command["fixture"], let url = URL(string: fixture) {
                     result["suspensionChecks"] = await verifySuspension(owner, fixture: url)
+                } else if name == "scroll-wheel" {
+                    result["scrollWheel"] = await OrbitScrollWheelProbe.run(owner, command: command)
                 } else if name == "download-audio" {
                     result["downloadAudio"] = await OrbitDownloadAudioProbe.run(owner, command: command, root: root)
                 } else if name == "settings" {

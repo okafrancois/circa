@@ -16,6 +16,37 @@ struct SpaceSwipeRouterIndependentTests {
         return try #require(NSEvent(cgEvent: cg))
     }
 
+    @Test("Unphased wheel packets never enter axis arbitration or inherit retired ownership")
+    func unphasedWheelAdmission() throws {
+        for mode in ["idle", "pending", "horizontal", "native", "discarded"] {
+            let router = SidebarScrollInputRouter()
+            var posted: [NSEvent] = []
+            router.postNativeEvent = { posted.append($0) }
+            if mode != "idle" {
+                #expect(router.route(try event(1), inside: true, captureOwner: { { true } },
+                                     recognize: { .pending }, cancelRecognition: {}))
+                if mode == "horizontal" {
+                    #expect(router.route(try event(2, x: 40), inside: true, captureOwner: { nil },
+                                         recognize: { .horizontal }, cancelRecognition: {}))
+                }
+                if mode == "native" {
+                    #expect(router.route(try event(2, y: 40), inside: true, captureOwner: { nil },
+                                         recognize: { .inactive }, cancelRecognition: {}))
+                }
+                if mode == "discarded" { router.invalidate() }
+            }
+            let owned = router.hasOwnedSequence
+            let postedCount = posted.count
+            for inside in [true, false] {
+                #expect(!router.route(try event(0, y: -4), inside: inside,
+                    captureOwner: { Issue.record("Wheel captured an owner"); return nil },
+                    recognize: { Issue.record("Wheel entered recognition"); return .horizontal },
+                    cancelRecognition: { Issue.record("Wheel cancelled a trackpad gesture") }), "Wheel must pass in \(mode)")
+                #expect(router.hasOwnedSequence == owned && posted.count == postedCount)
+            }
+        }
+    }
+
     @Test("Space swipe independent ticket exhaustion leaves originals and fresh genuine input untouched")
     func spaceSwipeIndependentTicketCapacity() throws {
         let router = SidebarScrollInputRouter()

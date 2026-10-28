@@ -96,6 +96,55 @@ struct SpaceSwipeRoutingTests {
         return (window, sidebar, document, first)
     }
 
+    @Test("Unphased wheels bypass pending, owned and retired swipe streams without changing their state")
+    func unphasedWheelsBypassSwipeRouting() async throws {
+        for inside in [true, false] {
+            for state in ["idle", "pending", "horizontal", "settling", "retired", "native", "creation"] {
+                let (window, sidebar, _, _) = try await fixture()
+                defer { sidebar.spaceSwipe.detach(); window.close() }
+                let swipe = sidebar.spaceSwipe
+                var posted: [NSEvent] = []
+                swipe.scrollInput.postNativeEvent = { posted.append($0) }
+                if state == "creation" { swipe.presentCreationPage() }
+                else if state != "idle" {
+                    _ = swipe.routeScroll(try rawScroll(.began), inside: true)
+                    if ["horizontal", "settling", "retired"].contains(state) {
+                        _ = swipe.routeScroll(try rawScroll(.changed, x: -80), inside: true)
+                    }
+                    if state == "settling" { _ = swipe.routeScroll(try rawScroll(.ended), inside: true) }
+                    if state == "retired" { swipe.cancel() }
+                    if state == "native" { _ = swipe.routeScroll(try rawScroll(.changed, y: -30), inside: true) }
+                }
+                let offset = swipe.offset
+                let active = swipe.isActive
+                let owned = swipe.scrollInput.hasOwnedSequence
+                let postedCount = posted.count
+                for precise in [false, true] {
+                    for vector: (Int32, Int32) in [(0, -1), (0, -80), (-80, -1)] {
+                        let cg = try #require(CGEvent(scrollWheelEvent2Source: nil, units: precise ? .pixel : .line,
+                            wheelCount: 2, wheel1: vector.1, wheel2: vector.0, wheel3: 0))
+                        let event = try #require(NSEvent(cgEvent: cg))
+                        #expect(event.phase.isEmpty && event.momentumPhase.isEmpty)
+                        #expect(event.hasPreciseScrollingDeltas == precise)
+                        #expect(!swipe.routeScroll(event, inside: inside), "Wheel must pass immediately in \(state)")
+                        #expect(!swipe.handleScroll(event, inside: inside), "Direct recognition must ignore wheels in \(state)")
+                        #expect(swipe.offset == offset && swipe.isActive == active)
+                        #expect(swipe.scrollInput.hasOwnedSequence == owned)
+                        #expect(posted.count == postedCount)
+                    }
+                }
+                // An independent wheel packet must not retire the phased gesture it interrupts.
+                if state == "pending" {
+                    #expect(swipe.routeScroll(try rawScroll(.changed, x: -80), inside: true))
+                    #expect(swipe.offset == -40)
+                    #expect(swipe.routeScroll(try rawScroll(.ended), inside: true))
+                    #expect(swipe.routeScroll(try rawScroll([], momentum: .began), inside: true))
+                    #expect(swipe.routeScroll(try rawScroll([], momentum: .ended), inside: true))
+                }
+            }
+        }
+    }
+
     @Test("Space swipe small vertical probation keeps original phases until direction is established")
     func spaceSwipeSmallVerticalProbation() async throws {
         for sign: Int32 in [-1, 1] {

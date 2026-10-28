@@ -718,7 +718,7 @@ final class BrowserSidebarView: NSView, SidebarListHost {
 final class SidebarSpacePageView: NSView, NSTextFieldDelegate, NSMenuDelegate {
     var isPrivate = false { didSet { if oldValue != isPrivate { needsLayout = true } } }
     var spaceID: SpaceID? { didSet { if spaceID != oldValue { cancelSpaceRename() }; list.spaceID = spaceID } }
-    private let scrollView = NSScrollView()
+    private let scrollView = BrowserGestureScrollView()
     let list = SidebarListView()
     private let titleLabel = SidebarSpaceTitleLabel(labelWithString: "")
     private let iconButton = OrbitGlyphButton(glyph: nil, label: uiText("Change Icon or Emoji…"))

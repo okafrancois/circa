@@ -65,6 +65,9 @@ final class SidebarScrollInputRouter {
     /// false means normal AppKit dispatch continues. No native scrolling is implemented here.
     func route(_ event: NSEvent, inside: Bool, captureOwner: () -> (() -> Bool)?,
                recognize: () -> Recognition, cancelRecognition: () -> Void) -> Bool {
+        // Wheel packets are independent of contact/momentum streams, including precise
+        // packets emitted by smooth-scrolling drivers. Never buffer or retire them.
+        guard !event.phase.isEmpty || !event.momentumPhase.isEmpty else { return false }
         let begins = event.phase.contains(.began)
         let mayBegin = event.phase.contains(.mayBegin)
         if begins || mayBegin {

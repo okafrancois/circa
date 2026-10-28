@@ -15,7 +15,7 @@ final class BrowserLibraryMediaView: NSView, NSSearchFieldDelegate {
         var title: String { url.lastPathComponent }
     }
     let searchField = BrowserLibrarySearchField()
-    let scroll = NSScrollView()
+    let scroll = BrowserGestureScrollView()
     private let grid = LibraryFlippedView()
     private let empty = BrowserLibraryMediaEmptyView()
     private var profileID: ProfileID?
