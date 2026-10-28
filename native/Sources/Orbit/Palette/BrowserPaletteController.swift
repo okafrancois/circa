@@ -36,6 +36,9 @@ final class BrowserPaletteController<Engine: BrowserEngine> {
     private(set) var lastAsyncRenderMilliseconds = 0.0
     private(set) var completedQuery = ""
     private var lastQuery = ""
+    private(set) var draft = ""
+    private(set) var siteSearch: BrowserPaletteSiteSearch?
+    private var selectionWasMoved = false
     var isPresented: Bool { !view.isHidden }
     var isAccepting: Bool { acceptTask != nil }
 
@@ -52,6 +55,9 @@ final class BrowserPaletteController<Engine: BrowserEngine> {
         view.onQuery = { [weak self] in self?.query($0) }
         view.onMove = { [weak self] in self?.move($0) }
         view.onDismiss = { [weak self] in self?.dismiss() }
+        view.onCancel = { [weak self] in self?.leaveSiteSearch() ?? false }
+        view.onTab = { [weak self] in self?.enterSiteSearch() ?? false }
+        view.onEmptyBackspace = { [weak self] in self?.leaveSiteSearch() ?? false }
         view.onAccept = { [weak self] in self?.accept(modifiers: $0) }
         view.onSelect = { [weak self] index in
             guard let self else { return }
@@ -84,6 +90,8 @@ final class BrowserPaletteController<Engine: BrowserEngine> {
         presentation = UUID()
         generation = UUID()
         let ticket = presentation
+        siteSearch = nil
+        view.setSiteSearch(nil, animated: false)
         mode = requestedMode
         owner.hideLibrary(focus: false)
         owner.dismissPeek()
@@ -124,14 +132,15 @@ final class BrowserPaletteController<Engine: BrowserEngine> {
             if requestedMode == .currentTab, inputRevision == firstQuery {
                 view.input.stringValue = ready.selectedOccurrenceID.flatMap { owner.session.surface(for: $0)?.navigationState.url?.absoluteString } ?? ""
                 view.input.currentEditor()?.selectAll(nil)
+                draft = view.input.stringValue
             }
-            query(view.input.stringValue, preserveSelection: true, userInitiated: false)
+            query(draft, preserveSelection: true, userInitiated: false)
             loadDocument(for: sources)
             warmupTask = Task { [weak self, weak owner] in
                 guard let owner else { return }
                 await owner.historyObserver.prepareSuggestions(for: sources.profileID)
                 guard let self, !Task.isCancelled, isPresented, presentation == ticket, sourceContext?.profileID == sources.profileID else { return }
-                query(view.input.stringValue, preserveSelection: true, userInitiated: false)
+                query(draft, preserveSelection: true, userInitiated: false)
             }
 
         }
@@ -160,7 +169,7 @@ final class BrowserPaletteController<Engine: BrowserEngine> {
             if changedProfile { history = []; faviconCache.clear() }
             candidates = owner?.session.organization.map(BrowserPaletteRanking.localCandidates) ?? []
             loadDocument(for: ready)
-            query(view.input.stringValue, preserveSelection: !changedProfile, userInitiated: false)
+            query(draft, preserveSelection: !changedProfile, userInitiated: false)
         } else { renderResults() }
     }
 
@@ -193,8 +202,10 @@ final class BrowserPaletteController<Engine: BrowserEngine> {
             lastRenderMilliseconds = Double(duration.components.seconds) * 1000 + Double(duration.components.attoseconds) / 1e15
             Self.signposter.endInterval("PaletteFirstDisplay", signpost)
         }
+        draft = text
         if view.input.stringValue != text { view.input.stringValue = text }
         if userInitiated {
+            selectionWasMoved = false
             inputRevision = UUID()
             // New editing intent revokes an acceptance which has not committed yet. A committed
             // navigation may complete, but its receipt cannot dismiss this newer draft.
@@ -208,12 +219,12 @@ final class BrowserPaletteController<Engine: BrowserEngine> {
         generation = UUID()
         let token = generation
         queryTask?.cancel()
-        if let owner, let profileID = sourceContext?.profileID {
+        if siteSearch == nil, let owner, let profileID = sourceContext?.profileID {
             let cached = owner.historyObserver.cachedSuggestions(for: profileID, query: text)
             history = BrowserPaletteRanking.rankedHistory(history + cached, query: text)
         }
         rebuild(preserveSelection: preserveSelection)
-        guard let owner, let profileID = sourceContext?.profileID else { return }
+        guard siteSearch == nil, let owner, let profileID = sourceContext?.profileID else { return }
         queryTask = Task { [weak self, weak owner] in
             guard let owner, !Task.isCancelled else { return }
             let suggestions: [BrowserHistorySuggestion]
@@ -236,11 +247,10 @@ final class BrowserPaletteController<Engine: BrowserEngine> {
 
     private func rebuild(preserveSelection: Bool) {
         guard let owner else { return }
-        let selectedID = preserveSelection && results.indices.contains(selection.index) ? results[selection.index].id : nil
-        results = BrowserPaletteRanking.results(query: view.input.stringValue, mode: mode, resolver: owner.addressResolver,
+        let selectedID = preserveSelection && selectionWasMoved && results.indices.contains(selection.index) ? results[selection.index].id : nil
+        results = siteSearch?.results(query: draft) ?? BrowserPaletteRanking.results(query: draft, mode: mode, resolver: owner.addressResolver,
                                                 candidates: candidates, history: history, actions: availableActions)
         if let selectedID, let index = results.firstIndex(where: { $0.id == selectedID }) { selection.select(index, count: results.count) }
-        else if preserveSelection, let index = results.firstIndex(where: { $0.id == "address" || $0.id == "search" }) { selection.select(index, count: results.count) }
         else { selection.reset() }
         renderResults()
     }
@@ -270,13 +280,46 @@ final class BrowserPaletteController<Engine: BrowserEngine> {
                 icons[result.id] = faviconCache.image(for: reference)
             }
         }
+        view.siteSearchHint = siteSearch == nil ? BrowserPaletteSiteSearch.matching(draft) : nil
         view.favicons = icons
         view.render(results, selected: selection.index)
+        if results.indices.contains(selection.index), siteSearch == nil {
+            view.completeURL(for: results[selection.index], draft: draft)
+        }
     }
 
     func move(_ delta: Int) {
+        selectionWasMoved = true
         selection.move(delta, count: results.count)
+        view.input.stringValue = draft
+        if let editor = view.input.currentEditor() as? NSTextView, !editor.hasMarkedText() {
+            editor.string = draft
+            editor.setSelectedRange(NSRange(location: (draft as NSString).length, length: 0))
+        }
         view.updateSelection(selection.index)
+        if results.indices.contains(selection.index), siteSearch == nil {
+            view.completeURL(for: results[selection.index], draft: draft)
+        }
+    }
+
+    @discardableResult
+    func enterSiteSearch() -> Bool {
+        guard isPresented, siteSearch == nil, let site = BrowserPaletteSiteSearch.matching(draft) else { return false }
+        siteSearch = site
+        history = []
+        view.setSiteSearch(site, animated: true)
+        query("")
+        return true
+    }
+
+    @discardableResult
+    func leaveSiteSearch() -> Bool {
+        guard isPresented, siteSearch != nil else { return false }
+        siteSearch = nil
+        history = []
+        view.setSiteSearch(nil, animated: true)
+        query("")
+        return true
     }
 
     func accept(modifiers: NSEvent.ModifierFlags = []) {
@@ -398,6 +441,8 @@ final class BrowserPaletteController<Engine: BrowserEngine> {
     func dismiss(returnFocus: Bool = true) {
         let wasPresented = isPresented
         view.isHidden = true
+        siteSearch = nil
+        view.setSiteSearch(nil, animated: false)
         queryTask?.cancel()
         documentTask?.cancel()
         presentationTask?.cancel()

@@ -9,6 +9,23 @@ final class BrowserPaletteView: NSView, NSTextFieldDelegate, NSTableViewDataSour
     let scroll = NSScrollView()
     let searchIcon = NSImageView()
     let divider = NSView()
+    let infoButton = NSButton()
+    let scopeLabel = NSTextField(labelWithString: "")
+    let siteHint = NSTextField(labelWithString: "")
+    private let infoPopover = NSPopover()
+    private(set) var inputSymbol = "magnifyingglass"
+    var siteSearchHint: BrowserPaletteSiteSearch? {
+        didSet {
+            guard oldValue != siteSearchHint else { return }
+            siteHint.stringValue = siteSearchHint == nil ? "" : uiText("Tab to search")
+            siteHint.isHidden = siteSearchHint == nil
+            needsLayout = true
+        }
+    }
+    private var siteSearch: BrowserPaletteSiteSearch?
+    private var suppressCompletion = false
+    private var deletionEdit = false
+    static let scopedSearchSpring = OrbitTokens.Spring(response: 0.7, dampingFraction: 0.9)
     private let innerStroke = NSView()
     private let list = PaletteTableView()
     private enum Entry: Equatable {
@@ -29,12 +46,18 @@ final class BrowserPaletteView: NSView, NSTextFieldDelegate, NSTableViewDataSour
     var onAccept: ((NSEvent.ModifierFlags) -> Void)?
     var onSelect: ((Int) -> Void)?
     var onDismiss: (() -> Void)?
+    var onCancel: (() -> Bool)?
+    var onTab: (() -> Bool)?
+    var onEmptyBackspace: (() -> Bool)?
     var accent = OrbitTokens.ThemeAccent.defaultPurple.selection
     var favicons: [String: NSImage] = [:]
     override var isFlipped: Bool { true }
     override var isHidden: Bool {
         didSet {
             if isHidden {
+                infoPopover.close()
+                panel.layer?.removeAnimation(forKey: "palette.scoped-search")
+                panelShadow.removeAnimation(forKey: "palette.scoped-search")
                 countAnnouncementTask?.cancel()
                 countAnnouncementTask = nil
             }
@@ -42,9 +65,6 @@ final class BrowserPaletteView: NSView, NSTextFieldDelegate, NSTableViewDataSour
     }
     func waitForAccessibilityAnnouncements() async { await countAnnouncementTask?.value }
 
-    // Orbit's normal Command Bar uses synchronous visibility, layout and row selection.
-    // A separate bounce observes scoped-search transitions in the container.
-    // Orbit has no scoped-search state yet; normal presentation must not trigger that spring.
     override init(frame: NSRect) {
         super.init(frame: frame)
         isHidden = true
@@ -81,6 +101,24 @@ final class BrowserPaletteView: NSView, NSTextFieldDelegate, NSTableViewDataSour
         searchIcon.image = NSImage(systemSymbolName: "magnifyingglass", accessibilityDescription: nil)
         searchIcon.setAccessibilityElement(false)
         panel.addSubview(searchIcon)
+        infoButton.image = NSImage(systemSymbolName: "info.circle", accessibilityDescription: uiText("About suggestions"))
+        infoButton.isBordered = false
+        infoButton.bezelStyle = .circular
+        infoButton.target = self
+        infoButton.action = #selector(showSuggestionInfo(_:))
+        infoButton.setAccessibilityLabel(uiText("About suggestions"))
+        infoButton.setAccessibilityIdentifier("palette-suggestion-info")
+        panel.addSubview(infoButton)
+        scopeLabel.font = OrbitTokens.Typography.commandBarRowTitle
+        scopeLabel.wantsLayer = true
+        scopeLabel.layer?.cornerRadius = OrbitTokens.Radius.commandBarRow
+        scopeLabel.alignment = .center
+        scopeLabel.isHidden = true
+        panel.addSubview(scopeLabel)
+        siteHint.font = OrbitTokens.Typography.commandBarAccessory
+        siteHint.textColor = OrbitTokens.Color.Text.commandBarSecondary
+        siteHint.isHidden = true
+        panel.addSubview(siteHint)
         divider.wantsLayer = true
         divider.setAccessibilityElement(false)
         panel.addSubview(divider)
@@ -136,8 +174,14 @@ final class BrowserPaletteView: NSView, NSTextFieldDelegate, NSTableViewDataSour
         innerStroke.frame = panel.bounds.insetBy(dx: 0.5, dy: 0.5)
         // Panel uses unflipped coordinates. Its top and input stay fixed while results change.
         let inputHeight = input.intrinsicContentSize.height
-        input.frame = NSRect(x: m.titleOriginX, y: panel.bounds.height - m.searchRowHeight / 2 - inputHeight / 2,
-                             width: max(0, panel.bounds.width - m.titleOriginX - 22), height: inputHeight)
+        let scopeWidth = siteSearch == nil ? 0 : min(180, ceil(scopeLabel.intrinsicContentSize.width) + 20)
+        scopeLabel.frame = NSRect(x: m.titleOriginX, y: panel.bounds.height - 45, width: scopeWidth, height: 26)
+        let inputX = m.titleOriginX + (scopeWidth > 0 ? scopeWidth + 10 : 0)
+        let trailing: CGFloat = siteHint.isHidden ? 48 : 144
+        input.frame = NSRect(x: inputX, y: panel.bounds.height - m.searchRowHeight / 2 - inputHeight / 2,
+                             width: max(0, panel.bounds.width - inputX - trailing), height: inputHeight)
+        infoButton.frame = NSRect(x: panel.bounds.width - 46, y: panel.bounds.height - 44, width: 24, height: 24)
+        siteHint.frame = NSRect(x: panel.bounds.width - 144, y: panel.bounds.height - 43, width: 96, height: 20)
         searchIcon.frame = NSRect(x: 23, y: panel.bounds.height - m.searchRowHeight / 2 - 8, width: 16, height: 16)
         divider.frame = NSRect(x: m.rowInsetX, y: panel.bounds.height - m.searchRowHeight,
                                width: max(0, panel.bounds.width - 2 * m.rowInsetX), height: 1 / (window?.backingScaleFactor ?? 2))
@@ -149,8 +193,6 @@ final class BrowserPaletteView: NSView, NSTextFieldDelegate, NSTableViewDataSour
     /// Synchronous: the controller can measure render plus layoutSubtreeIfNeeded in one signpost.
     func render(_ results: [BrowserPaletteResult], selected: Int) {
         scroll.hasVerticalScroller = results.count > 5
-        let inputSymbol = results.first?.section == .address ? "globe" : "magnifyingglass"
-        searchIcon.image = NSImage(systemSymbolName: inputSymbol, accessibilityDescription: nil)
         var nextEntries: [Entry] = []
         var nextRows: [Int] = []
         nextEntries.reserveCapacity(results.count + BrowserPaletteSection.allCases.count)
@@ -199,6 +241,16 @@ final class BrowserPaletteView: NSView, NSTextFieldDelegate, NSTableViewDataSour
         selectedIndex = results.indices.contains(selected) ? selected : -1
         selectedResult = selectedIndex >= 0 ? results[selectedIndex] : nil
         announcedResultCount = results.count
+        let symbol = selectedResult?.inputSymbol ?? "magnifyingglass"
+        inputSymbol = symbol
+        if symbolImages[symbol] == nil { symbolImages[symbol] = NSImage(systemSymbolName: symbol, accessibilityDescription: nil) }
+        let image = selectedResult.flatMap { result in
+            result.section == .tabs || result.section == .pinned ? favicons[result.id] : nil
+        }
+        let inputImage = image ?? symbolImages[symbol]
+        if searchIcon.image !== inputImage { searchIcon.image = inputImage }
+        searchIcon.contentTintColor = image == nil ? OrbitTokens.Color.Text.commandBarPrimary : nil
+        infoButton.isHidden = siteSearch != nil
         let row = selectedIndex >= 0 ? resultRows[selectedIndex] : -1
         list.selectRowIndexes(row >= 0 ? IndexSet(integer: row) : [], byExtendingSelection: false)
         if oldIndex != selectedIndex { refreshSelection(at: oldIndex) }
@@ -351,12 +403,78 @@ final class BrowserPaletteView: NSView, NSTextFieldDelegate, NSTableViewDataSour
         OrbitTokens.Shadow.commandBar.apply(to: panelShadow, isFlipped: true, appearance: effectiveAppearance)
         input.textColor = OrbitTokens.Color.Text.commandBarPrimary
         searchIcon.contentTintColor = OrbitTokens.Color.Text.commandBarPrimary
+        infoButton.contentTintColor = OrbitTokens.Color.Text.commandBarSecondary
+        scopeLabel.textColor = OrbitTokens.Color.Text.onAccent
+        scopeLabel.layer?.backgroundColor = accent.resolvedCGColor(for: effectiveAppearance)
         divider.layer?.backgroundColor = OrbitTokens.Color.Line.commandBarHairline.resolvedCGColor(for: effectiveAppearance)
         panel.layer?.borderWidth = 1 / (window?.backingScaleFactor ?? 2)
         panel.layer?.borderColor = OrbitTokens.Color.Line.commandBarOuterStroke.resolvedCGColor(for: effectiveAppearance)
         innerStroke.layer?.borderWidth = 1 / (window?.backingScaleFactor ?? 2)
         innerStroke.layer?.borderColor = OrbitTokens.Color.Line.commandBarInnerStroke.resolvedCGColor(for: effectiveAppearance)
     }
+    func completeURL(for result: BrowserPaletteResult, draft: String) {
+        guard !suppressCompletion, siteSearchHint == nil, !draft.isEmpty,
+              !draft.contains(where: \.isWhitespace), result.section != .search,
+              result.section != .commands, let url = result.url,
+              let editor = input.currentEditor() as? NSTextView, !editor.hasMarkedText(),
+              editor.selectedRange().location >= (draft as NSString).length else { return }
+        let full = BrowserPaletteRanking.displayURL(url)
+        guard full.count > draft.count, full.lowercased().hasPrefix(draft.lowercased()) else { return }
+        input.stringValue = draft + full.dropFirst(draft.count)
+        editor.string = input.stringValue
+        editor.setSelectedRange(NSRange(location: (draft as NSString).length,
+                                        length: (input.stringValue as NSString).length - (draft as NSString).length))
+    }
+
+    func setSiteSearch(_ site: BrowserPaletteSiteSearch?, animated: Bool) {
+        let changed = (siteSearch == nil) != (site == nil)
+        siteSearch = site
+        scopeLabel.stringValue = site.map { uiText($0.name) } ?? ""
+        scopeLabel.layer?.backgroundColor = accent.resolvedCGColor(for: effectiveAppearance)
+        scopeLabel.isHidden = site == nil
+        let placeholder = site.map { uiFormat("Search %@", uiText($0.name)) } ?? uiText("Search or Enter URL…")
+        input.placeholderString = placeholder
+        input.placeholderAttributedString = NSAttributedString(string: placeholder, attributes: [
+            .font: OrbitTokens.Typography.commandBarInput, .foregroundColor: OrbitTokens.Color.Text.placeholder
+        ])
+        input.setAccessibilityLabel(placeholder)
+        // AppKit's active field editor caches its placeholder. Rebind it at a scope boundary;
+        // the controller clears the query immediately afterward, and IME never enters here.
+        if !isHidden, input.currentEditor() != nil {
+            window?.makeFirstResponder(nil)
+            window?.makeFirstResponder(input)
+        }
+        infoPopover.close()
+        needsLayout = true
+        layoutSubtreeIfNeeded()
+        panel.layer?.removeAnimation(forKey: "palette.scoped-search")
+        panelShadow.removeAnimation(forKey: "palette.scoped-search")
+        guard changed, animated, !isHidden, !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion,
+              panel.frame.maxY < bounds.height - OrbitTokens.Metrics.CommandBar.rowInsetX else { return }
+        // The recovered subscription bounces only on nil <-> scoped state, not each query.
+        // Keep the final model transform at identity so interruption and dismissal are immediate.
+        for target in [panel.layer, panelShadow].compactMap({ $0 }) {
+            let frame = target.frame
+            target.anchorPoint = CGPoint(x: 0.5, y: 0.5)
+            target.frame = frame
+            let animation = Self.scopedSearchSpring.animation(keyPath: "transform")
+            animation.fromValue = NSValue(caTransform3D: CATransform3DMakeScale(0.95, 0.95, 1))
+            animation.toValue = NSValue(caTransform3D: CATransform3DIdentity)
+            target.add(animation, forKey: "palette.scoped-search")
+        }
+    }
+
+    @objc private func showSuggestionInfo(_ sender: NSButton) {
+        let controller = NSViewController()
+        let label = NSTextField(wrappingLabelWithString: uiText("Suggestions come from your open tabs, bookmarks, and history. Web searches use your selected search engine."))
+        label.frame = NSRect(x: 16, y: 16, width: 280, height: 72)
+        controller.view = NSView(frame: NSRect(x: 0, y: 0, width: 312, height: 104))
+        controller.view.addSubview(label)
+        infoPopover.contentViewController = controller
+        infoPopover.behavior = .transient
+        infoPopover.show(relativeTo: sender.bounds, of: sender, preferredEdge: .maxY)
+    }
+
     override func mouseDown(with event: NSEvent) {
         if !panel.frame.contains(convert(event.locationInWindow, from: nil)) { onDismiss?() }
     }
@@ -367,6 +485,8 @@ final class BrowserPaletteView: NSView, NSTextFieldDelegate, NSTableViewDataSour
     }
     func controlTextDidChange(_ notification: Notification) {
         guard (input.currentEditor() as? NSTextView)?.hasMarkedText() != true else { return }
+        suppressCompletion = deletionEdit
+        deletionEdit = false
         onQuery?(input.stringValue)
     }
     func control(_ control: NSControl, textView: NSTextView, doCommandBy selector: Selector) -> Bool {
@@ -374,7 +494,7 @@ final class BrowserPaletteView: NSView, NSTextFieldDelegate, NSTableViewDataSour
         switch selector {
         case #selector(NSResponder.moveDown(_:)): onMove?(1)
         case #selector(NSResponder.moveUp(_:)): onMove?(-1)
-        case #selector(NSResponder.insertTab(_:)): onMove?(1)
+        case #selector(NSResponder.insertTab(_:)): if onTab?() != true { onMove?(1) }
         case #selector(NSResponder.insertBacktab(_:)): onMove?(-1)
         case #selector(NSResponder.insertNewline(_:)),
              #selector(NSResponder.insertNewlineIgnoringFieldEditor(_:)),
@@ -384,7 +504,11 @@ final class BrowserPaletteView: NSView, NSTextFieldDelegate, NSTableViewDataSour
             if selector == #selector(NSResponder.insertNewlineIgnoringFieldEditor(_:)) { flags.insert(.option) }
             if selector == #selector(NSResponder.insertLineBreak(_:)) { flags.insert(.control) }
             onAccept?(flags)
-        case #selector(NSResponder.cancelOperation(_:)): onDismiss?()
+        case #selector(NSResponder.deleteBackward(_:)):
+            if textView.string.isEmpty, onEmptyBackspace?() == true { return true }
+            deletionEdit = true
+            return false
+        case #selector(NSResponder.cancelOperation(_:)): if onCancel?() != true { onDismiss?() }
         default: return false
         }
         return true
@@ -513,7 +637,7 @@ final class PaletteResultCell: NSTableCellView {
         }
         showsTabAction = result.section == .tabs || { if case .tab = result.action { return true }; return false }()
         showsRestoreAction = result.section == .archive
-        let detail = showsDetails && result.section != .commands && result.detail != result.title
+        let detail = showsDetails && result.section != .commands && !result.detail.isEmpty && result.detail != result.title
             ? "— " + result.detail : ""
         if detailLabel.stringValue != detail {
             detailLabel.stringValue = detail

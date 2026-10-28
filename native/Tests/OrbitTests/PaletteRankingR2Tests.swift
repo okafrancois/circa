@@ -8,13 +8,14 @@ struct PaletteRankingR2Tests {
         .init(id: "tab:\(url)", title: title, detail: detail, section: .tabs, action: .tab(TabID(), windowID: nil, spaceID: nil), sourceURL: URL(string: url)!, scopePriority: scope)
     }
 
-    @Test("Explicit input stays first and present across a broad result cap")
+    @Test("Text matches lead and search is last across a broad result cap")
     func inputAndCap() {
         let candidates = (0..<100).map { tab("Example \($0)", url: "https://site\($0).test/") }
         for limit in [1, 2, 40] {
             let rows = BrowserPaletteRanking.results(query: "e", mode: .newTab, resolver: .init(), candidates: candidates, history: [], actions: [], limit: limit)
-            #expect(rows.first?.id == "search")
-            #expect(rows.filter { $0.id == "search" }.count == 1)
+            #expect(rows.first?.section == .tabs)
+            #expect(rows.filter { $0.id == "search" }.count == (limit > 1 ? 1 : 0))
+            if limit > 1 { #expect(rows.last?.id == "search") }
             #expect(rows.count == limit)
         }
     }
@@ -29,7 +30,7 @@ struct PaletteRankingR2Tests {
         let prefix = BrowserPaletteRanking.results(query: "cat", mode: .newTab, resolver: .init(), candidates: [other, exact], history: [], actions: [])
         #expect(prefix.first?.id == exact.id)
         let edit = BrowserPaletteRanking.results(query: "cat", mode: .currentTab, resolver: .init(), candidates: [other, exact], history: [], actions: [])
-        #expect(edit.first?.id == "search")
+        #expect(edit.first?.id == exact.id)
     }
 
     @Test("Scope labels never match and quality sorts tabs before window proximity")

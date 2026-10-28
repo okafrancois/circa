@@ -331,6 +331,56 @@ struct NativePaletteViewTests {
         #expect(frame.height == m.searchRowHeight + m.firstRowGap + 5 * m.rowPitch - (m.rowPitch - m.rowHeight) + m.bottomPadding)
     }
 
+    @Test("Header tracks selection and scoped transitions bounce without animating ordinary input")
+    func selectedHeaderAndScope() throws {
+        let h = PaletteViewHarness()
+        defer { h.close() }
+        h.view.input.stringValue = "result"
+        h.render([paletteViewResult(0, section: .history), paletteViewResult(1, section: .search)])
+        #expect(h.view.inputSymbol == "clock" && !h.view.infoButton.isHidden)
+        h.view.updateSelection(1)
+        #expect(h.view.inputSymbol == "magnifyingglass")
+        let search = BrowserPaletteResult(id: "search", title: "result", detail: "", section: .search,
+            action: .navigate(URL(string: "https://example.org/search?q=result")!))
+        let searchCell = PaletteResultCell()
+        searchCell.configure(result: search, image: nil, usesFavicon: false)
+        #expect(searchCell.detailLabel.stringValue.isEmpty)
+        #expect(h.view.panel.layer?.animation(forKey: "palette.scoped-search") == nil)
+        h.view.setSiteSearch(BrowserPaletteSiteSearch.matching("youtube"), animated: true)
+        h.render([])
+        #expect(h.view.scopeLabel.stringValue == "YouTube" && !h.view.scopeLabel.isHidden)
+        #expect(h.view.input.frame.minX > h.view.scopeLabel.frame.maxX)
+        #expect(h.view.infoButton.isHidden)
+        #expect(h.view.input.placeholderAttributedString?.string == "Search YouTube")
+        let spring = BrowserPaletteView.scopedSearchSpring
+        #expect(spring.response == 0.7 && spring.dampingFraction == 0.9)
+        if !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion {
+            let animation = try #require(h.view.panel.layer?.animation(forKey: "palette.scoped-search") as? CASpringAnimation)
+            #expect(animation.stiffness == spring.stiffness && animation.damping == spring.damping)
+            #expect(animation.duration == animation.settlingDuration)
+        }
+        h.view.isHidden = true
+        #expect(h.view.panel.layer?.animation(forKey: "palette.scoped-search") == nil)
+        h.view.setSiteSearch(nil, animated: false)
+        #expect(h.view.scopeLabel.isHidden)
+    }
+
+    @Test("URL completion selects only the suffix and leaves navigation authority on the result")
+    func urlCompletion() throws {
+        let h = PaletteViewHarness()
+        defer { h.close() }
+        let editor = try h.editor()
+        h.view.input.stringValue = "exam"
+        editor.string = "exam"
+        editor.setSelectedRange(NSRange(location: 4, length: 0))
+        let result = BrowserPaletteResult(id: "page", title: "Example", detail: "example.org/guide", section: .history,
+            action: .navigate(URL(string: "https://example.org/guide")!))
+        h.view.completeURL(for: result, draft: "exam")
+        #expect(editor.string == "example.org/guide")
+        #expect(editor.selectedRange() == NSRange(location: 4, length: 13))
+        #expect(result.url?.absoluteString == "https://example.org/guide")
+    }
+
     @Test("Warm synchronous render plus layout stays below 8 ms at p95 across filtering and sections")
     func renderAndLayoutLatency() {
         let h = PaletteViewHarness()

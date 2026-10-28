@@ -40,6 +40,8 @@ struct BrowserPaletteResult: Identifiable, Equatable {
         case .search: return "magnifyingglass"
         }
     }
+    var inputSymbol: String { section == .history ? "clock" : symbol }
+
     var actionLabel: String {
         if section == .tabs { return uiText("Switch to Tab") }
         switch action {
@@ -96,9 +98,9 @@ enum BrowserPaletteRanking {
         let typed: BrowserPaletteResult?
         switch destination {
         case .page(let url):
-            typed = .init(id: "address", title: BrowserSuggestionText.displayURL(url), detail: uiText("Go to URL"), section: .address, action: .navigate(url))
+            typed = .init(id: "address", title: displayURL(url), detail: uiText("Go to URL"), section: .address, action: .navigate(url))
         case .search(let url, let text):
-            typed = .init(id: "search", title: text, detail: uiFormat("Search with %@", resolver.searchEngine.displayName), section: .search, action: .navigate(url))
+            typed = .init(id: "search", title: text, detail: "", section: .search, action: .navigate(url))
         case nil: typed = nil
         }
         let matchInput = input.replacingOccurrences(of: "^https?://(www\\.)?|^www\\.", with: "", options: .regularExpression)
@@ -117,15 +119,19 @@ enum BrowserPaletteRanking {
         var represented = Set(matches.filter { $0.section != .archive }.compactMap { $0.url.map(canonicalURL) })
         if case .page(let url) = destination { represented.insert(canonicalURL(url)) }
         let historyRows: [BrowserPaletteResult] = history.filter { represented.insert(canonicalURL($0.url)).inserted }.map {
-            .init(id: "history:\($0.url.absoluteString)", title: $0.title.isEmpty ? BrowserSuggestionText.displayURL($0.url) : $0.title,
-                  detail: BrowserSuggestionText.displayURL($0.url), section: .history, action: .navigate($0.url),
+            .init(id: "history:\($0.url.absoluteString)", title: $0.title.isEmpty ? displayURL($0.url) : $0.title,
+                  detail: displayURL($0.url), section: .history, action: .navigate($0.url),
                   faviconReference: $0.faviconReference)
         }
         var rows = matches.filter { $0.section == .tabs || $0.section == .pinned }
         rows += historyRows
+        let hasPageMatches = !rows.isEmpty
+        let isSingleTerm = BrowserSuggestionText.terms(input).count == 1
         let commandRows = actions.enumerated().compactMap { index, result -> (BrowserPaletteResult, Int, Int)? in
             guard result.action != .command(.newTab), result.action != .command(.openCommandBar),
                   let score = commandScore(input, result: result) else { return nil }
+            // Short generic aliases such as "get extensions" cannot displace matching pages.
+            if hasPageMatches, !input.isEmpty, isSingleTerm, score < 1000 { return nil }
             return (result, score, index)
         }.sorted { $0.1 == $1.1 ? $0.2 < $1.2 : $0.1 > $1.1 }.map(\.0)
         if input.isEmpty {
@@ -134,20 +140,39 @@ enum BrowserPaletteRanking {
         } else { rows += commandRows }
         rows += matches.filter { $0.section == .archive }
         rows = deduplicatingTitlesAndHosts(rows)
-        // The explicit input is always present, including after truncating broad matches.
+        // URL input remains authoritative (an exact open URL may switch to its live tab).
+        // Text matches autocomplete first; the explicit web search is always the last row.
         if let typed {
-            let strong = mode == .newTab && limit > 1 ? rows.firstIndex { isStrongMatch($0, query: input, destination: destination) } : nil
-            if let strong { rows.insert(rows.remove(at: strong), at: 0); rows.insert(typed, at: 1) }
-            else if case .search = destination, input.count >= 3, limit > 1, let command = commandRows.first,
-                    (commandScore(input, result: command) ?? 0) >= 600 {
+            if case .page = destination {
+                if mode == .newTab, limit > 1,
+                   let exact = rows.firstIndex(where: { isStrongMatch($0, query: input, destination: destination) }) {
+                    rows.insert(rows.remove(at: exact), at: 0)
+                    rows.insert(typed, at: 1)
+                } else { rows.insert(typed, at: 0) }
+                return Array(rows.prefix(limit))
+            }
+            if !hasPageMatches, input.count >= 3, let command = commandRows.first,
+               (commandScore(input, result: command) ?? 0) >= 600 {
                 rows.removeAll { $0.id == command.id }
                 rows.insert(command, at: 0)
-                rows.insert(typed, at: 1)
             }
-            else { rows.insert(typed, at: 0) }
+            if rows.isEmpty { return [typed] }
+            if limit == 1 { return Array(rows.prefix(1)) }
+            return Array(rows.prefix(limit - 1)) + [typed]
         }
-        if input.isEmpty { return Array(rows.prefix(min(limit, 8))) }
-        return Array(rows.prefix(limit))
+        return Array(rows.prefix(input.isEmpty ? min(limit, 8) : limit))
+    }
+
+    /// Palette-only presentation: keep the navigation URL and search index unchanged.
+    static func displayURL(_ url: URL) -> String {
+        let text = BrowserSuggestionText.displayURL(url)
+        guard let scheme = url.scheme?.lowercased(), scheme == "http" || scheme == "https",
+              let range = text.range(of: "://") else { return text }
+        var value = String(text[range.upperBound...])
+        if value.hasPrefix("www.") { value.removeFirst(4) }
+        if url.path.isEmpty || url.path == "/", url.query == nil, url.fragment == nil,
+           value.hasSuffix("/") { value.removeLast() }
+        return value
     }
 
     /// Match each localized phrase separately: unrelated aliases must not manufacture a match.
@@ -248,8 +273,8 @@ enum BrowserPaletteRanking {
 
     static func localCandidates(_ snapshot: BrowserOrganizationSnapshot) -> [BrowserPaletteResult] {
         snapshot.allTabs.map {
-            .init(id: "tab:\($0.id.rawValue)", title: $0.title ?? BrowserSuggestionText.displayURL($0.url),
-                  detail: BrowserSuggestionText.displayURL($0.url), section: $0.isLoadedInThisWindow ? .tabs : .pinned,
+            .init(id: "tab:\($0.id.rawValue)", title: $0.title ?? displayURL($0.url),
+                  detail: displayURL($0.url), section: $0.isLoadedInThisWindow ? .tabs : .pinned,
                   action: .tab($0.id, windowID: nil, spaceID: nil), sourceURL: $0.url)
         }
         // Archived tabs come from the document candidates: ORG-R2 replaced the snapshot's archive
@@ -268,9 +293,8 @@ enum BrowserPaletteRanking {
         var seen: Set<TabID> = []
         var result = open.compactMap { tab -> BrowserPaletteResult? in
             guard windowIDs[tab.windowID] != nil, seen.insert(tab.id).inserted else { return nil }
-            let label = tab.windowID == windowID ? (tab.spaceID == spaceID ? uiText("This Space") : uiText("Other Space")) : uiText("Other Window")
-            return .init(id: "tab:\(tab.id.rawValue)", title: logical[tab.id]?.resolvedTitle ?? BrowserSuggestionText.displayURL(tab.url),
-                         detail: BrowserSuggestionText.displayURL(tab.url) + " · " + label, section: .tabs,
+            return .init(id: "tab:\(tab.id.rawValue)", title: logical[tab.id]?.resolvedTitle ?? displayURL(tab.url),
+                         detail: displayURL(tab.url), section: .tabs,
                          action: .tab(tab.id, windowID: windowIDs[tab.windowID], spaceID: tab.spaceID), sourceURL: tab.url,
                          scopePriority: tab.windowID == windowID ? (tab.spaceID == spaceID ? 0 : 1) : 2)
         }
@@ -283,8 +307,8 @@ enum BrowserPaletteRanking {
                 case .folder(let id): append(folders[id]?.children ?? [], in: space)
                 case .tab(let id):
                     guard seen.insert(id).inserted, let tab = logical[id] else { continue }
-                    result.append(.init(id: "tab:\(id.rawValue)", title: tab.resolvedTitle ?? BrowserSuggestionText.displayURL(tab.url),
-                                        detail: BrowserSuggestionText.displayURL(tab.url), section: .pinned,
+                    result.append(.init(id: "tab:\(id.rawValue)", title: tab.resolvedTitle ?? displayURL(tab.url),
+                                        detail: displayURL(tab.url), section: .pinned,
                                         action: .tab(id, windowID: nil, spaceID: space), sourceURL: tab.url))
                 }
             }
@@ -292,8 +316,8 @@ enum BrowserPaletteRanking {
         for favorites in document.organization.favorites where favorites.profileID == profileID { append(favorites.items, in: nil) }
         for sections in document.organization.spaces where spaces.contains(sections.spaceID) { append(sections.pinned, in: sections.spaceID) }
         result += document.organization.archive.filter { $0.profileID == profileID }.map {
-            .init(id: "archive:\($0.id.rawValue)", title: $0.tab.resolvedTitle ?? BrowserSuggestionText.displayURL($0.tab.url),
-                  detail: BrowserSuggestionText.displayURL($0.tab.url), section: .archive, action: .archive($0.id), sourceURL: $0.tab.url)
+            .init(id: "archive:\($0.id.rawValue)", title: $0.tab.resolvedTitle ?? displayURL($0.tab.url),
+                  detail: displayURL($0.tab.url), section: .archive, action: .archive($0.id), sourceURL: $0.tab.url)
         }
         return result
     }

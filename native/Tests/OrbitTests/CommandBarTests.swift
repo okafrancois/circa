@@ -70,6 +70,52 @@ struct CommandBarTests {
         #expect(BrowserPaletteRanking.deduplicatingTitlesAndHosts(Array(rows.reversed())).contains { $0.id == "b" })
     }
 
+    @Test("History and bookmarks lead text search; no match falls back to search in both modes")
+    func textMatchOrderAndDisplay() throws {
+        let url = URL(string: "https://www.example.org/welcome-to-orbit")!
+        let bookmark = BrowserPaletteResult(id: "bookmark", title: "Getting Started", detail: "example.org/welcome-to-orbit",
+            section: .pinned, action: .navigate(url))
+        let history = BrowserHistorySuggestion(profileID: ProfileID(), url: url, title: "Getting Started", faviconReference: nil,
+            visitCount: 10, typedCount: 1, lastVisitedAt: Date(), score: 20)
+        for mode in [BrowserPaletteMode.newTab, .currentTab] {
+            let saved = BrowserPaletteRanking.results(query: "get", mode: mode, resolver: .init(), candidates: [bookmark], history: [], actions: [command(.manageExtensions)])
+            #expect(saved.map(\.id) == ["bookmark", "search"])
+            let recent = BrowserPaletteRanking.results(query: "get", mode: mode, resolver: .init(), candidates: [], history: [history], actions: [])
+            #expect(recent.first?.section == .history && recent.last?.id == "search")
+            let absent = BrowserPaletteRanking.results(query: "unmatched synthetic query", mode: mode, resolver: .init(), candidates: [bookmark], history: [], actions: [])
+            #expect(absent.count == 1 && absent.first?.id == "search")
+        }
+        #expect(BrowserPaletteRanking.displayURL(url) == "example.org/welcome-to-orbit")
+        #expect(BrowserPaletteRanking.displayURL(URL(string: "http://127.0.0.1:46081/")!) == "127.0.0.1:46081")
+        #expect(BrowserPaletteRanking.displayURL(URL(string: "https://user:password@example.org/%E2%80%AEabc%0A?q=%26#end")!) == "example.org/\\u{202E}abc\\u{000A}?q=&#end")
+    }
+
+    @Test("Site keywords are exact, URL aliases are bounded and queries cannot inject URL components")
+    func siteSearchDestinations() throws {
+        for keyword in ["youtube", "YouTube", "www.youtube.com", "https://www.youtube.com/"] {
+            #expect(BrowserPaletteSiteSearch.matching(keyword)?.name == "YouTube")
+        }
+        for keyword in ["", "you", "youtube.com.evil.test", "youtube.com/path", "youtube cats", "https://youtube.com/?q=x"] {
+            #expect(BrowserPaletteSiteSearch.matching(keyword) == nil)
+        }
+        let query = "café /?q=a&b=+%#猫"
+        for site in BrowserPaletteSiteSearch.sites {
+            let result = try #require(site.results(query: query).first)
+            #expect(result.section == .search && !BrowserPaletteRanking.recordsTypedVisit(result))
+            let url = try #require(result.url)
+            #expect(url.scheme == "https" && url.user == nil && url.password == nil)
+            #expect(url.absoluteString.contains("%2B") && url.absoluteString.contains("%26"))
+            #expect(url.absoluteString.contains("%23") && url.absoluteString.contains("%2F"))
+            #expect(site.results(query: " ").isEmpty)
+        }
+        let youtube = try #require(BrowserPaletteSiteSearch.matching("youtube")?.url(for: query))
+        #expect(URLComponents(url: youtube, resolvingAgainstBaseURL: false)?.queryItems == [URLQueryItem(name: "search_query", value: query)])
+        let gmail = try #require(BrowserPaletteSiteSearch.matching("gmail")?.url(for: query))
+        #expect(gmail.fragment?.removingPercentEncoding == "apps/" + query)
+        let spotify = try #require(BrowserPaletteSiteSearch.matching("spotify")?.url(for: query))
+        #expect(spotify.path == "/search/" + query)
+    }
+
     @Test("Only installed actions are offered, with catalog shortcuts and distinct command icons")
     func installedCommands() async throws {
         NSApplication.shared.setActivationPolicy(.prohibited)
