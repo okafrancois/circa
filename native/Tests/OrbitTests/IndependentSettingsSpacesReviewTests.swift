@@ -98,7 +98,7 @@ struct IndependentSettingsSpacesReviewTests {
         controller.showLibrary(.spaces)
         await controller.session.waitForPendingCommands()
         let view = controller.library.spacesView
-        view.table.selectRowIndexes(IndexSet(integer: try #require(view.rows.firstIndex { $0.space.id == target })), byExtendingSelection: false)
+        view.selectItem(at: try #require(view.rows.firstIndex { $0.space.id == target }))
         view.openSelected()
         let click = try #require(deferred)
         controller.hideLibrary()
@@ -211,7 +211,7 @@ struct IndependentSettingsSpacesReviewTests {
         controller.showLibrary(.spaces)
         await controller.session.waitForPendingCommands()
         let view = controller.library.spacesView
-        view.table.selectRowIndexes(IndexSet(integer: 1), byExtendingSelection: false)
+        view.selectItem(at: 1)
         let editor = NSTextView()
         editor.setMarkedText("に", selectedRange: .init(location: 1, length: 0),
             replacementRange: .init(location: NSNotFound, length: 0))
@@ -222,7 +222,7 @@ struct IndependentSettingsSpacesReviewTests {
         }
         await controller.session.waitForPendingCommands()
         #expect(controller.session.snapshot?.activeSpaceID == first && controller.library.isPresented)
-        #expect(view.table.selectedRow == 1 && editor.hasMarkedText())
+        #expect(view.selectedIndex == 1 && editor.hasMarkedText())
     }
 
 }

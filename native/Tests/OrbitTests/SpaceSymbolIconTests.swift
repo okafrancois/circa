@@ -196,8 +196,7 @@ struct SpaceSymbolIconTests {
         let library = controller.library.spacesView
         let index = try #require(library.rows.firstIndex { $0.space.id == id })
         #expect(library.rows[index].iconSelection == choice && library.rows[index].icon == nil)
-        let row = try #require(library.tableView(library.table, viewFor: nil, row: index) as? NSStackView)
-        let libraryImage = try #require(row.arrangedSubviews.first as? NSImageView)
+        let libraryImage = try #require(library.tiles[index].iconView as? NSImageView)
         let settingsImage = try #require(BrowserSettingsIconPreview.projection(choice) as? NSImageView)
         #expect(libraryImage.image === settingsImage.image && libraryImage.image?.isTemplate == true)
         #expect(settingsImage.accessibilityLabel() == uiText("Work"))

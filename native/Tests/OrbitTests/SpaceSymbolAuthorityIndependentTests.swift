@@ -80,8 +80,7 @@ struct SpaceSymbolAuthorityIndependentTests {
                 let library = controller.library.spacesView
                 let index = try #require(library.rows.firstIndex { $0.space.id == id })
                 #expect(library.rows[index].iconSelection == choice)
-                let row = try #require(library.tableView(library.table, viewFor: nil, row: index) as? NSStackView)
-                let image = try #require(row.arrangedSubviews.first as? NSImageView)
+                let image = try #require(library.tiles[index].iconView as? NSImageView)
                 let settings = try #require(BrowserSettingsIconPreview.projection(choice) as? NSImageView)
                 #expect(image.image === settings.image)
                 #expect(image.accessibilityLabel() == SpaceIconImages.label(choice))

@@ -11,6 +11,9 @@ extension BrowserWindowController {
         let leading = view.leadingAnchor.constraint(equalTo: root.leadingAnchor)
         let width = view.widthAnchor.constraint(equalToConstant: 417)
         width.priority = NSLayoutConstraint.Priority(999)
+        library.widthConstraint = width
+        library.spacesWidthConstraint = view.widthAnchor.constraint(equalTo: root.widthAnchor, constant: -56)
+        library.spacesWidthConstraint?.priority = NSLayoutConstraint.Priority(999)
         NSLayoutConstraint.activate([
             leading, width,
             view.widthAnchor.constraint(lessThanOrEqualTo: root.widthAnchor, constant: -56),
@@ -62,6 +65,21 @@ extension BrowserWindowController {
             spacesView.leadingAnchor.constraint(equalTo: view.body.leadingAnchor), spacesView.trailingAnchor.constraint(equalTo: view.body.trailingAnchor),
             spacesView.topAnchor.constraint(equalTo: view.body.topAnchor), spacesView.bottomAnchor.constraint(equalTo: view.body.bottomAnchor)
         ])
+        let mediaView = library.mediaView
+        mediaView.translatesAutoresizingMaskIntoConstraints = false
+        mediaView.isHidden = true
+        view.body.addSubview(mediaView)
+        NSLayoutConstraint.activate([
+            mediaView.leadingAnchor.constraint(equalTo: view.body.leadingAnchor), mediaView.trailingAnchor.constraint(equalTo: view.body.trailingAnchor),
+            mediaView.topAnchor.constraint(equalTo: view.body.topAnchor), mediaView.bottomAnchor.constraint(equalTo: view.body.bottomAnchor)
+        ])
+        mediaView.onBack = view.onBack
+        mediaView.onAction = { [weak self] context, action in
+            guard let self, acceptsCommands, library.isPresented, library.category == .media,
+                  library.view.acceptsLibraryInput, session.activeProfileID == context.key.profileID,
+                  library.mediaView.rows.contains(where: { $0.snapshot.context == context }) else { return }
+            downloads.perform(action, in: context)
+        }
         spacesView.onBack = view.onBack
         spacesView.onOpen = { [weak self] target, catalog, ticket in
             guard let self, acceptsCommands, library.isPresented, library.category == .spaces,
@@ -198,8 +216,8 @@ extension BrowserWindowController {
         case .downloads: downloadsPane.searchField
         case .archive: archive.view.searchField
         case .history: library.historyView.searchField
-        case .spaces: library.spacesView.searchField
-        case .media: library.view.emptySearch
+        case .spaces: library.spacesView
+        case .media: library.mediaView.searchField
         }
     }
 
@@ -232,7 +250,9 @@ extension BrowserWindowController {
         deactivateArchiveCategory()
         hideDownloads()
         library.history.stop()
+        library.spacesTask?.cancel(); library.spacesTask = nil
         library.spacesView.clear()
+        library.mediaView.clear()
     }
 
     func renderLibrary() {
@@ -245,17 +265,32 @@ extension BrowserWindowController {
         }
         guard let profile = session.activeProfileID else { hideLibrary(); return }
         library.displayedProfileID = profile
+        windowShell.libraryPreservesDocumentWidth = library.category == .spaces
+        library.widthConstraint?.isActive = library.category != .spaces
+        library.spacesWidthConstraint?.isActive = library.category == .spaces
         library.view.select(library.category, theme: windowShell.theme)
         library.historyView.isHidden = library.category != .history
         library.spacesView.isHidden = library.category != .spaces
+        library.mediaView.isHidden = library.category != .media
+        if library.category == .media { renderLibraryMedia() } else { library.mediaView.clear() }
         if library.category == .spaces, let catalog = session.catalog {
             var icons: [SpaceID: BrowserSpaceIcon] = [:]
             for space in catalog.spaces {
                 if let icon = settingsPreferences?.runtime.document.space(space.id).iconSelection { icons[space.id] = icon }
             }
             library.spacesView.render(catalog: catalog, activeSpaceID: session.snapshot?.activeSpaceID,
-                sourceProfile: profile, icons: icons, presentation: library.presentationID)
-        } else { library.spacesView.clear() }
+                sourceProfile: profile, icons: icons, presentation: library.presentationID,
+                themes: Dictionary(uniqueKeysWithValues: catalog.spaces.map { ($0.id, resolvedSpaceTheme(for: $0.id)) }))
+            let ticket = library.presentationID
+            library.spacesTask?.cancel()
+            library.spacesTask = Task { [weak self] in
+                guard let self else { return }
+                let document = await session.spaceSwipeDocument()
+                guard !Task.isCancelled, library.isPresented, library.category == .spaces,
+                      library.presentationID == ticket, session.activeProfileID == profile, session.catalog == catalog else { return }
+                library.spacesView.renderContents(document: document, windowID: session.snapshot?.id, icon: sidebar.previewIcon)
+            }
+        } else { library.spacesTask?.cancel(); library.spacesTask = nil; library.spacesView.clear() }
         if library.category == .archive {
             hideDownloads()
             archive.isPresented = true
@@ -273,6 +308,11 @@ extension BrowserWindowController {
         }
         if library.category == .history { library.history.selectProfile(profile) }
         else { library.history.stop() }
+    }
+
+    func renderLibraryMedia() {
+        guard library.isPresented, library.category == .media, let profile = session.activeProfileID else { return }
+        library.mediaView.render(downloads.snapshots(profileID: profile), profile: profile)
     }
 
     private func deleteLibraryHistory(_ deletion: BrowserHistoryDeletion) {
