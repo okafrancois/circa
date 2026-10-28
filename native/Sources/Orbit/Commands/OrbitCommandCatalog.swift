@@ -89,6 +89,7 @@ enum BrowserCommandID: String, CaseIterable, Sendable {
     case newFolder
     case archiveTab
     case manageExtensions
+    case openPasswordManager
     case quitOrbit
     case minimizeWindow
     case preferences
@@ -448,6 +449,8 @@ enum OrbitCommandCatalog {
     ]
 
     static let supplemental: [BrowserCommandDefinition] = [
+        .init(id: .openPasswordManager, title: "Manage Passwords", menu: "Command Bar", shortcuts: [],
+              scope: .browser, requirement: .window, owner: "PASSWORDS", sources: ["Browser command"]),
         .init(id: .selectTab1, title: "Select Tab 1", menu: "Tabs", shortcuts: [.init(key: "1", modifiers: .init(rawValue: 1048576))], scope: .browser, requirement: .window, owner: "ORG", sources: ["Browser command"]),
         .init(id: .selectSpace1, title: "Select Space 1", menu: "Tabs", shortcuts: [.init(key: "1", modifiers: .init(rawValue: 262144))], scope: .browser, requirement: .window, owner: "ORG", sources: ["Browser command"]),
         .init(id: .selectTab2, title: "Select Tab 2", menu: "Tabs", shortcuts: [.init(key: "2", modifiers: .init(rawValue: 1048576))], scope: .browser, requirement: .window, owner: "ORG", sources: ["Browser command"]),

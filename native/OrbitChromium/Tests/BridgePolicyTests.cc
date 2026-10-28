@@ -111,7 +111,7 @@ void NetworkSwitchesPerPolicy() {
     Check(HasSwitch(policy, "disable-sync"), "sync stays off in every mode");
     Check(HasSwitch(policy, "no-first-run") && HasSwitch(policy, "no-default-browser-check"), "no first-run prompt");
     Check(HasSwitch(policy, "disable-breakpad"), "no crash reporter");
-    Check(HasSwitch(policy, "password-store", "basic"), "basic password store");
+    Check(!HasSwitch(policy, "password-store"), "platform encryption provider selects the store");
     Check(DisablesFeature(policy, "AutofillServerCommunication"), "no autofill crowdsourcing upload");
     Check(!HasSwitch(policy, "variations-server-url") && !HasSwitch(policy, "enable-crash-reporter"),
           "no variations server or crash upload");

@@ -54,10 +54,11 @@ final class OrbitSmokeDriver: OrbitLaunchHooks {
         ["--disable-features=MacAppCodeSignClone"] +
             (arguments.contains("--orbit-smoke-site-data") ? ["--use-fake-device-for-media-stream"] : [])
     }
-    private var visibleUpdateSmoke: Bool {
-        arguments.contains("--orbit-smoke-extension-update") && arguments.contains("--orbit-smoke-extension-update-manual")
+    private var visibleSmoke: Bool {
+        (arguments.contains("--orbit-smoke-extension-update") && arguments.contains("--orbit-smoke-extension-update-manual"))
+            || arguments.contains("--orbit-smoke-passwords")
     }
-    var hiddenApplication: Bool { !visibleUpdateSmoke }
+    var hiddenApplication: Bool { !visibleSmoke }
 
     // MARK: Launch hooks
 
@@ -100,7 +101,7 @@ final class OrbitSmokeDriver: OrbitLaunchHooks {
             self?.record("hidden.violation", "failed", ["kind": kind, "detail": detail.description])
             self?.finish(aborted: true)
         }
-        if !visibleUpdateSmoke { HiddenGuard.shared.install() }
+        if !visibleSmoke { HiddenGuard.shared.install() }
         // The witness and the runner end a run with SIGTERM: finish through the real termination.
         signal(SIGTERM, SIG_IGN)
         let source = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .main)
@@ -111,7 +112,7 @@ final class OrbitSmokeDriver: OrbitLaunchHooks {
     }
 
     func runtimeDidBecomeReady(_ configuration: OrbitProductConfiguration) {
-        if !visibleUpdateSmoke { HiddenGuard.shared.startMonitoring() }
+        if !visibleSmoke { HiddenGuard.shared.startMonitoring() }
         ChromiumRuntime.shared.trace = { name, fields in
             MainActor.assumeIsolated { OrbitSmokeDriver.shared.event("runtime-" + name, fields) }
         }
@@ -145,8 +146,8 @@ final class OrbitSmokeDriver: OrbitLaunchHooks {
         // Hidden-mode audit in the laboratory's vocabulary (scripts/orbit-chromium-lab.py verdict).
         let guardSummary = HiddenGuard.shared
         let visibleWindows = NSApp.windows.filter { $0.isVisible || $0.occlusionState.contains(.visible) }.count
-        if visibleUpdateSmoke {
-            check("update.visible-window", visibleWindows > 0, ["visibleWindows": visibleWindows])
+        if visibleSmoke {
+            check(arguments.contains("--orbit-smoke-passwords") ? "passwords.visible-window" : "update.visible-window", visibleWindows > 0, ["visibleWindows": visibleWindows])
         } else {
             check("hidden.monitor", guardSummary.ticks > 0 && guardSummary.violations.isEmpty,
                   ["ticks": guardSummary.ticks, "violations": guardSummary.violations.count])
@@ -301,7 +302,8 @@ final class OrbitSmokeDriver: OrbitLaunchHooks {
         if phase == .fresh && !arguments.contains("--orbit-smoke-engine-r5") && !arguments.contains("--orbit-smoke-extension-only")
             && !arguments.contains("--orbit-smoke-relaunch") && !arguments.contains("--orbit-smoke-private-domain")
             && !arguments.contains("--orbit-smoke-profiles") && !arguments.contains("--orbit-smoke-site-data")
-            && !arguments.contains("--orbit-smoke-space-profile") && !arguments.contains("--orbit-smoke-archive-auto") {
+            && !arguments.contains("--orbit-smoke-space-profile") && !arguments.contains("--orbit-smoke-archive-auto")
+            && !arguments.contains("--orbit-smoke-passwords") {
             if arguments.contains("--orbit-smoke-isolated-application") {
                 // Supplemental lane only: the original conformance result remains separate.
                 // No application assertion below is omitted or relaxed.
@@ -352,6 +354,11 @@ final class OrbitSmokeDriver: OrbitLaunchHooks {
             return
         }
         check("app.window", true, ["windows": application.windows.windows.count, "restored": restored.count])
+        if arguments.contains("--orbit-smoke-passwords") {
+            await OrbitPasswordScenario.run(application: application, environment: environment, window: first, fixture: fixture, root: runRoot, record: record)
+            finish(aborted: false)
+            return
+        }
         if arguments.contains("--orbit-smoke-archive-auto") {
             await OrbitArchiveAutoScenario.run(engine: engine, fixture: fixture, root: runRoot, record: record)
             finish(aborted: false)

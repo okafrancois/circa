@@ -301,7 +301,6 @@ inline std::vector<BrowserSwitch> BrowserSwitches(NetworkPolicy policy) {
   }
   for (const char* name : {"no-first-run", "no-default-browser-check", "disable-sync", "disable-breakpad"})
     switches.push_back({name, ""});
-  switches.push_back({"password-store", "basic"});
   for (const auto& item : EssentialSurfaceSwitches()) switches.push_back(item);
   return switches;
 }
