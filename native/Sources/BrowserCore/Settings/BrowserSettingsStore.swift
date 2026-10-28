@@ -159,6 +159,7 @@ public struct BrowserSettingsDocument: Codable, Equatable, Sendable {
     public var interaction = BrowserInteractionPreferences()
     public var memorySaver: BrowserMemorySaverSetting = .fourHours
     public var enablesBoostsOnWebsites = true
+    public var hasSeenBoostsIntroduction = false
     public var opensExternalLinksInQuickWindow = true {
         didSet {
             // Keep the legacy preference and ATC's destination consistent before encoding.
@@ -176,7 +177,7 @@ public struct BrowserSettingsDocument: Codable, Equatable, Sendable {
     public var spaces: [SpaceID: BrowserSpaceSettings] = [:]
     public init() {}
     private enum CodingKeys: String, CodingKey {
-        case enablesBoostsOnWebsites, interaction, memorySaver, linkRouting, secondaryAppearanceDraft, version, reducedMotion, profiles, spaces, opensExternalLinksInQuickWindow, lastActiveWindowID, lastActiveSpaceID
+        case hasSeenBoostsIntroduction, enablesBoostsOnWebsites, interaction, memorySaver, linkRouting, secondaryAppearanceDraft, version, reducedMotion, profiles, spaces, opensExternalLinksInQuickWindow, lastActiveWindowID, lastActiveSpaceID
     }
     public init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
@@ -185,6 +186,7 @@ public struct BrowserSettingsDocument: Codable, Equatable, Sendable {
         reducedMotion = try values.decode(BrowserReducedMotionSetting.self, forKey: .reducedMotion)
         interaction = try values.decodeIfPresent(BrowserInteractionPreferences.self, forKey: .interaction) ?? .init()
         memorySaver = (try? values.decode(BrowserMemorySaverSetting.self, forKey: .memorySaver)) ?? .fourHours
+        hasSeenBoostsIntroduction = try values.decodeIfPresent(Bool.self, forKey: .hasSeenBoostsIntroduction) ?? false
         enablesBoostsOnWebsites = try values.decodeIfPresent(Bool.self, forKey: .enablesBoostsOnWebsites) ?? true
         profiles = try values.decode([ProfileID: BrowserProfileSettings].self, forKey: .profiles)
         spaces = try values.decode([SpaceID: BrowserSpaceSettings].self, forKey: .spaces)
@@ -327,6 +329,12 @@ public actor BrowserSettingsStore {
     public func setMemorySaver(_ setting: BrowserMemorySaverSetting) throws {
         var next = document
         next.memorySaver = setting
+        try publish(next)
+    }
+
+    public func markBoostsIntroductionSeen() throws {
+        var next = document
+        next.hasSeenBoostsIntroduction = true
         try publish(next)
     }
 

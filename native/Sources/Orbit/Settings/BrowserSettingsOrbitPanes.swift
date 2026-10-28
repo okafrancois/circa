@@ -293,6 +293,12 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
     private var advanced: some View {
         Group {
             panel {
+                Toggle(BrowserSettingsRuntime.enablesBoostsTitle, isOn: Binding(
+                    get: { runtime.document.enablesBoostsOnWebsites },
+                    set: { value in model.perform { try await runtime.setEnablesBoostsOnWebsites(value) } }
+                )).padding(12).accessibilityIdentifier("settings-enables-boosts")
+            }
+            panel {
                 settingRow("Put inactive tabs to sleep after") {
                     Picker(uiText("Memory Saver"), selection: Binding(get: { runtime.document.memorySaver }, set: { value in
                         model.perform { try await model.setMemorySaver(value) }

@@ -10,7 +10,7 @@ extension NativeWebKitTests {
 struct LibraryPanelTests {
     @Test("The rail follows Orbit destinations and leaves History on its menu command")
     func destinations() {
-        #expect(BrowserLibraryCategory.railCategories == [.media, .downloads, .spaces, .archive])
+        #expect(BrowserLibraryCategory.railCategories == [.media, .downloads, .spaces, .boosts, .archive])
         let view = BrowserLibraryView()
         view.select(.downloads, theme: .lavender)
         #expect(view.categoryButtons[.downloads]?.state == .on)
@@ -24,10 +24,10 @@ struct LibraryPanelTests {
 
     @Test("Easels is absent from the rail and every available destination")
     func easelsIsRemoved() {
-        #expect(BrowserLibraryCategory.allCases.count == 5)
-        #expect(BrowserLibraryCategory(rawValue: 5) == nil)
+        #expect(BrowserLibraryCategory.allCases.count == 6)
+        #expect(BrowserLibraryCategory(rawValue: 6) == nil)
         let view = BrowserLibraryView()
-        #expect(view.categoryButtons.count == 4)
+        #expect(view.categoryButtons.count == 5)
         #expect(view.categoryButtons.values.allSatisfy { $0.accessibilityIdentifier() != "library-category-easels" })
         view.select(.media, theme: .default)
         #expect(BrowserLibraryMediaView().searchField.placeholderString == uiText("Search Media…"))
@@ -87,13 +87,13 @@ struct LibraryPanelTests {
             let frames = BrowserLibraryCategory.railCategories.compactMap { category in
                 view.categoryButtons[category].map { view.convert($0.bounds, from: $0) }
             }.sorted { $0.minY < $1.minY }
-            #expect(frames.count == 4)
+            #expect(frames.count == 5)
             for (lower, upper) in zip(frames, frames.dropFirst()) { #expect(lower.maxY <= upper.minY + 0.5) }
             if height == 780 {
                 let first = try #require(frames.first), last = try #require(frames.last)
                 // Orbit's six-entry pitch (100 pt over its 580 pt span), group centred in that span.
-                #expect(abs(first.minY - 205) < 0.5, "Rail frames: \(frames)")
-                #expect(abs(last.maxY - 585) < 0.5)
+                #expect(abs(first.minY - 155) < 0.5, "Rail frames: \(frames)")
+                #expect(abs(last.maxY - 635) < 0.5)
                 for (lower, upper) in zip(frames, frames.dropFirst()) { #expect(abs(upper.minY - lower.minY - 100) < 0.5) }
                 #expect(frames.allSatisfy { abs($0.height - 80) < 0.5 && abs($0.width - 97) < 0.5 })
             }

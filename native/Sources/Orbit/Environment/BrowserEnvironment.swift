@@ -135,7 +135,9 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
         environment.shortcutPreferences = BrowserShortcutPreferences(destination: sessionFile.appendingPathExtension("shortcuts.json"))
         environment.sessionFile = sessionFile
         environment.boosts = BrowserBoostsRuntime(directory: sessionFile.deletingLastPathComponent()
-            .appendingPathComponent("Boosts", isDirectory: true))
+            .appendingPathComponent("Boosts", isDirectory: true),
+            hostOverride: Bundle.main.object(forInfoDictionaryKey: "OrbitSyntheticBundle") as? Bool == true
+                && ProcessInfo.processInfo.environment["ORBIT_SYNTHETIC_BOOST_HOST"] == "1" ? BrowserFakeBoostHost() : nil)
         environment.favoriteIcons = FavoriteIconStore(directory: sessionFile.deletingLastPathComponent()
             .appendingPathComponent("Favorite Icons", isDirectory: true))
         if let effectiveDocument, let icons = environment.favoriteIcons {
@@ -159,7 +161,7 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
         // Failure remains a visible, retryable cleanup job; it never resurrects the retired model.
         if !pendingRemovals.isEmpty { try? await environment.retrySettingsProfileRemovals() }
         environment.lastBoostsEnabled = environment.settings.document.enablesBoostsOnWebsites
-        if engine.capabilities.contains(.boosts) {
+        if environment.boosts.hostOverride != nil || engine.capabilities.contains(.boosts) {
             _ = try await environment.initialContext.value
             for profile in await store.catalogSnapshot().profiles {
                 do {
@@ -269,6 +271,7 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
         controller.onDeleteSpace = { [weak self] id, profile in try await self?.removeSpaceFromSettings(id, expectedProfileID: profile) }
         controller.themeEditors = themeEditors
         controller.settingsPreferences = BrowserWindowSettings(runtime: settings)
+        controller.boostsRuntime = boosts
         controller.sidebar.resolveSpaceIcon = { [weak settings] id in
             settings?.document.space(id).iconSelection ?? .none
         }

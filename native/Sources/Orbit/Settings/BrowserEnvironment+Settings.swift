@@ -7,7 +7,7 @@ extension BrowserEnvironment {
         let enabled = settings.document.enablesBoostsOnWebsites
         if enabled != lastBoostsEnabled {
             lastBoostsEnabled = enabled
-            if engine.capabilities.contains(.boosts) {
+            if boosts.hostOverride != nil || engine.capabilities.contains(.boosts) {
                 Task { [weak self] in
                     guard let self else { return }
                     for profile in await store.catalogSnapshot().profiles {

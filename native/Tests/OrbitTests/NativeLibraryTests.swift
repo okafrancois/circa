@@ -101,7 +101,7 @@ struct NativeLibraryTests {
             #expect(controller.library.category == category)
         }
         #expect(OrbitCommandCatalog.declarations.first { $0.command == .viewHistory }?.key == "y")
-        #expect(BrowserLibraryCategory.allCases.count == 5)
+        #expect(BrowserLibraryCategory.allCases.count == 6)
         #expect(controller.window?.isVisible == false)
     }
 

@@ -173,6 +173,8 @@ final class BrowserLibraryPresentation {
     let historyView = BrowserLibraryHistoryView()
     let spacesView = BrowserLibrarySpacesView()
     let mediaView = BrowserLibraryMediaView()
+    let boostsView = BrowserLibraryBoostsView()
+    var boostsTask: Task<Void, Never>?
     var spacesTask: Task<Void, Never>?
     var presentationID = UUID() { didSet { if presentationID != oldValue { revokeSelections() } } }
     private var selections: [UUID: CatalogSelectionAdmission] = [:]

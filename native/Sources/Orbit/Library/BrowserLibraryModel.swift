@@ -3,7 +3,7 @@ import Foundation
 
 /// Orbit Library destinations. History remains available from its separate menu command.
 enum BrowserLibraryCategory: Int, CaseIterable {
-    case downloads, history, archive, spaces, media
+    case downloads, history, archive, spaces, media, boosts
     var title: String {
         switch self {
         case .downloads: return libraryText("downloads", "Downloads")
@@ -11,12 +11,14 @@ enum BrowserLibraryCategory: Int, CaseIterable {
         case .archive: return libraryText("archive", "Archived Tabs")
         case .spaces: return libraryText("spaces", "Spaces")
         case .media: return uiText("Media")
+        case .boosts: return uiText("Boosts")
         }
     }
-    static let railCategories: [Self] = [.media, .downloads, .spaces, .archive]
+    static let railCategories: [Self] = [.media, .downloads, .spaces, .boosts, .archive]
     var symbol: String {
         switch self {
         case .media: "photo.on.rectangle"
+        case .boosts: "paintbrush.pointed"
         case .downloads: "arrow.down.circle"
         case .spaces: "rectangle.on.rectangle"
         case .archive: "archivebox"

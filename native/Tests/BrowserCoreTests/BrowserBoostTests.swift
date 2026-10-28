@@ -262,7 +262,7 @@ struct BrowserBoostTests {
         #expect(compiled.css.contains(":not(i):not(i *):not(.material-symbols-outlined)"))
         #expect(compiled.css.contains(":not(.material-icons):not(.material-icons *)"))
         #expect(compiled.css.contains("text-transform: uppercase !important;"))
-        #expect(compiled.css.contains(":root { font-size: 125.0% !important; }"))
+        #expect(compiled.css.contains(":root { zoom: 1.25 !important; }"))
         #expect(compiled.css.hasSuffix(item.content.customCSS))
         #expect(!compiled.css.contains("filter:"))
         #expect(compiled.isolatedJavaScript == nil)

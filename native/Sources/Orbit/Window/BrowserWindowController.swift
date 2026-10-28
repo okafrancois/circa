@@ -81,6 +81,10 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
 
     let archive = BrowserArchivePresentation()
     let library = BrowserLibraryPresentation()
+    var boostsRuntime: BrowserBoostsRuntime?
+    var boostEditor: BrowserBoostEditorController?
+    var boostTask: Task<Void, Never>?
+    var boostsIntroduced = false
     var bookmarkTransfer: BrowserBookmarkTransferController<Engine>?
 
     // MARK: Downloads
@@ -272,6 +276,9 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
         passwordPrompt.close()
         developerTintSurface?.setPageTintObservationEnabled(false)
         developerTintSurface = nil
+        boostTask?.cancel()
+        boostEditor?.close()
+        library.boostsTask?.cancel()
         capture.cancel()
         tabSuspension.close()
         extensionControls.close()
@@ -302,6 +309,7 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
     /// Termination after the session was saved: releases every live document of this window
     /// without touching the model, so the saved session stays exactly as written.
     func retireForTermination() {
+        boostTask?.cancel(); boostEditor?.close(); library.boostsTask?.cancel()
         library.isPresented = false
         library.drawer.finishClosing()
         sidebar.spaceSwipe.detach()
@@ -423,6 +431,9 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
         refreshPageZoom()
         renderDownloads()
         renderArchive()
+        if let boostEditor, boostEditor.session.store.profileID != session.activeProfileID {
+            boostEditor.close(); self.boostEditor = nil
+        }
         renderLibrary()
         let pillSelectionChanged = displayedSpaceID != nil && displayedSpaceID != session.snapshot?.activeSpaceID
         if pillSelectionChanged { sidebar.addressContainer.beginSelectionUpdate() }
