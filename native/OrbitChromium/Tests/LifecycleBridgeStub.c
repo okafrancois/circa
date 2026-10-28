@@ -69,6 +69,7 @@ int32_t ACRNavigate(uint64_t token, const char *url) { return 1; }
 int32_t ACRGoBack(uint64_t token) { return 0; }
 int32_t ACRGoForward(uint64_t token) { return 0; }
 int32_t ACRReload(uint64_t token) { return 1; }
+int32_t ACRReloadIgnoringCache(uint64_t token) { return 1; }
 int32_t ACRStopLoad(uint64_t token) { return 1; }
 int32_t ACRSetFocus(uint64_t token, int32_t focus) { return 0; }
 int32_t ACRNotifyHostChanged(uint64_t token, int32_t hidden) { return 1; }
@@ -313,3 +314,6 @@ void ACRStubEmitFavicon(uint64_t surface, uint64_t profile, int32_t browser, uin
 
 int32_t ACRBrowserStateAvailable(void) { return 0; }
 int32_t ACRExtensionActionSnapshot(uint64_t token, char* json, uint32_t capacity) { return -1; }
+
+int32_t ACRDiscardTab(uint64_t token) { return 0; }
+int32_t ACRRestoreDiscardedTab(uint64_t token) { return 0; }

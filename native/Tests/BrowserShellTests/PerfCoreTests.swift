@@ -7,6 +7,9 @@ import Testing
 private final class PerfSurface: BrowserSurface {
     let currentURL: URL?
     var disposalCount = 0
+    var suspension: BrowserSurfaceSuspensionResult = .unsupported
+    var suspensionCount = 0
+    func suspendInPlace() -> BrowserSurfaceSuspensionResult { suspensionCount += 1; return suspension }
     init(_ url: URL) { currentURL = url }
     func dispose() { disposalCount += 1 }
 }
@@ -81,6 +84,29 @@ struct PerfCoreTests {
         await session.waitForQueuedCommands()
         session.close()
         await session.waitForPendingCommands()
+    }
+
+    @Test("Native discard keeps ownership and a refusal never disposes history", arguments: [false, true])
+    func inPlaceSuspension(accepted: Bool) async throws {
+        let session = BrowserWindowSession(store: BrowserStore(), makeSurface: { _, url in PerfSurface(url) })
+        session.surfaceLoadingPolicy = .visibleOnly
+        session.openTab(url: URL(string: "https://example.test/history")!)
+        session.openTab(url: URL(string: "https://example.test/selected")!)
+        await session.waitForQueuedCommands()
+        let tabs = try #require(session.snapshot?.tabs)
+        let first = try #require(session.surface(for: tabs[0].occurrenceID))
+        first.suspension = accepted ? .suspended : .refused
+        #expect(session.suspendSurface(first) == accepted)
+        #expect(first.suspensionCount == 1 && first.disposalCount == 0)
+        #expect(session.surface(for: tabs[0].occurrenceID) === first)
+        session.selectOccurrence(tabs[0].occurrenceID)
+        await session.waitForQueuedCommands()
+        #expect(session.selectedSurface === first)
+        #expect(!session.suspendSurface(first))
+        #expect(first.suspensionCount == 1)
+        session.close()
+        await session.waitForPendingCommands()
+        #expect(first.disposalCount == 1)
     }
 
     @Test("Every visible Split pane is created and protected from retirement")

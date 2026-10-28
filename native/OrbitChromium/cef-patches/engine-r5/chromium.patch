@@ -1,0 +1,910 @@
+diff --git a/chrome/browser/file_select_helper.cc b/chrome/browser/file_select_helper.cc
+index 227ace4086..4a17f899f6 100644
+--- a/chrome/browser/file_select_helper.cc
++++ b/chrome/browser/file_select_helper.cc
+@@ -21,6 +21,11 @@
+ #include "base/task/thread_pool.h"
+ #include "base/threading/hang_watcher.h"
+ #include "build/build_config.h"
++#include "cef/libcef/features/features.h"
++#if BUILDFLAG(ENABLE_CEF)
++#include "cef/libcef/browser/chrome/browser_delegate.h"
++#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
++#endif
+ #include "chrome/browser/browser_process.h"
+ #include "chrome/browser/enterprise/connectors/common.h"
+ #include "chrome/browser/platform_util.h"
+@@ -72,6 +77,19 @@ DEFINE_LOCAL_ELEMENT_IDENTIFIER_VALUE(kCancelButtonId);
+ 
+ namespace {
+ 
++// Only Orbit hosted tabs use the embedder's upload confirmation. Other windows
++// retain Chrome's tab-modal confirmation, even if their dialog host is absent.
++bool UsesOrbitUploadConfirmation(content::WebContents* web_contents) {
++#if BUILDFLAG(ENABLE_CEF)
++  auto* tab = tabs::TabInterface::MaybeGetFromContents(web_contents);
++  auto* window = tab ? tab->GetBrowserWindowInterface() : nullptr;
++  auto* delegate = window ? window->cef_delegate() : nullptr;
++  return delegate && delegate->UsesNativeHostedWindow();
++#else
++  return false;
++#endif
++}
++
+ void DeleteFiles(std::vector<base::FilePath> paths) {
+   for (auto& file_path : paths)
+     base::DeleteFile(file_path);
+@@ -264,6 +282,14 @@ void FileSelectHelper::OnListDone(int error) {
+   }
+ 
+   if (dialog_type_ == ui::SelectFileDialog::SELECT_UPLOAD_FOLDER) {
++    if (run_from_cef_ || UsesOrbitUploadConfirmation(web_contents_)) {
++      // Don't show the upload confirmation dialog when triggered via CEF
++      // (initially or recursively), or via Orbit's hosted dialog handler.
++      // CefFileDialogManager cancels hosted folder requests if the handler
++      // declines them. Orbit must confirm before continuing that callback.
++      PerformContentAnalysisIfNeeded(std::move(chooser_files));
++      return;
++    }
+     auto model = CreateConfirmationDialog(
+         entry->display_name_, std::move(chooser_files),
+         base::BindOnce(&FileSelectHelper::PerformContentAnalysisIfNeeded,
+@@ -526,31 +552,51 @@ FileSelectHelper::GetFileTypesFromAcceptType(
+   std::vector<base::FilePath::StringType>* extensions =
+       &file_type->extensions.back();
+ 
++  // Create individual filters for each accept type.
++  std::vector<std::vector<base::FilePath::StringType>> all_extensions;
++  std::vector<std::u16string> all_overrides;
++  std::vector<std::u16string> all_mimetypes;
++
+   // Find the corresponding extensions.
+   int valid_type_count = 0;
+   int description_id = 0;
++  std::string ascii_type;
+   for (const auto& accept_type : accept_types) {
++    std::vector<base::FilePath::StringType> current_extensions;
++    description_id = 0;
++    ascii_type.clear();
++
+     size_t old_extension_size = extensions->size();
+     if (accept_type[0] == '.') {
+       // If the type starts with a period it is assumed to be a file extension
+       // so we just have to add it to the list.
+       base::FilePath::StringType ext =
+           base::FilePath::FromUTF16Unsafe(accept_type).value();
+-      extensions->push_back(ext.substr(1));
++      current_extensions.push_back(ext.substr(1));
+     } else {
+       if (!base::IsStringASCII(accept_type))
+         continue;
+-      std::string ascii_type = base::UTF16ToASCII(accept_type);
++      ascii_type = base::UTF16ToASCII(accept_type);
+       if (ascii_type == "image/*")
+         description_id = IDS_IMAGE_FILES;
+       else if (ascii_type == "audio/*")
+         description_id = IDS_AUDIO_FILES;
+       else if (ascii_type == "video/*")
+         description_id = IDS_VIDEO_FILES;
+-
+-      net::GetExtensionsForMimeType(ascii_type, extensions);
++      net::GetExtensionsForMimeType(ascii_type, &current_extensions);
+     }
+ 
++    if (!current_extensions.empty()) {
++      all_extensions.push_back(current_extensions);
++      all_overrides.push_back(description_id != 0
++                                  ? l10n_util::GetStringUTF16(description_id)
++                                  : std::u16string());
++      all_mimetypes.push_back(ascii_type.empty() ? std::u16string()
++                                                 : accept_type);
++
++      extensions->insert(extensions->end(), current_extensions.begin(),
++                         current_extensions.end());
++    }
+     if (extensions->size() > old_extension_size)
+       valid_type_count++;
+   }
+@@ -566,13 +612,29 @@ FileSelectHelper::GetFileTypesFromAcceptType(
+   //    "ehtml,shtml,htm,html" for "text/html". On Windows, the select file
+   //    dialog uses the first extension in the list to form the description,
+   //    like "EHTML Files". This is not what we want.
+-  if (valid_type_count > 1 ||
+-      (valid_type_count == 1 && description_id == 0 && extensions->size() > 1))
++  if (valid_type_count > 1 || (valid_type_count == 1 && description_id == 0 &&
++                               extensions->size() > 1)) {
+     description_id = IDS_CUSTOM_FILES;
++    ascii_type.clear();
++  }
++
++  file_type->extension_description_overrides.push_back(
++      description_id != 0 ? l10n_util::GetStringUTF16(description_id)
++                          : std::u16string());
++  file_type->extension_mimetypes.push_back(
++      ascii_type.empty() ? std::u16string() : base::ASCIIToUTF16(ascii_type));
+ 
+-  if (description_id) {
+-    file_type->extension_description_overrides.push_back(
+-        l10n_util::GetStringUTF16(description_id));
++  if (all_extensions.size() > 1) {
++    // Add filters for the specific accept types after the combined filter so
++    // that the combined filter is selected by default.
++    file_type->extensions.insert(file_type->extensions.end(),
++                                 all_extensions.begin(), all_extensions.end());
++    file_type->extension_description_overrides.insert(
++        file_type->extension_description_overrides.end(), all_overrides.begin(),
++        all_overrides.end());
++    file_type->extension_mimetypes.insert(file_type->extension_mimetypes.end(),
++                                          all_mimetypes.begin(),
++                                          all_mimetypes.end());
+   }
+ 
+   return file_type;
+@@ -582,7 +644,8 @@ FileSelectHelper::GetFileTypesFromAcceptType(
+ void FileSelectHelper::RunFileChooser(
+     content::RenderFrameHost* render_frame_host,
+     scoped_refptr<content::FileSelectListener> listener,
+-    const FileChooserParams& params) {
++    const FileChooserParams& params,
++    bool run_from_cef) {
+   Profile* profile = Profile::FromBrowserContext(
+       render_frame_host->GetProcess()->GetBrowserContext());
+ 
+@@ -590,6 +653,7 @@ void FileSelectHelper::RunFileChooser(
+   // message.
+   scoped_refptr<FileSelectHelper> file_select_helper(
+       new FileSelectHelper(profile));
++  file_select_helper->run_from_cef_ = run_from_cef;
+   file_select_helper->RunFileChooser(render_frame_host, std::move(listener),
+                                      params.Clone());
+ }
+@@ -728,8 +792,11 @@ void FileSelectHelper::RunFileChooserOnUIThread(
+       NOTREACHED();
+   }
+ 
++  auto native_view = web_contents_->GetNativeView();
++  // |native_view| will be nullptr with CEF windowless rendering.
+   gfx::NativeWindow owning_window =
+-      platform_util::GetTopLevel(web_contents_->GetNativeView());
++      native_view ? platform_util::GetTopLevel(native_view)
++                  : gfx::NativeWindow();
+ 
+ #if BUILDFLAG(IS_ANDROID)
+   select_file_dialog_->SetAcceptTypes(params->accept_types);
+diff --git a/chrome/browser/ui/browser_window/internal/browser_window_features.cc b/chrome/browser/ui/browser_window/internal/browser_window_features.cc
+index f51b071375..6f4863370d 100644
+--- a/chrome/browser/ui/browser_window/internal/browser_window_features.cc
++++ b/chrome/browser/ui/browser_window/internal/browser_window_features.cc
+@@ -12,6 +12,7 @@
+ #include "base/memory/ptr_util.h"
+ #include "base/metrics/histogram_functions.h"
+ #include "base/no_destructor.h"
++#include "cef/libcef/features/features.h"
+ #include "chrome/browser/actor/ui/actor_border_view_controller.h"
+ #include "chrome/browser/actor/ui/actor_ui_window_controller.h"
+ #include "chrome/browser/autocomplete/aim_eligibility_service_factory.h"
+@@ -246,6 +247,17 @@
+ BrowserWindowFeatures::BrowserWindowFeatures() = default;
+ BrowserWindowFeatures::~BrowserWindowFeatures() = default;
+ 
++// static
++bool BrowserWindowFeatures::IsNormalBrowser(
++    const BrowserWindowInterface* browser) {
++  // CEF normal browsers have TYPE_POPUP.
++  if (browser->GetType() == BrowserWindowInterface::Type::TYPE_POPUP &&
++      browser->cef_delegate()) {
++    return true;
++  }
++  return browser->GetType() == BrowserWindowInterface::Type::TYPE_NORMAL;
++}
++
+ void BrowserWindowFeatures::Init(BrowserWindowInterface* browser) {
+   // This is used only for the controllers which will be created on demand
+   // later.
+@@ -318,8 +330,8 @@ void BrowserWindowFeatures::Init(BrowserWindowInterface* browser) {
+           *browser, *browser, *browser->GetTabStripModel());
+   window_feature_controller_ =
+       GetUserDataFactory().CreateInstance<WindowFeatureController>(
+-          *browser, fullscreen_controller_.get(), app_browser_controller_.get(),
+-          browser->GetType(),
++          *browser, browser, fullscreen_controller_.get(),
++          app_browser_controller_.get(), browser->GetType(),
+           BrowserInitState::From(browser)
+               ->browser_window_create_params()
+               .is_trusted_source,
+@@ -688,6 +700,9 @@ void BrowserWindowFeatures::InitPostWindowConstruction(
+   // Foundational state used throughout this function. Computed/assigned early
+   // so the alphabetical sections below can rely on them.
+   Profile* const profile = browser_->GetProfile();
++
++  const bool supports_toolbar = IsNormalBrowser(browser);
++
+   BrowserView* const browser_view =
+       BrowserView::GetBrowserViewForBrowser(browser);
+   WebUIBrowserWindow* const webui_browser_window =
+@@ -750,18 +765,6 @@ void BrowserWindowFeatures::InitPostWindowConstruction(
+         std::make_unique<ContentsBorderController>(browser_view);
+   }
+ 
+-  if (browser_view) {
+-    if (browser_->GetType() == BrowserWindowInterface::Type::TYPE_NORMAL ||
+-        browser_->GetType() == BrowserWindowInterface::Type::TYPE_POPUP ||
+-        browser_view->GetIsWebAppType()) {
+-      data_protection_ui_controller_ =
+-          GetUserDataFactory()
+-              .CreateInstance<
+-                  enterprise_data_protection::DataProtectionUIController>(
+-                  *browser_view->browser(), browser_view);
+-    }
+-  }
+-
+ #if BUILDFLAG(ENABLE_EXTENSIONS) && (BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC))
+   if (browser_view) {
+     if (!browser_->GetProfile()->IsOffTheRecord()) {
+@@ -812,7 +815,12 @@ void BrowserWindowFeatures::InitPostWindowConstruction(
+ 
+   // Must be after exclusive_access_manager_,
+   // desktop_browser_window_capabilities_, and browser_ui_controller_.
++#if BUILDFLAG(ENABLE_CEF)
++  browser_web_contents_delegate_ =
++      cef::BrowserDelegate::CreateWebContentsDelegate(
++#else
+   browser_web_contents_delegate_ = std::make_unique<BrowserWebContentsDelegate>(
++#endif
+       browser, *exclusive_access_manager_, *browser_command_controller_,
+       *unload_controller_, app_browser_controller_.get(),
+       *BrowserWindow::FromBrowser(browser),
+@@ -925,7 +933,7 @@ void BrowserWindowFeatures::InitPostWindowConstruction(
+           *browser, browser, browser->GetTabStripModel(),
+           browser->GetSessionID(), browser->GetType());
+ 
+-  if (browser->GetType() == BrowserWindowInterface::Type::TYPE_NORMAL ||
++  if (supports_toolbar ||
+       browser->GetType() == BrowserWindowInterface::Type::TYPE_APP) {
+     toast_service_ =
+         GetUserDataFactory().CreateInstance<ToastService>(*browser, browser);
+@@ -969,7 +977,7 @@ void BrowserWindowFeatures::InitPostWindowConstruction(
+   // omnibox and a tab strip). By default most new features should be
+   // instantiated in this block (please keep this list ordered without taking
+   // into consideration buildflags, repeating buildflags is ok):
+-  if (browser->GetType() == BrowserWindowInterface::Type::TYPE_NORMAL) {
++  if (supports_toolbar) {
+     if (browser_view) {
+       if (base::FeatureList::IsEnabled(features::kGlicActorUi)) {
+         std::vector<std::pair<views::WebView*, ActorOverlayWebView*>>
+@@ -1134,6 +1142,40 @@ void BrowserWindowFeatures::InitPostBrowserViewConstruction(
+       browser_view);
+ }
+ 
++void BrowserWindowFeatures::InitPostTabModelConstruction(
++    BrowserWindowInterface* interface) {
++  auto* browser_view = BrowserView::GetBrowserViewForBrowser(interface);
++  if (!browser_view) {
++    // A BrowserWindow without BrowserView (Orbit hosted Chrome style, ENG-X2):
++    // no Views-based tab UI to initialize.
++    return;
++  }
++
++  auto* browser = browser_view->browser();
++  const bool supports_toolbar = IsNormalBrowser(browser);
++
++  if (supports_toolbar) {
++    if (!data_protection_ui_controller_) {
++      data_protection_ui_controller_ =
++          GetUserDataFactory()
++              .CreateInstance<
++                  enterprise_data_protection::DataProtectionUIController>(
++                  *browser, browser_view);
++    }
++  }
++}
++
++void BrowserWindowFeatures::OnWebContentsCreated(
++    BrowserWindowInterface* interface,
++    content::WebContents* target_contents) {
++#if BUILDFLAG(ENABLE_CEF)
++  // Also reached without a BrowserView (Orbit hosted Chrome style, ENG-X2).
++  if (auto cef_delegate = interface->cef_delegate()) {
++    cef_delegate->OnWebContentsCreated(target_contents);
++  }
++#endif
++}
++
+ void BrowserWindowFeatures::TearDownPreBrowserWindowDestruction() {
+   // Tear down in reverse order of construction: embedder first, then
+   // InitPostWindowConstruction, then Init. Within each section, members are
+diff --git a/chrome/browser/ui/navigator/BUILD.gn b/chrome/browser/ui/navigator/BUILD.gn
+index 582c183a4c..a8b8e4d649 100644
+--- a/chrome/browser/ui/navigator/BUILD.gn
++++ b/chrome/browser/ui/navigator/BUILD.gn
+@@ -6,6 +6,8 @@ import("//build/config/ui.gni")
+ 
+ source_set("navigator") {
+   public = [
++    # Orbit CEF fork: header-only creation intent read by CEF (EXT-OUTCOME-R2).
++    "orbit_navigate_intent.h",
+     "browser_navigator.h",
+     "browser_navigator_params.h",
+     "browser_navigator_params_utils.h",
+diff --git a/chrome/browser/ui/navigator/browser_navigator.cc b/chrome/browser/ui/navigator/browser_navigator.cc
+index b95a279fab..e42182714b 100644
+--- a/chrome/browser/ui/navigator/browser_navigator.cc
++++ b/chrome/browser/ui/navigator/browser_navigator.cc
+@@ -31,6 +31,8 @@
+ #include "chrome/browser/ui/browser_init_state.h"
+ #include "chrome/browser/ui/browser_ui_controller/browser_ui_controller.h"
+ #include "chrome/browser/ui/browser_window.h"
++#include "chrome/browser/ui/browser_window/public/browser_window_features.h"
++#include "chrome/browser/ui/navigator/orbit_navigate_intent.h"
+ #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+ #include "chrome/browser/ui/browser_window/public/create_browser_window.h"
+ #include "chrome/browser/ui/browser_window/public/profile_browser_collection.h"
+@@ -333,6 +335,12 @@ std::tuple<BrowserWindowInterface*, int> GetBrowserAndTabForDisposition(
+ 
+       browser_params.pip_options = pip_options;
+ 
++      browser_params.can_resize = pip_options->resizable;
++
++#if BUILDFLAG(ENABLE_CEF)
++      browser_params.opener = params.browser;
++#endif
++
+       const ui::BaseWindow* const browser_window = params.browser->GetWindow();
+       const gfx::NativeWindow native_window =
+           browser_window ? browser_window->GetNativeWindow()
+@@ -528,7 +536,35 @@ std::unique_ptr<content::WebContents> CreateTargetContents(
+   }
+ #endif
+ 
+-  return WebContents::Create(create_params);
++  std::unique_ptr<WebContents> target_contents =
++      WebContents::Create(create_params);
++
++#if BUILDFLAG(ENABLE_CEF)
++  // Orbit: the creation hook below runs before this tab has a URL, an index or
++  // an activation state; publish the request's own (NormalizeDisposition has
++  // already settled ADD_ACTIVE for tab dispositions).
++  const bool tab_disposition =
++      params.disposition == WindowOpenDisposition::NEW_FOREGROUND_TAB ||
++      params.disposition == WindowOpenDisposition::NEW_BACKGROUND_TAB ||
++      params.disposition == WindowOpenDisposition::SINGLETON_TAB ||
++      params.disposition == WindowOpenDisposition::SWITCH_TO_TAB ||
++      params.disposition == WindowOpenDisposition::NEW_SPLIT_VIEW;
++  orbit::NavigateIntent orbit_intent;
++  orbit_intent.browser = params.browser;
++  orbit_intent.contents = target_contents.get();
++  orbit_intent.url = url;
++  orbit_intent.tabstrip_index = params.tabstrip_index;
++  orbit_intent.active =
++      !tab_disposition
++          ? -1
++          : ((params.tabstrip_add_types & AddTabTypes::ADD_ACTIVE) ? 1 : 0);
++  orbit::ScopedNavigateIntent orbit_intent_scope(&orbit_intent);
++#endif
++
++  params.browser->GetFeatures().OnWebContentsCreated(params.browser,
++                                                     target_contents.get());
++
++  return target_contents;
+ }
+ 
+ }  // namespace
+@@ -963,6 +999,11 @@ base::WeakPtr<content::NavigationHandle> NavigateImpl(
+     // navigation happens in a different tab to the link click.
+     apps::SetLinkCapturingSourceDisposition(tab_to_insert->GetContents(),
+                                             params->disposition);
++
++    // With CEF the BrowserView is created before the TabModel, so we need a
++    // separate initialization of objects that depend on TabModel.
++    params->browser->GetFeatures().InitPostTabModelConstruction(
++        params->browser);
+   }
+ 
+   if (params->source_contents == contents_to_navigate_or_insert) {
+diff --git a/chrome/browser/ui/sad_tab_controller.cc b/chrome/browser/ui/sad_tab_controller.cc
+index 804a89c558..70e58bbd67 100644
+--- a/chrome/browser/ui/sad_tab_controller.cc
++++ b/chrome/browser/ui/sad_tab_controller.cc
+@@ -29,7 +29,12 @@ ContentsWebView* FindContentsWebView(content::WebContents* web_contents) {
+     return nullptr;
+   }
+   BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser);
+-  DCHECK(browser_view);
++  // Orbit (CEF hosted tabs): a logical Browser whose BrowserWindow is an AppKit
++  // OrbitBrowserWindow has no BrowserView; the embedder shows its own crashed
++  // page (CefRequestHandler::OnRenderProcessTerminated).
++  if (!browser_view) {
++    return nullptr;
++  }
+ 
+   for (auto* contents_view : browser_view->GetAllVisibleContentsWebViews()) {
+     if (contents_view->web_contents() == web_contents) {
+diff --git a/chrome/browser/ui/views/extensions/extension_popup.cc b/chrome/browser/ui/views/extensions/extension_popup.cc
+index f209fe05f1..975736cec5 100644
+--- a/chrome/browser/ui/views/extensions/extension_popup.cc
++++ b/chrome/browser/ui/views/extensions/extension_popup.cc
+@@ -80,7 +80,27 @@ void ExtensionPopup::ShowPopup(
+ #endif
+ }
+ 
++void ExtensionPopup::ShowPopupWithNativeParent(
++    BrowserWindowInterface* browser,
++    std::unique_ptr<extensions::ExtensionViewHost> host,
++    gfx::NativeView native_parent, const gfx::Rect& screen_anchor,
++    std::shared_ptr<NativeInvocation> invocation) {
++  if (!native_parent || !invocation || !invocation->IsValid()) return;
++  auto* popup = new ExtensionPopup(
++      browser, std::move(host), views::BubbleAnchor(),
++      views::BubbleBorder::TOP_LEFT, PopupShowAction::kShow,
++      ShowPopupCallback(), native_parent, screen_anchor, std::move(invocation));
++  if (popup->orbit_cancelled_) { delete popup; return; }
++  auto weak = popup->deferred_close_weak_ptr_factory_.GetWeakPtr();
++  views::BubbleDialogDelegateView::CreateBubble(popup);
++  if (!weak) return;
++  if (popup->CheckNativeInvocation() && popup->host_->has_loaded_once()) popup->ShowBubble();
++}
++
+ ExtensionPopup::~ExtensionPopup() {
++  orbit_destroying_ = true;
++  if (orbit_native_) CancelNativeInvocation();
++  if (observed_tab_strip_) observed_tab_strip_->RemoveObserver(this);
+   // The ExtensionPopup may close before it was ever shown. If so, indicate such
+   // through the callback.
+   if (shown_callback_) {
+@@ -103,6 +123,7 @@ gfx::Size ExtensionPopup::CalculatePreferredSize(
+ 
+ void ExtensionPopup::AddedToWidget() {
+   BubbleDialogDelegateView::AddedToWidget();
++  if (orbit_native_ && !CheckNativeInvocation()) return;
+ 
+   // Remove the Escape accelerator from DialogClientView so that key events for
+   // Escape are passed to the contained WebContents / ExtensionViewHost rather
+@@ -128,6 +149,12 @@ views::View* ExtensionPopup::GetInitiallyFocusedView() {
+ }
+ 
+ void ExtensionPopup::OnWidgetDestroying(views::Widget* widget) {
++  orbit_destroying_ = true;
++  if (orbit_native_) CancelNativeInvocation();
++  if (observed_tab_strip_) {
++    observed_tab_strip_->RemoveObserver(this);
++    observed_tab_strip_ = nullptr;
++  }
+   BubbleDialogDelegateView::OnWidgetDestroying(widget);
+   anchor_widget_observation_.Reset();
+   extension_registry_observation_.Reset();
+@@ -139,6 +166,7 @@ void ExtensionPopup::OnWidgetDestroying(views::Widget* widget) {
+ 
+ void ExtensionPopup::OnWidgetTreeActivated(views::Widget* root_widget,
+                                            views::Widget* active_widget) {
++  if (orbit_native_ && !CheckNativeInvocation()) return;
+   // The widget is shown asynchronously and may take a long time to appear, so
+   // only close if it's actually been shown.
+   if (!GetWidget()->IsVisible()) {
+@@ -159,8 +187,11 @@ void ExtensionPopup::OnWidgetTreeActivated(views::Widget* root_widget,
+       return;
+     }
+ 
+-    if (extensions::SecurityDialogTracker::GetInstance()
+-            ->BrowserHasVisibleSecurityDialogs(browser_, GetWidget())) {
++    auto weak = deferred_close_weak_ptr_factory_.GetWeakPtr();
++    const bool blocked = extensions::SecurityDialogTracker::GetInstance()
++        ->BrowserHasVisibleSecurityDialogs(browser_, GetWidget());
++    if (!weak || (orbit_native_ && !CheckNativeInvocation())) return;
++    if (blocked) {
+       // Defer to avoid reentrant focus and window activation changes in
+       // FocusController while the security dialog is in the middle of being
+       // shown.
+@@ -191,6 +222,7 @@ gfx::Size ExtensionPopup::GetMaxBounds() {
+   }
+ #endif
+ 
++  if (GetAnchor().IsNull()) return kMaxSize;
+   gfx::Size max_size = kMaxSize;
+   max_size.SetToMin(
+       BubbleDialogDelegate::GetMaxAvailableScreenSpaceToPlaceBubble(
+@@ -205,6 +237,7 @@ void ExtensionPopup::OnExtensionUnloaded(
+     content::BrowserContext* browser_context,
+     const extensions::Extension* extension,
+     extensions::UnloadedExtensionReason reason) {
++  if (orbit_native_ && !CheckNativeInvocation()) return;
+   CHECK(host_);
+   if (extension->id() == host_->extension_id()) {
+     // To ensure |extension_view_| cannot receive any messages that cause it to
+@@ -223,20 +256,23 @@ void ExtensionPopup::OnExtensionUnloaded(
+ 
+ void ExtensionPopup::DocumentOnLoadCompletedInPrimaryMainFrame() {
+   // Show when the content finishes loading and its width is computed.
++  auto weak = deferred_close_weak_ptr_factory_.GetWeakPtr();
+   ShowBubble();
+-  Observe(nullptr);
++  if (weak) Observe(nullptr);
+ }
+ 
+ void ExtensionPopup::OnTabStripModelChanged(
+     TabStripModel* tab_strip_model,
+     const TabStripModelChange& change,
+     const TabStripSelectionChange& selection) {
++  if (orbit_native_) { CancelNativeInvocation(); return; }
+   if (!tab_strip_model->empty() && selection.active_tab_changed()) {
+     CloseDeferredIfNecessary();
+   }
+ }
+ 
+ void ExtensionPopup::OnSecurityDialogAdded(views::Widget* widget) {
++  if (orbit_native_ && !CheckNativeInvocation()) return;
+   // Don't close if the security dialog belongs to this popup.
+   if (extensions::SecurityDialogTracker::IsWidgetOrDescendantOf(widget,
+                                                                 GetWidget())) {
+@@ -256,16 +292,42 @@ ExtensionPopup::ExtensionPopup(
+     views::BubbleAnchor anchor,
+     views::BubbleBorder::Arrow arrow,
+     PopupShowAction show_action,
+-    ShowPopupCallback callback)
++    ShowPopupCallback callback,
++    gfx::NativeView native_parent,
++    const gfx::Rect& screen_anchor,
++    std::shared_ptr<NativeInvocation> invocation)
+     : BubbleDialogDelegateView(anchor,
+                                arrow,
+                                views::BubbleBorder::STANDARD_SHADOW,
+                                /*autosize=*/true),
+       browser_(browser),
++      native_invocation_(std::move(invocation)),
++      orbit_native_(native_invocation_ != nullptr),
+       host_(std::move(host)),
+       show_action_(show_action),
+       shown_callback_(std::move(callback)),
+       deferred_close_weak_ptr_factory_(this) {
++  if (native_parent) {
++    set_parent_window(native_parent);
++    SetAnchorRect(screen_anchor);
++  }
++  if (orbit_native_ && !native_invocation_->IsValid()) {
++    orbit_constructing_ = false;
++    CancelNativeInvocation();
++    return;
++  }
++  observed_tab_strip_ = browser_->GetTabStripModel();
++  observed_tab_strip_->AddObserver(this);
++  if (native_invocation_) {
++    native_invocation_->SetCancellation(base::BindRepeating(
++        &ExtensionPopup::CancelNativeInvocation,
++        native_invocation_weak_ptr_factory_.GetWeakPtr()));
++  }
++  if (orbit_native_ && !CheckNativeInvocation()) {
++    orbit_constructing_ = false;
++    CancelNativeInvocation();
++    return;
++  }
+   g_last_popup_for_testing = this;
+   SetButtons(static_cast<int>(ui::mojom::DialogButton::kNone));
+   set_use_round_corners(false);
+@@ -292,14 +354,18 @@ ExtensionPopup::ExtensionPopup(
+       browser_->GetProfile(), host_.get()));
+   extension_view_->SetContainer(this);
+   extension_view_->Init();
++  orbit_constructing_ = false;
++  if (orbit_native_ && !CheckNativeInvocation()) { CancelNativeInvocation(); return; }
+ 
+   // See comments in OnWidgetActivationChanged().
+-  set_close_on_deactivate(false);
++  set_close_on_deactivate(static_cast<bool>(native_parent));
+ 
+-  browser_->GetTabStripModel()->AddObserver(this);
+ 
+-  CHECK(anchor_widget());
+-  anchor_widget_observation_.Observe(anchor_widget()->GetPrimaryWindowWidget());
++  if (anchor_widget()) {
++    anchor_widget_observation_.Observe(anchor_widget()->GetPrimaryWindowWidget());
++  } else {
++    CHECK(native_parent);
++  }
+ 
+   security_dialog_tracker_observation_.Observe(
+       extensions::SecurityDialogTracker::GetInstance());
+@@ -316,52 +382,94 @@ ExtensionPopup::ExtensionPopup(
+   // If the host had somehow finished loading, then we'd miss the notification
+   // and not show.  This seems to happen in single-process mode.
+   if (host_->has_loaded_once()) {
+-    ShowBubble();
++    if (!orbit_native_) ShowBubble();
+   } else {
+     // Wait to show the popup until the contained host finishes loading.
+     Observe(host_->host_contents());
+   }
+ }
+ 
+-void ExtensionPopup::ShowBubble() {
+-  // Don't show the popup if there are visible security dialogs. This protects
+-  // the security dialogs from spoofing.
+-  if (extensions::SecurityDialogTracker::GetInstance()
+-          ->BrowserHasVisibleSecurityDialogs(browser_, GetWidget())) {
+-    withheld_from_view_.reset();
+-    CloseDeferredIfNecessary();
+-    return;
++bool ExtensionPopup::CheckNativeInvocation() {
++  if (!orbit_native_) return true;
++  if (orbit_cancelled_) return false;
++  if (native_invocation_ && native_invocation_->IsValid()) return true;
++  CancelNativeInvocation();
++  return false;
++}
++
++void ExtensionPopup::CancelNativeInvocation() {
++  orbit_cancelled_ = true;
++  native_invocation_weak_ptr_factory_.InvalidateWeakPtrs();
++  deferred_close_weak_ptr_factory_.InvalidateWeakPtrs();
++  Observe(nullptr);
++  extension_registry_observation_.Reset();
++  security_dialog_tracker_observation_.Reset();
++  anchor_widget_observation_.Reset();
++  if (observed_tab_strip_) {
++    observed_tab_strip_->RemoveObserver(this);
++    observed_tab_strip_ = nullptr;
+   }
++  browser_ = nullptr; // Revoke before calling external/native cancellation code.
++  auto invocation = std::move(native_invocation_);
++  if (invocation) { invocation->SetCancellation({}); invocation->Cancel(); }
++  if (orbit_constructing_) return;
++  auto weak = deferred_close_weak_ptr_factory_.GetWeakPtr();
++  if (extension_view_) RemoveChildViewT(extension_view_.ExtractAsDangling());
++  if (!weak) return;
++  host_.reset();
++  if (!weak) return;
++  withheld_from_view_.reset();
++  if (!orbit_destroying_ && GetWidget()) CloseDeferredIfNecessary();
++}
+ 
++void ExtensionPopup::OnTabStripModelDestroyed(TabStripModel*) {
++  observed_tab_strip_ = nullptr;
++  browser_ = nullptr;
++  if (orbit_native_) CancelNativeInvocation();
++  else if (GetWidget()) CloseDeferredIfNecessary();
++}
++
++void ExtensionPopup::ShowBubble() {
++  if (orbit_native_ && !CheckNativeInvocation()) return;
++  if (!GetWidget() || !browser_ || !host_) return;
++  auto weak = deferred_close_weak_ptr_factory_.GetWeakPtr();
++  const bool blocked = extensions::SecurityDialogTracker::GetInstance()
++      ->BrowserHasVisibleSecurityDialogs(browser_, GetWidget());
++  if (!weak || (orbit_native_ && !CheckNativeInvocation())) return;
++  if (blocked) { withheld_from_view_.reset(); CloseDeferredIfNecessary(); return; }
++  // Recheck immediately before Show, then after every safety/focus callback.
++  if (orbit_native_ && !CheckNativeInvocation()) return;
+   GetWidget()->Show();
++  if (!weak || (orbit_native_ && !CheckNativeInvocation())) return;
+   withheld_from_view_.reset();
+-
+-  // Focus on the host contents when the bubble is first shown.
+   host_->host_contents()->Focus();
+-
++  if (!weak || (orbit_native_ && !CheckNativeInvocation())) return;
+   if (show_action_ == PopupShowAction::kShowAndInspect) {
+-    DevToolsWindow::OpenDevToolsWindow(
+-        host_->host_contents(), DevToolsToggleAction::ShowConsolePanel(),
+-        DevToolsOpenedByAction::kContextMenuInspect);
+-  }
+-
+-  if (shown_callback_) {
+-    std::move(shown_callback_).Run(host_.get());
++    DevToolsWindow::OpenDevToolsWindow(host_->host_contents(),
++        DevToolsToggleAction::ShowConsolePanel(), DevToolsOpenedByAction::kContextMenuInspect);
+   }
++  if (!weak || (orbit_native_ && !CheckNativeInvocation())) return;
++  if (shown_callback_) std::move(shown_callback_).Run(host_.get());
+ }
+ 
+ void ExtensionPopup::CloseIfSecurityDialogPresent() {
++  if (orbit_native_ && !CheckNativeInvocation()) return;
+   if (!browser_ || !host_) {
+     return;
+   }
+ 
+-  if (extensions::SecurityDialogTracker::GetInstance()
+-          ->BrowserHasVisibleSecurityDialogs(browser_, GetWidget())) {
++  auto weak = deferred_close_weak_ptr_factory_.GetWeakPtr();
++  const bool blocked = extensions::SecurityDialogTracker::GetInstance()
++      ->BrowserHasVisibleSecurityDialogs(browser_, GetWidget());
++  if (!weak || (orbit_native_ && !CheckNativeInvocation())) return;
++  if (blocked) {
+     CloseDeferredIfNecessary(views::Widget::ClosedReason::kLostFocus);
+   }
+ }
+ 
+ void ExtensionPopup::CloseUnlessBlockedByInspectionOrJSDialog() {
++  auto weak = deferred_close_weak_ptr_factory_.GetWeakPtr();
++  if (orbit_native_ && !CheckNativeInvocation()) return;
+   if (!browser_ || !host_) {
+     return;
+   }
+@@ -370,19 +478,24 @@ void ExtensionPopup::CloseUnlessBlockedByInspectionOrJSDialog() {
+   javascript_dialogs::AppModalDialogQueue* app_modal_queue =
+       javascript_dialogs::AppModalDialogQueue::GetInstance();
+   CHECK(app_modal_queue);
+-  if (app_modal_queue->HasActiveDialog()) {
++  const bool app_modal = app_modal_queue->HasActiveDialog();
++  if (!weak || (orbit_native_ && !CheckNativeInvocation())) return;
++  if (app_modal) {
+     return;
+   }
+ 
+   // Don't close if a web modal dialog (e.g. webauthn security key dialog) is
+   // showing.
+-  if (web_modal::WebContentsHasActiveWebModal(host_->host_contents())) {
++  const bool has_web_modal = web_modal::WebContentsHasActiveWebModal(host_->host_contents());
++  if (!weak || (orbit_native_ && !CheckNativeInvocation())) return;
++  if (has_web_modal) {
+     return;
+   }
+ 
+   // Don't close if the extension page is under inspection in a DevTools window.
+-  if (DevToolsWindow::GetInstanceForInspectedWebContents(
+-          host_->host_contents())) {
++  const bool inspected = DevToolsWindow::GetInstanceForInspectedWebContents(host_->host_contents()) != nullptr;
++  if (!weak || (orbit_native_ && !CheckNativeInvocation())) return;
++  if (inspected) {
+     return;
+   }
+ 
+@@ -410,6 +523,7 @@ void ExtensionPopup::CloseDeferredIfNecessary(
+ }
+ 
+ void ExtensionPopup::HandleCloseExtensionHost(extensions::ExtensionHost* host) {
++  if (orbit_native_ && !CheckNativeInvocation()) return;
+   DCHECK_EQ(host, host_.get());
+   CloseDeferredIfNecessary();
+ }
+diff --git a/chrome/browser/ui/views/extensions/extension_popup.h b/chrome/browser/ui/views/extensions/extension_popup.h
+index 642dfef01b..e5739bbb2a 100644
+--- a/chrome/browser/ui/views/extensions/extension_popup.h
++++ b/chrome/browser/ui/views/extensions/extension_popup.h
+@@ -5,6 +5,7 @@
+ #ifndef CHROME_BROWSER_UI_VIEWS_EXTENSIONS_EXTENSION_POPUP_H_
+ #define CHROME_BROWSER_UI_VIEWS_EXTENSIONS_EXTENSION_POPUP_H_
+ 
++#include <memory>
+ #include "base/functional/callback.h"
+ #include "base/memory/raw_ptr.h"
+ #include "base/scoped_observation.h"
+@@ -67,6 +68,24 @@ class ExtensionPopup : public views::BubbleDialogDelegateView,
+                         PopupShowAction show_action,
+                         ShowPopupCallback callback);
+ 
++  // Owned native authorization. No asynchronous callback may borrow an embedder
++  // object. Cancellation is synchronous even when widget destruction is deferred.
++  class NativeInvocation {
++   public:
++    virtual ~NativeInvocation() = default;
++    virtual bool IsValid() = 0;
++    virtual void SetCancellation(base::RepeatingClosure callback) = 0;
++    virtual void Cancel() = 0;
++  };
++
++  // Orbit: a genuine extension host in a bubble parented to an embedder NSView.
++  // The caller must validate the hosted Browser, active tab and native anchor.
++  static void ShowPopupWithNativeParent(
++      BrowserWindowInterface* browser,
++      std::unique_ptr<extensions::ExtensionViewHost> host,
++      gfx::NativeView native_parent, const gfx::Rect& screen_anchor,
++      std::shared_ptr<NativeInvocation> invocation);
++
+   ExtensionPopup(const ExtensionPopup&) = delete;
+   ExtensionPopup& operator=(const ExtensionPopup&) = delete;
+   ~ExtensionPopup() override;
+@@ -120,7 +139,14 @@ class ExtensionPopup : public views::BubbleDialogDelegateView,
+                  views::BubbleAnchor anchor,
+                  views::BubbleBorder::Arrow arrow,
+                  PopupShowAction show_action,
+-                 ShowPopupCallback callback);
++                 ShowPopupCallback callback,
++                 gfx::NativeView native_parent = {},
++                 const gfx::Rect& screen_anchor = {},
++                 std::shared_ptr<NativeInvocation> invocation = {});
++
++  bool CheckNativeInvocation();
++  void CancelNativeInvocation();
++  void OnTabStripModelDestroyed(TabStripModel* model) override;
+ 
+   // Shows the bubble, focuses its content, and registers listeners.
+   void ShowBubble();
+@@ -138,6 +164,12 @@ class ExtensionPopup : public views::BubbleDialogDelegateView,
+   void HandleCloseExtensionHost(extensions::ExtensionHost* host);
+ 
+   raw_ptr<BrowserWindowInterface> browser_;
++  raw_ptr<TabStripModel> observed_tab_strip_ = nullptr;
++  std::shared_ptr<NativeInvocation> native_invocation_;
++  bool orbit_native_ = false;
++  bool orbit_cancelled_ = false;
++  bool orbit_constructing_ = true;
++  bool orbit_destroying_ = false;
+ 
+   // The contained host for the view.
+   std::unique_ptr<extensions::ExtensionViewHost> host_;
+@@ -147,7 +179,7 @@ class ExtensionPopup : public views::BubbleDialogDelegateView,
+       performance_manager::PageLiveStateDecorator::ScopedWithheldFromView>
+       withheld_from_view_;
+ 
+-  raw_ptr<ExtensionViewViews> extension_view_;
++  raw_ptr<ExtensionViewViews> extension_view_ = nullptr;
+ 
+   base::ScopedObservation<extensions::ExtensionRegistry,
+                           extensions::ExtensionRegistryObserver>
+@@ -166,6 +198,8 @@ class ExtensionPopup : public views::BubbleDialogDelegateView,
+       anchor_widget_observation_{this};
+ 
+   base::WeakPtrFactory<ExtensionPopup> deferred_close_weak_ptr_factory_;
++  // Cancellation authority must survive invalidation of ordinary deferred-close tasks.
++  base::WeakPtrFactory<ExtensionPopup> native_invocation_weak_ptr_factory_{this};
+ };
+ 
+ #endif  // CHROME_BROWSER_UI_VIEWS_EXTENSIONS_EXTENSION_POPUP_H_
+diff --git a/chrome/browser/ui/navigator/orbit_navigate_intent.h b/chrome/browser/ui/navigator/orbit_navigate_intent.h
+new file mode 100644
+index 0000000000..92897371d4
+--- /dev/null
++++ b/chrome/browser/ui/navigator/orbit_navigate_intent.h
+@@ -0,0 +1,63 @@
++// Copyright 2026 Orbit. Portions copyright The Chromium Authors. Use of this
++// source code is governed by a BSD-style license that can be found in the
++// LICENSE file.
++
++#ifndef CHROME_BROWSER_UI_NAVIGATOR_ORBIT_NAVIGATE_INTENT_H_
++#define CHROME_BROWSER_UI_NAVIGATOR_ORBIT_NAVIGATE_INTENT_H_
++
++#include "base/check.h"
++#include "base/memory/raw_ptr.h"
++#include "url/gurl.h"
++
++class BrowserWindowInterface;
++
++namespace content {
++class WebContents;
++}
++
++namespace orbit {
++
++// Orbit CEF fork (EXT-OUTCOME-R2). Navigate() creates the WebContents of a new
++// tab and runs the Browser's creation hook (CEF's OnWebContentsCreated →
++// SetAsDelegate) before it loads the URL and inserts the tab. At that moment
++// the tab has no visible URL, no tab strip index and no activation state; the
++// request itself is the only authority for them. CreateTargetContents
++// publishes it here for the duration of that hook. UI thread only.
++struct NavigateIntent {
++  raw_ptr<const BrowserWindowInterface> browser = nullptr;
++  raw_ptr<const content::WebContents> contents = nullptr;
++  GURL url;
++  // Requested tab strip index, -1 when Chrome chooses it.
++  int tabstrip_index = -1;
++  // 1 the tab is added active, 0 in the background, -1 not a tab disposition.
++  int active = -1;
++};
++
++inline const NavigateIntent*& CurrentNavigateIntentSlot() {
++  static const NavigateIntent* current = nullptr;
++  return current;
++}
++
++// The intent of the tab whose creation hook is running, or null.
++inline const NavigateIntent* CurrentNavigateIntent() {
++  return CurrentNavigateIntentSlot();
++}
++
++class ScopedNavigateIntent {
++ public:
++  explicit ScopedNavigateIntent(const NavigateIntent* intent)
++      : previous_(CurrentNavigateIntentSlot()) {
++    CHECK(intent);
++    CurrentNavigateIntentSlot() = intent;
++  }
++  ScopedNavigateIntent(const ScopedNavigateIntent&) = delete;
++  ScopedNavigateIntent& operator=(const ScopedNavigateIntent&) = delete;
++  ~ScopedNavigateIntent() { CurrentNavigateIntentSlot() = previous_; }
++
++ private:
++  const NavigateIntent* const previous_;
++};
++
++}  // namespace orbit
++
++#endif  // CHROME_BROWSER_UI_NAVIGATOR_ORBIT_NAVIGATE_INTENT_H_

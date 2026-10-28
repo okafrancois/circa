@@ -166,14 +166,7 @@ public final class ChromiumSurface: BrowserEngineSurface {
     var automaticPiPRevision: UInt64 = 0
     private var documentObserverReady = false
     private var documentObserverRequest: Int32 = 0
-    /// Destinations retained when the old renderer and its native navigation controller ended.
-    /// Traversals reload, as discarded documents do; no DOM, form or history.state is serialized.
-    var suspendedHistory: [URL] = []
-    // Native history metadata does not expose every frame's request body. Retain any
-    // surface that has seen a non-replayable navigation, including child frames.
-    var hasNonReplayableNavigation = false
-    var suspendedHistoryIndex = 0
-    private var traversingSuspendedHistory = false
+    public internal(set) var isSuspended = false
     var isProtectedFromSuspension: Bool {
         !documentObserverReady || !mediaActivity.webAudioReady || !mediaActivity.mediaReady || mediaActivity.isPlaying
             || mediaActivity.audioPlaying != false || isElementFullscreen
@@ -220,12 +213,7 @@ public final class ChromiumSurface: BrowserEngineSurface {
 
     public var currentURL: URL? { requestedDestination ?? state.url }
     public var navigationState: BrowserNavigationState {
-        var result = state
-        if !suspendedHistory.isEmpty {
-            result.canGoBack = suspendedHistoryIndex > 0
-            result.canGoForward = suspendedHistoryIndex + 1 < suspendedHistory.count
-        }
-        return result
+        state
     }
 
     /// True while CEF creates the browser of a surface that was not disposed before creation.
@@ -302,17 +290,6 @@ public final class ChromiumSurface: BrowserEngineSurface {
 
     private func history(_ offset: Int32) -> URL? {
         guard !isDisposed, isBrowserCreated else { return nil }
-        if !suspendedHistory.isEmpty {
-            let index = suspendedHistoryIndex + Int(offset)
-            guard suspendedHistory.indices.contains(index) else { return nil }
-            let destination = suspendedHistory[index]
-            guard ACRNavigate(token, destination.absoluteString) == 1 else { return nil }
-            suspendedHistoryIndex = index
-            traversingSuspendedHistory = true
-            requestedDestination = destination
-            pendingKind = .backForward
-            return destination
-        }
         var buffer = [CChar](repeating: 0, count: 8192)
         guard ACRHistoryURL(token, offset, &buffer, buffer.count) >= 0,
               let url = URL(string: String(nulTerminated: buffer)) else { return nil }
@@ -364,6 +341,7 @@ public final class ChromiumSurface: BrowserEngineSurface {
     /// The shell showed `hostView` in a window, or the user clicked into it.
     func hostViewDidBecomeVisible() {
         guard !isDisposed, isBrowserCreated, hostedWindowToken != 0 else { return }
+        resumeDiscardedTab()
         engine?.activateHostedTab(self)
     }
 
@@ -377,6 +355,7 @@ public final class ChromiumSurface: BrowserEngineSurface {
         }
         guard !isDisposed else { return }
         guard isBrowserCreated else { pendingCommands.append(.hostChanged(hidden: hidden)); return }
+        if !hidden { resumeDiscardedTab() }
         _ = ACRNotifyHostChanged(token, hidden ? 1 : 0)
     }
 
@@ -635,6 +614,7 @@ public final class ChromiumSurface: BrowserEngineSurface {
             case .focus:
                 focusDocument()
             case .hostChanged(let hidden):
+                if !hidden { resumeDiscardedTab() }
                 _ = ACRNotifyHostChanged(token, hidden ? 1 : 0)
             case .mute(let muted):
                 _ = ACRSetAudioMuted(token, muted ? 1 : 0)
@@ -767,9 +747,6 @@ public final class ChromiumSurface: BrowserEngineSurface {
             return ACR_POLICY_ALLOW
         }
         guard !isDisposed else { return ACR_POLICY_CANCEL }
-        if request.hasBody || !["GET", "HEAD"].contains(request.method?.uppercased() ?? "") {
-            hasNonReplayableNavigation = true
-        }
         let destination = request.url.flatMap(URL.init(string:))
         let shellStarted = destination != nil && destination == requestedDestination
         let kind = Self.navigationKind(request, shellStarted: shellStarted, pendingKind: pendingKind)
@@ -907,10 +884,13 @@ public final class ChromiumSurface: BrowserEngineSurface {
         case ACR_EVENT_ADDRESS:
             let previous = state.url
             state.url = event.url.flatMap(URL.init(string:))
+            if event.value == 1 {
+                state.committedURL = state.url
+                requestedDestination = nil
+            }
             onChange?()
             // ABI 7: an address change without a new document (fragment, History API).
             if event.value == 1, let url = state.url {
-                recordSuspendedHistoryCommit(url)
                 let navigation = BrowserSameDocumentNavigation(url: url, previous: previous)
                 onEngineEvent?("same-document", ["kind": navigation.kind.rawValue])
                 delegate?.surface(self, didNavigateWithinDocument: navigation)
@@ -931,6 +911,8 @@ public final class ChromiumSurface: BrowserEngineSurface {
                 _ = finishCloseConfirmation(closed: true)
                 return
             }
+            // A native activation or extension may navigate a discarded background tab.
+            isSuspended = false
             findDocumentGeneration &+= 1
             find = nil
             state.faviconURL = nil
@@ -944,7 +926,6 @@ public final class ChromiumSurface: BrowserEngineSurface {
                 updatePageTint(nil)
             }
             restartPageTintObservation()
-            if let url = state.committedURL { recordSuspendedHistoryCommit(url) }
             requestedDestination = nil
             refreshZoom()
             onEngineEvent?("commit", ["url": event.url ?? "", "generation": String(findDocumentGeneration),
@@ -1029,6 +1010,7 @@ public final class ChromiumSurface: BrowserEngineSurface {
         case ACR_EVENT_DOWNLOAD:
             handleDownload(event)
         case ACR_EVENT_RENDER_TERMINATED:
+            guard !isSuspended else { return }
             pageTintFailed = true
             updatePageTint(nil)
             onEngineEvent?("render-terminated", ["status": String(event.value)])
@@ -1039,17 +1021,6 @@ public final class ChromiumSurface: BrowserEngineSurface {
             receivePageEvent(event)
         default:
             break
-        }
-    }
-
-    private func recordSuspendedHistoryCommit(_ url: URL) {
-        guard !suspendedHistory.isEmpty else { return }
-        if traversingSuspendedHistory {
-            suspendedHistory[suspendedHistoryIndex] = url
-            traversingSuspendedHistory = false
-        } else if suspendedHistory[suspendedHistoryIndex] != url {
-            suspendedHistory = Array(suspendedHistory.prefix(suspendedHistoryIndex + 1)) + [url]
-            suspendedHistoryIndex = suspendedHistory.count - 1
         }
     }
 

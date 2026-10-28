@@ -62,6 +62,10 @@ MOVE_EVENTS_EXTENSION = LAB_DIR / "Smoke/move-events-extension"
 ESSENTIALS_USER = "orbit-synthetic-user"
 ESSENTIALS_PASSWORD = "orbit-synthetic-password"
 ESSENTIALS_PAGES = {
+    "suspension": """<!doctype html><title>Synthetic session</title>
+<body style="height:5000px">
+<form method="POST" action="/essentials/suspension-post"><input id="check" name="choice" type="checkbox"><input name="token" value="synthetic"></form>
+<p>Native session history fixture.</p></body>""",
     "dialogs": """<!doctype html><title>essentials-dialogs</title>
 <body style="margin:0;font:16px -apple-system">
 <a id="link" href="/essentials/linked" style="position:absolute;left:20px;top:20px">Linked page</a>
@@ -86,8 +90,19 @@ def essentials_handler(run_root, counters):
     expected = "Basic " + base64.b64encode((ESSENTIALS_USER + ":" + ESSENTIALS_PASSWORD).encode()).decode()
 
     class Essentials(base):
+        def do_POST(self):
+            if urlsplit(self.path).path != "/essentials/suspension-post":
+                return super().do_POST()
+            length = int(self.headers.get("Content-Length", "0"))
+            if not 0 < length <= 1024: return self.reply(413)
+            self.rfile.read(length)
+            counters["suspension-post"] = counters.get("suspension-post", 0) + 1
+            return self.reply(200, b'<!doctype html><title>Synthetic POST</title><p>Posted once.</p>')
+
         def do_GET(self):
             path = urlsplit(self.path).path
+            if path == "/essentials/suspension-post-count":
+                return self.reply(200, str(counters.get("suspension-post", 0)).encode(), "text/plain")
             if not path.startswith("/essentials/"):
                 return super().do_GET()
             counters[path] = counters.get(path, 0) + 1
@@ -426,6 +441,9 @@ def run_phase(phase, run, data, origin, args, tls_origin=None):
                "--use-fake-device-for-media-stream"]
     if tls_origin and phase == "fresh":
         command.append("--orbit-smoke-tls-fixture=" + tls_origin)
+    if getattr(args, "engine_r5_only", False):
+        command.append("--orbit-smoke-engine-r5")
+        command.append("--orbit-smoke-resource-tabs=" + str(args.resource_tabs))
     if getattr(args, "engine_r4_only", False):
         command.append("--orbit-smoke-engine-r4")
     if args.extension_only:
@@ -614,15 +632,17 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest="command", required=True)
     builder = sub.add_parser("build")
-    builder.add_argument("--flavor", choices=x2.FLAVORS, default="orbit-engine-extensions-r4")
+    builder.add_argument("--flavor", choices=x2.FLAVORS, default="orbit-engine-extensions-r5")
     runner = sub.add_parser("smoke")
-    runner.add_argument("--flavor", choices=x2.FLAVORS, default="orbit-engine-extensions-r4")
+    runner.add_argument("--flavor", choices=x2.FLAVORS, default="orbit-engine-extensions-r5")
     runner.add_argument("--evidence-root", type=Path, default=EVIDENCE)
     runner.add_argument("--timeout", type=int, default=180)
     runner.add_argument("--quit-timeout", type=int, default=30)
     runner.add_argument("--no-extension", action="store_true")
     runner.add_argument("--fresh-only", action="store_true")
     runner.add_argument("--keep-going", action="store_true")
+    runner.add_argument("--engine-r5-only", action="store_true", help="Hermetic native discard/history/POST scenarios")
+    runner.add_argument("--resource-tabs", type=int, choices=(0, 20, 50, 100), default=0)
     runner.add_argument("--engine-r4-only", action="store_true",
                         help="Hermetic native action/audio/color/save API scenarios")
     runner.add_argument("--extension-only", action="store_true",
@@ -642,6 +662,9 @@ def main():
         if args.extension_only or args.private_domain_only or args.profiles_only or args.space_profile_only:
             parser.error("--archive-auto-only excludes other focused probes")
         args.no_extension = True
+    if args.command == "smoke" and args.engine_r5_only:
+        args.no_extension = True
+        args.fresh_only = True
     if args.command == "smoke" and args.engine_r4_only:
         args.extension_only = True
         args.fresh_only = True
@@ -656,7 +679,7 @@ def main():
         args.no_extension = True
     if args.command == "smoke" and args.private_domain_only:
         if args.flavor not in ("orbit-essentials-r2", "orbit-engine-extensions", "orbit-engine-extensions-r2",
-                               "orbit-engine-extensions-r3", "orbit-engine-extensions-r4") or args.extension_only:
+                               "orbit-engine-extensions-r3", "orbit-engine-extensions-r4", "orbit-engine-extensions-r5") or args.extension_only:
             parser.error("--private-domain-only requires a product engine and excludes --extension-only")
         args.no_extension = True
         args.fresh_only = True

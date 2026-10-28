@@ -6,6 +6,15 @@ import Foundation
 public protocol BrowserSurface: AnyObject {
     var currentURL: URL? { get }
     func dispose()
+    /// Keeps the engine's session controller while releasing its renderer. A refusal must
+    /// never fall back to URL replay, which would destroy opaque history and POST state.
+    func suspendInPlace() -> BrowserSurfaceSuspensionResult
+}
+
+public enum BrowserSurfaceSuspensionResult { case unsupported, refused, suspended }
+
+public extension BrowserSurface {
+    func suspendInPlace() -> BrowserSurfaceSuspensionResult { .unsupported }
 }
 
 public enum BrowserWindowSessionError: Error, Equatable {
@@ -894,6 +903,13 @@ public final class BrowserWindowSession<Surface: BrowserSurface> {
         guard surfaceLoadingPolicy == .visibleOnly, !isClosed, !hasPendingCommands,
               let id = occurrenceID(for: surface), !visibleOccurrenceIDs.contains(id),
               transits[id] == nil, authorities[id] == modelOccurrenceAuthorities[id] else { return false }
+        switch surface.suspendInPlace() {
+        case .refused: return false
+        case .suspended:
+            onChange?()
+            return true
+        case .unsupported: break
+        }
         surfaces.removeValue(forKey: id)
         occurrencesBySurface.removeValue(forKey: ObjectIdentifier(surface))
         authorities.removeValue(forKey: id)

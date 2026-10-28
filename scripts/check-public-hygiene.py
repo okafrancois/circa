@@ -29,8 +29,7 @@ IMPORT_ROOTS = tuple(expand(path) for path in (
     "native/Tests/OrbitTests/Import/{source}/",
 ))
 
-# Mixed-purpose files allow only these exact import identifiers/strings. The compatibility
-# header retains the documented prebuilt engine ABI. Shared locks must keep their names
+# Mixed-purpose files allow only these exact import identifiers/strings. Shared locks keep their names
 # across worktrees until all callers migrate together.
 ALLOWED_TEXT = {path: tuple(expand(value) for value in values) for path, values in {'AGENTS.md': ['/tmp/{lower}y-gui-slot.lock', '/tmp/{lower}y-native-full-suite.lock'],
  'native/OrbitChromium/App/EngineComposition+Chromium.swift': ['{source}ImportError',
@@ -43,14 +42,6 @@ ALLOWED_TEXT = {path: tuple(expand(value) for value in values) for path, values 
                                                                '{source}SourceSnapshot',
                                                                '{source_bundle}',
                                                                '{lower}IsRunning'],
- 'native/OrbitChromium/Bridge/EngineCompatibility.h': ['{upper}Y_CEF_PATCHES',
-                                                       '{lower}-lab-chromium-source-v1',
-                                                       '{lower}y-engine-extensions-r3',
-                                                       '{lower}y_cef_essentials_level',
-                                                       '{lower}y_cef_extension_set_pinned',
-                                                       '{lower}y_cef_extension_shortcut',
-                                                       '{lower}y_cef_get_api',
-                                                       '{lower}y_cef_set_unowned_tab_handler'],
  'native/OrbitChromium/ChromiumEngine/ChromiumAuthenticationImport.swift': ['{source}PreparedSyntheticCookie'],
  'native/OrbitChromium/Tests/AuthenticationCoordinatorTests.swift': ['{source}AuthenticationError',
                                                                      '{source}ChromiumSecretDecoder',
@@ -152,11 +143,6 @@ ALLOWED_HEX = {
     "native/OrbitChromium/Smoke/OrbitRuntimeStateScenarios.swift": ("FF123456", "FF654321", "FFABCDEF", "FFFEDCBA"),
 }
 ADDRESS = re.compile(r"(?i)\b0x[0-9a-f]{8,}\b")
-# The engine fork still keeps its legacy source directory and symbol prefix; patches and the
-# engine export script must name them (including unchanged diff context) until the fork
-# renames its legacy identifiers in the next engine batch.
-ENGINE_LEGACY_PATHS = ("native/OrbitChromium/cef-patches/", "scripts/cef-engine-")
-ENGINE_LEGACY = re.compile(r"(?i)\b\w*" + re.escape(SOURCE_NAME.lower()) + r"y\w*")
 LOWER_NAME = re.escape(SOURCE_NAME.lower())
 MENTION = re.compile(
     r"(?i:(?<![A-Za-z0-9])" + LOWER_NAME + r"(?![A-Za-z0-9])|" + LOWER_NAME + r"y\w*|" + LOWER_NAME + r"lab\w*|"
@@ -192,8 +178,6 @@ def check_text(path, text):
             if match and json.loads(match[1]) in LOCALIZED_IMPORT_KEYS and match[1] == match[2]:
                 continue
         scrubbed = mask_literals(line, (*TECHNICAL_TEXT, *ALLOWED_TEXT.get(path, ())))
-        if path.startswith(ENGINE_LEGACY_PATHS):
-            scrubbed = ENGINE_LEGACY.sub(" ", scrubbed)
         if MENTION.search(scrubbed):
             findings.append((path, number, "source-browser mention outside the import allowlist"))
     return findings

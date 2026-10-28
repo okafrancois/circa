@@ -4,8 +4,8 @@ import BrowserEngine
 import BrowserShell
 import Foundation
 
-/// One low-frequency sweep per window. No page state or edited content is persisted. A sleeping
-/// tab remains in the model; normal selection recreates its surface through the session factory.
+/// One low-frequency sweep per window. Native discard keeps page state in the engine session;
+/// no document content is persisted by the shell. Selection reloads the discarded renderer.
 @MainActor
 final class BrowserTabSuspensionController<Engine: BrowserEngine> {
     typealias Surface = Engine.Surface

@@ -1,6 +1,6 @@
 import Foundation
 
-/// Only non-content state crosses the engine boundary. A nil result means that this document
+/// Only non-content metadata crosses the engine boundary; native session state stays in-engine. A nil result means that this document
 /// is busy, has unsaved edits or cannot be checked safely; the owner keeps its engine alive.
 public struct BrowserSuspensionState: Equatable, Sendable {
     public let url: URL
