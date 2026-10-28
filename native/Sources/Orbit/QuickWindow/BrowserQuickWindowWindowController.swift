@@ -1,8 +1,13 @@
 import AppKit
 import QuartzCore
+import OSLog
 import BrowserCore
 import BrowserEngine
 import BrowserShell
+
+private enum QuickWindowTransferTrace {
+    static let signposter = OSSignposter(subsystem: "local.orbit", category: "surface-transfer")
+}
 
 /// A transient document owner. It never creates a tab until promotion has committed.
 @MainActor
@@ -175,18 +180,27 @@ final class BrowserQuickWindowWindowController<Engine: BrowserEngine>: NSWindowC
         findSession.close()
         guard let transfer = container.release(surface, profileID: profileID,
                                                rebind: { [weak self] in self?.bind($0) }) else { return nil }
-        let adoption = destination.acceptSurface(transfer, activate: true)
-        guard transfer.state != .pending else { transfer.cancel(); return nil }
+        let signposter = QuickWindowTransferTrace.signposter
+        let interval = signposter.beginInterval("QuickWindowPromotion", id: signposter.makeSignpostID())
+        let adoption = destination.acceptSurface(transfer, activate: true) { [weak self] in
+            // The receiver has installed the live host. Do not leave an empty panel on screen
+            // until the asynchronous promotion task resumes in a later display frame.
+            self?.window?.animationBehavior = .none
+            self?.window?.orderOut(nil)
+        }
+        guard transfer.state != .pending else {
+            signposter.endInterval("QuickWindowPromotion", interval)
+            transfer.cancel()
+            return nil
+        }
         siteControls.render()
         openButton.isEnabled = false
         let completion = Task<TabOccurrenceID?, Never> { [self] in
+            defer { signposter.endInterval("QuickWindowPromotion", interval) }
             let result = await adoption.value
             promotion = nil
             if result != nil, transfer.state == .completed {
                 self.surface = nil
-                // Orbit's model handoff retires the panel immediately. Order it out before
-                // close so AppKit does not add a separate panel-dismissal fade.
-                window?.orderOut(nil)
                 window?.close()
             } else if container.owns(surface), !isClosed {
                 bind(surface)

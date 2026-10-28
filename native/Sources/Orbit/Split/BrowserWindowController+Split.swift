@@ -113,8 +113,11 @@ extension BrowserWindowController {
         } else if let selected {
             if session.activeSplit == nil { split.expandedGroup = nil }
             let view = split.presentation(for: .single(ObjectIdentifier(selected)), configure: configureSplitView)
-            view.presentSingle(selected.hostView)
             contentCard.present(view, retainingPreviousUntil: capture)
+            // Give the destination a window and its final geometry before moving the live host.
+            // An off-window, zero-sized intermediate parent hides the native compositor.
+            contentCard.layoutSubtreeIfNeeded()
+            view.presentSingle(selected.hostView)
         } else {
             split.clear()
             contentCard.present(nil, retainingPreviousUntil: capture)

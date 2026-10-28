@@ -3,9 +3,11 @@ import OrbitChromiumBridge
 import BrowserCore
 import BrowserEngine
 import Foundation
+import OSLog
 
 @MainActor
 public final class ChromiumBrowserEngine: BrowserPrivateEngine {
+    private static let transferSignposter = OSSignposter(subsystem: "local.orbit", category: "surface-transfer")
     /// How `makeSurface` creates native browsers.
     public enum SurfaceMode: Equatable, Sendable {
         /// Alloy browsers parented to `hostView` (stock SDK behaviour, laboratory default).
@@ -520,6 +522,8 @@ extension ChromiumBrowserEngine {
     /// window `token`, or reorders it there. Keeps the activation bookkeeping of both windows.
     @discardableResult
     func moveHostedTab(_ surface: ChromiumSurface, to token: UInt64, index: Int? = nil) -> Bool {
+        let interval = Self.transferSignposter.beginInterval("ChromiumTabMove", id: Self.transferSignposter.makeSignpostID())
+        defer { Self.transferSignposter.endInterval("ChromiumTabMove", interval) }
         let source = surface.hostedWindowToken
         guard surface.isBrowserCreated, !surface.isDisposed, source != 0,
               ACRMoveSurfaceToWindow(surface.token, token, index.map { Int32(clamping: $0) } ?? -1,
