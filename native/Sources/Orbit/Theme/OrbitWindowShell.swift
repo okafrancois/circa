@@ -84,13 +84,14 @@ final class OrbitWindowShell {
     var isFloatingRevealed: Bool { !isDocked && floatProgress > 0 }
     var isAnimating: Bool { sidebarTransition != nil }
 
-    init() {
+    /// Native input is injectable so hidden tests do not inherit the user's physical mouse state.
+    init(isMouseButtonPressed: @escaping () -> Bool = { NSEvent.pressedMouseButtons != 0 }) {
         hoverReveal.onRevealChange = { [weak self] reveal in self?.setFloating(reveal) }
         hoverReveal.isHeld = { [weak self] in
             guard let self else { return false }
             // Only feature-owned presentations hold the sidebar. AppKit also attaches persistent
             // fullscreen chrome as a visible child window; child visibility is not a popover signal.
-            return menuTrackingDepth > 0 || isHoverHeld() || NSEvent.pressedMouseButtons != 0
+            return menuTrackingDepth > 0 || isHoverHeld() || isMouseButtonPressed()
         }
         hoverReveal.isPointerInside = { [weak self] in self?.hoverTracker.isPointerInsideKeepRegion() ?? false }
     }

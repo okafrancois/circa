@@ -5,6 +5,43 @@ import Testing
 @Suite("URL pill layout", .serialized)
 @MainActor
 struct URLPillLayoutTests {
+    @Test("Pill icons keep adaptive neutral grey through theme, hover and press changes", arguments: [false, true])
+    func neutralIcons(isDark: Bool) throws {
+        let appearance = try #require(NSAppearance(named: isDark ? .darkAqua : .aqua))
+        let pill = SidebarAddressField(frame: NSRect(x: 0, y: 0, width: 312, height: 36))
+        pill.appearance = appearance
+        let field = NSTextField(string: "example.org")
+        pill.installField(field)
+        let copy = PillCopyLinkButton()
+        let site = SiteControlButton("", identifier: "site-controls", onPress: {})
+        site.image = OrbitGlyph.symbol("slider.horizontal.3", pointSize: 18)
+        pill.installAccessory(copy, onHover: true)
+        pill.installAccessory(site, onHover: true)
+        let event = NSEvent()
+        let neutral = OrbitTokens.Color.Text.secondary.resolved(for: appearance)
+        for theme in [OrbitTokens.SpaceTheme.default, .lavender, .default] {
+            pill.accent = OrbitSpaceThemes.accent(for: theme)
+            let textColor = field.textColor
+            for state in 0..<3 {
+                pill.mouseEntered(with: event)
+                if state == 1 { copy.mouseEntered(with: event); site.mouseEntered(with: event) }
+                if state == 2 {
+                    copy.mouseExited(with: event); site.mouseExited(with: event)
+                    copy.isHighlighted = true; site.isHighlighted = true
+                }
+                #expect(copy.tint.resolved(for: appearance) == neutral)
+                #expect(site.contentTintColor?.resolved(for: appearance) == neutral)
+                #expect(field.stringValue == "example.org" && field.textColor == textColor)
+                if state > 0 {
+                    #expect(copy.hoverFill.color == OrbitTokens.Color.State.standaloneButton)
+                    #expect(site.layer?.backgroundColor == OrbitTokens.Color.State.sidebarItemHovered.resolvedCGColor(for: appearance))
+                }
+            }
+            copy.isHighlighted = false; site.isHighlighted = false
+            pill.mouseExited(with: event)
+        }
+    }
+
     @Test("Trailing icons stay at the pill edge while the address fills and truncates before them")
     func trailingAlignment() throws {
         NSApplication.shared.setActivationPolicy(.prohibited)

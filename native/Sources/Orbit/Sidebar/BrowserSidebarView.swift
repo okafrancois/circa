@@ -1043,7 +1043,7 @@ final class SidebarAddressField: SidebarFlippedView {
         refreshAccent()
     }
 
-    /// Trailing controls use the secondary contrast tier; AppKit retains disabled-state rendering.
+    /// Trailing icons use neutral secondary grey; AppKit retains disabled-state rendering.
     func installAccessory(_ view: NSView, onHover: Bool = false, order: Int = 0) {
         if let button = view as? NSButton, button.image != nil {
             if view.accessibilityIdentifier() != "site-controls" {
@@ -1064,10 +1064,9 @@ final class SidebarAddressField: SidebarFlippedView {
 
     private func applyAccessoryAccent(_ view: NSView) {
         if let button = view as? OrbitGlyphButton {
-            let effective = OrbitSpaceThemes.accent(accent, over: background.fillColor.map { [$0] } ?? [], iconHover: button.hoverFill.color)
-            button.tint = effective.icon
+            button.tint = OrbitTokens.Color.Text.secondary
         } else if let button = view as? NSButton {
-            button.contentTintColor = effectiveAccent.sidebarSecondaryText
+            button.contentTintColor = button.image == nil ? effectiveAccent.sidebarSecondaryText : OrbitTokens.Color.Text.secondary
         }
     }
 

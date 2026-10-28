@@ -22,9 +22,15 @@ final class SiteControlButton: NSButton {
     }
     override func mouseEntered(with event: NSEvent) { isPillHovered = true; updatePillHover() }
     override func mouseExited(with event: NSEvent) { isPillHovered = false; updatePillHover() }
+    override var isHighlighted: Bool { didSet { updatePillHover() } }
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        updatePillHover()
+    }
     private func updatePillHover() {
         guard usesURLPillStyle else { return }
-        layer?.backgroundColor = (isPillHovered ? OrbitTokens.Color.State.sidebarItemHovered : .clear).cgColor
+        let fill = isPillHovered || isHighlighted ? OrbitTokens.Color.State.sidebarItemHovered : .clear
+        layer?.backgroundColor = fill.resolvedCGColor(for: effectiveAppearance)
     }
 
     convenience init(_ title: String, identifier: String, onPress: @escaping () -> Void) {
