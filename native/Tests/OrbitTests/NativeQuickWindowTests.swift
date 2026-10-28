@@ -7,6 +7,15 @@ import Testing
 @testable import Orbit
 
 @MainActor
+private final class QuickWindowHostProbe: NSView {
+    var moves: [(window: NSWindow?, size: NSSize)] = []
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        moves.append((window, superview?.bounds.size ?? .zero))
+    }
+}
+
+@MainActor
 private final class LimitedQuickWindowEngine: BrowserEngine {
     let reference = PeekSyntheticEngine()
     let kind = BrowserEngineKind.synthetic
@@ -80,6 +89,11 @@ struct NativeQuickWindowTests {
         surface.navigate(to: second)
         surface.documentState = "unsaved synthetic form"
         let generation = surface.documentGeneration
+        main.window?.contentView?.layoutSubtreeIfNeeded()
+        little.window?.contentView?.layoutSubtreeIfNeeded()
+        let probe = QuickWindowHostProbe(frame: surface.hostView.bounds)
+        surface.hostView.addSubview(probe)
+        probe.moves.removeAll()
         let task = try #require(little.promote(to: main))
         #expect(!little.container.owns(surface))
         #expect(surface.delegate === main)
@@ -95,6 +109,10 @@ struct NativeQuickWindowTests {
         #expect(environment.quickWindows.isEmpty)
         #expect(surface.hostView.window === main.window)
         #expect(surface.placement.container == .tab)
+        #expect(little.window?.animationBehavior == NSWindow.AnimationBehavior.none)
+        #expect(!probe.moves.isEmpty)
+        #expect(probe.moves.allSatisfy { $0.window === main.window && $0.size.width > 0 && $0.size.height > 0 })
+        #expect(surface.hostView.frame == surface.hostView.superview?.bounds)
     }
 
     @Test("Foreign-profile and retiring receivers refuse before the document moves")

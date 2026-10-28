@@ -53,10 +53,11 @@ extension BrowserWindowController {
     /// arrive before the tab is recorded are reconciled when recording resolves. Refused (the
     /// transfer stays pending and returns to its source) while the window prepares to quit.
     func acceptSurface(_ transfer: BrowserSurfaceTransfer<Surface>, activate: Bool,
-                       replacingExisting: Bool = false) -> Task<TabOccurrenceID?, Never> {
+                       replacingExisting: Bool = false, didAdopt: (() -> Void)? = nil) -> Task<TabOccurrenceID?, Never> {
         guard acceptsCommands else { return Task { nil } }
         let surface = transfer.surface
-        let adoption = session.acceptTransfer(transfer, activate: activate, replacingExisting: replacingExisting) { bindSurface($0) }
+        let adoption = session.acceptTransfer(transfer, activate: activate, replacingExisting: replacingExisting,
+                                             bind: { bindSurface($0) }, didAdopt: didAdopt)
         guard transfer.state != .pending else { return adoption }
         reconcileTransferredSurface(surface, after: adoption)
         return adoption

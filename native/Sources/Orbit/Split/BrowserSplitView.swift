@@ -115,8 +115,8 @@ final class BrowserSplitView: NSView {
         for divider in dividers { divider.removeFromSuperview() }; dividers = []
         if singleView !== host {
             singleView?.removeFromSuperview()
-            host.removeFromSuperview()
             host.translatesAutoresizingMaskIntoConstraints = true
+            host.frame = bounds
             addSubview(host, positioned: .below, relativeTo: dropHint)
             singleView = host
         }

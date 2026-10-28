@@ -195,6 +195,28 @@ private final class RoutingWindowDelegate: BrowserEngineSurfaceDelegate {
 @MainActor
 @Suite("Live surface transfer")
 struct BrowserSurfaceTransferTests {
+    @Test("Adoption completion follows presentation in the same turn and never runs on failure", arguments: [false, true])
+    func adoptionPresentationCompletion(receiverCloses: Bool) async throws {
+        let fixture = try await TransferFixture.make()
+        let (moving, _) = try await fixture.openInFirst(URL(string: "https://move.test/presentation")!)
+        let transfer = try #require(fixture.first.releaseSurface(moving, rebind: fixture.firstRebind))
+        var published = false
+        var completed = false
+        fixture.second.onChange = { published = true }
+        let adoption = fixture.second.acceptTransfer(transfer, didAdopt: {
+            #expect(published)
+            #expect(transfer.state == .completed)
+            #expect(fixture.second.selectedSurface === moving)
+            #expect(fixture.second.occurrenceID(for: moving) != nil)
+            completed = true
+        })
+        if receiverCloses { fixture.second.close() }
+        let result = await adoption.value
+        #expect(completed == !receiverCloses)
+        #expect((result != nil) == !receiverCloses)
+        await fixture.close()
+    }
+
     @Test("A live surface moves between windows with its owner and delegate, never disposed or reloaded")
     func moveBetweenWindows() async throws {
         let fixture = try await TransferFixture.make()

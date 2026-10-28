@@ -505,7 +505,7 @@ public extension BrowserWindowSession {
 
     func acceptTransfer(
         _ transfer: BrowserSurfaceTransfer<Surface>, activate: Bool = true, replacingExisting: Bool = false,
-        bind: (Surface) -> Void = { _ in }
+        bind: (Surface) -> Void = { _ in }, didAdopt: (() -> Void)? = nil
     ) -> Task<TabOccurrenceID?, Never> {
         guard !isClosed, let activeContext, activeContext.profileID == transfer.profileID else { return Task { nil } }
         let expectedOccurrenceID = replacingExisting ? occurrenceTabIDs.first { $0.value == transfer.tabID }?.key : nil
@@ -565,7 +565,10 @@ public extension BrowserWindowSession {
                 transfer.didRecord(by: self)
                 install(state)
                 reconcileDestination(of: surface, recorded: url)
-                return isClosed ? nil : self.occurrenceID(for: surface)
+                guard !isClosed, let adopted = self.occurrenceID(for: surface) else { return nil }
+                // Retire transient source chrome in the same turn that presents the live host.
+                didAdopt?()
+                return adopted
             } catch {
                 return nil
             }
