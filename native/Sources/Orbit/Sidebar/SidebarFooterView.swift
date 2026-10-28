@@ -344,10 +344,12 @@ final class SidebarSpaceButton: OrbitGlyphButton {
                case .systemSymbol(let name) = button.iconSelection,
                let image = SpaceIconImages.symbol(name, pointSize: 15, tint: button.tint,
                     active: button.isActive, appearance: button.effectiveAppearance) {
+                // The button is flipped; draw the symbol upright like the emoji path does.
                 image.draw(in: NSRect(x: bounds.midX - image.size.width / 2, y: bounds.midY - image.size.height / 2,
                                       width: image.size.width, height: image.size.height),
                            from: .zero, operation: .sourceOver,
-                           fraction: button.isActive ? 1 : button.inactiveOpacity(button.effectiveAppearance))
+                           fraction: button.isActive ? 1 : button.inactiveOpacity(button.effectiveAppearance),
+                           respectFlipped: true, hints: nil)
                 return
             }
             if let button = button as? SidebarSpaceButton, !button.settingsIcon.isEmpty, button.presentation == .icons {
@@ -487,10 +489,6 @@ final class SidebarSpaceTooltip: NSView {
     private let material = NSVisualEffectView()
     private let tint = NSView()
     private let label = NSTextField(labelWithString: "")
-    private let profileBadge = NSView()
-    private let profileLabel = NSTextField(labelWithString: "")
-    private let profileGlyph = SidebarProfileBadgeGlyph()
-    private(set) var profileName: String?
     private var keycaps: [NSTextField] = []
     private(set) var name = ""
     private(set) var shortcut: String?
@@ -516,15 +514,7 @@ final class SidebarSpaceTooltip: NSView {
         label.textColor = NSColor(white: 0.96, alpha: 1)
         label.maximumNumberOfLines = 1
         label.lineBreakMode = .byTruncatingTail
-        profileBadge.wantsLayer = true
-        profileBadge.layer?.cornerRadius = 11
-        profileBadge.layer?.backgroundColor = NSColor(white: 0.9, alpha: 0.96).cgColor
-        profileLabel.font = .systemFont(ofSize: 11, weight: .semibold)
-        profileLabel.textColor = NSColor(srgbRed: 0.38, green: 0.32, blue: 0.39, alpha: 1)
-        profileLabel.lineBreakMode = .byTruncatingTail
-        profileBadge.addSubview(profileGlyph)
-        profileBadge.addSubview(profileLabel)
-        for view in [material, tint, label, profileBadge] { addSubview(view) }
+        for view in [material, tint, label] { addSubview(view) }
         setAccessibilityIdentifier("space-hover-capsule")
         setAccessibilityElement(true)
         setAccessibilityRole(.group)
@@ -534,9 +524,9 @@ final class SidebarSpaceTooltip: NSView {
     override var isFlipped: Bool { true }
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
 
-    func configure(name: String, shortcut: String?, profileName: String? = nil, maximumWidth: CGFloat = 600) -> NSSize {
+    /// The capsule shows the Space name and its shortcut only, never the profile.
+    func configure(name: String, shortcut: String?, maximumWidth: CGFloat = 600) -> NSSize {
         self.name = name
-        self.profileName = profileName
         self.shortcut = shortcut
         label.stringValue = name
         keycaps.forEach { $0.removeFromSuperview() }
@@ -556,26 +546,17 @@ final class SidebarSpaceTooltip: NSView {
         let keyWidths = keycaps.map { max(18, ceil($0.intrinsicContentSize.width) + 6) }
         let keysWidth = keyWidths.reduce(0, +) + CGFloat(max(0, keycaps.count - 1)) * 3
         let gap: CGFloat = keycaps.isEmpty ? 0 : 6
-        profileLabel.stringValue = profileName ?? ""
-        profileBadge.isHidden = profileName == nil
-        let profileWidth = profileName.map { ceil(($0 as NSString).size(withAttributes: [.font: profileLabel.font!]).width) + 30 } ?? 0
-        let profileGap: CGFloat = profileName == nil ? 0 : 2
-        let badgeWidth = min(profileWidth, max(0, maximumWidth - 20 - gap - keysWidth - profileGap - 24))
         // NSTextField's intrinsic width can retain the previous truncated cell width.
         // Measure the complete name so even the first hover has no ellipsis or width jump.
         let nameWidth = ceil((name as NSString).size(withAttributes: [.font: label.font!]).width) + 6
-        let textWidth = min(nameWidth, max(12, maximumWidth - 20 - gap - keysWidth - badgeWidth - profileGap))
+        let textWidth = min(nameWidth, max(12, maximumWidth - 20 - gap - keysWidth))
         label.frame = NSRect(x: 8, y: 6, width: textWidth, height: 17)
-        var x = label.frame.maxX + profileGap
-        profileBadge.frame = NSRect(x: x, y: 3, width: badgeWidth, height: 22)
-        profileGlyph.frame = NSRect(x: 6, y: 4, width: 12, height: 14)
-        profileLabel.frame = NSRect(x: 22, y: 3, width: max(0, badgeWidth - 26), height: 16)
-        x += badgeWidth + gap
+        var x = label.frame.maxX + gap
         for (key, width) in zip(keycaps, keyWidths) {
             key.frame = NSRect(x: x, y: 5, width: width, height: 18)
             x += width + 3
         }
-        let size = NSSize(width: label.frame.maxX + profileGap + badgeWidth + gap + keysWidth + 10, height: 28)
+        let size = NSSize(width: label.frame.maxX + gap + keysWidth + 10, height: 28)
         material.frame = NSRect(origin: .zero, size: size)
         tint.frame = material.frame
         setAccessibilityLabel(name)
@@ -584,21 +565,3 @@ final class SidebarSpaceTooltip: NSView {
     }
 }
 
-
-@MainActor
-private final class SidebarProfileBadgeGlyph: NSView {
-    override func draw(_ dirtyRect: NSRect) {
-        NSColor(srgbRed: 0.38, green: 0.32, blue: 0.39, alpha: 0.1).setFill()
-        NSBezierPath(ovalIn: NSRect(x: 0, y: 1, width: 12, height: 12)).fill()
-        NSColor(srgbRed: 0.38, green: 0.32, blue: 0.39, alpha: 1).setFill()
-        for x: CGFloat in [3, 7] {
-            NSBezierPath(roundedRect: NSRect(x: x, y: 7, width: 1.5, height: 4), xRadius: 0.75, yRadius: 0.75).fill()
-        }
-        let smile = NSBezierPath()
-        smile.move(to: NSPoint(x: 2, y: 5))
-        smile.curve(to: NSPoint(x: 10, y: 5), controlPoint1: NSPoint(x: 4, y: 2), controlPoint2: NSPoint(x: 8, y: 2))
-        smile.lineWidth = 1.25
-        NSColor(srgbRed: 0.38, green: 0.32, blue: 0.39, alpha: 1).setStroke()
-        smile.stroke()
-    }
-}

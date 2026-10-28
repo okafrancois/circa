@@ -51,7 +51,9 @@ struct SpaceSwitchHoverTests {
         sidebar.footer.onHoverSpace?(buttons[1])
         #expect(delays == [0.45, 0.45])
         timers[1].action()
-        #expect(!capsule.isHidden && capsule.name == "Personal" && capsule.profileName == "Work")
+        #expect(!capsule.isHidden && capsule.name == "Personal")
+        let texts = descendantTextFields(capsule).map(\.stringValue)
+        #expect(!texts.contains("Work"), "The capsule never shows the Space's profile")
         #expect(capsule.shortcut == "⌃2" && capsule.alphaValue == 1)
         sidebar.footer.onHoverSpace?(buttons[2])
         #expect(timers.count == 2 && !capsule.isHidden && capsule.name == "Reading")
@@ -110,15 +112,44 @@ struct SpaceSwitchHoverTests {
         #expect(capsule.isHidden)
     }
 
-    @Test("Profile badges fit in the capsule and repeat configuration retains the exact short width")
-    func profileBadge() {
+    @Test("The capsule holds only the name and shortcut, fits its maximum width and keeps its exact short width")
+    func nameAndShortcutOnly() {
         let capsule = SidebarSpaceTooltip()
-        let short = capsule.configure(name: "Personal", shortcut: "⌃2", profileName: "Default")
-        #expect(short.height == 28 && short.width < 220)
-        let long = capsule.configure(name: String(repeating: "Long ", count: 30), shortcut: "⌃9",
-                                     profileName: String(repeating: "Profile ", count: 30), maximumWidth: 240)
+        let short = capsule.configure(name: "Personal", shortcut: "⌃2")
+        #expect(short.height == 28 && short.width < 160)
+        #expect(Set(descendantTextFields(capsule).map(\.stringValue)) == ["Personal", "⌃", "2"])
+        let long = capsule.configure(name: String(repeating: "Long ", count: 30), shortcut: "⌃9", maximumWidth: 240)
         #expect(long.width <= 240)
-        #expect(capsule.configure(name: "Personal", shortcut: "⌃2", profileName: "Default") == short)
+        #expect(capsule.configure(name: "Personal", shortcut: "⌃2") == short)
+    }
+
+    @Test("Symbol Space icons render upright in the flipped footer button")
+    func symbolIconOrientation() throws {
+        let (sidebar, window, _) = fixture()
+        defer { window.close() }
+        let button = try #require(sidebar.footer.spaceButtons.first)
+        button.iconSelection = .systemSymbol("triangle.fill")
+        button.layoutSubtreeIfNeeded()
+        let bitmap = try #require(button.bitmapImageRepForCachingDisplay(in: button.bounds))
+        button.cacheDisplay(in: button.bounds, to: bitmap)
+        // A point-up triangle has most of its ink in its lower half; flipped drawing inverts that.
+        var upper = 0.0, lower = 0.0
+        for y in 0..<bitmap.pixelsHigh {
+            for x in 0..<bitmap.pixelsWide {
+                let alpha = Double(bitmap.colorAt(x: x, y: y)?.alphaComponent ?? 0)
+                if y < bitmap.pixelsHigh / 2 { upper += alpha } else { lower += alpha }
+            }
+        }
+        #expect(upper + lower > 0)
+        #expect(lower > upper * 1.5)
     }
 }
+}
+
+@MainActor
+private func descendantTextFields(_ view: NSView) -> [NSTextField] {
+    view.subviews.flatMap { subview -> [NSTextField] in
+        if let field = subview as? NSTextField { return [field] }
+        return descendantTextFields(subview)
+    }
 }

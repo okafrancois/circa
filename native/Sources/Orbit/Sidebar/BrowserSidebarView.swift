@@ -699,7 +699,7 @@ final class BrowserSidebarView: NSView, SidebarListHost {
             guard let self, let button, button.window != nil, self.commandsEnabled,
                   !self.isPresentationHidden, !self.hasFooterPresentation,
                   self.footer.spaceButtons.contains(where: { $0 === button }) else { return }
-            let size = self.tooltip.configure(name: button.space.name, shortcut: self.spaceShortcutLabel(button.index), profileName: self.renderedCatalog?.profiles.first { $0.id == button.space.profileID }?.name, maximumWidth: max(40, self.bounds.width - 2 * Metrics.paddingX))
+            let size = self.tooltip.configure(name: button.space.name, shortcut: self.spaceShortcutLabel(button.index), maximumWidth: max(40, self.bounds.width - 2 * Metrics.paddingX))
             let anchor = button.convert(button.bounds, to: self)
             var x = (anchor.midX - size.width / 2).rounded()
             x = min(max(Metrics.paddingX, x), self.bounds.width - Metrics.paddingX - size.width)
