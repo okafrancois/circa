@@ -328,6 +328,17 @@ extension BrowserWindowController {
         }
     }
 
+    /// Capture the displayed document before submitting work to the window's command queue.
+    func performDocumentCommand(_ action: @escaping (Surface) throws -> Void) {
+        guard acceptsCommands, let surface = pageCommandSurface() else { return }
+        let generation = surface.documentGeneration
+        session.performWindowAction { [weak self, weak surface] in
+            guard let self, let surface, self.showsPageSurface(surface),
+                  !surface.isDisposed, surface.documentGeneration == generation else { return }
+            do { try action(surface) } catch { self.session.onError?(error) }
+        }
+    }
+
     var canViewPageSource: Bool {
         guard engine.capabilities.contains(.devTools), let url = pageCommandSurface()?.navigationState.committedURL else { return false }
         return BrowserPageContextCommands.canViewSource(url)

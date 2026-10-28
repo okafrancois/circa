@@ -387,6 +387,10 @@ struct NativeQuickWindowR2Tests {
                 windowNumber: little.window?.windowNumber ?? 0, context: nil, characters: key,
                 charactersIgnoringModifiers: key, isARepeat: false, keyCode: 0))
         }
+        #expect(keyboard.handle(try event("t")))
+        #expect(little.window?.firstResponder is NSTextView)
+        #expect(router.windows.isEmpty)
+        little.window?.makeFirstResponder(nil)
         #expect(!keyboard.handle(try event("[")))
         #expect(bar.performKeyEquivalent(with: try event("[")))
         #expect(surface.currentURL?.path == "/first")

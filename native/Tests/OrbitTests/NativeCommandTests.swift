@@ -298,7 +298,7 @@ struct NativeCommandTests {
         // + site-session/bookmark import and export (4), and private-window routing (1).
         // + local Share and page-context Share (2), sidebar tab navigation (4), Select Space 1–9 (9).
         let implemented = system.registry.definitions.filter { system.registry.isImplemented($0.id) }.map(\.id.rawValue)
-        #expect(implemented.count == 179, "\(implemented.count): \(implemented.sorted())")
+        #expect(implemented.count == 182, "\(implemented.count): \(implemented.sorted())")
         #expect(system.registry.isImplemented(.checkForUpdates))
         #expect(system.registry.isImplemented(.toggleDeveloperMode))
         #expect(system.registry.isImplemented(.newIncognitoWindow))
@@ -312,10 +312,17 @@ struct NativeCommandTests {
         #expect(system.registry.isImplemented(.copyURL))
         #expect(system.registry.isImplemented(.showSiteControls))
         #expect(system.registry.isImplemented(.showHideSidebar))
-        #expect(!system.registry.isImplemented(.forceRefreshThePage))
+        #expect(system.registry.isImplemented(.forceRefreshThePage))
+        #expect(system.registry.isImplemented(.javascriptConsole))
+        #expect(system.registry.isImplemented(.pasteAsNewTab))
         #expect(system.registry.isImplemented(.addSplitView))
         #expect(system.registry.isImplemented(.newQuickWindowWindow))
         #expect(!system.registry.isImplemented(.newChatGPTMessage))
+        // Unsupported declarations retain no handler until their behavior is specified.
+        for id: BrowserCommandID in [.blankWindow, .showHideToolbar, .joinMeeting, .cycleExtensions,
+                                     .peekEmail, .copyURLAsQuote, .removeSuggestion, .exit] {
+            #expect(!system.registry.isImplemented(id))
+        }
     }
 
     @Test("MENUS-WORK audits every visible action and keeps unsupported commands out of every presentation")
@@ -336,6 +343,10 @@ struct NativeCommandTests {
         let omitted = OrbitCommandCatalog.actionDefinitions.filter {
             !registry.isImplemented($0.id) && BrowserStandardActions.selector(for: $0.id) == nil
         }
+        let unbound = registry.definitions.filter {
+            !$0.shortcuts.isEmpty && !registry.isImplemented($0.id) && BrowserStandardActions.selector(for: $0.id) == nil
+        }.map { $0.id.rawValue }.sorted()
+        print("SHORTCUTS unimplemented: " + unbound.joined(separator: ", "))
         print("MENUS-WORK omitted: " + omitted.map { $0.id.rawValue }.sorted().joined(separator: ", "))
         for id in [BrowserCommandID.findAndReplace, .useSelectionToFind, .jumpToSelection, .copyURLAsQuote, .captureInPortraitMode] {
             #expect(!registry.isImplemented(id))
@@ -498,11 +509,11 @@ struct NativeCommandTests {
           Find
             {Find}
             Find… [find] ⌘F
-            Find and Replace [findAndReplace] ⌥⌘F
+            Find and Replace [findAndReplace] ⌥⌘F <performFindPanelAction:>
             Find Next [findNext] ⌘G
             Find Previous [findPrevious] ⇧⌘G
-            Use Selection to Find [useSelectionToFind]
-            Jump to Selection [jumpToSelection] ⌘J
+            Use Selection to Find [useSelectionToFind] <performFindPanelAction:>
+            Jump to Selection [jumpToSelection] ⌘J <centerSelectionInVisibleArea:>
           Spelling and Grammar
             {Spelling}
             Show Spelling and Grammar [showSpellingAndGrammar] ⌘: <showGuessPanel:>

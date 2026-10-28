@@ -2324,6 +2324,7 @@ extern "C" int32_t ACRGoForward(uint64_t token) {
   return 1;
 }
 extern "C" int32_t ACRReload(uint64_t token) { ACR_HOST(token); host->browser->Reload(); return 1; }
+extern "C" int32_t ACRReloadIgnoringCache(uint64_t token) { ACR_HOST(token); host->browser->ReloadIgnoreCache(); return 1; }
 extern "C" int32_t ACRStopLoad(uint64_t token) { ACR_HOST(token); host->browser->StopLoad(); return 1; }
 extern "C" int32_t ACRSetFocus(uint64_t token, int32_t focus) {
   ACR_HOST(token);

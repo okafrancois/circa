@@ -127,6 +127,7 @@ public final class WebKitSurface: BrowserEngineSurface {
     }
 
     public func reload() { webView.reload() }
+    public func reloadIgnoringCache() throws { webView.reloadFromOrigin() }
     public func stopLoading() { webView.stopLoading() }
 
     func recordNavigation(_ navigation: WKNavigation?, to url: URL) {

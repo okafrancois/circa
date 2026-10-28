@@ -337,6 +337,7 @@ int32_t ACRNavigate(uint64_t surface_token, const char *url);
 int32_t ACRGoBack(uint64_t surface_token);
 int32_t ACRGoForward(uint64_t surface_token);
 int32_t ACRReload(uint64_t surface_token);
+int32_t ACRReloadIgnoringCache(uint64_t surface_token);
 int32_t ACRStopLoad(uint64_t surface_token);
 int32_t ACRSetFocus(uint64_t surface_token, int32_t focus);
 /* Chrome content settings in one request context. kind: 0 notifications, 1 camera,

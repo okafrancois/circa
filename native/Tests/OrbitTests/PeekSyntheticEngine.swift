@@ -186,6 +186,11 @@ final class PeekSyntheticSurface: BrowserEngineSurface, BrowserLinkGeometrySourc
         delegate?.surfaceDidFinishNavigation(self)
     }
 
+    var cacheBypassingReloadCount = 0
+    var developerPanels: [BrowserDeveloperPanel] = []
+    func reloadIgnoringCache() throws { cacheBypassingReloadCount += 1; reload() }
+    func showDeveloperPanel(_ panel: BrowserDeveloperPanel) throws { developerPanels.append(panel) }
+
     func reload() {
         guard let currentURL else { return }
         requestedURLs.append(currentURL)

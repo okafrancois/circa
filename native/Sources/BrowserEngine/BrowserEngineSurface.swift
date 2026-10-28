@@ -211,6 +211,7 @@ public protocol BrowserEngineSurface: BrowserFindSurface {
     @discardableResult func goBack() -> URL?
     @discardableResult func goForward() -> URL?
     func reload()
+    func reloadIgnoringCache() throws
     func stopLoading()
     /// After a cancelled quit, the stopped request no longer owns the displayed address.
     func cancelStoppedNavigationTracking()
@@ -265,6 +266,7 @@ public protocol BrowserEngineSurface: BrowserFindSurface {
 }
 
 public extension BrowserEngineSurface {
+    func reloadIgnoringCache() throws { throw BrowserEngineError.unsupportedOperation }
     func archivePage(documentGeneration: UInt64) async throws -> Data { throw BrowserEngineError.unsupportedOperation }
     func showDeveloperPanel(_ panel: BrowserDeveloperPanel) throws {
         try perform(panel == .elements ? .inspectElements : .showDevTools)

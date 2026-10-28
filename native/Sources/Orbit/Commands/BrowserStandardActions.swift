@@ -10,6 +10,9 @@ enum BrowserStandardActions {
         .cut: #selector(NSText.cut(_:)), .copy: #selector(NSText.copy(_:)), .paste: #selector(NSText.paste(_:)),
         .pasteAndMatchStyle: #selector(NSTextView.pasteAsPlainText(_:)), .delete: #selector(NSText.delete(_:)),
         .selectAll: #selector(NSText.selectAll(_:)),
+        .jumpToSelection: #selector(NSResponder.centerSelectionInVisibleArea(_:)),
+        .findAndReplace: #selector(NSTextView.performFindPanelAction(_:)),
+        .useSelectionToFind: #selector(NSTextView.performFindPanelAction(_:)),
         .showSpellingAndGrammar: #selector(NSText.showGuessPanel(_:)), .checkDocumentNow: #selector(NSText.checkSpelling(_:)),
         .checkSpellingWhileTyping: #selector(NSTextView.toggleContinuousSpellChecking(_:)),
         .checkGrammarWithSpelling: #selector(NSTextView.toggleGrammarChecking(_:)),
@@ -48,7 +51,13 @@ enum BrowserStandardActions {
     @MainActor
     static func target(for id: BrowserCommandID) -> AnyObject? { fontTraits[id] != nil ? NSFontManager.shared : nil }
 
-    static func tag(for id: BrowserCommandID) -> Int { fontTraits[id].map { Int($0.rawValue) } ?? 0 }
+    static func tag(for id: BrowserCommandID) -> Int {
+        switch id {
+        case .findAndReplace: return Int(NSTextFinder.Action.showReplaceInterface.rawValue)
+        case .useSelectionToFind: return Int(NSFindPanelAction.setFindString.rawValue)
+        default: return fontTraits[id].map { Int($0.rawValue) } ?? 0
+        }
+    }
 
     static func keyWindowSelector(for id: BrowserCommandID) -> Selector? { keyWindowSelectors[id] }
 }
