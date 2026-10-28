@@ -112,6 +112,9 @@ enum OrbitPerformanceProbe {
                 }
                 result["completedCommand"] = command["id"] ?? name
             }
+            if owner.isPeekPresented, let rect = owner.peekOverlay.sourceRect {
+                result["peekOrigin"] = ["x": rect.minX, "y": rect.minY, "width": rect.width, "height": rect.height]
+            } else { result.removeValue(forKey: "peekOrigin") }
             result["surfaces"] = owner.session.ownedSurfaces.count
             result["browsers"] = owner.session.ownedSurfaces.filter(\.isBrowserCreated).count
             write(result, to: output)

@@ -13,6 +13,7 @@ import OSLog
 @MainActor
 final class ChromiumHostView: NSView {
     weak var surface: ChromiumSurface?
+    var linkActivation: (point: NSPoint, timestamp: TimeInterval, generation: UInt64)?
     private static let signposter = OSSignposter(subsystem: "local.orbit", category: "chromium-layout")
 
     override func viewDidMoveToWindow() {
@@ -77,6 +78,11 @@ final class ChromiumHostView: NSView {
         if hit != nil, let type = NSApp?.currentEvent?.type,
            [.leftMouseDown, .rightMouseDown, .otherMouseDown].contains(type) {
             surface?.hostViewDidBecomeVisible()
+            if type == .leftMouseDown, let event = NSApp.currentEvent, let surface {
+                let local = convert(event.locationInWindow, from: nil)
+                linkActivation = (NSPoint(x: local.x, y: isFlipped ? local.y : bounds.height - local.y),
+                                  event.timestamp, surface.documentGeneration)
+            }
         }
         return hit
     }
@@ -640,8 +646,10 @@ public final class ChromiumSurface: BrowserEngineSurface {
     }
 
     func decideKey(_ key: ChromiumKeyEvent) -> (consume: Bool, track: Bool) {
-        guard !isDisposed, let event = key.event, event.type == .keyDown, Self.isShortcutCandidate(event),
-              let delegate else { return (false, false) }
+        guard !isDisposed, let event = key.event, event.type == .keyDown else { return (false, false) }
+        // Enter/Space can activate a focused link. Never reuse a preceding mouse click for it.
+        (hostView as? ChromiumHostView)?.linkActivation = nil
+        guard Self.isShortcutCandidate(event), let delegate else { return (false, false) }
         switch delegate.surface(self, willSendKeyToPage: event) {
         case .browser:
             return (true, false)

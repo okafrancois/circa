@@ -166,7 +166,8 @@ extension BrowserWindowController {
         guard case .peek(let trigger) = BrowserPeekRouting.decide(link, settings: peek.settings) else { return .declined }
         let child = make()
         guard peek.claim(child) else { return .handled(nil) }
-        presentPeek(child, source: source, sourceOccurrenceID: sourceOccurrence, trigger: trigger)
+        presentPeek(child, source: source, sourceOccurrenceID: sourceOccurrence, trigger: trigger,
+                    activationPoint: peekActivationPoint(in: source))
         return .handled(child)
     }
 
@@ -184,9 +185,12 @@ extension BrowserWindowController {
                                     kind: action.kind == .linkActivation && action.isUserGesture != false ? .linkActivation : .other,
                                     httpMethod: action.httpMethod, hasBody: action.hasBody != false))
         guard case .peek(let trigger) = BrowserPeekRouting.decide(link, settings: peek.settings) else { return .declined }
+        let origin = peekActivationPoint(in: source)
+        let generation = source.documentGeneration
         Task { [weak self, weak source] in
-            guard let self, let source, owns(source), session.selectedSurface === source else { return }
-            openPeek(url, trigger: trigger)
+            guard let self, let source, owns(source), session.selectedSurface === source,
+                  source.documentGeneration == generation else { return }
+            openPeek(url, trigger: trigger, activationPoint: origin)
         }
         return .handled(.cancel)
     }
@@ -212,7 +216,7 @@ extension BrowserWindowController {
     /// Opens `url` in a new Peek over the selected tab, in that tab's profile. Used by commands
     /// (⇧⌘T reopening a closed Peek) and by features such as ORBIT-MAIL once arbitrated.
     @discardableResult
-    func openPeek(_ url: URL, trigger: BrowserPeekTrigger = .command) -> Surface? {
+    func openPeek(_ url: URL, trigger: BrowserPeekTrigger = .command, activationPoint: NSPoint? = nil) -> Surface? {
         guard acceptsCommands, !session.isClosed, BrowserPeekRouting.isWebURL(url),
               let source = session.selectedSurface,
               let sourceOccurrence = session.occurrenceID(for: source) else { return nil }
@@ -221,21 +225,34 @@ extension BrowserWindowController {
             surface.dispose()
             return nil
         }
-        presentPeek(surface, source: source, sourceOccurrenceID: sourceOccurrence, trigger: trigger)
+        presentPeek(surface, source: source, sourceOccurrenceID: sourceOccurrence, trigger: trigger, activationPoint: activationPoint)
         // Ownership, delegate and placement are recorded: the first load may start.
         surface.navigate(to: url)
         return surface
     }
 
+    /// Read the initiating event before deferring the navigation. Keyboard activation must not
+    /// hit-test an unrelated link that happens to be underneath the pointer.
+    private func peekActivationPoint(in source: Surface) -> NSPoint? {
+        guard let event = NSApp.currentEvent, event.window === window,
+              [.leftMouseDown, .leftMouseUp, .otherMouseDown, .otherMouseUp].contains(event.type) else {
+            return (source as? any BrowserLinkGeometrySource)?.linkActivationPoint
+        }
+        let host = source.hostView
+        let point = host.convert(event.locationInWindow, from: nil)
+        guard host.bounds.contains(point) else { return nil }
+        return NSPoint(x: point.x, y: host.isFlipped ? point.y : host.bounds.height - point.y)
+    }
+
     private func presentPeek(_ surface: Surface, source: Surface, sourceOccurrenceID: TabOccurrenceID,
-                             trigger: BrowserPeekTrigger) {
+                             trigger: BrowserPeekTrigger, activationPoint: NSPoint? = nil) {
         peek.overlay.scrimCornerRadius = contentCard.cornerRadius
-        peek.overlay.sourceRect = nil
+        let pointer = peek.overlay.convert(window?.mouseLocationOutsideOfEventStream ?? .zero, from: nil)
+        peek.overlay.sourceRect = BrowserPeekMotion.pointerFallback(at: pointer)
         peek.overlay.sourceCornerRadius = 0
         peek.overlay.prepareSource = nil
-        if trigger != .command, let geometry = source as? any BrowserLinkGeometrySource {
-            let point = source.hostView.convert(window?.mouseLocationOutsideOfEventStream ?? .zero, from: nil)
-            let viewportPoint = NSPoint(x: point.x, y: source.hostView.isFlipped ? point.y : source.hostView.bounds.height - point.y)
+        if trigger != .command, let geometry = source as? any BrowserLinkGeometrySource,
+           let viewportPoint = activationPoint ?? peekActivationPoint(in: source) {
             let generation = source.documentGeneration
             peek.overlay.prepareSource = { [weak self, weak source, weak geometry] in
                 guard let self, let source, let geometry,

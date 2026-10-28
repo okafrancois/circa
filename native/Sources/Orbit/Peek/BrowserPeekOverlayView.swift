@@ -453,10 +453,7 @@ final class BrowserPeekOverlayView: NSView {
     }
 
     private var resolvedSourceRect: NSRect {
-        let card = cardFrame
-        return sourceRect ?? NSRect(x: card.minX - BrowserPeekMotion.fallbackExtraWidth / 2,
-                                    y: card.minY, width: card.width + BrowserPeekMotion.fallbackExtraWidth,
-                                    height: card.height)
+        sourceRect ?? BrowserPeekMotion.pointerFallback(at: NSPoint(x: cardFrame.midX, y: cardFrame.midY))
     }
 
     private var sourceGeometry: (scale: CGFloat, height: CGFloat) {

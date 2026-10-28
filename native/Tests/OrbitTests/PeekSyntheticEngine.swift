@@ -71,7 +71,14 @@ final class PeekSyntheticDocumentView: NSView {
 }
 
 @MainActor
-final class PeekSyntheticSurface: BrowserEngineSurface {
+final class PeekSyntheticSurface: BrowserEngineSurface, BrowserLinkGeometrySource {
+    var linkActivationPoint: NSPoint?
+    var linkGeometryResult: BrowserLinkGeometry?
+    var linkGeometryPoints: [NSPoint] = []
+    func linkGeometry(at point: NSPoint) async -> BrowserLinkGeometry? {
+        linkGeometryPoints.append(point)
+        return linkGeometryResult
+    }
     let profileID: ProfileID
     let hostView = NSView()
     let documentView = PeekSyntheticDocumentView()

@@ -3,9 +3,18 @@ import BrowserEngine
 import Foundation
 
 extension ChromiumSurface: BrowserLinkGeometrySource {
+    public var linkActivationPoint: NSPoint? {
+        guard let activation = (hostView as? ChromiumHostView)?.linkActivation,
+              activation.generation == documentGeneration,
+              ProcessInfo.processInfo.systemUptime - activation.timestamp < 1,
+              NSApp.currentEvent?.type != .keyDown else { return nil }
+        return activation.point
+    }
+
     public func linkGeometry(at point: NSPoint) async -> BrowserLinkGeometry? {
         guard !isDisposed, isBrowserCreated, point.x.isFinite, point.y.isFinite else { return nil }
         let generation = documentGeneration
+        let zoom = pageZoom
         func call(_ method: String, _ parameters: [String: Any]) async -> [String: Any]? {
             guard let data = try? JSONSerialization.data(withJSONObject: parameters) else { return nil }
             let (ok, result) = await devToolsCall(method, params: String(decoding: data, as: UTF8.self), timeout: .milliseconds(250))
@@ -16,8 +25,8 @@ extension ChromiumSurface: BrowserLinkGeometrySource {
         guard let metrics = await call("Page.getLayoutMetrics", [:]),
               let viewport = metrics["cssVisualViewport"] as? [String: Any],
               let scrollX = viewport["pageX"] as? Double, let scrollY = viewport["pageY"] as? Double,
-              let hit = await call("DOM.getNodeForLocation", ["x": Int(point.x / pageZoom + scrollX),
-                                                            "y": Int(point.y / pageZoom + scrollY),
+              let hit = await call("DOM.getNodeForLocation", ["x": Int(point.x / zoom + scrollX),
+                                                            "y": Int(point.y / zoom + scrollY),
                                                             "includeUserAgentShadowDOM": false]),
               let node = hit["backendNodeId"] as? Int, let frame = hit["frameId"] as? String,
               let world = await call("Page.createIsolatedWorld", ["frameId": frame, "worldName": "OrbitLinkGeometry"]),
@@ -32,19 +41,19 @@ extension ChromiumSurface: BrowserLinkGeometrySource {
         if let link, let box = await call("DOM.getBoxModel", ["objectId": link]),
            let model = box["model"] as? [String: Any], let quad = model["border"] as? [Double], quad.count == 8,
            quad.allSatisfy(\.isFinite) {
-            let xs = stride(from: 0, to: 8, by: 2).map { quad[$0] * pageZoom }
-            let ys = stride(from: 1, to: 8, by: 2).map { quad[$0] * pageZoom }
+            let xs = stride(from: 0, to: 8, by: 2).map { quad[$0] * zoom }
+            let ys = stride(from: 1, to: 8, by: 2).map { quad[$0] * zoom }
             rect = NSRect(x: xs.min()!, y: ys.min()!, width: xs.max()! - xs.min()!, height: ys.max()! - ys.min()!)
             let style = await call("Runtime.callFunctionOn", ["objectId": link,
                 "functionDeclaration": "function() { return parseFloat(getComputedStyle(this).borderTopLeftRadius) || 0; }",
                 "returnByValue": true])
             if let radius = (style?["result"] as? [String: Any])?["value"] as? Double, radius.isFinite {
-                cornerRadius = max(0, radius * pageZoom)
+                cornerRadius = max(0, radius * zoom)
             }
         }
         _ = await call("Runtime.releaseObject", ["objectId": identifier])
         if let link { _ = await call("Runtime.releaseObject", ["objectId": link]) }
-        guard !isDisposed, documentGeneration == generation, let rect, rect.width > 0, rect.height > 0 else { return nil }
+        guard !isDisposed, documentGeneration == generation, pageZoom == zoom, let rect, rect.width > 0, rect.height > 0 else { return nil }
         return BrowserLinkGeometry(bounds: rect, cornerRadius: cornerRadius)
     }
 }
