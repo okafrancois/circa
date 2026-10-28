@@ -56,6 +56,7 @@ struct NativePaletteViewTests {
         let h = PaletteViewHarness()
         defer { h.close() }
         let favicon = NSImage(size: NSSize(width: 16, height: 16))
+        h.view.input.stringValue = "result"
         h.view.accent = .systemPurple
         h.view.favicons = ["synthetic-0": favicon]
         h.render([paletteViewResult(0, section: .tabs)])
@@ -69,7 +70,7 @@ struct NativePaletteViewTests {
         #expect(cell.icon.frame.size == NSSize(width: 16, height: 16))
         #expect(cell.titleLabel.frame.midY == cell.detailLabel.frame.midY)
         #expect(cell.titleLabel.frame.maxX < cell.detailLabel.frame.minX)
-        #expect(cell.detailLabel.stringValue == "result-0.test")
+        #expect(cell.detailLabel.stringValue == "— result-0.test")
         #expect(cell.actionLabel.stringValue == "Switch to Tab" && !cell.actionLabel.isHidden)
         #expect(cell.titleLabel.textColor == .white && cell.actionLabel.textColor == .white)
         #expect(cell.background.layer?.backgroundColor == NSColor.systemPurple.resolvedCGColor(for: cell.effectiveAppearance))
@@ -79,6 +80,46 @@ struct NativePaletteViewTests {
             #expect(panel.width == 765 && panel.midX == size.width / 2)
             #expect(panel.minY == size.height / 2 - 168.5)
         }
+    }
+
+    @Test("Tab actions stay visible off selection; plain navigation has no fabricated Open action")
+    func actionAffordances() throws {
+        let h = PaletteViewHarness()
+        defer { h.close() }
+        let rows = [paletteViewResult(0, section: .tabs), paletteViewResult(1, section: .tabs), paletteViewResult(2)]
+        h.render(rows)
+        let tab = try #require(h.table.view(atColumn: 0, row: 1, makeIfNecessary: true) as? PaletteResultCell)
+        let page = try #require(h.table.view(atColumn: 0, row: 2, makeIfNecessary: true) as? PaletteResultCell)
+        #expect(!tab.actionLabel.isHidden && !tab.accessory.isHidden && !tab.actionIcon.isHidden)
+        #expect(tab.actionLabel.stringValue == "Switch to Tab")
+        #expect(tab.detailLabel.stringValue.isEmpty)
+        #expect(page.actionLabel.isHidden && page.accessory.isHidden)
+        h.view.input.stringValue = "result"
+        h.render(rows, selected: 2)
+        page.layoutSubtreeIfNeeded()
+        #expect(page.detailLabel.stringValue == "— result-2.test")
+        #expect(page.actionLabel.isHidden && page.accessory.isHidden)
+        #expect(page.titleLabel.frame.maxX < page.detailLabel.frame.minX)
+        #expect(page.background.frame.height == 46)
+        // Returning to the empty draft updates existing cells synchronously.
+        h.view.input.stringValue = ""
+        h.render(rows)
+        #expect(tab.detailLabel.stringValue.isEmpty && page.detailLabel.stringValue.isEmpty)
+    }
+
+    @Test("Selection wins over hover and reused results cannot inherit a stale hover fill")
+    func hoverReuse() throws {
+        let h = PaletteViewHarness()
+        defer { h.close() }
+        h.render([paletteViewResult(0), paletteViewResult(1)])
+        let cell = try #require(h.table.view(atColumn: 0, row: 1, makeIfNecessary: true) as? PaletteResultCell)
+        let event = try h.key()
+        cell.mouseEntered(with: event)
+        #expect(cell.background.layer?.backgroundColor == OrbitTokens.Color.State.commandBarRowHover.resolvedCGColor(for: cell.effectiveAppearance))
+        h.view.updateSelection(1)
+        #expect(cell.background.layer?.backgroundColor == h.view.accent.resolvedCGColor(for: cell.effectiveAppearance))
+        h.render([paletteViewResult(0), paletteViewResult(3)])
+        #expect(cell.background.layer?.backgroundColor == NSColor.clear.resolvedCGColor(for: cell.effectiveAppearance))
     }
 
     @Test("Native rows expose selection and section semantics while the input keeps its field editor")
