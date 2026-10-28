@@ -2,7 +2,7 @@ import AppKit
 import BrowserCore
 import BrowserEngine
 
-/// Developer toolbar dimensions are expressed in points.
+/// A compact 35-point developer toolbar with a page-coloured surface.
 /// The content card supplies the top corner clipping; the page boundary stays square.
 @MainActor
 final class BrowserDeveloperToolbar: NSView {
@@ -12,6 +12,9 @@ final class BrowserDeveloperToolbar: NSView {
     private let lock = SiteControlButton("", identifier: "developer-security", onPress: {})
     private let background = OrbitThemeFillView()
     private let actions = NSStackView()
+    private var separators: [NSView] = []
+    private(set) var pageTint: BrowserPageTint?
+    private(set) var foreground: NSColor = .black
     private let extensions = NSStackView()
     private var extensionButtons: [String: SiteControlButton] = [:]
     private var badges: [String: BrowserExtensionBadgeView] = [:]
@@ -32,9 +35,6 @@ final class BrowserDeveloperToolbar: NSView {
         background.frame = bounds
         background.autoresizingMask = [.width, .height]
         addSubview(background)
-        let stripes = BrowserDeveloperToolbarStripes(frame: bounds)
-        stripes.autoresizingMask = [.width, .height]
-        addSubview(stripes)
         lock.image = Self.glyph("lock.fill", width: 11.5, height: 13.5, weight: .medium)
         lock.isBordered = false
         lock.setAccessibilityLabel(uiText("Site Settings"))
@@ -69,7 +69,7 @@ final class BrowserDeveloperToolbar: NSView {
             NSPasteboard.general.clearContents(); NSPasteboard.general.setString(address.stringValue, forType: .string)
         }
         captureSeparator = addSeparator()
-        // Portrait capture is not implemented.
+        // Portrait capture has no implemented action.
         captureButton = addButton("camera", label: uiText("Capture…"), id: "developer-capture") { [weak self] in self?.onCapture?() }
         addSeparator()
         addButton("terminal", label: uiText("Toggle Console"), id: "developer-console") { [weak self] in self?.onPanel?(.console) }
@@ -80,6 +80,7 @@ final class BrowserDeveloperToolbar: NSView {
         extensions.orientation = .horizontal; extensions.spacing = 0
         actions.addArrangedSubview(extensions)
         addButton("rectangle.split.2x1", label: uiText("Split View Menu"), id: "developer-split") { [weak self] in self?.onSplit?() }
+        background.onAppearanceChange = { [weak self] in self?.refreshTint() }
         apply(theme: .default)
     }
     required init?(coder: NSCoder) { nil }
@@ -125,7 +126,7 @@ final class BrowserDeveloperToolbar: NSView {
         sized.isTemplate = true
         return sized
     }
-    /// Reference outline: 16.5×12 pt ink, outward left/right tabs, recessed top/bottom.
+    /// Horizontal puzzle outline: 16.5×12 pt ink, outward tabs, recessed top/bottom.
     /// Draw paths at the destination backing scale; no asset copy or bitmap resizing.
     private static var horizontalPuzzle: NSImage {
         let image = NSImage(size: NSSize(width: 17, height: 13), flipped: true) { _ in
@@ -165,16 +166,48 @@ final class BrowserDeveloperToolbar: NSView {
         line.layer?.backgroundColor = NSColor.white.withAlphaComponent(0.23).cgColor
         line.frame = NSRect(x: 7, y: 0, width: 0.5, height: 18)
         container.addSubview(line)
+        separators.append(line)
         actions.addArrangedSubview(container)
         return container
     }
     func apply(theme: OrbitTokens.SpaceTheme) {
         background.apply(theme)
-        // Foreground follows the Space appearance, including its explicit light/dark override.
-        let foreground = OrbitTokens.Color.Text.primary
-        address.textColor = foreground.withAlphaComponent(0.75)
-        lock.contentTintColor = foreground.withAlphaComponent(0.9)
+        refreshTint()
+    }
+    func updateTint(_ tint: BrowserPageTint?) {
+        guard pageTint != tint else { return }
+        pageTint = tint
+        refreshTint()
+    }
+    private func refreshTint() {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        background.isHidden = pageTint != nil
+        if let tint = pageTint {
+            layer?.backgroundColor = NSColor(srgbRed: CGFloat(tint.red) / 255, green: CGFloat(tint.green) / 255,
+                                              blue: CGFloat(tint.blue) / 255, alpha: 1).cgColor
+            foreground = tint.prefersWhiteForeground ? .white : .black
+        } else {
+            layer?.backgroundColor = nil
+            let stops = background.resolvedStops.compactMap { NSColor(cgColor: $0)?.usingColorSpace(.sRGB) }
+            let color = stops.isEmpty ? NSColor.windowBackgroundColor : stops[stops.count / 2]
+            let rgb = color.usingColorSpace(.sRGB) ?? .white
+            let tint = BrowserPageTint(red: UInt8(max(0, min(255, rgb.redComponent * 255))),
+                                       green: UInt8(max(0, min(255, rgb.greenComponent * 255))),
+                                       blue: UInt8(max(0, min(255, rgb.blueComponent * 255))))
+            foreground = tint.prefersWhiteForeground ? .white : .black
+        }
+        // Keep text opaque: at the WCAG crossover, an opacity wash would drop below 4.5:1.
+        address.textColor = foreground
+        if let editor = address.currentEditor() as? NSTextView {
+            editor.textColor = foreground
+            editor.insertionPointColor = foreground
+        }
+        lock.contentTintColor = foreground
         for case let button as NSButton in actions.arrangedSubviews { button.contentTintColor = foreground }
+        for button in extensionButtons.values { button.contentTintColor = foreground }
+        for line in separators { line.layer?.backgroundColor = foreground.withAlphaComponent(0.23).cgColor }
+        CATransaction.commit()
     }
     func update(url: URL?, canCapture: Bool = true) {
         if address.currentEditor() == nil { address.stringValue = url?.absoluteString ?? "" }
@@ -215,6 +248,7 @@ final class BrowserDeveloperToolbar: NSView {
                 if extensions.arrangedSubviews.contains(button) { extensions.removeArrangedSubview(button) }
                 extensions.insertArrangedSubview(button, at: index)
             }
+            button.contentTintColor = foreground
             button.setAccessibilityLabel(item.name); button.toolTip = item.name
             button.setAccessibilityValue(item.actionBadgeText ?? "")
             badges[item.id]?.text = item.actionBadgeText
@@ -225,8 +259,8 @@ final class BrowserDeveloperToolbar: NSView {
     }
 }
 
-/// The reference's red shield belongs to the extension icon; its badge is a dark rounded tab
-/// overlapping the lower right, with white compact numerals. This view never intercepts clicks.
+/// Extension badges overlap the icon's lower right, with white compact numerals.
+/// This view never intercepts clicks.
 @MainActor
 final class BrowserExtensionBadgeView: NSView {
     var text: String? { didSet { isHidden = text?.isEmpty != false; invalidateIntrinsicContentSize(); needsDisplay = true } }
@@ -246,22 +280,5 @@ final class BrowserExtensionBadgeView: NSView {
         let size = (text as NSString).size(withAttributes: attributes)
         (text as NSString).draw(at: NSPoint(x: (bounds.width - size.width) / 2, y: (bounds.height - size.height) / 2),
                                  withAttributes: attributes)
-    }
-}
-
-/// The reference alternates 20 pt bands on a 40 pt period, descending at 45°.
-@MainActor
-private final class BrowserDeveloperToolbarStripes: NSView {
-    override var isFlipped: Bool { true }
-    override func hitTest(_ point: NSPoint) -> NSView? { nil }
-    override func draw(_ dirtyRect: NSRect) {
-        NSColor.white.withAlphaComponent(0.02).setFill()
-        for x in stride(from: -bounds.height - 40, through: bounds.width, by: 40) {
-            let p = NSBezierPath()
-            p.move(to: NSPoint(x: x, y: 0)); p.line(to: NSPoint(x: x + 20, y: 0))
-            p.line(to: NSPoint(x: x + 20 + bounds.height, y: bounds.height))
-            p.line(to: NSPoint(x: x + bounds.height, y: bounds.height))
-            p.close(); p.fill()
-        }
     }
 }

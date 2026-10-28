@@ -7,10 +7,18 @@ extension BrowserWindowController {
         guard let surface = session.selectedSurface,
               siteControls.preferences.preferences(url: surface.navigationState.committedURL,
                                                    profileID: surface.profileID).developerMode else {
+            developerTintSurface?.setPageTintObservationEnabled(false)
+            developerTintSurface = nil
             contentCard.setHeader(nil)
             return
         }
+        if developerTintSurface !== surface {
+            developerTintSurface?.setPageTintObservationEnabled(false)
+            developerTintSurface = surface
+            surface.setPageTintObservationEnabled(true)
+        }
         developerToolbar.apply(theme: windowShell.theme)
+        developerToolbar.updateTint(surface.navigationState.pageTint)
         developerToolbar.update(url: surface.navigationState.committedURL, canCapture: engine.capabilities.contains(.snapshots))
         developerToolbar.onNavigate = { [weak self, weak surface] value in
             guard let self, let surface, session.selectedSurface === surface, acceptsCommands else { return }

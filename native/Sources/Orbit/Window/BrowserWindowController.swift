@@ -75,6 +75,7 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
     var siteControls: BrowserSiteControls<Engine>!
     let developerToolbar = BrowserDeveloperToolbar()
     var developerToolbarProfile: ProfileID?
+    weak var developerTintSurface: Surface?
     lazy var sharing = BrowserSharingController(owner: self)
 
     let archive = BrowserArchivePresentation()
@@ -266,6 +267,8 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
     func windowDidBecomeKey(_ notification: Notification) { onActivate() }
 
     func windowWillClose(_ notification: Notification) {
+        developerTintSurface?.setPageTintObservationEnabled(false)
+        developerTintSurface = nil
         capture.cancel()
         tabSuspension.close()
         extensionControls.close()

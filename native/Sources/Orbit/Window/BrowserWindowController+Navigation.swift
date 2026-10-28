@@ -101,6 +101,7 @@ extension BrowserWindowController {
         guard session.selectedSurface === surface else { return }
         refreshPageZoom()
         renderLoadingIndicator()
+        renderDeveloperToolbar()
         let state = surface.navigationState
         if window?.firstResponder !== addressField.currentEditor() {
             let url = state.url ?? session.organization?.selectedTab?.url

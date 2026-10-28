@@ -4,6 +4,8 @@ import BrowserShell
 
 /// A value snapshot of the observable navigation state of one surface.
 public struct BrowserNavigationState: Equatable, Sendable {
+    /// Last known opaque site colour, retained while a new document is being measured.
+    public var pageTint: BrowserPageTint?
     /// The displayed address, which can be provisional while a navigation is pending.
     public var url: URL?
     /// The address of the last committed document.
@@ -195,6 +197,8 @@ public protocol BrowserEngineSurface: BrowserFindSurface {
     /// `currentURL`, inherited from `BrowserSurface`, prefers a shell-requested destination that
     /// has not committed yet; `navigationState.url` is what the engine displays.
     var navigationState: BrowserNavigationState { get }
+    /// Opt-in observation for visible developer chrome. Engines without a colour source use nil.
+    func setPageTintObservationEnabled(_ enabled: Bool)
     /// Current factor, 1 meaning actual size. Zoom commands may apply asynchronously; the change
     /// is reported through `onChange`. Zoom is defined for a committed document: before the first
     /// commit an engine may ignore zoom commands (Chromium indexes zoom by host).
@@ -265,6 +269,7 @@ public protocol BrowserEngineSurface: BrowserFindSurface {
 }
 
 public extension BrowserEngineSurface {
+    func setPageTintObservationEnabled(_ enabled: Bool) {}
     func archivePage(documentGeneration: UInt64) async throws -> Data { throw BrowserEngineError.unsupportedOperation }
     func showDeveloperPanel(_ panel: BrowserDeveloperPanel) throws {
         try perform(panel == .elements ? .inspectElements : .showDevTools)
