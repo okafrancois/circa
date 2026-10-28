@@ -47,18 +47,28 @@ struct SidebarStallsTests {
         let expanded = document.frame.size
         #expect(expanded.width > original.width)
         #expect(document.resizeCount == 1)
-        try await Task.sleep(for: .milliseconds(180))
+        try await settle(shell, after: .milliseconds(180))
         #expect(!shell.isAnimating)
         #expect(document.resizeCount == 1)
         shell.setFloating(true)
-        try await Task.sleep(for: .milliseconds(450))
+        try await settle(shell, after: .milliseconds(450))
         #expect(document.frame.size == expanded && document.resizeCount == 1)
         shell.setFloating(false)
-        try await Task.sleep(for: .milliseconds(450))
+        try await settle(shell, after: .milliseconds(450))
         #expect(document.frame.size == expanded && document.resizeCount == 1)
         shell.setDocked(true)
-        try await Task.sleep(for: .milliseconds(180))
+        try await settle(shell, after: .milliseconds(180))
         #expect(document.frame.size == original && document.resizeCount == 2)
+    }
+
+    /// Waits for the transition's nominal duration, then for the shell to report it finished.
+    /// A fixed sleep alone flaked under full-suite load, when the completion ran late.
+    private func settle(_ shell: OrbitWindowShell, after nominal: Duration) async throws {
+        try await Task.sleep(for: nominal)
+        let deadline = ContinuousClock.now + .seconds(3)
+        while shell.isAnimating && ContinuousClock.now < deadline {
+            try await Task.sleep(for: .milliseconds(20))
+        }
     }
 
     @Test("Retaining the offscreen sidebar cannot expose hit targets or anchored presentations")
