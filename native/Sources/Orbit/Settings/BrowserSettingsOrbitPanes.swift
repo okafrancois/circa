@@ -293,6 +293,11 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
     private var advanced: some View {
         Group {
             panel {
+                liveToggle("Enable Picture in Picture when you leave a video tab",
+                           value: runtime.document.automaticPictureInPicture,
+                           identifier: "settings-automatic-pip", save: model.setAutomaticPictureInPicture)
+            }
+            panel {
                 settingRow("Put inactive tabs to sleep after") {
                     Picker(uiText("Memory Saver"), selection: Binding(get: { runtime.document.memorySaver }, set: { value in
                         model.perform { try await model.setMemorySaver(value) }

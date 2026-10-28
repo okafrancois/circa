@@ -110,10 +110,15 @@ final class BrowserSiteControls<Engine: BrowserEngine> {
         if lastSelectedSurface !== surface {
             if let previous = lastSelectedSurface, owner.owns(previous), !owner.siteControlsClosed {
                 let settings = preferences.preferences(url: previous.navigationState.committedURL, profileID: previous.profileID)
-                previous.updateAutomaticPictureInPicture(isSelected: false, allowed: settings.automaticPictureInPicture)
+                previous.updateAutomaticPictureInPicture(isSelected: false, allowed: settings.automaticPictureInPicture && owner.allowsAutomaticPictureInPicture)
             }
             lastSelectedSurface = surface
             surface?.updateAutomaticPictureInPicture(isSelected: true, allowed: true)
+        }
+        if !owner.allowsAutomaticPictureInPicture {
+            for background in owner.siteControlSurfaces where background !== surface {
+                background.updateAutomaticPictureInPicture(isSelected: false, allowed: false)
+            }
         }
         let key = surface.map(ObjectIdentifier.init)
         if selection != key || generation != surface?.findDocumentGeneration || owner.siteControlsClosed {

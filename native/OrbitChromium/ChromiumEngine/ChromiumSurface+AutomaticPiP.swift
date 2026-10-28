@@ -11,6 +11,7 @@ extension ChromiumSurface {
     public func updateAutomaticPictureInPicture(isSelected: Bool, allowed: Bool) {
         let enter = !isSelected && allowed
         guard !isDisposed, isBrowserCreated, enter != automaticPiPShouldEnter else { return }
+        if enter { automaticPiPSourceWindow = hostView.window }
         automaticPiPShouldEnter = enter
         automaticPiPRevision &+= 1
         guard automaticPiPTask == nil else { return }
@@ -31,6 +32,7 @@ extension ChromiumSurface {
     /// Each frame gets an isolated world. Cross-origin players use their own native DOM and
     /// permissions policy; no Node/IPC is exposed and page replacements of DOM APIs do not run.
     private func reconcileAutomaticPiP(enter: Bool, generation: UInt64) async {
+        guard enter else { return }
         let (ok, treeData) = await devToolsCall("Page.getFrameTree")
         guard ok, let json = try? JSONSerialization.jsonObject(with: treeData) as? [String: Any],
               let tree = json["frameTree"] as? [String: Any] else { return }
@@ -45,15 +47,19 @@ extension ChromiumSurface {
             guard created, let world = try? JSONSerialization.jsonObject(with: worldData) as? [String: Any],
                   let context = world["executionContextId"] as? Int,
                   documentGeneration == generation, !isDisposed else { continue }
-            let expression = enter ? Self.enterAutomaticPiP : Self.exitAutomaticPiP
+            guard enter, automaticPiPShouldEnter else { return }
+            let expression = Self.enterAutomaticPiP
             guard let evaluation = try? JSONSerialization.data(withJSONObject: [
                 "expression": expression, "contextId": context, "returnByValue": true,
                 "userGesture": true, "awaitPromise": true
             ]) else { continue }
+            automaticPiPPresentation?.finish()
+            automaticPiPPresentation = ChromiumPictureInPicturePresentation(sourceWindow: automaticPiPSourceWindow)
             let (evaluated, resultData) = await devToolsCall("Runtime.evaluate", params: String(decoding: evaluation, as: UTF8.self))
             guard evaluated, let result = try? JSONSerialization.jsonObject(with: resultData) as? [String: Any],
-                  result["exceptionDetails"] == nil else { continue }
-            if enter, (result["result"] as? [String: Any])?["value"] as? Bool == true { return }
+                  result["exceptionDetails"] == nil else { automaticPiPPresentation?.finish(); continue }
+            if (result["result"] as? [String: Any])?["value"] as? Bool == true { return }
+            automaticPiPPresentation?.finish()
         }
     }
 
@@ -61,26 +67,20 @@ extension ChromiumSurface {
     (async () => {
       if (!document.pictureInPictureEnabled || document.pictureInPictureElement) return false;
       const videos = [...document.querySelectorAll('video')].filter(v =>
-        !v.paused && !v.ended && v.readyState >= 2 && v.videoWidth > 0 && !v.disablePictureInPicture);
+        !v.paused && !v.ended && v.readyState >= 2 && v.videoWidth > 0 && !v.disablePictureInPicture &&
+        v.checkVisibility({checkOpacity:true, checkVisibilityCSS:true}) && (() => {
+          const r = v.getBoundingClientRect();
+          return r.width > 0 && r.height > 0 && r.bottom > 0 && r.right > 0 &&
+                 r.top < innerHeight && r.left < innerWidth;
+        })());
       videos.sort((a,b) => b.videoWidth*b.videoHeight - a.videoWidth*a.videoHeight);
       const video = videos[0];
       if (!video) return false;
       try {
         await video.requestPictureInPicture();
-        globalThis.orbitAutomaticPiPVideo = video;
         return document.pictureInPictureElement === video;
       } catch (_) { return false; }
     })()
     """#
 
-    private static let exitAutomaticPiP = #"""
-    (async () => {
-      const video = globalThis.orbitAutomaticPiPVideo;
-      globalThis.orbitAutomaticPiPVideo = null;
-      if (video && document.pictureInPictureElement === video) {
-        try { await document.exitPictureInPicture(); } catch (_) {}
-      }
-      return true;
-    })()
-    """#
 }

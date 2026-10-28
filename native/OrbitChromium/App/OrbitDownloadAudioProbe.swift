@@ -11,16 +11,53 @@ enum OrbitDownloadAudioProbe {
     static func run(_ owner: OrbitWindowController, command: [String: String], root: URL) async -> [String: Any] {
         var result: [String: Any] = [:]
         let step = command["step"] ?? "status"
+        if step == "window", let screen = NSScreen.screens.first {
+            owner.window?.setFrame(screen.visibleFrame, display: true)
+            owner.window?.makeKeyAndOrderFront(nil)
+            NSApp.activate()
+            return ["frame": NSStringFromRect(screen.visibleFrame)]
+        }
         if step == "load", let url = command["url"].flatMap(URL.init(string:)) {
             owner.downloads.destinationProvider = { _, filename in root.appendingPathComponent(filename) }
             owner.downloads.openFile = { openAccepted = NSWorkspace.shared.open($0) }
             owner.downloads.revealFile = { NSWorkspace.shared.activateFileViewerSelecting([$0]); revealRequested = true }
             owner.session.openTab(url: url)
             await owner.session.waitForQueuedCommands()
+            return ["loaded": true]
+        }
+        if step == "select", let index = command["index"].flatMap(Int.init),
+           let tabs = owner.session.snapshot?.tabs, tabs.indices.contains(index) {
+            owner.session.selectOccurrence(tabs[index].occurrenceID)
+            await owner.session.waitForQueuedCommands()
+            return ["selected": index]
+        }
+        if step == "automatic-pip", let settings = owner.settingsPreferences?.runtime {
+            try? await settings.store.setAutomaticPictureInPicture(command["enabled"] == "true")
+            await settings.refresh()
+            return ["enabled": settings.document.automaticPictureInPicture]
+        }
+        if step == "pip-status" {
+            var players: [[String: Any]] = []
+            for surface in owner.session.ownedSurfaces where surface.isReady {
+                if let state = await OrbitPerformanceProbe.evaluate(surface,
+                    "({pip:!!document.pictureInPictureElement, playing:[...document.querySelectorAll('video')].some(v=>!v.paused)})") {
+                    players.append(state)
+                }
+            }
+            result["players"] = players
+            result["windows"] = NSApp.windows.map { window in
+                ["number": window.windowNumber, "class": String(describing: type(of: window)),
+                 "identifier": window.identifier?.rawValue ?? "", "level": window.level.rawValue,
+                 "visible": window.isVisible, "frame": NSStringFromRect(window.frame),
+                 "style": window.styleMask.rawValue, "behavior": window.collectionBehavior.rawValue,
+                 "title": window.title] as [String: Any]
+            }
+            return result
         }
         if let surface = owner.session.selectedSurface {
             if step == "evaluate", let expression = command["expression"] {
                 result["evaluation"] = await OrbitPerformanceProbe.evaluate(surface, expression) ?? [:]
+                return result
             }
             if step == "mute" { try? surface.setAudioMuted(command["muted"] == "true") }
             if step == "toggle-audio", let id = owner.session.organization?.selectedTab?.id {

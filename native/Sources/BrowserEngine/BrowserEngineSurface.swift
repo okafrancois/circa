@@ -248,8 +248,8 @@ public protocol BrowserEngineSurface: BrowserFindSurface {
     func restoreAfterSuspension(_ state: BrowserSuspensionState) async
     /// Throws `unsupportedOperation` without `audioMuting`.
     func setAudioMuted(_ muted: Bool) throws
-    /// Selection lifecycle for the native video PiP window. Returning to its tab closes only
-    /// PiP entered automatically; a manually requested PiP session remains user-owned.
+    /// Selection lifecycle for the native video PiP window. The engine owns the session after
+    /// entry, including its default behavior when the source tab becomes selected again.
     func updateAutomaticPictureInPicture(isSelected: Bool, allowed: Bool)
     func showDeveloperPanel(_ panel: BrowserDeveloperPanel) throws
 
