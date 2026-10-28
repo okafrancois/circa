@@ -1,6 +1,20 @@
 import AppKit
 import BrowserCore
 
+/// Effective action values for a tab, or the extension's default values. ARGB uses sRGB bytes.
+public struct BrowserExtensionActionState: Sendable, Equatable, Codable {
+    public var title: String
+    public var badgeText: String
+    public var badgeBackgroundColor: UInt32
+    public var isEnabled: Bool
+    public var iconPNGBase64: String?
+    public init(title: String, badgeText: String, badgeBackgroundColor: UInt32,
+                isEnabled: Bool, iconPNGBase64: String? = nil) {
+        self.title = title; self.badgeText = badgeText; self.badgeBackgroundColor = badgeBackgroundColor
+        self.isEnabled = isEnabled; self.iconPNGBase64 = iconPNGBase64
+    }
+}
+
 /// A Chrome Web Store compatible extension visible in one profile.
 public struct BrowserExtensionSummary: Sendable, Equatable, Codable {
     public var id: String
@@ -11,6 +25,8 @@ public struct BrowserExtensionSummary: Sendable, Equatable, Codable {
     public var isPinned: Bool?
     public var iconPNGBase64: String?
     /// Global action badge when supplied by the engine; nil means unavailable, never a count of zero.
+    public var actionState: BrowserExtensionActionState?
+    public var defaultActionState: BrowserExtensionActionState?
     public var actionBadgeText: String?
 
     public init(id: String, name: String, version: String, isEnabled: Bool, hasAction: Bool,
@@ -56,6 +72,7 @@ public extension BrowserExtensionManagement {
 /// "native inventory/actions unavailable", never emulate extension APIs with page scripts.
 @MainActor
 public protocol BrowserExtensionHost: BrowserExtensionManagement {
+    func installedExtensions(on surface: any BrowserEngineSurface) throws -> [BrowserExtensionSummary]
     func installedExtensions(in profileID: ProfileID) throws -> [BrowserExtensionSummary]
     func observeChanges(in profileID: ProfileID, handler: @escaping () -> Void) throws -> BrowserExtensionObservation
     var onExtensionsChange: ((ProfileID) -> Void)? { get set }
@@ -124,6 +141,9 @@ public final class BrowserExtensionChangeHub {
 }
 
 public extension BrowserExtensionHost {
+    func installedExtensions(on surface: any BrowserEngineSurface) throws -> [BrowserExtensionSummary] {
+        try installedExtensions(in: surface.profileID)
+    }
     var supportsPinning: Bool { false }
     func setPinned(_ pinned: Bool, extensionID: String, in profileID: ProfileID) throws {
         throw BrowserEngineError.unsupportedOperation

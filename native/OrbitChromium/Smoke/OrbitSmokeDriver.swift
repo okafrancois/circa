@@ -451,6 +451,9 @@ final class OrbitSmokeDriver: OrbitLaunchHooks {
               && engine.hostedWindowCount == 1, identity(tab).merging(["holdingWindowTabs": engine.holdingWindowTabCount,
                                                                        "hostedWindows": engine.hostedWindowCount]) { $1 })
         if extensionLoaded { await extensionProbes(tab) }
+        if arguments.contains("--orbit-smoke-engine-r4") {
+            await runtimeStateScenarios(window, tab, engine)
+        }
         // DBG-CH2: isolate worker startup and the normal product quit on a fresh profile.
         if arguments.contains("--orbit-smoke-extension-only") { return }
 

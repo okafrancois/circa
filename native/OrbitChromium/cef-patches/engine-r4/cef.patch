@@ -1,0 +1,515 @@
+diff --git a/libcef/browser/orbit/orbit_cef_api.h b/libcef/browser/orbit/orbit_cef_api.h
+index 0cb1a21..53f3e48 100644
+--- a/libcef/browser/orbit/orbit_cef_api.h
++++ b/libcef/browser/orbit/orbit_cef_api.h
+@@ -1,20 +1,17 @@
+-// Copyright 2026 Orbit. Portions copyright The Chromium Embedded Framework
++// Copyright 2026 Orbit. Portions copyright The Chromium Embedded Framework
+ // Authors. Use of this source code is governed by a BSD-style license that can
+ // be found in the LICENSE file.
+-//
+-// Orbit side API of the patched CEF (branch orbit/8078). This header is plain C
+-// and is copied verbatim into the Orbit bridge; it is not part of the public
++// Orbit side API of the patched CEF (branch orbit/8078). This header is plain C
++// and is copied verbatim into the Orbit bridge; it is not part of the public
+ // CEF API (cef/include is unchanged, so no translator.py and no API hash).
+-//
+-// The bridge resolves the single exported symbol `orbit_cef_get_api` with
++// The bridge resolves the single exported symbol `orbit_cef_get_api` with
+ // dlsym() on the loaded framework. A stock CEF build does not export it, which
+ // is how the bridge tells the two apart (ACRPatchLevel() == 0).
+-//
+ // Threading: every function must be called on the CEF UI thread (the main
+ // thread on macOS) after CefInitialize() and before CefShutdown().
+ 
+-#ifndef CEF_LIBCEF_BROWSER_ORBIT_ORBIT_CEF_API_H_
+-#define CEF_LIBCEF_BROWSER_ORBIT_ORBIT_CEF_API_H_
++#ifndef CEF_LIBCEF_BROWSER_ORBIT_ORBIT_CEF_API_H_
++#define CEF_LIBCEF_BROWSER_ORBIT_ORBIT_CEF_API_H_
+ 
+ #include <stdint.h>
+ 
+@@ -22,14 +19,23 @@
+ extern "C" {
+ #endif
+ 
+-// Version 1 (ENG-X2.1): one logical Chrome Browser per (Orbit window, profile),
+-// Chrome-style tabs whose content NSView is placed by Orbit.
++// Version 1 (ENG-X2.1): one logical Chrome Browser per (Orbit window, profile),
++// Chrome-style tabs whose content NSView is placed by Orbit.
+ // Version 2 (CHROMIUM-APP-R2): additive, move_tab. A table requested as version
+ // 1 reports version 1 and keeps the version 1 layout as its prefix.
+ // Version 3 (CHROMIUM-APP-R3): additive, hold_window/release_window. Earlier
+ // versions keep their layout as the prefix of the table.
+ // Version 4 (EXTENSIONS-PRODUCT-R1): additive, native per-profile extension services.
+-#define ORBIT_CEF_API_VERSION 4u
++#define ORBIT_CEF_API_VERSION 4u
++
++typedef struct {
++  uint32_t struct_size;
++  int32_t audible;
++  int32_t muted;
++  uint32_t colors;  // bit 0 theme, bit 1 background; colors are unpremultiplied ARGB.
++  uint32_t theme_color;
++  uint32_t background_color;
++} orbit_browser_state_t;
+ 
+ typedef struct {
+   uint32_t struct_size;
+@@ -42,21 +48,21 @@ typedef struct {
+   int32_t index;
+   // 1 when the tab is the active tab of its Browser.
+   int32_t active;
+-  // 1 when the browser is an Orbit hosted Chrome-style tab.
++  // 1 when the browser is an Orbit hosted Chrome-style tab.
+   int32_t hosted;
+-  // Orbit window token of the Browser, 0 when none.
++  // Orbit window token of the Browser, 0 when none.
+   uint64_t window_token;
+-} orbit_tab_info_t;
++} orbit_tab_info_t;
+ 
+ typedef struct {
+   uint32_t struct_size;
+   uint32_t version;
+ 
+-  // Registers an Orbit window. `nswindow` is a borrowed NSWindow* that must
++  // Registers an Orbit window. `nswindow` is a borrowed NSWindow* that must
+   // outlive the registration (call window_destroyed before releasing it).
+   // Returns 1 on success, 0 if the token is in use or invalid.
+   int32_t (*window_created)(uint64_t window_token, void* nswindow);
+-  // Unregisters an Orbit window. Logical Browsers that still own tabs lose
++  // Unregisters an Orbit window. Logical Browsers that still own tabs lose
+   // their native window and close when their last tab closes. Returns the
+   // number of logical Browsers that were still alive, or -1 if unknown.
+   int32_t (*window_destroyed)(uint64_t window_token);
+@@ -84,7 +90,7 @@ typedef struct {
+   // Activates a hosted tab in its TabStripModel (tabs.onActivated).
+   int32_t (*activate_tab)(int32_t browser_id);
+   // Fills `info` for any CEF browser id. Returns 1 when the browser exists.
+-  int32_t (*get_tab_info)(int32_t browser_id, orbit_tab_info_t* info);
++  int32_t (*get_tab_info)(int32_t browser_id, orbit_tab_info_t* info);
+ 
+   // Diagnostics: live logical Browsers of a window (all profiles), or -1.
+   int32_t (*window_browser_count)(uint64_t window_token);
+@@ -112,7 +118,7 @@ typedef struct {
+   // removed only once Chrome no longer writes to it.
+   int32_t (*profile_loaded)(const char* path);
+ 
+-  // Version 3. Holds the logical Browsers of an Orbit window for a tab transfer:
++  // Version 3. Holds the logical Browsers of an Orbit window for a tab transfer:
+   // while held, a Browser whose last tab moved away stays alive (same window
+   // id) so that a rollback can return the tab to it; releasing the last hold
+   // closes those still empty. Returns the hold count after the call, -1 for an
+@@ -147,13 +153,18 @@ typedef struct {
+                                         uint64_t selection_epoch);
+   // Idempotent; revokes before notifying the popup, including before first load.
+   void (*extension_cancel)(uint64_t invocation);
+-} orbit_cef_api_t;
++  // Version 5. Effective per-tab action values plus defaults, using the inventory JSON schema.
++  int32_t (*extension_action_snapshot)(int32_t browser_id, char* json, uint32_t capacity);
++  // Snapshot and one UI-thread subscription per browser. Null callback unregisters.
++  int32_t (*browser_state)(int32_t browser_id, orbit_browser_state_t* state);
++  int32_t (*browser_state_observe)(int32_t browser_id, void (*changed)(void*, const orbit_browser_state_t*), void* context);
++} orbit_cef_api_t;
+ 
+ // Returns the API table for `version`, or NULL when unsupported.
+-typedef const orbit_cef_api_t* (*orbit_cef_get_api_t)(uint32_t version);
++typedef const orbit_cef_api_t* (*orbit_cef_get_api_t)(uint32_t version);
+ 
+ #ifdef __cplusplus
+ }
+ #endif
+ 
+-#endif  // CEF_LIBCEF_BROWSER_ORBIT_ORBIT_CEF_API_H_
++#endif  // CEF_LIBCEF_BROWSER_ORBIT_ORBIT_CEF_API_H_
+diff --git a/libcef/browser/orbit/orbit_cef_api.mm b/libcef/browser/orbit/orbit_cef_api.mm
+index d613228..e958e64 100644
+--- a/libcef/browser/orbit/orbit_cef_api.mm
++++ b/libcef/browser/orbit/orbit_cef_api.mm
+@@ -26,6 +26,8 @@
+ // Private additive extension services; no public CEF API change.
+ #include "cef/libcef/browser/orbit/orbit_extensions.inc"
+ 
++#include "cef/libcef/browser/orbit/orbit_runtime_state.inc"
++
+ namespace {
+ 
+ bool OnValidUIThread() {
+@@ -146,9 +148,9 @@ int32_t ActivateTab(int32_t browser_id) {
+   return 1;
+ }
+ 
+-int32_t GetTabInfo(int32_t browser_id, orbit_tab_info_t* info) {
++int32_t GetTabInfo(int32_t browser_id, orbit_tab_info_t* info) {
+   if (!OnValidUIThread() || !info ||
+-      info->struct_size < sizeof(orbit_tab_info_t)) {
++      info->struct_size < sizeof(orbit_tab_info_t)) {
+     return 0;
+   }
+   auto host = CefBrowserHostBase::GetBrowserForBrowserId(browser_id);
+@@ -241,8 +243,8 @@ int32_t ReleaseWindow(uint64_t window_token) {
+ 
+ // Version 1 callers check `version == 1` and a size of at least their layout;
+ // later versions keep the earlier layouts as their prefix.
+-const orbit_cef_api_t kApiV1 = {
+-    sizeof(orbit_cef_api_t),
++const orbit_cef_api_t kApiV1 = {
++    sizeof(orbit_cef_api_t),
+     1u,
+     &WindowCreated,
+     &WindowDestroyed,
+@@ -261,8 +263,8 @@ int32_t ReleaseWindow(uint64_t window_token) {
+     nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
+ };
+ 
+-const orbit_cef_api_t kApiV2 = {
+-    sizeof(orbit_cef_api_t),
++const orbit_cef_api_t kApiV2 = {
++    sizeof(orbit_cef_api_t),
+     2u,
+     &WindowCreated,
+     &WindowDestroyed,
+@@ -281,8 +283,8 @@ int32_t ReleaseWindow(uint64_t window_token) {
+     nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
+ };
+ 
+-const orbit_cef_api_t kApiV3 = {
+-    sizeof(orbit_cef_api_t),
++const orbit_cef_api_t kApiV3 = {
++    sizeof(orbit_cef_api_t),
+     3u,
+     &WindowCreated,
+     &WindowDestroyed,
+@@ -301,28 +303,37 @@ int32_t ReleaseWindow(uint64_t window_token) {
+     nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr,
+ };
+ 
+-const orbit_cef_api_t kApiV4 = {
+-    sizeof(orbit_cef_api_t), 4u,
++const orbit_cef_api_t kApiV4 = {
++    sizeof(orbit_cef_api_t), 4u,
+     &WindowCreated, &WindowDestroyed, &WindowActivationChanged, &WindowBoundsChanged,
+     &PrepareHostedTab, &CancelHostedTab, &AttachView, &ActivateTab, &GetTabInfo,
+     &WindowBrowserCount, &MoveTab, &ProfileLoaded, &HoldWindow, &ReleaseWindow,
+     &ExtensionsSnapshot, &ExtensionSetEnabled, &ExtensionRemove, &ExtensionsObserve, &ExtensionAction, &ExtensionSelectionChanged, &ExtensionCancel,
+ };
+ 
++const orbit_cef_api_t kApiV5 = [] {
++  auto api = kApiV4;
++  api.version = 5u;
++  api.extension_action_snapshot = &ExtensionActionSnapshot;
++  api.browser_state = &BrowserState;
++  api.browser_state_observe = &BrowserStateObserve;
++  return api;
++}();
++
+ }  // namespace
+ 
+-extern "C" CEF_EXPORT const orbit_cef_api_t* orbit_cef_get_api(uint32_t version);
++extern "C" CEF_EXPORT const orbit_cef_api_t* orbit_cef_get_api(uint32_t version);
+ 
+ // CH-ESSENTIALS (Orbit docs/native-port/ch-essentials-2026-10-25.md): level of the
+ // essential-surface fixes, independent of the side API version. 1: element
+ // fullscreen reported by OrbitBrowserWindow, no sad-tab crash without a
+ // BrowserView, embedder-confirmed folder upload only for Orbit hosted tabs.
+-extern "C" CEF_EXPORT uint32_t orbit_cef_essentials_level(void);
+-extern "C" CEF_EXPORT uint32_t orbit_cef_essentials_level(void) {
++extern "C" CEF_EXPORT uint32_t orbit_cef_essentials_level(void);
++extern "C" CEF_EXPORT uint32_t orbit_cef_essentials_level(void) {
+   return 1u;
+ }
+ 
+-extern "C" CEF_EXPORT const orbit_cef_api_t* orbit_cef_get_api(
++extern "C" CEF_EXPORT const orbit_cef_api_t* orbit_cef_get_api(
+     uint32_t version) {
+   switch (version) {
+     case 1u:
+@@ -333,6 +344,8 @@ int32_t ReleaseWindow(uint64_t window_token) {
+       return &kApiV3;
+     case 4u:
+       return &kApiV4;
++    case 5u:
++      return &kApiV5;
+     default:
+       return nullptr;
+   }
+diff --git a/libcef/browser/orbit/orbit_extension_toolbar.inc b/libcef/browser/orbit/orbit_extension_toolbar.inc
+index 60c33d4..3959408 100644
+--- a/libcef/browser/orbit/orbit_extension_toolbar.inc
++++ b/libcef/browser/orbit/orbit_extension_toolbar.inc
+@@ -20,7 +20,7 @@ class OrbitCommandDispatcher final : public extensions::ExtensionKeybindingRegist
+ };
+ }  // namespace
+ 
+-extern "C" CEF_EXPORT int32_t orbit_cef_extension_set_pinned(const char* path, const char* id, int32_t pinned) {
++extern "C" CEF_EXPORT int32_t orbit_cef_extension_set_pinned(const char* path, const char* id, int32_t pinned) {
+   Profile* profile = ExtensionProfile(path);
+   if (!profile || !id || (pinned != 0 && pinned != 1)) return 0;
+   auto* toolbar = ToolbarActionsModel::Get(profile);
+@@ -31,7 +31,7 @@ extern "C" CEF_EXPORT int32_t orbit_cef_extension_set_pinned(const char* path, co
+ 
+ // 1: named command dispatched through Chrome's registry; 2: native action ID
+ // returned to the bridge, which owns the shell anchor and invocation lifetime.
+-extern "C" CEF_EXPORT int32_t orbit_cef_extension_shortcut(int32_t browser_id,
++extern "C" CEF_EXPORT int32_t orbit_cef_extension_shortcut(int32_t browser_id,
+     int32_t key_code, uint32_t flags, char* action_id, uint32_t capacity) {
+   if (!OnValidUIThread() || !action_id || capacity < 33) return 0;
+   auto host = GetChromeHost(browser_id);
+diff --git a/libcef/browser/orbit/orbit_extensions.inc b/libcef/browser/orbit/orbit_extensions.inc
+index b451bea..8de0cd6 100644
+--- a/libcef/browser/orbit/orbit_extensions.inc
++++ b/libcef/browser/orbit/orbit_extensions.inc
+@@ -4,6 +4,7 @@
+ #include "base/base64.h"
+ #include "chrome/browser/ui/toolbar/toolbar_actions_model.h"
+ #include "extensions/browser/extension_action.h"
++#include "extensions/browser/extension_action_icon_factory.h"
+ #include "extensions/browser/extension_icon_image.h"
+ #include "extensions/common/manifest_handlers/icons_handler.h"
+ #include "ui/gfx/image/image.h"
+@@ -40,8 +41,9 @@ Profile* ExtensionProfile(const char* path) {
+ std::string ExtensionIconPNG(Profile* profile, const extensions::Extension& extension,
+                              extensions::ExtensionAction* action);
+ 
+-int32_t ExtensionsSnapshot(const char* path, char* output, uint32_t capacity) {
+-  Profile* profile = ExtensionProfile(path);
++base::DictValue ActionValues(Profile* profile, const extensions::Extension& extension,
++                             extensions::ExtensionAction* action, int tab_id);
++int32_t ExtensionSnapshot(Profile* profile, int tab_id, bool per_tab, char* output, uint32_t capacity) {
+   if (!profile) return -1;
+   auto* registry = extensions::ExtensionRegistry::Get(profile);
+   auto* actions = extensions::ExtensionActionManager::Get(profile);
+@@ -59,7 +61,13 @@ int32_t ExtensionsSnapshot(const char* path, char* output, uint32_t capacity) {
+     row.Set("hasAction", action != nullptr);
+     auto* toolbar = ToolbarActionsModel::Get(profile);
+     row.Set("isPinned", toolbar && toolbar->IsActionPinned(extension->id()));
+-    if (action) row.Set("iconPNGBase64", ExtensionIconPNG(profile, *extension, action));
++    if (action) {
++      row.Set("iconPNGBase64", ExtensionIconPNG(profile, *extension, action));
++      if (per_tab) {
++        row.Set("defaultActionState", ActionValues(profile, *extension, action, extensions::ExtensionAction::kDefaultTabId));
++        row.Set("actionState", ActionValues(profile, *extension, action, tab_id));
++      }
++    }
+     rows.Append(std::move(row));
+   }
+   const auto json = base::WriteJson(rows);
+@@ -68,6 +76,18 @@ int32_t ExtensionsSnapshot(const char* path, char* output, uint32_t capacity) {
+   return static_cast<int32_t>(json->size());
+ }
+ 
++int32_t ExtensionsSnapshot(const char* path, char* output, uint32_t capacity) {
++  return ExtensionSnapshot(ExtensionProfile(path), 0, false, output, capacity);
++}
++int32_t ExtensionActionSnapshot(int32_t browser_id, char* output, uint32_t capacity) {
++  if (!OnValidUIThread()) return -1;
++  auto host = GetChromeHost(browser_id);
++  if (!host || !host->GetWebContents() || !host->browser()) return -1;
++  auto* profile = host->browser()->GetProfile();
++  if (!profile || profile->IsOffTheRecord()) return -1;
++  return ExtensionSnapshot(profile, extensions::ExtensionTabUtil::GetTabId(host->GetWebContents()), true, output, capacity);
++}
++
+ int32_t ExtensionSetEnabled(const char* path, const char* id, int32_t enabled) {
+   Profile* profile = ExtensionProfile(path);
+   if (!profile || !id || (enabled != 0 && enabled != 1)) return 0;
+@@ -100,6 +120,7 @@ int32_t ExtensionRemove(const char* path, const char* id) {
+ class OrbitExtensionObservation final : public extensions::ExtensionRegistryObserver,
+                                        public ToolbarActionsModel::Observer,
+                                        public extensions::IconImage::Observer,
++                                       public extensions::ExtensionActionIconFactory::Observer,
+                                        public std::enable_shared_from_this<OrbitExtensionObservation> {
+  public:
+   OrbitExtensionObservation(Profile* profile, extensions::ExtensionRegistry* registry,
+@@ -123,24 +144,30 @@ class OrbitExtensionObservation final : public extensions::ExtensionRegistryObser
+     const auto png = png_image.As1xPNGBytes();
+     return png ? base::Base64Encode(base::span(*png)) : std::string();
+   }
++  gfx::Image ActionIcon(const extensions::Extension& extension, extensions::ExtensionAction* action, int tab_id) {
++    auto& factory = action_icons_[extension.id()];
++    if (!factory) factory = std::make_unique<extensions::ExtensionActionIconFactory>(&extension, action, this);
++    return factory->GetIcon(tab_id);
++  }
++  void OnIconUpdated() override { Notify(); }
+   void OnExtensionIconImageChanged(extensions::IconImage*) override { Notify(); }
+   void OnToolbarActionAdded(const std::string&) override { Notify(); }
+-  void OnToolbarActionRemoved(const std::string& id) override { icons_.erase(id); Notify(); }
++  void OnToolbarActionRemoved(const std::string& id) override { action_icons_.erase(id); icons_.erase(id); Notify(); }
+   void OnToolbarActionUpdated(const std::string&) override { Notify(); }
+   void OnToolbarModelInitialized() override { Notify(); }
+   void OnToolbarPinnedActionsChanged() override { Notify(); }
+-  void OnToolbarActionsModelShutdown() override { toolbar_observation_.Reset(); icons_.clear(); }
++  void OnToolbarActionsModelShutdown() override { toolbar_observation_.Reset(); action_icons_.clear(); icons_.clear(); }
+   void OnExtensionLoaded(content::BrowserContext*, const extensions::Extension*) override { Notify(); }
+   void OnExtensionReady(content::BrowserContext*, const extensions::Extension*) override { Notify(); }
+   void OnExtensionUnloaded(content::BrowserContext*, const extensions::Extension* extension,
+-                           extensions::UnloadedExtensionReason) override { icons_.erase(extension->id()); Notify(); }
++                           extensions::UnloadedExtensionReason) override { action_icons_.erase(extension->id()); icons_.erase(extension->id()); Notify(); }
+   void OnExtensionInstalled(content::BrowserContext*, const extensions::Extension*, bool) override { Notify(); }
+   void OnExtensionUninstalled(content::BrowserContext*, const extensions::Extension*,
+                               extensions::UninstallReason) override { Notify(); }
+   void OnShutdown(extensions::ExtensionRegistry*) override {
+     changed_ = nullptr;
+     toolbar_observation_.Reset();
+-    icons_.clear();
++    action_icons_.clear(); icons_.clear();
+     observation_.Reset();
+   }
+  private:
+@@ -151,6 +178,7 @@ class OrbitExtensionObservation final : public extensions::ExtensionRegistryObser
+     void* context = context_;
+     if (callback) callback(context);
+   }
++  std::map<std::string, std::unique_ptr<extensions::ExtensionActionIconFactory>> action_icons_;
+   std::map<std::string, std::unique_ptr<extensions::IconImage>> icons_;
+   base::ScopedObservation<ToolbarActionsModel, ToolbarActionsModel::Observer> toolbar_observation_{this};
+   void (*changed_)(void*);
+@@ -171,6 +199,25 @@ std::string ExtensionIconPNG(Profile* profile, const extensions::Extension& exte
+   auto observer = found->second;
+   return observer->Icon(profile, extension);
+ }
++base::DictValue ActionValues(Profile* profile, const extensions::Extension& extension,
++                             extensions::ExtensionAction* action, int tab_id) {
++  base::DictValue row;
++  row.Set("title", action->GetTitle(tab_id));
++  row.Set("badgeText", action->GetExplicitlySetBadgeText(tab_id));
++  row.Set("badgeBackgroundColor", static_cast<double>(action->GetBadgeBackgroundColor(tab_id)));
++  row.Set("isEnabled", action->GetIsVisible(tab_id));
++  const auto found = GetExtensionObservations().find(profile->GetPath().value());
++  if (found != GetExtensionObservations().end()) {
++    auto observer = found->second;
++    const auto image = observer->ActionIcon(extension, action, tab_id);
++    if (!image.IsEmpty()) {
++      gfx::Image png_image(image.AsImageSkia());
++      const auto png = png_image.As1xPNGBytes();
++      if (png) row.Set("iconPNGBase64", base::Base64Encode(base::span(*png)));
++    }
++  }
++  return row;
++}
+ int32_t ExtensionsObserve(const char* path, void (*changed)(void*), void* context) {
+   if (!OnValidUIThread() || !path) return 0;
+   GetExtensionObservations().erase(path);
+diff --git a/libcef/browser/orbit/orbit_unowned_tabs_entry.cc b/libcef/browser/orbit/orbit_unowned_tabs_entry.cc
+index 260a96f..c5c6026 100644
+--- a/libcef/browser/orbit/orbit_unowned_tabs_entry.cc
++++ b/libcef/browser/orbit/orbit_unowned_tabs_entry.cc
+@@ -44,7 +44,7 @@ CefRefPtr<CefClient> AdoptFromEmbedder(orbit_unowned_tab_handler_t handler,
+ }  // namespace
+ 
+ extern "C" CEF_EXPORT int32_t
+-orbit_cef_set_unowned_tab_handler(orbit_unowned_tab_handler_t handler,
++orbit_cef_set_unowned_tab_handler(orbit_unowned_tab_handler_t handler,
+                                  void* context) {
+   if (!CEF_CURRENTLY_ON_UIT()) {
+     return 0;
+diff --git a/libcef/browser/orbit/orbit_runtime_state.inc b/libcef/browser/orbit/orbit_runtime_state.inc
+new file mode 100644
+index 0000000..d0a7583
+--- /dev/null
++++ b/libcef/browser/orbit/orbit_runtime_state.inc
+@@ -0,0 +1,60 @@
++// Copyright 2026 Orbit. BSD-style license; see LICENSE.
++#include "content/public/browser/web_contents.h"
++#include "content/public/browser/web_contents_observer.h"
++
++namespace {
++void ReadBrowserState(content::WebContents* contents, orbit_browser_state_t* state) {
++  state->audible = contents->IsCurrentlyAudible() ? 1 : 0;
++  state->muted = contents->IsAudioMuted() ? 1 : 0;
++  const auto theme = contents->GetThemeColor();
++  const auto background = contents->GetBackgroundColor();
++  state->colors = (theme ? 1u : 0u) | (background ? 2u : 0u);
++  state->theme_color = theme.value_or(0);
++  state->background_color = background.value_or(0);
++}
++int32_t BrowserState(int32_t id, orbit_browser_state_t* state) {
++  if (!OnValidUIThread() || !state || state->struct_size < sizeof(*state)) return 0;
++  auto host = CefBrowserHostBase::GetBrowserForBrowserId(id);
++  if (!host || !host->GetWebContents()) return 0;
++  ReadBrowserState(host->GetWebContents(), state);
++  return 1;
++}
++class OrbitRuntimeObservation final : public content::WebContentsObserver,
++                                     public std::enable_shared_from_this<OrbitRuntimeObservation> {
++ public:
++  OrbitRuntimeObservation(content::WebContents* contents,
++      void (*changed)(void*, const orbit_browser_state_t*), void* context)
++      : content::WebContentsObserver(contents), changed_(changed), context_(context) {}
++  void OnAudioStateChanged(bool) override { Notify(); }
++  void DidUpdateAudioMutingState(bool) override { Notify(); }
++  void DidChangeThemeColor() override { Notify(); }
++  void OnBackgroundColorChanged() override { Notify(); }
++  void WebContentsDestroyed() override { changed_ = nullptr; Observe(nullptr); }
++ private:
++  void Notify() {
++    auto alive = shared_from_this();
++    if (!changed_ || !web_contents()) return;
++    orbit_browser_state_t state{};
++    state.struct_size = sizeof(state);
++    ReadBrowserState(web_contents(), &state);
++    changed_(context_, &state);
++  }
++  void (*changed_)(void*, const orbit_browser_state_t*);
++  void* context_;
++};
++using RuntimeObservationMap = std::map<int32_t, std::shared_ptr<OrbitRuntimeObservation>>;
++RuntimeObservationMap& RuntimeObservations() {
++  static base::NoDestructor<RuntimeObservationMap> observations;
++  return *observations;
++}
++int32_t BrowserStateObserve(int32_t id,
++    void (*changed)(void*, const orbit_browser_state_t*), void* context) {
++  if (!OnValidUIThread()) return 0;
++  RuntimeObservations().erase(id);
++  if (!changed) return 1;
++  auto host = CefBrowserHostBase::GetBrowserForBrowserId(id);
++  if (!host || !host->GetWebContents()) return 0;
++  RuntimeObservations()[id] = std::make_shared<OrbitRuntimeObservation>(host->GetWebContents(), changed, context);
++  return 1;
++}
++}  // namespace
+diff --git a/libcef/browser/file_dialog_manager.cc b/libcef/browser/file_dialog_manager.cc
+index e89fad5..ddae480 100644
+--- a/libcef/browser/file_dialog_manager.cc
++++ b/libcef/browser/file_dialog_manager.cc
+@@ -438,7 +438,8 @@ void CefFileDialogManager::RunSelectFile(
+       &select_existing_folder);
+   auto callback = base::BindOnce(
+       &CefFileDialogManager::SelectFileDoneByDelegateCallback,
+-      weak_ptr_factory_.GetWeakPtr(), base::UnsafeDangling(listener));
++      weak_ptr_factory_.GetWeakPtr(), base::UnsafeDangling(listener),
++      file_type_index);
+   callback = MaybeRunDelegate(chooser_params, extensions, descriptions,
+                               std::move(callback), select_existing_folder);
+   if (callback.is_null()) {
+@@ -593,6 +594,7 @@ CefFileDialogManager::MaybeRunDelegate(
+ 
+ void CefFileDialogManager::SelectFileDoneByDelegateCallback(
+     MayBeDangling<ui::SelectFileDialog::Listener> listener,
++    int file_type_index,
+     const std::vector<base::FilePath>& paths) {
+   CEF_REQUIRE_UIT();
+ 
+@@ -607,7 +609,7 @@ void CefFileDialogManager::SelectFileDoneByDelegateCallback(
+   if (paths.empty()) {
+     listener->FileSelectionCanceled();
+   } else if (paths.size() == 1) {
+-    listener->FileSelected(ui::SelectedFileInfo(paths[0]), /*index=*/0);
++    listener->FileSelected(ui::SelectedFileInfo(paths[0]), file_type_index);
+   } else {
+     listener->MultiFilesSelected(ui::FilePathListToSelectedFileInfoList(paths));
+   }
+diff --git a/libcef/browser/file_dialog_manager.h b/libcef/browser/file_dialog_manager.h
+index 4c01e26..7cc02ee 100644
+--- a/libcef/browser/file_dialog_manager.h
++++ b/libcef/browser/file_dialog_manager.h
+@@ -83,6 +83,7 @@ class CefFileDialogManager {
+ 
+   void SelectFileDoneByDelegateCallback(
+       MayBeDangling<ui::SelectFileDialog::Listener> listener,
++      int file_type_index,
+       const std::vector<base::FilePath>& paths);
+   void SelectFileDoneByListenerCallback(
+       MayBeDangling<ui::SelectFileDialog::Listener> listener,

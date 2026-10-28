@@ -104,6 +104,9 @@ private final class ContentFrameObservation {
 public final class ChromiumSurface: BrowserEngineSurface {
     public let profileID: ProfileID
     public let hostView: NSView
+    public private(set) var pageThemeColor: UInt32?
+    public private(set) var pageBackgroundColor: UInt32?
+    private var nativeAudible: Bool?
     public var onChange: (() -> Void)?
     public var onDispose: (() -> Void)?
     public weak var delegate: (any BrowserEngineSurfaceDelegate<ChromiumSurface>)?
@@ -484,6 +487,13 @@ public final class ChromiumSurface: BrowserEngineSurface {
         return BrowserSurfaceSnapshot(image: Self.scaled(image, to: request.width), documentGeneration: generation)
     }
 
+    /// Runs Chromium's native save pipeline. The shell may continue using archivePage for MHTML.
+    public func savePageWithNativeDialog() throws {
+        guard !isDisposed, isReady, ACRExecuteChromeCommand(token, "IDC_SAVE_PAGE") == 1 else {
+            throw BrowserEngineError.unsupportedOperation
+        }
+    }
+
     public func archivePage(documentGeneration generation: UInt64) async throws -> Data {
         guard !isDisposed else { throw BrowserEngineError.surfaceDisposed }
         guard generation == documentGeneration else { throw BrowserEngineError.documentChanged }
@@ -524,7 +534,7 @@ public final class ChromiumSurface: BrowserEngineSurface {
         guard !isDisposed else { return BrowserMediaState() }
         let muted = isBrowserCreated ? ACRIsAudioMuted(token) : pendingMute.map { $0 ? 1 : 0 } ?? -1
         return BrowserMediaState(playback: mediaActivity.isPlaying ? .playing : mediaActivity.mediaReady ? .paused : .unknown, camera: capture.video ? .active : .none,
-                                 microphone: capture.audio ? .active : .none, isAudible: nil,
+                                 microphone: capture.audio ? .active : .none, isAudible: nativeAudible,
                                  isAudioMuted: muted < 0 ? nil : muted == 1, isAudioPlaying: mediaActivity.audioPlaying)
     }
 
@@ -979,6 +989,14 @@ public final class ChromiumSurface: BrowserEngineSurface {
             if let url, let data = event.payload {
                 state.faviconImage = BrowserFaviconImage(sourceURL: url, png: data)
             }
+            onChange?()
+        case ACR_EVENT_BROWSER_STATE:
+            guard let payload = event.payload, payload.count == MemoryLayout<orbit_browser_state_t>.size else { return }
+            let value = payload.withUnsafeBytes { $0.loadUnaligned(as: orbit_browser_state_t.self) }
+            nativeAudible = value.audible != 0
+            onEngineEvent?("browser-state", ["audible": String(value.audible), "muted": String(value.muted)])
+            pageThemeColor = value.colors & 1 != 0 ? value.theme_color : nil
+            pageBackgroundColor = value.colors & 2 != 0 ? value.background_color : nil
             onChange?()
         case ACR_EVENT_AUDIO:
             capture = (event.flags & 1 != 0, event.flags & 2 != 0)

@@ -310,3 +310,6 @@ void ACRStubEmitFavicon(uint64_t surface, uint64_t profile, int32_t browser, uin
     .payload = bytes, .payload_size = size};
   test_callbacks.event(test_context, &event);
 }
+
+int32_t ACRBrowserStateAvailable(void) { return 0; }
+int32_t ACRExtensionActionSnapshot(uint64_t token, char* json, uint32_t capacity) { return -1; }

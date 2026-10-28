@@ -10,6 +10,7 @@ private final class ExtensionControlProbe: BrowserExtensionHost {
     var supportsPinning = false
     var registryReady = true
     var observationAttempts = 0
+    var actionStates: [ObjectIdentifier: BrowserExtensionActionState] = [:]
     var itemsByProfile: [ProfileID: [BrowserExtensionSummary]] = [:]
     let changes = BrowserExtensionChangeHub()
     var onExtensionsChange: ((ProfileID) -> Void)?
@@ -31,6 +32,11 @@ private final class ExtensionControlProbe: BrowserExtensionHost {
         requestedProfiles.append(profileID)
         guard registryReady else { throw BrowserEngineError.unsupportedOperation }
         return itemsByProfile[profileID] ?? [item]
+    }
+    func installedExtensions(on surface: any BrowserEngineSurface) throws -> [BrowserExtensionSummary] {
+        var items = try installedExtensions(in: surface.profileID)
+        if !items.isEmpty { items[0].actionState = actionStates[ObjectIdentifier(surface)] }
+        return items
     }
     func setEnabled(_ enabled: Bool, extensionID: String, in profileID: ProfileID) throws {
         toggles.append((extensionID, profileID, enabled))
@@ -56,6 +62,39 @@ extension NativeWebKitTests {
 @Suite("Native extension controls", .serialized)
 @MainActor
 struct NativeExtensionControlsTests {
+    @Test("Selected-tab badges update both anchors without replacing their views")
+    func tabBadgesFollowSelection() async throws {
+        NSApplication.shared.setActivationPolicy(.prohibited)
+        let engine = SiteSyntheticEngine(), host = ExtensionControlProbe()
+        host.supportsPinning = true; host.item.isPinned = true
+        engine.extensions = host
+        let environment = BrowserEnvironment(engine: engine)
+        let owner = try await environment.makeWindow()
+        defer { owner.session.close(); owner.window?.close() }
+        owner.submitAddress("https://extensions.example.invalid/one")
+        await owner.session.waitForPendingCommands()
+        let one = try #require(owner.session.selectedSurface)
+        host.actionStates[ObjectIdentifier(one)] = .init(title: "One", badgeText: "1", badgeBackgroundColor: 0xffff0000, isEnabled: true)
+        owner.extensionControls.render()
+        let anchor = try #require(owner.sidebar.extensionsContainer.subviews.compactMap { $0 as? NSButton }.first)
+        let badge = try #require(anchor.subviews.compactMap { $0 as? BrowserExtensionBadgeView }.first)
+        #expect(badge.text == "1")
+        owner.openTab(url: URL(string: "https://extensions.example.invalid/two")!)
+        await owner.session.waitForPendingCommands()
+        let two = try #require(owner.session.selectedSurface)
+        host.actionStates[ObjectIdentifier(two)] = .init(title: "Two", badgeText: "2", badgeBackgroundColor: 0xff0000ff, isEnabled: false)
+        host.changes.emit(two.profileID)
+        #expect(owner.sidebar.extensionsContainer.subviews.contains { $0 === anchor })
+        #expect(badge.text == "2" && badge.backgroundARGB == 0xff0000ff)
+        #expect(anchor.toolTip == "Two" && !anchor.isEnabled)
+        let occurrence = try #require(owner.session.occurrenceID(for: one))
+        owner.session.selectOccurrence(occurrence)
+        await owner.session.waitForPendingCommands()
+        owner.extensionControls.render()
+        #expect(badge.text == "1" && anchor.isEnabled)
+        try await environment.finalize()
+    }
+
     @Test("A profile that becomes ready after startup still publishes live pins")
     func delayedRegistryPublishesPins() async throws {
         NSApplication.shared.setActivationPolicy(.prohibited)

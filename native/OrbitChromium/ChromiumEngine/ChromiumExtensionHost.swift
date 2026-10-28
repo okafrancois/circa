@@ -64,6 +64,20 @@ final class ChromiumExtensionHost: BrowserExtensionHost {
             .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
     }
 
+    func installedExtensions(on surface: any BrowserEngineSurface) throws -> [BrowserExtensionSummary] {
+        guard let engine, let surface = surface as? ChromiumSurface, surface.engine === engine,
+              !surface.isDisposed, surface.isReady else { throw BrowserEngineError.unsupportedOperation }
+        _ = try profileToken(surface.profileID)
+        let size = ACRExtensionActionSnapshot(surface.token, nil, 0)
+        guard size >= 0, size < 4 * 1024 * 1024 else { throw BrowserEngineError.unsupportedOperation }
+        var buffer = [CChar](repeating: 0, count: Int(size) + 1)
+        guard ACRExtensionActionSnapshot(surface.token, &buffer, UInt32(buffer.count)) == size else {
+            throw BrowserEngineError.unsupportedOperation
+        }
+        return try JSONDecoder().decode([BrowserExtensionSummary].self,
+            from: Data(buffer.dropLast().map { UInt8(bitPattern: $0) }))
+    }
+
     func setEnabled(_ enabled: Bool, extensionID: String, in profileID: ProfileID) throws {
         guard ACRExtensionSetEnabled(try profileToken(profileID), extensionID, enabled ? 1 : 0) == 1 else {
             throw BrowserEngineError.unsupportedOperation

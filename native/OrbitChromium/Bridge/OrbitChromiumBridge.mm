@@ -5,7 +5,6 @@
 #include "OrbitBridgeFiles.h"
 #include "OrbitBridgePolicy.h"
 #include "OrbitCefApi.h"
-#include "EngineCompatibility.h"
 #include "OrbitExtensionPolicy.h"
 #include "OrbitUnownedTabsApi.h"
 #include "OrbitClientWrap.h"
@@ -1132,6 +1131,16 @@ class Client final : public CefClient, public CefLifeSpanHandler, public CefDisp
     g_state->AbortPending(token, browser->IsValid() ? "popup-aborted" : "popup-aborted-opener-closed");
   }
 
+  static void RuntimeChanged(void* context, const orbit_browser_state_t* state) {
+    if (!g_state || !state) return;
+    const uint64_t token = reinterpret_cast<uintptr_t>(context);
+    if (!g_state->Find(token)) return;
+    auto event = g_state->Event(ACR_EVENT_BROWSER_STATE, token);
+    event.payload = reinterpret_cast<const uint8_t*>(state);
+    event.payload_size = sizeof(*state);
+    g_state->Send(event);
+  }
+
   void OnAfterCreated(CefRefPtr<CefBrowser> browser) override {
     CEF_REQUIRE_UI_THREAD();
     browser_created_ = true;
@@ -1175,6 +1184,13 @@ class Client final : public CefClient, public CefLifeSpanHandler, public CefDisp
     created.detail_code = has_tab ? tab.tab_id : -1;
     PostUI([token = token_] { if (g_state) g_state->CaptureHostedIdentity(token); });
     g_state->Send(created);
+    if (g_state->orbit && g_state->orbit->version >= 5) {
+      g_state->orbit->browser_state_observe(browser->GetIdentifier(), &RuntimeChanged, reinterpret_cast<void*>(static_cast<uintptr_t>(token_)));
+      orbit_browser_state_t state{};
+      state.struct_size = sizeof(state);
+      if (g_state->orbit->browser_state(browser->GetIdentifier(), &state))
+        RuntimeChanged(reinterpret_cast<void*>(static_cast<uintptr_t>(token_)), &state);
+    }
     if (g_state->quitting || g_state->closed_before_creation.erase(token_)) {
       auto found = g_state->hosts.find(token_);
       if (found != g_state->hosts.end()) g_state->CloseHost(found->second);
@@ -1202,6 +1218,8 @@ class Client final : public CefClient, public CefLifeSpanHandler, public CefDisp
   void OnBeforeClose(CefRefPtr<CefBrowser> browser) override {
     CEF_REQUIRE_UI_THREAD();
     if (!g_state) return;
+    if (g_state->orbit && g_state->orbit->version >= 5)
+      g_state->orbit->browser_state_observe(browser->GetIdentifier(), nullptr, nullptr);
     if (auto* host = g_state->Find(token_)) g_state->RevokeExtensionSurface(*host);
     g_state->CancelRequestsOf(token_);
     // Popups still being created by this opener: per the SDK, their state is cleared here
@@ -1725,12 +1743,13 @@ const orbit_cef_api_t* ResolveOrbitApi() {
       stringByStandardizingPath];
   void* handle = dlopen(path.fileSystemRepresentation, RTLD_LAZY | RTLD_LOCAL | RTLD_NOLOAD);
   if (!handle) return nullptr;
-  const auto get = reinterpret_cast<orbit_cef_get_api_t>(orbit_engine::ResolveSymbol(handle, "orbit_cef_get_api"));
+  const auto get = reinterpret_cast<orbit_cef_get_api_t>(dlsym(handle, "orbit_cef_get_api"));
   // The newest side API the framework has: v3 (transfer holds), v2 (move_tab, profile_loaded) or
   // v1. Each version's layout is the prefix of the next; a function beyond the resolved version
   // is never called.
   const orbit_cef_api_t* api = nullptr;
-  const std::pair<uint32_t, size_t> versions[] = {{4u, sizeof(orbit_cef_api_t)},
+  const std::pair<uint32_t, size_t> versions[] = {{5u, sizeof(orbit_cef_api_t)},
+                                                   {4u, offsetof(orbit_cef_api_t, extension_action_snapshot)},
                                                    {3u, offsetof(orbit_cef_api_t, extensions_snapshot)},
                                                    {2u, offsetof(orbit_cef_api_t, hold_window)},
                                                    {1u, offsetof(orbit_cef_api_t, move_tab)}};
@@ -1755,7 +1774,7 @@ uint32_t ResolveEssentialsLevel() {
   void* handle = dlopen(path.fileSystemRepresentation, RTLD_LAZY | RTLD_LOCAL | RTLD_NOLOAD);
   if (!handle) return 0;
   using LevelFunction = uint32_t (*)();
-  const auto level = reinterpret_cast<LevelFunction>(orbit_engine::ResolveSymbol(handle, "orbit_cef_essentials_level"));
+  const auto level = reinterpret_cast<LevelFunction>(dlsym(handle, "orbit_cef_essentials_level"));
   const uint32_t value = level ? level() : 0;
   dlclose(handle);
   return value;
@@ -1770,7 +1789,7 @@ orbit_cef_set_unowned_tab_handler_t ResolveUnownedTabRegistration() {
   void* handle = dlopen(path.fileSystemRepresentation, RTLD_LAZY | RTLD_LOCAL | RTLD_NOLOAD);
   if (!handle) return nullptr;
   const auto set = reinterpret_cast<orbit_cef_set_unowned_tab_handler_t>(
-      orbit_engine::ResolveSymbol(handle, "orbit_cef_set_unowned_tab_handler"));
+      dlsym(handle, "orbit_cef_set_unowned_tab_handler"));
   dlclose(handle);  // The loader keeps its own reference for the process lifetime.
   return set;
 }
@@ -1783,7 +1802,7 @@ Function ResolveExtensionToolbarFunction(const char* name) {
       stringByStandardizingPath];
   void* handle = dlopen(path.fileSystemRepresentation, RTLD_LAZY | RTLD_LOCAL | RTLD_NOLOAD);
   if (!handle) return nullptr;
-  const auto function = reinterpret_cast<Function>(orbit_engine::ResolveSymbol(handle, name));
+  const auto function = reinterpret_cast<Function>(dlsym(handle, name));
   dlclose(handle);
   return function;
 }
@@ -3344,4 +3363,13 @@ extern "C" int32_t ACRCancelExtensionAction(uint64_t token) {
   ACR_HOST(token);
   g_state->CancelExtensionAction(*host);
   return 1;
+}
+
+extern "C" int32_t ACRBrowserStateAvailable(void) {
+  return g_state && g_state->orbit && g_state->orbit->version >= 5;
+}
+extern "C" int32_t ACRExtensionActionSnapshot(uint64_t token, char* json, uint32_t capacity) {
+  auto* host = g_state ? g_state->Find(token) : nullptr;
+  if (!host || !host->browser || !ACRBrowserStateAvailable()) return -1;
+  return g_state->orbit->extension_action_snapshot(host->browser->GetIdentifier(), json, capacity);
 }

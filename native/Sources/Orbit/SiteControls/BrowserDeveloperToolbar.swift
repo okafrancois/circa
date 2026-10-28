@@ -249,10 +249,12 @@ final class BrowserDeveloperToolbar: NSView {
                 extensions.insertArrangedSubview(button, at: index)
             }
             button.contentTintColor = foreground
-            button.setAccessibilityLabel(item.name); button.toolTip = item.name
-            button.setAccessibilityValue(item.actionBadgeText ?? "")
-            badges[item.id]?.text = item.actionBadgeText
-            if let encoded = item.iconPNGBase64, let data = Data(base64Encoded: encoded), let image = NSImage(data: data) {
+            button.setAccessibilityLabel(item.name); button.toolTip = item.actionState?.title ?? item.name
+            button.setAccessibilityValue(item.actionState?.badgeText ?? item.actionBadgeText ?? "")
+            badges[item.id]?.text = item.actionState?.badgeText ?? item.actionBadgeText
+            badges[item.id]?.backgroundARGB = item.actionState?.badgeBackgroundColor
+            button.isEnabled = item.actionState?.isEnabled != false
+            if let encoded = item.actionState?.iconPNGBase64 ?? item.iconPNGBase64, let data = Data(base64Encoded: encoded), let image = NSImage(data: data) {
                 image.size = NSSize(width: 14, height: 14); button.image = image
             }
         }
@@ -264,6 +266,7 @@ final class BrowserDeveloperToolbar: NSView {
 @MainActor
 final class BrowserExtensionBadgeView: NSView {
     var text: String? { didSet { isHidden = text?.isEmpty != false; invalidateIntrinsicContentSize(); needsDisplay = true } }
+    var backgroundARGB: UInt32? { didSet { needsDisplay = true } }
     static let font = NSFont.systemFont(ofSize: 6, weight: .bold)
     override var intrinsicContentSize: NSSize {
         let width = ((text ?? "") as NSString).size(withAttributes: [.font: Self.font]).width
@@ -274,7 +277,11 @@ final class BrowserExtensionBadgeView: NSView {
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
     override func draw(_ dirtyRect: NSRect) {
         guard let text, !text.isEmpty else { return }
-        NSColor(srgbRed: 0.19, green: 0.19, blue: 0.20, alpha: 1).setFill()
+        let background = backgroundARGB.map {
+            NSColor(srgbRed: CGFloat(($0 >> 16) & 255) / 255, green: CGFloat(($0 >> 8) & 255) / 255,
+                    blue: CGFloat($0 & 255) / 255, alpha: CGFloat(($0 >> 24) & 255) / 255)
+        } ?? NSColor(srgbRed: 0.19, green: 0.19, blue: 0.20, alpha: 1)
+        background.setFill()
         NSBezierPath(roundedRect: bounds, xRadius: 1.5, yRadius: 1.5).fill()
         let attributes: [NSAttributedString.Key: Any] = [.font: Self.font, .foregroundColor: NSColor.white]
         let size = (text as NSString).size(withAttributes: attributes)

@@ -4,6 +4,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include "OrbitAuthenticationABI.h"
+#include "OrbitCefApi.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -86,7 +87,8 @@ typedef enum {
   ACR_EVENT_CLOSE_CANCELED,     /* the user stayed on a page asked to close by ACRRequestClose */
   ACR_EVENT_EXTENSIONS_CHANGED, /* ABI 10: profile_token only */
   ACR_EVENT_ACTIVATION_REQUEST, /* CefFocusHandler FOCUS_SOURCE_SYSTEM; exact surface_token */
-  ACR_EVENT_MEDIA_ACTIVITY      /* method in detail; CDP WebAudio/Media metadata in payload */
+  ACR_EVENT_MEDIA_ACTIVITY,     /* method in detail; CDP WebAudio/Media metadata in payload */
+  ACR_EVENT_BROWSER_STATE       /* orbit_browser_state_t payload: native audibility, mute and page colors */
 } ACREventKind;
 
 typedef enum {
@@ -591,6 +593,9 @@ int32_t ACROpenExtensionManager(uint64_t surface_token);
  * page 0 the manager, 1 the details of extension_id (32 letters a-p), 2 keyboard shortcuts.
  * 1 on success, 0 when refused (including an invalid page or ID). */
 int32_t ACROpenExtensionManagerPage(uint64_t surface_token, int32_t page, const char *extension_id);
+
+int32_t ACRBrowserStateAvailable(void);
+int32_t ACRExtensionActionSnapshot(uint64_t surface_token, char* json, uint32_t capacity);
 
 #ifdef __cplusplus
 }

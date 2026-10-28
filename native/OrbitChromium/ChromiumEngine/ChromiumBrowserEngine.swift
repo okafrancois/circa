@@ -39,6 +39,7 @@ public final class ChromiumBrowserEngine: BrowserPrivateEngine {
         // beforeunload before a shell close: TryCloseBrowser on Chrome-style tabs. Chrome-style tabs
         // also render extension documents under the extension system's own access checks.
         if surfaceMode == .hosted { capabilities.formUnion([.beforeUnloadOnClose, .extensionDocuments, .pageSaving]) }
+        if ACRBrowserStateAvailable() == 1 { capabilities.insert(.audibleState) }
         if supportsLiveTabMoves { capabilities.insert(.liveSurfaceTransfer) }
         if patchLevel >= 2 { capabilities.insert(.profileRemoval) }
         return capabilities

@@ -426,6 +426,8 @@ def run_phase(phase, run, data, origin, args, tls_origin=None):
                "--use-fake-device-for-media-stream"]
     if tls_origin and phase == "fresh":
         command.append("--orbit-smoke-tls-fixture=" + tls_origin)
+    if getattr(args, "engine_r4_only", False):
+        command.append("--orbit-smoke-engine-r4")
     if args.extension_only:
         command.append("--orbit-smoke-extension-only")
     if getattr(args, "private_domain_only", False):
@@ -449,6 +451,8 @@ def run_phase(phase, run, data, origin, args, tls_origin=None):
     if not args.no_extension:
         # The EngineGate MV3 probes, and the tab move event recorder (CHROMIUM-APP-R2).
         extensions = [str(lab.EXTENSION)]
+        if getattr(args, "engine_r4_only", False):
+            extensions.append(str(LAB_DIR / "Smoke/runtime-state-extension"))
         if not args.extension_only:
             extensions.append(str(MOVE_EVENTS_EXTENSION))
         command.append("--load-extension=" + ",".join(extensions))
@@ -596,7 +600,8 @@ def export(run, stamp, flavor):
         target = destination / phase_root.name
         target.mkdir()
         for name in ("verdict.json", "results.json", "events.jsonl", "window-watch.jsonl", "ownership.json",
-                     "stderr.log", "witness-stderr.log", "archive-session.json"):
+                     "stderr.log", "witness-stderr.log", "archive-session.json",
+                     "runtime-page.png", "native-save.html"):
             if (phase_root / name).exists():
                 shutil.copy2(phase_root / name, target / name)
         reports = phase_root / "reports"
@@ -609,14 +614,17 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest="command", required=True)
     builder = sub.add_parser("build")
-    builder.add_argument("--flavor", choices=x2.FLAVORS, default="orbit-engine-extensions-r3")
+    builder.add_argument("--flavor", choices=x2.FLAVORS, default="orbit-engine-extensions-r4")
     runner = sub.add_parser("smoke")
-    runner.add_argument("--flavor", choices=x2.FLAVORS, default="orbit-engine-extensions-r3")
+    runner.add_argument("--flavor", choices=x2.FLAVORS, default="orbit-engine-extensions-r4")
+    runner.add_argument("--evidence-root", type=Path, default=EVIDENCE)
     runner.add_argument("--timeout", type=int, default=180)
     runner.add_argument("--quit-timeout", type=int, default=30)
     runner.add_argument("--no-extension", action="store_true")
     runner.add_argument("--fresh-only", action="store_true")
     runner.add_argument("--keep-going", action="store_true")
+    runner.add_argument("--engine-r4-only", action="store_true",
+                        help="Hermetic native action/audio/color/save API scenarios")
     runner.add_argument("--extension-only", action="store_true",
                         help="Fresh real-shell MV3 and normal quit gate, without unrelated scenarios")
     runner.add_argument("--private-domain-only", action="store_true",
@@ -634,6 +642,8 @@ def main():
         if args.extension_only or args.private_domain_only or args.profiles_only or args.space_profile_only:
             parser.error("--archive-auto-only excludes other focused probes")
         args.no_extension = True
+    if args.command == "smoke" and args.engine_r4_only:
+        args.extension_only = True
         args.fresh_only = True
     if args.command == "smoke" and args.space_profile_only:
         if args.extension_only or args.private_domain_only or args.profiles_only:
@@ -646,7 +656,7 @@ def main():
         args.no_extension = True
     if args.command == "smoke" and args.private_domain_only:
         if args.flavor not in ("orbit-essentials-r2", "orbit-engine-extensions", "orbit-engine-extensions-r2",
-                               "orbit-engine-extensions-r3") or args.extension_only:
+                               "orbit-engine-extensions-r3", "orbit-engine-extensions-r4") or args.extension_only:
             parser.error("--private-domain-only requires a product engine and excludes --extension-only")
         args.no_extension = True
         args.fresh_only = True
@@ -656,6 +666,8 @@ def main():
         if args.no_extension:
             parser.error("--extension-only requires the extension")
         args.fresh_only = True
+    if args.command == "smoke":
+        globals()["EVIDENCE"] = args.evidence_root
     return build(args) if args.command == "build" else smoke(args)
 
 

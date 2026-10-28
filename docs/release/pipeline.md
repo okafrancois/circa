@@ -2,7 +2,7 @@
 
 ## Configuration and prerequisites
 - `release/config.json` is the single release configuration; initial version is **0.1.0**, bundle ID `io.github.okatech.orbit`.
-- The Chromium product uses CEF 156, flavor `orbit-engine-extensions-r3`.
+- The Chromium product uses CEF 156, flavor `orbit-engine-extensions-r4`.
 - Keep the engine distribution under the repository's `.tools/chromium-fork/distrib/`.
   Worktrees reuse the main checkout's distribution; the pipeline does not build CEF.
 - Install Xcode/CLT, Python 3, CMake, Ninja, and `gh`; authenticate `gh` for the public

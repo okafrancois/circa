@@ -103,7 +103,7 @@ final class BrowserExtensionsController<Engine: BrowserEngine> {
     }
 
     private func icon(for item: BrowserExtensionSummary) -> NSImage? {
-        guard let encoded = item.iconPNGBase64, encoded.count < 512 * 1024,
+        guard let encoded = item.actionState?.iconPNGBase64 ?? item.iconPNGBase64, encoded.count < 512 * 1024,
               let data = Data(base64Encoded: encoded) else { return nil }
         return NSImage(data: data)
     }
@@ -115,7 +115,11 @@ final class BrowserExtensionsController<Engine: BrowserEngine> {
         let items: [BrowserExtensionSummary]
         if let profile, let presentationInventory { items = presentationInventory(profile) }
         else if let profile, let host = owner.engine.extensions, host.supportsPinning {
-            do { items = try host.installedExtensions(in: profile) }
+            do {
+                if let surface, surface.profileID == profile, previewProfile == nil {
+                    items = try host.installedExtensions(on: surface)
+                } else { items = try host.installedExtensions(in: profile) }
+            }
             catch {
                 // Never show another profile's icons while this registry is starting. Previously
                 // decoded destination pixels remain usable without a clear/recreate frame.
@@ -181,7 +185,21 @@ final class BrowserExtensionsController<Engine: BrowserEngine> {
             }
             // Pending selection blocks actions without washing out already decoded pixels.
             (action.cell as? NSButtonCell)?.imageDimsWhenDisabled = false
-            action.toolTip = item.name
+            action.toolTip = item.actionState?.title ?? item.name
+            action.setAccessibilityValue(item.actionState?.badgeText ?? item.actionBadgeText ?? "")
+            let badge: BrowserExtensionBadgeView
+            if let existing = action.subviews.compactMap({ $0 as? BrowserExtensionBadgeView }).first { badge = existing }
+            else {
+                badge = BrowserExtensionBadgeView()
+                badge.translatesAutoresizingMaskIntoConstraints = false
+                action.addSubview(badge)
+                NSLayoutConstraint.activate([
+                    badge.trailingAnchor.constraint(equalTo: action.trailingAnchor, constant: -3),
+                    badge.bottomAnchor.constraint(equalTo: action.bottomAnchor, constant: 7)
+                ])
+            }
+            badge.text = item.actionState?.badgeText ?? item.actionBadgeText
+            badge.backgroundARGB = item.actionState?.badgeBackgroundColor
             action.setAccessibilityLabel(item.name)
             if let action = action as? SiteControlButton {
                 action.contextMenuBuilder = { [weak self, weak surface] in
@@ -192,7 +210,10 @@ final class BrowserExtensionsController<Engine: BrowserEngine> {
             return action
         }
         if let profile { buttonsByProfile[profile] = pinnedButtons }
-        for view in pinnedButtons { view.isEnabled = surface?.profileID == profile && surface != nil && previewProfile == nil && owner.acceptsCommands }
+        for (view, item) in zip(pinnedButtons, pinned) {
+            view.isEnabled = surface?.profileID == profile && surface != nil && previewProfile == nil
+                && owner.acceptsCommands && item.actionState?.isEnabled != false
+        }
         owner.sidebar.extensionsContainer.setPinnedButtons(pinnedButtons)
         owner.sidebar.addressContainer.needsLayout = true
         if let surface { owner.engine.extensions?.setActionAnchor(owner.siteControls.actionAnchor, on: surface) }
