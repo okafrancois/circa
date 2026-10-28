@@ -35,12 +35,12 @@ final class BrowserDeveloperToolbar: NSView {
         let stripes = BrowserDeveloperToolbarStripes(frame: bounds)
         stripes.autoresizingMask = [.width, .height]
         addSubview(stripes)
-        lock.image = Self.glyph("lock.fill", width: 8.5, height: 12)
+        lock.image = Self.glyph("lock.fill", width: 11.5, height: 13.5, weight: .medium)
         lock.isBordered = false
         lock.setAccessibilityLabel(uiText("Site Settings"))
         lock.toolTip = uiText("Site Settings")
         lock.onPress = { [weak self] in self?.onSiteControls?() }
-        address.font = .monospacedSystemFont(ofSize: 10, weight: .semibold)
+        address.font = .monospacedSystemFont(ofSize: 9.5, weight: .regular)
         address.isBordered = false; address.isBezeled = false; address.drawsBackground = false
         address.focusRingType = .none
         address.lineBreakMode = .byTruncatingMiddle
@@ -53,14 +53,14 @@ final class BrowserDeveloperToolbar: NSView {
             addSubview(view)
         }
         NSLayoutConstraint.activate([
-            lock.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 15),
-            lock.widthAnchor.constraint(equalToConstant: 9),
-            lock.heightAnchor.constraint(equalToConstant: 13),
-            lock.centerYAnchor.constraint(equalTo: centerYAnchor),
-            address.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 35.5),
+            lock.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 13.25),
+            lock.widthAnchor.constraint(equalToConstant: 12.5),
+            lock.heightAnchor.constraint(equalToConstant: 18),
+            lock.centerYAnchor.constraint(equalTo: centerYAnchor, constant: 0.25),
+            address.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 36.5),
             address.trailingAnchor.constraint(equalTo: actions.leadingAnchor, constant: -10),
             address.widthAnchor.constraint(greaterThanOrEqualToConstant: 40),
-            address.centerYAnchor.constraint(equalTo: centerYAnchor),
+            address.centerYAnchor.constraint(equalTo: centerYAnchor, constant: 1),
             actions.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -5.5),
             actions.centerYAnchor.constraint(equalTo: centerYAnchor)
         ])
@@ -76,7 +76,7 @@ final class BrowserDeveloperToolbar: NSView {
         addButton("globe", label: uiText("Toggle Network Panel"), id: "developer-network") { [weak self] in self?.onPanel?(.network) }
         addButton("scope", label: uiText("Inspect Element"), id: "developer-inspect") { [weak self] in self?.onPanel?(.elements) }
         addSeparator()
-        addButton("puzzlepiece.extension", label: uiText("Extensions Menu"), id: "developer-extensions") { [weak self] in self?.onExtensions?() }
+        addButton("puzzlepiece", label: uiText("Extensions Menu"), id: "developer-extensions") { [weak self] in self?.onExtensions?() }
         extensions.orientation = .horizontal; extensions.spacing = 0
         actions.addArrangedSubview(extensions)
         addButton("rectangle.split.2x1", label: uiText("Split View Menu"), id: "developer-split") { [weak self] in self?.onSplit?() }
@@ -92,12 +92,13 @@ final class BrowserDeveloperToolbar: NSView {
         case "link": NSSize(width: 13, height: 13)
         case "camera": NSSize(width: 15, height: 12)
         case "terminal": NSSize(width: 14, height: 11)
-        case "globe": NSSize(width: 12, height: 12)
-        case "scope": NSSize(width: 15, height: 15)
+        case "globe": NSSize(width: 11.75, height: 11.75)
+        case "scope": NSSize(width: 13, height: 13)
+        case "puzzlepiece": NSSize(width: 16, height: 12)
         default: NSSize(width: 11, height: 11)
         }
-        button.image = symbol == "puzzlepiece.extension" ? Self.extensionsGlyph
-            : Self.glyph(symbol, width: ink.width, height: ink.height)
+        button.image = Self.glyph(symbol, width: ink.width, height: ink.height,
+                                  weight: symbol == "scope" ? .medium : .regular)
         button.setAccessibilityLabel(label); button.toolTip = label
         button.isBordered = false
         button.widthAnchor.constraint(equalToConstant: width).isActive = true
@@ -105,8 +106,9 @@ final class BrowserDeveloperToolbar: NSView {
         actions.addArrangedSubview(button)
         return button
     }
-    private static func glyph(_ name: String, width: CGFloat, height: CGFloat) -> NSImage? {
-        guard let image = OrbitGlyph.symbol(name, pointSize: 14, weight: .regular) else { return nil }
+    private static func glyph(_ name: String, width: CGFloat, height: CGFloat,
+                              weight: NSFont.Weight = .regular) -> NSImage? {
+        guard let image = OrbitGlyph.symbol(name, pointSize: 14, weight: weight) else { return nil }
         // SF Symbols retain alignment padding when drawn into a canvas.
         let sized = NSImage(size: NSSize(width: width * 1.25, height: height * 1.25), flipped: false) { rect in
             if name == "globe" {
@@ -120,27 +122,6 @@ final class BrowserDeveloperToolbar: NSView {
         }
         sized.isTemplate = true
         return sized
-    }
-    /// Symmetric horizontal puzzle outline, measured at 16×12 pt in the reference.
-    private static var extensionsGlyph: NSImage {
-        let image = NSImage(size: NSSize(width: 17, height: 14), flipped: false) { _ in
-            let p = NSBezierPath()
-            p.move(to: NSPoint(x: 5, y: 10.5))
-            p.line(to: NSPoint(x: 6.5, y: 10.5))
-            p.curve(to: NSPoint(x: 9.5, y: 10.5), controlPoint1: NSPoint(x: 5, y: 14.5), controlPoint2: NSPoint(x: 11, y: 14.5))
-            p.line(to: NSPoint(x: 12, y: 10.5)); p.line(to: NSPoint(x: 12, y: 8.5))
-            p.curve(to: NSPoint(x: 12, y: 5), controlPoint1: NSPoint(x: 17.5, y: 11), controlPoint2: NSPoint(x: 17.5, y: 2.5))
-            p.line(to: NSPoint(x: 12, y: 3.5)); p.line(to: NSPoint(x: 9.5, y: 3.5))
-            p.curve(to: NSPoint(x: 6, y: 3.5), controlPoint1: NSPoint(x: 11, y: -0.5), controlPoint2: NSPoint(x: 4.5, y: -0.5))
-            p.line(to: NSPoint(x: 4, y: 3.5)); p.line(to: NSPoint(x: 4, y: 5.5))
-            p.curve(to: NSPoint(x: 4, y: 9), controlPoint1: NSPoint(x: -1, y: 3), controlPoint2: NSPoint(x: -1, y: 11.5))
-            p.line(to: NSPoint(x: 4, y: 10.5)); p.close()
-            p.lineWidth = 1.15; p.lineJoinStyle = .round
-            NSColor.black.setStroke(); p.stroke()
-            return true
-        }
-        image.isTemplate = true
-        return image
     }
     @discardableResult
     private func addSeparator() -> NSView {
@@ -159,8 +140,8 @@ final class BrowserDeveloperToolbar: NSView {
         background.apply(theme)
         // Foreground follows the Space appearance, including its explicit light/dark override.
         let foreground = OrbitTokens.Color.Text.primary
-        address.textColor = foreground
-        lock.contentTintColor = foreground
+        address.textColor = foreground.withAlphaComponent(0.75)
+        lock.contentTintColor = foreground.withAlphaComponent(0.9)
         for case let button as NSButton in actions.arrangedSubviews { button.contentTintColor = foreground }
     }
     func update(url: URL?, canCapture: Bool = true) {

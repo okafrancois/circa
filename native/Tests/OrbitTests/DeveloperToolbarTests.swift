@@ -44,7 +44,7 @@ struct DeveloperToolbarTests {
         toolbar.update(url: URL(string: "https://www.chess.com/play"), canCapture: false)
         #expect(try button("developer-capture", in: toolbar).isHidden)
         #expect(toolbar.address.stringValue == "https://www.chess.com/play")
-        #expect(toolbar.address.font?.pointSize == 10)
+        #expect(toolbar.address.font?.pointSize == 9.5)
     }
 
     @Test("Extension updates preserve cached paint and anchors, reorder pins, and clear badges and removed profiles")
