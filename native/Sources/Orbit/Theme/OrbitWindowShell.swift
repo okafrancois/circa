@@ -43,6 +43,9 @@ final class OrbitWindowShell {
     private var menuTrackingDepth = 0
     private var isApplying = false
     private var libraryVisibleWidth: CGFloat = 0
+    var libraryPreservesDocumentWidth = false {
+        didSet { if oldValue != libraryPreservesDocumentWidth { applyGeometry() } }
+    }
     private var libraryProgress: CGFloat = 0
 
     func setLibraryProgress(_ value: CGFloat) {
@@ -337,7 +340,9 @@ final class OrbitWindowShell {
             // and home. It moves throughout the transition, including while Home is offscreen.
             let displacement = max(0, libraryVisibleWidth - resolved.cardFrame.minX * libraryProgress)
             resolved.cardFrame.origin.x += displacement
-            resolved.cardFrame.size.width -= displacement
+            // A wide destination pushes the document beyond the window instead of
+            // shrinking its native controls or increasing the window's fitting width.
+            if !libraryPreservesDocumentWidth { resolved.cardFrame.size.width -= displacement }
             resolved.cardGap += displacement
         }
         let wasOnScreen = geometry?.isSidebarOnScreen

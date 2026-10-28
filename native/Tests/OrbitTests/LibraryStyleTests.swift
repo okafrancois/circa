@@ -22,11 +22,11 @@ struct LibraryStyleTests {
         #expect(root.hitTest(point)?.isDescendant(of: sidebar) == true)
     }
 
-    @Test("Every Library list scrolls without a vertical or horizontal scroller")
+    @Test("Only the horizontal Spaces grid exposes a scroller")
     func scrollers() {
         NSApplication.shared.setActivationPolicy(.prohibited)
         let views: [NSView] = [BrowserLibraryHistoryView(), BrowserLibrarySpacesView(),
-                              BrowserDownloadsView(), BrowserArchiveView()]
+                              BrowserLibraryMediaView(), BrowserDownloadsView(), BrowserArchiveView()]
         func scrollViews(in view: NSView) -> [NSScrollView] {
             (view as? NSScrollView).map { [$0] } ?? view.subviews.flatMap { scrollViews(in: $0) }
         }
@@ -34,7 +34,8 @@ struct LibraryStyleTests {
             let scrolls = scrollViews(in: view)
             #expect(!scrolls.isEmpty)
             for scroll in scrolls {
-                #expect(!scroll.hasVerticalScroller && !scroll.hasHorizontalScroller)
+                #expect(!scroll.hasVerticalScroller)
+                #expect(scroll.hasHorizontalScroller == (view is BrowserLibrarySpacesView))
                 #expect(!scroll.drawsBackground)
             }
         }

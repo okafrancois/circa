@@ -45,7 +45,7 @@ struct NativeLibrarySpacesTests {
         await controller.session.waitForPendingCommands()
         let view = controller.library.spacesView
         #expect(!view.isHidden && view.rows.count == 3)
-        #expect(controller.libraryFocusView === view.searchField)
+        #expect(controller.libraryFocusView === view)
         #expect(controller.engine.surfaces.count == created)
         #expect(controller.session.snapshot?.activeSpaceID == first)
         view.searchField.stringValue = "malaga"
@@ -73,14 +73,13 @@ struct NativeLibrarySpacesTests {
         controller.showLibrary(.spaces)
         await controller.session.waitForPendingCommands()
         let view = controller.library.spacesView
-        view.table.selectRowIndexes(IndexSet(integer: try #require(view.rows.firstIndex { $0.space.id == third })), byExtendingSelection: false)
-        view.table.onReturn?()
+        view.tiles[try #require(view.rows.firstIndex { $0.space.id == third })].performClick(nil)
         await controller.session.waitForPendingCommands()
         #expect(controller.session.snapshot?.activeSpaceID == third && controller.session.activeProfileID == b)
         #expect(!controller.library.isPresented)
         controller.showLibrary(.spaces)
         await controller.session.waitForPendingCommands()
-        view.table.selectRowIndexes(IndexSet(integer: try #require(view.rows.firstIndex { $0.space.id == first })), byExtendingSelection: false)
+        view.selectItem(at: try #require(view.rows.firstIndex { $0.space.id == first }))
         view.openSelected()
         await controller.session.waitForPendingCommands()
         #expect(controller.session.selectedSurface === surface)
@@ -98,7 +97,7 @@ struct NativeLibrarySpacesTests {
         let view = controller.library.spacesView
         let oldTicket = controller.library.presentationID
         let catalog = try #require(controller.session.catalog)
-        view.table.selectRowIndexes(IndexSet(integer: try #require(view.rows.firstIndex { $0.space.id == third })), byExtendingSelection: false)
+        view.selectItem(at: try #require(view.rows.firstIndex { $0.space.id == third }))
         view.openSelected()
         let action = try #require(delayed)
         controller.session.activateSpace(second)
@@ -121,7 +120,7 @@ struct NativeLibrarySpacesTests {
         controller.showLibrary(.spaces)
         await controller.session.waitForPendingCommands()
         let view = controller.library.spacesView
-        view.table.selectRowIndexes(IndexSet(integer: try #require(view.rows.firstIndex { $0.space.id == third })), byExtendingSelection: false)
+        view.selectItem(at: try #require(view.rows.firstIndex { $0.space.id == third }))
         try await store.assignSettingsSpace(third, to: a)
         view.openSelected()
         await controller.session.waitForPendingCommands()
@@ -140,14 +139,58 @@ struct NativeLibrarySpacesTests {
         let view = controller.library.spacesView
         let input = NSTextView()
         #expect(view.control(view.searchField, textView: input, doCommandBy: #selector(NSResponder.moveDown(_:))))
-        #expect(view.table.selectedRow == 0)
+        #expect(view.selectedIndex == 0)
+        let previousTile = try #require(view.tiles.first)
+        let sourceSpace = controller.session.snapshot?.activeSpaceID
         view.searchField.stringValue = "Coral"
         view.controlTextDidChange(Notification(name: NSControl.textDidChangeNotification))
-        #expect(view.rows.count == 1 && view.table.selectedRow == -1)
+        #expect(view.rows.count == 1 && view.selectedIndex == -1)
+        previousTile.performClick(nil)
+        await controller.session.waitForPendingCommands()
+        #expect(controller.session.snapshot?.activeSpaceID == sourceSpace && controller.library.isPresented)
         #expect(view.control(view.searchField, textView: input, doCommandBy: #selector(NSResponder.moveDown(_:))))
         #expect(view.control(view.searchField, textView: input, doCommandBy: #selector(NSResponder.insertNewline(_:))))
         await controller.session.waitForPendingCommands()
         #expect(controller.session.snapshot?.activeSpaceID == third && controller.session.activeProfileID == b)
+    }
+
+    @Test("Spaces form fixed-width horizontal tiles with local tab previews and no additional surfaces")
+    func tileContents() async throws {
+        let (controller, _, _, _, _, _, _) = try await fixture()
+        defer { controller.session.close(); controller.window?.close() }
+        let created = controller.engine.surfaces.count
+        controller.window?.setContentSize(NSSize(width: 1120, height: 780))
+        controller.showLibrary(.spaces)
+        await controller.session.waitForPendingCommands()
+        await controller.library.spacesTask?.value
+        let view = controller.library.spacesView
+        controller.window?.contentView?.layoutSubtreeIfNeeded()
+        #expect(controller.window?.contentView?.bounds.size == NSSize(width: 1120, height: 780))
+        #expect(controller.library.view.bounds.width == 1064)
+        #expect(view.tiles.count == 3)
+        #expect(view.tiles[0].frame == NSRect(x: 24, y: 48, width: 240, height: 676), "Tile frame: \(view.tiles[0].frame), viewport: \(view.scroll.contentSize)")
+        #expect(view.tiles[1].frame.minX == 288)
+        #expect(view.tiles[0].accessibilityHelp()?.contains("library-spaces.fixture.test") == true)
+        #expect(controller.engine.surfaces.count == created)
+    }
+
+    @Test("Each tile resolves its own light or dark theme and clears an inherited override")
+    func tileAppearance() async throws {
+        let (controller, _, _, _, _, _, _) = try await fixture()
+        defer { controller.session.close(); controller.window?.close() }
+        controller.showLibrary(.spaces)
+        await controller.session.waitForPendingCommands()
+        let tile = try #require(controller.library.spacesView.tiles.first)
+        var theme = OrbitTokens.SpaceTheme.rosePlum
+        theme.mode = .light
+        tile.configure(item: tile.item, theme: theme, content: .empty)
+        #expect(tile.appearance?.name == .aqua)
+        theme.mode = .dark
+        tile.configure(item: tile.item, theme: theme, content: .empty)
+        #expect(tile.appearance?.name == .darkAqua)
+        theme.mode = .automatic
+        tile.configure(item: tile.item, theme: theme, content: .empty)
+        #expect(tile.appearance == nil)
     }
 
     @Test("Inventory exposes the saved composed emoji and fits the retained minimum drawer geometry")

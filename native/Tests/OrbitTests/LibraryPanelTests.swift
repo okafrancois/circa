@@ -30,7 +30,7 @@ struct LibraryPanelTests {
         #expect(view.categoryButtons.count == 4)
         #expect(view.categoryButtons.values.allSatisfy { $0.accessibilityIdentifier() != "library-category-easels" })
         view.select(.media, theme: .default)
-        #expect(view.emptySearch.placeholderString == uiText("Search Media…"))
+        #expect(BrowserLibraryMediaView().searchField.placeholderString == uiText("Search Media…"))
     }
 
     @Test("An outside click dismisses the panel and keeps the document event available")
@@ -105,24 +105,22 @@ struct LibraryPanelTests {
 
     @Test("Empty searches preserve editing across projections and Escape clears before leaving")
     func emptySearchEditing() throws {
-        let view = BrowserLibraryView(frame: NSRect(x: 0, y: 0, width: 417, height: 780))
-        view.select(.media, theme: .default)
-        #expect(view.emptySearch.isEditable && view.emptySearch.isSelectable)
-        view.emptySearch.stringValue = "Synthetic query"
+        let view = BrowserLibraryMediaView(frame: NSRect(x: 0, y: 0, width: 417, height: 780))
+        let profile = ProfileID()
+        view.render([], profile: profile)
+        #expect(view.searchField.isEditable && view.searchField.isSelectable)
+        view.searchField.stringValue = "Synthetic query"
         view.controlTextDidChange(Notification(name: NSControl.textDidChangeNotification))
-        view.select(.media, theme: .default)
-        #expect(view.emptySearch.stringValue == "Synthetic query")
+        view.render([], profile: profile)
+        #expect(view.searchField.stringValue == "Synthetic query")
         var exited = false
         view.onBack = { exited = true }
         let text = NSTextView()
-        #expect(view.control(view.emptySearch, textView: text, doCommandBy: #selector(NSResponder.cancelOperation(_:))))
-        #expect(view.emptySearch.stringValue.isEmpty && !exited)
-        #expect(view.control(view.emptySearch, textView: text, doCommandBy: #selector(NSResponder.cancelOperation(_:))))
+        #expect(view.control(view.searchField, textView: text, doCommandBy: #selector(NSResponder.cancelOperation(_:))))
+        #expect(view.searchField.stringValue.isEmpty && !exited)
+        #expect(view.control(view.searchField, textView: text, doCommandBy: #selector(NSResponder.cancelOperation(_:))))
         #expect(exited)
-        view.select(.media, theme: .default)
-        #expect(view.emptySearch.placeholderString == uiText("Search Media…"))
-        view.select(.downloads, theme: .default)
-        #expect(view.emptySearch.isHidden)
+        #expect(view.searchField.placeholderString == uiText("Search Media…"))
     }
 
     @Test("The native field editor stays inside the Library search text rectangle")

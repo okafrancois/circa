@@ -6,13 +6,11 @@ func libraryText(_ key: String, _ fallback: String) -> String { uiText(fallback)
 
 /// The Library shares the window's background; only its destination rail adds a tint.
 @MainActor
-final class BrowserLibraryView: NSView, NSSearchFieldDelegate {
+final class BrowserLibraryView: NSView {
     static let railWidth: CGFloat = 112
     let body = NSView()
     let railBackground = NSView()
     private(set) var categoryButtons: [BrowserLibraryCategory: BrowserLibraryCategoryButton] = [:]
-    let emptySearch = BrowserLibrarySearchField()
-    private let empty = BrowserLibraryEmptyView()
     private let rail = NSView()
     var onCategory: ((BrowserLibraryCategory) -> Void)?
     var onBack: (() -> Void)?
@@ -46,13 +44,6 @@ final class BrowserLibraryView: NSView, NSSearchFieldDelegate {
         back.setAccessibilityIdentifier("library-back")
         back.translatesAutoresizingMaskIntoConstraints = false
         addSubview(back)
-        emptySearch.translatesAutoresizingMaskIntoConstraints = false
-        emptySearch.delegate = self
-        emptySearch.setAccessibilityIdentifier("library-empty-search")
-        body.addSubview(emptySearch)
-        empty.translatesAutoresizingMaskIntoConstraints = false
-        empty.isHidden = true
-        body.addSubview(empty)
         NSLayoutConstraint.activate([
             railBackground.leadingAnchor.constraint(equalTo: leadingAnchor),
             railBackground.widthAnchor.constraint(equalToConstant: Self.railWidth),
@@ -64,13 +55,8 @@ final class BrowserLibraryView: NSView, NSSearchFieldDelegate {
             body.leadingAnchor.constraint(equalTo: leadingAnchor, constant: Self.railWidth),
             body.trailingAnchor.constraint(equalTo: trailingAnchor),
             body.topAnchor.constraint(equalTo: topAnchor),
-            body.bottomAnchor.constraint(equalTo: bottomAnchor),
-            emptySearch.leadingAnchor.constraint(equalTo: body.leadingAnchor, constant: 8),
-            emptySearch.trailingAnchor.constraint(equalTo: body.trailingAnchor, constant: -8),
-            emptySearch.topAnchor.constraint(equalTo: body.topAnchor, constant: 10),
-            empty.leadingAnchor.constraint(equalTo: body.leadingAnchor, constant: 16),
-            empty.trailingAnchor.constraint(equalTo: body.trailingAnchor, constant: -16),
-            empty.centerYAnchor.constraint(equalTo: body.centerYAnchor, constant: 28)
+            body.bottomAnchor.constraint(equalTo: bottomAnchor)
+
         ])
         setAccessibilityIdentifier("browser-library")
         setAccessibilityLabel(uiText("Library"))
@@ -102,19 +88,6 @@ final class BrowserLibraryView: NSView, NSSearchFieldDelegate {
     func select(_ category: BrowserLibraryCategory, theme: OrbitTokens.SpaceTheme) {
         updatePageAppearance()
         for (destination, button) in categoryButtons { button.state = destination == category ? .on : .off }
-        empty.isHidden = category != .media
-        emptySearch.isHidden = empty.isHidden
-        emptySearch.placeholderString = uiText("Search Media…")
-        updateEmptyState()
-    }
-    func controlTextDidChange(_ notification: Notification) { updateEmptyState() }
-    func control(_ control: NSControl, textView: NSTextView, doCommandBy selector: Selector) -> Bool {
-        guard !textView.hasMarkedText(), selector == #selector(NSResponder.cancelOperation(_:)) else { return false }
-        cancelLibrarySearch(emptySearch, search: { self.updateEmptyState() }, close: { self.onBack?() })
-        return true
-    }
-    private func updateEmptyState() {
-        empty.configure(symbol: "photo.on.rectangle", title: uiText("No Media"), query: emptySearch.stringValue)
     }
     @objc private func selectCategory(_ sender: BrowserLibraryCategoryButton) {
         guard acceptsLibraryInput else { return }
@@ -193,11 +166,15 @@ final class BrowserLibraryCategoryButton: NSButton {
 final class BrowserLibraryPresentation {
     let view = BrowserLibraryView()
     let drawer = BrowserLibraryDrawer()
+    var widthConstraint: NSLayoutConstraint?
+    var spacesWidthConstraint: NSLayoutConstraint?
     let swipe = BrowserLibrarySwipeController()
     var displayedProfileID: ProfileID? { didSet { if displayedProfileID != oldValue { revokeSelections() } } }
     let history = BrowserLibraryHistoryModel()
     let historyView = BrowserLibraryHistoryView()
     let spacesView = BrowserLibrarySpacesView()
+    let mediaView = BrowserLibraryMediaView()
+    var spacesTask: Task<Void, Never>?
     var presentationID = UUID() { didSet { if presentationID != oldValue { revokeSelections() } } }
     private var selections: [UUID: CatalogSelectionAdmission] = [:]
     /// Tests inject a response without presenting a sheet or activating a window.

@@ -253,7 +253,7 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
         session.observeOrganizationChanges()
         findSession.onChange = { [weak self] in self?.renderFind() }
         findSession.onFocusReturn = { [weak self] surface in self?.returnFocusAfterFind(on: surface) }
-        downloads.observe(id) { [weak self] in self?.renderDownloads() }
+        downloads.observe(id) { [weak self] in self?.renderDownloads(); self?.renderLibraryMedia() }
         if restoringWindowID == nil && opensInitialTab { openTab() }
     }
 
