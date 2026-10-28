@@ -121,3 +121,45 @@ extension NativeWebKitTests {
         #expect(await settings.snapshot().space(created.id).iconSelection == .grapheme("🧪"))
     }
 }
+
+extension NativeWebKitTests {
+    @Test("Last Space pull shows only the edge ring until release; cancellation restores the source")
+    @MainActor
+    func spaceCreationEdgeBeforeForm() async throws {
+        NSApplication.shared.setActivationPolicy(.prohibited)
+        let store = BrowserStore()
+        let profile = await store.createProfile(name: "Synthetic")
+        let last = try await store.createSpace(name: "Last", profileID: profile)
+        let catalog = await store.catalogSnapshot()
+        let window = CreationTestWindow(contentRect: NSRect(x: 0, y: 0, width: 500, height: 950),
+                                        styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        let sidebar = BrowserSidebarView(frame: window.contentView!.bounds)
+        window.contentView!.addSubview(sidebar)
+        defer { sidebar.spaceSwipe.detach(); window.close() }
+        sidebar.onNewSpace = {}
+        sidebar.configureNewSpacePage = { $0.configure(profiles: catalog.profiles, selected: profile) }
+        sidebar.render(catalog: catalog, activeSpaceID: last, organization: nil)
+        sidebar.layoutSubtreeIfNeeded()
+        let swipe = sidebar.spaceSwipe
+        swipe.automaticallyAdvances = false; swipe.clock = { 10 }
+        func send(_ phase: Int64, _ x: Int32, _ time: Double) throws {
+            let cg = try #require(CGEvent(scrollWheelEvent2Source: nil, units: .pixel, wheelCount: 2, wheel1: 0, wheel2: x, wheel3: 0))
+            cg.setIntegerValueField(.scrollWheelEventIsContinuous, value: 1)
+            cg.setIntegerValueField(.scrollWheelEventScrollPhase, value: phase)
+            cg.timestamp = UInt64(time * 1_000_000_000)
+            _ = swipe.handleScroll(try #require(NSEvent(cgEvent: cg)), inside: true)
+        }
+        try send(1, 0, 1)
+        try send(2, -180, 1.02)
+        #expect(sidebar.creationEdge != nil)
+        #expect(sidebar.newSpaceSwipePage == nil)
+        #expect(abs(sidebar.page.frame.minX) < 24)
+        try send(8, 0, 1.03)
+        _ = swipe.advance(to: 12)
+        #expect(sidebar.creationEdge == nil && sidebar.newSpaceSwipePage == nil)
+        #expect(sidebar.page.frame.minX == 0)
+        #expect(sidebar.swipeContext?.1 == last)
+        #expect(await store.catalogSnapshot() == catalog)
+    }
+}

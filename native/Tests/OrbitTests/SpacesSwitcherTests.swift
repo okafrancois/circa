@@ -134,7 +134,7 @@ struct SpacesSwitcherTests {
         sidebar.layoutSubtreeIfNeeded()
         _ = swipe.handleScroll(try event(1, time: 2), inside: true)
         _ = swipe.handleScroll(try event(2, x: -320, time: 2.04), inside: true)
-        #expect(sidebar.newSpaceSwipePage != nil && creations == 0)
+        #expect(sidebar.creationEdge != nil && sidebar.newSpaceSwipePage == nil && creations == 0)
         _ = swipe.handleScroll(try event(4, time: 2.05), inside: true)
         _ = swipe.advance(to: 12)
         #expect(creations == 0 && sidebar.newSpaceSwipePage != nil && swipe.isCreationPageVisible)

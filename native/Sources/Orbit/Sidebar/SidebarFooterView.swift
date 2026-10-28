@@ -16,6 +16,8 @@ final class SidebarFooterView: NSView {
     let plusButton = OrbitGlyphButton(glyph: OrbitGlyph.footerPlus, label: OrbitShellText.create)
     private(set) var spaceButtons: [SidebarSpaceButton] = []
     private var spaces: [BrowserSpace] = []
+    private let creationDot = NSView()
+    var creationProgress: CGFloat = 0 { didSet { needsLayout = true } }
     private var activeSpaceID: SpaceID?
     private var commandsEnabled = true
     private(set) var contextMenu: SidebarSpaceMenu?
@@ -38,6 +40,10 @@ final class SidebarFooterView: NSView {
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         for button in [libraryButton, plusButton] { addSubview(button) }
+        creationDot.wantsLayer = true
+        creationDot.layer?.cornerRadius = 4
+        creationDot.alphaValue = 0
+        addSubview(creationDot)
         refreshAccent()
     }
 
@@ -109,7 +115,22 @@ final class SidebarFooterView: NSView {
         spaceLayout = FooterSpaceLayout.resolve(count: spaceButtons.count, libraryCenterX: geometry.libraryCenterX,
                                                 plusCenterX: geometry.plusCenterX,
                                                 backingScale: window?.backingScaleFactor ?? 1)
-        for (button, centerX) in zip(spaceButtons, spaceLayout.centerXs) {
+        let progress = min(1, max(0, creationProgress))
+        let group = FooterSpaceLayout.resolve(count: spaceButtons.count + 2, libraryCenterX: geometry.libraryCenterX,
+                                              plusCenterX: geometry.plusCenterX,
+                                              backingScale: window?.backingScaleFactor ?? 1)
+        let libraryX = group.centerXs.first ?? geometry.libraryCenterX
+        libraryButton.frame.origin.x += (libraryX - geometry.libraryCenterX) * progress
+        plusButton.alphaValue = 1 - progress
+        creationDot.frame = NSRect(x: (group.centerXs.last ?? 0) - 4, y: geometry.footerCenterY - 4, width: 8, height: 8)
+        effectiveAppearance.performAsCurrentDrawingAppearance { creationDot.layer?.backgroundColor = NSColor.secondaryLabelColor.cgColor }
+        creationDot.alphaValue = progress
+        libraryButton.alphaValue = 1 - progress * 0.5
+        for (index, pair) in zip(spaceButtons, spaceLayout.centerXs).enumerated() {
+            let (button, sourceX) = pair
+            let creationX = group.centerXs.indices.contains(index + 1) ? group.centerXs[index + 1] : sourceX
+            let centerX = sourceX + (creationX - sourceX) * progress
+            button.alphaValue = 1 - progress * 0.5
             button.frame = NSRect(x: centerX - spaceLayout.pitch / 2, y: y, width: spaceLayout.pitch, height: size)
             button.presentation = spaceLayout.presentation
             button.dotDiameter = button.fittedDotDiameter(spaceLayout.dotDiameter)
