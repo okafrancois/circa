@@ -4,6 +4,14 @@ import AppKit
 /// These paths use CASpringAnimation through , not Motion's CoreVideo clock.
 enum BrowserPeekMotion {
     static let present = OrbitTokens.Spring(response: 0.245, dampingFraction: 0.865)
+    // Full-window entry: approximately 0.35 s through its small overshoot and settling.
+    static let libraryPresent = OrbitTokens.Spring(response: 0.253, dampingFraction: 0.85)
+    static func librarySource(in bounds: NSRect) -> NSRect {
+        let width = bounds.width * widthFraction * 0.001
+        let height = max(0, bounds.height - verticalInset * 2) * 0.62 * 0.001
+        return NSRect(x: bounds.minX + bounds.width * 0.352 - width / 2,
+                      y: bounds.minY + bounds.height * 0.44 - height / 2, width: width, height: height)
+    }
     static let dismiss = OrbitTokens.Spring(response: 0.225, dampingFraction: 0.895)
     static let promote = OrbitTokens.Spring(response: 0.18, dampingFraction: 0.885)
     static let sourcePresent = OrbitTokens.Spring(response: 0.245 * 0.5, dampingFraction: 0.95)

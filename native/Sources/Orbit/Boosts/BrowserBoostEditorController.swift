@@ -7,6 +7,7 @@ final class BrowserBoostEditorController: NSWindowController {
     let session: BrowserBoostEditorSession
     let editor: BrowserBoostEditorView
     var zapView: BrowserBoostZapView?
+    weak var pageHost: NSView?
     private var resizeTimer: Timer?
     private var resizeBegan: TimeInterval?
     init(session: BrowserBoostEditorSession, parent: NSWindow, firstRun: Bool) {
@@ -117,9 +118,9 @@ extension BrowserWindowController {
             guard let self, let surface else { return }
             do {
                 let store = try runtime.store(for: profile)
-                guard owns(surface), session.selectedSurface === surface, surface.documentGeneration == generation else { return }
+                guard isBoostPageTarget(surface), surface.documentGeneration == generation else { return }
                 let draft = try await BrowserBoostEditorSession.create(in: store, url: url, title: uiText("My Boost"))
-                guard owns(surface), session.selectedSurface === surface, surface.documentGeneration == generation,
+                guard !Task.isCancelled, isBoostPageTarget(surface), surface.documentGeneration == generation,
                       session.activeProfileID == profile, acceptsCommands else { return }
                 presentBoost(draft, parent: parent)
                 try await synchronizeBoosts(profile)
@@ -138,6 +139,7 @@ extension BrowserWindowController {
             }
         }
         let controller = BrowserBoostEditorController(session: draft, parent: parent, firstRun: firstRun)
+        controller.pageHost = pageCommandSurface()?.hostView
         let profile = draft.store.profileID
         draft.onCommit = { [weak self] in
             guard let self else { return }
@@ -153,21 +155,32 @@ extension BrowserWindowController {
             controller.zapView?.renderZaps(controller.session.boost.content.zapSelectors)
         }
         boostEditor = controller
-        controller.showWindow(nil)
+        if parent.isVisible { controller.showWindow(nil) }
+    }
+
+    func isBoostPageTarget(_ surface: Surface) -> Bool {
+        (owns(surface) || peek.owns(surface)) && pageCommandSurface() === surface
+    }
+
+    func closeBoostEditor(on surface: Surface) {
+        guard let editor = boostEditor, editor.pageHost === surface.hostView else { return }
+        editor.close()
+        boostEditor = nil
     }
 
     func beginBoostZap(_ controller: BrowserBoostEditorController) {
         if let picker = controller.zapView { picker.stop(); controller.zapView = nil; controller.editor.isZapping = false; return }
-        guard let surface = pageCommandSurface(), surface.profileID == controller.session.store.profileID,
+        guard let surface = pageCommandSurface(), isBoostPageTarget(surface),
+              controller.pageHost === surface.hostView, surface.profileID == controller.session.store.profileID,
               let probe = engine.conformanceProbe else { return }
         let generation = surface.documentGeneration
         let picker = BrowserBoostZapView(frame: surface.hostView.bounds)
         picker.autoresizingMask = [.width, .height]
         picker.inspect = { [weak self, weak surface] point in
-            guard let self, let surface, owns(surface), pageCommandSurface() === surface,
+            guard let self, let surface, isBoostPageTarget(surface),
                   surface.documentGeneration == generation else { throw BrowserEngineError.documentChanged }
             let raw = try await probe.evaluateScript(BrowserBoostZapView.script(at: point, zoom: surface.pageZoom), in: surface)
-            guard owns(surface), pageCommandSurface() === surface, surface.documentGeneration == generation,
+            guard isBoostPageTarget(surface), surface.documentGeneration == generation,
                   let raw, raw != "null", let data = raw.data(using: .utf8) else { return nil }
             return try JSONDecoder().decode(BrowserBoostPickedElement.self, from: data)
         }
@@ -210,18 +223,21 @@ extension BrowserWindowController {
     func openLibraryBoost(_ boost: BrowserBoost, profile: ProfileID) {
         guard library.isPresented, library.category == .boosts, session.activeProfileID == profile,
               let runtime = boostsRuntime, let parent = window else { return }
+        boostTask?.cancel()
+        let ticket = library.presentationID
         boostTask = Task { [weak self] in
             guard let self else { return }
             do {
                 let store = try runtime.store(for: profile)
                 guard let current = await store.snapshot().boosts.first(where: { $0.id == boost.id }),
+                      !Task.isCancelled, library.isPresented, library.category == .boosts,
+                      library.presentationID == ticket,
                       session.activeProfileID == profile, acceptsCommands else { return }
                 var parts = URLComponents()
                 parts.scheme = current.hostPattern.schemes.contains(.https) ? "https" : "http"
                 parts.host = current.hostPattern.host; parts.port = current.hostPattern.port
                 guard let url = parts.url else { return }
-                hideLibrary()
-                session.openTab(url: url)
+                guard openLibraryBoostPage(url, profile: profile) != nil else { return }
                 presentBoost(.init(store: store, boost: current), parent: parent)
                 try await synchronizeBoosts(profile)
             } catch { session.onError?(error) }

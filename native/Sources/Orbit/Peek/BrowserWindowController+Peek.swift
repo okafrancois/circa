@@ -39,6 +39,7 @@ extension BrowserWindowController {
         }
         peek.onEngineEvent = { [weak self] surface, event in self?.peekSurfaceEvent(event, on: surface) }
         peek.onSurfaceDispose = { [weak self] surface in
+            self?.closeBoostEditor(on: surface)
             self?.findSession.retire(surface)
             self?.pageSurfaceDidLeave(surface)
             self?.renderPeekPageTools()
@@ -223,6 +224,20 @@ extension BrowserWindowController {
         return surface
     }
 
+    /// Opens a Library item without requiring or changing the selected tab.
+    @discardableResult
+    func openLibraryBoostPage(_ url: URL, profile: ProfileID) -> Surface? {
+        guard acceptsCommands, !session.isClosed, library.isPresented,
+              session.activeProfileID == profile, BrowserPeekRouting.isWebURL(url) else { return nil }
+        let source = session.selectedSurface
+        let surface = engine.makeSurface(profileID: profile, delegate: peek)
+        guard peek.claim(surface) else { surface.dispose(); return nil }
+        presentPeek(surface, source: source, sourceOccurrenceID: source.flatMap { session.occurrenceID(for: $0) },
+                    trigger: .command, isLibraryBoost: true)
+        surface.navigate(to: url)
+        return surface
+    }
+
     /// Read the initiating event before deferring the navigation. Keyboard activation must not
     /// hit-test an unrelated link that happens to be underneath the pointer.
     private func peekActivationPoint(in source: Surface) -> NSPoint? {
@@ -236,14 +251,16 @@ extension BrowserWindowController {
         return NSPoint(x: point.x, y: host.isFlipped ? point.y : host.bounds.height - point.y)
     }
 
-    private func presentPeek(_ surface: Surface, source: Surface, sourceOccurrenceID: TabOccurrenceID,
-                             trigger: BrowserPeekTrigger, activationPoint: NSPoint? = nil) {
+    private func presentPeek(_ surface: Surface, source: Surface?, sourceOccurrenceID: TabOccurrenceID?,
+                             trigger: BrowserPeekTrigger, activationPoint: NSPoint? = nil, isLibraryBoost: Bool = false) {
         peek.overlay.scrimCornerRadius = contentCard.cornerRadius
         let pointer = peek.overlay.convert(window?.mouseLocationOutsideOfEventStream ?? .zero, from: nil)
-        peek.overlay.sourceRect = BrowserPeekMotion.pointerFallback(at: pointer)
+        if let previous = peek.presentedSurface { closeBoostEditor(on: previous) }
+        peek.overlay.sourceRect = isLibraryBoost ? BrowserPeekMotion.librarySource(in: peek.overlay.bounds)
+            : BrowserPeekMotion.pointerFallback(at: pointer)
         peek.overlay.sourceCornerRadius = 0
         peek.overlay.prepareSource = nil
-        if trigger != .command, let geometry = source as? any BrowserLinkGeometrySource,
+        if trigger != .command, let source, let geometry = source as? any BrowserLinkGeometrySource,
            let viewportPoint = activationPoint ?? peekActivationPoint(in: source) {
             let generation = source.documentGeneration
             peek.overlay.prepareSource = { [weak self, weak source, weak geometry] in
@@ -267,7 +284,7 @@ extension BrowserWindowController {
             }
         }
         peek.present(surface, source: source, sourceOccurrenceID: sourceOccurrenceID, trigger: trigger,
-                     animated: window?.isVisible == true)
+                     animated: window?.isVisible == true, isLibraryBoost: isLibraryBoost)
         // Opening a Peek is a user action in this window: its document takes keyboard focus.
         surface.focusDocument()
         renderPeekPageTools()
@@ -283,7 +300,9 @@ extension BrowserWindowController {
         guard let dismissed = peek.dismiss(animated: animated && window?.isVisible == true, remember: true) else { return }
         // A permission prompt of the closed document has no target any more.
         if siteControls.hasPendingPermission(for: dismissed.surface) { siteControls.cancelPermission() }
-        if hadFocus { focusSelectedDocument() }
+        closeBoostEditor(on: dismissed.surface)
+        if library.isPresented { window?.makeFirstResponder(libraryFocusView) }
+        else if hadFocus { focusSelectedDocument() }
         renderPeekPageTools()
     }
 
@@ -298,7 +317,9 @@ extension BrowserWindowController {
     func renderPeek() {
         let selected = session.snapshot?.selectedOccurrenceID
         if let presentation = peek.presentation {
-            let sourceAlive = presentation.source.map { owns($0) } ?? false
+            let sourceAlive = presentation.isLibraryBoost
+                ? library.isPresented && session.activeProfileID == presentation.surface.profileID
+                : presentation.source.map { owns($0) } ?? false
             if session.isClosed || !sourceAlive || selected != presentation.sourceOccurrenceID {
                 dismissPeek(animated: !session.isClosed)
             }
@@ -379,6 +400,7 @@ extension BrowserWindowController {
                 if destinationImage == nil, hadFocus, session.selectedSurface === surface { surface.focusDocument() }
             }
         } else { contentCard.setPeekDimmed(false, animated: false) }
+        if presentation.isLibraryBoost { hideLibrary(focus: false) }
         peek.endPresentationAfterHandOff()
         renderPeekPageTools()
         // Keep the last painted frame until adoption completes. The destination and the
@@ -396,7 +418,7 @@ extension BrowserWindowController {
                 // Peek; show it again rather than leaving it hidden.
                 if peek.owns(surface), !peek.isPresented {
                     peek.present(surface, source: presentation.source, sourceOccurrenceID: presentation.sourceOccurrenceID,
-                                 trigger: presentation.trigger, animated: false)
+                                 trigger: presentation.trigger, animated: false, isLibraryBoost: presentation.isLibraryBoost)
                 }
                 return
             }

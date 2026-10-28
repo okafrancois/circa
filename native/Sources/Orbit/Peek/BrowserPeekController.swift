@@ -12,6 +12,7 @@ final class BrowserPeekController<Surface: BrowserEngineSurface>: BrowserEngineS
         weak var source: Surface?
         let sourceOccurrenceID: TabOccurrenceID?
         let trigger: BrowserPeekTrigger
+        let isLibraryBoost: Bool
         /// A main-frame document committed (the contract's displayable signal, CONTRACT-R2).
         var hasRendered = false
     }
@@ -137,16 +138,17 @@ final class BrowserPeekController<Surface: BrowserEngineSurface>: BrowserEngineS
 
     /// Shows a surface Peek already owns. A previous Peek is disposed without animation.
     func present(_ surface: Surface, source: Surface?, sourceOccurrenceID: TabOccurrenceID?,
-                 trigger: BrowserPeekTrigger, animated: Bool) {
+                 trigger: BrowserPeekTrigger, animated: Bool, isLibraryBoost: Bool = false) {
         handoffTask?.cancel()
         handoffTask = nil
         // The previous Peek, presented or still fading out, is disposed now.
         presentation = nil
         for other in container.surfaces where other !== surface { container.dispose(other) }
         promotionPlacement = nil
-        presentation = Presentation(surface: surface, source: source, sourceOccurrenceID: sourceOccurrenceID, trigger: trigger)
+        presentation = Presentation(surface: surface, source: source, sourceOccurrenceID: sourceOccurrenceID, trigger: trigger, isLibraryBoost: isLibraryBoost)
         lastDismissed = nil
         pageFocus = .peek
+        overlay.isLibraryBoost = isLibraryBoost
         overlay.isSplitAvailable = splitHandoff != nil
         overlay.show(surface.hostView, animated: animated)
         refreshToolbar()
