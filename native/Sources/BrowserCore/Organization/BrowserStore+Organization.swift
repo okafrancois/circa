@@ -818,6 +818,16 @@ extension BrowserStore {
         try commitOrganization { $0.setPolicy(policy) }
     }
 
+    /// Applies one setting to every existing profile and to profiles created later, atomically.
+    public func setAutoArchiveThresholdForAllProfiles(_ threshold: BrowserAutoArchiveThreshold, fromProfile profileID: ProfileID) throws {
+        guard profiles[profileID] != nil else { throw BrowserStoreError.profileMissing }
+        guard threshold.isValid else { throw BrowserOrganizationError.invalidThreshold }
+        var policy = organization.policy
+        policy.defaultThreshold = threshold
+        policy.profileThresholds.removeAll()
+        try commitOrganization { $0.setPolicy(policy) }
+    }
+
     /// The cap applies to each profile. Lowering it purges each profile's oldest records immediately.
     public func setMaximumArchivedTabs(_ limit: Int) throws {
         guard limit >= 0 else { throw BrowserOrganizationError.invalidThreshold }

@@ -274,9 +274,9 @@ extension BrowserAutoArchiveThreshold: Codable {
     }
 }
 
-/// Auto-archive configuration. Orbit stores per-profile thresholds (`autoArchiveTimeThresholdsPerProfile`,
-/// names only observed); its option values and default were not decoded. Reconstruction choices:
-/// global default of 12 hours, optional per-profile override, archive capped at 1 000 records.
+/// Profile-scoped inactivity settings. Profiles without an override use the shared default,
+/// initially 12 hours.
+/// The archive count limit bounds the persisted session document.
 public struct BrowserArchivePolicy: Equatable, Sendable {
     public var defaultThreshold: BrowserAutoArchiveThreshold
     public var profileThresholds: [ProfileID: BrowserAutoArchiveThreshold]

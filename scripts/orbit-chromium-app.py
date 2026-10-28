@@ -432,6 +432,8 @@ def run_phase(phase, run, data, origin, args, tls_origin=None):
         command.append("--orbit-smoke-private-domain")
     if getattr(args, "profiles_only", False):
         command.append("--orbit-smoke-profiles")
+    if getattr(args, "archive_auto_only", False):
+        command.append("--orbit-smoke-archive-auto")
     if getattr(args, "space_profile_only", False):
         command.append("--orbit-smoke-space-profile")
     command.append("--orbit-smoke-extension-timeout=" + str(getattr(args, "extension_timeout", 25)))
@@ -594,7 +596,7 @@ def export(run, stamp, flavor):
         target = destination / phase_root.name
         target.mkdir()
         for name in ("verdict.json", "results.json", "events.jsonl", "window-watch.jsonl", "ownership.json",
-                     "stderr.log", "witness-stderr.log"):
+                     "stderr.log", "witness-stderr.log", "archive-session.json"):
             if (phase_root / name).exists():
                 shutil.copy2(phase_root / name, target / name)
         reports = phase_root / "reports"
@@ -621,11 +623,18 @@ def main():
                         help="Hidden mock-only private domain coexistence/release probe on approved EssentialsR2")
     runner.add_argument("--profiles-only", action="store_true",
                         help="Two persistent product profiles across normal and crash relaunches, without extensions")
+    runner.add_argument("--archive-auto-only", action="store_true",
+                        help="Synthetic accelerated-clock archiving on real Chromium surfaces")
     runner.add_argument("--space-profile-only", action="store_true",
                         help="Synthetic Space profile move hook and real Chromium cookie isolation, without UI")
     runner.add_argument("--extension-timeout", type=int, default=25,
                         help="Bounded wait for an extension report (25..180 seconds; does not alter probe deadlines)")
     args = parser.parse_args()
+    if args.command == "smoke" and args.archive_auto_only:
+        if args.extension_only or args.private_domain_only or args.profiles_only or args.space_profile_only:
+            parser.error("--archive-auto-only excludes other focused probes")
+        args.no_extension = True
+        args.fresh_only = True
     if args.command == "smoke" and args.space_profile_only:
         if args.extension_only or args.private_domain_only or args.profiles_only:
             parser.error("--space-profile-only excludes other focused probes")

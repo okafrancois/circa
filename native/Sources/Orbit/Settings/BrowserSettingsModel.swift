@@ -198,7 +198,7 @@ final class BrowserSettingsModel<Engine: BrowserEngine>: ObservableObject {
         }
         let document = await environment.store.sessionDocument()
         archivedSpaces = document.organization.archivedSpaces
-        let threshold = document.organization.archivePolicy.profileThresholds[profile]
+        let threshold = document.organization.archivePolicy.threshold(for: profile)
         let origins = await environment.settingsPermissionOrigins(profile: profile)
         var rows: [BrowserSettingsPermissionRow] = []
         for origin in origins {
@@ -249,8 +249,13 @@ final class BrowserSettingsModel<Engine: BrowserEngine>: ObservableObject {
         try await runtime.updateProfile(id, edit)
     }
 
-    func setArchiveThreshold(_ threshold: BrowserAutoArchiveThreshold?, profile: ProfileID) async throws {
-        try await environment.store.setAutoArchiveThreshold(threshold, forProfile: profile)
+    func setArchiveThreshold(_ threshold: BrowserAutoArchiveThreshold?, profile: ProfileID, allProfiles: Bool = false) async throws {
+        try await requireProfile(profile)
+        if allProfiles, let threshold {
+            try await environment.store.setAutoArchiveThresholdForAllProfiles(threshold, fromProfile: profile)
+        } else {
+            try await environment.store.setAutoArchiveThreshold(threshold, forProfile: profile)
+        }
         await environment.refreshSettingsCatalog()
     }
 

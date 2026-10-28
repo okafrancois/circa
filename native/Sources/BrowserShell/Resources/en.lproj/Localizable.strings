@@ -1219,3 +1219,9 @@
 "Separate your tabs for life,\nwork, projects, and more." = "Separate your tabs for life,\nwork, projects, and more.";
 "Site Settings" = "Site Settings";
 "Close" = "Close";
+
+"Would you like to apply this change to all of your Profiles, or only your %@ Profile?" = "Would you like to apply this change to all of your Profiles, or only your %@ Profile?";
+"All Profiles" = "All Profiles";
+"Only this Profile" = "Only this Profile";
+"Orbit will never auto-archive your tabs." = "Orbit will never auto-archive your tabs.";
+"Orbit will now archive your tabs after %@" = "Orbit will now archive your tabs after %@";

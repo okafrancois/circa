@@ -181,4 +181,83 @@ struct BrowserOrganizationArchiveTests {
         #expect(try await fixture.store.archivedTabs(from: fixture.context()).map(\.id) == [ids[2]])
         try await fixture.validate()
     }
+    @Test("Every supported inactivity delay uses the injected clock at its exact boundary",
+          arguments: [BrowserAutoArchiveThreshold.twelveHours, .oneDay, .sevenDays, .thirtyDays])
+    func supportedThresholdBoundaries(_ threshold: BrowserAutoArchiveThreshold) async throws {
+        let f = try await OrganizationFixture.make()
+        let old = try await f.open("boundary")
+        _ = try await f.open("visible")
+        try await f.store.setAutoArchiveThreshold(threshold, forProfile: f.personal)
+        f.clock.advance(by: try #require(threshold.interval) - 1)
+        #expect(await f.store.archiveExpiredTabs().isEmpty)
+        f.clock.advance(by: 1)
+        #expect(await f.store.archiveExpiredTabs().map(\.id) == [old])
+    }
+
+    @Test("Pinned folders and nested splits remain exempt while Today splits archive together")
+    func folderAndSplitRules() async throws {
+        let f = try await OrganizationFixture.make()
+        let pinned = try await f.open("folder-tab")
+        let pa = try await f.open("folder-split-a"), pb = try await f.open("folder-split-b")
+        _ = try await f.store.pinTabs([pinned, pa, pb], from: f.context())
+        let (pinnedSplit, _) = try await f.store.createSplit([pa, pb], from: f.context())
+        let (folder, _) = try await f.store.createFolder(title: "Synthetic folder", at: .init(.pinned(f.home)),
+            containing: [.tab(pinned), .split(pinnedSplit)], from: f.context())
+        let folderChildren = try #require(try await f.organization().folder(folder)?.childNodes)
+        let a = try await f.open("today-split-a"), b = try await f.open("today-split-b")
+        _ = try await f.store.createSplit([a, b], from: f.context())
+        f.clock.advance(by: 12 * 3600)
+        #expect(await f.store.archiveExpiredTabs().isEmpty) // Both visible panes are protected.
+        _ = try await f.open("visible")
+        f.clock.advance(by: 12 * 3600)
+        #expect(await f.store.archiveExpiredTabs(protecting: [a]).isEmpty)
+        #expect(Set(await f.store.archiveExpiredTabs().map(\.id)) == [a, b])
+        #expect(try await f.organization().folder(folder)?.childNodes == folderChildren)
+        try await f.validate()
+    }
+
+    @Test("Settings are profile scoped across Spaces, and applying to all replaces every override")
+    func allProfilesSetting() async throws {
+        let f = try await OrganizationFixture.make()
+        #expect(await f.store.archivePolicy().defaultThreshold == .twelveHours)
+        try await f.store.setAutoArchiveThreshold(.oneDay, forProfile: f.personal)
+        #expect(try await f.organization().autoArchiveThreshold == .oneDay)
+        try await f.activate(f.leisure)
+        #expect(try await f.organization().autoArchiveThreshold == .oneDay)
+        try await f.activate(f.lab)
+        #expect(try await f.organization().autoArchiveThreshold == .twelveHours)
+        try await f.store.setAutoArchiveThreshold(.sevenDays, forProfile: f.work)
+        try await f.store.setAutoArchiveThresholdForAllProfiles(.thirtyDays, fromProfile: f.personal)
+        let policy = await f.store.archivePolicy()
+        #expect(policy.profileThresholds.isEmpty)
+        #expect(policy.threshold(for: f.personal) == .thirtyDays && policy.threshold(for: f.work) == .thirtyDays)
+        let restored = try BrowserStore(restoring: BrowserSessionDocument.decode(await f.store.sessionDocument().encoded()))
+        #expect(await restored.archivePolicy() == policy)
+        await #expect(throws: BrowserStoreError.profileMissing) {
+            try await f.store.setAutoArchiveThresholdForAllProfiles(.oneDay, fromProfile: ProfileID())
+        }
+        #expect(await f.store.archivePolicy() == policy)
+        try await f.validate()
+    }
+
+    @Test("Background navigation and title changes do not count as viewing a tab")
+    func backgroundMetadataDoesNotResetIdle() async throws {
+        let f = try await OrganizationFixture.make()
+        let id = try await f.open("metadata")
+        let occurrence = try #require(await f.occurrences(of: id).first)
+        _ = try await f.open("visible")
+        f.clock.advance(by: 12 * 3600 - 1)
+        let authority = try await f.store.captureOccurrenceAuthority(for: occurrence.occurrenceID, from: f.context())
+        _ = try await f.store.updateDestination(to: organizationURL("redirected"), from: authority)
+        _ = try await f.store.updatePageTitle("Synthetic title", from: authority)
+        _ = try await f.store.renameTab(id, to: "Synthetic custom title", from: f.context())
+        f.clock.advance(by: 1)
+        let record = try #require(await f.store.archiveExpiredTabs().first)
+        #expect(record.id == id && record.tab.url == organizationURL("redirected"))
+        #expect(record.tab.pageTitle == "Synthetic title" && record.tab.customTitle == "Synthetic custom title")
+        #expect(record.spaceID == f.home && record.profileID == f.personal && record.archivedAt == f.clock.now)
+        let restored = try BrowserStore(restoring: BrowserSessionDocument.decode(await f.store.sessionDocument().encoded()))
+        #expect(await restored.sessionDocument().organization.archive == [record])
+    }
+
 }
