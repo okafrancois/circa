@@ -2,73 +2,180 @@ import AppKit
 import BrowserCore
 import BrowserEngine
 
-/// Observed in Developer Mode shows a 40 pt content toolbar; the sidebar keeps
-/// its host-only address. Its URL is selectable and uses the same navigation action as the pill.
+/// Developer toolbar dimensions are expressed in points.
+/// The content card supplies the top corner clipping; the page boundary stays square.
 @MainActor
 final class BrowserDeveloperToolbar: NSView {
+    static let height: CGFloat = 35
+    static let buttonPitch: CGFloat = 24.5
     let address = NSTextField()
+    private let lock = SiteControlButton("", identifier: "developer-security", onPress: {})
+    private let background = OrbitThemeFillView()
     private let actions = NSStackView()
     private let extensions = NSStackView()
     private var extensionButtons: [String: SiteControlButton] = [:]
+    private var badges: [String: BrowserExtensionBadgeView] = [:]
+    private var captureButton: NSButton!
+    private var captureSeparator: NSView!
     var onNavigate: ((String) -> Void)?
     var onPanel: ((BrowserDeveloperPanel) -> Void)?
+    var onSiteControls: (() -> Void)?
+    var onCapture: (() -> Void)?
     var onExtensions: (() -> Void)?
     var onSplit: (() -> Void)?
     var onExtension: ((String, NSButton) -> Void)?
 
     init() {
-        super.init(frame: NSRect(x: 0, y: 0, width: 700, height: 40))
+        super.init(frame: NSRect(x: 0, y: 0, width: 958.5, height: Self.height))
         setAccessibilityIdentifier("developer-toolbar")
         wantsLayer = true
-        address.font = .monospacedSystemFont(ofSize: 12, weight: .semibold)
+        background.frame = bounds
+        background.autoresizingMask = [.width, .height]
+        addSubview(background)
+        let stripes = BrowserDeveloperToolbarStripes(frame: bounds)
+        stripes.autoresizingMask = [.width, .height]
+        addSubview(stripes)
+        lock.image = Self.glyph("lock.fill", width: 8.5, height: 12)
+        lock.isBordered = false
+        lock.setAccessibilityLabel(uiText("Site Settings"))
+        lock.toolTip = uiText("Site Settings")
+        lock.onPress = { [weak self] in self?.onSiteControls?() }
+        address.font = .monospacedSystemFont(ofSize: 10, weight: .semibold)
         address.isBordered = false; address.isBezeled = false; address.drawsBackground = false
         address.focusRingType = .none
         address.lineBreakMode = .byTruncatingMiddle
         address.setAccessibilityIdentifier("developer-url")
+        address.setAccessibilityLabel(uiText("Address"))
         address.target = self; address.action = #selector(navigate)
-        address.translatesAutoresizingMaskIntoConstraints = false
-        actions.translatesAutoresizingMaskIntoConstraints = false
         actions.orientation = .horizontal; actions.spacing = 0
-        addSubview(address); addSubview(actions)
+        for view in [lock, address, actions] {
+            view.translatesAutoresizingMaskIntoConstraints = false
+            addSubview(view)
+        }
         NSLayoutConstraint.activate([
-            address.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
+            lock.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 15),
+            lock.widthAnchor.constraint(equalToConstant: 9),
+            lock.heightAnchor.constraint(equalToConstant: 13),
+            lock.centerYAnchor.constraint(equalTo: centerYAnchor),
+            address.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 35.5),
             address.trailingAnchor.constraint(equalTo: actions.leadingAnchor, constant: -10),
+            address.widthAnchor.constraint(greaterThanOrEqualToConstant: 40),
             address.centerYAnchor.constraint(equalTo: centerYAnchor),
-            actions.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
+            actions.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -5.5),
             actions.centerYAnchor.constraint(equalTo: centerYAnchor)
         ])
-        addButton("link", label: uiText("Copy Link"), id: "developer-copy") { [weak self] in
+        addButton("link", label: uiText("Copy Link"), id: "developer-copy", width: 44.5) { [weak self] in
             guard let self else { return }
             NSPasteboard.general.clearContents(); NSPasteboard.general.setString(address.stringValue, forType: .string)
         }
+        captureSeparator = addSeparator()
+        // Portrait capture is not implemented.
+        captureButton = addButton("camera", label: uiText("Capture…"), id: "developer-capture") { [weak self] in self?.onCapture?() }
+        addSeparator()
         addButton("terminal", label: uiText("Toggle Console"), id: "developer-console") { [weak self] in self?.onPanel?(.console) }
-        addButton("network", label: uiText("Toggle Network Panel"), id: "developer-network") { [weak self] in self?.onPanel?(.network) }
+        addButton("globe", label: uiText("Toggle Network Panel"), id: "developer-network") { [weak self] in self?.onPanel?(.network) }
         addButton("scope", label: uiText("Inspect Element"), id: "developer-inspect") { [weak self] in self?.onPanel?(.elements) }
+        addSeparator()
         addButton("puzzlepiece.extension", label: uiText("Extensions Menu"), id: "developer-extensions") { [weak self] in self?.onExtensions?() }
         extensions.orientation = .horizontal; extensions.spacing = 0
         actions.addArrangedSubview(extensions)
         addButton("rectangle.split.2x1", label: uiText("Split View Menu"), id: "developer-split") { [weak self] in self?.onSplit?() }
+        apply(theme: .default)
     }
     required init?(coder: NSCoder) { nil }
     @objc private func navigate() { onNavigate?(address.stringValue) }
-    private func addButton(_ symbol: String, label: String, id: String, action: @escaping () -> Void) {
+    @discardableResult
+    private func addButton(_ symbol: String, label: String, id: String,
+                           width: CGFloat = buttonPitch, action: @escaping () -> Void) -> NSButton {
         let button = SiteControlButton("", identifier: id, onPress: action)
-        button.image = OrbitGlyph.symbol(symbol, pointSize: 17)
+        let ink: NSSize = switch symbol {
+        case "link": NSSize(width: 13, height: 13)
+        case "camera": NSSize(width: 15, height: 12)
+        case "terminal": NSSize(width: 14, height: 11)
+        case "globe": NSSize(width: 12, height: 12)
+        case "scope": NSSize(width: 15, height: 15)
+        default: NSSize(width: 11, height: 11)
+        }
+        button.image = symbol == "puzzlepiece.extension" ? Self.extensionsGlyph
+            : Self.glyph(symbol, width: ink.width, height: ink.height)
         button.setAccessibilityLabel(label); button.toolTip = label
         button.isBordered = false
-        button.widthAnchor.constraint(equalToConstant: 28).isActive = true
+        button.widthAnchor.constraint(equalToConstant: width).isActive = true
         button.heightAnchor.constraint(equalToConstant: 28).isActive = true
         actions.addArrangedSubview(button)
+        return button
     }
-    func update(url: URL?) {
+    private static func glyph(_ name: String, width: CGFloat, height: CGFloat) -> NSImage? {
+        guard let image = OrbitGlyph.symbol(name, pointSize: 14, weight: .regular) else { return nil }
+        // SF Symbols retain alignment padding when drawn into a canvas.
+        let sized = NSImage(size: NSSize(width: width * 1.25, height: height * 1.25), flipped: false) { rect in
+            if name == "globe" {
+                var transform = AffineTransform(translationByX: rect.midX, byY: rect.midY)
+                transform.rotate(byDegrees: -20)
+                transform.translate(x: -rect.midX, y: -rect.midY)
+                (transform as NSAffineTransform).concat()
+            }
+            image.draw(in: rect)
+            return true
+        }
+        sized.isTemplate = true
+        return sized
+    }
+    /// Symmetric horizontal puzzle outline, measured at 16×12 pt in the reference.
+    private static var extensionsGlyph: NSImage {
+        let image = NSImage(size: NSSize(width: 17, height: 14), flipped: false) { _ in
+            let p = NSBezierPath()
+            p.move(to: NSPoint(x: 5, y: 10.5))
+            p.line(to: NSPoint(x: 6.5, y: 10.5))
+            p.curve(to: NSPoint(x: 9.5, y: 10.5), controlPoint1: NSPoint(x: 5, y: 14.5), controlPoint2: NSPoint(x: 11, y: 14.5))
+            p.line(to: NSPoint(x: 12, y: 10.5)); p.line(to: NSPoint(x: 12, y: 8.5))
+            p.curve(to: NSPoint(x: 12, y: 5), controlPoint1: NSPoint(x: 17.5, y: 11), controlPoint2: NSPoint(x: 17.5, y: 2.5))
+            p.line(to: NSPoint(x: 12, y: 3.5)); p.line(to: NSPoint(x: 9.5, y: 3.5))
+            p.curve(to: NSPoint(x: 6, y: 3.5), controlPoint1: NSPoint(x: 11, y: -0.5), controlPoint2: NSPoint(x: 4.5, y: -0.5))
+            p.line(to: NSPoint(x: 4, y: 3.5)); p.line(to: NSPoint(x: 4, y: 5.5))
+            p.curve(to: NSPoint(x: 4, y: 9), controlPoint1: NSPoint(x: -1, y: 3), controlPoint2: NSPoint(x: -1, y: 11.5))
+            p.line(to: NSPoint(x: 4, y: 10.5)); p.close()
+            p.lineWidth = 1.15; p.lineJoinStyle = .round
+            NSColor.black.setStroke(); p.stroke()
+            return true
+        }
+        image.isTemplate = true
+        return image
+    }
+    @discardableResult
+    private func addSeparator() -> NSView {
+        let container = NSView()
+        container.widthAnchor.constraint(equalToConstant: 14.5).isActive = true
+        container.heightAnchor.constraint(equalToConstant: 18).isActive = true
+        let line = NSView()
+        line.wantsLayer = true
+        line.layer?.backgroundColor = NSColor.white.withAlphaComponent(0.23).cgColor
+        line.frame = NSRect(x: 7, y: 0, width: 0.5, height: 18)
+        container.addSubview(line)
+        actions.addArrangedSubview(container)
+        return container
+    }
+    func apply(theme: OrbitTokens.SpaceTheme) {
+        background.apply(theme)
+        // Foreground follows the Space appearance, including its explicit light/dark override.
+        let foreground = OrbitTokens.Color.Text.primary
+        address.textColor = foreground
+        lock.contentTintColor = foreground
+        for case let button as NSButton in actions.arrangedSubviews { button.contentTintColor = foreground }
+    }
+    func update(url: URL?, canCapture: Bool = true) {
         if address.currentEditor() == nil { address.stringValue = url?.absoluteString ?? "" }
+        lock.isHidden = url?.scheme?.lowercased() != "https"
+        captureButton.isHidden = !canCapture
+        captureSeparator.isHidden = !canCapture
     }
     func updateExtensions(_ items: [BrowserExtensionSummary]) {
         let ids = Set(items.map(\.id))
         for id in Array(extensionButtons.keys) where !ids.contains(id) {
             extensionButtons.removeValue(forKey: id)?.removeFromSuperview()
+            badges[id] = nil
         }
-        for item in items {
+        for (index, item) in items.enumerated() {
             let button: SiteControlButton
             if let existing = extensionButtons[item.id] { button = existing }
             else {
@@ -78,19 +185,70 @@ final class BrowserDeveloperToolbar: NSView {
                 }
                 created.isBordered = false
                 created.imageScaling = .scaleProportionallyDown
-                created.widthAnchor.constraint(equalToConstant: 28).isActive = true
+                created.widthAnchor.constraint(equalToConstant: Self.buttonPitch).isActive = true
                 created.heightAnchor.constraint(equalToConstant: 28).isActive = true
+                let badge = BrowserExtensionBadgeView()
+                badge.translatesAutoresizingMaskIntoConstraints = false
+                created.addSubview(badge)
+                NSLayoutConstraint.activate([
+                    badge.trailingAnchor.constraint(equalTo: created.trailingAnchor, constant: -3),
+                    badge.bottomAnchor.constraint(equalTo: created.bottomAnchor, constant: 7)
+                ])
+                badges[item.id] = badge
                 extensionButtons[item.id] = created
-                extensions.addArrangedSubview(created)
                 button = created
             }
+            if extensions.arrangedSubviews.count <= index || extensions.arrangedSubviews[index] !== button {
+                if extensions.arrangedSubviews.contains(button) { extensions.removeArrangedSubview(button) }
+                extensions.insertArrangedSubview(button, at: index)
+            }
             button.setAccessibilityLabel(item.name); button.toolTip = item.name
+            button.setAccessibilityValue(item.actionBadgeText ?? "")
+            badges[item.id]?.text = item.actionBadgeText
             if let encoded = item.iconPNGBase64, let data = Data(base64Encoded: encoded), let image = NSImage(data: data) {
-                image.size = NSSize(width: 16, height: 16); button.image = image
+                image.size = NSSize(width: 14, height: 14); button.image = image
             }
         }
     }
+}
+
+/// The reference's red shield belongs to the extension icon; its badge is a dark rounded tab
+/// overlapping the lower right, with white compact numerals. This view never intercepts clicks.
+@MainActor
+final class BrowserExtensionBadgeView: NSView {
+    var text: String? { didSet { isHidden = text?.isEmpty != false; invalidateIntrinsicContentSize(); needsDisplay = true } }
+    static let font = NSFont.systemFont(ofSize: 6, weight: .bold)
+    override var intrinsicContentSize: NSSize {
+        let width = ((text ?? "") as NSString).size(withAttributes: [.font: Self.font]).width
+        return NSSize(width: max(9, ceil(width) + 3), height: 8)
+    }
+    override init(frame: NSRect) { super.init(frame: frame); isHidden = true; setAccessibilityElement(false) }
+    required init?(coder: NSCoder) { nil }
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
     override func draw(_ dirtyRect: NSRect) {
-        NSColor.labelColor.withAlphaComponent(0.07).setFill(); bounds.fill()
+        guard let text, !text.isEmpty else { return }
+        NSColor(srgbRed: 0.19, green: 0.19, blue: 0.20, alpha: 1).setFill()
+        NSBezierPath(roundedRect: bounds, xRadius: 1.5, yRadius: 1.5).fill()
+        let attributes: [NSAttributedString.Key: Any] = [.font: Self.font, .foregroundColor: NSColor.white]
+        let size = (text as NSString).size(withAttributes: attributes)
+        (text as NSString).draw(at: NSPoint(x: (bounds.width - size.width) / 2, y: (bounds.height - size.height) / 2),
+                                 withAttributes: attributes)
+    }
+}
+
+/// The reference alternates 20 pt bands on a 40 pt period, descending at 45°.
+@MainActor
+private final class BrowserDeveloperToolbarStripes: NSView {
+    override var isFlipped: Bool { true }
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+    override func draw(_ dirtyRect: NSRect) {
+        NSColor.white.withAlphaComponent(0.02).setFill()
+        for x in stride(from: -bounds.height - 40, through: bounds.width, by: 40) {
+            let p = NSBezierPath()
+            p.move(to: NSPoint(x: x, y: 0)); p.line(to: NSPoint(x: x + 20, y: 0))
+            p.line(to: NSPoint(x: x + 20 + bounds.height, y: bounds.height))
+            p.line(to: NSPoint(x: x + bounds.height, y: bounds.height))
+            p.close(); p.fill()
+        }
     }
 }

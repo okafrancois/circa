@@ -74,6 +74,7 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
 
     var siteControls: BrowserSiteControls<Engine>!
     let developerToolbar = BrowserDeveloperToolbar()
+    var developerToolbarProfile: ProfileID?
     lazy var sharing = BrowserSharingController(owner: self)
 
     let archive = BrowserArchivePresentation()

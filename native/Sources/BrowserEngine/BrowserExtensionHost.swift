@@ -10,9 +10,11 @@ public struct BrowserExtensionSummary: Sendable, Equatable, Codable {
     public var hasAction: Bool
     public var isPinned: Bool?
     public var iconPNGBase64: String?
+    /// Global action badge when supplied by the engine; nil means unavailable, never a count of zero.
+    public var actionBadgeText: String?
 
     public init(id: String, name: String, version: String, isEnabled: Bool, hasAction: Bool,
-                isPinned: Bool? = nil, iconPNGBase64: String? = nil) {
+                isPinned: Bool? = nil, iconPNGBase64: String? = nil, actionBadgeText: String? = nil) {
         self.id = id
         self.name = name
         self.version = version
@@ -20,6 +22,7 @@ public struct BrowserExtensionSummary: Sendable, Equatable, Codable {
         self.hasAction = hasAction
         self.isPinned = isPinned
         self.iconPNGBase64 = iconPNGBase64
+        self.actionBadgeText = actionBadgeText
     }
 }
 
