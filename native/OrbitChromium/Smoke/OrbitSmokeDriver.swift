@@ -298,7 +298,7 @@ final class OrbitSmokeDriver: OrbitLaunchHooks {
             finish(aborted: false)
             return
         }
-        if phase == .fresh && !arguments.contains("--orbit-smoke-extension-only")
+        if phase == .fresh && !arguments.contains("--orbit-smoke-engine-r5") && !arguments.contains("--orbit-smoke-extension-only")
             && !arguments.contains("--orbit-smoke-relaunch") && !arguments.contains("--orbit-smoke-private-domain")
             && !arguments.contains("--orbit-smoke-profiles") && !arguments.contains("--orbit-smoke-site-data")
             && !arguments.contains("--orbit-smoke-space-profile") && !arguments.contains("--orbit-smoke-archive-auto") {
@@ -450,6 +450,10 @@ final class OrbitSmokeDriver: OrbitLaunchHooks {
         check("hosted.tab", firstIdentity?.isHosted == true && tab.runtimeStyle == 2 && engine.holdingWindowTabCount == 0
               && engine.hostedWindowCount == 1, identity(tab).merging(["holdingWindowTabs": engine.holdingWindowTabCount,
                                                                        "hostedWindows": engine.hostedWindowCount]) { $1 })
+        if arguments.contains("--orbit-smoke-engine-r5") {
+            await suspensionScenarios(window, tab, engine)
+            return
+        }
         if extensionLoaded { await extensionProbes(tab) }
         if arguments.contains("--orbit-smoke-engine-r4") {
             await runtimeStateScenarios(window, tab, engine)

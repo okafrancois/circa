@@ -281,6 +281,14 @@ private func failedAddressChecks(_ backend: ChromiumBrowserEngine) {
     let page = backend.makeSurface(profileID: ProfileID(), delegate: delegate)
     emit(ACR_EVENT_CREATED, page.token, value: 2)
     emit(ACR_EVENT_ADDRESS, page.token, url: "https://previous.example.test/")
+    emit(ACR_EVENT_DOCUMENT, page.token, url: "https://previous.example.test/")
+    let generation = page.documentGeneration
+    let stateURL = URL(string: "https://previous.example.test/?entry=1")!
+    page.navigate(to: stateURL)
+    emit(ACR_EVENT_ADDRESS, page.token, value: 1, url: stateURL.absoluteString)
+    precondition(page.navigationState.committedURL == stateURL && page.currentURL == stateURL,
+                 "same-document history updates committed and requested URL authority")
+    precondition(page.documentGeneration == generation, "same-document history keeps document identity")
     emit(ACR_EVENT_LOAD_ERROR, page.token, value: -105, url: "http://unavailable.invalid/")
     precondition(page.navigationState.url?.absoluteString == "http://unavailable.invalid/",
                  "a DNS failure must not display the previous document's address")

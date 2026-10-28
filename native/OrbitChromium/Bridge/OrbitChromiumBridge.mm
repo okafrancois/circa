@@ -1748,7 +1748,8 @@ const orbit_cef_api_t* ResolveOrbitApi() {
   // v1. Each version's layout is the prefix of the next; a function beyond the resolved version
   // is never called.
   const orbit_cef_api_t* api = nullptr;
-  const std::pair<uint32_t, size_t> versions[] = {{5u, sizeof(orbit_cef_api_t)},
+  const std::pair<uint32_t, size_t> versions[] = {{6u, sizeof(orbit_cef_api_t)},
+                                                   {5u, offsetof(orbit_cef_api_t, discard_tab)},
                                                    {4u, offsetof(orbit_cef_api_t, extension_action_snapshot)},
                                                    {3u, offsetof(orbit_cef_api_t, extensions_snapshot)},
                                                    {2u, offsetof(orbit_cef_api_t, hold_window)},
@@ -1827,6 +1828,9 @@ class App final : public CefApp, public CefBrowserProcessHandler {
       if (item.value.empty()) command->AppendSwitch(item.name);
       else command->AppendSwitchWithValue(item.name, item.value);
     }
+    auto enabled = command->GetSwitchValue("enable-features").ToString();
+    if (!enabled.empty()) enabled += ",";
+    command->AppendSwitchWithValue("enable-features", enabled + "WebContentsDiscard");
     // Disabled features of the allow-listed arguments, the extra switches and the policy, as one
     // value (the filtered argv carries none itself).
     std::vector<std::string> disabled = {command->GetSwitchValue("disable-features").ToString()};
@@ -2437,6 +2441,17 @@ extern "C" int32_t ACRSetSitePermission(uint64_t profile, const char* origin, in
   }
   context->second->SetContentSetting(origin, origin, type, value);
   return 1;
+}
+
+extern "C" int32_t ACRDiscardTab(uint64_t token) {
+  ACR_HOST(token);
+  return g_state->orbit && g_state->orbit->version >= 6 && g_state->orbit->discard_tab
+      ? g_state->orbit->discard_tab(host->browser->GetIdentifier()) : 0;
+}
+extern "C" int32_t ACRRestoreDiscardedTab(uint64_t token) {
+  ACR_HOST(token);
+  return g_state->orbit && g_state->orbit->version >= 6 && g_state->orbit->restore_discarded_tab
+      ? g_state->orbit->restore_discarded_tab(host->browser->GetIdentifier()) : 0;
 }
 
 extern "C" int32_t ACRNavigationHistory(uint64_t token, char* buffer, size_t capacity) {

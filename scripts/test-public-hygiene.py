@@ -58,11 +58,13 @@ class PublicHygieneTests(unittest.TestCase):
         self.assertFalse(policy.check_text("CMakeLists.txt", policy.TECHNICAL_TEXT[0]))
         self.assertFalse(policy.check_text("geometry.swift", policy.TECHNICAL_TEXT[1] + "(withCenter: point)"))
 
-    def test_compatibility_is_localized(self):
+    def test_engine_symbols_have_no_compatibility_exception(self):
         path = "native/OrbitChromium/Bridge/EngineCompatibility.h"
         symbol = policy.SOURCE_NAME.lower() + "y_cef_get_api"
-        self.assertFalse(policy.check_text(path, '"' + symbol + '"'))
+        self.assertTrue(policy.check_text(path, '"' + symbol + '"'))
         self.assertTrue(policy.check_text("other.h", symbol))
+        self.assertTrue(policy.check_text("native/OrbitChromium/cef-patches/example.patch", symbol))
+        self.assertTrue(policy.check_text("scripts/cef-engine-example.py", symbol))
 
     def test_tracked_tree_and_binary_metadata(self):
         with tempfile.TemporaryDirectory(prefix="orbit-hygiene-") as temporary:

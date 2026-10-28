@@ -26,7 +26,7 @@ extern "C" {
 // Version 3 (CHROMIUM-APP-R3): additive, hold_window/release_window. Earlier
 // versions keep their layout as the prefix of the table.
 // Version 4 (EXTENSIONS-PRODUCT-R1): additive, native per-profile extension services.
-#define ORBIT_CEF_API_VERSION 4u
+#define ORBIT_CEF_API_VERSION 6u
 
 typedef struct {
   uint32_t struct_size;
@@ -158,6 +158,11 @@ typedef struct {
   // Snapshot and one UI-thread subscription per browser. Null callback unregisters.
   int32_t (*browser_state)(int32_t browser_id, orbit_browser_state_t* state);
   int32_t (*browser_state_observe)(int32_t browser_id, void (*changed)(void*, const orbit_browser_state_t*), void* context);
+  // Version 6. In-place WebContents discard preserves NavigationController and page state.
+  // Returns 1 when accepted, 0 on an invalid/busy tab. Restore loads only if necessary;
+  // Chromium's history navigation uses cache-only recovery for POST entries.
+  int32_t (*discard_tab)(int32_t browser_id);
+  int32_t (*restore_discarded_tab)(int32_t browser_id);
 } orbit_cef_api_t;
 
 // Returns the API table for `version`, or NULL when unsupported.
