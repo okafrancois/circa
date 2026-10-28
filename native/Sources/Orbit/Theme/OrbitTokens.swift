@@ -78,6 +78,7 @@ extension OrbitTokens {
             ///  — sidebar "+" menu, popovers.
             public static let popover = NSColor.orbitDynamic("Surface.popover", light: .orbitSRGB(0xFAFBFF), dark: .orbitSRGB(0x151C30))
             public static let commandBar = NSColor.orbitDynamic("Surface.commandBar", light: .orbitSRGB(0xF9F9F9), dark: .orbitSRGB(0x313131))
+            public static let commandBarTint = NSColor.orbitDynamic("Surface.commandBarTint", light: .orbitSRGB(0xFFFFFF, 0.12), dark: .orbitSRGB(0x000000, 0.12))
             public static let preview = NSColor.orbitDynamic("Surface.preview", light: .orbitSRGB(0xFFFFFF), dark: .orbitSRGB(0x212222))
             public static let splitToolbar = NSColor.orbitDynamic("Surface.splitToolbar", light: preview, dark: NSColor(white: 0.31, alpha: 1))
             public static let splitToolbarEmphasized = NSColor.orbitDynamic("Surface.splitToolbarEmphasized", light: preview, dark: .orbitSRGB(0xFFFFFF))
@@ -105,6 +106,7 @@ extension OrbitTokens {
             public static let standaloneButton = NSColor.orbitDynamic("State.standaloneButton", light: .orbitSRGB(0x000000, 0.08), dark: .orbitSRGB(0xFFFFFF, 0.15))
             ///  — 24 × 24 hover square of the × close button in a tab row.
             public static let rowCloseButtonHover = NSColor.orbitDynamic("State.rowCloseButtonHover", light: .orbitSRGB(0x000000, 0.07), dark: .orbitSRGB(0xFFFFFF, 0.075))
+            public static let commandBarRowSelected = NSColor.orbitDynamic("State.commandBarRowSelected", light: .orbitSRGB(0x000000, 0.10), dark: .orbitSRGB(0xFFFFFF, 0.10))
             public static let commandBarRowHover = NSColor.orbitDynamic("State.commandBarRowHover", light: .orbitSRGB(0x000000, 0.05), dark: .orbitSRGB(0xFFFFFF, 0.05))
             ///  — arrow chip.
             public static let commandBarAccessory = NSColor.orbitDynamic("State.commandBarAccessory", light: .orbitSRGB(0x000000, 0.05), dark: .orbitSRGB(0xFFFFFF, 0.05))
@@ -134,6 +136,8 @@ extension OrbitTokens {
             public static let sidebarBorder = NSColor.orbitSRGB(0xFFFFFF, 0.30)
             ///  — card, Peek, floating sidebar hairline.
             public static let floatingScrimBorder = NSColor.orbitDynamic("Line.floatingScrimBorder", light: .orbitSRGB(0x000000, 0.10), dark: .orbitSRGB(0xFFFFFF, 0.20))
+            public static let commandBarMaterialOuterStroke = NSColor.orbitDynamic("Line.commandBarMaterialOuterStroke", light: .orbitSRGB(0x000000, 0.25), dark: .orbitSRGB(0x000000, 0.90))
+            public static let commandBarMaterialInnerStroke = NSColor.orbitDynamic("Line.commandBarMaterialInnerStroke", light: .orbitSRGB(0x000000, 0.10), dark: .orbitSRGB(0xFFFFFF, 0.10))
             public static let commandBarHairline = NSColor.orbitDynamic("Line.commandBarHairline", light: .orbitSRGB(0x000000, 0.10), dark: .orbitSRGB(0xFFFFFF, 0.10))
             public static let commandBarOuterStroke = NSColor.orbitDynamic("Line.commandBarOuterStroke", light: .orbitSRGB(0x000000, 0.25), dark: .orbitSRGB(0x000000, 0.98))
             public static let commandBarInnerStroke = NSColor.orbitDynamic("Line.commandBarInnerStroke", light: .orbitSRGB(0xFFFFFF, 0.0), dark: .orbitSRGB(0xFFFFFF, 0.23))
@@ -621,7 +625,7 @@ extension OrbitTokens {
         public static let addressField: CGFloat = 12
         public static let favoriteTile: CGFloat = 12
         public static let tabRow: CGFloat = 11
-        public static let commandBar: CGFloat = 12
+        public static let commandBar: CGFloat = 27
         public static let commandBarRow: CGFloat = 8
         public static let commandBarIconTile: CGFloat = 6
         public static let plusMenu: CGFloat = 12

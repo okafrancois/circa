@@ -5,6 +5,10 @@ import AppKit
 final class BrowserPaletteView: NSView, NSTextFieldDelegate, NSTableViewDataSource, NSTableViewDelegate {
     let input: NSTextField = PaletteInputField()
     let panel = NSView()
+    let material = OrbitGlassMaterialView()
+    private let materialTint = NSView()
+    private let materialObservers = OrbitGlassObservers()
+    private(set) var usesMaterial = !NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency
     private let panelShadow = CALayer()
     let scroll = NSScrollView()
     let searchIcon = NSImageView()
@@ -77,6 +81,18 @@ final class BrowserPaletteView: NSView, NSTextFieldDelegate, NSTableViewDataSour
         innerStroke.wantsLayer = true
         innerStroke.layer?.cornerRadius = OrbitTokens.Radius.commandBar - 0.5
         innerStroke.setAccessibilityElement(false)
+        panel.addSubview(material)
+        material.material = .hudWindow
+        material.blendingMode = .withinWindow
+        material.state = .active
+        material.wantsLayer = true
+        material.layer?.cornerRadius = OrbitTokens.Radius.commandBar
+        material.layer?.masksToBounds = true
+        material.setAccessibilityElement(false)
+        materialTint.wantsLayer = true
+        materialTint.layer?.cornerRadius = OrbitTokens.Radius.commandBar
+        materialTint.setAccessibilityElement(false)
+        panel.addSubview(materialTint)
         panel.addSubview(innerStroke)
         input.isBordered = false
         input.isBezeled = false
@@ -149,6 +165,12 @@ final class BrowserPaletteView: NSView, NSTextFieldDelegate, NSTableViewDataSour
         list.dataSource = self
         list.delegate = self
         list.onPressRow = { [weak self] row in self?.press(row: row) }
+        let center = NSWorkspace.shared.notificationCenter
+        let observer = center.addObserver(forName: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification,
+                                          object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.refreshMaterial() }
+        }
+        materialObservers.tokens.append((center, observer))
         refreshColors()
     }
     required init?(coder: NSCoder) { nil }
@@ -171,6 +193,8 @@ final class BrowserPaletteView: NSView, NSTextFieldDelegate, NSTableViewDataSour
         panelShadow.frame = panel.frame
         panelShadow.shadowPath = CGPath(roundedRect: panelShadow.bounds, cornerWidth: OrbitTokens.Radius.commandBar,
                                        cornerHeight: OrbitTokens.Radius.commandBar, transform: nil)
+        material.frame = panel.bounds
+        materialTint.frame = panel.bounds
         innerStroke.frame = panel.bounds.insetBy(dx: 0.5, dy: 0.5)
         // Panel uses unflipped coordinates. Its top and input stay fixed while results change.
         let inputHeight = input.intrinsicContentSize.height
@@ -285,7 +309,7 @@ final class BrowserPaletteView: NSView, NSTextFieldDelegate, NSTableViewDataSour
     private func refreshSelection(at index: Int) {
         guard resultRows.indices.contains(index),
               let cell = list.view(atColumn: 0, row: resultRows[index], makeIfNecessary: false) as? PaletteResultCell else { return }
-        cell.apply(selected: index == selectedIndex, accent: accent)
+        cell.apply(selected: index == selectedIndex, accent: accent, usesMaterial: usesMaterial)
     }
 
     private var visibleRows: Range<Int> {
@@ -380,7 +404,7 @@ final class BrowserPaletteView: NSView, NSTextFieldDelegate, NSTableViewDataSour
         }
         cell.configure(result: result, image: image, usesFavicon: usesFavicon,
                        showsDetails: !input.stringValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-        cell.apply(selected: index == selected, accent: accent)
+        cell.apply(selected: index == selected, accent: accent, usesMaterial: usesMaterial)
     }
 
     private func press(row: Int) {
@@ -398,8 +422,21 @@ final class BrowserPaletteView: NSView, NSTextFieldDelegate, NSTableViewDataSour
             }
         }
     }
+    func refreshMaterial(reduceTransparency: Bool = NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency) {
+        usesMaterial = !reduceTransparency
+        refreshColors()
+        for row in entries.indices {
+            if let cell = list.view(atColumn: 0, row: row, makeIfNecessary: false) as? PaletteResultCell {
+                configure(cell, at: row, selected: selectedIndex)
+            }
+        }
+    }
+
     private func refreshColors() {
-        panel.layer?.backgroundColor = OrbitTokens.Color.Surface.commandBar.resolvedCGColor(for: effectiveAppearance)
+        material.isHidden = !usesMaterial
+        materialTint.isHidden = !usesMaterial
+        materialTint.layer?.backgroundColor = OrbitTokens.Color.Surface.commandBarTint.resolvedCGColor(for: effectiveAppearance)
+        panel.layer?.backgroundColor = (usesMaterial ? NSColor.clear : OrbitTokens.Color.Surface.commandBar).resolvedCGColor(for: effectiveAppearance)
         OrbitTokens.Shadow.commandBar.apply(to: panelShadow, isFlipped: true, appearance: effectiveAppearance)
         input.textColor = OrbitTokens.Color.Text.commandBarPrimary
         searchIcon.contentTintColor = OrbitTokens.Color.Text.commandBarPrimary
@@ -408,9 +445,9 @@ final class BrowserPaletteView: NSView, NSTextFieldDelegate, NSTableViewDataSour
         scopeLabel.layer?.backgroundColor = accent.resolvedCGColor(for: effectiveAppearance)
         divider.layer?.backgroundColor = OrbitTokens.Color.Line.commandBarHairline.resolvedCGColor(for: effectiveAppearance)
         panel.layer?.borderWidth = 1 / (window?.backingScaleFactor ?? 2)
-        panel.layer?.borderColor = OrbitTokens.Color.Line.commandBarOuterStroke.resolvedCGColor(for: effectiveAppearance)
-        innerStroke.layer?.borderWidth = 1 / (window?.backingScaleFactor ?? 2)
-        innerStroke.layer?.borderColor = OrbitTokens.Color.Line.commandBarInnerStroke.resolvedCGColor(for: effectiveAppearance)
+        panel.layer?.borderColor = (usesMaterial ? OrbitTokens.Color.Line.commandBarMaterialOuterStroke : OrbitTokens.Color.Line.commandBarOuterStroke).resolvedCGColor(for: effectiveAppearance)
+        innerStroke.layer?.borderWidth = usesMaterial ? 1 : 1 / (window?.backingScaleFactor ?? 2)
+        innerStroke.layer?.borderColor = (usesMaterial ? OrbitTokens.Color.Line.commandBarMaterialInnerStroke : OrbitTokens.Color.Line.commandBarInnerStroke).resolvedCGColor(for: effectiveAppearance)
     }
     func completeURL(for result: BrowserPaletteResult, draft: String) {
         guard !suppressCompletion, siteSearchHint == nil, !draft.isEmpty,
@@ -591,6 +628,7 @@ final class PaletteResultCell: NSTableCellView {
     private var isSelectedResult = false
     private var isHovered = false
     private var selectionAccent = NSColor.clear
+    private var usesMaterial = true
     private var hoverArea: NSTrackingArea?
     private var showsTabAction = false
     private var showsRestoreAction = false
@@ -647,14 +685,17 @@ final class PaletteResultCell: NSTableCellView {
         shortcutLabel.stringValue = result.shortcut
         if icon.image !== image { icon.image = image }
     }
-    func apply(selected: Bool, accent: NSColor) {
+    func apply(selected: Bool, accent: NSColor, usesMaterial: Bool = true) {
+        self.usesMaterial = usesMaterial
         isSelectedResult = selected
         selectionAccent = accent
         refreshBackground()
-        titleLabel.textColor = selected ? OrbitTokens.Color.Text.onAccent : OrbitTokens.Color.Text.commandBarPrimary
-        detailLabel.textColor = selected ? OrbitTokens.Color.Text.onAccent.withAlphaComponent(0.72) : OrbitTokens.Color.Text.commandBarSecondary
-        actionLabel.textColor = selected ? OrbitTokens.Color.Text.onAccent : OrbitTokens.Color.Text.commandBarSecondary
-        shortcutLabel.textColor = selected ? OrbitTokens.Color.Text.onAccent.withAlphaComponent(0.8) : OrbitTokens.Color.Text.commandBarSecondary
+        let selectedText = usesMaterial && !OrbitAppearance.isDark(effectiveAppearance)
+            ? OrbitTokens.Color.Text.commandBarPrimary : OrbitTokens.Color.Text.onAccent
+        titleLabel.textColor = selected ? selectedText : OrbitTokens.Color.Text.commandBarPrimary
+        detailLabel.textColor = selected ? selectedText.withAlphaComponent(0.72) : OrbitTokens.Color.Text.commandBarSecondary
+        actionLabel.textColor = selected ? selectedText : OrbitTokens.Color.Text.commandBarSecondary
+        shortcutLabel.textColor = selected ? selectedText.withAlphaComponent(0.8) : OrbitTokens.Color.Text.commandBarSecondary
         let showsAction = showsTabAction || (showsRestoreAction && selected)
         actionIcon.contentTintColor = selected ? accent : OrbitTokens.Color.State.commandBarAccessoryForeground
         actionIcon.isHidden = !showsAction
@@ -668,7 +709,7 @@ final class PaletteResultCell: NSTableCellView {
         needsLayout = true
     }
     private func refreshBackground() {
-        background.layer?.backgroundColor = (isSelectedResult ? selectionAccent :
+        background.layer?.backgroundColor = (isSelectedResult ? (usesMaterial ? OrbitTokens.Color.State.commandBarRowSelected : selectionAccent) :
             (isHovered ? OrbitTokens.Color.State.commandBarRowHover : .clear)).resolvedCGColor(for: effectiveAppearance)
     }
     override func updateTrackingAreas() {
