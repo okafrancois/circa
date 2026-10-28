@@ -4,7 +4,7 @@ import BrowserShell
 
 extension OrbitApplication {
     var activeQuickWindow: BrowserQuickWindowWindowController<ActiveEngine>? {
-        environment?.quickWindows.values.first { !$0.isClosed && $0.window === NSApp?.keyWindow }
+        environment?.quickWindows.values.first { !$0.isClosed && $0.ownsCommandWindow(NSApp?.keyWindow) }
     }
 
     func installQuickWindowCommands(in registry: BrowserCommandRegistry<OrbitWindowController>) {
@@ -184,6 +184,28 @@ extension OrbitApplication {
             }
             return
         }
+        // Land in the selected Space of the existing main window.
+        // Preserve the captured profile boundary while the Space activation is queued.
+        if let spaceID, let target = windows.selectedWindow, target.session.activeProfileID == little.profileID {
+            guard little.beginPromotionPreparation() else { return }
+            enqueueQuickWindowCommand { [weak self, weak little, weak target] in
+                guard let self, let little, let target else { return }
+                defer { little.endPromotionPreparation() }
+                let catalog = await environment.store.catalogSnapshot()
+                guard !isPreparingToQuit, !little.isClosed, target.acceptsCommands,
+                      target.session.activeProfileID == little.profileID,
+                      catalog.spaces.contains(where: { $0.id == spaceID && $0.profileID == little.profileID }) else { return }
+                target.session.activateSpace(spaceID)
+                await target.session.waitForPendingCommands()
+                guard !little.isClosed, !isPreparingToQuit, target.acceptsCommands,
+                      target.session.snapshot?.activeSpaceID == spaceID,
+                      target.session.activeProfileID == little.profileID else { return }
+                if let adoption = little.promote(to: target), await adoption.value != nil {
+                    presentQuickWindowDestination(target)
+                }
+            }
+            return
+        }
         if !environment.engine.capabilities.contains(.liveSurfaceTransfer), little.surface?.currentURL == nil { return }
         guard little.beginPromotionPreparation() else { return }
         let destinationSpaceID = spaceID ?? little.sourceSpaceID
@@ -229,30 +251,18 @@ extension OrbitApplication {
         Task { [weak self, weak little] in
             let catalog = await environment.store.catalogSnapshot()
             guard let self, let little, !little.isClosed, !little.isPromotionInProgress else { return }
-            let menu = NSMenu()
-            for space in catalog.spaces where space.profileID == little.profileID {
-                let item = NSMenuItem(title: uiFormat("Open in %@", space.name), action: #selector(openQuickWindowInSpace(_:)), keyEquivalent: "")
-                item.target = self
-                item.representedObject = QuickWindowSpaceDestination(controller: little, spaceID: space.id)
-                menu.addItem(item)
+            let rows = catalog.spaces.filter { $0.profileID == little.profileID }.map { space in
+                let icon = SpaceIconImages.view(environment.settings.document.space(space.id).iconSelection, pointSize: 20)
+                return BrowserQuickWindowSearchRow(id: space.id.rawValue.uuidString, title: space.name,
+                    image: (icon as? NSImageView)?.image,
+                    iconBackground: OrbitSpaceThemes.accent(for: environment.spaceTheme(for: space.id)).soft) { [weak self, weak little] in
+                        guard let little else { return }
+                        little.spaceChooser?.hide()
+                        self?.promoteQuickWindow(little, to: space.id)
+                    }
             }
-            menu.popUp(positioning: nil, at: NSPoint(x: 0, y: little.spaceButton.bounds.height), in: little.spaceButton)
+            little.showSpaceChooser(rows)
         }
     }
 
-    @objc private func openQuickWindowInSpace(_ sender: NSMenuItem) {
-        guard let destination = sender.representedObject as? QuickWindowSpaceDestination,
-              let controller = destination.controller else { return }
-        promoteQuickWindow(controller, to: destination.spaceID)
-    }
-}
-
-@MainActor
-private final class QuickWindowSpaceDestination {
-    weak var controller: BrowserQuickWindowWindowController<ActiveEngine>?
-    let spaceID: SpaceID
-    init(controller: BrowserQuickWindowWindowController<ActiveEngine>, spaceID: SpaceID) {
-        self.controller = controller
-        self.spaceID = spaceID
-    }
 }

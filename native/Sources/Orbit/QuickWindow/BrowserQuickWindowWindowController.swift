@@ -53,7 +53,18 @@ final class BrowserQuickWindowWindowController<Engine: BrowserEngine>: NSWindowC
     private var resolver = AddressResolver()
     private var bindingRevision: UInt64 = 0
     private var unresponsivePageRequests: [ObjectIdentifier: UUID] = [:]
-    private var opensWithDocument = false
+    var opensWithDocument = false
+    var spaceChooser: BrowserQuickWindowSearchPanel?
+    private(set) var compactInput: BrowserQuickWindowSearchPanel?
+    var suggestionProvider: ((String) async -> [BrowserHistorySuggestion])?
+    var inputHistory: [BrowserHistorySuggestion] = []
+    var inputCandidates: [BrowserPaletteResult] = []
+    private var inputQueryTask: Task<Void, Never>?
+    private var inputQueryRevision = UUID()
+    private let inputFavicons = BrowserPaletteFaviconCache()
+    let sourceSpaceBadge = NSButton()
+    let extensionsButton = NSButton()
+    private var openGroupWidth: NSLayoutConstraint?
     private let inputToken = UUID()
 
     init(engine: Engine, spaceID: SpaceID, profileID: ProfileID, spaceName: String,
@@ -184,12 +195,110 @@ final class BrowserQuickWindowWindowController<Engine: BrowserEngine>: NSWindowC
         return completion
     }
 
+    override func showWindow(_ sender: Any?) {
+        if !opensWithDocument, surface?.currentURL == nil {
+            showCompactInput()
+        } else { super.showWindow(sender) }
+    }
+
+    func ownsCommandWindow(_ candidate: NSWindow?) -> Bool {
+        candidate != nil && (candidate === window || candidate === compactInput?.window || candidate === spaceChooser?.window)
+    }
+
+    private func showCompactInput() {
+        guard let input = prepareCompactInput() else { return }
+        input.show(appearance: window?.appearance, screen: window?.screen)
+    }
+
+    func prepareCompactInput() -> BrowserQuickWindowSearchPanel? {
+        guard acceptsCommands, !isClosed else { return nil }
+        if compactInput == nil {
+            let input = BrowserQuickWindowSearchPanel(kind: .address)
+            compactInput = input
+            input.onCancel = { [weak self] in self?.window?.performClose(nil) }
+            input.onQuery = { [weak self] in self?.queryCompactInput($0) }
+            input.onSubmit = { [weak self] text in
+                guard let self, let url = try? resolver.resolve(text).url else { return }
+                acceptCompactURL(url, typed: true)
+            }
+            inputFavicons.onChange = { [weak self] in self?.renderCompactInput() }
+        }
+        queryCompactInput(compactInput?.input.stringValue ?? "")
+        return compactInput
+    }
+
+    func queryCompactInput(_ query: String) {
+        inputQueryTask?.cancel()
+        inputQueryRevision = UUID()
+        inputHistory = BrowserPaletteRanking.rankedHistory(inputHistory.filter {
+            BrowserSuggestionText.matches(query, title: $0.title, url: $0.url)
+        } + historyObserver.cachedSuggestions(for: profileID, query: query), query: query)
+        renderCompactInput()
+        guard let suggestionProvider else { return }
+        let revision = inputQueryRevision
+        inputQueryTask = Task { [weak self] in
+            let history = await suggestionProvider(query)
+            guard let self, !Task.isCancelled, inputQueryRevision == revision, !isClosed else { return }
+            inputHistory = history
+            renderCompactInput()
+        }
+    }
+
+    private func renderCompactInput() {
+        guard let compactInput else { return }
+        let query = compactInput.input.stringValue
+        let results = BrowserPaletteRanking.results(query: query, mode: .newTab, resolver: resolver,
+            candidates: inputCandidates, history: inputHistory, actions: [], limit: 5)
+        compactInput.render(results.compactMap { result in
+            guard let url = result.url else { return nil }
+            let image = result.faviconReference.flatMap { inputFavicons.image(for: $0) }
+                ?? NSImage(systemSymbolName: result.symbol, accessibilityDescription: nil)
+            return BrowserQuickWindowSearchRow(id: result.id, title: result.title,
+                detail: result.section == .address || result.section == .search ? "" : BrowserSuggestionText.displayURL(url), image: image) { [weak self] in
+                    self?.acceptCompactURL(url, typed: result.section == .address)
+                }
+        })
+    }
+
+    func acceptCompactURL(_ url: URL, typed: Bool) {
+        guard acceptsCommands, !opensWithDocument, let surface, container.owns(surface), !isClosed else { return }
+        inputQueryTask?.cancel()
+        let screen = compactInput?.window.screen ?? window?.screen ?? NSScreen.main
+        compactInput?.hide()
+        opensWithDocument = true
+        if typed { historyObserver.markTypedNavigation(surface, url: url) }
+        surface.navigate(to: url)
+        if let screen {
+            window?.setFrame(BrowserQuickWindowMetrics.frame(size: BrowserQuickWindowMetrics.initialPageSize,
+                                                               visibleFrame: screen.visibleFrame), display: false)
+        }
+        if NSApp.activationPolicy() != .prohibited {
+            super.showWindow(nil)
+            window?.makeKeyAndOrderFront(nil)
+            surface.focusDocument()
+        }
+    }
+
+    func prepareCompactPresentation() async {
+        _ = prepareCompactInput()
+        await inputQueryTask?.value
+        await inputFavicons.waitForPendingImages()
+        renderCompactInput()
+    }
+
+    func waitForCompactSuggestions() async { await inputQueryTask?.value }
+
     func focusInitialContent() {
         if opensWithDocument, let surface, container.owns(surface) { surface.focusDocument() }
         else { focusAddress() }
     }
 
-    func focusAddress() { window?.makeFirstResponder(addressField); addressField.selectText(nil) }
+    func focusAddress() {
+        if let compactInput, compactInput.window.isVisible {
+            compactInput.window.makeFirstResponder(compactInput.input)
+            compactInput.input.selectText(nil)
+        } else { window?.makeFirstResponder(addressField); addressField.selectText(nil) }
+    }
 
     @discardableResult
     func beginPromotionPreparation() -> Bool {
@@ -232,6 +341,9 @@ final class BrowserQuickWindowWindowController<Engine: BrowserEngine>: NSWindowC
     func retire() {
         guard !isClosed else { return }
         isClosed = true
+        inputQueryTask?.cancel()
+        compactInput?.close()
+        spaceChooser?.close()
         siteControls.cancelPermission()
         findSession.shutdown()
         container.close()
@@ -258,7 +370,7 @@ final class BrowserQuickWindowWindowController<Engine: BrowserEngine>: NSWindowC
             page.trailingAnchor.constraint(equalTo: root.trailingAnchor), page.bottomAnchor.constraint(equalTo: root.bottomAnchor)
         ])
         addressField.placeholderString = uiText("Search or Enter URL")
-        addressField.font = OrbitTokens.Typography.quickWindowDomain
+        addressField.font = .systemFont(ofSize: 13, weight: .medium)
         addressField.alignment = .center
         OrbitAddressFieldStyle.applySingleLine(to: addressField)
         addressField.focusRingType = .none
@@ -270,7 +382,7 @@ final class BrowserQuickWindowWindowController<Engine: BrowserEngine>: NSWindowC
         addressField.target = self
         addressField.action = #selector(submitAddress(_:))
         openButton.isBordered = false
-        openButton.font = OrbitTokens.Typography.quickWindowDomain
+        openButton.font = .systemFont(ofSize: 13, weight: .medium)
         openButton.lineBreakMode = .byTruncatingTail
         openGroup.wantsLayer = true
         openButton.target = self
@@ -287,9 +399,31 @@ final class BrowserQuickWindowWindowController<Engine: BrowserEngine>: NSWindowC
         copyAddressButton.target = self
         copyAddressButton.action = #selector(copyAddress(_:))
         copyAddressButton.setAccessibilityLabel(uiText("Copy URL"))
-        for control in [addressField, openGroup, copyAddressButton] { control.translatesAutoresizingMaskIntoConstraints = false; bar.addSubview(control) }
+        sourceSpaceBadge.isBordered = false
+        sourceSpaceBadge.font = .systemFont(ofSize: 12, weight: .semibold)
+        sourceSpaceBadge.imagePosition = .imageLeading
+        sourceSpaceBadge.target = self
+        sourceSpaceBadge.action = #selector(showQuickWindowSiteControls(_:))
+        sourceSpaceBadge.wantsLayer = true
+        sourceSpaceBadge.layer?.cornerRadius = 10
+        sourceSpaceBadge.setAccessibilityLabel(uiText("Space"))
+        extensionsButton.image = NSImage(systemSymbolName: "puzzlepiece.extension", accessibilityDescription: uiText("Extensions Menu"))
+        extensionsButton.isBordered = false
+        extensionsButton.target = self
+        extensionsButton.action = #selector(showQuickWindowExtensions(_:))
+        extensionsButton.setAccessibilityLabel(uiText("Extensions Menu"))
+        for control in [addressField, openGroup, copyAddressButton, sourceSpaceBadge, extensionsButton] { control.translatesAutoresizingMaskIntoConstraints = false; bar.addSubview(control) }
         for control in [openButton, spaceButton] { control.translatesAutoresizingMaskIntoConstraints = false; openGroup.addSubview(control) }
+        let groupWidth = openGroup.widthAnchor.constraint(equalToConstant: OrbitTokens.Metrics.QuickWindow.openInButtonSize.width)
+        openGroupWidth = groupWidth
         NSLayoutConstraint.activate([
+            sourceSpaceBadge.leadingAnchor.constraint(equalTo: addressField.leadingAnchor, constant: 8),
+            sourceSpaceBadge.centerYAnchor.constraint(equalTo: addressField.centerYAnchor),
+            sourceSpaceBadge.heightAnchor.constraint(equalToConstant: 24),
+            sourceSpaceBadge.widthAnchor.constraint(lessThanOrEqualToConstant: 130),
+            extensionsButton.trailingAnchor.constraint(equalTo: copyAddressButton.leadingAnchor, constant: -4),
+            extensionsButton.centerYAnchor.constraint(equalTo: addressField.centerYAnchor),
+            extensionsButton.widthAnchor.constraint(equalToConstant: 26), extensionsButton.heightAnchor.constraint(equalToConstant: 26),
             addressField.leadingAnchor.constraint(equalTo: bar.leadingAnchor, constant: OrbitTokens.Metrics.QuickWindow.addressLeadingInset),
             addressField.centerYAnchor.constraint(equalTo: bar.topAnchor, constant: OrbitTokens.Metrics.QuickWindow.addressPillCenterY),
             addressField.heightAnchor.constraint(equalToConstant: OrbitTokens.Metrics.QuickWindow.addressPillHeight),
@@ -300,7 +434,7 @@ final class BrowserQuickWindowWindowController<Engine: BrowserEngine>: NSWindowC
             copyAddressButton.centerYAnchor.constraint(equalTo: addressField.centerYAnchor),
             openGroup.centerYAnchor.constraint(equalTo: addressField.centerYAnchor),
             openGroup.heightAnchor.constraint(equalToConstant: OrbitTokens.Metrics.QuickWindow.openInButtonSize.height),
-            openGroup.widthAnchor.constraint(equalToConstant: OrbitTokens.Metrics.QuickWindow.openInButtonSize.width),
+            groupWidth,
             openGroup.trailingAnchor.constraint(equalTo: bar.trailingAnchor, constant: -OrbitTokens.Metrics.QuickWindow.trailingInset),
             openButton.leadingAnchor.constraint(equalTo: openGroup.leadingAnchor), openButton.topAnchor.constraint(equalTo: openGroup.topAnchor),
             openButton.bottomAnchor.constraint(equalTo: openGroup.bottomAnchor), openButton.trailingAnchor.constraint(equalTo: spaceButton.leadingAnchor),
@@ -324,12 +458,19 @@ final class BrowserQuickWindowWindowController<Engine: BrowserEngine>: NSWindowC
         resolver.searchEngine = searchEngine
         window?.appearance = OrbitAppearance.windowAppearance(for: theme.mode)
         toolbar.fill.apply(theme)
+        let dark = window?.appearance?.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+        let font = dark ? NSFont.systemFont(ofSize: 13, weight: .medium) : OrbitTokens.Typography.quickWindowDomain
+        addressField.font = font
+        openButton.font = font
         let accent = OrbitSpaceThemes.accent(for: theme)
         openGroup.accent = accent
         openButton.contentTintColor = accent.sidebarText
         spaceButton.contentTintColor = accent.sidebarText
         addressField.textColor = accent.sidebarText
         copyAddressButton.contentTintColor = accent.sidebarText.withAlphaComponent(0.55)
+        extensionsButton.contentTintColor = accent.sidebarText.withAlphaComponent(0.55)
+        sourceSpaceBadge.contentTintColor = accent.sidebarText
+        sourceSpaceBadge.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.08).cgColor
     }
 
     func updateDestinationName(_ name: String, sourceName: String) {
@@ -343,10 +484,15 @@ final class BrowserQuickWindowWindowController<Engine: BrowserEngine>: NSWindowC
             addressField.stringValue = surface?.navigationState.url?.absoluteString ?? ""
         }
         window?.title = surface?.navigationState.title ?? uiText("Little Orbit")
+        sourceSpaceBadge.title = sourceSpaceName
+        sourceSpaceBadge.isHidden = addressField.currentEditor() != nil
+        extensionsButton.isEnabled = acceptsCommands && engine.extensions != nil
         let shortcut = promotionShortcut?() ?? ""
         openButton.shortcut = shortcut
         openButton.title = engine.capabilities.contains(.liveSurfaceTransfer)
             ? uiFormat("Open in %@", destinationName) : uiText("Open a Copy in Orbit")
+        let labelWidth = (openButton.title as NSString).size(withAttributes: [.font: openButton.font!]).width
+        openGroupWidth?.constant = ceil(labelWidth) + 76
         openButton.isEnabled = acceptsCommands && surface?.isDisposed == false
         openButton.setAccessibilityLabel(engine.capabilities.contains(.liveSurfaceTransfer)
             ? uiFormat("Open in %@", destinationName) : uiText("Open a Copy in Orbit"))
@@ -362,6 +508,36 @@ final class BrowserQuickWindowWindowController<Engine: BrowserEngine>: NSWindowC
     }
     @objc private func copyAddress(_ sender: Any?) {
         if let url = surface?.currentURL { copyURLWriter(url) }
+    }
+    func showSpaceChooser(_ rows: [BrowserQuickWindowSearchRow]) {
+        guard acceptsCommands, let window else { return }
+        let chooser = spaceChooser ?? BrowserQuickWindowSearchPanel(kind: .spaces)
+        spaceChooser = chooser
+        chooser.onCancel = { [weak chooser] in chooser?.hide() }
+        chooser.onQuery = { [weak chooser] query in
+            chooser?.render(rows.filter { query.isEmpty || BrowserSuggestionText.matches(query, title: $0.title, url: nil) }, preserveSelection: false)
+        }
+        chooser.input.stringValue = ""
+        chooser.render(rows)
+        let rect = window.convertToScreen(spaceButton.convert(spaceButton.bounds, to: nil))
+        if NSApp.activationPolicy() != .prohibited { chooser.show(appearance: window.appearance, anchor: rect, screen: window.screen) }
+    }
+
+    @objc private func showQuickWindowSiteControls(_ sender: Any?) { siteControls.show() }
+    @objc private func showQuickWindowExtensions(_ sender: NSButton) {
+        guard acceptsCommands, surface != nil, let host = engine.extensions else { return }
+        let menu = NSMenu()
+        for item in (try? host.installedExtensions(in: profileID)) ?? [] where item.isEnabled && item.hasAction {
+            let entry = NSMenuItem(title: item.name, action: #selector(performQuickWindowExtension(_:)), keyEquivalent: "")
+            entry.target = self; entry.representedObject = item.id
+            menu.addItem(entry)
+        }
+        if menu.items.isEmpty { menu.addItem(withTitle: uiText("No extensions in this profile."), action: nil, keyEquivalent: "") }
+        menu.popUp(positioning: nil, at: NSPoint(x: 0, y: sender.bounds.height), in: sender)
+    }
+    @objc private func performQuickWindowExtension(_ sender: NSMenuItem) {
+        guard acceptsCommands, let surface, let id = sender.representedObject as? String else { return }
+        try? engine.extensions?.performAction(extensionID: id, on: surface, anchor: extensionsButton)
     }
     @objc private func openInOrbit(_ sender: Any?) { onPromote?() }
     @objc private func chooseDestination(_ sender: Any?) { onChooseSpace?() }
