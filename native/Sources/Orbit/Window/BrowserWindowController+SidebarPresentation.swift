@@ -5,6 +5,7 @@ import BrowserShell
 
 extension BrowserWindowController {
     func installSidebarPresentation() {
+        windowShell.onSidebarWidthChange = { [weak self] in self?.windowPlacementDidChange() }
         windowShell.onPresentationChange = { [weak self] in self?.updateSidebarColumnVisibility() }
         windowShell.onCollapseRequest = { [weak self] in self?.submitInput { $0.hideSidebar() } }
         sidebar.onFooterPresentationChange = { [weak self] in self?.windowShell.hoverHoldDidChange() }

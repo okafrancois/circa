@@ -483,6 +483,8 @@ def run_phase(phase, run, data, origin, args, tls_origin=None):
         command.append("--orbit-smoke-private-domain")
     if getattr(args, "profiles_only", False):
         command.append("--orbit-smoke-profiles")
+    if getattr(args, "relaunch_only", False):
+        command.append("--orbit-smoke-relaunch")
     if getattr(args, "archive_auto_only", False):
         command.append("--orbit-smoke-archive-auto")
     if getattr(args, "space_profile_only", False):
@@ -626,7 +628,7 @@ def smoke(args):
         if refusal.get("passed") is True:
             if not args.extension_only:
                 tls_server, tls_origin = start_tls_fixture(run)
-            for phase in PHASES[: 1 if args.fresh_only else len(PHASES)]:
+            for phase in PHASES[: 1 if args.fresh_only else 2 if args.relaunch_only else len(PHASES)]:
                 # Extension reports land in the current phase directory.
                 server.RequestHandlerClass = essentials_handler(run / phase, counters)
                 verdicts.append(run_phase(phase, run, data, origin, args, tls_origin))
@@ -644,7 +646,7 @@ def smoke(args):
     summary = {"flavor": args.flavor, "stamp": stamp, "phases": [
         {"phase": v["phase"], "passed": v["passed"], "failedChecks": sorted(k for k, ok in v["checks"].items() if not ok),
          "scenarios": v["scenarios"]} for v in verdicts],
-        "allPhasesPassed": len(verdicts) == (1 if args.fresh_only else len(PHASES)) and all(v["passed"] for v in verdicts)
+        "allPhasesPassed": len(verdicts) == (1 if args.fresh_only else 2 if args.relaunch_only else len(PHASES)) and all(v["passed"] for v in verdicts)
             and refusal.get("passed") is True and fixture_stopped,
         "fixtureThreadStopped": fixture_stopped,
         "argumentRefusal": refusal, "processesLeft": len(left), "fixtureRequests": counters}
@@ -696,6 +698,7 @@ def main():
                         help="Fresh real-shell MV3 and normal quit gate, without unrelated scenarios")
     runner.add_argument("--private-domain-only", action="store_true",
                         help="Hidden mock-only private domain coexistence/release probe on approved EssentialsR2")
+    runner.add_argument("--relaunch-only", action="store_true", help="Regular windows and Little across normal quit and relaunch")
     runner.add_argument("--profiles-only", action="store_true",
                         help="Two persistent product profiles across normal and crash relaunches, without extensions")
     runner.add_argument("--archive-auto-only", action="store_true",
@@ -705,6 +708,12 @@ def main():
     runner.add_argument("--extension-timeout", type=int, default=25,
                         help="Bounded wait for an extension report (25..180 seconds; does not alter probe deadlines)")
     args = parser.parse_args()
+    if args.command == "smoke" and args.relaunch_only:
+        if any((args.fresh_only, args.boosts_only, args.passwords_only, args.engine_r5_only,
+                args.engine_r4_only, args.extension_only, args.private_domain_only, args.profiles_only,
+                args.archive_auto_only, args.space_profile_only)):
+            parser.error("--relaunch-only excludes other focused probes")
+        args.no_extension = True
     if args.command == "smoke" and args.archive_auto_only:
         if args.extension_only or args.private_domain_only or args.profiles_only or args.space_profile_only:
             parser.error("--archive-auto-only excludes other focused probes")

@@ -406,7 +406,7 @@ final class OrbitSmokeDriver: OrbitLaunchHooks {
                 fixture: fixture, restoring: phase == .restore, record: record)
         } else if arguments.contains("--orbit-smoke-relaunch") {
             await OrbitRelaunchScenarios.session(application: application, environment: environment,
-                engine: engine, fixture: fixture, restored: restored.count, restoring: phase == .restore, record: record)
+                engine: engine, fixture: fixture, root: runRoot, restored: restored.count, restoring: phase == .restore, record: record)
         } else { switch phase {
         case .fresh: await fresh(application, first, engine)
         case .restore: await restore(application, engine, restored: restored.count)

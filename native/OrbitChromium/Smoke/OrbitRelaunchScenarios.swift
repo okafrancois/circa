@@ -135,7 +135,7 @@ enum OrbitRelaunchScenarios {
     /// The same real session is saved and reopened across process launches. Little Orbit is
     /// transient by product design: recreate and exercise it on every launch, keep it through quit.
     static func session(application: OrbitApplication, environment: OrbitEnvironment,
-                        engine: ChromiumBrowserEngine, fixture: URL, restored: Int, restoring: Bool, record: Record) async {
+                        engine: ChromiumBrowserEngine, fixture: URL, root: URL, restored: Int, restoring: Bool, record: Record) async {
         func page(_ name: String) -> URL { URL(string: "/page?case=\(name)", relativeTo: fixture)!.absoluteURL }
         func check(_ name: String, _ ok: Bool, _ fields: [String: Any] = [:]) {
             record("relaunch." + name, ok ? "proven" : "failed", fields)
@@ -158,6 +158,21 @@ enum OrbitRelaunchScenarios {
                 let seeded = await until { first.favorites.grid.items.contains { $0.tab.id == tab.id } }
                 check("seed-favorite", seeded)
             } else { check("seed-favorite", false) }
+            first.openTab(url: page("relaunch-pin-home"))
+            _ = await until { first.session.organization?.selectedTab?.url == page("relaunch-pin-home")
+                && first.session.selectedSurface?.navigationState.isLoading == false }
+            if let tab = first.session.organization?.selectedTab, let space = first.session.snapshot?.activeSpaceID {
+                first.session.pinTabs([tab.id])
+                first.session.renameTab(tab.id, to: "Synthetic custom title")
+                if let parent = await first.session.createFolder(title: "Synthetic Parent", at: .init(.pinned(space))).value,
+                   let child = await first.session.createFolder(title: "Synthetic Child", at: .init(.folder(parent))).value {
+                    first.session.moveItems([.tab(tab.id)], to: .init(.folder(child)))
+                }
+                await first.session.waitForPendingCommands()
+                first.submitAddress(page("relaunch-pin-away").absoluteString)
+                _ = await until { first.session.organization?.selectedTab?.url == page("relaunch-pin-away")
+                    && first.session.selectedSurface?.navigationState.isLoading == false }
+            } else { check("seed-pin", false) }
             var splitTabs: [TabID] = []
             for name in ["relaunch-split-left", "relaunch-split-right"] {
                 first.openTab(url: page(name))
@@ -170,6 +185,11 @@ enum OrbitRelaunchScenarios {
             }
             first.session.createSplit(splitTabs)
             await first.session.waitForPendingCommands()
+            if let split = first.session.activeSplit {
+                first.session.orientSplit(split.group.id, to: .vertical)
+                first.session.resizeSplit(split.group.id, ratios: [0.35, 0.65])
+                await first.session.waitForPendingCommands()
+            }
             application.windows.newWindow()
             _ = await until { application.windows.windows.count == 2 }
             if let second = application.windows.windows.values.first(where: { $0 !== first }) {
@@ -188,6 +208,21 @@ enum OrbitRelaunchScenarios {
         }
         let split = await until { windows.contains { $0.session.activeSplit?.tabs.count == 2 } }
         check("split", split)
+        check("split-layout", windows.contains { $0.session.activeSplit?.group.orientation == .vertical
+            && $0.session.activeSplit?.group.ratios == [0.35, 0.65] })
+        check("nested-pin", windows.contains { window in
+            window.session.organization?.pinned.contains { item in
+                guard case .folder(let parent) = item, parent.title == "Synthetic Parent" else { return false }
+                return parent.children.contains { item in
+                    guard case .folder(let child) = item, child.title == "Synthetic Child" else { return false }
+                    return child.children.contains { item in
+                        guard case .tab(let tab) = item else { return false }
+                        return tab.customTitle == "Synthetic custom title" && tab.pinnedURL == page("relaunch-pin-home")
+                            && tab.url == page("relaunch-pin-away")
+                    }
+                }
+            } == true
+        })
         let splitDocuments = await until {
             windows.contains { window in
                 guard let group = window.session.activeSplit, group.tabs.count == 2 else { return false }
@@ -204,6 +239,17 @@ enum OrbitRelaunchScenarios {
         check("favorites", favorite)
         check("hosted", windows.allSatisfy { $0.session.selectedSurface?.tabIdentity?.isHosted == true }
               && engine.holdingWindowTabCount == 0)
+        check("private-not-restored", application.privateWindows.isEmpty && windows.count == 2)
+        application.createPrivateCommandWindow()
+        await application.waitForPrivateWindowCommands()
+        if let privateWindow = application.windows.windows.values.first(where: \.isPrivateWindow) {
+            privateWindow.palette.dismiss(returnFocus: false)
+            privateWindow.openTab(url: page("relaunch-private"))
+            check("private-document", await until {
+                privateWindow.session.selectedSurface?.navigationState.committedURL == page("relaunch-private")
+                    && privateWindow.session.selectedSurface?.navigationState.isLoading == false
+            })
+        } else { check("private-document", false) }
         application.quickWindowPresenter = { _ in }
         application.openQuickWindow(url: page("relaunch-little"), source: first)
         await application.waitForQuickWindowCommands()
@@ -216,6 +262,43 @@ enum OrbitRelaunchScenarios {
             }
         }
         check("little-orbit", little, ["count": environment.quickWindows.count])
+        first.focusAddress()
+        await first.session.waitForPendingCommands()
+        first.showFind()
+        await first.session.waitForPendingCommands()
+        let findWasEditing = first.findBar.searchField.currentEditor() != nil
+        first.setSidebarVisible(false, animated: false)
+        first.closeFind()
+        let focusReturned = (first.window?.firstResponder as? NSView).map { responder in
+            first.session.selectedSurface.map { surface in responder.isDescendant(of: surface.hostView) } ?? false
+        } ?? false
+        check("find-hidden-sidebar-focus", findWasEditing && first.findBar.isHidden && focusReturned,
+              ["findWasEditing": findWasEditing, "focusReturned": focusReturned])
+        first.setSidebarVisible(true, animated: false)
+        let placementFile = root.deletingLastPathComponent().appendingPathComponent("window-placement.json")
+        if restoring {
+            let saved = (try? Data(contentsOf: placementFile)).flatMap {
+                try? JSONDecoder().decode([String: [Double]].self, from: $0)
+            } ?? [:]
+            for window in windows {
+                let frame = window.window!.frame
+                let expected = saved[window.session.snapshot!.id.rawValue.uuidString]
+                let actual = [frame.origin.x, frame.origin.y, frame.width, frame.height,
+                              window.windowShell.preferredSidebarWidth].map(Double.init)
+                check("placement-" + window.id.uuidString, expected == actual,
+                      ["expected": expected ?? [], "actual": actual])
+            }
+        } else {
+            var saved: [String: [Double]] = [:]
+            for (index, window) in windows.sorted(by: { $0.id.uuidString < $1.id.uuidString }).enumerated() {
+                let frame = NSRect(x: 70 + index * 30, y: 80 + index * 20, width: 850 + index * 40, height: 610 + index * 20)
+                window.window?.setFrame(frame, display: false)
+                window.windowShell.setSidebarWidth(CGFloat(280 + index * 30))
+                saved[window.session.snapshot!.id.rawValue.uuidString] = [frame.origin.x, frame.origin.y, frame.width, frame.height,
+                                             window.windowShell.preferredSidebarWidth].map(Double.init)
+            }
+            if let data = try? JSONEncoder().encode(saved) { try? data.write(to: placementFile) }
+        }
         // The product termination saves again synchronously; let the ordinary debounce run too.
         try? await Task.sleep(for: .milliseconds(500))
         // Read a settled store snapshot, rather than the UI projection between actor updates.

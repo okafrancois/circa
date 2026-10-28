@@ -113,6 +113,7 @@ struct WindowRecord {
     var activeSpaceID: SpaceID
     var selectedOccurrenceBySpace: [SpaceID: TabOccurrenceID] = [:]
     var occurrenceIDsBySpace: [SpaceID: [TabOccurrenceID]] = [:]
+    var placement: BrowserWindowPlacement?
     var revision: UInt64 = 0
     /// Consecutive revisions produced only by reconciling this window's occurrences after an
     /// organization change made elsewhere; any other revision change starts outside the range.
@@ -171,6 +172,7 @@ public actor BrowserStore {
         tabs = Dictionary(uniqueKeysWithValues: document.tabs.map { ($0.occurrenceID, $0) })
         for saved in document.windows {
             var window = WindowRecord(id: saved.id, activeSpaceID: saved.activeSpaceID)
+            window.placement = saved.placement
             for group in saved.spaces {
                 window.occurrenceIDsBySpace[group.spaceID] = group.occurrenceIDs
                 window.selectedOccurrenceBySpace[group.spaceID] = group.selectedOccurrenceID
@@ -189,6 +191,13 @@ public actor BrowserStore {
         spaceSettingsOwnership.capture(spaceID: id, profileID: profileID, sourceWindow: sourceWindow, sourceProfile: sourceProfile)
     }
 
+    /// Layout changes do not revoke document or command contexts.
+    public func updateWindowPlacements(_ placements: [WindowID: BrowserWindowPlacement]) {
+        for (id, placement) in placements where placement.isUsable && windows[id] != nil {
+            windows[id]?.placement = placement
+        }
+    }
+
     public func sessionDocument() -> BrowserSessionDocument {
         let savedWindows = windows.values.sorted { $0.id.rawValue.uuidString < $1.id.rawValue.uuidString }.map { window in
             let spaceIDs = Set(window.occurrenceIDsBySpace.keys)
@@ -200,7 +209,7 @@ public actor BrowserStore {
                     selectedOccurrenceID: window.selectedOccurrenceBySpace[spaceID]
                 )
             }
-            return BrowserSessionDocument.Window(id: window.id, activeSpaceID: window.activeSpaceID, spaces: groups)
+            return BrowserSessionDocument.Window(id: window.id, activeSpaceID: window.activeSpaceID, spaces: groups, placement: window.placement)
         }
         return BrowserSessionDocument(
             profiles: profileOrder.compactMap { profiles[$0] },
