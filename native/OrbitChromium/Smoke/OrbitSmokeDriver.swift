@@ -324,6 +324,8 @@ final class OrbitSmokeDriver: OrbitLaunchHooks {
         // product start-up (`applicationDidFinishLaunching`), whose windows would be shown.
         let application = OrbitApplication(environment: environment, windowPresenter: { _, _ in })
         self.application = application
+        // Hidden smoke accepts the warning through the same injectable presenter as the unit tests.
+        application.confirmQuit = { .quit }
         // Installed before AppKit finished launching, the delegate would also receive the product
         // start-up (`applicationDidFinishLaunching`): a second environment and engine.
         let launched = await until(10) { OrbitLauncher.hasFinishedLaunching }

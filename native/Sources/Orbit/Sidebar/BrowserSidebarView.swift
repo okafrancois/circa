@@ -147,6 +147,10 @@ final class BrowserSidebarView: NSView, SidebarListHost {
     /// Targets of the context menu being shown; commands use them instead of the selection.
     private(set) var contextMenuNodes: [BrowserOrganizationNode] = []
     private let dropCoordinator = SidebarDropCoordinator()
+    var onReorderSnap: (() -> Void)? {
+        get { dropCoordinator.onReorderSnap }
+        set { dropCoordinator.onReorderSnap = newValue }
+    }
     /// Retained here; targets hold their views weakly.
     private var externalDropTargets: [any SidebarDropTarget] = []
 

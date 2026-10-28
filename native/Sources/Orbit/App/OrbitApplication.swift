@@ -9,7 +9,10 @@ import BrowserShell
 @MainActor
 final class OrbitApplication: NSObject, NSApplicationDelegate {
     private(set) var environment: OrbitEnvironment?
-    let updater = OrbitUpdater()
+    private let inactiveUpdater = OrbitUpdater()
+    var updater: OrbitUpdater { environment?.settings.updater ?? inactiveUpdater }
+    var quitPreferenceSave: Task<Void, Error>?
+    var confirmQuit: @MainActor () -> OrbitQuitDecision = OrbitQuitConfirmation.present
     private var startupTask: Task<Void, Never>?
     private var isStartingUp = false
     private var externalURLStartupComplete = false
@@ -136,7 +139,6 @@ final class OrbitApplication: NSObject, NSApplicationDelegate {
             defer { isStartingUp = false }
             do {
                 let configuration = try PreviewLaunchConfiguration(arguments: ProcessInfo.processInfo.arguments)
-                updater.start(synthetic: activeSyntheticDataGuard() != nil)
                 environment = try await OrbitEnvironment.open(engine: makeActiveEngine(), sessionFile: configuration.sessionFile)
             } catch {
                 let alert = NSAlert()
@@ -156,6 +158,7 @@ final class OrbitApplication: NSObject, NSApplicationDelegate {
                 }
                 environment = OrbitEnvironment(engine: makeActiveEngine())
             }
+            updater.start(synthetic: activeSyntheticDataGuard() != nil)
             if let environment { commands.registry.useShortcutPreferences(environment.shortcutPreferences) }
             environment?.onPersistenceError = { [weak self] error in self?.presentSaveError(error) }
             environment?.onRescueNeedsWindow = { [weak self] profileID in self?.openRescueWindow(for: profileID) }
@@ -255,6 +258,7 @@ final class OrbitApplication: NSObject, NSApplicationDelegate {
         defer { if !isPreparingToQuit { pendingSiteSessionRequest = nil } }
         // Leave macOS's default-browser confirmation in charge; do not stack a save-error alert.
         guard settingsWindow?.model.isRequestingDefaultBrowser != true else { return .terminateCancel }
+        guard confirmQuitIfNeeded() else { return .terminateCancel }
         if environment?.downloads.hasActiveTransfers == true {
             let alert = NSAlert()
             alert.messageText = uiText("Downloads Are Still in Progress")
@@ -278,6 +282,21 @@ final class OrbitApplication: NSObject, NSApplicationDelegate {
         return .terminateLater
     }
 
+    func confirmQuitIfNeeded() -> Bool {
+        if pendingSiteSessionRequest == nil, environment?.settings.document.interaction.warnBeforeQuitting == true {
+            switch confirmQuit() {
+            case .cancel: return false
+            case .quit: break
+            case .quitWithoutWarning:
+                // Persist through the same Settings queue that termination drains before saving.
+                quitPreferenceSave = Task { [environment] in
+                    try await environment?.settings.updateInteraction { $0.warnBeforeQuitting = false }
+                }
+            }
+        }
+        return true
+    }
+
     /// Quit freezes new input, drains accepted work, and durably saves before any teardown.
     /// Only an explicit diagnostic/test timeout can reject a slow command queue.
     func completeTermination(timeout: Duration? = nil) async throws {
@@ -286,6 +305,9 @@ final class OrbitApplication: NSObject, NSApplicationDelegate {
         do {
             let deadline = timeout.map { ContinuousClock.now + $0 }
             func remaining() -> Duration? { deadline.map { max(.zero, ContinuousClock.now.duration(to: $0)) } }
+            let preferenceSave = quitPreferenceSave
+            quitPreferenceSave = nil
+            try await preferenceSave?.value
             try await settingsWindow?.model.suspendForTermination(timeout: remaining())
             while isStartingUp {
                 guard deadline.map({ ContinuousClock.now < $0 }) ?? true, !Task.isCancelled else {

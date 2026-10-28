@@ -27,6 +27,7 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
     let forwardButton = OrbitGlyphButton(glyph: nil, label: OrbitShellText.forward)
     let reloadButton = OrbitGlyphButton(glyph: nil, label: OrbitShellText.reload)
     var addressResolver = AddressResolver()
+    lazy var capture = BrowserCaptureController(owner: self)
     var settingsPreferences: BrowserWindowSettings?
     /// The open theme editor of this window (ORBIT-THEMES), previewing its draft on the window.
     var themeEditor: OrbitThemeEditorController?
@@ -221,6 +222,9 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
         let startSurface: (Surface, URL) -> Void = { surface, url in
             if url.absoluteString != "about:blank" {
                 BrowserNavigationPolicy.authorizeLocalDocument(url, for: surface)
+                if engine.kind == .chromium, BrowserNavigationPolicy.isChromiumSettingsURL(url) {
+                    BrowserNavigationPolicy.authorizeChromiumSettings(for: surface)
+                }
                 surface.navigate(to: url)
             }
         }
@@ -260,6 +264,7 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
     func windowDidBecomeKey(_ notification: Notification) { onActivate() }
 
     func windowWillClose(_ notification: Notification) {
+        capture.cancel()
         tabSuspension.close()
         extensionControls.close()
         bookmarkTransfer?.cancel()
@@ -419,6 +424,7 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
             && nativePromotion?.intent.isRevoked == true && addressField.currentEditor() != nil
             && window?.firstResponder === addressField.currentEditor()
         if selectionChanged {
+            capture.cancel()
             let previousSpaceID = displayedSpaceID
             displayedOccurrenceID = session.snapshot?.selectedOccurrenceID
             displayedSpaceID = session.snapshot?.activeSpaceID

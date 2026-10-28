@@ -1189,3 +1189,12 @@
 "Allow %@ to access %@?" = "Allow %@ to access %@?";
 
 "Separate your tabs for life, work, projects, and more." = "Separate your tabs for life, work, projects, and more.";
+
+/* Live Settings and capture feedback. */
+"Automatically update" = "Automatically update";
+"Warn before quitting" = "Warn before quitting";
+"Haptic feedback when reordering tabs" = "Haptic feedback when reordering tabs";
+"Quit Orbit?" = "Quit Orbit?";
+"Your tabs will be here when you return." = "Your tabs will be here when you return.";
+"Quit, and don’t ask again" = "Quit, and don’t ask again";
+"Drag to capture a portion of this page. Press Escape to cancel." = "Drag to capture a portion of this page. Press Escape to cancel.";

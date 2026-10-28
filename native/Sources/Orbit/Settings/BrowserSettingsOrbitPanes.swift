@@ -59,9 +59,12 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
     private var general: some View {
         Group {
             panel {
-                unavailableToggle(uiFormat("Automatically update my %@", applicationName))
+                settingRow(uiFormat("Automatically update my %@", applicationName)) {
+                    BrowserAutomaticUpdateToggle(updater: runtime.updater)
+                }
                 rule
-                unavailableToggle("Warn before quitting")
+                liveToggle("Warn before quitting", value: runtime.document.interaction.warnBeforeQuitting,
+                           identifier: "settings-warn-before-quitting", save: model.setWarnBeforeQuitting)
             }
             panel {
                 HStack(spacing: 14) {
@@ -175,10 +178,8 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
                         }
                         rule
                         settingRow("Downloads, languages, and site settings") {
-                            VStack(alignment: .trailing, spacing: 4) {
-                                Button(uiText("More Settings…")) {}.disabled(true)
-                                Text(uiText("Coming soon")).font(.system(size: 11)).foregroundStyle(.secondary)
-                            }
+                            Button(uiText("More Settings…")) { open(.chromium, profile: profile) }
+                                .disabled(!model.canOpenChromiumSettings(profile: profile))
                                 .accessibilityIdentifier("settings-chromium-profile")
                         }
                     }
@@ -275,8 +276,6 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
             appIcon.frame(width: 112, height: 112).padding(.top, 24)
             Text(uiText("App Icon")).font(.system(size: 21, weight: .semibold))
             Text(uiFormat("%@ uses its current app icon.", applicationName)).foregroundStyle(.secondary)
-            Button(uiText("Choose an Icon…")) {}.disabled(true)
-            Text(uiText("Coming soon")).font(.system(size: 12)).foregroundStyle(.secondary)
         }.frame(maxWidth: .infinity)
     }
 
@@ -312,9 +311,11 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
                 }
             }
             panel {
-                unavailableToggle(uiFormat("Play %@ sound effects", applicationName))
+                liveToggle(uiFormat("Play %@ sound effects", applicationName), value: runtime.document.interaction.playSoundEffects,
+                           identifier: "settings-sound-effects", save: model.setPlaySoundEffects)
                 rule
-                unavailableToggle("Haptic feedback when reordering tabs")
+                liveToggle("Haptic feedback when reordering tabs", value: runtime.document.interaction.hapticFeedback,
+                           identifier: "settings-reorder-haptics", save: model.setHapticFeedback)
             }
             panel {
                 settingRow("Website data and permissions") {
@@ -358,15 +359,26 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
         HStack(spacing: 12) { Text(uiText(title)).fixedSize(horizontal: false, vertical: true); Spacer(minLength: 8); control() }
             .padding(.horizontal, 12).padding(.vertical, 10)
     }
-    private func unavailableToggle(_ title: String) -> some View {
-        HStack {
-            Text(uiText(title))
-            Text(uiText("Coming soon")).font(.system(size: 11)).foregroundStyle(.tertiary)
-            Spacer(minLength: 8)
-            Toggle(uiText(title), isOn: .constant(false)).labelsHidden().toggleStyle(.switch).controlSize(.mini).disabled(true)
-        }.foregroundStyle(.secondary).padding(12)
+    private func liveToggle(_ title: String, value: Bool, identifier: String,
+                            save: @escaping (Bool) async throws -> Void) -> some View {
+        settingRow(title) {
+            Toggle(uiText(title), isOn: Binding(get: { value }, set: { next in
+                model.perform { try await save(next) }
+            })).labelsHidden().toggleStyle(.switch).controlSize(.mini).accessibilityIdentifier(identifier)
+        }
     }
     private func open(_ page: BrowserSettingsPage, profile: ProfileID) {
         model.perform { try await model.openBrowserSettings(page, profile: profile) }
+    }
+}
+
+@MainActor
+private struct BrowserAutomaticUpdateToggle: View {
+    @ObservedObject var updater: OrbitUpdater
+    var body: some View {
+        Toggle(uiText("Automatically update"), isOn: Binding(get: { updater.automaticallyUpdates },
+            set: { updater.setAutomaticallyUpdates($0) }))
+            .labelsHidden().toggleStyle(.switch).controlSize(.mini)
+            .accessibilityIdentifier("settings-automatic-updates")
     }
 }

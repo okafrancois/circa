@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 #if canImport(Sparkle)
 import Sparkle
 #endif
@@ -27,7 +28,55 @@ enum OrbitUpdatePolicy {
 }
 
 @MainActor
-final class OrbitUpdater: NSObject {
+protocol OrbitAutomaticUpdateTarget: AnyObject {
+    var automaticallyChecksForUpdates: Bool { get set }
+    var automaticallyDownloadsUpdates: Bool { get set }
+}
+
+#if canImport(Sparkle)
+extension SPUUpdater: OrbitAutomaticUpdateTarget {}
+#endif
+
+@MainActor
+final class OrbitUpdater: NSObject, ObservableObject {
+    private let defaults: UserDefaults
+    private var defaultsObservation: AnyCancellable?
+    /// Sparkle owns this preference, including changes made in its update alert. Using its key
+    /// also keeps the switch persistent in synthetic bundles without constructing an updater.
+    @Published private(set) var automaticallyUpdates: Bool
+
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+        automaticallyUpdates = defaults.object(forKey: "SUAutomaticallyUpdate") as? Bool ?? true
+        super.init()
+        defaultsObservation = NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification, object: defaults)
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                MainActor.assumeIsolated { self?.reloadPreference() }
+            }
+    }
+
+    private func reloadPreference() {
+        automaticallyUpdates = defaults.object(forKey: "SUAutomaticallyUpdate") as? Bool ?? true
+    }
+
+    func setAutomaticallyUpdates(_ enabled: Bool) {
+        #if canImport(Sparkle)
+        if let updater = controller?.updater {
+            // This switch controls installation, never the availability notifications.
+            Self.applyAutomaticallyUpdates(enabled, to: updater)
+        } else { defaults.set(enabled, forKey: "SUAutomaticallyUpdate") }
+        #else
+        defaults.set(enabled, forKey: "SUAutomaticallyUpdate")
+        #endif
+        reloadPreference()
+    }
+
+    static func applyAutomaticallyUpdates(_ enabled: Bool, to target: any OrbitAutomaticUpdateTarget) {
+        target.automaticallyChecksForUpdates = true
+        target.automaticallyDownloadsUpdates = enabled
+    }
+
     #if canImport(Sparkle)
     private var controller: SPUStandardUpdaterController?
     #endif

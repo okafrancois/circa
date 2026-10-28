@@ -7,6 +7,8 @@ import Combine
 /// durable actor commits, and controls enqueue full mutations instead of overwriting stale forms.
 @MainActor
 final class BrowserSettingsRuntime: ObservableObject {
+    let updater = OrbitUpdater()
+    let feedback = OrbitInteractionFeedback()
     let store: BrowserSettingsStore
     @Published private(set) var document = BrowserSettingsDocument()
     var onChange: (() -> Void)?
@@ -19,6 +21,7 @@ final class BrowserSettingsRuntime: ObservableObject {
     func refresh() async {
         document = await store.snapshot()
         OrbitMotionPreferences.overrideReducedMotion = document.reducedMotion.override
+        feedback.preferences = document.interaction
         onChange?()
     }
 
@@ -27,6 +30,12 @@ final class BrowserSettingsRuntime: ObservableObject {
         do { try await store.setSecondaryAppearanceDraft(value) }
         catch { document = await store.snapshot(); throw error }
         document = await store.snapshot()
+    }
+
+    func updateInteraction(_ edit: @Sendable (inout BrowserInteractionPreferences) -> Void) async throws {
+        do { try await store.updateInteraction(edit) }
+        catch { await refresh(); throw error }
+        await refresh()
     }
 
     func setOpensExternalLinksInQuickWindow(_ value: Bool) async throws {
@@ -92,6 +101,7 @@ final class BrowserWindowSettings {
     }
 
     func apply<Engine: BrowserEngine>(to owner: BrowserWindowController<Engine>) {
+        owner.sidebar.onReorderSnap = { [weak runtime] in runtime?.feedback.reorderSnapped() }
         guard let profileID = owner.session.activeProfileID else { return }
         let settings = runtime.document.profile(profileID)
         owner.addressResolver.searchEngine = settings.searchEngine
