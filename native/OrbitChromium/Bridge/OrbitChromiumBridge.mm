@@ -1754,7 +1754,8 @@ const orbit_cef_api_t* ResolveOrbitApi() {
   // v1. Each version's layout is the prefix of the next; a function beyond the resolved version
   // is never called.
   const orbit_cef_api_t* api = nullptr;
-  const std::pair<uint32_t, size_t> versions[] = {{8u, sizeof(orbit_cef_api_t)},
+  const std::pair<uint32_t, size_t> versions[] = {{9u, sizeof(orbit_cef_api_t)},
+                                                   {8u, offsetof(orbit_cef_api_t, set_automatic_pip)},
                                                    {7u, offsetof(orbit_cef_api_t, boosts_replace)},
                                                    {6u, offsetof(orbit_cef_api_t, password_prompt_observe)},
                                                    {5u, offsetof(orbit_cef_api_t, discard_tab)},
@@ -2524,6 +2525,12 @@ extern "C" int32_t ACRIsAudioMuted(uint64_t token) {
   Host* host = g_state->Find(token);
   if (!host) return -1;
   return host->browser->GetHost()->IsAudioMuted() ? 1 : 0;
+}
+
+extern "C" int32_t ACRSetAutomaticPiP(uint64_t token, int32_t automatic) {
+  ACR_HOST(token);
+  if (!g_state->orbit || g_state->orbit->version < 9u || !g_state->orbit->set_automatic_pip) return 0;
+  return g_state->orbit->set_automatic_pip(host->browser->GetIdentifier(), automatic);
 }
 
 extern "C" int32_t ACRExecuteDevToolsMethod(uint64_t token, const char* method, const char* params) {
