@@ -4,9 +4,9 @@ import Foundation
 import ImageIO
 
 extension ChromiumSurface {
-    /// CEF 156's CefDisplayHandler/CefBrowserHost expose neither theme-color nor WebContents'
-    /// background. CDP has no equivalent getter. Read only the meta hint with a bounded probe;
-    /// all other colours come from Chromium's rendered surface, including images and gradients.
+    /// The engine reports the page's declared theme colour natively; it wins when opaque. Without
+    /// it (or on an engine without native colour state) read the meta hint with a bounded probe,
+    /// then fall back to Chromium's rendered surface, including images and gradients.
     static let pageTintProbe = #"""
     (() => {
       if (document.readyState === 'loading') return null;
@@ -45,7 +45,17 @@ extension ChromiumSurface {
         }
     }
 
+    /// The declared theme colour as a tint, when the engine reports an opaque one.
+    var nativeThemeTint: BrowserPageTint? {
+        guard let argb = pageThemeColor, argb >> 24 == 0xFF else { return nil }
+        return BrowserPageTint(red: UInt8((argb >> 16) & 0xFF), green: UInt8((argb >> 8) & 0xFF), blue: UInt8(argb & 0xFF))
+    }
+
     private func measurePageTint() async {
+        if let tint = nativeThemeTint {
+            updatePageTint(tint)
+            return
+        }
         guard isBrowserCreated, !pageTintFailed,
               let url = navigationState.committedURL,
               ["http", "https", "file"].contains(url.scheme?.lowercased() ?? ""),

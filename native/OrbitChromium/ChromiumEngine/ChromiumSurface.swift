@@ -1001,6 +1001,8 @@ public final class ChromiumSurface: BrowserEngineSurface {
             onEngineEvent?("browser-state", ["audible": String(value.audible), "muted": String(value.muted)])
             pageThemeColor = value.colors & 1 != 0 ? value.theme_color : nil
             pageBackgroundColor = value.colors & 2 != 0 ? value.background_color : nil
+            // A declared theme colour updates the developer toolbar at once, without a probe.
+            if pageTintObservationEnabled, let tint = nativeThemeTint { updatePageTint(tint) }
             onChange?()
         case ACR_EVENT_AUDIO:
             capture = (event.flags & 1 != 0, event.flags & 2 != 0)
