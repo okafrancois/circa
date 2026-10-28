@@ -305,9 +305,9 @@ class SidebarListRow: NSView, NSTextFieldDelegate {
 }
 
 @MainActor
-final class SidebarTabRow: SidebarListRow {
+class SidebarTabRow: SidebarListRow {
     private(set) var item: SidebarTabItem
-    private let favicon = NSImageView()
+    let favicon = NSImageView()
     private let slash = SidebarPinnedSlashView()
     let closeButton = OrbitGlyphButton(glyph: OrbitGlyph.close, label: "")
     let resetButton = OrbitGlyphButton(glyph: OrbitGlyph.resetPinned, label: "")
@@ -369,8 +369,8 @@ final class SidebarTabRow: SidebarListRow {
     private var displayedFavicon: NSImage? { item.favicon ?? item.activity.favicon }
     var showsAudio: Bool { item.activity.isAudible == true || item.activity.isAudioMuted == true }
 
-    func update(_ item: SidebarTabItem, depth: Int) {
-        rebind(node: .tab(item.id), depth: depth)
+    func update(_ item: SidebarTabItem, depth: Int, node: BrowserOrganizationNode? = nil) {
+        rebind(node: node ?? .tab(item.id), depth: depth)
         let changed = item != self.item
         self.item = item
         titleLabel.stringValue = item.title
@@ -488,6 +488,90 @@ final class SidebarTabRow: SidebarListRow {
     }
 }
 
+/// Two selected pages share an outer row, with a separate favicon and truncated title per page.
+/// Input still targets the group; layouts with more members retain the existing aggregate row.
+@MainActor
+final class SidebarSplitRow: SidebarTabRow {
+    private(set) var paneCells: [SidebarSplitPaneCell] = []
+
+    init(item: SidebarTabItem, node: BrowserOrganizationNode, depth: Int) {
+        super.init(item: item, depth: depth)
+        updateSplit(item, node: node, depth: depth)
+    }
+    required init?(coder: NSCoder) { nil }
+
+    func updateSplit(_ item: SidebarTabItem, node: BrowserOrganizationNode, depth: Int) {
+        update(item, depth: depth, node: node)
+        let members = item.selected && item.splitPanes.count == 2 ? item.splitPanes : []
+        titleLabel.isHidden = !members.isEmpty
+        if paneCells.count != members.count {
+            paneCells.forEach { $0.removeFromSuperview() }
+            paneCells = members.map { _ in SidebarSplitPaneCell(frame: .zero) }
+            paneCells.forEach { addSubview($0, positioned: .below, relativeTo: closeButton) }
+        }
+        for (cell, member) in zip(paneCells, members) { cell.present(member, accent: effectiveAccent) }
+        needsLayout = true
+    }
+
+    override func accentDidChange() {
+        super.accentDidChange()
+        for (cell, member) in zip(paneCells, item.splitPanes) { cell.present(member, accent: effectiveAccent) }
+    }
+
+    override func layout() {
+        super.layout()
+        guard paneCells.count == 2 else { return }
+        favicon.isHidden = true
+        titleLabel.isHidden = true
+        let inset: CGFloat = 4, gap: CGFloat = 4
+        let width = max(0, (bounds.width - 2 * inset - gap) / 2)
+        for (index, cell) in paneCells.enumerated() {
+            cell.frame = CGRect(x: inset + CGFloat(index) * (width + gap), y: inset,
+                                width: width, height: max(0, bounds.height - inset * 2))
+            cell.trailingInset = index == 1 && isHovering ? 24 : 4
+        }
+    }
+}
+
+@MainActor
+final class SidebarSplitPaneCell: NSView {
+    let icon = NSImageView()
+    let label = NSTextField(labelWithString: "")
+    var trailingInset: CGFloat = 4 { didSet { needsLayout = true } }
+    override var isFlipped: Bool { true }
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        wantsLayer = true
+        layer?.cornerRadius = 9
+        icon.imageScaling = .scaleProportionallyDown
+        label.font = OrbitTokens.Typography.sidebarTabTitle
+        label.lineBreakMode = .byTruncatingTail
+        label.maximumNumberOfLines = 1
+        for view in [icon, label] { view.setAccessibilityElement(false); addSubview(view) }
+        setAccessibilityElement(false)
+    }
+    required init?(coder: NSCoder) { nil }
+
+    func present(_ item: SidebarSplitPaneItem, accent: OrbitTokens.ThemeAccent) {
+        icon.image = item.favicon ?? OrbitGlyph.faviconPlaceholder
+        icon.contentTintColor = item.favicon == nil ? accent.icon : nil
+        label.stringValue = item.title
+        label.textColor = accent.sidebarText
+        layer?.backgroundColor = OrbitTokens.Color.State.tabPressed.resolvedCGColor(for: effectiveAppearance)
+    }
+    override func layout() {
+        super.layout()
+        icon.frame = CGRect(x: 7, y: (bounds.height - 14) / 2, width: 14, height: 14)
+        let height = ceil(label.intrinsicContentSize.height)
+        label.frame = CGRect(x: 33, y: ((bounds.height - height) / 2).rounded(),
+                             width: max(0, bounds.width - 33 - trailingInset), height: height)
+    }
+}
+
+/// A folder row: an 18 pt folder glyph tinted with the Space accent, a 14 pt semibold title and no
+/// chevron; the glyph switches between closed and open. Clicking toggles it.
 @MainActor
 final class SidebarFolderRow: SidebarListRow {
     private(set) var item: SidebarFolderItem

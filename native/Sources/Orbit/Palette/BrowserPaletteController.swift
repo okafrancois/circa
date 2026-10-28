@@ -70,7 +70,7 @@ final class BrowserPaletteController<Engine: BrowserEngine> {
         }
     }
 
-    func present(_ requestedMode: BrowserPaletteMode) {
+    func present(_ requestedMode: BrowserPaletteMode, emptyAddress: Bool = false) {
         guard let owner, owner.acceptsCommands, let registry, !owner.session.isClosed else { return }
         if isPresented, mode == requestedMode { dismiss(); return }
         presentationSequence &+= 1
@@ -112,7 +112,7 @@ final class BrowserPaletteController<Engine: BrowserEngine> {
                   searchAliases: BrowserDailyCommands.aliases($0.id), shortcut: $0.shortcuts.first?.displayLabel ?? "")
         }
         view.accent = OrbitSpaceThemes.accent(for: owner.resolvedSpaceTheme(for: context?.spaceID)).selection
-        view.input.stringValue = mode == .currentTab ? owner.session.selectedSurface?.navigationState.url?.absoluteString ?? "" : ""
+        view.input.stringValue = mode == .currentTab && !emptyAddress ? owner.session.selectedSurface?.navigationState.url?.absoluteString ?? "" : ""
         view.isHidden = false
         view.superview?.addSubview(view, positioned: .above, relativeTo: nil)
         view.needsLayout = true
@@ -129,7 +129,7 @@ final class BrowserPaletteController<Engine: BrowserEngine> {
             hasCapturedContext = true
             let sources = owner.session.paletteContext ?? ready
             sourceContext = sources
-            if requestedMode == .currentTab, inputRevision == firstQuery {
+            if requestedMode == .currentTab, !emptyAddress, inputRevision == firstQuery {
                 view.input.stringValue = ready.selectedOccurrenceID.flatMap { owner.session.surface(for: $0)?.navigationState.url?.absoluteString } ?? ""
                 view.input.currentEditor()?.selectAll(nil)
                 draft = view.input.stringValue

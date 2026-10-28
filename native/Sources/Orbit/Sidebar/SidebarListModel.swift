@@ -31,6 +31,12 @@ struct SidebarTabItem: Equatable {
     var isOpenInAnotherWindow = false
     var isLoadedInThisWindow = false
     var activity = SidebarTabActivity()
+    var splitPanes: [SidebarSplitPaneItem] = []
+}
+
+struct SidebarSplitPaneItem: Equatable {
+    let title: String
+    let favicon: NSImage?
 }
 
 struct SidebarFolderItem: Equatable {
@@ -129,11 +135,17 @@ struct SidebarListContent: Equatable {
                                                    content: .tab(row)))
                 case let .split(split):
                     guard let active = split.activeTab ?? split.tabs.first else { continue }
-                    let title = split.tabs.map { $0.customTitle ?? liveTitle($0) ?? $0.pageTitle ?? $0.url.host ?? SidebarListStrings.newTab }.joined(separator: " | ")
+                    let title = split.tabs.map { $0.customTitle ?? liveTitle($0).flatMap { $0.isEmpty ? nil : $0 }
+                        ?? $0.pageTitle ?? $0.url.host ?? SidebarListStrings.newTab }.joined(separator: " | ")
                     let row = SidebarTabItem(id: active.id, occurrenceID: active.occurrenceID, title: title,
                         selected: split.activeTab != nil, favicon: NSImage(systemSymbolName: "rectangle.split.2x1", accessibilityDescription: uiText("Split View")),
                         isMultiSelected: multi.contains(.split(split.group.id)), isPinned: section == .pinned,
-                        isLoadedInThisWindow: split.tabs.contains { $0.isLoadedInThisWindow }, activity: liveActivity(active))
+                        isLoadedInThisWindow: split.tabs.contains { $0.isLoadedInThisWindow }, activity: liveActivity(active),
+                        splitPanes: split.tabs.map {
+                            SidebarSplitPaneItem(title: $0.customTitle ?? liveTitle($0).flatMap { $0.isEmpty ? nil : $0 }
+                                ?? $0.pageTitle ?? $0.url.host ?? SidebarListStrings.newTab,
+                                favicon: liveActivity($0).favicon)
+                        })
                     result.append(SidebarListEntry(node: .split(split.group.id), section: section, ancestors: ancestors,
                                                    content: .split(row, split.group.tabIDs)))
                 case let .folder(folder):

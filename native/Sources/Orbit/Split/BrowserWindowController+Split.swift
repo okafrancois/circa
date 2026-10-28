@@ -69,6 +69,13 @@ extension BrowserWindowController {
                         if let url = surface.goForward() { controller.session.updateDestination(for: surface, to: url) }
                     case .reload: surface.reload()
                     case .address: controller.focusAddress()
+                    case .siteControls:
+                        guard controller.session.selectedSurface === surface,
+                              let pane = controller.split.view.panes[id] else { return }
+                        controller.siteControls.toggle(presentationAnchor: pane.siteControls)
+                    case .separate:
+                        guard controller.session.selectedSurface === surface else { return }
+                        controller.session.separateSplitPane(id)
                     }
                 }
             }
@@ -138,7 +145,14 @@ extension BrowserWindowController {
         guard acceptsCommands, canAddSplitPane else { return }
         let ids = sidebar.selection.orderedNodes(in: session.organization!).compactMap(\.tabID)
         if ids.count >= 2 { session.createSplit(ids) }
-        else { session.addSplitPane() }
+        else {
+            session.addSplitPane()
+            session.performWindowAction { [weak self] in
+                guard let self, session.activeSplit != nil,
+                      session.organization?.selectedTab?.url.absoluteString == "about:blank" else { return }
+                palette.present(.currentTab, emptyAddress: true)
+            }
+        }
     }
 
     func canDropIntoSplit(_ payload: SidebarDragPayload) -> Bool {

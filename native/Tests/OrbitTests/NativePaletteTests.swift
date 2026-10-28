@@ -72,6 +72,41 @@ extension NativeWebKitTests {
 @Suite("Native command palette", .serialized)
 @MainActor
 struct NativePaletteTests {
+    @Test("Split creation opens an empty address draft and navigates the new pane only",
+          arguments: [BrowserCommandOrigin.menu, .keyboard, .palette])
+    func splitAddressDraft(_ origin: BrowserCommandOrigin) async throws {
+        let h = try await PaletteHarness()
+        h.window.submitAddress("https://split.test/source")
+        await h.settle()
+        let source = try #require(h.window.session.selectedSurface)
+        if origin == .palette {
+            await h.show()
+            h.window.palette.query("Add Split View")
+            await h.window.palette.waitForResults()
+            let index = try #require(h.window.palette.results.firstIndex { $0.action == .command(.addSplitView) })
+            h.window.palette.move(index - h.window.palette.selection.index)
+            h.window.palette.accept()
+        } else {
+            #expect(h.registry.dispatch(.addSplitView, origin: origin))
+        }
+        await h.settle()
+        await h.window.palette.waitForResults()
+        let target = try #require(h.window.session.selectedSurface)
+        #expect(target !== source)
+        #expect(h.window.session.activeSplit?.tabs.count == 2)
+        #expect(h.window.palette.isPresented)
+        #expect(h.window.palette.mode == .currentTab)
+        #expect(h.window.palette.view.input.stringValue.isEmpty)
+        h.window.palette.query("https://split.test/target")
+        await h.window.palette.waitForResults()
+        h.window.palette.accept()
+        await h.settle()
+        #expect(target.navigationState.url?.absoluteString == "https://split.test/target")
+        #expect(source.navigationState.url?.absoluteString == "https://split.test/source")
+        #expect(h.window.session.activeSplit?.tabs.count == 2)
+        try await h.close()
+    }
+
     @Test("Command-T opens instantly without creating a tab; Escape cancels; repeated shortcut toggles")
     func presentation() async throws {
         let h = try await PaletteHarness()
