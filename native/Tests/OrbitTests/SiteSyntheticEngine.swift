@@ -148,11 +148,15 @@ final class SiteSyntheticSurface: BrowserEngineSurface {
 
     var faviconURL: URL?
     var faviconImage: BrowserFaviconImage?
+    var pageTint: BrowserPageTint?
+    private(set) var observesPageTint = false
+    func setPageTintObservationEnabled(_ enabled: Bool) { observesPageTint = enabled }
 
     var navigationState: BrowserNavigationState {
         var state = BrowserNavigationState(url: currentURL, committedURL: currentURL, title: currentURL?.host,
                                canGoBack: index > 0, canGoForward: index + 1 < history.count, faviconURL: faviconURL)
         state.faviconImage = faviconImage
+        state.pageTint = pageTint
         return state
     }
 

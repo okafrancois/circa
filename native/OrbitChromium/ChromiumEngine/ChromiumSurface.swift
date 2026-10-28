@@ -132,6 +132,15 @@ public final class ChromiumSurface: BrowserEngineSurface {
     let profileToken: UInt64
     weak var engine: ChromiumBrowserEngine?
     private var state = BrowserNavigationState()
+    var pageTintObservationEnabled = false
+    var pageTintTask: Task<Void, Never>?
+    var pageTintFailed = false
+
+    func updatePageTint(_ tint: BrowserPageTint?) {
+        guard state.pageTint != tint else { return }
+        state.pageTint = tint
+        onChange?()
+    }
     private var faviconRevision: UInt64 = 0
     private var requestedDestination: URL?
     /// Kind of the next main-frame navigation the shell started (history traversal, reload).
@@ -543,6 +552,8 @@ public final class ChromiumSurface: BrowserEngineSurface {
     }
 
     public func dispose() {
+        pageTintTask?.cancel()
+        pageTintTask = nil
         automaticPiPTask?.cancel()
         automaticPiPTask = nil
         cancelExtensionAction()
@@ -910,6 +921,11 @@ public final class ChromiumSurface: BrowserEngineSurface {
             state.faviconRevision = 0
             state.faviconMetadataIsSettled = false
             state.committedURL = event.url.flatMap(URL.init(string:))
+            pageTintFailed = false
+            if !["http", "https", "file"].contains(state.committedURL?.scheme?.lowercased() ?? "") {
+                updatePageTint(nil)
+            }
+            restartPageTintObservation()
             if let url = state.committedURL { recordSuspendedHistoryCommit(url) }
             requestedDestination = nil
             refreshZoom()
@@ -923,6 +939,10 @@ public final class ChromiumSurface: BrowserEngineSurface {
             onEngineEvent?("load-end", ["status": String(event.value)])
             delegate?.surfaceDidFinishNavigation(self)
         case ACR_EVENT_LOAD_ERROR:
+            if event.value != -3 {
+                pageTintFailed = true
+                updatePageTint(nil)
+            }
             if isConfirmingDownloadClose {
                 _ = finishCloseConfirmation(closed: false)
             }
@@ -981,6 +1001,8 @@ public final class ChromiumSurface: BrowserEngineSurface {
         case ACR_EVENT_DOWNLOAD:
             handleDownload(event)
         case ACR_EVENT_RENDER_TERMINATED:
+            pageTintFailed = true
+            updatePageTint(nil)
             onEngineEvent?("render-terminated", ["status": String(event.value)])
             rendererDidTerminate(status: event.value)
             delegate?.surfaceDidFailNavigation(self)
