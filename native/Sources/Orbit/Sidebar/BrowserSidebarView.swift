@@ -85,6 +85,7 @@ final class BrowserSidebarView: NSView, SidebarListHost {
     var onRenameSpace: ((SpaceID) -> Void)?
     var onEditSpaceTheme: ((SpaceID) -> Void)?
     var onEditSpaceIcon: ((SpaceID) -> Void)?
+    var makeSpaceProfileMenu: ((SpaceID) -> NSMenu?)?
     var onMoveSpace: ((SpaceID, SpaceID?) -> Void)?
     var onShowLibrary: (() -> Void)?
     /// Shortcut label of the Space at an index ("⌃2"), supplied by the Commands lot.
@@ -608,6 +609,10 @@ final class BrowserSidebarView: NSView, SidebarListHost {
     }
 
     private func configure(_ page: SidebarSpacePageView) {
+        page.profileMenuProvider = { [weak self, weak page] in
+            guard let id = page?.spaceID else { return nil }
+            return self?.makeSpaceProfileMenu?(id)
+        }
         page.list.host = self
         page.list.onFolderHover = { [weak self] row, inside in self?.onFolderHover?(row, inside) }
         page.list.onPreviewInvalidated = { [weak self] row in self?.onPreviewInvalidated?(row) }
@@ -697,7 +702,7 @@ final class BrowserSidebarView: NSView, SidebarListHost {
 /// The Space page: title, then the Pinned/Today list (separator, New Tab, Today rows), scrolled
 /// together.
 @MainActor
-final class SidebarSpacePageView: NSView, NSTextFieldDelegate {
+final class SidebarSpacePageView: NSView, NSTextFieldDelegate, NSMenuDelegate {
     var isPrivate = false { didSet { if oldValue != isPrivate { needsLayout = true } } }
     var spaceID: SpaceID? { didSet { if spaceID != oldValue { cancelSpaceRename() }; list.spaceID = spaceID } }
     private let scrollView = NSScrollView()
@@ -722,6 +727,7 @@ final class SidebarSpacePageView: NSView, NSTextFieldDelegate {
     private var titleCommit: ((String) -> Void)?
     var isRenamingSpace: Bool { titleEditor != nil }
     var onDeleteSpace: (() -> Void)?
+    var profileMenuProvider: (() -> NSMenu?)?
     var canDeleteSpace = false { didSet { titleLabel.menu = titleMenu() } }
     var accent = OrbitTokens.ThemeAccent.defaultSpace {
         didSet {
@@ -883,15 +889,30 @@ final class SidebarSpacePageView: NSView, NSTextFieldDelegate {
 
     private func titleMenu() -> NSMenu {
         let menu = NSMenu()
+        menu.delegate = self
+        populateTitleMenu(menu)
+        return menu
+    }
+
+    func menuNeedsUpdate(_ menu: NSMenu) {
+        menu.removeAllItems()
+        populateTitleMenu(menu)
+    }
+
+    private func populateTitleMenu(_ menu: NSMenu) {
         menu.autoenablesItems = false
         menu.addItem(withTitle: OrbitShellText.renameSpace, action: #selector(renameSpace(_:)), keyEquivalent: "").target = self
         menu.addItem(withTitle: uiText("Change Space Icon…"), action: #selector(editIcon(_:)), keyEquivalent: "").target = self
         menu.addItem(withTitle: uiText("Edit Theme Color…"), action: #selector(editTheme(_:)), keyEquivalent: "").target = self
+        if let profiles = profileMenuProvider?() {
+            let item = NSMenuItem(title: uiText("Set Profile"), action: nil, keyEquivalent: "")
+            item.submenu = profiles
+            menu.addItem(item)
+        }
         menu.addItem(.separator())
         let delete = menu.addItem(withTitle: uiText("Delete Space…"), action: #selector(deleteSpace(_:)), keyEquivalent: "")
         delete.target = self
         delete.isEnabled = canDeleteSpace
-        return menu
     }
 
     @objc private func deleteSpace(_ sender: Any?) { if list.commandsEnabled && canDeleteSpace { onDeleteSpace?() } }

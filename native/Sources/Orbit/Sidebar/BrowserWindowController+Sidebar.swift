@@ -8,6 +8,7 @@ import BrowserShell
 extension BrowserWindowController {
     func installSidebarActions() {
         installSidebarList()
+        sidebar.makeSpaceProfileMenu = { [weak self] id in self?.makeSpaceProfileMenu(for: id) }
         sidebar.configureNewSpacePage = { [weak self] in self?.configureSpaceCreation($0) }
         sidebar.spaceSwipe.allowsInput = { [weak self] in
             guard let self else { return false }
