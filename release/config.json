@@ -5,7 +5,7 @@
   "initial_version": "0.1.0",
   "identity": "Developer ID Application: Berny François Itoutou (5Y39TTNCM7)",
   "notarytool_profile": "orbit-notary",
-  "public_ed_key": "",
+  "public_ed_key": "/AjwXDiBlg9R1aYMbpCIEKXNDW6w1ZlWd1UPqps0ZlI=",
   "keychain_account": "orbit-browser",
   "cef_flavor": "orbit-engine-extensions-r3",
   "sparkle_version": "2.10.1",
