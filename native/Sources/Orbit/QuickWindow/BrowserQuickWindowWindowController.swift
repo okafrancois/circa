@@ -80,6 +80,8 @@ final class BrowserQuickWindowWindowController<Engine: BrowserEngine>: NSWindowC
                               styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
                               backing: .buffered, defer: true)
         window.isReleasedWhenClosed = false
+        // Little Orbit keeps its dark chrome independently of the source Space's appearance.
+        window.appearance = NSAppearance(named: .darkAqua)
         window.titleVisibility = .hidden
         window.titlebarAppearsTransparent = true
         window.title = uiText("Little Orbit")
@@ -207,7 +209,7 @@ final class BrowserQuickWindowWindowController<Engine: BrowserEngine>: NSWindowC
 
     private func showCompactInput() {
         guard let input = prepareCompactInput() else { return }
-        input.show(appearance: window?.appearance, screen: window?.screen)
+        input.show(screen: window?.screen)
     }
 
     func prepareCompactInput() -> BrowserQuickWindowSearchPanel? {
@@ -456,10 +458,9 @@ final class BrowserQuickWindowWindowController<Engine: BrowserEngine>: NSWindowC
 
     func applyPreferences(searchEngine: SearchEngine, theme: OrbitTokens.SpaceTheme) {
         resolver.searchEngine = searchEngine
-        window?.appearance = OrbitAppearance.windowAppearance(for: theme.mode)
+        window?.appearance = NSAppearance(named: .darkAqua)
         toolbar.fill.apply(theme)
-        let dark = window?.appearance?.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-        let font = dark ? NSFont.systemFont(ofSize: 13, weight: .medium) : OrbitTokens.Typography.quickWindowDomain
+        let font = NSFont.systemFont(ofSize: 13, weight: .medium)
         addressField.font = font
         openButton.font = font
         let accent = OrbitSpaceThemes.accent(for: theme)
@@ -520,7 +521,7 @@ final class BrowserQuickWindowWindowController<Engine: BrowserEngine>: NSWindowC
         chooser.input.stringValue = ""
         chooser.render(rows)
         let rect = window.convertToScreen(spaceButton.convert(spaceButton.bounds, to: nil))
-        if NSApp.activationPolicy() != .prohibited { chooser.show(appearance: window.appearance, anchor: rect, screen: window.screen) }
+        if NSApp.activationPolicy() != .prohibited { chooser.show(anchor: rect, screen: window.screen) }
     }
 
     @objc private func showQuickWindowSiteControls(_ sender: Any?) { siteControls.show() }

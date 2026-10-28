@@ -57,6 +57,7 @@ final class BrowserQuickWindowSearchPanel: NSObject, NSWindowDelegate, NSTextFie
         window = BrowserQuickWindowSearchWindow(contentRect: .zero, styleMask: .borderless, backing: .buffered, defer: true)
         super.init()
         window.isReleasedWhenClosed = false
+        window.appearance = NSAppearance(named: .darkAqua)
         window.delegate = self
         window.backgroundColor = .clear
         window.isOpaque = false
@@ -128,10 +129,9 @@ final class BrowserQuickWindowSearchPanel: NSObject, NSWindowDelegate, NSTextFie
         for view in rowViews.values { view.needsDisplay = true }
     }
 
-    func show(appearance: NSAppearance?, anchor: NSRect? = nil, screen: NSScreen? = nil) {
+    func show(anchor: NSRect? = nil, screen: NSScreen? = nil) {
         ending = false
         self.anchor = anchor
-        window.appearance = appearance
         let visible = (screen ?? NSScreen.main)?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1512, height: 958)
         let frame = anchor.map { NSRect(x: $0.maxX + 3 - width, y: $0.maxY + 4.5 - preferredSize.height, width: width, height: preferredSize.height) }
             ?? BrowserQuickWindowMetrics.frame(size: preferredSize, visibleFrame: visible)

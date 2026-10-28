@@ -4,8 +4,8 @@ import AppKit
 /// window appearance (); automatic follows the system.
 @MainActor
 enum OrbitAppearance {
-    /// `--appearance light|dark` forces every window, so visible validation can cover both
-    /// appearances without changing the user's System Settings.
+    /// `--appearance light|dark` forces Space windows, so visible validation can cover both
+    /// appearances without changing System Settings. Fixed-appearance panels remain independent.
     static let launchOverride: NSAppearance.Name? = override(in: ProcessInfo.processInfo.arguments)
 
     static func override(in arguments: [String]) -> NSAppearance.Name? {
