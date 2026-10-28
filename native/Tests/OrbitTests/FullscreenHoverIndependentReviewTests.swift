@@ -38,14 +38,14 @@ extension NativeWebKitTests {
 @Suite(.serialized)
 @MainActor
 struct FullscreenHoverIndependentReviewTests {
-    private func fixture() -> (NSWindow, OrbitWindowShell, ReviewHoverClock) {
+    private func fixture(isMouseButtonPressed: @escaping () -> Bool = { false }) -> (NSWindow, OrbitWindowShell, ReviewHoverClock) {
         NSApplication.shared.setActivationPolicy(.prohibited)
         let window = NSWindow(contentRect: CGRect(x: 0, y: 0, width: 800, height: 600),
                               styleMask: [.titled], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false
         let root = OrbitWindowRootView(frame: window.contentLayoutRect)
         window.contentView = root
-        let shell = OrbitWindowShell()
+        let shell = OrbitWindowShell(isMouseButtonPressed: isMouseButtonPressed)
         shell.prepare(window: window, root: root)
         shell.setDocked(false, animated: false)
         shell.hoverReveal.isPointerInside = { false }
@@ -127,6 +127,24 @@ struct FullscreenHoverIndependentReviewTests {
         #expect(!shell.hoverReveal.isHeld() && shell.hoverReveal.phase == .idle)
     }
 
+    @Test("A pressed mouse holds the sidebar until release and the leave deadline")
+    func mouseRelease() {
+        var pressed = true
+        let (window, shell, clock) = fixture(isMouseButtonPressed: { pressed })
+        defer { window.close() }
+        reveal(shell, clock)
+        shell.hoverReveal.pointerExitedPanel()
+        clock.advance(0.12)
+        #expect(shell.hoverReveal.isHeld() && shell.hoverReveal.phase == .revealed)
+        pressed = false
+        shell.hoverHoldDidChange()
+        #expect(!shell.hoverReveal.isHeld() && shell.hoverReveal.phase == .leaving)
+        clock.advance(shell.hoverReveal.leaveDelay / 2)
+        #expect(shell.hoverReveal.phase == .leaving)
+        clock.advance(shell.hoverReveal.leaveDelay)
+        #expect(shell.hoverReveal.phase == .idle)
+    }
+
     @Test("Window and installed monitor do not retain a discarded shell")
     func shellLifetime() async throws {
         let (window, initial, _) = fixture()
@@ -134,7 +152,7 @@ struct FullscreenHoverIndependentReviewTests {
         // A separate scope avoids a strong tuple binding obscuring the lifetime under test.
         weak var discarded: OrbitWindowShell?
         do {
-            let shell = OrbitWindowShell()
+            let shell = OrbitWindowShell(isMouseButtonPressed: { false })
             shell.prepare(window: window, root: try #require(window.contentView as? OrbitWindowRootView))
             discarded = shell
         }

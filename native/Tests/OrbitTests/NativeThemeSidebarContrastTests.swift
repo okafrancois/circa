@@ -56,10 +56,10 @@ struct NativeThemeSidebarContrastTests {
         #expect(address.textColor == .systemOrange, "The installed address editor retains its separate styling")
         let lateAccessory = NSButton(image: try #require(OrbitGlyph.otherWindow), target: nil, action: nil)
         sidebar.addressContainer.installAccessory(lateAccessory)
-        #expect(same(lateAccessory.contentTintColor, accent.icon, appearance: appearance))
+        #expect(same(lateAccessory.contentTintColor, OrbitTokens.Color.Text.secondary, appearance: appearance))
         let lateCustomGlyph = OrbitGlyphButton(glyph: OrbitGlyph.close, label: "Synthetic accessory")
         sidebar.addressContainer.installAccessory(lateCustomGlyph)
-        #expect(same(lateCustomGlyph.tint, accent.icon, appearance: appearance))
+        #expect(same(lateCustomGlyph.tint, OrbitTokens.Color.Text.secondary, appearance: appearance))
         try expectControls(sidebar, accent: accent, appearance: appearance)
 
         // A Space change creates a new page through the real sidebar projection path.
@@ -83,8 +83,8 @@ struct NativeThemeSidebarContrastTests {
         sidebar.applyAccent(updated)
         try expectControls(sidebar, accent: updated, appearance: appearance)
         #expect(same(zoom.contentTintColor, updated.sidebarSecondaryText, appearance: appearance))
-        #expect(same(lateAccessory.contentTintColor, updated.icon, appearance: appearance))
-        #expect(same(lateCustomGlyph.tint, updated.icon, appearance: appearance))
+        #expect(same(lateAccessory.contentTintColor, OrbitTokens.Color.Text.secondary, appearance: appearance))
+        #expect(same(lateCustomGlyph.tint, OrbitTokens.Color.Text.secondary, appearance: appearance))
         for button in sidebar.footer.spaceButtons {
             #expect(same(button.tint, updated.icon, appearance: appearance))
         }
