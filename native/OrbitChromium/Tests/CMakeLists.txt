@@ -86,9 +86,8 @@ target_include_directories(FaviconReplayTests PRIVATE
 target_link_libraries(FaviconReplayTests PRIVATE BrowserEngine ChromiumLifecycleBridgeStub)
 
 # API compatibility checks do not initialize CEF or open any browser/profile.
-add_executable(OrbitEngineCompatibilityTests EngineCompatibilityTests.cc)
 add_executable(OrbitEngineBinaryCompatibilityTests EngineBinaryCompatibilityTests.cc)
-foreach(TARGET OrbitEngineCompatibilityTests OrbitEngineBinaryCompatibilityTests)
+foreach(TARGET OrbitEngineBinaryCompatibilityTests)
   set_target_properties(${TARGET} PROPERTIES CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON)
   target_compile_options(${TARGET} PRIVATE -UNDEBUG)
 endforeach()

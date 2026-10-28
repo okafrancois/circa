@@ -72,8 +72,7 @@ final class BrowserArchiveRuntime<Surface: BrowserEngineSurface> {
     }
 
     static func protects(_ media: BrowserMediaState) -> Bool {
-        // Unknown engines remain protected. Chromium can report audio playback activity even
-        // without an acoustic audibility API; known idle media must not protect every loaded tab.
+        // Native audibility is authoritative when available. Unknown engines remain protected.
         media.isAudible == true || media.isAudioPlaying == true
             || (media.isAudible == nil && media.isAudioPlaying == nil)
             || media.playback == .playing || media.playback == .suspended

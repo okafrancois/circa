@@ -195,6 +195,9 @@ public protocol BrowserEngineSurface: BrowserFindSurface {
     /// `currentURL`, inherited from `BrowserSurface`, prefers a shell-requested destination that
     /// has not committed yet; `navigationState.url` is what the engine displays.
     var navigationState: BrowserNavigationState { get }
+    /// Native page colors as unpremultiplied ARGB. Changes are delivered through onChange.
+    var pageThemeColor: UInt32? { get }
+    var pageBackgroundColor: UInt32? { get }
     /// Current factor, 1 meaning actual size. Zoom commands may apply asynchronously; the change
     /// is reported through `onChange`. Zoom is defined for a committed document: before the first
     /// commit an engine may ignore zoom commands (Chromium indexes zoom by host).
@@ -302,4 +305,9 @@ public extension BrowserEngineSurface {
     /// The generation of the visible document. It changes exactly when a different document
     /// commits, including same-URL reloads; find, zoom indicators and snapshots are scoped to it.
     var documentGeneration: UInt64 { findDocumentGeneration }
+}
+
+public extension BrowserEngineSurface {
+    var pageThemeColor: UInt32? { nil }
+    var pageBackgroundColor: UInt32? { nil }
 }

@@ -30,6 +30,15 @@ extern "C" {
 
 typedef struct {
   uint32_t struct_size;
+  int32_t audible;
+  int32_t muted;
+  uint32_t colors;  // bit 0 theme, bit 1 background; colors are unpremultiplied ARGB.
+  uint32_t theme_color;
+  uint32_t background_color;
+} orbit_browser_state_t;
+
+typedef struct {
+  uint32_t struct_size;
   // Extension tab id (SessionTabHelper), -1 when the tab has none.
   int32_t tab_id;
   // Extension window id (SessionID of the logical Browser), -1 when the tab is
@@ -144,6 +153,11 @@ typedef struct {
                                         uint64_t selection_epoch);
   // Idempotent; revokes before notifying the popup, including before first load.
   void (*extension_cancel)(uint64_t invocation);
+  // Version 5. Effective per-tab action values plus defaults, using the inventory JSON schema.
+  int32_t (*extension_action_snapshot)(int32_t browser_id, char* json, uint32_t capacity);
+  // Snapshot and one UI-thread subscription per browser. Null callback unregisters.
+  int32_t (*browser_state)(int32_t browser_id, orbit_browser_state_t* state);
+  int32_t (*browser_state_observe)(int32_t browser_id, void (*changed)(void*, const orbit_browser_state_t*), void* context);
 } orbit_cef_api_t;
 
 // Returns the API table for `version`, or NULL when unsupported.

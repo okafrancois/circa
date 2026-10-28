@@ -48,20 +48,13 @@ OUT = "out/Release_GN_arm64"
 DISTRIB = FORK / "distrib"
 
 
-def legacy_engine_value(name):
-    """Read the single compatibility contract shared with the native bridge."""
-    header = (LAB_DIR / "Bridge/EngineCompatibility.h").read_text()
-    match = re.search(r'^#define ORBIT_LEGACY_' + name + r' "([^"\n]+)"$', header, re.MULTILINE)
-    if not match:
-        raise SystemExit("Missing legacy engine compatibility entry: " + name)
-    return match[1]
-
-
 def distribution_dir(flavor):
     current = DISTRIB / flavor
     if current.exists() or flavor != "orbit-engine-extensions-r3":
         return current
-    return DISTRIB / legacy_engine_value("DISTRIBUTION")
+    # Retain the previous distribution under its original on-disk directory name.
+    previous = list(DISTRIB.glob("*-engine-extensions-r3"))
+    return previous[0] if len(previous) == 1 else current
 
 EVIDENCE = MAIN / "artifacts/native-orbit-chromium-x2"
 STAGE = LAB_DIR / "build/cef-stage"          # clone of the CEF repo holding branch orbit/8078
@@ -104,7 +97,7 @@ def baseline_idle():
 
 @contextmanager
 def source_tree_lock():
-    if (FORK / ".owner").read_text() not in ("orbit-chromium-source-v1", legacy_engine_value("OWNER_MARKER")):
+    if (FORK / ".owner").read_text() not in ("orbit-chromium-source-v1",):
         raise SystemExit("Source laboratory owner marker mismatch")
     with (FORK / ".lock").open("a") as stream:
         try:
@@ -157,7 +150,7 @@ PATCHED_FLAVORS += ("orbit-engine-extensions-hosted",)
 PATCHED_FLAVORS += ("orbit-engine-extensions-sidebar",)
 PATCHED_FLAVORS += ("orbit-engine-extensions",)
 PATCHED_FLAVORS += ("orbit-engine-extensions-r2",)
-PATCHED_FLAVORS += ("orbit-engine-extensions-r3",)
+PATCHED_FLAVORS += ("orbit-engine-extensions-r3", "orbit-engine-extensions-r4")
 FLAVORS = ("sdk", "stock") + PATCHED_FLAVORS
 
 
@@ -447,9 +440,12 @@ def timed(log, command):
 
 
 def distrib(args):
-    ok, status = baseline_idle()
-    if not ok:
-        raise SystemExit("Baseline build not complete (%s)" % status.get("state"))
+    # A joined incremental build in the locked caller establishes completion directly.
+    # Older standalone exports still require their original baseline status.
+    if not getattr(args, "incremental_build_completed", False):
+        ok, status = baseline_idle()
+        if not ok:
+            raise SystemExit("Baseline build not complete (%s)" % status.get("state"))
     guard()
     head = subprocess.check_output(["git", "-C", str(CEF_REPO), "rev-parse", "HEAD"], text=True).strip()
     if args.flavor == "stock" and head != BASE_CEF:
