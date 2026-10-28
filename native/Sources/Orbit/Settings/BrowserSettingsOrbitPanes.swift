@@ -30,6 +30,7 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
     @State private var newSpaceName = ""
     @State private var shortcutQuery = ""
     @State private var showsAirTrafficControl = false
+    @State private var archiveChange: BrowserArchiveSettingsChange?
 
     var body: some View {
         ScrollView {
@@ -54,6 +55,15 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
         .controlSize(.small)
         .disabled(runtime.isUnavailable)
         .accessibilityIdentifier("settings-pane-" + (model.settingsSection ?? .general).rawValue)
+        .alert(item: $archiveChange) { change in
+            Alert(title: Text(change.title),
+                  message: Text(uiFormat("Would you like to apply this change to all of your Profiles, or only your %@ Profile?", change.profileName)),
+                  primaryButton: .default(Text(uiText("All Profiles"))) {
+                      model.perform { try await model.setArchiveThreshold(change.threshold, profile: change.profile, allProfiles: true) }
+                  }, secondaryButton: .default(Text(uiText("Only this Profile"))) {
+                      model.perform { try await model.setArchiveThreshold(change.threshold, profile: change.profile) }
+                  })
+        }
     }
 
     private var general: some View {
@@ -155,16 +165,19 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
                         rule
                         settingRow("Archive tabs after") {
                             Picker(uiText("Archive tabs after"), selection: Binding(get: { model.archiveThreshold }, set: { value in
-                                model.perform { try await model.setArchiveThreshold(value, profile: profile) }
+                                guard let value else { return }
+                                if model.catalog.profiles.count > 1 {
+                                    archiveChange = .init(profile: profile, profileName: entry.name, threshold: value)
+                                } else {
+                                    model.perform { try await model.setArchiveThreshold(value, profile: profile) }
+                                }
                             })) {
-                                Text(uiText("Use Default")).tag(nil as BrowserAutoArchiveThreshold?)
-                                Text(uiText("12 Hours")).tag(Optional(BrowserAutoArchiveThreshold.twelveHours))
-                                Text(uiText("24 Hours")).tag(Optional(BrowserAutoArchiveThreshold.oneDay))
-                                Text(uiText("7 Days")).tag(Optional(BrowserAutoArchiveThreshold.sevenDays))
-                                Text(uiText("30 Days")).tag(Optional(BrowserAutoArchiveThreshold.thirtyDays))
-                                Text(uiText("Never")).tag(Optional(BrowserAutoArchiveThreshold.never))
+                                Text(uiText("12 hours")).tag(Optional(BrowserAutoArchiveThreshold.twelveHours))
+                                Text(uiText("24 hours")).tag(Optional(BrowserAutoArchiveThreshold.oneDay))
+                                Text(uiText("7 days")).tag(Optional(BrowserAutoArchiveThreshold.sevenDays))
+                                Text(uiText("30 days")).tag(Optional(BrowserAutoArchiveThreshold.thirtyDays))
                                 if let current = model.archiveThreshold, !standardArchiveThresholds.contains(current) {
-                                    Text(uiText("Custom Delay")).tag(Optional(current))
+                                    Text(current == .never ? uiText("Never") : uiText("Custom Delay")).tag(Optional(current))
                                 }
                             }.labelsHidden().frame(width: 110).accessibilityIdentifier("settings-auto-archive")
                         }
@@ -344,7 +357,7 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
         let query = shortcutQuery.trimmingCharacters(in: .whitespacesAndNewlines)
         return model.settingsShortcuts.filter { query.isEmpty || $0.localizedTitle.localizedStandardContains(query) || $0.menu.localizedStandardContains(query) }
     }
-    private var standardArchiveThresholds: [BrowserAutoArchiveThreshold] { [.twelveHours, .oneDay, .sevenDays, .thirtyDays, .never] }
+    private var standardArchiveThresholds: [BrowserAutoArchiveThreshold] { [.twelveHours, .oneDay, .sevenDays, .thirtyDays] }
     private var appIcon: some View {
         Image(nsImage: NSApp.applicationIconImage ?? NSImage()).resizable().interpolation(.high).scaledToFit().accessibilityLabel(uiText("App Icon"))
     }

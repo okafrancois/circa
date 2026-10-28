@@ -301,7 +301,7 @@ final class OrbitSmokeDriver: OrbitLaunchHooks {
         if phase == .fresh && !arguments.contains("--orbit-smoke-extension-only")
             && !arguments.contains("--orbit-smoke-relaunch") && !arguments.contains("--orbit-smoke-private-domain")
             && !arguments.contains("--orbit-smoke-profiles") && !arguments.contains("--orbit-smoke-site-data")
-            && !arguments.contains("--orbit-smoke-space-profile") {
+            && !arguments.contains("--orbit-smoke-space-profile") && !arguments.contains("--orbit-smoke-archive-auto") {
             if arguments.contains("--orbit-smoke-isolated-application") {
                 // Supplemental lane only: the original conformance result remains separate.
                 // No application assertion below is omitted or relaxed.
@@ -352,6 +352,11 @@ final class OrbitSmokeDriver: OrbitLaunchHooks {
             return
         }
         check("app.window", true, ["windows": application.windows.windows.count, "restored": restored.count])
+        if arguments.contains("--orbit-smoke-archive-auto") {
+            await OrbitArchiveAutoScenario.run(engine: engine, fixture: fixture, root: runRoot, record: record)
+            finish(aborted: false)
+            return
+        }
         if arguments.contains("--orbit-smoke-extension-update") {
             await OrbitExtensionUpdateScenario.run(environment: environment, window: first, fixture: fixture, record: record)
             finish(aborted: false)
