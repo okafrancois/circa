@@ -238,7 +238,7 @@ struct NativeThemeLifecycleRegressionTests {
         #expect(main.window?.isVisible == false)
     }
 
-    @Test("Little Orbit applies forced dark, forced light and automatic window modes")
+    @Test("Little Orbit keeps its dark window surfaces in dark, light and automatic Space modes")
     func quickWindowAppearance() async throws {
         NSApplication.shared.setActivationPolicy(.prohibited)
         let environment = Environment(engine: PeekSyntheticEngine())
@@ -251,10 +251,10 @@ struct NativeThemeLifecycleRegressionTests {
         #expect(little.window?.appearance?.name == .darkAqua)
         theme.mode = .light
         little.applyPreferences(searchEngine: .google, theme: OrbitSpaceThemes.rendered(theme))
-        #expect(little.window?.appearance?.name == .aqua)
+        #expect(little.window?.appearance?.name == .darkAqua)
         theme.mode = .automatic
         little.applyPreferences(searchEngine: .google, theme: OrbitSpaceThemes.rendered(theme))
-        #expect(little.window?.appearance?.name == OrbitAppearance.windowAppearance(for: .automatic)?.name)
+        #expect(little.window?.appearance?.name == .darkAqua)
         #expect(little.window?.isVisible == false)
     }
 
