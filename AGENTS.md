@@ -25,7 +25,8 @@ Orbit is a native macOS browser: Swift/AppKit shell (`native/Sources/Orbit`) on 
 - Signing: release builds use the Developer ID configured in `release/config.json`; test bundles use `scripts/local_signing.py`. Never change Keychain ACLs or delete Safe Storage keys to work around prompts.
 
 ## Motion and design
-- Animated surfaces must match the design reference in curve, duration, direction and sequencing. A static capture does not validate a transition: compare frame by frame and deliver side-by-side videos.
+- No reference, no design. A visible surface or transition is built only from real evidence of the reference: a capture or recording of it, or values recovered from its binary or resources. When that evidence is missing, stop that part and ask the PM for the exact capture you need. Never ship a plausible-looking reconstruction and list it under limits.
+- Animated surfaces must match the design reference in curve, duration, direction, sequencing and the elements that appear during the transition. A static capture does not validate a transition: compare frame by frame and deliver side-by-side videos against the real reference.
 - Known data (cached favicons, titles, URLs) renders without flicker.
 
 ## Releases
