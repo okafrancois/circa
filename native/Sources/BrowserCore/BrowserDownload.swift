@@ -185,6 +185,10 @@ public struct BrowserDownloadSnapshot: Equatable, Sendable, CustomStringConverti
     public let isCancellationAccepted: Bool
     public let controlError: BrowserDownloadError?
 
+    /// Optional for transfers restored from older history files.
+    public let startedAt: Date?
+    public let completedAt: Date?
+
     public var context: BrowserDownloadContext { .init(key: key, revision: revision) }
 
     /// Expected lengths can be estimates; neither this fraction nor completion rewrites bytes.
@@ -211,9 +215,11 @@ public struct BrowserDownloadSnapshot: Equatable, Sendable, CustomStringConverti
         currentURL: URL?, destinationURL: URL?, fileAvailability: BrowserDownloadFileAvailability,
         failure: BrowserDownloadFailure?, pendingAction: BrowserDownloadAction?,
         isCancellationRequested: Bool, controlError: BrowserDownloadError?,
-        isCancellationAccepted: Bool = false
+        isCancellationAccepted: Bool = false, startedAt: Date? = nil, completedAt: Date? = nil
     ) {
         self.key = key
+        self.startedAt = startedAt
+        self.completedAt = completedAt
         self.owner = owner
         self.revision = revision
         self.sequence = sequence

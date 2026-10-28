@@ -72,6 +72,10 @@ struct NativeArchiveAutoSettingsTests {
         let reopenedCache = FavoriteIconStore(directory: directory)
         #expect(await reopenedCache.cachedImage(profile: record.profileID, home: record.tab.url)?.png == image.png)
         #expect(await reopenedCache.cachedImage(profile: ProfileID(), home: record.tab.url) == nil)
+        let memory = SidebarIconMemoryCache()
+        await memory.preload(document: await restored.sessionDocument(), store: reopenedCache)
+        #expect(memory.image(profile: record.profileID, home: record.tab.url) != nil)
+        #expect(memory.image(profile: ProfileID(), home: record.tab.url) == nil)
     }
 }
 }

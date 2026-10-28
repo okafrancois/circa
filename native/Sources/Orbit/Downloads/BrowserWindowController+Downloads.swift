@@ -48,9 +48,7 @@ extension BrowserWindowController {
         guard session.activeProfileID == profile else { downloadsPane.list.render([]); return }
         downloadsPane.setProfileName(session.catalog?.profiles.first { $0.id == profile }?.name ?? "")
         let query = downloadsPane.query.trimmingCharacters(in: .whitespacesAndNewlines)
-        let rows = downloads.snapshots(profileID: profile).filter {
-            query.isEmpty || ($0.destinationURL?.lastPathComponent ?? $0.suggestedFilename).localizedCaseInsensitiveContains(query)
-        }.map { item -> DownloadRowPresentation in
+        let rows = downloads.snapshots(profileID: profile).map { item -> DownloadRowPresentation in
             let detail: String
             switch item.state {
             case .awaitingDestination: detail = uiText("Choose a Destination…")
@@ -75,8 +73,10 @@ extension BrowserWindowController {
             return DownloadRowPresentation(id: item.key.id, lifetime: item.key.lifetime, revision: item.revision,
                 title: item.destinationURL?.lastPathComponent ?? item.suggestedFilename, detail: detail,
                 receivedBytes: item.receivedBytes, totalBytes: item.totalBytes,
-                isRunning: item.state == .running, actions: actions)
+                isRunning: item.state == .running, actions: actions,
+                fileURL: item.state == .complete && item.fileAvailability == .available ? item.destinationURL : nil,
+                startedAt: item.startedAt)
         }
-        downloadsPane.list.render(rows)
+        downloadsPane.list.render(rows, query: query)
     }
 }

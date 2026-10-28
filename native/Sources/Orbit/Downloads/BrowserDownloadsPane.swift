@@ -20,6 +20,7 @@ final class BrowserDownloadsPane: NSView, NSSearchFieldDelegate {
     private let titleLabel = NSTextField(labelWithString: uiText("Downloads"))
     private let profileLabel = NSTextField(labelWithString: "")
     let searchField = BrowserLibrarySearchField()
+    private let filterButton = BrowserLibraryFilterButton()
     var query: String { searchField.stringValue }
 
     override init(frame frameRect: NSRect) {
@@ -40,7 +41,7 @@ final class BrowserDownloadsPane: NSView, NSSearchFieldDelegate {
         searchField.recentsAutosaveName = nil
         searchField.delegate = self
         searchField.setAccessibilityIdentifier("downloads-search")
-        for view in [titleLabel, profileLabel, searchField, list] {
+        for view in [titleLabel, profileLabel, searchField, filterButton, list] {
             view.translatesAutoresizingMaskIntoConstraints = false
             results.addSubview(view)
         }
@@ -56,7 +57,9 @@ final class BrowserDownloadsPane: NSView, NSSearchFieldDelegate {
             titleLabel.leadingAnchor.constraint(equalTo: results.leadingAnchor, constant: 16), titleLabel.topAnchor.constraint(equalTo: results.topAnchor, constant: 40),
             titleLabel.trailingAnchor.constraint(lessThanOrEqualTo: results.trailingAnchor, constant: -16),
             profileLabel.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor), profileLabel.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 5),
-            searchField.leadingAnchor.constraint(equalTo: results.leadingAnchor, constant: 8), searchField.trailingAnchor.constraint(equalTo: results.trailingAnchor, constant: -8),
+            searchField.leadingAnchor.constraint(equalTo: results.leadingAnchor, constant: 8), searchField.trailingAnchor.constraint(equalTo: filterButton.leadingAnchor, constant: -4),
+            filterButton.trailingAnchor.constraint(equalTo: results.trailingAnchor, constant: -8),
+            filterButton.centerYAnchor.constraint(equalTo: searchField.centerYAnchor),
             searchTop,
             list.leadingAnchor.constraint(equalTo: results.leadingAnchor), list.trailingAnchor.constraint(equalTo: results.trailingAnchor),
             list.topAnchor.constraint(equalTo: searchField.bottomAnchor, constant: 8), list.bottomAnchor.constraint(equalTo: results.bottomAnchor)

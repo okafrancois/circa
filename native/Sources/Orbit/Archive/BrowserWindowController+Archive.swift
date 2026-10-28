@@ -24,6 +24,10 @@ extension BrowserWindowController {
     func installArchive(in root: NSView) {
         let view = archive.view
         view.setLibraryEmbedded()
+        view.favicon = { [weak self] url in
+            guard let self, let profile = archive.displayedProfile else { return nil }
+            return sidebar.previewIcon(profile, url)
+        }
         view.translatesAutoresizingMaskIntoConstraints = false
         view.isHidden = true
         root.addSubview(view)

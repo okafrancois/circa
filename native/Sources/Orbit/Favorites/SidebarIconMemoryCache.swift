@@ -49,7 +49,8 @@ final class SidebarIconMemoryCache {
             }
             let homes = favorites.map { $0.tab.pinnedURL ?? $0.tab.url }
                 + document.organization.tabs.filter { rowIDs.contains($0.id) }.map { $0.pinnedURL ?? $0.url }
-            for home in homes {
+            let archived = document.organization.archive.filter { $0.profileID == space.profileID }.map { $0.tab.url }
+            for home in homes + archived {
                 guard image(profile: space.profileID, home: home) == nil,
                       let pixels = await store.cachedImage(profile: space.profileID, home: home),
                       let decoded = await pixels.nativeImage() else { continue }

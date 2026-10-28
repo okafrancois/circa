@@ -47,6 +47,63 @@ struct DownloadHistoryTests {
         manager.shutdown(); restored.shutdown()
     }
 
+    @Test("Start and completion timestamps survive durable history and a fresh transfer lifetime")
+    func timestamps() throws {
+        let root = try directory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        var now = Date(timeIntervalSince1970: 1_800_000_000)
+        let start = now
+        let coordinator = BrowserDownloadCoordinator(clock: { now })
+        let registration = try coordinator.register(owner: .init(profileID: ProfileID()), transfer: HistoryTransfer())
+        #expect(coordinator.snapshot(for: registration.key)?.startedAt == start)
+        #expect(coordinator.snapshot(for: registration.key)?.completedAt == nil)
+        now += 20
+        registration.report(.init(key: registration.key, sequence: 1, state: .running, receivedBytes: 5))
+        #expect(coordinator.snapshot(for: registration.key)?.startedAt == start)
+        #expect(coordinator.snapshot(for: registration.key)?.completedAt == nil)
+        now += 10
+        registration.report(.init(key: registration.key, sequence: 2, state: .complete, receivedBytes: 10))
+        let snapshot = try #require(coordinator.snapshot(for: registration.key))
+        #expect(snapshot.completedAt == now)
+        let file = root.appendingPathComponent("history.json")
+        try BrowserDownloadHistoryStore(destination: file).save([.init(snapshot)])
+        let loaded = try BrowserDownloadHistoryStore(destination: file)
+        let restored = BrowserDownloadCoordinator()
+        try restored.restore(loaded.records)
+        let item = try #require(restored.allSnapshots.first)
+        #expect(item.startedAt == start && item.completedAt == now)
+        #expect(item.key.lifetime != registration.key.lifetime)
+    }
+
+    @Test("Version one history without timestamp keys or with null timestamps remains undated after migration")
+    func oldHistoryTimestampMigration() throws {
+        let root = try directory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let coordinator = BrowserDownloadCoordinator()
+        let registration = try coordinator.register(owner: .init(profileID: ProfileID()), transfer: HistoryTransfer())
+        registration.report(.init(key: registration.key, sequence: 1, state: .complete))
+        let encoded = try JSONEncoder().encode(BrowserDownloadHistoryRecord(#require(coordinator.snapshot(for: registration.key))))
+        var record = try #require(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+        for nulls in [false, true] {
+            record["startedAt"] = nulls ? NSNull() : nil
+            record["completedAt"] = nulls ? NSNull() : nil
+            let bytes = try JSONSerialization.data(withJSONObject: record)
+            let decoded = try JSONDecoder().decode(BrowserDownloadHistoryRecord.self, from: bytes)
+            #expect(decoded.startedAt == nil && decoded.completedAt == nil)
+            let file = root.appendingPathComponent(nulls ? "nulls.json" : "legacy.json")
+            try JSONSerialization.data(withJSONObject: ["version": 1, "records": [record]]).write(to: file)
+            let history = try BrowserDownloadHistoryStore(destination: file)
+            let restored = BrowserDownloadCoordinator()
+            try restored.restore(history.records)
+            let snapshot = try #require(restored.allSnapshots.first)
+            #expect(snapshot.startedAt == nil && snapshot.completedAt == nil)
+            let migrated = root.appendingPathComponent(nulls ? "migrated-nulls.json" : "migrated-legacy.json")
+            try BrowserDownloadHistoryStore(destination: migrated).save([.init(snapshot)])
+            let reloaded = try #require(BrowserDownloadHistoryStore(destination: migrated).records.first)
+            #expect(reloaded.startedAt == nil && reloaded.completedAt == nil)
+        }
+    }
+
     @Test("Malformed or future history is left intact")
     func futureHistory() throws {
         let root = try directory()

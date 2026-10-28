@@ -1,5 +1,7 @@
 import AppKit
 import Foundation
+import QuickLookThumbnailing
+import UniformTypeIdentifiers
 
 struct DownloadRowPresentation {
     enum Action { case cancel, pause, resume, open, reveal, remove }
@@ -12,6 +14,8 @@ struct DownloadRowPresentation {
     let totalBytes: Int64?
     let isRunning: Bool
     let actions: [Action]
+    var fileURL: URL? = nil
+    var startedAt: Date? = nil
 }
 
 /// A profile-scoped native list. Transfer ownership and file effects belong to the coordinator.
@@ -22,8 +26,29 @@ final class BrowserDownloadsView: NSView {
     private(set) var renderCount = 0
     private let rows = NSStackView()
     private let empty = BrowserLibraryEmptyView()
-    var emptyQuery = "" { didSet { empty.configure(symbol: BrowserLibraryCategory.downloads.symbol, title: uiText("No Downloads"), query: emptyQuery) } }
+    var emptyQuery = "" { didSet { empty.configure(symbol: BrowserLibraryCategory.downloads.symbol, title: uiText("No Downloads"), query: emptyQuery, largeGlyph: true) } }
     private var rowViews: [UUID: BrowserDownloadRowView] = [:]
+    private var headings: [Day: NSTextField] = [:]
+    private var presentations: [DownloadRowPresentation] = []
+    private var query = ""
+    private let dates = BrowserLibraryDateObserver()
+    enum Day: Hashable { case dated(Date), undated }
+
+    static func grouped(_ presentations: [DownloadRowPresentation], calendar: Calendar = .current) -> [(Day, [DownloadRowPresentation])] {
+        var groups: [Day: [DownloadRowPresentation]] = [:]
+        for row in presentations {
+            let day = row.startedAt.map { Day.dated(calendar.startOfDay(for: $0)) } ?? .undated
+            groups[day, default: []].append(row)
+        }
+        return groups.keys.sorted {
+            switch ($0, $1) {
+            case (.dated(let a), .dated(let b)): return a > b
+            case (.dated, .undated): return true
+            default: return false
+            }
+        }.map { ($0, (groups[$0] ?? []).sorted { ($0.startedAt ?? .distantPast) > ($1.startedAt ?? .distantPast) }) }
+    }
+
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -39,18 +64,21 @@ final class BrowserDownloadsView: NSView {
         document.addSubview(rows)
         scroll.documentView = document
         addSubview(scroll)
-        empty.configure(symbol: BrowserLibraryCategory.downloads.symbol, title: uiText("No Downloads"))
+        empty.configure(symbol: BrowserLibraryCategory.downloads.symbol, title: uiText("No Downloads"), largeGlyph: true)
         empty.translatesAutoresizingMaskIntoConstraints = false
         addSubview(empty)
+        dates.onChange = { [weak self] in
+            guard let self else { return }; render(presentations, query: query)
+        }
         NSLayoutConstraint.activate([
             scroll.leadingAnchor.constraint(equalTo: leadingAnchor),
             scroll.trailingAnchor.constraint(equalTo: trailingAnchor),
             scroll.topAnchor.constraint(equalTo: topAnchor),
             scroll.bottomAnchor.constraint(equalTo: bottomAnchor),
             document.widthAnchor.constraint(equalTo: scroll.contentView.widthAnchor),
-            rows.leadingAnchor.constraint(equalTo: document.leadingAnchor, constant: 16),
-            rows.trailingAnchor.constraint(equalTo: document.trailingAnchor, constant: -16),
-            rows.topAnchor.constraint(equalTo: document.topAnchor, constant: 8),
+            rows.leadingAnchor.constraint(equalTo: document.leadingAnchor, constant: 8),
+            rows.trailingAnchor.constraint(equalTo: document.trailingAnchor, constant: -8),
+            rows.topAnchor.constraint(equalTo: document.topAnchor, constant: 4),
             rows.bottomAnchor.constraint(equalTo: document.bottomAnchor, constant: -8),
             empty.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 16),
             empty.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -16),
@@ -60,32 +88,66 @@ final class BrowserDownloadsView: NSView {
 
     required init?(coder: NSCoder) { nil }
 
-    func render(_ presentations: [DownloadRowPresentation]) {
+    override func viewDidMoveToWindow() { super.viewDidMoveToWindow(); dates.setAttached(window != nil) }
+
+    func render(_ presentations: [DownloadRowPresentation], query: String = "") {
+        self.presentations = presentations
+        self.query = query
         renderCount += 1
         let live = Set(presentations.map(\.id))
         for id in rowViews.keys.filter({ !live.contains($0) }) {
             rowViews.removeValue(forKey: id)?.removeFromSuperview()
         }
-        for (index, presentation) in presentations.enumerated() {
-            let row: BrowserDownloadRowView
-            if let existing = rowViews[presentation.id], existing.lifetime == presentation.lifetime {
-                row = existing
-            } else {
-                rowViews.removeValue(forKey: presentation.id)?.removeFromSuperview()
-                row = BrowserDownloadRowView(id: presentation.id, lifetime: presentation.lifetime)
-                row.onDragFile = { [weak self] id, lifetime, revision in self?.onDragFile?(id, lifetime, revision) }
-                row.onAction = { [weak self] id, lifetime, revision, action in self?.onAction?(id, lifetime, revision, action) }
-                rowViews[presentation.id] = row
-                rows.insertArrangedSubview(row, at: min(index, rows.arrangedSubviews.count))
-                row.widthAnchor.constraint(equalTo: rows.widthAnchor).isActive = true
+        let visible = presentations.filter { query.isEmpty || $0.title.localizedCaseInsensitiveContains(query) }
+        let groups = Self.grouped(visible)
+        let days = Set(groups.map { $0.0 })
+        for day in headings.keys.filter({ !days.contains($0) }) { headings.removeValue(forKey: day)?.removeFromSuperview() }
+        var arranged: [NSView] = []
+        for (day, items) in groups {
+            let heading = headings[day] ?? NSTextField(labelWithString: "")
+            heading.font = .systemFont(ofSize: 13, weight: .bold)
+            heading.textColor = BrowserLibraryStyle.foreground.withAlphaComponent(0.65)
+            heading.setAccessibilityRole(NSAccessibility.Role(rawValue: "AXHeading"))
+            switch day {
+            case .undated: heading.stringValue = uiText("Undated")
+            case .dated(let date):
+                let formatter = DateFormatter(); formatter.setLocalizedDateFormatFromTemplate("MMMMd")
+                heading.stringValue = Calendar.current.isDateInToday(date) ? uiText("Today")
+                    : Calendar.current.isDateInYesterday(date) ? uiText("Yesterday") : formatter.string(from: date)
             }
-            row.render(presentation)
-            if rows.arrangedSubviews[index] !== row {
-                rows.removeArrangedSubview(row)
-                rows.insertArrangedSubview(row, at: index)
+            if headings[day] == nil { heading.heightAnchor.constraint(equalToConstant: 24).isActive = true }
+            headings[day] = heading
+            arranged.append(heading)
+            for presentation in items {
+                let row: BrowserDownloadRowView
+                if let existing = rowViews[presentation.id], existing.lifetime == presentation.lifetime {
+                    row = existing
+                } else {
+                    rowViews.removeValue(forKey: presentation.id)?.removeFromSuperview()
+                    row = BrowserDownloadRowView(id: presentation.id, lifetime: presentation.lifetime)
+                    row.onDragFile = { [weak self] id, lifetime, revision in self?.onDragFile?(id, lifetime, revision) }
+                    row.onAction = { [weak self] id, lifetime, revision, action in self?.onAction?(id, lifetime, revision, action) }
+                    rowViews[presentation.id] = row
+
+                }
+                row.render(presentation)
+                arranged.append(row)
             }
         }
-        empty.isHidden = !presentations.isEmpty
+        for view in rows.arrangedSubviews where !arranged.contains(where: { $0 === view }) {
+            rows.removeArrangedSubview(view); view.removeFromSuperview()
+        }
+        for (index, view) in arranged.enumerated() {
+            if view.superview == nil {
+                rows.addArrangedSubview(view)
+                if view is BrowserDownloadRowView { view.widthAnchor.constraint(equalTo: rows.widthAnchor).isActive = true }
+            }
+            if rows.arrangedSubviews.count <= index || rows.arrangedSubviews[index] !== view {
+                if rows.arrangedSubviews.contains(view) { rows.removeArrangedSubview(view) }
+                rows.insertArrangedSubview(view, at: index)
+            }
+        }
+        empty.isHidden = !visible.isEmpty
     }
 
     var displayedTitles: [String] {
@@ -99,17 +161,20 @@ private final class FlippedDownloadDocument: NSView {
 }
 
 @MainActor
-private final class BrowserDownloadRowView: NSView, NSDraggingSource {
+final class BrowserDownloadRowView: NSView, NSDraggingSource {
     let id: UUID
     let lifetime: UUID
     var onDragFile: ((UUID, UUID, UInt64) -> URL?)?
     var onAction: ((UUID, UUID, UInt64, DownloadRowPresentation.Action) -> Void)?
     private var revision: UInt64 = 0
     private var tracking: NSTrackingArea?
-    private let titleLabel = NSTextField(labelWithString: "")
-    private let detailLabel = NSTextField(labelWithString: "")
+    let titleLabel = NSTextField(labelWithString: "")
+    let detailLabel = NSTextField(labelWithString: "")
     private let progress = NSProgressIndicator()
     private let actionStack = NSStackView()
+    let icon = NSImageView()
+    private var fileURL: URL?
+    private var thumbnailRequest: QLThumbnailGenerator.Request?
     private var actionButtons: [(DownloadRowPresentation.Action, NSButton)] = []
     private var shownActions: [DownloadRowPresentation.Action] = []
     var displayedTitle: String { titleLabel.stringValue }
@@ -121,46 +186,45 @@ private final class BrowserDownloadRowView: NSView, NSDraggingSource {
         translatesAutoresizingMaskIntoConstraints = false
         wantsLayer = true
         layer?.cornerRadius = 8
-        titleLabel.font = OrbitTokens.Typography.sidebarTabTitle
+        titleLabel.font = .systemFont(ofSize: 14, weight: .medium)
         titleLabel.lineBreakMode = .byTruncatingMiddle
-        detailLabel.font = OrbitTokens.Typography.menuShortcut
-        detailLabel.textColor = OrbitTokens.Color.Text.secondary
+        detailLabel.font = .systemFont(ofSize: 12, weight: .medium)
         detailLabel.lineBreakMode = .byTruncatingMiddle
         progress.style = .bar
         progress.controlSize = .small
         progress.minValue = 0
         progress.maxValue = 1
-        let labels = NSStackView(views: [titleLabel, detailLabel, progress])
-        labels.orientation = .vertical
-        labels.alignment = .leading
-        labels.spacing = 5
-        labels.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         actionStack.orientation = .horizontal
-        actionStack.spacing = 4
-        let icon = NSImageView(image: NSImage(systemSymbolName: "doc", accessibilityDescription: nil)!)
-        icon.contentTintColor = OrbitTokens.Color.Text.secondary
-        let line = NSStackView(views: [icon, labels, actionStack])
-        line.orientation = .horizontal
-        line.alignment = .centerY
-        line.spacing = 12
-        line.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(line)
+        actionStack.spacing = 2
+        icon.imageScaling = .scaleProportionallyUpOrDown
+        for view in [icon, titleLabel, detailLabel, progress, actionStack] {
+            view.translatesAutoresizingMaskIntoConstraints = false; addSubview(view)
+        }
         NSLayoutConstraint.activate([
-            line.leadingAnchor.constraint(equalTo: leadingAnchor),
-            line.trailingAnchor.constraint(equalTo: trailingAnchor),
-            line.topAnchor.constraint(equalTo: topAnchor, constant: 12),
-            line.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -12),
-            icon.widthAnchor.constraint(equalToConstant: 24),
-            icon.heightAnchor.constraint(equalToConstant: 28),
-            labels.widthAnchor.constraint(greaterThanOrEqualToConstant: 100),
-            progress.widthAnchor.constraint(equalTo: labels.widthAnchor)
+            heightAnchor.constraint(equalToConstant: 56),
+            icon.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
+            icon.centerYAnchor.constraint(equalTo: centerYAnchor),
+            icon.widthAnchor.constraint(equalToConstant: 24), icon.heightAnchor.constraint(equalToConstant: 24),
+            titleLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 44),
+            titleLabel.trailingAnchor.constraint(equalTo: actionStack.leadingAnchor, constant: -4),
+            titleLabel.bottomAnchor.constraint(equalTo: centerYAnchor, constant: -1),
+            detailLabel.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
+            detailLabel.trailingAnchor.constraint(equalTo: titleLabel.trailingAnchor),
+            detailLabel.topAnchor.constraint(equalTo: centerYAnchor, constant: 2),
+            progress.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
+            progress.trailingAnchor.constraint(equalTo: titleLabel.trailingAnchor),
+            progress.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -2),
+            actionStack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -4),
+            actionStack.centerYAnchor.constraint(equalTo: centerYAnchor)
         ])
+        updateColors()
     }
 
     required init?(coder: NSCoder) { nil }
 
     func render(_ row: DownloadRowPresentation) {
         revision = row.revision
+        updateIcon(row)
         titleLabel.stringValue = row.title
         detailLabel.stringValue = row.detail
         progress.isHidden = !row.isRunning
@@ -186,12 +250,39 @@ private final class BrowserDownloadRowView: NSView, NSDraggingSource {
                 let button = NSButton(image: NSImage(systemSymbolName: pair.0, accessibilityDescription: pair.1)!,
                                       target: self, action: #selector(performRowAction(_:)))
                 button.isBordered = false
+                button.image = button.image?.withSymbolConfiguration(.init(pointSize: 11, weight: .regular))
+                button.widthAnchor.constraint(equalToConstant: 16).isActive = true
+                button.heightAnchor.constraint(equalToConstant: 24).isActive = true
                 button.toolTip = pair.1
                 button.setAccessibilityLabel(pair.1)
                 actionStack.addArrangedSubview(button)
                 actionButtons.append((action, button))
             }
         }
+    }
+
+    private func updateIcon(_ row: DownloadRowPresentation) {
+        guard icon.image == nil || fileURL != row.fileURL else { return }
+        if let thumbnailRequest { QLThumbnailGenerator.shared.cancel(thumbnailRequest) }
+        fileURL = row.fileURL
+        let type = UTType(filenameExtension: (row.title as NSString).pathExtension) ?? .data
+        icon.image = NSWorkspace.shared.icon(for: type)
+        guard let url = fileURL else { return }
+        icon.image = NSWorkspace.shared.icon(forFile: url.path)
+        let request = QLThumbnailGenerator.Request(fileAt: url, size: NSSize(width: 24, height: 24), scale: 2, representationTypes: .thumbnail)
+        thumbnailRequest = request
+        QLThumbnailGenerator.shared.generateBestRepresentation(for: request) { [weak self] representation, _ in
+            let image = representation?.cgImage
+            Task { @MainActor [weak self, image] in
+                guard let self, fileURL == url, let image else { return }
+                icon.image = NSImage(cgImage: image, size: .zero)
+            }
+        }
+    }
+    override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); updateColors() }
+    private func updateColors() {
+        titleLabel.textColor = BrowserLibraryStyle.foreground
+        detailLabel.textColor = BrowserLibraryStyle.foreground.withAlphaComponent(0.55)
     }
 
     override func updateTrackingAreas() {

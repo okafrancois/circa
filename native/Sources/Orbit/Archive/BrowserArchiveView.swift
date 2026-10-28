@@ -14,8 +14,10 @@ final class BrowserArchiveView: NSView, NSTableViewDataSource, NSTableViewDelega
     let settings = NSPopUpButton()
     private var embedded = false
     private var standaloneControls: [NSView] = []
+    private var contentStack: NSStackView?
     func setLibraryEmbedded() {
         embedded = true
+        contentStack?.spacing = 8
         standaloneControls.forEach { $0.isHidden = true }
         layer?.backgroundColor = NSColor.clear.cgColor
     }
@@ -35,8 +37,9 @@ final class BrowserArchiveView: NSView, NSTableViewDataSource, NSTableViewDelega
     var onClear: (() -> Void)?
     var onBack: (() -> Void)?
     var onSettings: ((Int) -> Void)?
+    var favicon: (URL) -> NSImage? = { _ in nil }
     private let dateFormatter: DateFormatter = {
-        let formatter = DateFormatter(); formatter.dateStyle = .full; formatter.timeStyle = .none
+        let formatter = DateFormatter(); formatter.setLocalizedDateFormatFromTemplate("MMMMd"); formatter.timeStyle = .none
         formatter.doesRelativeDateFormatting = true
         return formatter
     }()
@@ -52,7 +55,7 @@ final class BrowserArchiveView: NSView, NSTableViewDataSource, NSTableViewDelega
         title.textColor = OrbitTokens.Color.Text.primary
         profileLabel.font = OrbitTokens.Typography.menuShortcut
         profileLabel.textColor = OrbitTokens.Color.Text.secondary
-        searchField.placeholderString = archiveText("search", "Search Archived Tabs…")
+        searchField.placeholderString = archiveText("search", "Search Archive…")
         searchField.maximumRecents = 0
         searchField.recentsAutosaveName = nil
         searchField.delegate = self
@@ -74,7 +77,9 @@ final class BrowserArchiveView: NSView, NSTableViewDataSource, NSTableViewDelega
         table.addTableColumn(NSTableColumn(identifier: .init("archive")))
         table.headerView = nil
         table.dataSource = self; table.delegate = self
+        table.style = .plain
         table.rowSizeStyle = .custom
+        table.intercellSpacing = .zero
         table.backgroundColor = .clear
         table.focusRingType = .exterior
         table.target = self; table.doubleAction = #selector(restore)
@@ -86,10 +91,13 @@ final class BrowserArchiveView: NSView, NSTableViewDataSource, NSTableViewDelega
         scroll.documentView = table
         BrowserLibraryStyle.configure(scroll)
         scroll.drawsBackground = false
-        empty.configure(symbol: BrowserLibraryCategory.archive.symbol, title: uiText("No Archived Tabs"))
+        empty.configure(symbol: BrowserLibraryCategory.archive.symbol, title: uiText("No Archived Tabs"), largeGlyph: true)
         empty.translatesAutoresizingMaskIntoConstraints = false
         addSubview(empty)
-        let stack = NSStackView(views: [header, categories, profileLabel, searchField, settings, scroll, actions])
+        let search = NSStackView(views: [searchField, BrowserLibraryFilterButton()])
+        search.spacing = 4
+        let stack = NSStackView(views: [header, categories, profileLabel, search, settings, scroll, actions])
+        contentStack = stack
         stack.orientation = .vertical; stack.alignment = .leading; stack.spacing = 12
         stack.translatesAutoresizingMaskIntoConstraints = false
         addSubview(stack)
@@ -103,7 +111,7 @@ final class BrowserArchiveView: NSView, NSTableViewDataSource, NSTableViewDelega
             empty.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -16),
             empty.centerYAnchor.constraint(equalTo: centerYAnchor, constant: 28)
         ])
-        for view in [header, searchField, settings, scroll, actions] { view.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true }
+        for view in [header, search, settings, scroll, actions] { view.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true }
         dates.onChange = { [weak self] in
             guard let self else { return }
             dateFormatter.calendar = .current; dateFormatter.timeZone = .current; dateFormatter.locale = .current
@@ -139,7 +147,7 @@ final class BrowserArchiveView: NSView, NSTableViewDataSource, NSTableViewDelega
         } else { table.deselectAll(nil) }
         empty.isHidden = !records.isEmpty
         recordActions?.isHidden = records.isEmpty
-        empty.configure(symbol: BrowserLibraryCategory.archive.symbol, title: uiText("No Archived Tabs"), query: searchField.stringValue)
+        empty.configure(symbol: BrowserLibraryCategory.archive.symbol, title: uiText("No Archived Tabs"), query: searchField.stringValue, largeGlyph: true)
         updateActions()
     }
     var selectedRecord: BrowserArchivedTab? {
@@ -150,40 +158,36 @@ final class BrowserArchiveView: NSView, NSTableViewDataSource, NSTableViewDelega
         BrowserLibraryRowView()
     }
     func numberOfRows(in tableView: NSTableView) -> Int { rows.count }
-    func tableView(_ tableView: NSTableView, isGroupRow row: Int) -> Bool { if case .day = rows[row] { return true }; return false }
+    func tableView(_ tableView: NSTableView, isGroupRow row: Int) -> Bool { false }
     func tableView(_ tableView: NSTableView, shouldSelectRow row: Int) -> Bool { if case .tab = rows[row] { return true }; return false }
-    func tableView(_ tableView: NSTableView, heightOfRow row: Int) -> CGFloat { if case .day = rows[row] { return 32 }; return 68 }
+    func tableView(_ tableView: NSTableView, heightOfRow row: Int) -> CGFloat { if case .day = rows[row] { return 28 }; return 56 }
     func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
         let identifier: NSUserInterfaceItemIdentifier
         if case .day = rows[row] { identifier = .init("archive-day") } else { identifier = .init("archive-tab") }
-        let cell = (tableView.makeView(withIdentifier: identifier, owner: self) as? NSTableCellView) ?? makeCell(identifier)
-        guard let label = cell.textField else { return cell }
-        switch rows[row] {
-        case .day(let day):
-            label.stringValue = dateFormatter.string(from: day)
-            label.font = OrbitTokens.Typography.sidebarFolderTitle
-            label.textColor = OrbitTokens.Color.Text.secondary
-        case .tab(let record):
-            label.stringValue = uiFormat("%@\n%@\n→ %@", record.tab.resolvedTitle ?? record.tab.url.host ?? archiveText("tab", "Tab"), record.tab.url.absoluteString, spaceNames[record.spaceID] ?? archiveText("currentSpace", "Current Space"))
-            label.font = OrbitTokens.Typography.sidebarTabTitle
-            label.textColor = OrbitTokens.Color.Text.primary
+        if case .day(let day) = rows[row] {
+            let cell = (tableView.makeView(withIdentifier: identifier, owner: self) as? NSTableCellView) ?? NSTableCellView()
+            cell.identifier = identifier
+            let label = cell.textField ?? NSTextField(labelWithString: "")
+            if label.superview == nil {
+                cell.addSubview(label); cell.textField = label
+                label.translatesAutoresizingMaskIntoConstraints = false
+                label.setAccessibilityRole(NSAccessibility.Role(rawValue: "AXHeading"))
+                NSLayoutConstraint.activate([
+                    label.leadingAnchor.constraint(equalTo: cell.leadingAnchor, constant: 4),
+                    label.trailingAnchor.constraint(equalTo: cell.trailingAnchor, constant: -4),
+                    label.centerYAnchor.constraint(equalTo: cell.centerYAnchor)
+                ])
+            }
+            label.stringValue = Calendar.current.isDateInToday(day) ? uiText("Today")
+                : Calendar.current.isDateInYesterday(day) ? uiText("Yesterday") : dateFormatter.string(from: day)
+            label.font = .systemFont(ofSize: 13, weight: .bold)
+            label.textColor = BrowserLibraryStyle.foreground.withAlphaComponent(0.65)
+            return cell
         }
-        return cell
-    }
-    private func makeCell(_ identifier: NSUserInterfaceItemIdentifier) -> NSTableCellView {
-        let cell = NSTableCellView()
+        guard case .tab(let record) = rows[row] else { return nil }
+        let cell = (tableView.makeView(withIdentifier: identifier, owner: self) as? BrowserArchiveCell) ?? BrowserArchiveCell()
         cell.identifier = identifier
-        let label = NSTextField(wrappingLabelWithString: "")
-        label.maximumNumberOfLines = 3
-        label.translatesAutoresizingMaskIntoConstraints = false
-        if identifier.rawValue == "archive-day" { label.setAccessibilityRole(NSAccessibility.Role(rawValue: "AXHeading")) }
-        cell.addSubview(label)
-        cell.textField = label
-        NSLayoutConstraint.activate([
-            label.leadingAnchor.constraint(equalTo: cell.leadingAnchor, constant: 8),
-            label.trailingAnchor.constraint(equalTo: cell.trailingAnchor, constant: -8),
-            label.centerYAnchor.constraint(equalTo: cell.centerYAnchor)
-        ])
+        cell.configure(record, icon: favicon(record.tab.url))
         return cell
     }
     override func viewDidMoveToWindow() {
@@ -234,5 +238,48 @@ final class ArchiveTableView: NSTableView {
         case 53: onEscape?()
         default: super.keyDown(with: event)
         }
+    }
+}
+
+@MainActor
+final class BrowserArchiveCell: NSTableCellView {
+    let titleLabel = NSTextField(labelWithString: "")
+    let detailLabel = NSTextField(labelWithString: "")
+    private let icon = NSImageView()
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        titleLabel.font = .systemFont(ofSize: 14, weight: .medium)
+        detailLabel.font = .systemFont(ofSize: 12, weight: .medium)
+        titleLabel.lineBreakMode = .byTruncatingTail
+        detailLabel.lineBreakMode = .byTruncatingTail
+        icon.imageScaling = .scaleProportionallyUpOrDown
+        for view in [icon, titleLabel, detailLabel] { view.translatesAutoresizingMaskIntoConstraints = false; addSubview(view) }
+        textField = titleLabel; imageView = icon
+        NSLayoutConstraint.activate([
+            icon.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
+            icon.centerYAnchor.constraint(equalTo: centerYAnchor),
+            icon.widthAnchor.constraint(equalToConstant: 24), icon.heightAnchor.constraint(equalToConstant: 24),
+            titleLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 44),
+            titleLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
+            titleLabel.bottomAnchor.constraint(equalTo: centerYAnchor, constant: -1),
+            detailLabel.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
+            detailLabel.trailingAnchor.constraint(equalTo: titleLabel.trailingAnchor),
+            detailLabel.topAnchor.constraint(equalTo: centerYAnchor, constant: 2)
+        ])
+        updateColors()
+    }
+    required init?(coder: NSCoder) { nil }
+    func configure(_ record: BrowserArchivedTab, icon image: NSImage?) {
+        titleLabel.stringValue = record.tab.resolvedTitle ?? record.tab.url.host ?? uiText("Tab")
+        detailLabel.stringValue = record.tab.url.absoluteString
+        icon.image = image ?? NSImage(systemSymbolName: "globe", accessibilityDescription: nil)
+        icon.contentTintColor = image == nil ? BrowserLibraryStyle.foreground.withAlphaComponent(0.5) : nil
+        setAccessibilityLabel(titleLabel.stringValue)
+        setAccessibilityHelp(detailLabel.stringValue)
+    }
+    override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); updateColors() }
+    private func updateColors() {
+        titleLabel.textColor = BrowserLibraryStyle.foreground
+        detailLabel.textColor = BrowserLibraryStyle.foreground.withAlphaComponent(0.55)
     }
 }
