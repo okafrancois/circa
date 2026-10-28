@@ -1,0 +1,162 @@
+diff --git a/chrome/browser/ui/passwords/manage_passwords_ui_controller.cc b/chrome/browser/ui/passwords/manage_passwords_ui_controller.cc
+index 0d2c0bbb5..b67922b7c 100644
+--- a/chrome/browser/ui/passwords/manage_passwords_ui_controller.cc
++++ b/chrome/browser/ui/passwords/manage_passwords_ui_controller.cc
+@@ -20,6 +20,10 @@
+ #include "base/task/sequenced_task_runner.h"
+ #include "base/timer/timer.h"
+ #include "build/build_config.h"
++#include "cef/libcef/features/features.h"
++#if BUILDFLAG(ENABLE_CEF) && BUILDFLAG(IS_MAC)
++#include "cef/libcef/browser/orbit/orbit_password_prompt.h"
++#endif
+ #include "chrome/app/chrome_command_ids.h"
+ #include "chrome/browser/actor/actor_keyed_service.h"
+ #include "chrome/browser/feature_engagement/tracker_factory.h"
+@@ -227,6 +231,9 @@ void ManagePasswordsUIController::OnPasswordSubmitted(
+ 
+   save_fallback_timer_.Stop();
+ 
++#if BUILDFLAG(ENABLE_CEF) && BUILDFLAG(IS_MAC)
++  orbit::ResetPasswordPrompt(web_contents());
++#endif
+   passwords_data_.OnPendingPassword(std::move(form_manager));
+ 
+   // All necessary events should be triggered in `passwords_data_`, so that the
+@@ -258,6 +265,9 @@ void ManagePasswordsUIController::OnUpdatePasswordSubmitted(
+   save_password_after_trusted_vault_error_resolution_ = false;
+   DestroyPopups();
+   save_fallback_timer_.Stop();
++#if BUILDFLAG(ENABLE_CEF) && BUILDFLAG(IS_MAC)
++  orbit::ResetPasswordPrompt(web_contents());
++#endif
+   passwords_data_.OnUpdatePassword(std::move(form_manager));
+ 
+   // Trigger `passwords_data_` updates so the state is correct after password
+@@ -278,9 +288,15 @@ void ManagePasswordsUIController::OnShowManualFallbackForSaving(
+   if (has_generated_password) {
+     passwords_data_.OnAutomaticPasswordSave(std::move(form_manager));
+   } else if (is_update) {
+-    passwords_data_.OnUpdatePassword(std::move(form_manager));
++  #if BUILDFLAG(ENABLE_CEF) && BUILDFLAG(IS_MAC)
++  orbit::ResetPasswordPrompt(web_contents());
++#endif
++  passwords_data_.OnUpdatePassword(std::move(form_manager));
+   } else {
+-    passwords_data_.OnPendingPassword(std::move(form_manager));
++  #if BUILDFLAG(ENABLE_CEF) && BUILDFLAG(IS_MAC)
++  orbit::ResetPasswordPrompt(web_contents());
++#endif
++  passwords_data_.OnPendingPassword(std::move(form_manager));
+   }
+   UpdateBubbleAndIconVisibility();
+   save_fallback_timer_.Start(
+@@ -1241,12 +1257,16 @@ void ManagePasswordsUIController::UpdateBubbleAndIconVisibility() {
+     ClearPopUpFlagForBubble();
+   }
+ 
+-  BrowserWindowInterface* browser =
+-      GlobalBrowserCollection::GetInstance()->FindBrowserWithTab(
+-          web_contents());
+-  if (!browser) {
++#if BUILDFLAG(ENABLE_CEF) && BUILDFLAG(IS_MAC)
++  if (orbit::UpdatePasswordPrompt(web_contents(), IsAutomaticallyOpeningBubble() ||
++      bubble_status_ == BubbleStatus::SHOULD_POP_UP_WITH_FOCUS)) {
++    ClearPopUpFlagForBubble();
+     return;
+   }
++#endif
++  BrowserWindowInterface* browser =
++      GlobalBrowserCollection::GetInstance()->FindBrowserWithTab(web_contents());
++  if (!browser) return;
+ 
+   tabs::TabInterface* const tab_interface =
+       tabs::TabInterface::MaybeGetFromContents(web_contents());
+@@ -1534,12 +1554,18 @@ bool ManagePasswordsUIController::BubbleManagerHasPasswordBubbleInQueue()
+ }
+ 
+ void ManagePasswordsUIController::ShowBubble() {
++#if BUILDFLAG(ENABLE_CEF) && BUILDFLAG(IS_MAC)
++  if (orbit::UpdatePasswordPrompt(web_contents(), true)) return;
++#endif
+   if (TabDialogs* tab_dialogs = TabDialogs::FromWebContents(web_contents())) {
+     tab_dialogs->ShowManagePasswordsBubble(user_action_);
+   }
+ }
+ 
+ void ManagePasswordsUIController::HideBubble(bool initiated_by_bubble_manager) {
++#if BUILDFLAG(ENABLE_CEF) && BUILDFLAG(IS_MAC)
++  if (orbit::HidePasswordPrompt(web_contents())) return;
++#endif
+   is_mouse_hovered_ = false;
+   if (TabDialogs* tab_dialogs = TabDialogs::FromWebContents(web_contents())) {
+     tab_dialogs->HideManagePasswordsBubble();
+diff --git a/components/password_manager/core/common/password_manager_pref_names.h b/components/password_manager/core/common/password_manager_pref_names.h
+index feb3e6e14..00aaa93c5 100644
+--- a/components/password_manager/core/common/password_manager_pref_names.h
++++ b/components/password_manager/core/common/password_manager_pref_names.h
+@@ -9,6 +9,10 @@
+ 
+ namespace password_manager::prefs {
+ 
++// Local generation is an embedder opt-in; store and frame checks still apply.
++inline constexpr char kLocalPasswordGenerationEnabled[] =
++    "password_manager.local_generation_enabled";
++
+ // Alphabetical list of preference names specific to the PasswordManager
+ // component.
+ 
+diff --git a/components/password_manager/core/browser/password_manager.cc b/components/password_manager/core/browser/password_manager.cc
+index 89cdfdee3..bc4470f2c 100644
+--- a/components/password_manager/core/browser/password_manager.cc
++++ b/components/password_manager/core/browser/password_manager.cc
+@@ -548,6 +548,7 @@ PasswordForm CreateFormForLeakCheck(const PasswordForm& pending_credentials,
+ // static
+ void PasswordManager::RegisterProfilePrefs(
+     user_prefs::PrefRegistrySyncable* registry) {
++  registry->RegisterBooleanPref(prefs::kLocalPasswordGenerationEnabled, false);
+   registry->RegisterBooleanPref(
+       prefs::kCredentialsEnableService, true,
+       user_prefs::PrefRegistrySyncable::SYNCABLE_PRIORITY_PREF);
+diff --git a/components/password_manager/core/browser/password_feature_manager_impl.cc b/components/password_manager/core/browser/password_feature_manager_impl.cc
+index 96544b532..6e7289419 100644
+--- a/components/password_manager/core/browser/password_feature_manager_impl.cc
++++ b/components/password_manager/core/browser/password_feature_manager_impl.cc
+@@ -28,7 +28,8 @@ PasswordFeatureManagerImpl::PasswordFeatureManagerImpl(
+ bool PasswordFeatureManagerImpl::IsGenerationEnabled() const {
+   switch (password_manager::sync_util::GetPasswordSyncState(sync_service_)) {
+     case sync_util::SyncState::kNotActive:
+-      return false;
++      return pref_service_ &&
++             pref_service_->GetBoolean(prefs::kLocalPasswordGenerationEnabled);
+     case sync_util::SyncState::kActiveWithNormalEncryption:
+     case sync_util::SyncState::kActiveWithCustomPassphrase:
+       return true;
+diff --git a/components/password_manager/core/browser/password_feature_manager_impl_unittest.cc b/components/password_manager/core/browser/password_feature_manager_impl_unittest.cc
+index 68340d191..f1b5193f5 100644
+--- a/components/password_manager/core/browser/password_feature_manager_impl_unittest.cc
++++ b/components/password_manager/core/browser/password_feature_manager_impl_unittest.cc
+@@ -28,6 +28,8 @@ class PasswordFeatureManagerImplTest : public ::testing::Test {
+                                   &pref_service_,
+                                   &sync_service_) {
+ 
++    pref_service_.registry()->RegisterBooleanPref(
++        password_manager::prefs::kLocalPasswordGenerationEnabled, false);
+     account_.email = "account@gmail.com";
+     account_.gaia = GaiaId("account");
+     account_.account_id = CoreAccountId::FromGaiaId(account_.gaia);
+@@ -184,3 +186,14 @@ INSTANTIATE_TEST_SUITE_P(
+             .pref_value = true,
+         }));
+ #endif  // BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)  || BUILDFLAG(IS_CHROMEOS)
++
++TEST_F(PasswordFeatureManagerImplTest, LocalGenerationRequiresExplicitOptIn) {
++  sync_service_.SetSignedOut();
++  EXPECT_FALSE(password_feature_manager_.IsGenerationEnabled());
++  pref_service_.SetBoolean(
++      password_manager::prefs::kLocalPasswordGenerationEnabled, true);
++  EXPECT_TRUE(password_feature_manager_.IsGenerationEnabled());
++  pref_service_.SetBoolean(
++      password_manager::prefs::kLocalPasswordGenerationEnabled, false);
++  EXPECT_FALSE(password_feature_manager_.IsGenerationEnabled());
++}

@@ -29,6 +29,7 @@ import os
 import re
 import shutil
 import ssl
+import sqlite3
 import subprocess
 import sys
 import threading
@@ -62,6 +63,16 @@ MOVE_EVENTS_EXTENSION = LAB_DIR / "Smoke/move-events-extension"
 ESSENTIALS_USER = "orbit-synthetic-user"
 ESSENTIALS_PASSWORD = "orbit-synthetic-password"
 ESSENTIALS_PAGES = {
+    "password-login": """<!doctype html><title>Login fixture</title>
+<form method="post" action="/essentials/password-submit">
+<label>Username<input id="username" name="username" autocomplete="username"></label>
+<label>Password<input id="password" name="password" type="password" autocomplete="current-password"></label>
+<button type="submit">Sign in</button></form>""",
+    "password-generate": """<!doctype html><title>Registration fixture</title>
+<form method="post" action="/essentials/password-submit">
+<label>Username<input id="username" name="username" autocomplete="username"></label>
+<label>Password<input id="password" name="password" type="password" autocomplete="new-password"></label>
+<button type="submit">Register</button></form>""",
     "suspension": """<!doctype html><title>Synthetic session</title>
 <body style="height:5000px">
 <form method="POST" action="/essentials/suspension-post"><input id="check" name="choice" type="checkbox"><input name="token" value="synthetic"></form>
@@ -91,6 +102,11 @@ def essentials_handler(run_root, counters):
 
     class Essentials(base):
         def do_POST(self):
+            if urlsplit(self.path).path == "/essentials/password-submit":
+                length = int(self.headers.get("Content-Length", "0"))
+                if not 0 < length <= 4096: return self.reply(413)
+                self.rfile.read(length)  # Synthetic credentials are never logged or echoed.
+                return self.reply(200, b'<!doctype html><title>Signed in</title><p>Fixture submission accepted.</p>')
             if urlsplit(self.path).path != "/essentials/suspension-post":
                 return super().do_POST()
             length = int(self.headers.get("Content-Length", "0"))
@@ -441,6 +457,8 @@ def run_phase(phase, run, data, origin, args, tls_origin=None):
                "--use-fake-device-for-media-stream"]
     if tls_origin and phase == "fresh":
         command.append("--orbit-smoke-tls-fixture=" + tls_origin)
+    if getattr(args, "passwords_only", False):
+        command.append("--orbit-smoke-passwords")
     if getattr(args, "engine_r5_only", False):
         command.append("--orbit-smoke-engine-r5")
         command.append("--orbit-smoke-resource-tabs=" + str(args.resource_tabs))
@@ -502,6 +520,18 @@ def run_phase(phase, run, data, origin, args, tls_origin=None):
     lines = watch_lines(root / "window-watch.jsonl")
     verdict = lab.verdict(root, owned["code"], owned["timed_out"], owned["quit_timed_out"], after, lines, "hidden")
     checks = verdict["checks"]
+    if getattr(args, "passwords_only", False) and phase == "fresh":
+        # Read only after normal engine teardown. Never emit credential values.
+        rows = []
+        for database in data.rglob("Login Data"):
+            connection = sqlite3.connect("file:" + str(database) + "?mode=ro", uri=True)
+            try:
+                rows += connection.execute("SELECT username_value, blacklisted_by_user, length(password_value) FROM logins").fetchall()
+            finally:
+                connection.close()
+        checks["passwordSavedEncrypted"] = any(u == "fixture-save" and b == 0 and n > 3 for u, b, n in rows)
+        checks["passwordNotNowDiscarded"] = not any(u in ("fixture-decline", "fixture-pending") for u, _, _ in rows)
+        checks["passwordNeverBlocked"] = any(b == 1 for _, b, _ in rows)
     checks.update(noUnresolvedGroupMembers=not owned["remaining"], runnerCompletedWithoutException=error is None,
                   runnerNotCancelled=not owned["cancelled"], noForcedCleanupSignals=not owned["forced_signals"])
     checks["noReapNeeded"] = not reaped
@@ -632,15 +662,16 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest="command", required=True)
     builder = sub.add_parser("build")
-    builder.add_argument("--flavor", choices=x2.FLAVORS, default="orbit-engine-extensions-r5")
+    builder.add_argument("--flavor", choices=x2.FLAVORS, default="orbit-engine-extensions-r6")
     runner = sub.add_parser("smoke")
-    runner.add_argument("--flavor", choices=x2.FLAVORS, default="orbit-engine-extensions-r5")
+    runner.add_argument("--flavor", choices=x2.FLAVORS, default="orbit-engine-extensions-r6")
     runner.add_argument("--evidence-root", type=Path, default=EVIDENCE)
     runner.add_argument("--timeout", type=int, default=180)
     runner.add_argument("--quit-timeout", type=int, default=30)
     runner.add_argument("--no-extension", action="store_true")
     runner.add_argument("--fresh-only", action="store_true")
     runner.add_argument("--keep-going", action="store_true")
+    runner.add_argument("--passwords-only", action="store_true", help="Hermetic native password controller probes")
     runner.add_argument("--engine-r5-only", action="store_true", help="Hermetic native discard/history/POST scenarios")
     runner.add_argument("--resource-tabs", type=int, choices=(0, 20, 50, 100), default=0)
     runner.add_argument("--engine-r4-only", action="store_true",
@@ -662,6 +693,9 @@ def main():
         if args.extension_only or args.private_domain_only or args.profiles_only or args.space_profile_only:
             parser.error("--archive-auto-only excludes other focused probes")
         args.no_extension = True
+    if args.command == "smoke" and args.passwords_only:
+        args.no_extension = True
+        args.fresh_only = True
     if args.command == "smoke" and args.engine_r5_only:
         args.no_extension = True
         args.fresh_only = True
@@ -679,7 +713,7 @@ def main():
         args.no_extension = True
     if args.command == "smoke" and args.private_domain_only:
         if args.flavor not in ("orbit-essentials-r2", "orbit-engine-extensions", "orbit-engine-extensions-r2",
-                               "orbit-engine-extensions-r3", "orbit-engine-extensions-r4", "orbit-engine-extensions-r5") or args.extension_only:
+                               "orbit-engine-extensions-r3", "orbit-engine-extensions-r4", "orbit-engine-extensions-r5", "orbit-engine-extensions-r6") or args.extension_only:
             parser.error("--private-domain-only requires a product engine and excludes --extension-only")
         args.no_extension = True
         args.fresh_only = True

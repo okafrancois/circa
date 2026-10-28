@@ -518,6 +518,12 @@ class ProfileHandler final : public CefRequestContextHandler {
     if (!g_state) return;
     g_state->ready_profiles.insert(token_);
     DisableSafeBrowsing(context);
+    // Admitted persistent Orbit profiles may generate locally; Sync stays disabled.
+    if (!context->GetCachePath().empty() && context->HasPreference("password_manager.local_generation_enabled")) {
+      auto value = CefValue::Create(); value->SetBool(true);
+      CefString error;
+      context->SetPreference("password_manager.local_generation_enabled", value, error);
+    }
     ACREvent event {};
     event.struct_size = sizeof(event);
     event.kind = ACR_EVENT_PROFILE_READY;
@@ -1748,7 +1754,8 @@ const orbit_cef_api_t* ResolveOrbitApi() {
   // v1. Each version's layout is the prefix of the next; a function beyond the resolved version
   // is never called.
   const orbit_cef_api_t* api = nullptr;
-  const std::pair<uint32_t, size_t> versions[] = {{6u, sizeof(orbit_cef_api_t)},
+  const std::pair<uint32_t, size_t> versions[] = {{7u, sizeof(orbit_cef_api_t)},
+                                                   {6u, offsetof(orbit_cef_api_t, password_prompt_observe)},
                                                    {5u, offsetof(orbit_cef_api_t, discard_tab)},
                                                    {4u, offsetof(orbit_cef_api_t, extension_action_snapshot)},
                                                    {3u, offsetof(orbit_cef_api_t, extensions_snapshot)},
@@ -3391,4 +3398,35 @@ extern "C" int32_t ACRExtensionActionSnapshot(uint64_t token, char* json, uint32
   auto* host = g_state ? g_state->Find(token) : nullptr;
   if (!host || !host->browser || !ACRBrowserStateAvailable()) return -1;
   return g_state->orbit->extension_action_snapshot(host->browser->GetIdentifier(), json, capacity);
+}
+
+// Passwords deliberately bypass ACREvent and its diagnostic tracing.
+namespace {
+std::string PasswordProfilePath(uint64_t token, uint64_t profile) {
+  auto* host = g_state ? g_state->Find(token) : nullptr;
+  if (!NSThread.isMainThread || !g_state || g_state->quitting || !host ||
+      host->profile != profile || !host->browser || !host->browser->IsValid() ||
+      host->closing_by_shell || host->close_requested || !g_state->orbit || g_state->orbit->version < 7) return {};
+  auto found = g_state->profiles.find(profile);
+  if (found == g_state->profiles.end() || !found->second || found->second->IsGlobal() ||
+      !host->browser->GetHost()->GetRequestContext()->IsSame(found->second)) return {};
+  return found->second->GetCachePath().ToString();
+}
+}
+extern "C" int32_t ACRPasswordPromptObserve(uint64_t token, uint64_t profile,
+    orbit_password_prompt_callback_t callback, void* context) {
+  const auto path = PasswordProfilePath(token, profile); if (path.empty()) return 0;
+  return g_state->orbit->password_prompt_observe(g_state->Find(token)->browser->GetIdentifier(), path.c_str(), callback, context);
+}
+extern "C" int32_t ACRPasswordPromptSnapshot(uint64_t token, uint64_t profile, orbit_password_prompt_t* snapshot) {
+  const auto path = PasswordProfilePath(token, profile); if (path.empty()) return 0;
+  return g_state->orbit->password_prompt_snapshot(g_state->Find(token)->browser->GetIdentifier(), path.c_str(), snapshot);
+}
+extern "C" int32_t ACRPasswordPromptDecide(uint64_t token, uint64_t profile, uint64_t generation, int32_t decision) {
+  const auto path = PasswordProfilePath(token, profile); if (path.empty()) return 0;
+  return g_state->orbit->password_prompt_decide(g_state->Find(token)->browser->GetIdentifier(), path.c_str(), generation, decision);
+}
+extern "C" int32_t ACRPasswordPromptReopen(uint64_t token, uint64_t profile, uint64_t generation) {
+  const auto path = PasswordProfilePath(token, profile); if (path.empty()) return 0;
+  return g_state->orbit->password_prompt_reopen(g_state->Find(token)->browser->GetIdentifier(), path.c_str(), generation);
 }

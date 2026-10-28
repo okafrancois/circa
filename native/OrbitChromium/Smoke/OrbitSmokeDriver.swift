@@ -55,7 +55,8 @@ final class OrbitSmokeDriver: OrbitLaunchHooks {
             (arguments.contains("--orbit-smoke-site-data") ? ["--use-fake-device-for-media-stream"] : [])
     }
     private var visibleSmoke: Bool {
-        (arguments.contains("--orbit-smoke-extension-update") && arguments.contains("--orbit-smoke-extension-update-manual"))
+        arguments.contains("--orbit-smoke-password-generation") ||
+            (arguments.contains("--orbit-smoke-extension-update") && arguments.contains("--orbit-smoke-extension-update-manual"))
             || arguments.contains("--orbit-smoke-passwords")
     }
     var hiddenApplication: Bool { !visibleSmoke }
@@ -299,7 +300,7 @@ final class OrbitSmokeDriver: OrbitLaunchHooks {
             finish(aborted: false)
             return
         }
-        if phase == .fresh && !arguments.contains("--orbit-smoke-engine-r5") && !arguments.contains("--orbit-smoke-extension-only")
+        if phase == .fresh && !arguments.contains("--orbit-smoke-password-generation") && !arguments.contains("--orbit-smoke-passwords") && !arguments.contains("--orbit-smoke-engine-r5") && !arguments.contains("--orbit-smoke-extension-only")
             && !arguments.contains("--orbit-smoke-relaunch") && !arguments.contains("--orbit-smoke-private-domain")
             && !arguments.contains("--orbit-smoke-profiles") && !arguments.contains("--orbit-smoke-site-data")
             && !arguments.contains("--orbit-smoke-space-profile") && !arguments.contains("--orbit-smoke-archive-auto")
@@ -457,6 +458,14 @@ final class OrbitSmokeDriver: OrbitLaunchHooks {
         check("hosted.tab", firstIdentity?.isHosted == true && tab.runtimeStyle == 2 && engine.holdingWindowTabCount == 0
               && engine.hostedWindowCount == 1, identity(tab).merging(["holdingWindowTabs": engine.holdingWindowTabCount,
                                                                        "hostedWindows": engine.hostedWindowCount]) { $1 })
+        if arguments.contains("--orbit-smoke-password-generation") {
+            await passwordGenerationScenario(window, tab, engine)
+            return
+        }
+        if arguments.contains("--orbit-smoke-passwords") {
+            await passwordScenarios(window, tab, engine)
+            return
+        }
         if arguments.contains("--orbit-smoke-engine-r5") {
             await suspensionScenarios(window, tab, engine)
             return

@@ -129,6 +129,7 @@ public final class ChromiumSurface: BrowserEngineSurface {
     public private(set) var browserID: Int32 = 0
 
     let token: UInt64
+    var passwordPromptObserver: (@MainActor (BrowserPasswordPromptEvent, BrowserPasswordPrompt) -> Void)?
     let profileToken: UInt64
     weak var engine: ChromiumBrowserEngine?
     private var state = BrowserNavigationState()
@@ -539,6 +540,7 @@ public final class ChromiumSurface: BrowserEngineSurface {
     }
 
     public func dispose() {
+        observePasswordPrompt(nil)
         pageTintTask?.cancel()
         pageTintTask = nil
         automaticPiPTask?.cancel()
