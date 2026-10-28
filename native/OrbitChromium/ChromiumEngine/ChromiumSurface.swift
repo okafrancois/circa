@@ -787,10 +787,13 @@ public final class ChromiumSurface: BrowserEngineSurface {
             downloadSourceCommitted = true
             finishDownloadSourcePreparation(true)
         }
-        if event.kind == ACR_EVENT_DOWNLOAD, event.requestID == 0 {
-            downloads[event.downloadID]?.receive(event)
+        // CEF can ask for the target again during an automatic or manual resume. The
+        // original transfer owns it even after its shell tab has retired.
+        if event.kind == ACR_EVENT_DOWNLOAD, let transfer = downloads[event.downloadID] {
+            transfer.receive(event)
             return
         }
+        if event.kind == ACR_EVENT_DOWNLOAD, event.requestID == 0 { return }
         if event.kind == ACR_EVENT_DEVTOOLS_RESULT {
             let identifier = Int32(truncatingIfNeeded: event.requestID)
             if identifier == documentObserverRequest, identifier != 0 {

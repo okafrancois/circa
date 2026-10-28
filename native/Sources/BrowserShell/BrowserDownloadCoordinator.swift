@@ -72,7 +72,7 @@ public final class BrowserDownloadCoordinator {
 
         init(
             key: BrowserDownloadKey, owner: BrowserDownloadOwner, suggestedFilename: String,
-            sourceURL: URL?, transfer: any BrowserDownloadTransfer
+            sourceURL: URL?, transfer: (any BrowserDownloadTransfer)?
         ) {
             self.key = key
             self.owner = owner
@@ -152,6 +152,30 @@ public final class BrowserDownloadCoordinator {
         guard !isClosed else { throw BrowserDownloadError.coordinatorStopped }
         return registration
     }
+
+    /// Restored records have a fresh lifetime and no live controls or source UI ownership.
+    public func restore(_ records: [BrowserDownloadHistoryRecord]) throws {
+        guard !isClosed else { throw BrowserDownloadError.coordinatorStopped }
+        guard records.allSatisfy(\.isValid), Set(records.map(\.id)).count == records.count,
+              records.allSatisfy({ entries[$0.id] == nil }) else { throw BrowserDownloadError.invalidUpdate }
+        for record in records {
+            let key = BrowserDownloadKey(id: record.id, profileID: record.profileID, lifetime: UUID())
+            let entry = Entry(key: key, owner: .init(profileID: record.profileID),
+                              suggestedFilename: record.filename, sourceURL: nil, transfer: nil)
+            entry.state = record.state
+            entry.receivedBytes = record.receivedBytes
+            entry.totalBytes = record.totalBytes
+            entry.destinationURL = record.destinationURL
+            entry.failure = record.failure
+            entry.capabilities = []
+            entries[key.id] = entry
+            order.append(key.id)
+        }
+        publish()
+        drainEffects()
+    }
+
+    public var allSnapshots: [BrowserDownloadSnapshot] { order.compactMap { entries[$0]?.snapshot } }
 
     public func snapshots(profileID: ProfileID) -> [BrowserDownloadSnapshot] {
         order.compactMap { entries[$0] }.filter { $0.owner.profileID == profileID }.map(\.snapshot)

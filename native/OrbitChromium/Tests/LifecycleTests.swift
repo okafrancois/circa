@@ -357,6 +357,52 @@ private func nativeCloseChecks(_ backend: ChromiumBrowserEngine) async {
     print("PASS: native close updates Today, deduplicates requests, preserves crash, confirmation and download paths")
 }
 
+/// Exercises repeated native target determination after the source tab has retired.
+@MainActor
+private func downloadRetryChecks(_ backend: ChromiumBrowserEngine) async throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent("orbit-download-retry-" + UUID().uuidString)
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: false)
+    defer { try? FileManager.default.removeItem(at: root) }
+    let coordinator = BrowserDownloadCoordinator()
+    let delegate = LifecycleDelegate()
+    let source = backend.makeSurface(profileID: ProfileID(), delegate: delegate)
+    emit(ACR_EVENT_CREATED, source.token, value: 2)
+    emit(ACR_EVENT_DOCUMENT, source.token, url: "about:blank")
+    var offers = 0
+    delegate.onDownload = { download in
+        offers += 1
+        let transfer = download.makeTransfer { _ in root.appendingPathComponent("synthetic.bin") }
+        let registration = try! coordinator.register(owner: .init(profileID: source.profileID), transfer: transfer)
+        transfer.attach(registration)
+    }
+    ACRStubDownload(source.token, 800, Int32(ACR_DOWNLOAD_IN_PROGRESS.rawValue), 0)
+    for _ in 0..<100 {
+        if ACRStubDownloadRequest() == 800 { break }
+        try await Task.sleep(for: .milliseconds(5))
+    }
+    let path = String(cString: ACRStubDownloadPath())
+    precondition(!path.isEmpty)
+    try Data(repeating: 1, count: 128).write(to: URL(fileURLWithPath: path))
+    source.dispose()
+    ACRStubDownload(source.token, 801, Int32(ACR_DOWNLOAD_IN_PROGRESS.rawValue), 64)
+    precondition(ACRStubDownloadRequest() == 801 && String(cString: ACRStubDownloadPath()) == path)
+    precondition(offers == 1 && source.hasActiveDownloads)
+    ACRStubDownload(source.token, 0, Int32(ACR_DOWNLOAD_INTERRUPTED.rawValue), 64)
+    precondition(coordinator.allSnapshots.first?.state == .interrupted)
+    precondition(coordinator.allSnapshots.first?.canPerform(.resume) == true)
+    try coordinator.perform(.resume, in: coordinator.allSnapshots[0].context)
+    ACRStubDownload(source.token, 802, Int32(ACR_DOWNLOAD_IN_PROGRESS.rawValue), 64)
+    precondition(ACRStubDownloadRequest() == 802 && String(cString: ACRStubDownloadPath()) == path)
+    ACRStubDownload(source.token, 0, Int32(ACR_DOWNLOAD_COMPLETE.rawValue), 128)
+    precondition(coordinator.allSnapshots.first?.state == .complete)
+    let completed = try Data(contentsOf: root.appendingPathComponent("synthetic.bin"))
+    precondition(completed.count == 128)
+    precondition(!FileManager.default.fileExists(atPath: path))
+    emit(ACR_EVENT_CLOSED, source.token)
+    coordinator.shutdown()
+    print("PASS: a detached download reuses its target across native retry and interruption/resume, then publishes completed bytes")
+}
+
 @main
 @MainActor
 struct LifecycleTests {
@@ -370,6 +416,10 @@ struct LifecycleTests {
         precondition(result == 0 && engine != nil, "the stub must report readiness without starting CEF")
         if CommandLine.arguments.contains("--review-favicon-only") {
             await reviewFaviconReceiptChecks(engine!)
+            return
+        }
+        if CommandLine.arguments.contains("--downloads-only") {
+            try! await downloadRetryChecks(engine!)
             return
         }
         if CommandLine.arguments.contains("--native-close-only") {

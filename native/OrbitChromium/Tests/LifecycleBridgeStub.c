@@ -90,7 +90,22 @@ uint64_t ACRCookieRead(uint64_t token, const char *url, const char *name) { retu
 int32_t ACRGetDiagnostics(ACRDiagnostics *diagnostics) { return 0; }
 int32_t ACRResolveNavigationPolicy(uint64_t request, ACRNavigationPolicy policy) { return 1; }
 int32_t ACRResolvePermission(uint64_t request, ACRPermissionDecision decision) { return 1; }
-int32_t ACRResolveDownloadDestination(uint64_t request, const char *path) { return 1; }
+static char download_path[4096];
+static uint64_t download_request;
+int32_t ACRResolveDownloadDestination(uint64_t request, const char *path) {
+  download_request = request;
+  snprintf(download_path, sizeof(download_path), "%s", path ? path : "");
+  return 1;
+}
+const char *ACRStubDownloadPath(void) { return download_path; }
+uint64_t ACRStubDownloadRequest(void) { return download_request; }
+void ACRStubDownload(uint64_t token, uint64_t request, int32_t status, int64_t bytes) {
+  ACREvent event = {.struct_size = sizeof(ACREvent), .kind = ACR_EVENT_DOWNLOAD,
+                   .surface_token = token, .request_id = request, .download_id = 42,
+                   .download_status = status, .received_bytes = bytes, .total_bytes = 128,
+                   .suggested_name = "synthetic.bin"};
+  test_callbacks.event(test_context, &event);
+}
 int32_t ACRDownloadCommand(uint64_t profile, uint32_t download, ACRDownloadAction action) { return 1; }
 
 static int hosted_mode, activation_count;

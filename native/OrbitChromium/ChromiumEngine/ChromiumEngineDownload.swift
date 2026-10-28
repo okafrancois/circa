@@ -67,6 +67,7 @@ final class ChromiumDownloadTransfer: BrowserEngineDownloadTransfer {
     private var totalBytes: Int64?
     private var currentURL: URL?
     private var destinationURL: URL?
+    private var staging: BrowserDownloadStagingFile?
     private var destinationResolved = false
     private var isInvalidated = false
     private var destinationTask: Task<Void, Never>?
@@ -106,9 +107,16 @@ final class ChromiumDownloadTransfer: BrowserEngineDownloadTransfer {
                 report(.failed, failure: .engineFailure)
                 return
             }
+            do {
+                staging = try BrowserDownloadStagingFile(destination: chosen)
+            } catch {
+                resolveDestination(nil)
+                report(.failed, failure: .destinationUnavailable)
+                return
+            }
             destinationURL = chosen
             report(.running)
-            resolveDestination(chosen.path)
+            resolveDestination(staging?.file.path)
         }
     }
 
@@ -120,6 +128,12 @@ final class ChromiumDownloadTransfer: BrowserEngineDownloadTransfer {
     }
 
     func receive(_ event: ChromiumEvent) {
+        if event.requestID != 0 {
+            // Target determination repeats for Chromium retries. Reuse the same private
+            // destination and engine item; do not offer another save sheet or replay the URL.
+            _ = ACRResolveDownloadDestination(event.requestID, isInvalidated ? nil : staging?.file.path)
+            return
+        }
         guard !isInvalidated, destinationResolved else { return }
         receivedBytes = max(receivedBytes, event.receivedBytes)
         if event.totalBytes > 0 { totalBytes = event.totalBytes }
@@ -133,6 +147,17 @@ final class ChromiumDownloadTransfer: BrowserEngineDownloadTransfer {
         default: next = event.downloadPaused ? .paused : .running
         }
         guard state.canTransition(to: next) || (next == state && !next.isTerminal) else { return }
+        if next == .complete {
+            do { try staging?.finish(); staging = nil }
+            catch {
+                staging?.discard(); staging = nil
+                report(.failed, failure: .destinationUnavailable)
+                releaseSource()
+                return
+            }
+        } else if next == .cancelled {
+            staging?.discard(); staging = nil
+        }
         let availability: BrowserDownloadFileAvailability = next == .complete
             ? (destinationURL.flatMap(BrowserDownloadPaths.regularFileSize) == nil ? .missing : .available) : .unknown
         report(next, availability: availability, failure: failure)
@@ -141,6 +166,8 @@ final class ChromiumDownloadTransfer: BrowserEngineDownloadTransfer {
 
     func sourceClosed() {
         guard !isInvalidated, !state.isTerminal else { return }
+        _ = ACRDownloadCommand(profileToken, nativeID, ACR_DOWNLOAD_CANCEL)
+        staging?.discard(); staging = nil
         report(.failed, failure: .engineFailure)
         releaseSource()
     }
@@ -189,6 +216,7 @@ final class ChromiumDownloadTransfer: BrowserEngineDownloadTransfer {
         isInvalidated = true
         destinationTask?.cancel()
         resolveDestination(nil)
+        staging?.discard(); staging = nil
         registration = nil
         releaseSource()
         onInvalidate?()

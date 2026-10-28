@@ -47,7 +47,7 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
         archiveRuntime = runtime
         return runtime
     }
-    let downloads = BrowserDownloadsController()
+    private(set) var downloads = BrowserDownloadsController()
     /// Last-resort owner of live documents whose move failed while neither the receiver nor the
     /// source could take them back; `rehomeRescuedSurfaces` gives each a window of its profile.
     let rescue: BrowserSurfaceContainer<Engine.Surface>
@@ -104,6 +104,14 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
         let migratesThemes = await migrateImportedSpaceThemes(store: store, location: location)
         let effectiveDocument = pendingRemovals.isEmpty && !migratesThemes ? document : await store.sessionDocument()
         let environment = BrowserEnvironment(engine: engine, store: store, document: effectiveDocument, persistence: persistence)
+        do {
+            let history = try BrowserDownloadHistoryStore(destination: sessionFile.appendingPathExtension("downloads.json"))
+            environment.downloads = BrowserDownloadsController(history: history)
+        } catch {
+            // Keep the session usable and leave unreadable/future history untouched.
+            environment.onPersistenceError?(error)
+        }
+        environment.downloads.onHistoryError = { [weak environment] in environment?.onPersistenceError?($0) }
         environment.profileRemovalJournal = removals
         do {
             environment.settings = BrowserSettingsRuntime(store: try BrowserSettingsStore(destination: sessionFile.appendingPathExtension("settings.json")))

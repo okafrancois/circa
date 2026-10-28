@@ -42,4 +42,7 @@ void *ACRStubAdoptEngineTab(uint64_t window_token, uint64_t profile_token, const
 void ACRStubHostedMode(int32_t enabled);
 uint64_t ACRStubPublishedSurface(void);
 int32_t ACRStubActivationCount(void);
+const char *ACRStubDownloadPath(void);
+uint64_t ACRStubDownloadRequest(void);
+void ACRStubDownload(uint64_t token, uint64_t request, int32_t status, int64_t bytes);
 #endif
