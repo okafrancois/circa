@@ -56,6 +56,78 @@ struct LibraryDownloadsArchiveTests {
         #expect(restored == nil && deleted == nil)
     }
 
+    @Test("Download actions are hidden at rest and remain available through hover, focus and menus")
+    func downloadActionVisibility() throws {
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 305, height: 100),
+            styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        defer { window.close() }
+        let row = BrowserDownloadRowView(id: UUID(), lifetime: UUID())
+        row.frame = NSRect(x: 0, y: 0, width: 305, height: 56)
+        window.contentView?.addSubview(row)
+        func render(_ revision: UInt64) {
+            row.render(.init(id: row.id, lifetime: row.lifetime, revision: revision, title: "Synthetic.pdf",
+                detail: "12 KB", receivedBytes: 12000, totalBytes: 12000, isRunning: false, actions: [.open, .reveal, .remove]))
+        }
+        render(1)
+        let event = try #require(NSEvent.mouseEvent(with: .rightMouseDown, location: .zero, modifierFlags: [],
+            timestamp: 0, windowNumber: window.windowNumber, context: nil, eventNumber: 1, clickCount: 1, pressure: 0))
+        #expect(!row.areActionsVisible)
+        row.mouseEntered(with: event)
+        #expect(row.areActionsVisible)
+        row.mouseExited(with: event)
+        #expect(!row.areActionsVisible)
+        #expect(window.makeFirstResponder(row))
+        #expect(row.areActionsVisible)
+        row.mouseEntered(with: event); row.mouseExited(with: event)
+        #expect(row.areActionsVisible)
+        window.makeFirstResponder(nil)
+        NotificationCenter.default.post(name: NSWindow.didUpdateNotification, object: window)
+        #expect(!row.areActionsVisible)
+        let menu = try #require(row.menu(for: event))
+        #expect(menu.items.map(\.title) == [uiText("Open File"), uiText("Show in Finder"), uiText("Remove from List")])
+        var received: [(UInt64, DownloadRowPresentation.Action)] = []
+        row.onAction = { _, _, revision, action in received.append((revision, action)) }
+        for item in menu.items { (item.target as? NSObject)?.perform(try #require(item.action), with: item) }
+        #expect(received.map { $0.1 } == [.open, .reveal, .remove])
+        render(2)
+        let item = try #require(menu.items.last)
+        (item.target as? NSObject)?.perform(try #require(item.action), with: item)
+        #expect(received.last?.0 == 1)
+        #expect(!row.areActionsVisible)
+    }
+
+    @Test("Archive row menus preserve record identity without footer controls")
+    func archiveRowMenus() throws {
+        let view = BrowserArchiveView(frame: NSRect(x: 0, y: 0, width: 305, height: 780))
+        view.setLibraryEmbedded()
+        let now = Date(), profile = ProfileID(), space = SpaceID()
+        func record() -> BrowserArchivedTab {
+            .init(tab: .init(id: TabID(), url: URL(string: "https://library.test/page")!,
+                pageTitle: "Synthetic", createdAt: now, lastActiveAt: now), profileID: profile, spaceID: space,
+                origin: .today, reason: .closed, archivedAt: now)
+        }
+        let first = record(), second = record()
+        view.render([first, second], profileName: "Synthetic", setting: 0)
+        let index = try #require(view.rows.firstIndex { if case .tab(let r) = $0 { return r.id == first.id }; return false })
+        let menu = try #require(view.contextMenu(for: index))
+        #expect(view.contextMenu(for: 0) == nil)
+        #expect(menu.items.map(\.title) == [uiText("Restore"), uiText("Delete")])
+        view.table.selectRowIndexes(IndexSet(integer: index == 1 ? 2 : 1), byExtendingSelection: false)
+        var restored: TabID?, deleted: TabID?
+        view.onRestore = { restored = $0 }; view.onDelete = { deleted = $0 }
+        for item in menu.items { (item.target as? NSObject)?.perform(try #require(item.action), with: item) }
+        #expect(restored == first.id && deleted == first.id)
+        func buttons(in view: NSView) -> [NSButton] {
+            (view as? NSButton).map { [$0] } ?? view.subviews.flatMap { buttons(in: $0) }
+        }
+        #expect(!buttons(in: view).contains { [uiText("Restore"), uiText("Delete")].contains($0.title) })
+        view.render([], profileName: "Synthetic", setting: 0)
+        restored = nil; deleted = nil
+        for item in menu.items { (item.target as? NSObject)?.perform(try #require(item.action), with: item) }
+        #expect(restored == nil && deleted == nil)
+    }
+
     @Test("Empty archive and download searches align their messages in the Library body")
     func emptyAlignment() throws {
         func empty(in view: NSView) -> BrowserLibraryEmptyView? {

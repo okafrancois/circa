@@ -168,6 +168,10 @@ final class BrowserDownloadRowView: NSView, NSDraggingSource {
     var onAction: ((UUID, UUID, UInt64, DownloadRowPresentation.Action) -> Void)?
     private var revision: UInt64 = 0
     private var tracking: NSTrackingArea?
+    private var hovered = false
+    private var restingTitleTrailing: NSLayoutConstraint!
+    private var activeTitleTrailing: NSLayoutConstraint!
+    var areActionsVisible: Bool { !actionStack.isHidden }
     let titleLabel = NSTextField(labelWithString: "")
     let detailLabel = NSTextField(labelWithString: "")
     private let progress = NSProgressIndicator()
@@ -200,13 +204,15 @@ final class BrowserDownloadRowView: NSView, NSDraggingSource {
         for view in [icon, titleLabel, detailLabel, progress, actionStack] {
             view.translatesAutoresizingMaskIntoConstraints = false; addSubview(view)
         }
+        restingTitleTrailing = titleLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8)
+        activeTitleTrailing = titleLabel.trailingAnchor.constraint(equalTo: actionStack.leadingAnchor, constant: -4)
         NSLayoutConstraint.activate([
             heightAnchor.constraint(equalToConstant: 56),
             icon.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
             icon.centerYAnchor.constraint(equalTo: centerYAnchor),
             icon.widthAnchor.constraint(equalToConstant: 24), icon.heightAnchor.constraint(equalToConstant: 24),
             titleLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 44),
-            titleLabel.trailingAnchor.constraint(equalTo: actionStack.leadingAnchor, constant: -4),
+            restingTitleTrailing,
             titleLabel.bottomAnchor.constraint(equalTo: centerYAnchor, constant: -1),
             detailLabel.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
             detailLabel.trailingAnchor.constraint(equalTo: titleLabel.trailingAnchor),
@@ -217,6 +223,7 @@ final class BrowserDownloadRowView: NSView, NSDraggingSource {
             actionStack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -4),
             actionStack.centerYAnchor.constraint(equalTo: centerYAnchor)
         ])
+        actionStack.isHidden = true
         updateColors()
     }
 
@@ -261,6 +268,69 @@ final class BrowserDownloadRowView: NSView, NSDraggingSource {
         }
     }
 
+    override var acceptsFirstResponder: Bool { true }
+    override func becomeFirstResponder() -> Bool {
+        let accepted = super.becomeFirstResponder()
+        if accepted { setActionsVisible(true) }
+        return accepted
+    }
+    override func resignFirstResponder() -> Bool {
+        let accepted = super.resignFirstResponder()
+        if accepted {
+            DispatchQueue.main.async { [weak self] in self?.updateActionsVisibility() }
+        }
+        return accepted
+    }
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        NotificationCenter.default.removeObserver(self, name: NSWindow.didUpdateNotification, object: nil)
+        if let window {
+            NotificationCenter.default.addObserver(self, selector: #selector(windowUpdated), name: NSWindow.didUpdateNotification, object: window)
+        }
+        hovered = false
+        updateActionsVisibility()
+    }
+    @objc private func windowUpdated() { updateActionsVisibility() }
+    private func updateActionsVisibility() {
+        let responder = window?.firstResponder as? NSView
+        setActionsVisible(hovered || responder === self || responder?.isDescendant(of: actionStack) == true)
+    }
+    private func setActionsVisible(_ visible: Bool) {
+        guard actionStack.isHidden == visible else { return }
+        if visible {
+            restingTitleTrailing.isActive = false
+            activeTitleTrailing.isActive = true
+        } else {
+            activeTitleTrailing.isActive = false
+            restingTitleTrailing.isActive = true
+        }
+        actionStack.isHidden = !visible
+    }
+    override func keyDown(with event: NSEvent) {
+        guard event.modifierFlags.intersection([.command, .control, .option, .shift]).isEmpty else {
+            super.keyDown(with: event); return
+        }
+        switch event.keyCode {
+        case 36, 76: if shownActions.contains(.open) { onAction?(id, lifetime, revision, .open) }
+        case 51, 117: if shownActions.contains(.remove) { onAction?(id, lifetime, revision, .remove) }
+        default: super.keyDown(with: event)
+        }
+    }
+    override func menu(for event: NSEvent) -> NSMenu? {
+        let menu = super.menu(for: event) ?? NSMenu()
+        for (action, button) in actionButtons {
+            let item = NSMenuItem(title: button.toolTip ?? "", action: #selector(performMenuAction(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = (revision, action)
+            menu.addItem(item)
+        }
+        return menu.items.isEmpty ? nil : menu
+    }
+    @objc private func performMenuAction(_ sender: NSMenuItem) {
+        guard let (revision, action) = sender.representedObject as? (UInt64, DownloadRowPresentation.Action) else { return }
+        onAction?(id, lifetime, revision, action)
+    }
+
     private func updateIcon(_ row: DownloadRowPresentation) {
         guard icon.image == nil || fileURL != row.fileURL else { return }
         if let thumbnailRequest { QLThumbnailGenerator.shared.cancel(thumbnailRequest) }
@@ -292,9 +362,17 @@ final class BrowserDownloadRowView: NSView, NSDraggingSource {
         tracking = area
         addTrackingArea(area)
     }
-    override func mouseEntered(with event: NSEvent) { layer?.backgroundColor = NSColor.labelColor.withAlphaComponent(0.07).cgColor }
-    override func mouseExited(with event: NSEvent) { layer?.backgroundColor = NSColor.clear.cgColor }
-    override func mouseDown(with event: NSEvent) { }
+    override func mouseEntered(with event: NSEvent) {
+        hovered = true
+        layer?.backgroundColor = NSColor.labelColor.withAlphaComponent(0.07).cgColor
+        updateActionsVisibility()
+    }
+    override func mouseExited(with event: NSEvent) {
+        hovered = false
+        layer?.backgroundColor = NSColor.clear.cgColor
+        updateActionsVisibility()
+    }
+    override func mouseDown(with event: NSEvent) { window?.makeFirstResponder(self) }
     override func mouseUp(with event: NSEvent) {
         guard bounds.contains(convert(event.locationInWindow, from: nil)), shownActions.contains(.open) else { return }
         onAction?(id, lifetime, revision, .open)

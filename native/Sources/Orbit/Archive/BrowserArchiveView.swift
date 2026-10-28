@@ -23,9 +23,6 @@ final class BrowserArchiveView: NSView, NSTableViewDataSource, NSTableViewDelega
     }
     private let profileLabel = NSTextField(labelWithString: "")
     private let empty = BrowserLibraryEmptyView()
-    private var recordActions: NSView?
-    private let restoreButton = NSButton(title: archiveText("restore", "Restore"), target: nil, action: nil)
-    private let deleteButton = NSButton(title: archiveText("delete", "Delete"), target: nil, action: nil)
     private(set) var rows: [Row] = []
     private let dates = BrowserLibraryDateObserver()
     private var renderedRecords: [BrowserArchivedTab] = []
@@ -62,8 +59,6 @@ final class BrowserArchiveView: NSView, NSTableViewDataSource, NSTableViewDelega
         searchField.setAccessibilityIdentifier("archive-search")
         let back = NSButton(title: archiveText("back", "Back"), target: self, action: #selector(goBack))
         let clear = NSButton(title: archiveText("clear", "Clear Archive…"), target: self, action: #selector(clearAll))
-        restoreButton.target = self; restoreButton.action = #selector(restore)
-        deleteButton.target = self; deleteButton.action = #selector(deleteSelected)
         settings.addItems(withTitles: [archiveText("inheritTemporary", "Temporary setting · Use Default Timing"), archiveText("12hours", "12 hours"), archiveText("24hours", "24 hours"), archiveText("7days", "7 days"), archiveText("30days", "30 days")])
         settings.target = self; settings.action = #selector(changeSettings)
         settings.setAccessibilityLabel(archiveText("settingsAccessibility", "Auto Archive — Temporary Profile Setting"))
@@ -72,8 +67,6 @@ final class BrowserArchiveView: NSView, NSTableViewDataSource, NSTableViewDelega
         standaloneControls = [back, categories]
         let header = NSStackView(views: [back, title, NSView(), clear])
         standaloneControls = [header, categories, profileLabel, settings]
-        let actions = NSStackView(views: [restoreButton, deleteButton, NSView()])
-        recordActions = actions
         table.addTableColumn(NSTableColumn(identifier: .init("archive")))
         table.headerView = nil
         table.dataSource = self; table.delegate = self
@@ -87,6 +80,7 @@ final class BrowserArchiveView: NSView, NSTableViewDataSource, NSTableViewDelega
         table.onReturn = { [weak self] in self?.restore() }
         table.onDelete = { [weak self] in self?.deleteSelected() }
         table.onEscape = { [weak self] in self?.onBack?() }
+        table.onMenuForRow = { [weak self] row in self?.contextMenu(for: row) }
         let scroll = NSScrollView()
         scroll.documentView = table
         BrowserLibraryStyle.configure(scroll)
@@ -96,7 +90,7 @@ final class BrowserArchiveView: NSView, NSTableViewDataSource, NSTableViewDelega
         addSubview(empty)
         let search = NSStackView(views: [searchField, BrowserLibraryFilterButton()])
         search.spacing = 4
-        let stack = NSStackView(views: [header, categories, profileLabel, search, settings, scroll, actions])
+        let stack = NSStackView(views: [header, categories, profileLabel, search, settings, scroll])
         contentStack = stack
         stack.orientation = .vertical; stack.alignment = .leading; stack.spacing = 12
         stack.translatesAutoresizingMaskIntoConstraints = false
@@ -111,13 +105,12 @@ final class BrowserArchiveView: NSView, NSTableViewDataSource, NSTableViewDelega
             empty.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -16),
             empty.centerYAnchor.constraint(equalTo: centerYAnchor, constant: 28)
         ])
-        for view in [header, search, settings, scroll, actions] { view.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true }
+        for view in [header, search, settings, scroll] { view.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true }
         dates.onChange = { [weak self] in
             guard let self else { return }
             dateFormatter.calendar = .current; dateFormatter.timeZone = .current; dateFormatter.locale = .current
             render(renderedRecords, profileName: profileLabel.stringValue, setting: settings.indexOfSelectedItem, spaceNames: spaceNames)
         }
-        updateActions()
     }
     required init?(coder: NSCoder) { nil }
     override var wantsUpdateLayer: Bool { true }
@@ -146,9 +139,7 @@ final class BrowserArchiveView: NSView, NSTableViewDataSource, NSTableViewDelega
             table.selectRowIndexes(IndexSet(integer: index), byExtendingSelection: false)
         } else { table.deselectAll(nil) }
         empty.isHidden = !records.isEmpty
-        recordActions?.isHidden = records.isEmpty
         empty.configure(symbol: BrowserLibraryCategory.archive.symbol, title: uiText("No Archived Tabs"), query: searchField.stringValue, largeGlyph: true)
-        updateActions()
     }
     var selectedRecord: BrowserArchivedTab? {
         guard rows.indices.contains(table.selectedRow), case let .tab(record) = rows[table.selectedRow] else { return nil }
@@ -194,7 +185,6 @@ final class BrowserArchiveView: NSView, NSTableViewDataSource, NSTableViewDelega
         super.viewDidMoveToWindow()
         dates.setAttached(window != nil)
     }
-    func tableViewSelectionDidChange(_ notification: Notification) { updateActions() }
     func controlTextDidChange(_ notification: Notification) { onSearch?() }
     func control(_ control: NSControl, textView: NSTextView, doCommandBy commandSelector: Selector) -> Bool {
         if commandSelector == #selector(NSResponder.moveDown(_:)) {
@@ -210,7 +200,23 @@ final class BrowserArchiveView: NSView, NSTableViewDataSource, NSTableViewDelega
         }
         return false
     }
-    private func updateActions() { restoreButton.isEnabled = selectedRecord != nil; deleteButton.isEnabled = selectedRecord != nil }
+    func contextMenu(for row: Int) -> NSMenu? {
+        guard rows.indices.contains(row), case .tab(let record) = rows[row] else { return nil }
+        let menu = NSMenu()
+        for (title, action) in [(uiText("Restore"), #selector(restoreFromMenu(_:))), (uiText("Delete"), #selector(deleteFromMenu(_:)))] {
+            let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
+            item.target = self; item.representedObject = record.id
+            menu.addItem(item)
+        }
+        return menu
+    }
+    private func menuRecord(_ sender: NSMenuItem) -> TabID? {
+        guard let id = sender.representedObject as? TabID,
+              rows.contains(where: { if case .tab(let record) = $0 { return record.id == id }; return false }) else { return nil }
+        return id
+    }
+    @objc private func restoreFromMenu(_ sender: NSMenuItem) { if let id = menuRecord(sender) { onRestore?(id) } }
+    @objc private func deleteFromMenu(_ sender: NSMenuItem) { if let id = menuRecord(sender) { onDelete?(id) } }
     @objc private func selectCategory(_ sender: NSSegmentedControl) {
         if sender.selectedSegment == 1 { onDownloads?() }
         sender.selectedSegment = 0
@@ -227,6 +233,13 @@ final class ArchiveTableView: NSTableView {
     var onReturn: (() -> Void)?
     var onDelete: (() -> Void)?
     var onEscape: (() -> Void)?
+    var onMenuForRow: ((Int) -> NSMenu?)?
+    override func menu(for event: NSEvent) -> NSMenu? {
+        let row = self.row(at: convert(event.locationInWindow, from: nil))
+        guard let menu = onMenuForRow?(row) else { return super.menu(for: event) }
+        selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
+        return menu
+    }
     override func keyDown(with event: NSEvent) {
         guard event.modifierFlags.intersection([.command, .control, .option, .shift]).isEmpty else {
             super.keyDown(with: event)
