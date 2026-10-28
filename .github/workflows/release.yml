@@ -26,6 +26,12 @@ jobs:
           fetch-depth: 0
           ref: ${{ inputs.tag || github.ref }}
           clean: false
+      - name: Link the prebuilt engine tools
+        # The CEF distribution and Sparkle tools are local to the release Mac, never in Git.
+        # Set ORBIT_TOOLS_DIR in the runner's .env file.
+        run: |
+          if [ ! -e .tools ]; then ln -s "${ORBIT_TOOLS_DIR:?Set ORBIT_TOOLS_DIR in the runner .env}" .tools; fi
+          test -d .tools/chromium-fork/distrib
       - name: Build, sign, notarize when configured, and publish
         env:
           GH_TOKEN: ${{ github.token }}
