@@ -30,6 +30,7 @@ Orbit is a native macOS browser: Swift/AppKit shell (`native/Sources/Orbit`) on 
 
 ## Releases
 - `scripts/release.py` builds, signs, notarizes (`orbit-notary` profile), packages and publishes. It runs on the self-hosted runner when a `vX.Y.Z` tag is pushed. Never trigger releases from pull requests or forks.
+- Release cadence: after merging one or more user-visible features or fixes, the PM pushes `main` and tags the next version (patch for fixes, minor for new features). Installed copies update through Sparkle.
 
 ## Local lab material
 - Research notes and historical references are kept outside Git in the main checkout's ignored `lab/` folder. Read them only when a brief points to them; never copy them into tracked files.
