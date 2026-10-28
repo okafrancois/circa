@@ -752,7 +752,7 @@ struct NativeThemeShellTests {
         controller.activateSpace(first)
         await controller.session.waitForPendingCommands()
         #expect(controller.sidebar.page.spaceID == first && controller.windowShell.theme == .default)
-        #expect(controller.sidebar.footer.spaceButtons.map { $0.accessibilityLabel() } == ["Space Preview", "Space Synthetic themed Space"])
+        #expect(controller.sidebar.footer.spaceButtons.map { $0.accessibilityLabel() } == ["Space Personal", "Space Synthetic themed Space"])
     }
 
     @Test("⌘S reaches the shell through the command registry binding of the THEME lot")

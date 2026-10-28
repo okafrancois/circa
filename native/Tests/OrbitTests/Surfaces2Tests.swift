@@ -46,7 +46,7 @@ struct Surfaces2Tests {
         let trafficContainer = try #require(little.window?.standardWindowButton(.closeButton)?.superview?.superview)
         #expect(trafficContainer.frame.maxX <= little.addressField.frame.minX)
         #expect(little.addressField.stringValue == url.absoluteString)
-        #expect(little.openButton.title == "Open in Preview")
+        #expect(little.openButton.title == "Open in Personal")
         #expect(little.openButton.shortcut == "⌘O")
         var copied: URL?
         little.copyURLWriter = { copied = $0 }

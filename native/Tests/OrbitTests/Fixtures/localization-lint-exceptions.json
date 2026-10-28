@@ -89,6 +89,7 @@
   "Palette/BrowserPaletteView.swift": [
     "\"\"",
     "\", \"",
+    "\"arrow.right\"",
     "\"globe\"",
     "\"magnifyingglass\"",
     "\"opacity\"",
@@ -101,6 +102,7 @@
     "\"palette-section\"",
     "\"palette-section-\\(row)\"",
     "\"result\"",
+    "\"— \"",
     "\"↩\"",
     "\"↵\"",
     "\"⏎\""

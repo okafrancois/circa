@@ -49,7 +49,7 @@ struct NativeQuickWindowTests {
         #expect(BrowserSessionDocument.currentVersion == 4)
         little.window?.contentView?.layoutSubtreeIfNeeded()
         #expect(little.addressField.accessibilityLabel() == "Address")
-        #expect(little.openButton.accessibilityLabel() == "Open in Preview")
+        #expect(little.openButton.accessibilityLabel() == "Open in Personal")
         #expect(little.window?.contentView?.subviews.first?.frame.height == 47)
         little.window?.performClose(nil)
         #expect(little.isClosed && surface.isDisposed)

@@ -63,17 +63,19 @@ struct ReviewDailyUITests {
             .init(id: "synthetic", title: "Synthetic title", detail: detail, section: .history,
                   action: .navigate(URL(string: "https://palette.test/")!))
         }
+        // Inline details only show once the user has typed something.
+        view.input.stringValue = "synthetic"
         view.render([result("x")], selected: 0)
         view.layoutSubtreeIfNeeded()
         let table = try #require(view.scroll.documentView as? NSTableView)
         let cell = try #require(table.view(atColumn: 0, row: 0, makeIfNecessary: true) as? PaletteResultCell)
         cell.layoutSubtreeIfNeeded()
-        #expect(cell.detailLabel.stringValue == "x")
+        #expect(cell.detailLabel.stringValue == "— x")
         view.render([result("Chrome Web Store: synthetic longer detail")], selected: 0)
         view.layoutSubtreeIfNeeded()
         cell.layoutSubtreeIfNeeded()
         #expect((table.view(atColumn: 0, row: 0, makeIfNecessary: false) as? PaletteResultCell) === cell)
-        #expect(cell.detailLabel.stringValue == "Chrome Web Store: synthetic longer detail")
+        #expect(cell.detailLabel.stringValue == "— Chrome Web Store: synthetic longer detail")
         let text = (cell.detailLabel.stringValue as NSString).size(withAttributes: [.font: cell.detailLabel.font!]).width
         #expect(cell.detailLabel.frame.width >= ceil(text) + 2)
         #expect(cell.titleLabel.frame.maxX < cell.detailLabel.frame.minX)
