@@ -73,7 +73,7 @@ final class BrowserDeveloperToolbar: NSView {
         captureButton = addButton("camera", label: uiText("Capture…"), id: "developer-capture") { [weak self] in self?.onCapture?() }
         addSeparator()
         addButton("terminal", label: uiText("Toggle Console"), id: "developer-console") { [weak self] in self?.onPanel?(.console) }
-        addButton("globe", label: uiText("Toggle Network Panel"), id: "developer-network") { [weak self] in self?.onPanel?(.network) }
+        addButton("network", label: uiText("Toggle Network Panel"), id: "developer-network") { [weak self] in self?.onPanel?(.network) }
         addButton("scope", label: uiText("Inspect Element"), id: "developer-inspect") { [weak self] in self?.onPanel?(.elements) }
         addSeparator()
         addButton("puzzlepiece", label: uiText("Extensions Menu"), id: "developer-extensions") { [weak self] in self?.onExtensions?() }
@@ -88,17 +88,25 @@ final class BrowserDeveloperToolbar: NSView {
     private func addButton(_ symbol: String, label: String, id: String,
                            width: CGFloat = buttonPitch, action: @escaping () -> Void) -> NSButton {
         let button = SiteControlButton("", identifier: id, onPress: action)
-        let ink: NSSize = switch symbol {
-        case "link": NSSize(width: 13, height: 13)
-        case "camera": NSSize(width: 15, height: 12)
-        case "terminal": NSSize(width: 14, height: 11)
-        case "globe": NSSize(width: 11.75, height: 11.75)
-        case "scope": NSSize(width: 13, height: 13)
-        case "puzzlepiece": NSSize(width: 16, height: 12)
-        default: NSSize(width: 11, height: 11)
+        if symbol == "network" {
+            // Use SF's native vector at its configured size, without a rotated bitmap canvas.
+            button.image = OrbitGlyph.symbol(symbol, pointSize: 12.5, weight: .regular)
+            button.symbolConfiguration = .init(pointSize: 12.5, weight: .regular)
+            button.imageScaling = .scaleNone
+        } else if symbol == "puzzlepiece" {
+            button.image = Self.horizontalPuzzle
+            button.imageScaling = .scaleNone
+        } else {
+            let ink: NSSize = switch symbol {
+            case "link": NSSize(width: 13, height: 13)
+            case "camera": NSSize(width: 15, height: 12)
+            case "terminal": NSSize(width: 14, height: 11)
+            case "scope": NSSize(width: 13, height: 13)
+            default: NSSize(width: 11, height: 11)
+            }
+            button.image = Self.glyph(symbol, width: ink.width, height: ink.height,
+                                      weight: symbol == "scope" ? .medium : .regular)
         }
-        button.image = Self.glyph(symbol, width: ink.width, height: ink.height,
-                                  weight: symbol == "scope" ? .medium : .regular)
         button.setAccessibilityLabel(label); button.toolTip = label
         button.isBordered = false
         button.widthAnchor.constraint(equalToConstant: width).isActive = true
@@ -111,17 +119,41 @@ final class BrowserDeveloperToolbar: NSView {
         guard let image = OrbitGlyph.symbol(name, pointSize: 14, weight: weight) else { return nil }
         // SF Symbols retain alignment padding when drawn into a canvas.
         let sized = NSImage(size: NSSize(width: width * 1.25, height: height * 1.25), flipped: false) { rect in
-            if name == "globe" {
-                var transform = AffineTransform(translationByX: rect.midX, byY: rect.midY)
-                transform.rotate(byDegrees: -20)
-                transform.translate(x: -rect.midX, y: -rect.midY)
-                (transform as NSAffineTransform).concat()
-            }
             image.draw(in: rect)
             return true
         }
         sized.isTemplate = true
         return sized
+    }
+    /// Reference outline: 16.5×12 pt ink, outward left/right tabs, recessed top/bottom.
+    /// Draw paths at the destination backing scale; no asset copy or bitmap resizing.
+    private static var horizontalPuzzle: NSImage {
+        let image = NSImage(size: NSSize(width: 17, height: 13), flipped: true) { _ in
+            let p = NSBezierPath()
+            p.move(to: NSPoint(x: 5.2, y: 1.2))
+            p.line(to: NSPoint(x: 6.8, y: 1.2)); p.line(to: NSPoint(x: 6.8, y: 2.7))
+            p.curve(to: NSPoint(x: 10.2, y: 2.7), controlPoint1: NSPoint(x: 6.8, y: 4.4), controlPoint2: NSPoint(x: 10.2, y: 4.4))
+            p.line(to: NSPoint(x: 10.2, y: 1.2)); p.line(to: NSPoint(x: 11.8, y: 1.2))
+            p.curve(to: NSPoint(x: 12.5, y: 1.9), controlPoint1: NSPoint(x: 12.35, y: 1.2), controlPoint2: NSPoint(x: 12.5, y: 1.35))
+            p.line(to: NSPoint(x: 12.5, y: 4.2)); p.line(to: NSPoint(x: 14, y: 4.2))
+            p.curve(to: NSPoint(x: 14, y: 8.8), controlPoint1: NSPoint(x: 17.1, y: 4.2), controlPoint2: NSPoint(x: 17.1, y: 8.8))
+            p.line(to: NSPoint(x: 12.5, y: 8.8)); p.line(to: NSPoint(x: 12.5, y: 11.1))
+            p.curve(to: NSPoint(x: 11.8, y: 11.8), controlPoint1: NSPoint(x: 12.5, y: 11.65), controlPoint2: NSPoint(x: 12.35, y: 11.8))
+            p.line(to: NSPoint(x: 10.2, y: 11.8)); p.line(to: NSPoint(x: 10.2, y: 10.3))
+            p.curve(to: NSPoint(x: 6.8, y: 10.3), controlPoint1: NSPoint(x: 10.2, y: 8.6), controlPoint2: NSPoint(x: 6.8, y: 8.6))
+            p.line(to: NSPoint(x: 6.8, y: 11.8)); p.line(to: NSPoint(x: 5.2, y: 11.8))
+            p.curve(to: NSPoint(x: 4.5, y: 11.1), controlPoint1: NSPoint(x: 4.65, y: 11.8), controlPoint2: NSPoint(x: 4.5, y: 11.65))
+            p.line(to: NSPoint(x: 4.5, y: 8.8)); p.line(to: NSPoint(x: 3, y: 8.8))
+            p.curve(to: NSPoint(x: 3, y: 4.2), controlPoint1: NSPoint(x: -0.1, y: 8.8), controlPoint2: NSPoint(x: -0.1, y: 4.2))
+            p.line(to: NSPoint(x: 4.5, y: 4.2)); p.line(to: NSPoint(x: 4.5, y: 1.9))
+            p.curve(to: NSPoint(x: 5.2, y: 1.2), controlPoint1: NSPoint(x: 4.5, y: 1.35), controlPoint2: NSPoint(x: 4.65, y: 1.2))
+            p.close(); p.lineWidth = 1.1; p.lineJoinStyle = .round
+            NSColor.black.setStroke(); p.stroke()
+            return true
+        }
+        image.isTemplate = true
+        image.cacheMode = .never
+        return image
     }
     @discardableResult
     private func addSeparator() -> NSView {
