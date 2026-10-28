@@ -19,6 +19,82 @@ struct MotionATests {
         #expect(card.layer?.animation(forKey: "peek.background.transform") == nil)
     }
 
+    @Test("Promotion retires its retained frame and controls in the receiver's turn")
+    func promotionReveal() throws {
+        _ = NSApplication.shared
+        let previous = OrbitMotionPreferences.overrideReducedMotion
+        OrbitMotionPreferences.overrideReducedMotion = false
+        defer { OrbitMotionPreferences.overrideReducedMotion = previous }
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 800, height: 600),
+                              styleMask: [.borderless], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        defer { window.close() }
+        let overlay = BrowserPeekOverlayView()
+        window.contentView = overlay
+        let host = NSView()
+        overlay.show(host, animated: true)
+        let context = try #require(CGContext(data: nil, width: 16, height: 16, bitsPerComponent: 8,
+            bytesPerRow: 64, space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue))
+        context.setFillColor(NSColor.red.cgColor)
+        context.fill(CGRect(x: 0, y: 0, width: 16, height: 16))
+        let image = try #require(context.makeImage())
+        overlay.retainPromotionImage(image)
+        let originalCard = overlay.cardFrame
+        overlay.preparePromotionViewport(host, size: NSSize(width: 780, height: 580))
+        #expect(host.superview === overlay.pageArea && host.frame.size == NSSize(width: 780, height: 580))
+        #expect(overlay.cardFrame == originalCard)
+        overlay.restorePromotionViewport()
+        #expect(host.frame.size == overlay.pageArea.bounds.size)
+        let retained = try #require(overlay.layer?.sublayers?.first { $0.contents != nil })
+        #expect(retained.frame == overlay.cardFrame)
+        #expect(retained.animationKeys()?.isEmpty != false, "the retained frame must not animate from zero size")
+        overlay.discardPromotionImage()
+        #expect(retained.contents == nil && overlay.isShown, "a refused transfer leaves its live Peek usable")
+        overlay.retainPromotionImage(image)
+        let destination = NSRect(x: 10, y: 10, width: 780, height: 580)
+        overlay.retainDestinationImage(image, in: destination)
+        #expect(retained.frame == destination && overlay.toolbar.isHidden)
+        var completions = 0
+        overlay.completePromotion { completions += 1 }
+        #expect(completions == 1)
+        #expect(overlay.isHidden && !overlay.isShown && !overlay.isExiting)
+        #expect(overlay.subviews.allSatisfy { $0.layer?.animationKeys()?.isEmpty != false })
+        // A new Peek must be independent of the previous transfer's presentation animations.
+        overlay.show(NSView(), animated: false)
+        #expect(!overlay.isHidden && overlay.isShown && !overlay.toolbar.isHidden)
+        #expect(retained.superlayer === overlay.layer && retained.contents == nil)
+        #expect(completions == 1)
+        OrbitMotionPreferences.overrideReducedMotion = true
+        overlay.retainPromotionImage(image)
+        overlay.completePromotion()
+        #expect(retained.superlayer === overlay.pageArea.layer)
+        let crossfade = try #require(overlay.subviews[1].layer?.animation(forKey: "peek.fade") as? CABasicAnimation)
+        #expect(crossfade.duration == BrowserPeekStyle.reducedMotionCrossfade)
+        #expect(crossfade.toValue as? Float == 0)
+        overlay.show(NSView(), animated: false)
+        #expect(retained.animationKeys()?.isEmpty != false)
+    }
+
+    @Test("Promotion reveals in the renderer placement turn, once and only in its receiver")
+    func promotionPlacement() {
+        let peek = BrowserPeekController<PeekSyntheticSurface>()
+        let host = NSView()
+        let receiver = NSView()
+        var reveals = 0
+        peek.revealPromotionWhenPlaced(host) { reveals += 1 }
+        peek.revealPromotionIfPlaced(in: receiver)
+        #expect(reveals == 0)
+        receiver.addSubview(host)
+        peek.revealPromotionIfPlaced(in: receiver)
+        #expect(reveals == 1)
+        peek.revealPromotionIfPlaced(in: receiver)
+        #expect(reveals == 1)
+        peek.revealPromotionWhenPlaced(host) { reveals += 1 }
+        peek.cancelPromotionPlacement()
+        peek.revealPromotionIfPlaced(in: receiver)
+        #expect(reveals == 1)
+    }
+
     @Test("Peek uses Orbit's distinct CA springs without doubling their Core Animation time")
     func springCoefficients() {
         let cases: [(OrbitTokens.Spring, Double, Double)] = [

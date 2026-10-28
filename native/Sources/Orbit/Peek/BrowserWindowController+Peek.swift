@@ -31,7 +31,7 @@ extension BrowserWindowController {
         peek.sourceClassifier = { [weak self] occurrenceID in self?.peekSourceClassification(for: occurrenceID) }
         peek.onStateChange = { [weak self] in
             if self?.peek.isPresented == true { self?.sidebar.spaceSwipe.cancel() }
-            if let self, !peek.isPresented {
+            if let self, !peek.isPresented, peek.handoffTask == nil {
                 contentCard.setPeekDimmed(false, animated: window?.isVisible == true)
             }
             self?.peek.refreshToolbar()
@@ -322,7 +322,17 @@ extension BrowserWindowController {
             let image = try? await surface.captureSnapshot(.init(afterScreenUpdates: false, documentGeneration: surface.documentGeneration))
             guard !Task.isCancelled, peek.presentation?.id == presentation.id, acceptsCommands else { return nil }
             if let image { peek.overlay.retainPromotionImage(image.image) }
-            let result = await performPeekPromotion()?.value
+            var destinationImage: CGImage?
+            if image != nil, !BrowserPeekStyle.prefersReducedMotion {
+                window?.contentView?.layoutSubtreeIfNeeded()
+                peek.overlay.preparePromotionViewport(surface.hostView, size: contentCard.pageViewportSize)
+                let destination = try? await surface.captureSnapshot(.init(afterScreenUpdates: true,
+                    documentGeneration: surface.documentGeneration))
+                destinationImage = destination?.image
+            }
+            defer { peek.overlay.restorePromotionViewport(restoreLayout: peek.owns(surface)) }
+            guard !Task.isCancelled, peek.presentation?.id == presentation.id, acceptsCommands else { return nil }
+            let result = await performPeekPromotion(destinationImage: destinationImage)?.value
             if peek.presentation?.id == presentation.id { peek.handoffTask = nil }
             return result
         }
@@ -330,35 +340,58 @@ extension BrowserWindowController {
         return task
     }
 
-    private func performPeekPromotion() -> Task<TabOccurrenceID?, Never>? {
+    private func performPeekPromotion(destinationImage: CGImage? = nil) -> Task<TabOccurrenceID?, Never>? {
         guard acceptsCommands, let surface = peek.presentedSurface, let presentation = peek.presentation else { return nil }
         let hadFocus = peekHoldsFocus
         let outcome = BrowserPeekTransfer.handOff(surface, from: peek) { transfer in
             acceptSurface(transfer, activate: true)
         }
         guard case .accepted(let adoption) = outcome else {
+            peek.overlay.discardPromotionImage()
             NSSound.beep()
             return nil
         }
-        finishPeekHandoff(surface, presentation: presentation, adoption: adoption, hadFocus: hadFocus, expanding: true)
+        finishPeekHandoff(surface, presentation: presentation, adoption: adoption, hadFocus: hadFocus, expanding: true, destinationImage: destinationImage)
         return adoption
     }
 
     private func finishPeekHandoff(_ surface: Surface, presentation: BrowserPeekController<Surface>.Presentation,
-                                  adoption: Task<TabOccurrenceID?, Never>, hadFocus: Bool, expanding: Bool) {
-        let animate = expanding && window?.isVisible == true
-        contentCard.setPeekDimmed(false, animated: animate)
+                                  adoption: Task<TabOccurrenceID?, Never>, hadFocus: Bool, expanding: Bool, destinationImage: CGImage? = nil) {
+        let retainsImage = expanding && window?.isVisible == true
+        let revealsOnPlacement = retainsImage && !BrowserPeekStyle.prefersReducedMotion
+        if revealsOnPlacement {
+            peek.revealPromotionWhenPlaced(surface.hostView) { [weak self, weak surface] in
+                guard let self, let surface else { return }
+                if !peek.isPresented {
+                    contentCard.setPeekDimmed(false, animated: false)
+                    if let destinationImage {
+                        let target = peek.overlay.convert(surface.hostView.bounds, from: surface.hostView)
+                        peek.overlay.retainDestinationImage(destinationImage, in: target)
+                        Task { [weak self, weak surface] in
+                            guard let self, let surface else { return }
+                            _ = try? await surface.captureSnapshot(.init(afterScreenUpdates: true,
+                                documentGeneration: surface.documentGeneration))
+                            if !peek.isPresented { peek.overlay.completePromotion() }
+                            if hadFocus, session.selectedSurface === surface { surface.focusDocument() }
+                        }
+                    } else { peek.overlay.completePromotion() }
+                }
+                if destinationImage == nil, hadFocus, session.selectedSurface === surface { surface.focusDocument() }
+            }
+        } else { contentCard.setPeekDimmed(false, animated: false) }
         peek.endPresentationAfterHandOff()
         renderPeekPageTools()
-        // The retained Peek image moves into place before the reparented renderer is revealed.
-        // Otherwise the destination appears at full size underneath its still-moving copy.
-        if animate { surface.hostView.isHidden = true }
-        if !animate { peek.overlay.hide(animated: false) }
+        // Keep the last painted frame until adoption completes. The destination and the
+        // overlay then change in one turn, without scaling a second copy of the document.
+        if retainsImage, BrowserPeekStyle.prefersReducedMotion { surface.hostView.isHidden = true }
+        if !retainsImage { peek.overlay.hide(animated: false) }
         Task { [weak self, weak surface] in
             let occurrence = await adoption.value
             guard let self, let surface else { return }
             guard occurrence != nil else {
+                peek.cancelPromotionPlacement()
                 surface.hostView.isHidden = false
+                surface.hostView.alphaValue = 1
                 // CONTRACT-R2: the tab could not be recorded and the live document came back to
                 // Peek; show it again rather than leaving it hidden.
                 if peek.owns(surface), !peek.isPresented {
@@ -367,25 +400,26 @@ extension BrowserWindowController {
                 }
                 return
             }
-            if animate {
-                window?.contentView?.layoutSubtreeIfNeeded()
-                let target = peek.overlay.convert(surface.hostView.bounds, from: surface.hostView)
-                let reveal: @MainActor () -> Void = { [weak self, weak surface] in
-                    guard let surface else { return }
-                    surface.hostView.isHidden = false
-                    if hadFocus, self?.session.selectedSurface === surface { surface.focusDocument() }
-                }
-                peek.overlay.expand(to: target, completion: reveal)
-                // A newer overlay presentation can replace the exit completion. Its live tab
-                // must still become visible when this handoff's own animation has finished.
-                let duration = BrowserPeekMotion.promote.animation(keyPath: "transform").duration
-                Task { @MainActor in
-                    try? await Task.sleep(for: .seconds(duration + BrowserPeekStyle.exitCompletionGrace))
-                    reveal()
-                }
+            if revealsOnPlacement {
+                peek.revealPromotionIfPlaced(in: contentCard)
+                return
             }
-            // The document keeps keyboard focus once the content card shows it.
-            if !animate, hadFocus, session.selectedSurface === surface { surface.focusDocument() }
+            let reveal: @MainActor () -> Void = { [weak self, weak surface] in
+                guard let surface else { return }
+                surface.hostView.isHidden = false
+                surface.hostView.alphaValue = 1
+                if hadFocus, self?.session.selectedSurface === surface { surface.focusDocument() }
+            }
+            if retainsImage, !peek.isPresented {
+                peek.overlay.completePromotion(completion: reveal)
+                if BrowserPeekStyle.prefersReducedMotion {
+                    // A newer presentation can replace the crossfade's exit completion.
+                    Task { @MainActor in
+                        try? await Task.sleep(for: .seconds(BrowserPeekStyle.reducedMotionCrossfade + BrowserPeekStyle.exitCompletionGrace))
+                        reveal()
+                    }
+                }
+            } else { reveal() }
         }
     }
 

@@ -446,6 +446,7 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
         let outgoingCapture = SpaceSwipeTrace.interval("RenderOutgoingCaptureRequest") { tabSwitcher.prepareForPresentation(selected) }
         if let selected { contentCard.prepareToReparent(selected.hostView) }
         SpaceSwipeTrace.interval("RenderSplitReparent") { renderSplit(retainingPreviousUntil: outgoingCapture) }
+        peek.revealPromotionIfPlaced(in: contentCard)
         if let selected {
             refreshNavigation(for: selected)
         } else {
