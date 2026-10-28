@@ -298,6 +298,10 @@ def assemble(source_app, executable, framework, helpers_dir, output, bundle_id, 
     for key in ('OrbitDataRoot', 'OrbitUseMockKeychain', 'OrbitSyntheticBundle'):
         metadata.pop(key, None)
     if synthetic:
+        # Test bundles never claim web URLs or documents: they would otherwise pile up in
+        # System Settings > Default web browser and LaunchServices routing.
+        for key in ('CFBundleURLTypes', 'CFBundleDocumentTypes'):
+            metadata.pop(key, None)
         metadata.update(OrbitDataRoot=str(confined_root), OrbitUseMockKeychain=True, OrbitSyntheticBundle=True)
         metadata['LSUIElement'] = True  # Hidden guard used by X1-R2; not part of the real product.
     frameworks = output / 'Contents/Frameworks'

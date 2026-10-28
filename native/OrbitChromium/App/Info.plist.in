@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<!-- Product build of Orbit on Chromium (CHROMIUM-APP). Unsigned build output: scripts/orbit-app.py
-     completes the declarations (URL schemes, documents, usage descriptions), versions and signs. -->
+<!-- Product build of Orbit on Chromium. Unsigned build output; scripts/release.py (or scripts/orbit-app.py)
+     sets identity and versions, then signs. Web URL and document claims live here so that the
+     released app can be chosen as the default web browser. -->
 <plist version="1.0"><dict>
   <key>CFBundleIdentifier</key><string>io.github.okatech.orbit.test.orbit.unpackaged</string>
   <key>CFBundleExecutable</key><string>@ORBIT_PRODUCT_NAME@</string>
@@ -21,6 +22,18 @@
   <key>NSLocationWhenInUseUsageDescription</key><string>Orbit partage votre localisation uniquement avec les sites que vous autorisez.</string>
   <key>NSBluetoothAlwaysUsageDescription</key><string>Orbit utilise le Bluetooth uniquement pour les sites et les appareils que vous autorisez.</string>
   <key>NSBluetoothPeripheralUsageDescription</key><string>Orbit utilise le Bluetooth uniquement pour les sites et les appareils que vous autorisez.</string>
+  <key>CFBundleURLTypes</key><array><dict>
+    <key>CFBundleURLName</key><string>Web URLs</string>
+    <key>CFBundleTypeRole</key><string>Viewer</string>
+    <key>CFBundleURLSchemes</key><array><string>http</string><string>https</string></array>
+  </dict></array>
+  <key>CFBundleDocumentTypes</key><array><dict>
+    <key>CFBundleTypeName</key><string>Web document</string>
+    <key>CFBundleTypeRole</key><string>Viewer</string>
+    <key>LSHandlerRank</key><string>Alternate</string>
+    <key>CFBundleTypeExtensions</key><array><string>html</string><string>htm</string><string>xhtml</string><string>webloc</string><string>url</string></array>
+    <key>LSItemContentTypes</key><array><string>public.html</string><string>public.xhtml</string><string>com.apple.web-internet-location</string><string>com.microsoft.internet-shortcut</string></array>
+  </dict></array>
   <key>NSPrincipalClass</key><string>ACRApplication</string>
   <key>NSHighResolutionCapable</key><true/>
   <key>NSSupportsAutomaticGraphicsSwitching</key><true/>
