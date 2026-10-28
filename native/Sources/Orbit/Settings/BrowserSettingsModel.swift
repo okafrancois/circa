@@ -257,6 +257,12 @@ final class BrowserSettingsModel<Engine: BrowserEngine>: ObservableObject {
         await environment.refreshSettingsCatalog()
     }
 
+    func setAutomaticPictureInPicture(_ value: Bool) async throws {
+        do { try await runtime.store.setAutomaticPictureInPicture(value) }
+        catch { await runtime.refresh(); throw error }
+        await runtime.refresh()
+    }
+
     func setWarnBeforeQuitting(_ value: Bool) async throws {
         try await runtime.updateInteraction { $0.warnBeforeQuitting = value }
     }

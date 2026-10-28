@@ -26,6 +26,7 @@ extension BrowserEnvironment {
         for controller in liveControllers {
             controller.settingsPreferences?.apply(to: controller)
             controller.renderChrome()
+            controller.siteControls.render()
             controller.settingsPreferences?.renderIcons(in: controller)
             controller.renderLibrary()
             controller.palette.renderContext()

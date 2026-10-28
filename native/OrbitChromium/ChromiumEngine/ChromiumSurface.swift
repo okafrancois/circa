@@ -162,6 +162,8 @@ public final class ChromiumSurface: BrowserEngineSurface {
     private var devTools: [Int32: CheckedContinuation<(Bool, Data), Never>] = [:]
     private var devToolsTimeouts: [Int32: Task<Void, Never>] = [:]
     var mediaActivity = ChromiumMediaActivity()
+    weak var automaticPiPSourceWindow: NSWindow?
+    var automaticPiPPresentation: ChromiumPictureInPicturePresentation?
     var automaticPiPTask: Task<Void, Never>?
     var automaticPiPShouldEnter = false
     var automaticPiPRevision: UInt64 = 0
@@ -543,6 +545,8 @@ public final class ChromiumSurface: BrowserEngineSurface {
         observePasswordPrompt(nil)
         pageTintTask?.cancel()
         pageTintTask = nil
+        automaticPiPPresentation?.finish()
+        automaticPiPPresentation = nil
         automaticPiPTask?.cancel()
         automaticPiPTask = nil
         cancelExtensionAction()

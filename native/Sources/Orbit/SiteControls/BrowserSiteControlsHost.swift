@@ -12,6 +12,7 @@ protocol BrowserSiteControlsHost<Engine>: AnyObject {
     var siteControlSurface: Engine.Surface? { get }
     var siteControlSurfaces: [Engine.Surface] { get }
     var siteControlsClosed: Bool { get }
+    var allowsAutomaticPictureInPicture: Bool { get }
     var isPreparingForTermination: Bool { get }
     var acceptsCommands: Bool { get }
     func owns(_ surface: Engine.Surface) -> Bool
@@ -25,9 +26,11 @@ protocol BrowserSiteControlsHost<Engine>: AnyObject {
 // Hosts without a Space sidebar (Little Orbit) have no interactive presentation to retire.
 extension BrowserSiteControlsHost {
     func prepareForSiteControlsPresentation() {}
+    var allowsAutomaticPictureInPicture: Bool { true }
 }
 
 extension BrowserWindowController: BrowserSiteControlsHost {
+    var allowsAutomaticPictureInPicture: Bool { settingsPreferences?.runtime.document.automaticPictureInPicture ?? true }
     func openExtensionStore(from surface: Surface) {
         guard acceptsCommands, isSitePermissionTarget(surface), let context = session.paletteContext,
               context.profileID == surface.profileID else { return }
