@@ -75,4 +75,26 @@ struct PermissionPromptTests {
             #expect(!content.drawsBackground)
         }
     }
+
+    @Test("Immediate dismissal invalidates before closing and preserves later motion preferences")
+    func immediateDismissal() {
+        for animates in [true, false] {
+            let panel = BrowserSitePopover()
+            panel.popover.animates = animates
+            var events: [String] = []
+            panel.onWillClose = { events.append("invalidate") }
+            panel.onCloseRequest = {
+                #expect(!panel.popover.animates)
+                events.append("close")
+            }
+            panel.close(animating: false)
+            #expect(events == ["invalidate", "close"])
+            #expect(panel.popover.animates == animates)
+
+            panel.onCloseRequest = { #expect(panel.popover.animates == animates) }
+            panel.close()
+            #expect(panel.popover.animates == animates)
+            panel.onCloseRequest = nil
+        }
+    }
 }
