@@ -282,9 +282,9 @@ public final class BrowserWindowSession<Surface: BrowserSurface> {
             if let spaceID {
                 initialSpaceID = spaceID
             } else {
-                let profileID = await store.createProfile(name: BrowserText.string("Preview"))
+                let profileID = await store.createProfile(name: BrowserText.string("Personal"))
                 guard !session.isClosed else { return }
-                initialSpaceID = try await store.createSpace(name: BrowserText.string("Preview"), profileID: profileID)
+                initialSpaceID = try await store.createSpace(name: BrowserText.string("Personal"), profileID: profileID)
             }
             guard !session.isClosed else { return }
             let windowID = try await store.createWindow(activeSpaceID: initialSpaceID)
@@ -375,6 +375,35 @@ public final class BrowserWindowSession<Surface: BrowserSurface> {
                 let state = try await session.store.createSpace(name: name, newProfileName: newProfileName, from: context)
                 session.install(state)
             }
+        }
+    }
+
+    /// Create with its appearance before publishing, so the first visible frame is complete.
+    public func createSpace(name: String, profileID: ProfileID?, newProfileName: String?,
+                            theme: BrowserSpaceTheme, icon: BrowserSpaceIcon, settings: BrowserSettingsStore?,
+                            beforePublication: @escaping @MainActor () async -> Void = {},
+                            completion: @escaping @MainActor (Bool) -> Void) {
+        enqueue { session in
+            do {
+                try theme.validate()
+                guard icon.isValid else { throw BrowserSettingsError.invalidIcon }
+                guard settings?.isUnavailable != true else { throw BrowserSettingsError.unavailable }
+                try await session.withAdoptedContext { context in
+                    let state: BrowserWindowState
+                    if let profileID {
+                        state = try await session.store.createSpace(name: name, profileID: profileID, from: context)
+                    } else if let newProfileName {
+                        state = try await session.store.createSpace(name: name, newProfileName: newProfileName, from: context)
+                    } else { throw BrowserStoreError.profileMissing }
+                    let id = state.snapshot.activeSpaceID
+                    guard let space = state.catalog.spaces.first(where: { $0.id == id }) else { throw BrowserStoreError.spaceMissing }
+                    _ = try await session.store.setSpaceTheme(theme, for: id, profileID: space.profileID)
+                    try await settings?.updateSpace(id) { $0.iconSelection = icon }
+                    await beforePublication()
+                    session.install(try await session.store.captureWindowState(in: context.windowID))
+                }
+                completion(true)
+            } catch { completion(false); throw error }
         }
     }
 

@@ -8,6 +8,7 @@ import BrowserShell
 extension BrowserWindowController {
     func installSidebarActions() {
         installSidebarList()
+        sidebar.configureNewSpacePage = { [weak self] in self?.configureSpaceCreation($0) }
         sidebar.spaceSwipe.allowsInput = { [weak self] in
             guard let self else { return false }
             return acceptsCommands && !session.isClosed && !palette.isPresented && !library.isPresented && !peek.isPresented
@@ -89,50 +90,43 @@ extension BrowserWindowController {
     }
 
     func presentNewSpace() {
-        guard acceptsCommands else { return }
-        session.performWindowAction { [weak self] in self?.presentNewSpaceSheet() }
+        guard acceptsCommands, !isPrivateWindow else { return }
+        session.performWindowAction { [weak self] in
+            guard let self, acceptsCommands, session.catalog?.profiles.isEmpty == false else { return }
+            if sidebar.isPresentationHidden { showSidebarForCreation() }
+            sidebar.spaceSwipe.presentCreationPage()
+        }
     }
 
-    private func presentNewSpaceSheet() {
-        guard acceptsCommands, let window, let catalog = session.catalog, !catalog.profiles.isEmpty else { return }
-        let alert = NSAlert()
-        alert.messageText = uiText("New Space")
-        alert.informativeText = uiText("Choose a name and browsing profile for this Space.")
-        alert.addButton(withTitle: uiText("Create"))
-        alert.addButton(withTitle: uiText("Cancel"))
-        let name = NSTextField(string: uiText("New Space"))
-        name.placeholderString = uiText("Space Name")
-        name.setAccessibilityLabel(uiText("Space Name"))
-        let profiles = NSPopUpButton(frame: .zero, pullsDown: false)
-        profiles.addItems(withTitles: catalog.profiles.map(\.name))
-        profiles.addItem(withTitle: uiText("New Profile…"))
-        let profileName = NSTextField()
-        profileName.placeholderString = uiText("New Profile Name")
-        profileName.setAccessibilityLabel(uiText("New Profile Name"))
-        profiles.setAccessibilityLabel(uiText("Browsing Profile"))
-        if let active = catalog.spaces.first(where: { $0.id == session.snapshot?.activeSpaceID }),
-           let index = catalog.profiles.firstIndex(where: { $0.id == active.profileID }) {
-            profiles.selectItem(at: index)
+    private func showSidebarForCreation() {
+        // The normal sidebar command preserves the shell's geometry and presentation rules.
+        if sidebar.isPresentationHidden { setSidebarVisible(true, animated: false) }
+    }
+
+    private func configureSpaceCreation(_ page: SidebarNewSpacePageView) {
+        guard let catalog = session.catalog else { return }
+        page.configure(profiles: catalog.profiles, selected: session.activeProfileID)
+        page.onBack = { [weak self] in self?.sidebar.spaceSwipe.dismissCreationPage() }
+        page.onTheme = { [weak self] theme in
+            self?.windowShell.applySpaceSwipeBlend(nil)
+            self?.windowShell.apply(theme: OrbitSpaceThemes.rendered(theme), animated: false)
         }
-        let form = NSStackView(views: [name, profiles, profileName])
-        form.orientation = .vertical
-        form.alignment = .leading
-        form.spacing = 12
-        form.frame = NSRect(x: 0, y: 0, width: 300, height: 108)
-        name.widthAnchor.constraint(equalToConstant: 300).isActive = true
-        profiles.widthAnchor.constraint(equalToConstant: 300).isActive = true
-        profileName.widthAnchor.constraint(equalToConstant: 300).isActive = true
-        alert.accessoryView = form
-        alert.window.initialFirstResponder = name
-        alert.beginSheetModal(for: window) { [weak self] response in
-            guard response == .alertFirstButtonReturn else { return }
-            let title = name.stringValue
-            if profiles.indexOfSelectedItem == catalog.profiles.count {
-                let newProfileName = profileName.stringValue
-                self?.submitInput { $0.session.createSpace(name: title, newProfileName: newProfileName) }
-            } else if catalog.profiles.indices.contains(profiles.indexOfSelectedItem) {
-                let profileID = catalog.profiles[profiles.indexOfSelectedItem].id
-                self?.submitInput { $0.createSpace(name: title, profileID: profileID) }
+        page.onCreate = { [weak self, weak page] name, profile, newProfile, icon, theme in
+            guard let self, acceptsCommands, let page, sidebar.newSpaceSwipePage === page else { return }
+            submitInput { [weak page] owner in
+                guard let page, owner.sidebar.newSpaceSwipePage === page else { return }
+                owner.session.createSpace(name: name, profileID: profile, newProfileName: newProfile,
+                                    theme: theme, icon: icon, settings: owner.settingsPreferences?.runtime.store,
+                                    beforePublication: { [weak self] in await self?.settingsPreferences?.runtime.refresh() }) { [weak self, weak page] success in
+                    guard let self else { return }
+                    if success {
+                        Task { @MainActor [weak self] in
+                            guard let self else { return }
+                            await settingsPreferences?.runtime.refresh()
+                            settingsPreferences?.renderIcons(in: self)
+                        }
+                    } else { page?.creationFailed() }
+                }
             }
         }
     }

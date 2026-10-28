@@ -79,6 +79,7 @@ final class BrowserSidebarView: NSView, SidebarListHost {
     var onSelectSpace: ((SpaceID) -> Void)?
     var onNewTab: (() -> Void)?
     var onNewSpace: (() -> Void)?
+    var configureNewSpacePage: ((SidebarNewSpacePageView) -> Void)?
     var creationActions: (() -> [SidebarCreationAction])?
     private var creationMenu: SidebarCreationMenu?
     var hasFooterPresentation: Bool { creationMenu != nil || footer.contextMenu != nil || footer.iconPicker != nil }
@@ -260,8 +261,9 @@ final class BrowserSidebarView: NSView, SidebarListHost {
     /// switch in flight) renders as empty until the matching one arrives.
     func render(catalog: BrowserCatalogSnapshot?, activeSpaceID: SpaceID?, organization: BrowserOrganizationSnapshot?) {
         if catalog != renderedCatalog || activeSpaceID != self.activeSpaceID { cancelFooterPresentations() }
+        let wasCreating = spaceSwipe.isCreationPageVisible
         spaceSwipe.validate(catalog: catalog, active: activeSpaceID)
-        let consumedSwipe = spaceSwipe.willRender(active: activeSpaceID)
+        let consumedSwipe = spaceSwipe.willRender(active: activeSpaceID) || wasCreating
         let previousSpaceID = self.activeSpaceID
         let previousCatalog = renderedCatalog
         if catalog != renderedCatalog || activeSpaceID != self.activeSpaceID {
@@ -1317,6 +1319,7 @@ extension BrowserSidebarView {
 
     func showSpaceSwipe(offset: CGFloat, space: BrowserSpace?, content: SidebarListContent?,
                         destinationAccent: OrbitTokens.ThemeAccent? = nil, favorites: SpaceSwipeFavoritesPreview? = nil) {
+        newSpaceSwipePage?.closePickers()
         newSpaceSwipePage?.removeFromSuperview(); newSpaceSwipePage = nil
         if swipeSourceGeometry == nil { swipeSourceGeometry = geometry }
         if swipeOutgoing == nil {
@@ -1394,7 +1397,7 @@ extension BrowserSidebarView {
         swipePreviewFavorites?.removeFromSuperview(); swipePreviewFavorites = nil
         if newSpaceSwipePage == nil {
             let creation = SidebarNewSpacePageView()
-            creation.onCreate = { [weak self] in self?.onNewSpace?() }
+            configureNewSpacePage?(creation)
             pageContainer.addSubview(creation)
             newSpaceSwipePage = creation
         }
@@ -1439,6 +1442,7 @@ extension BrowserSidebarView {
     }
 
     func finishSpaceSwipe(committed: SpaceID?) {
+        newSpaceSwipePage?.closePickers()
         newSpaceSwipePage?.removeFromSuperview(); newSpaceSwipePage = nil
         if let committed { adoptSpaceSwipeDestination(committed) }
         retainSpaceSwipePreview()
