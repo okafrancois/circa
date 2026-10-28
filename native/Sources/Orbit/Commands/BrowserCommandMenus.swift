@@ -61,8 +61,7 @@ final class BrowserCommandMenus<Window: AnyObject>: NSObject, NSMenuItemValidati
         return menu
     }
 
-    /// One import command that brings everything over from Orbit (Spaces, tabs, then connections).
-    /// The finer-grained transfer commands stay in the Command Bar only.
+    /// One import entry brings over Spaces, tabs and connections from the source browser.
     private static var fileAppendix: [BrowserCommandID] {
         [.importFromArc]
     }
@@ -73,8 +72,7 @@ final class BrowserCommandMenus<Window: AnyObject>: NSObject, NSMenuItemValidati
         for child in spec.children {
             if let item = makeItem(child, emitted: &emitted) { menu.addItem(item) }
         }
-        // Every menu follows Orbit's serialized MainMenu, except File: Orbit's own transfer commands
-        // (Orbit connections, bookmark import/export) have no Orbit entry and must stay reachable.
+        // File appends the single Orbit-specific import entry required by the product brief.
         let present = Set(menu.items.compactMap { $0.identifier?.rawValue })
         let featureIDs = OrbitCommandCatalog.featureDefinitions
             .filter { spec.menuTitle == "File" && Self.fileAppendix.contains($0.id) && !present.contains($0.id.rawValue) }
@@ -155,7 +153,7 @@ final class BrowserCommandMenus<Window: AnyObject>: NSObject, NSMenuItemValidati
 
     /// Native responder actions work in fields and sheets even without a browser handler.
     private func isAvailableInMenus(_ id: BrowserCommandID) -> Bool {
-        registry.isImplemented(id) || BrowserStandardActions.selector(for: id) != nil
+        !OrbitCommandCatalog.hiddenCommands.contains(id) && (registry.isImplemented(id) || BrowserStandardActions.selector(for: id) != nil)
     }
 
     /// Omitted commands must not leave empty groups or separators attached only to hidden aliases.

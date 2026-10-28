@@ -509,6 +509,35 @@ struct NativePageInteractionTests {
         #expect(second.closeConfirmationRequests == 2)
     }
 
+    @Test("Save Page As writes a self-contained archive and refuses document changes while choosing")
+    func savePageCommand() async throws {
+        let engine = SyntheticEngine()
+        engine.extraCapabilities = [.pageSaving]
+        let (controller, surface) = try await loadedWindow(engine)
+        defer { controller.session.close(); controller.window?.close() }
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let file = root.appendingPathComponent("page.mhtml")
+        controller.pageSaver.chooseDestination = { _, _ in
+            let onMainThread = { Thread.isMainThread }
+            #expect(onMainThread())
+            return file
+        }
+        controller.pageSaver.begin()
+        try await waitForPage("page saved") { !controller.pageSaver.isBusy }
+        #expect(try Data(contentsOf: file) == surface.pageArchive)
+        try FileManager.default.removeItem(at: file)
+        controller.pageSaver.chooseDestination = { _, _ in
+            surface.navigate(to: URL(string: "https://changed.test/")!)
+            try? await waitForPage("changed document") { surface.navigationState.committedURL?.host == "changed.test" }
+            return file
+        }
+        controller.pageSaver.begin()
+        try await waitForPage("stale save cancelled") { !controller.pageSaver.isBusy }
+        #expect(!FileManager.default.fileExists(atPath: file.path))
+    }
+
     @Test("Print, Developer Tools and View Source reach the page command surface")
     func pageCommands() async throws {
         let engine = SyntheticEngine()

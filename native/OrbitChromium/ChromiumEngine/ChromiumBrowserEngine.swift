@@ -34,11 +34,11 @@ public final class ChromiumBrowserEngine: BrowserPrivateEngine {
             .mediaCaptureState, .audioMuting, .favicons, .mediaCapturePermissions, .persistentProfiles,
             // CH-ESSENTIALS (ABI 9): context menus reported to the shell (CefContextMenuHandler),
             // DevTools in Chrome's undocked window, the system print panel.
-            .pageContextMenus, .devTools, .printing
+            .pageContextMenus, .devTools, .printing, .fullPageSnapshots
         ]
         // beforeunload before a shell close: TryCloseBrowser on Chrome-style tabs. Chrome-style tabs
         // also render extension documents under the extension system's own access checks.
-        if surfaceMode == .hosted { capabilities.formUnion([.beforeUnloadOnClose, .extensionDocuments]) }
+        if surfaceMode == .hosted { capabilities.formUnion([.beforeUnloadOnClose, .extensionDocuments, .pageSaving]) }
         if supportsLiveTabMoves { capabilities.insert(.liveSurfaceTransfer) }
         if patchLevel >= 2 { capabilities.insert(.profileRemoval) }
         return capabilities

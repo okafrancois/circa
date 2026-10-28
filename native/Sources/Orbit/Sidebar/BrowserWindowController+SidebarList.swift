@@ -247,6 +247,20 @@ extension BrowserWindowController {
             item.title = title
             item.keyEquivalent = ""
         }
+        if let mute = built.menu.items.first(where: { $0.identifier?.rawValue == BrowserCommandID.sidebarMuteTab.rawValue }) {
+            if let surface = sidebarMuteSurface {
+                let muted = siteControls.mediaStates[ObjectIdentifier(surface)]?.isAudioMuted == true
+                mute.title = uiText(muted ? "Unmute Tab" : "Mute Tab")
+            } else { built.menu.removeItem(mute) }
+        }
+        for item in built.menu.items where [BrowserCommandID.sidebarArchiveTabsAbove.rawValue, BrowserCommandID.sidebarArchiveTabsBelow.rawValue,
+                                            BrowserCommandID.sidebarArchiveOtherTabs.rawValue].contains(item.identifier?.rawValue ?? "") {
+            if let validator = item.target as? NSMenuItemValidation, !validator.validateMenuItem(item) { built.menu.removeItem(item) }
+        }
+        for item in built.menu.items.reversed() where item.isSeparatorItem {
+            guard let index = built.menu.items.firstIndex(of: item) else { continue }
+            if index == 0 || index == built.menu.items.count - 1 || built.menu.items[index - 1].isSeparatorItem { built.menu.removeItem(item) }
+        }
         let move = SidebarMoveMenu(owner: self, nodes: nodes)
         if let move {
             let index = built.menu.items.firstIndex { $0.identifier?.rawValue == BrowserCommandID.renameCurrentItem.rawValue } ?? 0
@@ -335,7 +349,7 @@ extension BrowserWindowController {
 
     func copySidebarLinks(markdown: Bool) {
         let links = sidebarLinkTargets.map { tab in
-            markdown ? "[\(tab.title ?? tab.url.absoluteString)](\(tab.url.absoluteString))" : tab.url.absoluteString
+            markdown ? BrowserMarkdownLink.format(title: tab.title, url: tab.url) : tab.url.absoluteString
         }
         guard !links.isEmpty else { return }
         NSPasteboard.general.clearContents()

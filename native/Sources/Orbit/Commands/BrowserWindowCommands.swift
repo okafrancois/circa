@@ -23,7 +23,15 @@ enum BrowserWindowCommands {
         func window(_ id: BrowserCommandID, _ action: @escaping (BrowserWindowController<Engine>) -> Void) {
             try! registry.register(id) { controller, _ in action(controller) }
         }
-        window(.capture) { $0.capture.begin() }
+        try! registry.register(.capture, validate: { $0.engine.capabilities.contains(.snapshots) && $0.pageCommandSurface() != nil }) { controller, _ in
+            controller.capture.begin()
+        }
+        try! registry.register(.captureFullPage, validate: { $0.engine.capabilities.contains(.fullPageSnapshots) && $0.pageCommandSurface() != nil }) { controller, _ in
+            controller.capture.begin(fullPage: true)
+        }
+        try! registry.register(.savePageAs, validate: { $0.engine.capabilities.contains(.pageSaving) && $0.pageCommandSurface()?.navigationState.url != nil }) { controller, _ in
+            controller.pageSaver.begin()
+        }
         window(.newTab) { $0.openTab() }
         window(.openCommandBar) { $0.focusAddress() }
         BrowserPaletteCommands.install(in: registry)
@@ -50,6 +58,7 @@ enum BrowserWindowCommands {
         window(.zoomOut) { $0.changePageZoom(.decrease) }
         window(.zoomToActualSize) { $0.changePageZoom(.reset) }
         window(.copyURL) { $0.sharing.copyLink() }
+        window(.copyURLAsMarkdown) { $0.sharing.copyMarkdownLink() }
         window(.share) { $0.sharing.sharePage() }
         window(.closeWindow) { controller in
             controller.session.performWindowAction { [weak controller] in controller?.window?.performClose(nil) }

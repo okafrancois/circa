@@ -47,14 +47,17 @@ public struct BrowserSnapshotRequest: Sendable, Equatable {
     public var width: CGFloat?
     /// Wait for pending screen updates before capturing.
     public var afterScreenUpdates: Bool
+    /// Explicit user capture only; passive thumbnails keep the viewport default.
+    public var fullPage: Bool
     /// The document to capture, from `documentGeneration`. When set, the capture fails with
     /// `documentChanged` unless this exact document is visible from start to completion, so a
     /// thumbnail can never show another document than the one it was requested for.
     public var documentGeneration: UInt64?
 
-    public init(width: CGFloat? = nil, afterScreenUpdates: Bool = true, documentGeneration: UInt64? = nil) {
+    public init(width: CGFloat? = nil, afterScreenUpdates: Bool = true, documentGeneration: UInt64? = nil, fullPage: Bool = false) {
         self.width = width
         self.afterScreenUpdates = afterScreenUpdates
+        self.fullPage = fullPage
         self.documentGeneration = documentGeneration
     }
 }
@@ -226,6 +229,8 @@ public protocol BrowserEngineSurface: BrowserFindSurface {
     /// `surfaceDisposed` after disposal and `documentChanged` when `request.documentGeneration`
     /// is not the document captured.
     func captureSnapshot(_ request: BrowserSnapshotRequest) async throws -> BrowserSurfaceSnapshot
+    /// Self-contained MHTML of this exact document, including its subresources.
+    func archivePage(documentGeneration: UInt64) async throws -> Data
     func requestMediaState() async -> BrowserMediaState
     func captureStateForSuspension() async -> BrowserSuspensionState?
     /// Cheap final veto for native media/capture activity that arrived during an async check.
@@ -260,6 +265,7 @@ public protocol BrowserEngineSurface: BrowserFindSurface {
 }
 
 public extension BrowserEngineSurface {
+    func archivePage(documentGeneration: UInt64) async throws -> Data { throw BrowserEngineError.unsupportedOperation }
     func showDeveloperPanel(_ panel: BrowserDeveloperPanel) throws {
         try perform(panel == .elements ? .inspectElements : .showDevTools)
     }

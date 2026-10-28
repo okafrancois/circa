@@ -422,7 +422,7 @@ struct SidebarListWindowTests {
         #expect(nodes == [.tab(t)] && (c.list.row(for: .tab(t)) as? SidebarTabRow)?.isContextTarget == true)
         let built = try #require(c.makeSidebarContextMenu(for: nodes))
         let titles = built.menu.items.map { $0.isSeparatorItem ? "—" : $0.title }
-        #expect(titles == ["Copy URL", "Copy Link as Markdown", "—", "Move to", "Rename", "Duplicate", "—", "Pin Tab", "New Folder with Selection", "—", "Archive Tab", "—", "Archive Other Tabs"])
+        #expect(titles == ["Copy URL", "Copy Link as Markdown", "—", "Move to", "Rename", "Duplicate", "—", "Pin Tab", "New Folder with Selection", "—", "Mute Tab", "—", "Archive Tab", "—", "Archive Other Tabs", "Archive Tabs Below"])
         #expect(built.menu.items.compactMap(\.identifier?.rawValue).contains(BrowserCommandID.pinUnpinTab.rawValue))
         let enabled = built.menu.items.filter { !$0.isSeparatorItem }.map(\.isEnabled)
         #expect(enabled.filter { !$0 }.count <= 1) // No other Today tab may be available.
@@ -456,6 +456,53 @@ struct SidebarListWindowTests {
         #expect(harness.registry.dispatch(.pinUnpinTab, origin: .keyboard))
         await harness.settle()
         #expect(section(c.organization.tab(visible)) == "pinned")
+    }
+
+    @Test("Relative archive targets only Today around the clicked row, retaining pins and the selection")
+    func archiveAboveBelow() async throws {
+        let harness = try await SidebarListHarness()
+        defer { harness.shutdown() }
+        let c = harness.window
+        let first = try #require(await harness.openTab("https://menus.test/first"))
+        let middle = try #require(await harness.openTab("https://menus.test/middle"))
+        let last = try #require(await harness.openTab("https://menus.test/last"))
+        c.session.pinTabs([first])
+        c.session.moveItems([.tab(middle)], to: .init(.today(harness.spaceID), position: .end))
+        c.session.moveItems([.tab(last)], to: .init(.today(harness.spaceID), position: .end))
+        await harness.settle()
+        let nodes = c.sidebar.prepareContextMenu(for: .tab(middle))
+        let menu = try #require(c.makeSidebarContextMenu(for: nodes))
+        #expect(c.sidebarRelativeTodayTabs(above: false) == [last])
+        #expect(!c.sidebarRelativeTodayTabs(above: true).contains(first))
+        menu.menu.performActionForItem(at: menu.menu.indexOfItem(withTitle: "Archive Tabs Below"))
+        await harness.settle()
+        c.sidebar.endContextMenu()
+        #expect(c.organization.tab(last) == nil)
+        #expect(c.organization.tab(first) != nil && c.organization.tab(middle) != nil)
+        #expect(harness.registry.dispatch(.revealCurrentTab, origin: .keyboard))
+        await harness.settle()
+        #expect(c.isSidebarVisible)
+    }
+
+    @Test("Mute acts on the clicked live tab and its next menu offers Unmute")
+    func muteClickedTab() async throws {
+        let harness = try await SidebarListHarness()
+        defer { harness.shutdown() }
+        let c = harness.window
+        let first = try #require(await harness.openTab("https://menus.test/audio", activate: true))
+        let surface = try #require(c.session.selectedSurface)
+        _ = await harness.openTab("https://menus.test/other", activate: true)
+        let selected = try #require(c.session.selectedSurface)
+        let menu = try #require(c.makeSidebarContextMenu(for: c.sidebar.prepareContextMenu(for: .tab(first))))
+        #expect(menu.menu.items.contains { $0.title == "Mute Tab" })
+        menu.menu.performActionForItem(at: menu.menu.indexOfItem(withTitle: "Mute Tab"))
+        await harness.settle()
+        for _ in 0..<20 { await Task.yield() }
+        #expect(surface.media.isAudioMuted == true && selected.media.isAudioMuted == false)
+        c.sidebar.endContextMenu()
+        let next = try #require(c.makeSidebarContextMenu(for: c.sidebar.prepareContextMenu(for: .tab(first))))
+        #expect(next.menu.items.contains { $0.title == "Unmute Tab" })
+        c.sidebar.endContextMenu()
     }
 
     @Test("Copy and Duplicate act on the clicked row while another tab stays selected")

@@ -17,33 +17,44 @@ final class BrowserCaptureController<Engine: BrowserEngine> {
 
     init(owner: BrowserWindowController<Engine>) { self.owner = owner }
 
-    func begin() {
-        guard overlay == nil, task == nil, let owner, let surface = owner.session.selectedSurface,
-              !surface.isDisposed, owner.window?.attachedSheet == nil else { return }
+    func begin(fullPage: Bool = false) {
+        guard overlay == nil, task == nil, let owner, let surface = owner.pageCommandSurface(),
+              !surface.isDisposed, owner.window?.attachedSheet == nil,
+              !fullPage || owner.engine.capabilities.contains(.fullPageSnapshots) else { return }
         let requestID = UUID()
         captureID = requestID
         source = surface
         let generation = surface.documentGeneration
         task = Task { [weak self, weak owner, weak surface] in
             defer { if self?.captureID == requestID { self?.task = nil } }
-            guard let snapshot = try? await surface?.captureSnapshot(.init(documentGeneration: generation)),
-                  !Task.isCancelled, let self, let owner, let surface, owner.session.selectedSurface === surface,
-                  !surface.isDisposed, surface.documentGeneration == generation else { return }
-            let view = BrowserCaptureSelectionView(image: snapshot.image)
-            view.frame = surface.hostView.bounds
-            view.autoresizingMask = [.width, .height]
-            view.onFinish = { [weak self, weak surface, weak owner] rect in
-                self?.overlay?.removeFromSuperview()
-                self?.overlay = nil
-                owner?.focusSelectedDocument()
-                guard let self, let owner, let surface, let rect,
-                      owner.session.selectedSurface === surface, !surface.isDisposed,
-                      surface.documentGeneration == generation else { return }
-                self.finish(image: snapshot.image, normalizedRect: rect)
+            do {
+                guard let snapshot = try await surface?.captureSnapshot(.init(documentGeneration: generation, fullPage: fullPage)),
+                      !Task.isCancelled, let self, let owner, let surface, owner.pageCommandSurface() === surface,
+                      !surface.isDisposed, surface.documentGeneration == generation else { return }
+                if fullPage {
+                    self.finish(image: snapshot.image, normalizedRect: CGRect(x: 0, y: 0, width: 1, height: 1))
+                    return
+                }
+                let view = BrowserCaptureSelectionView(image: snapshot.image)
+                view.frame = surface.hostView.bounds
+                view.autoresizingMask = [.width, .height]
+                view.onFinish = { [weak self, weak surface, weak owner] rect in
+                    self?.overlay?.removeFromSuperview()
+                    self?.overlay = nil
+                    guard let owner, let surface, owner.pageCommandSurface() === surface, !surface.isDisposed,
+                          surface.documentGeneration == generation else { return }
+                    surface.focusDocument()
+                    guard let self, let rect else { return }
+                    self.finish(image: snapshot.image, normalizedRect: rect)
+                }
+                overlay = view
+                surface.hostView.addSubview(view)
+                owner.window?.makeFirstResponder(view)
+            } catch {
+                guard !Task.isCancelled, let owner, let surface, owner.pageCommandSurface() === surface,
+                      !surface.isDisposed, surface.documentGeneration == generation else { return }
+                owner.session.onError?(error)
             }
-            overlay = view
-            surface.hostView.addSubview(view)
-            owner.window?.makeFirstResponder(view)
         }
     }
 

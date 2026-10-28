@@ -41,6 +41,10 @@ public struct BrowserEngineCapabilities: OptionSet, Sendable {
     public static let chromeWebStoreExtensions = Self(rawValue: 1 << 13)
     public static let devTools = Self(rawValue: 1 << 14)
     public static let printing = Self(rawValue: 1 << 15)
+    /// Native Save Page As flow for the displayed document.
+    public static let pageSaving = Self(rawValue: 1 << 24)
+    /// Snapshots can include the complete scrollable document.
+    public static let fullPageSnapshots = Self(rawValue: 1 << 25)
     /// A policy question can stay open after the delegate returns (`BrowserPolicyDecision.suspend()`):
     /// the engine holds the original request natively and resumes it, never replays it. Without
     /// this capability the delegate answers synchronously from state it prepared ahead, as stock

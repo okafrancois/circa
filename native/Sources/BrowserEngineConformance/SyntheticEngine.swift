@@ -363,6 +363,15 @@ public final class SyntheticSurface: BrowserEngineSurface {
 
     public func stopFinding(clearSelection: Bool) {}
 
+    public var pageArchive: Data = Data("MIME-Version: 1.0\r\nContent-Type: text/html\r\n\r\nSynthetic page".utf8)
+    public var archiveRequest: (() async throws -> Data)?
+    public func archivePage(documentGeneration: UInt64) async throws -> Data {
+        guard !isDisposed else { throw BrowserEngineError.surfaceDisposed }
+        guard documentGeneration == self.documentGeneration else { throw BrowserEngineError.documentChanged }
+        if let archiveRequest { return try await archiveRequest() }
+        return pageArchive
+    }
+
     public func captureSnapshot(_ request: BrowserSnapshotRequest) async throws -> BrowserSurfaceSnapshot {
         throw BrowserEngineError.unsupportedOperation
     }

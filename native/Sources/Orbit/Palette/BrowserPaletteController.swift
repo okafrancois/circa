@@ -97,7 +97,7 @@ final class BrowserPaletteController<Engine: BrowserEngine> {
             BrowserDailyCommands.priority($0.id) < BrowserDailyCommands.priority($1.id)
         }.filter {
             $0.scope != .responder && $0.id != .newTab && $0.id != .openCommandBar && registry.isImplemented($0.id)
-                && $0.menu != BrowserPageContextCommands.menu
+                && OrbitCommandCatalog.isCommandBarAction($0)
         }.map {
             .init(id: "command:\($0.id.rawValue)", title: $0.localizedTitle, detail: $0.id == .manageExtensions && owner.engine.extensionManagement == nil
                     ? uiText("Extensions require an updated Chromium build.") : BrowserDailyCommands.detail($0.id), section: .commands, action: .command($0.id),
