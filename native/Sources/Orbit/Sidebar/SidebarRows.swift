@@ -488,8 +488,8 @@ class SidebarTabRow: SidebarListRow {
     }
 }
 
-/// Two selected pages share an outer row, with a separate favicon and truncated title per page.
-/// Input still targets the group; layouts with more members retain the existing aggregate row.
+/// Selected split pages share an outer row, with a favicon and truncated title per page.
+/// Input still targets the group.
 @MainActor
 final class SidebarSplitRow: SidebarTabRow {
     private(set) var paneCells: [SidebarSplitPaneCell] = []
@@ -502,7 +502,7 @@ final class SidebarSplitRow: SidebarTabRow {
 
     func updateSplit(_ item: SidebarTabItem, node: BrowserOrganizationNode, depth: Int) {
         update(item, depth: depth, node: node)
-        let members = item.selected && item.splitPanes.count == 2 ? item.splitPanes : []
+        let members = item.selected && (2...3).contains(item.splitPanes.count) ? item.splitPanes : []
         titleLabel.isHidden = !members.isEmpty
         if paneCells.count != members.count {
             paneCells.forEach { $0.removeFromSuperview() }
@@ -520,15 +520,15 @@ final class SidebarSplitRow: SidebarTabRow {
 
     override func layout() {
         super.layout()
-        guard paneCells.count == 2 else { return }
+        guard paneCells.count >= 2 else { return }
         favicon.isHidden = true
         titleLabel.isHidden = true
         let inset: CGFloat = 4, gap: CGFloat = 4
-        let width = max(0, (bounds.width - 2 * inset - gap) / 2)
+        let width = max(0, (bounds.width - 2 * inset - CGFloat(paneCells.count - 1) * gap) / CGFloat(paneCells.count))
         for (index, cell) in paneCells.enumerated() {
             cell.frame = CGRect(x: inset + CGFloat(index) * (width + gap), y: inset,
                                 width: width, height: max(0, bounds.height - inset * 2))
-            cell.trailingInset = index == 1 && isHovering ? 24 : 4
+            cell.trailingInset = index == paneCells.count - 1 && isHovering ? 24 : 4
         }
     }
 }

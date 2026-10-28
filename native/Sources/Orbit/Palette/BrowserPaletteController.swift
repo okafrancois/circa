@@ -13,6 +13,7 @@ final class BrowserPaletteController<Engine: BrowserEngine> {
     private var hasCapturedContext = false
     private var sourceContext: BrowserContext?
     private(set) var mode: BrowserPaletteMode = .newTab
+    private var opensEmptyAddress = false
     private(set) var results: [BrowserPaletteResult] = []
     private(set) var selection = BrowserPaletteSelection()
     private var candidates: [BrowserPaletteResult] = []
@@ -93,6 +94,7 @@ final class BrowserPaletteController<Engine: BrowserEngine> {
         siteSearch = nil
         view.setSiteSearch(nil, animated: false)
         mode = requestedMode
+        opensEmptyAddress = emptyAddress
         owner.hideLibrary(focus: false)
         owner.dismissPeek()
         hasCapturedContext = false
@@ -249,7 +251,8 @@ final class BrowserPaletteController<Engine: BrowserEngine> {
         guard let owner else { return }
         let selectedID = preserveSelection && selectionWasMoved && results.indices.contains(selection.index) ? results[selection.index].id : nil
         results = siteSearch?.results(query: draft) ?? BrowserPaletteRanking.results(query: draft, mode: mode, resolver: owner.addressResolver,
-                                                candidates: candidates, history: history, actions: availableActions)
+                                                candidates: opensEmptyAddress ? candidates.filter { $0.url?.absoluteString != "about:blank" } : candidates,
+                                                history: history, actions: opensEmptyAddress && draft.isEmpty ? [] : availableActions)
         if let selectedID, let index = results.firstIndex(where: { $0.id == selectedID }) { selection.select(index, count: results.count) }
         else { selection.reset() }
         renderResults()

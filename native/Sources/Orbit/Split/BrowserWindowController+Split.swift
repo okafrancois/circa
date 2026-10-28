@@ -13,6 +13,7 @@ final class BrowserSplitPresentation {
     private(set) var view = BrowserSplitView(frame: .zero)
     private var key: Key?
     var expandedGroup: SplitGroupID?
+    var sharingPicker: NSSharingServicePicker?
 
     /// A complete outgoing wrapper can be retained by the content card while the engine paints.
     /// Intra-group focus keeps the existing wrapper, so no live pane changes its native parent.
@@ -73,9 +74,11 @@ extension BrowserWindowController {
                         guard controller.session.selectedSurface === surface,
                               let pane = controller.split.view.panes[id] else { return }
                         controller.siteControls.toggle(presentationAnchor: pane.siteControls)
-                    case .separate:
-                        guard controller.session.selectedSurface === surface else { return }
-                        controller.session.separateSplitPane(id)
+                    case .menu:
+                        guard controller.session.selectedSurface === surface,
+                              let pane = controller.split.view.panes[id] else { return }
+                        let menu = controller.makeSplitPaneMenu(id)
+                        menu.popUp(positioning: nil, at: NSPoint(x: 0, y: pane.splitToggle.bounds.height), in: pane.splitToggle)
                     }
                 }
             }
@@ -144,12 +147,12 @@ extension BrowserWindowController {
         session.performWindowAction { [weak self] in self?.focusSelectedDocument() }
     }
 
-    func addSplitFromSelection() {
+    func addSplitFromSelection(at index: Int? = nil) {
         guard acceptsCommands, canAddSplitPane else { return }
         let ids = sidebar.selection.orderedNodes(in: session.organization!).compactMap(\.tabID)
         if ids.count >= 2 { session.createSplit(ids) }
         else {
-            session.addSplitPane()
+            session.addSplitPane(at: index)
             session.performWindowAction { [weak self] in
                 guard let self, session.activeSplit != nil,
                       session.organization?.selectedTab?.url.absoluteString == "about:blank" else { return }

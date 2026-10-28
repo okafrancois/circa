@@ -22,6 +22,11 @@ final class BrowserQuickWindowPanel: NSPanel {
 /// Uses dynamic tokens when the appearance changes while a Little Orbit is open.
 @MainActor
 final class BrowserQuickWindowAddressField: NSTextField {
+    var onActivate: (() -> Void)?
+    override func mouseDown(with event: NSEvent) {
+        if let onActivate { onActivate() } else { super.mouseDown(with: event) }
+    }
+
     override var wantsUpdateLayer: Bool { false }
     override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); updateLayer() }
     override func layout() { super.layout(); updateLayer() }

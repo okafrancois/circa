@@ -20,8 +20,8 @@ public extension BrowserWindowSession {
     func createSplit(_ ids: [TabID], orientation: BrowserSplitOrientation = .horizontal) {
         enqueueOrganization { session, context in try await session.store.createSplit(ids, orientation: orientation, from: context).1 }
     }
-    func addSplitPane(url: URL = URL(string: "about:blank")!) {
-        enqueueOrganization { session, context in try await session.store.splitWithNewTab(url: url, from: context) }
+    func addSplitPane(url: URL = URL(string: "about:blank")!, at index: Int? = nil) {
+        enqueueOrganization { session, context in try await session.store.splitWithNewTab(url: url, at: index, from: context) }
     }
     func addSplitPane(_ id: TabID, to split: SplitGroupID, at index: Int? = nil, orientation: BrowserSplitOrientation? = nil) {
         enqueueOrganization { session, context in try await session.store.addPane(id, to: split, at: index, orientation: orientation, from: context) }
