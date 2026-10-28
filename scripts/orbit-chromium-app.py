@@ -128,6 +128,9 @@ def essentials_handler(run_root, counters):
                 else:
                     body = ('<!doctype html><title>Boost fixture</title><div id="zap">Hidden by registration</div><p>Document start fixture</p><script src="/boosts/probe.js"></script>' + ('<iframe src="/boosts/middle"></iframe>' if path == "/boosts/main" else '')).encode()
                 return self.reply(200, body, extra=[("Content-Security-Policy", "default-src 'none'; script-src 'self'; style-src 'none'; frame-src http://127.0.0.1:%d http://localhost:%d; require-trusted-types-for 'script'" % (port, port))])
+            if path == "/essentials/daily-pending":
+                time.sleep(2)
+                return self.reply(200, lab.page("daily-pending"))
             if path == "/essentials/suspension-post-count":
                 return self.reply(200, str(counters.get("suspension-post", 0)).encode(), "text/plain")
             if not path.startswith("/essentials/"):
@@ -483,6 +486,8 @@ def run_phase(phase, run, data, origin, args, tls_origin=None):
         command.append("--orbit-smoke-private-domain")
     if getattr(args, "profiles_only", False):
         command.append("--orbit-smoke-profiles")
+    if getattr(args, "daily_qa", None):
+        command.append("--orbit-smoke-daily-qa=" + args.daily_qa)
     if getattr(args, "relaunch_only", False):
         command.append("--orbit-smoke-relaunch")
     if getattr(args, "archive_auto_only", False):
@@ -577,6 +582,11 @@ def run_phase(phase, run, data, origin, args, tls_origin=None):
         results, events, require_extension=phase == "fresh" and not args.no_extension,
         require_quit=phase != "crash")
     checks.update(product_checks)
+    if getattr(args, "daily_qa", None) == "downloads":
+        checks["downloadStagingCleaned"] = not any(root.glob(".orbit-download-*"))
+        checks["downloadQuitAcceptedWhileActive"] = any(
+            event.get("event") == "result" and event.get("id") == "daily.download-quit-accepted"
+            for event in events)
     if getattr(args, "private_domain_only", False):
         statuses = {entry["id"]: entry["status"] for entry in results.get("results", [])}
         required = ("normal-ready", "same-origin-isolated", "memory-services", "no-profile-directory",
@@ -698,6 +708,7 @@ def main():
                         help="Fresh real-shell MV3 and normal quit gate, without unrelated scenarios")
     runner.add_argument("--private-domain-only", action="store_true",
                         help="Hidden mock-only private domain coexistence/release probe on approved EssentialsR2")
+    runner.add_argument("--daily-qa", choices=("overlays", "downloads", "archive"), help="Synthetic daily ownership, download quit and archive undo probes")
     runner.add_argument("--relaunch-only", action="store_true", help="Regular windows and Little across normal quit and relaunch")
     runner.add_argument("--profiles-only", action="store_true",
                         help="Two persistent product profiles across normal and crash relaunches, without extensions")
@@ -708,6 +719,13 @@ def main():
     runner.add_argument("--extension-timeout", type=int, default=25,
                         help="Bounded wait for an extension report (25..180 seconds; does not alter probe deadlines)")
     args = parser.parse_args()
+    if args.command == "smoke" and args.daily_qa:
+        if any((args.relaunch_only, args.boosts_only, args.passwords_only, args.engine_r5_only,
+                args.engine_r4_only, args.extension_only, args.private_domain_only, args.profiles_only,
+                args.archive_auto_only, args.space_profile_only)):
+            parser.error("--daily-qa excludes other focused probes")
+        args.no_extension = True
+        args.fresh_only = True
     if args.command == "smoke" and args.relaunch_only:
         if any((args.fresh_only, args.boosts_only, args.passwords_only, args.engine_r5_only,
                 args.engine_r4_only, args.extension_only, args.private_domain_only, args.profiles_only,

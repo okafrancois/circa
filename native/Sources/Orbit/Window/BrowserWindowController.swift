@@ -442,7 +442,8 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
         refreshPageZoom()
         renderDownloads()
         renderArchive()
-        if let boostEditor, boostEditor.session.store.profileID != session.activeProfileID {
+        if let boostEditor, boostEditor.session.store.profileID != session.activeProfileID
+            || (boostEditor.pageHost !== selected?.hostView && boostEditor.pageHost !== peek.presentedSurface?.hostView) {
             boostEditor.close(); self.boostEditor = nil
         }
         renderLibrary()

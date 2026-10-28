@@ -17,6 +17,7 @@ final class BrowserBoostZapView: NSView {
     var onZap: ((String) -> Void)?
     var onUnzap: ((String) -> Void)?
     var onDone: (() -> Void)?
+    var onStop: (() -> Void)?
     var onError: ((Error) -> Void)?
     private var candidate: BrowserBoostPickedElement?
     private var selected = false
@@ -145,10 +146,12 @@ final class BrowserBoostZapView: NSView {
         needsLayout = true
     }
     func stop() {
+        let heldFocus = (window?.firstResponder as? NSView)?.isDescendant(of: self) == true
         task?.cancel(); ticket = UUID()
         if let inputMonitor { NSEvent.removeMonitor(inputMonitor); self.inputMonitor = nil }
         trackingWindow?.acceptsMouseMovedEvents = previouslyAcceptedMoves
         trackingWindow = nil; removeFromSuperview()
+        if heldFocus { onStop?() }
     }
     private func confirm(related: Bool) {
         guard let candidate else { return }

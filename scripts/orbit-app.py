@@ -534,7 +534,7 @@ def main():
     cleaner.add_argument('--repo', type=Path, default=ROOT)
     args = parser.parse_args()
     if args.command == 'build' and args.bundle_id is None:
-        args.bundle_id = 'io.github.okatech.orbit.test.orbit.test.orbit-identity' if args.synthetic else BUNDLE_ID
+        args.bundle_id = 'lab.orbit.orbit.synthetic' if args.synthetic else BUNDLE_ID
     if args.command == 'clean-stale':
         print(json.dumps(clean_stale(args.repo), indent=2))
         return

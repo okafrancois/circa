@@ -11,6 +11,7 @@ final class BrowserPeekController<Surface: BrowserEngineSurface>: BrowserEngineS
         /// The tab whose link opened the Peek; downloads and popups are attributed to it.
         weak var source: Surface?
         let sourceOccurrenceID: TabOccurrenceID?
+        var sourceSpaceID: SpaceID? = nil
         let trigger: BrowserPeekTrigger
         let isLibraryBoost: Bool
         /// A main-frame document committed (the contract's displayable signal, CONTRACT-R2).
@@ -26,6 +27,7 @@ final class BrowserPeekController<Surface: BrowserEngineSurface>: BrowserEngineS
     struct DismissedPeek: Equatable {
         let url: URL
         let sourceOccurrenceID: TabOccurrenceID?
+        var sourceSpaceID: SpaceID? = nil
         var closedAt = Date()
     }
 
@@ -54,6 +56,7 @@ final class BrowserPeekController<Surface: BrowserEngineSurface>: BrowserEngineS
 
     /// Where the Peek is shown, for `BrowserSurfacePlacement.peek`.
     var windowID: () -> WindowID? = { nil }
+    var spaceID: () -> SpaceID? = { nil }
     /// Classifies a source tab: Favorite, Pinned (with its home address) or Today, from the
     /// organization model. Nil (no model, unknown occurrence): automatic Peek never applies.
     var sourceClassifier: ((TabOccurrenceID) -> (role: BrowserPeekSourceRole, homeURL: URL?)?)?
@@ -145,7 +148,7 @@ final class BrowserPeekController<Surface: BrowserEngineSurface>: BrowserEngineS
         presentation = nil
         for other in container.surfaces where other !== surface { container.dispose(other) }
         promotionPlacement = nil
-        presentation = Presentation(surface: surface, source: source, sourceOccurrenceID: sourceOccurrenceID, trigger: trigger, isLibraryBoost: isLibraryBoost)
+        presentation = Presentation(surface: surface, source: source, sourceOccurrenceID: sourceOccurrenceID, sourceSpaceID: spaceID(), trigger: trigger, isLibraryBoost: isLibraryBoost)
         lastDismissed = nil
         pageFocus = .peek
         overlay.isLibraryBoost = isLibraryBoost
@@ -163,7 +166,7 @@ final class BrowserPeekController<Surface: BrowserEngineSurface>: BrowserEngineS
         guard let dismissed = presentation else { return nil }
         presentation = nil
         if remember, let url = dismissed.surface.currentURL ?? dismissed.surface.navigationState.url {
-            lastDismissed = DismissedPeek(url: url, sourceOccurrenceID: dismissed.sourceOccurrenceID, closedAt: clock())
+            lastDismissed = DismissedPeek(url: url, sourceOccurrenceID: dismissed.sourceOccurrenceID, sourceSpaceID: dismissed.sourceSpaceID, closedAt: clock())
         }
         let surface = dismissed.surface
         // Inert from now on: no navigation, popup or download can start while it fades out.

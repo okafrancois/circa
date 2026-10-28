@@ -28,6 +28,7 @@ extension BrowserWindowController {
         }
 
         peek.windowID = { [weak self] in self?.session?.snapshot?.id }
+        peek.spaceID = { [weak self] in self?.session?.snapshot?.activeSpaceID }
         peek.sourceClassifier = { [weak self] occurrenceID in self?.peekSourceClassification(for: occurrenceID) }
         peek.onStateChange = { [weak self] in
             if self?.peek.isPresented == true { self?.sidebar.spaceSwipe.cancel() }
@@ -320,11 +321,13 @@ extension BrowserWindowController {
             let sourceAlive = presentation.isLibraryBoost
                 ? library.isPresented && session.activeProfileID == presentation.surface.profileID
                 : presentation.source.map { owns($0) } ?? false
-            if session.isClosed || !sourceAlive || selected != presentation.sourceOccurrenceID {
+            if session.isClosed || !sourceAlive || selected != presentation.sourceOccurrenceID
+                || presentation.sourceSpaceID != session.snapshot?.activeSpaceID {
                 dismissPeek(animated: !session.isClosed)
             }
         }
-        if let dismissed = peek.lastDismissed, dismissed.sourceOccurrenceID != selected {
+        if let dismissed = peek.lastDismissed, dismissed.sourceOccurrenceID != selected
+            || dismissed.sourceSpaceID != session.snapshot?.activeSpaceID {
             peek.forgetDismissed()
         }
     }
@@ -470,6 +473,7 @@ extension BrowserWindowController {
     var canReopenPeek: Bool {
         guard let dismissed = peek.lastDismissed, !peek.isPresented else { return false }
         return dismissed.sourceOccurrenceID == session.snapshot?.selectedOccurrenceID
+            && dismissed.sourceSpaceID == session.snapshot?.activeSpaceID
     }
 
     /// ⇧⌘T after closing a Peek reopens it over the same tab (official notes O23). The document

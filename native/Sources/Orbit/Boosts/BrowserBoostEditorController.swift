@@ -184,6 +184,10 @@ extension BrowserWindowController {
                   let raw, raw != "null", let data = raw.data(using: .utf8) else { return nil }
             return try JSONDecoder().decode(BrowserBoostPickedElement.self, from: data)
         }
+        picker.onStop = { [weak self, weak surface] in
+            guard let self, let surface, isBoostPageTarget(surface) else { return }
+            surface.focusDocument()
+        }
         picker.onZap = { [weak controller] in controller?.session.zap($0) }
         picker.onUnzap = { [weak controller] in controller?.session.unzap($0) }
         picker.onError = { [weak picker] _ in picker?.onDone?() }
@@ -225,6 +229,8 @@ extension BrowserWindowController {
               let runtime = boostsRuntime, let parent = window else { return }
         boostTask?.cancel()
         let ticket = library.presentationID
+        let sourceSpace = session.snapshot?.activeSpaceID
+        let sourceOccurrence = session.snapshot?.selectedOccurrenceID
         boostTask = Task { [weak self] in
             guard let self else { return }
             do {
@@ -232,6 +238,8 @@ extension BrowserWindowController {
                 guard let current = await store.snapshot().boosts.first(where: { $0.id == boost.id }),
                       !Task.isCancelled, library.isPresented, library.category == .boosts,
                       library.presentationID == ticket,
+                      session.snapshot?.activeSpaceID == sourceSpace,
+                      session.snapshot?.selectedOccurrenceID == sourceOccurrence,
                       session.activeProfileID == profile, acceptsCommands else { return }
                 var parts = URLComponents()
                 parts.scheme = current.hostPattern.schemes.contains(.https) ? "https" : "http"
