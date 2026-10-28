@@ -29,7 +29,7 @@ struct SpaceMotionTests {
         }
     }
 
-    @Test("Selected URLs replace immediately in both Space directions; status alone changes the baseline")
+    @Test("Known selected URLs replace without a blank frame; the security and status group reflows")
     func urlReplacementAndStatus() async throws {
         let store = BrowserStore()
         let profile = await store.createProfile(name: "Synthetic")
@@ -47,10 +47,10 @@ struct SpaceMotionTests {
         field.setStatusVisible(true, animated: false)
         field.layoutSubtreeIfNeeded()
         #expect(field.hasStatus)
-        #expect(field.constraints.contains { $0.isActive && $0.firstAttribute == .lastBaseline && $0.constant == -4 })
+        #expect(field.textGroup.constraints.contains { $0.isActive && $0.firstAttribute == .lastBaseline && $0.constant == -4 })
         field.setStatusVisible(false, animated: false)
         #expect(!field.hasStatus)
-        #expect(!field.constraints.contains { $0.isActive && $0.firstAttribute == .lastBaseline })
+        #expect(!field.textGroup.constraints.contains { $0.isActive && $0.firstAttribute == .lastBaseline && ($0.firstItem as? NSView) === field.displayLabel })
     }
 
     @Test("Released swipe URL ignores late source metadata and restores on refusal")

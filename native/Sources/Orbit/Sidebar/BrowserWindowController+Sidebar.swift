@@ -28,6 +28,7 @@ extension BrowserWindowController {
             }
             windowShell.applySpaceSwipeBlend(blend)
             if blend == nil, let session {
+                extensionControls.finishPreview()
                 let url = session.selectedSurface?.navigationState.url ?? session.organization?.selectedTab?.url
                 addressField.finishSpaceTransition(url?.absoluteString ?? String(),
                     in: session.snapshot?.activeSpaceID, spaces: session.catalog?.spaces ?? [])
@@ -35,9 +36,14 @@ extension BrowserWindowController {
         }
         sidebar.spaceSwipe.onRelease = { [weak self] source, target, document in
             guard let self else { return }
+            sidebar.addressContainer.beginSelectionUpdate()
+            if let profile = document.spaces.first(where: { $0.id == target })?.profileID {
+                extensionControls.preview(in: profile)
+            }
             let selected = document.windows.first { $0.id.rawValue == id }?.spaces.first { $0.spaceID == target }?.selectedOccurrenceID
             let value = document.tabs.first { $0.occurrenceID == selected }?.url.absoluteString ?? String()
             addressField.setAddress(value, from: source, to: target, spaces: document.spaces, awaitingPublication: true)
+            sidebar.addressContainer.endSelectionUpdate()
         }
         sidebar.spaceSwipe.commit = { [weak self] target, catalog, admission, isCurrent, completion in
             guard let self else { completion(false); return }

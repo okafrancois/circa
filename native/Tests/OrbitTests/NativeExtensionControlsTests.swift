@@ -10,6 +10,7 @@ private final class ExtensionControlProbe: BrowserExtensionHost {
     var supportsPinning = false
     var registryReady = true
     var observationAttempts = 0
+    var itemsByProfile: [ProfileID: [BrowserExtensionSummary]] = [:]
     let changes = BrowserExtensionChangeHub()
     var onExtensionsChange: ((ProfileID) -> Void)?
     var requestedProfiles: [ProfileID] = []
@@ -29,7 +30,7 @@ private final class ExtensionControlProbe: BrowserExtensionHost {
     func installedExtensions(in profileID: ProfileID) throws -> [BrowserExtensionSummary] {
         requestedProfiles.append(profileID)
         guard registryReady else { throw BrowserEngineError.unsupportedOperation }
-        return [item]
+        return itemsByProfile[profileID] ?? [item]
     }
     func setEnabled(_ enabled: Bool, extensionID: String, in profileID: ProfileID) throws {
         toggles.append((extensionID, profileID, enabled))
@@ -82,6 +83,52 @@ struct NativeExtensionControlsTests {
         host.changes.emit(profile)
         #expect(window.sidebar.extensionsContainer.subviews.isEmpty)
         window.session.close()
+        try await environment.finalize()
+    }
+
+    @Test("Space previews retain profile-owned pixels, survive an empty Space and restore after refusal")
+    func spacePreviewIcons() async throws {
+        NSApplication.shared.setActivationPolicy(.prohibited)
+        let engine = SiteSyntheticEngine(), host = ExtensionControlProbe()
+        host.supportsPinning = true; host.item.isPinned = true
+        engine.extensions = host
+        let environment = BrowserEnvironment(engine: engine)
+        let owner = try await environment.makeWindow()
+        defer { owner.window?.close() }
+        let first = try #require(owner.session.activeProfileID)
+        owner.extensionControls.render()
+        let firstButton = try #require(owner.sidebar.extensionsContainer.subviews.first)
+        let other = await environment.store.createProfile(name: "Synthetic preview")
+        owner.session.refreshCatalog()
+        await owner.session.waitForPendingCommands()
+        host.itemsByProfile[other] = [BrowserExtensionSummary(id: host.item.id, name: "Synthetic other", version: "1",
+                                                             isEnabled: true, hasAction: true, isPinned: true)]
+        owner.extensionControls.preview(in: other)
+        let otherButton = try #require(owner.sidebar.extensionsContainer.subviews.first)
+        #expect(firstButton !== otherButton)
+        #expect((otherButton as? NSButton)?.cell.flatMap { $0 as? NSButtonCell }?.imageDimsWhenDisabled == false)
+        host.registryReady = false
+        owner.extensionControls.preview(in: first)
+        #expect(owner.sidebar.extensionsContainer.subviews.first === firstButton)
+        host.registryReady = true
+        owner.extensionControls.finishPreview()
+        #expect(owner.sidebar.extensionsContainer.subviews.first === firstButton)
+        let empty = try await environment.store.createSpace(name: "Synthetic empty", profileID: first)
+        owner.session.activateSpace(empty)
+        await owner.session.waitForPendingCommands()
+        owner.extensionControls.render()
+        #expect(owner.session.selectedSurface == nil)
+        #expect(owner.sidebar.extensionsContainer.subviews.first === firstButton)
+        let otherSpace = try await environment.store.createSpace(name: "Synthetic other", profileID: other)
+        owner.session.activateSpace(otherSpace)
+        await owner.session.waitForPendingCommands()
+        owner.submitAddress("https://example.net/")
+        await owner.session.waitForPendingCommands()
+        owner.extensionControls.render()
+        #expect(owner.sidebar.extensionsContainer.subviews.first === otherButton)
+        (otherButton as? SiteControlButton)?.onPress?()
+        #expect(host.actionSurface?.profileID == other)
+        owner.session.close()
         try await environment.finalize()
     }
 

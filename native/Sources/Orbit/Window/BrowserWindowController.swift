@@ -414,6 +414,8 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
         renderDownloads()
         renderArchive()
         renderLibrary()
+        let pillSelectionChanged = displayedSpaceID != nil && displayedSpaceID != session.snapshot?.activeSpaceID
+        if pillSelectionChanged { sidebar.addressContainer.beginSelectionUpdate() }
         siteControls.render()
         renderDeveloperToolbar()
         extensionControls.render()
@@ -453,6 +455,7 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
             reloadButton.isEnabled = false
             rebuildTabStrip()
         }
+        if pillSelectionChanged { sidebar.addressContainer.endSelectionUpdate() }
         if selectionChanged, !library.isPresented, !palette.isPresented, !preserveAddressDraft, window?.isKeyWindow == true { focusSelectedDocument() }
         renderPeek()
         tabSwitcher.renderSession()
