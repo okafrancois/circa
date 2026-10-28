@@ -68,7 +68,11 @@
     "\"\\n\"",
     "\"arrow.up.left.and.arrow.down.right\"",
     "\"bounds\"",
+    "\"contents\"",
     "\"cornerRadius\"",
+    "\"masksToBounds\"",
+    "\"onOrderIn\"",
+    "\"onOrderOut\"",
     "\"opacity\"",
     "\"peek-address\"",
     "\"peek-close\"",
@@ -86,7 +90,8 @@
     "\"rectangle.split.2x1\"",
     "\"shadowPath\"",
     "\"transform\"",
-    "\"xmark\""
+    "\"xmark\"",
+    "\"zPosition\""
   ],
   "Palette/BrowserPaletteView.swift": [
     "\"\"",

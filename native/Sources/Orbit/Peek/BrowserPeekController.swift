@@ -81,6 +81,21 @@ final class BrowserPeekController<Surface: BrowserEngineSurface>: BrowserEngineS
     /// Nonisolated so that a window can hold it as a stored property; views are created lazily.
     nonisolated init() {}
 
+    private var promotionPlacement: (host: NSView, reveal: @MainActor () -> Void)?
+
+    func revealPromotionWhenPlaced(_ host: NSView, reveal: @escaping @MainActor () -> Void) {
+        promotionPlacement = (host, reveal)
+    }
+
+    func revealPromotionIfPlaced(in parent: NSView) {
+        guard !isPresented, let pending = promotionPlacement, pending.host.isDescendant(of: parent) else { return }
+        parent.layoutSubtreeIfNeeded()
+        promotionPlacement = nil
+        pending.reveal()
+    }
+
+    func cancelPromotionPlacement() { promotionPlacement = nil }
+
     var presentedSurface: Surface? { presentation?.surface }
     var isPresented: Bool { presentation != nil }
 
@@ -128,6 +143,7 @@ final class BrowserPeekController<Surface: BrowserEngineSurface>: BrowserEngineS
         // The previous Peek, presented or still fading out, is disposed now.
         presentation = nil
         for other in container.surfaces where other !== surface { container.dispose(other) }
+        promotionPlacement = nil
         presentation = Presentation(surface: surface, source: source, sourceOccurrenceID: sourceOccurrenceID, trigger: trigger)
         lastDismissed = nil
         pageFocus = .peek
@@ -159,7 +175,7 @@ final class BrowserPeekController<Surface: BrowserEngineSurface>: BrowserEngineS
     }
 
     /// Ends the presentation of a surface that left Peek alive (tab, Split). The overlay leaves
-    /// with `expand` or `hide`; the surface is no longer Peek's.
+    /// when the receiver completes adoption; the surface is no longer Peek's.
     func endPresentationAfterHandOff() {
         presentation = nil
         lastDismissed = nil
@@ -170,6 +186,7 @@ final class BrowserPeekController<Surface: BrowserEngineSurface>: BrowserEngineS
 
     /// Closes the Peek of a closing window: every owned surface is disposed.
     func close() {
+        promotionPlacement = nil
         handoffTask?.cancel()
         handoffTask = nil
         presentation = nil

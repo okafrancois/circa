@@ -31,6 +31,7 @@ final class BrowserPeekOverlayView: NSView {
     private var sourceTask: Task<Void, Never>?
     private let sourceImage = CALayer()
     private let promotionImage = CALayer()
+    private var promotionViewport: (host: NSView, constraints: [NSLayoutConstraint])?
     /// The page geometry stays anchored to the content card while the scrim covers the sidebar.
     weak var contentAnchor: NSView?
     var presentationBounds: NSRect {
@@ -72,8 +73,12 @@ final class BrowserPeekOverlayView: NSView {
         pageContainer.translatesAutoresizingMaskIntoConstraints = false
         pageContainer.wantsLayer = true
         promotionImage.contentsGravity = .resize
-        pageContainer.layer?.addSublayer(promotionImage)
+        promotionImage.actions = Dictionary(uniqueKeysWithValues:
+            ["bounds", "position", "contents", "cornerRadius", "masksToBounds", "zPosition", "onOrderIn", "onOrderOut"]
+                .map { ($0, NSNull()) })
         addSubview(toolbar)
+        layer?.addSublayer(promotionImage)
+        promotionImage.zPosition = 1
         cardClip.addSubview(pageContainer)
         sourceImage.contentsGravity = .resize
         cardClip.layer?.addSublayer(sourceImage)
@@ -178,6 +183,7 @@ final class BrowserPeekOverlayView: NSView {
     /// Installs `hostView` in the card and fades the overlay in. The view is placed edge to edge
     /// below the toolbar; placing it again does nothing, so the document is never reloaded.
     func show(_ hostView: NSView, animated: Bool) {
+        restorePromotionViewport()
         sourceTask?.cancel()
         transitionGeneration &+= 1
         pendingExit = nil
@@ -197,7 +203,15 @@ final class BrowserPeekOverlayView: NSView {
         sourceImage.removeAllAnimations()
         sourceImage.contents = nil
         sourceImage.opacity = 0
+        promotionImage.removeAllAnimations()
+        promotionImage.removeFromSuperlayer()
+        layer?.addSublayer(promotionImage)
+        promotionImage.zPosition = 1
+        promotionImage.cornerRadius = 0
+        promotionImage.masksToBounds = false
         promotionImage.contents = nil
+        cardShadow.isHidden = false
+        toolbar.isHidden = false
         pageContainer.alphaValue = 1
         needsLayout = true
         layoutSubtreeIfNeeded()
@@ -287,50 +301,80 @@ final class BrowserPeekOverlayView: NSView {
         }
     }
 
-    /// Promotion: the card grows into the whole content card it is centred on while it fades,
-    /// uncovering the page that the content card now presents.
+    /// Keeps the last painted frame attached while the live surface changes parents.
     func retainPromotionImage(_ image: CGImage) {
-        promotionImage.frame = pageContainer.bounds
+        // This layer starts empty. Its geometry and contents must be ready before the live
+        // host leaves; implicit layer actions would grow it from zero during the transfer.
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        if BrowserPeekStyle.prefersReducedMotion {
+            promotionImage.removeFromSuperlayer()
+            pageContainer.layer?.addSublayer(promotionImage)
+            promotionImage.frame = pageContainer.bounds
+            promotionImage.cornerRadius = 0
+            promotionImage.masksToBounds = false
+        } else {
+            promotionImage.frame = cardFrame
+            promotionImage.cornerRadius = BrowserPeekStyle.cardRadius
+            promotionImage.masksToBounds = true
+        }
         promotionImage.contents = image
+        CATransaction.commit()
+        CATransaction.flush()
     }
 
-    func expand(to destination: NSRect? = nil, completion: @escaping () -> Void = {}) {
-        guard isShown else { completion(); return }
+    /// Reflow behind the retained frame while the old card still clips the live host.
+    func preparePromotionViewport(_ host: NSView, size: NSSize) {
+        restorePromotionViewport()
+        guard host.superview === pageContainer, size.width > 0, size.height > 0 else { return }
+        let constraints = pageContainer.constraints.filter { $0.firstItem === host || $0.secondItem === host }
+        promotionViewport = (host, constraints)
+        NSLayoutConstraint.deactivate(constraints)
+        host.translatesAutoresizingMaskIntoConstraints = true
+        host.autoresizingMask = []
+        host.frame = NSRect(origin: .zero, size: size)
+        host.layoutSubtreeIfNeeded()
+    }
+
+    func restorePromotionViewport(restoreLayout: Bool = true) {
+        guard let pending = promotionViewport else { return }
+        promotionViewport = nil
+        guard restoreLayout, pending.host.superview === pageContainer else { return }
+        pending.host.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate(pending.constraints)
+        pageContainer.layoutSubtreeIfNeeded()
+    }
+
+    /// The already reflowed image covers the first paint in the receiver's native hierarchy.
+    func retainDestinationImage(_ image: CGImage, in destination: NSRect) {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        promotionImage.frame = destination
+        promotionImage.contents = image
+        promotionImage.cornerRadius = OrbitTokens.Radius.contentCard
+        promotionImage.masksToBounds = true
+        cardShadow.isHidden = true
+        toolbar.isHidden = true
+        CATransaction.commit()
+        CATransaction.flush()
+    }
+
+    func discardPromotionImage() {
+        promotionImage.contents = nil
+    }
+
+    /// Promotion changes the card and its controls together when the receiver is ready.
+    /// Keep the accessibility crossfade for callers that explicitly reduce motion.
+    func completePromotion(completion: @escaping () -> Void = {}) {
+        guard isShown, BrowserPeekStyle.prefersReducedMotion else {
+            hide(animated: false, completion: completion)
+            return
+        }
         beginExit(animated: true, completion: completion) {
-            if BrowserPeekStyle.prefersReducedMotion {
-                let duration = BrowserPeekStyle.reducedMotionCrossfade
-                fade(layer: cardShadow.layer, from: 1, to: 0, duration: duration, holds: true)
-                fade(layer: scrim.layer, from: 1, to: 0, duration: duration, holds: true)
-                return duration
-            }
-            let spring = BrowserPeekStyle.expandSpring
-            let card = cardShadow.frame
-            let target = destination ?? presentationBounds
-            let scale = target.width / max(1, card.width)
-            let size = NSRect(x: 0, y: 0, width: card.width, height: target.height / max(0.001, scale))
-            func add(_ layer: CALayer?, key: String, to value: Any) {
-                guard let layer else { return }
-                let animation = spring.animation(keyPath: key)
-                animation.fromValue = (layer.presentation() ?? layer).value(forKeyPath: key)
-                animation.toValue = value
-                animation.fillMode = .both
-                animation.isRemovedOnCompletion = false
-                layer.add(animation, forKey: "peek.promote." + key)
-            }
-            if let layer = cardShadow.layer {
-                add(layer, key: "transform", to: NSValue(caTransform3D: CATransform3DMakeScale(scale, scale, 1)))
-                add(layer, key: "position", to: NSValue(point: NSPoint(x: target.minX + layer.anchorPoint.x * target.width,
-                                                                      y: target.minY + layer.anchorPoint.y * target.height)))
-                add(layer, key: "bounds", to: NSValue(rect: size))
-            }
-            if let layer = cardClip.layer {
-                add(layer, key: "bounds", to: NSValue(rect: size))
-                add(layer, key: "position", to: NSValue(point: NSPoint(x: layer.anchorPoint.x * size.width,
-                                                                      y: layer.anchorPoint.y * size.height)))
-            }
-            springOpacity(scrim.layer, from: 1, to: 0, spring: spring, holds: true)
-            springOpacity(toolbar.layer, from: 1, to: 0, spring: spring, holds: true)
-            return spring.animation(keyPath: "transform").duration
+            let duration = BrowserPeekStyle.reducedMotionCrossfade
+            fade(layer: cardShadow.layer, from: 1, to: 0, duration: duration, holds: true)
+            fade(layer: scrim.layer, from: 1, to: 0, duration: duration, holds: true)
+            return duration
         }
     }
 
@@ -373,6 +417,7 @@ final class BrowserPeekOverlayView: NSView {
         toolbar.layer?.removeAllAnimations()
         pageContainer.layer?.removeAllAnimations()
         sourceImage.removeAllAnimations()
+        promotionImage.removeAllAnimations()
         promotionImage.contents = nil
         exit.completion()
     }

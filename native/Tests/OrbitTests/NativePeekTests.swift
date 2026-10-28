@@ -155,6 +155,11 @@ struct NativePeekTests {
         #expect(!peeked.isDisposed)
         #expect(controller.peek.container.surfaces.isEmpty)
         #expect(peeked.hostView.isDescendant(of: controller.contentCard))
+        #expect(!peeked.hostView.isHidden && peeked.hostView.alphaValue == 1)
+        #expect(controller.peekOverlay.isHidden && !controller.peekOverlay.isExiting)
+        #expect(controller.contentCard.peekRecede == 0 && controller.contentCard.alphaValue == 1)
+        #expect(controller.contentCard.layer?.animation(forKey: "peek.background.opacity") == nil)
+        #expect(controller.contentCard.layer?.animation(forKey: "peek.background.transform") == nil)
         #expect(controller.session.snapshot?.tabs.count == 2)
         #expect(controller.window?.firstResponder === peeked.documentView)
 

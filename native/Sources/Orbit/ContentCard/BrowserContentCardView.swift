@@ -18,6 +18,9 @@ final class BrowserContentCardView: NSView {
     private weak var headerView: NSView?
     private var headerConstraints: [NSLayoutConstraint] = []
     var headerHeight: CGFloat { headerView == nil ? 0 : BrowserDeveloperToolbar.height }
+    var pageViewportSize: NSSize {
+        NSSize(width: clip.bounds.width, height: max(0, clip.bounds.height - headerHeight))
+    }
     func setHeader(_ view: NSView?) {
         guard headerView !== view else { return }
         NSLayoutConstraint.deactivate(headerConstraints)
