@@ -47,26 +47,27 @@ struct BrowserSyncIdleBenchmarks {
             let oldTransport = BrowserSyncMemoryTransport(cloud: BrowserSyncMemoryCloud(), account: "synthetic")
             let newTransport = BrowserSyncMemoryTransport(cloud: BrowserSyncMemoryCloud(), account: "synthetic")
             let iterations = 8
-            var oldMain = 0.0, oldBytes = 0, oldWall = 0.0, oldCPU = 0.0, oldMainCPU = 0.0
+            var oldPersistence = BrowserSyncPersistence()
+            let oldDestination = root.appendingPathComponent("old.json")
+            try oldPersistence.save(BrowserSyncReplica.encodeValue(original), to: oldDestination, maximumBytes: 64 * 1024 * 1024)
+            let oldBefore = oldPersistence
+            var oldMain = 0.0, oldWall = 0.0, oldCPU = 0.0, oldMainCPU = 0.0
             for i in 0..<iterations {
                 let time = now.addingTimeInterval(Double(i + 1)), start = Date(), c = cpu(), threadStart = mainCPU()
                 var segment = Date()
-                try original.account.admit("synthetic"); try original.save(root.appendingPathComponent("old.json"))
-                oldBytes += try (FileManager.default.attributesOfItem(atPath: root.appendingPathComponent("old.json").path)[.size] as! NSNumber).intValue
+                try original.account.admit("synthetic"); try oldPersistence.save(BrowserSyncReplica.encodeValue(original), to: oldDestination, maximumBytes: 64 * 1024 * 1024)
                 try original.replica.capture(LegacySyncMapping.project(session: session, settings: settings, boosts: boosts), now: time)
-                try original.save(root.appendingPathComponent("old.json")); oldBytes += try (FileManager.default.attributesOfItem(atPath: root.appendingPathComponent("old.json").path)[.size] as! NSNumber).intValue
+                try oldPersistence.save(BrowserSyncReplica.encodeValue(original), to: oldDestination, maximumBytes: 64 * 1024 * 1024)
                 oldMain += Date().timeIntervalSince(segment)
                 let incoming = try await oldTransport.exchange(Array(original.replica.records.values))
                 segment = Date()
-                try original.replica.merge(incoming); try original.save(root.appendingPathComponent("old.json"))
-                oldBytes += try (FileManager.default.attributesOfItem(atPath: root.appendingPathComponent("old.json").path)[.size] as! NSNumber).intValue
+                try original.replica.merge(incoming); try oldPersistence.save(BrowserSyncReplica.encodeValue(original), to: oldDestination, maximumBytes: 64 * 1024 * 1024)
                 try original.replica.capture(LegacySyncMapping.project(session: session, settings: settings, boosts: boosts), now: time)
                 let value = try LegacySyncMapping.materialize(original.replica.visible, local: session, settings: settings, boosts: boosts)
                 let shared = BrowserSessionDocument(profiles: value.profiles, spaces: value.spaces, windows: [], tabs: [], organization: value.organization)
                 let projected = try LegacySyncMapping.project(session: shared, settings: value.settings, boosts: value.boosts)
                 #expect(projected == (try LegacySyncMapping.project(session: session, settings: settings, boosts: boosts)))
-                try original.replica.acknowledge(projected); try original.save(root.appendingPathComponent("old.json"))
-                oldBytes += try (FileManager.default.attributesOfItem(atPath: root.appendingPathComponent("old.json").path)[.size] as! NSNumber).intValue
+                try original.replica.acknowledge(projected); try oldPersistence.save(BrowserSyncReplica.encodeValue(original), to: oldDestination, maximumBytes: 64 * 1024 * 1024)
                 oldMain += Date().timeIntervalSince(segment); oldWall += Date().timeIntervalSince(start); oldCPU += cpu() - c; oldMainCPU += mainCPU() - threadStart
             }
             // Prime caches outside the measured idle interval.
@@ -85,8 +86,12 @@ struct BrowserSyncIdleBenchmarks {
                 try await worker.acknowledge(result.projection)
                 newWall += Date().timeIntervalSince(start); newCPU += cpu() - c; newMainCPU += mainCPU() - threadStart
             }
-            let after = await worker.persistenceCounts(), scale = 1000 / Double(iterations)
-            print("SYNC_BENCH tabs=\(count) cycles=\(iterations) old_wall_ms=\(oldWall * scale) new_wall_ms=\(newWall * scale) old_main_ms=\(oldMain * scale) old_main_cpu_ms=\(oldMainCPU * scale) new_main_cpu_ms=\(newMainCPU * scale) old_cpu_ms=\(oldCPU * scale) new_cpu_ms=\(newCPU * scale) old_writes_hour=2880 new_writes_hour=\((after.writes - before.writes) * 720 / iterations) old_bytes_hour=\(oldBytes * 720 / iterations) new_bytes_hour=\((after.bytes - before.bytes) * 720 / iterations)")
+            let after = await worker.persistenceCounts()
+            #expect(after.replicaWrites == before.replicaWrites)
+            #expect(after.writes - before.writes == iterations * 2)
+            #expect(after.bytes - before.bytes == iterations * 2 * 72)
+            let scale = 1000 / Double(iterations)
+            print("SYNC_BENCH tabs=\(count) cycles=\(iterations) old_wall_ms=\(oldWall * scale) new_wall_ms=\(newWall * scale) old_main_ms=\(oldMain * scale) old_main_cpu_ms=\(oldMainCPU * scale) new_main_cpu_ms=\(newMainCPU * scale) old_cpu_ms=\(oldCPU * scale) new_cpu_ms=\(newCPU * scale) old_writes_hour=\((oldPersistence.writes - oldBefore.writes) * 720 / iterations) new_replica_writes_hour=\((after.replicaWrites - before.replicaWrites) * 720 / iterations) new_writes_hour=\((after.writes - before.writes) * 720 / iterations) old_bytes_hour=\((oldPersistence.bytesWritten - oldBefore.bytesWritten) * 720 / iterations) new_bytes_hour=\((after.bytes - before.bytes) * 720 / iterations)")
         }
     }
 

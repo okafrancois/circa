@@ -39,17 +39,20 @@ public actor BrowserSyncWorker {
     }
     private var state: BrowserSyncState
     private let destination: URL
-    private var persistence = BrowserSyncPersistence()
+    private var persistence: BrowserSyncClockPersistence
     private var projectionCache: (Snapshot, BrowserSyncProjection)?
     private var materializationCache: (Snapshot, [String: [String: Data]], Prepared)?
 
     public init(state: BrowserSyncState, destination: URL) {
         self.state = state; self.destination = destination
+        self.persistence = BrowserSyncClockPersistence(state: state, destination: destination)
     }
-    func persistenceCounts() -> (writes: Int, bytes: Int) { (persistence.writes, persistence.bytesWritten) }
+    func persistenceCounts() -> (writes: Int, bytes: Int, replicaWrites: Int) {
+        (persistence.writes, persistence.bytesWritten, persistence.replicaWrites)
+    }
 
     private func persist() throws {
-        try persistence.save(BrowserSyncReplica.encodeValue(state), to: destination, maximumBytes: 64 * 1024 * 1024)
+        try persistence.save(state, to: destination)
     }
     public func setEnabled(_ enabled: Bool) throws {
         state.enabled = enabled

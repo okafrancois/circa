@@ -212,8 +212,9 @@ public struct BrowserSyncState: Codable, Sendable {
     public init() {}
     public static func load(_ destination: URL) throws -> Self {
         guard let bytes = try BrowserPermissionFile.load(destination, maximumBytes: 64 * 1024 * 1024) else { return Self() }
-        let value = try JSONDecoder().decode(Self.self, from: bytes)
+        var value = try JSONDecoder().decode(Self.self, from: bytes)
         guard value.version == BrowserSyncSchema.version, value.replica.version == BrowserSyncSchema.version else { throw BrowserSyncError.unsupportedVersion }
+        value.replica.tick = max(value.replica.tick, BrowserSyncClockPersistence.loadTick(for: bytes, at: destination) ?? value.replica.tick)
         return value
     }
     public func save(_ destination: URL) throws {

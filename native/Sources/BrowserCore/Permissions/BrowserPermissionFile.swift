@@ -5,6 +5,7 @@ import Foundation
 /// this service never logs a path or any persisted origin. Calls run on the store actor.
 enum BrowserPermissionFile {
     enum Failure: Error { case invalidPath, unsafeFile, tooLarge, io, committedButNotDurable }
+    enum WriteBarrier: String, CaseIterable { case written, fileSynced, fullySynced, replaced, directorySynced }
     enum Access { case standard, privateBookmark }
     static func load(_ url: URL, maximumBytes: Int = 4 * 1024 * 1024, access: Access = .standard) throws -> Data? {
         guard maximumBytes > 0 else { throw Failure.tooLarge }
@@ -32,7 +33,8 @@ enum BrowserPermissionFile {
     }
 
     static func save(_ data: Data, to url: URL, maximumBytes: Int = 4 * 1024 * 1024, access: Access = .standard,
-                     beforeReplace: () throws -> Void = {}) throws {
+                     beforeReplace: () throws -> Void = {},
+                     barrier: (WriteBarrier) throws -> Void = { _ in }) throws {
         guard maximumBytes > 0 else { throw Failure.tooLarge }
         guard data.count <= maximumBytes else { throw Failure.tooLarge }
         let (parent, name, privateDirectory) = try openParent(url, create: true, access: access)
@@ -65,12 +67,17 @@ enum BrowserPermissionFile {
                 offset += count
             }
         }
+        try barrier(.written)
         guard fsync(file) == 0 else { throw Failure.io }
+        try barrier(.fileSynced)
         if fcntl(file, F_FULLFSYNC) != 0, ![EINVAL, ENOTSUP, ENOTTY].contains(errno) { throw Failure.io }
+        try barrier(.fullySynced)
         guard try identity(parent: parent, name: name) == original else { throw Failure.unsafeFile }
         try beforeReplace()
         guard renameat(parent, temporary, parent, name) == 0 else { throw Failure.io }
+        try barrier(.replaced)
         if fsync(parent) != 0, ![EINVAL, ENOTSUP, ENOTTY].contains(errno) { throw Failure.committedButNotDurable }
+        try barrier(.directorySynced)
     }
 
     private struct Identity: Equatable { let device: dev_t; let inode: ino_t }
