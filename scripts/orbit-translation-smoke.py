@@ -51,7 +51,7 @@ def phase(args):
     proven = {row['id'] for row in results['results'] if row['status'] == 'proven'}
     required = {'page-loaded', 'chromium-no-key-refused'}
     if not args.probe_only:
-        required |= {'available', 'offer-click', 'original-click', 'translated', 'english-heading', 'same-document', 'restored', 'german-heading', 'dynamic-content', 'interactive', 'dynamic-restored'}
+        required |= {'available', 'offer-click', 'original-click', 'translated', 'english-heading', 'same-document', 'translated-move', 'restored', 'german-heading', 'dynamic-content', 'interactive', 'dynamic-restored'}
     assert {'translation.' + name for name in required} <= proven
     print(f'Translation smoke: {len(required)} checks passed; clean normal shutdown')
 

@@ -72,6 +72,10 @@ final class PeekSyntheticDocumentView: NSView {
 
 @MainActor
 final class PeekSyntheticSurface: BrowserEngineSurface, BrowserLinkGeometrySource {
+    var supportsPageTranslation = false
+    var translationRestoreCount = 0
+    func translationSample() async throws -> BrowserTranslationSample { .init(text: "", language: "") }
+    func restoreTranslation() async throws { translationRestoreCount += 1 }
     var linkActivationPoint: NSPoint?
     var linkGeometryResult: BrowserLinkGeometry?
     var linkGeometryPoints: [NSPoint] = []

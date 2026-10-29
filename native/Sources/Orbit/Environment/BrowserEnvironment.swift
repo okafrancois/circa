@@ -20,6 +20,7 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
     var lastUsedSpaceID: SpaceID?
     var onQuickWindowDestinationChange: (() -> Void)?
     let store: BrowserStore
+    let translationPages = BrowserTranslationPages()
     let themeEditors = OrbitThemeEditorRegistry()
     private var catalogObservation: Task<Void, Never>?
     private(set) var restoredWindowIDs: [WindowID]
@@ -241,7 +242,7 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
             id: id, store: store, spaceID: spaceID, engine: engine,
             restoringWindowID: restoredID, opensInitialTab: opensInitialTab && !isSplitRescueWindow, savesSessionLocally: persistence != nil,
             isPrivateWindow: isPrivate,
-            downloads: downloads, history: history, rescue: rescue,
+            downloads: downloads, history: history, translationPages: translationPages, rescue: rescue,
             onInput: onInput,
             onCatalogChange: { [weak self] catalog in self?.catalogDidChange(catalog) },
             onStateChange: { [weak self] in
@@ -514,6 +515,7 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
         let controllers = liveControllers
         retireQuickWindows()
         for controller in controllers { controller.retireForTermination() }
+        translationPages.close()
         downloads.shutdown()
         let engine = engine
         return await BrowserTermination.detachAndShutDown(
