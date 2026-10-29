@@ -6,7 +6,7 @@ enum OrbitThemeEditorMetrics {
     /// Compact color viewport; the extended editor retains the applied-material controls.
     // The original 508 pt color editor is retained above an applied-material section (26 Oct request).
     static let pickerSize = NSSize(width: 356, height: 508)
-    static let size = NSSize(width: 356, height: 650)
+    static let size = NSSize(width: 356, height: 520)
     static let cornerRadius: CGFloat = 20
     static let offsetFromCard = CGPoint(x: 13, y: 13)
 

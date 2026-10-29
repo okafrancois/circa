@@ -25,13 +25,6 @@ final class BrowserSettingsRuntime: ObservableObject {
         onChange?()
     }
 
-    /// Publish only the secondary draft; deliberately bypass the browser's onChange callback.
-    func setSecondaryAppearanceDraft(_ value: BrowserSecondaryAppearanceDraft) async throws {
-        do { try await store.setSecondaryAppearanceDraft(value) }
-        catch { document = await store.snapshot(); throw error }
-        document = await store.snapshot()
-    }
-
     func updateInteraction(_ edit: @Sendable (inout BrowserInteractionPreferences) -> Void) async throws {
         do { try await store.updateInteraction(edit) }
         catch { await refresh(); throw error }

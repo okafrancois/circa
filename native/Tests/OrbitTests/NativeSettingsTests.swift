@@ -934,34 +934,7 @@ extension NativeWebKitTests.NativeSettingsTests {
 }
 
 extension NativeWebKitTests.NativeSettingsTests {
-    @Test("Secondary appearance saves through the settings queue without publishing a browser change")
-    func secondaryAppearanceDoesNotApplyBrowserTheme() async throws {
-        NSApplication.shared.setActivationPolicy(.prohibited)
-        let environment = BrowserEnvironment(engine: SettingsFixtureEngine())
-        // Finish synthetic bootstrap before comparing whole session documents.
-        _ = try await environment.initialContext.value
-        let model = settingsModel(environment)
-        await model.reload()
-        let before = await environment.store.sessionDocument()
-        let settingsBefore = model.runtime.document
-        var browserChanges = 0
-        model.runtime.onChange = { browserChanges += 1 }
-        model.perform {
-            var draft = model.runtime.document.secondaryAppearanceDraft
-            draft.material = .liquidGlass
-            draft.transparency = 0.8
-            try await model.runtime.setSecondaryAppearanceDraft(draft)
-        }
-        await model.waitForPendingActions()
-        #expect(browserChanges == 0)
-        #expect(model.runtime.document.secondaryAppearanceDraft.material == .liquidGlass)
-        #expect(model.runtime.document.secondaryAppearanceDraft.transparency == 0.8)
-        var settingsAfter = model.runtime.document
-        settingsAfter.secondaryAppearanceDraft = settingsBefore.secondaryAppearanceDraft
-        #expect(settingsAfter == settingsBefore)
-        #expect(await environment.store.sessionDocument() == before)
-        #expect(environment.engine.clearedProfiles.isEmpty)
-    }
+
 
     @Test("Native Orbit secondary screens render hidden using packaged vector resources")
     func secondaryIdentityHiddenViews() async throws {
@@ -988,8 +961,6 @@ extension NativeWebKitTests.NativeSettingsTests {
             #expect(bitmap.pixelsWide > 0 && bitmap.pixelsHigh > 0)
             #expect(!window.isVisible)
         }
-        #expect(OrbitSecondaryAppearancePreview.sampleOpacity(model.runtime.document.secondaryAppearanceDraft, reduceTransparency: true) == 1)
-        #expect(OrbitSecondaryAppearancePreview.sampleOpacity(model.runtime.document.secondaryAppearanceDraft, reduceTransparency: false) < 1)
         #expect(!window.isVisible)
     }
 

@@ -212,8 +212,6 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
         configureContent()
         sidebar.isPrivate = isPrivateWindow
         if isPrivateWindow {
-            windowShell.themeFill.useOpaqueBackground()
-            windowShell.floatingBackdrop.fill.useOpaqueBackground()
             contentCard.emptyStateTitle = uiText("Private")
             contentCard.emptyStateDetail = uiText("Your browsing history is not saved.")
         }

@@ -1323,7 +1323,6 @@ struct SpaceSwipeRoutingTests {
         defer { sidebar.spaceSwipe.detach(); window.close() }
         let shell = OrbitWindowShell()
         shell.apply(theme: .amberCoral, animated: false)
-        let material = shell.themeFill.materialView
         var sourceTheme = OrbitTokens.SpaceTheme.amberCoral
         sidebar.spaceSwipe.resolveTheme = { $0 == first ? sourceTheme : .lavender }
         sidebar.spaceSwipe.onThemeProgress = { shell.applySpaceSwipeBlend($0) }
@@ -1339,7 +1338,6 @@ struct SpaceSwipeRoutingTests {
         #expect(shell.spaceSwipeBlend?.progress == 0)
         #expect(shell.themeFill.theme == .amberCoral)
         #expect(shell.floatingBackdrop.fill.theme == .amberCoral)
-        #expect(shell.themeFill.materialView === material)
         for name in [NSAppearance.Name.aqua, .darkAqua] {
             let appearance = try #require(NSAppearance(named: name))
             shell.themeFill.appearance = appearance
@@ -1350,7 +1348,6 @@ struct SpaceSwipeRoutingTests {
         _ = sidebar.spaceSwipe.handleScroll(try scroll(.cancelled), inside: true)
         sidebar.spaceSwipe.advance(to: 12)
         #expect(shell.themeFill.theme == .lavender)
-        #expect(shell.themeFill.materialView === material)
         #expect(sidebar.page.spaceID == first)
         #expect(commits == 0)
     }

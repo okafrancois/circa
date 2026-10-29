@@ -30,11 +30,6 @@ final class OrbitThemeEditorView: NSView {
     var onDismiss: (() -> Void)?
 
     let surfaceScope = NSTextField(labelWithString: uiText("This Space · captured profile"))
-    let surfaceMaterial = NSPopUpButton(frame: .zero, pullsDown: false)
-    let surfaceTransparency = NSSlider(value: 0.65, minValue: 0, maxValue: 1, target: nil, action: nil)
-    private let surfaceMaterialLabel = NSTextField(labelWithString: uiText("Material"))
-    private let surfaceTransparencyLabel = NSTextField(labelWithString: uiText("Transparency"))
-    private let surfaceCapability = NSTextField(wrappingLabelWithString: "")
     let material = NSVisualEffectView()
     let field = OrbitThemeFieldView()
     let placeholder = NSTextField(labelWithString: "")
@@ -122,26 +117,7 @@ final class OrbitThemeEditorView: NSView {
         surfaceScope.font = .systemFont(ofSize: 11, weight: .semibold)
         surfaceScope.lineBreakMode = .byTruncatingTail
         surfaceScope.toolTip = surfaceScope.stringValue
-        surfaceMaterialLabel.frame = NSRect(x: 20, y: 525, width: 105, height: 20)
-        surfaceMaterial.frame = NSRect(x: 130, y: 519, width: 206, height: 28)
-        surfaceMaterial.addItems(withTitles: BrowserThemeSurface.Material.allCases.map(OrbitThemeSurfaceText.material))
-        surfaceMaterial.target = self
-        surfaceMaterial.action = #selector(changeSurfaceMaterial(_:))
-        surfaceMaterial.setAccessibilityLabel(uiText("Material for this Space"))
-        surfaceMaterial.setAccessibilityIdentifier("theme-surface-material")
-        surfaceTransparencyLabel.frame = NSRect(x: 20, y: 557, width: 105, height: 20)
-        surfaceTransparency.frame = NSRect(x: 130, y: 552, width: 206, height: 24)
-        surfaceTransparency.isContinuous = true
-        surfaceTransparency.target = self
-        surfaceTransparency.action = #selector(changeSurfaceTransparency(_:))
-        surfaceTransparency.setAccessibilityLabel(uiText("Transparency for this Space"))
-        surfaceTransparency.setAccessibilityIdentifier("theme-surface-transparency")
-        surfaceCapability.frame = NSRect(x: 20, y: 582, width: 316, height: 62)
-        surfaceCapability.font = .systemFont(ofSize: 10)
-        surfaceCapability.textColor = .secondaryLabelColor
-        for view in [surfaceScope, surfaceMaterialLabel, surfaceMaterial, surfaceTransparencyLabel,
-                     surfaceTransparency, surfaceCapability] { addSubview(view) }
-
+        addSubview(surfaceScope)
         setAccessibilityElement(true)
         setAccessibilityRole(.popover)
         setAccessibilityLabel(OrbitThemeEditorText.title)
@@ -149,17 +125,10 @@ final class OrbitThemeEditorView: NSView {
         render()
     }
 
-    /// The compact picker opens at the color controls; existing material controls remain scrollable.
+    /// The compact picker opens at the color controls; the scope label remains scrollable.
     func makePickerViewport() -> NSScrollView {
         // The native popover supplies its own material. Avoid compositing it twice.
         material.isHidden = true
-        if frame.height == M.size.height {
-            for control in [surfaceScope, surfaceMaterialLabel, surfaceMaterial, surfaceTransparencyLabel,
-                            surfaceTransparency, surfaceCapability] as [NSView] {
-                control.frame.origin.y += 22
-            }
-            setFrameSize(NSSize(width: M.size.width, height: M.size.height + 22))
-        }
         let scroll = NSScrollView(frame: NSRect(origin: .zero, size: M.pickerSize))
         scroll.drawsBackground = false
         scroll.hasVerticalScroller = true
@@ -172,16 +141,6 @@ final class OrbitThemeEditorView: NSView {
     required init?(coder: NSCoder) { nil }
 
     override var isFlipped: Bool { true }
-
-    @objc private func changeSurfaceMaterial(_ sender: NSPopUpButton) {
-        let index = sender.indexOfSelectedItem
-        guard BrowserThemeSurface.Material.allCases.indices.contains(index) else { return }
-        edit { $0.setMaterial(BrowserThemeSurface.Material.allCases[index]) }
-    }
-
-    @objc private func changeSurfaceTransparency(_ sender: NSSlider) {
-        edit { $0.setTransparency(sender.doubleValue) }
-    }
 
     private func edit(_ change: (inout OrbitThemeEditorState) -> Void) {
         var next = state
@@ -218,14 +177,6 @@ final class OrbitThemeEditorView: NSView {
     /// Projects `state`; also called when the appearance changes (layer colours are resolved).
     func render() {
         let appearance = effectiveAppearance
-        let surface = state.theme.surface ?? BrowserThemeSurface()
-        surfaceMaterial.selectItem(at: BrowserThemeSurface.Material.allCases.firstIndex(of: surface.material) ?? 0)
-        surfaceTransparency.doubleValue = surface.transparency
-        surfaceTransparency.isEnabled = surface.material != .solid
-        surfaceTransparency.setAccessibilityValue(OrbitThemeEditorText.percent(surface.transparency))
-        surfaceTransparency.toolTip = OrbitThemeEditorText.percent(surface.transparency)
-        surfaceCapability.stringValue = OrbitThemeSurfaceText.capability
-            + " " + uiText("Transparency reveals the blurred desktop through the theme. Solid is opaque.")
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         let modeIndex = Self.modes.firstIndex(of: state.theme.mode) ?? 0

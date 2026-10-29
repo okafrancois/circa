@@ -107,29 +107,14 @@ struct OrbitThemeEditorState: Equatable {
             replaceColor(at: selected, with: swatch)
             return
         }
-        let surface = theme.surface
         theme = BrowserSpaceTheme.composed(colors: [swatch], intensity: hasColor ? theme.intensity : BrowserSpaceTheme.defaultIntensity,
                                            noise: theme.noise, mode: theme.mode,
                                            presetID: BrowserSpaceThemePresets.presetID(family: family, index: index))
-        theme.surface = surface
         selectedIndex = 0
     }
 
     mutating func showFamily(offset: Int) {
         familyIndex = min(BrowserSpaceThemePresets.families.count - 1, max(0, familyIndex + offset))
-    }
-
-    mutating func setMaterial(_ material: BrowserThemeSurface.Material) {
-        var surface = theme.surface ?? BrowserThemeSurface()
-        surface.material = material
-        theme.surface = surface
-    }
-
-    mutating func setTransparency(_ value: Double) {
-        guard value.isFinite, (0...1).contains(value) else { return }
-        var surface = theme.surface ?? BrowserThemeSurface()
-        surface.transparency = value
-        theme.surface = surface
     }
 
     mutating func setMode(_ mode: BrowserSpaceTheme.Mode) { theme = theme.recomposed(mode: mode) }
@@ -161,17 +146,14 @@ struct OrbitThemeEditorState: Equatable {
     }
 
     private mutating func setColors(_ colors: [BrowserThemeColor], intensity: Double? = nil) {
-        let surface = theme.surface
         if colors.isEmpty {
             var reset = BrowserSpaceThemePresets.default
             reset.mode = theme.mode
-            reset.surface = surface
             theme = reset
             return
         }
         theme = BrowserSpaceTheme.composed(colors: colors, intensity: intensity ?? (hasColor ? theme.intensity : BrowserSpaceTheme.defaultIntensity),
                                            noise: hasColor ? theme.noise : 0, mode: theme.mode)
-        theme.surface = surface
     }
 }
 

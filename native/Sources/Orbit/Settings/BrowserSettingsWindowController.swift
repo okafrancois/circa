@@ -442,33 +442,12 @@ struct BrowserSettingsView<Engine: BrowserEngine>: View {
                     ForEach(model.catalog.profiles, id: \.id) { Text($0.name).tag($0.id) }
                 }.accessibilityIdentifier("settings-appearance-profile")
                 if let id = model.appearanceSpaceID,
-                   let space = model.catalog.spaces.first(where: { $0.id == id && $0.profileID == profile }) {
+                   model.catalog.spaces.contains(where: { $0.id == id && $0.profileID == profile }) {
                     Picker(uiText("Space"), selection: Binding(get: { id }, set: { model.selectAppearanceSpace($0) })) {
                         ForEach(model.catalog.spaces.filter { $0.profileID == profile }, id: \.id) { Text($0.name).tag($0.id) }
                     }.accessibilityIdentifier("settings-appearance-space")
-                    let surface = space.theme?.surface ?? BrowserThemeSurface()
                     Text(uiText("Applies to this Space in every window. Other Spaces keep their own themes."))
                         .foregroundStyle(.secondary).accessibilityIdentifier("settings-appearance-scope")
-                    if space.theme?.surface == nil {
-                        Text(uiText("This Space keeps its existing material until you change a control."))
-                            .font(.caption).foregroundStyle(.secondary)
-                    }
-                    Picker(uiText("Material"), selection: Binding(get: { surface.material }, set: { value in
-                        model.queueAppearanceSurfaceEdit(spaceID: id, profileID: profile, material: value)
-                    })) {
-                        ForEach(BrowserThemeSurface.Material.allCases, id: \.self) { value in
-                            Text(OrbitThemeSurfaceText.material(value)).tag(value)
-                        }
-                    }.accessibilityIdentifier("settings-appearance-material")
-                    Slider(value: Binding(get: { surface.transparency }, set: { value in
-                        model.queueAppearanceSurfaceEdit(spaceID: id, profileID: profile, transparency: value)
-                    }), in: 0...1) { Text(uiText("Transparency")) }
-                        .disabled(surface.material == .solid)
-                        .accessibilityIdentifier("settings-appearance-transparency")
-                    LabeledContent(uiText("Transparency"), value: surface.transparency.formatted(.percent.precision(.fractionLength(0))))
-                    Text(OrbitThemeSurfaceText.capability).font(.caption).foregroundStyle(.secondary)
-                    Text(uiText("Transparency reveals the blurred desktop through the theme. Reduce Transparency and Increase Contrast use an opaque theme. Choose Solid for full opacity."))
-                        .font(.caption).foregroundStyle(.secondary)
                     Button(uiText("Edit Theme Color…")) { model.presentThemeEditor?(id) }
                 } else {
                     Text(uiText("Choose a profile with an available Space."))

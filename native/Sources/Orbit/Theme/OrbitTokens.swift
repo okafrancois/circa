@@ -243,8 +243,6 @@ extension OrbitTokens {
         /// The stored Space theme this was rendered from; nil for built-in token themes.
         /// Accent derivation reads it; equality includes it.
         public var model: BrowserSpaceTheme?
-        /// Explicit surface survives captured swipe gradients even when their model is nil.
-        public var surface: BrowserThemeSurface?
 
         /// Default Space of — : two-stop gradient, light #D9DBF5 → #F3E5E5
         /// dark #252538 → #352337 (see Gradient). Whether every new Space gets it or a rotating default is

@@ -120,30 +120,6 @@ public struct BrowserSpaceSettings: Codable, Equatable, Sendable {
     }
 }
 
-/// A secondary-screen draft only. Browser rendering must never consume this value.
-public struct BrowserSecondaryAppearanceDraft: Codable, Equatable, Sendable {
-    public enum Material: String, Codable, CaseIterable, Sendable { case solid, frosted, liquidGlass }
-    public var material: Material = .solid
-    public var transparency: Double = 0.25
-    public init() {}
-
-    private enum CodingKeys: String, CodingKey { case material, transparency }
-
-    /// Optional, secondary-only intentions must never prevent restoration of browser preferences.
-    /// Recover each known member independently; loading never rewrites the original file.
-    public init(from decoder: Decoder) throws {
-        self.init()
-        guard let values = try? decoder.container(keyedBy: CodingKeys.self) else { return }
-        material = (try? values.decode(Material.self, forKey: .material)) ?? .solid
-        if let value = try? values.decode(Double.self, forKey: .transparency),
-           value.isFinite, (0...1).contains(value) {
-            transparency = value
-        }
-    }
-
-    public var isValid: Bool { transparency.isFinite && (0...1).contains(transparency) }
-}
-
 public struct BrowserInteractionPreferences: Codable, Equatable, Sendable {
     public var warnBeforeQuitting = true
     public var playSoundEffects = true
@@ -154,7 +130,6 @@ public struct BrowserInteractionPreferences: Codable, Equatable, Sendable {
 public struct BrowserSettingsDocument: Codable, Equatable, Sendable {
     public static let currentVersion = 1
     public var version = Self.currentVersion
-    public var secondaryAppearanceDraft = BrowserSecondaryAppearanceDraft()
     public var reducedMotion: BrowserReducedMotionSetting = .system
     public var interaction = BrowserInteractionPreferences()
     public var memorySaver: BrowserMemorySaverSetting = .fourHours
@@ -178,11 +153,11 @@ public struct BrowserSettingsDocument: Codable, Equatable, Sendable {
     public var spaces: [SpaceID: BrowserSpaceSettings] = [:]
     public init() {}
     private enum CodingKeys: String, CodingKey {
-        case automaticPictureInPicture, hasSeenBoostsIntroduction, enablesBoostsOnWebsites, interaction, memorySaver, linkRouting, secondaryAppearanceDraft, version, reducedMotion, profiles, spaces, opensExternalLinksInQuickWindow, lastActiveWindowID, lastActiveSpaceID
+        case automaticPictureInPicture, hasSeenBoostsIntroduction, enablesBoostsOnWebsites, interaction, memorySaver, linkRouting, version, reducedMotion, profiles, spaces, opensExternalLinksInQuickWindow, lastActiveWindowID, lastActiveSpaceID
     }
     public init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
-        secondaryAppearanceDraft = (try? values.decode(BrowserSecondaryAppearanceDraft.self, forKey: .secondaryAppearanceDraft)) ?? .init()
+        // Retired secondary appearance fields are ignored and omitted on the next save.
         version = try values.decode(Int.self, forKey: .version)
         reducedMotion = try values.decode(BrowserReducedMotionSetting.self, forKey: .reducedMotion)
         interaction = try values.decodeIfPresent(BrowserInteractionPreferences.self, forKey: .interaction) ?? .init()
@@ -207,7 +182,7 @@ public struct BrowserSettingsDocument: Codable, Equatable, Sendable {
 }
 
 public enum BrowserSettingsError: Error, Equatable {
-    case invalidSecondaryAppearanceDraft, unsupportedVersion, invalidIcon, profileInUse, lastProfile, spaceNotEmpty, unavailable, profileBeingDeleted, lastSpace, profileHasSpaces, defaultProfile
+    case unsupportedVersion, invalidIcon, profileInUse, lastProfile, spaceNotEmpty, unavailable, profileBeingDeleted, lastSpace, profileHasSpaces, defaultProfile
 }
 
 /// No implicit default destination: tests and private sessions stay in memory. Writes use the
@@ -321,12 +296,6 @@ public actor BrowserSettingsStore {
         try publish(next)
     }
 
-    public func setSecondaryAppearanceDraft(_ draft: BrowserSecondaryAppearanceDraft) throws {
-        var next = document
-        next.secondaryAppearanceDraft = draft
-        try publish(next)
-    }
-
     public func setReducedMotion(_ setting: BrowserReducedMotionSetting) throws {
         var next = document
         next.reducedMotion = setting
@@ -392,7 +361,6 @@ public actor BrowserSettingsStore {
 
     private static func validate(_ document: BrowserSettingsDocument) throws {
         guard document.version == BrowserSettingsDocument.currentVersion else { throw BrowserSettingsError.unsupportedVersion }
-        guard document.secondaryAppearanceDraft.isValid else { throw BrowserSettingsError.invalidSecondaryAppearanceDraft }
         guard document.linkRouting.rules.allSatisfy(\.isValid),
               Set(document.linkRouting.rules.map(\.id)).count == document.linkRouting.rules.count else {
             throw BrowserLinkRoutingError.invalidRule

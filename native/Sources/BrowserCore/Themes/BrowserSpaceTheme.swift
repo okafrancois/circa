@@ -105,19 +105,6 @@ public struct BrowserThemeColor: Codable, Hashable, Sendable {
     }()
 }
 
-/// Applied to one Space only. The old secondary settings draft is never imported implicitly.
-public struct BrowserThemeSurface: Codable, Hashable, Sendable {
-    public enum Material: String, Codable, CaseIterable, Sendable { case solid, frosted, liquidGlass }
-    public var material: Material
-    /// 0 is opaque; 1 leaves a 12% gradient veil over the native material. Not window alpha.
-    public var transparency: Double
-    public init(material: Material = .liquidGlass, transparency: Double = 0.65) {
-        self.material = material
-        self.transparency = transparency
-    }
-    public var isValid: Bool { transparency.isFinite && (0...1).contains(transparency) }
-}
-
 public struct BrowserSpaceTheme: Codable, Hashable, Sendable {
     public static let maximumColors = 3
     /// : the default gradient's axis runs at 43° from the top-left corner.
@@ -151,8 +138,7 @@ public struct BrowserSpaceTheme: Codable, Hashable, Sendable {
         }
     }
 
-    /// Nil preserves the pre-existing shell policy; older documents decode without migration.
-    public var surface: BrowserThemeSurface?
+    // Codable ignores retired surface/material fields in older themes.
     public var presetID: String?
     public var mode: Mode
     public var colors: [BrowserThemeColor]
@@ -162,8 +148,7 @@ public struct BrowserSpaceTheme: Codable, Hashable, Sendable {
     public var dark: Gradient
 
     public init(presetID: String? = nil, mode: Mode, colors: [BrowserThemeColor], intensity: Double, noise: Double,
-                light: Gradient, dark: Gradient, surface: BrowserThemeSurface? = nil) {
-        self.surface = surface
+                light: Gradient, dark: Gradient) {
         self.presetID = presetID
         self.mode = mode
         self.colors = colors
@@ -174,7 +159,7 @@ public struct BrowserSpaceTheme: Codable, Hashable, Sendable {
     }
 
     public var isValid: Bool {
-        (surface?.isValid ?? true) && colors.count <= Self.maximumColors && colors.allSatisfy(\.isValid)
+        colors.count <= Self.maximumColors && colors.allSatisfy(\.isValid)
             && intensity.isFinite && (0...1).contains(intensity) && noise.isFinite && (0...1).contains(noise)
             && light.isValid && dark.isValid && presetID.map(Self.isValidPresetID) ?? true
     }
@@ -231,12 +216,10 @@ extension BrowserSpaceTheme {
         if colors.isEmpty {
             var theme = self.colors.isEmpty ? self : BrowserSpaceThemePresets.default
             theme.mode = mode
-            theme.surface = surface
             return theme
         }
-        var result = Self.composed(colors: colors, intensity: intensity ?? self.intensity, noise: noise ?? self.noise,
+        let result = Self.composed(colors: colors, intensity: intensity ?? self.intensity, noise: noise ?? self.noise,
                                    mode: mode, presetID: colors == self.colors ? presetID : nil)
-        result.surface = surface
         return result
     }
 }

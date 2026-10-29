@@ -4,29 +4,9 @@ import QuartzCore
 @MainActor
 final class OrbitThemeFillView: NSView {
     private let host = CALayer()
-    /// A light neutral wash accompanies AppKit's adaptive behind-window frost.
-    private let readability = CALayer()
-    private(set) var materialView: OrbitGlassMaterialView?
-    /// Retained across theme switches, swipes and accessibility fallback; never a shared instance.
-    private(set) var liquidGlassView: NSView?
-    var materialCornerRadius: CGFloat = 0 { didSet { updateMaterialCornerRadius() } }
-    var usesNativeLiquidGlass: Bool { liquidGlassView?.isHidden == false }
-    private func updateMaterialCornerRadius() {
-        if #available(macOS 26.0, *), let glass = liquidGlassView as? OrbitLiquidGlassView {
-            glass.cornerRadius = materialCornerRadius
-        }
-    }
-    private(set) var materialRole: OrbitGlassRole = .opaque
-    private let materialObservers = OrbitGlassObservers()
-    private let windowObservers = OrbitGlassObservers()
-    private(set) var glassStyle = OrbitGlassStyle.resolve(role: .opaque, isDark: false, isActive: false,
-                                                       reduceTransparency: false, increaseContrast: false)
-    var onMaterialChange: (() -> Void)?
     private let gradient = CAGradientLayer()
     private let grain = OrbitGrainLayer()
     private(set) var theme: OrbitTokens.SpaceTheme = .default
-    /// Test seams: interactive swipe frames must not redo material or grain work.
-    private(set) var materialRefreshCount = 0
     var grainNeedsDisplay: Bool { grain.needsDisplay() }
     /// The window-sized gradient this view shows a part of. The floating sidebar backdrop sets the
     /// window content size and its own top-left offset so its fill matches the window fill.
@@ -39,102 +19,14 @@ final class OrbitThemeFillView: NSView {
         host.addSublayer(gradient)
         host.addSublayer(grain)
         wantsLayer = true
-        // A layer-backed view may host the material subview and a separate tint layer. Keep the
-        // tint above AppKit's material layers without making the controls vibrant descendants.
-        host.zPosition = 1
         layer?.addSublayer(host)
-        readability.zPosition = 0.5
-        readability.opacity = 0
-        layer?.addSublayer(readability)
         gradient.locations = [0, 0.5, 1]
         grain.isHidden = true
         refreshColors()
         layoutLayers()
     }
 
-    convenience init(materialRole: OrbitGlassRole) {
-        self.init(frame: .zero)
-        self.materialRole = materialRole
-        if materialRole != .opaque {
-            let material = OrbitGlassMaterialView(frame: bounds)
-            material.autoresizingMask = [.width, .height]
-            addSubview(material, positioned: .below, relativeTo: nil)
-            materialView = material
-            if #available(macOS 26.0, *) {
-                let glass = OrbitLiquidGlassView(frame: bounds)
-                glass.autoresizingMask = [.width, .height]
-                glass.isHidden = true
-                addSubview(glass, positioned: .above, relativeTo: material)
-                liquidGlassView = glass
-            }
-            let center = NSWorkspace.shared.notificationCenter
-            let token = center.addObserver(forName: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification,
-                                           object: nil, queue: .main) { [weak self] _ in
-                MainActor.assumeIsolated { self?.refreshMaterial() }
-            }
-            materialObservers.tokens.append((center, token))
-        }
-        refreshMaterial()
-    }
-
     required init?(coder: NSCoder) { nil }
-
-    override func viewDidMoveToWindow() {
-        super.viewDidMoveToWindow()
-        for (center, token) in windowObservers.tokens { center.removeObserver(token) }
-        windowObservers.tokens.removeAll()
-        if let window, materialRole != .opaque {
-            let center = NotificationCenter.default
-            for name in [NSWindow.didBecomeKeyNotification, NSWindow.didResignKeyNotification] {
-                let token = center.addObserver(forName: name, object: window, queue: .main) { [weak self] _ in
-                    MainActor.assumeIsolated { self?.refreshMaterial() }
-                }
-                windowObservers.tokens.append((center, token))
-            }
-        }
-        refreshMaterial()
-    }
-
-    /// Re-resolves on appearance, activation and accessibility changes; no preference writes.
-    func useOpaqueBackground() {
-        materialRole = .opaque
-        refreshMaterial()
-    }
-
-    func refreshMaterial() {
-        materialRefreshCount += 1
-        let workspace = NSWorkspace.shared
-        applyMaterialStyle(.resolve(role: materialRole, isDark: OrbitAppearance.isDark(effectiveAppearance),
-                                    isActive: window?.isKeyWindow == true,
-                                    reduceTransparency: workspace.accessibilityDisplayShouldReduceTransparency,
-                                    increaseContrast: workspace.accessibilityDisplayShouldIncreaseContrast,
-                                    surface: theme.surface))
-    }
-
-    /// The resolved-style seam also allows deterministic, hidden accessibility regression tests.
-    func applyMaterialStyle(_ style: OrbitGlassStyle) {
-        glassStyle = style
-        if !style.usesMaterial {
-            host.removeAnimation(forKey: Self.themeFadeKey)
-            readability.removeAnimation(forKey: Self.themeFadeKey)
-        }
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
-        host.opacity = style.tintOpacity
-        readability.backgroundColor = (OrbitAppearance.isDark(effectiveAppearance) ? NSColor.black : NSColor.white).cgColor
-        readability.opacity = style.readabilityOpacity
-        // The HUD material is AppKit's thinner behind-window frost. The standard window
-        // material substantially mutes the backdrop even after the theme tint is reduced.
-        let backdrop: NSVisualEffectView.Material = style.requestsLiquidGlass ? .hudWindow : .underWindowBackground
-        if materialView?.material != backdrop { materialView?.material = backdrop }
-        let nativeGlass = style.usesMaterial && style.requestsLiquidGlass && liquidGlassView != nil
-        liquidGlassView?.isHidden = !nativeGlass
-        // NSGlassEffectView decorates its local backdrop. It does not replace the explicit
-        // behind-window sampler: hiding that view made Liquid Glass lose the desktop blur.
-        materialView?.isHidden = !style.usesMaterial
-        CATransaction.commit()
-        onMaterialChange?()
-    }
 
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
 
@@ -156,10 +48,7 @@ final class OrbitThemeFillView: NSView {
                           width: size.width, height: size.height)
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        materialView?.frame = bounds
-        liquidGlassView?.frame = bounds
         host.frame = bounds
-        readability.frame = bounds
         gradient.frame = fill
         applyEndpoints()
         grain.frame = host.bounds
@@ -182,10 +71,7 @@ final class OrbitThemeFillView: NSView {
         // : light ↔ dark is instant — a Space cross-fade in flight must not keep
         // painting the previous appearance's colours.
         gradient.removeAnimation(forKey: Self.themeFadeKey)
-        host.removeAnimation(forKey: Self.themeFadeKey)
-        readability.removeAnimation(forKey: Self.themeFadeKey)
         refreshColors()
-        refreshMaterial()
         onAppearanceChange?()
     }
 
@@ -205,18 +91,10 @@ final class OrbitThemeFillView: NSView {
     var resolvedStops: [CGColor] { OrbitThemeGradient.normalizedStops(theme.stops, appearance: effectiveAppearance) }
 
     func apply(_ newTheme: OrbitTokens.SpaceTheme, fade: TimeInterval? = nil) {
-        apply(newTheme, fade: fade, refreshesMaterial: true)
-    }
-
-    private func apply(_ newTheme: OrbitTokens.SpaceTheme, fade: TimeInterval?, refreshesMaterial: Bool) {
         guard newTheme != theme else { return }
         let previous = (gradient.presentation() ?? gradient).colors
-        let previousTint = (host.presentation() ?? host).opacity
-        let previousWash = (readability.presentation() ?? readability).opacity
-        let surfaceChanged = newTheme.surface != theme.surface
         theme = newTheme
         refreshColors()
-        if refreshesMaterial || surfaceChanged { refreshMaterial() }
         if let fade, fade > 0, let previous {
             let animation = CABasicAnimation(keyPath: "colors")
             animation.fromValue = previous
@@ -224,28 +102,15 @@ final class OrbitThemeFillView: NSView {
             animation.duration = fade
             animation.timingFunction = CAMediaTimingFunction(name: .easeOut)
             gradient.add(animation, forKey: Self.themeFadeKey)
-            for (layer, opacity) in [(host, previousTint), (readability, previousWash)] where opacity != layer.opacity {
-                let fade = CABasicAnimation(keyPath: "opacity")
-                fade.fromValue = opacity
-                fade.toValue = layer.opacity
-                fade.duration = animation.duration
-                fade.timingFunction = animation.timingFunction
-                layer.add(fade, forKey: Self.themeFadeKey)
-            }
         }
     }
 
     /// Progress-driven fills must replace, rather than queue behind, a previous theme fade.
     /// Orbit's Metal configuration setter invalidates its layer
     /// its asynchronous display path does not attach a separate Core Animation colour fade.
-    /// Runs on every swipe display callback: only the gradient colours change. Material inputs
-    /// (appearance, key state, accessibility) have their own observers, so it is re-resolved only
-    /// when the blended surface itself changes.
     func applyInteractiveTheme(_ newTheme: OrbitTokens.SpaceTheme) {
         gradient.removeAnimation(forKey: Self.themeFadeKey)
-        host.removeAnimation(forKey: Self.themeFadeKey)
-        readability.removeAnimation(forKey: Self.themeFadeKey)
-        apply(newTheme, fade: nil, refreshesMaterial: false)
+        apply(newTheme, fade: nil)
     }
 
     private func refreshColors() {
@@ -322,9 +187,10 @@ final class OrbitGrainLayer: CALayer {
 
 @MainActor
 final class OrbitFloatingSidebarBackdrop: NSView {
-    let fill = OrbitThemeFillView(materialRole: .floatingSidebar)
+    let fill = OrbitThemeFillView()
     private let dim = CALayer()
     private let edge = CAShapeLayer()
+    private let observers = OrbitWorkspaceObservers()
     var cornerRadius: CGFloat = OrbitTokens.Radius.floatingSidebar { didSet { needsLayout = true } }
 
     override init(frame frameRect: NSRect) {
@@ -342,7 +208,12 @@ final class OrbitFloatingSidebarBackdrop: NSView {
         edge.lineWidth = 1
         fill.layer?.addSublayer(dim)
         fill.layer?.addSublayer(edge)
-        fill.onMaterialChange = { [weak self] in self?.refreshColors() }
+        let center = NSWorkspace.shared.notificationCenter
+        let observer = center.addObserver(forName: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification,
+                                          object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.refreshColors() }
+        }
+        observers.tokens.append((center, observer))
         refreshColors()
     }
 
@@ -354,11 +225,10 @@ final class OrbitFloatingSidebarBackdrop: NSView {
         super.layout()
         fill.frame = bounds
         // : a 1 pt ring, inside the panel.
-        let edgeWidth: CGFloat = fill.glassStyle.emphasizesBoundary ? 2 : 1
+        let edgeWidth: CGFloat = NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast ? 2 : 1
         let inset = edgeWidth / 2
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        fill.materialCornerRadius = cornerRadius
         fill.layer?.cornerRadius = cornerRadius
         layer?.shadowPath = CGPath(roundedRect: bounds, cornerWidth: cornerRadius, cornerHeight: cornerRadius, transform: nil)
         dim.frame = fill.bounds
@@ -377,7 +247,7 @@ final class OrbitFloatingSidebarBackdrop: NSView {
     private func refreshColors() {
         guard let layer else { return }
         OrbitTokens.Shadow.floatingSidebar.apply(to: layer, appearance: effectiveAppearance)
-        edge.strokeColor = (fill.glassStyle.emphasizesBoundary ? NSColor.labelColor : OrbitTokens.Color.Line.sidebarBorder)
+        edge.strokeColor = (NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast ? NSColor.labelColor : OrbitTokens.Color.Line.sidebarBorder)
             .resolvedCGColor(for: effectiveAppearance)
         needsLayout = true
         dim.backgroundColor = OrbitTokens.Color.State.floatingSidebarDim.resolvedCGColor(for: effectiveAppearance)

@@ -51,23 +51,6 @@ public extension BrowserStore {
         return change
     }
 
-    /// An atomic field edit cannot restore a stale gradient captured by an Appearance form.
-    /// Profile ownership is checked in the same actor turn as mutation, including queued actions.
-    @discardableResult
-    func setSpaceThemeSurface(for spaceID: SpaceID, profileID: ProfileID,
-                              material: BrowserThemeSurface.Material? = nil, transparency: Double? = nil,
-                              fallback: BrowserSpaceTheme = BrowserSpaceThemePresets.default) throws -> BrowserSpaceThemeChange {
-        guard let space = spaces[spaceID] else { throw BrowserStoreError.spaceMissing }
-        guard space.profileID == profileID else { throw BrowserSpaceThemeError.conflict }
-        var theme = space.theme ?? fallback
-        var surface = theme.surface ?? BrowserThemeSurface()
-        if let material { surface.material = material }
-        if let transparency { surface.transparency = transparency }
-        guard surface.isValid else { throw BrowserSessionError.invalidSpaceTheme }
-        theme.surface = surface
-        return try setSpaceTheme(theme, for: spaceID, profileID: profileID)
-    }
-
     /// Replays a recorded change; undo passes `change.inverse`. Nothing changes on conflict.
     func applySpaceThemeChange(_ change: BrowserSpaceThemeChange) throws {
         guard let space = spaces[change.spaceID] else { throw BrowserStoreError.spaceMissing }
