@@ -171,6 +171,31 @@ enum OrbitPerformanceProbe {
                         }
                     }
                     result["startupCheck"] = check
+                } else if name == "sync-idle" {
+                    // Explicit fake transport only; never enable account-backed runtime sync.
+                    do {
+                        let session = await environment.store.sessionDocument()
+                        let settings = await environment.settings.store.snapshot()
+                        var boosts: [BrowserBoostDocument] = []
+                        for profile in session.profiles { boosts.append(await (try environment.boosts.store(for: profile.id)).snapshot()) }
+                        let snapshot = BrowserSyncWorker.Snapshot(session: session, settings: settings, boosts: boosts)
+                        let destination = root.appendingPathComponent("idle-replica.json")
+                        let worker = BrowserSyncWorker(state: .init(), destination: destination)
+                        let transport = BrowserSyncMemoryTransport(cloud: BrowserSyncMemoryCloud(), account: "synthetic")
+                        var unchanged = 0
+                        let start = ProcessInfo.processInfo.systemUptime
+                        for _ in 0..<5 {
+                            try await worker.admit("synthetic")
+                            let outgoing = try await worker.capture(snapshot)
+                            try await worker.merge(await transport.exchange(outgoing), identity: "synthetic")
+                            let prepared = try await worker.prepare(snapshot)
+                            if !prepared.changed { unchanged += 1 }
+                            try await worker.acknowledge(prepared.projection)
+                        }
+                        result["syncIdle"] = ["cycles": 5, "unchanged": unchanged, "transport": "memory",
+                            "milliseconds": (ProcessInfo.processInfo.systemUptime - start) * 1000,
+                            "durableBytes": (try Data(contentsOf: destination)).count] as [String: Any]
+                    } catch { result["syncIdle"] = ["failed": true] }
                 } else if name == "benchmark" {
                     result["benchmark"] = await benchmark(owner, command: command, store: environment.store)
                 } else if name == "url-pill-fixture" {

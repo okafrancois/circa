@@ -17,6 +17,7 @@ public actor BrowserHistoryCloudKitTransport: BrowserHistorySyncTransport, CKSyn
     private let zone = CKRecordZone.ID(zoneName: BrowserHistorySyncSchema.zone)
     private var state: State
     private var engine: CKSyncEngine?
+    private var persistence = BrowserSyncPersistence()
     private var stopped = false
     private var failure: (any Error)?
 
@@ -93,7 +94,7 @@ public actor BrowserHistoryCloudKitTransport: BrowserHistorySyncTransport, CKSyn
     }
 
     private func persist() throws {
-        try BrowserPermissionFile.save(BrowserSyncReplica.encodeValue(state), to: destination, maximumBytes: 256 * 1024 * 1024)
+        try persistence.save(BrowserSyncReplica.encodeValue(state), to: destination, maximumBytes: 256 * 1024 * 1024)
     }
 
     private func accept(_ record: CKRecord) throws {
