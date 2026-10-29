@@ -86,11 +86,16 @@ def cloud_entitlements(profile, config, now=None):
         'com.apple.application-identifier': team + '.' + config['bundle_id'],
         'com.apple.developer.team-identifier': team,
     }
-    if profile.get('TeamIdentifier') != [team] or not profile.get('ProvisionsAllDevices') or values.get('get-task-allow'):
+    if (profile.get('TeamIdentifier') != [team] or not profile.get('ProvisionsAllDevices')
+            or values.get('get-task-allow') or values.get('com.apple.security.get-task-allow')):
         raise ValueError('Expected a Developer ID distribution provisioning profile')
     for key, value in expected.items():
         allowed = values.get(key)
-        if isinstance(value, list):
+        # Apple's Developer ID profiles may authorize every iCloud service. Keep the
+        # signed request narrow; wildcards never relax app, team or container admission.
+        if key == 'com.apple.developer.icloud-services' and (allowed == '*' or allowed == ['*']):
+            matches = True
+        elif isinstance(value, list):
             matches = isinstance(allowed, list) and all(item in allowed for item in value)
         elif isinstance(allowed, list):
             matches = value in allowed
@@ -136,6 +141,15 @@ def verify_cloud_signature(bundle, expected):
     run('codesign', '--verify', '--strict', bundle)
 
 
+def verify_cloud_launch(bundle):
+    """Fail before packaging if macOS refuses the restricted signature at execution."""
+    info = plistlib.loads((bundle / 'Contents/Info.plist').read_bytes())
+    executable = bundle / 'Contents/MacOS' / info['CFBundleExecutable']
+    result = run(executable, '--orbit-verify-icloud', capture_output=True, text=True, timeout=30)
+    if json.loads(result.stdout) != {'icloudAvailable': True, 'storageInitialized': False}:
+        raise RuntimeError('Release launch verification did not admit iCloud capabilities')
+
+
 def prepare_bundle(source, destination, config, version, build, local_test_root=None, feed_url=None):
     packager = load_packager()
     if local_test_root:
@@ -167,6 +181,7 @@ def prepare_bundle(source, destination, config, version, build, local_test_root=
         from local_signing import sign_chromium_bundle
         sign_chromium_bundle(destination, identity, main_entitlements=entitlements)
         verify_cloud_signature(destination, entitlements)
+        verify_cloud_launch(destination)
     else:
         packager.sign(destination, identity)
     if identity != 'local':

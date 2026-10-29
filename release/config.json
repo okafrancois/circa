@@ -11,5 +11,5 @@
   "sparkle_version": "2.10.1",
   "sparkle_sha256": "1a856d2a9edb8e628de88121d7be04cf0e2167f8641650b78fca00b14244cf27",
   "team_id": "5Y39TTNCM7",
-  "provisioning_profile": null
+  "provisioning_profile": "~/Library/OrbitRelease/Orbit_Developer_ID.provisionprofile"
 }

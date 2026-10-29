@@ -130,7 +130,10 @@ final class OrbitApplication: NSObject, NSApplicationDelegate {
 
     /// The engine's launcher owns process entry: a Chromium build must start its runtime
     /// before `NSApplication.shared` exists.
-    static func main() { OrbitLauncher.run() }
+    static func main() {
+        if let result = BrowserSyncLaunchVerification.run(arguments: CommandLine.arguments) { exit(result) }
+        OrbitLauncher.run()
+    }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         installMenus()
