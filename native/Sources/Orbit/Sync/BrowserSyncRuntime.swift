@@ -14,7 +14,7 @@ final class BrowserSyncRuntime: ObservableObject {
     @Published var needsAccountDecision = false
     let available: Bool
     let showsSettings: Bool
-    private var state = BrowserSyncState()
+    private var worker: BrowserSyncWorker?
     private var destination: URL?
     private var transport: (any BrowserSyncTransport)?
     private var passwordTransport: (any BrowserPasswordSyncTransport)?
@@ -37,6 +37,7 @@ final class BrowserSyncRuntime: ObservableObject {
         available = true
         showsSettings = true
         self.destination = destination
+        worker = BrowserSyncWorker(state: BrowserSyncState(), destination: destination)
         self.interval = interval
         self.cycle = cycle
         status = .off
@@ -57,7 +58,8 @@ final class BrowserSyncRuntime: ObservableObject {
     func configure<Engine: BrowserEngine>(_ environment: BrowserEnvironment<Engine>, destination: URL) throws {
         guard available, !environment.isPrivate else { return }
         self.destination = destination
-        state = try BrowserSyncState.load(destination)
+        let state = try BrowserSyncState.load(destination)
+        worker = BrowserSyncWorker(state: state, destination: destination)
         enabled = state.enabled; status = enabled ? .on : .off
         cycle = { [weak self, weak environment] in
             guard let self, let environment, !environment.isFinalizing, !environment.settingsRemovalIsRunning else { return }
@@ -68,9 +70,9 @@ final class BrowserSyncRuntime: ObservableObject {
     }
 
     func setEnabled(_ value: Bool) async throws {
-        guard available, let destination else { return }
-        state.enabled = value
-        try state.save(destination)
+        guard available, let worker else { return }
+        if !value { task?.cancel() }
+        try await worker.setEnabled(value)
         enabled = value
         if !value { task?.cancel(); await transport?.stop(); await historyTransport?.stop(); transport = nil; historyTransport = nil; await stopPasswords(); status = .off }
         else { status = .on; NSApp?.registerForRemoteNotifications(); start() }
@@ -127,17 +129,17 @@ final class BrowserSyncRuntime: ObservableObject {
     }
 
     private func synchronize<Engine: BrowserEngine>(_ environment: BrowserEnvironment<Engine>) async throws {
-        guard let destination, enabled else { return }
+        guard let destination, let worker, enabled else { return }
         // No container is ever initialized in unsigned/synthetic processes.
         guard available else { throw BrowserSyncError.unavailable }
         let container = CKContainer(identifier: BrowserSyncSchema.container)
         let identity = try await container.accountStatus() == .available ? try await container.userRecordID().recordName : nil
-        do { try state.account.admit(identity) }
-        catch { try state.save(destination); throw error }
-        try state.save(destination)
+        try await worker.admit(identity)
         guard let identity else { throw BrowserSyncError.signedOut }
         if transport == nil {
-            transport = try BrowserCloudKitTransport(destination: destination.appendingPathExtension("cloudkit"), identity: identity)
+            transport = try await Task.detached(priority: .utility) {
+                try BrowserCloudKitTransport(destination: destination.appendingPathExtension("cloudkit"), identity: identity)
+            }.value
         }
         guard let transport else { return }
         status = .syncing
@@ -160,28 +162,21 @@ final class BrowserSyncRuntime: ObservableObject {
         let settings = await environment.settings.store.snapshot()
         var boostDocuments: [BrowserBoostDocument] = []
         for profile in session.profiles { boostDocuments.append(await (try environment.boosts.store(for: profile.id)).snapshot()) }
-        let projection = try BrowserSyncMapping.project(session: session, settings: settings, boosts: boostDocuments)
-        try state.replica.capture(projection)
-        try state.save(destination)
-        let incoming = try await transport.exchange(Array(state.replica.records.values))
+        let outgoing = try await worker.capture(.init(session: session, settings: settings, boosts: boostDocuments))
+        guard enabled, !Task.isCancelled else { return }
+        let incoming = try await transport.exchange(outgoing)
         guard enabled, !Task.isCancelled, !environment.isFinalizing, !environment.settingsRemovalIsRunning else { return }
-        try state.account.admit(try await transport.account())
-        try state.replica.merge(incoming)
-        try state.save(destination)
+        try await worker.merge(incoming, identity: transport.account())
         // Recapture immediately before publication; changes made while offline win by their
         // own stamp instead of being overwritten by a network snapshot.
         let current = await environment.store.sessionDocument()
         let currentSettings = await environment.settings.store.snapshot()
         var currentBoosts: [BrowserBoostDocument] = []
         for profile in current.profiles { currentBoosts.append(await (try environment.boosts.store(for: profile.id)).snapshot()) }
-        try state.replica.capture(BrowserSyncMapping.project(session: current, settings: currentSettings, boosts: currentBoosts))
-        let value = try BrowserSyncMapping.materialize(state.replica.visible, local: current, settings: currentSettings, boosts: currentBoosts)
-        let shared = BrowserSessionDocument(profiles: value.profiles, spaces: value.spaces, windows: [], tabs: [], organization: value.organization)
-        let projected = try BrowserSyncMapping.project(session: shared, settings: value.settings, boosts: value.boosts)
-        let currentProjection = try BrowserSyncMapping.project(session: current, settings: currentSettings, boosts: currentBoosts)
-        if projected == currentProjection {
-            try state.replica.acknowledge(projected)
-            try state.save(destination)
+        let prepared = try await worker.prepare(.init(session: current, settings: currentSettings, boosts: currentBoosts))
+        let value = prepared.value
+        if !prepared.changed {
+            try await worker.acknowledge(prepared.projection)
             status = .synced(Date())
             return
         }
@@ -200,8 +195,7 @@ final class BrowserSyncRuntime: ObservableObject {
         await environment.settings.refresh()
         await environment.refreshSettingsCatalog()
         try await environment.saveNow()
-        try state.replica.acknowledge(projected)
-        try state.save(destination)
+        try await worker.acknowledge(prepared.projection)
         status = .synced(Date())
     }
 
@@ -209,8 +203,9 @@ final class BrowserSyncRuntime: ObservableObject {
         identity: String, destination: URL) async throws {
         guard enabled, !environment.isPrivate else { return }
         if historyTransport == nil {
-            historyTransport = try BrowserHistoryCloudKitTransport(
-                destination: destination.appendingPathExtension("history.cloudkit"), identity: identity)
+            historyTransport = try await Task.detached(priority: .utility) {
+                try BrowserHistoryCloudKitTransport(destination: destination.appendingPathExtension("history.cloudkit"), identity: identity)
+            }.value
         }
         guard let historyTransport else { return }
         let session = await environment.store.sessionDocument()
@@ -234,7 +229,7 @@ final class BrowserSyncRuntime: ObservableObject {
     }
 
     private func stopPasswords() async {
-        passwords?.stop(); passwords = nil
+        await passwords?.stop(); passwords = nil
         await passwordTransport?.stop(); passwordTransport = nil
     }
 
@@ -242,10 +237,12 @@ final class BrowserSyncRuntime: ObservableObject {
         identity: String, destination: URL) async throws {
         guard enabled, !environment.isPrivate, let store = environment.engine.passwordStore else { return }
         if passwords == nil || passwordTransport == nil {
-            let key = try BrowserPasswordSyncCache.systemKey()
+            let key = try await Task.detached(priority: .utility) { try BrowserPasswordSyncCache.systemKey() }.value
             passwords = try BrowserPasswordSync(cache: .init(destination: destination.appendingPathExtension("passwords.sealed"), key: key))
-            passwordTransport = try BrowserPasswordCloudKitTransport(
-                cache: .init(destination: destination.appendingPathExtension("passwords.cloudkit.sealed"), key: key), identity: identity)
+            passwordTransport = try await Task.detached(priority: .utility) {
+                try BrowserPasswordCloudKitTransport(
+                    cache: .init(destination: destination.appendingPathExtension("passwords.cloudkit.sealed"), key: key), identity: identity)
+            }.value
         }
         guard let passwords, let passwordTransport else { return }
         let session = await environment.store.sessionDocument()
@@ -254,7 +251,7 @@ final class BrowserSyncRuntime: ObservableObject {
                   !environment.isFinalizing, !environment.settingsRemovalIsRunning else { throw BrowserSyncError.unavailable }
             let container = CKContainer(identifier: BrowserSyncSchema.container)
             let current = try await container.accountStatus() == .available ? try await container.userRecordID().recordName : nil
-            try state.account.admit(current)
+            try await worker?.admit(current)
             guard current == identity else { throw BrowserSyncError.accountChanged }
         }
     }

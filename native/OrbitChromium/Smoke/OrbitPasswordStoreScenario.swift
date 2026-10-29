@@ -108,7 +108,7 @@ enum OrbitPasswordStoreScenario {
         do {
             let a = try BrowserPasswordSync(cache: .init(destination: root.appendingPathComponent("a.sealed"), key: key))
             let b = try BrowserPasswordSync(cache: .init(destination: root.appendingPathComponent("b.sealed"), key: key))
-            defer { a.stop(); b.stop() }
+            defer { Task { await a.stop(); await b.stop() } }
             let first = SmokeMappedPasswordStore(store: store, local: localA), second = SmokeMappedPasswordStore(store: store, local: localB)
             let cloud = BrowserPasswordSyncMemoryCloud()
             var row = BrowserPasswordRecord(primaryKey: .init(signonRealm: "https://sync-fixture.invalid/", originURL: "https://sync-fixture.invalid/login",
