@@ -13,6 +13,7 @@ public struct BrowserImportPlan: Sendable, Equatable {
         public let sourceDirectory: String?
         /// True when Arc's default profile is merged into the target's existing first profile.
         public let isAdopted: Bool
+        public var mappingKey: String? = nil
     }
 
     public struct Space: Sendable, Equatable {
@@ -44,6 +45,7 @@ public struct BrowserImportPlan: Sendable, Equatable {
         public let directory: String
     }
 
+    public var registration: BrowserImportRegistration? = nil
     public var profiles: [Profile] = []
     public var spaces: [Space] = []
     public var favorites: [Favorites] = []
