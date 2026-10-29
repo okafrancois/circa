@@ -684,8 +684,8 @@ final class BrowserSidebarView: NSView, SidebarListHost {
 
     func applyAccent(_ accent: OrbitTokens.ThemeAccent) {
         self.accent = accent
-        addressContainer.accent = accent
-        navigationContainer.accent = accent
+        if addressContainer.accent != accent { addressContainer.accent = accent }
+        if navigationContainer.accent != accent { navigationContainer.accent = accent }
         footer.accent = accent
         page.accent = accent
         leavingPage?.accent = accent
@@ -993,6 +993,7 @@ final class SidebarToolbarRow: SidebarFlippedView {
     private(set) var overflowButton: NSButton?
     var accent = OrbitTokens.ThemeAccent.defaultSpace {
         didSet {
+            guard accent != oldValue else { return }
             for button in buttons { applyAccent(to: button) }
             if let overflowButton { applyAccent(to: overflowButton) }
         }

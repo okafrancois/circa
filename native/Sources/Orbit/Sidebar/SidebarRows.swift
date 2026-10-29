@@ -314,6 +314,8 @@ class SidebarTabRow: SidebarListRow {
     private let otherWindowMark = NSImageView()
     let audioButton = OrbitGlyphButton(glyph: nil, label: "")
     private let loadingIndicator = SidebarTabLoadingView()
+    private let faviconPlaceholder = OrbitGlyph.faviconPlaceholder
+    private var audioMuted: Bool?
 
     init(item: SidebarTabItem, depth: Int = 0) {
         self.item = item
@@ -373,14 +375,19 @@ class SidebarTabRow: SidebarListRow {
         rebind(node: node ?? .tab(item.id), depth: depth)
         let changed = item != self.item
         self.item = item
-        titleLabel.stringValue = item.title
-        titleLabel.textColor = titleColor
-        favicon.image = displayedFavicon ?? OrbitGlyph.faviconPlaceholder
-        favicon.contentTintColor = displayedFavicon == nil ? effectiveAccent.icon : nil
+        if titleLabel.stringValue != item.title { titleLabel.stringValue = item.title }
+        if titleLabel.textColor != titleColor { titleLabel.textColor = titleColor }
+        let image = displayedFavicon ?? faviconPlaceholder
+        if favicon.image !== image { favicon.image = image }
+        let tint = displayedFavicon == nil ? effectiveAccent.icon : nil
+        if favicon.contentTintColor != tint { favicon.contentTintColor = tint }
         loadingIndicator.isLoading = item.activity.isLoading
         let muted = item.activity.isAudioMuted == true
-        audioButton.glyph = OrbitGlyph.symbol(muted ? "speaker.slash.fill" : "speaker.wave.2.fill",
-                                             pointSize: Metrics.audioGlyphSize, weight: .medium)
+        if audioMuted != muted {
+            audioMuted = muted
+            audioButton.glyph = OrbitGlyph.symbol(muted ? "speaker.slash.fill" : "speaker.wave.2.fill",
+                                                 pointSize: Metrics.audioGlyphSize, weight: .medium)
+        }
         let audioLabel = uiText(muted ? "Unmute Tab" : "Mute Tab")
         audioButton.setAccessibilityLabel(audioLabel)
         audioButton.toolTip = audioLabel
@@ -495,12 +502,14 @@ final class SidebarSplitRow: SidebarTabRow {
     private(set) var paneCells: [SidebarSplitPaneCell] = []
 
     init(item: SidebarTabItem, node: BrowserOrganizationNode, depth: Int) {
+        OrbitUIWorkCounters.record("splitAllocation")
         super.init(item: item, depth: depth)
         updateSplit(item, node: node, depth: depth)
     }
     required init?(coder: NSCoder) { nil }
 
     func updateSplit(_ item: SidebarTabItem, node: BrowserOrganizationNode, depth: Int) {
+        OrbitUIWorkCounters.record("splitUpdate")
         update(item, depth: depth, node: node)
         let members = item.selected && (2...3).contains(item.splitPanes.count) ? item.splitPanes : []
         titleLabel.isHidden = !members.isEmpty
@@ -834,10 +843,14 @@ final class SidebarClearButton: NSButton {
     override var mouseDownCanMoveWindow: Bool { false }
     override var isHighlighted: Bool { didSet { needsDisplay = true } }
 
-    var preferredWidth: CGFloat { ceil(attributedLabel.size().width) + 2 * OrbitTokens.Metrics.Sidebar.clearHoverPadding }
+    var preferredWidth: CGFloat {
+        OrbitUIWorkCounters.record("clearMeasurement")
+        return ceil(attributedLabel.size().width) + 2 * OrbitTokens.Metrics.Sidebar.clearHoverPadding
+    }
     var isRevealed: Bool { alphaValue > 0 }
 
     var attributedLabel: NSAttributedString {
+        OrbitUIWorkCounters.record("clearLabel")
         let overlays = isEnabled && (isHovering || isHighlighted) ? [OrbitTokens.Color.State.standaloneButton] : []
         let effective = OrbitSpaceThemes.accent(accent, over: overlays)
         return NSAttributedString(string: title, attributes: [

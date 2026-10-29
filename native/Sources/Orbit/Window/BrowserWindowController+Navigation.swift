@@ -107,8 +107,8 @@ extension BrowserWindowController {
             let url = state.url ?? session.organization?.selectedTab?.url
             addressField.refreshAddress(url?.absoluteString ?? "", in: session.snapshot?.activeSpaceID)
         }
-        backButton.isEnabled = state.canGoBack
-        forwardButton.isEnabled = state.canGoForward
-        reloadButton.isEnabled = state.url != nil
+        if backButton.isEnabled != state.canGoBack { backButton.isEnabled = state.canGoBack }
+        if forwardButton.isEnabled != state.canGoForward { forwardButton.isEnabled = state.canGoForward }
+        if reloadButton.isEnabled != (state.url != nil) { reloadButton.isEnabled = state.url != nil }
     }
 }

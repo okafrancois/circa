@@ -302,6 +302,7 @@ final class OrbitThemeFieldView: NSView {
         fill.cornerRadius = OrbitThemeEditorMetrics.fieldCornerRadius
         fill.backgroundColor = OrbitThemeEditorColors.field.resolvedCGColor(for: appearance)
         dots.frame = bounds
+        OrbitUIWorkCounters.record("dotGridBuild")
         let path = CGMutablePath()
         let pitch = OrbitThemeEditorMetrics.dotPitch, side = OrbitThemeEditorMetrics.dotDiameter
         var y = pitch / 2
