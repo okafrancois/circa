@@ -380,6 +380,67 @@ struct SidebarListWindowTests {
         #expect((a.list.row(for: .tab(x)) as? SidebarTabRow)?.item.isOpenInAnotherWindow == true)
     }
 
+    @Test("A tab dropped in another Space moves its live document and history with one undoable placement")
+    func crossSpaceLiveMove() async throws {
+        let harness = try await SidebarListHarness()
+        defer { harness.shutdown() }
+        let a = harness.window
+        let remaining = try #require(await harness.openTab("https://source.test/", in: a, activate: true))
+        let first = URL(string: "https://history.test/first")!
+        let x = try #require(await harness.openTab(first.absoluteString, in: a, activate: true))
+        let surface = try #require(a.session.selectedSurface)
+        surface.navigate(to: URL(string: "https://history.test/second")!)
+        let b = try await harness.newWindow()
+        let space = try await harness.store.createSpace(name: "Destination", profileID: harness.profileID)
+        b.session.activateSpace(space)
+        await harness.settle()
+        let payload = a.payload(.tab(x))
+        a.sidebar.list(a.list, dragLeftWindow: payload)
+        await harness.settle()
+        #expect(a.organization.selectedTab?.id == remaining)
+        let point = b.sidebarPoint(listY: b.list.displayedLayout.newTabCenterY)
+        let hover = b.sidebar.simulateDragHover(payload, at: point)
+        #expect(hover?.isValid == true)
+        #expect(b.list.insertionLineFrame != nil && b.list.gapPlaceholderFrame == nil)
+        b.sidebar.simulateDrop(payload, at: point)
+        await harness.settle()
+        #expect(b.session.selectedSurface === surface && !surface.isDisposed)
+        #expect(b.organization.selectedTab?.id == x)
+        #expect(a.organization.tab(x) == nil && a.liveSidebarSurface(of: x) == nil)
+        #expect(b.organization.allTabs.filter { $0.id == x }.count == 1)
+        #expect(b.session.snapshot?.tabs.filter { $0.id == x }.count == 1)
+        #expect(surface.navigationState.canGoBack)
+        #expect(surface.goBack() == first)
+        await harness.settle()
+        #expect(b.organization.undoAction == .moveItems)
+        let undone = await b.session.undoOrganization().value
+        #expect(undone != nil)
+        await harness.settle()
+        #expect(a.organization.tab(x) != nil && b.organization.tab(x) == nil)
+        _ = await b.session.redoOrganization().value
+        await harness.settle()
+        #expect(a.organization.tab(x) == nil && b.organization.allTabs.filter { $0.id == x }.count == 1)
+    }
+
+    @Test("A cross-profile drop leaves document, history and organization untouched")
+    func foreignProfileDropRefused() async throws {
+        let harness = try await SidebarListHarness()
+        defer { harness.shutdown() }
+        let a = harness.window
+        let x = try #require(await harness.openTab("https://identity.test/", in: a, activate: true))
+        let surface = try #require(a.session.selectedSurface)
+        let b = try await harness.newWindow()
+        let profile = await harness.store.createProfile(name: "Foreign")
+        let space = try await harness.store.createSpace(name: "Foreign", profileID: profile)
+        b.session.activateSpace(space)
+        await harness.settle()
+        let verdict = b.sidebar.simulateDrop(a.payload(.tab(x)), at: b.sidebarPoint(listY: b.list.displayedLayout.newTabCenterY))
+        await harness.settle()
+        #expect(verdict?.error == .crossProfileMove)
+        #expect(a.session.selectedSurface === surface && !surface.isDisposed)
+        #expect(b.organization.tab(x) == nil && a.organization.tab(x)?.isSelected == true)
+    }
+
     @Test("List rows reach the Favorites grid through the FAVORITES drop adapter, and tiles drop into the list")
     func favoritesDropAdapter() async throws {
         let harness = try await SidebarListHarness()

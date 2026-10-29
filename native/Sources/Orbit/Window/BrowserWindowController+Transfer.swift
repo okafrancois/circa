@@ -13,7 +13,8 @@ extension BrowserWindowController {
     /// tab here, rebound, or to the environment's rescue holder if this window is gone too.
     @discardableResult
     func moveSurface(_ surface: Surface, to destination: BrowserWindowController,
-                     activate: Bool = true, replacingExisting: Bool = false) -> Task<TabOccurrenceID?, Never>? {
+                     activate: Bool = true, replacingExisting: Bool = false,
+                     movingTo placement: BrowserOrganizationDestination? = nil) -> Task<TabOccurrenceID?, Never>? {
         guard destination !== self, destination.engine === engine,
               engine.capabilities.contains(.liveSurfaceTransfer),
               acceptsCommands, destination.acceptsCommands, owns(surface),
@@ -26,7 +27,7 @@ extension BrowserWindowController {
             return nil
         }
         surfaceDidLeave(surface)
-        let adoption = destination.acceptSurface(transfer, activate: activate, replacingExisting: replacingExisting)
+        let adoption = destination.acceptSurface(transfer, activate: activate, replacingExisting: replacingExisting, movingTo: placement)
         // Refused in this same turn: the live document goes straight back to its tab here.
         guard transfer.state != .pending else {
             transfer.cancel()
@@ -53,10 +54,10 @@ extension BrowserWindowController {
     /// arrive before the tab is recorded are reconciled when recording resolves. Refused (the
     /// transfer stays pending and returns to its source) while the window prepares to quit.
     func acceptSurface(_ transfer: BrowserSurfaceTransfer<Surface>, activate: Bool,
-                       replacingExisting: Bool = false, didAdopt: (() -> Void)? = nil) -> Task<TabOccurrenceID?, Never> {
+                       replacingExisting: Bool = false, movingTo placement: BrowserOrganizationDestination? = nil, didAdopt: (() -> Void)? = nil) -> Task<TabOccurrenceID?, Never> {
         guard acceptsCommands else { return Task { nil } }
         let surface = transfer.surface
-        let adoption = session.acceptTransfer(transfer, activate: activate, replacingExisting: replacingExisting,
+        let adoption = session.acceptTransfer(transfer, activate: activate, replacingExisting: replacingExisting, movingTo: placement,
                                              bind: { bindSurface($0) }, didAdopt: didAdopt)
         guard transfer.state != .pending else { return adoption }
         reconcileTransferredSurface(surface, after: adoption)

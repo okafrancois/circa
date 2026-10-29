@@ -60,9 +60,11 @@ public extension BrowserWindowSession {
     }
 
 
-    func moveItems(_ nodes: [BrowserOrganizationNode], to destination: BrowserOrganizationDestination) {
-        enqueueOrganization { session, context in
-            try await session.store.moveItems(nodes, to: destination, from: context)
+    @discardableResult
+    func moveItems(_ nodes: [BrowserOrganizationNode], to destination: BrowserOrganizationDestination) -> Task<Bool?, Never> {
+        enqueueOrganizationValue { session, context in
+            let state = try await session.store.moveItems(nodes, to: destination, from: context)
+            return (true, state)
         }
     }
 

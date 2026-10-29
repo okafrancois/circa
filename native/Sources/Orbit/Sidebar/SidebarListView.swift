@@ -16,6 +16,7 @@ protocol SidebarListHost: AnyObject {
     func list(_ list: SidebarListView, contextMenuFor node: BrowserOrganizationNode, event: NSEvent, in view: NSView)
     func list(_ list: SidebarListView, dragPayloadFor node: BrowserOrganizationNode, grabOffsetX: CGFloat) -> SidebarDragPayload?
     func list(_ list: SidebarListView, dragDidChange payload: SidebarDragPayload?)
+    func list(_ list: SidebarListView, dragLeftWindow payload: SidebarDragPayload)
     /// The row Return renames: the anchor of the selection or the selected tab.
     func listCurrentNode(_ list: SidebarListView) -> BrowserOrganizationNode?
     func listCancelSelection(_ list: SidebarListView)
@@ -28,6 +29,7 @@ protocol SidebarListHost: AnyObject {
 
 extension SidebarListHost {
     func list(_ list: SidebarListView, toggleAudio tab: TabID) {}
+    func list(_ list: SidebarListView, dragLeftWindow payload: SidebarDragPayload) {}
 }
 
 /// Pinned and Today rows of one Space page, the separator, New Tab and Today's Clear control.
@@ -96,6 +98,12 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
     private var pendingCommit: PendingCommit?
     private var localDrag: SidebarDragPayload?
     private var localDropWasNoOp = false
+    private let insertionLine = SidebarInsertionLineView()
+    private var isCrossWindowHover = false
+    private var sourceOutsideSidebar = false
+    private var announcedWindowDeparture = false
+    private var dragGhostNodes: Set<BrowserOrganizationNode> = []
+    private var dragSelectionToRestore: TabID?
 
     // Pointer and rename state.
     private struct PointerDown {
@@ -130,6 +138,8 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
         newTabRow.target = self
         newTabRow.action = #selector(newTab(_:))
         for view in [gapPlaceholder, separator, newTabRow, clearButton] as [NSView] { addSubview(view) }
+        addSubview(insertionLine)
+        insertionLine.isHidden = true
         animator.onFrame = { [weak self] time in self?.animationFrame(at: time) }
         setAccessibilityRole(.group)
     }
@@ -172,7 +182,7 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
     /// Rows highlighted while their context menu is open.
     func setContextTargets(_ nodes: Set<BrowserOrganizationNode>) {
         contextTargets = nodes
-        for (node, row) in rowViews { row.isContextTarget = nodes.contains(node) }
+        for (node, row) in rowViews { row.isContextTarget = nodes.contains(node) || dragGhostNodes.contains(node) }
     }
 
     // MARK: Layout and motion
@@ -181,7 +191,10 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
         sourceHidden.union(hoverHidden).union(pendingCommit?.hidden ?? [])
     }
 
-    private var effectiveGap: SidebarDropGap? { gap ?? pendingCommit?.gap }
+    private var effectiveGap: SidebarDropGap? {
+        if isCrossWindowHover, let gap, gap.index >= dropLayout.rows(in: gap.section).count { return nil }
+        return gap ?? pendingCommit?.gap
+    }
 
     private func resolveLayouts() {
         let hidden = hiddenNodes
@@ -399,6 +412,16 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
     var documentHeight: CGFloat { displayedLayout.documentHeight }
 
     private func refreshGapPlaceholder(animated: Bool) {
+        insertionLine.isHidden = true
+        if isCrossWindowHover, effectiveGap == nil, let gap {
+            let layout = SidebarListLayout.resolve(entries: content.entries, spaceTitleCenterY: spaceTitleCenterY,
+                width: bounds.width, hidden: hiddenNodes, gap: gap)
+            if let frame = layout.gapFrame {
+                insertionLine.frame = NSRect(x: frame.minX + 7, y: frame.minY - Metrics.rowSpacing / 2 - 3,
+                                             width: max(0, frame.width - 7), height: 6)
+                insertionLine.isHidden = false
+            }
+        }
         if let frame = displayedLayout.gapFrame {
             gapPlaceholder.frame = frame
             if gapPlaceholder.isHidden {
@@ -452,7 +475,7 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
         row.onPreviewInvalidated = { [weak self] row in self?.onPreviewInvalidated?(row) }
         row.leavingEntry = entry
         row.commandsEnabled = commandsEnabled
-        row.isContextTarget = contextTargets.contains(entry.node)
+        row.isContextTarget = contextTargets.contains(entry.node) || dragGhostNodes.contains(entry.node)
         row.isDropTarget = entry.node.folderID != nil && entry.node.folderID == folderTarget
         row.alphaValue = 1
         row.isHidden = false
@@ -460,6 +483,7 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
     }
 
     private func configure(_ row: SidebarListRow, with entry: SidebarListEntry) {
+        row.isContextTarget = contextTargets.contains(entry.node) || dragGhostNodes.contains(entry.node)
         row.leavingEntry = entry
         switch (row, entry.content) {
         case let (row as SidebarSplitRow, .split(item, _)):
@@ -735,6 +759,7 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
             isDragging = false
             return
         }
+        dragSelectionToRestore = lifted.first(where: { $0.tab?.selected == true })?.tab?.id
         localDrag = payload
         localDropWasNoOp = false
         let session = beginDraggingSession(with: items, event: event, source: self)
@@ -750,14 +775,40 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
         context == .withinApplication ? .move : []
     }
 
+    func draggingSession(_ session: NSDraggingSession, movedTo screenPoint: NSPoint) {
+        guard let payload = localDrag, payload.nodes.count == 1, payload.nodes.first?.tabID != nil,
+              let window else { return }
+        let point = convert(window.convertPoint(fromScreen: screenPoint), from: nil)
+        let outside = point.x < bounds.minX || point.x > bounds.maxX || !window.frame.contains(screenPoint)
+        if !window.frame.contains(screenPoint), !announcedWindowDeparture {
+            announcedWindowDeparture = true
+            host?.list(self, dragLeftWindow: payload)
+        }
+        guard sourceOutsideSidebar != outside else { return }
+        sourceOutsideSidebar = outside
+        sourceHidden = outside ? [] : Set(liftedRows(for: payload.nodes).map(\.node))
+        // Keep the source row as a stationary ghost while the system drag crosses windows.
+        dragGhostNodes = outside ? Set(payload.nodes) : []
+        setContextTargets(contextTargets)
+        relayout(animated: true)
+    }
+
     func ignoreModifierKeys(for session: NSDraggingSession) -> Bool { true }
 
     func draggingSession(_ session: NSDraggingSession, endedAt screenPoint: NSPoint, operation: NSDragOperation) {
         isDragging = false
+        sourceOutsideSidebar = false
+        announcedWindowDeparture = false
+        if operation.isEmpty { dragGhostNodes = [] }
+        setContextTargets(contextTargets)
         let payload = localDrag
         localDrag = nil
         let lifted = sourceHidden
         sourceHidden = []
+        if operation.isEmpty, let tab = dragSelectionToRestore {
+            host?.list(self, activate: .tab(tab), modifiers: [])
+        }
+        dragSelectionToRestore = nil
         if operation.isEmpty || localDropWasNoOp {
             liftedNodes.subtract(lifted)
             if pendingCommit != nil, localDropWasNoOp { endPendingCommit() }
@@ -775,7 +826,9 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
 
     func dropProposal(for payload: SidebarDragPayload, at point: NSPoint,
                       in snapshot: BrowserOrganizationSnapshot) -> SidebarDropProposal? {
-        // Rows of this Space dragged from another window are lifted here too: both lists show them.
+        isCrossWindowHover = payload.nodes.count == 1 && payload.nodes.first?.tabID != nil
+            && payload.sourceWindow != SidebarWindowDirectory.id(of: window)
+        // A tab already shared by these two windows is hidden only in the receiver.
         let lifted = payload.spaceID == spaceID && localDrag == nil ? Set(liftedRows(for: payload.nodes).map(\.node)) : []
         if lifted != hoverHidden {
             hoverHidden = lifted
@@ -808,6 +861,7 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
             liftedNodes.subtract(hoverHidden)
             hoverHidden = []
         }
+        if payload == nil { isCrossWindowHover = false }
         let nextGap = isValid ? proposal?.gap : nil
         let nextFolder = isValid ? proposal?.folderTarget : nil
         guard nextGap != gap || nextFolder != folderTarget || payload == nil else { return }
@@ -820,14 +874,20 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
         if let folder = proposal.folderTarget {
             return displayedCenterY(of: .node(.folder(folder))).map { rowFrame(centerY: $0) }
         }
+        if isCrossWindowHover, let gap = proposal.gap {
+            return SidebarListLayout.resolve(entries: content.entries, spaceTitleCenterY: spaceTitleCenterY,
+                width: bounds.width, hidden: hiddenNodes, gap: gap).gapFrame
+        }
         return displayedLayout.gapFrame
     }
 
     /// The drop was accepted (or was a no-op); the sidebar commits it.
     func didAcceptDrop(_ proposal: SidebarDropProposal, payload: SidebarDragPayload, changesOrganization: Bool) -> Bool {
         let lifted = hiddenNodes
+        let external = isCrossWindowHover && effectiveGap == nil
+        isCrossWindowHover = false
         if changesOrganization {
-            beginPendingCommit(hidden: lifted, gap: gap, payload: payload)
+            beginPendingCommit(hidden: lifted, gap: external ? nil : gap, payload: payload)
         } else {
             liftedNodes.subtract(lifted)
             if localDrag != nil { localDropWasNoOp = true }
@@ -852,6 +912,7 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
         guard let pending = pendingCommit else { return }
         pending.timer.cancel()
         pendingCommit = nil
+        if localDrag == nil { dragGhostNodes = [] }
         if shouldRelayout { relayout(animated: true) }
     }
 
@@ -869,6 +930,7 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
 
     func row(for node: BrowserOrganizationNode) -> SidebarListRow? { rowViews[node] }
     var materializedRowCount: Int { rowViews.count }
+    var insertionLineFrame: NSRect? { insertionLine.isHidden ? nil : insertionLine.frame }
     var gapPlaceholderFrame: NSRect? { gapPlaceholder.isHidden ? nil : gapPlaceholder.frame }
     var isClearRevealed: Bool { clearButton.isRevealed }
     func setTodayHoveredForTesting(_ hovered: Bool) { isTodayHovered = hovered }
@@ -952,5 +1014,21 @@ enum SidebarDragImage {
         let height = ceil(title.size().height)
         title.draw(with: NSRect(x: titleX, y: (rect.height - height) / 2, width: max(0, rect.width - titleX - Metrics.rowInsetX),
                                 height: height), options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
+    }
+}
+
+/// A one-and-a-half-point insertion rule with a hollow five-point leading marker.
+@MainActor
+private final class SidebarInsertionLineView: NSView {
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+    override func draw(_ dirtyRect: NSRect) {
+        let color = OrbitTokens.Color.Text.primary
+        color.setStroke()
+        let path = NSBezierPath()
+        path.lineWidth = 1.5
+        path.appendOval(in: NSRect(x: 0.75, y: 0.75, width: 4.5, height: 4.5))
+        path.move(to: NSPoint(x: 5.25, y: 3))
+        path.line(to: NSPoint(x: bounds.maxX, y: 3))
+        path.stroke()
     }
 }

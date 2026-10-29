@@ -133,15 +133,27 @@ final class SidebarDropCoordinator {
         return next
     }
 
-    /// Rows move between windows of one Space only (SB-LIST contract): another profile is a
-    /// cross-profile move, another Space of the profile is not visible in this context — shared
-    /// Favorites included, whose payload carries the source window's Space. The store repeats the
-    /// model checks authoritatively when the command runs.
+    /// Cross-window tab moves use the source's current projection to validate identity and the
+    /// destination's projection to validate placement. A process-local window must vouch for a
+    /// foreign Space; arbitrary pasteboard IDs never expand the visible command context.
     static func validate(_ payload: SidebarDragPayload, to destination: BrowserOrganizationDestination,
                          snapshot: BrowserOrganizationSnapshot, catalog: BrowserCatalogSnapshot) -> BrowserOrganizationError? {
         guard payload.profileID == snapshot.profileID else { return .crossProfileMove }
-        guard payload.spaceID == snapshot.spaceID else { return .notVisibleInContext }
-        return snapshot.validateMove(payload.nodes, to: destination, catalog: catalog)
+        if payload.spaceID == snapshot.spaceID {
+            return snapshot.validateMove(payload.nodes, to: destination, catalog: catalog)
+        }
+        if case .favorites = destination.container { return .notVisibleInContext }
+        guard payload.nodes.count == 1,
+              let source = SidebarWindowDirectory.organization(of: payload.sourceWindow),
+              source.spaceID == payload.spaceID, source.profileID == payload.profileID,
+              payload.nodes.allSatisfy({ node in
+                  guard let id = node.tabID, let tab = source.tab(id) else { return false }
+                  if case .favorites = tab.section { return false }
+                  return true
+              }) else { return .notVisibleInContext }
+        // Validate target anchors and folder rules with a temporary combined projection. This
+        // does not publish foreign rows or change the destination's selection.
+        return snapshot.validateMove(payload.nodes, to: destination, catalog: catalog, incomingTabsFrom: source)
     }
 
     /// Accepted drop, or nil when the last verdict refused it.
