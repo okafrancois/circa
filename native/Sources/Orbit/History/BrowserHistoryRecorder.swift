@@ -226,6 +226,23 @@ final class BrowserHistoryRecorder {
         return try await access(profileID: document.profileID, disabled: 0) { try await $0.importDocument(document) }
     }
 
+    func syncBatches(for profileID: ProfileID, now: Date = Date()) async throws -> [BrowserHistorySyncBatch] {
+        await flush()
+        let maintenance = try await access(profileID: profileID, disabled: false) { try await $0.historySyncNeedsApply([], now: now) }
+        let wasWarm = maintenance ? beginBulkMutation(for: profileID) : false
+        defer { if maintenance { endBulkMutation(for: profileID, rebuild: wasWarm) } }
+        return try await access(profileID: profileID, disabled: []) { try await $0.historySyncBatches(now: now) }
+    }
+
+    @discardableResult func applySync(_ batches: [BrowserHistorySyncBatch], for profileID: ProfileID, now: Date = Date()) async throws -> Bool {
+        guard isPersistent(profileID), try await access(profileID: profileID, disabled: false, operation: {
+            try await $0.historySyncNeedsApply(batches, now: now)
+        }) else { return false }
+        let wasWarm = beginBulkMutation(for: profileID)
+        defer { endBulkMutation(for: profileID, rebuild: wasWarm) }
+        return try await access(profileID: profileID, disabled: false) { try await $0.applyHistorySync(batches, now: now) }
+    }
+
     // MARK: Multi-chunk import (CORE-IMPORT)
 
     /// True when imported visits of the profile would be persisted (never for ephemeral profiles).

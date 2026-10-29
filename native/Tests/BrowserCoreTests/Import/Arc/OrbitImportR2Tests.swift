@@ -368,7 +368,7 @@ struct OrbitImportR2Tests {
         try await distinct.close(); try await repeated.close()
         let inspect = try HistoryDatabase(url: root.appendingPathComponent(repeatedProfile.rawValue.uuidString).appendingPathComponent("history.sqlite"),
                                           profileID: repeatedProfile)
-        #expect(try inspect.scalarInt("PRAGMA user_version") == 5)
+        #expect(try inspect.scalarInt("PRAGMA user_version") == HistoryDatabase.currentVersion)
         try inspect.execute("INSERT INTO search(search,rank) VALUES('integrity-check',1)")
         try inspect.execute("INSERT INTO titleWords(titleWords,rank) VALUES('integrity-check',1)")
         try inspect.close()

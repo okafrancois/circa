@@ -1,6 +1,6 @@
 @testable import Orbit
 import AppKit
-import BrowserCore
+@testable import BrowserCore
 import BrowserEngine
 import BrowserShell
 import Foundation
@@ -439,4 +439,30 @@ private final class HistoryTestEngine: BrowserEngine {
     func shutdown() {}
 }
 
+}
+
+extension NativeWebKitTests.BrowserHistoryRecorderTests {
+    @Test("Remote visits refresh a warm Command Bar index and private recorders never export them")
+    func remoteHistoryIndex() async throws {
+        let root = URL(fileURLWithPath: "/private/tmp/orbit-history-remote-index-\(UUID())")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let profile = ProfileID(), now = Date()
+        let recorder = BrowserHistoryRecorder(directory: root, resolveProfile: { .init(profileID: $0, persistence: .persistent) })
+        await recorder.prepareSuggestions(for: profile)
+        let visit = BrowserHistoryVisit(url: URL(string: "https://remote.synthetic.test/page")!, title: "Remote synthetic", visitedAt: now, transition: .typed, typedCount: 2)
+        let batch = BrowserHistorySyncBatch(profileID: profile, cutoff: BrowserHistorySyncSchema.cutoff(now), events: [.init(visit: visit)])
+        try await recorder.applySync([batch], for: profile, now: now)
+        await recorder.prepareSuggestions(for: profile)
+        // A rebuild queued after the mutation can share the in-flight warm-up.
+        for _ in 0..<50 where recorder.cachedSuggestions(for: profile, query: "remote").isEmpty {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(recorder.cachedSuggestions(for: profile, query: "remote").first?.typedCount == 2)
+        #expect(try await recorder.suggestions(for: profile, query: "remote").first?.visitCount == 1)
+        let privateRecorder = BrowserHistoryRecorder()
+        try await privateRecorder.applySync([batch], for: profile, now: now)
+        #expect(try await privateRecorder.syncBatches(for: profile, now: now).isEmpty)
+        #expect(try await privateRecorder.visits(for: profile).isEmpty)
+        try await recorder.close()
+    }
 }

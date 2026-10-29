@@ -188,8 +188,8 @@ struct BrowserHistoryTests {
         #expect(try await migrated.suggestions("migration").first?.typedCount == 2)
         try await migrated.close()
         let inspect = try HistoryTestSQL(url)
-        #expect(try inspect.integer("PRAGMA user_version") == 5)
-        #expect(try inspect.integer("SELECT version FROM identity") == 5)
+        #expect(try inspect.integer("PRAGMA user_version") == HistoryDatabase.currentVersion)
+        #expect(try inspect.integer("SELECT version FROM identity") == HistoryDatabase.currentVersion)
         #expect(try inspect.integer("SELECT COUNT(*) FROM pragma_table_info('pages') WHERE name='id' AND type='INTEGER' AND pk=1") == 1)
         let pageID = try inspect.integer("SELECT id FROM pages")
         try inspect.execute("VACUUM; INSERT INTO search(search,rank) VALUES('integrity-check',1)")
@@ -371,6 +371,8 @@ private final class HistoryTestSQL {
     }
     func makeLegacy(version: Int) throws {
         try execute("""
+            DROP TABLE historySyncEvents; DROP TABLE historySyncBatches;
+            DROP TABLE historySyncState; DROP TABLE historySyncVersions;
             DROP TRIGGER pages_insert; DROP TRIGGER pages_delete; DROP TRIGGER pages_update;
             DROP TRIGGER titleWords_insert; DROP TRIGGER titleWords_delete; DROP TRIGGER titleWords_update;
             DROP TABLE titleWords;

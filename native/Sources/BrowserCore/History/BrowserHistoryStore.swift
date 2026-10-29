@@ -6,7 +6,9 @@ import SQLite3
 public actor BrowserHistoryStore {
     public let profileID: ProfileID
     public let policy: BrowserHistoryPolicy
-    private let database: HistoryDatabase?
+    let database: HistoryDatabase?
+    var applyingHistorySync = false
+    var lastHistoryJournalPrune = Date.distantPast
     /// Separate read-only WAL connection: suggestions and index snapshots bypass this actor.
     private nonisolated let reader: HistoryReadConnection?
     private let profileDirectory: OrbitSecureDirectory?
@@ -88,13 +90,13 @@ public actor BrowserHistoryStore {
 
     @discardableResult public func record(_ visit: BrowserHistoryVisit) throws -> Bool {
         guard database != nil else { return false }
-        return try insert([visit]) == 1
+        return try insert([visit], respectsBarriers: false) == 1
     }
 
     /// Records a visit and returns the committed page aggregate for in-memory index updates.
     /// Returns nil when nothing was inserted (duplicate identity or disabled policy).
     public func recordReturningPage(_ visit: BrowserHistoryVisit) throws -> BrowserHistoryIndexedPage? {
-        guard database != nil, try insert([visit]) == 1 else { return nil }
+        guard database != nil, try insert([visit], respectsBarriers: false) == 1 else { return nil }
         return try page(for: visit.url)
     }
 
@@ -123,7 +125,7 @@ public actor BrowserHistoryStore {
         return try insert(document.visits)
     }
 
-    private func insert(_ visits: [BrowserHistoryVisit]) throws -> Int {
+    func insert(_ visits: [BrowserHistoryVisit], respectsBarriers: Bool = true) throws -> Int {
         guard let database else { return 0 }
         // Validate the entire batch before starting a transaction, including redirect metadata.
         for visit in visits where !Self.accepts(visit) { throw BrowserHistoryError.invalidVisit }
@@ -131,7 +133,10 @@ public actor BrowserHistoryStore {
             let statement = try database.prepare("INSERT OR IGNORE INTO visits(id,url,site,time,title,typed,payload,searchTitle) VALUES(?,?,?,?,?,?,?,?)")
             defer { sqlite3_finalize(statement) }
             var inserted = 0
+            let barriers = try syncDeletions()
+            let cutoff = try syncCutoff()
             for visit in visits {
+                guard visit.visitedAt >= cutoff, (!respectsBarriers || !barriers.contains(where: { $0.matches(visit) })) else { continue }
                 sqlite3_reset(statement)
                 sqlite3_clear_bindings(statement)
                 let data = try JSONEncoder().encode(visit)
@@ -141,6 +146,7 @@ public actor BrowserHistoryStore {
                 try database.step(statement)
                 guard database.changes > 0 else { continue }
                 inserted += 1
+                if !applyingHistorySync { try appendSyncEvent(BrowserHistorySyncEvent(visit: visit)) }
                 try database.execute("""
                     INSERT INTO pages(url,title,favicon,last,visits,typed,searchURL,searchTitle)
                     VALUES(?,?,?,?,1,?,?,?) ON CONFLICT(url) DO UPDATE SET
@@ -163,15 +169,17 @@ public actor BrowserHistoryStore {
         guard faviconReference.map(BrowserHistoryFavicon.accepts) ?? true else { throw BrowserHistoryError.invalidVisit }
         return try database.transaction { () throws -> BrowserHistoryIndexedPage? in
             guard var visit = try readVisits(whereSQL: "id=?", values: [.text(visitID.uuidString)], limit: 1, offset: 0).first else { return nil }
+            let titleChanged = visit.title != title
             visit.title = title
-            visit.faviconReference = faviconReference
+            if !applyingHistorySync { visit.faviconReference = faviconReference }
             let payload = String(decoding: try JSONEncoder().encode(visit), as: UTF8.self)
             try database.execute("UPDATE visits SET title=?,payload=?,searchTitle=? WHERE id=?", [.text(title), .text(payload), .text(Self.fold(title)), .text(visitID.uuidString)])
+            if !applyingHistorySync && titleChanged { try appendSyncEvent(BrowserHistorySyncEvent(visit: visit)) }
             // A late title callback must not overwrite the metadata of a newer visit.
             try database.execute("""
                 UPDATE pages SET title=?,searchTitle=?,favicon=? WHERE url=? AND
                 ?=(SELECT id FROM visits WHERE url=? ORDER BY time DESC,rowid DESC LIMIT 1)
-                """, [.text(title), .text(Self.fold(title)), .text(faviconReference?.absoluteString ?? ""),
+                """, [.text(title), .text(Self.fold(title)), .text(visit.faviconReference?.absoluteString ?? ""),
                        .text(visit.url.absoluteString), .text(visitID.uuidString), .text(visit.url.absoluteString)])
             return try page(for: visit.url)
         }
@@ -349,7 +357,7 @@ public actor BrowserHistoryStore {
         return grouped.keys.sorted(by: >).map { BrowserHistoryDay(day: $0, visits: grouped[$0]!) }
     }
 
-    @discardableResult public func delete(_ deletion: BrowserHistoryDeletion) throws -> Int {
+    @discardableResult public func delete(_ deletion: BrowserHistoryDeletion, now: Date = Date()) throws -> Int {
         guard let database else { return 0 }
         let clause: String
         let values: [HistoryValue]
@@ -362,6 +370,18 @@ public actor BrowserHistoryStore {
         case .site(let host): clause = "site=?"; values = [.text(URL(string: "https://" + host)?.host?.lowercased() ?? host.lowercased())]
         case .all: clause = "1"; values = []
         }
+        let count = try database.transaction {
+            if !applyingHistorySync {
+                try appendSyncEvent(BrowserHistorySyncEvent(deletion: BrowserHistorySyncDeletion(deletion, now: now), time: now))
+            }
+            return try deleteRows(clause: clause, values: values)
+        }
+        maintenanceStatus = database.checkpoint()
+        return count
+    }
+
+    func deleteRows(clause: String, values: [HistoryValue]) throws -> Int {
+        guard let database else { return 0 }
         let count = try database.transaction {
             try database.execute("CREATE TEMP TABLE affected AS SELECT DISTINCT url FROM visits WHERE \(clause)", values)
             defer { try? database.execute("DROP TABLE affected") }
@@ -386,7 +406,7 @@ public actor BrowserHistoryStore {
             return count
         }
         // The deletion has committed. Maintenance failure must not report that mutation as failed.
-        maintenanceStatus = database.checkpoint()
+        if database.withHandle({ sqlite3_get_autocommit($0) != 0 }) { maintenanceStatus = database.checkpoint() }
         return count
     }
 
@@ -429,7 +449,7 @@ final class HistoryDatabase: @unchecked Sendable {
     private var handle: OpaquePointer?
     var changes: Int { Int(sqlite3_changes(handle)) }
 
-    static let currentVersion = 5
+    static let currentVersion = 6
 
     init(openingURL url: URL, flags: Int32) throws {
         // Checked ancestors, single-link database/sidecars, and directory identity before/after open.
@@ -468,6 +488,7 @@ final class HistoryDatabase: @unchecked Sendable {
                         case 2: try migrateToVersionThree()
                         case 3: try migrateToVersionFour()
                         case 4: try migrateToVersionFive()
+                        case 5: try migrateToVersionSix(profileID)
                         default: throw BrowserHistoryError.unsupportedVersion
                         }
                         migratingVersion += 1
@@ -599,6 +620,28 @@ final class HistoryDatabase: @unchecked Sendable {
         return changed
     }
 
+    private func migrateToVersionSix(_ profileID: ProfileID) throws {
+        try execute("CREATE TABLE historySyncEvents(id TEXT PRIMARY KEY,payload TEXT NOT NULL,expires REAL NOT NULL,kind INTEGER NOT NULL,batch TEXT)")
+        try execute("CREATE INDEX historySyncPending ON historySyncEvents(batch)")
+        try execute("CREATE INDEX historySyncDeletions ON historySyncEvents(kind)")
+        try execute("CREATE TABLE historySyncBatches(id TEXT PRIMARY KEY,payload TEXT NOT NULL,expires REAL NOT NULL)")
+        try execute("CREATE TABLE historySyncState(cutoff REAL NOT NULL)")
+        try execute("INSERT INTO historySyncState VALUES(?)", [.number(Date.distantPast.timeIntervalSince1970)])
+        try execute("CREATE TABLE historySyncVersions(id TEXT PRIMARY KEY,time REAL NOT NULL,event TEXT NOT NULL)")
+        let rows = try prepare("SELECT payload FROM visits WHERE time>=?")
+        try bind(rows, [.number(BrowserHistorySyncSchema.cutoff(Date()).timeIntervalSince1970)])
+        defer { sqlite3_finalize(rows) }
+        while try next(rows) {
+            let visit = try JSONDecoder().decode(BrowserHistoryVisit.self, from: Data(text(rows, 0).utf8))
+            let event = BrowserHistorySyncEvent(visit: visit)
+            try execute("INSERT INTO historySyncEvents(id,payload,expires,kind) VALUES(?,?,?,0)",
+                [.text(event.id.uuidString), .text(String(decoding: try BrowserSyncReplica.encodeValue(event), as: UTF8.self)),
+                 .number(event.expires.timeIntervalSince1970)])
+            try execute("INSERT INTO historySyncVersions VALUES(?,?,?)", [.text(visit.id.uuidString),
+                .number(event.time.timeIntervalSince1970), .text(event.id.uuidString)])
+        }
+    }
+
     static let migrationBatch = 2048
 
     func scalarInt(_ sql: String) throws -> Int {
@@ -667,6 +710,7 @@ final class HistoryDatabase: @unchecked Sendable {
         try step(statement)
     }
     func transaction<T>(_ operation: () throws -> T) throws -> T {
+        if withHandle({ sqlite3_get_autocommit($0) == 0 }) { return try operation() }
         try execute("BEGIN IMMEDIATE")
         do { let value = try operation(); try execute("COMMIT"); return value }
         catch { try? execute("ROLLBACK"); throw error }

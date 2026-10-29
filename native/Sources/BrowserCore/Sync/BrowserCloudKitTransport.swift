@@ -72,7 +72,9 @@ public actor BrowserCloudKitTransport: BrowserSyncTransport, CKSyncEngineDelegat
             engine = CKSyncEngine(configuration)
         }
         guard let engine else { throw BrowserSyncError.unavailable }
-        try await engine.fetchChanges()
+        var fetch = CKSyncEngine.FetchChangesOptions()
+        fetch.scope = .zoneIDs([zone])
+        try await engine.fetchChanges(fetch)
         if let failure { throw failure }
         try await admitted()
         var pending: [CKSyncEngine.PendingRecordZoneChange] = []
@@ -95,6 +97,13 @@ public actor BrowserCloudKitTransport: BrowserSyncTransport, CKSyncEngineDelegat
         if let failure { throw failure }
         try await admitted()
         return Array(state.records.values)
+    }
+
+    public func nextFetchChangesOptions(_ context: CKSyncEngine.FetchChangesContext,
+                                        syncEngine: CKSyncEngine) async -> CKSyncEngine.FetchChangesOptions {
+        var options = context.options
+        options.scope = .zoneIDs([zone])
+        return options
     }
 
     public func stop() async {
@@ -135,10 +144,10 @@ public actor BrowserCloudKitTransport: BrowserSyncTransport, CKSyncEngineDelegat
                 try persist()
             case .fetchedRecordZoneChanges(let event):
                 try await admitted()
-                for modification in event.modifications { try accept(modification.record) }
+                for modification in event.modifications where modification.record.recordID.zoneID == zone { try accept(modification.record) }
                 // Logical deletions travel as tombstones. Physical deletions require a full
                 // rescan; never interpret them as permission to erase local user data.
-                if !event.deletions.isEmpty { throw BrowserSyncError.invalidRecord }
+                if event.deletions.contains(where: { $0.recordID.zoneID == zone }) { throw BrowserSyncError.invalidRecord }
                 try persist()
             case .sentRecordZoneChanges(let event):
                 try await admitted()
