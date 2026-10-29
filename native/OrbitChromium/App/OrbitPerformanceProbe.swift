@@ -122,6 +122,24 @@ enum OrbitPerformanceProbe {
                     result["importFixture"] = await ChromiumImportProbe.run(root: root)
                 } else if name == "safari-import-fixture" {
                     result["safariImport"] = await SafariImportProbe.run(root: root, store: environment.store, passwords: environment.engine.passwordStore)
+                } else if name == "firefox-import-fixture", ownsWindow(owner, bundleID: "lab.orbit.orbit.import-recovery") {
+                    result["firefoxImport"] = await FirefoxImportProbe.run(root: root, store: environment.store)
+                    do {
+                        guard let configuration = activeSiteSessionConfiguration(), configuration.usesMockKeychain else { throw BrowserAuthenticationImportError.invalidState }
+                        let run = try BrowserAuthenticationRun.open(dataRoot: root, recoveryKey: ChromiumAuthenticationStartup.recoveryKey(configuration))
+                        let catalog = await environment.store.catalogSnapshot()
+                        if let space = catalog.spaces.first(where: { $0.profileID == run.status.profileID }) {
+                            owner.session.activateSpace(space.id)
+                            await owner.session.waitForPendingCommands()
+                            owner.session.openTab(url: URL(string: "http://127.0.0.1:18080/login")!)
+                            await owner.session.waitForPendingCommands()
+                            if let surface = owner.session.selectedSurface {
+                                await waitForLoad(surface)
+                                let value = await evaluate(surface, "({signedIn:document.title==='Synthetic signed in'})")
+                                result["firefoxCookie"] = value?["signedIn"] as? Bool ?? false
+                            }
+                        }
+                    } catch { result["firefoxCookie"] = false }
                 } else if name == "data-quick-wins" {
                     if let text = command["base"], let base = URL(string: text),
                        base.scheme == "http", base.host == "127.0.0.1" {

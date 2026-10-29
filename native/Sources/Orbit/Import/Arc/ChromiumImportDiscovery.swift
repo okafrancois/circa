@@ -8,6 +8,9 @@ enum ChromiumImportDiscovery {
     static func installed() -> [BrowserImportDescriptor] {
         ChromiumImportRegistry.installed { NSWorkspace.shared.urlsForApplications(withBundleIdentifier: $0) }
     }
+    static func installedFirefoxFamily() -> [BrowserImportDescriptor] {
+        FirefoxImportRegistry.installed { NSWorkspace.shared.urlsForApplications(withBundleIdentifier: $0) }
+    }
     static func placement(browser: String, profile: String) -> ChromiumImportPlacement {
         .init(importedSpace: uiFormat("Imported from %@ — %@", browser, profile),
               bookmarkFolder: uiText("Imported Bookmarks"), windowName: uiText("Imported Window"))

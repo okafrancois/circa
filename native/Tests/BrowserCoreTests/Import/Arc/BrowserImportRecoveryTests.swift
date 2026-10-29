@@ -29,7 +29,7 @@ struct BrowserImportRecoveryTests {
         }
         return result
     }
-    private func child(_ root: URL, phase: String, action: String, choice: String, safari: Bool = false) throws -> Process {
+    private func child(_ root: URL, phase: String, action: String, choice: String, safari: Bool = false, firefox: Bool = false) throws -> Process {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: CommandLine.arguments[0])
         var args: [String] = []
@@ -43,6 +43,7 @@ struct BrowserImportRecoveryTests {
         env["ORBIT_IMPORT_RECOVERY_ACTION"] = action
         env["ORBIT_IMPORT_RECOVERY_CHOICE"] = choice
         if safari { env["ORBIT_IMPORT_RECOVERY_SAFARI"] = "1" }
+        if firefox { env["ORBIT_IMPORT_RECOVERY_FIREFOX"] = "1" }
         process.environment = env
         let log = root.appendingPathComponent(action + ".log")
         FileManager.default.createFile(atPath: log.path, contents: nil)
@@ -87,6 +88,21 @@ struct BrowserImportRecoveryTests {
             }
         }
     }
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["ORBIT_IMPORT_RECOVERY_CRASH_MATRIX"] == "1"))
+    func firefoxSigkillMatrix() throws {
+        let auth = Self.authentication.filter { $0 != "auth-file:Local Storage/value" }
+        for phase in Self.structural + Self.structuralRestore + auth + Self.restoration {
+            for choice in ["restore", "continueWithoutImport"] {
+                let fixture = try OrbitFixture.temporaryDirectory()
+                defer { try? FileManager.default.removeItem(at: fixture) }
+                let killed = try child(fixture, phase: phase, action: "mutate", choice: choice, firefox: true)
+                #expect(killed.terminationReason == .uncaughtSignal && killed.terminationStatus == SIGKILL, "Missing Firefox kill: \(phase)")
+                let relaunched = try child(fixture, phase: phase, action: "recover", choice: choice, firefox: true)
+                #expect(relaunched.terminationStatus == 0, "Firefox recovery failed: \(phase), \(choice)")
+                print("FIREFOX-RECOVERY-MATRIX \(phase) \(choice) \(String(decoding: try Data(contentsOf: fixture.appendingPathComponent("result.json")), as: UTF8.self))")
+            }
+        }
+    }
     @Test func fallbackRetainsImportedDataAndRestoresOriginalBytes() async throws {
         let fixture = try ChromiumImportTests.Fixture(); defer { fixture.remove() }
         _ = try await fixture.base.seedExistingSession()
@@ -110,6 +126,7 @@ struct BrowserImportRecoveryTests {
         let env = ProcessInfo.processInfo.environment
         guard let path = env["ORBIT_IMPORT_RECOVERY_ROOT"], let phase = env["ORBIT_IMPORT_RECOVERY_PHASE"] else { return }
         let safari = env["ORBIT_IMPORT_RECOVERY_SAFARI"] == "1"
+        let firefox = env["ORBIT_IMPORT_RECOVERY_FIREFOX"] == "1"
         let base = URL(fileURLWithPath: path), root = base.appendingPathComponent("data")
         let session = root.appendingPathComponent("session.json")
         let choice = BrowserImportRecovery.Choice(rawValue: env["ORBIT_IMPORT_RECOVERY_CHOICE"] ?? "restore")!
@@ -202,7 +219,10 @@ struct BrowserImportRecoveryTests {
         var importer = BrowserImportOrchestrator(source: source, options: options, probe: NeverRunningProbe(), snapshotParent: snapshots)
         let safariAdapter = SafariBrowserImportAdapter(installationID: UUID(), profile: .init(directory: "History", name: "Synthetic"),
             placement: .init(importedSpace: "Imported", bookmarkFolder: "Imported Bookmarks", windowName: "Imported Window"), includeSharedData: true)
-        if safari {
+        if firefox {
+            _ = try FirefoxImportTests.populate(source)
+            importer.adapter = FirefoxImportTests.adapter()
+        } else if safari {
             try SafariImportTests.export(to: source.appendingPathComponent("Export.zip"))
             importer.source = source.appendingPathComponent("Export.zip")
             importer.adapter = safariAdapter
@@ -221,7 +241,11 @@ struct BrowserImportRecoveryTests {
             }
         } else {
             let run: BrowserAuthenticationRun
-            if safari {
+            if firefox {
+                run = try await BrowserAuthenticationRun.applyFirefox(preparation: importer.prepare(for: target), importer: importer, target: target,
+                    adapter: FirefoxImportTests.adapter(), passwordCSV: Data(FirefoxImportTests.csv.utf8), consent: true,
+                    targetPassword: Data("mock_password".utf8), recoveryKey: Self.key, checkpoint: checkpoint)
+            } else if safari {
                 run = try await BrowserAuthenticationRun.applySafariExport(preparation: importer.prepare(for: target), importer: importer, target: target,
                     adapter: safariAdapter, consent: true, recoveryKey: Self.key, checkpoint: checkpoint)
             } else {
