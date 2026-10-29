@@ -84,7 +84,7 @@ public struct BrowserSyncReplica: Codable, Sendable {
     public let device: String
     public private(set) var records: [String: BrowserSyncRecord] = [:]
     public private(set) var baseline: [String: [String: Data]] = [:]
-    private var tick: Int64 = 0
+    internal var tick: Int64 = 0
     public init(device: String = UUID().uuidString) { self.device = device }
 
     private mutating func stamp(now: Date) -> BrowserSyncStamp {

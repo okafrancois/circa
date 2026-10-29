@@ -30,23 +30,30 @@ struct BrowserSyncIdleTests {
         #expect(count == 2)
     }
 
-    @Test("Three synthetic devices preserve exact replicas, clocks, tombstones and durable outboxes")
-    func randomizedDevices() async throws {
+    @Test("Three synthetic devices preserve exact replicas, clocks, tombstones and durable outboxes", arguments: [UInt64(2477492513), UInt64(17), UInt64(991)])
+    func randomizedDevices(seed: UInt64) async throws {
         let root = root(); defer { try? FileManager.default.removeItem(at: root) }
         let fixture = BrowserSyncTests(), oldCloud = BrowserSyncMemoryCloud(), newCloud = BrowserSyncMemoryCloud()
         var originals = (0..<3).map { i -> BrowserSyncState in
             var state = BrowserSyncState(); state.replica = .init(device: "device-\(i)"); return state
         }
-        let workers = originals.enumerated().map { BrowserSyncWorker(state: $0.element, destination: root.appendingPathComponent("\($0.offset).json")) }
+        var workers = originals.enumerated().map { BrowserSyncWorker(state: $0.element, destination: root.appendingPathComponent("\($0.offset).json")) }
         let oldTransports = (0..<3).map { _ in BrowserSyncMemoryTransport(cloud: oldCloud, account: "synthetic") }
         let newTransports = (0..<3).map { _ in BrowserSyncMemoryTransport(cloud: newCloud, account: "synthetic") }
         var locals = Array(repeating: fixture.document(nested: true), count: 3)
-        var random: UInt64 = 2477492513
-        for turn in 0..<102 {
+        var random = seed
+        for turn in 0..<312 {
             random = random &* 6364136223846793005 &+ 1
-            let index = turn < 90 ? Int((random >> 32) % 3) : turn % 3
-            let now = fixture.date.addingTimeInterval(Double(turn))
-            if turn < 90 && turn % 4 != 0 {
+            let index = turn < 300 ? Int((random >> 32) % 3) : turn % 3
+            let now = fixture.date.addingTimeInterval(-Double(turn % 5))
+            // Reopen before every turn, including after offline captures.
+            let destination = root.appendingPathComponent("\(index).json")
+            if FileManager.default.fileExists(atPath: destination.path) {
+                let recovered = try BrowserSyncState.load(destination)
+                #expect(try BrowserSyncReplica.encodeValue(recovered) == BrowserSyncReplica.encodeValue(originals[index]))
+                workers[index] = BrowserSyncWorker(state: recovered, destination: destination)
+            }
+            if turn < 300 && turn % 4 != 0 {
                 locals[index] = fixture.document(order: random & 1 == 0 ? [fixture.first, fixture.second] : [fixture.second, fixture.first],
                     name: "Space \(turn / 4)", title: "Title \(turn)", nested: true, moved: random & 2 != 0, restored: random & 4 != 0)
             }
@@ -60,7 +67,7 @@ struct BrowserSyncIdleTests {
             // Compare the durable outbox before any network operation; some turns stay offline.
             var persisted = try BrowserSyncState.load(root.appendingPathComponent("\(index).json"))
             #expect(try BrowserSyncReplica.encodeValue(persisted) == BrowserSyncReplica.encodeValue(originals[index]))
-            if turn < 90 && turn % 7 == 0 { continue }
+            if turn < 300 && turn % 7 == 0 { continue }
             let oldIncoming = try await oldTransports[index].exchange(Array(originals[index].replica.records.values))
             let newIncoming = try await newTransports[index].exchange(outgoing)
             try originals[index].replica.merge(oldIncoming)
@@ -164,7 +171,7 @@ struct BrowserSyncProcessCrashTests {
     @Test func durableBoundary() async throws {
         let phase = ProcessInfo.processInfo.environment["ORBIT_SYNC_CRASH_PHASE"] ?? ""
         let path = ProcessInfo.processInfo.environment["ORBIT_SYNC_CRASH_ROOT"] ?? ""
-        guard path.hasPrefix("/private/tmp/perf-sync-idle/crash-") else { throw BrowserSyncError.unavailable }
+        guard path.hasPrefix("/private/tmp/perf-sync-idle-3/crash-") else { throw BrowserSyncError.unavailable }
         let root = URL(fileURLWithPath: path), destination = root.appendingPathComponent("replica.json")
         let expectedFile = root.appendingPathComponent("expected.json"), serverFile = root.appendingPathComponent("server.json")
         let fixture = BrowserSyncTests(), cloud = BrowserSyncMemoryCloud()
