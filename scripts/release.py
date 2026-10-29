@@ -67,6 +67,75 @@ def update_info(info, config, version, build, local_test_root=None, feed_url=Non
     return info
 
 
+ICLOUD_CONTAINER = 'iCloud.io.github.okatech.orbit'
+
+
+def cloud_entitlements(profile, config, now=None):
+    """Admit only an unexpired Developer ID profile for this exact production app."""
+    from datetime import datetime, timezone
+    now = now or datetime.now(timezone.utc)
+    expiration = profile.get('ExpirationDate')
+    if not expiration or expiration.replace(tzinfo=timezone.utc) <= now:
+        raise ValueError('Provisioning profile is expired or has no expiration')
+    team = config['team_id']
+    values = profile.get('Entitlements', {})
+    expected = {
+        'com.apple.developer.icloud-services': ['CloudKit'],
+        'com.apple.developer.icloud-container-identifiers': [ICLOUD_CONTAINER],
+        'com.apple.developer.icloud-container-environment': 'Production',
+        'com.apple.application-identifier': team + '.' + config['bundle_id'],
+        'com.apple.developer.team-identifier': team,
+    }
+    if profile.get('TeamIdentifier') != [team] or not profile.get('ProvisionsAllDevices') or values.get('get-task-allow'):
+        raise ValueError('Expected a Developer ID distribution provisioning profile')
+    for key, value in expected.items():
+        allowed = values.get(key)
+        if isinstance(value, list):
+            matches = isinstance(allowed, list) and all(item in allowed for item in value)
+        elif isinstance(allowed, list):
+            matches = value in allowed
+        else:
+            matches = value == allowed
+        if not matches:
+            raise ValueError('Provisioning profile does not authorize ' + key)
+    push = values.get('com.apple.developer.aps-environment')
+    if push is not None:
+        if push != 'production':
+            raise ValueError('CloudKit requires production push environment')
+        expected['com.apple.developer.aps-environment'] = push
+    return expected
+
+
+def embed_cloud_profile(bundle, config, local_test_root=None):
+    path = config.get('provisioning_profile')
+    if not path or local_test_root:
+        return None
+    path = Path(path).expanduser()
+    # An explicitly configured missing file is an error, never a silent loss of sync.
+    decoded = run('security', 'cms', '-D', '-i', path, capture_output=True).stdout
+    profile = plistlib.loads(decoded)
+    entitlements = cloud_entitlements(profile, config)
+    if not profile.get('DeveloperCertificates'):
+        raise ValueError('Provisioning profile has no signing certificates')
+    shutil.copyfile(path, bundle / 'Contents/embedded.provisionprofile')
+    return entitlements
+
+
+def verify_cloud_signature(bundle, expected):
+    signed = run('codesign', '-d', '--entitlements', ':-', bundle, capture_output=True).stdout
+    actual = plistlib.loads(signed)
+    if any(actual.get(key) != value for key, value in expected.items()):
+        raise RuntimeError('Signed iCloud entitlements do not match the profile')
+    decoded = run('security', 'cms', '-D', '-i', bundle / 'Contents/embedded.provisionprofile', capture_output=True).stdout
+    profile = plistlib.loads(decoded)
+    with tempfile.TemporaryDirectory(prefix='orbit-profile-verify-') as temporary:
+        prefix = str(Path(temporary) / 'certificate')
+        run('codesign', '-d', '--extract-certificates=' + prefix, bundle, capture_output=True)
+        if Path(prefix + '0').read_bytes() not in profile['DeveloperCertificates']:
+            raise RuntimeError('Developer ID signer is not authorized by the provisioning profile')
+    run('codesign', '--verify', '--strict', bundle)
+
+
 def prepare_bundle(source, destination, config, version, build, local_test_root=None, feed_url=None):
     packager = load_packager()
     if local_test_root:
@@ -93,7 +162,13 @@ def prepare_bundle(source, destination, config, version, build, local_test_root=
     identity = config.get('identity') or 'local'
     if identity == 'local' and not local_test_root:
         raise ValueError('The local identity is reserved for isolated test bundles')
-    packager.sign(destination, identity)
+    entitlements = embed_cloud_profile(destination, config, local_test_root)
+    if entitlements:
+        from local_signing import sign_chromium_bundle
+        sign_chromium_bundle(destination, identity, main_entitlements=entitlements)
+        verify_cloud_signature(destination, entitlements)
+    else:
+        packager.sign(destination, identity)
     if identity != 'local':
         details = run('codesign', '-dv', '--verbose=4', destination, capture_output=True, text=True).stderr
         if 'TeamIdentifier=' + config['team_id'] not in details.splitlines():
@@ -139,6 +214,8 @@ def main():
     parser.add_argument('--feed-url')
     args = parser.parse_args()
     config = json.loads(args.config.read_text())
+    if config.get('provisioning_profile'):
+        config['provisioning_profile'] = str((args.config.parent / Path(config['provisioning_profile']).expanduser()).resolve())
     if args.test_notarize_app_only and not args.local_test_root:
         raise ValueError('--test-notarize-app-only requires an isolated test bundle')
     if not args.local_test_root and (config['name'] != PRODUCT_NAME or config['bundle_id'] != BUNDLE_ID):

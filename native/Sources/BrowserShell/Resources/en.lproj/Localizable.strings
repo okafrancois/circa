@@ -1326,3 +1326,17 @@
 "Share Split View…" = "Share Split View…";
 "Capture a portion of this page" = "Capture a portion of this page";
 "Capture the full page" = "Capture the full page";
+
+"Sync with iCloud" = "Sync with iCloud";
+"iCloud sync is unavailable in this build." = "iCloud sync is unavailable in this build.";
+"iCloud sync is off." = "iCloud sync is off.";
+"iCloud sync is on." = "iCloud sync is on.";
+"Syncing with iCloud…" = "Syncing with iCloud…";
+"Last synced: %@" = "Last synced: %@";
+"Signed out of iCloud. Your local data is kept." = "Signed out of iCloud. Your local data is kept.";
+"Your iCloud account changed. Sync is paused." = "Your iCloud account changed. Sync is paused.";
+"Use a different iCloud account?" = "Use a different iCloud account?";
+"Keep Sync Off" = "Keep Sync Off";
+"Your local data belongs to the previous iCloud account. To keep accounts separate, sign back into that account before trying again. Your local data will stay on this Mac." = "Your local data belongs to the previous iCloud account. To keep accounts separate, sign back into that account before trying again. Your local data will stay on this Mac.";
+
+"Try Again" = "Try Again";
