@@ -57,7 +57,7 @@ extension OrbitApplication {
                 request.profileID = little.profileID
                 request.spaceID = little.sourceSpaceID
                 configureQuickWindow(little)
-                quickWindowPresenter(little)
+                presentAndScheduleUpdates { quickWindowPresenter(little) }
                 confirmQuickWindowRequest(request)
             } catch { await openQuickWindowFallback(request) }
         }
@@ -151,7 +151,7 @@ extension OrbitApplication {
             configureQuickWindow(child)
             let surface = make()
             guard child.adoptNewTarget(surface) else { child.retire(); return nil }
-            quickWindowPresenter(child)
+            presentAndScheduleUpdates { quickWindowPresenter(child) }
             return surface
         }
     }

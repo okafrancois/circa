@@ -39,7 +39,7 @@ extension OrbitApplication {
                         request.spaceID = little.sourceSpaceID
                         request.profileID = little.profileID
                         configureQuickWindow(little)
-                        quickWindowPresenter(little)
+                        presentAndScheduleUpdates { quickWindowPresenter(little) }
                         confirmQuickWindowRequest(request)
                     } catch { await openQuickWindowFallback(request) }
                 } else {

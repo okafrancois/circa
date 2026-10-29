@@ -1,4 +1,5 @@
 import AppKit
+import QuartzCore
 import BrowserCore
 import BrowserEngine
 import BrowserShell
@@ -11,6 +12,26 @@ final class OrbitApplication: NSObject, NSApplicationDelegate {
     private(set) var environment: OrbitEnvironment?
     private let inactiveUpdater = OrbitUpdater()
     var updater: OrbitUpdater { environment?.settings.updater ?? inactiveUpdater }
+    private var scheduledUpdater = false
+    var afterWindowCommit: (@escaping @MainActor () -> Void) -> Void = { completion in
+        CATransaction.setCompletionBlock { Task { @MainActor in completion() } }
+    }
+    var onUpdaterStart: (() -> Void)?
+
+    /// Called for normal and quick windows, including cold external-URL launches.
+    func presentAndScheduleUpdates(_ present: () -> Void) {
+        guard !scheduledUpdater else { present(); return }
+        scheduledUpdater = true
+        CATransaction.begin()
+        present()
+        afterWindowCommit { [weak self] in
+            guard let self else { return }
+            onUpdaterStart?()
+            updater.start(synthetic: activeSyntheticDataGuard() != nil)
+        }
+        CATransaction.commit()
+    }
+
     var quitPreferenceSave: Task<Void, Error>?
     var confirmQuit: @MainActor () -> OrbitQuitDecision = OrbitQuitConfirmation.present
     var confirmDownloadQuit: @MainActor () -> Bool = {
@@ -119,7 +140,7 @@ final class OrbitApplication: NSObject, NSApplicationDelegate {
         },
         present: { [weak self] controller, activate in
             guard let self, !provisionalQuickWindowWindows.contains(controller.id) else { return }
-            windowPresenter(controller, activate)
+            presentAndScheduleUpdates { windowPresenter(controller, activate) }
         },
         // Only termination disposes routed windows: the model is preserved for restoration.
         dispose: { controller in
@@ -169,7 +190,6 @@ final class OrbitApplication: NSObject, NSApplicationDelegate {
                 }
                 environment = OrbitEnvironment(engine: makeActiveEngine())
             }
-            updater.start(synthetic: activeSyntheticDataGuard() != nil)
             if let environment { commands.registry.useShortcutPreferences(environment.shortcutPreferences) }
             environment?.onPersistenceError = { [weak self] error in self?.presentSaveError(error) }
             environment?.onRescueNeedsWindow = { [weak self] profileID in self?.openRescueWindow(for: profileID) }
@@ -243,7 +263,7 @@ final class OrbitApplication: NSObject, NSApplicationDelegate {
                         let deliveries = requests.map { request in
                             controller.session.openTabForDelivery(url: request.url!)
                         }
-                        windowPresenter(controller, true)
+                        presentAndScheduleUpdates { windowPresenter(controller, true) }
                         if NSApp.activationPolicy() != .prohibited { NSApp.activate() }
                         enqueueQuickWindowCommand { [weak self] in
                             guard let self else { return }
