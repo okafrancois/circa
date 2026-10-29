@@ -7,6 +7,9 @@ final class BrowserBoostEditorView: NSView {
     var onClose: (() -> Void)?
     var onZap: (() -> Void)?
     var onCode: (() -> Void)?
+    var onAllBoosts: (() -> Void)?
+    var onDelete: (() -> Void)?
+    private let titleButton = BoostButton(title: "")
     var onRender: (() -> Void)?
     var isZapping = false { didSet { render() } }
     private let wheel = BrowserBoostColorWheel()
@@ -35,10 +38,14 @@ final class BrowserBoostEditorView: NSView {
         close.fill = .clear
         close.actionBlock = { [weak self] in self?.onClose?() }
         place(close, 6, 6, 28, 28)
-        let title = NSTextField(labelWithString: session.boost.title)
-        title.font = .systemFont(ofSize: 13, weight: .medium)
-        title.alignment = .center
-        place(title, 34, 13, 112, 20)
+        titleButton.fill = .clear
+        titleButton.lineBreakMode = .byTruncatingTail
+        titleButton.actionBlock = { [weak self] in self?.showHeaderMenu() }
+        titleButton.textTrailingInset = 20
+        place(titleButton, 40, 6, 100, 28)
+        let chevron = NSImageView(image: NSImage(systemSymbolName: "chevron.down", accessibilityDescription: nil)!)
+        chevron.contentTintColor = .gray
+        titleButton.addSubview(chevron); chevron.frame = NSRect(x: 84, y: 9, width: 12, height: 10)
         let reset = BoostButton(symbol: "arrow.counterclockwise", label: uiText("Reset to original colors"))
         reset.fill = .clear
         reset.actionBlock = { [weak session] in session?.resetColors() }
@@ -134,8 +141,32 @@ final class BrowserBoostEditorView: NSView {
     private func place(_ view: NSView, _ x: CGFloat, _ y: CGFloat, _ width: CGFloat, _ height: CGFloat) {
         addSubview(view); view.frame = NSRect(x: x, y: y, width: width, height: height)
     }
+    func makeHeaderMenu() -> NSMenu {
+        let menu = NSMenu()
+        menu.autoenablesItems = false
+        func add(_ title: String, _ action: Selector) {
+            let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
+            item.target = self; item.isEnabled = !session.isClosed && !session.isDeleting
+            menu.addItem(item)
+        }
+        add(uiText("Reset all Edits"), #selector(resetAction))
+        add(uiText("Delete this Boost"), #selector(deleteAction))
+        menu.addItem(.separator())
+        add(uiText("All Boosts…"), #selector(allBoostsAction))
+        return menu
+    }
+    private func showHeaderMenu() {
+        makeHeaderMenu().popUp(positioning: nil, at: NSPoint(x: 0, y: titleButton.bounds.maxY), in: titleButton)
+    }
+    @objc private func resetAction() { session.resetAllEdits() }
+    @objc private func deleteAction() { onDelete?() }
+    @objc private func allBoostsAction() { onAllBoosts?() }
+
     func render() {
         onRender?()
+        titleButton.title = session.boost.title
+        titleButton.setAccessibilityLabel(session.boost.title)
+        selectedFontIndex = session.boost.content.fontFamily.flatMap { Self.fontFamilies.firstIndex(of: $0) }
         wheel.scheme = session.boost.content.colorScheme
         for (index, button) in fontButtons.enumerated() {
             button.fill = selectedFontIndex == index ? .black.withAlphaComponent(0.12) : .clear
@@ -161,6 +192,9 @@ final class BrowserBoostEditorView: NSView {
 @MainActor
 final class BoostButton: NSButton {
     var actionBlock: (() -> Void)?
+    var shortcutBadge: String?
+    var outlinesShortcutBadge = false
+    var textTrailingInset: CGFloat = 0
     var cornerRadius: CGFloat = 8
     var fill = NSColor(srgbRed: 0.92, green: 0.92, blue: 0.925, alpha: 1) { didSet { needsDisplay = true } }
     convenience init(title: String) { self.init(frame: .zero); self.title = title }
@@ -180,12 +214,25 @@ final class BoostButton: NSButton {
     override func draw(_ dirtyRect: NSRect) {
         fill.setFill(); NSBezierPath(roundedRect: bounds, xRadius: cornerRadius, yRadius: cornerRadius).fill()
         if image != nil { super.draw(dirtyRect); return }
-        let paragraph = NSMutableParagraphStyle(); paragraph.alignment = alignment
+        if let shortcutBadge {
+            let badgeWidth: CGFloat = outlinesShortcutBadge ? 27 : 34
+            let badge = NSRect(x: bounds.maxX - badgeWidth - 12, y: (bounds.height - 20) / 2, width: badgeWidth, height: 20)
+            let path = NSBezierPath(roundedRect: badge, xRadius: 4, yRadius: 4)
+            if outlinesShortcutBadge { NSColor.white.withAlphaComponent(0.4).setStroke(); path.lineWidth = 1; path.stroke() }
+            else { NSColor.white.withAlphaComponent(0.16).setFill(); path.fill() }
+            let label = shortcutBadge as NSString
+            let attributes: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: outlinesShortcutBadge ? 17 : 10, weight: .semibold), .foregroundColor: NSColor.white.withAlphaComponent(0.8)]
+            let size = label.size(withAttributes: attributes)
+            label.draw(at: NSPoint(x: badge.midX - size.width / 2, y: badge.midY - size.height / 2), withAttributes: attributes)
+            (title as NSString).draw(at: NSPoint(x: 12, y: (bounds.height - 16) / 2), withAttributes: [.font: NSFont.systemFont(ofSize: 13), .foregroundColor: contentTintColor ?? .white])
+            return
+        }
+        let paragraph = NSMutableParagraphStyle(); paragraph.alignment = alignment; paragraph.lineBreakMode = lineBreakMode
         let attributes: [NSAttributedString.Key: Any] = [.font: font ?? .systemFont(ofSize: 13),
             .foregroundColor: contentTintColor ?? NSColor.darkGray, .paragraphStyle: paragraph]
         let height = (title as NSString).size(withAttributes: attributes).height
         let inset: CGFloat = alignment == .left ? 12 : 0
-        (title as NSString).draw(in: NSRect(x: inset, y: (bounds.height - height) / 2, width: bounds.width - inset * 2, height: height), withAttributes: attributes)
+        (title as NSString).draw(in: NSRect(x: inset, y: (bounds.height - height) / 2, width: bounds.width - inset * 2 - textTrailingInset, height: height), withAttributes: attributes)
     }
 }
 

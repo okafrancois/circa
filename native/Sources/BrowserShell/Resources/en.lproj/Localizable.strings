@@ -1340,3 +1340,19 @@
 "Your local data belongs to the previous iCloud account. To keep accounts separate, sign back into that account before trying again. Your local data will stay on this Mac." = "Your local data belongs to the previous iCloud account. To keep accounts separate, sign back into that account before trying again. Your local data will stay on this Mac.";
 
 "Try Again" = "Try Again";
+
+"Reset all Edits" = "Reset all Edits";
+
+"Delete this Boost" = "Delete this Boost";
+
+"All Boosts…" = "All Boosts…";
+
+"Delete this Boost?" = "Delete this Boost?";
+
+"This can’t be undone." = "This can’t be undone.";
+
+"Enable JavaScript for this Boost?" = "Enable JavaScript for this Boost?";
+
+"Only enable code you trust. JavaScript can read and change this site's pages. Changes run after reloading the page; disabling or deleting a Boost cannot undo code that already ran." = "Only enable code you trust. JavaScript can read and change this site's pages. Changes run after reloading the page; disabling or deleting a Boost cannot undo code that already ran.";
+
+"Enable JavaScript" = "Enable JavaScript";
