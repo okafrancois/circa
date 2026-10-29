@@ -24,6 +24,8 @@ final class BrowserLibraryMediaView: NSView, NSSearchFieldDelegate {
     private var tiles: [BrowserDownloadKey: BrowserLibraryMediaTile] = [:]
     var onAction: ((BrowserDownloadContext, DownloadRowPresentation.Action) -> Void)?
     var onBack: (() -> Void)?
+    /// Synthetic measurement only: signed changes of resident decoded thumbnail bytes.
+    static var thumbnailBytesProbe: ((Int) -> Void)?
     override init(frame: NSRect) {
         super.init(frame: frame)
         searchField.placeholderString = uiText("Search Media…")
@@ -123,6 +125,7 @@ private final class BrowserLibraryMediaTile: NSButton {
             Task { @MainActor [weak self, image] in
                 guard let self else { return }
                 thumbnail = image.map { NSImage(cgImage: $0, size: .zero) }
+                if let image { BrowserLibraryMediaView.thumbnailBytesProbe?(image.bytesPerRow * image.height) }
                 needsDisplay = true
             }
         }
