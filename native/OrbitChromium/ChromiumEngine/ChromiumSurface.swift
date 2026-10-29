@@ -133,6 +133,7 @@ public final class ChromiumSurface: BrowserEngineSurface {
     let profileToken: UInt64
     weak var engine: ChromiumBrowserEngine?
     private var state = BrowserNavigationState()
+    var translationWorld: (generation: UInt64, context: Int)?
     var pageTintObservationEnabled = false
     var pageTintTask: Task<Void, Never>?
     var pageTintFailed = false

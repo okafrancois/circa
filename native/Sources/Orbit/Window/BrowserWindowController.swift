@@ -27,6 +27,7 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
     let forwardButton = OrbitGlyphButton(glyph: nil, label: OrbitShellText.forward)
     let reloadButton = OrbitGlyphButton(glyph: nil, label: OrbitShellText.reload)
     var addressResolver = AddressResolver()
+    lazy var translation = BrowserTranslationController(owner: self)
     lazy var capture = BrowserCaptureController(owner: self)
     lazy var pageSaver = BrowserPageSaveController(owner: self)
     var settingsPreferences: BrowserWindowSettings?
@@ -284,6 +285,7 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
     func windowDidResignKey(_ notification: Notification) { passwordPrompt.close() }
 
     func windowWillClose(_ notification: Notification) {
+        translation.close()
         passwordPrompt.close()
         developerTintSurface?.setPageTintObservationEnabled(false)
         developerTintSurface = nil
@@ -320,6 +322,7 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
     /// Termination after the session was saved: releases every live document of this window
     /// without touching the model, so the saved session stays exactly as written.
     func retireForTermination() {
+        translation.close()
         boostTask?.cancel(); boostEditor?.close(); library.boostsTask?.cancel()
         library.isPresented = false
         library.drawer.finishClosing()
@@ -418,6 +421,7 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
         engineEventHooks.emit(.stateChanged, for: surface)
         palette.renderContext()
         passwordPrompt.render()
+        translation.render()
     }
 
     // MARK: Session projection
@@ -496,6 +500,7 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
         palette.renderContext()
         settingsPreferences?.renderSession(in: self)
         passwordPrompt.render()
+        translation.render()
     }
 
     // MARK: Objective-C entry points (forwarders only)

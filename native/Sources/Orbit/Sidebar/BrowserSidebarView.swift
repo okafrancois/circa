@@ -1094,6 +1094,15 @@ final class SidebarAddressField: SidebarFlippedView {
         refreshAccent()
     }
 
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        let local = convert(point, from: superview)
+        guard !isHidden, alphaValue > 0, bounds.contains(local) else { return nil }
+        // The two-line presentation extends beyond the single-line editor's native height.
+        if let address = field as? OrbitLocationField,
+           let hit = address.statusHitTarget(at: address.convert(local, from: self)) { return hit }
+        return super.hitTest(point)
+    }
+
     /// Capture the accessory container, including native popup anchors. Contraction keeps
     /// the new contents at the old leading edge, then moves them right. Expansion
     /// installs its complete layout immediately.

@@ -11,6 +11,7 @@ final class OrbitLocationField: NSTextField {
     let securityIcon = NSImageView()
     private let searchIcon = NSImageView()
     private let statusLabel = AddressHostLabel(labelWithString: String())
+    private let statusButton = AddressStatusButton()
     private var restingAlignment: NSLayoutConstraint!
     private var statusAlignment: NSLayoutConstraint!
     private var textLeading: NSLayoutConstraint!
@@ -19,6 +20,7 @@ final class OrbitLocationField: NSTextField {
     private(set) var pendingSpaceID: SpaceID?
     private(set) var security: BrowserSiteControlsModel.Connection = .unavailable
     private(set) var securitySymbol: String?
+    var onStatusPress: (() -> Void)?
     var onAddressChange: ((Bool) -> Void)?
     /// Status producers supply their own localized message. No URL/domain heuristic fabricates one.
     var statusForSpace: ((SpaceID?) -> String?)?
@@ -32,6 +34,13 @@ final class OrbitLocationField: NSTextField {
         }
         textMask.layer?.masksToBounds = true
         addSubview(textMask)
+        statusButton.isBordered = false
+        statusButton.isHidden = true
+        statusButton.refusesFirstResponder = true
+        statusButton.setAccessibilityElement(false)
+        statusButton.target = self
+        statusButton.action = #selector(pressStatus)
+        addSubview(statusButton)
         textMask.addSubview(textGroup)
         textMask.addSubview(searchIcon)
         for view in [displayLabel, securityIcon, statusLabel] {
@@ -125,6 +134,30 @@ final class OrbitLocationField: NSTextField {
         }, animated: animated)
     }
 
+    var statusAnchorRect: NSRect {
+        var rect = statusLabel.convert(statusLabel.bounds, to: self)
+        rect.size.width = min(rect.width, statusLabel.attributedStringValue.size().width)
+        return rect
+    }
+
+    @objc private func pressStatus() { if hasStatus { onStatusPress?() } }
+
+    func statusHitTarget(at point: NSPoint) -> NSView? {
+        if currentEditor() == nil, hasStatus, onStatusPress != nil, statusAnchorRect.contains(point) {
+            statusButton.frame = statusAnchorRect
+            statusButton.isHidden = false
+            return statusButton
+        }
+        statusButton.isHidden = true
+        return nil
+    }
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        guard !isHidden, alphaValue > 0 else { return nil }
+        if let hit = statusHitTarget(at: convert(point, from: superview)) { return hit }
+        return super.hitTest(point)
+    }
+
     override func layout() {
         super.layout()
         textMask.frame = NSRect(x: 0, y: (bounds.height - 36) / 2, width: bounds.width, height: 36)
@@ -197,4 +230,9 @@ final class AddressPresentationView: NSView {
 @MainActor
 final class AddressHostLabel: NSTextField {
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
+}
+
+@MainActor
+private final class AddressStatusButton: NSButton {
+    override func draw(_ dirtyRect: NSRect) {}
 }

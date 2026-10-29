@@ -1340,3 +1340,19 @@
 "Your local data belongs to the previous iCloud account. To keep accounts separate, sign back into that account before trying again. Your local data will stay on this Mac." = "Your local data belongs to the previous iCloud account. To keep accounts separate, sign back into that account before trying again. Your local data will stay on this Mac.";
 
 "Try Again" = "Try Again";
+
+"Translation Available" = "Translation Available";
+
+"Translating…" = "Translating…";
+
+"Translated" = "Translated";
+
+"Translation unavailable" = "Translation unavailable";
+
+"Use Original" = "Use Original";
+
+"Translate" = "Translate";
+
+"Translated from %@." = "Translated from %@.";
+
+"Translate this page\nto %@?" = "Translate this page\nto %@?";
