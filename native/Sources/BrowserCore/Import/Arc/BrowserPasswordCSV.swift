@@ -40,7 +40,7 @@ public enum BrowserPasswordCSV {
         if !field.isEmpty || !row.isEmpty || closed { try finishField(); rows.append(row) }
         let header = rows.first?.map { $0.lowercased() } ?? []
         guard !header.isEmpty, Set(header).count == header.count,
-              let urlIndex = header.firstIndex(of: "url"), let usernameIndex = header.firstIndex(of: "username"),
+              let urlIndex = header.firstIndex(of: "url") ?? header.firstIndex(of: "hostname"), let usernameIndex = header.firstIndex(of: "username"),
               let passwordIndex = header.firstIndex(of: "password") else { throw BrowserAuthenticationImportError.invalidCSV }
         var result = ChromiumPasswordReadResult()
         for row in rows.dropFirst() {
@@ -49,6 +49,9 @@ public enum BrowserPasswordCSV {
             if let note = header.firstIndex(of: "note") ?? header.firstIndex(of: "notes"), !row[note].isEmpty { result.unrepresentedNotes += 1 }
             if let otp = header.firstIndex(of: "otpauth"), !row[otp].isEmpty { result.unrepresentedOTP += 1 }
             if let passkey = header.firstIndex(of: "passkey"), !row[passkey].isEmpty { result.unrepresentedPasskeys += 1 }
+            if let realm = header.firstIndex(of: "httprealm"), !row[realm].isEmpty {
+                result.unsupported += 1; continue
+            }
             if row[passwordIndex].isEmpty { result.unsupported += 1; continue }
             let origin = row[urlIndex]
             guard ChromiumPasswordReader.validWebURL(origin), var components = URLComponents(string: origin) else {

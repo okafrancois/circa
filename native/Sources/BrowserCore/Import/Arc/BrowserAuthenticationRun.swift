@@ -148,6 +148,30 @@ public final class BrowserAuthenticationRun {
             passwords: read.passwords, cookies: 0, unsupported: read.unsupported, total: 0,
             recoveryKey: recoveryKey, checkpoint: checkpoint)
     }
+    /// Plaintext source cookies are converted under Orbit's key. Optional caller-selected Firefox
+    /// CSV bytes use the common decoder; NSS databases are never opened or decrypted.
+    public static func applyFirefox(preparation: BrowserImportPreparation, importer: BrowserImportOrchestrator,
+                                    target: some BrowserImportTarget, adapter: FirefoxBrowserImportAdapter,
+                                    passwordCSV: Data? = nil, consent: Bool, targetPassword: Data, recoveryKey: SymmetricKey,
+                                    checkpoint: @escaping (String) throws -> Void = { _ in }) async throws -> BrowserAuthenticationRun {
+        guard consent, adapter.authenticationConsent else { throw BrowserAuthenticationImportError.consentRequired }
+        guard preparation.plan.registration == adapter.registration else { throw BrowserAuthenticationImportError.invalidState }
+        var key = try ArcChromiumCookieCipher.deriveKey(password: targetPassword)
+        defer { key.resetBytes(in: 0..<key.count) }
+        let root = try OrbitSecureDirectory.open(preparation.snapshot.directory, create: false)
+        var files: [String: Data] = [:], cookies = 0
+        if root.exists("cookies.sqlite") {
+            let converted = root.url.appendingPathComponent("orbit-converted-cookies")
+            defer { try? FileManager.default.removeItem(at: converted) }
+            cookies = try FirefoxCookieImport.convert(file: root.url.appendingPathComponent("cookies.sqlite"), destination: converted, targetKey: key).0
+            files["Cookies"] = try Data(contentsOf: converted)
+        }
+        let read = try passwordCSV.map(BrowserPasswordCSV.read) ?? ChromiumPasswordReadResult()
+        return try await applyDecoded(preparation: preparation, importer: importer, target: target,
+            sourceID: adapter.registration.sourceID, sourceProfile: adapter.profile.directory, files: files,
+            passwords: read.passwords, cookies: cookies, unsupported: read.unsupported,
+            total: files.values.reduce(0) { $0 + $1.count }, recoveryKey: recoveryKey, checkpoint: checkpoint)
+    }
     private static func applyDecoded(preparation: BrowserImportPreparation, importer: BrowserImportOrchestrator,
                                      target: some BrowserImportTarget, sourceID: String, sourceProfile: String,
                                      files: [String: Data], passwords: [ImportedBrowserPassword], cookies: Int,
