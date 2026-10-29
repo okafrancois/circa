@@ -11,6 +11,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+import xml.etree.ElementTree as ET
 from urllib.parse import urlsplit
 
 from sparkle_setup import ROOT, ensure_sparkle
@@ -214,6 +215,19 @@ def notarize_archive(archive, profile, evidence):
         raise RuntimeError('Notarization rejected; inspect submission ' + submission.get('id', 'unknown'))
 
 
+def validate_appcast(path, build):
+    """A publishable feed must offer this build as a full update, regardless of deltas."""
+    namespace = '{http://www.andymatuschak.org/xml-namespaces/sparkle}'
+    items = ET.parse(path).findall('./channel/item')
+    versions = [int(item.findtext(namespace + 'version') or
+                    item.find('enclosure').get(namespace + 'version', '0')) for item in items]
+    if not versions or max(versions) != build:
+        raise ValueError('Appcast does not point directly to the release being published')
+    latest = items[versions.index(build)].find('enclosure')
+    if latest is None or not latest.get('url') or not latest.get(namespace + 'edSignature'):
+        raise ValueError('Latest release requires a signed full archive, independent of delta coverage')
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--config', type=Path, default=ROOT / 'release/config.json')
@@ -296,7 +310,8 @@ def main():
     run('swift', ROOT / 'scripts/sparkle_verify.swift', config['public_ed_key'], signature[1], archive)
     prefix = args.feed_url.rsplit('/', 1)[0] + '/' if args.feed_url else f"https://github.com/{config['repository']}/releases/download/v{version}/"
     run(sparkle / 'bin/generate_appcast', *signing, '--versions', str(build), '--download-url-prefix', prefix,
-        '--delta-compression', 'lzfse', archives)
+        '--delta-compression', 'lzfse', '--maximum-versions', '3', '--maximum-deltas', '5', archives)
+    validate_appcast(archives / 'appcast.xml', build)
     if args.publish:
         repo, tag = config['repository'], 'v' + version
         existing = subprocess.run(['gh', 'release', 'view', tag, '--repo', repo, '--json', 'isDraft'], capture_output=True, text=True)

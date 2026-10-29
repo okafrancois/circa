@@ -46,6 +46,20 @@ class ReleaseTests(unittest.TestCase):
         self.assertEqual(info['SUScheduledCheckInterval'], 3600)
         self.assertTrue(info['SUAutomaticallyUpdate'])
 
+    def test_feed_requires_the_newest_release_and_a_full_signed_archive(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            feed = Path(temporary) / 'appcast.xml'
+            feed.write_text('<rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle"><channel>'
+                '<item><sparkle:version>27</sparkle:version><enclosure url="https://example.test/latest.zip" '
+                'sparkle:edSignature="test"/><sparkle:deltas><enclosure sparkle:version="999"/></sparkle:deltas></item>'
+                '<item><sparkle:version>25</sparkle:version></item></channel></rss>')
+            release.validate_appcast(feed, 27)
+            with self.assertRaises(ValueError):
+                release.validate_appcast(feed, 25)
+            feed.write_text(feed.read_text().replace('sparkle:edSignature="test"', ''))
+            with self.assertRaises(ValueError):
+                release.validate_appcast(feed, 27)
+
     def test_synthetic_roots_do_not_leak_into_product(self):
         info = release.update_info({'OrbitDataRoot': '/tmp/test', 'OrbitSyntheticBundle': True,
                                     'OrbitUseMockKeychain': True, 'OrbitUpdaterLocalTest': True},

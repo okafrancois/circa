@@ -333,7 +333,7 @@ final class OrbitApplication: NSObject, NSApplicationDelegate {
         guard !isPreparingToQuit else { return .terminateLater }
         defer { if !isPreparingToQuit { pendingSiteSessionRequest = nil; pendingBrowserImport = nil } }
         guard settingsWindow?.model.isRequestingDefaultBrowser != true else { return .terminateCancel }
-        guard confirmQuitIfNeeded() else { return .terminateCancel }
+        guard updater.isRestartingForUpdate || confirmQuitIfNeeded() else { return .terminateCancel }
         if environment?.downloads.hasActiveTransfers == true {
             guard confirmDownloadQuit() else { return .terminateCancel }
         }
@@ -341,6 +341,7 @@ final class OrbitApplication: NSObject, NSApplicationDelegate {
         for controller in windows.windows.values { controller.freezeCommandsForTermination() }
         Task { [self] in
             do {
+                await updater.prepareForQuit()
                 try await completeTermination()
             } catch {
                 presentSaveError(error)
