@@ -26,7 +26,7 @@ extern "C" {
 // Version 3 (CHROMIUM-APP-R3): additive, hold_window/release_window. Earlier
 // versions keep their layout as the prefix of the table.
 // Version 4 (EXTENSIONS-PRODUCT-R1): additive, native per-profile extension services.
-#define ORBIT_CEF_API_VERSION 10u
+#define ORBIT_CEF_API_VERSION 11u
 
 // Version 8. Callback once after live renderer CSS installation (1), or failure (0).
 typedef void (*orbit_boost_ack_t)(void*, uint64_t revision, int32_t installed);
@@ -82,6 +82,37 @@ typedef struct {
 } orbit_password_prompt_t;
 // event: 1 show, 2 hide, 3 state changed. Never sent through generic events.
 typedef void (*orbit_password_prompt_callback_t)(void*, int32_t, const orbit_password_prompt_t*);
+
+// Version 11. Profile password store only. Borrowed strings/arrays are valid only
+// during the call/callback; no secret is sent through generic event diagnostics.
+// UTF-16 spans preserve embedded NULs. Times are microseconds since 1601 UTC,
+// including Chromium's zero (unset). The stable key is the five identity fields
+// below, not a local database row number; it changes when those fields change.
+typedef struct { const uint16_t* data; uint32_t count; } orbit_password_text_t;
+typedef struct {
+  uint32_t struct_size;
+  const char* signon_realm;
+  const char* origin_url;
+  const char* action_url;
+  orbit_password_text_t username_element;
+  orbit_password_text_t username_value;
+  orbit_password_text_t password_element;
+  orbit_password_text_t password_value;
+  int64_t date_created;
+  int64_t date_last_used;
+  int64_t date_password_modified;
+  int32_t blocked_by_user;
+  int32_t scheme;
+} orbit_password_record_t;
+// status: 1 success, -1 backend/verification error, -2 cancelled by close/profile
+// teardown, -3 conflict (add existing/update missing/target key occupied).
+// Accepted requests complete exactly once on the UI thread. Refused calls
+// return 0 and do not invoke completion. Writes return no rows.
+typedef void (*orbit_password_result_t)(void*, int32_t status,
+    const orbit_password_record_t* records, uint32_t count);
+// event: 1 changed, 2 retained (resnapshot in either case), 3 closed.
+// Carries no secrets. One subscription per opened handle; close revokes it.
+typedef void (*orbit_password_changed_t)(void*, int32_t event);
 
 typedef struct {
   uint32_t struct_size;
@@ -210,6 +241,17 @@ typedef struct {
   // Returns 1 when known, 0 otherwise. Does not retain or replay the request.
   int32_t (*popup_navigation_metadata)(int32_t browser_id, const char* frame_id,
                                       orbit_navigation_metadata_t* metadata);
+  // Version 11. Opens only an already-loaded regular profile, never loads it.
+  uint64_t (*password_store_open)(const char* profile_path);
+  void (*password_store_close)(uint64_t handle);
+  int32_t (*password_store_list)(uint64_t, orbit_password_result_t, void*);
+  // operation: 1 add, 2 update, 3 remove. Update uses old_key (required),
+  // preserving Chromium metadata outside this API. Remove uses old_key only.
+  // Invalid sizes/URLs/schemes and private contexts fail closed.
+  int32_t (*password_store_write)(uint64_t, int32_t operation,
+      const orbit_password_record_t* record, const orbit_password_record_t* old_key,
+      orbit_password_result_t, void*);
+  int32_t (*password_store_observe)(uint64_t, orbit_password_changed_t, void*);
 } orbit_cef_api_t;
 
 // Returns the API table for `version`, or NULL when unsupported.

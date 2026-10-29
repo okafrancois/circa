@@ -159,6 +159,9 @@ public protocol BrowserEngine: AnyObject {
     /// Nil without native document-start registration support. The shell must gate on both.
     var boosts: (any BrowserBoostHost)? { get }
 
+    /// Built-in credential store. Nil for unsupported or private engines.
+    var passwordStore: (any BrowserPasswordStore)? { get }
+
     /// Shell windows (CHROMIUM-APP). The shell shows the surfaces whose `placement.windowID` is
     /// `windowID` in `window`. Engines that model windows natively (hosted Chromium: one logical
     /// Chrome `Browser` per window and profile, the source of extension `windows`/`tabs`
@@ -206,6 +209,7 @@ public protocol BrowserEngine: AnyObject {
 }
 
 public extension BrowserEngine {
+    var passwordStore: (any BrowserPasswordStore)? { nil }
     var boosts: (any BrowserBoostHost)? { nil }
     var extensionManagement: (any BrowserExtensionManagement)? { nil }
     var conformanceProbe: (any BrowserEngineConformanceProbe<Surface>)? { nil }

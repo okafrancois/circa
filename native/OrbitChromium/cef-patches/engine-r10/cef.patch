@@ -1,0 +1,340 @@
+diff --git a/libcef/browser/orbit/orbit_cef_api.h b/libcef/browser/orbit/orbit_cef_api.h
+index 08318d7..77576a1 100644
+--- a/libcef/browser/orbit/orbit_cef_api.h
++++ b/libcef/browser/orbit/orbit_cef_api.h
+@@ -26,7 +26,7 @@ extern "C" {
+ // Version 3 (CHROMIUM-APP-R3): additive, hold_window/release_window. Earlier
+ // versions keep their layout as the prefix of the table.
+ // Version 4 (EXTENSIONS-PRODUCT-R1): additive, native per-profile extension services.
+-#define ORBIT_CEF_API_VERSION 10u
++#define ORBIT_CEF_API_VERSION 11u
+
+ // Version 8. Callback once after live renderer CSS installation (1), or failure (0).
+ typedef void (*orbit_boost_ack_t)(void*, uint64_t revision, int32_t installed);
+@@ -83,6 +83,37 @@ typedef struct {
+ // event: 1 show, 2 hide, 3 state changed. Never sent through generic events.
+ typedef void (*orbit_password_prompt_callback_t)(void*, int32_t, const orbit_password_prompt_t*);
+
++// Version 11. Profile password store only. Borrowed strings/arrays are valid only
++// during the call/callback; no secret is sent through generic event diagnostics.
++// UTF-16 spans preserve embedded NULs. Times are microseconds since 1601 UTC,
++// including Chromium's zero (unset). The stable key is the five identity fields
++// below, not a local database row number; it changes when those fields change.
++typedef struct { const uint16_t* data; uint32_t count; } orbit_password_text_t;
++typedef struct {
++  uint32_t struct_size;
++  const char* signon_realm;
++  const char* origin_url;
++  const char* action_url;
++  orbit_password_text_t username_element;
++  orbit_password_text_t username_value;
++  orbit_password_text_t password_element;
++  orbit_password_text_t password_value;
++  int64_t date_created;
++  int64_t date_last_used;
++  int64_t date_password_modified;
++  int32_t blocked_by_user;
++  int32_t scheme;
++} orbit_password_record_t;
++// status: 1 success, -1 backend/verification error, -2 cancelled by close/profile
++// teardown, -3 conflict (add existing/update missing/target key occupied).
++// Accepted requests complete exactly once on the UI thread. Refused calls
++// return 0 and do not invoke completion. Writes return no rows.
++typedef void (*orbit_password_result_t)(void*, int32_t status,
++    const orbit_password_record_t* records, uint32_t count);
++// event: 1 changed, 2 retained (resnapshot in either case), 3 closed.
++// Carries no secrets. One subscription per opened handle; close revokes it.
++typedef void (*orbit_password_changed_t)(void*, int32_t event);
++
+ typedef struct {
+   uint32_t struct_size;
+   uint32_t version;
+@@ -210,6 +241,17 @@ typedef struct {
+   // Returns 1 when known, 0 otherwise. Does not retain or replay the request.
+   int32_t (*popup_navigation_metadata)(int32_t browser_id, const char* frame_id,
+                                       orbit_navigation_metadata_t* metadata);
++  // Version 11. Opens only an already-loaded regular profile, never loads it.
++  uint64_t (*password_store_open)(const char* profile_path);
++  void (*password_store_close)(uint64_t handle);
++  int32_t (*password_store_list)(uint64_t, orbit_password_result_t, void*);
++  // operation: 1 add, 2 update, 3 remove. Update uses old_key (required),
++  // preserving Chromium metadata outside this API. Remove uses old_key only.
++  // Invalid sizes/URLs/schemes and private contexts fail closed.
++  int32_t (*password_store_write)(uint64_t, int32_t operation,
++      const orbit_password_record_t* record, const orbit_password_record_t* old_key,
++      orbit_password_result_t, void*);
++  int32_t (*password_store_observe)(uint64_t, orbit_password_changed_t, void*);
+ } orbit_cef_api_t;
+
+ // Returns the API table for `version`, or NULL when unsupported.
+diff --git a/libcef/browser/orbit/orbit_cef_api.mm b/libcef/browser/orbit/orbit_cef_api.mm
+index a24ec68..37b45aa 100644
+--- a/libcef/browser/orbit/orbit_cef_api.mm
++++ b/libcef/browser/orbit/orbit_cef_api.mm
+@@ -30,6 +30,7 @@
+
+ // Private additive extension services; no public CEF API change.
+ #include "cef/libcef/browser/orbit/orbit_extensions.inc"
++#include "cef/libcef/browser/orbit/orbit_password_store.inc"
+
+ #include "cef/libcef/browser/orbit/orbit_runtime_state.inc"
+ #include "cef/libcef/browser/orbit/orbit_suspension.inc"
+@@ -396,12 +397,24 @@ int32_t ReleaseWindow(uint64_t window_token) {
+
+ const orbit_cef_api_t kApiV10 = [] {
+   auto api = kApiV9;
+-  api.struct_size = sizeof(orbit_cef_api_t);
++  api.struct_size = offsetof(orbit_cef_api_t, password_store_open);
+   api.version = 10u;
+   api.popup_navigation_metadata = &PopupNavigationMetadata;
+   return api;
+ }();
+
++const orbit_cef_api_t kApiV11 = [] {
++  auto api = kApiV10;
++  api.struct_size = sizeof(orbit_cef_api_t);
++  api.version = 11u;
++  api.password_store_open = &PasswordStoreOpen;
++  api.password_store_close = &PasswordStoreClose;
++  api.password_store_list = &PasswordStoreList;
++  api.password_store_write = &PasswordStoreWrite;
++  api.password_store_observe = &PasswordStoreObserve;
++  return api;
++}();
++
+ }  // namespace
+
+ extern "C" CEF_EXPORT const orbit_cef_api_t* orbit_cef_get_api(uint32_t version);
+@@ -438,6 +451,8 @@ int32_t ReleaseWindow(uint64_t window_token) {
+       return &kApiV9;
+     case 10u:
+       return &kApiV10;
++    case 11u:
++      return &kApiV11;
+     default:
+       return nullptr;
+   }
+diff --git a/libcef/browser/orbit/orbit_password_store.inc b/libcef/browser/orbit/orbit_password_store.inc
+new file mode 100644
+index 0000000..2485273
+--- /dev/null
++++ b/libcef/browser/orbit/orbit_password_store.inc
+@@ -0,0 +1,218 @@
++// Copyright 2026 Orbit. BSD-style license; see LICENSE.
++#include <deque>
++#include "base/memory/weak_ptr.h"
++#include "base/task/single_thread_task_runner.h"
++#include "base/strings/utf_string_conversions.h"
++#include "chrome/browser/password_manager/factories/profile_password_store_factory.h"
++#include "chrome/browser/profiles/profile_observer.h"
++#include "components/password_manager/core/browser/password_store/password_store_consumer.h"
++#include "components/password_manager/core/browser/password_store/password_store_interface.h"
++
++namespace {
++using password_manager::StoredCredential;
++using password_manager::PasswordStoreInterface;
++
++orbit_password_text_t PasswordText(std::u16string_view text) {
++  return {reinterpret_cast<const uint16_t*>(text.data()), static_cast<uint32_t>(text.size())};
++}
++bool ReadPasswordText(orbit_password_text_t text, std::u16string& out) {
++  if (text.count > 1024 * 1024 || (text.count && !text.data)) return false;
++  if (!text.count) { out.clear(); return true; }
++  out.assign(reinterpret_cast<const char16_t*>(text.data), text.count);
++  return true;
++}
++bool ReadPasswordRecord(const orbit_password_record_t* row, StoredCredential& out) {
++  if (!row || row->struct_size < sizeof(*row) || !row->signon_realm ||
++      !row->origin_url || !row->action_url || row->scheme < 0 || row->scheme > 4 ||
++      (row->blocked_by_user != 0 && row->blocked_by_user != 1)) return false;
++  out.signon_realm = row->signon_realm;
++  out.url = GURL(row->origin_url); out.action = GURL(row->action_url);
++  if (out.signon_realm.empty() || !out.url.is_valid() ||
++      (!out.action.is_empty() && !out.action.is_valid())) return false;
++  std::u16string password;
++  if (!ReadPasswordText(row->username_element, out.username_element) ||
++      !ReadPasswordText(row->username_value, out.username_value) ||
++      !ReadPasswordText(row->password_element, out.password_element) ||
++      !ReadPasswordText(row->password_value, password)) return false;
++  out.password_value = password_manager::PasswordString(std::move(password));
++  out.date_created = base::Time::FromDeltaSinceWindowsEpoch(base::Microseconds(row->date_created));
++  out.date_last_used = base::Time::FromDeltaSinceWindowsEpoch(base::Microseconds(row->date_last_used));
++  out.date_password_modified = base::Time::FromDeltaSinceWindowsEpoch(base::Microseconds(row->date_password_modified));
++  out.blocked_by_user = row->blocked_by_user;
++  out.scheme = static_cast<password_manager::PasswordForm::Scheme>(row->scheme);
++  return true;
++}
++void SetPasswordFields(const StoredCredential& from, StoredCredential& to) {
++  to.signon_realm = from.signon_realm; to.url = from.url; to.action = from.action;
++  to.username_element = from.username_element; to.username_value = from.username_value;
++  to.password_element = from.password_element; to.password_value = from.password_value;
++  to.date_created = from.date_created; to.date_last_used = from.date_last_used;
++  to.date_password_modified = from.date_password_modified;
++  to.blocked_by_user = from.blocked_by_user; to.scheme = from.scheme;
++}
++bool SamePasswordFields(const StoredCredential& a, const StoredCredential& b) {
++  return password_manager::AreStoredCredentialUniqueKeysEqual(a, b) &&
++      a.action == b.action && a.password_value == b.password_value &&
++      a.date_created == b.date_created && a.date_last_used == b.date_last_used &&
++      a.date_password_modified == b.date_password_modified &&
++      a.blocked_by_user == b.blocked_by_user && a.scheme == b.scheme;
++}
++struct PasswordRequest {
++  int operation = 0;
++  bool verifying = false;
++  StoredCredential record, old_key;
++  orbit_password_result_t callback = nullptr;
++  void* context = nullptr;
++};
++class PasswordSession;
++auto& PasswordSessions() {
++  static base::NoDestructor<std::map<uint64_t, std::shared_ptr<PasswordSession>>> sessions;
++  return *sessions;
++}
++class PasswordSession final : public password_manager::PasswordStoreConsumer,
++                              public PasswordStoreInterface::Observer,
++                              public ProfileObserver,
++                              public std::enable_shared_from_this<PasswordSession> {
++ public:
++  PasswordSession(Profile* profile, scoped_refptr<PasswordStoreInterface> store)
++      : profile_(profile), store_(std::move(store)) {
++    profile_->AddObserver(this); store_->AddObserver(this);
++  }
++  ~PasswordSession() override { CHECK(!profile_); }
++  void Close() {
++    if (!profile_) return;
++    auto keep_alive = shared_from_this();
++    weak_.InvalidateWeakPtrs();
++    store_->RemoveObserver(this); profile_->RemoveObserver(this);
++    profile_ = nullptr; store_ = nullptr;
++    auto pending = std::move(requests_);
++    auto cb = changed_; auto ctx = changed_context_; changed_ = nullptr;
++    for (auto& request : pending) request->callback(request->context, -2, nullptr, 0);
++    if (cb) cb(ctx, 3);
++  }
++  void OnProfileWillBeDestroyed(Profile*) override {
++    auto keep_alive = shared_from_this();
++    std::erase_if(PasswordSessions(), [this](const auto& entry) { return entry.second.get() == this; });
++    Close();
++  }
++  void Enqueue(std::unique_ptr<PasswordRequest> request) {
++    requests_.push_back(std::move(request));
++    if (requests_.size() == 1) Read();
++  }
++  bool Observe(orbit_password_changed_t cb, void* context) {
++    if (!profile_) return false;
++    changed_ = cb; changed_context_ = context; return true;
++  }
++  bool live() const { return profile_ != nullptr; }
++  void OnLoginsChanged(PasswordStoreInterface*, const password_manager::PasswordStoreChangeList&) override { Emit(1); }
++  void OnLoginsRetained(PasswordStoreInterface*, const std::vector<StoredCredential>&) override { Emit(2); }
++  void OnGetPasswordStoreResultsOrErrorFrom(PasswordStoreInterface*,
++      base::expected<std::vector<StoredCredential>, password_manager::PasswordStoreBackendError> result) override {
++    auto keep_alive = shared_from_this();
++    if (requests_.empty()) return;
++    if (!result.has_value()) { Finish(-1); return; }
++    auto& request = *requests_.front();
++    if (!request.operation) {
++      std::vector<crypto::SecureU16String> passwords;
++      passwords.reserve(result->size());
++      std::vector<orbit_password_record_t> rows;
++      for (auto& f : *result) {
++        passwords.push_back(f.password_value.secure_value());
++        rows.push_back({sizeof(orbit_password_record_t), f.signon_realm.c_str(),
++            f.url.spec().c_str(), f.action.spec().c_str(), PasswordText(f.username_element),
++            PasswordText(f.username_value), PasswordText(f.password_element), PasswordText(passwords.back()),
++            f.date_created.ToDeltaSinceWindowsEpoch().InMicroseconds(),
++            f.date_last_used.ToDeltaSinceWindowsEpoch().InMicroseconds(),
++            f.date_password_modified.ToDeltaSinceWindowsEpoch().InMicroseconds(), f.blocked_by_user,
++            static_cast<int32_t>(f.scheme)});
++      }
++      Finish(1, rows.data(), rows.size()); return;
++    }
++    auto find = [&](const StoredCredential& key) {
++      return std::ranges::find_if(*result, [&](const auto& f) {
++        return password_manager::AreStoredCredentialUniqueKeysEqual(f, key);
++      });
++    };
++    auto target = find(request.record), old = find(request.old_key);
++    if (request.verifying) {
++      bool success = request.operation == 3 ? old == result->end() :
++          target != result->end() && SamePasswordFields(*target, request.record);
++      if (request.operation == 2 && !password_manager::AreStoredCredentialUniqueKeysEqual(request.old_key, request.record))
++        success = success && old == result->end();
++      Finish(success ? 1 : -1); return;
++    }
++    if ((request.operation == 1 && target != result->end()) ||
++        (request.operation != 1 && old == result->end()) ||
++        (request.operation == 2 && target != result->end() && target != old)) { Finish(-3); return; }
++    request.verifying = true;
++    auto done = base::BindOnce(&PasswordSession::Read, weak_.GetWeakPtr());
++    if (request.operation == 1) {
++      StoredCredential form; SetPasswordFields(request.record, form);
++      store_->AddLogin(std::move(form), std::move(done));
++    } else if (request.operation == 2) {
++      auto form = std::move(*old); SetPasswordFields(request.record, form);
++      if (password_manager::AreStoredCredentialUniqueKeysEqual(request.old_key, request.record))
++        store_->UpdateLogin(std::move(form), std::move(done));
++      else store_->UpdateLoginWithPrimaryKey(std::move(form), request.old_key, std::move(done));
++    } else {
++      // The local backend sequences reads after removals on its task runner.
++      store_->RemoveLogin(FROM_HERE, request.old_key); Read();
++    }
++  }
++ private:
++  void Emit(int event) { auto keep_alive = shared_from_this(); if (changed_) changed_(changed_context_, event); }
++  void Read() { if (store_) store_->GetAllLogins(weak_.GetWeakPtr()); }
++  void Finish(int status, const orbit_password_record_t* rows = nullptr, uint32_t count = 0) {
++    auto keep_alive = shared_from_this();
++    auto request = std::move(requests_.front()); requests_.pop_front();
++    // Start the next queued operation before calling external reentrant code.
++    if (!requests_.empty()) Read();
++    request->callback(request->context, status, rows, count);
++  }
++  raw_ptr<Profile> profile_;
++  scoped_refptr<PasswordStoreInterface> store_;
++  std::deque<std::unique_ptr<PasswordRequest>> requests_;
++  orbit_password_changed_t changed_ = nullptr;
++  void* changed_context_ = nullptr;
++  base::WeakPtrFactory<PasswordSession> weak_{this};
++};
++std::shared_ptr<PasswordSession> PasswordSessionFor(uint64_t handle) {
++  if (!OnValidUIThread()) return nullptr;
++  auto found = PasswordSessions().find(handle);
++  return found != PasswordSessions().end() && found->second->live() ? found->second : nullptr;
++}
++uint64_t PasswordStoreOpen(const char* path) {
++  Profile* profile = ExtensionProfile(path);
++  if (!profile || !profile->IsRegularProfile()) return 0;
++  auto store = ProfilePasswordStoreFactory::GetForProfile(profile, ServiceAccessType::EXPLICIT_ACCESS);
++  if (!store) return 0;
++  static uint64_t next = 1;
++  uint64_t handle = next++;
++  PasswordSessions()[handle] = std::make_shared<PasswordSession>(profile, std::move(store));
++  return handle;
++}
++void PasswordStoreClose(uint64_t handle) {
++  if (!OnValidUIThread()) return;
++  auto found = PasswordSessions().find(handle);
++  if (found == PasswordSessions().end()) return;
++  auto session = found->second; PasswordSessions().erase(found); session->Close();
++}
++int32_t PasswordStoreList(uint64_t handle, orbit_password_result_t cb, void* context) {
++  auto session = PasswordSessionFor(handle); if (!session || !cb) return 0;
++  auto request = std::make_unique<PasswordRequest>(); request->callback = cb; request->context = context;
++  session->Enqueue(std::move(request)); return 1;
++}
++int32_t PasswordStoreWrite(uint64_t handle, int32_t operation, const orbit_password_record_t* record,
++    const orbit_password_record_t* old_key, orbit_password_result_t cb, void* context) {
++  auto session = PasswordSessionFor(handle);
++  if (!session || !cb || operation < 1 || operation > 3) return 0;
++  auto request = std::make_unique<PasswordRequest>();
++  if ((operation != 3 && !ReadPasswordRecord(record, request->record)) ||
++      (operation != 1 && !ReadPasswordRecord(old_key, request->old_key))) return 0;
++  request->operation = operation; request->callback = cb; request->context = context;
++  session->Enqueue(std::move(request)); return 1;
++}
++int32_t PasswordStoreObserve(uint64_t handle, orbit_password_changed_t cb, void* context) {
++  auto session = PasswordSessionFor(handle); return session && session->Observe(cb, context) ? 1 : 0;
++}
++}  // namespace
