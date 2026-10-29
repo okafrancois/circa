@@ -9,6 +9,7 @@ final class BrowserBoostEditorView: NSView {
     var onCode: (() -> Void)?
     var onAllBoosts: (() -> Void)?
     var onDelete: (() -> Void)?
+    var onRename: (() -> Void)?
     private let titleButton = BoostButton(title: "")
     var onRender: (() -> Void)?
     var isZapping = false { didSet { render() } }
@@ -149,6 +150,7 @@ final class BrowserBoostEditorView: NSView {
             item.target = self; item.isEnabled = !session.isClosed && !session.isDeleting
             menu.addItem(item)
         }
+        add(uiText("Rename this Boost…"), #selector(renameAction))
         add(uiText("Reset all Edits"), #selector(resetAction))
         add(uiText("Delete this Boost"), #selector(deleteAction))
         menu.addItem(.separator())
@@ -159,6 +161,7 @@ final class BrowserBoostEditorView: NSView {
         makeHeaderMenu().popUp(positioning: nil, at: NSPoint(x: 0, y: titleButton.bounds.maxY), in: titleButton)
     }
     @objc private func resetAction() { session.resetAllEdits() }
+    @objc private func renameAction() { onRename?() }
     @objc private func deleteAction() { onDelete?() }
     @objc private func allBoostsAction() { onAllBoosts?() }
 
@@ -194,6 +197,8 @@ final class BoostButton: NSButton {
     var actionBlock: (() -> Void)?
     var shortcutBadge: String?
     var outlinesShortcutBadge = false
+    var shortcutBadgeColor: NSColor = .white.withAlphaComponent(0.16)
+    var shortcutBadgeTextColor: NSColor = .white.withAlphaComponent(0.8)
     var textTrailingInset: CGFloat = 0
     var cornerRadius: CGFloat = 8
     var fill = NSColor(srgbRed: 0.92, green: 0.92, blue: 0.925, alpha: 1) { didSet { needsDisplay = true } }
@@ -219,9 +224,9 @@ final class BoostButton: NSButton {
             let badge = NSRect(x: bounds.maxX - badgeWidth - 12, y: (bounds.height - 20) / 2, width: badgeWidth, height: 20)
             let path = NSBezierPath(roundedRect: badge, xRadius: 4, yRadius: 4)
             if outlinesShortcutBadge { NSColor.white.withAlphaComponent(0.4).setStroke(); path.lineWidth = 1; path.stroke() }
-            else { NSColor.white.withAlphaComponent(0.16).setFill(); path.fill() }
+            else { shortcutBadgeColor.setFill(); path.fill() }
             let label = shortcutBadge as NSString
-            let attributes: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: outlinesShortcutBadge ? 17 : 10, weight: .semibold), .foregroundColor: NSColor.white.withAlphaComponent(0.8)]
+            let attributes: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: outlinesShortcutBadge ? 17 : 10, weight: .semibold), .foregroundColor: shortcutBadgeTextColor]
             let size = label.size(withAttributes: attributes)
             label.draw(at: NSPoint(x: badge.midX - size.width / 2, y: badge.midY - size.height / 2), withAttributes: attributes)
             (title as NSString).draw(at: NSPoint(x: 12, y: (bounds.height - 16) / 2), withAttributes: [.font: NSFont.systemFont(ofSize: 13), .foregroundColor: contentTintColor ?? .white])

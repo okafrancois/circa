@@ -22,8 +22,8 @@ struct BrowserBoostMenuCodeTests {
         await session.pending?.value
         let view = BrowserBoostEditorView(session: session, firstRun: false)
         let menu = view.makeHeaderMenu()
-        #expect(menu.items.filter { !$0.isSeparatorItem }.map(\.title) == ["Reset all Edits", "Delete this Boost", "All Boosts…"])
-        let reset = try #require(menu.items.first)
+        #expect(menu.items.filter { !$0.isSeparatorItem }.map(\.title) == ["Rename this Boost…", "Reset all Edits", "Delete this Boost", "All Boosts…"])
+        let reset = try #require(menu.items.first { $0.title == "Reset all Edits" })
         #expect(NSApplication.shared.sendAction(try #require(reset.action), to: reset.target, from: reset))
         await session.pending?.value
         let reloaded = try BrowserBoostStore(profileID: profile, persistence: .profileDirectory(root))

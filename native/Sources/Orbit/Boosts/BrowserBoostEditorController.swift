@@ -10,6 +10,7 @@ final class BrowserBoostEditorController: NSWindowController {
     weak var pageHost: NSView?
     private weak var presentingWindow: NSWindow?
     private(set) var deleteConfirmation: BrowserBoostDeleteView?
+    private(set) var renameSheet: BrowserBoostRenameView?
     private var resizeTimer: Timer?
     private var resizeBegan: TimeInterval?
     init(session: BrowserBoostEditorSession, parent: NSWindow, firstRun: Bool) {
@@ -25,6 +26,12 @@ final class BrowserBoostEditorController: NSWindowController {
         presentingWindow = parent
         editor.onClose = { [weak self] in self?.close() }
         editor.onDelete = { [weak self] in self?.confirmDelete() }
+        editor.onRename = { [weak self] in
+            // Let menu tracking restore its previous key window before focusing the sheet.
+            RunLoop.main.perform(inModes: [.default]) { [weak self] in
+                MainActor.assumeIsolated { self?.beginRename() }
+            }
+        }
         editor.onCode = { [weak self] in self?.showCode() }
         panel.title = uiText("Boost")
         panel.setAccessibilityLabel(uiText("Boost"))
@@ -61,7 +68,7 @@ final class BrowserBoostEditorController: NSWindowController {
         resize(to: frame) { [weak self] in guard let self else { return }; window.contentView = editor }
     }
     func confirmDelete() {
-        guard deleteConfirmation == nil, !session.isClosed,
+        guard deleteConfirmation == nil, renameSheet == nil, !session.isClosed,
               let parent = presentingWindow, let host = parent.contentView else { return }
         zapView?.stop(); zapView = nil; editor.isZapping = false
         let view = BrowserBoostDeleteView { [weak self] accepted in
@@ -83,6 +90,25 @@ final class BrowserBoostEditorController: NSWindowController {
         deleteConfirmation = view
         if let window { parent.removeChildWindow(window); window.orderOut(nil) }
         parent.makeKeyAndOrderFront(nil)
+    }
+
+    func beginRename() {
+        guard renameSheet == nil, deleteConfirmation == nil, !session.isClosed, !session.isDeleting,
+              let parent = presentingWindow, let host = parent.contentView else { return }
+        zapView?.stop(); zapView = nil; editor.isZapping = false
+        let view = BrowserBoostRenameView(name: session.boost.title) { [weak self] name in
+            guard let self else { return }
+            renameSheet = nil
+            window?.ignoresMouseEvents = false
+            if let name { session.rename(to: name) }
+            if !session.isClosed { window?.makeKeyAndOrderFront(nil) }
+        }
+        view.frame = host.bounds; view.autoresizingMask = [.width, .height]
+        host.addSubview(view, positioned: .above, relativeTo: nil)
+        renameSheet = view
+        window?.ignoresMouseEvents = true
+        parent.makeKeyAndOrderFront(nil)
+        view.present()
     }
 
     private func resize(to target: NSRect, completion: (@MainActor @Sendable () -> Void)? = nil) {
@@ -119,6 +145,8 @@ final class BrowserBoostEditorController: NSWindowController {
     override func close() {
         resizeTimer?.invalidate(); resizeTimer = nil
         deleteConfirmation?.removeFromSuperview(); deleteConfirmation = nil
+        renameSheet?.stop(); renameSheet = nil
+        window?.ignoresMouseEvents = false
         zapView?.stop(); zapView = nil
         session.close()
         if let window { window.parent?.removeChildWindow(window) }

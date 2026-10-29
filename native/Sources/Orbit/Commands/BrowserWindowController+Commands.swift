@@ -10,7 +10,7 @@ extension BrowserWindowController {
         let navigation = surface?.navigationState
         var state = BrowserCommandState()
         state.isAvailable = acceptsCommands && !session.isClosed
-        state.isModal = window?.attachedSheet != nil
+        state.isModal = window?.attachedSheet != nil || boostEditor?.renameSheet != nil
         state.hasWindow = window != nil
         state.hasSurface = surface != nil
         state.hasURL = navigation?.url != nil

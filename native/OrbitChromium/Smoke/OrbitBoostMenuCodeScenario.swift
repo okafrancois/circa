@@ -44,7 +44,7 @@ extension OrbitSmokeDriver {
         _ = await until(8) { FileManager.default.fileExists(atPath: self.runRoot.appendingPathComponent("capture-ready").path) }
         await pause()
         let menu = editor.editor.makeHeaderMenu()
-        check("supported-menu", menu.items.filter { !$0.isSeparatorItem }.map(\.title) == ["Reset all Edits", "Delete this Boost", "All Boosts…"])
+        check("supported-menu", menu.items.filter { !$0.isSeparatorItem }.map(\.title) == ["Rename this Boost…", "Reset all Edits", "Delete this Boost", "All Boosts…"])
         if gate(panel) {
             let timer = Timer(timeInterval: 1.2, target: BoostMenuTrackingEnd(menu), selector: #selector(BoostMenuTrackingEnd.cancel), userInfo: nil, repeats: false)
             RunLoop.main.add(timer, forMode: .common)
@@ -77,21 +77,21 @@ extension OrbitSmokeDriver {
         editor.showControls(); await pause(0.8)
         capture("orbit-before-reset", editor.editor)
         guard gate(panel) else { return }
-        event("boost-reset", [:]); menu.performActionForItem(at: 0)
+        event("boost-reset", [:]); menu.performActionForItem(at: 1)
         await editor.session.pending?.value; await pause(1)
         check("reset-content", editor.session.boost.content == BrowserBoostContent() && !editor.session.boost.javaScriptOptIn)
         check("reset-live-css", await evaluate("String(getComputedStyle(document.querySelector('h1')).color !== 'rgb(190, 30, 70)')", page) == "true")
         capture("orbit-reset", editor.editor)
         capture("orbit-reset-page", owner.window?.contentView)
         guard gate(panel) else { return }
-        menu.performActionForItem(at: 1); await pause(1)
+        menu.performActionForItem(at: 2); await pause(1)
         capture("orbit-delete-confirmation", owner.window?.contentView)
         guard gate(owner.window) else { return }
         editor.deleteConfirmation?.finish(false); await pause()
         let retained = await editor.session.store.snapshot()
         check("delete-cancel", !editor.session.isClosed && retained.boosts.count == 1)
         guard gate(panel) else { return }
-        menu.performActionForItem(at: 1); await pause()
+        menu.performActionForItem(at: 2); await pause()
         check("delete-reopened", editor.deleteConfirmation != nil)
         guard gate(owner.window) else { return }
         editor.deleteConfirmation?.finish(true); await editor.session.pending?.value; await pause()
