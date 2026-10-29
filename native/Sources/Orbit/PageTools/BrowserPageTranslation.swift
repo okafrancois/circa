@@ -152,10 +152,30 @@ private struct TranslationTaskView: View {
     }
 }
 
+/// Shared within one environment so translation follows live documents across window owners.
+@MainActor
+final class BrowserTranslationPages {
+    var pages: [ObjectIdentifier: BrowserPageTranslation] = [:]
+
+    func prune() {
+        for (key, page) in pages where !page.isCurrent {
+            page.retire(); pages.removeValue(forKey: key)
+        }
+    }
+
+    func close() {
+        for page in pages.values { page.retire() }
+        pages.removeAll()
+    }
+}
+
 @MainActor
 final class BrowserTranslationController<Engine: BrowserEngine> {
     weak var owner: BrowserWindowController<Engine>?
-    private var pages: [ObjectIdentifier: BrowserPageTranslation] = [:]
+    private var pages: [ObjectIdentifier: BrowserPageTranslation] {
+        get { owner?.translationPages.pages ?? [:] }
+        set { owner?.translationPages.pages = newValue }
+    }
     let popover = NSPopover()
     private var presentedPage: BrowserPageTranslation?
     init(owner: BrowserWindowController<Engine>) {
@@ -177,8 +197,13 @@ final class BrowserTranslationController<Engine: BrowserEngine> {
     }
     func render() {
         guard let owner else { return }
-        for (key, page) in pages where !page.isCurrent || !owner.session.ownedSurfaces.contains(where: { ObjectIdentifier($0) == key }) {
-            page.retire(); pages.removeValue(forKey: key)
+        owner.translationPages.prune()
+        for surface in owner.session.ownedSurfaces {
+            guard let page = pages[ObjectIdentifier(surface)] else { continue }
+            page.onChange = { [weak self] in self?.update() }
+            if let host = page.host, let root = owner.window?.contentView, host.superview !== root {
+                root.addSubview(host)
+            }
         }
         if let surface = owner.session.selectedSurface, surface.supportsPageTranslation,
            !surface.navigationState.isLoading, ["https", "http"].contains(surface.navigationState.committedURL?.scheme),
@@ -219,8 +244,11 @@ final class BrowserTranslationController<Engine: BrowserEngine> {
     }
     func close() {
         popover.close()
-        for page in pages.values { page.retire() }
-        pages.removeAll()
+        // A released surface belongs to its receiver or the rescue holder, even if this
+        // window closes while adoption is pending. Only retire documents still owned here.
+        for surface in owner?.session.ownedSurfaces ?? [] {
+            pages.removeValue(forKey: ObjectIdentifier(surface))?.retire()
+        }
     }
 }
 

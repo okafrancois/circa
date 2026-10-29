@@ -6,8 +6,9 @@ import QuartzCore
 
 @MainActor
 enum OrbitTranslationScenario {
-    static func run(window: BrowserWindowController<ChromiumBrowserEngine>, root: URL, probeOnly: Bool,
+    static func run(window initialWindow: BrowserWindowController<ChromiumBrowserEngine>, environment: BrowserEnvironment<ChromiumBrowserEngine>, root: URL, probeOnly: Bool,
                     record: @escaping (String, String, [String: Any]) -> Void) async {
+        var window = initialWindow
         func check(_ name: String, _ ok: Bool) { record("translation." + name, ok ? "proven" : "failed", [:]) }
         // Every synthetic event is gated by the exact native window's owner PID and baked ID.
         func owned(_ target: NSWindow?) -> Bool {
@@ -96,6 +97,20 @@ enum OrbitTranslationScenario {
         _ = await evaluate("location.hash='Definitionen'; 'ok'", tab: tab)
         check("same-document", page.isCurrent && page.state.phase == .translated)
         _ = await evaluate("scrollTo(0,0); 'ok'", tab: tab)
+        // Keep the active translation task and its originals while moving the live tab.
+        do {
+            let destination = try await environment.makeWindow()
+            destination.showWindow(nil); destination.window?.makeKeyAndOrderFront(nil)
+            guard let move = window.moveSurface(tab, to: destination), await move.value != nil else {
+                check("translated-move", false); return
+            }
+            let source = window
+            window = destination
+            source.window?.close()
+            await window.session.waitForPendingCommands()
+            try? await Task.sleep(for: .milliseconds(500))
+            check("translated-move", window.translation.page === page && page.state.phase == .translated)
+        } catch { check("translated-move", false); return }
         guard owned(window.window) else { check("original-owner", false); return }
         check("original-click", await clickStatus())
         await capture("original-popup")

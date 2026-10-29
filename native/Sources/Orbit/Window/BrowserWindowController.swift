@@ -27,6 +27,7 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
     let forwardButton = OrbitGlyphButton(glyph: nil, label: OrbitShellText.forward)
     let reloadButton = OrbitGlyphButton(glyph: nil, label: OrbitShellText.reload)
     var addressResolver = AddressResolver()
+    let translationPages: BrowserTranslationPages
     lazy var translation = BrowserTranslationController(owner: self)
     lazy var capture = BrowserCaptureController(owner: self)
     lazy var pageSaver = BrowserPageSaveController(owner: self)
@@ -170,6 +171,7 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
         isPrivateWindow: Bool = false,
         downloads: BrowserDownloadsController = BrowserDownloadsController(),
         history: BrowserHistoryRecorder = BrowserHistoryRecorder(),
+        translationPages: BrowserTranslationPages = BrowserTranslationPages(),
         rescue: BrowserSurfaceContainer<Engine.Surface>? = nil,
         onInput: ((@escaping @MainActor (BrowserWindowController) -> Void) -> Void)? = nil,
         onCatalogChange: @escaping (BrowserCatalogSnapshot) -> Void = { _ in },
@@ -178,6 +180,7 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
         onClose: @escaping () -> Void,
         onActivate: @escaping () -> Void
     ) {
+        self.translationPages = translationPages
         self.id = id
         self.engine = engine
         self.onClose = onClose

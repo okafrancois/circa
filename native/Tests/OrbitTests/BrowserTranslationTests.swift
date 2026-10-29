@@ -3,6 +3,44 @@ import AppKit
 @testable import Orbit
 
 struct BrowserTranslationTests {
+    @Test("A translated live document keeps its restoration state across window ownership changes", arguments: [true, false])
+    @MainActor func translatedTabTransfer(closeSource: Bool) async throws {
+        NSApplication.shared.setActivationPolicy(.prohibited)
+        let environment = BrowserEnvironment(engine: PeekSyntheticEngine())
+        let source = try await environment.makeWindow()
+        let destination = try await environment.makeWindow()
+        defer { source.session.close(); source.window?.close(); destination.session.close(); destination.window?.close() }
+        source.openTab(url: URL(string: "https://translation.test/")!)
+        await source.session.waitForPendingCommands()
+        let surface = try #require(source.session.selectedSurface)
+        surface.supportsPageTranslation = true
+        source.translation.render()
+        let page = try #require(source.translation.page)
+        page.detection?.cancel()
+        page.state.detect(source: "de", preferred: ["en"], supported: true)
+        let began = page.state.begin()
+        #expect(began)
+        page.state.complete()
+        let host = NSView(frame: NSRect(x: 0, y: 0, width: 1, height: 1))
+        source.window?.contentView?.addSubview(host)
+        page.host = host
+        let move = try #require(source.moveSurface(surface, to: destination))
+        #expect(await move.value != nil)
+        await destination.session.waitForPendingCommands()
+        if closeSource { source.window?.close() }
+        destination.translation.render()
+        #expect(host.superview === destination.window?.contentView)
+        #expect(destination.translation.page === page)
+        #expect(destination.translation.page?.state.phase == .translated)
+        await destination.translation.page?.restore()
+        #expect(surface.translationRestoreCount == 1)
+        #expect(page.state.phase == .original)
+        surface.navigate(to: URL(string: "https://translation.test/next")!)
+        destination.translation.render()
+        #expect(destination.translation.page !== page)
+        #expect(page.host == nil)
+    }
+
     @Test("Status hit testing chooses its action control before URL editing")
     @MainActor func statusHitTarget() throws {
         let root = SidebarAddressField(frame: NSRect(x: 0, y: 0, width: 300, height: 36))
