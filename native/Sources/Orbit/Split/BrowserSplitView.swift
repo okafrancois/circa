@@ -41,6 +41,11 @@ final class BrowserSplitView: NSView {
     private let layoutMotion = OrbitTimedAnimator(value: 1)
     private var paneOrigins: [TabID: CGRect] = [:]
     private var pendingLayoutMotion = false
+    private var acceptsInteraction = true
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        acceptsInteraction ? super.hitTest(point) : nil
+    }
 
 
     override var isFlipped: Bool { true }
@@ -94,6 +99,7 @@ final class BrowserSplitView: NSView {
     /// An outgoing wrapper may stay attached for a snapshot, but may no longer intercept input
     /// or complete a divider gesture belonging to a presentation that is no longer current.
     func suspendInteraction() {
+        acceptsInteraction = false
         layoutMotion.set(1)
         stopMonitoring()
         dragOrigin = nil
@@ -109,6 +115,7 @@ final class BrowserSplitView: NSView {
     }
 
     func presentSingle(_ host: NSView) {
+        acceptsInteraction = true
         layoutMotion.set(1); paneOrigins = [:]; pendingLayoutMotion = false
         group = nil; draftRatios = nil; hasKeyboardDraft = false; dragOrigin = nil; originalRatios = nil
         for pane in panes.values { pane.removeFromSuperview() }; panes = [:]
@@ -124,6 +131,7 @@ final class BrowserSplitView: NSView {
     }
 
     func present(_ group: BrowserSplitGroup, panes incoming: [Pane], active: TabID?, accent: OrbitTokens.ThemeAccent) {
+        acceptsInteraction = true
         // Orbit's ordinary creation/close path publishes the new pane tree immediately.
         // Its animated layout branch is for changing ratios within an existing pane tree.
         let animateRatios = self.group?.tabIDs == group.tabIDs && self.group?.orientation == group.orientation

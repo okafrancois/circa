@@ -365,6 +365,21 @@ public final class ChromiumSurface: BrowserEngineSurface {
         return true
     }
 
+    /// A bounded renderer opportunity for live-tab paint holding; never a scanout signal.
+    public func activationPaintBarrier() -> Task<Void, Never>? {
+        guard isBrowserCreated, !isDisposed, !isSuspended, !state.isLoading else { return nil }
+        let generation = documentGeneration
+        return Task { [weak self] in
+            guard let self, !Task.isCancelled, self.documentGeneration == generation,
+                  self.hostView.window != nil else { return }
+            // r10 has no presentation feedback callback. Two renderer frame opportunities
+            // allow its retained surface to arrive; the shell independently caps the hold.
+            _ = await self.devToolsCall("Runtime.evaluate", params:
+                #"{"expression":"new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(()=>r(true))))","awaitPromise":true,"returnByValue":true}"#,
+                timeout: .milliseconds(150))
+        }
+    }
+
     /// The shell showed `hostView` in a window, or the user clicked into it.
     func hostViewDidBecomeVisible() {
         guard !isDisposed, isBrowserCreated, hostedWindowToken != 0 else { return }

@@ -231,6 +231,11 @@ public protocol BrowserEngineSurface: BrowserFindSurface {
     /// `makeFirstResponder(hostView)` itself: a plain parent view is not the document responder.
     @discardableResult func focusDocument() -> Bool
 
+    /// Optional, bounded activation paint opportunity after the host is attached. This is a
+    /// readiness barrier for retaining outgoing pixels, not a guarantee of display scanout.
+    /// Nil keeps the engine's ordinary presentation path. Never reloads or captures a page.
+    func activationPaintBarrier() -> Task<Void, Never>?
+
     /// Applies the zoom policy of the engine. Engines without `nativeSiteZoom` scope the factor
     /// to the profile and host inside the adapter.
     func performZoom(_ command: BrowserPageZoomCommand)
@@ -284,6 +289,7 @@ public protocol BrowserEngineSurface: BrowserFindSurface {
 }
 
 public extension BrowserEngineSurface {
+    func activationPaintBarrier() -> Task<Void, Never>? { nil }
     var passwordPrompts: (any BrowserPasswordPromptSource)? { nil }
     func setPageTintObservationEnabled(_ enabled: Bool) {}
     func reloadIgnoringCache() throws { throw BrowserEngineError.unsupportedOperation }
