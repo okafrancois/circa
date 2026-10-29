@@ -119,7 +119,7 @@ struct SidebarStallsTests {
         root.layoutSubtreeIfNeeded()
         shell.setDocked(false)
         shell.setDocked(true)
-        try await Task.sleep(for: .milliseconds(180))
+        try await settle(shell, after: .milliseconds(180))
         #expect(shell.isDocked && shell.isSidebarOnScreen && !shell.isAnimating)
         #expect(shell.hoverReveal.phase == .disabled)
     }
