@@ -64,7 +64,7 @@ def phase(args):
     assert process.returncode == 0 and not owner.remaining and not owner.forced_signals
     assert not results['aborted'] and all(r['status'] != 'failed' for r in results['results'])
     ids = {r['id'] for r in results['results'] if r['status'] == 'proven'}
-    required = {'empty', 'add-observed', 'round-trip', 'profile-isolation', 'duplicate-conflict',
+    required = {'sync-engine-add', 'sync-engine-update', 'sync-engine-delete', 'sync-cache-sealed', 'empty', 'add-observed', 'round-trip', 'profile-isolation', 'duplicate-conflict',
                 'update', 'update-observed', 'key-update', 'key-update-observed', 'blocklist-observed',
                 'remove-observed', 'blocklist-preserved', 'missing-conflict', 'private-refused',
                 'second-handle', 'pending-cancelled', 'final-empty', 'stream-closed',

@@ -17,6 +17,8 @@ final class BrowserSyncRuntime: ObservableObject {
     private var state = BrowserSyncState()
     private var destination: URL?
     private var transport: (any BrowserSyncTransport)?
+    private var passwordTransport: (any BrowserPasswordSyncTransport)?
+    private var passwords: BrowserPasswordSync?
     private var historyTransport: (any BrowserHistorySyncTransport)?
     private var task: Task<Void, Never>?
     private var cycle: (() async throws -> Void)?
@@ -57,7 +59,7 @@ final class BrowserSyncRuntime: ObservableObject {
         state.enabled = value
         try state.save(destination)
         enabled = value
-        if !value { await transport?.stop(); await historyTransport?.stop(); transport = nil; historyTransport = nil; status = .off }
+        if !value { await transport?.stop(); await historyTransport?.stop(); transport = nil; historyTransport = nil; await stopPasswords(); status = .off }
         else { status = .on; NSApp?.registerForRemoteNotifications(); start() }
     }
 
@@ -65,6 +67,7 @@ final class BrowserSyncRuntime: ObservableObject {
         task?.cancel()
         await transport?.stop()
         await historyTransport?.stop()
+        await stopPasswords()
         await task?.value
         task = nil; transport = nil; historyTransport = nil
     }
@@ -81,10 +84,11 @@ final class BrowserSyncRuntime: ObservableObject {
                 if enabled {
                     do { try await cycle?() }
                     catch BrowserSyncError.signedOut {
-                        status = .signedOut; await transport?.stop(); transport = nil
+                        status = .signedOut; await stopPasswords(); await transport?.stop(); transport = nil
                         await historyTransport?.stop(); historyTransport = nil
                     }
                     catch BrowserSyncError.accountChanged {
+                        await stopPasswords()
                         await historyTransport?.stop(); historyTransport = nil
                         status = .accountChanged; needsAccountDecision = true
                         await transport?.stop(); transport = nil
@@ -93,7 +97,7 @@ final class BrowserSyncRuntime: ObservableObject {
                         status = .accountChanged
                     }
                     catch BrowserSyncError.localChange { status = .on }
-                    catch { status = .unavailable; await transport?.stop(); transport = nil }
+                    catch { status = .unavailable; await stopPasswords(); await transport?.stop(); transport = nil }
                 }
                 try? await Task.sleep(for: .seconds(5))
             }
@@ -122,6 +126,13 @@ final class BrowserSyncRuntime: ObservableObject {
             // A missing Production history type (or corrupt/unsupported history payload) must
             // fail closed for this zone without interrupting organization synchronization.
             await historyTransport?.stop(); historyTransport = nil
+        }
+        do { try await synchronizePasswords(environment, identity: identity, destination: destination) }
+        catch BrowserSyncError.signedOut { throw BrowserSyncError.signedOut }
+        catch BrowserSyncError.accountChanged { throw BrowserSyncError.accountChanged }
+        catch {
+            // Password schema/key/engine failures are isolated from the other sync zones.
+            await stopPasswords()
         }
         let session = await environment.store.sessionDocument()
         let settings = await environment.settings.store.snapshot()
@@ -197,6 +208,32 @@ final class BrowserSyncRuntime: ObservableObject {
                     controller.library.history.reload()
                 }
             }
+        }
+    }
+
+    private func stopPasswords() async {
+        passwords?.stop(); passwords = nil
+        await passwordTransport?.stop(); passwordTransport = nil
+    }
+
+    private func synchronizePasswords<Engine: BrowserEngine>(_ environment: BrowserEnvironment<Engine>,
+        identity: String, destination: URL) async throws {
+        guard enabled, !environment.isPrivate, let store = environment.engine.passwordStore else { return }
+        if passwords == nil || passwordTransport == nil {
+            let key = try BrowserPasswordSyncCache.systemKey()
+            passwords = try BrowserPasswordSync(cache: .init(destination: destination.appendingPathExtension("passwords.sealed"), key: key))
+            passwordTransport = try BrowserPasswordCloudKitTransport(
+                cache: .init(destination: destination.appendingPathExtension("passwords.cloudkit.sealed"), key: key), identity: identity)
+        }
+        guard let passwords, let passwordTransport else { return }
+        let session = await environment.store.sessionDocument()
+        try await passwords.synchronize(store: store, profiles: session.profiles.map(\.id), transport: passwordTransport) { [weak self, weak environment] in
+            guard let self, let environment, enabled, !Task.isCancelled,
+                  !environment.isFinalizing, !environment.settingsRemovalIsRunning else { throw BrowserSyncError.unavailable }
+            let container = CKContainer(identifier: BrowserSyncSchema.container)
+            let current = try await container.accountStatus() == .available ? try await container.userRecordID().recordName : nil
+            try state.account.admit(current)
+            guard current == identity else { throw BrowserSyncError.accountChanged }
         }
     }
 

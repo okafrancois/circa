@@ -2,6 +2,7 @@ import BrowserCore
 import BrowserEngine
 import ChromiumEngine
 import Foundation
+import CryptoKit
 import OrbitChromiumBridge
 
 /// Hermetic bridge/store qualification. Only verdicts, never credentials, enter evidence.
@@ -10,6 +11,7 @@ enum OrbitPasswordStoreScenario {
     static func run(engine: ChromiumBrowserEngine, record: (String, String, [String: Any]) -> Void) async {
         func check(_ id: String, _ value: Bool) { record("password-store." + id, value ? "proven" : "failed", [:]) }
         guard let store = engine.passwordStore else { check("available", false); return }
+        await syncRoundTrip(engine: engine, store: store, check: check)
         let profile = ProfileID(), other = ProfileID()
         do {
             check("empty", try await store.list(profileID: profile).isEmpty)
@@ -94,9 +96,69 @@ enum OrbitPasswordStoreScenario {
             check("unexpected-error", false)
         }
     }
+
+    private static func syncRoundTrip(engine: ChromiumBrowserEngine, store: any BrowserPasswordStore,
+                                      check: (String, Bool) -> Void) async {
+        guard let option = ProcessInfo.processInfo.arguments.first(where: { $0.hasPrefix("--orbit-data-root=") }) else {
+            check("sync-confinement", false); return
+        }
+        let root = URL(fileURLWithPath: String(option.dropFirst("--orbit-data-root=".count))).appendingPathComponent("PasswordSyncSmoke")
+        let logical = ProfileID(), localA = ProfileID(), localB = ProfileID()
+        let key = SymmetricKey(size: .bits256)
+        do {
+            let a = try BrowserPasswordSync(cache: .init(destination: root.appendingPathComponent("a.sealed"), key: key))
+            let b = try BrowserPasswordSync(cache: .init(destination: root.appendingPathComponent("b.sealed"), key: key))
+            defer { a.stop(); b.stop() }
+            let first = SmokeMappedPasswordStore(store: store, local: localA), second = SmokeMappedPasswordStore(store: store, local: localB)
+            let cloud = BrowserPasswordSyncMemoryCloud()
+            var row = BrowserPasswordRecord(primaryKey: .init(signonRealm: "https://sync-fixture.invalid/", originURL: "https://sync-fixture.invalid/login",
+                usernameElement: "user", usernameValue: "synthetic-sync-user", passwordElement: "pass"),
+                passwordValue: "synthetic-sync-secret", dateCreated: 13_000_000_000_000_001, datePasswordModified: 13_000_000_000_000_002)
+            try await first.add(row, profileID: logical)
+            try await a.synchronize(store: first, profiles: [logical], transport: cloud)
+            try await b.synchronize(store: second, profiles: [logical], transport: cloud)
+            let fetched = try await second.list(profileID: logical)
+            check("sync-engine-add", fetched.count == 1 && fetched.first?.passwordValue == row.passwordValue)
+            let oldKey = row.primaryKey
+            row.primaryKey.usernameValue = "synthetic-sync-renamed"; row.passwordValue = "synthetic-sync-updated"; row.datePasswordModified += 100
+            try await second.update(row, replacing: oldKey, profileID: logical)
+            try await b.synchronize(store: second, profiles: [logical], transport: cloud)
+            try await a.synchronize(store: first, profiles: [logical], transport: cloud)
+            let updated = try await first.list(profileID: logical)
+            check("sync-engine-update", updated.count == 1 && updated.first?.primaryKey == row.primaryKey && updated.first?.passwordValue == row.passwordValue)
+            try await first.remove(row.primaryKey, profileID: logical)
+            try await a.synchronize(store: first, profiles: [logical], transport: cloud)
+            try await b.synchronize(store: second, profiles: [logical], transport: cloud)
+            check("sync-engine-delete", try await second.list(profileID: logical).isEmpty)
+            var clean = true
+            for file in try FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: nil) {
+                let bytes = try Data(contentsOf: file)
+                for secret in ["synthetic-sync-user", "synthetic-sync-secret", "sync-fixture.invalid", "synthetic-sync-renamed", "synthetic-sync-updated"] {
+                    if bytes.range(of: Data(secret.utf8)) != nil { clean = false }
+                }
+            }
+            check("sync-cache-sealed", clean)
+            try await engine.removeProfile(localA); try await engine.removeProfile(localB)
+            try FileManager.default.removeItem(at: root)
+        } catch { check("sync-unexpected-error", false) }
+    }
+
 }
 
 private final class CancellationProbe {
     let continuation: CheckedContinuation<Int32, Never>
     init(_ continuation: CheckedContinuation<Int32, Never>) { self.continuation = continuation }
+}
+
+
+@MainActor
+private final class SmokeMappedPasswordStore: BrowserPasswordStore {
+    let store: any BrowserPasswordStore
+    let local: ProfileID
+    init(store: any BrowserPasswordStore, local: ProfileID) { self.store = store; self.local = local }
+    func list(profileID: ProfileID) async throws -> [BrowserPasswordRecord] { try await store.list(profileID: local) }
+    func add(_ row: BrowserPasswordRecord, profileID: ProfileID) async throws { try await store.add(row, profileID: local) }
+    func update(_ row: BrowserPasswordRecord, replacing key: BrowserPasswordKey, profileID: ProfileID) async throws { try await store.update(row, replacing: key, profileID: local) }
+    func remove(_ key: BrowserPasswordKey, profileID: ProfileID) async throws { try await store.remove(key, profileID: local) }
+    func changes(profileID: ProfileID) async throws -> AsyncStream<BrowserPasswordStoreChange> { try await store.changes(profileID: local) }
 }
