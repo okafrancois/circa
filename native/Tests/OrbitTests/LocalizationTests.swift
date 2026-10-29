@@ -38,6 +38,23 @@ struct LocalizationTests {
         #expect(SearchEngine.duckDuckGo.displayName == "DuckDuckGo")
     }
 
+    @Test("English count phrases resolve stringsdict plural rules through uiText")
+    func localizedPluralCounts() {
+        for (key, singular, plural) in [
+            ("%ld passwords", "1 password", "2 passwords"),
+            ("%ld cookies", "1 cookie", "2 cookies"),
+            ("%ld Spaces", "1 Space", "2 Spaces"),
+            ("%ld tabs and folders", "1 tab or folder", "2 tabs and folders"),
+            ("%ld history visits", "1 history visit", "2 history visits"),
+            ("%ld archived tabs", "1 archived tab", "2 archived tabs"),
+            ("%ld existing passwords were kept.", "1 existing password was kept.", "2 existing passwords were kept."),
+        ] {
+            #expect(uiText(key, count: 1) == singular)
+            #expect(uiText(key, count: 2) == plural)
+        }
+        #expect(uiText("%ld passwords", count: 0) == "0 passwords")
+    }
+
     @Test("Key UI files do not introduce literal labels, tooltips, alerts or accessibility text")
     func noHardCodedUIStrings() throws {
         // Deliberately simple sink-based lint. Metadata-only literals (selectors, symbols,
@@ -174,6 +191,9 @@ struct LocalizationTests {
         let bundle = try #require(Bundle(url: output))
         #expect(bundle.developmentLocalization == "en")
         #expect(bundle.localizedString(forKey: "Downloads", value: "missing", table: nil) == "Downloads")
+        let plural = bundle.localizedString(forKey: "%ld passwords", value: "missing", table: nil)
+        #expect(String.localizedStringWithFormat(plural, 1) == "1 password")
+        #expect(String.localizedStringWithFormat(plural, 2) == "2 passwords")
         #expect(try assemble(source: temporary.appendingPathComponent("missing")) != 0)
     }
     @Test("Product packager rejects missing resources before creating output on either input path")

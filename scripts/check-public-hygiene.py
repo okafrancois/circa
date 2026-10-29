@@ -33,6 +33,7 @@ IMPORT_ROOTS = tuple(expand(path) for path in (
 # across worktrees until all callers migrate together.
 ALLOWED_TEXT = {path: tuple(expand(value) for value in values) for path, values in {'AGENTS.md': ['/tmp/{lower}y-gui-slot.lock', '/tmp/{lower}y-native-full-suite.lock'],
  'native/OrbitChromium/App/EngineComposition+Chromium.swift': ['{source}ImportError',
+                                                               '{source}ImportAlertPresenter',
                                                                '{source}SiteSessionFixtureKeys',
                                                                '{source}SiteSessionImport',
                                                                '{source}SiteSessionKeyProviding',

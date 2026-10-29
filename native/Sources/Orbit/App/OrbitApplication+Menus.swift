@@ -92,7 +92,7 @@ extension OrbitApplication {
         application(.importArcConnections) { [weak self] in self?.startArcSiteSessionImport() }
         application(.restoreArcConnections) { [weak self] in self?.startArcSiteSessionImport(restoring: true) }
         application(.importFromArc) { [weak self] in self?.startArcImport() }
-        application(.importFromAnotherBrowser) { [weak self] in self?.startArcImport() }
+        application(.importFromAnotherBrowser) { [weak self] in self?.startBrowserImport() }
         application(.checkForUpdates) { [weak self] in self?.updater.checkForUpdates() }
         registry.registerPrerequisite(.checkForUpdates) { [weak self] _, _ in self?.updater.canCheckForUpdates == true }
         application(.quitOrbit, allowsDuringModal: true) { NSApp.terminate(nil) }

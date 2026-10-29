@@ -33,6 +33,11 @@ class PublicHygieneTests(unittest.TestCase):
         self.assertTrue(policy.check_text(path, f"// {name} sidebar"))
         self.assertTrue(policy.check_text(path, identifier + "Sidebar"))
         self.assertTrue(policy.check_text("other.swift", identifier))
+        progress = name + "ImportAlertPresenter"
+        composition = "native/OrbitChromium/App/EngineComposition+Chromium.swift"
+        self.assertFalse(policy.check_text(composition, progress + "(browserImport: true)"))
+        self.assertTrue(policy.check_text(composition, progress + "Sidebar"))
+        self.assertTrue(policy.check_text("unrelated.swift", progress))
         imported = policy.IMPORT_ROOTS[0] + "Example.swift"
         self.assertFalse(policy.check_text(imported, f"Import {name} data"))
         self.assertTrue(policy.check_text(imported, "// 0x" + "123456789"))

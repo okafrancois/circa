@@ -5,6 +5,9 @@ import BrowserCore
 /// a small floating panel for progress. Shows counts only.
 @MainActor
 final class ArcImportAlertPresenter: ArcImportPresenting {
+    private let browserImport: Bool
+    private let canCancel: Bool
+    init(browserImport: Bool = false, canCancel: Bool = true) { self.browserImport = browserImport; self.canCancel = canCancel }
     private var panel: NSPanel?
     private var indicator: NSProgressIndicator?
     private var label: NSTextField?
@@ -32,7 +35,7 @@ final class ArcImportAlertPresenter: ArcImportPresenting {
     func showProgress(_ progress: ArcImportProgress, onCancel: @escaping @MainActor () -> Void) {
         self.onCancel = onCancel
         if panel == nil { makePanel() }
-        label?.stringValue = Self.phaseText(progress.phase)
+        label?.stringValue = browserImport ? BrowserImportText.phase(progress.phase) : Self.phaseText(progress.phase)
         if let fraction = progress.fraction {
             indicator?.isIndeterminate = false
             indicator?.doubleValue = fraction
@@ -99,7 +102,7 @@ final class ArcImportAlertPresenter: ArcImportPresenting {
     private func makePanel() {
         let panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 360, height: 104),
                             styleMask: [.titled, .utilityWindow], backing: .buffered, defer: false)
-        panel.title = ArcImportText.progressTitle
+        panel.title = browserImport ? uiText("Import from Another Browser") : ArcImportText.progressTitle
         panel.isFloatingPanel = true
         panel.hidesOnDeactivate = false
         let label = NSTextField(labelWithString: "")
@@ -108,6 +111,7 @@ final class ArcImportAlertPresenter: ArcImportPresenting {
         indicator.minValue = 0
         indicator.maxValue = 1
         let cancel = NSButton(title: ArcImportText.cancel, target: self, action: #selector(cancelImport))
+        cancel.isEnabled = canCancel
         let stack = NSStackView(views: [label, indicator, cancel])
         stack.orientation = .vertical
         stack.alignment = .leading

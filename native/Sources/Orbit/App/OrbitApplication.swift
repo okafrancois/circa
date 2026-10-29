@@ -52,6 +52,8 @@ final class OrbitApplication: NSObject, NSApplicationDelegate {
     var isImportingSiteSessions = false
     var pendingSiteSessionRequest: ArcSiteSessionRequest?
     var wantsSiteSessionRelaunch = false
+    var pendingBrowserImport: BrowserImportOfflineJob?
+    lazy var browserImport = BrowserImportCoordinator()
     var settingsWindow: BrowserSettingsWindowController<ActiveEngine>?
     lazy var commands = makeCommandSystem()
     lazy var orbitImport = ArcImportCoordinator(presenter: ArcImportAlertPresenter(),
@@ -247,6 +249,7 @@ final class OrbitApplication: NSObject, NSApplicationDelegate {
             }
             finishExternalURLStartup()
             presentSiteSessionImportOutcome()
+            presentBrowserImportResult()
             offerArcImportIfFirstRun(restoredWindowCount: restoredWindowCount)
         }
     }
@@ -328,7 +331,7 @@ final class OrbitApplication: NSObject, NSApplicationDelegate {
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         guard !isPreparingToQuit else { return .terminateLater }
-        defer { if !isPreparingToQuit { pendingSiteSessionRequest = nil } }
+        defer { if !isPreparingToQuit { pendingSiteSessionRequest = nil; pendingBrowserImport = nil } }
         guard settingsWindow?.model.isRequestingDefaultBrowser != true else { return .terminateCancel }
         guard confirmQuitIfNeeded() else { return .terminateCancel }
         if environment?.downloads.hasActiveTransfers == true {
@@ -350,7 +353,7 @@ final class OrbitApplication: NSObject, NSApplicationDelegate {
     }
 
     func confirmQuitIfNeeded() -> Bool {
-        if pendingSiteSessionRequest == nil, environment?.settings.document.interaction.warnBeforeQuitting == true {
+        if pendingSiteSessionRequest == nil, pendingBrowserImport == nil, environment?.settings.document.interaction.warnBeforeQuitting == true {
             switch confirmQuit() {
             case .cancel: return false
             case .quit: break
@@ -401,6 +404,7 @@ final class OrbitApplication: NSObject, NSApplicationDelegate {
             for controller in controllers { controller.cancelTerminationPreparation() }
             isPreparingToQuit = false
             pendingSiteSessionRequest = nil
+            pendingBrowserImport = nil
             wantsSiteSessionRelaunch = false
             settingsWindow?.model.resumeAfterCancelledTermination()
             environment?.terminationDidCancel()
