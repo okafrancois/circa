@@ -208,7 +208,8 @@ public final class ChromiumSurface: BrowserEngineSurface {
     private var nativeSnapshotToken: UUID?
     private var nativeSnapshotContinuation: CheckedContinuation<BrowserNativeCapture, any Error>?
     private var devToolsTimeouts: [Int32: Task<Void, Never>] = [:]
-    var mediaActivity = ChromiumMediaActivity()
+    var lifecycleObservation: Task<Void, Never>?
+    var audioContexts = ChromiumAudioContextActivity()
     weak var automaticPiPSourceWindow: NSWindow?
     var automaticPiPPresentation: ChromiumPictureInPicturePresentation?
     var automaticPiPTask: Task<Void, Never>?
@@ -216,8 +217,6 @@ public final class ChromiumSurface: BrowserEngineSurface {
     var automaticPiPIsSelected = true
     var automaticPiPSession: (context: Int, generation: UInt64)?
     var automaticPiPRevision: UInt64 = 0
-    private var documentObserverReady = false
-    private var documentObserverRequest: Int32 = 0
     public internal(set) var isSuspended = false
     var suspensionPaintEnabled = false
     var suspensionMainFrame: String?
@@ -225,8 +224,7 @@ public final class ChromiumSurface: BrowserEngineSurface {
     var suspensionPaintTask: Task<Void, Never>?
     public internal(set) var suspensionPaintGeneration: UInt64?
     var isProtectedFromSuspension: Bool {
-        !documentObserverReady || !mediaActivity.webAudioReady || !mediaActivity.mediaReady || mediaActivity.isPlaying
-            || mediaActivity.audioPlaying != false || isElementFullscreen
+        BrowserPageSuspensionPolicy.refusal(pagePerformance?.lifecycle()) != nil || !audioContexts.isSafe || isElementFullscreen
             || !pendingPermissions.isEmpty || !pendingDialogRequests.isEmpty || !pendingPageRequests.isEmpty
             || capture.video || capture.audio || !downloads.isEmpty
     }
@@ -709,9 +707,21 @@ public final class ChromiumSurface: BrowserEngineSurface {
     public func requestMediaState() async -> BrowserMediaState {
         guard !isDisposed else { return BrowserMediaState() }
         let muted = isBrowserCreated ? ACRIsAudioMuted(token) : pendingMute.map { $0 ? 1 : 0 } ?? -1
-        return BrowserMediaState(playback: mediaActivity.isPlaying ? .playing : mediaActivity.mediaReady ? .paused : .unknown, camera: capture.video ? .active : .none,
-                                 microphone: capture.audio ? .active : .none, isAudible: nativeAudible,
-                                 isAudioMuted: muted < 0 ? nil : muted == 1, isAudioPlaying: mediaActivity.audioPlaying)
+        let lifecycle = pagePerformance?.lifecycle()
+        let playing: Bool? = audioContexts.isRunning ? true : lifecycle.flatMap {
+            if $0.playingMedia || $0.playingVideo || $0.audioContextRunning { return true }
+            return audioContexts.isKnown ? false : nil
+        }
+        // The native lifecycle does not expose audio-track presence. A playing silent or
+        // muted player stays unknown rather than being declared safe for auto-archive.
+        let audio: Bool? = audioContexts.isRunning ? true : lifecycle.flatMap {
+            if $0.audible || $0.audioContextRunning || ($0.playingMedia && !$0.playingVideo) { return true }
+            return $0.playingMedia || !audioContexts.isKnown ? nil : false
+        }
+        return BrowserMediaState(playback: playing == true ? .playing : playing == false ? .paused : .unknown,
+                                 camera: capture.video ? .active : .none, microphone: capture.audio ? .active : .none,
+                                 isAudible: lifecycle?.audible ?? nativeAudible,
+                                 isAudioMuted: muted < 0 ? nil : muted == 1, isAudioPlaying: audio)
     }
 
     public func setAudioMuted(_ muted: Bool) throws {
@@ -738,6 +748,8 @@ public final class ChromiumSurface: BrowserEngineSurface {
     }
 
     public func dispose() {
+        lifecycleObservation?.cancel()
+        lifecycleObservation = nil
         nativePerformance.close()
         suspensionPaintTask?.cancel()
         suspensionPaintTask = nil
@@ -1017,11 +1029,6 @@ public final class ChromiumSurface: BrowserEngineSurface {
         if event.kind == ACR_EVENT_DOWNLOAD, event.requestID == 0 { return }
         if event.kind == ACR_EVENT_DEVTOOLS_RESULT {
             let identifier = Int32(truncatingIfNeeded: event.requestID)
-            if identifier == documentObserverRequest, identifier != 0 {
-                documentObserverReady = event.value == 1 && !isDisposed
-                documentObserverRequest = 0
-                return
-            }
             finishDevTools(identifier, result: (event.value == 1, event.payload ?? Data()))
             return
         }
@@ -1062,8 +1069,8 @@ public final class ChromiumSurface: BrowserEngineSurface {
         switch event.kind {
         case ACR_EVENT_MEDIA_ACTIVITY:
             if let method = event.detail, let payload = event.payload {
+                audioContexts.receive(method: method, payload: payload)
                 receiveSuspensionPaint(method: method, payload: payload)
-                mediaActivity.receive(method: method, payload: payload)
                 onChange?()
             }
         case ACR_EVENT_CREATED:
@@ -1083,16 +1090,11 @@ public final class ChromiumSurface: BrowserEngineSurface {
             // Submit before the first navigation. CEF may not answer until it has a document;
             // waiting for the reply here would delay that document by the command timeout.
             _ = ACRExecuteDevToolsMethod(token, "Page.enable", "")
-            let parameters: [String: Any] = ["source": Self.suspensionEditObserver, "worldName": "OrbitSuspension", "runImmediately": true]
-            if let data = try? JSONSerialization.data(withJSONObject: parameters), let params = String(data: data, encoding: .utf8) {
-                documentObserverRequest = ACRExecuteDevToolsMethod(token, "Page.addScriptToEvaluateOnNewDocument", params)
-            }
+            observePageLifecycle()
             Task { [weak self] in
                 guard let self else { return }
                 let (ok, _) = await self.devToolsCall("WebAudio.enable")
-                self.mediaActivity.webAudioReady = ok && !self.isDisposed
-                let (mediaOK, _) = await self.devToolsCall("Media.enable")
-                self.mediaActivity.mediaReady = mediaOK && !self.isDisposed
+                self.audioContexts.ready = ok && !self.isDisposed
                 self.onChange?()
             }
             replayPendingCommands()
@@ -1225,7 +1227,7 @@ public final class ChromiumSurface: BrowserEngineSurface {
         case ACR_EVENT_DOWNLOAD:
             handleDownload(event)
         case ACR_EVENT_RENDER_TERMINATED:
-            guard !isSuspended else { return }
+            guard !isSuspended, pagePerformance?.lifecycle()?.state != .discarded else { return }
             pageTintFailed = true
             updatePageTint(nil)
             onEngineEvent?("render-terminated", ["status": String(event.value)])

@@ -14,6 +14,7 @@ final class BrowserTabSuspensionController<Engine: BrowserEngine> {
     private var backgroundSince: [ObjectIdentifier: TimeInterval] = [:]
     private var previouslyVisible: Set<ObjectIdentifier> = []
     private var suspended: [TabOccurrenceID: BrowserSuspensionState] = [:]
+    private var nativeSleeping: [TabOccurrenceID: URL] = [:]
     private var restoring: Set<TabOccurrenceID> = []
     private var sleepingIcons: [TabOccurrenceID: (ProfileID, URL, NSImage)] = [:]
     private var timer: Task<Void, Never>?
@@ -36,17 +37,20 @@ final class BrowserTabSuspensionController<Engine: BrowserEngine> {
         self.store = store
         observer = owner.engineEventHooks.observe { [weak self] surface, event in
             guard let self else { return }
+            self.observeNativeSuspension(surface)
             self.updateCover(for: surface)
             guard let owner = self.owner,
-                  let id = owner.session.occurrenceID(for: surface), let state = self.suspended[id] else { return }
+                  let id = owner.session.occurrenceID(for: surface),
+                  self.suspended[id] != nil || self.nativeSleeping[id] != nil else { return }
             if event == .navigationStarted { self.restoring.insert(id) }
             // Native load-end can precede the loading-state update. Retain the sleeping
             // presentation until the resumed load settles; discard itself is not a wake.
             guard event == .navigationFinished || event == .stateChanged,
-                  self.restoring.contains(id), !surface.navigationState.isLoading else { return }
-            self.suspended[id] = nil
+                  self.restoring.contains(id), !surface.isSuspended, !surface.navigationState.isLoading else { return }
+            let state = self.suspended.removeValue(forKey: id)
+            self.nativeSleeping[id] = nil
             self.restoring.remove(id)
-            guard surface.navigationState.committedURL == state.url else { return }
+            guard let state, surface.navigationState.committedURL == state.url else { return }
             Task { [weak surface] in await surface?.restoreAfterSuspension(state) }
         }
         timer = Task { [weak self] in
@@ -67,6 +71,7 @@ final class BrowserTabSuspensionController<Engine: BrowserEngine> {
         covers.retain([])
         observer?.cancel()
         suspended.removeAll()
+        nativeSleeping.removeAll()
         sleepingIcons.removeAll()
         restoring.removeAll()
     }
@@ -81,9 +86,25 @@ final class BrowserTabSuspensionController<Engine: BrowserEngine> {
     /// Keep a sleeping row stable while its same-URL native restoration is loading.
     /// Ordinary navigation still gets the normal loading presentation.
     func preservesSleepingPresentation(for occurrence: TabOccurrenceID) -> Bool {
-        guard let owner, let state = suspended[occurrence],
+        guard let owner, let url = suspended[occurrence]?.url ?? nativeSleeping[occurrence],
               let surface = owner.session.surface(for: occurrence) else { return false }
-        return surface.navigationState.url == state.url
+        return surface.navigationState.url == url
+    }
+
+    private func observeNativeSuspension(_ surface: Surface) {
+        guard surface.isSuspended, let owner,
+              let id = owner.session.occurrenceID(for: surface), suspended[id] == nil,
+              nativeSleeping[id] == nil, let url = surface.navigationState.committedURL else { return }
+        nativeSleeping[id] = url
+        // Native pressure discards have no shell capture. Keep metadata stable while the
+        // engine restores its own history and scroll state on the next activation.
+        let favicon = surface.navigationState.faviconImage
+        Task { [weak self, weak surface] in
+            guard let image = await favicon?.nativeImage(), let self, let surface,
+                  let owner = self.owner, owner.session.surface(for: id) === surface,
+                  self.nativeSleeping[id] == url else { return }
+            self.sleepingIcons[id] = (surface.profileID, url, image)
+        }
     }
 
     /// Called before reparenting makes the native host visible (and resumes its renderer).
@@ -169,6 +190,12 @@ final class BrowserTabSuspensionController<Engine: BrowserEngine> {
         }
         previouslyVisible = visible
         let occurrences = Set(owner.session.ownedSurfaces.compactMap { owner.session.occurrenceID(for: $0) })
+        for id in nativeSleeping.keys where !occurrences.contains(id) {
+            nativeSleeping[id] = nil
+            sleepingIcons[id] = nil
+            restoring.remove(id)
+        }
+        for surface in owner.session.ownedSurfaces { observeNativeSuspension(surface) }
         covers.retain(occurrences)
         for id in activeCovers.keys where !owner.session.visibleOccurrenceIDs.contains(id) { dismissCover(id) }
     }
@@ -188,6 +215,7 @@ final class BrowserTabSuspensionController<Engine: BrowserEngine> {
         let logical = Set(document.organization.tabs.map(\.id))
         let retained = Set(tabs.keys)
         suspended = suspended.filter { retained.contains($0.key) }
+        nativeSleeping = nativeSleeping.filter { retained.contains($0.key) }
         restoring.formIntersection(retained)
         sleepingIcons = sleepingIcons.filter { retained.contains($0.key) }
         var count = 0

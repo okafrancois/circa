@@ -9,6 +9,44 @@ extension NativeWebKitTests {
 @Suite(.serialized)
 @MainActor
 struct MemorySuspensionPolicyTests {
+    @Test("Native discard preserves the sleeping row through wake without manufacturing a cover")
+    func nativeDiscard() async throws {
+        NSApplication.shared.setActivationPolicy(.prohibited)
+        let environment = BrowserEnvironment(engine: SiteSyntheticEngine())
+        let window = try await environment.makeWindow()
+        defer { window.tabSuspension.close(); window.session.close(); window.window?.close(); environment.autoArchive.scheduler.stop() }
+        window.openTab(url: URL(string: "https://memory.test/native")!)
+        await window.session.waitForPendingCommands()
+        let surface = try #require(window.session.selectedSurface)
+        let id = try #require(window.session.snapshot?.selectedOccurrenceID)
+        window.openTab(url: URL(string: "https://memory.test/anchor")!)
+        await window.session.waitForPendingCommands()
+        surface.isSuspended = true
+        surface.onChange?()
+        #expect(window.tabSuspension.preservesSleepingPresentation(for: id))
+        var cache = window.tabSuspension.covers
+        #expect(cache.value(for: id) == nil)
+        #expect(window.tabSuspension.activeCoverIDs.isEmpty)
+        surface.delegate?.surfaceDidStartNavigation(surface)
+        surface.delegate?.surfaceDidFinishNavigation(surface)
+        #expect(window.tabSuspension.preservesSleepingPresentation(for: id))
+        surface.isSuspended = false
+        surface.isLoading = true
+        surface.delegate?.surfaceDidStartNavigation(surface)
+        surface.delegate?.surfaceDidFinishNavigation(surface)
+        #expect(window.tabSuspension.preservesSleepingPresentation(for: id))
+        surface.isLoading = false
+        surface.onChange?()
+        #expect(!window.tabSuspension.preservesSleepingPresentation(for: id))
+        surface.isSuspended = true
+        surface.onChange?()
+        #expect(window.tabSuspension.preservesSleepingPresentation(for: id))
+        window.session.closeOccurrence(id)
+        await window.session.waitForPendingCommands()
+        window.tabSuspension.selectionDidChange()
+        #expect(!window.tabSuspension.preservesSleepingPresentation(for: id))
+    }
+
     @Test("Background pinned and Favorite tabs retain their away URL, icon and native history",
           arguments: [false, true])
     func pinnedState(favorite: Bool) async throws {

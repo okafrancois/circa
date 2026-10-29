@@ -256,6 +256,7 @@ public protocol BrowserEngineSurface: BrowserFindSurface {
     func requestMediaState() async -> BrowserMediaState
     func captureStateForSuspension() async -> BrowserSuspensionState?
     /// Cheap final veto for native media/capture activity that arrived during an async check.
+    var isSuspended: Bool { get }
     var allowsSuspension: Bool { get }
     /// Optional native paint acknowledgement for an in-place renderer restoration.
     var supportsSuspensionPaint: Bool { get }
@@ -307,6 +308,7 @@ public extension BrowserEngineSurface {
     }
     func updateAutomaticPictureInPicture(isSelected: Bool, allowed: Bool) {}
     func captureStateForSuspension() async -> BrowserSuspensionState? { nil }
+    var isSuspended: Bool { false }
     var allowsSuspension: Bool { false }
     var supportsSuspensionPaint: Bool { false }
     func prepareSuspensionPaint() async -> Bool { false }

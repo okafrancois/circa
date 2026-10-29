@@ -5,14 +5,15 @@ import Foundation
 
 extension ChromiumSurface {
     public var allowsSuspension: Bool { canSuspendDocument }
-    /// Checks every frame, including cross-origin frames, in a DevTools isolated world. Page
-    /// scripts cannot replace this world's DOM builtins or erase its edit listener. Values and
-    /// text are compared inside the renderer; only a boolean and scroll coordinates return.
+    /// Native lifecycle vetoes run first. r11 cannot rule out script-modified form values,
+    /// so eligible candidates still need a value-only check in each isolated frame at sweep
+    /// time. No persistent renderer observer is installed; field content stays in the renderer.
     public func captureStateForSuspension() async -> BrowserSuspensionState? {
         guard canSuspendDocument, let url = navigationState.committedURL,
               ["http", "https"].contains(url.scheme) else { return refuseSuspension("native-protection") }
         let generation = documentGeneration
-        let (ok, data) = await devToolsCall("Page.getFrameTree")
+        let nativeDocument = pagePerformance?.lifecycle()?.documentID
+        let (ok, data) = await suspensionDevToolsCall("Page.getFrameTree")
         guard ok, let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let tree = json["frameTree"] as? [String: Any] else { return refuseSuspension("frame-tree") }
         func frames(_ tree: [String: Any]) -> [String] {
@@ -21,6 +22,7 @@ extension ChromiumSurface {
         }
         let ids = frames(tree)
         guard !ids.isEmpty else { return refuseSuspension("no-frames") }
+        onEngineEvent?("suspension-value-fallback", ["frames": String(ids.count), "cdpCalls": String(1 + 2 * ids.count)])
         var scroll: (Double, Double) = (0, 0)
         for (index, id) in ids.enumerated() {
             guard let context = await suspensionWorld(frameID: id) else { return refuseSuspension("isolated-world") }
@@ -41,7 +43,8 @@ extension ChromiumSurface {
               let entries = json["entries"] as? [String], let historyIndex = json["currentIndex"] as? Int else { return refuseSuspension("history-read") }
         let history = entries.compactMap(URL.init(string:))
         guard history.count == entries.count, history.indices.contains(historyIndex), history[historyIndex] == url else { return refuseSuspension("history-state") }
-        guard canSuspendDocument, documentGeneration == generation, navigationState.committedURL == url else { return refuseSuspension("changed-document") }
+        guard canSuspendDocument, documentGeneration == generation,
+              pagePerformance?.lifecycle()?.documentID == nativeDocument, navigationState.committedURL == url else { return refuseSuspension("changed-document") }
         return BrowserSuspensionState(url: url, documentGeneration: generation, scrollX: scroll.0, scrollY: scroll.1,
                                       history: history, historyIndex: historyIndex)
     }
@@ -55,11 +58,16 @@ extension ChromiumSurface {
         !isDisposed && isReady && !navigationState.isLoading && !isProtectedFromSuspension && !isSuspended
     }
 
+    private func suspensionDevToolsCall(_ method: String, params: String = "") async -> (Bool, Data) {
+        onEngineEvent?("suspension-cdp-call", ["method": method])
+        return await devToolsCall(method, params: params)
+    }
+
     private func suspensionWorld(frameID: String) async -> Int? {
         let params: [String: Any] = ["frameId": frameID, "worldName": "OrbitSuspension"]
         guard let data = try? JSONSerialization.data(withJSONObject: params),
               let text = String(data: data, encoding: .utf8) else { return nil }
-        let (ok, result) = await devToolsCall("Page.createIsolatedWorld", params: text)
+        let (ok, result) = await suspensionDevToolsCall("Page.createIsolatedWorld", params: text)
         guard ok, let json = try? JSONSerialization.jsonObject(with: result) as? [String: Any] else { return nil }
         return json["executionContextId"] as? Int
     }
@@ -68,29 +76,16 @@ extension ChromiumSurface {
         let params: [String: Any] = ["expression": expression, "contextId": context, "returnByValue": true]
         guard let data = try? JSONSerialization.data(withJSONObject: params),
               let text = String(data: data, encoding: .utf8) else { return nil }
-        let (ok, result) = await devToolsCall("Runtime.evaluate", params: text)
+        let (ok, result) = await suspensionDevToolsCall("Runtime.evaluate", params: text)
         guard ok, let json = try? JSONSerialization.jsonObject(with: result) as? [String: Any],
               json["exceptionDetails"] == nil, let remote = json["result"] as? [String: Any] else { return nil }
         return remote["value"] as? [String: Any]
     }
 
-    static let suspensionEditObserver = #"""
-    (() => {
-      if (!globalThis.orbitSuspension) {
-        globalThis.orbitSuspension = {edited:false};
-        addEventListener('input', e => { if (e.isTrusted) orbitSuspension.edited=true; }, true);
-        addEventListener('change', e => { if (e.isTrusted) orbitSuspension.edited=true; }, true);
-      }
-    })()
-    """#
-
     private static let suspensionCheck = #"""
     (() => {
-      if (!globalThis.orbitSuspension) return {safe:false,reason:'uninitialized-observer',documentURL:location.href};
       const roots = [document];
-      let unsafe = orbitSuspension.edited;
       let changedField = false;
-      let playing = false;
       for (let i=0; i<roots.length; ++i) {
         for (const element of roots[i].querySelectorAll('*')) {
           if (element.shadowRoot) roots.push(element.shadowRoot);
@@ -100,14 +95,33 @@ extension ChromiumSurface {
           } else if (element instanceof HTMLTextAreaElement) {
             changedField ||= element.value !== element.defaultValue;
           }
-          playing ||= element instanceof HTMLMediaElement && !element.paused && !element.ended;
         }
       }
-      unsafe ||= changedField || playing;
-      return {safe:!unsafe, x:scrollX, y:scrollY,documentURL:location.href,
-        reason:orbitSuspension.edited?'trusted-edit':changedField?'changed-field':playing?'playing-media':'safe'};
+      return {safe:!changedField, x:scrollX, y:scrollY,documentURL:location.href,
+        reason:changedField?'changed-field':'safe'};
     })()
     """#
+
+    func observePageLifecycle() {
+        guard lifecycleObservation == nil, let performance = pagePerformance else { return }
+        // Register synchronously before the first document can start playback or be edited.
+        let changes = performance.changes()
+        lifecycleObservation = Task { [weak self] in
+            for await change in changes {
+                guard !Task.isCancelled, let self, !self.isDisposed else { return }
+                if change.event == .closed { return }
+                if change.event == .discarded || change.state?.state == .discarded {
+                    // Buffered events may outlive a native activation. Read current state so
+                    // a queued discard cannot put an already-restored document back to sleep.
+                    if performance.lifecycle()?.state == .discarded, !self.isSuspended {
+                        self.isSuspended = true
+                        self.onEngineEvent?("suspension-discarded", ["initiator": change.initiator == .nativePolicy ? "native" : "embedder"])
+                    }
+                }
+                self.onChange?()
+            }
+        }
+    }
 
     /// Chromium owns page state and history restoration, including cache-only POST recovery.
     public func restoreAfterSuspension(_ state: BrowserSuspensionState) async {}
@@ -122,8 +136,8 @@ extension ChromiumSurface {
 
     func resumeDiscardedTab() {
         guard isSuspended, !isDisposed else { return }
+        guard ACRRestoreDiscardedTab(token) == 1 else { return }
         isSuspended = false
-        _ = ACRRestoreDiscardedTab(token)
         onEngineEvent?("suspension-restored", [:])
     }
 }
