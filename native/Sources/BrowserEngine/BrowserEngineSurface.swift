@@ -240,6 +240,11 @@ public protocol BrowserEngineSurface: BrowserFindSurface {
     /// is not the document captured.
     func captureSnapshot(_ request: BrowserSnapshotRequest) async throws -> BrowserSurfaceSnapshot
     /// Self-contained MHTML of this exact document, including its subresources.
+    var supportsPageTranslation: Bool { get }
+    func translationSample() async throws -> BrowserTranslationSample
+    func translationTexts() async throws -> [BrowserTranslationText]
+    func applyTranslation(_ texts: [BrowserTranslationText]) async throws
+    func restoreTranslation() async throws
     func archivePage(documentGeneration: UInt64) async throws -> Data
     func requestMediaState() async -> BrowserMediaState
     func captureStateForSuspension() async -> BrowserSuspensionState?
@@ -278,6 +283,11 @@ public extension BrowserEngineSurface {
     var passwordPrompts: (any BrowserPasswordPromptSource)? { nil }
     func setPageTintObservationEnabled(_ enabled: Bool) {}
     func reloadIgnoringCache() throws { throw BrowserEngineError.unsupportedOperation }
+    var supportsPageTranslation: Bool { false }
+    func translationSample() async throws -> BrowserTranslationSample { throw BrowserEngineError.unsupportedOperation }
+    func translationTexts() async throws -> [BrowserTranslationText] { throw BrowserEngineError.unsupportedOperation }
+    func applyTranslation(_ texts: [BrowserTranslationText]) async throws { throw BrowserEngineError.unsupportedOperation }
+    func restoreTranslation() async throws { throw BrowserEngineError.unsupportedOperation }
     func archivePage(documentGeneration: UInt64) async throws -> Data { throw BrowserEngineError.unsupportedOperation }
     func showDeveloperPanel(_ panel: BrowserDeveloperPanel) throws {
         try perform(panel == .elements ? .inspectElements : .showDevTools)

@@ -1356,3 +1356,18 @@
 "Only enable code you trust. JavaScript can read and change this site's pages. Changes run after reloading the page; disabling or deleting a Boost cannot undo code that already ran." = "Only enable code you trust. JavaScript can read and change this site's pages. Changes run after reloading the page; disabling or deleting a Boost cannot undo code that already ran.";
 
 "Enable JavaScript" = "Enable JavaScript";
+"Translation Available" = "Translation Available";
+
+"Translating…" = "Translating…";
+
+"Translated" = "Translated";
+
+"Translation unavailable" = "Translation unavailable";
+
+"Use Original" = "Use Original";
+
+"Translate" = "Translate";
+
+"Translated from %@." = "Translated from %@.";
+
+"Translate this page\nto %@?" = "Translate this page\nto %@?";
