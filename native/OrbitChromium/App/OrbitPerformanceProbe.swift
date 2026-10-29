@@ -86,6 +86,36 @@ enum OrbitPerformanceProbe {
                 let name = command["command"] ?? ""
                 if name == "theme-fixture", ownsWindow(owner, bundleID: "lab.orbit.orbit.theme-fixture") {
                     result["themeFixture"] = await themeFixture(owner, store: environment.store, command: command)
+                } else if name == "import-auth-check", ownsWindow(owner, bundleID: "lab.orbit.orbit.import-auth") {
+                    do {
+                        guard let configuration = activeSiteSessionConfiguration() else { throw BrowserAuthenticationImportError.invalidState }
+                        let run = try BrowserAuthenticationRun.open(dataRoot: root, recoveryKey: ChromiumAuthenticationStartup.recoveryKey(configuration))
+                        let catalog = await environment.store.catalogSnapshot()
+                        if let space = catalog.spaces.first(where: { $0.profileID == run.status.profileID }) {
+                            owner.session.activateSpace(space.id)
+                            await owner.session.waitForPendingCommands()
+                            owner.session.openTab(url: URL(string: "http://127.0.0.1:18080/login")!)
+                            await owner.session.waitForPendingCommands()
+                            if let surface = owner.session.selectedSurface {
+                                await waitForLoad(surface)
+                                try await Task.sleep(for: .milliseconds(600))
+                                guard ownsWindow(owner, bundleID: "lab.orbit.orbit.import-auth") else { throw BrowserAuthenticationImportError.invalidState }
+                                _ = await surface.devToolsCall("Input.dispatchMouseEvent", params: #"{"type":"mousePressed","x":60,"y":75,"button":"left","clickCount":1}"#)
+                                guard ownsWindow(owner, bundleID: "lab.orbit.orbit.import-auth") else { throw BrowserAuthenticationImportError.invalidState }
+                                _ = await surface.devToolsCall("Input.dispatchMouseEvent", params: #"{"type":"mouseReleased","x":60,"y":75,"button":"left","clickCount":1}"#)
+                                try await Task.sleep(for: .milliseconds(600))
+                                let session = await evaluate(surface, "({signedIn:document.title==='Synthetic signed in'})")
+                                guard ownsWindow(owner, bundleID: "lab.orbit.orbit.import-auth") else { throw BrowserAuthenticationImportError.invalidState }
+                                _ = await evaluate(surface, "document.querySelector('form').requestSubmit();({submitted:true})")
+                                try await Task.sleep(for: .milliseconds(800))
+                                result["importAuth"] = ["signedIn": session?["signedIn"] as? Bool ?? false,
+                                    "autofilled": surface.navigationState.title == "Synthetic filled", "phase": run.status.phase.rawValue]
+                            }
+                        } else {
+                            result["importAuth"] = ["restored": run.status.phase == .restored,
+                                "remainingProfiles": catalog.profiles.count]
+                        }
+                    } catch { result["importAuth"] = ["failed": true] }
                 } else if name == "chromium-import-fixture" {
                     result["importFixture"] = await ChromiumImportProbe.run(root: root)
                 } else if name == "data-quick-wins" {

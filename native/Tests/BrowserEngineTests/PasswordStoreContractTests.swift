@@ -1,5 +1,6 @@
 import BrowserCore
 import BrowserEngine
+import Foundation
 import Testing
 
 /// In-memory test double; production credentials always remain in the engine store.
@@ -65,4 +66,19 @@ struct PasswordStoreContractTests {
         #expect(!String(describing: row).contains("sensitive"))
         #expect(!String(reflecting: row).contains("sensitive"))
     }
+    @Test("CSV import preserves existing credentials, isolates profiles and retries idempotently")
+    func csvImport() async throws {
+        let store = MockPasswordStore(), profile = ProfileID(), other = ProfileID()
+        let csv = Data("name,url,username,password\nSynthetic,https://fixture.test/login,user,first\n".utf8)
+        let first = try await BrowserPasswordImporter.importCSV(csv, to: store, profileID: profile)
+        #expect(first.imported == 1)
+        let again = try await BrowserPasswordImporter.importCSV(csv, to: store, profileID: profile)
+        #expect(again.imported == 0 && again.alreadyPresent == 1)
+        let changed = Data("url,username,password\nhttps://fixture.test/login,user,changed\n".utf8)
+        let conflict = try await BrowserPasswordImporter.importCSV(changed, to: store, profileID: profile)
+        #expect(conflict.conflicts == 1)
+        #expect(try await store.list(profileID: profile).first?.passwordValue == "first")
+        #expect(try await store.list(profileID: other).isEmpty)
+    }
+
 }
