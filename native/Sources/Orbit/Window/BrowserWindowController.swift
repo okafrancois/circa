@@ -265,7 +265,7 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
         }
         session.onChange = { [weak self] in
             self?.bookmarkTransfer?.contextDidChange()
-            self?.renderSession()
+            self?.renderSession(selection: self?.session.selectionChangeTabIDs)
             self?.onStateChange()
         }
         session.onMetadataChange = { [weak self] ids in
@@ -479,11 +479,11 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
 
     /// The single projection of session state onto the window. Each feature contributes one
     /// render call; feature logic stays in its extension.
-    func renderSession() {
-        SpaceSwipeTrace.interval("RenderSession") { renderSessionProjection() }
+    func renderSession(selection: Set<TabID>? = nil) {
+        SpaceSwipeTrace.interval("RenderSession") { renderSessionProjection(selection: selection) }
     }
 
-    private func renderSessionProjection() {
+    private func renderSessionProjection(selection: Set<TabID>?) {
         BrowserPerformance.count(.windowProjections, window: id)
         sidebarMetadataValues = sidebarMetadataValues.filter { session.tabID(for: $0.key) != nil }
         tabSuspension?.selectionDidChange()
@@ -509,7 +509,9 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
         siteControls.render()
         renderDeveloperToolbar()
         extensionControls.render()
-        SpaceSwipeTrace.interval("RenderFavorites") { favorites.render() }
+        SpaceSwipeTrace.interval("RenderFavorites") {
+            if let selection { favorites.applySelection(selection) } else { favorites.render() }
+        }
         let selectionChanged = displayedOccurrenceID != session.snapshot?.selectedOccurrenceID
             || displayedSpaceID != session.snapshot?.activeSpaceID
         let preserveAddressDraft = nativePromotion?.surface === selected
@@ -532,9 +534,9 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
             }?.name ?? OrbitShellText.emptySpaceTitle
         }
         let outgoingCapture = SpaceSwipeTrace.interval("RenderOutgoingCaptureRequest") { tabSwitcher.prepareForPresentation(selected) }
-        SpaceSwipeTrace.interval("RenderSplitReparent") { renderSplit(retainingPreviousUntil: outgoingCapture) }
+        SpaceSwipeTrace.interval("RenderSplitReparent") { renderSplit(retainingPreviousUntil: outgoingCapture, selectionOnly: selection != nil) }
         peek.revealPromotionIfPlaced(in: contentCard)
-        rebuildTabStrip()
+        rebuildTabStrip(selection: selection)
         if let selected {
             refreshNavigation(for: selected)
         } else {

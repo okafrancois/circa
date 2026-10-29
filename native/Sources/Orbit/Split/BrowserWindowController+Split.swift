@@ -90,7 +90,7 @@ extension BrowserWindowController {
         }
     }
 
-    func renderSplit(retainingPreviousUntil capture: Task<Void, Never>? = nil) {
+    func renderSplit(retainingPreviousUntil capture: Task<Void, Never>? = nil, selectionOnly: Bool = false) {
         // Commit the destination wrapper, final geometry and native host together. An
         // intermediate commit can expose the card backdrop before the hosted layer arrives.
         CATransaction.begin()
@@ -120,7 +120,7 @@ extension BrowserWindowController {
                 self?.submitInput { $0.session.resizeSplit(group.group.id, ratios: ratios, validating: context, expectedGroup: group.group) }
             }
             view.present(group.group, panes: panes, active: group.activeTab?.id,
-                               accent: OrbitSpaceThemes.accent(for: windowShell.theme))
+                               accent: OrbitSpaceThemes.accent(for: windowShell.theme), selectionOnly: selectionOnly)
             contentCard.present(view, isSplit: true, retainingPreviousUntil: capture)
         } else if let selected {
             if session.activeSplit == nil { split.expandedGroup = nil }

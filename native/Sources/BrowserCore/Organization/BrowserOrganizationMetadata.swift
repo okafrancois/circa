@@ -99,13 +99,16 @@ public struct BrowserOrganizationMetadataIndex: Sendable {
         return nil
     }
 
+    public func row(for id: TabID) -> BrowserOrganizationNode? { paths[id]?.row }
+
     public func requiresCompositeProjection(_ id: TabID) -> Bool {
         paths[id].map { $0.section == 0 || $0.pane != nil } ?? false
     }
 }
 
 public extension BrowserOrganizationSnapshot {
-    func applying(_ delta: BrowserOrganizationMetadata, index: BrowserOrganizationMetadataIndex? = nil) -> Self {
+    func applying(_ delta: BrowserOrganizationMetadata, index: BrowserOrganizationMetadataIndex? = nil,
+                  selection: TabOccurrenceID? = nil, updatingSelection: Bool = false) -> Self {
         let index = index ?? BrowserOrganizationMetadataIndex(self)
         func replace(_ items: inout [BrowserOrganizationItem], path: BrowserOrganizationMetadataIndex.Path,
                      depth: Int, value: BrowserOrganizationTabItem) {
@@ -124,6 +127,7 @@ public extension BrowserOrganizationSnapshot {
         next.organizationRevision = delta.revision
         for (id, value) in delta.tabs {
             guard let path = index.paths[id], var tab = index.tab(id, in: next) else { continue }
+            if updatingSelection { tab.isSelected = tab.occurrenceID != nil && tab.occurrenceID == selection }
             tab.pageTitle = value.pageTitle
             if let url = delta.localDestinations[id] { tab.url = url }
             else if !tab.isLoadedInThisWindow { tab.url = value.url }

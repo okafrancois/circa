@@ -56,7 +56,7 @@ public extension BrowserWindowSession {
                 session.install(state)
                 target = state.context
             }
-            let state = try await session.store.selectTab(id, from: target)
+            let state = try await session.selectTabState(id, from: target)
             session.install(state)
             return !session.isClosed
         }

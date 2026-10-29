@@ -9,7 +9,7 @@ public extension BrowserWindowSession {
             guard let context = try await session.organizationContext(), let organization = session.organization else { return }
             let ids = organization.favorites.compactMap { $0.node.tabID }
             guard ids.indices.contains(index) else { return }
-            let state = try await session.store.selectTab(ids[index], from: context)
+            let state = try await session.selectTabState(ids[index], from: context)
             guard !session.isClosed else { return }
             session.install(state)
             if let surface = session.selectedSurface { onSelect(surface) }

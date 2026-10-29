@@ -177,7 +177,15 @@ extension BrowserStore {
     public func selectTab(_ id: TabID, from context: BrowserContext,
                           expecting expected: BrowserOrganizationSnapshot? = nil,
                           admission: BrowserSidebarSelectionAdmission? = nil) throws -> BrowserWindowState {
-        guard admission?.isValid != false else { return try captureWindowState(in: context.windowID) }
+        try performTabSelection(id, from: context, expecting: expected, admission: admission)
+        return try captureWindowState(in: context.windowID)
+    }
+
+    func performTabSelection(_ id: TabID, from context: BrowserContext,
+                             expecting expected: BrowserOrganizationSnapshot?,
+                             admission: BrowserSidebarSelectionAdmission?,
+                             currentProjection: BrowserOrganizationSnapshot? = nil) throws {
+        guard admission?.isValid != false else { return }
         if var expected {
             // A filtered metadata publication must not invalidate an unrelated window's input.
             // Structural history (including A→B→A) still requires the exact causal revision.
@@ -188,7 +196,7 @@ extension BrowserStore {
                }) {
                 expected.organizationRevision = organizationRevision
             }
-            if try organizationSnapshot(from: context) != expected {
+            if try (currentProjection ?? organizationSnapshot(from: context)) != expected {
                 throw BrowserOrganizationError.notVisibleInContext
             }
         }
@@ -206,7 +214,6 @@ extension BrowserStore {
             openOccurrence(of: id, url: entry.url, in: context.windowID, spaceID: context.spaceID, activate: true)
         }
         if case let .split(id)? = organization.container(of: .tab(id)) { ensureSplitOccurrences(id, in: context) }
-        return try captureWindowState(in: context.windowID)
     }
 
     @discardableResult
@@ -240,7 +247,18 @@ extension BrowserStore {
     /// the inactivity clock measures time since a tab was last on screen.
     func markViewed(_ window: WindowRecord?) {
         guard let window else { return }
-        for visible in visibleTabIDs(in: window) { organization.touch(visible, at: clock()) }
+        let visible = visibleTabIDs(in: window)
+        for id in visible { organization.touch(id, at: clock()) }
+        recordSelectionActivity(Set(visible))
+    }
+
+    func recordSelectionActivity(_ ids: Set<TabID>) {
+        guard !ids.isEmpty else { return }
+        selectionActivityRevision &+= 1
+        selectionActivityHistory.append((selectionActivityRevision, ids))
+        if selectionActivityHistory.count > 256 {
+            selectionActivityFloor = selectionActivityHistory.removeFirst().revision
+        }
     }
 
     /// Removes an occurrence from its Space list. Selection moves to the next neighbor, or the

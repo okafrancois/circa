@@ -14,9 +14,9 @@ public extension BrowserWindowSession {
             await previous?.value
             guard !isClosed, activeContext == expected else { return false }
             do {
-                try await store.selectOccurrence(occurrenceID, from: expected)
-                let revision = expected.revision &+ (expected.selectedOccurrenceID == occurrenceID ? 0 : 1)
-                guard let state = try await stateAfterMutation(expected, revision: revision, selection: occurrenceID) else { return false }
+                let state = try await store.selectOccurrenceUpdating(occurrenceID, from: expected,
+                    state: selectionState, index: organizationRuntime.metadataIndex)
+                guard !isClosed else { return false }
                 install(state)
                 return !isClosed && snapshot?.selectedOccurrenceID == occurrenceID
             } catch { return false }
@@ -38,7 +38,7 @@ public extension BrowserWindowSession {
                 ordinal = (current + offset + tabs.count) % tabs.count
             } else { ordinal = index == -1 ? tabs.count - 1 : (index ?? 0) }
             guard tabs.indices.contains(ordinal) else { return }
-            let state = try await session.store.selectTab(tabs[ordinal].id, from: context)
+            let state = try await session.selectTabState(tabs[ordinal].id, from: context)
             guard !session.isClosed else { return }
             session.install(state)
             if let surface = session.selectedSurface { onSelect(surface) }

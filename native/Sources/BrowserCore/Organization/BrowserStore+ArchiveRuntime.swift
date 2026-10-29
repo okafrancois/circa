@@ -22,6 +22,7 @@ public extension BrowserStore {
     func touchArchiveProtectedTabs(_ ids: Set<TabID>) {
         let now = clock()
         for id in ids where organization.tabs[id] != nil { organization.touch(id, at: now) }
+        recordSelectionActivity(ids)
     }
 
     /// Clear Today retains every window's visible tab, in addition to shell media protection.
