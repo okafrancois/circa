@@ -1,7 +1,6 @@
 import AppKit
 import BrowserEngine
 import Foundation
-import ImageIO
 
 extension ChromiumSurface {
     /// The engine reports the page's declared theme colour natively; it wins when opaque. Without
@@ -56,32 +55,60 @@ extension ChromiumSurface {
             updatePageTint(tint)
             return
         }
-        guard isBrowserCreated, !pageTintFailed,
+        guard isBrowserCreated, !pageTintFailed, !navigationState.isLoading,
               let url = navigationState.committedURL,
               ["http", "https", "file"].contains(url.scheme?.lowercased() ?? ""),
-              hostView.window != nil, !hostView.isHiddenOrHasHiddenAncestor else { return }
+              let window = hostView.window, window.occlusionState.contains(.visible),
+              !hostView.isHiddenOrHasHiddenAncestor else { return }
         let generation = documentGeneration
-        let params = ["expression": Self.pageTintProbe, "returnByValue": true] as [String: Any]
-        guard let json = try? JSONSerialization.data(withJSONObject: params) else { return }
-        let (ok, data) = await devToolsCall("Runtime.evaluate", params: String(decoding: json, as: UTF8.self))
-        guard ok, !Task.isCancelled, generation == documentGeneration, !pageTintFailed,
-              let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let result = root["result"] as? [String: Any], let value = result["value"] as? [String: Any] else { return }
-        if let bytes = value["color"] as? [Int], bytes.count == 3, bytes.allSatisfy({ (0...255).contains($0) }) {
-            updatePageTint(BrowserPageTint(red: UInt8(bytes[0]), green: UInt8(bytes[1]), blue: UInt8(bytes[2])))
-            return
+        let size = hostView.bounds.size
+        guard (try? await beginSnapshotCapture()) != nil else { return }
+        defer { snapshotCaptureInFlight = false }
+        guard !Task.isCancelled, generation == documentGeneration, pageTintObservationEnabled else { return }
+        if let api = pagePerformance {
+            guard size.width.isFinite, size.width >= 1, size.width <= CGFloat(Int32.max), size.height >= 2 else { return }
+            var request = BrowserNativeCaptureRequest(outputWidth: 64, outputHeight: 1)
+            request.width = Int32(size.width.rounded(.down)); request.height = 2
+            guard let captured = try? await captureNativeSnapshot(api, request: request) else { return }
+            guard !Task.isCancelled, !isDisposed, generation == documentGeneration,
+                  size == hostView.bounds.size, !pageTintFailed, pageTintObservationEnabled,
+                  window === hostView.window, window.occlusionState.contains(.visible),
+                  !hostView.isHiddenOrHasHiddenAncestor else { return }
+            if let image = ChromiumSnapshotDecoder.nativeImage(captured),
+               let tint = BrowserPageTint.sampledTopEdge(image) {
+                updatePageTint(nativeThemeTint ?? tint)
+                return
+            }
+            guard captured.status == .unavailable || captured.status == .timedOut else { return }
+        } else {
+            // Engines without native theme/capture state retain the bounded meta-colour probe.
+            let params = ["expression": Self.pageTintProbe, "returnByValue": true] as [String: Any]
+            guard let json = try? JSONSerialization.data(withJSONObject: params) else { return }
+            let (ok, data) = await devToolsCall("Runtime.evaluate", params: String(decoding: json, as: UTF8.self))
+            guard ok, !Task.isCancelled, generation == documentGeneration, !pageTintFailed, pageTintObservationEnabled,
+                  window === hostView.window, window.occlusionState.contains(.visible),
+                  !hostView.isHiddenOrHasHiddenAncestor,
+                  let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let result = root["result"] as? [String: Any], let value = result["value"] as? [String: Any] else { return }
+            if let bytes = value["color"] as? [Int], bytes.count == 3, bytes.allSatisfy({ (0...255).contains($0) }) {
+                updatePageTint(nativeThemeTint ?? BrowserPageTint(red: UInt8(bytes[0]), green: UInt8(bytes[1]), blue: UInt8(bytes[2])))
+                return
+            }
         }
         // A CDP clip (even with captureBeyondViewport:false) temporarily resizes the widget.
         // Capture the unmodified viewport instead; only its first row is read below.
         let capture: [String: Any] = ["format": "png", "captureBeyondViewport": false]
         guard let json = try? JSONSerialization.data(withJSONObject: capture) else { return }
         let (captured, png) = await devToolsCall("Page.captureScreenshot", params: String(decoding: json, as: UTF8.self))
-        guard captured, !Task.isCancelled, generation == documentGeneration, !pageTintFailed,
-              let object = try? JSONSerialization.jsonObject(with: png) as? [String: Any],
-              let encoded = object["data"] as? String, let bytes = Data(base64Encoded: encoded),
-              let source = CGImageSourceCreateWithData(bytes as CFData, nil),
-              let image = CGImageSourceCreateImageAtIndex(source, 0, nil),
-              let tint = BrowserPageTint.sampledTopEdge(image) else { return }
-        updatePageTint(tint)
+        guard captured, !Task.isCancelled, generation == documentGeneration, !pageTintFailed else { return }
+        let worker = Task.detached(priority: .utility) {
+            guard let decoded = ChromiumSnapshotDecoder.decode(png, width: nil, generation: generation) else { return nil as BrowserPageTint? }
+            return BrowserPageTint.sampledTopEdge(decoded.snapshot.image)
+        }
+        let tint = await withTaskCancellationHandler { await worker.value } onCancel: { worker.cancel() }
+        guard !Task.isCancelled, !isDisposed, generation == documentGeneration, !pageTintFailed,
+              pageTintObservationEnabled, window === hostView.window,
+              window.occlusionState.contains(.visible), !hostView.isHiddenOrHasHiddenAncestor, let tint else { return }
+        updatePageTint(nativeThemeTint ?? tint)
     }
 }

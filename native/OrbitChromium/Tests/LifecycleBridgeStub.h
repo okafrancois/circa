@@ -49,4 +49,7 @@ void ACRStubDownload(uint64_t token, uint64_t request, int32_t status, int64_t b
 void ACRStubDevToolsMode(int32_t enabled);
 int32_t ACRStubDevToolsID(void);
 void ACRStubRetirementMode(int32_t result);
+void ACRStubCaptureMode(int32_t enabled);
+int32_t ACRStubCaptureCount(void);
+void ACRStubCaptureFinish(int32_t status);
 #endif

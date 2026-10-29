@@ -5,6 +5,32 @@ import ImageIO
 
 /// ImageIO decoding and resampling never need the surface or AppKit's main actor.
 enum ChromiumSnapshotDecoder {
+    /// Native output uses pixels, matching the existing explicit-width PNG thumbnail contract.
+    static func nativeRequest(size: CGSize, scale: CGFloat, width: CGFloat?) -> BrowserNativeCaptureRequest? {
+        guard size.width.isFinite, size.height.isFinite, size.width > 0, size.height > 0,
+              scale.isFinite, scale > 0 else { return nil }
+        let outputWidth = (width ?? size.width * scale).rounded()
+        let outputHeight = (size.height * outputWidth / size.width).rounded()
+        guard outputWidth.isFinite, outputHeight.isFinite,
+              outputWidth >= 1, outputHeight >= 1, outputWidth <= 4096, outputHeight <= 4096 else { return nil }
+        return .init(outputWidth: Int32(outputWidth), outputHeight: Int32(outputHeight))
+    }
+
+    /// The provider retains the owned Data; no PNG/base64 decode or second bitmap is needed.
+    static func nativeImage(_ capture: BrowserNativeCapture) -> CGImage? {
+        guard !Task.isCancelled, capture.status == .captured,
+              capture.width > 0, capture.height > 0, capture.width <= 4096, capture.height <= 4096,
+              capture.rowBytes == UInt32(capture.width) * 4,
+              capture.pixels.count == Int(capture.rowBytes) * Int(capture.height),
+              let space = CGColorSpace(name: CGColorSpace.sRGB),
+              let provider = CGDataProvider(data: capture.pixels as CFData) else { return nil }
+        return CGImage(width: Int(capture.width), height: Int(capture.height), bitsPerComponent: 8,
+                       bitsPerPixel: 32, bytesPerRow: Int(capture.rowBytes), space: space,
+                       bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedFirst.rawValue)
+                           .union(.byteOrder32Little), provider: provider, decode: nil,
+                       shouldInterpolate: true, intent: .defaultIntent)
+    }
+
     static func decode(_ data: Data, width: CGFloat?, generation: UInt64) -> (snapshot: BrowserSurfaceSnapshot, decodedBytes: Int)? {
         guard !Task.isCancelled,
               let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],

@@ -29,6 +29,35 @@ import UniformTypeIdentifiers
             return ChromiumSnapshotDecoder.decode(response, width: 40, generation: 0) == nil
         }.value
         precondition(cancelled, "cancelled work never enters ImageIO")
+        let target = ChromiumSnapshotDecoder.nativeRequest(size: CGSize(width: 1000, height: 600), scale: 2, width: 200)!
+        precondition(target.outputWidth == 200 && target.outputHeight == 120)
+        precondition(ChromiumSnapshotDecoder.nativeRequest(size: CGSize(width: 1000, height: 600), scale: 2, width: nil)!.outputWidth == 2000)
+        for width: CGFloat in [.nan, .infinity, 0, -1, 4097] {
+            precondition(ChromiumSnapshotDecoder.nativeRequest(size: CGSize(width: 1000, height: 600), scale: 2, width: width) == nil)
+        }
+        precondition(ChromiumSnapshotDecoder.nativeRequest(size: CGSize(width: 1, height: 5000), scale: 1, width: nil) == nil)
+        precondition(ChromiumSnapshotDecoder.nativeRequest(size: .zero, scale: 2, width: 200) == nil)
+        let bgra = Data([30, 60, 90, 255, 12, 24, 36, 255])
+        let native = BrowserNativeCapture(status: .captured, width: 2, height: 1, rowBytes: 8, pixels: bgra)
+        let nativeImage = ChromiumSnapshotDecoder.nativeImage(native)!
+        precondition(nativeImage.width == 2 && nativeImage.height == 1)
+        precondition(nativeImage.colorSpace?.name == CGColorSpace.sRGB)
+        let rgba = CGContext(data: nil, width: 2, height: 1, bitsPerComponent: 8, bytesPerRow: 8,
+            space: CGColorSpace(name: CGColorSpace.sRGB)!, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+        rgba.draw(nativeImage, in: CGRect(x: 0, y: 0, width: 2, height: 1))
+        let pixels = rgba.data!.assumingMemoryBound(to: UInt8.self)
+        precondition(Array(UnsafeBufferPointer(start: pixels, count: 8)) == [90, 60, 30, 255, 36, 24, 12, 255], "BGRA must not swap red and blue")
+        for invalid in [BrowserNativeCapture(status: .unavailable),
+                        .init(status: .captured, width: 2, height: 1, rowBytes: 4, pixels: bgra),
+                        .init(status: .captured, width: 2, height: 1, rowBytes: 8, pixels: Data([0])),
+                        .init(status: .captured, width: 5000, height: 1, rowBytes: 20000)] {
+            precondition(ChromiumSnapshotDecoder.nativeImage(invalid) == nil)
+        }
+        let nativeCancelled = await Task.detached {
+            withUnsafeCurrentTask { $0?.cancel() }
+            return ChromiumSnapshotDecoder.nativeImage(native) == nil
+        }.value
+        precondition(nativeCancelled)
         print("PASS snapshot dimensions, generation, full resolution and invalid payload rejection")
     }
 }
