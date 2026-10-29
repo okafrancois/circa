@@ -26,17 +26,15 @@ func spaceSwipeSavedSelectionAppearance() async throws {
 }
 
 extension NativeWebKitTests {
-@Test("Space swipe theme progress uses captured endpoints, follows appearance, restores selected theme and material")
+@Test("Space swipe theme progress uses captured endpoints, follows appearance, restores selected theme")
 @MainActor
 func spaceSwipeThemeProgressAndRestore() {
     let shell = OrbitWindowShell()
     let source = OrbitTokens.SpaceTheme.amberCoral
     let target = OrbitTokens.SpaceTheme.lavender
     shell.apply(theme: source, animated: false)
-    let material = shell.themeFill.materialView
     shell.applySpaceSwipeBlend(.init(source: source, destination: target, progress: 0.5))
     #expect(shell.theme == source)
-    #expect(shell.themeFill.materialView === material)
     #expect(!shell.themeFill.isCrossfading)
     for name in [NSAppearance.Name.aqua, .darkAqua] {
         let appearance = NSAppearance(named: name)!
@@ -59,7 +57,6 @@ func spaceSwipeThemeProgressAndRestore() {
     #expect(shell.themeFill.theme != target)
     shell.applySpaceSwipeBlend(nil)
     #expect(shell.themeFill.theme == target)
-    #expect(shell.themeFill.materialView === material)
 }
 }
 
@@ -73,7 +70,7 @@ private final class BackgroundCountingWindow: NSWindow {
 }
 
 extension NativeWebKitTests {
-@Test("Swipe theme frames only repaint the gradient: no grain redraw, material pass or equal window background")
+@Test("Swipe theme frames only repaint the gradient: no grain redraw or equal window background")
 @MainActor
 func spaceSwipeThemeFramesAreIncremental() {
     let window = BackgroundCountingWindow(contentRect: NSRect(x: 0, y: 0, width: 400, height: 300),
@@ -87,7 +84,6 @@ func spaceSwipeThemeFramesAreIncremental() {
     var target = OrbitTokens.SpaceTheme.lavender
     target.texture = .grain
     target.textureIntensity = 0.5
-    target.surface = source.surface
     let root = OrbitWindowRootView(frame: NSRect(x: 0, y: 0, width: 400, height: 300))
     window.contentView = root
     shell.prepare(window: window, root: root)
@@ -95,20 +91,14 @@ func spaceSwipeThemeFramesAreIncremental() {
     func flush(_ layer: CALayer?) { layer?.displayIfNeeded(); layer?.sublayers?.forEach(flush) }
     flush(shell.themeFill.layer)
     #expect(!shell.themeFill.grainNeedsDisplay)
-    let refreshes = shell.themeFill.materialRefreshCount
     shell.applySpaceSwipeBlend(.init(source: source, destination: target, progress: 0.2))
     let assignments = window.backgroundAssignments
     for step in 3...9 {
         shell.applySpaceSwipeBlend(.init(source: source, destination: target, progress: CGFloat(step) / 10))
         #expect(!shell.themeFill.grainNeedsDisplay)
     }
-    #expect(shell.themeFill.materialRefreshCount == refreshes)
-    if !shell.themeFill.glassStyle.usesMaterial {
-        // Opaque fallback: each distinct blended colour is assigned once.
-        #expect(window.backgroundAssignments - assignments <= 7)
-    } else {
-        #expect(window.backgroundAssignments == assignments)
-    }
+    #expect(window.isOpaque)
+    #expect(window.backgroundAssignments - assignments <= 7)
     shell.applySpaceSwipeBlend(nil)
     #expect(shell.themeFill.theme == source)
 }

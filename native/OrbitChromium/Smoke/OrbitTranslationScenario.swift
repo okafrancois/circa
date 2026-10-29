@@ -30,7 +30,7 @@ enum OrbitTranslationScenario {
             button.performClick(nil)
             return await OrbitRelaunchScenarios.until { window.translation.popover.isShown }
         }
-        let theme = OrbitTokens.SpaceTheme(stops: [NSColor(srgbRed: 40/255, green: 37/255, blue: 55/255, alpha: 1)], mode: .dark, texture: .none, textureIntensity: 0, surface: BrowserThemeSurface(material: .solid, transparency: 0))
+        let theme = OrbitTokens.SpaceTheme(stops: [NSColor(srgbRed: 40/255, green: 37/255, blue: 55/255, alpha: 1)], mode: .dark, texture: .none, textureIntensity: 0)
         func capture(_ name: String) async {
             try? await Task.sleep(for: .milliseconds(250))
             window.windowShell.apply(theme: theme, animated: false)

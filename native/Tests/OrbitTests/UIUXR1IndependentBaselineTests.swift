@@ -49,27 +49,24 @@ struct UIUXR1IndependentBaselineTests {
         #expect(renamed == [first.id])
     }
 
-    @Test("Interactive color frames avoid material work but explicit appearance and activation changes still resolve it")
-    func incrementalMaterialAndInvalidation() {
-        let fill = OrbitThemeFillView(materialRole: .windowShell)
+    @Test("Interactive color frames avoid appearance callbacks; explicit appearance changes still publish")
+    func incrementalAppearanceInvalidation() {
+        let fill = OrbitThemeFillView()
         var source = OrbitTokens.SpaceTheme.amberCoral
         var target = OrbitTokens.SpaceTheme.lavender
-        target.surface = source.surface
         source.texture = .grain
         target.texture = .grain
         source.textureIntensity = 0.5
         target.textureIntensity = 0.5
         fill.apply(source)
         var refreshes = 0
-        fill.onMaterialChange = { refreshes += 1 }
+        fill.onAppearanceChange = { refreshes += 1 }
         for step in 1...4 {
             fill.applyInteractiveTheme(SpaceSwipeThemeBlend(source: source, destination: target, progress: CGFloat(step) / 5).theme)
         }
         #expect(refreshes == 0)
         fill.viewDidChangeEffectiveAppearance()
         #expect(refreshes == 1)
-        fill.refreshMaterial()
-        #expect(refreshes == 2)
     }
 }
 }

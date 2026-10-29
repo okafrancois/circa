@@ -64,7 +64,7 @@ enum OrbitSpaceThemes {
             stopRange: .init(light: CGFloat(model.light.start)...CGFloat(model.light.end),
                              dark: CGFloat(model.dark.start)...CGFloat(model.dark.end)),
             angle: .init(light: CGFloat(model.light.angleDegrees), dark: CGFloat(model.dark.angleDegrees)),
-            model: model, surface: model.surface)
+            model: model)
         if renderedThemes.count >= 256 { renderedThemes.removeAll() }
         renderedThemes[model] = theme
         return theme

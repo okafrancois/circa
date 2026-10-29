@@ -249,41 +249,5 @@ extension BrowserSettingsTests {
 }
 
 extension BrowserSettingsTests {
-    @Test("Version one without a secondary draft preserves existing settings and defaults the isolated draft")
-    func secondaryDraftMigrationAndPersistence() async throws {
-        let url = destination()
-        defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
-        let store = try BrowserSettingsStore(destination: url)
-        let profile = ProfileID(), space = SpaceID()
-        var search = BrowserProfileSettings()
-        search.searchEngine = .bing
-        var palette = BrowserSpaceSettings()
-        palette.palette = .rosePlum
-        try await store.setProfile(search, for: profile)
-        try await store.setSpace(palette, for: space)
-        try await store.setReducedMotion(.reduce)
-        var oldJSON = try #require(JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any])
-        oldJSON.removeValue(forKey: "secondaryAppearanceDraft")
-        try JSONSerialization.data(withJSONObject: oldJSON).write(to: url)
-        let migrated = try BrowserSettingsStore(destination: url)
-        let before = await migrated.snapshot()
-        #expect(before.secondaryAppearanceDraft == .init())
-        var draft = BrowserSecondaryAppearanceDraft()
-        draft.material = .liquidGlass
-        draft.transparency = 0.7
-        try await migrated.setSecondaryAppearanceDraft(draft)
-        let reopened = try BrowserSettingsStore(destination: url)
-        var after = await reopened.snapshot()
-        #expect(after.secondaryAppearanceDraft == draft)
-        after.secondaryAppearanceDraft = .init()
-        #expect(after == before)
-        #expect(after.version == 1 && after.profile(profile) == search && after.space(space) == palette)
-        draft.transparency = 1.1
-        await #expect(throws: BrowserSettingsError.invalidSecondaryAppearanceDraft) { try await migrated.setSecondaryAppearanceDraft(draft) }
-        #expect(await migrated.snapshot().secondaryAppearanceDraft.transparency == 0.7)
-        draft.transparency = .nan
-        await #expect(throws: BrowserSettingsError.invalidSecondaryAppearanceDraft) { try await migrated.setSecondaryAppearanceDraft(draft) }
-        let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
-        #expect((attributes[.posixPermissions] as? NSNumber)?.intValue == 0o600)
-    }
+
 }

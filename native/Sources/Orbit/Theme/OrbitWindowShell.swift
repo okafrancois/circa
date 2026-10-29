@@ -8,7 +8,7 @@ import OSLog
 /// given, and reports presentation changes through closures.
 @MainActor
 final class OrbitWindowShell {
-    let themeFill = OrbitThemeFillView(materialRole: .windowShell)
+    let themeFill = OrbitThemeFillView()
     let floatingBackdrop = OrbitFloatingSidebarBackdrop()
     let resizeHandle = OrbitSidebarResizeHandle()
     let loadingIndicator = OrbitLoadingIndicatorView()
@@ -114,7 +114,6 @@ final class OrbitWindowShell {
         root.addSubview(themeFill, positioned: .below, relativeTo: nil)
         root.onLayout = { [weak self] in self?.applyGeometry() }
         root.onTrackingAreasInvalidated = { [weak self] in self?.updateHoverRegions(force: true) }
-        themeFill.onMaterialChange = { [weak self] in self?.updateWindowBackground() }
         themeFill.onAppearanceChange = { [weak self] in self?.updateWindowBackground() }
         observeWindow(window)
         installReleaseMonitor()
@@ -498,13 +497,9 @@ final class OrbitWindowShell {
     private func updateWindowBackground() {
         guard let window else { return }
         let stops = OrbitThemeGradient.normalizedStops((spaceSwipePaintedTheme ?? theme).stops, appearance: window.effectiveAppearance)
-        // A solid NSWindow backing store would occlude behind-window sampling. Accessibility
-        // fallback restores the exact opaque Space paint; the document card is unaffected.
-        let opaque = !themeFill.glassStyle.usesMaterial
-        let color = themeFill.glassStyle.usesMaterial ? NSColor.clear
-            : (stops.first.flatMap { NSColor(cgColor: $0) } ?? OrbitTokens.Color.Surface.windowDefault)
+        let color = stops.first.flatMap { NSColor(cgColor: $0) } ?? OrbitTokens.Color.Surface.windowDefault
         // Reassigning an equal background still invalidates the whole window on every swipe frame.
-        if window.isOpaque != opaque { window.isOpaque = opaque }
+        if !window.isOpaque { window.isOpaque = true }
         if window.backgroundColor != color { window.backgroundColor = color }
     }
 

@@ -217,31 +217,6 @@ final class BrowserSettingsModel<Engine: BrowserEngine>: ObservableObject {
         selectionGeneration = UUID()
     }
 
-    /// Capture identity and selection generation before entering the settings queue. A switched form
-    /// cannot deliver a delayed slider value into a different Space or reassigned profile.
-    func queueAppearanceSurfaceEdit(spaceID: SpaceID, profileID: ProfileID,
-                                    material: BrowserThemeSurface.Material? = nil, transparency: Double? = nil) {
-        let generation = selectionGeneration
-        perform { [self] in
-            guard generation == selectionGeneration, selectedProfileID == profileID,
-                  appearanceSpaceID == spaceID else { throw BrowserSpaceThemeError.conflict }
-            guard !runtime.isUnavailable else { throw BrowserSettingsError.unavailable }
-            guard !environment.themeEditors.isFrozen else { throw BrowserTerminationPreparationError.commandsDidNotSettle }
-            try await environment.themeEditors.withFinishedEditors(spaceID: spaceID, profileID: profileID) { [self] in
-                guard generation == selectionGeneration, selectedProfileID == profileID,
-                      appearanceSpaceID == spaceID else { throw BrowserSpaceThemeError.conflict }
-                guard !runtime.isUnavailable else { throw BrowserSettingsError.unavailable }
-                guard !environment.themeEditors.isFrozen else { throw BrowserTerminationPreparationError.commandsDidNotSettle }
-                let fallback = runtime.document.space(spaceID).palette.themeModel ?? BrowserSpaceThemePresets.default
-                try await environment.store.setSpaceThemeSurface(for: spaceID, profileID: profileID,
-                    material: material, transparency: transparency, fallback: fallback)
-                // Keep admission reserved until both browser and Settings editor inputs are current.
-                await environment.refreshSettingsCatalog()
-                await reload()
-            }
-        }
-    }
-
     func updateProfile(_ id: ProfileID, _ edit: @Sendable (inout BrowserProfileSettings) -> Void) async throws {
         try await requireProfile(id)
         try await runtime.updateProfile(id, edit)

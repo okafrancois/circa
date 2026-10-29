@@ -26,7 +26,7 @@ struct SpaceIconPickerTests {
         #expect(picker.grid.menu?.items.map(\.title) == [uiText("Emoji & Symbols…"), uiText("Remove Icon")])
     }
 
-    @Test("Compact theme viewport retains material editing below the initial color controls")
+    @Test("Compact theme viewport retains the existing color controls and scope")
     func compactThemeViewport() throws {
         let editor = OrbitThemeEditorView(state: OrbitThemeEditorState(theme: BrowserSpaceThemePresets.default))
         let scroll = editor.makePickerViewport()
@@ -34,14 +34,9 @@ struct SpaceIconPickerTests {
         #expect(scroll.frame.size == NSSize(width: 356, height: 508))
         #expect(scroll.documentView === editor)
         #expect(editor.visibleRect.minY == 0)
-        #expect(!editor.visibleRect.intersects(editor.surfaceMaterial.frame))
-        #expect(!editor.visibleRect.intersects(editor.surfaceScope.frame))
+        #expect(editor.visibleRect.intersects(editor.surfaceScope.frame))
         #expect(editor.material.isHidden)
-        scroll.contentView.scroll(to: NSPoint(x: 0, y: 142))
-        #expect(editor.visibleRect.intersects(editor.surfaceMaterial.frame))
-        editor.surfaceMaterial.selectItem(at: BrowserThemeSurface.Material.allCases.firstIndex(of: .solid)!)
-        _ = editor.surfaceMaterial.sendAction(editor.surfaceMaterial.action!, to: editor.surfaceMaterial.target)
-        #expect(editor.state.theme.surface?.material == .solid)
+        #expect(editor.frame.height == 520)
     }
 
     @Test("The catalog lists valid single-grapheme emoji in every category, flags as pairs, no bare components")

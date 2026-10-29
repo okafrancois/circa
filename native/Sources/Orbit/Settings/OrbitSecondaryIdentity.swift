@@ -51,42 +51,6 @@ struct OrbitSecondaryMark: View {
     }
 }
 
-/// The preview is deliberately a flat swatch, with no implied native glass implementation.
-struct OrbitSecondaryAppearancePreview: View {
-    let draft: BrowserSecondaryAppearanceDraft
-    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    static func sampleOpacity(_ draft: BrowserSecondaryAppearanceDraft, reduceTransparency: Bool) -> Double {
-        reduceTransparency ? 1 : 1 - draft.transparency * 0.7
-    }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack {
-                OrbitSecondaryMark().frame(width: 32, height: 32)
-                Text(uiText("Settings preview")).font(.headline)
-                Spacer()
-            }
-            RoundedRectangle(cornerRadius: 8)
-                .fill(OrbitSecondaryIdentity.outremer.opacity(Self.sampleOpacity(draft, reduceTransparency: reduceTransparency)))
-                .frame(height: 48)
-                .accessibilityLabel(uiText("Transparency sample"))
-            Text(uiText("Illustrative color sample only. No native glass effect is applied."))
-                .font(.caption).foregroundStyle(.secondary)
-            if reduceTransparency {
-                Text(uiText("Reduce Transparency is enabled: the sample stays opaque.")).font(.caption)
-            }
-        }
-        .padding(18)
-        .background(OrbitSecondaryIdentity.ivory, in: RoundedRectangle(cornerRadius: 10))
-        .foregroundStyle(OrbitSecondaryIdentity.ink)
-        // There is no animation, including when Reduce Motion is enabled.
-        .transaction { if reduceMotion { $0.animation = nil } }
-        .accessibilityIdentifier("settings-appearance-preview")
-    }
-}
-
 struct OrbitSecondaryAbout: View {
     var body: some View {
         VStack(spacing: 18) {

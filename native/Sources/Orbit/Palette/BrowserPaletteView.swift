@@ -5,9 +5,9 @@ import AppKit
 final class BrowserPaletteView: NSView, NSTextFieldDelegate, NSTableViewDataSource, NSTableViewDelegate {
     let input: NSTextField = PaletteInputField()
     let panel = NSView()
-    let material = OrbitGlassMaterialView()
+    let material = OrbitPaletteBackdropView()
     private let materialTint = NSView()
-    private let materialObservers = OrbitGlassObservers()
+    private let materialObservers = OrbitWorkspaceObservers()
     private(set) var usesMaterial = !NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency
     private let panelShadow = CALayer()
     let scroll = NSScrollView()
@@ -750,4 +750,10 @@ final class PaletteResultCell: NSTableCellView {
         let detailX = titleLabel.frame.maxX + (hasDetail ? 4 : 0)
         detailLabel.frame = NSRect(x: detailX, y: (m.rowHeight - 18) / 2, width: hasDetail ? max(0, x + usableWidth - detailX) : 0, height: 18)
     }
+}
+
+/// Decorative backdrop; the palette controls receive all pointer input.
+@MainActor
+final class OrbitPaletteBackdropView: NSVisualEffectView {
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
 }

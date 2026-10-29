@@ -748,18 +748,8 @@
 "Appearance draft" = "Appearance draft";
 "Built for macOS. Your profiles and browsing data stay on this Mac." = "Built for macOS. Your profiles and browsing data stay on this Mac.";
 "Development build" = "Development build";
-"Frosted and Liquid Glass are saved intentions for a future material implementation. This build does not preview native glass." = "Frosted and Liquid Glass are saved intentions for a future material implementation. This build does not preview native glass.";
-"Frosted — prepared" = "Frosted — prepared";
-"Illustrative color sample only. No native glass effect is applied." = "Illustrative color sample only. No native glass effect is applied.";
-"Liquid Glass — prepared" = "Liquid Glass — prepared";
-"Material" = "Material";
 "Orbit Settings" = "Orbit Settings";
-"Reduce Transparency is enabled: the sample stays opaque." = "Reduce Transparency is enabled: the sample stays opaque.";
 "Saved for these settings only. The browser window and Space themes are unchanged." = "Saved for these settings only. The browser window and Space themes are unchanged.";
-"Settings preview" = "Settings preview";
-"Solid" = "Solid";
-"Transparency" = "Transparency";
-"Transparency sample" = "Transparency sample";
 
 "Orbit Live" = "Orbit Live";
 "About %@" = "About %@";
@@ -808,29 +798,19 @@
 
 "Applies to this Space in every window. Other Spaces keep their own themes." = "Applies to this Space in every window. Other Spaces keep their own themes.";
 
-"This Space keeps its existing material until you change a control." = "This Space keeps its existing material until you change a control.";
 
-"Transparency reveals the blurred desktop through the theme. Reduce Transparency and Increase Contrast use an opaque theme. Choose Solid for full opacity." = "Transparency reveals the blurred desktop through the theme. Reduce Transparency and Increase Contrast use an opaque theme. Choose Solid for full opacity.";
 
 "Choose a profile with an available Space." = "Choose a profile with an available Space.";
 
 "This Space · captured profile" = "This Space · captured profile";
 
-"Material for this Space" = "Material for this Space";
 
-"Transparency for this Space" = "Transparency for this Space";
 
-"Existing material until changed. " = "Existing material until changed. ";
 
-"Transparency reveals the blurred desktop through the theme. Solid is opaque." = "Transparency reveals the blurred desktop through the theme. Solid is opaque.";
 
-"Frosted" = "Frosted";
 
-"Liquid Glass" = "Liquid Glass";
 
-"Native Liquid Glass (macOS 26+). Accessibility may make the frame opaque." = "Native Liquid Glass (macOS 26+). Accessibility may make the frame opaque.";
 
-"Native frosted fallback on this macOS. Liquid Glass requires macOS 26." = "Native frosted fallback on this macOS. Liquid Glass requires macOS 26.";
 
 "Extensions require an updated Chromium build." = "Extensions require an updated Chromium build.";
 
