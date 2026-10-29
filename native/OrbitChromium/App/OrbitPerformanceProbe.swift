@@ -120,6 +120,8 @@ enum OrbitPerformanceProbe {
                     result["importRecovery"] = ["started": true, "profiles": await environment.store.catalogSnapshot().profiles.count]
                 } else if name == "chromium-import-fixture" {
                     result["importFixture"] = await ChromiumImportProbe.run(root: root)
+                } else if name == "safari-import-fixture" {
+                    result["safariImport"] = await SafariImportProbe.run(root: root, store: environment.store, passwords: environment.engine.passwordStore)
                 } else if name == "data-quick-wins" {
                     if let text = command["base"], let base = URL(string: text),
                        base.scheme == "http", base.host == "127.0.0.1" {

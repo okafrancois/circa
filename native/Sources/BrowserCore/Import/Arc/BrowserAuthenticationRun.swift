@@ -127,6 +127,44 @@ public final class BrowserAuthenticationRun {
             }
         }
         for name in ["Local Storage", "IndexedDB", "WebStorage"] where source.exists(name) { try collect(source.directory(name, create: false), prefix: name) }
+        let run = try await applyDecoded(preparation: preparation, importer: importer, target: target,
+            sourceID: authentication.sourceID, sourceProfile: authentication.sourceProfile, files: files,
+            passwords: passwords, cookies: cookies, unsupported: unsupported, total: total,
+            recoveryKey: recoveryKey, checkpoint: checkpoint)
+        authentication.discard()
+        return run
+    }
+    /// The official export lane uses the common CSV decoder, with no source or target Safe Storage
+    /// query. Credentials are sealed before structural mutation and applied by the normal startup sink.
+    public static func applySafariExport(preparation: BrowserImportPreparation, importer: BrowserImportOrchestrator,
+                                         target: some BrowserImportTarget, adapter: SafariBrowserImportAdapter,
+                                         consent: Bool, recoveryKey: SymmetricKey,
+                                         checkpoint: @escaping (String) throws -> Void = { _ in }) async throws -> BrowserAuthenticationRun {
+        guard consent else { throw BrowserAuthenticationImportError.consentRequired }
+        guard preparation.plan.registration == adapter.registration else { throw BrowserAuthenticationImportError.invalidState }
+        let read = try adapter.passwords(snapshot: preparation.snapshot)
+        return try await applyDecoded(preparation: preparation, importer: importer, target: target,
+            sourceID: adapter.registration.sourceID, sourceProfile: adapter.profile.directory, files: [:],
+            passwords: read.passwords, cookies: 0, unsupported: read.unsupported, total: 0,
+            recoveryKey: recoveryKey, checkpoint: checkpoint)
+    }
+    private static func applyDecoded(preparation: BrowserImportPreparation, importer: BrowserImportOrchestrator,
+                                     target: some BrowserImportTarget, sourceID: String, sourceProfile: String,
+                                     files: [String: Data], passwords: [ImportedBrowserPassword], cookies: Int,
+                                     unsupported: Int, total: Int, recoveryKey: SymmetricKey,
+                                     checkpoint: @escaping (String) throws -> Void) async throws -> BrowserAuthenticationRun {
+        guard target.holdsExclusiveAccess, preparation.plan.profiles.count == 1,
+              let profile = preparation.plan.profiles.first, !profile.isAdopted,
+              preparation.plan.registration?.sourceID == sourceID,
+              profile.sourceDirectory == sourceProfile, preparation.report.target.profilesAdded == 1 else {
+            throw BrowserAuthenticationImportError.targetNotFresh
+        }
+        let root = try OrbitSecureDirectory.open(target.location.dataDirectory, create: false)
+        let engine = try root.directory("Chromium", create: true)
+        let profileName = "profile-" + profile.id.rawValue.uuidString.lowercased()
+        let history = try root.directory("History", create: true)
+        guard !engine.exists(profileName), !history.exists(profile.id.rawValue.uuidString),
+              !(try exists(dataRoot: root.url)) else { throw BrowserAuthenticationImportError.targetNotFresh }
         var backup: [String: Data] = [:], absent: [String] = []
         for path in backupPaths {
             let url = root.url.appendingPathComponent(path)
@@ -140,7 +178,7 @@ public final class BrowserAuthenticationRun {
         try OrbitDiskSpace.require(Int64(total * 4 + 64 * 1024 * 1024), at: root.url, probe: importer.diskSpace)
         let directory = try root.directory("AuthenticationImport", create: true)
         let run = try Self(root: root, directory: directory, key: recoveryKey,
-            document: Document(profileID: profile.id, sourceID: authentication.sourceID, sourceProfile: authentication.sourceProfile,
+            document: Document(profileID: profile.id, sourceID: sourceID, sourceProfile: sourceProfile,
                 phase: .prepared, backup: backup, absent: absent, files: files, passwords: passwords, cookies: cookies, unsupportedPasswords: unsupported))
         run.checkpoint = checkpoint
         _ = try BrowserImportRecovery.begin(at: target.location, profiles: [profile.id.rawValue], authentication: true)
@@ -162,7 +200,6 @@ public final class BrowserAuthenticationRun {
         run.document.phase = .passwordsPending; try run.save()
         try BrowserImportRecovery.open(at: root.url)?.runtimeReady()
         try checkpoint("auth-passwords-pending")
-        authentication.discard()
         return run
     }
     /// Retain the completed undo point before starting another selected-profile import. Its key

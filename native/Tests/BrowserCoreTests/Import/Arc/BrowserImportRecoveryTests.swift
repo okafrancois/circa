@@ -29,7 +29,7 @@ struct BrowserImportRecoveryTests {
         }
         return result
     }
-    private func child(_ root: URL, phase: String, action: String, choice: String) throws -> Process {
+    private func child(_ root: URL, phase: String, action: String, choice: String, safari: Bool = false) throws -> Process {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: CommandLine.arguments[0])
         var args: [String] = []
@@ -42,6 +42,7 @@ struct BrowserImportRecoveryTests {
         env["ORBIT_IMPORT_RECOVERY_PHASE"] = phase
         env["ORBIT_IMPORT_RECOVERY_ACTION"] = action
         env["ORBIT_IMPORT_RECOVERY_CHOICE"] = choice
+        if safari { env["ORBIT_IMPORT_RECOVERY_SAFARI"] = "1" }
         process.environment = env
         let log = root.appendingPathComponent(action + ".log")
         FileManager.default.createFile(atPath: log.path, contents: nil)
@@ -70,6 +71,22 @@ struct BrowserImportRecoveryTests {
             }
         }
     }
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["ORBIT_IMPORT_RECOVERY_CRASH_MATRIX"] == "1"))
+    func safariSigkillMatrix() throws {
+        let auth = Self.authentication.filter { !$0.hasPrefix("auth-file:") }
+        for phase in Self.structural + Self.structuralRestore + auth + Self.restoration {
+            for choice in ["restore", "continueWithoutImport"] {
+                let fixture = try OrbitFixture.temporaryDirectory()
+                defer { try? FileManager.default.removeItem(at: fixture) }
+                let killed = try child(fixture, phase: phase, action: "mutate", choice: choice, safari: true)
+                #expect(killed.terminationReason == .uncaughtSignal && killed.terminationStatus == SIGKILL, "Missing Safari kill: \(phase)")
+                let relaunched = try child(fixture, phase: phase, action: "recover", choice: choice, safari: true)
+                #expect(relaunched.terminationStatus == 0, "Safari recovery failed: \(phase), \(choice)")
+                let result = try Data(contentsOf: fixture.appendingPathComponent("result.json"))
+                print("SAFARI-RECOVERY-MATRIX \(phase) \(choice) \(String(decoding: result, as: UTF8.self))")
+            }
+        }
+    }
     @Test func fallbackRetainsImportedDataAndRestoresOriginalBytes() async throws {
         let fixture = try ChromiumImportTests.Fixture(); defer { fixture.remove() }
         _ = try await fixture.base.seedExistingSession()
@@ -92,6 +109,7 @@ struct BrowserImportRecoveryTests {
     @Test func worker() async throws {
         let env = ProcessInfo.processInfo.environment
         guard let path = env["ORBIT_IMPORT_RECOVERY_ROOT"], let phase = env["ORBIT_IMPORT_RECOVERY_PHASE"] else { return }
+        let safari = env["ORBIT_IMPORT_RECOVERY_SAFARI"] == "1"
         let base = URL(fileURLWithPath: path), root = base.appendingPathComponent("data")
         let session = root.appendingPathComponent("session.json")
         let choice = BrowserImportRecovery.Choice(rawValue: env["ORBIT_IMPORT_RECOVERY_CHOICE"] ?? "restore")!
@@ -182,7 +200,13 @@ struct BrowserImportRecoveryTests {
             placement: .init(importedSpace: "Imported", bookmarkFolder: "Imported Bookmarks", windowName: "Imported Window"))
         var options = ArcImportOptions(); options.historyChunkSize = 2
         var importer = BrowserImportOrchestrator(source: source, options: options, probe: NeverRunningProbe(), snapshotParent: snapshots)
-        importer.adapter = adapter
+        let safariAdapter = SafariBrowserImportAdapter(installationID: UUID(), profile: .init(directory: "History", name: "Synthetic"),
+            placement: .init(importedSpace: "Imported", bookmarkFolder: "Imported Bookmarks", windowName: "Imported Window"), includeSharedData: true)
+        if safari {
+            try SafariImportTests.export(to: source.appendingPathComponent("Export.zip"))
+            importer.source = source.appendingPathComponent("Export.zip")
+            importer.adapter = safariAdapter
+        } else { importer.adapter = adapter }
         importer.checkpoint = { point in
             if String(describing: point) == phase { kill(getpid(), SIGKILL); while true { pause() } }
         }
@@ -196,6 +220,11 @@ struct BrowserImportRecoveryTests {
                 try ArcImportRestore(id: outcome.backupID, location: .init(sessionFile: session)).run(diskSpace: OrbitSystemDiskSpaceProbe(), interruption: nil, checkpoint: checkpoint)
             }
         } else {
+            let run: BrowserAuthenticationRun
+            if safari {
+                run = try await BrowserAuthenticationRun.applySafariExport(preparation: importer.prepare(for: target), importer: importer, target: target,
+                    adapter: safariAdapter, consent: true, recoveryKey: Self.key, checkpoint: checkpoint)
+            } else {
             let profile = source.appendingPathComponent("Default")
             let database = try AuthenticationSQLite(profile.appendingPathComponent("Cookies"))
             try database.execute("CREATE TABLE meta(key TEXT,value INTEGER); INSERT INTO meta VALUES('version',24),('last_compatible_version',24)")
@@ -211,9 +240,10 @@ struct BrowserImportRecoveryTests {
             try FileManager.default.createDirectory(at: profile.appendingPathComponent("Local Storage"), withIntermediateDirectories: true)
             try Data("synthetic storage".utf8).write(to: profile.appendingPathComponent("Local Storage/value"))
             let auth = try ChromiumAuthenticationSnapshot.capture(source: source, adapter: adapter, consent: true, parent: snapshots, probe: NeverRunningProbe())
-            let run = try await BrowserAuthenticationRun.apply(preparation: importer.prepare(for: target), importer: importer, target: target,
+            run = try await BrowserAuthenticationRun.apply(preparation: importer.prepare(for: target), importer: importer, target: target,
                 authentication: auth, sourcePassword: Data("mock-source".utf8), targetPassword: Data("mock_password".utf8), recoveryKey: Self.key,
                 checkpoint: checkpoint)
+            }
             await target.close()
             if phase == "product-fixture" { return }
             if Self.restoration.contains(phase) {

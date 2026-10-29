@@ -108,6 +108,8 @@ public struct ChromiumPasswordReadResult: Sendable {
     public var passwords: [ImportedBrowserPassword] = []
     public var unsupported = 0
     public var unrepresentedNotes = 0
+    public var unrepresentedOTP = 0
+    public var unrepresentedPasskeys = 0
 }
 
 public enum ChromiumPasswordReader {

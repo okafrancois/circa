@@ -31,6 +31,14 @@ private final class MockPasswordStore: BrowserPasswordStore {
 @Suite("Password store contract")
 @MainActor
 struct PasswordStoreContractTests {
+    @Test func safariCSVUsesCommonPasswordSink() async throws {
+        let store = MockPasswordStore(), profile = ProfileID()
+        let data = Data("\u{feff}Title,URL,Username,Password,Notes,OTPAuth\r\nSynthetic,https://fixture.test/login,user,\"a,\"\"b\"\"\",Note,otpauth://synthetic\r\n".utf8)
+        let counts = try await BrowserPasswordImporter.importCSV(data, to: store, profileID: profile)
+        #expect(counts.imported == 1 && counts.unrepresentedNotes == 1 && counts.unrepresentedOTP == 1)
+        #expect(try await store.list(profileID: profile).first?.passwordValue == "a,\"b\"")
+        #expect(try await store.list(profileID: ProfileID()).isEmpty)
+    }
     @Test("A consumer can reconcile key edits, blocklists and profile isolation")
     func reconciliation() async throws {
         let store: any BrowserPasswordStore = MockPasswordStore()
