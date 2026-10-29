@@ -5,7 +5,7 @@ import Testing
 
 @Suite("Command Bar history equivalence", .serialized)
 struct CommandBarHistoryTests {
-    @Test("Indexed empty and short-symbol paths preserve 4000 queries over 100k pages")
+    @Test("Empty and literal-symbol paths preserve 4000 queries over 100k pages")
     func equivalence100k() async throws {
         let root = URL(fileURLWithPath: "/private/tmp/orbit-cmdbar-\(UUID())")
         defer { try? FileManager.default.removeItem(at: root) }
@@ -30,6 +30,30 @@ struct CommandBarHistoryTests {
         let migrated = try BrowserHistoryStore(profileID: profile, policy: .persistent, directory: root)
         #expect(try await migrated.suggestions("~!", now: now).count == 12)
         try await migrated.close()
+        let development = try HistoryDatabase(url: file, profileID: profile)
+        #expect(try development.scalarInt("SELECT COUNT(*) FROM pages") == 100_000)
+        #expect(try development.scalarInt("SELECT COUNT(*) FROM visits") == 100_000)
+        try development.execute("CREATE TABLE shortSymbols(term TEXT NOT NULL,pageID INTEGER NOT NULL,PRIMARY KEY(term,pageID)) WITHOUT ROWID")
+        try development.execute("CREATE INDEX shortSymbols_page ON shortSymbols(pageID)")
+        try development.execute("INSERT INTO shortSymbols SELECT '/',id FROM pages")
+        try development.execute("CREATE TRIGGER shortSymbols_insert AFTER INSERT ON pages BEGIN INSERT OR IGNORE INTO shortSymbols SELECT value,new.id FROM json_each(orbit_short_symbols(new.searchURL,new.searchTitle)); END")
+        try development.execute("CREATE TRIGGER shortSymbols_delete AFTER DELETE ON pages BEGIN DELETE FROM shortSymbols WHERE pageID=old.id; END")
+        try development.execute("CREATE TRIGGER shortSymbols_update AFTER UPDATE OF searchURL,searchTitle ON pages WHEN old.searchURL IS NOT new.searchURL COLLATE BINARY OR old.searchTitle IS NOT new.searchTitle COLLATE BINARY BEGIN DELETE FROM shortSymbols WHERE pageID=old.id; INSERT OR IGNORE INTO shortSymbols SELECT value,new.id FROM json_each(orbit_short_symbols(new.searchURL,new.searchTitle)); END")
+        try development.close()
+        // No retired SQL function is registered: opening must drop the write triggers first.
+        let cleaned = try BrowserHistoryStore(profileID: profile, policy: .persistent, directory: root)
+        #expect(try await cleaned.suggestions("~!", now: now).count == 12)
+        let added = BrowserHistoryVisit(url: URL(string: "https://synthetic.test/after-cleanup")!, title: "Synthetic cleanup", visitedAt: now)
+        #expect(try await cleaned.record(added))
+        try await cleaned.updateMetadata(visitID: added.id, title: "Updated synthetic cleanup")
+        try await cleaned.close()
+        let inspect = try HistoryDatabase(url: file, profileID: profile)
+        #expect(try inspect.scalarInt("SELECT COUNT(*) FROM sqlite_master WHERE name LIKE 'shortSymbols%'") == 0)
+        #expect(try inspect.scalarInt("SELECT COUNT(*) FROM pragma_function_list WHERE name='orbit_short_symbols'") == 0)
+        #expect(try inspect.scalarInt("SELECT COUNT(*) FROM sqlite_master WHERE name='pages_weight_last'") == 1)
+        #expect(try inspect.scalarInt("SELECT COUNT(*) FROM pages") == 100_001)
+        #expect(try inspect.scalarInt("SELECT COUNT(*) FROM visits") == 100_001)
+        try inspect.close()
     }
 
     @Test("Warm membership reuse preserves scores through query widening and index mutations")
@@ -277,8 +301,6 @@ private struct OriginalMemoryIndex: Sendable {
 // Downgrade only the suggestion acceleration objects in synthetic legacy fixtures.
 extension HistoryDatabase {
     func discardSuggestionSchemaForLegacyFixture() throws {
-        for name in ["shortSymbols_insert", "shortSymbols_delete", "shortSymbols_update"] { try execute("DROP TRIGGER IF EXISTS \(name)") }
-        try execute("DROP TABLE IF EXISTS shortSymbols")
         try execute("DROP INDEX IF EXISTS pages_weight_last")
     }
 }

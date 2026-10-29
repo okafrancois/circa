@@ -312,10 +312,10 @@ public actor BrowserHistoryStore {
                 firstLong = false
             } else if !BrowserHistoryMatching.usesWordStart(matchTerm, in: matchTerms) {
                 if !hasDriver {
-                    // Symbol postings retain the original first 10k matching page IDs.
+                    // Retain the original first 10k literal matches, including their scan order.
                     hasDriver = true
-                    clauses.append("pages.rowid IN (\(rankedArm("SELECT id,last,visits,typed FROM pages WHERE id IN (SELECT pageID FROM shortSymbols WHERE term=? ORDER BY pageID LIMIT ?)")))")
-                    values += [.text(term), budget] + ranked
+                    clauses.append("pages.rowid IN (\(rankedArm("SELECT id,last,visits,typed FROM pages WHERE instr(searchURL,?)>0 OR instr(searchTitle,?)>0 LIMIT ?")))")
+                    values += [.text(term), .text(term), budget] + ranked
                 }
                 clauses.append("(instr(searchURL,?)>0 OR instr(searchTitle,?)>0)")
                 values += [.text(term), .text(term)]
@@ -481,7 +481,6 @@ final class HistoryDatabase: @unchecked Sendable {
     convenience init(url: URL, profileID: ProfileID) throws {
         try self.init(openingURL: url, flags: SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_FULLMUTEX)
         do {
-            try registerShortSymbolFunction()
             try execute("PRAGMA synchronous=FULL")
             try execute("PRAGMA secure_delete=ON")
             try execute("PRAGMA temp_store=MEMORY")
@@ -518,6 +517,7 @@ final class HistoryDatabase: @unchecked Sendable {
                     }
                 }
             }
+            try removeRetiredSuggestionPostings()
         } catch { sqlite3_close(handle); handle = nil; throw error }
     }
 
@@ -663,40 +663,23 @@ final class HistoryDatabase: @unchecked Sendable {
         }
     }
 
-    /// Additive acceleration only: original page/visit columns and FTS content stay intact.
+    /// Frecency is monotone in last-visit time within a fixed visit weight.
     private func migrateToVersionSeven() throws {
         try execute("CREATE INDEX pages_weight_last ON pages((visits+typed*4.0) DESC,last DESC,url ASC)")
-        try execute("CREATE TABLE shortSymbols(term TEXT NOT NULL,pageID INTEGER NOT NULL,PRIMARY KEY(term,pageID)) WITHOUT ROWID")
-        try execute("CREATE INDEX shortSymbols_page ON shortSymbols(pageID)")
-        try execute("INSERT OR IGNORE INTO shortSymbols SELECT value,pages.id FROM pages,json_each(orbit_short_symbols(searchURL,searchTitle))")
-        try execute("CREATE TRIGGER shortSymbols_insert AFTER INSERT ON pages BEGIN INSERT OR IGNORE INTO shortSymbols SELECT value,new.id FROM json_each(orbit_short_symbols(new.searchURL,new.searchTitle)); END")
-        try execute("CREATE TRIGGER shortSymbols_delete AFTER DELETE ON pages BEGIN DELETE FROM shortSymbols WHERE pageID=old.id; END")
-        try execute("CREATE TRIGGER shortSymbols_update AFTER UPDATE OF searchURL,searchTitle ON pages WHEN old.searchURL IS NOT new.searchURL COLLATE BINARY OR old.searchTitle IS NOT new.searchTitle COLLATE BINARY BEGIN DELETE FROM shortSymbols WHERE pageID=old.id; INSERT OR IGNORE INTO shortSymbols SELECT value,new.id FROM json_each(orbit_short_symbols(new.searchURL,new.searchTitle)); END")
     }
 
-    private func registerShortSymbolFunction() throws {
-        let result = withHandle { handle in
-            sqlite3_create_function_v2(handle, "orbit_short_symbols", 2, SQLITE_UTF8 | SQLITE_DETERMINISTIC, nil, { context, _, arguments in
-                guard let context, let arguments else { return }
-                var symbols: Set<String> = []
-                for column in 0..<2 {
-                    guard let bytes = sqlite3_value_text(arguments[column]) else { continue }
-                    let text = String(decoding: UnsafeBufferPointer(start: bytes, count: Int(sqlite3_value_bytes(arguments[column]))), as: UTF8.self)
-                    let scalars = Array(text.unicodeScalars)
-                    for index in scalars.indices {
-                        let scalar = scalars[index]
-                        guard scalar.value < 128, BrowserHistoryMatching.isSeparator(UInt8(scalar.value)) else { continue }
-                        symbols.insert(String(scalar))
-                        if index + 1 < scalars.count { symbols.insert(String(scalar) + String(scalars[index + 1])) }
-                    }
-                }
-                guard let data = try? JSONSerialization.data(withJSONObject: Array(symbols)) else { sqlite3_result_error_nomem(context); return }
-                data.withUnsafeBytes { bytes in
-                    sqlite3_result_text(context, bytes.baseAddress?.assumingMemoryBound(to: CChar.self), Int32(bytes.count), unsafeBitCast(-1, to: sqlite3_destructor_type.self))
-                }
-            }, nil, nil, nil)
+    /// An unreleased version-seven build installed per-symbol postings. Retire only those
+    /// acceleration objects, including their write triggers, without touching history content.
+    /// Ordinary opens remain read-only; obsolete objects are removed atomically once.
+    private func removeRetiredSuggestionPostings() throws {
+        guard try scalarInt("SELECT COUNT(*) FROM sqlite_master WHERE name IN ('shortSymbols','shortSymbols_page','shortSymbols_insert','shortSymbols_delete','shortSymbols_update')") > 0 else { return }
+        try transaction {
+            for name in ["shortSymbols_insert", "shortSymbols_delete", "shortSymbols_update"] {
+                try execute("DROP TRIGGER IF EXISTS \(name)")
+            }
+            try execute("DROP INDEX IF EXISTS shortSymbols_page")
+            try execute("DROP TABLE IF EXISTS shortSymbols")
         }
-        guard result == SQLITE_OK else { throw BrowserHistoryError.storageFailure(result) }
     }
 
     static let migrationBatch = 2048
