@@ -55,6 +55,7 @@ final class BrowserSidebarView: NSView, SidebarListHost {
     var onSelectTab: ((TabID) -> Void)?
     var onCloseTabs: (([TabID]) -> Void)?
     var onSetFolderCollapsed: ((FolderID, Bool) -> Void)?
+    var onSetPinnedSectionCollapsed: ((SpaceID, Bool) -> Void)?
     var onResetTab: ((TabID) -> Void)?
     var onToggleTabAudio: ((TabID) -> Void)?
     var onRename: ((BrowserOrganizationNode, String) -> Void)?
@@ -791,6 +792,10 @@ final class BrowserSidebarView: NSView, SidebarListHost {
         page.list.onFolderHover = { [weak self] row, inside in self?.onFolderHover?(row, inside) }
         page.list.onPreviewInvalidated = { [weak self] row in self?.onPreviewInvalidated?(row) }
         page.accent = accent
+        page.onSetPinnedSectionCollapsed = { [weak self, weak page] collapsed in
+            guard let self, let page, self.page === page, let id = page.spaceID else { return }
+            self.onSetPinnedSectionCollapsed?(id, collapsed)
+        }
         page.onRenameSpace = { [weak self, weak page] in
             if let id = page?.spaceID { self?.onRenameSpace?(id) }
         }
@@ -889,6 +894,9 @@ final class SidebarSpacePageView: NSView, NSTextFieldDelegate, NSMenuDelegate {
     let scrollView = BrowserGestureScrollView()
     let list = SidebarListView()
     let titleLabel = SidebarSpaceTitleLabel(labelWithString: "")
+    let disclosure = SidebarSpaceDisclosure()
+    let moreButton = OrbitGlyphButton(glyph: OrbitGlyph.symbol("ellipsis", pointSize: 12, weight: .semibold), label: uiText("Space Settings"))
+    var onSetPinnedSectionCollapsed: ((Bool) -> Void)?
     let iconButton = OrbitGlyphButton(glyph: nil, label: uiText("Change Icon or Emoji…"))
     var iconSelection: BrowserSpaceIcon = .none {
         didSet {
@@ -912,6 +920,8 @@ final class SidebarSpacePageView: NSView, NSTextFieldDelegate, NSMenuDelegate {
     var canDeleteSpace = false { didSet { titleLabel.menu = titleMenu() } }
     var accent = OrbitTokens.ThemeAccent.defaultSpace {
         didSet {
+            disclosure.tint = accent.foreground
+            moreButton.tint = accent.foreground.withAlphaComponent(0.6)
             titleLabel.textColor = accent.foreground
             list.accent = accent
             scrollView.scrollerKnobStyle = OrbitThemeForeground.isLight(on: accent.foreground.resolved(for: effectiveAppearance)) ? .dark : .light
@@ -942,7 +952,24 @@ final class SidebarSpacePageView: NSView, NSTextFieldDelegate, NSMenuDelegate {
         titleLabel.maximumNumberOfLines = 1
         titleLabel.menu = titleMenu()
         titleLabel.onDoubleClick = { [weak self] in self?.renameSpace(nil) }
+        titleLabel.setAccessibilityElement(false)
+        titleLabel.onClick = { [weak self] in self?.togglePinnedSection() }
+        disclosure.onToggle = { [weak self] in self?.togglePinnedSection() }
+        disclosure.onHover = { [weak self] hovered in
+            guard let self else { return }
+            iconButton.alphaValue = hovered ? 0 : 1
+            moreButton.alphaValue = hovered ? 1 : 0
+            needsLayout = true
+        }
+        disclosure.onShowMenu = { [weak self] in self?.showTitleMenu(nil) }
+        moreButton.target = self
+        moreButton.action = #selector(showTitleMenu(_:))
+        moreButton.alphaValue = 0
+        moreButton.setAccessibilityIdentifier("space-header-menu")
+        list.addSubview(disclosure)
         list.addSubview(titleLabel)
+        list.addSubview(moreButton)
+        list.onPinnedExpansionChange = { [weak self] value in self?.disclosure.expansion = value }
         iconButton.isHidden = true
         iconButton.target = self
         iconButton.action = #selector(editIcon(_:))
@@ -963,12 +990,28 @@ final class SidebarSpacePageView: NSView, NSTextFieldDelegate, NSMenuDelegate {
             titleLabel.stringValue = title
             needsLayout = true
         }
+        disclosure.setAccessibilityLabel(titleLabel.stringValue)
+        disclosure.isCollapsed = content.isPinnedSectionCollapsed
         list.apply(content, animated: animated)
+        disclosure.expansion = list.pinnedExpansion
+    }
+
+    private func togglePinnedSection() {
+        guard list.commandsEnabled, !isRenamingSpace, !isPrivate, !list.isStandalone else { return }
+        window?.makeFirstResponder(disclosure)
+        onSetPinnedSectionCollapsed?(!list.content.isPinnedSectionCollapsed)
+    }
+
+    @objc private func showTitleMenu(_ sender: Any?) {
+        guard list.commandsEnabled, !isRenamingSpace, let menu = spaceContextMenu else { return }
+        menu.popUp(positioning: nil, at: NSPoint(x: disclosure.frame.minX, y: disclosure.frame.maxY), in: list)
     }
 
     func setCommandsEnabled(_ enabled: Bool) {
         if !enabled { cancelSpaceRename() }
         list.setCommandsEnabled(enabled)
+        disclosure.isEnabled = enabled
+        moreButton.isEnabled = enabled
     }
 
     /// Replaces the title by an editor over the same frame and typography, text selected.
@@ -993,6 +1036,8 @@ final class SidebarSpacePageView: NSView, NSTextFieldDelegate, NSMenuDelegate {
         titleEditor = editor
         titleCommit = commit
         titleLabel.isHidden = true
+        disclosure.isHidden = true
+        moreButton.isHidden = true
         list.addSubview(editor)
         needsLayout = true
         layoutSubtreeIfNeeded()
@@ -1035,6 +1080,8 @@ final class SidebarSpacePageView: NSView, NSTextFieldDelegate, NSMenuDelegate {
         if editor.currentEditor() != nil { window?.makeFirstResponder(nil) }
         editor.removeFromSuperview()
         titleLabel.isHidden = false
+        disclosure.isHidden = false
+        moreButton.isHidden = false
         needsLayout = true
         if commit, !name.isEmpty, name != titleLabel.stringValue { action?(name) }
     }
@@ -1050,11 +1097,17 @@ final class SidebarSpacePageView: NSView, NSTextFieldDelegate, NSMenuDelegate {
             list.frame = NSRect(x: 0, y: 0, width: width, height: documentHeight)
         }
         let titleHeight = ceil(titleLabel.intrinsicContentSize.height)
-        let titleX = iconSelection == .none ? geometry.spaceTitleOriginX : Metrics.titleOriginX
+        let titleX = iconSelection == .none && !disclosure.isHovering ? geometry.spaceTitleOriginX : Metrics.titleOriginX
         iconButton.frame = NSRect(x: Metrics.faviconCenterX - 12, y: geometry.spaceTitleCenterY - 12,
                                   width: 24, height: 24)
         titleLabel.frame = NSRect(x: titleX, y: (geometry.spaceTitleCenterY - titleHeight / 2).rounded(),
                                   width: max(0, width - titleX - Metrics.paddingX - Metrics.rowInsetX), height: titleHeight)
+        disclosure.frame = NSRect(x: Metrics.paddingX, y: geometry.spaceTitleCenterY - 18,
+                                  width: max(0, width - 2 * Metrics.paddingX), height: 36)
+        moreButton.frame = NSRect(x: width - Metrics.paddingX - 28, y: geometry.spaceTitleCenterY - 14, width: 28, height: 28)
+        disclosure.isHidden = isRenamingSpace || isPrivate || list.isStandalone
+        moreButton.isHidden = disclosure.isHidden
+        titleLabel.frame.size.width = max(0, moreButton.frame.minX - titleX - 4)
         titleEditor?.frame = titleLabel.frame.insetBy(dx: -4, dy: -3)
         if isPrivate { titleLabel.isHidden = true; iconButton.isHidden = true }
     }
@@ -1845,11 +1898,14 @@ extension BrowserSidebarView {
     }
 }
 
-/// The Space title; a double click starts the in-place rename (hypothesis: Orbit header editing).
+/// The Space title forwards clicks to its disclosure; a double click begins in-place rename.
 @MainActor
 final class SidebarSpaceTitleLabel: NSTextField {
     var onDoubleClick: (() -> Void)?
+    var onClick: (() -> Void)?
     override func mouseDown(with event: NSEvent) {
-        if event.clickCount == 2 { onDoubleClick?() } else { super.mouseDown(with: event) }
+        if event.modifierFlags.contains(.control) { super.mouseDown(with: event) }
+        else if event.clickCount == 2 { onDoubleClick?() }
+        else { onClick?() }
     }
 }

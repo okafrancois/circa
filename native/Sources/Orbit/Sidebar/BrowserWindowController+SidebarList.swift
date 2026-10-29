@@ -65,6 +65,12 @@ extension BrowserWindowController {
         sidebar.onSelectSplit = { [weak self] id in self?.submitInput { $0.session.selectSplit(id) } }
         sidebar.onSelectTab = { [weak self] id in self?.submitInput { $0.activateSidebarTab(id) } }
         sidebar.onCloseTabs = { [weak self] ids in self?.submitInput { $0.closeSidebarTabs(ids) } }
+        sidebar.onSetPinnedSectionCollapsed = { [weak self] id, collapsed in
+            self?.submitInput { controller in
+                guard controller.session.snapshot?.activeSpaceID == id else { return }
+                controller.session.setPinnedSectionCollapsed(collapsed)
+            }
+        }
         sidebar.onSetFolderCollapsed = { [weak self] id, collapsed in
             self?.submitInput { $0.session.setFolderCollapsed(id, collapsed) }
         }
