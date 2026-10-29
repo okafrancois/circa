@@ -1377,12 +1377,10 @@
 // Native browser import
 "Import Restored" = "Import Restored";
 "Your session from before the import is ready. The imported profile was removed." = "Your session from before the import is ready. The imported profile was removed.";
-"Added a new profile with %@ passwords and %@ cookies. %@ passwords were unsupported; %@ existing passwords were kept. Bookmarks, tabs and history are ready in the imported Spaces." = "Added a new profile with %@ passwords and %@ cookies. %@ passwords were unsupported; %@ existing passwords were kept. Bookmarks, tabs and history are ready in the imported Spaces.";
 "Restore…" = "Restore…";
 "Restore Before This Import?" = "Restore Before This Import?";
 "Orbit will save and restart. This replaces all session edits made after the import and removes the imported profile, including its passwords, cookies and history. Other profiles’ website data is kept." = "Orbit will save and restart. This replaces all session edits made after the import and removes the imported profile, including its passwords, cookies and history. Other profiles’ website data is kept.";
 "Restore and Restart" = "Restore and Restart";
-"A new Orbit profile will receive %@ Spaces, %@ tabs and folders, and %@ history visits." = "A new Orbit profile will receive %@ Spaces, %@ tabs and folders, and %@ history visits.";
 "Bookmarks" = "Bookmarks";
 "Open tabs" = "Open tabs";
 "Passwords" = "Passwords";
@@ -1395,7 +1393,6 @@
 "Not supported; not imported" = "Not supported; not imported";
 "%@: %@" = "%@: %@";
 "Some history could not be read and will not be imported." = "Some history could not be read and will not be imported.";
-"%@ additional history visits have no dates in the export and will not be added." = "%@ additional history visits have no dates in the export and will not be added.";
 "Orbit will save your current session and restart to import. Nothing opens automatically. Restore can undo this import, replacing later session edits and removing the imported profile." = "Orbit will save your current session and restart to import. Nothing opens automatically. Restore can undo this import, replacing later session edits and removing the imported profile.";
 "Copying selected browser data…" = "Copying selected browser data…";
 "Reading bookmarks and tabs…" = "Reading bookmarks and tabs…";
@@ -1436,3 +1433,26 @@
 "Import Cancelled" = "Import Cancelled";
 "Nothing was kept from this import. Your previous session is ready." = "Nothing was kept from this import. Your previous session is ready.";
 "Choose a profile from the selected export. Any shared bookmarks and passwords will be added to its new Orbit profile." = "Choose a profile from the selected export. Any shared bookmarks and passwords will be added to its new Orbit profile.";
+
+/* Browser import summaries and plural fallbacks. */
+"%ld Spaces" = "%ld Spaces";
+"%ld tabs and folders" = "%ld tabs and folders";
+"%ld archived tabs" = "%ld archived tabs";
+"%ld history visits" = "%ld history visits";
+"%ld passwords" = "%ld passwords";
+"%ld passwords could not be imported." = "%ld passwords could not be imported.";
+"%ld existing passwords were kept." = "%ld existing passwords were kept.";
+"%ld additional history visits have no dates in the export and will not be added." = "%ld additional history visits have no dates in the export and will not be added.";
+"%ld additional history visits had no dates in the export and were not added." = "%ld additional history visits had no dates in the export and were not added.";
+"A new Orbit profile will be created." = "A new Orbit profile will be created.";
+"A new Orbit profile will receive %@." = "A new Orbit profile will receive %@.";
+"Added a new Orbit profile." = "Added a new Orbit profile.";
+"Added a new profile with %@." = "Added a new profile with %@.";
+"from selected CSV" = "from selected CSV";
+"no data found" = "no data found";
+"export required" = "export required";
+"unsupported version" = "unsupported version";
+"could not be read" = "could not be read";
+"not supported for Safari exports" = "not supported for Safari exports";
+"not supported" = "not supported";
+"Some history could not be read and was not imported." = "Some history could not be read and was not imported.";

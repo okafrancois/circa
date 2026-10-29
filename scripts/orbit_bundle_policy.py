@@ -69,8 +69,11 @@ def validate_bundle_contents(bundle):
                 allowed = resource in {(), ('Info.plist',), ('Resources',)}
                 if resource[:1] == ('Resources',):
                     resource = resource[1:]
-                allowed = allowed or (len(resource) == 1 and resource[0].endswith('.lproj')) or (
-                    len(resource) == 2 and resource[0].endswith('.lproj') and resource[1] == 'Localizable.strings')
+                localized_file = (len(resource) == 2 and resource[0].endswith('.lproj') and
+                                  resource[1] in {'Localizable.strings', 'Localizable.stringsdict'})
+                allowed = allowed or (len(resource) == 1 and resource[0].endswith('.lproj')) or localized_file
+                if localized_file and (entry.is_symlink() or not entry.is_file()):
+                    raise RuntimeError('Invalid shared localization resource type refused: ' + str(relative))
                 # CMake retains Orbit/; SwiftPM flattens processed resource filenames.
                 # Admit only this exact group, never arbitrary SVG/PDF/JSON/Markdown files.
                 orbit_directory = resource == ('Orbit',)

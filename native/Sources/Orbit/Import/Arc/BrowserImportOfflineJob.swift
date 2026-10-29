@@ -126,7 +126,7 @@ final class BrowserImportOfflineJob: @unchecked Sendable {
                     targetPassword: authentication.targetPassword, recoveryKey: key, checkpoint: checkpoint)
             } else { throw BrowserAuthenticationImportError.invalidState }
             await target.close()
-            try BrowserImportMetadata.writeResult(JSONEncoder().encode(BrowserImportResult(report: preparation.report, hasPasswordCSV: passwordCSV != nil)), root: root)
+            try BrowserImportMetadata.writeResult(JSONEncoder().encode(BrowserImportResult(report: preparation.report, hasPasswordCSV: passwordCSV != nil, sourceID: adapter.descriptor.id)), root: root)
         } catch {
             await target.close()
             // The existing launch recovery gate owns any partially applied import. Never open CEF here.
@@ -141,6 +141,7 @@ struct BrowserImportResult: Codable {
     var failed = false
     var report: ArcImportReport? = nil
     var hasPasswordCSV: Bool? = nil
+    var sourceID: String? = nil
 }
 
 extension OrbitApplication {
@@ -172,11 +173,10 @@ extension OrbitApplication {
             if result.restored {
                 alert.informativeText = uiText("Your session from before the import is ready. The imported profile was removed.")
             } else if let run = try? BrowserAuthenticationRun.open(dataRoot: configuration.dataRoot, recoveryKey: ChromiumAuthenticationStartup.recoveryKey(configuration)), run.status.phase == .verified {
-                alert.informativeText = uiFormat("Added a new profile with %@ passwords and %@ cookies. %@ passwords were unsupported; %@ existing passwords were kept. Bookmarks, tabs and history are ready in the imported Spaces.",
-                    ArcImportText.number(max(0, run.status.passwords - run.status.passwordConflicts)), ArcImportText.number(run.status.cookies),
-                    ArcImportText.number(run.status.unsupportedPasswords), ArcImportText.number(run.status.passwordConflicts))
-                if let outcome = run.status.outcome { alert.informativeText += "\n\n" + ArcImportText.completion(outcome) }
-                if let report = result.report { alert.informativeText += "\n\n" + BrowserImportText.availability(report, passwordCSV: result.hasPasswordCSV == true) }
+                alert.informativeText = BrowserImportText.completion(run.status.outcome,
+                    passwords: run.status.passwords, cookies: run.status.cookies,
+                    unsupportedPasswords: run.status.unsupportedPasswords, keptPasswords: run.status.passwordConflicts,
+                    report: result.report, passwordCSV: result.hasPasswordCSV == true, sourceID: result.sourceID)
             } else {
                 try? BrowserImportMetadata.removeResult(root: configuration.dataRoot)
                 return

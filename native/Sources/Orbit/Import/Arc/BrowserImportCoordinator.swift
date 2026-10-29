@@ -98,7 +98,7 @@ final class BrowserImportCoordinator {
                 progress.hideProgress()
                 guard preparation.report.sessionBudget.fits else { throw ArcImportError.sessionTooLarge(projectedBytes: preparation.report.sessionBudget.projectedBytes, limitBytes: preparation.report.sessionBudget.limitBytes) }
                 guard picker.confirm(title: uiFormat("Import from %@?", choice.descriptor.name),
-                    message: BrowserImportText.review(preparation.report, passwordCSV: csv != nil), button: uiText("Import and Restart")) else { return }
+                    message: BrowserImportText.review(preparation.report, passwordCSV: csv != nil, sourceID: choice.descriptor.id), button: uiText("Import and Restart")) else { return }
                 // This explicit Import action is the only source Keychain admission. Worker only.
                 let selectedSource = source
                 let authentication = try await perform { _ in

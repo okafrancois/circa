@@ -2,37 +2,82 @@ import BrowserCore
 import Foundation
 
 enum BrowserImportText {
-    static func review(_ report: ArcImportReport, passwordCSV: Bool = false) -> String {
-        var lines = [uiFormat("A new Orbit profile will receive %@ Spaces, %@ tabs and folders, and %@ history visits.",
-            ArcImportText.number(report.target.spacesAdded), ArcImportText.number(report.target.addedItems), ArcImportText.number(report.history.importable))]
-        lines.append(availability(report, passwordCSV: passwordCSV))
+    static func review(_ report: ArcImportReport, passwordCSV: Bool = false, sourceID: String? = nil) -> String {
+        let counts = structuralCounts(report.target, history: report.history.importable)
+        var lines = [counts.isEmpty ? uiText("A new Orbit profile will be created.")
+            : uiFormat("A new Orbit profile will receive %@.", ListFormatter.localizedString(byJoining: counts))]
+        let categories = availability(report, passwordCSV: passwordCSV, sourceID: sourceID)
+        if !categories.isEmpty { lines.append(categories) }
         lines.append(uiText("Orbit will save your current session and restart to import. Nothing opens automatically. Restore can undo this import, replacing later session edits and removing the imported profile."))
         return lines.joined(separator: "\n\n")
     }
-    static func availability(_ report: ArcImportReport, passwordCSV: Bool = false) -> String {
+
+    static func completion(_ outcome: ArcImportOutcome?, passwords: Int = 0, cookies: Int = 0,
+                           unsupportedPasswords: Int = 0, keptPasswords: Int = 0,
+                           report: ArcImportReport? = nil, passwordCSV: Bool = false, sourceID: String? = nil) -> String {
+        var counts = outcome.map { structuralCounts($0.merge, history: $0.historyInserted) } ?? []
+        let addedPasswords = max(0, passwords - keptPasswords)
+        if addedPasswords > 0 { counts.append(uiText("%ld passwords", count: addedPasswords)) }
+        if cookies > 0 { counts.append(uiText("%ld cookies", count: cookies)) }
+        var lines = [counts.isEmpty ? uiText("Added a new Orbit profile.")
+            : uiFormat("Added a new profile with %@.", ListFormatter.localizedString(byJoining: counts))]
+        if unsupportedPasswords > 0 { lines.append(uiText("%ld passwords could not be imported.", count: unsupportedPasswords)) }
+        if keptPasswords > 0 { lines.append(uiText("%ld existing passwords were kept.", count: keptPasswords)) }
+        if let report {
+            let notes = availability(report, passwordCSV: passwordCSV, sourceID: sourceID, forReview: false)
+            if !notes.isEmpty { lines.append(notes) }
+        }
+        return lines.joined(separator: "\n\n")
+    }
+
+    private static func structuralCounts(_ counts: BrowserImportMergeCounts, history: Int) -> [String] {
+        var parts: [String] = []
+        if counts.spacesAdded > 0 { parts.append(uiText("%ld Spaces", count: counts.spacesAdded)) }
+        if counts.addedItems > 0 { parts.append(uiText("%ld tabs and folders", count: counts.addedItems)) }
+        if counts.archivedTabsAdded > 0 { parts.append(uiText("%ld archived tabs", count: counts.archivedTabsAdded)) }
+        if history > 0 { parts.append(uiText("%ld history visits", count: history)) }
+        return parts
+    }
+
+    static func availability(_ report: ArcImportReport, passwordCSV: Bool = false, sourceID: String? = nil,
+                             forReview: Bool = true) -> String {
         var lines: [String] = []
         let labels = ["bookmarks": uiText("Bookmarks"), "tabs": uiText("Open tabs"), "history": uiText("History"),
             "passwords": uiText("Passwords"), "cookies": uiText("Cookies")]
+        var capabilities = report.capabilities ?? [:]
+        if forReview, sourceID == "safari" {
+            capabilities["cookies"] = .unsupported
+            capabilities["tabs"] = .unsupported
+        }
         for key in labels.keys.sorted() {
-            guard let capability = report.capabilities?[key], let label = labels[key] else { continue }
+            guard let capability = capabilities[key], let label = labels[key] else { continue }
             if key == "passwords", passwordCSV {
-                lines.append(uiFormat("%@: %@", label, uiText("From selected CSV")))
+                if forReview { lines.append(uiFormat("%@: %@", label, uiText("from selected CSV"))) }
                 continue
             }
             let status: String
             switch capability {
-            case .supported: status = uiText("Available")
-            case .empty: status = uiText("No data found")
-            case .needsExport: status = uiText("Export required; not imported directly")
-            case .unsupportedVersion: status = uiText("Unsupported version; not imported")
-            case .failed: status = uiText("Could not be read; not imported")
-            case .unsupported: status = uiText("Not supported; not imported")
+            case .supported:
+                if forReview { lines.append(label) }
+                continue
+            case .empty:
+                guard forReview else { continue }
+                status = uiText("no data found")
+            case .needsExport: status = uiText("export required")
+            case .unsupportedVersion: status = uiText("unsupported version")
+            case .failed: status = uiText("could not be read")
+            case .unsupported:
+                status = sourceID == "safari" ? uiText("not supported for Safari exports") : uiText("not supported")
             }
             lines.append(uiFormat("%@: %@", label, status))
         }
-        if report.historyDatabasesUnreadable > 0 { lines.append(uiText("Some history could not be read and will not be imported.")) }
+        if report.historyDatabasesUnreadable > 0 {
+            lines.append(forReview ? uiText("Some history could not be read and will not be imported.")
+                : uiText("Some history could not be read and was not imported."))
+        }
         if let count = report.sourceCounts?["aggregateVisitsWithoutTimestamps"], count > 0 {
-            lines.append(uiFormat("%@ additional history visits have no dates in the export and will not be added.", ArcImportText.number(count)))
+            lines.append(forReview ? uiText("%ld additional history visits have no dates in the export and will not be added.", count: count)
+                : uiText("%ld additional history visits had no dates in the export and were not added.", count: count))
         }
         return lines.joined(separator: "\n")
     }

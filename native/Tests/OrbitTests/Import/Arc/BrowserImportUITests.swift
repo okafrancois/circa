@@ -63,15 +63,61 @@ struct BrowserImportUITests {
         report.capabilities = ["bookmarks": .needsExport, "tabs": .failed, "history": .supported]
         report.historyDatabasesUnreadable = 1
         let review = BrowserImportText.review(report)
-        #expect(review.contains(uiText("Export required; not imported directly")))
-        #expect(review.contains(uiText("Could not be read; not imported")))
+        #expect(review.contains(uiText("export required")))
+        #expect(review.contains(uiText("could not be read")))
         #expect(review.contains(uiText("Some history could not be read and will not be imported.")))
         #expect(!review.contains("needsExport"))
+        #expect(!review.contains(": Available"))
         report.capabilities?["passwords"] = .needsExport
-        #expect(BrowserImportText.review(report, passwordCSV: true).contains(uiText("From selected CSV")))
+        #expect(BrowserImportText.review(report, passwordCSV: true).contains(uiText("from selected CSV")))
+        #expect(BrowserImportText.review(report, sourceID: "safari").contains("Cookies: " + uiText("not supported for Safari exports")))
         for error in [BrowserAuthenticationImportError.keychainDenied, .sourceKeyMissing, .keychainFailure] {
             #expect(BrowserImportText.failure(error).contains("Nothing was imported"))
         }
+    }
+    @Test func importSummariesUsePluralRulesAndOmitEmptyCounts() {
+        var report = ArcImportReport()
+        report.target.spacesAdded = 1
+        report.target.todayTabsAdded = 1
+        report.history.importable = 1
+        report.capabilities = ["bookmarks": .supported, "history": .supported, "tabs": .supported]
+        let review = BrowserImportText.review(report)
+        for phrase in ["1 Space", "1 tab or folder", "1 history visit"] { #expect(review.contains(phrase)) }
+        #expect(!review.contains("0 "))
+        #expect(!review.contains("1 Spaces"))
+        #expect(!review.contains("1 history visits"))
+        var outcome = ArcImportOutcome()
+        outcome.merge = report.target
+        outcome.historyInserted = 1
+        let result = BrowserImportText.completion(outcome, passwords: 1, cookies: 1, report: report)
+        for phrase in ["1 Space", "1 tab or folder", "1 history visit", "1 password", "1 cookie"] { #expect(result.contains(phrase)) }
+        for omitted in ["0 ", "1 passwords", "1 cookies", "archived", "unsupported", "kept", "Bookmarks:", "History:", "Open tabs:", "Available"] {
+            #expect(!result.contains(omitted))
+        }
+        #expect(BrowserImportText.review(.init()).hasPrefix(uiText("A new Orbit profile will be created.")))
+        #expect(BrowserImportText.completion(nil) == uiText("Added a new Orbit profile."))
+    }
+    @Test func completionKeepsOnlyApplicableWarningsAndCounts() {
+        var report = ArcImportReport()
+        report.capabilities = ["bookmarks": .needsExport, "history": .supported, "tabs": .empty, "passwords": .needsExport, "cookies": .unsupported]
+        report.sourceCounts = ["aggregateVisitsWithoutTimestamps": 1]
+        let result = BrowserImportText.completion(nil, passwords: 3, cookies: 2, unsupportedPasswords: 1,
+            keptPasswords: 1, report: report, passwordCSV: true, sourceID: "safari")
+        #expect(result.contains("2 passwords"))
+        #expect(result.contains("2 cookies"))
+        #expect(result.contains("1 password could not be imported."))
+        #expect(result.contains("1 existing password was kept."))
+        #expect(result.contains("1 additional history visit had no date in the export and was not added."))
+        #expect(result.contains(uiText("export required")))
+        #expect(result.contains(uiText("not supported for Safari exports")))
+        #expect(!result.contains(uiText("no data found")))
+        #expect(!result.contains(uiText("from selected CSV")))
+        #expect(!result.contains("History"))
+        var outcome = ArcImportOutcome()
+        outcome.merge.archivedTabsAdded = 1
+        #expect(BrowserImportText.completion(outcome).contains("1 archived tab"))
+        outcome.merge.archivedTabsAdded = 2
+        #expect(BrowserImportText.completion(outcome).contains("2 archived tabs"))
     }
     @Test @MainActor func cancelledJobDiscardsWithoutTargetMutation() throws {
         let root = URL(fileURLWithPath: "/private/tmp/import-ui-test-" + UUID().uuidString)
