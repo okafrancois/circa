@@ -64,7 +64,14 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
 
     // MARK: Find
     let findSession: BrowserFindSession<Surface>
-    let findBar = BrowserFindBarView()
+    var findBarStorage: BrowserFindBarView?
+    var findBar: BrowserFindBarView {
+        if let findBarStorage { return findBarStorage }
+        let view = BrowserFindBarView()
+        findBarStorage = view
+        if let root = window?.contentView { installFindBar(in: root) }
+        return view
+    }
     weak var findOwner: Surface?
     var displayedFindDocumentGeneration: UInt64 = 0
     weak var focusBeforeFind: NSResponder?
@@ -91,7 +98,7 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
 
     // MARK: Downloads
     let downloads: BrowserDownloadsController
-    let downloadsPane = BrowserDownloadsPane()
+    lazy var downloadsPane = BrowserDownloadsPane()
     var downloadsProfileID: ProfileID?
 
     // MARK: Tab switcher
@@ -180,6 +187,7 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
         onClose: @escaping () -> Void,
         onActivate: @escaping () -> Void
     ) {
+        BrowserPerformance.mark(.windowPropertiesReady)
         self.translationPages = translationPages
         self.id = id
         self.engine = engine
@@ -207,6 +215,7 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
         window.backgroundColor = .windowBackgroundColor
         window.minSize = NSSize(width: 600, height: 400)
         window.center()
+        BrowserPerformance.mark(.nativeWindowReady)
         super.init(window: window)
         siteControls = BrowserSiteControls<Engine>(owner: self)
         favorites = BrowserFavoritesController<Engine>(owner: self)
@@ -261,7 +270,12 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
         session.observeOrganizationChanges()
         findSession.onChange = { [weak self] in self?.renderFind() }
         findSession.onFocusReturn = { [weak self] surface in self?.returnFocusAfterFind(on: surface) }
-        downloads.observe(id) { [weak self] in self?.renderDownloads(); self?.renderLibraryMedia() }
+        downloads.observeChanges(id) { [weak self] delta in
+            self?.renderDownloads(delta: delta)
+            if delta.historyChanged || delta.changed.contains(where: { $0.state == .complete }) {
+                self?.renderLibraryMedia()
+            }
+        }
         if restoringWindowID == nil && opensInitialTab { openTab() }
     }
 
@@ -281,7 +295,15 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
         onStateChange()
     }
 
-    func windowDidBecomeKey(_ notification: Notification) { onActivate(); passwordPrompt.render() }
+    func windowDidBecomeKey(_ notification: Notification) {
+        onActivate()
+        passwordPrompt.render()
+        // Detached swipe pages need not compete with the first window transaction.
+        Task { [weak self] in
+            guard let self, !session.isClosed else { return }
+            sidebar.spaceSwipe.validate(catalog: session.catalog, active: session.snapshot?.activeSpaceID)
+        }
+    }
 
     func windowDidResignKey(_ notification: Notification) { passwordPrompt.close() }
 
@@ -434,6 +456,7 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
     }
 
     private func renderSessionProjection() {
+        BrowserPerformance.count(.windowProjections, window: id)
         tabSuspension?.selectionDidChange()
         if let catalog = session.catalog, catalog != publishedCatalog {
             publishedCatalog = catalog

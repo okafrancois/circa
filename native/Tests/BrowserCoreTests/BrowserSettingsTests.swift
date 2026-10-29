@@ -32,7 +32,7 @@ struct BrowserSettingsTests {
         try await store.setReducedMotion(.reduce)
         let reopened = try BrowserSettingsStore(destination: url)
         let saved = await reopened.snapshot()
-        #expect(saved.version == 1 && saved.profile(first) == profile)
+        #expect(saved.version == BrowserSettingsDocument.currentVersion && saved.profile(first) == profile)
         #expect(saved.profile(second) == BrowserProfileSettings())
         #expect(saved.space(space) == theme && saved.reducedMotion == .reduce)
         let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
@@ -48,7 +48,7 @@ struct BrowserSettingsTests {
         #expect(profile.searchEngine == .google && !profile.opensPinnedLinksInPeek && profile.shiftClickOpensPeek)
     }
 
-    @Test("Version zero migrates the boolean override and publishes version one on the next write")
+    @Test("Version zero migrates the boolean override and publishes the current version on the next write")
     func migration() async throws {
         let url = destination()
         defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }

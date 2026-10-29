@@ -16,10 +16,16 @@ struct BrowserSyncRuntimeTests {
         #expect(!runtime.hasScheduledCycle)
         try await Task.sleep(for: .milliseconds(35))
         #expect(cycles == 0)
+        // Positive checks poll: a loaded host can delay the 10 ms cycles.
+        func waitForCycle(after count: Int) async throws {
+            let deadline = ContinuousClock.now + .seconds(5)
+            while cycles <= count, ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(10)) }
+        }
         for _ in 0..<2 {
+            let before = cycles
             try await runtime.setEnabled(true)
-            try await Task.sleep(for: .milliseconds(35))
-            #expect(cycles > 0)
+            try await waitForCycle(after: before)
+            #expect(cycles > before)
             try await runtime.setEnabled(false)
             let stopped = cycles
             try await Task.sleep(for: .milliseconds(35))
@@ -31,7 +37,7 @@ struct BrowserSyncRuntimeTests {
         #expect(!runtime.hasScheduledCycle)
         let stopped = cycles
         runtime.resumeAfterCancelledTermination()
-        try await Task.sleep(for: .milliseconds(35))
+        try await waitForCycle(after: stopped)
         #expect(cycles > stopped)
         await runtime.prepareForTermination()
     }
@@ -47,7 +53,12 @@ struct BrowserSyncRuntimeTests {
                 throw error
             }
             try await runtime.setEnabled(true)
-            try await Task.sleep(for: .milliseconds(50))
+            // Poll instead of a fixed sleep: a loaded host can delay the 10 ms cycles.
+            let deadline = ContinuousClock.now + .seconds(5)
+            while ContinuousClock.now < deadline {
+                if error == .accountChanged ? !runtime.hasScheduledCycle : cycles > 1 { break }
+                try await Task.sleep(for: .milliseconds(10))
+            }
             if error == .accountChanged {
                 #expect(cycles == 1)
                 #expect(!runtime.enabled && !runtime.hasScheduledCycle && runtime.needsAccountDecision)

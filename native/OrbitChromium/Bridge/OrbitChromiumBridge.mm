@@ -592,7 +592,8 @@ class DevToolsObserver final : public CefDevToolsMessageObserver {
     const std::string name = method;
     if (!g_state || (name != "WebAudio.contextCreated" && name != "WebAudio.contextChanged"
                      && name != "WebAudio.contextWillBeDestroyed" && name != "Media.playerEventsAdded"
-                     && name != "Media.playerPropertiesChanged" && name != "Media.playersCreated")) return;
+                     && name != "Media.playerPropertiesChanged" && name != "Media.playersCreated"
+                     && name != "Page.frameNavigated" && name != "Page.lifecycleEvent")) return;
     auto event = g_state->Event(ACR_EVENT_MEDIA_ACTIVITY, token_);
     event.detail = name.c_str();
     event.payload = params;
@@ -2050,6 +2051,9 @@ bool SameDirectory(const std::string& a, const std::string& b) {
 
 }  // namespace
 
+static void (*g_startup_timing)(int32_t) = nullptr;
+extern "C" void ACRSetStartupTimingCallback(void (*callback)(int32_t)) { g_startup_timing = callback; }
+
 extern "C" int32_t ACRRun(int argc, char* argv[], const ACRRunOptions* options,
                           const ACRCallbacks* callbacks, void* context) {
   if (!NSThread.isMainThread || g_state || !options || options->struct_size != sizeof(ACRRunOptions)
@@ -2059,6 +2063,7 @@ extern "C" int32_t ACRRun(int argc, char* argv[], const ACRRunOptions* options,
   orbit_bridge::ConfigureBrowserQoS();
   @autoreleasepool {
     if (!loader.LoadInMain()) return 69;
+    if (g_startup_timing) g_startup_timing(0);
     State state;
     state.callbacks = *callbacks;
     state.context = context;
@@ -2146,11 +2151,13 @@ extern "C" int32_t ACRRun(int argc, char* argv[], const ACRRunOptions* options,
     browser_argv.push_back(program.data());
     for (auto& argument : state.browser_arguments) browser_argv.push_back(argument.data());
     browser_argv.push_back(nullptr);
+    if (g_startup_timing) g_startup_timing(1);
     if (!CefInitialize(CefMainArgs(static_cast<int>(browser_argv.size()) - 1, browser_argv.data()), settings, app,
                        nullptr)) {
       g_state = nullptr;
       return CefGetExitCode();
     }
+    if (g_startup_timing) g_startup_timing(2);
     state.initialized = true;
     CefRunMessageLoop();
     fprintf(stderr, "acr: message loop exited hosts=%zu pending=%zu\n", state.hosts.size(),
@@ -2326,7 +2333,9 @@ extern "C" int32_t ACRProfileLoaded(const char* path) {
   return g_state->orbit->profile_loaded(path);
 }
 
-extern "C" int32_t ACRRemoveProfileDirectory(const char* cache_path) {
+extern "C" int32_t ACRRetireProfileDirectory(const char* cache_path, uint64_t* retirement) {
+  if (!retirement) return -1;
+  *retirement = 0;
   if (!NSThread.isMainThread || !g_state || !g_state->initialized || !cache_path || !g_state->anchor) return 0;
   // CHROMIUM-APP-R3: every step on the root descriptor opened at start-up.
   if (!g_state->anchor->StillAtPath()) return -5;
@@ -2347,13 +2356,29 @@ extern "C" int32_t ACRRemoveProfileDirectory(const char* cache_path) {
   }
   // Chrome must have unloaded the Profile: it would otherwise keep writing into the directory.
   if (ACRProfileLoaded(path.c_str()) != 0) return 0;
-  switch (g_state->anchor->RemoveChild(name)) {
+  std::unique_ptr<orbit_bridge::AnchoredRoot::RetiredChild> retired;
+  const auto result = g_state->anchor->RetireChild(name, &retired);
+  if (retired) *retirement = reinterpret_cast<uint64_t>(retired.release());
+  switch (result) {
     case orbit_bridge::AnchoredRoot::Removal::kRemoved: return 2;
     case orbit_bridge::AnchoredRoot::Removal::kAbsent: return 1;
     case orbit_bridge::AnchoredRoot::Removal::kRefused: return -5;
     case orbit_bridge::AnchoredRoot::Removal::kFailed: return -1;
   }
   return -1;
+}
+
+extern "C" int32_t ACRFinishProfileRemoval(uint64_t retirement) {
+  if (!retirement) return 2;
+  std::unique_ptr<orbit_bridge::AnchoredRoot::RetiredChild> retired(
+      reinterpret_cast<orbit_bridge::AnchoredRoot::RetiredChild*>(retirement));
+  return retired->Remove() ? 2 : -1;
+}
+
+extern "C" int32_t ACRRemoveProfileDirectory(const char* path) {
+  uint64_t retirement = 0;
+  const int32_t result = ACRRetireProfileDirectory(path, &retirement);
+  return retirement ? ACRFinishProfileRemoval(retirement) : result;
 }
 
 #define ACR_HOST(token) \

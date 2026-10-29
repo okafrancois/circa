@@ -790,9 +790,12 @@ public final class BrowserWindowSession<Surface: BrowserSurface> {
 
     func adoptWindow(_ windowID: WindowID) async throws {
         guard !isClosed else { return }
+        BrowserPerformance.mark(.sessionAdoptBegin)
         let state = try await store.materializeVisibleSplitAndCaptureState(in: windowID)
+        BrowserPerformance.mark(.sessionCaptured)
         guard !isClosed else { return }
         guard await store.isCurrent(state.context) else { throw BrowserStoreError.staleContext }
+        BrowserPerformance.mark(.sessionValidated)
         install(state)
     }
 
@@ -848,6 +851,7 @@ public final class BrowserWindowSession<Surface: BrowserSurface> {
             record(surface, as: tab.occurrenceID, authority: state.occurrenceAuthorities[tab.occurrenceID])
             created.append((tab.occurrenceID, surface, tab.url))
         }
+        BrowserPerformance.mark(.sessionSurfacesReady)
         requestedSurfaceIDs.subtract(created.map { $0.0 })
         activeContext = state.context
         modelOccurrenceAuthorities = state.occurrenceAuthorities
@@ -863,7 +867,9 @@ public final class BrowserWindowSession<Surface: BrowserSurface> {
             }
         }
         guard !isClosed else { return }
+        BrowserPerformance.mark(.sessionNavigated)
         onChange?()
+        BrowserPerformance.mark(.sessionRendered)
     }
 
     /// Records ownership maps and reports membership. No actor hop or engine callback may run

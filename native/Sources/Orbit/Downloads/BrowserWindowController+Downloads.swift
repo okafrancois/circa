@@ -43,40 +43,55 @@ extension BrowserWindowController {
         downloadsPane.list.render([])
     }
 
-    func renderDownloads() {
+    func renderDownloads(delta: BrowserDownloadCoordinator.Delta? = nil) {
         guard let profile = downloadsProfileID else { return }
         guard session.activeProfileID == profile else { downloadsPane.list.render([]); return }
         downloadsPane.setProfileName(session.catalog?.profiles.first { $0.id == profile }?.name ?? "")
         let query = downloadsPane.query.trimmingCharacters(in: .whitespacesAndNewlines)
-        let rows = downloads.snapshots(profileID: profile).map { item -> DownloadRowPresentation in
-            let detail: String
-            switch item.state {
-            case .awaitingDestination: detail = uiText("Choose a Destination…")
-            case .running:
-                let received = ByteCountFormatter.string(fromByteCount: item.receivedBytes, countStyle: .file)
-                detail = item.totalBytes.map { uiFormat("%@ of %@", received, ByteCountFormatter.string(fromByteCount: $0, countStyle: .file)) } ?? received
-            case .paused: detail = uiText("Paused")
-            case .interrupted: detail = uiText("Interrupted")
-            case .complete:
-                let size = ByteCountFormatter.string(fromByteCount: item.receivedBytes, countStyle: .file)
-                let status = item.fileAvailability == .missing ? uiText("Complete · File Unavailable") : uiText("Complete")
-                detail = uiFormat("%@ · %@", status, size)
-            case .cancelled: detail = uiText("Canceled")
-            case .failed: detail = item.failure == .destinationUnavailable ? uiText("Destination Unavailable") : uiText("Download Failed")
-            }
-            var actions: [DownloadRowPresentation.Action] = []
-            if item.canPerform(.pause) { actions.append(.pause) }
-            if item.canPerform(.resume) { actions.append(.resume) }
-            if item.canPerform(.cancel) { actions.append(.cancel) }
-            if item.state == .complete { actions.append(contentsOf: [.open, .reveal]) }
-            if item.state.isTerminal { actions.append(.remove) }
-            return DownloadRowPresentation(id: item.key.id, lifetime: item.key.lifetime, revision: item.revision,
-                title: item.destinationURL?.lastPathComponent ?? item.suggestedFilename, detail: detail,
-                receivedBytes: item.receivedBytes, totalBytes: item.totalBytes,
-                isRunning: item.state == .running, actions: actions,
-                fileURL: item.state == .complete && item.fileAvailability == .available ? item.destinationURL : nil,
-                startedAt: item.startedAt)
+        if let delta, downloadsPane.list.canUpdate(delta, profileID: profile) {
+            downloadsPane.list.update(delta.changed.filter { $0.owner.profileID == profile }.map(DownloadRowPresentation.init))
+            return
         }
-        downloadsPane.list.render(rows, query: query)
+        // Rows are built only for the entries that receive a view.
+        let items = downloads.snapshots(profileID: profile)
+        downloadsPane.list.render(items.map { DownloadListEntry(id: $0.key.id, lifetime: $0.key.lifetime,
+                                                                title: DownloadRowPresentation.title($0), startedAt: $0.startedAt) },
+                                  query: query, presentation: { DownloadRowPresentation(items[$0]) })
+    }
+}
+
+extension DownloadRowPresentation {
+    static func title(_ item: BrowserDownloadSnapshot) -> String {
+        item.destinationURL?.lastPathComponent ?? item.suggestedFilename
+    }
+
+    init(_ item: BrowserDownloadSnapshot) {
+        let detail: String
+        switch item.state {
+        case .awaitingDestination: detail = uiText("Choose a Destination…")
+        case .running:
+            let received = ByteCountFormatter.string(fromByteCount: item.receivedBytes, countStyle: .file)
+            detail = item.totalBytes.map { uiFormat("%@ of %@", received, ByteCountFormatter.string(fromByteCount: $0, countStyle: .file)) } ?? received
+        case .paused: detail = uiText("Paused")
+        case .interrupted: detail = uiText("Interrupted")
+        case .complete:
+            let size = ByteCountFormatter.string(fromByteCount: item.receivedBytes, countStyle: .file)
+            let status = item.fileAvailability == .missing ? uiText("Complete · File Unavailable") : uiText("Complete")
+            detail = uiFormat("%@ · %@", status, size)
+        case .cancelled: detail = uiText("Canceled")
+        case .failed: detail = item.failure == .destinationUnavailable ? uiText("Destination Unavailable") : uiText("Download Failed")
+        }
+        var actions: [Action] = []
+        if item.canPerform(.pause) { actions.append(.pause) }
+        if item.canPerform(.resume) { actions.append(.resume) }
+        if item.canPerform(.cancel) { actions.append(.cancel) }
+        if item.state == .complete { actions.append(contentsOf: [.open, .reveal]) }
+        if item.state.isTerminal { actions.append(.remove) }
+        self.init(id: item.key.id, lifetime: item.key.lifetime, revision: item.revision,
+                  title: Self.title(item), detail: detail,
+                  receivedBytes: item.receivedBytes, totalBytes: item.totalBytes,
+                  isRunning: item.state == .running, actions: actions,
+                  fileURL: item.state == .complete && item.fileAvailability == .available ? item.destinationURL : nil,
+                  startedAt: item.startedAt)
     }
 }

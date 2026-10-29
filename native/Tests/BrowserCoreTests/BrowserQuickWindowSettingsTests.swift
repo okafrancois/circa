@@ -18,7 +18,7 @@ struct BrowserQuickWindowSettingsTests {
         let legacy = try JSONSerialization.data(withJSONObject: object)
         let restored = try JSONDecoder().decode(BrowserSettingsDocument.self, from: legacy)
         #expect(restored == document)
-        #expect(restored.version == 1 && restored.opensExternalLinksInQuickWindow)
+        #expect(restored.version == BrowserSettingsDocument.currentVersion && restored.opensExternalLinksInQuickWindow)
     }
 
     @Test("The routing toggle persists and reopens independently of the session document")

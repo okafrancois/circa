@@ -56,7 +56,15 @@ extension BrowserHistoryStore {
     /// Existing history, imports and subsequent metadata revisions all enter the same journal.
     public func historySyncBatches(now: Date = Date()) throws -> [BrowserHistorySyncBatch] {
         guard let database else { return [] }
-        return try database.transaction {
+        let changes = database.withHandle { sqlite3_total_changes64($0) }
+        let dataVersion = try database.scalarText("PRAGMA data_version")
+        let requestedCutoff = BrowserHistorySyncSchema.cutoff(now)
+        if let cache = syncBatchCache, cache.changes == changes, cache.dataVersion == dataVersion, requestedCutoff <= cache.cutoff {
+            return cache.batches
+        }
+        // Never publish a cache before COMMIT, or while unpacked rows remain.
+        syncBatchCache = nil
+        let result = try database.transaction {
             let previous = try syncCutoff()
             let cutoff = max(previous, BrowserHistorySyncSchema.cutoff(now))
             try advanceSyncCutoff(cutoff)
@@ -91,6 +99,10 @@ extension BrowserHistoryStore {
             }
             return result
         }
+        if try database.scalarText("SELECT COUNT(*) FROM historySyncEvents WHERE batch IS NULL") == "0" {
+            syncBatchCache = (database.withHandle { sqlite3_total_changes64($0) }, dataVersion, try syncCutoff(), result)
+        }
+        return result
     }
 
     private func saveSyncBatch(_ batch: BrowserHistorySyncBatch) throws {

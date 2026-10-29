@@ -37,6 +37,7 @@ public extension BrowserWindowSession {
             self?.queueOrganizationRefresh()
             for await _ in changes {
                 guard let self, !self.isClosed else { return }
+                BrowserPerformance.count(.organizationDeliveries)
                 self.queueOrganizationRefresh()
             }
         }
@@ -406,6 +407,7 @@ extension BrowserWindowSession {
 
     /// Publishes only when something visible to this window changed.
     func refreshOrganizationState() async throws {
+        BrowserPerformance.count(.organizationRefreshes)
         guard !isClosed, let windowID else { return }
         let state = try await store.captureWindowState(in: windowID)
         guard !isClosed, let activeContext else { return }

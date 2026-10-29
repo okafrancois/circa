@@ -340,6 +340,7 @@ final class BrowserSidebarView: NSView, SidebarListHost {
     /// Surface updates (loading progress, titles) re-render often: the content is rebuilt only
     /// when the snapshot, the selection or a live title changed.
     private func makeContent() -> SidebarListContent {
+        BrowserPerformance.count(.sidebarContentPasses)
         var titles: [TabID: String] = [:]
         var activities: [TabID: SidebarTabActivity] = [:]
         if let organization {
@@ -350,6 +351,7 @@ final class BrowserSidebarView: NSView, SidebarListHost {
         }
         let inputs = ContentInputs(organization: organization, selection: selection, liveTitles: titles, liveActivities: activities)
         guard inputs != contentInputs else { return cachedContent }
+        BrowserPerformance.count(.sidebarRebuilds)
         contentInputs = inputs
         cachedContent = SidebarListContent(snapshot: organization, selection: selection, liveTitle: { titles[$0.id] },
                                           liveActivity: { activities[$0.id] ?? .init() })
@@ -684,8 +686,8 @@ final class BrowserSidebarView: NSView, SidebarListHost {
 
     func applyAccent(_ accent: OrbitTokens.ThemeAccent) {
         self.accent = accent
-        addressContainer.accent = accent
-        navigationContainer.accent = accent
+        if addressContainer.accent != accent { addressContainer.accent = accent }
+        if navigationContainer.accent != accent { navigationContainer.accent = accent }
         footer.accent = accent
         page.accent = accent
         leavingPage?.accent = accent
@@ -993,6 +995,7 @@ final class SidebarToolbarRow: SidebarFlippedView {
     private(set) var overflowButton: NSButton?
     var accent = OrbitTokens.ThemeAccent.defaultSpace {
         didSet {
+            guard accent != oldValue else { return }
             for button in buttons { applyAccent(to: button) }
             if let overflowButton { applyAccent(to: overflowButton) }
         }

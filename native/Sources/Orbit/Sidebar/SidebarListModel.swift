@@ -113,6 +113,7 @@ struct SidebarListContent: Equatable {
     init(snapshot: BrowserOrganizationSnapshot?, selection: BrowserOrganizationSelection = .init(),
          liveTitle: (BrowserOrganizationTabItem) -> String? = { _ in nil },
          liveActivity: (BrowserOrganizationTabItem) -> SidebarTabActivity = { _ in .init() }) {
+        BrowserPerformance.count(.listProjections)
         guard let snapshot else { return }
         isPinnedSectionCollapsed = snapshot.isPinnedSectionCollapsed
         let multi = selection.nodes.count >= 2 && selection.spaceID == snapshot.spaceID

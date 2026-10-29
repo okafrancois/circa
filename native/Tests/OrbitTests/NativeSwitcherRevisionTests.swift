@@ -195,6 +195,7 @@ struct NativeSwitcherRevisionTests {
         card.present(replacement, retainingPreviousUntil: firstRace)
         while surface.continuations.isEmpty { await Task.yield() }
         card.present(surface.hostView)
+        cache.cancelPendingCapture(for: surface)
         let secondRace = cache.request(surface, force: true)
         card.present(replacement, retainingPreviousUntil: secondRace)
         while surface.continuations.count < 2 { await Task.yield() }

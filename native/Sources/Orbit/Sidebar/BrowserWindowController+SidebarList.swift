@@ -31,8 +31,10 @@ extension BrowserWindowController {
                     ?? sidebarIcons.image(for: item, surface: nil, isOwned: { _ in false }))
             }
             let media = siteControls.mediaStates[ObjectIdentifier(surface)]
-            let icon = sidebarIcons.image(for: item, surface: surface, isOwned: { [weak self] in self?.owns($0) == true })
-            return SidebarTabActivity(favicon: icon, isLoading: surface.navigationState.isLoading,
+            let preservingSleep = tabSuspension.preservesSleepingPresentation(for: occurrenceID)
+            let sleepingIcon = preservingSleep ? tabSuspension.icon(for: occurrenceID) : nil
+            let icon = sleepingIcon ?? sidebarIcons.image(for: item, surface: surface, isOwned: { [weak self] in self?.owns($0) == true })
+            return SidebarTabActivity(favicon: icon, isLoading: surface.navigationState.isLoading && !preservingSleep,
                                       isAudible: media?.isAudible ?? media?.isAudioPlaying, isAudioMuted: media?.isAudioMuted)
         }
         sidebarIcons.onChange = { [weak self] in

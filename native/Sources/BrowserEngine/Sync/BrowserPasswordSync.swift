@@ -132,13 +132,12 @@ public actor BrowserPasswordSyncMemoryCloud: BrowserPasswordSyncTransport {
 
 /// Engine store is the local authority. The durable outbox/baseline is always AES-GCM sealed.
 /// No decrypted credential, matching key or CKSyncEngine serialization is written to disk.
-@MainActor
-public final class BrowserPasswordSync {
-    private struct Binding: Codable {
+public actor BrowserPasswordSync {
+    private struct Binding: Codable, Sendable {
         var id: UUID
         var fields: [String: Data]
     }
-    private struct State: Codable {
+    private struct State: Codable, Sendable {
         var device = UUID().uuidString
         var entries: [BrowserPasswordSyncEntry] = []
         var baseline: [ProfileID: [Binding]] = [:]
@@ -180,8 +179,7 @@ public final class BrowserPasswordSync {
                 // Secret-free notifications schedule a fresh list on the next bounded cycle.
                 observers[profile] = Task { [weak self] in
                     for await change in stream {
-                        guard !Task.isCancelled, change != .closed, let self, !self.stopped else { break }
-                        self.invalidated.insert(profile)
+                        guard !Task.isCancelled, change != .closed, let self, await self.invalidate(profile) else { break }
                     }
                 }
             }
@@ -205,6 +203,12 @@ public final class BrowserPasswordSync {
             try capture(try await store.list(profileID: profile), profile: profile, now: Date())
         }
         try cache.save(state)
+    }
+
+    private func invalidate(_ profile: ProfileID) -> Bool {
+        guard !stopped else { return false }
+        invalidated.insert(profile)
+        return true
     }
 
     private func capture(_ rows: [BrowserPasswordRecord], profile: ProfileID, now: Date) throws {

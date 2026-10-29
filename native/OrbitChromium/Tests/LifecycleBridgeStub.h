@@ -46,4 +46,7 @@ int32_t ACRStubActivationCount(void);
 const char *ACRStubDownloadPath(void);
 uint64_t ACRStubDownloadRequest(void);
 void ACRStubDownload(uint64_t token, uint64_t request, int32_t status, int64_t bytes);
+void ACRStubDevToolsMode(int32_t enabled);
+int32_t ACRStubDevToolsID(void);
+void ACRStubRetirementMode(int32_t result);
 #endif

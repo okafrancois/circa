@@ -270,6 +270,9 @@ typedef enum {
   ACR_NETWORK_PRODUCT = 1
 } ACRNetworkPolicy;
 
+/* Optional synthetic startup timing tap; main thread only. 0=loaded, 1=initialize, 2=initialized. */
+void ACRSetStartupTimingCallback(void (*callback)(int32_t));
+
 /* Main thread only. Blocking CefRunMessageLoop; call before NSApplication is
  * created. root_cache_path must be an existing private directory; every
  * persistent profile path must be a child of it. Extra switches are appended
@@ -525,6 +528,11 @@ int32_t ACRProfileLoaded(const char *cache_path);
  * loading state unknown), -1 when removal failed, -5 when the root's name no longer designates the
  * directory ACRRun anchored (replaced root or link in its path: nothing is touched). */
 int32_t ACRRemoveProfileDirectory(const char *cache_path);
+/* Same authority checks/status as removal; atomically retires on main without walking the tree.
+ * A nonzero retirement must be consumed exactly once by ACRFinishProfileRemoval on a worker.
+ * The handle owns an independent descriptor; finishing never accesses CEF or bridge state. */
+int32_t ACRRetireProfileDirectory(const char *cache_path, uint64_t *retirement);
+int32_t ACRFinishProfileRemoval(uint64_t retirement);
 
 /* Native accessibility tree of a surface (CefBrowserHost::SetAccessibilityState,
  * public API: works on both builds and both styles). enabled: 1 on, 0 off,

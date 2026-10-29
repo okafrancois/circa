@@ -60,7 +60,7 @@ public enum BrowserPasswordStoreChange: Sendable, Equatable {
 /// A cancelled writer must re-list before retrying. Updates preserve unexposed native
 /// metadata; newly added records cannot restore notes, federation or sharing metadata.
 @MainActor
-public protocol BrowserPasswordStore: AnyObject {
+public protocol BrowserPasswordStore: AnyObject, Sendable {
     func list(profileID: ProfileID) async throws -> [BrowserPasswordRecord]
     func add(_ record: BrowserPasswordRecord, profileID: ProfileID) async throws
     func update(_ record: BrowserPasswordRecord, replacing key: BrowserPasswordKey, profileID: ProfileID) async throws

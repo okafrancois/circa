@@ -5,6 +5,7 @@ import ChromiumEngine
 import Darwin
 import QuartzCore
 import OSLog
+import ObjectiveC.runtime
 
 /// Explicit synthetic measurement endpoint. Normal product startup and personal roots never
 /// enable it. Results contain counters and timestamps, never page content or destinations.
@@ -17,6 +18,7 @@ enum OrbitPerformanceProbe {
     }
     static func start(application: OrbitApplication, configuration: OrbitProductConfiguration) {
         guard configuration.syntheticGuard != nil, CommandLine.arguments.contains("--perf-probe") else { return }
+        installDrawCounter()
         let log = configuration.dataRoot.appendingPathComponent("download-events.jsonl")
         ChromiumRuntime.shared.trace = { name, fields in
             guard name == "download", let data = try? JSONSerialization.data(withJSONObject: fields, options: [.sortedKeys]) else { return }
@@ -52,13 +54,17 @@ enum OrbitPerformanceProbe {
         var result: [String: Any] = ["pid": ProcessInfo.processInfo.processIdentifier]
         var firstPaint = false
         while !Task.isCancelled {
-            try? await Task.sleep(for: .milliseconds(firstPaint ? 250 : 20))
+            try? await Task.sleep(for: .milliseconds(firstPaint && result["interactiveUptime"] != nil ? 250 : 20))
             guard let environment = application.environment,
                   let owner = environment.liveControllers.first,
                   let snapshot = owner.session.snapshot else { continue }
             if result["interactiveUptime"] == nil, owner.window?.isVisible == true,
                !owner.session.hasPendingCommands, owner.window?.firstResponder != nil {
-                result["interactiveUptime"] = ProcessInfo.processInfo.systemUptime
+                owner.window?.displayIfNeeded()
+                CATransaction.flush()
+                BrowserPerformance.mark(.windowCommitted)
+                BrowserPerformance.mark(.windowInteractive)
+                result["interactiveUptime"] = BrowserPerformance.phases["windowInteractive"]
             }
             if !firstPaint, let id = snapshot.selectedOccurrenceID, let surface = owner.session.surface(for: id),
                surface.isReady, !surface.navigationState.isLoading,
@@ -67,6 +73,7 @@ enum OrbitPerformanceProbe {
                 result["firstPaintUptime"] = ProcessInfo.processInfo.systemUptime - age
                 firstPaint = true
             }
+            result["startupPhases"] = BrowserPerformance.phases
             result["surfaces"] = owner.session.ownedSurfaces.count
             result["browsers"] = owner.session.ownedSurfaces.filter(\.isBrowserCreated).count
             result["windowNumber"] = owner.window?.windowNumber
@@ -116,6 +123,79 @@ enum OrbitPerformanceProbe {
                     }
                     result["reenabledCycles"] = cycles
                     await scheduler.prepareForTermination()
+                } else if name == "mainthread" {
+                    result["mainthread"] = await mainthread(owner, command: command, root: root)
+                } else if name == "lists" {
+                    result["lists"] = await lists(owner, command: command, root: root)
+                } else if name == "ui-quick-wins", ownsWindow(owner) {
+                    result["uiQuickWins"] = await uiQuickWins(owner, store: environment.store, command: command)
+                } else if name == "startup-check", ownsWindow(owner, bundleID: "lab.orbit.orbit.perf-startup") {
+                    let document = await environment.store.sessionDocument()
+                    let restored = document.windows.first { $0.id == owner.session.snapshot?.id }
+                    var check: [String: Any] = [
+                        "profiles": document.profiles.count, "spaces": document.spaces.count,
+                        "windows": document.windows.count, "tabs": document.tabs.count,
+                        "activeSpacePreserved": restored?.activeSpaceID == owner.session.snapshot?.activeSpaceID,
+                        "findDeferred": owner.findBarStorage == nil,
+                        "libraryDeferred": !owner.library.contentsInstalled,
+                        "quickWindows": environment.quickWindows.count,
+                        "quickWindowLoaded": environment.quickWindows.values.contains {
+                            $0.window?.isVisible == true && $0.surface?.navigationState.isLoading == false
+                                && $0.surface?.navigationState.committedURL?.host == "127.0.0.1"
+                        }
+                    ]
+                    if command["exercise"] == "1" {
+                        var verified = 0
+                        for space in document.spaces {
+                            guard ownsWindow(owner, bundleID: "lab.orbit.orbit.perf-startup") else { break }
+                            owner.session.activateSpace(space.id)
+                            await owner.session.waitForPendingCommands()
+                            if let surface = owner.session.selectedSurface {
+                                await waitForLoad(surface)
+                                if surface.profileID == space.profileID,
+                                   owner.session.snapshot?.activeSpaceID == space.id { verified += 1 }
+                            }
+                        }
+                        check["verifiedSpaces"] = verified
+                        if ownsWindow(owner, bundleID: "lab.orbit.orbit.perf-startup") {
+                            let begin = ProcessInfo.processInfo.systemUptime
+                            owner.showFind()
+                            await owner.session.waitForPendingCommands()
+                            check["findVisible"] = owner.findBarStorage?.isHidden == false
+                            owner.closeFind()
+                            owner.showLibrary(.history)
+                            await owner.session.waitForPendingCommands()
+                            check["libraryVisible"] = owner.library.isPresented && owner.library.contentsInstalled
+                            check["firstToolsMilliseconds"] = (ProcessInfo.processInfo.systemUptime - begin) * 1000
+                            owner.hideLibrary()
+                        }
+                    }
+                    result["startupCheck"] = check
+                } else if name == "sync-idle" {
+                    // Explicit fake transport only; never enable account-backed runtime sync.
+                    do {
+                        let session = await environment.store.sessionDocument()
+                        let settings = await environment.settings.store.snapshot()
+                        var boosts: [BrowserBoostDocument] = []
+                        for profile in session.profiles { boosts.append(await (try environment.boosts.store(for: profile.id)).snapshot()) }
+                        let snapshot = BrowserSyncWorker.Snapshot(session: session, settings: settings, boosts: boosts)
+                        let destination = root.appendingPathComponent("idle-replica.json")
+                        let worker = BrowserSyncWorker(state: .init(), destination: destination)
+                        let transport = BrowserSyncMemoryTransport(cloud: BrowserSyncMemoryCloud(), account: "synthetic")
+                        var unchanged = 0
+                        let start = ProcessInfo.processInfo.systemUptime
+                        for _ in 0..<5 {
+                            try await worker.admit("synthetic")
+                            let outgoing = try await worker.capture(snapshot)
+                            try await worker.merge(await transport.exchange(outgoing), identity: "synthetic")
+                            let prepared = try await worker.prepare(snapshot)
+                            if !prepared.changed { unchanged += 1 }
+                            try await worker.acknowledge(prepared.projection)
+                        }
+                        result["syncIdle"] = ["cycles": 5, "unchanged": unchanged, "transport": "memory",
+                            "milliseconds": (ProcessInfo.processInfo.systemUptime - start) * 1000,
+                            "durableBytes": (try Data(contentsOf: destination)).count] as [String: Any]
+                    } catch { result["syncIdle"] = ["failed": true] }
                 } else if name == "benchmark" {
                     result["benchmark"] = await benchmark(owner, command: command, store: environment.store)
                 } else if name == "url-pill-fixture" {
@@ -325,7 +405,8 @@ extension OrbitPerformanceProbe {
     /// Refuse synthetic input unless WindowServer attributes this exact window to this process.
     private static func ownsWindow(_ owner: OrbitWindowController, bundleID: String = "lab.orbit.orbit.perf-core-3") -> Bool {
         guard Bundle.main.infoDictionary?["OrbitSyntheticBundle"] as? Bool == true,
-              Bundle.main.bundleIdentifier == bundleID,
+              Bundle.main.bundleIdentifier == bundleID
+                || (bundleID == "lab.orbit.orbit.perf-core-3" && Bundle.main.bundleIdentifier == "lab.orbit.orbit.perf-measure"),
               let window = owner.window, window.isVisible,
               let windows = CGWindowListCopyWindowInfo([.optionIncludingWindow], CGWindowID(window.windowNumber)) as? [[String: Any]]
         else { return false }
@@ -385,6 +466,9 @@ extension OrbitPerformanceProbe {
     /// Synthetic diagnostics report renderer frame opportunities / AppKit commits, not scanout.
     private static func benchmark(_ owner: OrbitWindowController, command: [String: String], store: BrowserStore) async -> [String: Any] {
         let kind = command["kind"] ?? "latency"
+        if kind.hasPrefix("measure-") {
+            return await measure(owner, command: command, store: store)
+        }
         if kind.hasPrefix("workload-") {
             return await workload(owner, kind: kind, store: store)
         }
@@ -458,10 +542,12 @@ extension OrbitPerformanceProbe {
         }
         for i in 0..<(Int(command["count"] ?? "25") ?? 25) {
             for task in ["tab", "space", "palette", "typing"] {
+                guard ownsWindow(owner) else { return ["ownershipRefused": true] }
                 let interval = poster.beginInterval("Interaction", id: poster.makeSignpostID(), "kind=\(task, privacy: .public)")
                 let start = ProcessInfo.processInfo.systemUptime
                 var valid = true
                 if task == "tab", let tabs = owner.session.snapshot?.tabs, tabs.count > 1 {
+                    measurements["tabSelectionChanged", default: []].append(owner.session.snapshot?.selectedOccurrenceID == tabs[i % 2].occurrenceID ? 0 : 1)
                     owner.session.selectOccurrence(tabs[i % 2].occurrenceID)
                     await owner.session.waitForQueuedCommands()
                     if let surface = owner.session.selectedSurface { valid = await nextPageFrame(surface) }
@@ -491,7 +577,10 @@ extension OrbitPerformanceProbe {
                 if task != "typing" { measurements[task+"Ms", default:[]].append((ProcessInfo.processInfo.systemUptime-start)*1000) }
                 if !valid { measurements["failures", default:[]].append(1) }
                 poster.endInterval("Interaction", interval)
-                if task == "palette" { owner.palette.dismiss(returnFocus: true) }
+                if task == "palette" {
+                    guard ownsWindow(owner) else { return ["ownershipRefused": true] }
+                    owner.palette.dismiss(returnFocus: true)
+                }
             }
         }
         return measurements
@@ -564,7 +653,10 @@ extension OrbitPerformanceProbe {
                     var ok = true
                     if task == "tab" {
                         let tabs = owner.session.organization?.allTabs.filter { $0.section.spaceID == owner.session.snapshot?.activeSpaceID && $0.occurrenceID.flatMap { owner.session.surface(for: $0) } != nil } ?? []
-                        if let tab = tabs.first(where: { !$0.isSelected }) { ok = await select(tab.id) }
+                        if let tab = tabs.first(where: { !$0.isSelected }) {
+                            values["tabSelectionChanged", default: []].append(1)
+                            ok = await select(tab.id)
+                        }
                         else { ok = false }
                     } else if task == "space" {
                         let active = owner.session.snapshot?.activeSpaceID
@@ -617,5 +709,760 @@ private final class OrbitPerformanceFrameCounter: NSObject {
     @objc func step(_ link: CADisplayLink) {
         targets.append(link.targetTimestamp * 1000)
         callbacks.append(ProcessInfo.processInfo.systemUptime * 1000)
+    }
+}
+
+extension OrbitPerformanceProbe {
+    private static func threadCPU() -> Double {
+        var time = timespec()
+        clock_gettime(CLOCK_THREAD_CPUTIME_ID, &time)
+        return Double(time.tv_sec) + Double(time.tv_nsec) / 1e9
+    }
+
+    private static func mainthread(_ owner: OrbitWindowController, command: [String: String], root: URL) async -> [String: Any] {
+        guard ownsWindow(owner, bundleID: "lab.orbit.orbit.perf-w2-mainthread"), let profile = owner.session.activeProfileID else { return ["ownershipRefused": true] }
+        let kind = command["kind"] ?? "switches"
+        var result: [String: Any] = [:]
+        var maxGap = 0.0
+        var lastBeat = ProcessInfo.processInfo.systemUptime
+        let heartbeat = Task { @MainActor in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .milliseconds(2))
+                let now = ProcessInfo.processInfo.systemUptime
+                maxGap = max(maxGap, (now - lastBeat) * 1000)
+                lastBeat = now
+            }
+        }
+        defer { heartbeat.cancel() }
+        if kind == "prepare" {
+            for tab in owner.session.snapshot?.tabs.prefix(3) ?? [] {
+                guard ownsWindow(owner, bundleID: "lab.orbit.orbit.perf-w2-mainthread") else { return ["ownershipRefused": true] }
+                owner.session.selectOccurrence(tab.occurrenceID)
+                await owner.session.waitForQueuedCommands()
+                if let surface = owner.session.selectedSurface { await waitForLoad(surface) }
+            }
+            return ["prepared": true]
+        }
+        if kind == "switches" {
+            var counts: [String: Int] = [:]
+            ChromiumSurface.snapshotProbe = { name, value in counts[name, default: 0] += name == "decodedBytes" ? value : 1 }
+            defer { ChromiumSurface.snapshotProbe = nil }
+            let cpu = threadCPU()
+            let tabs = Array(owner.session.snapshot?.tabs.prefix(3) ?? [])
+            for index in 0..<50 {
+                guard ownsWindow(owner, bundleID: "lab.orbit.orbit.perf-w2-mainthread"), tabs.count == 3 else { return ["ownershipRefused": true] }
+                owner.session.selectOccurrence(tabs[index % tabs.count].occurrenceID)
+                await owner.session.waitForQueuedCommands()
+                try? await Task.sleep(for: .milliseconds(12))
+            }
+            try? await Task.sleep(for: .milliseconds(700))
+            result["mainCPUms"] = (threadCPU() - cpu) * 1000
+            result["captures"] = counts
+            guard ownsWindow(owner, bundleID: "lab.orbit.orbit.perf-w2-mainthread") else { return ["ownershipRefused": true] }
+            owner.tabSwitcher.controlIsHeld = { true }
+            owner.tabSwitcher.cycle()
+            owner.tabSwitcher.show()
+            try? await Task.sleep(for: .milliseconds(300))
+            result["thumbnailCount"] = owner.session.ownedSurfaces.filter { owner.tabSwitcher.snapshots.image(for: $0) != nil }.count
+        } else if kind == "downloads" {
+            let files = root.appendingPathComponent("download-fixture")
+            let records = await Task.detached(priority: .utility) {
+                try? FileManager.default.createDirectory(at: files, withIntermediateDirectories: true)
+                return (0..<1000).map { index in
+                    let url = files.appendingPathComponent("history-\(index).bin")
+                    if index % 3 != 0 { try? Data([42]).write(to: url) }
+                    return BrowserDownloadHistoryRecord(BrowserDownloadSnapshot(
+                        key: .init(id: UUID(), profileID: profile, lifetime: UUID()), owner: .init(profileID: profile),
+                        revision: 0, sequence: 1, suggestedFilename: "history-\(index).bin", state: .complete,
+                        receivedBytes: 1, totalBytes: 1, capabilities: [], currentURL: nil, destinationURL: url,
+                        fileAvailability: .unknown, failure: nil, pendingAction: nil, isCancellationRequested: false, controlError: nil))
+                }
+            }.value
+            try? owner.downloads.coordinator.restore(records)
+            guard ownsWindow(owner, bundleID: "lab.orbit.orbit.perf-w2-mainthread") else { return ["ownershipRefused": true] }
+            owner.tabSwitcher.cancel()
+            // Measure a settled history as well as cold-open failure in the external harness.
+            _ = owner.downloads.snapshots(profileID: profile)
+            try? await Task.sleep(for: .milliseconds(500))
+            guard ownsWindow(owner, bundleID: "lab.orbit.orbit.perf-w2-mainthread") else { return ["ownershipRefused": true] }
+            var cpu = threadCPU()
+            let start = ProcessInfo.processInfo.systemUptime
+            owner.showDownloads()
+            await owner.session.waitForQueuedCommands()
+            owner.window?.contentView?.layoutSubtreeIfNeeded()
+            owner.window?.displayIfNeeded()
+            result["openCPUms"] = (threadCPU() - cpu) * 1000
+            result["openWallMs"] = (ProcessInfo.processInfo.systemUptime - start) * 1000
+            try? await Task.sleep(for: .milliseconds(500))
+            cpu = threadCPU()
+            for n in 0..<20 {
+                guard ownsWindow(owner, bundleID: "lab.orbit.orbit.perf-w2-mainthread") else { return ["ownershipRefused": true] }
+                let scroll = owner.downloadsPane.list.subviews.compactMap { $0 as? NSScrollView }.first
+                if let scroll {
+                    scroll.contentView.scroll(to: NSPoint(x: 0, y: CGFloat(n % 10) * 500))
+                    scroll.reflectScrolledClipView(scroll.contentView)
+                }
+                owner.renderDownloads()
+                owner.window?.displayIfNeeded()
+                try? await Task.sleep(for: .milliseconds(8))
+            }
+            result["scrollRefreshCPUms"] = (threadCPU() - cpu) * 1000
+            owner.downloads.destinationProvider = { _, name in files.appendingPathComponent(name) }
+            let before = owner.downloads.coordinator.allSnapshots.count
+            cpu = threadCPU()
+            if let base = command["fixture"].flatMap(URL.init(string:)) {
+                for n in 0..<5 {
+                    guard ownsWindow(owner, bundleID: "lab.orbit.orbit.perf-w2-mainthread") else { return ["ownershipRefused": true] }
+                    owner.session.openTab(url: base.appendingPathComponent("download/\(n)"))
+                    await owner.session.waitForQueuedCommands()
+                }
+                let deadline = ProcessInfo.processInfo.systemUptime + 10
+                while ProcessInfo.processInfo.systemUptime < deadline {
+                    let active = owner.downloads.coordinator.allSnapshots.dropFirst(before)
+                    if active.count == 5 && active.allSatisfy({ $0.state.isTerminal }) { break }
+                    try? await Task.sleep(for: .milliseconds(20))
+                }
+            }
+            result["fiveDownloadsCPUms"] = (threadCPU() - cpu) * 1000
+            result["downloadStates"] = owner.downloads.coordinator.allSnapshots.dropFirst(before).map { $0.state.rawValue }
+            result["historyRows"] = owner.downloads.snapshots(profileID: profile).count
+        } else if kind == "delete" {
+            let id = ProfileID()
+            let path = URL(fileURLWithPath: ChromiumRuntime.shared.rootCachePath).appendingPathComponent("profile-" + id.rawValue.uuidString.lowercased())
+            await Task.detached(priority: .utility) {
+                try? FileManager.default.createDirectory(at: path, withIntermediateDirectories: true)
+                for n in 0..<20000 { try? Data([42]).write(to: path.appendingPathComponent("file-\(n)")) }
+            }.value
+            maxGap = 0; lastBeat = ProcessInfo.processInfo.systemUptime
+            let cpu = threadCPU(), start = ProcessInfo.processInfo.systemUptime
+            do {
+                try await owner.engine.removeProfile(id)
+                result["removed"] = !FileManager.default.fileExists(atPath: path.path)
+                _ = owner.engine.profile(for: id)
+                await owner.engine.profileReady(id)
+                result["recreated"] = !owner.engine.refusedProfiles.contains(id)
+                try await owner.engine.removeProfile(id)
+            } catch { result["error"] = String(describing: error) }
+            result["deleteCPUms"] = (threadCPU() - cpu) * 1000
+            result["deleteWallMs"] = (ProcessInfo.processInfo.systemUptime - start) * 1000
+        }
+        try? await Task.sleep(for: .milliseconds(10))
+        result["longestMainGapMs"] = maxGap
+        return result
+    }
+}
+
+extension OrbitPerformanceProbe {
+    private static let listsBundleID = "lab.orbit.orbit.perf-w2-lists"
+    /// A fixed past instant keeps day headings and row times identical between runs.
+    private static let listsBase = Date(timeIntervalSinceReferenceDate: 812_462_400)
+    private static var listsThumbnailBytes = (resident: 0, peak: 0, accepted: 0)
+
+    private static func footprintMiB() -> Double {
+        var info = task_vm_info_data_t()
+        var count = mach_msg_type_number_t(MemoryLayout<task_vm_info_data_t>.size / MemoryLayout<natural_t>.size)
+        let status = withUnsafeMutablePointer(to: &info) {
+            $0.withMemoryRebound(to: integer_t.self, capacity: Int(count)) { task_info(mach_task_self_, task_flavor_t(TASK_VM_INFO), $0, &count) }
+        }
+        return status == KERN_SUCCESS ? Double(info.phys_footprint) / 1_048_576 : -1
+    }
+
+    private static func viewCount(_ view: NSView) -> Int { view.subviews.reduce(1) { $0 + viewCount($1) } }
+
+    private static func listViews(_ owner: OrbitWindowController, _ category: String) -> (root: NSView, scroll: NSScrollView?)? {
+        switch category {
+        case "downloads": return (owner.downloadsPane.list, owner.downloadsPane.list.subviews.compactMap { $0 as? NSScrollView }.first)
+        case "media": return (owner.library.mediaView, owner.library.mediaView.scroll)
+        case "history": return (owner.library.historyView, owner.library.historyView.table.enclosingScrollView)
+        case "folder": return (owner.folderPreview.view, owner.folderPreview.view.scroll)
+        default: return nil
+        }
+    }
+
+    private static func percentile(_ values: [Double], _ p: Double) -> Double {
+        let sorted = values.sorted()
+        guard !sorted.isEmpty else { return 0 }
+        return sorted[min(sorted.count - 1, Int((Double(sorted.count - 1) * p).rounded()))]
+    }
+
+    private static func listStats(_ owner: OrbitWindowController, _ category: String) -> [String: Any] {
+        guard let views = listViews(owner, category) else { return [:] }
+        var stats: [String: Any] = ["viewsAlive": viewCount(views.root), "footprintMiB": footprintMiB()]
+        if let scroll = views.scroll {
+            stats["documentHeight"] = scroll.documentView?.frame.height ?? 0
+            stats["scrollY"] = scroll.contentView.bounds.origin.y
+        }
+        if category == "media" {
+            stats["thumbnailResidentBytes"] = listsThumbnailBytes.resident
+            stats["thumbnailPeakBytes"] = listsThumbnailBytes.peak
+            stats["thumbnailAcceptedBytes"] = listsThumbnailBytes.accepted
+            stats["mediaRows"] = owner.library.mediaView.rows.count
+        }
+        if category == "history" {
+            stats["historyRows"] = owner.library.historyView.rows.count
+            stats["historyReloads"] = owner.library.historyView.reloadCount
+        }
+        if category == "downloads" { stats["downloadTitles"] = owner.downloadsPane.list.displayedTitles.count }
+        if category == "folder" { stats["folderResults"] = folderResults(owner).count }
+        return stats
+    }
+
+    private static func folderResults(_ owner: OrbitWindowController) -> [FolderPreviewResult] {
+        guard let folder = owner.sidebar.page.folderRows.first?.node.folderID,
+              case let .folder(root)? = owner.session.organization?.item(for: .folder(folder)) else { return [] }
+        return FolderPreviewResult.ordered(root.children)
+    }
+
+    private static func waitUntil(_ timeout: TimeInterval, _ condition: () -> Bool) async -> Bool {
+        let deadline = ProcessInfo.processInfo.systemUptime + timeout
+        while !condition() {
+            guard ProcessInfo.processInfo.systemUptime < deadline else { return false }
+            try? await Task.sleep(for: .milliseconds(2))
+        }
+        return true
+    }
+
+    /// Synthetic long lists: seeds downloads, media and history, opens a list, scrolls it and
+    /// reports main-thread time, live views, thumbnail bytes and footprint. No content leaves it.
+    private static func lists(_ owner: OrbitWindowController, command: [String: String], root: URL) async -> [String: Any] {
+        guard ownsWindow(owner, bundleID: listsBundleID), let profile = owner.session.activeProfileID else { return ["ownershipRefused": true] }
+        let kind = command["kind"] ?? ""
+        let category = command["category"] ?? ""
+        let count = Int(command["count"] ?? "") ?? 1000
+        var result: [String: Any] = [:]
+        BrowserLibraryMediaView.thumbnailBytesProbe = { delta in
+            listsThumbnailBytes.resident += delta
+            listsThumbnailBytes.peak = max(listsThumbnailBytes.peak, listsThumbnailBytes.resident)
+            if delta > 0 { listsThumbnailBytes.accepted += delta }
+        }
+        switch kind {
+        case "appearance":
+            NSApp.appearance = NSAppearance(named: command["value"] == "dark" ? .darkAqua : .aqua)
+            try? await Task.sleep(for: .milliseconds(300))
+        case "theme":
+            guard let space = owner.session.snapshot?.activeSpaceID else { return ["error": "space"] }
+            let colors = (command["colors"] ?? "").split(separator: ",").compactMap { BrowserThemeColor(hexString: String($0)) }
+            do { _ = try await owner.session.setSpaceTheme(.radial(colors: colors, intensity: 0.78), for: space, profileID: profile) }
+            catch { return ["error": "theme"] }
+            try? await Task.sleep(for: .milliseconds(500))
+        case "seed-downloads", "seed-media":
+            let media = kind == "seed-media"
+            let files = root.appendingPathComponent(media ? "media-fixture" : "download-fixture")
+            let base = listsBase
+            let records = await Task.detached(priority: .utility) { () -> [BrowserDownloadHistoryRecord] in
+                try? FileManager.default.createDirectory(at: files, withIntermediateDirectories: true)
+                let extensions = ["pdf", "zip", "txt", "dmg", "bin", "csv"]
+                var images: [Data] = []
+                if media {
+                    for variant in 0..<8 {
+                        let space = CGColorSpace(name: CGColorSpace.sRGB)!
+                        guard let context = CGContext(data: nil, width: 600, height: 400, bitsPerComponent: 8, bytesPerRow: 0,
+                                                      space: space, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { continue }
+                        let hue = CGFloat(variant) / 8
+                        context.setFillColor(NSColor(hue: hue, saturation: 0.55, brightness: 0.85, alpha: 1).cgColor)
+                        context.fill(CGRect(x: 0, y: 0, width: 600, height: 400))
+                        context.setFillColor(NSColor(hue: 1 - hue, saturation: 0.7, brightness: 0.5, alpha: 1).cgColor)
+                        context.fillEllipse(in: CGRect(x: 150 + variant * 20, y: 80, width: 240, height: 240))
+                        let data = NSMutableData()
+                        if let image = context.makeImage(),
+                           let destination = CGImageDestinationCreateWithData(data, "public.png" as CFString, 1, nil) {
+                            CGImageDestinationAddImage(destination, image, nil)
+                            if CGImageDestinationFinalize(destination) { images.append(data as Data) }
+                        }
+                    }
+                }
+                return (0..<count).map { index in
+                    let name = media ? "Synthetic image \(index).png" : "Synthetic file \(index).\(extensions[index % extensions.count])"
+                    let url = files.appendingPathComponent(name)
+                    let bytes = media ? images[index % max(1, images.count)] : Data([42])
+                    if media || index % 3 != 0 { try? bytes.write(to: url) }
+                    let started = base.addingTimeInterval(-Double(index) * (media ? 60 : 1500))
+                    return BrowserDownloadHistoryRecord(BrowserDownloadSnapshot(
+                        key: .init(id: UUID(), profileID: profile, lifetime: UUID()), owner: .init(profileID: profile),
+                        revision: 0, sequence: 1, suggestedFilename: name, state: .complete,
+                        receivedBytes: Int64(bytes.count), totalBytes: Int64(bytes.count), capabilities: [], currentURL: nil,
+                        destinationURL: url, fileAvailability: .unknown, failure: nil, pendingAction: nil,
+                        isCancellationRequested: false, controlError: nil, startedAt: started, completedAt: started))
+                }
+            }.value
+            do { try owner.downloads.coordinator.restore(records) } catch { return ["error": "restore"] }
+            // Settle file availability the way an open panel would, before measuring.
+            _ = owner.downloads.snapshots(profileID: profile)
+            try? await Task.sleep(for: .milliseconds(1500))
+            _ = owner.downloads.snapshots(profileID: profile)
+            try? await Task.sleep(for: .milliseconds(500))
+            result["records"] = records.count
+        case "seed-history":
+            let base = listsBase
+            let visits = (0..<count).map { index in
+                BrowserHistoryVisit(url: URL(string: "http://127.0.0.1/history/\(index)")!, title: "Synthetic visit \(index)",
+                                    visitedAt: base.addingTimeInterval(-Double(index) * 300), transition: .link)
+            }
+            do { result["imported"] = try await owner.library.history.recorder.importDocument(BrowserHistoryDocument(profileID: profile, visits: visits)) }
+            catch { return ["error": "history"] }
+        case "open":
+            owner.tabSwitcher.cancel()
+            let before = footprintMiB()
+            let cpu = threadCPU(), start = ProcessInfo.processInfo.systemUptime
+            switch category {
+            case "downloads": owner.showDownloads()
+            case "media": owner.showLibrary(.media)
+            case "history": owner.showLibrary(.history)
+            case "folder":
+                guard let row = owner.sidebar.page.folderRows.first else { return ["error": "folder"] }
+                owner.folderPreview.hover(row, inside: true)
+            default: return ["error": "category"]
+            }
+            await owner.session.waitForQueuedCommands()
+            if category == "history" {
+                result["settled"] = await waitUntil(10) { !owner.library.history.isLoading && !owner.library.historyView.rows.isEmpty }
+            }
+            if category == "folder" {
+                result["presentedByHover"] = await waitUntil(1.5) { owner.folderPreview.isPresented }
+                if !owner.folderPreview.isPresented, let row = owner.sidebar.page.folderRows.first, let host = row.window?.contentView {
+                    result["hoverDiagnostics"] = ["keyWindow": row.window?.isKeyWindow == true, "allowed": owner.folderPreview.allowed(),
+                                                  "phase": String(describing: owner.folderPreview.intent.phase)]
+                    // The hover intent declined (e.g. the synthetic window is not key): present the
+                    // same view with the same results and favicon resolver directly.
+                    let cpu = threadCPU()
+                    let view = owner.folderPreview.view
+                    let results = folderResults(owner)
+                    view.search.stringValue = ""
+                    view.title.stringValue = (row as? SidebarFolderRow)?.item.title ?? ""
+                    host.addSubview(view, positioned: .above, relativeTo: nil)
+                    view.frame = FolderPreviewGeometry.frame(anchor: row.convert(row.visibleRect, to: host), viewport: host.bounds,
+                                                             flipped: host.isFlipped, count: results.count)
+                    view.render(results, image: { owner.folderPreview.favicon($0.tab) })
+                    view.animateAppearance()
+                    owner.window?.contentView?.layoutSubtreeIfNeeded()
+                    owner.window?.displayIfNeeded()
+                    result["directOpenCPUms"] = (threadCPU() - cpu) * 1000
+                }
+                result["settled"] = owner.folderPreview.isPresented
+            }
+            owner.window?.contentView?.layoutSubtreeIfNeeded()
+            owner.window?.displayIfNeeded()
+            result["openCPUms"] = (threadCPU() - cpu) * 1000
+            result["openWallMs"] = (ProcessInfo.processInfo.systemUptime - start) * 1000
+            result["footprintBeforeMiB"] = before
+            try? await Task.sleep(for: .milliseconds(1200))
+            result.merge(listStats(owner, category)) { $1 }
+        case "scroll":
+            guard let scroll = listViews(owner, category)?.scroll else { return ["error": "scroll"] }
+            let y = CGFloat(Double(command["y"] ?? "") ?? 0)
+            let maxY = max(0, (scroll.documentView?.frame.height ?? 0) - scroll.contentView.bounds.height)
+            scroll.contentView.scroll(to: NSPoint(x: 0, y: min(y, maxY)))
+            scroll.reflectScrolledClipView(scroll.contentView)
+            owner.window?.displayIfNeeded()
+            try? await Task.sleep(for: .milliseconds(1500))
+            result.merge(listStats(owner, category)) { $1 }
+        case "steps":
+            guard let scroll = listViews(owner, category)?.scroll else { return ["error": "scroll"] }
+            let steps = Int(command["steps"] ?? "") ?? 600
+            let stride = CGFloat(Double(command["stride"] ?? "") ?? 120)
+            var cpuSteps: [Double] = [], wallSteps: [Double] = []
+            let total = threadCPU()
+            for step in 0..<steps {
+                guard step % 50 != 0 || ownsWindow(owner, bundleID: listsBundleID) else { return ["ownershipRefused": true] }
+                let maxY = max(0, (scroll.documentView?.frame.height ?? 0) - scroll.contentView.bounds.height)
+                let y = maxY > 0 ? (CGFloat(step + 1) * stride).truncatingRemainder(dividingBy: maxY) : 0
+                let cpu = threadCPU(), start = ProcessInfo.processInfo.systemUptime
+                scroll.contentView.scroll(to: NSPoint(x: 0, y: y))
+                scroll.reflectScrolledClipView(scroll.contentView)
+                owner.window?.displayIfNeeded()
+                cpuSteps.append((threadCPU() - cpu) * 1000)
+                wallSteps.append((ProcessInfo.processInfo.systemUptime - start) * 1000)
+                try? await Task.sleep(for: .milliseconds(4))
+            }
+            result["stepsCPUms"] = (threadCPU() - total) * 1000
+            result["stepCPUp50"] = percentile(cpuSteps, 0.5)
+            result["stepCPUp95"] = percentile(cpuSteps, 0.95)
+            result["stepCPUmax"] = cpuSteps.max() ?? 0
+            result["stepWallp95"] = percentile(wallSteps, 0.95)
+            result["stepWallmax"] = wallSteps.max() ?? 0
+            try? await Task.sleep(for: .milliseconds(800))
+            result.merge(listStats(owner, category)) { $1 }
+        case "loadmore":
+            let model = owner.library.history, view = owner.library.historyView
+            guard let scroll = view.table.enclosingScrollView else { return ["error": "scroll"] }
+            scroll.contentView.scroll(to: NSPoint(x: 0, y: 2600))
+            scroll.reflectScrolledClipView(scroll.contentView)
+            owner.window?.displayIfNeeded()
+            func anchor() -> (UUID?, CGFloat) {
+                let point = NSPoint(x: 1, y: scroll.contentView.bounds.minY + 40)
+                let row = view.table.row(at: point)
+                guard view.rows.indices.contains(row), case let .visit(visit) = view.rows[row] else { return (nil, 0) }
+                return (visit.id, view.table.rect(ofRow: row).minY - scroll.contentView.bounds.minY)
+            }
+            if let index = view.rows.firstIndex(where: { if case .visit = $0 { return true }; return false }).map({ $0 + 10 }) {
+                view.table.selectRowIndexes(IndexSet(integer: index), byExtendingSelection: false)
+            }
+            let selected = view.selectedVisit?.id
+            let initial = anchor()
+            var pages: [Double] = []
+            var stable = true
+            let reloads = view.reloadCount
+            let total = threadCPU()
+            while model.hasMore {
+                guard ownsWindow(owner, bundleID: listsBundleID) else { return ["ownershipRefused": true] }
+                let cpu = threadCPU()
+                model.loadMore()
+                guard await waitUntil(10, { !model.isLoading }) else { result["timeout"] = true; break }
+                owner.window?.displayIfNeeded()
+                pages.append((threadCPU() - cpu) * 1000)
+                let current = anchor()
+                if current.0 != initial.0 || abs(current.1 - initial.1) > 0.001 { stable = false }
+            }
+            result["loadMoreCPUms"] = (threadCPU() - total) * 1000
+            result["pages"] = pages.count
+            result["pageCPUp95"] = percentile(pages, 0.95)
+            result["pageCPUmax"] = pages.max() ?? 0
+            result["pageCPUlast"] = pages.last ?? 0
+            result["anchorStable"] = stable && initial.0 != nil
+            result["selectionKept"] = selected != nil && view.selectedVisit?.id == selected
+            result["fullReloadsDuringLoadMore"] = view.reloadCount - reloads
+            result.merge(listStats(owner, category)) { $1 }
+        case "folder-input":
+            let view = owner.folderPreview.view
+            guard owner.folderPreview.isPresented else { return ["error": "folder"] }
+            let editor = NSTextView()
+            var moves: [Double] = []
+            for _ in 0..<40 {
+                let cpu = threadCPU()
+                _ = view.control(view.search, textView: editor, doCommandBy: #selector(NSResponder.moveDown(_:)))
+                owner.window?.displayIfNeeded()
+                moves.append((threadCPU() - cpu) * 1000)
+            }
+            result["selectionMoveCPUp95"] = percentile(moves, 0.95)
+            result["selectionMoveCPUmax"] = moves.max() ?? 0
+            var searches: [Double] = []
+            // The intent's search sequence: rows turn inert at once, then the filtered results arrive.
+            let all = folderResults(owner)
+            for term in ["Synthetic", "Synthetic tab 1", "Synthetic"] {
+                let cpu = threadCPU()
+                view.search.stringValue = term
+                view.render([], image: { _ in nil })
+                owner.window?.displayIfNeeded()
+                view.render(all.filter { $0.title.range(of: term, options: [.caseInsensitive, .diacriticInsensitive]) != nil },
+                            image: { owner.folderPreview.favicon($0.tab) })
+                owner.window?.displayIfNeeded()
+                searches.append((threadCPU() - cpu) * 1000)
+            }
+            view.search.stringValue = ""
+            result["searchCPUms"] = searches
+            result.merge(listStats(owner, category)) { $1 }
+        case "transfers":
+            guard let base = command["fixture"].flatMap(URL.init(string:)) else { return ["error": "fixture"] }
+            let files = root.appendingPathComponent("transfer-fixture")
+            try? FileManager.default.createDirectory(at: files, withIntermediateDirectories: true)
+            owner.downloads.destinationProvider = { _, name in files.appendingPathComponent(name) }
+            let before = owner.downloads.coordinator.allSnapshots.count
+            let cpu = threadCPU()
+            for n in 0..<5 {
+                guard ownsWindow(owner, bundleID: listsBundleID) else { return ["ownershipRefused": true] }
+                owner.session.openTab(url: base.appendingPathComponent("download/\(n)"))
+                await owner.session.waitForQueuedCommands()
+            }
+            // The list stays presented while the transfers run.
+            if !owner.library.isPresented || owner.library.category != .downloads { owner.showDownloads() }
+            let finished = await waitUntil(20) {
+                let active = owner.downloads.coordinator.allSnapshots.dropFirst(before)
+                return active.count == 5 && active.allSatisfy { $0.state.isTerminal }
+            }
+            result["fiveDownloadsCPUms"] = (threadCPU() - cpu) * 1000
+            result["finished"] = finished
+            result["downloadStates"] = owner.downloads.coordinator.allSnapshots.dropFirst(before).map { $0.state.rawValue }
+            result.merge(listStats(owner, "downloads")) { $1 }
+        case "stats":
+            result.merge(listStats(owner, category)) { $1 }
+        default:
+            return ["error": "kind"]
+        }
+        return result
+    }
+
+    private static func uiQuickWins(_ owner: OrbitWindowController, store: BrowserStore,
+                                    command: [String: String]) async -> [String: Any] {
+        OrbitUIWorkCounters.enabled = true
+        switch command["action"] {
+        case "reset": OrbitUIWorkCounters.reset()
+        case "mixed":
+            OrbitUIWorkCounters.reset()
+            let timings = await benchmark(owner, command: ["kind": "workload-latency"], store: store)
+            let scroll = await benchmark(owner, command: ["kind": "scroll"], store: store)
+            return ["counters": OrbitUIWorkCounters.values, "timings": timings, "scroll": scroll]
+        case "scroll", "splits":
+            if command["action"] == "splits" {
+                let list = owner.sidebar.page.list
+                let entries = (0..<100).map { index in
+                    let item = SidebarTabItem(id: TabID(), title: "Synthetic split \(index)", selected: index == 0,
+                        splitPanes: [.init(title: "Synthetic left", favicon: nil), .init(title: "Synthetic right", favicon: nil)])
+                    return SidebarListEntry(node: .split(SplitGroupID()), section: .today, ancestors: [], content: .split(item, []))
+                }
+                list.apply(.init(entries: entries), animated: false)
+                list.setFrameSize(NSSize(width: list.bounds.width, height: list.documentHeight))
+                list.layoutSubtreeIfNeeded()
+            }
+            OrbitUIWorkCounters.reset()
+            let timings = await benchmark(owner, command: ["kind": "scroll"], store: store)
+            return ["counters": OrbitUIWorkCounters.values, "scroll": timings]
+        case "editor":
+            owner.presentActiveSpaceThemeEditor()
+            await owner.session.waitForQueuedCommands()
+            guard let editor = owner.themeEditor else { return ["editorMissing": true] }
+            editor.view.layoutSubtreeIfNeeded()
+            OrbitUIWorkCounters.reset()
+            for index in 0..<120 {
+                guard ownsWindow(owner) else { return ["ownershipRefused": true] }
+                var state = editor.view.state
+                state.pick(at: CGPoint(x: Double(index % 60) / 60, y: 0.6))
+                state.setIntensity(Double(index % 100) / 100)
+                editor.view.state = state
+                editor.view.onChange?(state)
+                owner.window?.displayIfNeeded()
+                CATransaction.flush()
+                try? await Task.sleep(for: .milliseconds(8))
+            }
+        case "theme":
+            guard let space = owner.session.snapshot?.activeSpaceID, let profile = owner.session.activeProfileID else { return [:] }
+            let colors = (command["colors"] ?? "203F98,B8F478").split(separator: ",").compactMap { BrowserThemeColor(hexString: String($0)) }
+            _ = try? await owner.session.setSpaceTheme(.radial(colors: colors, intensity: 0.78), for: space, profileID: profile)
+        case "space":
+            let document = await store.sessionDocument()
+            if let index = Int(command["index"] ?? ""), document.spaces.indices.contains(index) {
+                owner.session.activateSpace(document.spaces[index].id)
+                await owner.session.waitForQueuedCommands()
+            }
+        default: break
+        }
+        return ["counters": OrbitUIWorkCounters.values]
+    }
+}
+
+extension OrbitPerformanceProbe {
+    private static var drawCounterInstalled = false
+    /// Install the counter only in an admitted probe process, leaving shared theme sources alone.
+    private static func installDrawCounter() {
+        guard !drawCounterInstalled,
+              let original = class_getInstanceMethod(OrbitGlyphButton.self, #selector(NSView.draw(_:))),
+              let replacement = class_getInstanceMethod(OrbitGlyphButton.self, #selector(OrbitGlyphButton.perfDraw(_:))) else { return }
+        method_exchangeImplementations(original, replacement)
+        drawCounterInstalled = true
+    }
+
+    private static func history(_ surface: ChromiumSurface) async -> [String: Any]? {
+        let (ok, data) = await surface.devToolsCall("Page.getNavigationHistory")
+        guard ok, let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let entries = json["entries"] as? [[String: Any]], let index = json["currentIndex"] else { return nil }
+        // Compare internally; never publish the destinations or titles.
+        return ["index": index, "entries": entries.map { $0["url"] as? String ?? "" }]
+    }
+    private struct WakeTrial {
+        let id: TabOccurrenceID
+        let surface: ChromiumSurface
+        let state: BrowserNavigationState
+        let history: NSDictionary
+    }
+    private static var wakeTrial: WakeTrial?
+
+    private static func measure(_ owner: OrbitWindowController, command: [String: String], store: BrowserStore) async -> [String: Any] {
+        guard ownsWindow(owner) else { return ["ownershipRefused": true] }
+        let kind = command["kind"] ?? ""
+        let document = await store.sessionDocument()
+        func settle(_ milliseconds: Int = 350) async {
+            await owner.session.waitForQueuedCommands()
+            try? await Task.sleep(for: .milliseconds(milliseconds))
+            await owner.session.waitForPendingCommands()
+            owner.window?.displayIfNeeded(); CATransaction.flush()
+        }
+        func select(_ id: TabOccurrenceID) async -> ChromiumSurface? {
+            guard ownsWindow(owner) else { return nil }
+            owner.session.selectOccurrence(id)
+            await owner.session.waitForQueuedCommands()
+            guard let surface = owner.session.selectedSurface else { return nil }
+            await waitForLoad(surface)
+            return surface
+        }
+        if kind == "measure-prepare" {
+            var loaded = 0
+            for space in document.spaces.prefix(Int(command["spaces"] ?? "5") ?? 5) {
+                guard ownsWindow(owner) else { return ["ownershipRefused": true] }
+                owner.session.activateSpace(space.id)
+                await owner.session.waitForQueuedCommands()
+                for tab in (owner.session.snapshot?.tabs ?? []).prefix(2) {
+                    if await select(tab.occurrenceID) != nil { loaded += 1 }
+                }
+            }
+            guard ownsWindow(owner) else { return ["ownershipRefused": true] }
+            owner.session.activateSpace(document.spaces[0].id)
+            await settle(700)
+            return ["loaded": loaded, "surfaces": owner.session.ownedSurfaces.count]
+        }
+        if kind == "measure-tabs" {
+            var values: [String: [Double]] = [:]
+            let tabs = owner.session.snapshot?.tabs ?? []
+            guard tabs.count >= 2 else { return ["failures": [1]] }
+            for tab in tabs.prefix(2) { _ = await select(tab.occurrenceID) }
+            await settle()
+            for i in 0..<(Int(command["count"] ?? "20") ?? 20) {
+                if command["paletteWait"] != nil {
+                    guard ownsWindow(owner) else { return ["ownershipRefused": true] }
+                    owner.palette.present(.newTab)
+                    await owner.palette.waitForResults()
+                    guard ownsWindow(owner) else { return ["ownershipRefused": true] }
+                    owner.palette.view.input.stringValue = "x"
+                    owner.palette.view.onQuery?("x")
+                    await owner.palette.waitForResults()
+                    guard ownsWindow(owner) else { return ["ownershipRefused": true] }
+                    owner.palette.dismiss(returnFocus: true)
+                    if command["paletteWait"] == "settled" { await settle(350) }
+                }
+                guard ownsWindow(owner) else { return ["ownershipRefused": true] }
+                if command["spaceWait"] != nil, document.spaces.count > 1 {
+                    let active = owner.session.snapshot?.activeSpaceID
+                    let index = document.spaces.firstIndex { $0.id == active } ?? 0
+                    owner.session.activateSpace(document.spaces[(index+1) % 2].id)
+                    await owner.session.waitForQueuedCommands()
+                    if command["spaceWait"] == "settled" {
+                        while owner.sidebar.isSpaceTransitionAnimating { try? await Task.sleep(for: .milliseconds(2)) }
+                    }
+                }
+                let currentTabs = owner.session.snapshot?.tabs ?? tabs
+                guard let tab = currentTabs.prefix(2).first(where: { $0.occurrenceID != owner.session.snapshot?.selectedOccurrenceID }) else { return ["failures": [1]] }
+                guard ownsWindow(owner) else { return ["ownershipRefused": true] }
+                let start = ProcessInfo.processInfo.systemUptime
+                let target = command["path"] == "noop" ? owner.session.snapshot?.selectedOccurrenceID ?? tab.occurrenceID : tab.occurrenceID
+                values["tabSelectionChanged", default: []].append(target == owner.session.snapshot?.selectedOccurrenceID ? 0 : 1)
+                if command["path"] == "occurrence" || command["path"] == "noop" { owner.session.selectOccurrence(target) }
+                else { owner.session.selectTab(tab.id) }
+                await owner.session.waitForQueuedCommands()
+                let queued = ProcessInfo.processInfo.systemUptime
+                guard let surface = owner.session.selectedSurface else { return ["failures": [1]] }
+                let deadline = queued + 5
+                while !surface.isReady || surface.navigationState.isLoading {
+                    guard ProcessInfo.processInfo.systemUptime < deadline else { return ["failures": [1]] }
+                    try? await Task.sleep(for: .milliseconds(5))
+                }
+                let loaded = ProcessInfo.processInfo.systemUptime
+                let ok = await nextPageFrame(surface)
+                let frame = ProcessInfo.processInfo.systemUptime
+                values["queueMs", default: []].append((queued-start)*1000)
+                values["loadWaitMs", default: []].append((loaded-queued)*1000)
+                values["frameWaitMs", default: []].append((frame-loaded)*1000)
+                values["tabMs", default: []].append((frame-start)*1000)
+                if !ok { values["failures", default: []].append(1) }
+            }
+            return values
+        }
+        if kind == "measure-counters" {
+            let tabs = owner.session.snapshot?.tabs ?? []
+            guard tabs.count >= 2 else { return ["failures": [1]] }
+            _ = await select(tabs[0].occurrenceID)
+            guard let background = await select(tabs[1].occurrenceID) else { return ["failures": [1]] }
+            _ = await select(tabs[0].occurrenceID)
+            await settle(700)
+            var results: [String: Any] = [:]
+            for action in ["title", "favicon", "navigation", "tab", "space", "character"] {
+                guard ownsWindow(owner) else { return ["ownershipRefused": true] }
+                if action == "character" { owner.palette.present(.newTab); await owner.palette.waitForResults(); await settle() }
+                guard ownsWindow(owner) else { return ["ownershipRefused": true] }
+                BrowserPerformance.resetCounters()
+                var valid = true
+                if action == "title" {
+                    valid = await evaluate(background, "(() => {document.title='Synthetic changed'; return {ok: true};})()")?["ok"] as? Bool == true
+                } else if action == "favicon" {
+                    valid = await evaluate(background, "(() => {let l=document.querySelector('link[rel=icon]') || document.head.appendChild(document.createElement('link'));l.rel='icon';l.href='/icon.svg?changed=1';return {ok:true};})()")?["ok"] as? Bool == true
+                } else if action == "navigation", let url = owner.session.selectedSurface?.currentURL {
+                    owner.session.selectedSurface?.navigate(to: url.appendingPathComponent("next"))
+                    if let surface = owner.session.selectedSurface { await waitForLoad(surface) }
+                } else if action == "tab" { owner.session.selectOccurrence(tabs[1].occurrenceID) }
+                else if action == "space", document.spaces.count > 1 { owner.session.activateSpace(document.spaces[1].id) }
+                else if action == "character" {
+                    owner.palette.view.input.stringValue = "x"
+                    owner.palette.view.onQuery?("x")
+                    await owner.palette.waitForResults()
+                    valid = owner.palette.draft == "x"
+                }
+                await settle(800)
+                results[action] = ["counters": BrowserPerformance.counters, "valid": valid]
+            }
+            guard ownsWindow(owner) else { return ["ownershipRefused": true] }
+            owner.palette.dismiss(returnFocus: true)
+            return results
+        }
+        if kind == "measure-wake-prepare" {
+            let tabs = owner.session.snapshot?.tabs ?? []
+            let index = Int(command["index"] ?? "1") ?? 1
+            guard tabs.indices.contains(index), let surface = await select(tabs[index].occurrenceID), let base = surface.currentURL else { return ["failures": [1]] }
+            if command["history"] == "1" {
+                surface.navigate(to: base.appendingPathComponent("second")); await waitForLoad(surface)
+                surface.navigate(to: base.appendingPathComponent("third")); await waitForLoad(surface)
+                _ = surface.goBack(); await waitForLoad(surface)
+            }
+            await settle(500)
+            let iconDeadline = ProcessInfo.processInfo.systemUptime + 2
+            while surface.navigationState.faviconImage == nil && ProcessInfo.processInfo.systemUptime < iconDeadline {
+                try? await Task.sleep(for: .milliseconds(10))
+            }
+            guard let history = await history(surface) else { return ["failures": [1]] }
+            wakeTrial = WakeTrial(id: tabs[index].occurrenceID, surface: surface, state: surface.navigationState, history: history as NSDictionary)
+            _ = await select(tabs[0].occurrenceID)
+            await settle(500)
+            return ["prepared": true]
+        }
+        if kind == "measure-discard", let trial = wakeTrial {
+            let count = await owner.tabSuspension.sweep(now: ProcessInfo.processInfo.systemUptime + 86401)
+            return ["discarded": trial.surface.isSuspended, "count": count, "sameSurface": owner.session.surface(for: trial.id) === trial.surface]
+        }
+        if kind == "measure-wake", let trial = wakeTrial {
+            guard ownsWindow(owner), trial.surface.isSuspended else { return ["failures": [1]] }
+            let start = ProcessInfo.processInfo.systemUptime
+            owner.session.selectOccurrence(trial.id)
+            await owner.session.waitForQueuedCommands()
+            var frame = await nextPageFrame(trial.surface)
+            let frameDeadline = start + 5
+            while !frame && ProcessInfo.processInfo.systemUptime < frameDeadline {
+                try? await Task.sleep(for: .milliseconds(2))
+                frame = await nextPageFrame(trial.surface)
+            }
+            let frameEnd = ProcessInfo.processInfo.systemUptime
+            await waitForLoad(trial.surface)
+            var paint: Double?
+            let deadline = start + 5
+            while paint == nil && ProcessInfo.processInfo.systemUptime < deadline {
+                let value = await evaluate(trial.surface, "(() => {const p=performance.getEntriesByType('paint').find(p=>p.name==='first-contentful-paint');return p?{age:(Date.now()-performance.timeOrigin-p.startTime)/1000}:{};})()")
+                if let age = value?["age"] as? Double { paint = ProcessInfo.processInfo.systemUptime-age }
+                else { try? await Task.sleep(for: .milliseconds(5)) }
+            }
+            await settle(150)
+            let iconDeadline = ProcessInfo.processInfo.systemUptime + 2
+            while trial.surface.navigationState.faviconImage == nil && ProcessInfo.processInfo.systemUptime < iconDeadline {
+                try? await Task.sleep(for: .milliseconds(10))
+            }
+            let state = trial.surface.navigationState
+            let afterHistory = await history(trial.surface)
+            let visible = trial.surface.hostView.window === owner.window && !trial.surface.hostView.isHiddenOrHasHiddenAncestor
+            return ["frameMs": (frameEnd-start)*1000, "contentPaintMs": paint.map { ($0-start)*1000 } ?? -1,
+                    "valid": frame && (paint.map { $0 >= start } ?? false) && visible && !trial.surface.isSuspended,
+                    "faviconBefore": trial.state.faviconImage != nil, "faviconAfter": state.faviconImage != nil,
+                    "faviconSourcePreserved": state.faviconURL == trial.state.faviconURL,
+                    "backBefore": trial.state.canGoBack, "forwardBefore": trial.state.canGoForward,
+                    "historyEntries": (afterHistory?["entries"] as? [String])?.count ?? 0,
+                    "titlePreserved": state.title == trial.state.title,
+                    "urlPreserved": state.committedURL == trial.state.committedURL,
+                    "faviconPreserved": state.faviconImage?.png == trial.state.faviconImage?.png && state.faviconImage != nil,
+                    "historyPreserved": afterHistory.map { trial.history.isEqual(to: $0) } ?? false,
+                    "backPreserved": state.canGoBack == trial.state.canGoBack,
+                    "forwardPreserved": state.canGoForward == trial.state.canGoForward,
+                    "sameSurface": owner.session.surface(for: trial.id) === trial.surface]
+        }
+        return ["unknownKind": kind]
+    }
+}
+
+extension OrbitGlyphButton {
+    @objc fileprivate func perfDraw(_ rect: NSRect) {
+        BrowserPerformance.count(.glyphDraws)
+        perfDraw(rect)
     }
 }

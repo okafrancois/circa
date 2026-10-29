@@ -99,22 +99,42 @@ class AnchoredRoot {
     return FileIdentity{info.st_dev, info.st_ino};
   }
 
-  // Removes the direct child `name`. A directory is first renamed to a private tombstone in the
-  // root (its name is free at once), then removed without following links; any other entry
-  // (a file left where a profile directory was, a symbolic link) is unlinked itself.
-  Removal RemoveChild(const std::string& name) const {
-    if (!IsValidChildName(name) || !StillAtPath()) return Removal::kRefused;
+  // A retired tree owns a duplicate root descriptor, so cleanup survives bridge teardown.
+  class RetiredChild {
+   public:
+    RetiredChild(int fd, std::string name) : fd_(fd), name_(std::move(name)) {}
+    ~RetiredChild() { close(fd_); }
+    bool Remove() const { return RemoveTree(fd_, name_.c_str()); }
+   private:
+    int fd_;
+    std::string name_;
+  };
+
+  // Authority checks and atomic retirement stay on the UI thread. Recursive IO uses only the
+  // returned descriptor and tombstone, with no access to Chrome or bridge global state.
+  Removal RetireChild(const std::string& name, std::unique_ptr<RetiredChild>* retired) const {
+    if (!retired || !IsValidChildName(name) || !StillAtPath()) return Removal::kRefused;
+    retired->reset();
     switch (Inspect(name)) {
       case Entry::kAbsent: return Removal::kAbsent;
       case Entry::kError: return Removal::kFailed;
       case Entry::kOther: return unlinkat(fd_, name.c_str(), 0) == 0 ? Removal::kRemoved : Removal::kFailed;
       case Entry::kDirectory: break;
     }
+    const int worker_fd = fcntl(fd_, F_DUPFD_CLOEXEC, 0);
+    if (worker_fd < 0) return Removal::kFailed;
     char tombstone[64];
     snprintf(tombstone, sizeof(tombstone), ".orbit-removed-%08x%08x", arc4random(), arc4random());
-    if (renameat(fd_, name.c_str(), fd_, tombstone) != 0) return Removal::kFailed;
-    if (!RemoveTree(fd_, tombstone) || Inspect(tombstone) != Entry::kAbsent) return Removal::kFailed;
+    if (renameat(fd_, name.c_str(), fd_, tombstone) != 0) { close(worker_fd); return Removal::kFailed; }
+    *retired = std::make_unique<RetiredChild>(worker_fd, tombstone);
     return Removal::kRemoved;
+  }
+
+  Removal RemoveChild(const std::string& name) const {
+    std::unique_ptr<RetiredChild> retired;
+    const auto result = RetireChild(name, &retired);
+    if (retired && !retired->Remove()) return Removal::kFailed;
+    return result;
   }
 
  private:

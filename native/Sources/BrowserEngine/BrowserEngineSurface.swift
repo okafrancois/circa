@@ -250,6 +250,10 @@ public protocol BrowserEngineSurface: BrowserFindSurface {
     func captureStateForSuspension() async -> BrowserSuspensionState?
     /// Cheap final veto for native media/capture activity that arrived during an async check.
     var allowsSuspension: Bool { get }
+    /// Optional native paint acknowledgement for an in-place renderer restoration.
+    var supportsSuspensionPaint: Bool { get }
+    func prepareSuspensionPaint() async -> Bool
+    var suspensionPaintGeneration: UInt64? { get }
     func restoreAfterSuspension(_ state: BrowserSuspensionState) async
     /// Throws `unsupportedOperation` without `audioMuting`.
     func setAudioMuted(_ muted: Bool) throws
@@ -295,6 +299,9 @@ public extension BrowserEngineSurface {
     func updateAutomaticPictureInPicture(isSelected: Bool, allowed: Bool) {}
     func captureStateForSuspension() async -> BrowserSuspensionState? { nil }
     var allowsSuspension: Bool { false }
+    var supportsSuspensionPaint: Bool { false }
+    func prepareSuspensionPaint() async -> Bool { false }
+    var suspensionPaintGeneration: UInt64? { nil }
     func restoreAfterSuspension(_ state: BrowserSuspensionState) async {}
     var isReady: Bool { true }
     var isTeardownComplete: Bool { false }

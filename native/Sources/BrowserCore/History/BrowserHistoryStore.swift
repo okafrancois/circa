@@ -7,6 +7,8 @@ public actor BrowserHistoryStore {
     public let profileID: ProfileID
     public let policy: BrowserHistoryPolicy
     let database: HistoryDatabase?
+    // Total SQLite changes invalidate this cache even after a rolled-back mutation.
+    var syncBatchCache: (changes: Int64, dataVersion: String, cutoff: Date, batches: [BrowserHistorySyncBatch])?
     var applyingHistorySync = false
     var lastHistoryJournalPrune = Date.distantPast
     /// Separate read-only WAL connection: suggestions and index snapshots bypass this actor.

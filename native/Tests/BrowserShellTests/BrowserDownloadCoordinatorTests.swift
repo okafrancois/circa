@@ -773,3 +773,40 @@ struct BrowserDownloadCoordinatorTests {
         #expect(transfer.actions.isEmpty && transfer.invalidations == 1)
     }
 }
+
+extension BrowserDownloadCoordinatorTests {
+    @Test("Progress deltas coalesce items while final outcomes and removals publish immediately")
+    func progressDeltas() async throws {
+        let coordinator = BrowserDownloadCoordinator()
+        defer { coordinator.shutdown() }
+        var deltas: [BrowserDownloadCoordinator.Delta] = []
+        coordinator.onDelta = { deltas.append($0) }
+        let a = try register(coordinator, DownloadTransfer())
+        let b = try register(coordinator, DownloadTransfer())
+        _ = report(a); _ = report(b)
+        deltas.removeAll()
+        for sequence in 2...50 {
+            _ = report(a, sequence: UInt64(sequence), received: Int64(sequence))
+            _ = report(b, sequence: UInt64(sequence), received: Int64(sequence))
+        }
+        #expect(deltas.isEmpty)
+        #expect(try value(coordinator, a).receivedBytes == 50)
+        try await Task.sleep(for: .milliseconds(150))
+        #expect(deltas.count == 1 && deltas[0].changed.count == 2)
+        #expect(deltas[0].changed.allSatisfy { $0.receivedBytes == 50 })
+        #expect(!deltas[0].historyChanged)
+        _ = report(a, sequence: 51, received: 51)
+        _ = report(a, sequence: 52, state: .complete, received: 52)
+        #expect(deltas.last?.changed.first?.state == .complete && deltas.last?.historyChanged == true)
+        try coordinator.remove(in: value(coordinator, a).context)
+        #expect(deltas.last?.removed == [a.key])
+        let count = deltas.count
+        try await Task.sleep(for: .milliseconds(150))
+        #expect(deltas.dropFirst(count).allSatisfy { $0.changed.allSatisfy { $0.key != a.key } })
+        _ = report(b, sequence: 51, state: .failed, received: 50, failure: .network)
+        #expect(deltas.last?.changed.first?.state == .failed)
+        let c = try register(coordinator, DownloadTransfer())
+        _ = report(c, state: .cancelled)
+        #expect(deltas.last?.changed.first?.state == .cancelled)
+    }
+}

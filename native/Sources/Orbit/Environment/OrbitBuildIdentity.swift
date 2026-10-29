@@ -38,6 +38,8 @@ struct OrbitCodeSignature: Equatable {
     /// Dynamic signature of this process; nil when it cannot be read. `stableRootSHA1` is the
     /// certificate fingerprint built into the product (none: the requirement is not satisfied).
     static func current(stableRootSHA1: String? = nil, developerTeamID: String? = activeDeveloperSigningTeam()) -> OrbitCodeSignature? {
+        BrowserPerformance.mark(.signatureBegin)
+        defer { BrowserPerformance.mark(.signatureReady) }
         var code: SecCode?
         guard SecCodeCopySelf([], &code) == errSecSuccess, let code else { return nil }
         let valid = SecCodeCheckValidity(code, [], nil) == errSecSuccess

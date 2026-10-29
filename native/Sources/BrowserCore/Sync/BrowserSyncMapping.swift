@@ -131,9 +131,17 @@ public enum BrowserSyncMapping {
         func entries(_ prefix: String) -> [(String, [String: Data])] {
             records.filter { $0.key.hasPrefix(prefix + "/") }.sorted { $0.key < $1.key }
         }
-        func placement(_ key: String) -> BrowserSyncPlacement? {
-            records[key]?["placement"].flatMap { try? JSONDecoder().decode(BrowserSyncPlacement.self, from: $0) }
+        // This index belongs to this immutable materialization generation.
+        let decoder = JSONDecoder()
+        let placements = records.compactMapValues { fields in
+            fields["placement"].flatMap { try? decoder.decode(BrowserSyncPlacement.self, from: $0) }
         }
+        func placement(_ key: String) -> BrowserSyncPlacement? { placements[key] }
+        // Preserve first-match behavior even for an unvalidated local snapshot.
+        let localTabs = Dictionary(local.organization.tabs.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        let localFolders = Dictionary(local.organization.folders.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        let localSplits = Dictionary(local.organization.splits.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        let localSections = Dictionary(local.organization.spaces.map { ($0.spaceID, $0) }, uniquingKeysWith: { first, _ in first })
         func ordered(_ keys: [String]) -> [String] {
             keys.sorted {
                 let a = placement($0)?.order ?? .init(digits: [])
@@ -173,7 +181,7 @@ public enum BrowserSyncMapping {
             switch node {
             case .tab(let tabID):
                 var values = data
-                let existing = local.organization.tabs.first { $0.id == tabID }
+                let existing = localTabs[tabID]
                 values["lastActiveAt"] = try BrowserSyncReplica.encodeValue(existing?.lastActiveAt ?? Date())
                 var tab = try decode(BrowserOrganizedTab.self, values)
                 if let existing, existing.pinnedURL == tab.pinnedURL { tab.url = existing.url }
@@ -182,7 +190,7 @@ public enum BrowserSyncMapping {
             case .folder(let folderID):
                 var values = data
                 values["children"] = try BrowserSyncReplica.encodeValue(try (children[key] ?? []).flatMap(build))
-                values["isCollapsed"] = try BrowserSyncReplica.encodeValue(local.organization.folders.first { $0.id == folderID }?.isCollapsed ?? false)
+                values["isCollapsed"] = try BrowserSyncReplica.encodeValue(localFolders[folderID]?.isCollapsed ?? false)
                 sharedFolders.append(try decode(BrowserOrganizedFolder.self, values))
                 return [node]
             case .split:
@@ -208,10 +216,10 @@ public enum BrowserSyncMapping {
                 switch node {
                 case .tab(let id):
                     guard !sharedIDs.contains(id), todayIDs.insert(id).inserted,
-                          let tab = local.organization.tabs.first(where: { $0.id == id }) else { return [] }
+                          let tab = localTabs[id] else { return [] }
                     sharedTabs.append(tab); return [node]
                 case .split(let id):
-                    guard var split = local.organization.splits.first(where: { $0.id == id }) else { return [] }
+                    guard var split = localSplits[id] else { return [] }
                     let kept = keepLocal(split.tabIDs.map(BrowserOrganizationNode.tab))
                     guard kept.count >= 2 else { return kept }
                     if kept.compactMap(\.tabID) != split.tabIDs {
@@ -224,7 +232,7 @@ public enum BrowserSyncMapping {
             }
         }
         let sections = try spaces.map { space in
-            let old = local.organization.spaces.first { $0.spaceID == space.id }
+            let old = localSections[space.id]
             return BrowserOrganizationDocument.SpaceSections(spaceID: space.id,
                 pinned: try (children[id("pinned", space.id.rawValue)] ?? []).flatMap(build),
                 today: keepLocal(old?.today ?? []),

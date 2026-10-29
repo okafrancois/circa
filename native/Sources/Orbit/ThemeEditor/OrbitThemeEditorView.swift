@@ -267,6 +267,12 @@ final class OrbitThemeFieldView: NSView {
     var onNudge: ((_ hueDegrees: Double, _ saturation: Double) -> Void)?
     private let fill = CALayer()
     private let dots = CAShapeLayer()
+    private struct DotGeometry: Equatable {
+        let size: CGSize
+        let pitch: CGFloat
+        let diameter: CGFloat
+    }
+    private var dotGeometry: DotGeometry?
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -302,18 +308,23 @@ final class OrbitThemeFieldView: NSView {
         fill.cornerRadius = OrbitThemeEditorMetrics.fieldCornerRadius
         fill.backgroundColor = OrbitThemeEditorColors.field.resolvedCGColor(for: appearance)
         dots.frame = bounds
-        let path = CGMutablePath()
         let pitch = OrbitThemeEditorMetrics.dotPitch, side = OrbitThemeEditorMetrics.dotDiameter
-        var y = pitch / 2
-        while y < bounds.height {
-            var x = pitch / 2
-            while x < bounds.width {
-                path.addEllipse(in: CGRect(x: x - side / 2, y: y - side / 2, width: side, height: side))
-                x += pitch
+        let geometry = DotGeometry(size: bounds.size, pitch: pitch, diameter: side)
+        if dotGeometry != geometry {
+            OrbitUIWorkCounters.record("dotGridBuild")
+            let path = CGMutablePath()
+            var y = pitch / 2
+            while y < bounds.height {
+                var x = pitch / 2
+                while x < bounds.width {
+                    path.addEllipse(in: CGRect(x: x - side / 2, y: y - side / 2, width: side, height: side))
+                    x += pitch
+                }
+                y += pitch
             }
-            y += pitch
+            dots.path = path
+            dotGeometry = geometry
         }
-        dots.path = path
         dots.fillColor = OrbitThemeEditorColors.dot.resolvedCGColor(for: appearance)
         CATransaction.commit()
     }

@@ -94,20 +94,26 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
         // Shared for the whole lifetime: an offline Orbit import or restore (exclusive) cannot write
         // this session while Orbit uses it, and Orbit does not open it during one. A restore
         // interrupted mid-swap is rolled back first.
+        BrowserPerformance.mark(.environment)
         let location = ArcImportDataLocation(sessionFile: sessionFile)
         try ArcImportBackups.recoverInterruptedRestore(at: location)
         let lock = try OrbitDataDirectoryLock.acquire(location.dataDirectory, exclusive: false, validatingPath: false)
         let persistence = BrowserSessionPersistence(destination: sessionFile)
+        BrowserPerformance.mark(.sessionRead)
         let document = try await persistence.load()
+        BrowserPerformance.mark(.sessionDecoded)
         let store = try document.map { try BrowserStore(restoring: $0) } ?? BrowserStore()
+        BrowserPerformance.mark(.modelRestored)
         let removals = try BrowserProfileRemovalStore(destination: sessionFile.appendingPathExtension("profile-removals.json"))
         let pendingRemovals = await removals.pending()
         // Quarantine durable intents before initialContext or restored windows can use a profile.
         for removal in pendingRemovals { await store.recoverSettingsProfileRemoval(removal.profileID) }
         // Space themes import bridge: imported Orbit appearances become Space themes once, before any window.
         let migratesThemes = await migrateImportedSpaceThemes(store: store, location: location)
+        BrowserPerformance.mark(.themesLoaded)
         let effectiveDocument = pendingRemovals.isEmpty && !migratesThemes ? document : await store.sessionDocument()
         let environment = BrowserEnvironment(engine: engine, store: store, document: effectiveDocument, persistence: persistence)
+        BrowserPerformance.mark(.environmentCreated)
         do {
             let history = try BrowserDownloadHistoryStore(destination: sessionFile.appendingPathExtension("downloads.json"))
             environment.downloads = BrowserDownloadsController(history: history)
@@ -125,6 +131,7 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
         }
         environment.settings.onChange = { [weak environment] in environment?.settingsDidChange() }
         await environment.settings.refresh()
+        BrowserPerformance.mark(.settingsLoaded)
         let activity = environment.settings.document
         if let active = activity.lastActiveWindowID, environment.restoredWindowIDs.contains(active) {
             environment.restoredWindowIDs.removeAll { $0 == active }
@@ -142,9 +149,11 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
                 && ProcessInfo.processInfo.environment["ORBIT_SYNTHETIC_BOOST_HOST"] == "1" ? BrowserFakeBoostHost() : nil)
         environment.favoriteIcons = FavoriteIconStore(directory: sessionFile.deletingLastPathComponent()
             .appendingPathComponent("Favorite Icons", isDirectory: true))
+        BrowserPerformance.mark(.iconPreload)
         if let effectiveDocument, let icons = environment.favoriteIcons {
             await environment.sidebarIconMemory.preload(document: effectiveDocument, store: icons)
         }
+        BrowserPerformance.mark(.iconsLoaded)
         environment.dataDirectoryLock = lock
         environment.history = BrowserHistoryRecorder(directory: sessionFile.deletingLastPathComponent().appendingPathComponent("History", isDirectory: true), resolveProfile: engine.profile(for:))
         environment.history.onIssue = { [weak environment] profileID, issue in environment?.onHistoryIssue?(profileID, issue) }
@@ -163,6 +172,7 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
         // Failure remains a visible, retryable cleanup job; it never resurrects the retired model.
         if !pendingRemovals.isEmpty { try? await environment.retrySettingsProfileRemovals() }
         environment.lastBoostsEnabled = environment.settings.document.enablesBoostsOnWebsites
+        BrowserPerformance.mark(.profilesBegin)
         if environment.boosts.hostOverride != nil || engine.capabilities.contains(.boosts) {
             _ = try await environment.initialContext.value
             for profile in await store.catalogSnapshot().profiles {
@@ -172,6 +182,7 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
                 } catch { environment.onPersistenceError?(error) }
             }
         }
+        BrowserPerformance.mark(.profilesReady)
         do { try environment.sync.configure(environment, destination: sessionFile.appendingPathExtension("sync.json")) }
         catch { environment.onPersistenceError?(error) }
         if migratesThemes { environment.scheduleSave() }
@@ -218,6 +229,7 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
         onClose: @escaping () -> Void = {},
         onActivate: @escaping () -> Void = {}
     ) async throws -> WindowController {
+        BrowserPerformance.mark(.windowBegin)
         let restoredID = restoredWindowIDs.first { $0.rawValue == id }
         let spaceID: SpaceID
         if let restoredID {
@@ -265,10 +277,12 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
                 self?.onQuickWindowDestinationChange?()
             }
         )
+        BrowserPerformance.mark(.windowBuilt)
         if let restoredID {
             let placement = await store.sessionDocument().windows.first { $0.id == restoredID }?.placement
             controller.restoreWindowPlacement(placement)
         }
+        BrowserPerformance.mark(.windowPlacementReady)
         controller.onMoveSpaceToProfile = { [weak self] id, target, source in
             try await self?.moveSpaceToProfile(id, to: target, expectedProfileID: source)
         }
@@ -299,6 +313,7 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
         controller.siteControls.permissionsUnavailable = permissionsUnavailable
         controllers[id] = WeakController(controller)
         await controller.session.waitForPendingCommands()
+        BrowserPerformance.mark(.windowSessionReady)
         guard controller.session.snapshot != nil else {
             controller.window?.close()
             throw PreviewEnvironmentError.windowInitializationFailed
@@ -312,6 +327,7 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
         if let profileID = controller.session.activeProfileID { rescueWindowRequests.remove(profileID) }
         if let spaceID = controller.session.snapshot?.activeSpaceID { rescueSplitWindowRequests.remove(spaceID) }
         if !rescue.surfaces.isEmpty { rehomeRescuedSurfaces() }
+        BrowserPerformance.mark(.windowReady)
         return controller
     }
 
@@ -601,6 +617,7 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
 
     func scheduleSave() {
         guard persistence != nil, !isFinalizing else { return }
+        BrowserPerformance.count(.savesScheduled)
         saveTask?.cancel()
         saveTask = Task { [weak self] in
             do {
