@@ -102,12 +102,26 @@ public struct BrowserWindowState: Sendable {
     public let snapshot: BrowserWindowSnapshot
     public let catalog: BrowserCatalogSnapshot
     public var catalogRevision: UInt64 = 0
+    public var activityRevision: UInt64 = 0
+    /// Present only when membership, catalog and organization structure are unchanged.
+    public var selectionTabIDs: Set<TabID>? = nil
     /// The complete occurrence inventory of this window. Its absence revokes a previously owned lease.
     public let occurrenceAuthorities: [TabOccurrenceID: BrowserOccurrenceAuthority]
     /// Logical identities for exactly the same active and inactive occurrence inventory.
     public let occurrenceTabIDs: [TabOccurrenceID: TabID]
     /// Favorites, Pinned and Today as this window sees its active Space, captured in the same turn.
     public let organization: BrowserOrganizationSnapshot
+    public init(context: BrowserContext, snapshot: BrowserWindowSnapshot, catalog: BrowserCatalogSnapshot,
+                catalogRevision: UInt64 = 0, activityRevision: UInt64 = 0, selectionTabIDs: Set<TabID>? = nil,
+                occurrenceAuthorities: [TabOccurrenceID: BrowserOccurrenceAuthority],
+                occurrenceTabIDs: [TabOccurrenceID: TabID], organization: BrowserOrganizationSnapshot) {
+        self.context = context; self.snapshot = snapshot; self.catalog = catalog
+        self.catalogRevision = catalogRevision; self.activityRevision = activityRevision
+        self.selectionTabIDs = selectionTabIDs
+        self.occurrenceAuthorities = occurrenceAuthorities; self.occurrenceTabIDs = occurrenceTabIDs
+        self.organization = organization
+    }
+
 }
 
 struct WindowRecord {
@@ -176,6 +190,9 @@ public actor BrowserStore {
     var organizationObserverWindows: [UUID: WindowID] = [:]
     var organizationMetadataHistory: [(revision: UInt64, tabs: Set<TabID>)] = []
     var organizationMetadataFloor: UInt64 = 0
+    var selectionActivityRevision: UInt64 = 0
+    var selectionActivityFloor: UInt64 = 0
+    var selectionActivityHistory: [(revision: UInt64, tabs: Set<TabID>)] = []
     var metadataOccurrences: [WindowID: [TabID: TabOccurrenceID]] = [:]
     /// Spaces whose imported Orbit appearance was already considered (one-time theme migration).
     var themeImports: Set<SpaceID> = []
@@ -411,7 +428,7 @@ public actor BrowserStore {
             }
         }
         metadataOccurrences[windowID] = Dictionary(tabIDs.map { ($0.value, $0.key) }, uniquingKeysWith: { first, _ in first })
-        return BrowserWindowState(context: context, snapshot: snapshot, catalog: catalogSnapshot(), catalogRevision: catalogRevision,
+        return BrowserWindowState(context: context, snapshot: snapshot, catalog: catalogSnapshot(), catalogRevision: catalogRevision, activityRevision: selectionActivityRevision,
                                   occurrenceAuthorities: authorities,
                                   occurrenceTabIDs: tabIDs,
                                   organization: try organizationSnapshot(for: windowID))

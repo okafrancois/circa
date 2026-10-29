@@ -6,7 +6,7 @@ import QuartzCore
 @MainActor
 final class BrowserSplitView: NSView {
     enum NavigationAction { case back, forward, reload, address, siteControls, menu }
-    struct Pane {
+    struct Pane: Equatable {
         let id: TabID
         /// Nil while the tab has no live surface in this window: the pane keeps its slot with a
         /// placeholder and nothing is loaded or reloaded on its behalf.
@@ -35,6 +35,7 @@ final class BrowserSplitView: NSView {
     var canDrop: ((SidebarDragPayload) -> Bool)?
     var onDrop: ((SidebarDragPayload, BrowserSplitOrientation, Bool) -> Void)?
     var accent = OrbitTokens.ThemeAccent.defaultPurple
+    private var presentedPanes: [Pane] = []
     private var active: TabID?
     private var singleView: NSView?
     private let dropHint = NSView()
@@ -117,6 +118,7 @@ final class BrowserSplitView: NSView {
     func presentSingle(_ host: NSView) {
         acceptsInteraction = true
         layoutMotion.set(1); paneOrigins = [:]; pendingLayoutMotion = false
+        presentedPanes = []
         group = nil; draftRatios = nil; hasKeyboardDraft = false; dragOrigin = nil; originalRatios = nil
         for pane in panes.values { pane.removeFromSuperview() }; panes = [:]
         for divider in dividers { divider.removeFromSuperview() }; dividers = []
@@ -130,8 +132,22 @@ final class BrowserSplitView: NSView {
         needsLayout = true
     }
 
-    func present(_ group: BrowserSplitGroup, panes incoming: [Pane], active: TabID?, accent: OrbitTokens.ThemeAccent) {
+    func present(_ group: BrowserSplitGroup, panes incoming: [Pane], active: TabID?, accent: OrbitTokens.ThemeAccent,
+                 selectionOnly: Bool = false) {
         acceptsInteraction = true
+        if selectionOnly, self.group == group, presentedPanes == incoming, self.accent == accent,
+           dragOrigin == nil, !hasKeyboardDraft, !pendingLayoutMotion {
+            if self.active != active {
+                for (id, pane) in self.panes where id != self.active && id != active { pane.settleFocusAnimation() }
+                if let previous = self.active { self.panes[previous]?.setActive(false, accent: accent) }
+                if let active { self.panes[active]?.setActive(true, accent: accent) }
+                self.active = active
+            } else {
+                for pane in self.panes.values { pane.settleFocusAnimation() }
+            }
+            return
+        }
+        presentedPanes = incoming
         // Orbit's ordinary creation/close path publishes the new pane tree immediately.
         // Its animated layout branch is for changing ratios within an existing pane tree.
         let animateRatios = self.group?.tabIDs == group.tabIDs && self.group?.orientation == group.orientation
@@ -524,6 +540,8 @@ final class BrowserSplitPaneView: NSView {
         }
         CATransaction.commit()
     }
+
+    func settleFocusAnimation() { focusBorder.removeAnimation(forKey: "splitFocus") }
 
     func setActive(_ active: Bool, accent: OrbitTokens.ThemeAccent) {
         let wasActive = isActive

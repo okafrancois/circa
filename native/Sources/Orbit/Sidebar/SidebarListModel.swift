@@ -121,6 +121,26 @@ struct SidebarListContent: Equatable {
             isLoadedInThisWindow: tab.isLoadedInThisWindow, activity: activity)
     }
 
+    private static let splitIcon = NSImage(systemSymbolName: "rectangle.split.2x1", accessibilityDescription: uiText("Split View"))
+
+    static func splitItem(_ split: BrowserOrganizationSplitItem, multi: Set<BrowserOrganizationNode>,
+                          section: SidebarListSection,
+                          liveTitle: (BrowserOrganizationTabItem) -> String?,
+                          liveActivity: (BrowserOrganizationTabItem) -> SidebarTabActivity) -> SidebarTabItem? {
+        guard let active = split.activeTab ?? split.tabs.first else { return nil }
+        let title = split.tabs.map { $0.customTitle ?? liveTitle($0).flatMap { $0.isEmpty ? nil : $0 }
+            ?? $0.pageTitle ?? $0.url.host ?? SidebarListStrings.newTab }.joined(separator: " | ")
+        return SidebarTabItem(id: active.id, occurrenceID: active.occurrenceID, title: title,
+            selected: split.activeTab != nil, favicon: splitIcon,
+            isMultiSelected: multi.contains(.split(split.group.id)), isPinned: section == .pinned,
+            isLoadedInThisWindow: split.tabs.contains { $0.isLoadedInThisWindow }, activity: liveActivity(active),
+            splitPanes: split.tabs.map {
+                SidebarSplitPaneItem(title: $0.customTitle ?? liveTitle($0).flatMap { $0.isEmpty ? nil : $0 }
+                    ?? $0.pageTitle ?? $0.url.host ?? SidebarListStrings.newTab,
+                    favicon: liveActivity($0).favicon)
+            })
+    }
+
     init(snapshot: BrowserOrganizationSnapshot?, selection: BrowserOrganizationSelection = .init(),
          liveTitle: (BrowserOrganizationTabItem) -> String? = { _ in nil },
          liveActivity: (BrowserOrganizationTabItem) -> SidebarTabActivity = { _ in .init() }) {
@@ -139,18 +159,7 @@ struct SidebarListContent: Equatable {
                     result.append(SidebarListEntry(node: .tab(tab.id), section: section, ancestors: ancestors,
                                                    content: .tab(row)))
                 case let .split(split):
-                    guard let active = split.activeTab ?? split.tabs.first else { continue }
-                    let title = split.tabs.map { $0.customTitle ?? liveTitle($0).flatMap { $0.isEmpty ? nil : $0 }
-                        ?? $0.pageTitle ?? $0.url.host ?? SidebarListStrings.newTab }.joined(separator: " | ")
-                    let row = SidebarTabItem(id: active.id, occurrenceID: active.occurrenceID, title: title,
-                        selected: split.activeTab != nil, favicon: NSImage(systemSymbolName: "rectangle.split.2x1", accessibilityDescription: uiText("Split View")),
-                        isMultiSelected: multi.contains(.split(split.group.id)), isPinned: section == .pinned,
-                        isLoadedInThisWindow: split.tabs.contains { $0.isLoadedInThisWindow }, activity: liveActivity(active),
-                        splitPanes: split.tabs.map {
-                            SidebarSplitPaneItem(title: $0.customTitle ?? liveTitle($0).flatMap { $0.isEmpty ? nil : $0 }
-                                ?? $0.pageTitle ?? $0.url.host ?? SidebarListStrings.newTab,
-                                favicon: liveActivity($0).favicon)
-                        })
+                    guard let row = Self.splitItem(split, multi: multi, section: section, liveTitle: liveTitle, liveActivity: liveActivity) else { continue }
                     result.append(SidebarListEntry(node: .split(split.group.id), section: section, ancestors: ancestors,
                                                    content: .split(row, split.group.tabIDs)))
                 case let .folder(folder):

@@ -190,18 +190,16 @@ private extension BrowserStore {
     func selectProvidedSurfaceTab(
         _ authority: BrowserOccurrenceAuthority, ifContextMatches context: BrowserContext,
         lifetime: SurfaceCommandLifetime, targetLifetime: SurfaceCommandLifetime,
-        intent: BrowserSelectionIntent
+        intent: BrowserSelectionIntent, state: BrowserWindowState?, index: BrowserOrganizationMetadataIndex?
     ) throws -> BrowserWindowState? {
         try lifetime.whileActive { () throws -> BrowserWindowState? in
             try targetLifetime.whileActive { () throws -> BrowserWindowState? in
                 // Lock order is always session, target, intent. No UI or engine callback runs here.
                 try intent.whileActive { () throws -> BrowserWindowState? in
-                    let before = try captureWindowState(from: context)
                     guard authority.windowID == context.windowID, authority.spaceID == context.spaceID,
                           authority.profileID == context.profileID,
-                          before.occurrenceAuthorities[authority.occurrenceID] == authority else { return nil }
-                    try selectOccurrence(authority.occurrenceID, from: context)
-                    return try captureWindowState(in: context.windowID)
+                          try captureOccurrenceAuthority(for: authority.occurrenceID, from: context) == authority else { return nil }
+                    return try selectOccurrenceUpdating(authority.occurrenceID, from: context, state: state, index: index)
                 } ?? nil
             } ?? nil
         } ?? nil
@@ -232,6 +230,9 @@ public final class BrowserWindowSession<Surface: BrowserSurface> {
     public private(set) var catalog: BrowserCatalogSnapshot?
     public private(set) var isClosed = false
     public var onChange: (() -> Void)?
+    public var usesScopedSelectionUpdates = true
+    /// Valid only while the existing onChange publication is being delivered.
+    public private(set) var selectionChangeTabIDs: Set<TabID>?
     public var onMetadataChange: ((Set<TabID>) -> Void)?
     public var onError: ((any Error) -> Void)?
 
@@ -563,11 +564,10 @@ public final class BrowserWindowSession<Surface: BrowserSurface> {
     public func selectOccurrence(_ occurrenceID: TabOccurrenceID) {
         enqueue { session in
             guard let context = try await session.validatedContext() else { return }
-            try await session.store.selectOccurrence(occurrenceID, from: context)
-            let revision = context.revision &+ (context.selectedOccurrenceID == occurrenceID ? 0 : 1)
-            if let state = try await session.stateAfterMutation(context, revision: revision, selection: occurrenceID) {
-                session.install(state)
-            }
+            let state = try await session.store.selectOccurrenceUpdating(occurrenceID, from: context,
+                state: session.selectionState, index: session.organizationRuntime.metadataIndex)
+            guard !session.isClosed else { return }
+            session.install(state)
         }
     }
 
@@ -600,7 +600,8 @@ public final class BrowserWindowSession<Surface: BrowserSurface> {
                 try validateContext(expectedContext)
                 guard let state = try await store.selectProvidedSurfaceTab(
                     authority, ifContextMatches: expectedContext, lifetime: surfaceCommandLifetime,
-                    targetLifetime: ownership.lifetime, intent: intent
+                    targetLifetime: ownership.lifetime, intent: intent,
+                    state: selectionState, index: organizationRuntime.metadataIndex
                 ), !isClosed else { return false }
                 install(state)
                 return !isClosed && snapshot?.selectedOccurrenceID == occurrenceID
@@ -738,6 +739,7 @@ public final class BrowserWindowSession<Surface: BrowserSurface> {
         organizationRuntime.retire()
         onChange = nil
         onMetadataChange = nil
+        selectionChangeTabIDs = nil
         onError = nil
         onSurfaceMembershipChange = nil
         // Moves in flight from this window lose their return path and go to the rescue holder.
@@ -871,9 +873,12 @@ public final class BrowserWindowSession<Surface: BrowserSurface> {
         snapshot = state.snapshot
         catalog = state.catalog
         organizationRuntime.catalogRevision = state.catalogRevision
+        organizationRuntime.activityRevision = state.activityRevision
         organizationRuntime.snapshot = state.organization
-        organizationRuntime.metadataIndex = BrowserOrganizationMetadataIndex(state.organization)
-        organizationRuntime.occurrenceIndices = Dictionary(uniqueKeysWithValues: state.snapshot.tabs.enumerated().map { ($0.element.occurrenceID, $0.offset) })
+        if state.selectionTabIDs == nil {
+            organizationRuntime.metadataIndex = BrowserOrganizationMetadataIndex(state.organization)
+            organizationRuntime.occurrenceIndices = Dictionary(uniqueKeysWithValues: state.snapshot.tabs.enumerated().map { ($0.element.occurrenceID, $0.offset) })
+        }
         // Loads start only after ownership, membership and the new state are visible, so events
         // delivered synchronously by the engine see a consistent owner.
         if let startSurface {
@@ -883,7 +888,12 @@ public final class BrowserWindowSession<Surface: BrowserSurface> {
         }
         guard !isClosed else { return }
         BrowserPerformance.mark(.sessionNavigated)
+        let previousSelectionChange = selectionChangeTabIDs
+        // Surface admission retains the complete presentation path, including live Favorite
+        // activity and icon adoption. Only already-owned documents use the selection hint.
+        selectionChangeTabIDs = created.isEmpty ? state.selectionTabIDs : nil
         onChange?()
+        selectionChangeTabIDs = isClosed ? nil : previousSelectionChange
         BrowserPerformance.mark(.sessionRendered)
     }
 

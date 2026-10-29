@@ -157,6 +157,8 @@ enum OrbitPerformanceProbe {
                     }
                     result["reenabledCycles"] = cycles
                     await scheduler.prepareForTermination()
+                } else if name == "selection-performance", ownsWindow(owner) {
+                    result["selectionPerformance"] = await OrbitSelectionPerformanceProbe.run(owner, command: command)
                 } else if name == "mainthread" {
                     result["mainthread"] = await mainthread(owner, command: command, root: root)
                 } else if name == "lists" {

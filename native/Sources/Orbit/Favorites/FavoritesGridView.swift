@@ -40,6 +40,14 @@ final class FavoritesGridView: NSView, NSDraggingSource, FavoritesLocalDragSourc
     }
     var canAnimate: Bool { animatesChanges && window?.isVisible == true && window?.occlusionState.contains(.visible) == true }
 
+    func applySelection(_ updates: [FavoriteTileItem]) {
+        for item in updates {
+            guard let index = items.firstIndex(where: { $0.tab.id == item.tab.id }), items[index] != item else { continue }
+            items[index] = item
+            tiles[index].update(item)
+        }
+    }
+
     func render(_ items: [FavoriteTileItem], profileID: ProfileID?) {
         let profileChanged = dropTarget.profileID != profileID
         if profileChanged { dropTarget.end() }

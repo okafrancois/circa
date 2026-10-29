@@ -71,14 +71,15 @@ extension BrowserWindowController {
 
     /// Projects the active Space's organization (Pinned, folders, Today) with the live titles of
     /// this window's documents; rows are diffed by `TabID`/`FolderID`.
-    func rebuildTabStrip() {
+    func rebuildTabStrip(selection: Set<TabID>? = nil) {
         sidebarIcons.retain(Set(session.organization?.allTabs.map(\.id) ?? []))
         SpaceSwipeTrace.tabStrip {
             folderPreview.intent.reconcile(session.organization)
             updateSidebarUndoRouter()
             sidebar.standaloneProfileName = session.snapshot?.isStandalone == true ? session.catalog?.profiles.first(where: { $0.id == session.activeProfileID })?.name : nil
-            sidebar.render(catalog: session.catalog, activeSpaceID: session.snapshot?.activeSpaceID,
-                           organization: session.organization)
+            if let selection { sidebar.applySelection(selection, organization: session.organization) }
+            else { sidebar.render(catalog: session.catalog, activeSpaceID: session.snapshot?.activeSpaceID,
+                           organization: session.organization) }
         }
     }
 

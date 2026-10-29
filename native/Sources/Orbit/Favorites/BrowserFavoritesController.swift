@@ -145,6 +145,16 @@ final class BrowserFavoritesController<Engine: BrowserEngine> {
         grid.render(items, profileID: snapshot?.profileID)
     }
 
+    func applySelection(_ ids: Set<TabID>) {
+        guard let owner, let snapshot = owner.session.organization, profileID == snapshot.profileID else { render(); return }
+        let items = grid.items.compactMap { item -> FavoriteTileItem? in
+            guard ids.contains(item.tab.id), let tab = owner.session.organizationTab(item.tab.id) else { return nil }
+            return FavoriteTileItem(tab: tab, favicon: item.favicon, isLoading: item.isLoading,
+                isAudible: item.isAudible, isAudioMuted: item.isAudioMuted)
+        }
+        grid.applySelection(items)
+    }
+
     func hasFavorite(at index: Int) -> Bool {
         let count = owner?.session.organization?.favorites.compactMap { $0.node.tabID }.count ?? 0
         return index >= 0 && index < count

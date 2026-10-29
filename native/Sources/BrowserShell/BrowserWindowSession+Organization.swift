@@ -12,6 +12,7 @@ final class BrowserOrganizationSessionRuntime {
     var snapshot: BrowserOrganizationSnapshot?
     var metadataIndex: BrowserOrganizationMetadataIndex?
     var catalogRevision: UInt64 = 0
+    var activityRevision: UInt64 = 0
     var occurrenceIndices: [TabOccurrenceID: Int] = [:]
     var observation: Task<Void, Never>?
     var isObservationRequested = false
@@ -80,7 +81,7 @@ public extension BrowserWindowSession {
                    isCurrent: @escaping @MainActor () -> Bool = { true }) {
         enqueueOrganization { session, context in
             guard isCurrent() else { return try await session.store.captureWindowState(in: context.windowID) }
-            return try await session.store.selectTab(id, from: context, expecting: expected, admission: admission)
+            return try await session.selectTabState(id, from: context, expecting: expected, admission: admission)
         }
     }
 
@@ -411,8 +412,10 @@ extension BrowserWindowSession {
     /// IDs, so they first adopt such a change instead of failing as stale.
     func organizationContext(publish: Bool = true) async throws -> BrowserContext? {
         guard !isClosed, let windowID else { return nil }
-        let state = try await store.captureWindowState(in: windowID)
+        let currentContext = try await store.captureContext(in: windowID)
         guard !isClosed, let activeContext else { return nil }
+        if currentContext == activeContext { return currentContext }
+        let state = try await store.captureWindowState(in: windowID)
         guard state.context.storeGeneration == activeContext.storeGeneration else { throw BrowserStoreError.staleContext }
         guard state.context.spaceID == activeContext.spaceID, state.context.profileID == activeContext.profileID else {
             throw BrowserWindowSessionError.contextChangeRequiresNewSession
@@ -458,5 +461,22 @@ extension BrowserWindowSession {
             guard !isClosed, let occurrenceID = reset.occurrenceID, let surface = surfaces[occurrenceID] else { continue }
             navigate(surface, reset.url)
         }
+    }
+}
+
+extension BrowserWindowSession {
+    var selectionState: BrowserWindowState? {
+        guard usesScopedSelectionUpdates, let context = activeContext, let snapshot, let catalog,
+              let organization else { return nil }
+        return BrowserWindowState(context: context, snapshot: snapshot, catalog: catalog,
+            catalogRevision: organizationRuntime.catalogRevision, activityRevision: organizationRuntime.activityRevision,
+            occurrenceAuthorities: modelOccurrenceAuthorities, occurrenceTabIDs: occurrenceTabIDs, organization: organization)
+    }
+
+    func selectTabState(_ id: TabID, from context: BrowserContext,
+                        expecting expected: BrowserOrganizationSnapshot? = nil,
+                        admission: BrowserSidebarSelectionAdmission? = nil) async throws -> BrowserWindowState {
+        try await store.selectTabUpdating(id, from: context, state: selectionState,
+            index: organizationRuntime.metadataIndex, expecting: expected, admission: admission)
     }
 }

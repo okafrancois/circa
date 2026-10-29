@@ -82,7 +82,7 @@ public struct BrowserOrganizationTabItem: Equatable, Sendable {
     public let occurrenceID: TabOccurrenceID?
     /// Also true for a Favorite still live in another Space of this window: selecting it moves it.
     public let isLoadedInThisWindow: Bool
-    public let isSelected: Bool
+    public internal(set) var isSelected: Bool
     /// Orbit shows a placeholder for a tab open in another window; the UI decides how to present it.
     public let isOpenInAnotherWindow: Bool
     /// Local activation timestamp; absent values are never inferred from creation/import dates.

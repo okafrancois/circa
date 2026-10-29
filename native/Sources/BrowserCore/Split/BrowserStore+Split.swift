@@ -156,6 +156,17 @@ extension BrowserStore {
                              from: captureContext(in: context.windowID))
     }
 
+    public func selectSplitUpdating(_ id: SplitGroupID, from context: BrowserContext,
+                                    state: BrowserWindowState?, index: BrowserOrganizationMetadataIndex?) throws -> BrowserWindowState {
+        _ = try organizationWindow(context)
+        _ = try splitSection(of: .split(id), in: context)
+        guard let group = organization.splits[id] else { throw BrowserOrganizationError.itemMissing }
+        ensureSplitOccurrences(id, in: context)
+        let selected = context.selectedOccurrenceID.flatMap { tabs[$0]?.id }
+        let destination = selected.flatMap { group.tabIDs.contains($0) ? $0 : nil } ?? group.tabIDs[0]
+        return try selectTabUpdating(destination, from: captureContext(in: context.windowID), state: state, index: index)
+    }
+
     func ensureSplitOccurrences(_ id: SplitGroupID, in context: BrowserContext) {
         guard let group = organization.splits[id], let window = windows[context.windowID] else { return }
         let loaded = Set(occurrences(in: window).map(\.id))

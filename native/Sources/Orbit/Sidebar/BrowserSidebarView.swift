@@ -405,7 +405,17 @@ final class BrowserSidebarView: NSView, SidebarListHost {
             return
         }
         organization = next
-        contentInputs = nil
+        if let inputs = contentInputs {
+            var titles = inputs.liveTitles
+            var activities = inputs.liveActivities
+            for id in ids {
+                guard let tab = metadataIndex?.tab(id, in: next) else { continue }
+                titles[id] = tab.occurrenceID == nil ? nil : liveTitle(tab)
+                activities[id] = tab.occurrenceID == nil ? nil : liveActivity(tab)
+            }
+            contentInputs = ContentInputs(organization: next, selection: selection,
+                liveTitles: titles, liveActivities: activities)
+        }
         var updates: [SidebarListEntry] = []
         let multi = selection.nodes.count >= 2 ? selection.nodes : []
         for id in ids {
@@ -416,6 +426,48 @@ final class BrowserSidebarView: NSView, SidebarListHost {
                 activity: tab.occurrenceID == nil ? .init() : liveActivity(tab))
             let entry = SidebarListEntry(node: old.node, section: old.section, ancestors: old.ancestors, content: .tab(row))
             if entry != old { cachedContent.entries[index] = entry; updates.append(entry) }
+        }
+        if !updates.isEmpty { BrowserPerformance.count(.sidebarContentPasses) }
+        page.list.applyMetadata(updates)
+    }
+
+    /// Selection has no structural effect. Reuse cached row paths and preserve layout/motion.
+    func applySelection(_ ids: Set<TabID>, organization next: BrowserOrganizationSnapshot?) {
+        guard let next, let current = organization, next.windowID == current.windowID,
+              next.spaceID == current.spaceID, next.profileID == current.profileID else {
+            render(catalog: renderedCatalog, activeSpaceID: activeSpaceID, organization: next)
+            return
+        }
+        organization = next
+        let selectedID = next.selectedTab?.id
+        if selectedID != lastSelectedTabID {
+            lastSelectedTabID = selectedID
+            if selection.nodes.count <= 1, let selectedID { selection.select(next.rowNode(for: selectedID), in: next) }
+        }
+        selection.reconcile(with: next)
+        let multi = selection.nodes.count >= 2 ? selection.nodes : []
+        let nodes = Set(ids.compactMap { metadataIndex?.row(for: $0) })
+        var updates: [SidebarListEntry] = []
+        for node in nodes {
+            guard let offset = contentIndices[node] else { continue }
+            let old = cachedContent.entries[offset]
+            let content: SidebarListEntry.Content
+            if let id = node.tabID, let tab = metadataIndex?.tab(id, in: next) {
+                content = .tab(SidebarListContent.tabItem(tab, multi: multi, section: old.section,
+                    liveTitle: tab.occurrenceID == nil ? nil : liveTitle(tab),
+                    activity: tab.occurrenceID == nil ? .init() : liveActivity(tab)))
+            } else if case let .split(split)? = next.item(for: node),
+                      let row = SidebarListContent.splitItem(split, multi: multi, section: old.section,
+                          liveTitle: liveTitle, liveActivity: liveActivity) {
+                content = .split(row, split.group.tabIDs)
+            } else { continue }
+            let entry = SidebarListEntry(node: node, section: old.section, ancestors: old.ancestors, content: content)
+            if entry != old { cachedContent.entries[offset] = entry; updates.append(entry) }
+        }
+        // Keep subsequent ordinary renders on the same cache; no full list projection is needed.
+        if let inputs = contentInputs {
+            contentInputs = ContentInputs(organization: next, selection: selection,
+                liveTitles: inputs.liveTitles, liveActivities: inputs.liveActivities)
         }
         if !updates.isEmpty { BrowserPerformance.count(.sidebarContentPasses) }
         page.list.applyMetadata(updates)

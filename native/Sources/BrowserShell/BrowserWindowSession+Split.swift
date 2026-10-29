@@ -27,7 +27,10 @@ public extension BrowserWindowSession {
         enqueueOrganization { session, context in try await session.store.addPane(id, to: split, at: index, orientation: orientation, from: context) }
     }
     func selectSplit(_ id: SplitGroupID) {
-        enqueueOrganization { session, context in try await session.store.selectSplit(id, from: context) }
+        enqueueOrganization { session, context in
+            try await session.store.selectSplitUpdating(id, from: context,
+                state: session.selectionState, index: session.organizationRuntime.metadataIndex)
+        }
     }
     func closeSplitPane(_ id: TabID) {
         enqueueOrganization { session, context in try await session.store.closeSplitPane(id, from: context) }
