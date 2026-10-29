@@ -96,19 +96,30 @@ public struct BrowserSyncReplica: Codable, Sendable {
         guard version == BrowserSyncSchema.version else { throw BrowserSyncError.unsupportedVersion }
         let editStamp = stamp(now: now)
         var entries = projection.entries
+        // Decode only listed baseline placements, once, including malformed suffix values
+        // that the original eager traversal would reject even when an order was reusable.
+        var placements: [String: BrowserSyncPlacement] = [:]
+        let decoder = JSONDecoder()
+        for id in Set(projection.lists.values.flatMap { $0 }) {
+            if let bytes = baseline[id]?["placement"] {
+                placements[id] = try decoder.decode(BrowserSyncPlacement.self, from: bytes)
+            }
+        }
         for (parent, ids) in projection.lists {
             var previous: BrowserSyncOrder?
             for (index, id) in ids.enumerated() {
-                let old = try baseline[id]?["placement"].map { try JSONDecoder().decode(BrowserSyncPlacement.self, from: $0) }
-                let next = try ids.dropFirst(index + 1).compactMap { nextID -> BrowserSyncOrder? in
-                    guard let bytes = baseline[nextID]?["placement"] else { return nil }
-                    let placement = try JSONDecoder().decode(BrowserSyncPlacement.self, from: bytes)
-                    return placement.parent == parent && (previous.map { $0 < placement.order } ?? true) ? placement.order : nil
-                }.first
+                let old = placements[id]
                 let order: BrowserSyncOrder
                 if let old, old.parent == parent, previous.map({ $0 < old.order }) ?? true {
                     order = old.order
-                } else { order = .between(previous, next) }
+                } else {
+                    let next = ids.dropFirst(index + 1).lazy.compactMap { nextID -> BrowserSyncOrder? in
+                        guard let placement = placements[nextID], placement.parent == parent,
+                              previous.map({ $0 < placement.order }) ?? true else { return nil }
+                        return placement.order
+                    }.first
+                    order = .between(previous, next)
+                }
                 let placement = BrowserSyncPlacement(parent: parent, root: projection.roots[id] ?? parent, order: order)
                 entries[id, default: [:]]["placement"] = try Self.encodeValue(placement)
                 previous = order
