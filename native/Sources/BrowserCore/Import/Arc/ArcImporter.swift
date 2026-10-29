@@ -176,7 +176,7 @@ public struct ArcImportPreparation: Sendable {
 
 /// Fault-injection points for crash tests.
 enum ArcImportCheckpoint: Equatable, Sendable {
-    case afterBackup, afterApply, afterPersist, afterHistoryChunk(Int)
+    case afterLock, afterBackup, afterJournal, afterApply, afterPersist, afterLedger, afterAppearance, afterHistoryChunk(Int), afterCompletion
 }
 
 /// Dry run → confirmation → apply. Work runs on the caller's task (never the main actor); the
@@ -370,6 +370,12 @@ public struct BrowserImportOrchestrator: Sendable {
                 backupBytes: ArcImportBackups.estimatedBytes(at: location, historyProfiles: plan.historySources.map(\.profileID)),
                 visits: report.history.importable, textBytes: report.history.importableTextBytes)
             try OrbitDiskSpace.require(required, at: location.dataDirectory, probe: diskSpace)
+            let recovery: BrowserImportRecovery?
+            if plan.registration != nil, report.target.profilesAdded == plan.profiles.count,
+               plan.profiles.allSatisfy({ !$0.isAdopted }) {
+                recovery = try BrowserImportRecovery.begin(at: location, profiles: plan.profiles.map { $0.id.rawValue }, authentication: false)
+            } else { recovery = nil }
+            try checkpoint(.afterLock)
             var outcome = ArcImportOutcome()
             progress(ArcImportProgress(.backingUp))
             let backupID = try ArcImportBackups.create(at: location, session: try await target.sessionBackup(),
@@ -379,6 +385,7 @@ public struct BrowserImportOrchestrator: Sendable {
             try checkpoint(.afterBackup)
             var journal = ArcImportJournal(state: .applying, backupID: backupID, startedAt: clock(), updatedAt: clock())
             try ArcImportFiles.write(journal, to: location.journalFile)
+            try checkpoint(.afterJournal)
 
             progress(ArcImportProgress(.applying))
             var ledger = try ArcImportFiles.readExisting(BrowserImportLedger.self, from: location.ledgerFile) ?? BrowserImportLedger()
@@ -394,11 +401,13 @@ public struct BrowserImportOrchestrator: Sendable {
             // Written only once the session is durable: an entry never names an unsaved object.
             ledger.formUnion(merged.ledger)
             try ArcImportFiles.write(ledger, to: location.ledgerFile)
+            try checkpoint(.afterLedger)
             var appearance = try ArcImportFiles.readExisting(BrowserSpaceAppearanceDocument.self, from: location.appearanceFile)
                 ?? BrowserSpaceAppearanceDocument()
             appearance.addMissing(plan.spaces.filter { merged.ledger.spaces.contains($0.id.rawValue) }
                 .map { .init(spaceID: $0.id, appearance: $0.appearance) })
             try ArcImportFiles.write(appearance, to: location.appearanceFile)
+            try checkpoint(.afterAppearance)
 
             var processedChunks = 0
             for (index, source) in plan.historySources.enumerated() {
@@ -441,6 +450,8 @@ public struct BrowserImportOrchestrator: Sendable {
             journal.state = .complete
             journal.updatedAt = clock()
             try ArcImportFiles.write(journal, to: location.journalFile)
+            try checkpoint(.afterCompletion)
+            if let recovery, !recovery.isAuthentication { try recovery.complete() }
             progress(ArcImportProgress(.finished))
             logger.log(.completed(added: merged.counts.addedItems + merged.counts.archivedTabsAdded,
                                   historyInserted: outcome.historyInserted))

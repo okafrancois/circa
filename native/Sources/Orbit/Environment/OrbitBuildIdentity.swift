@@ -162,6 +162,7 @@ enum OrbitAuthenticationStartup {
     static func run<T>(configuration: OrbitProductConfiguration, lock: OrbitDataRootLock,
                        backend: (() throws -> any OrbitRecoverySecItemBoundary)? = nil,
                        now: Int64 = Int64(Date().timeIntervalSince1970),
+                       beforeStructuralRecovery: () throws -> Void = {},
                        runtimeStart: () throws -> T) throws -> T {
         guard let lease = lock.recoveryLease else { throw OrbitRecoveryFailure.unsafeFilesystem }
         let product: OrbitNativeRecoveryKeyProvider.Product
@@ -178,6 +179,6 @@ enum OrbitAuthenticationStartup {
             // Construction is passive. Only an admitted, evidence-bearing registration can
             // reach this factory; the recovery loader calls copyMatching, never add.
             return OrbitSystemRecoverySecItems()
-        }, now: now, runtimeStart: runtimeStart)
+        }, now: now, beforeStructuralRecovery: beforeStructuralRecovery, runtimeStart: runtimeStart)
     }
 }

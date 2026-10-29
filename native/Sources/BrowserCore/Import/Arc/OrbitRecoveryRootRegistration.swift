@@ -190,6 +190,7 @@ extension OrbitAuthenticationStartupGate {
     public static func runRegistered<T>(lease: OrbitRecoveryRootLock, product: OrbitNativeRecoveryKeyProvider.Product,
                                         backend: () throws -> any OrbitRecoverySecItemBoundary,
                                         now: Int64 = Int64(Date().timeIntervalSince1970),
+                                        beforeStructuralRecovery: () throws -> Void = {},
                                         runtimeStart: () throws -> T) throws -> T {
         try lease.validate()
         let structural = try RecoveryImportLock(root: lease.root)
@@ -203,6 +204,7 @@ extension OrbitAuthenticationStartupGate {
         let location = try lease.root.sessionLocation()
         // Finish interrupted structural restoration while the same exclusive root
         // lock is held, before BrowserEnvironment would otherwise reopen it.
+        try beforeStructuralRecovery()
         try ArcImportBackups.recoverInterruptedRestore(at: location, holdingLock: true)
         if let registration { try registration.validate(product: product) }
         try structural.allowSessionReaders()

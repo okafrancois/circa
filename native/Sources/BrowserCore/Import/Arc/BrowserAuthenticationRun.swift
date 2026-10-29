@@ -6,7 +6,7 @@ import Foundation
 /// No existing target credentials/site data are admitted. Call offline methods while CEF is closed.
 /// The caller supplies an independent, durably provisioned recovery key (never a source key).
 public final class BrowserAuthenticationRun {
-    public enum Phase: String, Codable, Sendable { case prepared, applying, passwordsPending, verified, restoring, restored }
+    public enum Phase: String, Codable, Sendable { case prepared, applying, passwordsPending, passwordsApplying, verified, restoring, restored }
     public struct Status: Sendable {
         public let profileID: ProfileID
         public let phase: Phase
@@ -30,6 +30,7 @@ public final class BrowserAuthenticationRun {
         var passwordConflicts: Int? = nil
         var totalPasswords: Int? = nil
     }
+    var checkpoint: (String) throws -> Void = { _ in }
     private let root: OrbitSecureDirectory
     private let directory: OrbitSecureDirectory
     private let key: SymmetricKey
@@ -52,7 +53,7 @@ public final class BrowserAuthenticationRun {
         guard try root.checkedKind("AuthenticationImport") != nil else { return false }
         return try root.directory("AuthenticationImport", create: false).checkedKind("run.sealed") != nil
     }
-    public static func open(dataRoot: URL, recoveryKey: SymmetricKey, archiveID: UUID? = nil) throws -> BrowserAuthenticationRun {
+    public static func open(dataRoot: URL, recoveryKey: SymmetricKey, archiveID: UUID? = nil, checkpoint: @escaping (String) throws -> Void = { _ in }) throws -> BrowserAuthenticationRun {
         let root = try OrbitSecureDirectory.open(dataRoot, create: false)
         let directory = try root.directory(archiveID.map { "AuthenticationImportHistory/" + $0.uuidString } ?? "AuthenticationImport", create: false)
         let identity = try OrbitSecureDirectory.identity(of: root.descriptor)
@@ -64,7 +65,9 @@ public final class BrowserAuthenticationRun {
         guard document.version == 1, Set(document.backup.keys).union(document.absent) == Set(backupPaths),
               Set(document.backup.keys).isDisjoint(with: document.absent),
               document.files.keys.allSatisfy({ allowedProfilePath($0) }) else { throw BrowserAuthenticationImportError.invalidState }
-        return try Self(root: root, directory: directory, key: recoveryKey, document: document)
+        let run = try Self(root: root, directory: directory, key: recoveryKey, document: document)
+        run.checkpoint = checkpoint
+        return run
     }
     private static func allowedProfilePath(_ path: String) -> Bool {
         let parts = path.split(separator: "/", omittingEmptySubsequences: false).map(String.init)
@@ -81,7 +84,8 @@ public final class BrowserAuthenticationRun {
     /// installation. A new installation registration is required when importing a second copy.
     public static func apply(preparation: BrowserImportPreparation, importer: BrowserImportOrchestrator,
                              target: some BrowserImportTarget, authentication: ChromiumAuthenticationSnapshot,
-                             sourcePassword: Data, targetPassword: Data, recoveryKey: SymmetricKey) async throws -> BrowserAuthenticationRun {
+                             sourcePassword: Data, targetPassword: Data, recoveryKey: SymmetricKey,
+                             checkpoint: @escaping (String) throws -> Void = { _ in }) async throws -> BrowserAuthenticationRun {
         guard target.holdsExclusiveAccess, preparation.plan.profiles.count == 1,
               let profile = preparation.plan.profiles.first, !profile.isAdopted,
               preparation.plan.registration?.sourceID == authentication.sourceID,
@@ -138,19 +142,26 @@ public final class BrowserAuthenticationRun {
         let run = try Self(root: root, directory: directory, key: recoveryKey,
             document: Document(profileID: profile.id, sourceID: authentication.sourceID, sourceProfile: authentication.sourceProfile,
                 phase: .prepared, backup: backup, absent: absent, files: files, passwords: passwords, cookies: cookies, unsupportedPasswords: unsupported))
+        run.checkpoint = checkpoint
+        _ = try BrowserImportRecovery.begin(at: target.location, profiles: [profile.id.rawValue], authentication: true)
         try run.save()
+        try checkpoint("auth-prepared")
         run.document.phase = .applying; try run.save()
+        try checkpoint("auth-applying")
         // Any error leaves the complete encrypted undo point; the caller closes its target and
         // restores before opening runtime. Interrupted .applying never replays structural apply.
         _ = try await importer.apply(preparation, to: target)
         guard !engine.exists(profileName) else { throw BrowserAuthenticationImportError.targetNotFresh }
         let destination = try engine.directory(profileName, create: true)
-        for (path, bytes) in files {
+        for (path, bytes) in files.sorted(by: { $0.key < $1.key }) {
             let components = path.split(separator: "/").map(String.init)
             let parent = components.count == 1 ? destination : try destination.directory(components.dropLast().joined(separator: "/"), create: true)
             try parent.write(bytes, to: components.last!)
+            try checkpoint("auth-file:" + path)
         }
         run.document.phase = .passwordsPending; try run.save()
+        try BrowserImportRecovery.open(at: root.url)?.runtimeReady()
+        try checkpoint("auth-passwords-pending")
         authentication.discard()
         return run
     }
@@ -162,39 +173,56 @@ public final class BrowserAuthenticationRun {
         defer { lock.release() }
         _ = try directory.verifiedPath("run.sealed")
         let archive = try root.directory("AuthenticationImportHistory", create: true), id = UUID()
+        try checkpoint("auth-before-archive")
         try root.rename("AuthenticationImport", to: archive, id.uuidString)
+        try checkpoint("auth-after-archive")
         return id
     }
-    public func passwordsForRuntime() throws -> [ImportedBrowserPassword] {
+    public func beginPasswordApplication() throws {
         guard document.phase == .passwordsPending else { throw BrowserAuthenticationImportError.invalidState }
+        try BrowserImportRecovery.open(at: root.url)?.runtimeApplying()
+        document.phase = .passwordsApplying; try save()
+        try checkpoint("auth-passwords-applying")
+    }
+    public func passwordsForRuntime() throws -> [ImportedBrowserPassword] {
+        guard [.passwordsPending, .passwordsApplying].contains(document.phase) else { throw BrowserAuthenticationImportError.invalidState }
         return document.passwords
     }
     /// Call after native password store re-list verification. Offline cookie conversion has already
     /// validated decryption and schema; server-side session validity cannot be promised.
     public func markVerified(passwordConflicts: Int = 0) throws {
-        guard document.phase == .passwordsPending else { throw BrowserAuthenticationImportError.invalidState }
+        guard [.passwordsPending, .passwordsApplying].contains(document.phase) else { throw BrowserAuthenticationImportError.invalidState }
         document.phase = .verified; document.files = [:]
         document.totalPasswords = document.passwords.count; document.passwords = []
         document.passwordConflicts = passwordConflicts; try save()
+        try checkpoint("auth-verified")
+        try BrowserImportRecovery.open(at: root.url)?.complete()
     }
     /// Restore always requires explicit warning acceptance: later structural edits and edits to the
     /// imported profile will be removed. The other profiles' engine stores are never visited.
-    public func restore(confirmDeletingLaterChanges: Bool, usage: any OrbitTargetUsageProbe) throws {
+    public func restore(confirmDeletingLaterChanges: Bool, usage: any OrbitTargetUsageProbe, holdingLock: Bool = false) throws {
         guard confirmDeletingLaterChanges else { throw BrowserAuthenticationImportError.restoreConfirmationRequired }
-        let lock = try OrbitDataDirectoryLock.acquire(root.url, exclusive: true)
-        defer { lock.release() }
+        let lock = holdingLock ? nil : try OrbitDataDirectoryLock.acquire(root.url, exclusive: true)
+        defer { lock?.release() }
         guard !usage.isInUse(sessionFile: root.url.appendingPathComponent("session.json")) else { throw ArcImportError.targetInUse }
+        if try BrowserImportRecovery.open(at: root.url) == nil {
+            _ = try BrowserImportRecovery.begin(at: .init(sessionFile: root.url.appendingPathComponent("session.json")),
+                profiles: [document.profileID.rawValue], authentication: true, originalFiles: document.backup)
+        }
         document.phase = .restoring; try save()
-        let engine = try root.directory("Chromium", create: true)
-        try engine.removeChecked(profileName)
-        let history = try root.directory("History", create: true)
-        try history.removeChecked(document.profileID.rawValue.uuidString)
-        for path in Self.backupPaths {
-            let components = path.split(separator: "/").map(String.init)
-            let parent = components.count == 1 ? root : try root.directory(components.dropLast().joined(separator: "/"), create: true)
-            if let bytes = document.backup[path] { try parent.write(bytes, to: components.last!) }
-            else { try parent.removeChecked(components.last!) }
+        try checkpoint("auth-restoring")
+        guard let recovery = try BrowserImportRecovery.open(at: root.url) else { throw BrowserAuthenticationImportError.invalidState }
+        try recovery.recover(.restore, holdingLock: true, quarantineAuthentication: false) { point in
+            try self.checkpoint(point)
+            if point.hasPrefix("recovery-profile:Chromium/") {
+                try self.checkpoint("auth-restore-engine")
+            } else if point.hasPrefix("recovery-profile:History/") {
+                try self.checkpoint("auth-restore-history")
+            } else if point.hasPrefix("recovery-file:") {
+                try self.checkpoint(point.replacingOccurrences(of: "recovery-file:", with: "auth-restore-file:"))
+            }
         }
         document.phase = .restored; document.files = [:]; document.passwords = []; try save()
+        try checkpoint("auth-restored")
     }
 }
