@@ -146,6 +146,23 @@ final class SiteSyntheticSurface: BrowserEngineSurface {
 
     var currentURL: URL? { history.indices.contains(index) ? history[index] : nil }
 
+    // Opt-in native-discard fixture; other suites retain the unsupported default.
+    var allowsSuspension = false
+    var suspensionCapture: (() async -> BrowserSuspensionState?)?
+    var suspensionCount = 0
+    func captureStateForSuspension() async -> BrowserSuspensionState? {
+        if let suspensionCapture { return await suspensionCapture() }
+        guard allowsSuspension, let currentURL else { return nil }
+        return BrowserSuspensionState(url: currentURL, documentGeneration: documentGeneration,
+            scrollX: 0, scrollY: 0, history: history, historyIndex: index)
+    }
+    func suspendInPlace() -> BrowserSurfaceSuspensionResult {
+        guard allowsSuspension else { return .refused }
+        suspensionCount += 1
+        return .suspended
+    }
+
+    var isLoading = false
     var faviconURL: URL?
     var faviconImage: BrowserFaviconImage?
     var pageTint: BrowserPageTint?
@@ -155,6 +172,7 @@ final class SiteSyntheticSurface: BrowserEngineSurface {
     var navigationState: BrowserNavigationState {
         var state = BrowserNavigationState(url: currentURL, committedURL: currentURL, title: currentURL?.host,
                                canGoBack: index > 0, canGoForward: index + 1 < history.count, faviconURL: faviconURL)
+        state.isLoading = isLoading
         state.faviconImage = faviconImage
         state.pageTint = pageTint
         return state

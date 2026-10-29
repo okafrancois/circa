@@ -162,7 +162,7 @@ struct BrowserSyncTests {
         let value = try BrowserSyncMapping.materialize(decoded.visible, local: session, settings: .init())
         #expect(value.spaces.first?.theme == BrowserSpaceThemePresets.default)
         #expect(value.settings.profile(profile).searchEngine == .bing)
-        #expect(value.settings.memorySaver == .fourHours)
+        #expect(value.settings.memorySaver == .oneHour)
         #expect(value.settings.lastActiveWindowID == nil)
         #expect(value.boosts.first?.boosts.first?.javaScriptOptIn == false)
         #expect(value.boosts.first?.boosts.first?.content == content)
