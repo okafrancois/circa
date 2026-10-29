@@ -2,6 +2,7 @@ import AppKit
 import BrowserCore
 import BrowserEngine
 import ImageIO
+import CryptoKit
 
 private struct PaletteDecodedImage: @unchecked Sendable { let image: CGImage }
 
@@ -9,10 +10,12 @@ private struct PaletteDecodedImage: @unchecked Sendable { let image: CGImage }
 /// image request is permitted here; image objects are cached on the main actor after decoding.
 @MainActor
 final class BrowserPaletteFaviconCache {
-    private var images: [URL: NSImage] = [:]
-    private var rejected: Set<URL> = []
-    private var pending: [URL: Task<Void, Never>] = [:]
+    private var images = BrowserCostCache<String, NSImage>(budget: 2 * 1024 * 1024)
+    private var rejected = BrowserCostCache<String, Bool>(budget: 64 * 1024, countLimit: 512)
+    private var pending: [String: Task<Void, Never>] = [:]
     private var notificationTask: Task<Void, Never>?
+    private var pressure: BrowserMemoryPressure?
+    init() { pressure = BrowserMemoryPressure { [weak self] in self?.clear() } }
     var onChange: (() -> Void)?
 
     func image(for image: BrowserFaviconImage) -> NSImage? {
@@ -26,16 +29,18 @@ final class BrowserPaletteFaviconCache {
     }
 
     func image(for url: URL) -> NSImage? {
-        if let image = images[url] { return image }
-        guard !rejected.contains(url), pending[url] == nil, url.scheme == "data", url.absoluteString.utf8.count <= 262_144 else { return nil }
+        guard url.scheme == "data", url.absoluteString.utf8.count <= 262_144 else { return nil }
+        let key = Data(SHA256.hash(data: Data(url.absoluteString.utf8))).base64EncodedString()
+        if let image = images.value(for: key) { return image }
+        guard rejected.value(for: key) == nil, pending[key] == nil, pending.count < 16 else { return nil }
         let pixels = Int(OrbitTokens.Metrics.CommandBar.iconTileSize * 2)
-        pending[url] = Task { [weak self] in
+        pending[key] = Task { [weak self] in
             let decoded = await Task.detached(priority: .utility) { Self.decode(url, pixels: pixels) }.value
             guard !Task.isCancelled, let self else { return }
-            pending[url] = nil
+            pending[key] = nil
             if let decoded {
-                if images.count >= 256 { images.removeAll(keepingCapacity: true) }
-                images[url] = NSImage(cgImage: decoded.image, size: NSSize(width: OrbitTokens.Metrics.CommandBar.iconTileSize, height: OrbitTokens.Metrics.CommandBar.iconTileSize))
+                let image = NSImage(cgImage: decoded.image, size: NSSize(width: OrbitTokens.Metrics.CommandBar.iconTileSize, height: OrbitTokens.Metrics.CommandBar.iconTileSize))
+                images.insert(image, for: key, cost: decoded.image.bytesPerRow * decoded.image.height + 384)
                 if notificationTask == nil {
                     notificationTask = Task { [weak self] in
                         await Task.yield()
@@ -44,9 +49,13 @@ final class BrowserPaletteFaviconCache {
                         onChange?()
                     }
                 }
-            } else { rejected.insert(url) }
+            } else { rejected.insert(true, for: key, cost: 128) }
         }
         return nil
+    }
+
+    var cacheStatistics: [String: Int] {
+        ["entries": images.count, "bytes": images.cost, "failures": rejected.count, "failureBytes": rejected.cost, "pending": pending.count]
     }
 
     func clear() {

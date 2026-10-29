@@ -68,6 +68,7 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
     var lastBoostsEnabled = true
     private var history = BrowserHistoryRecorder()
     var favoriteIcons: FavoriteIconStore?
+    private var cachePressure: BrowserMemoryPressure?
     let sidebarIconMemory = SidebarIconMemoryCache()
     /// The explicit session destination; nil for temporary sessions (no import target).
     private(set) var sessionFile: URL?
@@ -156,6 +157,14 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
         BrowserPerformance.mark(.iconsLoaded)
         environment.dataDirectoryLock = lock
         environment.history = BrowserHistoryRecorder(directory: sessionFile.deletingLastPathComponent().appendingPathComponent("History", isDirectory: true), resolveProfile: engine.profile(for:))
+        environment.history.activeProfiles = { [weak environment] in
+            Set(environment?.liveControllers.compactMap { $0.session.activeProfileID } ?? [])
+        }
+        environment.cachePressure = BrowserMemoryPressure { [weak environment] in
+            guard let environment else { return }
+            environment.sidebarIconMemory.releaseMemory()
+            Task { await environment.favoriteIcons?.releaseMemory() }
+        }
         environment.history.onIssue = { [weak environment] profileID, issue in environment?.onHistoryIssue?(profileID, issue) }
         do {
             environment.sitePreferences = try BrowserSitePreferenceStore(destination: sessionFile.appendingPathExtension("site-preferences.json"))

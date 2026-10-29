@@ -57,6 +57,17 @@ public struct BrowserHistoryMemoryIndex: Sendable {
         fileprivate var matches: [Int] = []
         public init() {}
     }
+    public var residentEntryCount: Int { entries.count }
+    /// Logical payload, excluding allocator and Foundation object overhead.
+    public var residentBytes: Int {
+        entries.reduce(0) { total, entry in
+            total + entry.page.url.absoluteString.utf8.count + entry.page.title.utf8.count
+                + (entry.page.faviconReference?.absoluteString.utf8.count ?? 0)
+                + entry.page.searchURL.utf8.count + entry.page.searchTitle.utf8.count
+                + entry.searchURL.count + entry.searchTitle.count + entry.urlBytes.count
+        }
+    }
+
     private var revision = UUID()
     public let profileID: ProfileID
     public let capacity: Int

@@ -10,9 +10,9 @@ import UniformTypeIdentifiers
 actor FavoriteIconStore {
     private let directory: URL?
     private let session: URLSession
-    private var images: [String: BrowserFaviconImage] = [:]
+    private var images = BrowserCostCache<String, BrowserFaviconImage>(budget: 4 * 1024 * 1024)
     private var pending: [String: Task<BrowserFaviconImage?, Never>] = [:]
-    private var failures: [String: Date] = [:]
+    private var failures = BrowserCostCache<String, Date>(budget: 128 * 1024, countLimit: 512)
     private var removedProfiles = Set<ProfileID>()
 
     init(directory: URL? = nil) {
@@ -31,7 +31,7 @@ actor FavoriteIconStore {
         guard !removedProfiles.contains(profile), let origin = Self.origin(home) else { return nil }
         let key = profile.rawValue.uuidString + "/" + origin.absoluteString
         if let image = cachedImage(profile: profile, home: home) { return image }
-        if let failure = failures[key], Date().timeIntervalSince(failure) < 600 { return nil }
+        if let failure = failures.value(for: key), Date().timeIntervalSince(failure) < 600 { return nil }
         if let task = pending[key] { return await task.value }
         let session = session
         let task = Task { await Self.discover(home: origin, session: session) }
@@ -39,21 +39,22 @@ actor FavoriteIconStore {
         let result = await task.value
         pending[key] = nil
         guard !removedProfiles.contains(profile) else { return nil }
-        // A Chromium image may have arrived while public discovery was in flight.
-        if let image = images[key] { return image }
+        // A Chromium image may have arrived while public discovery was in flight, then
+        // left the memory budget. The persisted owned image still takes precedence.
+        if let image = cachedImage(profile: profile, home: home) { return image }
         if let result { put(result, profile: profile, home: home) }
-        else { failures[key] = Date() }
+        else { failures.insert(Date(), for: key, cost: key.utf8.count + 64) }
         return result
     }
 
     func cachedImage(profile: ProfileID, home: URL) -> BrowserFaviconImage? {
         guard !removedProfiles.contains(profile), let origin = Self.origin(home) else { return nil }
         let key = profile.rawValue.uuidString + "/" + origin.absoluteString
-        if let image = images[key] { return image }
+        if let image = images.value(for: key) { return image }
         if let file = file(profile: profile, origin: origin),
            let data = try? Data(contentsOf: file),
            let image = BrowserFaviconImage(sourceURL: origin, png: data) {
-            images[key] = image
+            images.insert(image, for: key, cost: image.png.count + key.utf8.count + 256)
             return image
         }
         return nil
@@ -62,8 +63,8 @@ actor FavoriteIconStore {
     func put(_ image: BrowserFaviconImage, profile: ProfileID, home: URL) {
         guard !removedProfiles.contains(profile), let origin = Self.origin(home) else { return }
         let key = profile.rawValue.uuidString + "/" + origin.absoluteString
-        images[key] = image
-        failures[key] = nil
+        images.insert(image, for: key, cost: image.png.count + key.utf8.count + 256)
+        failures.remove(key)
         guard let file = file(profile: profile, origin: origin) else { return }
         // Compare the actual persisted bytes: failed writes remain retryable, and a reopened
         // cache also avoids replacing the inode for an identical engine notification.
@@ -80,13 +81,28 @@ actor FavoriteIconStore {
         removedProfiles.insert(profile)
         let prefix = profile.rawValue.uuidString + "/"
         for key in Array(pending.keys) where key.hasPrefix(prefix) { pending.removeValue(forKey: key)?.cancel() }
-        images = images.filter { !$0.key.hasPrefix(prefix) }
-        failures = failures.filter { !$0.key.hasPrefix(prefix) }
+        for key in images.keys where key.hasPrefix(prefix) { images.remove(key) }
+        for key in failures.keys where key.hasPrefix(prefix) { failures.remove(key) }
         if let folder = directory?.appendingPathComponent(profile.rawValue.uuidString),
            FileManager.default.fileExists(atPath: folder.path) { try FileManager.default.removeItem(at: folder) }
     }
 
-    private func file(profile: ProfileID, origin: URL) -> URL? {
+    func releaseMemory() {
+        images.removeAll()
+        failures.removeAll()
+    }
+
+    nonisolated func cachedFile(profile: ProfileID, home: URL) -> URL? {
+        guard let origin = Self.origin(home) else { return nil }
+        return file(profile: profile, origin: origin)
+    }
+
+    var cacheStatistics: [String: Int] {
+        ["entries": images.count, "bytes": images.cost,
+         "failures": failures.count, "pending": pending.count]
+    }
+
+    nonisolated private func file(profile: ProfileID, origin: URL) -> URL? {
         let name = SHA256.hash(data: Data(origin.absoluteString.utf8)).map { String(format: "%02x", $0) }.joined()
         return directory?.appendingPathComponent(profile.rawValue.uuidString, isDirectory: true)
             .appendingPathComponent(name + ".png")
