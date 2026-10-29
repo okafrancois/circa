@@ -280,13 +280,15 @@ final class SidebarSpaceButton: OrbitGlyphButton {
     }
     var isActive: Bool {
         didSet {
+            guard isActive != oldValue else { return }
+            needsDisplay = true
             setEmphasis(animated: true)
             setAccessibilityValue(isActive ? OrbitShellText.selected : "")
         }
     }
     static let hoverDuration: TimeInterval = 0.2
-    @objc dynamic var hoverAmount: CGFloat = 0 { didSet { needsDisplay = true } }
-    @objc dynamic var iconEmphasis: CGFloat = 0 { didSet { needsDisplay = true } }
+    @objc dynamic var hoverAmount: CGFloat = 0 { didSet { if hoverAmount != oldValue { needsDisplay = true } } }
+    @objc dynamic var iconEmphasis: CGFloat = 0 { didSet { if iconEmphasis != oldValue { needsDisplay = true } } }
     var onPress: (() -> Void)?
 
     override class func defaultAnimation(forKey key: NSAnimatablePropertyKey) -> Any? {
@@ -329,7 +331,11 @@ final class SidebarSpaceButton: OrbitGlyphButton {
     var onHoverChange: ((Bool) -> Void)?
     var onContextMenu: (() -> Void)?
     var inactiveOpacity: (NSAppearance) -> CGFloat = { _ in Metrics.footerInactiveSpaceOpacity } {
-        didSet { needsDisplay = true }
+        didSet {
+            // Providers are replaced during theme paint. Compare their resolved values, while
+            // retaining the new provider for future appearance changes (which redraw normally).
+            if inactiveOpacity(effectiveAppearance) != oldValue(effectiveAppearance) { needsDisplay = true }
+        }
     }
 
     init(space: BrowserSpace, index: Int, isActive: Bool) {
