@@ -156,7 +156,7 @@ final class FavoriteIconPipeline<Surface: BrowserEngineSurface> {
               let width = properties[kCGImagePropertyPixelWidth] as? Int,
               let height = properties[kCGImagePropertyPixelHeight] as? Int,
               width > 0, height > 0, width <= 512, height <= 512,
-              let image = NSImage(data: data),
+              let image = BrowserIconRaster.image(data: data),
               image.size.width > 0, image.size.height > 0,
               image.size.width <= 512, image.size.height <= 512 else { return nil }
         return image

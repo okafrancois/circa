@@ -18,6 +18,13 @@ final class BrowserHistoryRecorder {
     private let resolveProfile: (ProfileID) -> BrowserEngineProfile
     private let now: () -> Date
     private let openStore: BrowserHistoryStoreOpener
+    /// Authoritative foreground profiles across all windows; background writes do not pin an index.
+    var activeProfiles: () -> Set<ProfileID> = { [] }
+    private var lastAccess: [ProfileID: Date] = [:]
+    private var accesses: [ProfileID: Int] = [:]
+    private var pressure: BrowserMemoryPressure?
+    private var idleTask: Task<Void, Never>?
+    private var isClosed = false
     private var stores: [ProfileID: BrowserHistoryStore] = [:]
     /// One in-flight open per profile; concurrent callers share its single attempt.
     private var openings: [ProfileID: Task<BrowserHistoryStore, Error>] = [:]
@@ -53,6 +60,16 @@ final class BrowserHistoryRecorder {
         self.resolveProfile = resolveProfile
         self.now = now
         self.openStore = openStore
+        pressure = BrowserMemoryPressure { [weak self] in
+            Task { await self?.releaseInactiveMemory() }
+        }
+        idleTask = Task { [weak self] in
+            while !Task.isCancelled {
+                do { try await Task.sleep(for: .seconds(60)) } catch { return }
+                guard let self, !isClosed else { return }
+                await releaseInactiveMemory(olderThan: 300)
+            }
+        }
     }
 
     func committed<Surface: BrowserEngineSurface>(_ surface: Surface, profile: BrowserEngineProfile) {
@@ -134,6 +151,7 @@ final class BrowserHistoryRecorder {
             memoryQueries.removeValue(forKey: profileID)
             return []
         }
+        lastAccess[profileID] = now()
         guard let index = memoryIndexes[profileID] else { memoryQueries[profileID] = nil; return [] }
         var cache = memoryQueries.removeValue(forKey: profileID) ?? .init()
         let result = index.suggestions(query, cache: &cache, limit: limit, now: now())
@@ -144,7 +162,9 @@ final class BrowserHistoryRecorder {
     /// Opens the store and builds the memory index off the main actor. Idempotent and shared:
     /// concurrent callers await the same build. Failures follow the normal incident policy.
     func prepareSuggestions(for profileID: ProfileID) async {
-        guard isPersistent(profileID), memoryIndexes[profileID] == nil else { return }
+        guard !isClosed, isPersistent(profileID) else { return }
+        lastAccess[profileID] = now()
+        guard memoryIndexes[profileID] == nil else { return }
         await startMemoryIndexBuild(for: profileID).value
     }
 
@@ -167,7 +187,7 @@ final class BrowserHistoryRecorder {
                 try await $0.memoryIndex(now: timestamp)
             }), isPersistent(profileID) else { return }
             // A deletion or import in progress rebuilds on completion; do not race it.
-            guard bulkMutations[profileID] == nil else { return }
+            guard !isClosed, bulkMutations[profileID] == nil else { return }
             if generation == indexGenerations[profileID, default: 0] {
                 memoryIndexes[profileID] = index
                 return
@@ -338,14 +358,43 @@ final class BrowserHistoryRecorder {
         memoryQueries.removeValue(forKey: profileID)
     }
 
+    /// Never close a connection borrowed by a query/write, a snapshot build, or a bulk mutation.
+    /// Removing ownership before awaiting close makes a concurrent new access open a fresh store.
+    func releaseInactiveMemory(olderThan interval: TimeInterval = 0) async {
+        for profile in Set(stores.keys).union(memoryIndexes.keys) {
+            guard !activeProfiles().contains(profile), accesses[profile, default: 0] == 0,
+                  openings[profile] == nil, indexBuilds[profile] == nil,
+                  bulkMutations[profile] == nil, importBrackets[profile] == nil,
+                  now().timeIntervalSince(lastAccess[profile] ?? .distantPast) >= interval else { continue }
+            memoryIndexes.removeValue(forKey: profile)
+            memoryQueries.removeValue(forKey: profile)
+            lastAccess.removeValue(forKey: profile)
+            if let store = stores.removeValue(forKey: profile) { try? await store.close() }
+        }
+    }
+
+    var cacheStatistics: [String: Int] {
+        ["stores": stores.count, "indexes": memoryIndexes.count,
+         "entries": memoryIndexes.values.reduce(0) { $0 + $1.residentEntryCount },
+         "bytes": memoryIndexes.values.reduce(0) { $0 + $1.residentBytes }]
+    }
+
     func flush() async { await pending?.value }
 
     func close() async throws {
+        idleTask?.cancel()
+        idleTask = nil
+        pressure = nil
         await flush()
+        isClosed = true
+        let builds = Array(indexBuilds.values)
+        for build in builds { build.cancel() }
+        for build in builds { await build.value }
         for opening in openings.values { _ = try? await opening.value }
         memoryIndexes.removeAll()
         memoryQueries.removeAll()
         for store in stores.values { try await store.close() }
+        stores.removeAll()
     }
 
     private func isPersistent(_ profileID: ProfileID) -> Bool {
@@ -365,8 +414,14 @@ final class BrowserHistoryRecorder {
 
     private func access<T: Sendable>(profileID: ProfileID, disabled: T,
                                     operation: @MainActor (BrowserHistoryStore) async throws -> T) async throws -> T {
+        accesses[profileID, default: 0] += 1
+        lastAccess[profileID] = now()
+        defer {
+            accesses[profileID, default: 1] -= 1
+            if accesses[profileID] == 0 { accesses.removeValue(forKey: profileID) }
+        }
         do {
-            guard let store = try await store(for: profileID) else { return disabled }
+            guard !isClosed, let store = try await store(for: profileID) else { return disabled }
             let result = try await operation(store)
             if issues[profileID] == .operationUnavailable { clearIssue(for: profileID) }
             return result

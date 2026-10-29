@@ -27,6 +27,17 @@ final class BrowserHistoryEngineObserver<Surface: BrowserEngineSurface> {
         }
     }
 
+    private var warmedProfile: ProfileID?
+    private var warmup: Task<Void, Never>?
+
+    func activateProfile(_ profileID: ProfileID?) {
+        guard profileID != warmedProfile else { return }
+        warmedProfile = profileID
+        warmup?.cancel()
+        guard let profileID else { warmup = nil; return }
+        warmup = Task { [weak recorder] in await recorder?.prepareSuggestions(for: profileID) }
+    }
+
     func suggestions(for profileID: ProfileID, query: String) async throws -> [BrowserHistorySuggestion] {
         try await recorder.suggestions(for: profileID, query: query)
     }

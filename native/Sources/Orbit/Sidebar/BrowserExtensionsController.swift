@@ -1,11 +1,13 @@
 import AppKit
 import BrowserCore
 import BrowserEngine
+import CryptoKit
 
 /// Profile-scoped extension access inside the sidebar address. Actions retain a stable anchor
 /// after the transient menu closes; the native engine owns installation and popup contents.
 @MainActor
 final class BrowserExtensionsController<Engine: BrowserEngine> {
+    private var pressure: BrowserMemoryPressure?
     private weak var owner: BrowserWindowController<Engine>?
     private var toolbarObservation: BrowserExtensionObservation?
     private var toolbarProfile: ProfileID?
@@ -22,18 +24,21 @@ final class BrowserExtensionsController<Engine: BrowserEngine> {
             self.surface = surface; generation = surface.documentGeneration; self.items = items
         }
     }
-    private var tabInventories: [ObjectIdentifier: TabInventory] = [:]
-    private var profileInventories: [ProfileID: [BrowserExtensionSummary]] = [:]
+    private var tabInventories = BrowserCostCache<ObjectIdentifier, TabInventory>(budget: 2 * 1024 * 1024)
+    private var profileInventories = BrowserCostCache<ProfileID, [BrowserExtensionSummary]>(budget: 2 * 1024 * 1024)
     /// Optional metadata injection for the confined Chromium presentation probe. Production
     /// always reads the engine registry; fixture buttons never dispatch engine actions.
     var presentationInventory: ((ProfileID) -> [BrowserExtensionSummary])?
     private var pinOrder: [ProfileID: [String]] = [:]
     private weak var selectedSurface: Engine.Surface?
+    private var iconImages = BrowserCostCache<String, NSImage>(budget: 1024 * 1024)
+
     private var generation: UInt64?
     private var selectionEpoch: UInt64 = 0
 
     init(owner: BrowserWindowController<Engine>) {
         self.owner = owner
+        pressure = BrowserMemoryPressure { [weak self] in self?.releaseMemory() }
     }
 
     func install() {
@@ -122,19 +127,35 @@ final class BrowserExtensionsController<Engine: BrowserEngine> {
         }
     }
 
+    private static func inventoryCost(_ items: [BrowserExtensionSummary]) -> Int {
+        items.reduce(128) { total, item in
+            let actions = [item.actionState, item.defaultActionState].compactMap { $0 }
+            return total + 256 + item.id.utf8.count + item.name.utf8.count + item.version.utf8.count
+                + (item.iconPNGBase64?.utf8.count ?? 0) + (item.actionBadgeText?.utf8.count ?? 0)
+                + actions.reduce(0) { $0 + $1.title.utf8.count + $1.badgeText.utf8.count + ($1.iconPNGBase64?.utf8.count ?? 0) }
+        }
+    }
+
     private func icon(for item: BrowserExtensionSummary) -> NSImage? {
         guard let encoded = item.actionState?.iconPNGBase64 ?? item.iconPNGBase64, encoded.count < 512 * 1024,
               let data = Data(base64Encoded: encoded) else { return nil }
-        return NSImage(data: data)
+        let key = ((previewProfile ?? selectedSurface?.profileID)?.rawValue.uuidString ?? "")
+            + item.id + Data(SHA256.hash(data: data)).base64EncodedString()
+        if let image = iconImages.value(for: key) { return image }
+        guard let image = BrowserIconRaster.image(data: data, pixels: 32, size: 16) else { return nil }
+        iconImages.insert(image, for: key, cost: BrowserIconRaster.cost(image) + key.utf8.count)
+        return image
     }
 
     private func renderPinnedIcons() {
         guard let owner else { return }
         let surface = owner.session.selectedSurface
         let profile = previewProfile ?? surface?.profileID ?? owner.session.activeProfileID
-        tabInventories = tabInventories.filter { $0.value.surface.map(owner.owns) == true }
-        profileInventories = profileInventories.filter { liveProfile in
-            owner.session.catalog?.profiles.contains { $0.id == liveProfile.key } == true
+        for key in tabInventories.keys where tabInventories.peekValue(for: key)?.surface.map(owner.owns) != true {
+            tabInventories.remove(key)
+        }
+        for profile in profileInventories.keys where owner.session.catalog?.profiles.contains(where: { $0.id == profile }) != true {
+            profileInventories.remove(profile)
         }
         let items: [BrowserExtensionSummary]
         if let profile, let presentationInventory { items = presentationInventory(profile) }
@@ -142,18 +163,18 @@ final class BrowserExtensionsController<Engine: BrowserEngine> {
             do {
                 if let surface, surface.profileID == profile, previewProfile == nil {
                     items = try host.installedExtensions(on: surface)
-                    tabInventories[ObjectIdentifier(surface)] = TabInventory(surface: surface, items: items)
+                    tabInventories.insert(TabInventory(surface: surface, items: items), for: ObjectIdentifier(surface), cost: Self.inventoryCost(items))
                 } else { items = try host.installedExtensions(in: profile) }
-                profileInventories[profile] = items
+                profileInventories.insert(items, for: profile, cost: Self.inventoryCost(items))
             }
             catch {
                 if let surface, surface.profileID == profile, previewProfile == nil {
-                    let cached = tabInventories[ObjectIdentifier(surface)]
+                    let cached = tabInventories.value(for: ObjectIdentifier(surface))
                     if cached?.surface === surface, cached?.generation == surface.documentGeneration {
                         items = cached?.items ?? []
                     } else {
                         // Keep the icon inventory, but never borrow another tab's action values.
-                        items = (profileInventories[profile] ?? []).map { item in
+                        items = (profileInventories.value(for: profile) ?? []).map { item in
                             var item = item
                             item.actionState = nil; item.actionBadgeText = nil
                             return item
@@ -252,7 +273,21 @@ final class BrowserExtensionsController<Engine: BrowserEngine> {
         if let surface { owner.engine.extensions?.setActionAnchor(owner.siteControls.actionAnchor, on: surface) }
     }
 
+    func releaseMemory() {
+        iconImages.removeAll()
+        tabInventories.removeAll()
+        profileInventories.removeAll()
+        let active = previewProfile ?? selectedSurface?.profileID
+        buttonsByProfile = buttonsByProfile.filter { $0.key == active }
+    }
+
+    var cacheStatistics: [String: Int] {
+        return ["iconEntries": iconImages.count, "iconBytes": iconImages.cost, "tabSnapshots": tabInventories.count, "profileSnapshots": profileInventories.count,
+                "bytes": tabInventories.cost + profileInventories.cost]
+    }
+
     func close() {
+        iconImages.removeAll()
         registryRetry?.cancel()
         registryRetry = nil
         toolbarObservation?.cancel()

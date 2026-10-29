@@ -72,6 +72,30 @@ extension NativeWebKitTests {
 @Suite("Native command palette", .serialized)
 @MainActor
 struct NativePaletteTests {
+    @Test("The first palette render uses known sidebar pixels only from the captured profile")
+    func knownIconOnFirstRender() async throws {
+        let h = try await PaletteHarness()
+        let home = URL(string: "https://cached.synthetic.test/")!
+        h.window.session.openTab(url: home)
+        await h.settle()
+        let pixels = try #require(BrowserFaviconImage(sourceURL: home, png: NativeFaviconReceiptTests.png()))
+        let image = try #require(await pixels.nativeImage())
+        h.window.sidebarIcons.memoryCache.put(image, profile: ProfileID(), home: home)
+        h.window.palette.registry = h.registry
+        h.window.palette.present(.newTab)
+        h.window.palette.query("cached")
+        let first = try #require(h.window.palette.results.first { $0.url == home })
+        #expect(h.window.palette.view.favicons[first.id] == nil)
+        h.window.sidebarIcons.memoryCache.put(image, profile: h.profileID, home: home)
+        h.window.palette.query("cached")
+        #expect(h.window.palette.view.favicons[first.id] === image)
+        let search = try #require(h.window.palette.results.first { $0.section == .search })
+        let searchURL = try #require(search.url)
+        h.window.sidebarIcons.memoryCache.put(image, profile: h.profileID, home: searchURL)
+        h.window.palette.query("cached")
+        #expect(h.window.palette.view.favicons[search.id] == nil)
+        try await h.close()
+    }
     @Test("Split creation opens an empty address draft and navigates the new pane only",
           arguments: [BrowserCommandOrigin.menu, .keyboard, .palette])
     func splitAddressDraft(_ origin: BrowserCommandOrigin) async throws {

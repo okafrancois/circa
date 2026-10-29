@@ -37,7 +37,7 @@ public struct BrowserFaviconImage: Equatable, Sendable {
         let data = png
         let decoded = await FaviconDecoder.shared.decode(data)
         guard !Task.isCancelled, let decoded else { return nil }
-        return NSImage(cgImage: decoded.image, size: .zero)
+        return NSImage(cgImage: decoded.image, size: NSSize(width: decoded.image.width, height: decoded.image.height))
     }
 }
 
@@ -49,8 +49,10 @@ private actor FaviconDecoder {
     func decode(_ data: Data) -> DecodedFavicon? {
         guard !Task.isCancelled,
               let source = CGImageSourceCreateWithData(data as CFData, nil),
-              let image = CGImageSourceCreateImageAtIndex(source, 0,
-                [kCGImageSourceShouldCacheImmediately: true] as CFDictionary) else { return nil }
+              let image = CGImageSourceCreateThumbnailAtIndex(source, 0, [
+                kCGImageSourceCreateThumbnailFromImageAlways: true,
+                kCGImageSourceThumbnailMaxPixelSize: 64,
+                kCGImageSourceShouldCacheImmediately: true] as CFDictionary) else { return nil }
         return DecodedFavicon(image: image)
     }
 }

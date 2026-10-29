@@ -140,6 +140,59 @@ enum OrbitPerformanceProbe {
                             }
                         }
                     } catch { result["firefoxCookie"] = false }
+                } else if name == "memory-caches-show", Bundle.main.bundleIdentifier == "lab.orbit.orbit.perf-mem-caches",
+                          let window = owner.window, NSApp.windows.contains(where: { $0 === window }) {
+                    window.makeKeyAndOrderFront(nil)
+                    result["memoryShown"] = true
+                } else if name == "memory-caches", ownsWindow(owner, bundleID: "lab.orbit.orbit.perf-mem-caches") {
+                    var check: [String: Any] = [:]
+                    let document = await environment.store.sessionDocument()
+                    let count = min(1000, max(0, Int(command["count"] ?? "0") ?? 0))
+                    let offset = Int(command["offset"] ?? "0") ?? 0
+                    var visits = 0, icons = 0
+                    if let port = Int(command["port"] ?? ""), (1024...65535).contains(port) {
+                        for index in offset..<(offset + count) {
+                            guard ownsWindow(owner, bundleID: "lab.orbit.orbit.perf-mem-caches"), document.spaces.count >= 3 else { break }
+                            let space = document.spaces[(index / 10) % 3]
+                            owner.session.activateSpace(space.id)
+                            await owner.session.waitForPendingCommands()
+                            guard ownsWindow(owner, bundleID: "lab.orbit.orbit.perf-mem-caches"),
+                                  let surface = owner.session.selectedSurface,
+                                  let url = URL(string: "http://o\(index).localhost:\(port)/\(index)") else { break }
+                            surface.navigate(to: url)
+                            await waitForLoad(surface)
+                            let deadline = ProcessInfo.processInfo.systemUptime + 2
+                            while (surface.navigationState.faviconImage?.sourceURL.host != url.host || surface.navigationState.committedURL != url),
+                                  ProcessInfo.processInfo.systemUptime < deadline {
+                                try? await Task.sleep(for: .milliseconds(10))
+                            }
+                            if surface.navigationState.committedURL == url { visits += 1 }
+                            if let pixels = surface.navigationState.faviconImage, pixels.sourceURL.host == url.host, let native = await pixels.nativeImage() {
+                                await environment.favoriteIcons?.put(pixels, profile: space.profileID, home: url)
+                                environment.sidebarIconMemory.put(native, profile: space.profileID, home: url)
+                                icons += 1
+                            }
+                            await environment.historyRecorder.prepareSuggestions(for: space.profileID)
+                        }
+                    }
+                    await environment.historyRecorder.flush()
+                    if command["pressure"] == "1" {
+                        BrowserMemoryPressure.simulate()
+                        await environment.favoriteIcons?.releaseMemory()
+                        environment.sidebarIconMemory.releaseMemory()
+                        await environment.historyRecorder.releaseInactiveMemory()
+                        owner.extensionControls.releaseMemory()
+                    }
+                    check["visits"] = visits; check["icons"] = icons
+                    check["encoded"] = await environment.favoriteIcons?.cacheStatistics
+                    check["sidebar"] = environment.sidebarIconMemory.cacheStatistics
+                    check["palette"] = owner.palette.faviconCacheStatistics
+                    check["history"] = environment.historyRecorder.cacheStatistics
+                    check["extensions"] = owner.extensionControls.cacheStatistics
+                    check["occluded"] = owner.window?.occlusionState.contains(.visible) != true
+                    check["windowNumber"] = owner.window?.windowNumber
+                    result["memoryCaches"] = check
+                    owner.window?.orderOut(nil)
                 } else if name == "data-quick-wins" {
                     if let text = command["base"], let base = URL(string: text),
                        base.scheme == "http", base.host == "127.0.0.1" {

@@ -486,6 +486,7 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
     private func renderSessionProjection(selection: Set<TabID>?) {
         BrowserPerformance.count(.windowProjections, window: id)
         sidebarMetadataValues = sidebarMetadataValues.filter { session.tabID(for: $0.key) != nil }
+        historyObserver.activateProfile(session.activeProfileID)
         tabSuspension?.selectionDidChange()
         if let catalog = session.catalog, catalog != publishedCatalog {
             publishedCatalog = catalog

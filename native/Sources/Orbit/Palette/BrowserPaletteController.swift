@@ -44,6 +44,8 @@ final class BrowserPaletteController<Engine: BrowserEngine> {
     var isPresented: Bool { !view.isHidden }
     var isAccepting: Bool { acceptTask != nil }
 
+    var faviconCacheStatistics: [String: Int] { faviconCache.cacheStatistics }
+
     func waitForResults() async {
         await presentationTask?.value
         await warmupTask?.value
@@ -295,6 +297,11 @@ final class BrowserPaletteController<Engine: BrowserEngine> {
             if icons[result.id] == nil,
                let reference = result.faviconReference ?? result.url.flatMap({ historyIcons[BrowserPaletteRanking.canonicalURL($0)] }) {
                 icons[result.id] = faviconCache.image(for: reference)
+            }
+            // Known profile-local pixels must survive a cold palette decode or LRU eviction.
+            // The shared sidebar working set also restores disk-backed icons in this render.
+            if icons[result.id] == nil, result.section != .search, let profileID, let home = result.url {
+                icons[result.id] = owner.sidebarIcons.memoryCache.image(profile: profileID, home: home)
             }
         }
         view.siteSearchHint = siteSearch == nil ? BrowserPaletteSiteSearch.matching(draft) : nil
