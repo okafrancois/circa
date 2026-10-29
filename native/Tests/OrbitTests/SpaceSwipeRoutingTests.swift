@@ -2000,6 +2000,62 @@ extension NativeWebKitTests.SpaceSwipeRoutingTests {
         _ = sidebar.spaceSwipe.advance(to: 12)
     }
 
+    @Test("Detached neighbor reuse invalidates content, paint and geometry and stays bounded")
+    func preparedNeighborCacheInvalidation() async throws {
+        let (window, sidebar, document, first) = try await fixture()
+        defer { sidebar.spaceSwipe.detach(); window.close() }
+        for _ in 0..<20 { await Task.yield() }
+        sidebar.appearance = NSAppearance(named: .aqua)
+        let neighbor = try #require(document.spaces.last?.id)
+        func prepare(_ document: BrowserSessionDocument) {
+            sidebar.prepareSpaceSwipeNeighbors(document: document, active: first, resolveTheme: { _ in .default })
+        }
+        prepare(document)
+        let original = try #require(sidebar.preparedSpaceSwipePage(for: neighbor))
+        #expect(original.superview == nil)
+        prepare(document)
+        #expect(sidebar.preparedSpaceSwipePage(for: neighbor) === original)
+        sidebar.resolveSpaceIcon = { _ in .grapheme("P") }
+        prepare(document)
+        let changedIcon = try #require(sidebar.preparedSpaceSwipePage(for: neighbor))
+        #expect(changedIcon !== original && changedIcon.iconSelection == .grapheme("P"))
+        sidebar.frame.size.width += 20
+        sidebar.layoutSubtreeIfNeeded()
+        prepare(document)
+        let resized = try #require(sidebar.preparedSpaceSwipePage(for: neighbor))
+        #expect(resized !== changedIcon)
+        sidebar.appearance = NSAppearance(named: .darkAqua)
+        prepare(document)
+        let dark = try #require(sidebar.preparedSpaceSwipePage(for: neighbor))
+        #expect(dark !== resized)
+        let store = try BrowserStore(restoring: document)
+        try await store.renameSpace(neighbor, name: "Updated neighbor")
+        let renamed = await store.sessionDocument()
+        prepare(renamed)
+        let renamedPage = try #require(sidebar.preparedSpaceSwipePage(for: neighbor))
+        #expect(renamedPage !== dark)
+        let windowID = try #require(document.windows.first?.id)
+        try await store.activateSpace(neighbor, in: windowID)
+        _ = try await store.openTab(url: URL(string: "https://fixture.test/preview")!,
+            from: store.captureContext(in: windowID), activate: true)
+        let populated = await store.sessionDocument()
+        prepare(populated)
+        let populatedPage = try #require(sidebar.preparedSpaceSwipePage(for: neighbor))
+        #expect(populatedPage !== renamedPage)
+        let image = NSImage(size: NSSize(width: 16, height: 16))
+        sidebar.previewIcon = { _, _ in image }
+        prepare(populated)
+        #expect(sidebar.preparedSpaceSwipePage(for: neighbor) !== populatedPage)
+        for index in 0..<8 { _ = try await store.createSpace(name: "Neighbor \(index)", profileID: document.profiles[0].id) }
+        let expanded = await store.sessionDocument()
+        for space in expanded.spaces {
+            sidebar.prepareSpaceSwipeNeighbors(document: expanded, active: space.id, resolveTheme: { _ in .default })
+            #expect(sidebar.preparedSpaceSwipePageCount <= 4)
+        }
+        prepare(document)
+        #expect(sidebar.preparedSpaceSwipePageCount <= 2)
+    }
+
     @Test("Prepared swipe neighbors stay detached through neutral input and reconcile before presentation")
     func spaceSwipePreparedNeighborsAreDetached() async throws {
         let (window, sidebar, document, first) = try await fixture(crossProfile: true)
