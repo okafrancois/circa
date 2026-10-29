@@ -28,25 +28,25 @@ struct BrowserDefaultBrowserService {
     var request: () async throws -> Void = {
         guard Bundle.main.bundleIdentifier == ProductIdentity.bundleIdentifier else { throw BrowserDefaultBrowserError.unavailableProduct }
         let url = Bundle.main.bundleURL
-        // Match the persisted public certificate fingerprint used by orbit-app.py. This reads
-        // metadata only; the signing keychain and its password are never opened.
-        let identityURL = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent(".local/share/orbit/signing/identity.json")
-        struct Identity: Decodable { let fingerprint: String }
-        let identity = try JSONDecoder().decode(Identity.self, from: Data(contentsOf: identityURL))
-        guard identity.fingerprint.count == 40,
-              identity.fingerprint.unicodeScalars.allSatisfy({ CharacterSet(charactersIn: "0123456789ABCDEFabcdef").contains($0) }) else {
-            throw BrowserDefaultBrowserError.invalidSignature
-        }
-        var code: SecStaticCode?
-        var requirement: SecRequirement?
-        guard SecStaticCodeCreateWithPath(url as CFURL, [], &code) == errSecSuccess,
-              SecRequirementCreateWithString("identifier \"\(ProductIdentity.bundleIdentifier)\" and certificate root = H\"\(identity.fingerprint)\"" as CFString, [], &requirement) == errSecSuccess,
-              let code, let requirement,
-              SecStaticCodeCheckValidity(code, [], requirement) == errSecSuccess else { throw BrowserDefaultBrowserError.invalidSignature }
+        try BrowserDefaultBrowserService.validateSignature(at: url)
         // These calls may display macOS confirmation dialogs. They are left to the user.
         try await NSWorkspace.shared.setDefaultApplication(at: url, toOpenURLsWithScheme: "http")
         try await NSWorkspace.shared.setDefaultApplication(at: url, toOpenURLsWithScheme: "https")
         try await NSWorkspace.shared.setDefaultApplication(at: url, toOpen: UTType.html)
+    }
+
+    /// The bundle must carry the product identifier and satisfy its own designated requirement,
+    /// whichever identity signed it (release Developer ID or a local build). Only signature
+    /// metadata is read; no file outside the bundle and no Keychain item is involved.
+    nonisolated static func validateSignature(at url: URL, identifier: String = ProductIdentity.bundleIdentifier) throws {
+        var code: SecStaticCode?
+        var requirement: SecRequirement?
+        var information: CFDictionary?
+        guard SecStaticCodeCreateWithPath(url as CFURL, [], &code) == errSecSuccess, let code,
+              SecCodeCopySigningInformation(code, SecCSFlags(rawValue: kSecCSSigningInformation), &information) == errSecSuccess,
+              (information as? [String: Any])?[kSecCodeInfoIdentifier as String] as? String == identifier,
+              SecCodeCopyDesignatedRequirement(code, [], &requirement) == errSecSuccess, let requirement,
+              SecStaticCodeCheckValidity(code, SecCSFlags(rawValue: kSecCSCheckAllArchitectures), requirement) == errSecSuccess
+        else { throw BrowserDefaultBrowserError.invalidSignature }
     }
 }
