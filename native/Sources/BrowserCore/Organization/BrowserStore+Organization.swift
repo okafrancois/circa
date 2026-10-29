@@ -140,10 +140,10 @@ extension BrowserStore {
         let redo = journal.flatMap { replayCandidate(in: $0.redo, undoing: false,
                                                      profileID: space.profileID, windowID: windowID) }
         return BrowserOrganizationSnapshot(
-            organizationRevision: organizationRevision, windowID: windowID, spaceID: space.id, profileID: space.profileID,
-            favorites: items(organization.favorites[space.profileID] ?? [], section: .favorites(space.profileID)),
-            pinned: items(organization.pinned[space.id] ?? [], section: .pinned(space.id)),
-            today: items(organization.today[space.id] ?? [], section: .today(space.id)),
+            organizationRevision: organizationRevision, windowID: windowID, spaceID: space.id, profileID: window.standaloneProfileID ?? space.profileID,
+            favorites: window.standaloneProfileID == nil ? items(organization.favorites[space.profileID] ?? [], section: .favorites(space.profileID)) : [],
+            pinned: window.standaloneProfileID == nil ? items(organization.pinned[space.id] ?? [], section: .pinned(space.id)) : [],
+            today: items(window.standaloneProfileID != nil ? organization.standalone[windowID] ?? [] : organization.today[space.id] ?? [], section: .today(space.id)),
             isPinnedSectionCollapsed: organization.collapsedPinnedSections.contains(space.id),
             archiveRevision: archived.revision,
             canRestoreArchivedTab: archived.canRestore,
@@ -274,6 +274,8 @@ extension BrowserStore {
                         drops.append(occurrenceID)
                         continue
                     }
+                    if let owner = organization.standaloneOwner(of: .tab(tab.id)), owner != windowID { drops.append(occurrenceID); continue }
+                    if window.standaloneProfileID != nil, organization.standaloneOwner(of: .tab(tab.id)) != windowID { drops.append(occurrenceID); continue }
                     switch section {
                     case let .favorites(profileID):
                         if spaces[spaceID]?.profileID != profileID { drops.append(occurrenceID) }
@@ -425,7 +427,7 @@ extension BrowserStore {
         let now = clock()
         let entry = BrowserOrganizedTab(id: tab.id, url: tab.url, createdAt: now, lastActiveAt: now)
         _ = try? commitOrganization { state in
-            state.addTab(entry, into: .today(tab.spaceID), at: Self.insertsNewTodayTabsAtTop ? 0 : .max)
+            state.addTab(entry, into: windows[tab.windowID]?.standaloneProfileID != nil ? .standalone(tab.windowID) : .today(tab.spaceID), at: Self.insertsNewTodayTabsAtTop ? 0 : .max)
         }
     }
 
@@ -745,10 +747,13 @@ extension BrowserStore {
     }
 
     public func clearTodayTabs(protecting protected: Set<TabID> = [], from context: BrowserContext) throws -> BrowserWindowState {
-        _ = try organizationWindow(context)
+        let window = try organizationWindow(context)
         let now = clock()
         try commitOrganization(.clearToday, in: context) { state in
-            let cleared = state.todayBlocks(in: context.spaceID).filter { Set($0).isDisjoint(with: protected) }.flatMap { $0 }
+            let blocks = window.standaloneProfileID != nil
+                ? (state.standalone[context.windowID] ?? []).map { state.tabIDs(in: $0) }
+                : state.todayBlocks(in: context.spaceID)
+            let cleared = blocks.filter { Set($0).isDisjoint(with: protected) }.flatMap { $0 }
             state.archiveTabs(cleared.map {
                 .init(id: $0, reason: .cleared, origin: .today, profileID: context.profileID, spaceID: context.spaceID)
             }, at: now)
@@ -759,17 +764,18 @@ extension BrowserStore {
     /// Restores an archived tab of the context's profile to the top of Today in its original Space,
     /// or in the current Space if the original no longer belongs to the profile. With `activate`, the
     /// window switches to that Space and selects the tab. Identity and custom title are preserved.
+    /// A standalone window restores into its own local list instead.
     public func restoreArchivedTab(_ id: TabID, activate: Bool, from context: BrowserContext) throws -> BrowserWindowState {
-        _ = try organizationWindow(context)
+        let window = try organizationWindow(context)
         guard let record = organization.archivedTab(id) else { throw BrowserOrganizationError.archivedTabMissing }
         guard record.profileID == context.profileID else { throw BrowserOrganizationError.notVisibleInContext }
-        let target = spaces[record.spaceID]?.profileID == record.profileID ? record.spaceID : context.spaceID
+        let target = window.standaloneProfileID == nil && spaces[record.spaceID]?.profileID == record.profileID ? record.spaceID : context.spaceID
         var tab = record.tab
         tab.pinnedURL = nil
         tab.lastActiveAt = clock()
         try commitOrganization(.restoreArchivedTab, in: context) { state in
             state.removeArchive(id)
-            state.addTab(tab, into: .today(target), at: Self.insertsNewTodayTabsAtTop ? 0 : .max)
+            state.addTab(tab, into: window.standaloneProfileID != nil ? .standalone(context.windowID) : .today(target), at: Self.insertsNewTodayTabsAtTop ? 0 : .max)
         }
         if activate {
             if target != context.spaceID { try activateSpace(target, in: context.windowID) }
@@ -1046,7 +1052,7 @@ extension BrowserStore {
         let window = try organizationWindow(context)
         try BrowserSessionDocument.validateDestination(url)
         guard let tabID, let section = organization.section(of: .tab(tabID)),
-              profileID(of: section) == context.profileID else {
+              (organization.standaloneOwner(of: .tab(tabID)).flatMap { windows[$0]?.standaloneProfileID } ?? profileID(of: section)) == context.profileID else {
             if replacingExisting || destination != nil { throw BrowserStoreError.staleContext }
             return try openTab(url: url, from: context, activate: activate)
         }
@@ -1059,6 +1065,7 @@ extension BrowserStore {
         if existing != nil && !replacingExisting {
             return try openTab(url: url, from: context, activate: activate)
         }
+        let destination = destination ?? (window.standaloneProfileID != nil ? .init(.standalone(context.windowID)) : nil)
         if let destination {
             let target = try destinationSection(of: destination.container, in: context)
             guard let space = spaces[context.spaceID], Self.section(target, isVisibleIn: space) else {
@@ -1096,6 +1103,7 @@ extension BrowserStore {
 
     /// Only the active Space's Pinned/Today and the active profile's Favorites are addressable.
     func visibleSection(of node: BrowserOrganizationNode, in context: BrowserContext) throws -> BrowserOrganizationSection {
+        if let id = organization.standaloneOwner(of: node), id != context.windowID { throw BrowserOrganizationError.notVisibleInContext }
         guard organization.contains(node), let section = organization.section(of: node) else {
             throw BrowserOrganizationError.itemMissing
         }
@@ -1110,6 +1118,7 @@ extension BrowserStore {
     func destinationSection(
         of container: BrowserOrganizationContainer, in context: BrowserContext
     ) throws -> BrowserOrganizationSection {
+        if windows[context.windowID]?.standaloneProfileID != nil, container != .standalone(context.windowID) { throw BrowserOrganizationError.invalidDestination }
         let section: BrowserOrganizationSection
         switch container {
         case let .favorites(id):
@@ -1121,6 +1130,9 @@ extension BrowserStore {
         case let .today(id):
             guard spaces[id] != nil else { throw BrowserStoreError.spaceMissing }
             section = .today(id)
+        case let .standalone(id):
+            guard id == context.windowID, windows[id]?.standaloneProfileID == context.profileID else { throw BrowserOrganizationError.notVisibleInContext }
+            return .today(context.spaceID)
         case .split: throw BrowserOrganizationError.invalidDestination
         case let .folder(id):
             guard let found = organization.section(ofContainer: container), organization.folders[id] != nil else {

@@ -47,6 +47,9 @@ final class BrowserSidebarView: NSView, SidebarListHost {
 
     // Window identity for drag payloads (`BrowserWindowController.id`).
     var windowIdentifier: UUID?
+    var standaloneProfileName: String?
+    private let standaloneProfilePill = NSTextField(labelWithString: "")
+    private let standaloneProfileIcon = NSImageView(image: NSImage(systemSymbolName: "face.smiling.fill", accessibilityDescription: nil) ?? NSImage())
     var onFolderHover: ((SidebarListRow, Bool) -> Void)?
     var onPreviewInvalidated: ((SidebarListRow) -> Void)?
     var onSelectTab: ((TabID) -> Void)?
@@ -57,6 +60,7 @@ final class BrowserSidebarView: NSView, SidebarListHost {
     var onRename: ((BrowserOrganizationNode, String) -> Void)?
     var onRenameDidEnd: (() -> Void)?
     var onClearToday: (() -> Void)?
+    var onTearOff: ((SidebarDragPayload, NSPoint) -> Void)?
     /// A validated drop: payload, destination, and whether the organization changes (false for
     /// rows dropped back in place, which still move live documents between windows).
     var onDrop: ((SidebarDragPayload, BrowserOrganizationDestination, Bool) -> Void)?
@@ -252,14 +256,41 @@ final class BrowserSidebarView: NSView, SidebarListHost {
             favoriteMinimumTileWidth: favoriteMinimumTileWidth,
             pinnedRowCount: layout.pinnedSlotCount, todayRowCount: layout.todaySlotCount,
             spaceCount: renderedCatalog?.spaces.count ?? 1))
+        if standaloneProfileName != nil { geometry.spaceTitleCenterY = 4 }
         navigationContainer.frame = NSRect(x: 0, y: 0, width: bounds.width, height: geometry.addressFrame.minY)
         navigationContainer.apply(geometry)
         addressContainer.frame = geometry.addressFrame
+        if let name = standaloneProfileName {
+            if standaloneProfilePill.superview == nil {
+                standaloneProfilePill.font = .systemFont(ofSize: 11)
+                standaloneProfilePill.maximumNumberOfLines = 1
+                standaloneProfilePill.textColor = .secondaryLabelColor
+                standaloneProfilePill.wantsLayer = true
+                standaloneProfilePill.layer?.cornerRadius = 10
+                standaloneProfilePill.layer?.backgroundColor = NSColor.white.withAlphaComponent(0.3).cgColor
+                standaloneProfilePill.addSubview(standaloneProfileIcon)
+                addSubview(standaloneProfilePill)
+            }
+            if standaloneProfilePill.stringValue != name {
+                let paragraph = NSMutableParagraphStyle()
+                paragraph.firstLineHeadIndent = 16
+                standaloneProfilePill.attributedStringValue = NSAttributedString(string: name,
+                    attributes: [.paragraphStyle: paragraph, .font: NSFont.systemFont(ofSize: 11), .foregroundColor: NSColor.secondaryLabelColor])
+            }
+            standaloneProfileIcon.frame = NSRect(x: 4, y: 5, width: 10, height: 10)
+            standaloneProfilePill.frame = NSRect(x: 8, y: geometry.addressFrame.maxY + 10, width: standaloneProfilePill.fittingSize.width + 28, height: 20)
+        }
+        standaloneProfilePill.isHidden = standaloneProfileName == nil
+        page.titleLabel.isHidden = standaloneProfileName != nil
+        if standaloneProfileName != nil { page.iconButton.isHidden = true }
+        if standaloneProfileName != nil { footer.isHidden = isPrivate; favoritesContainer.isHidden = true }
         pageContainer.frame = contentViewportFrame
         favoritesContainer.frame = contentFrame(geometry.favoritesFrame)
         for page in [page, leavingPage, swipePreview, swipeOutgoing].compactMap({ $0 }) {
             page.frame = contentFrame(geometry.pageFrame)
+            page.list.isStandalone = standaloneProfileName != nil
             page.geometry = geometry
+            if standaloneProfileName != nil { page.list.separator.isHidden = true; page.list.clearButton.isHidden = true }
         }
         pageContainer.scrollReceiver = page.pageScrollView
         layoutSpaceSwipePages()
@@ -302,6 +333,7 @@ final class BrowserSidebarView: NSView, SidebarListHost {
             footer.render(spaces: catalog?.spaces ?? [], activeSpaceID: activeSpaceID)
             needsLayout = true
         }
+        if standaloneProfileName != nil { footer.render(spaces: [], activeSpaceID: nil) }
         let current = organization?.spaceID == activeSpaceID ? organization : nil
         self.organization = current
         if let current {
@@ -501,6 +533,12 @@ final class BrowserSidebarView: NSView, SidebarListHost {
         undoRouter.validate(item, preferringOrganization: true)
     }
 
+
+    func list(_ list: SidebarListView, tearOff payload: SidebarDragPayload, at point: NSPoint) -> Bool {
+        guard commandsEnabled, payload.nodes.count == 1, payload.nodes.first?.tabID != nil, let onTearOff else { return false }
+        onTearOff(payload, point)
+        return true
+    }
 
     func list(_ list: SidebarListView, dragLeftWindow payload: SidebarDragPayload) {
         let moved = Set(payload.nodes.compactMap(\.tabID))
@@ -764,7 +802,7 @@ final class SidebarSpacePageView: NSView, NSTextFieldDelegate, NSMenuDelegate {
     let scrollView = BrowserGestureScrollView()
     let list = SidebarListView()
     let titleLabel = SidebarSpaceTitleLabel(labelWithString: "")
-    private let iconButton = OrbitGlyphButton(glyph: nil, label: uiText("Change Icon or Emoji…"))
+    let iconButton = OrbitGlyphButton(glyph: nil, label: uiText("Change Icon or Emoji…"))
     var iconSelection: BrowserSpaceIcon = .none {
         didSet {
             guard iconSelection != oldValue else { return }

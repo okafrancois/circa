@@ -59,6 +59,7 @@ final class OrbitApplication: NSObject, NSApplicationDelegate {
     /// The key window as command routing sees it. Hidden event-level tests inject their own
     /// window: an application that is never activated has no AppKit key window.
     let commandKeyWindow: () -> NSWindow?
+    var tearOffRequests: [UUID: SidebarTearOffRequest] = [:]
     var inheritedContexts: [UUID: Task<BrowserContext?, Never>] = [:]
     var inheritedWindowProfiles: [UUID: ProfileID] = [:]
     var privateWindowFactory: BrowserPrivateDomainFactory<ActiveEngine>?
@@ -111,8 +112,11 @@ final class OrbitApplication: NSObject, NSApplicationDelegate {
             guard let self, let environment = self.privateWindows[id]?.environment ?? self.environment else { throw CancellationError() }
             defer { self.inheritedWindowProfiles[id] = nil }
             let spaceID: SpaceID?
-            let opensInitialTab = self.quickWindowDestinationSpaces[id] == nil && !environment.isPrivate
-            if let contextTask = self.inheritedContexts.removeValue(forKey: id) {
+            let tearOff = self.tearOffRequests.removeValue(forKey: id)
+            let opensInitialTab = tearOff == nil && self.quickWindowDestinationSpaces[id] == nil && !environment.isPrivate
+            if let tearOff {
+                spaceID = tearOff.payload.spaceID
+            } else if let contextTask = self.inheritedContexts.removeValue(forKey: id) {
                 guard let context = await contextTask.value else { throw CancellationError() }
                 spaceID = context.spaceID
             } else if let littleSpace = self.quickWindowDestinationSpaces.removeValue(forKey: id) {
@@ -122,7 +126,7 @@ final class OrbitApplication: NSObject, NSApplicationDelegate {
             } else {
                 spaceID = nil
             }
-            let controller = try await environment.makeWindow(id: id, spaceID: spaceID, opensInitialTab: opensInitialTab, onInput: { [weak self] action in
+            let controller = try await environment.makeWindow(id: id, spaceID: spaceID, opensInitialTab: opensInitialTab, standalone: tearOff != nil, onInput: { [weak self] action in
                 guard let self, !isPreparingToQuit else { return }
                 windows.perform(in: id) { controller in controller.performAcceptedCommand { action(controller) } }
             }, onClose: { [weak self] in
@@ -130,6 +134,22 @@ final class OrbitApplication: NSObject, NSApplicationDelegate {
                 self?.inheritedContexts.removeValue(forKey: id)
                 self?.releasePrivateWindow(id)
             }, onActivate: { [weak self] in self?.windows.activate(id) })
+            controller.onTearOffTab = { [weak self, weak controller] payload, point in
+                guard let controller else { return }
+                self?.tearOff(payload, from: controller, at: point)
+            }
+            if let tearOff {
+                await tearOff.waitForPresentation()
+                guard !Task.isCancelled, let source = tearOff.source, source.acceptsCommands,
+                      let tab = tearOff.payload.nodes.first?.tabID,
+                      let surface = source.liveSidebarSurface(of: tab),
+                      let move = source.moveSurface(surface, to: controller, activate: true, replacingExisting: true),
+                      await move.value != nil else { controller.window?.close(); throw CancellationError() }
+                controller.window?.setFrame(tearOff.placement.frame, display: false)
+                controller.windowedFrame = tearOff.placement.frame
+                controller.windowShell.setSidebarWidth(tearOff.sidebarWidth)
+                controller.restoresFullScreen = tearOff.placement.entersFullScreen
+            }
             controller.favorites.bind(to: self.commands.registry)
             controller.palette.registry = self.commands.registry
             controller.sidebar.spaceShortcutLabel = { [weak registry = self.commands.registry] index in
@@ -141,7 +161,14 @@ final class OrbitApplication: NSObject, NSApplicationDelegate {
         },
         present: { [weak self] controller, activate in
             guard let self, !provisionalQuickWindowWindows.contains(controller.id) else { return }
-            presentAndScheduleUpdates { windowPresenter(controller, activate) }
+            presentAndScheduleUpdates {
+                windowPresenter(controller, activate)
+                if activate, controller.session.snapshot?.isStandalone == true { controller.focusSelectedDocument() }
+                if controller.restoresFullScreen, let window = controller.window, !window.styleMask.contains(.fullScreen) {
+                    controller.restoresFullScreen = false
+                    controller.toggleNativeFullScreen(window)
+                }
+            }
             BrowserPerformance.mark(.windowPresented)
             if BrowserPerformance.enabled, controller.window?.isVisible == true {
                 controller.window?.displayIfNeeded()

@@ -53,12 +53,14 @@ public struct BrowserSessionDocument: Codable, Equatable, Sendable {
         public let activeSpaceID: SpaceID
         public let spaces: [SpaceTabs]
         public let placement: BrowserWindowPlacement?
+        public let standalone: BrowserStandaloneWindow?
 
-        public init(id: WindowID, activeSpaceID: SpaceID, spaces: [SpaceTabs], placement: BrowserWindowPlacement? = nil) {
+        public init(id: WindowID, activeSpaceID: SpaceID, spaces: [SpaceTabs], placement: BrowserWindowPlacement? = nil, standalone: BrowserStandaloneWindow? = nil) {
             self.id = id
             self.activeSpaceID = activeSpaceID
             self.spaces = spaces
             self.placement = placement
+            self.standalone = standalone
         }
     }
 
@@ -202,13 +204,20 @@ public struct BrowserSessionDocument: Codable, Equatable, Sendable {
     /// Every occurrence names a logical tab of the sidebar, lives where that tab belongs, and a
     /// window holds at most one occurrence of each logical tab.
     private func validateOrganization(spaceIndex: [SpaceID: BrowserSpace], profiles: Set<ProfileID>) throws {
-        let state = try BrowserOrganizationState(document: organization)
+        var state = try BrowserOrganizationState(document: organization)
+        for window in windows {
+            if let local = window.standalone {
+                guard profiles.contains(local.profileID) else { throw BrowserSessionError.profileMissing }
+                try state.restoreStandalone(local, windowID: window.id, home: window.activeSpaceID)
+            }
+        }
         try state.validate(profiles: profiles, spaces: spaceIndex.mapValues(\.profileID))
         var windowsByTab: [TabID: Set<WindowID>] = [:]
         for tab in tabs {
             guard let section = state.section(of: .tab(tab.id)) else {
                 throw BrowserSessionError.occurrenceWithoutLogicalTab
             }
+            if let owner = state.standaloneOwner(of: .tab(tab.id)), owner != tab.windowID { throw BrowserSessionError.occurrenceOwnedByAnotherContainer }
             switch section {
             case let .favorites(profileID):
                 guard spaceIndex[tab.spaceID]?.profileID == profileID else {
