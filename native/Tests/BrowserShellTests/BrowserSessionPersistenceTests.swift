@@ -2,10 +2,35 @@ import BrowserCore
 import Darwin
 import Foundation
 import Testing
+import Synchronization
 @testable import BrowserShell
 
 @Suite("Automatic session persistence", .timeLimit(.minutes(1)))
 struct BrowserSessionPersistenceTests {
+    @Test("Every accepted save encodes once and writes the same canonical bytes")
+    func singleEncoding() async throws {
+        let directory = try PersistenceTestDirectory()
+        let fixture = try await persistenceFixture()
+        let counts = EncodingCounts()
+        let persistence = BrowserSessionPersistence(destination: directory.file, fileAccess: .init(encode: {
+            counts.encodes.withLock { $0 += 1 }
+            return try BrowserSessionFileStore.EncodedDocument($0)
+        }, save: { document, url in
+            counts.saves.withLock { $0 += 1 }
+            return try BrowserSessionFileStore().save(document, to: url)
+        }))
+        _ = try await persistence.load()
+        for _ in 0..<3 {
+            let expected = try await fixture.store.sessionDocument().encoded()
+            _ = try await persistence.saveCurrentState(from: fixture.store)
+            #expect(try Data(contentsOf: directory.file) == expected)
+            try await appendPersistenceTab(to: fixture)
+        }
+        #expect(counts.encodes.withLock { $0 } == 3)
+        #expect(counts.saves.withLock { $0 } == 3)
+        print("session saves=3 encodes=3 canonicalBytesIdentical=true")
+    }
+
     @Test("Loading a missing file enables real-file autosaves without creating a file on read")
     func autosaveAndLoad() async throws {
         let directory = try PersistenceTestDirectory()
@@ -550,4 +575,9 @@ private final class PersistenceFileProbe: @unchecked Sendable {
         value.maximumActive = max(value.maximumActive, value.active)
         value.observedMainThread = value.observedMainThread || Thread.isMainThread
     }
+}
+
+private final class EncodingCounts: Sendable {
+    let encodes = Mutex(0)
+    let saves = Mutex(0)
 }
