@@ -165,6 +165,8 @@ public final class ChromiumSurface: BrowserEngineSurface {
     var automaticPiPPresentation: ChromiumPictureInPicturePresentation?
     var automaticPiPTask: Task<Void, Never>?
     var automaticPiPShouldEnter = false
+    var automaticPiPIsSelected = true
+    var automaticPiPSession: (context: Int, generation: UInt64)?
     var automaticPiPRevision: UInt64 = 0
     private var documentObserverReady = false
     private var documentObserverRequest: Int32 = 0
