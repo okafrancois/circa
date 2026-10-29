@@ -147,6 +147,7 @@ final class SiteSyntheticSurface: BrowserEngineSurface {
     var currentURL: URL? { history.indices.contains(index) ? history[index] : nil }
 
     // Opt-in native-discard fixture; other suites retain the unsupported default.
+    var isSuspended = false
     var allowsSuspension = false
     var supportsSuspensionPaint = false
     var suspensionPaintGeneration: UInt64?

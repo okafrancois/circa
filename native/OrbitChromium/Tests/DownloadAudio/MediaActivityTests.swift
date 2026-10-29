@@ -2,41 +2,26 @@ import Foundation
 
 @main struct MediaActivityTests {
     static func main() {
-        var activity = ChromiumMediaActivity()
-        func send(_ name: String, _ object: [String: Any]) {
-            activity.receive(method: name, payload: try! JSONSerialization.data(withJSONObject: object))
+        var check = ChromiumAudioContextActivity()
+        func context(_ state: String, type: String = "realtime") {
+            let data = try! JSONSerialization.data(withJSONObject: ["context": ["contextId": "test", "contextType": type, "contextState": state]])
+            check.receive(method: "WebAudio.contextCreated", payload: data)
         }
-        func event(_ id: String, _ name: String) {
-            send("Media.playerEventsAdded", ["playerId": id, "events": [["value": "{\"event\":\"\(name)\"}"]]])
-        }
-        func audio(_ id: String, _ tracks: String) {
-            send("Media.playerPropertiesChanged", ["playerId": id, "properties": [["name": "kAudioTracks", "value": tracks]]])
-        }
-        precondition(activity.audioPlaying == nil)
-        activity.mediaReady = true; activity.webAudioReady = true
-        precondition(activity.audioPlaying == false)
-        event("audio", "kPlay")
-        precondition(activity.isPlaying && activity.audioPlaying == nil)
-        audio("audio", "[{\"codec\":\"pcm\"}]")
-        precondition(activity.audioPlaying == true)
-        event("audio", "kPause")
-        precondition(!activity.isPlaying && activity.audioPlaying == false)
-        event("video", "kPlay"); audio("video", "[]")
-        precondition(activity.isPlaying && activity.audioPlaying == false)
-        event("audio", "kPlay"); event("video", "kEnded")
-        precondition(activity.audioPlaying == true)
-        event("audio", "kWebMediaPlayerDestroyed")
-        precondition(activity.audioPlaying == false)
-        send("WebAudio.contextCreated", ["context": ["contextId": "offline", "contextType": "offline", "contextState": "running"]])
-        precondition(activity.audioPlaying == false)
-        send("WebAudio.contextCreated", ["context": ["contextId": "tone", "contextType": "realtime", "contextState": "running"]])
-        precondition(activity.audioPlaying == true)
-        send("WebAudio.contextChanged", ["context": ["contextId": "tone", "contextState": "suspended"]])
-        precondition(activity.audioPlaying == false)
-        send("WebAudio.contextWillBeDestroyed", ["contextId": "tone"])
-        precondition(activity.contexts.isEmpty)
-        event("video", "kWebMediaPlayerDestroyed")
-        precondition(activity.players.isEmpty)
-        print("PASS native CDP metadata: audio/video, unknown tracks, play/pause/end/destroy, realtime/offline Web Audio")
+        precondition(!check.isSafe)
+        check.ready = true
+        precondition(check.isSafe)
+        check.receive(method: "WebAudio.audioNodeCreated", payload: Data("ignored".utf8))
+        precondition(check.isSafe)
+        context("running", type: "offline"); precondition(check.isSafe)
+        context("running"); precondition(!check.isSafe)
+        context("suspended"); precondition(check.isSafe)
+        context("running"); precondition(!check.isSafe)
+        check.receive(method: "WebAudio.contextWillBeDestroyed", payload: Data(#"{"contextId":"test"}"#.utf8))
+        precondition(check.isSafe)
+        context("unrecognized"); precondition(!check.isSafe)
+        check = ChromiumAudioContextActivity(); check.ready = true
+        check.receive(method: "WebAudio.contextCreated", payload: Data("{}".utf8))
+        precondition(!check.isSafe)
+        print("PASS residual audio context observation: running, offline, stopped, destroyed and unknown state")
     }
 }
