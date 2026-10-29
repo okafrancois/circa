@@ -155,6 +155,10 @@ struct SidebarTearOffLiveTests {
             try await Task.sleep(for: .milliseconds(10))
         }
         let destination = try #require(app.windows.windows.values.first { $0 !== source })
+        // The fullscreen request follows presentation; under load it can land after the window count changes.
+        for _ in 0..<200 where toggles != (fullScreen ? 1 : 0) {
+            try await Task.sleep(for: .milliseconds(10))
+        }
         #expect(destination.session.selectedSurface === surface)
         #expect(destination.window?.frame.size == frame.size)
         #expect(toggles == (fullScreen ? 1 : 0))
