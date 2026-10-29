@@ -161,6 +161,7 @@ final class BrowserLibraryCategoryButton: NSButton {
 
 @MainActor
 final class BrowserLibraryPresentation {
+    var contentsInstalled = false
     let view = BrowserLibraryView()
     let drawer = BrowserLibraryDrawer()
     var widthConstraint: NSLayoutConstraint?
@@ -168,10 +169,10 @@ final class BrowserLibraryPresentation {
     let swipe = BrowserLibrarySwipeController()
     var displayedProfileID: ProfileID? { didSet { if displayedProfileID != oldValue { revokeSelections() } } }
     let history = BrowserLibraryHistoryModel()
-    let historyView = BrowserLibraryHistoryView()
-    let spacesView = BrowserLibrarySpacesView()
-    let mediaView = BrowserLibraryMediaView()
-    let boostsView = BrowserLibraryBoostsView()
+    lazy var historyView = BrowserLibraryHistoryView()
+    lazy var spacesView = BrowserLibrarySpacesView()
+    lazy var mediaView = BrowserLibraryMediaView()
+    lazy var boostsView = BrowserLibraryBoostsView()
     var boostsTask: Task<Void, Never>?
     var spacesTask: Task<Void, Never>?
     var presentationID = UUID() { didSet { if presentationID != oldValue { revokeSelections() } } }

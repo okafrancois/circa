@@ -169,7 +169,9 @@ final class OrbitApplication: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         BrowserPerformance.mark(.applicationLaunched)
+        BrowserPerformance.mark(.menusBegin)
         installMenus()
+        BrowserPerformance.mark(.menusReady)
         windows.onError = { _ in
             if ProcessInfo.processInfo.arguments.contains("--window-diagnostics") {
                 print("orbit-window event=route-error")

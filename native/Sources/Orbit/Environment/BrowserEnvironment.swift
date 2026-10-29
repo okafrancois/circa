@@ -282,6 +282,7 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
             let placement = await store.sessionDocument().windows.first { $0.id == restoredID }?.placement
             controller.restoreWindowPlacement(placement)
         }
+        BrowserPerformance.mark(.windowPlacementReady)
         controller.onMoveSpaceToProfile = { [weak self] id, target, source in
             try await self?.moveSpaceToProfile(id, to: target, expectedProfileID: source)
         }
@@ -312,6 +313,7 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
         controller.siteControls.permissionsUnavailable = permissionsUnavailable
         controllers[id] = WeakController(controller)
         await controller.session.waitForPendingCommands()
+        BrowserPerformance.mark(.windowSessionReady)
         guard controller.session.snapshot != nil else {
             controller.window?.close()
             throw PreviewEnvironmentError.windowInitializationFailed

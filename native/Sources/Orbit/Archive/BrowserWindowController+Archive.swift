@@ -13,7 +13,7 @@ final class BrowserArchivePresentation {
         let inheritsThreshold: Bool
     }
     var collectProtection: @MainActor () async -> Set<TabID> = { [] }
-    let view = BrowserArchiveView()
+    lazy var view = BrowserArchiveView()
     var isPresented = false
     var request: Request?
     var displayedProfile: ProfileID?

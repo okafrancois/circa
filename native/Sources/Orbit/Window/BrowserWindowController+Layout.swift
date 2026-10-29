@@ -5,6 +5,8 @@ import BrowserShell
 
 extension BrowserWindowController {
     func configureContent() {
+        BrowserPerformance.mark(.layoutBegin)
+        defer { BrowserPerformance.mark(.layoutReady) }
         guard let window else { return }
         let root = OrbitWindowRootView()
         windowShell.prepare(window: window, root: root)
@@ -31,11 +33,10 @@ extension BrowserWindowController {
         for view in [contentCard, sidebar] { view.translatesAutoresizingMaskIntoConstraints = false }
         root.addSubview(contentCard)
         windowShell.installLoadingIndicator(in: root)
-        installFindBar(in: root)
         installSplit()
+        BrowserPerformance.mark(.layoutLibraryBegin)
         installLibrary(in: root)
-        installDownloadsPane(in: library.view.body)
-        installArchive(in: library.view.body)
+        BrowserPerformance.mark(.layoutLibraryReady)
         windowShell.installFloatingBackdrop(in: root)
         root.addSubview(sidebar)
         installPeek(in: root)
