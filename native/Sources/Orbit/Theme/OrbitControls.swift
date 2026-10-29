@@ -121,20 +121,32 @@ class OrbitGlyphButton: NSButton {
             if newValue, OrbitUIWorkCounters.enabled {
                 OrbitUIWorkCounters.record("glyphDirty")
                 OrbitUIWorkCounters.record("glyphDirty.\(ObjectIdentifier(self))")
+                let cause = dirtyCause ?? "untracked.\(type(of: self))"
+                OrbitUIWorkCounters.record("glyphDirty.cause." + cause)
+                pendingCauses.insert(cause)
             }
             super.needsDisplay = newValue
         }
+    }
+    /// Diagnostics only: why the next draw happens. A draw with no recorded cause was requested by
+    /// AppKit itself (a new backing store, or a frame moved to another sub-pixel phase).
+    private var dirtyCause: String?
+    private var pendingCauses: Set<String> = []
+    private func invalidate(_ cause: String) {
+        dirtyCause = cause
+        needsDisplay = true
+        dirtyCause = nil
     }
     private var glyphConfiguration: OrbitGlyph.Configuration?
     var glyph: NSImage? {
         didSet {
             let next = OrbitGlyph.configuration(of: glyph)
-            if next != glyphConfiguration { glyphConfiguration = next; needsDisplay = true }
+            if next != glyphConfiguration { glyphConfiguration = next; invalidate("glyph") }
         }
     }
-    var tint: NSColor = OrbitTokens.Color.Text.baseSecondary { didSet { if tint != oldValue { needsDisplay = true } } }
-    var disabledTint: NSColor = OrbitTokens.Color.Text.tertiary { didSet { if disabledTint != oldValue { needsDisplay = true } } }
-    var showsHoverFill = true { didSet { if showsHoverFill != oldValue { needsDisplay = true } } }
+    var tint: NSColor = OrbitTokens.Color.Text.baseSecondary { didSet { if tint != oldValue { invalidate("tint") } } }
+    var disabledTint: NSColor = OrbitTokens.Color.Text.tertiary { didSet { if disabledTint != oldValue { invalidate("disabledTint") } } }
+    var showsHoverFill = true { didSet { if showsHoverFill != oldValue { invalidate("showsHoverFill") } } }
     /// Hover square drawn under the glyph.
     struct HoverFill: Equatable {
         var color: NSColor
@@ -149,10 +161,10 @@ class OrbitGlyphButton: NSButton {
         static let rowClose = HoverFill(color: OrbitTokens.Color.State.rowCloseButtonHover,
                                         side: OrbitTokens.Metrics.Sidebar.closeButtonSize, radius: OrbitTokens.Radius.closeButton)
     }
-    var hoverFill = HoverFill.standalone { didSet { if hoverFill != oldValue { needsDisplay = true } } }
+    var hoverFill = HoverFill.standalone { didSet { if hoverFill != oldValue { invalidate("hoverFill") } } }
     /// Footer Space icons draw their own content.
     var customDrawing: ((OrbitGlyphButton, NSRect) -> Void)?
-    private(set) var isHovering = false { didSet { if isHovering != oldValue { needsDisplay = true } } }
+    private(set) var isHovering = false { didSet { if isHovering != oldValue { invalidate("hover") } } }
     private var hoverArea: NSTrackingArea?
 
     init(glyph: NSImage?, label: String) {
@@ -170,11 +182,11 @@ class OrbitGlyphButton: NSButton {
 
     override var isEnabled: Bool {
         get { super.isEnabled }
-        set { if newValue != super.isEnabled { super.isEnabled = newValue; needsDisplay = true } }
+        set { if newValue != super.isEnabled { super.isEnabled = newValue; invalidate("enabled") } }
     }
     override var isHighlighted: Bool {
         get { super.isHighlighted }
-        set { if newValue != super.isHighlighted { super.isHighlighted = newValue; needsDisplay = true } }
+        set { if newValue != super.isHighlighted { super.isHighlighted = newValue; invalidate("highlighted") } }
     }
     override var mouseDownCanMoveWindow: Bool { false }
 
@@ -197,11 +209,15 @@ class OrbitGlyphButton: NSButton {
 
     override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
-        needsDisplay = true
+        invalidate("appearance")
     }
 
     override func draw(_ dirtyRect: NSRect) {
         OrbitUIWorkCounters.record("glyphDraw")
+        if OrbitUIWorkCounters.enabled {
+            OrbitUIWorkCounters.record("glyphDraw.cause." + (pendingCauses.isEmpty ? "appKit" : pendingCauses.sorted().joined(separator: "+")))
+        }
+        if !pendingCauses.isEmpty { pendingCauses.removeAll() }
         if showsHoverFill, isEnabled, isHovering || isHighlighted {
             hoverFill.color.setFill()
             let rect = hoverFill.side.map { side in

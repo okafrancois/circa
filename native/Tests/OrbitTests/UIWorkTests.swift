@@ -34,6 +34,32 @@ struct UIWorkTests {
         #expect(OrbitUIWorkCounters.values["glyphDirty", default: 0] > 0)
     }
 
+    @Test("Glyph draws name the properties that invalidated them, or AppKit when none did")
+    func glyphDrawCauses() throws {
+        let button = OrbitGlyphButton(glyph: OrbitGlyph.symbol("plus", pointSize: 12), label: "Synthetic button")
+        button.frame = NSRect(x: 0, y: 0, width: 32, height: 32)
+        func paint() throws {
+            let bitmap = try #require(NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 64, pixelsHigh: 64,
+                bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+                colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0))
+            bitmap.size = button.bounds.size
+            button.displayIgnoringOpacity(button.bounds, in: try #require(NSGraphicsContext(bitmapImageRep: bitmap)))
+        }
+        OrbitUIWorkCounters.enabled = true
+        defer { OrbitUIWorkCounters.enabled = false; OrbitUIWorkCounters.reset() }
+        OrbitUIWorkCounters.reset()
+        button.tint = .systemRed
+        button.mouseEntered(with: NSEvent())
+        try paint()
+        #expect(OrbitUIWorkCounters.values["glyphDraw.cause.hover+tint"] == 1)
+        try paint()
+        #expect(OrbitUIWorkCounters.values["glyphDraw.cause.appKit"] == 1)
+        button.needsDisplay = true
+        try paint()
+        #expect(OrbitUIWorkCounters.values["glyphDraw.cause.untracked.OrbitGlyphButton"] == 1)
+        #expect(OrbitUIWorkCounters.values["glyphDirty.cause.tint"] == 1)
+    }
+
     @Test("A title-only tab publication keeps its configured audio symbol and favicon")
     func tabPublication() {
         let id = TabID()

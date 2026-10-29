@@ -129,6 +129,8 @@ enum OrbitPerformanceProbe {
                     result["mainthread"] = await mainthread(owner, command: command, root: root)
                 } else if name == "lists" {
                     result["lists"] = await lists(owner, command: command, root: root)
+                } else if name == "glyph-diagnostics", ownsWindow(owner) {
+                    result["glyphDiagnostics"] = await glyphDiagnostics(owner, root: root, store: environment.store, command: command)
                 } else if name == "ui-quick-wins", ownsWindow(owner) {
                     result["uiQuickWins"] = await uiQuickWins(owner, store: environment.store, command: command)
                 } else if name == "startup-check", ownsWindow(owner, bundleID: "lab.orbit.orbit.perf-startup") {
@@ -1466,5 +1468,143 @@ extension OrbitGlyphButton {
     @objc fileprivate func perfDraw(_ rect: NSRect) {
         BrowserPerformance.count(.glyphDraws)
         perfDraw(rect)
+    }
+}
+
+
+extension OrbitPerformanceProbe {
+    /// Synthetic glyph attribution: draw causes per display frame, deterministic theme frames and a
+    /// state/scale fixture. Every action refuses a window this process does not own.
+    private static func glyphDiagnostics(_ owner: OrbitWindowController, root: URL, store: BrowserStore,
+                                         command: [String: String]) async -> [String: Any] {
+        guard ownsWindow(owner), let window = owner.window, let content = window.contentView else { return ["ownershipRefused": true] }
+        OrbitUIWorkCounters.enabled = true
+        func counters() -> [String: Int] { OrbitUIWorkCounters.values.filter { !$0.key.contains("ObjectIdentifier") } }
+        switch command["action"] {
+        case "reset":
+            OrbitUIWorkCounters.reset()
+            return [:]
+        case "status":
+            func layers(_ layer: CALayer) -> Int { 1 + (layer.mask.map(layers) ?? 0) + (layer.sublayers ?? []).reduce(0) { $0 + layers($1) } }
+            return ["layers": (content.superview?.layer ?? content.layer).map(layers) ?? 0]
+        case "front":
+            // Motion runs only for an unoccluded window; raise the owned window for this GUI lease.
+            NSApp.activate()
+            window.makeKeyAndOrderFront(nil)
+            try? await Task.sleep(for: .milliseconds(400))
+            return ["occluded": !window.occlusionState.contains(.visible), "key": window.isKeyWindow]
+        case "frames":
+            // Snapshot glyph counters on every display frame of one Space switch.
+            let document = await store.sessionDocument()
+            guard let index = Int(command["index"] ?? ""), document.spaces.indices.contains(index) else { return ["badIndex": true] }
+            OrbitUIWorkCounters.reset()
+            let sampler = OrbitGlyphFrameSampler()
+            let occluded = !window.occlusionState.contains(.visible)
+            let link = content.displayLink(target: sampler, selector: #selector(OrbitGlyphFrameSampler.tick(_:)))
+            link.add(to: .main, forMode: .common)
+            let start = ProcessInfo.processInfo.systemUptime
+            owner.session.activateSpace(document.spaces[index].id)
+            await owner.session.waitForQueuedCommands()
+            try? await Task.sleep(for: .milliseconds(30))
+            while owner.sidebar.isSpaceTransitionAnimating && ProcessInfo.processInfo.systemUptime < start + 3 {
+                try? await Task.sleep(for: .milliseconds(2))
+            }
+            let animated = ProcessInfo.processInfo.systemUptime - start
+            let span = Double(command["window"] ?? "") ?? 1
+            try? await Task.sleep(for: .milliseconds(Int(max(0.15, start + span - ProcessInfo.processInfo.systemUptime) * 1000)))
+            link.invalidate()
+            sampler.tick(nil)
+            return ["frames": sampler.frames, "start": start, "animatedSeconds": animated, "occluded": occluded,
+                    "totals": counters()]
+        case "blend":
+            // A deterministic Space theme frame through the production swipe paint path.
+            let document = await store.sessionDocument()
+            guard let active = owner.session.snapshot?.activeSpaceID,
+                  let other = document.spaces.first(where: { $0.id != active }) else { return ["badSpaces": true] }
+            OrbitUIWorkCounters.reset()
+            if command["progress"] == "clear" {
+                owner.sidebar.spaceSwipe.onThemeProgress?(nil)
+            } else {
+                let progress = CGFloat(Double(command["progress"] ?? "") ?? 0.5)
+                owner.sidebar.spaceSwipe.onThemeProgress?(SpaceSwipeThemeBlend(source: owner.resolvedSpaceTheme(for: active),
+                    destination: owner.resolvedSpaceTheme(for: other.id), progress: progress))
+            }
+            window.displayIfNeeded(); CATransaction.flush()
+            return ["counters": counters()]
+        case "fixture":
+            let identifier = NSUserInterfaceItemIdentifier("synthetic-glyph-fixture")
+            content.subviews.filter { $0.identifier == identifier }.forEach { $0.removeFromSuperview() }
+            if command["remove"] == "true" { window.displayIfNeeded(); CATransaction.flush(); return ["removed": true] }
+            let fixture = NSView(frame: NSRect(x: 10, y: 60, width: 960, height: 600))
+            fixture.identifier = identifier
+            fixture.wantsLayer = true
+            fixture.layer?.backgroundColor = NSColor.white.cgColor
+            fixture.appearance = NSAppearance(named: command["appearance"] == "dark" ? .darkAqua : .aqua)
+            let source = OrbitTokens.SpaceTheme(stops: [NSColor(srgbRed: 32.0/255, green: 63.0/255, blue: 152.0/255, alpha: 1)], mode: .automatic, texture: .none, textureIntensity: 0)
+            let destination = OrbitTokens.SpaceTheme(stops: [NSColor(srgbRed: 184.0/255, green: 244.0/255, blue: 120.0/255, alpha: 1)], mode: .automatic, texture: .none, textureIntensity: 0)
+            var themes: [OrbitTokens.SpaceTheme] = [.default, source, destination]
+            for seconds in [0.035, 0.07, 0.12, 0.184, 0.3] {
+                themes.append(SpaceSwipeThemeBlend(source: source, destination: destination,
+                    progress: CGFloat(OrbitThemeTransition.progress(at: seconds))).theme)
+            }
+            for progress: CGFloat in [0.1, 0.35, 0.65, 0.9] {
+                themes.append(SpaceSwipeThemeBlend(source: source, destination: destination, progress: progress).theme)
+            }
+            let glyphs = [OrbitGlyph.back, OrbitGlyph.forward, OrbitGlyph.reload, OrbitGlyph.close, OrbitGlyph.newTab,
+                          OrbitGlyph.sidebarToggle, OrbitGlyph.faviconPlaceholder, OrbitGlyph.siteControlCenter]
+            for (index, theme) in themes.enumerated() {
+                let panel = NSView(frame: NSRect(x: (index % 3) * 320, y: (index / 3) * 150, width: 320, height: 150))
+                panel.wantsLayer = true
+                panel.layer?.backgroundColor = theme.stops[0].cgColor
+                fixture.addSubview(panel)
+                let accent = OrbitSpaceThemes.accent(for: theme)
+                for state in 0..<4 {
+                    for (column, glyph) in glyphs.enumerated() {
+                        let button = OrbitGlyphButton(glyph: glyph, label: "Synthetic glyph")
+                        // Odd columns sit on quarter-point positions, like a page mid-slide.
+                        button.frame = NSRect(x: CGFloat(column * 38) + (column % 2 == 1 ? 0.25 : 0), y: CGFloat(state * 36), width: 32, height: 32)
+                        button.tint = accent.icon
+                        button.disabledTint = accent.foreground.withAlphaComponent(0.25)
+                        button.isEnabled = state != 1
+                        button.isHighlighted = state == 3
+                        if state == 2 { button.mouseEntered(with: NSEvent()) }
+                        panel.addSubview(button)
+                    }
+                }
+            }
+            content.addSubview(fixture)
+            content.layoutSubtreeIfNeeded()
+            window.displayIfNeeded()
+            CATransaction.flush()
+            // A 1x bitmap of the attached fixture supplements the physical 2x display capture.
+            if let bitmap = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 960, pixelsHigh: 600,
+                bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+                colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0),
+               let context = NSGraphicsContext(bitmapImageRep: bitmap) {
+                bitmap.size = fixture.bounds.size
+                fixture.displayIgnoringOpacity(fixture.bounds, in: context)
+                if let data = bitmap.representation(using: .png, properties: [:]) {
+                    try? data.write(to: root.appendingPathComponent("glyph-fixture-1x.png"))
+                }
+            }
+            return ["scale": window.backingScaleFactor, "buttons": themes.count * 4 * glyphs.count,
+                    "colorSpace": window.colorSpace?.localizedName ?? "unknown"]
+        default:
+            return ["counters": counters()]
+        }
+    }
+}
+
+@MainActor
+private final class OrbitGlyphFrameSampler: NSObject {
+    private var last: [String: Int] = [:]
+    private(set) var frames: [[String: Any]] = []
+    @objc func tick(_ link: CADisplayLink?) {
+        let current = OrbitUIWorkCounters.values.filter { $0.key.hasPrefix("glyphDraw") }
+        var delta: [String: Int] = [:]
+        for (key, value) in current where value != last[key, default: 0] { delta[key] = value - last[key, default: 0] }
+        last = current
+        guard !delta.isEmpty || !frames.isEmpty else { return }
+        frames.append(["t": link?.timestamp ?? CACurrentMediaTime(), "delta": delta])
     }
 }
