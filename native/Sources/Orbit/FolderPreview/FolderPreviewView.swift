@@ -12,16 +12,19 @@ enum FolderPreviewMetrics {
 }
 
 /// Native search and buttons keep AppKit text editing/IME and accessibility semantics.
+/// Only rows near the viewport have buttons, keyed by tab identity and recycled while scrolling.
 @MainActor
 final class FolderPreviewView: NSVisualEffectView, NSSearchFieldDelegate {
+    private static let overscanRows = 6
     let title = NSTextField(labelWithString: "")
     let search = NSSearchField()
     let scroll = NSScrollView()
     private let document = SidebarFlippedView()
-    private var rows: [NSButton] = []
+    private let empty = NSTextField(labelWithString: uiText("No tabs"))
+    private var results: [FolderPreviewResult] = []
     private var ids: [TabID] = []
-    private var imageResults: [FolderPreviewResult] = []
-    private var imageSources: [TabID: NSImage] = [:]
+    private var rowViews: [TabID: FolderPreviewRow] = [:]
+    private var pool: [FolderPreviewRow] = []
     private var imageProvider: ((FolderPreviewResult) -> NSImage?)?
     private var selected = -1
     private var tracking: NSTrackingArea?
@@ -55,6 +58,13 @@ final class FolderPreviewView: NSVisualEffectView, NSSearchFieldDelegate {
         scroll.autohidesScrollers = true
         scroll.scrollerKnobStyle = .default
         scroll.drawsBackground = false
+        scroll.contentView.postsBoundsChangedNotifications = true
+        NotificationCenter.default.addObserver(self, selector: #selector(clipBoundsDidChange(_:)),
+                                               name: NSView.boundsDidChangeNotification, object: scroll.contentView)
+        empty.frame = NSRect(x: 10, y: 12, width: 260, height: 24)
+        empty.textColor = .secondaryLabelColor
+        empty.isHidden = true
+        document.addSubview(empty)
         for child in [title, search, scroll] { addSubview(child) }
         setAccessibilityRole(.group)
         setAccessibilityLabel(uiText("Folder preview"))
@@ -87,70 +97,110 @@ final class FolderPreviewView: NSVisualEffectView, NSSearchFieldDelegate {
         search.frame = NSRect(x: 12, y: 40, width: max(0, bounds.width - 24), height: 24)
         scroll.frame = NSRect(x: 6, y: FolderPreviewMetrics.headerHeight, width: max(0, bounds.width - 12), height: max(0, bounds.height - FolderPreviewMetrics.headerHeight - FolderPreviewMetrics.bottomInset))
         document.frame.size.width = scroll.contentSize.width
-        for (index, row) in rows.enumerated() {
-            row.frame = NSRect(x: 0, y: CGFloat(index) * FolderPreviewMetrics.rowHeight, width: scroll.contentSize.width, height: FolderPreviewMetrics.rowHeight)
-        }
+        materialize()
         refreshImages()
     }
+
+    @objc private func clipBoundsDidChange(_ notification: Notification) { materialize() }
 
     func render(_ results: [FolderPreviewResult], image: @escaping (FolderPreviewResult) -> NSImage?) {
         let scrollOrigin = scroll.contentView.bounds.origin
         let selectedID = ids.indices.contains(selected) ? ids[selected] : nil
-        clear()
+        self.results = results
         ids = results.map { $0.tab.id }
-        imageResults = results
         imageProvider = image
         selected = selectedID.flatMap { ids.firstIndex(of: $0) } ?? -1
-        for (index, result) in results.enumerated() {
-            let button = FolderPreviewRow(title: "", target: self, action: #selector(choose(_:)))
-            button.tag = index
-            button.isBordered = false
-            button.alignment = .left
-            button.imagePosition = .imageLeading
-            button.imageScaling = .scaleProportionallyDown
-            setImage(image(result), for: result, on: button)
-            let recency = result.tab.lastActiveAt == nil ? [] : [Self.recency(result.tab.lastActiveAt)]
-            let detail = (result.path + (result.split == nil ? [] : [uiText("Split View")]) + recency).joined(separator: " · ")
-            let text = NSMutableAttributedString(string: result.title, attributes: [
-                .font: NSFont.systemFont(ofSize: 13), .foregroundColor: NSColor.labelColor])
-            if !detail.isEmpty {
-                text.append(NSAttributedString(string: "\n" + detail, attributes: [
-                    .font: NSFont.systemFont(ofSize: 11), .foregroundColor: NSColor.secondaryLabelColor]))
-            }
-            let paragraph = NSMutableParagraphStyle()
-            paragraph.lineBreakMode = .byTruncatingTail
-            text.addAttribute(.paragraphStyle, value: paragraph, range: NSRange(location: 0, length: text.length))
-            button.attributedTitle = text
-            button.cell?.lineBreakMode = .byTruncatingTail
-            button.setAccessibilityLabel(result.title + ", " + detail)
-            button.toolTip = result.tab.lastActiveAt.map { DateFormatter.localizedString(from: $0, dateStyle: .medium, timeStyle: .short) }
-            rows.append(button); document.addSubview(button)
-        }
-        if results.isEmpty {
-            let empty = NSTextField(labelWithString: uiText("No tabs"))
-            empty.frame = NSRect(x: 10, y: 12, width: 260, height: 24)
-            empty.textColor = .secondaryLabelColor
-            document.addSubview(empty)
-        }
+        empty.isHidden = !results.isEmpty
         document.frame.size.height = max(FolderPreviewMetrics.rowHeight, CGFloat(results.count) * FolderPreviewMetrics.rowHeight)
-        updateSelection()
+        materialize(reconfigure: true)
         needsLayout = true
         layoutSubtreeIfNeeded()
         scroll.contentView.scroll(to: NSPoint(x: 0, y: min(scrollOrigin.y, max(0, document.frame.height - scroll.contentSize.height))))
+    }
+
+    private func rowFrame(_ index: Int) -> NSRect {
+        NSRect(x: 0, y: CGFloat(index) * FolderPreviewMetrics.rowHeight, width: scroll.contentSize.width, height: FolderPreviewMetrics.rowHeight)
+    }
+
+    /// Gives buttons to the rows near the visible rect and recycles the others. A tab that stays
+    /// listed keeps its button across renders.
+    private func materialize(reconfigure: Bool = false) {
+        var visible = scroll.contentView.bounds
+        if visible.height <= 0 {
+            visible.size.height = FolderPreviewGeometry.maximumHeight - FolderPreviewMetrics.headerHeight - FolderPreviewMetrics.bottomInset
+        }
+        let pitch = FolderPreviewMetrics.rowHeight
+        let first = max(0, Int(floor(visible.minY / pitch)) - Self.overscanRows)
+        let last = min(ids.count - 1, Int(ceil(visible.maxY / pitch)) + Self.overscanRows)
+        var needed: [TabID: Int] = [:]
+        if first <= last { for index in first...last { needed[ids[index]] = index } }
+        let focused = (window?.firstResponder as? FolderPreviewRow).flatMap { row in rowViews.first { $0.value === row }?.key }
+        if let focused, needed[focused] == nil, let index = ids.firstIndex(of: focused) { needed[focused] = index }
+        for (id, row) in rowViews where needed[id] == nil {
+            rowViews[id] = nil
+            if window?.firstResponder === row { window?.makeFirstResponder(nil) }
+            row.prepareForReuse()
+            row.isHidden = true
+            pool.append(row)
+        }
+        for (id, index) in needed.sorted(by: { $0.value < $1.value }) {
+            if let row = rowViews[id] {
+                if reconfigure || row.tag != index { configure(row, index) }
+            } else {
+                let row = pool.popLast() ?? makeRow()
+                row.isHidden = false
+                rowViews[id] = row
+                configure(row, index)
+            }
+            if let row = rowViews[id], row.frame != rowFrame(index) { row.frame = rowFrame(index) }
+        }
+    }
+
+    private func makeRow() -> FolderPreviewRow {
+        let button = FolderPreviewRow(title: "", target: self, action: #selector(choose(_:)))
+        button.isBordered = false
+        button.alignment = .left
+        button.imagePosition = .imageLeading
+        button.imageScaling = .scaleProportionallyDown
+        document.addSubview(button)
+        return button
+    }
+
+    private func configure(_ button: FolderPreviewRow, _ index: Int) {
+        let result = results[index]
+        button.tag = index
+        setImage(imageProvider?(result), for: result, on: button)
+        let recency = result.tab.lastActiveAt == nil ? [] : [Self.recency(result.tab.lastActiveAt)]
+        let detail = (result.path + (result.split == nil ? [] : [uiText("Split View")]) + recency).joined(separator: " · ")
+        let text = NSMutableAttributedString(string: result.title, attributes: [
+            .font: NSFont.systemFont(ofSize: 13), .foregroundColor: NSColor.labelColor])
+        if !detail.isEmpty {
+            text.append(NSAttributedString(string: "\n" + detail, attributes: [
+                .font: NSFont.systemFont(ofSize: 11), .foregroundColor: NSColor.secondaryLabelColor]))
+        }
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.lineBreakMode = .byTruncatingTail
+        text.addAttribute(.paragraphStyle, value: paragraph, range: NSRange(location: 0, length: text.length))
+        button.attributedTitle = text
+        button.cell?.lineBreakMode = .byTruncatingTail
+        button.setAccessibilityLabel(result.title + ", " + detail)
+        button.toolTip = result.tab.lastActiveAt.map { DateFormatter.localizedString(from: $0, dateStyle: .medium, timeStyle: .short) }
+        applySelection(button, index)
     }
 
     /// Refresh the installed button images in place; cache invalidation alone cannot revoke copies.
     /// The owner supplies a live authority check, not an immutable image from an earlier render.
     func refreshImages() {
         guard let imageProvider else { return }
-        for (index, result) in imageResults.enumerated() where rows.indices.contains(index) && ids[index] == result.tab.id {
-            setImage(imageProvider(result), for: result, on: rows[index])
+        for (id, row) in rowViews where results.indices.contains(row.tag) && ids[row.tag] == id {
+            setImage(imageProvider(results[row.tag]), for: results[row.tag], on: row)
         }
     }
 
-    private func setImage(_ image: NSImage?, for result: FolderPreviewResult, on button: NSButton) {
-        if button.image != nil, image === imageSources[result.tab.id] { return }
-        imageSources[result.tab.id] = image
+    private func setImage(_ image: NSImage?, for result: FolderPreviewResult, on button: FolderPreviewRow) {
+        if button.image != nil, button.imageTab == result.tab.id, image === button.imageSource { return }
+        button.imageTab = result.tab.id
+        button.imageSource = image
         let icon = image ?? NSImage(systemSymbolName: result.split == nil ? "globe" : "rectangle.split.2x1", accessibilityDescription: nil)
         button.image = icon?.copy() as? NSImage
         button.image?.size = NSSize(width: FolderPreviewMetrics.faviconSize, height: FolderPreviewMetrics.faviconSize)
@@ -164,24 +214,32 @@ final class FolderPreviewView: NSVisualEffectView, NSSearchFieldDelegate {
 
     func clear() {
         imageProvider = nil
-        imageResults = []
-        imageSources = [:]
-        document.subviews.forEach { $0.removeFromSuperview() }
-        rows = []; ids = []
+        results = []
+        for row in Array(rowViews.values) + pool { row.removeFromSuperview() }
+        rowViews = [:]; pool = []; ids = []
+        empty.isHidden = true
     }
 
+    var materializedRowCount: Int { rowViews.count }
+
     @objc private func choose(_ sender: NSButton) {
-        guard ids.indices.contains(sender.tag), rows[sender.tag] === sender else { return }
+        guard ids.indices.contains(sender.tag), rowViews[ids[sender.tag]] === sender else { return }
         onChoose?(ids[sender.tag])
     }
-    private func updateSelection() {
-        for (index, row) in rows.enumerated() {
-            row.state = index == selected ? .on : .off
-            row.wantsLayer = true
-            row.layer?.cornerRadius = 8
-            (row as? FolderPreviewRow)?.isKeyboardSelected = index == selected
+    private func applySelection(_ row: FolderPreviewRow, _ index: Int) {
+        row.state = index == selected ? .on : .off
+        row.wantsLayer = true
+        row.layer?.cornerRadius = 8
+        row.isKeyboardSelected = index == selected
+    }
+    /// Only the previous and the new selected rows change.
+    private func select(_ index: Int) {
+        let previous = selected
+        selected = index
+        for changed in [previous, index] where ids.indices.contains(changed) {
+            if let row = rowViews[ids[changed]] { applySelection(row, changed) }
         }
-        if rows.indices.contains(selected) { document.scrollToVisible(rows[selected].frame) }
+        if ids.indices.contains(selected) { document.scrollToVisible(rowFrame(selected)) }
     }
     func controlTextDidChange(_ notification: Notification) { onSearch?(search.stringValue) }
     func controlTextDidEndEditing(_ notification: Notification) { onEditingEnded?() }
@@ -191,8 +249,7 @@ final class FolderPreviewView: NSVisualEffectView, NSSearchFieldDelegate {
         if selector == #selector(NSResponder.moveDown(_:)) || selector == #selector(NSResponder.moveUp(_:)) {
             guard !ids.isEmpty else { return true }
             let delta = selector == #selector(NSResponder.moveDown(_:)) ? 1 : -1
-            selected = max(0, min(ids.count - 1, selected + delta))
-            updateSelection(); return true
+            select(max(0, min(ids.count - 1, selected + delta))); return true
         }
         if selector == #selector(NSResponder.insertNewline(_:)) {
             if ids.indices.contains(selected) { onChoose?(ids[selected]) }
@@ -213,10 +270,12 @@ final class FolderPreviewView: NSVisualEffectView, NSSearchFieldDelegate {
 
 /// Viewport clipping works with either native coordinate system.
 struct FolderPreviewGeometry {
+    static let maximumHeight: CGFloat = 530
+
     static func frame(anchor: NSRect, viewport: NSRect, flipped: Bool, count: Int) -> NSRect {
         let area = viewport.insetBy(dx: min(8, viewport.width / 2), dy: min(8, viewport.height / 2))
         let width = min(FolderPreviewMetrics.width, max(0, area.width))
-        let height = min(530, max(0, area.height), FolderPreviewMetrics.headerHeight + FolderPreviewMetrics.bottomInset + max(FolderPreviewMetrics.rowHeight, CGFloat(count) * FolderPreviewMetrics.rowHeight))
+        let height = min(maximumHeight, max(0, area.height), FolderPreviewMetrics.headerHeight + FolderPreviewMetrics.bottomInset + max(FolderPreviewMetrics.rowHeight, CGFloat(count) * FolderPreviewMetrics.rowHeight))
         var x = anchor.maxX + 8
         if x + width > area.maxX { x = anchor.minX - width - 8 }
         x = max(area.minX, min(x, area.maxX - width))
@@ -230,7 +289,10 @@ struct FolderPreviewGeometry {
 /// drawn explicitly so the image cell cannot expand the row into a page-thumbnail layout.
 @MainActor
 private final class FolderPreviewRow: NSButton {
-    var isKeyboardSelected = false { didSet { needsDisplay = true } }
+    var isKeyboardSelected = false { didSet { if isKeyboardSelected != oldValue { needsDisplay = true } } }
+    /// The tab and source image the installed copy was made from.
+    var imageTab: TabID?
+    var imageSource: NSImage?
     private var isPointerInside = false
     private var tracking: NSTrackingArea?
     override var isFlipped: Bool { true }
@@ -253,6 +315,13 @@ private final class FolderPreviewRow: NSButton {
         if let tracking { removeTrackingArea(tracking) }
         let area = NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeInActiveApp, .inVisibleRect], owner: self)
         addTrackingArea(area); tracking = area
+    }
+    override func prepareForReuse() {
+        super.prepareForReuse()
+        isPointerInside = false
+        isKeyboardSelected = false
+        imageTab = nil
+        imageSource = nil
     }
     override func mouseEntered(with event: NSEvent) { isPointerInside = true; needsDisplay = true }
     override func mouseExited(with event: NSEvent) { isPointerInside = false; needsDisplay = true }

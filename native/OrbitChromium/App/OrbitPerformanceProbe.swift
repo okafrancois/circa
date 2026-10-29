@@ -118,6 +118,8 @@ enum OrbitPerformanceProbe {
                     await scheduler.prepareForTermination()
                 } else if name == "mainthread" {
                     result["mainthread"] = await mainthread(owner, command: command, root: root)
+                } else if name == "lists" {
+                    result["lists"] = await lists(owner, command: command, root: root)
                 } else if name == "benchmark" {
                     result["benchmark"] = await benchmark(owner, command: command, store: environment.store)
                 } else if name == "url-pill-fixture" {
@@ -758,6 +760,336 @@ extension OrbitPerformanceProbe {
         }
         try? await Task.sleep(for: .milliseconds(10))
         result["longestMainGapMs"] = maxGap
+        return result
+    }
+}
+
+extension OrbitPerformanceProbe {
+    private static let listsBundleID = "lab.orbit.orbit.perf-w2-lists"
+    /// A fixed past instant keeps day headings and row times identical between runs.
+    private static let listsBase = Date(timeIntervalSinceReferenceDate: 812_462_400)
+    private static var listsThumbnailBytes = (resident: 0, peak: 0, accepted: 0)
+
+    private static func footprintMiB() -> Double {
+        var info = task_vm_info_data_t()
+        var count = mach_msg_type_number_t(MemoryLayout<task_vm_info_data_t>.size / MemoryLayout<natural_t>.size)
+        let status = withUnsafeMutablePointer(to: &info) {
+            $0.withMemoryRebound(to: integer_t.self, capacity: Int(count)) { task_info(mach_task_self_, task_flavor_t(TASK_VM_INFO), $0, &count) }
+        }
+        return status == KERN_SUCCESS ? Double(info.phys_footprint) / 1_048_576 : -1
+    }
+
+    private static func viewCount(_ view: NSView) -> Int { view.subviews.reduce(1) { $0 + viewCount($1) } }
+
+    private static func listViews(_ owner: OrbitWindowController, _ category: String) -> (root: NSView, scroll: NSScrollView?)? {
+        switch category {
+        case "downloads": return (owner.downloadsPane.list, owner.downloadsPane.list.subviews.compactMap { $0 as? NSScrollView }.first)
+        case "media": return (owner.library.mediaView, owner.library.mediaView.scroll)
+        case "history": return (owner.library.historyView, owner.library.historyView.table.enclosingScrollView)
+        case "folder": return (owner.folderPreview.view, owner.folderPreview.view.scroll)
+        default: return nil
+        }
+    }
+
+    private static func percentile(_ values: [Double], _ p: Double) -> Double {
+        let sorted = values.sorted()
+        guard !sorted.isEmpty else { return 0 }
+        return sorted[min(sorted.count - 1, Int((Double(sorted.count - 1) * p).rounded()))]
+    }
+
+    private static func listStats(_ owner: OrbitWindowController, _ category: String) -> [String: Any] {
+        guard let views = listViews(owner, category) else { return [:] }
+        var stats: [String: Any] = ["viewsAlive": viewCount(views.root), "footprintMiB": footprintMiB()]
+        if let scroll = views.scroll {
+            stats["documentHeight"] = scroll.documentView?.frame.height ?? 0
+            stats["scrollY"] = scroll.contentView.bounds.origin.y
+        }
+        if category == "media" {
+            stats["thumbnailResidentBytes"] = listsThumbnailBytes.resident
+            stats["thumbnailPeakBytes"] = listsThumbnailBytes.peak
+            stats["thumbnailAcceptedBytes"] = listsThumbnailBytes.accepted
+            stats["mediaRows"] = owner.library.mediaView.rows.count
+        }
+        if category == "history" {
+            stats["historyRows"] = owner.library.historyView.rows.count
+            stats["historyReloads"] = owner.library.historyView.reloadCount
+        }
+        if category == "downloads" { stats["downloadTitles"] = owner.downloadsPane.list.displayedTitles.count }
+        if category == "folder" { stats["folderResults"] = folderResults(owner).count }
+        return stats
+    }
+
+    private static func folderResults(_ owner: OrbitWindowController) -> [FolderPreviewResult] {
+        guard let folder = owner.sidebar.page.folderRows.first?.node.folderID,
+              case let .folder(root)? = owner.session.organization?.item(for: .folder(folder)) else { return [] }
+        return FolderPreviewResult.ordered(root.children)
+    }
+
+    private static func waitUntil(_ timeout: TimeInterval, _ condition: () -> Bool) async -> Bool {
+        let deadline = ProcessInfo.processInfo.systemUptime + timeout
+        while !condition() {
+            guard ProcessInfo.processInfo.systemUptime < deadline else { return false }
+            try? await Task.sleep(for: .milliseconds(2))
+        }
+        return true
+    }
+
+    /// Synthetic long lists: seeds downloads, media and history, opens a list, scrolls it and
+    /// reports main-thread time, live views, thumbnail bytes and footprint. No content leaves it.
+    private static func lists(_ owner: OrbitWindowController, command: [String: String], root: URL) async -> [String: Any] {
+        guard ownsWindow(owner, bundleID: listsBundleID), let profile = owner.session.activeProfileID else { return ["ownershipRefused": true] }
+        let kind = command["kind"] ?? ""
+        let category = command["category"] ?? ""
+        let count = Int(command["count"] ?? "") ?? 1000
+        var result: [String: Any] = [:]
+        BrowserLibraryMediaView.thumbnailBytesProbe = { delta in
+            listsThumbnailBytes.resident += delta
+            listsThumbnailBytes.peak = max(listsThumbnailBytes.peak, listsThumbnailBytes.resident)
+            if delta > 0 { listsThumbnailBytes.accepted += delta }
+        }
+        switch kind {
+        case "appearance":
+            NSApp.appearance = NSAppearance(named: command["value"] == "dark" ? .darkAqua : .aqua)
+            try? await Task.sleep(for: .milliseconds(300))
+        case "theme":
+            guard let space = owner.session.snapshot?.activeSpaceID else { return ["error": "space"] }
+            let colors = (command["colors"] ?? "").split(separator: ",").compactMap { BrowserThemeColor(hexString: String($0)) }
+            do { _ = try await owner.session.setSpaceTheme(.radial(colors: colors, intensity: 0.78), for: space, profileID: profile) }
+            catch { return ["error": "theme"] }
+            try? await Task.sleep(for: .milliseconds(500))
+        case "seed-downloads", "seed-media":
+            let media = kind == "seed-media"
+            let files = root.appendingPathComponent(media ? "media-fixture" : "download-fixture")
+            let base = listsBase
+            let records = await Task.detached(priority: .utility) { () -> [BrowserDownloadHistoryRecord] in
+                try? FileManager.default.createDirectory(at: files, withIntermediateDirectories: true)
+                let extensions = ["pdf", "zip", "txt", "dmg", "bin", "csv"]
+                var images: [Data] = []
+                if media {
+                    for variant in 0..<8 {
+                        let space = CGColorSpace(name: CGColorSpace.sRGB)!
+                        guard let context = CGContext(data: nil, width: 600, height: 400, bitsPerComponent: 8, bytesPerRow: 0,
+                                                      space: space, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { continue }
+                        let hue = CGFloat(variant) / 8
+                        context.setFillColor(NSColor(hue: hue, saturation: 0.55, brightness: 0.85, alpha: 1).cgColor)
+                        context.fill(CGRect(x: 0, y: 0, width: 600, height: 400))
+                        context.setFillColor(NSColor(hue: 1 - hue, saturation: 0.7, brightness: 0.5, alpha: 1).cgColor)
+                        context.fillEllipse(in: CGRect(x: 150 + variant * 20, y: 80, width: 240, height: 240))
+                        let data = NSMutableData()
+                        if let image = context.makeImage(),
+                           let destination = CGImageDestinationCreateWithData(data, "public.png" as CFString, 1, nil) {
+                            CGImageDestinationAddImage(destination, image, nil)
+                            if CGImageDestinationFinalize(destination) { images.append(data as Data) }
+                        }
+                    }
+                }
+                return (0..<count).map { index in
+                    let name = media ? "Synthetic image \(index).png" : "Synthetic file \(index).\(extensions[index % extensions.count])"
+                    let url = files.appendingPathComponent(name)
+                    let bytes = media ? images[index % max(1, images.count)] : Data([42])
+                    if media || index % 3 != 0 { try? bytes.write(to: url) }
+                    let started = base.addingTimeInterval(-Double(index) * (media ? 60 : 1500))
+                    return BrowserDownloadHistoryRecord(BrowserDownloadSnapshot(
+                        key: .init(id: UUID(), profileID: profile, lifetime: UUID()), owner: .init(profileID: profile),
+                        revision: 0, sequence: 1, suggestedFilename: name, state: .complete,
+                        receivedBytes: Int64(bytes.count), totalBytes: Int64(bytes.count), capabilities: [], currentURL: nil,
+                        destinationURL: url, fileAvailability: .unknown, failure: nil, pendingAction: nil,
+                        isCancellationRequested: false, controlError: nil, startedAt: started, completedAt: started))
+                }
+            }.value
+            do { try owner.downloads.coordinator.restore(records) } catch { return ["error": "restore"] }
+            // Settle file availability the way an open panel would, before measuring.
+            _ = owner.downloads.snapshots(profileID: profile)
+            try? await Task.sleep(for: .milliseconds(1500))
+            _ = owner.downloads.snapshots(profileID: profile)
+            try? await Task.sleep(for: .milliseconds(500))
+            result["records"] = records.count
+        case "seed-history":
+            let base = listsBase
+            let visits = (0..<count).map { index in
+                BrowserHistoryVisit(url: URL(string: "http://127.0.0.1/history/\(index)")!, title: "Synthetic visit \(index)",
+                                    visitedAt: base.addingTimeInterval(-Double(index) * 300), transition: .link)
+            }
+            do { result["imported"] = try await owner.library.history.recorder.importDocument(BrowserHistoryDocument(profileID: profile, visits: visits)) }
+            catch { return ["error": "history"] }
+        case "open":
+            owner.tabSwitcher.cancel()
+            let before = footprintMiB()
+            let cpu = threadCPU(), start = ProcessInfo.processInfo.systemUptime
+            switch category {
+            case "downloads": owner.showDownloads()
+            case "media": owner.showLibrary(.media)
+            case "history": owner.showLibrary(.history)
+            case "folder":
+                guard let row = owner.sidebar.page.folderRows.first else { return ["error": "folder"] }
+                owner.folderPreview.hover(row, inside: true)
+            default: return ["error": "category"]
+            }
+            await owner.session.waitForQueuedCommands()
+            if category == "history" {
+                result["settled"] = await waitUntil(10) { !owner.library.history.isLoading && !owner.library.historyView.rows.isEmpty }
+            }
+            if category == "folder" {
+                result["presentedByHover"] = await waitUntil(1.5) { owner.folderPreview.isPresented }
+                if !owner.folderPreview.isPresented, let row = owner.sidebar.page.folderRows.first, let host = row.window?.contentView {
+                    result["hoverDiagnostics"] = ["keyWindow": row.window?.isKeyWindow == true, "allowed": owner.folderPreview.allowed(),
+                                                  "phase": String(describing: owner.folderPreview.intent.phase)]
+                    // The hover intent declined (e.g. the synthetic window is not key): present the
+                    // same view with the same results and favicon resolver directly.
+                    let cpu = threadCPU()
+                    let view = owner.folderPreview.view
+                    let results = folderResults(owner)
+                    view.search.stringValue = ""
+                    view.title.stringValue = (row as? SidebarFolderRow)?.item.title ?? ""
+                    host.addSubview(view, positioned: .above, relativeTo: nil)
+                    view.frame = FolderPreviewGeometry.frame(anchor: row.convert(row.visibleRect, to: host), viewport: host.bounds,
+                                                             flipped: host.isFlipped, count: results.count)
+                    view.render(results, image: { owner.folderPreview.favicon($0.tab) })
+                    view.animateAppearance()
+                    owner.window?.contentView?.layoutSubtreeIfNeeded()
+                    owner.window?.displayIfNeeded()
+                    result["directOpenCPUms"] = (threadCPU() - cpu) * 1000
+                }
+                result["settled"] = owner.folderPreview.isPresented
+            }
+            owner.window?.contentView?.layoutSubtreeIfNeeded()
+            owner.window?.displayIfNeeded()
+            result["openCPUms"] = (threadCPU() - cpu) * 1000
+            result["openWallMs"] = (ProcessInfo.processInfo.systemUptime - start) * 1000
+            result["footprintBeforeMiB"] = before
+            try? await Task.sleep(for: .milliseconds(1200))
+            result.merge(listStats(owner, category)) { $1 }
+        case "scroll":
+            guard let scroll = listViews(owner, category)?.scroll else { return ["error": "scroll"] }
+            let y = CGFloat(Double(command["y"] ?? "") ?? 0)
+            let maxY = max(0, (scroll.documentView?.frame.height ?? 0) - scroll.contentView.bounds.height)
+            scroll.contentView.scroll(to: NSPoint(x: 0, y: min(y, maxY)))
+            scroll.reflectScrolledClipView(scroll.contentView)
+            owner.window?.displayIfNeeded()
+            try? await Task.sleep(for: .milliseconds(1500))
+            result.merge(listStats(owner, category)) { $1 }
+        case "steps":
+            guard let scroll = listViews(owner, category)?.scroll else { return ["error": "scroll"] }
+            let steps = Int(command["steps"] ?? "") ?? 600
+            let stride = CGFloat(Double(command["stride"] ?? "") ?? 120)
+            var cpuSteps: [Double] = [], wallSteps: [Double] = []
+            let total = threadCPU()
+            for step in 0..<steps {
+                guard step % 50 != 0 || ownsWindow(owner, bundleID: listsBundleID) else { return ["ownershipRefused": true] }
+                let maxY = max(0, (scroll.documentView?.frame.height ?? 0) - scroll.contentView.bounds.height)
+                let y = maxY > 0 ? (CGFloat(step + 1) * stride).truncatingRemainder(dividingBy: maxY) : 0
+                let cpu = threadCPU(), start = ProcessInfo.processInfo.systemUptime
+                scroll.contentView.scroll(to: NSPoint(x: 0, y: y))
+                scroll.reflectScrolledClipView(scroll.contentView)
+                owner.window?.displayIfNeeded()
+                cpuSteps.append((threadCPU() - cpu) * 1000)
+                wallSteps.append((ProcessInfo.processInfo.systemUptime - start) * 1000)
+                try? await Task.sleep(for: .milliseconds(4))
+            }
+            result["stepsCPUms"] = (threadCPU() - total) * 1000
+            result["stepCPUp50"] = percentile(cpuSteps, 0.5)
+            result["stepCPUp95"] = percentile(cpuSteps, 0.95)
+            result["stepCPUmax"] = cpuSteps.max() ?? 0
+            result["stepWallp95"] = percentile(wallSteps, 0.95)
+            result["stepWallmax"] = wallSteps.max() ?? 0
+            try? await Task.sleep(for: .milliseconds(800))
+            result.merge(listStats(owner, category)) { $1 }
+        case "loadmore":
+            let model = owner.library.history, view = owner.library.historyView
+            guard let scroll = view.table.enclosingScrollView else { return ["error": "scroll"] }
+            scroll.contentView.scroll(to: NSPoint(x: 0, y: 2600))
+            scroll.reflectScrolledClipView(scroll.contentView)
+            owner.window?.displayIfNeeded()
+            func anchor() -> (UUID?, CGFloat) {
+                let point = NSPoint(x: 1, y: scroll.contentView.bounds.minY + 40)
+                let row = view.table.row(at: point)
+                guard view.rows.indices.contains(row), case let .visit(visit) = view.rows[row] else { return (nil, 0) }
+                return (visit.id, view.table.rect(ofRow: row).minY - scroll.contentView.bounds.minY)
+            }
+            if let index = view.rows.firstIndex(where: { if case .visit = $0 { return true }; return false }).map({ $0 + 10 }) {
+                view.table.selectRowIndexes(IndexSet(integer: index), byExtendingSelection: false)
+            }
+            let selected = view.selectedVisit?.id
+            let initial = anchor()
+            var pages: [Double] = []
+            var stable = true
+            let reloads = view.reloadCount
+            let total = threadCPU()
+            while model.hasMore {
+                guard ownsWindow(owner, bundleID: listsBundleID) else { return ["ownershipRefused": true] }
+                let cpu = threadCPU()
+                model.loadMore()
+                guard await waitUntil(10, { !model.isLoading }) else { result["timeout"] = true; break }
+                owner.window?.displayIfNeeded()
+                pages.append((threadCPU() - cpu) * 1000)
+                let current = anchor()
+                if current.0 != initial.0 || abs(current.1 - initial.1) > 0.001 { stable = false }
+            }
+            result["loadMoreCPUms"] = (threadCPU() - total) * 1000
+            result["pages"] = pages.count
+            result["pageCPUp95"] = percentile(pages, 0.95)
+            result["pageCPUmax"] = pages.max() ?? 0
+            result["pageCPUlast"] = pages.last ?? 0
+            result["anchorStable"] = stable && initial.0 != nil
+            result["selectionKept"] = selected != nil && view.selectedVisit?.id == selected
+            result["fullReloadsDuringLoadMore"] = view.reloadCount - reloads
+            result.merge(listStats(owner, category)) { $1 }
+        case "folder-input":
+            let view = owner.folderPreview.view
+            guard owner.folderPreview.isPresented else { return ["error": "folder"] }
+            let editor = NSTextView()
+            var moves: [Double] = []
+            for _ in 0..<40 {
+                let cpu = threadCPU()
+                _ = view.control(view.search, textView: editor, doCommandBy: #selector(NSResponder.moveDown(_:)))
+                owner.window?.displayIfNeeded()
+                moves.append((threadCPU() - cpu) * 1000)
+            }
+            result["selectionMoveCPUp95"] = percentile(moves, 0.95)
+            result["selectionMoveCPUmax"] = moves.max() ?? 0
+            var searches: [Double] = []
+            // The intent's search sequence: rows turn inert at once, then the filtered results arrive.
+            let all = folderResults(owner)
+            for term in ["Synthetic", "Synthetic tab 1", "Synthetic"] {
+                let cpu = threadCPU()
+                view.search.stringValue = term
+                view.render([], image: { _ in nil })
+                owner.window?.displayIfNeeded()
+                view.render(all.filter { $0.title.range(of: term, options: [.caseInsensitive, .diacriticInsensitive]) != nil },
+                            image: { owner.folderPreview.favicon($0.tab) })
+                owner.window?.displayIfNeeded()
+                searches.append((threadCPU() - cpu) * 1000)
+            }
+            view.search.stringValue = ""
+            result["searchCPUms"] = searches
+            result.merge(listStats(owner, category)) { $1 }
+        case "transfers":
+            guard let base = command["fixture"].flatMap(URL.init(string:)) else { return ["error": "fixture"] }
+            let files = root.appendingPathComponent("transfer-fixture")
+            try? FileManager.default.createDirectory(at: files, withIntermediateDirectories: true)
+            owner.downloads.destinationProvider = { _, name in files.appendingPathComponent(name) }
+            let before = owner.downloads.coordinator.allSnapshots.count
+            let cpu = threadCPU()
+            for n in 0..<5 {
+                guard ownsWindow(owner, bundleID: listsBundleID) else { return ["ownershipRefused": true] }
+                owner.session.openTab(url: base.appendingPathComponent("download/\(n)"))
+                await owner.session.waitForQueuedCommands()
+            }
+            // The list stays presented while the transfers run.
+            if !owner.library.isPresented || owner.library.category != .downloads { owner.showDownloads() }
+            let finished = await waitUntil(20) {
+                let active = owner.downloads.coordinator.allSnapshots.dropFirst(before)
+                return active.count == 5 && active.allSatisfy { $0.state.isTerminal }
+            }
+            result["fiveDownloadsCPUms"] = (threadCPU() - cpu) * 1000
+            result["finished"] = finished
+            result["downloadStates"] = owner.downloads.coordinator.allSnapshots.dropFirst(before).map { $0.state.rawValue }
+            result.merge(listStats(owner, "downloads")) { $1 }
+        case "stats":
+            result.merge(listStats(owner, category)) { $1 }
+        default:
+            return ["error": "kind"]
+        }
         return result
     }
 }

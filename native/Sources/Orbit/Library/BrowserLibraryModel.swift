@@ -30,7 +30,11 @@ enum BrowserLibraryCategory: Int, CaseIterable {
 final class BrowserLibraryHistoryModel {
     var recorder = BrowserHistoryRecorder()
     private(set) var profileID: ProfileID?
-    private(set) var visits: [BrowserHistoryVisit] = []
+    private(set) var visits: [BrowserHistoryVisit] = [] { didSet { visitsRevision &+= 1 } }
+    /// Bumped by every change of `visits`. `appendedFrom` is the previous count when that change
+    /// only appended a page, nil otherwise.
+    private(set) var visitsRevision: UInt64 = 0
+    private(set) var appendedFrom: Int?
     private(set) var query = ""
     private(set) var displayedQuery = ""
     private(set) var isDebouncing = false
@@ -68,6 +72,7 @@ final class BrowserLibraryHistoryModel {
         generation = UUID()
         task?.cancel()
         task = nil
+        appendedFrom = nil
         visits = []
         displayedQuery = ""
         isDebouncing = false
@@ -105,6 +110,7 @@ final class BrowserLibraryHistoryModel {
                 nextOffset = offset + page.count
                 var known = Set(reset ? [] : visits.map(\.id))
                 let unique = page.filter { known.insert($0.id).inserted }
+                appendedFrom = reset ? nil : visits.count
                 visits = reset ? unique : visits + unique
                 displayedQuery = query
                 hasMore = page.count == limit
