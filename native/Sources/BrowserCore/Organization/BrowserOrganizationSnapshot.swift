@@ -231,11 +231,18 @@ public struct BrowserOrganizationSnapshot: Equatable, Sendable {
     /// Destinations outside the active Space can only be section roots (e.g. a Space icon).
     public func validateMove(
         _ nodes: [BrowserOrganizationNode], to destination: BrowserOrganizationDestination,
-        catalog: BrowserCatalogSnapshot
+        catalog: BrowserCatalogSnapshot, incomingTabsFrom source: BrowserOrganizationSnapshot? = nil
     ) -> BrowserOrganizationError? {
         guard !nodes.isEmpty else { return .emptySelection }
         var sections: [BrowserOrganizationNode: BrowserOrganizationSection] = [:]
         var folderChains: [FolderID: Set<FolderID>] = [:]
+        if let source {
+            guard source.profileID == profileID else { return .crossProfileMove }
+            for node in nodes {
+                guard let id = node.tabID, let tab = source.tab(id) else { return .notVisibleInContext }
+                sections[node] = tab.section
+            }
+        }
         func index(_ items: [BrowserOrganizationItem], section: BrowserOrganizationSection, chain: Set<FolderID>) {
             for item in items {
                 sections[item.node] = section

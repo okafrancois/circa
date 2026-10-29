@@ -505,6 +505,7 @@ public extension BrowserWindowSession {
 
     func acceptTransfer(
         _ transfer: BrowserSurfaceTransfer<Surface>, activate: Bool = true, replacingExisting: Bool = false,
+        movingTo destination: BrowserOrganizationDestination? = nil,
         bind: (Surface) -> Void = { _ in }, didAdopt: (() -> Void)? = nil
     ) -> Task<TabOccurrenceID?, Never> {
         guard !isClosed, let activeContext, activeContext.profileID == transfer.profileID else { return Task { nil } }
@@ -557,7 +558,7 @@ public extension BrowserWindowSession {
                           url: url, tabID: transfer.tabID, from: context, activate: activate,
                           standaloneRescue: transfer.isStandaloneRescue,
                           replacingExisting: replacingExisting,
-                          expectedExistingOccurrenceID: expectedOccurrenceID,
+                          expectedExistingOccurrenceID: expectedOccurrenceID, movingTo: destination,
                           lifetime: surfaceCommandLifetime, providedLifetime: reservation.lifetime,
                           replacementLifetime: replacementLifetime),
                       !isClosed, BrowserSurfaceProvenance.bind(reservation, surface: surface, to: self) else { return nil }
@@ -637,7 +638,7 @@ private extension BrowserStore {
 
     func openTransferredSurfaceTab(
         url: URL, tabID: TabID?, from context: BrowserContext, activate: Bool, standaloneRescue: Bool, replacingExisting: Bool,
-        expectedExistingOccurrenceID: TabOccurrenceID?,
+        expectedExistingOccurrenceID: TabOccurrenceID?, movingTo destination: BrowserOrganizationDestination? = nil,
         lifetime: SurfaceCommandLifetime, providedLifetime: SurfaceCommandLifetime,
         replacementLifetime: SurfaceCommandLifetime
     ) throws -> (TabOccurrenceID, BrowserWindowState)? {
@@ -649,7 +650,7 @@ private extension BrowserStore {
                         return (occurrenceID, try captureWindowState(in: context.windowID))
                     }
                     let occurrenceID = try openTransferredOccurrence(of: tabID, url: url, from: context, activate: activate,
-                        replacingExisting: replacingExisting, expectedExistingOccurrenceID: expectedExistingOccurrenceID)
+                        replacingExisting: replacingExisting, expectedExistingOccurrenceID: expectedExistingOccurrenceID, movingTo: destination)
                     return (occurrenceID, try captureWindowState(in: context.windowID))
                 } ?? nil
             } ?? nil

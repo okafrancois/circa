@@ -10,7 +10,8 @@ extension BrowserWindowController {
     func installSidebarList() {
         sidebar.windowIdentifier = id
         installFolderPreview()
-        SidebarWindowDirectory.register(self, id: id) { [weak self] in self?.session.snapshot?.activeSpaceID }
+        SidebarWindowDirectory.register(self, id: id, activeSpace: { [weak self] in self?.session.snapshot?.activeSpaceID },
+                                        organization: { [weak self] in self?.session.organization })
         // Rows dropped on the Favorites zone go through the FAVORITES lot's adapter.
         sidebar.addDropTarget(SidebarFavoritesDropTarget(grid: favorites.grid, sidebar: sidebar))
         sidebar.liveTitle = { [weak self] item in
@@ -166,13 +167,40 @@ extension BrowserWindowController {
     func performSidebarDrop(_ payload: SidebarDragPayload, to destination: BrowserOrganizationDestination,
                             changesOrganization: Bool) {
         guard acceptsCommands, let snapshot = session.organization, let catalog = session.catalog,
-              snapshot.spaceID == payload.spaceID, snapshot.profileID == payload.profileID,
+              snapshot.profileID == payload.profileID,
               SidebarDropCoordinator.validate(payload, to: destination, snapshot: snapshot, catalog: catalog) == nil else { return }
         let source = SidebarWindowDirectory.window(payload.sourceWindow) as? BrowserWindowController
         if payload.sourceWindow != id {
             guard let source, source.acceptsCommands, let sourceSnapshot = source.session.organization,
                   sourceSnapshot.spaceID == payload.spaceID, sourceSnapshot.profileID == payload.profileID,
                   payload.nodes.allSatisfy({ sourceSnapshot.item(for: $0) != nil }) else { return }
+        }
+        let crossesSpace = snapshot.spaceID != payload.spaceID
+        if crossesSpace {
+            // Release before changing shared placement: reconciliation must never dispose the
+            // document being moved. The receiver records placement and undo with adoption.
+            guard let source, payload.nodes.count == 1, let tab = payload.nodes.first?.tabID else { return }
+            if let surface = source.liveSidebarSurface(of: tab) {
+                guard source.canTransferSurface(surface, to: self) else { return }
+                if let move = source.moveSurface(surface, to: self, activate: true, replacingExisting: true, movingTo: destination) {
+                    Task { [weak source] in
+                        guard await move.value != nil else { return }
+                        SidebarWindowDirectory.keepSourceKey(payload.sourceWindow)
+                        if source?.window?.isKeyWindow == true { source?.focusSelectedDocument() }
+                    }
+                }
+            } else {
+                let move = source.session.moveItems(payload.nodes, to: destination)
+                Task { [weak self] in
+                    guard await move.value == true, let self, acceptsCommands,
+                          session.activeProfileID == payload.profileID else { return }
+                    session.synchronizeOrganization()
+                    await session.waitForPendingCommands()
+                    guard session.organization?.tab(tab) != nil else { return }
+                    session.selectTab(tab)
+                }
+            }
+            return
         }
         if changesOrganization { session.moveItems(payload.nodes, to: destination) }
         guard payload.sourceWindow != id else { return }
@@ -191,12 +219,10 @@ extension BrowserWindowController {
                 if activate { session.selectTab(tabID) }
                 continue
             }
-            if source.canTransferSurface(dragged, to: self) {
-                if source.moveSurface(dragged, to: self, activate: activate, replacingExisting: true) != nil { continue }
-            }
-            // Without a transfer the first tab is shown here; the others load when clicked.
-            if activate { session.selectTab(tabID) }
-            source.unloadSidebarOccurrence(dragged)
+            // A live drag is a move. Refusal keeps the original document and its history;
+            // loading the URL in the receiver would silently turn this into a copy.
+            guard source.canTransferSurface(dragged, to: self) else { continue }
+            source.moveSurface(dragged, to: self, activate: activate, replacingExisting: true)
         }
     }
 

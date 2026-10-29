@@ -209,15 +209,29 @@ enum SidebarWindowDirectory {
     private struct Entry {
         weak var window: AnyObject?
         let activeSpace: @MainActor () -> SpaceID?
+        let organization: @MainActor () -> BrowserOrganizationSnapshot?
     }
     private static var windows: [UUID: Entry] = [:]
 
-    static func register(_ window: AnyObject, id: UUID, activeSpace: @escaping @MainActor () -> SpaceID?) {
+    static func register(_ window: AnyObject, id: UUID, activeSpace: @escaping @MainActor () -> SpaceID?,
+                         organization: @escaping @MainActor () -> BrowserOrganizationSnapshot? = { nil }) {
         windows = windows.filter { $0.value.window != nil }
-        windows[id] = Entry(window: window, activeSpace: activeSpace)
+        windows[id] = Entry(window: window, activeSpace: activeSpace, organization: organization)
     }
 
     static func window(_ id: UUID) -> AnyObject? { windows[id]?.window }
+
+    /// Hovering and accepting a row in a sibling window preserves the source's key window.
+    static func keepSourceKey(_ id: UUID) {
+        guard NSApp.isActive, let source = window(id) as? NSWindowController,
+              let window = source.window, window.isVisible, !window.isKeyWindow else { return }
+        window.makeKey()
+    }
+
+    static func organization(of id: UUID) -> BrowserOrganizationSnapshot? {
+        guard let entry = windows[id], entry.window != nil else { return nil }
+        return entry.organization()
+    }
 
     /// The active Space of a registered, still open window.
     static func activeSpace(of id: UUID) -> SpaceID? {

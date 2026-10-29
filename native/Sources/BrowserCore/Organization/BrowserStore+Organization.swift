@@ -1038,13 +1038,14 @@ extension BrowserStore {
     /// Replacements remove the old occurrence only after the transferred document can be recorded.
     public func openTransferredOccurrence(
         of tabID: TabID?, url: URL, from context: BrowserContext, activate: Bool,
-        replacingExisting: Bool = false, expectedExistingOccurrenceID: TabOccurrenceID? = nil
+        replacingExisting: Bool = false, expectedExistingOccurrenceID: TabOccurrenceID? = nil,
+        movingTo destination: BrowserOrganizationDestination? = nil
     ) throws -> TabOccurrenceID {
         let window = try organizationWindow(context)
         try BrowserSessionDocument.validateDestination(url)
         guard let tabID, let section = organization.section(of: .tab(tabID)),
               profileID(of: section) == context.profileID else {
-            if replacingExisting { throw BrowserStoreError.staleContext }
+            if replacingExisting || destination != nil { throw BrowserStoreError.staleContext }
             return try openTab(url: url, from: context, activate: activate)
         }
         let existing = occurrences(in: window).first { $0.id == tabID }
@@ -1056,7 +1057,17 @@ extension BrowserStore {
         if existing != nil && !replacingExisting {
             return try openTab(url: url, from: context, activate: activate)
         }
-        if (try? visibleSection(of: .tab(tabID), in: context)) == nil {
+        if let destination {
+            let target = try destinationSection(of: destination.container, in: context)
+            guard let space = spaces[context.spaceID], Self.section(target, isVisibleIn: space) else {
+                throw BrowserOrganizationError.notVisibleInContext
+            }
+            // The live document is already reserved by the receiver. Commit placement and its
+            // undo record before recording the new occurrence, without creating a second tab.
+            try commitOrganization(.moveItems, in: context) { state in
+                try state.move([.tab(tabID)], to: destination, destinationSection: target)
+            }
+        } else if (try? visibleSection(of: .tab(tabID), in: context)) == nil {
             try commitOrganization { state in
                 try state.move([.tab(tabID)], to: .init(.today(context.spaceID), position: .start),
                                destinationSection: .today(context.spaceID))

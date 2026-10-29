@@ -480,6 +480,13 @@ final class BrowserSidebarView: NSView, SidebarListHost {
     }
 
 
+    func list(_ list: SidebarListView, dragLeftWindow payload: SidebarDragPayload) {
+        let moved = Set(payload.nodes.compactMap(\.tabID))
+        guard let organization, let selected = organization.selectedTab, moved.contains(selected.id),
+              let remaining = organization.allTabs.first(where: { !moved.contains($0.id) && $0.isLoadedInThisWindow }) else { return }
+        onSelectTab?(remaining.id)
+    }
+
     override func draggingEntered(_ sender: any NSDraggingInfo) -> NSDragOperation { draggingUpdated(sender) }
 
     override func draggingUpdated(_ sender: any NSDraggingInfo) -> NSDragOperation {
@@ -488,6 +495,9 @@ final class BrowserSidebarView: NSView, SidebarListHost {
         page.autoscrollDuringDrag(at: convert(point, to: page))
         let verdict = dropCoordinator.update(payload: payload, at: point, in: self, targets: dropTargets,
                                              snapshot: organization, catalog: renderedCatalog)
+        if verdict?.isValid == true, payload.sourceWindow != windowIdentifier {
+            SidebarWindowDirectory.keepSourceKey(payload.sourceWindow)
+        }
         return verdict?.isValid == true ? .move : []
     }
 
@@ -529,7 +539,16 @@ final class BrowserSidebarView: NSView, SidebarListHost {
                     : settled
             }
         }
-        commitDrop(accepted.payload, proposal: accepted.proposal, target: accepted.target)
+        if accepted.payload.spaceID != organization?.spaceID {
+            // Remove the rule on release, then let the native drag settle before the row's
+            // finite insertion update. A new validation at command delivery still owns refusal.
+            dropCoordinator.clear()
+            _ = OrbitRunLoopTimer(after: 0.30) { [weak self] in
+                self?.commitDrop(accepted.payload, proposal: accepted.proposal, target: accepted.target)
+            }
+        } else {
+            commitDrop(accepted.payload, proposal: accepted.proposal, target: accepted.target)
+        }
         return true
     }
 
