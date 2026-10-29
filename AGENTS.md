@@ -20,7 +20,8 @@ Orbit is a native macOS browser: Swift/AppKit shell (`native/Sources/Orbit`) on 
 - The PM removes the whole worktree after merging; never leave large outputs there.
 
 ## GUI runs
-- Take the GUI slot with `/usr/bin/lockf -k /tmp/orbit-gui-slot.lock`, at most 60 s per session.
+- Take the GUI slot with `/usr/bin/lockf -k /tmp/orbit-gui-slot.lock`, at most 60 s per session. Every session that shows a window, captures the screen or measures paint holds it, probes included; results gathered without the lock are invalid.
+- Before every synthetic click, drag or keystroke, verify the target window belongs to your own test bundle's PID. Never send events to the installed product or to another browser.
 - The keyboard layout is French (AZERTY): send shortcuts by character (`osascript … keystroke "a" using command down`), never as US physical keys.
 - Never install anything in `/Applications` or `~/Applications`. After a GUI run, remove what the test bundle left: `lsregister -u`, `defaults delete <test id>`, `tccutil reset All <test id>`, test Keychain items.
 
