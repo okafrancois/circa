@@ -64,6 +64,7 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
     private var leavingRows: [ObjectIdentifier: (row: SidebarListRow, node: BrowserOrganizationNode)] = [:]
     private var tabPool: [SidebarTabRow] = []
     private var folderPool: [SidebarFolderRow] = []
+    private var splitPool: [SidebarSplitRow] = []
     private var enteringNodes: Set<BrowserOrganizationNode> = []
     var spaceID: SpaceID?
     var spaceTitleCenterY: CGFloat = 0 { didSet { if spaceTitleCenterY != oldValue { relayout(animated: false) } } }
@@ -76,6 +77,7 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
             for entry in leavingRows.values { entry.row.accent = accent }
             for row in tabPool { row.accent = accent }
             for row in folderPool { row.accent = accent }
+            for row in splitPool { row.accent = accent }
         }
     }
     private(set) var commandsEnabled = true
@@ -447,9 +449,14 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
         let row: SidebarListRow
         switch entry.content {
         case let .split(item, _):
-            let created = SidebarSplitRow(item: item, node: entry.node, depth: entry.depth)
-            addSubview(created, positioned: .below, relativeTo: separator)
-            row = created
+            if let reused = splitPool.popLast() {
+                reused.updateSplit(item, node: entry.node, depth: entry.depth)
+                row = reused
+            } else {
+                let created = SidebarSplitRow(item: item, node: entry.node, depth: entry.depth)
+                addSubview(created, positioned: .below, relativeTo: separator)
+                row = created
+            }
         case let .tab(item):
             if let reused = tabPool.popLast() {
                 reused.update(item, depth: entry.depth)
@@ -487,7 +494,9 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
         row.leavingEntry = entry
         switch (row, entry.content) {
         case let (row as SidebarSplitRow, .split(item, _)):
-            row.updateSplit(item, node: entry.node, depth: entry.depth)
+            if row.item != item || row.node != entry.node || row.depth != entry.depth || row.splitAppearanceChanged {
+                row.updateSplit(item, node: entry.node, depth: entry.depth)
+            }
         case let (row as SidebarTabRow, .tab(item)):
             if row.item != item || row.depth != entry.depth { row.update(item, depth: entry.depth) }
         case let (row as SidebarFolderRow, .folder(item)):
@@ -508,7 +517,7 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
         row.isDropTarget = false
         row.events = nil
         switch row {
-        case let row as SidebarSplitRow: row.removeFromSuperview()
+        case let row as SidebarSplitRow: splitPool.append(row)
         case let row as SidebarTabRow: tabPool.append(row)
         case let row as SidebarFolderRow: folderPool.append(row)
         default: row.removeFromSuperview()

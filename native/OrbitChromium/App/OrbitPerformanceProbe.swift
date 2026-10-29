@@ -120,6 +120,8 @@ enum OrbitPerformanceProbe {
                     result["mainthread"] = await mainthread(owner, command: command, root: root)
                 } else if name == "lists" {
                     result["lists"] = await lists(owner, command: command, root: root)
+                } else if name == "ui-quick-wins", ownsWindow(owner) {
+                    result["uiQuickWins"] = await uiQuickWins(owner, store: environment.store, command: command)
                 } else if name == "benchmark" {
                     result["benchmark"] = await benchmark(owner, command: command, store: environment.store)
                 } else if name == "url-pill-fixture" {
@@ -1091,5 +1093,62 @@ extension OrbitPerformanceProbe {
             return ["error": "kind"]
         }
         return result
+    }
+
+    private static func uiQuickWins(_ owner: OrbitWindowController, store: BrowserStore,
+                                    command: [String: String]) async -> [String: Any] {
+        OrbitUIWorkCounters.enabled = true
+        switch command["action"] {
+        case "reset": OrbitUIWorkCounters.reset()
+        case "mixed":
+            OrbitUIWorkCounters.reset()
+            let timings = await benchmark(owner, command: ["kind": "workload-latency"], store: store)
+            let scroll = await benchmark(owner, command: ["kind": "scroll"], store: store)
+            return ["counters": OrbitUIWorkCounters.values, "timings": timings, "scroll": scroll]
+        case "scroll", "splits":
+            if command["action"] == "splits" {
+                let list = owner.sidebar.page.list
+                let entries = (0..<100).map { index in
+                    let item = SidebarTabItem(id: TabID(), title: "Synthetic split \(index)", selected: index == 0,
+                        splitPanes: [.init(title: "Synthetic left", favicon: nil), .init(title: "Synthetic right", favicon: nil)])
+                    return SidebarListEntry(node: .split(SplitGroupID()), section: .today, ancestors: [], content: .split(item, []))
+                }
+                list.apply(.init(entries: entries), animated: false)
+                list.setFrameSize(NSSize(width: list.bounds.width, height: list.documentHeight))
+                list.layoutSubtreeIfNeeded()
+            }
+            OrbitUIWorkCounters.reset()
+            let timings = await benchmark(owner, command: ["kind": "scroll"], store: store)
+            return ["counters": OrbitUIWorkCounters.values, "scroll": timings]
+        case "editor":
+            owner.presentActiveSpaceThemeEditor()
+            await owner.session.waitForQueuedCommands()
+            guard let editor = owner.themeEditor else { return ["editorMissing": true] }
+            editor.view.layoutSubtreeIfNeeded()
+            OrbitUIWorkCounters.reset()
+            for index in 0..<120 {
+                guard ownsWindow(owner) else { return ["ownershipRefused": true] }
+                var state = editor.view.state
+                state.pick(at: CGPoint(x: Double(index % 60) / 60, y: 0.6))
+                state.setIntensity(Double(index % 100) / 100)
+                editor.view.state = state
+                editor.view.onChange?(state)
+                owner.window?.displayIfNeeded()
+                CATransaction.flush()
+                try? await Task.sleep(for: .milliseconds(8))
+            }
+        case "theme":
+            guard let space = owner.session.snapshot?.activeSpaceID, let profile = owner.session.activeProfileID else { return [:] }
+            let colors = (command["colors"] ?? "203F98,B8F478").split(separator: ",").compactMap { BrowserThemeColor(hexString: String($0)) }
+            _ = try? await owner.session.setSpaceTheme(.radial(colors: colors, intensity: 0.78), for: space, profileID: profile)
+        case "space":
+            let document = await store.sessionDocument()
+            if let index = Int(command["index"] ?? ""), document.spaces.indices.contains(index) {
+                owner.session.activateSpace(document.spaces[index].id)
+                await owner.session.waitForQueuedCommands()
+            }
+        default: break
+        }
+        return ["counters": OrbitUIWorkCounters.values]
     }
 }

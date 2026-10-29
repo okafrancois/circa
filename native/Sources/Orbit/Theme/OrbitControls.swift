@@ -1,11 +1,54 @@
 import AppKit
 import QuartzCore
 
+/// Opt-in synthetic diagnostics; ordinary UI work never retains counters or control identities.
+@MainActor
+enum OrbitUIWorkCounters {
+    static var enabled = false
+    static var values: [String: Int] = [:]
+    static func record(_ name: String) {
+        if enabled { values[name, default: 0] += 1 }
+    }
+    static func reset() { values.removeAll() }
+}
+
 @MainActor
 enum OrbitGlyph {
+    private final class SymbolIdentity: NSObject {
+        let name: String
+        let pointSize: CGFloat
+        let weight: NSFont.Weight
+        init(_ name: String, _ pointSize: CGFloat, _ weight: NSFont.Weight) {
+            self.name = name; self.pointSize = pointSize; self.weight = weight
+        }
+    }
+    private static let identities = NSMapTable<NSImage, SymbolIdentity>(
+        keyOptions: [.weakMemory, .objectPointerPersonality], valueOptions: .strongMemory)
+
+    /// Snapshot configuration as well as identity: callers can replace a configured symbol
+    /// with an equivalent image, or mutate an existing image's size before assigning it again.
+    struct Configuration: Equatable {
+        let name: String?
+        let pointSize: CGFloat?
+        let weight: NSFont.Weight?
+        let otherImage: ObjectIdentifier?
+        let size: NSSize
+        let isTemplate: Bool
+        let symbol: NSImage.SymbolConfiguration?
+    }
+    static func configuration(of image: NSImage?) -> Configuration? {
+        guard let image else { return nil }
+        let source = identities.object(forKey: image)
+        return Configuration(name: source?.name, pointSize: source?.pointSize, weight: source?.weight,
+            otherImage: source == nil ? ObjectIdentifier(image) : nil, size: image.size,
+            isTemplate: image.isTemplate, symbol: image.symbolConfiguration)
+    }
+
     static func symbol(_ name: String, pointSize: CGFloat, weight: NSFont.Weight = .medium) -> NSImage? {
-        NSImage(systemSymbolName: name, accessibilityDescription: nil)?
+        let image = NSImage(systemSymbolName: name, accessibilityDescription: nil)?
             .withSymbolConfiguration(.init(pointSize: pointSize, weight: weight))
+        if let image { identities.setObject(SymbolIdentity(name, pointSize, weight), forKey: image) }
+        return image
     }
 
     /// 19×14 for the ≈18.7×14.9 toggle.
@@ -72,10 +115,26 @@ enum OrbitGlyph {
 
 @MainActor
 class OrbitGlyphButton: NSButton {
-    var glyph: NSImage? { didSet { needsDisplay = true } }
-    var tint: NSColor = OrbitTokens.Color.Text.baseSecondary { didSet { needsDisplay = true } }
-    var disabledTint: NSColor = OrbitTokens.Color.Text.tertiary
-    var showsHoverFill = true
+    override var needsDisplay: Bool {
+        get { super.needsDisplay }
+        set {
+            if newValue, OrbitUIWorkCounters.enabled {
+                OrbitUIWorkCounters.record("glyphDirty")
+                OrbitUIWorkCounters.record("glyphDirty.\(ObjectIdentifier(self))")
+            }
+            super.needsDisplay = newValue
+        }
+    }
+    private var glyphConfiguration: OrbitGlyph.Configuration?
+    var glyph: NSImage? {
+        didSet {
+            let next = OrbitGlyph.configuration(of: glyph)
+            if next != glyphConfiguration { glyphConfiguration = next; needsDisplay = true }
+        }
+    }
+    var tint: NSColor = OrbitTokens.Color.Text.baseSecondary { didSet { if tint != oldValue { needsDisplay = true } } }
+    var disabledTint: NSColor = OrbitTokens.Color.Text.tertiary { didSet { if disabledTint != oldValue { needsDisplay = true } } }
+    var showsHoverFill = true { didSet { if showsHoverFill != oldValue { needsDisplay = true } } }
     /// Hover square drawn under the glyph.
     struct HoverFill: Equatable {
         var color: NSColor
@@ -98,6 +157,7 @@ class OrbitGlyphButton: NSButton {
 
     init(glyph: NSImage?, label: String) {
         self.glyph = glyph
+        self.glyphConfiguration = OrbitGlyph.configuration(of: glyph)
         super.init(frame: NSRect(x: 0, y: 0, width: OrbitTokens.Metrics.Toolbar.buttonHitSize, height: OrbitTokens.Metrics.Toolbar.buttonHitSize))
         title = ""
         isBordered = false
@@ -108,8 +168,14 @@ class OrbitGlyphButton: NSButton {
 
     required init?(coder: NSCoder) { nil }
 
-    override var isEnabled: Bool { didSet { needsDisplay = true } }
-    override var isHighlighted: Bool { didSet { needsDisplay = true } }
+    override var isEnabled: Bool {
+        get { super.isEnabled }
+        set { if newValue != super.isEnabled { super.isEnabled = newValue; needsDisplay = true } }
+    }
+    override var isHighlighted: Bool {
+        get { super.isHighlighted }
+        set { if newValue != super.isHighlighted { super.isHighlighted = newValue; needsDisplay = true } }
+    }
     override var mouseDownCanMoveWindow: Bool { false }
 
     override func updateTrackingAreas() {
@@ -135,6 +201,7 @@ class OrbitGlyphButton: NSButton {
     }
 
     override func draw(_ dirtyRect: NSRect) {
+        OrbitUIWorkCounters.record("glyphDraw")
         if showsHoverFill, isEnabled, isHovering || isHighlighted {
             hoverFill.color.setFill()
             let rect = hoverFill.side.map { side in
