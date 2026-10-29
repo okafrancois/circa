@@ -69,6 +69,8 @@ final class BrowserContentCardView: NSView {
         opacity.toValue = Float(alphaValue)
         layer.add(opacity, forKey: "peek.background.opacity")
     }
+    var frameEdgeColor: NSColor? { hairline.borderColor }
+    var themeForeground: NSColor? { didSet { hairline.borderColor = themeForeground?.withAlphaComponent(0.12) ?? OrbitTokens.Color.Line.floatingScrimBorder } }
     var splitTheme: OrbitTokens.SpaceTheme = .default {
         didSet { splitBackdrop.apply(splitTheme) }
     }

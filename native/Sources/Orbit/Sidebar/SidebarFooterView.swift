@@ -93,6 +93,7 @@ final class SidebarFooterView: NSView {
     private func configureContrast(of button: OrbitGlyphButton) {
         let foreground = foregroundAccent
         button.tint = foreground.icon
+        button.disabledTint = foreground.foreground.withAlphaComponent(0.25)
         if let space = button as? SidebarSpaceButton {
             space.inactiveOpacity = { appearance in
                 OrbitSpaceThemes.inactiveSpaceIconOpacity(for: foreground, appearance: appearance,

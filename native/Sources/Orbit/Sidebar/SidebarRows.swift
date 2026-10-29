@@ -713,7 +713,7 @@ final class SidebarPinnedSlashView: NSView {
 final class SidebarNewTabRow: NSButton {
     private let background = OrbitSurfaceBackgroundView(cornerRadius: OrbitTokens.Radius.tabRow)
     private let glyph = OrbitGlyphButton(glyph: OrbitGlyph.symbol("plus", pointSize: Metrics.newTabGlyphSize), label: "")
-    private let label = NSTextField(labelWithString: SidebarListStrings.newTab)
+    let label = NSTextField(labelWithString: SidebarListStrings.newTab)
     private let shortcut = NSTextField(labelWithString: "⌘T")
     var accent = OrbitTokens.ThemeAccent.defaultSpace { didSet { refreshAccent() } }
     private var isHovering = false { didSet { if isHovering != oldValue { refresh() } } }
@@ -779,9 +779,9 @@ final class SidebarNewTabRow: NSButton {
     override func mouseExited(with event: NSEvent) { isHovering = false }
 
     private func refreshAccent() {
-        glyph.tint = OrbitTokens.Color.Text.sidebarNewTab
-        label.textColor = OrbitTokens.Color.Text.sidebarNewTab
-        shortcut.textColor = OrbitTokens.Color.Text.sidebarNewTab
+        glyph.tint = accent.foreground
+        label.textColor = accent.foreground
+        shortcut.textColor = accent.foreground
     }
 
     private func refresh() {

@@ -75,7 +75,9 @@ enum OrbitPerformanceProbe {
                let command = try? JSONSerialization.jsonObject(with: data) as? [String: String] {
                 try? FileManager.default.removeItem(at: commandFile)
                 let name = command["command"] ?? ""
-                if name == "benchmark" {
+                if name == "theme-fixture", ownsWindow(owner, bundleID: "lab.orbit.orbit.theme-fixture") {
+                    result["themeFixture"] = await themeFixture(owner, store: environment.store, command: command)
+                } else if name == "benchmark" {
                     result["benchmark"] = await benchmark(owner, command: command, store: environment.store)
                 } else if name == "url-pill-fixture" {
                     let document = await environment.store.sessionDocument()
@@ -282,14 +284,58 @@ enum OrbitPerformanceProbe {
 
 extension OrbitPerformanceProbe {
     /// Refuse synthetic input unless WindowServer attributes this exact window to this process.
-    private static func ownsWindow(_ owner: OrbitWindowController) -> Bool {
+    private static func ownsWindow(_ owner: OrbitWindowController, bundleID: String = "lab.orbit.orbit.perf-core-3") -> Bool {
         guard Bundle.main.infoDictionary?["OrbitSyntheticBundle"] as? Bool == true,
-              Bundle.main.bundleIdentifier == "lab.orbit.orbit.perf-core-3",
+              Bundle.main.bundleIdentifier == bundleID,
               let window = owner.window, window.isVisible,
               let windows = CGWindowListCopyWindowInfo([.optionIncludingWindow], CGWindowID(window.windowNumber)) as? [[String: Any]]
         else { return false }
         return windows.contains { ($0[kCGWindowOwnerPID as String] as? Int32) == getpid()
             && ($0[kCGWindowNumber as String] as? Int) == window.windowNumber }
+    }
+
+    /// Synthetic-only theme fixture; it exercises the real editor and store publication paths.
+    private static func themeFixture(_ owner: OrbitWindowController, store: BrowserStore,
+                                     command: [String: String]) async -> Bool {
+        guard ownsWindow(owner, bundleID: "lab.orbit.orbit.theme-fixture") else { return false }
+        do {
+            switch command["action"] {
+            case "create":
+                guard let profile = owner.session.activeProfileID else { return false }
+                _ = try await store.createSpace(name: command["name"] ?? "Synthetic Theme", profileID: profile)
+                owner.session.refreshCatalog()
+                await owner.session.waitForQueuedCommands()
+            case "select":
+                let document = await store.sessionDocument()
+                guard let index = Int(command["index"] ?? ""), document.spaces.indices.contains(index) else { return false }
+                owner.session.activateSpace(document.spaces[index].id)
+                await owner.session.waitForQueuedCommands()
+            case "open": owner.presentActiveSpaceThemeEditor()
+            case "close": owner.themeEditor?.close(animated: false)
+            case "pick":
+                guard let editor = owner.themeEditor, let u = Double(command["u"] ?? ""),
+                      let v = Double(command["v"] ?? "") else { return false }
+                var state = editor.view.state
+                state.pick(at: CGPoint(x: u, y: v))
+                if let intensity = Double(command["intensity"] ?? "") { state.setIntensity(intensity) }
+                editor.view.state = state
+                editor.view.onChange?(state)
+            case "set":
+                guard let space = owner.session.snapshot?.activeSpaceID, let profile = owner.session.activeProfileID else { return false }
+                let colors = (command["colors"] ?? "").split(separator: ",").compactMap { BrowserThemeColor(hexString: String($0)) }
+                guard !colors.isEmpty else { return false }
+                let model: BrowserSpaceTheme
+                if command["baked"] == "true" {
+                    model = BrowserSpaceTheme(mode: .automatic, colors: [], intensity: 0.78, noise: 0,
+                                              light: .init(stops: colors), dark: .init(stops: colors))
+                } else {
+                    model = .radial(colors: colors, intensity: Double(command["intensity"] ?? "0.78") ?? 0.78)
+                }
+                _ = try await owner.session.setSpaceTheme(model, for: space, profileID: profile)
+            default: return false
+            }
+            return true
+        } catch { return false }
     }
 
     private static func nextPageFrame(_ surface: ChromiumSurface) async -> Bool {

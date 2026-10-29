@@ -5,6 +5,7 @@ import QuartzCore
 final class OrbitThemeFillView: NSView {
     private let host = CALayer()
     private let gradient = CAGradientLayer()
+    private let mesh = CALayer()
     private let grain = OrbitGrainLayer()
     private(set) var theme: OrbitTokens.SpaceTheme = .default
     var grainNeedsDisplay: Bool { grain.needsDisplay() }
@@ -17,6 +18,7 @@ final class OrbitThemeFillView: NSView {
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         host.addSublayer(gradient)
+        host.addSublayer(mesh)
         host.addSublayer(grain)
         wantsLayer = true
         layer?.addSublayer(host)
@@ -50,6 +52,7 @@ final class OrbitThemeFillView: NSView {
         CATransaction.setDisableActions(true)
         host.frame = bounds
         gradient.frame = fill
+        mesh.frame = fill
         applyEndpoints()
         grain.frame = host.bounds
         CATransaction.commit()
@@ -113,10 +116,35 @@ final class OrbitThemeFillView: NSView {
         apply(newTheme, fade: nil)
     }
 
+    static func meshImage(_ colors: [NSColor]) -> CGImage? {
+        let side = 64
+        let c = colors.map { [$0.redComponent, $0.greenComponent, $0.blueComponent] }
+        var bytes = [UInt8](repeating: 255, count: side * side * 4)
+        for y in 0..<side {
+            for x in 0..<side {
+                let u = CGFloat(x) / CGFloat(side - 1), v = CGFloat(y) / CGFloat(side - 1)
+                for channel in 0..<3 {
+                    let top = c[0][channel] * (1 - u) + c[1][channel] * u
+                    let bottom = c[2][channel] * (1 - u) + c[3][channel] * u
+                    bytes[(y * side + x) * 4 + channel] = UInt8((min(1, max(0, top * (1 - v) + bottom * v)) * 255).rounded())
+                }
+            }
+        }
+        guard let provider = CGDataProvider(data: Data(bytes) as CFData), let space = CGColorSpace(name: CGColorSpace.sRGB) else { return nil }
+        return CGImage(width: side, height: side, bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: side * 4,
+                       space: space, bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue),
+                       provider: provider, decode: nil, shouldInterpolate: true, intent: .defaultIntent)
+    }
+
     private func refreshColors() {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         gradient.colors = resolvedStops
+        gradient.isHidden = theme.meshCorners != nil
+        mesh.isHidden = theme.meshCorners == nil
+        if let corners = theme.meshCorners {
+            mesh.contents = Self.meshImage(corners.map { $0.resolved(for: effectiveAppearance) })
+        } else { mesh.contents = nil }
         applyEndpoints()
         // The tiled grain does not depend on the colours: redrawing this full-window CPU layer
         // on every swipe frame is wasted work. Bounds and backing-scale changes redraw it separately.
@@ -132,7 +160,7 @@ final class OrbitThemeFillView: NSView {
 final class OrbitGrainLayer: CALayer {
     /// Strength is composited by Core Animation; editing it must not redraw the tiled backing.
     var intensity: CGFloat = 0 {
-        didSet { opacity = Float(min(1, max(0, intensity))) }
+        didSet { opacity = Float(min(1, max(0, intensity)) * Self.maximumOpacity) }
     }
 
     override init() {
@@ -154,33 +182,51 @@ final class OrbitGrainLayer: CALayer {
         context.draw(tile, in: CGRect(x: 0, y: 0, width: side, height: side), byTiling: true)
     }
 
-    static let tileSide = 128
+    static let tileSide = 512
+    static let maximumOpacity: CGFloat = 0.15
 
-    /// Seeded speckles: about a tenth of the pixels are lightened or darkened, at most 10 % alpha
-    /// before the theme intensity ().
+    /// Fine RGB noise. Strength scales its mean and variation together without changing the
+    /// texture or invalidating the backing store. Channels remain independent at Retina resolution.
     static let tile: CGImage? = {
         let side = tileSide
-        var pixels = [UInt8](repeating: 0, count: side * side * 4)
         var seed: UInt64 = 0x9E37_79B9_7F4A_7C15
-        func next() -> UInt64 {
+        func uniform() -> Double {
             seed = seed &* 6_364_136_223_846_793_005 &+ 1_442_695_040_888_963_407
-            return seed >> 33
+            return (Double(seed >> 11) + 0.5) / 9_007_199_254_740_992
         }
-        for index in 0..<(side * side) {
-            let roll = next() % 1000
-            guard roll < 110 else { continue }
-            let alpha = UInt8(8 + next() % 18)
-            let light = roll % 2 == 0
-            let value: UInt8 = light ? alpha : 0
-            pixels[index * 4] = value
-            pixels[index * 4 + 1] = value
-            pixels[index * 4 + 2] = value
-            pixels[index * 4 + 3] = alpha
+        let kernel = [-0.04, 0.22, 1, 0.22, -0.04]
+        let variance = kernel.reduce(0) { $0 + $1 * $1 }
+        let means = [0.57, 0.532, 0.524], deviations = [0.284, 0.244, 0.244]
+        var pixels = [UInt8](repeating: 255, count: side * side * 4)
+        for channel in 0..<3 {
+            var noise = [Double](repeating: 0, count: side * side)
+            for i in stride(from: 0, to: noise.count, by: 2) {
+                let radius = sqrt(-2 * log(uniform())), angle = 2 * Double.pi * uniform()
+                noise[i] = radius * cos(angle)
+                noise[i + 1] = radius * sin(angle)
+            }
+            var horizontal = noise
+            for y in 0..<side {
+                for x in 0..<side {
+                    horizontal[y * side + x] = kernel.indices.reduce(0) { sum, k in
+                        sum + kernel[k] * noise[y * side + (x + k - 2 + side) % side]
+                    }
+                }
+            }
+            for y in 0..<side {
+                for x in 0..<side {
+                    let sample = kernel.indices.reduce(0) { sum, k in
+                        sum + kernel[k] * horizontal[((y + k - 2 + side) % side) * side + x]
+                    } / variance
+                    let value = min(1, max(0, means[channel] + deviations[channel] * sample))
+                    pixels[(y * side + x) * 4 + channel] = UInt8((value * 255).rounded())
+                }
+            }
         }
-        guard let provider = CGDataProvider(data: Data(pixels) as CFData) else { return nil }
+        guard let provider = CGDataProvider(data: Data(pixels) as CFData),
+              let space = CGColorSpace(name: CGColorSpace.sRGB) else { return nil }
         return CGImage(width: side, height: side, bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: side * 4,
-                       space: CGColorSpaceCreateDeviceRGB(),
-                       bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue),
+                       space: space, bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue),
                        provider: provider, decode: nil, shouldInterpolate: false, intent: .defaultIntent)
     }()
 }
@@ -191,6 +237,7 @@ final class OrbitFloatingSidebarBackdrop: NSView {
     private let dim = CALayer()
     private let edge = CAShapeLayer()
     private let observers = OrbitWorkspaceObservers()
+    var foreground: NSColor = OrbitTokens.Color.Text.primary { didSet { refreshColors() } }
     var cornerRadius: CGFloat = OrbitTokens.Radius.floatingSidebar { didSet { needsLayout = true } }
 
     override init(frame frameRect: NSRect) {
@@ -247,7 +294,7 @@ final class OrbitFloatingSidebarBackdrop: NSView {
     private func refreshColors() {
         guard let layer else { return }
         OrbitTokens.Shadow.floatingSidebar.apply(to: layer, appearance: effectiveAppearance)
-        edge.strokeColor = (NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast ? NSColor.labelColor : OrbitTokens.Color.Line.sidebarBorder)
+        edge.strokeColor = foreground.withAlphaComponent(0.12)
             .resolvedCGColor(for: effectiveAppearance)
         needsLayout = true
         dim.backgroundColor = OrbitTokens.Color.State.floatingSidebarDim.resolvedCGColor(for: effectiveAppearance)

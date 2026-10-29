@@ -1,28 +1,10 @@
 import BrowserCore
 import Foundation
 
-/// Position ↔ colour of the editor's dotted field. Horizontal position controls hue
-/// with a 74° offset; vertical position controls saturation (S = v^0.8, grey at the top).
-/// Brightness stays at 0.675.
+/// Radial interaction within the existing editor field, top-left unit coordinates.
 enum OrbitThemeFieldMapping {
-    static let hueOffset = 74.0 / 360
-    static let saturationExponent = 0.8
-    static let brightness = 0.675
-
-    /// `unit`: 0…1 in both axes, top-left origin.
-    static func color(at unit: CGPoint) -> BrowserThemeColor {
-        let u = min(1, max(0, Double(unit.x))), v = min(1, max(0, Double(unit.y)))
-        let hue = (u + hueOffset).truncatingRemainder(dividingBy: 1)
-        return BrowserThemeColor(hue: hue, saturation: pow(v, saturationExponent), brightness: brightness)
-    }
-
-    /// Handle position of any colour (swatches and imports keep their own brightness).
-    static func position(of color: BrowserThemeColor) -> CGPoint {
-        let (hue, saturation, _) = color.hsb
-        var u = hue - hueOffset
-        if u < 0 { u += 1 }
-        return CGPoint(x: u, y: pow(saturation, 1 / saturationExponent))
-    }
+    static func color(at unit: CGPoint) -> BrowserThemeColor { BrowserRadialThemePalette.color(at: unit) }
+    static func position(of color: BrowserThemeColor) -> CGPoint { BrowserRadialThemePalette.position(of: color) }
 }
 
 /// The editor's model, without AppKit: the draft theme, the selected handle and the swatch page.
@@ -107,7 +89,7 @@ struct OrbitThemeEditorState: Equatable {
             replaceColor(at: selected, with: swatch)
             return
         }
-        theme = BrowserSpaceTheme.composed(colors: [swatch], intensity: hasColor ? theme.intensity : BrowserSpaceTheme.defaultIntensity,
+        theme = BrowserSpaceTheme.radial(colors: [swatch], intensity: hasColor ? theme.intensity : BrowserSpaceTheme.defaultIntensity,
                                            noise: theme.noise, mode: theme.mode,
                                            presetID: BrowserSpaceThemePresets.presetID(family: family, index: index))
         selectedIndex = 0
@@ -152,7 +134,7 @@ struct OrbitThemeEditorState: Equatable {
             theme = reset
             return
         }
-        theme = BrowserSpaceTheme.composed(colors: colors, intensity: intensity ?? (hasColor ? theme.intensity : BrowserSpaceTheme.defaultIntensity),
+        theme = BrowserSpaceTheme.radial(colors: colors, intensity: intensity ?? (hasColor ? theme.intensity : BrowserSpaceTheme.defaultIntensity),
                                            noise: hasColor ? theme.noise : 0, mode: theme.mode)
     }
 }

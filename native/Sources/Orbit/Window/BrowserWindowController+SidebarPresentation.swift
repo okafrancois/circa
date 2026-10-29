@@ -112,11 +112,14 @@ extension BrowserWindowController {
         let switching = displayedSpaceID != nil && displayedSpaceID != spaceID
         // A late swipe publication can finish the preview inside willRender. Install its
         // stored theme first so clearing the interactive blend cannot flash the old Space.
+        windowShell.onThemePaint = { [weak self] painted in
+            let accent = OrbitSpaceThemes.accent(for: painted)
+            self?.sidebar.applyAccent(accent)
+            self?.contentCard.themeForeground = accent.foreground
+        }
         windowShell.apply(theme: theme, animated: switching)
         sidebar.prepareSpaceContentPublication(to: spaceID)
         _ = sidebar.spaceSwipe.willRender(active: spaceID)
-        let accent = OrbitSpaceThemes.accent(for: theme)
-        sidebar.applyAccent(accent)
         renderLoadingIndicator()
     }
 

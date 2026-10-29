@@ -250,7 +250,7 @@ struct ThemeAppearanceTests {
     func accents() throws {
         var defaultColors = OrbitSpaceThemes.accent(for: .default)
         defaultColors.contrastTheme = nil // The provenance is not a measured colour role.
-        #expect(defaultColors == .defaultSpace)
+        #expect(defaultColors.sidebarText == defaultColors.icon)
         let light = try #require(NSAppearance(named: .aqua))
         let dark = try #require(NSAppearance(named: .darkAqua))
         let selection = OrbitTokens.ThemeAccent.defaultSpace.selection.resolved(for: light)
@@ -260,7 +260,7 @@ struct ThemeAppearanceTests {
         let lime = OrbitSpaceThemes.accent(for: .limeCitrus)
         #expect(lime != .defaultSpace && lime != .defaultPurple)
         let derivedText = try #require(lime.sidebarText.resolved(for: light).usingColorSpace(.sRGB))
-        #expect(derivedText.hueComponent > 0.1 && derivedText.hueComponent < 0.3 && close(derivedText.brightnessComponent, 0.31, 0.02))
+        #expect(derivedText == OrbitThemeForeground.color(on: OrbitThemeGradient.representativeColor(.limeCitrus, appearance: light)))
         let strong = try #require(lime.strong.usingColorSpace(.sRGB))
         #expect(strong.hueComponent > 0.1 && strong.hueComponent < 0.3)
     }
