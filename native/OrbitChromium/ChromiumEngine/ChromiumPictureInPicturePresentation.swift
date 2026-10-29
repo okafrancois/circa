@@ -41,6 +41,12 @@ final class ChromiumPictureInPicturePresentation {
         opacityObservation = nil
     }
 
+    func prepareForReturn() {
+        finish()
+        animation?.cancel()
+        animation = nil
+    }
+
     private func consider(_ candidate: NSWindow) {
         guard !isArranging, window == nil, !existingWindows.contains(ObjectIdentifier(candidate)),
               candidate.styleMask.contains(.fullSizeContentView), !candidate.styleMask.contains(.titled),

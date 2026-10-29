@@ -10,9 +10,10 @@ extension ChromiumSurface {
     }
     public func updateAutomaticPictureInPicture(isSelected: Bool, allowed: Bool) {
         let enter = !isSelected && allowed
-        guard !isDisposed, isBrowserCreated, enter != automaticPiPShouldEnter else { return }
+        guard !isDisposed, isBrowserCreated, (enter != automaticPiPShouldEnter || isSelected != automaticPiPIsSelected) else { return }
         if enter { automaticPiPSourceWindow = hostView.window }
         automaticPiPShouldEnter = enter
+        automaticPiPIsSelected = isSelected
         automaticPiPRevision &+= 1
         guard automaticPiPTask == nil else { return }
         automaticPiPTask = Task { [weak self] in
@@ -22,7 +23,8 @@ extension ChromiumSurface {
                 let revision = automaticPiPRevision
                 let enter = automaticPiPShouldEnter
                 let generation = documentGeneration
-                await reconcileAutomaticPiP(enter: enter, generation: generation)
+                let returning = automaticPiPIsSelected
+                await reconcileAutomaticPiP(enter: enter, returning: returning, generation: generation)
                 guard !isDisposed, !Task.isCancelled else { return }
                 if revision == automaticPiPRevision { return }
             } while true
@@ -31,7 +33,17 @@ extension ChromiumSurface {
 
     /// Each frame gets an isolated world. Cross-origin players use their own native DOM and
     /// permissions policy; no Node/IPC is exposed and page replacements of DOM APIs do not run.
-    private func reconcileAutomaticPiP(enter: Bool, generation: UInt64) async {
+    private func reconcileAutomaticPiP(enter: Bool, returning: Bool, generation: UInt64) async {
+        if returning {
+            guard let session = automaticPiPSession else { return }
+            automaticPiPSession = nil
+            guard session.generation == generation else { return }
+            automaticPiPPresentation?.prepareForReturn()
+            // Exit through the renderer so Chromium returns the existing player inline without
+            // pausing it. No added fade, scale or travel accompanies the window removal.
+            _ = await evaluatePiP(BrowserAutomaticPiPScript.returnToSource, context: session.context)
+            return
+        }
         guard enter else { return }
         let (ok, treeData) = await devToolsCall("Page.getFrameTree")
         guard ok, let json = try? JSONSerialization.jsonObject(with: treeData) as? [String: Any],
@@ -48,7 +60,7 @@ extension ChromiumSurface {
                   let context = world["executionContextId"] as? Int,
                   documentGeneration == generation, !isDisposed else { continue }
             guard enter, automaticPiPShouldEnter else { return }
-            let expression = Self.enterAutomaticPiP
+            let expression = BrowserAutomaticPiPScript.enter
             guard let evaluation = try? JSONSerialization.data(withJSONObject: [
                 "expression": expression, "contextId": context, "returnByValue": true,
                 "userGesture": true, "awaitPromise": true
@@ -58,7 +70,10 @@ extension ChromiumSurface {
             let (evaluated, resultData) = await evaluateAutomaticPiP(evaluation)
             guard evaluated, let result = try? JSONSerialization.jsonObject(with: resultData) as? [String: Any],
                   result["exceptionDetails"] == nil else { automaticPiPPresentation?.finish(); continue }
-            if (result["result"] as? [String: Any])?["value"] as? Bool == true { return }
+            if (result["result"] as? [String: Any])?["value"] as? Bool == true {
+                automaticPiPSession = (context, generation)
+                return
+            }
             automaticPiPPresentation?.finish()
         }
     }
@@ -70,24 +85,10 @@ extension ChromiumSurface {
         return await devToolsCall("Runtime.evaluate", params: String(decoding: parameters, as: UTF8.self))
     }
 
-    private static let enterAutomaticPiP = #"""
-    (async () => {
-      if (!document.pictureInPictureEnabled || document.pictureInPictureElement) return false;
-      const videos = [...document.querySelectorAll('video')].filter(v =>
-        !v.paused && !v.ended && v.readyState >= 2 && v.videoWidth > 0 && !v.disablePictureInPicture &&
-        v.checkVisibility({checkOpacity:true, checkVisibilityCSS:true}) && (() => {
-          const r = v.getBoundingClientRect();
-          return r.width > 0 && r.height > 0 && r.bottom > 0 && r.right > 0 &&
-                 r.top < innerHeight && r.left < innerWidth;
-        })());
-      videos.sort((a,b) => b.videoWidth*b.videoHeight - a.videoWidth*a.videoHeight);
-      const video = videos[0];
-      if (!video) return false;
-      try {
-        await video.requestPictureInPicture();
-        return document.pictureInPictureElement === video;
-      } catch (_) { return false; }
-    })()
-    """#
-
+    private func evaluatePiP(_ expression: String, context: Int) async -> (Bool, Data) {
+        guard let parameters = try? JSONSerialization.data(withJSONObject: [
+            "expression": expression, "contextId": context, "returnByValue": true, "awaitPromise": true
+        ]) else { return (false, Data()) }
+        return await devToolsCall("Runtime.evaluate", params: String(decoding: parameters, as: UTF8.self))
+    }
 }
