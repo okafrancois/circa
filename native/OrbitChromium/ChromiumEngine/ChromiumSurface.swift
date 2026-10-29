@@ -182,6 +182,7 @@ public final class ChromiumSurface: BrowserEngineSurface {
     var hasActiveDownloads: Bool { !downloads.isEmpty }
     private var downloadSourceCommitted = false
     private var didRequestShellClose = false
+    private var downloadSourceTimeouts: [UUID: Task<Void, Never>] = [:]
     private var downloadSourceWaiters: [UUID: CheckedContinuation<Bool, Never>] = [:]
     /// Page-first keys sent to the page with a shell receipt, by bridge key id (ABI 7).
     private var keyReceipts: [(id: UInt64, receipt: BrowserKeyReceipt)] = []
@@ -194,6 +195,8 @@ public final class ChromiumSurface: BrowserEngineSurface {
     /// contract request the delegate received.
     var openContextMenu: (id: UInt64, commands: [String: Int32], request: BrowserContextMenuRequest)?
     /// `confirmClose()` waiting for the page; and whether its beforeunload dialog reached the delegate.
+    var closeConfirmationTimeout: Task<Void, Never>?
+    var closeCleanupTimeout: Task<Void, Never>?
     var closeConfirmation: CheckedContinuation<Bool, Never>?
     var closeConfirmationAskedUser = false
     var isConfirmingDownloadClose = false
@@ -551,6 +554,8 @@ public final class ChromiumSurface: BrowserEngineSurface {
     }
 
     public func dispose() {
+        closeCleanupTimeout?.cancel()
+        closeCleanupTimeout = nil
         observePasswordPrompt(nil)
         pageTintTask?.cancel()
         pageTintTask = nil
@@ -1119,14 +1124,17 @@ public final class ChromiumSurface: BrowserEngineSurface {
                 finishDownloadSourcePreparation(false)
                 return
             }
-            Task { @MainActor [weak self] in
-                try? await Task.sleep(for: .seconds(8))
+            downloadSourceTimeouts[id] = Task { @MainActor [weak self] in
+                do { try await Task.sleep(for: .seconds(8)) } catch { return }
+                self?.downloadSourceTimeouts[id] = nil
                 self?.downloadSourceWaiters.removeValue(forKey: id)?.resume(returning: false)
             }
         }
     }
 
     private func finishDownloadSourcePreparation(_ ready: Bool) {
+        for timeout in downloadSourceTimeouts.values { timeout.cancel() }
+        downloadSourceTimeouts.removeAll()
         let waiters = downloadSourceWaiters.values
         downloadSourceWaiters.removeAll()
         for waiter in waiters { waiter.resume(returning: ready) }

@@ -442,8 +442,9 @@ extension ChromiumSurface {
         let grace = Self.confirmationGrace
         return await withCheckedContinuation { continuation in
             closeConfirmation = continuation
-            Task { @MainActor [weak self] in
-                try? await Task.sleep(for: grace)
+            closeConfirmationTimeout = Task { @MainActor [weak self] in
+                do { try await Task.sleep(for: grace) } catch { return }
+                self?.closeConfirmationTimeout = nil
                 guard let self, self.closeConfirmation != nil, !self.closeConfirmationAskedUser,
                       !self.isConfirmingDownloadClose else { return }
                 self.onEngineEvent?("close-confirmation-grace-elapsed", [:])
@@ -459,6 +460,8 @@ extension ChromiumSurface {
     func finishCloseConfirmation(closed: Bool) -> Bool {
         guard let continuation = closeConfirmation else { return false }
         closeConfirmation = nil
+        closeConfirmationTimeout?.cancel()
+        closeConfirmationTimeout = nil
         isConfirmingDownloadClose = false
         closeConfirmationAskedUser = false
         if closed { closedByConfirmation = true }
@@ -466,8 +469,10 @@ extension ChromiumSurface {
         continuation.resume(returning: closed)
         if closed, !isDisposed {
             // The shell disposes after a positive answer; never leave a natively closed surface live.
-            Task { @MainActor [weak self] in
-                try? await Task.sleep(for: .seconds(3))
+            closeCleanupTimeout?.cancel()
+            closeCleanupTimeout = Task { @MainActor [weak self] in
+                do { try await Task.sleep(for: .seconds(3)) } catch { return }
+                self?.closeCleanupTimeout = nil
                 if let self, !self.isDisposed, !self.isBrowserCreated { self.dispose() }
             }
         }
