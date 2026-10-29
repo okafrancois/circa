@@ -27,6 +27,7 @@ final class BrowserDeveloperToolbar: NSView {
     var onExtensions: (() -> Void)?
     var onSplit: (() -> Void)?
     var onExtension: ((String, NSButton) -> Void)?
+    var extensionContextMenu: ((String) -> NSMenu?)?
 
     init() {
         super.init(frame: NSRect(x: 0, y: 0, width: 958.5, height: Self.height))
@@ -229,17 +230,13 @@ final class BrowserDeveloperToolbar: NSView {
                 created.onPress = { [weak self, weak created] in
                     guard let created else { return }; self?.onExtension?(item.id, created)
                 }
+                created.contextMenuBuilder = { [weak self] in self?.extensionContextMenu?(item.id) }
                 created.isBordered = false
                 created.imageScaling = .scaleProportionallyDown
                 created.widthAnchor.constraint(equalToConstant: Self.buttonPitch).isActive = true
                 created.heightAnchor.constraint(equalToConstant: 28).isActive = true
                 let badge = BrowserExtensionBadgeView()
-                badge.translatesAutoresizingMaskIntoConstraints = false
-                created.addSubview(badge)
-                NSLayoutConstraint.activate([
-                    badge.trailingAnchor.constraint(equalTo: created.trailingAnchor, constant: -3),
-                    badge.bottomAnchor.constraint(equalTo: created.bottomAnchor, constant: 7)
-                ])
+                badge.install(on: created, iconSize: 14)
                 badges[item.id] = badge
                 extensionButtons[item.id] = created
                 button = created
@@ -267,10 +264,22 @@ final class BrowserDeveloperToolbar: NSView {
 final class BrowserExtensionBadgeView: NSView {
     var text: String? { didSet { isHidden = text?.isEmpty != false; invalidateIntrinsicContentSize(); needsDisplay = true } }
     var backgroundARGB: UInt32? { didSet { needsDisplay = true } }
-    static let font = NSFont.systemFont(ofSize: 6, weight: .bold)
+    static let font = NSFont.systemFont(ofSize: 5, weight: .bold)
+    private var badgeFont: NSFont {
+        (text?.count ?? 0) > 4 ? .systemFont(ofSize: 6, weight: .bold) : Self.font
+    }
     override var intrinsicContentSize: NSSize {
-        let width = ((text ?? "") as NSString).size(withAttributes: [.font: Self.font]).width
-        return NSSize(width: max(9, ceil(width) + 3), height: 8)
+        let width = ((text ?? "") as NSString).size(withAttributes: [.font: badgeFont]).width
+        if (text?.count ?? 0) > 4 { return NSSize(width: max(9, ceil(width) + 3), height: 8) }
+        return NSSize(width: max(8, ceil(width) + 2), height: 7)
+    }
+    func install(on button: NSButton, iconSize: CGFloat) {
+        translatesAutoresizingMaskIntoConstraints = false
+        button.addSubview(self)
+        NSLayoutConstraint.activate([
+            trailingAnchor.constraint(equalTo: button.centerXAnchor, constant: iconSize / 2 - 1),
+            bottomAnchor.constraint(equalTo: button.centerYAnchor, constant: iconSize / 2 - 1)
+        ])
     }
     override init(frame: NSRect) { super.init(frame: frame); isHidden = true; setAccessibilityElement(false) }
     required init?(coder: NSCoder) { nil }
@@ -283,7 +292,7 @@ final class BrowserExtensionBadgeView: NSView {
         } ?? NSColor(srgbRed: 0.19, green: 0.19, blue: 0.20, alpha: 1)
         background.setFill()
         NSBezierPath(roundedRect: bounds, xRadius: 1.5, yRadius: 1.5).fill()
-        let attributes: [NSAttributedString.Key: Any] = [.font: Self.font, .foregroundColor: NSColor.white]
+        let attributes: [NSAttributedString.Key: Any] = [.font: badgeFont, .foregroundColor: NSColor.white]
         let size = (text as NSString).size(withAttributes: attributes)
         (text as NSString).draw(at: NSPoint(x: (bounds.width - size.width) / 2, y: (bounds.height - size.height) / 2),
                                  withAttributes: attributes)

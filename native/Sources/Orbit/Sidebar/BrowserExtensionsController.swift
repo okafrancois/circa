@@ -13,6 +13,17 @@ final class BrowserExtensionsController<Engine: BrowserEngine> {
     private var pinnedButtons: [NSButton] = []
     private var buttonsByProfile: [ProfileID: [NSButton]] = [:]
     private var previewProfile: ProfileID?
+    @MainActor
+    private final class TabInventory {
+        weak var surface: Engine.Surface?
+        let generation: UInt64
+        let items: [BrowserExtensionSummary]
+        init(surface: Engine.Surface, items: [BrowserExtensionSummary]) {
+            self.surface = surface; generation = surface.documentGeneration; self.items = items
+        }
+    }
+    private var tabInventories: [ObjectIdentifier: TabInventory] = [:]
+    private var profileInventories: [ProfileID: [BrowserExtensionSummary]] = [:]
     /// Optional metadata injection for the confined Chromium presentation probe. Production
     /// always reads the engine registry; fixture buttons never dispatch engine actions.
     var presentationInventory: ((ProfileID) -> [BrowserExtensionSummary])?
@@ -27,6 +38,15 @@ final class BrowserExtensionsController<Engine: BrowserEngine> {
 
     func install() {
         guard let owner else { return }
+        owner.siteControls.extensionContextMenu = { [weak self] item, surface in
+            self?.contextMenu(for: item, surface: surface)
+        }
+        owner.developerToolbar.extensionContextMenu = { [weak self, weak owner] id in
+            guard let self, let owner, let surface = owner.session.selectedSurface,
+                  let items = try? owner.engine.extensions?.installedExtensions(on: surface),
+                  let item = items.first(where: { $0.id == id }) else { return nil }
+            return contextMenu(for: item, surface: surface)
+        }
         let strip = owner.sidebar.extensionsContainer
         owner.sidebar.addressContainer.installAccessory(strip, onHover: true, order: 10)
         owner.sidebar.extensionsContainer.isAvailable = owner.engine.extensionManagement != nil && !owner.isPrivateWindow
@@ -112,20 +132,38 @@ final class BrowserExtensionsController<Engine: BrowserEngine> {
         guard let owner else { return }
         let surface = owner.session.selectedSurface
         let profile = previewProfile ?? surface?.profileID ?? owner.session.activeProfileID
+        tabInventories = tabInventories.filter { $0.value.surface.map(owner.owns) == true }
+        profileInventories = profileInventories.filter { liveProfile in
+            owner.session.catalog?.profiles.contains { $0.id == liveProfile.key } == true
+        }
         let items: [BrowserExtensionSummary]
         if let profile, let presentationInventory { items = presentationInventory(profile) }
         else if let profile, let host = owner.engine.extensions, host.supportsPinning {
             do {
                 if let surface, surface.profileID == profile, previewProfile == nil {
                     items = try host.installedExtensions(on: surface)
+                    tabInventories[ObjectIdentifier(surface)] = TabInventory(surface: surface, items: items)
                 } else { items = try host.installedExtensions(in: profile) }
+                profileInventories[profile] = items
             }
             catch {
-                // Never show another profile's icons while this registry is starting. Previously
-                // decoded destination pixels remain usable without a clear/recreate frame.
-                pinnedButtons = buttonsByProfile[profile] ?? []
-                owner.sidebar.extensionsContainer.setPinnedButtons(pinnedButtons)
-                return
+                if let surface, surface.profileID == profile, previewProfile == nil {
+                    let cached = tabInventories[ObjectIdentifier(surface)]
+                    if cached?.surface === surface, cached?.generation == surface.documentGeneration {
+                        items = cached?.items ?? []
+                    } else {
+                        // Keep the icon inventory, but never borrow another tab's action values.
+                        items = (profileInventories[profile] ?? []).map { item in
+                            var item = item
+                            item.actionState = nil; item.actionBadgeText = nil
+                            return item
+                        }
+                    }
+                } else {
+                    pinnedButtons = buttonsByProfile[profile] ?? []
+                    owner.sidebar.extensionsContainer.setPinnedButtons(pinnedButtons)
+                    return
+                }
             }
         } else {
             items = []
@@ -191,12 +229,7 @@ final class BrowserExtensionsController<Engine: BrowserEngine> {
             if let existing = action.subviews.compactMap({ $0 as? BrowserExtensionBadgeView }).first { badge = existing }
             else {
                 badge = BrowserExtensionBadgeView()
-                badge.translatesAutoresizingMaskIntoConstraints = false
-                action.addSubview(badge)
-                NSLayoutConstraint.activate([
-                    badge.trailingAnchor.constraint(equalTo: action.trailingAnchor, constant: -3),
-                    badge.bottomAnchor.constraint(equalTo: action.bottomAnchor, constant: 7)
-                ])
+                badge.install(on: action, iconSize: 16)
             }
             badge.text = item.actionState?.badgeText ?? item.actionBadgeText
             badge.backgroundARGB = item.actionState?.badgeBackgroundColor
@@ -226,11 +259,13 @@ final class BrowserExtensionsController<Engine: BrowserEngine> {
         toolbarObservation = nil
         toolbarProfile = nil
         buttonsByProfile.removeAll()
+        tabInventories.removeAll()
+        profileInventories.removeAll()
         previewProfile = nil
         presentationInventory = nil
     }
 
-    private func contextMenu(for item: BrowserExtensionSummary, surface: Engine.Surface) -> NSMenu? {
+    func contextMenu(for item: BrowserExtensionSummary, surface: Engine.Surface) -> NSMenu? {
         guard let owner, let host = owner.engine.extensions else { return nil }
         let epoch = selectionEpoch, document = surface.documentGeneration
         let valid: () -> Bool = { [weak self, weak owner, weak surface] in
@@ -253,9 +288,9 @@ final class BrowserExtensionsController<Engine: BrowserEngine> {
                 catch { owner.session.onError?(error) }
             }
         }
-        menu.addAction(uiText("Unpin"), enabled: host.supportsPinning) { [weak owner, weak surface] in
+        menu.addAction(item.isPinned == true ? uiText("Unpin") : uiText("Pin"), enabled: host.supportsPinning) { [weak owner, weak surface] in
             guard valid(), let owner, let surface else { return }
-            do { try host.setPinned(false, extensionID: item.id, in: surface.profileID) }
+            do { try host.setPinned(item.isPinned != true, extensionID: item.id, in: surface.profileID) }
             catch { owner.session.onError?(error) }
         }
         menu.addItem(.separator())

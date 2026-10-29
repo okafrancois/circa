@@ -62,7 +62,7 @@ struct DeveloperToolbarTests {
         let image = try #require(anchor.image)
         let badge = try #require(anchor.subviews.first as? BrowserExtensionBadgeView)
         #expect(badge.text == "22" && !badge.isHidden)
-        #expect(badge.intrinsicContentSize.height == 8)
+        #expect(badge.intrinsicContentSize.height == 7)
         #expect(badge.hitTest(.zero) == nil)
         var clicked: String?
         toolbar.onExtension = { id, button in clicked = id; #expect(button === anchor) }

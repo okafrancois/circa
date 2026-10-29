@@ -9,6 +9,7 @@ private final class ExtensionControlProbe: BrowserExtensionHost {
     var supportsActions = false
     var supportsPinning = false
     var registryReady = true
+    var unavailableSurfaces: Set<ObjectIdentifier> = []
     var observationAttempts = 0
     var actionStates: [ObjectIdentifier: BrowserExtensionActionState] = [:]
     var itemsByProfile: [ProfileID: [BrowserExtensionSummary]] = [:]
@@ -34,6 +35,7 @@ private final class ExtensionControlProbe: BrowserExtensionHost {
         return itemsByProfile[profileID] ?? [item]
     }
     func installedExtensions(on surface: any BrowserEngineSurface) throws -> [BrowserExtensionSummary] {
+        guard !unavailableSurfaces.contains(ObjectIdentifier(surface)) else { throw BrowserEngineError.unsupportedOperation }
         var items = try installedExtensions(in: surface.profileID)
         if !items.isEmpty { items[0].actionState = actionStates[ObjectIdentifier(surface)] }
         return items
@@ -79,6 +81,11 @@ struct NativeExtensionControlsTests {
         let anchor = try #require(owner.sidebar.extensionsContainer.subviews.compactMap { $0 as? NSButton }.first)
         let badge = try #require(anchor.subviews.compactMap { $0 as? BrowserExtensionBadgeView }.first)
         #expect(badge.text == "1")
+        owner.window?.contentView?.layoutSubtreeIfNeeded()
+        #expect(badge.frame.midX > anchor.bounds.midX)
+        #expect(anchor.isFlipped ? badge.frame.midY > anchor.bounds.midY : badge.frame.midY < anchor.bounds.midY)
+        owner.sidebar.addressContainer.mouseExited(with: NSEvent())
+        #expect(owner.sidebar.extensionsContainer.alphaValue == 1)
         owner.openTab(url: URL(string: "https://extensions.example.invalid/two")!)
         await owner.session.waitForPendingCommands()
         let two = try #require(owner.session.selectedSurface)
@@ -92,6 +99,97 @@ struct NativeExtensionControlsTests {
         await owner.session.waitForPendingCommands()
         owner.extensionControls.render()
         #expect(badge.text == "1" && anchor.isEnabled)
+        try await environment.finalize()
+    }
+
+    @Test("Rapid selection and late registry notifications never paint another tab's badge")
+    func rapidTabBadges() async throws {
+        NSApplication.shared.setActivationPolicy(.prohibited)
+        let engine = SiteSyntheticEngine(), host = ExtensionControlProbe()
+        host.supportsPinning = true; host.item.isPinned = true
+        engine.extensions = host
+        let environment = BrowserEnvironment(engine: engine)
+        let owner = try await environment.makeWindow()
+        defer { owner.session.close(); owner.window?.close() }
+        owner.submitAddress("https://extensions.example.invalid/one")
+        await owner.session.waitForPendingCommands()
+        let one = try #require(owner.session.selectedSurface)
+        host.actionStates[ObjectIdentifier(one)] = .init(title: "One", badgeText: "A1", badgeBackgroundColor: 0xffff0000, isEnabled: true)
+        owner.extensionControls.render()
+        owner.openTab(url: URL(string: "https://extensions.example.invalid/two")!)
+        await owner.session.waitForPendingCommands()
+        let two = try #require(owner.session.selectedSurface)
+        host.actionStates[ObjectIdentifier(two)] = .init(title: "Two", badgeText: "B2", badgeBackgroundColor: 0xff0000ff, isEnabled: true)
+        host.changes.emit(two.profileID)
+        let anchor = try #require(owner.sidebar.extensionsContainer.subviews.first as? NSButton)
+        let badge = try #require(anchor.subviews.compactMap { $0 as? BrowserExtensionBadgeView }.first)
+        let oneID = try #require(owner.session.occurrenceID(for: one))
+        let twoID = try #require(owner.session.occurrenceID(for: two))
+        func descendants(_ view: NSView) -> [NSView] { view.subviews.flatMap { [$0] + descendants($0) } }
+        let toolbarAnchor = try #require(descendants(owner.developerToolbar).first {
+            $0.accessibilityIdentifier() == "developer-extension-" + host.item.id
+        } as? NSButton)
+        let toolbarBadge = try #require(toolbarAnchor.subviews.compactMap { $0 as? BrowserExtensionBadgeView }.first)
+        let render = owner.session.onChange
+        var publications = 0
+        owner.session.onChange = {
+            render?()
+            publications += 1
+            let expected = host.actionStates[ObjectIdentifier(owner.session.selectedSurface!)]!
+            #expect(badge.text == expected.badgeText)
+            #expect(badge.backgroundARGB == expected.badgeBackgroundColor)
+            #expect(anchor.toolTip == expected.title)
+            #expect(anchor.subviews.contains { $0 === badge })
+            #expect(toolbarBadge.text == expected.badgeText)
+            #expect(toolbarBadge.backgroundARGB == expected.badgeBackgroundColor)
+        }
+        // Snapshots are now unavailable: known values must come from the exact destination.
+        host.unavailableSurfaces = [ObjectIdentifier(one), ObjectIdentifier(two)]
+        for _ in 0..<20 {
+            owner.session.selectOccurrence(oneID)
+            owner.session.selectOccurrence(twoID)
+            host.changes.emit(one.profileID)
+        }
+        await owner.session.waitForPendingCommands()
+        #expect(publications >= 40)
+        #expect(badge.text == "B2")
+        owner.session.onChange = render
+        // A new tab has no cached action; it must not inherit B2 during readiness.
+        host.registryReady = false
+        owner.openTab(url: URL(string: "https://extensions.example.invalid/three")!)
+        await owner.session.waitForPendingCommands()
+        #expect(badge.isHidden && badge.text == nil)
+        #expect(anchor.toolTip == host.item.name)
+        host.registryReady = true
+        let three = try #require(owner.session.selectedSurface)
+        host.actionStates[ObjectIdentifier(three)] = .init(title: "Empty", badgeText: "", badgeBackgroundColor: 0, isEnabled: true)
+        host.changes.emit(three.profileID)
+        #expect(badge.isHidden && badge.text == "")
+        #expect(toolbarBadge.isHidden && toolbarBadge.text == "")
+        try await environment.finalize()
+    }
+
+    @Test("An unpinned extension menu offers Pin and revokes the mutation after selection")
+    func unpinnedContext() async throws {
+        NSApplication.shared.setActivationPolicy(.prohibited)
+        let engine = SiteSyntheticEngine(), host = ExtensionControlProbe()
+        host.supportsPinning = true; host.item.isPinned = false
+        engine.extensions = host
+        let environment = BrowserEnvironment(engine: engine)
+        let owner = try await environment.makeWindow()
+        defer { owner.session.close(); owner.window?.close() }
+        owner.submitAddress("https://extensions.example.invalid/one")
+        await owner.session.waitForPendingCommands()
+        let surface = try #require(owner.session.selectedSurface)
+        let menu = try #require(owner.extensionControls.contextMenu(for: host.item, surface: surface))
+        let index = menu.indexOfItem(withTitle: "Pin")
+        #expect(index >= 0)
+        menu.performActionForItem(at: index)
+        #expect(host.pinChanges.first?.2 == true)
+        owner.openTab(url: URL(string: "https://extensions.example.invalid/two")!)
+        await owner.session.waitForPendingCommands()
+        menu.performActionForItem(at: index)
+        #expect(host.pinChanges.count == 1)
         try await environment.finalize()
     }
 

@@ -1192,7 +1192,7 @@ final class SidebarAddressField: SidebarFlippedView {
 
     private func refresh() {
         for view in hoverAccessories {
-            let revealed = (isHovering || holdsAccessoriesVisible) && !isEditing
+            let revealed = (view === extensions || isHovering || holdsAccessoriesVisible) && !isEditing
             // Keep native popup anchors in the visible hierarchy after the pointer enters
             // a menu or an extension popup. Editing alone reclaims their layout width.
             view.alphaValue = revealed ? 1 : 0
