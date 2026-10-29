@@ -18,19 +18,28 @@ struct UIWorkPixelTests {
         bitmap.size = view.bounds.size
         if layers, let layer = view.layer {
             let context = try #require(NSGraphicsContext(bitmapImageRep: bitmap))
-            context.cgContext.scaleBy(x: scale, y: scale)
             layer.render(in: context.cgContext)
         } else {
-            view.cacheDisplay(in: view.bounds, to: bitmap)
+            let context = try #require(NSGraphicsContext(bitmapImageRep: bitmap))
+            view.displayIgnoringOpacity(view.bounds, in: context)
         }
         try #require(bitmap.representation(using: .png, properties: [:])).write(to: directory.appendingPathComponent(name + ".png"))
     }
 
     @Test func painterMatrix() throws {
         NSApplication.shared.setActivationPolicy(.prohibited)
-        let themes: [OrbitTokens.SpaceTheme] = [ .default,
+        var themes: [OrbitTokens.SpaceTheme] = [ .default,
             .init(stops: [NSColor(srgbRed: 32.0/255, green: 63.0/255, blue: 152.0/255, alpha: 1)], mode: .automatic, texture: .none, textureIntensity: 0),
             .init(stops: [NSColor(srgbRed: 184.0/255, green: 244.0/255, blue: 120.0/255, alpha: 1)], mode: .automatic, texture: .none, textureIntensity: 0)]
+        // Sample the shared colour driver and pager progress, including intermediate foregrounds.
+        let source = themes[1], destination = themes[2]
+        for seconds in [0.035, 0.07, 0.12, 0.184, 0.3] {
+            themes.append(SpaceSwipeThemeBlend(source: source, destination: destination,
+                progress: CGFloat(OrbitThemeTransition.progress(at: seconds))).theme)
+        }
+        for progress: CGFloat in [0.1, 0.35, 0.65, 0.9] {
+            themes.append(SpaceSwipeThemeBlend(source: source, destination: destination, progress: progress).theme)
+        }
         for scale: CGFloat in [1, 2] {
             for (appearanceIndex, appearance) in [NSAppearance.Name.aqua, .darkAqua].enumerated() {
                 for (themeIndex, theme) in themes.enumerated() {
@@ -67,6 +76,7 @@ struct UIWorkPixelTests {
                         root.addSubview(row)
                         let name = "s\(Int(scale))-a\(appearanceIndex)-t\(themeIndex)-v\(state)"
                         try render(root, name: name, scale: scale)
+                        try render(root, name: name + "-warm", scale: scale)
                     }
                 }
                 let field = OrbitThemeFieldView(frame: NSRect(x: 0, y: 0, width: 240, height: 160))

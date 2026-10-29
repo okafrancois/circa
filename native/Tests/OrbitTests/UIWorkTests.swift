@@ -95,4 +95,20 @@ struct UIWorkTests {
         #expect(OrbitUIWorkCounters.values["clearMeasurement", default: 0] == 1)
     }
 
+    @Test("Editor colour and intensity refreshes reuse dots; geometry changes rebuild them")
+    func editorGeometry() {
+        let field = OrbitThemeFieldView(frame: NSRect(x: 0, y: 0, width: 240, height: 160))
+        field.refresh()
+        OrbitUIWorkCounters.enabled = true
+        defer { OrbitUIWorkCounters.enabled = false; OrbitUIWorkCounters.reset() }
+        OrbitUIWorkCounters.reset()
+        for _ in 0..<120 { field.refresh() }
+        #expect(OrbitUIWorkCounters.values["dotGridBuild", default: 0] == 0)
+        field.viewDidChangeEffectiveAppearance()
+        #expect(OrbitUIWorkCounters.values["dotGridBuild", default: 0] == 0)
+        field.setFrameSize(NSSize(width: 260, height: 160))
+        field.refresh()
+        #expect(OrbitUIWorkCounters.values["dotGridBuild", default: 0] == 1)
+    }
+
 }
