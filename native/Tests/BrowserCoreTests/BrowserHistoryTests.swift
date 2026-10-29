@@ -306,6 +306,7 @@ struct BrowserHistoryTests {
         #expect(try await store.importDocument(BrowserHistoryDocument(profileID: id, visits: records)) == 100000)
         let importMS = milliseconds(start.duration(to: clock.now))
         try await store.close()
+        let sizes = try compactedBenchmarkSizes(root: root, profileID: id)
         start = clock.now
         let reopened = try BrowserHistoryStore(profileID: id, policy: .persistent, directory: root)
         let startupMS = milliseconds(start.duration(to: clock.now))
@@ -333,10 +334,37 @@ struct BrowserHistoryTests {
             inserts.append(milliseconds(start.duration(to: clock.now)))
         }
         queries.sort(); prefixes.sort(); inserts.sort()
-        print("HISTORY_BENCH synthetic=100000 import_ms=\(importMS) startup_ms=\(startupMS) substring_p50_ms=\(queries[25]) substring_p95_ms=\(queries[47]) prefix_p50_ms=\(prefixes[25]) prefix_p95_ms=\(prefixes[47]) short_broad_ms=\(shortMS) insert_p50_ms=\(inserts[12]) insert_p95_ms=\(inserts[23])")
+        print("HISTORY_BENCH synthetic=100000 import_ms=\(importMS) startup_ms=\(startupMS) substring_p50_ms=\(queries[25]) substring_p95_ms=\(queries[47]) prefix_p50_ms=\(prefixes[25]) prefix_p95_ms=\(prefixes[47]) short_broad_ms=\(shortMS) insert_p50_ms=\(inserts[12]) insert_p95_ms=\(inserts[23]) insert_mean_ms=\(inserts.reduce(0,+)/Double(inserts.count)) database_bytes=\(sizes.full) pages_only_bytes=\(sizes.pages) weight_index_bytes=\(sizes.weight)")
         #expect(queries[47] < 5)
         #expect(prefixes[47] < 5)
         try await reopened.close()
+    }
+
+    /// Compare complete history and pages plus their indexes on exactly 100k pages, with
+    /// compaction identical in each implementation. Both files are private synthetic fixtures.
+    private func compactedBenchmarkSizes(root: URL, profileID: ProfileID) throws -> (full: Int, pages: Int, weight: Int) {
+        let file = root.appendingPathComponent(profileID.rawValue.uuidString).appendingPathComponent("history.sqlite")
+        let full = try HistoryDatabase(openingURL: file, flags: SQLITE_OPEN_READWRITE)
+        try full.execute("VACUUM")
+        try full.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        let fullBytes = try full.scalarInt("PRAGMA page_count") * full.scalarInt("PRAGMA page_size")
+        try full.close()
+        let pages = try HistoryDatabase(url: root.appendingPathComponent("pages-only.sqlite"), profileID: profileID)
+        try pages.execute("ATTACH DATABASE ? AS corpus", [.text(file.path)])
+        try pages.execute("INSERT INTO pages(id,url,title,favicon,last,visits,typed,searchURL,searchTitle) SELECT id,url,title,favicon,last,visits,typed,searchURL,searchTitle FROM corpus.pages")
+        try pages.execute("DETACH DATABASE corpus")
+        try pages.execute("VACUUM")
+        try pages.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        let pageSize = try pages.scalarInt("PRAGMA page_size")
+        let pageBytes = try pages.scalarInt("PRAGMA page_count") * pageSize
+        // The difference after removing only this index measures its compacted storage cost.
+        if try pages.scalarInt("SELECT COUNT(*) FROM sqlite_master WHERE name='pages_weight_last'") > 0 {
+            try pages.execute("DROP INDEX pages_weight_last")
+            try pages.execute("VACUUM")
+        }
+        let withoutWeight = try pages.scalarInt("PRAGMA page_count") * pageSize
+        try pages.close()
+        return (fullBytes, pageBytes, pageBytes - withoutWeight)
     }
 
     private func milliseconds(_ duration: Duration) -> Double {
@@ -371,6 +399,7 @@ private final class HistoryTestSQL {
     }
     func makeLegacy(version: Int) throws {
         try execute("""
+            DROP INDEX IF EXISTS pages_weight_last;
             DROP TABLE historySyncEvents; DROP TABLE historySyncBatches;
             DROP TABLE historySyncState; DROP TABLE historySyncVersions;
             DROP TRIGGER pages_insert; DROP TRIGGER pages_delete; DROP TRIGGER pages_update;

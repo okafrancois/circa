@@ -614,6 +614,19 @@ private final class PaletteSectionCell: NSTableCellView {
 
 @MainActor
 final class PaletteResultCell: NSTableCellView {
+    private var presentedResult: BrowserPaletteResult?
+    private var presentedImage: NSImage?
+    private var presentedDetails = false
+    private struct PaintKey: Equatable {
+        let selected: Bool
+        let accent: NSColor
+        let material: Bool
+        let appearance: NSAppearance.Name
+    }
+    private var paintKey: PaintKey?
+    private var textWidths: [ObjectIdentifier: (String, NSFont, CGFloat)] = [:]
+    private(set) var configurationCount = 0
+
     let titleLabel = NSTextField(labelWithString: "")
     let detailLabel = NSTextField(labelWithString: "")
     let actionLabel = NSTextField(labelWithString: "")
@@ -667,6 +680,12 @@ final class PaletteResultCell: NSTableCellView {
     required init?(coder: NSCoder) { nil }
 
     func configure(result: BrowserPaletteResult, image: NSImage?, usesFavicon: Bool, showsDetails: Bool = true) {
+        guard presentedResult != result || presentedImage !== image || self.usesFavicon != usesFavicon || presentedDetails != showsDetails else { return }
+        configurationCount += 1
+        presentedResult = result
+        presentedImage = image
+        presentedDetails = showsDetails
+        paintKey = nil
         if resultID != result.id { isHovered = false; resultID = result.id }
         self.usesFavicon = usesFavicon
         if titleLabel.stringValue != result.title {
@@ -681,11 +700,21 @@ final class PaletteResultCell: NSTableCellView {
             detailLabel.stringValue = detail
             needsLayout = true
         }
-        actionLabel.stringValue = result.actionLabel
-        shortcutLabel.stringValue = result.shortcut
+        if actionLabel.stringValue != result.actionLabel {
+            actionLabel.stringValue = result.actionLabel
+            needsLayout = true
+        }
+        if shortcutLabel.stringValue != result.shortcut {
+            shortcutLabel.stringValue = result.shortcut
+            needsLayout = true
+        }
         if icon.image !== image { icon.image = image }
     }
     func apply(selected: Bool, accent: NSColor, usesMaterial: Bool = true) {
+        let key = PaintKey(selected: selected, accent: accent, material: usesMaterial, appearance: effectiveAppearance.name)
+        guard paintKey != key else { return }
+        paintKey = key
+        let oldActionHidden = actionLabel.isHidden
         self.usesMaterial = usesMaterial
         isSelectedResult = selected
         selectionAccent = accent
@@ -706,7 +735,7 @@ final class PaletteResultCell: NSTableCellView {
         let hasWhiteTile = selected && (showsTabAction || !shortcutLabel.stringValue.isEmpty)
         icon.contentTintColor = usesFavicon ? nil : (selected ? (hasWhiteTile ? accent : .white) : OrbitTokens.Color.Text.commandBarPrimary)
         iconTile.layer?.backgroundColor = (hasWhiteTile ? NSColor.white : .clear).resolvedCGColor(for: effectiveAppearance)
-        needsLayout = true
+        if oldActionHidden != actionLabel.isHidden { needsLayout = true }
     }
     private func refreshBackground() {
         background.layer?.backgroundColor = (isSelectedResult ? (usesMaterial ? OrbitTokens.Color.State.commandBarRowSelected : selectionAccent) :
@@ -733,9 +762,13 @@ final class PaletteResultCell: NSTableCellView {
         actionIcon.frame = accessory.frame.insetBy(dx: 4, dy: 4)
         let x = m.titleOriginX - m.rowInsetX
         func textWidth(_ label: NSTextField) -> CGFloat {
-            label.stringValue.isEmpty ? 0 : ceil((label.stringValue as NSString).size(withAttributes: [
-                .font: label.font ?? OrbitTokens.Typography.commandBarAccessory
-            ]).width) + 4
+            let text = label.stringValue
+            let font = label.font ?? OrbitTokens.Typography.commandBarAccessory
+            let key = ObjectIdentifier(label)
+            if let (cachedText, cachedFont, width) = textWidths[key], cachedText == text, cachedFont == font { return width }
+            let width = text.isEmpty ? 0 : ceil((text as NSString).size(withAttributes: [.font: font]).width) + 4
+            textWidths[key] = (text, font, width)
+            return width
         }
         let right = !accessory.isHidden ? accessory.frame.minX - 10 : bounds.width - m.rowInsetX
         let shortcutWidth = min(textWidth(shortcutLabel), max(0, (right - x) * 0.25))

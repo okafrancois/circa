@@ -200,6 +200,8 @@ enum OrbitPerformanceProbe {
                             "milliseconds": (ProcessInfo.processInfo.systemUptime - start) * 1000,
                             "durableBytes": (try Data(contentsOf: destination)).count] as [String: Any]
                     } catch { result["syncIdle"] = ["failed": true] }
+                } else if name == "command-bar", ownsWindow(owner, bundleID: "lab.orbit.orbit.perf-cmdbar") {
+                    result["commandBar"] = await commandBar(owner, command: command)
                 } else if name == "benchmark" {
                     result["benchmark"] = await benchmark(owner, command: command, store: environment.store)
                 } else if name == "url-pill-fixture" {
@@ -407,6 +409,50 @@ enum OrbitPerformanceProbe {
 
 extension OrbitPerformanceProbe {
     /// Refuse synthetic input unless WindowServer attributes this exact window to this process.
+    private static func commandBar(_ owner: OrbitWindowController, command: [String: String]) async -> [String: Any] {
+        let bundleID = "lab.orbit.orbit.perf-cmdbar"
+        guard ownsWindow(owner, bundleID: bundleID) else { return ["ownershipRefused": true] }
+        NSApp.appearance = NSAppearance(named: command["appearance"] == "dark" ? .darkAqua : .aqua)
+        if !owner.palette.isPresented { owner.palette.present(.newTab) }
+        await owner.palette.waitForResults()
+        var first: [Double] = [], final: [Double] = [], arrows: [Double] = []
+        for query in ["", "s", "sy", "synthetic", "~", "résumé", "東京"] {
+            guard ownsWindow(owner, bundleID: bundleID) else { return ["ownershipRefused": true] }
+            let start = ProcessInfo.processInfo.systemUptime
+            owner.palette.query(query)
+            first.append((ProcessInfo.processInfo.systemUptime - start) * 1000)
+            await owner.palette.waitForResults()
+            final.append((ProcessInfo.processInfo.systemUptime - start) * 1000)
+            guard ownsWindow(owner, bundleID: bundleID) else { return ["ownershipRefused": true] }
+            let arrow = ProcessInfo.processInfo.systemUptime
+            owner.palette.move(1)
+            owner.palette.view.layoutSubtreeIfNeeded()
+            arrows.append((ProcessInfo.processInfo.systemUptime - arrow) * 1000)
+        }
+        guard ownsWindow(owner, bundleID: bundleID) else { return ["ownershipRefused": true] }
+        owner.palette.query(command["query"] ?? "synthetic")
+        await owner.palette.waitForResults()
+        owner.window?.displayIfNeeded()
+        CATransaction.flush()
+        let table = owner.palette.view.scroll.documentView as? NSTableView
+        let cells = (0..<(table?.numberOfRows ?? 0)).compactMap {
+            table?.view(atColumn: 0, row: $0, makeIfNecessary: false) as? PaletteResultCell
+        }
+        let before = cells.reduce(0) { $0 + $1.configurationCount }
+        if command["icons"] == "1", let first = owner.palette.results.first {
+            guard ownsWindow(owner, bundleID: bundleID) else { return ["ownershipRefused": true] }
+            let saved = owner.palette.view.favicons
+            owner.palette.view.favicons[first.id] = NSImage(size: NSSize(width: 16, height: 16))
+            owner.palette.view.render(owner.palette.results, selected: owner.palette.selection.index)
+            let changed = cells.reduce(0) { $0 + $1.configurationCount } - before
+            owner.palette.view.favicons = saved
+            owner.palette.view.render(owner.palette.results, selected: owner.palette.selection.index)
+            return ["cachedCells": cells.count, "iconReconfigurations": changed]
+        }
+        return ["firstMS": first, "finalMS": final, "arrowMS": arrows,
+                "results": owner.palette.results.count, "window": owner.window?.windowNumber ?? 0]
+    }
+
     private static func ownsWindow(_ owner: OrbitWindowController, bundleID: String = "lab.orbit.orbit.perf-core-3") -> Bool {
         guard Bundle.main.infoDictionary?["OrbitSyntheticBundle"] as? Bool == true,
               Bundle.main.bundleIdentifier == bundleID

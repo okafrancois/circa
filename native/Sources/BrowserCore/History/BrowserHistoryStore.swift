@@ -264,6 +264,23 @@ public actor BrowserHistoryStore {
     static func suggestionStatement(_ query: String, mode: BrowserHistorySearchMode, limit: Int,
                                     now: Date) -> (sql: String, values: [HistoryValue]) {
         let matchTerms = BrowserHistoryMatching.terms(query).filter { !$0.text.isEmpty }
+        if matchTerms.isEmpty {
+            let cap = HistoryValue.number(Double(min(limit, 1000)))
+            return ("""
+                WITH RECURSIVE weights(value) AS (
+                  SELECT MAX(visits+typed*4.0) FROM pages
+                  UNION ALL SELECT (SELECT MAX(visits+typed*4.0) FROM pages WHERE (visits+typed*4.0)<weights.value)
+                  FROM weights WHERE value IS NOT NULL
+                ), candidates AS (
+                  SELECT pages.* FROM weights JOIN pages ON pages.id IN (
+                    SELECT id FROM pages WHERE (visits+typed*4.0)=weights.value ORDER BY last DESC,url ASC LIMIT ?
+                  ) WHERE weights.value IS NOT NULL
+                )
+                SELECT url,title,favicon,last,visits,typed,
+                  (visits+typed*4.0)/(1.0+MAX(0,?-last)/86400.0/7.0) AS score
+                FROM candidates ORDER BY score DESC,last DESC,url ASC LIMIT ?
+                """, [cap, .number(now.timeIntervalSince1970), cap])
+        }
         let terms = matchTerms.map(\.text)
         var values: [HistoryValue] = [.number(now.timeIntervalSince1970)]
         var clauses: [String] = []
@@ -295,7 +312,7 @@ public actor BrowserHistoryStore {
                 firstLong = false
             } else if !BrowserHistoryMatching.usesWordStart(matchTerm, in: matchTerms) {
                 if !hasDriver {
-                    // Symbol-led short query: no token index applies; bounded literal scan.
+                    // Retain the original first 10k literal matches, including their scan order.
                     hasDriver = true
                     clauses.append("pages.rowid IN (\(rankedArm("SELECT id,last,visits,typed FROM pages WHERE instr(searchURL,?)>0 OR instr(searchTitle,?)>0 LIMIT ?")))")
                     values += [.text(term), .text(term), budget] + ranked
@@ -451,7 +468,7 @@ final class HistoryDatabase: @unchecked Sendable {
     private var handle: OpaquePointer?
     var changes: Int { Int(sqlite3_changes(handle)) }
 
-    static let currentVersion = 6
+    static let currentVersion = 7
 
     init(openingURL url: URL, flags: Int32) throws {
         // Checked ancestors, single-link database/sidecars, and directory identity before/after open.
@@ -491,6 +508,7 @@ final class HistoryDatabase: @unchecked Sendable {
                         case 3: try migrateToVersionFour()
                         case 4: try migrateToVersionFive()
                         case 5: try migrateToVersionSix(profileID)
+                        case 6: try migrateToVersionSeven()
                         default: throw BrowserHistoryError.unsupportedVersion
                         }
                         migratingVersion += 1
@@ -499,6 +517,7 @@ final class HistoryDatabase: @unchecked Sendable {
                     }
                 }
             }
+            try removeRetiredSuggestionPostings()
         } catch { sqlite3_close(handle); handle = nil; throw error }
     }
 
@@ -641,6 +660,25 @@ final class HistoryDatabase: @unchecked Sendable {
                  .number(event.expires.timeIntervalSince1970)])
             try execute("INSERT INTO historySyncVersions VALUES(?,?,?)", [.text(visit.id.uuidString),
                 .number(event.time.timeIntervalSince1970), .text(event.id.uuidString)])
+        }
+    }
+
+    /// Frecency is monotone in last-visit time within a fixed visit weight.
+    private func migrateToVersionSeven() throws {
+        try execute("CREATE INDEX pages_weight_last ON pages((visits+typed*4.0) DESC,last DESC,url ASC)")
+    }
+
+    /// An unreleased version-seven build installed per-symbol postings. Retire only those
+    /// acceleration objects, including their write triggers, without touching history content.
+    /// Ordinary opens remain read-only; obsolete objects are removed atomically once.
+    private func removeRetiredSuggestionPostings() throws {
+        guard try scalarInt("SELECT COUNT(*) FROM sqlite_master WHERE name IN ('shortSymbols','shortSymbols_page','shortSymbols_insert','shortSymbols_delete','shortSymbols_update')") > 0 else { return }
+        try transaction {
+            for name in ["shortSymbols_insert", "shortSymbols_delete", "shortSymbols_update"] {
+                try execute("DROP TRIGGER IF EXISTS \(name)")
+            }
+            try execute("DROP INDEX IF EXISTS shortSymbols_page")
+            try execute("DROP TABLE IF EXISTS shortSymbols")
         }
     }
 

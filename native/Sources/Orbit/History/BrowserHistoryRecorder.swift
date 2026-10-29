@@ -23,6 +23,7 @@ final class BrowserHistoryRecorder {
     private var openings: [ProfileID: Task<BrowserHistoryStore, Error>] = [:]
     /// Per-profile bounded memory index for synchronous keystroke suggestions.
     private var memoryIndexes: [ProfileID: BrowserHistoryMemoryIndex] = [:]
+    private var memoryQueries: [ProfileID: BrowserHistoryMemoryIndex.QueryCache] = [:]
     /// Bumped by every committed mutation; a snapshot built across a bump is discarded.
     private var indexGenerations: [ProfileID: UInt64] = [:]
     private var indexBuilds: [ProfileID: Task<Void, Never>] = [:]
@@ -130,9 +131,14 @@ final class BrowserHistoryRecorder {
     func cachedSuggestions(for profileID: ProfileID, query: String, limit: Int = 12) -> [BrowserHistorySuggestion] {
         guard isPersistent(profileID) else {
             memoryIndexes.removeValue(forKey: profileID)
+            memoryQueries.removeValue(forKey: profileID)
             return []
         }
-        return memoryIndexes[profileID]?.suggestions(query, limit: limit, now: now()) ?? []
+        guard let index = memoryIndexes[profileID] else { memoryQueries[profileID] = nil; return [] }
+        var cache = memoryQueries.removeValue(forKey: profileID) ?? .init()
+        let result = index.suggestions(query, cache: &cache, limit: limit, now: now())
+        memoryQueries[profileID] = cache
+        return result
     }
 
     /// Opens the store and builds the memory index off the main actor. Idempotent and shared:
@@ -173,6 +179,7 @@ final class BrowserHistoryRecorder {
     private func committedPage(_ page: BrowserHistoryIndexedPage?, profileID: ProfileID) {
         guard let page else { return }
         indexGenerations[profileID, default: 0] &+= 1
+        memoryQueries.removeValue(forKey: profileID)
         guard isPersistent(profileID), var index = memoryIndexes[profileID] else { return }
         memoryIndexes.removeValue(forKey: profileID)
         index.upsert(page, now: now().timeIntervalSince1970)
@@ -186,6 +193,7 @@ final class BrowserHistoryRecorder {
     private func beginBulkMutation(for profileID: ProfileID) -> Bool {
         bulkMutations[profileID, default: 0] += 1
         indexGenerations[profileID, default: 0] &+= 1
+        memoryQueries.removeValue(forKey: profileID)
         return memoryIndexes.removeValue(forKey: profileID) != nil || indexBuilds[profileID] != nil
     }
 
@@ -193,6 +201,7 @@ final class BrowserHistoryRecorder {
         bulkMutations[profileID, default: 1] -= 1
         if bulkMutations[profileID] == 0 { bulkMutations.removeValue(forKey: profileID) }
         indexGenerations[profileID, default: 0] &+= 1
+        memoryQueries.removeValue(forKey: profileID)
         memoryIndexes.removeValue(forKey: profileID)
         if rebuild { refreshMemoryIndex(for: profileID) }
     }
@@ -297,6 +306,7 @@ final class BrowserHistoryRecorder {
         // Keep the tombstone even if cleanup fails. An explicit cleanup retry is still allowed.
         removedProfiles.insert(profileID)
         indexGenerations[profileID, default: 0] &+= 1
+        memoryQueries.removeValue(forKey: profileID)
         memoryIndexes.removeValue(forKey: profileID)
         await flush()
         // An open in flight must settle before the directory is removed.
@@ -325,6 +335,7 @@ final class BrowserHistoryRecorder {
         openings.removeValue(forKey: profileID)
         failedOpens.removeValue(forKey: profileID)
         indexGenerations[profileID, default: 0] &+= 1
+        memoryQueries.removeValue(forKey: profileID)
     }
 
     func flush() async { await pending?.value }
@@ -333,6 +344,7 @@ final class BrowserHistoryRecorder {
         await flush()
         for opening in openings.values { _ = try? await opening.value }
         memoryIndexes.removeAll()
+        memoryQueries.removeAll()
         for store in stores.values { try await store.close() }
     }
 
