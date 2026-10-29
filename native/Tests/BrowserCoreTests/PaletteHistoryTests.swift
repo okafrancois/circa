@@ -47,6 +47,7 @@ struct PaletteHistoryTests {
         try await store.record(visit)
         try await store.close()
         let raw = try HistoryDatabase(url: root.appendingPathComponent(profile.rawValue.uuidString).appendingPathComponent("history.sqlite"), profileID: profile)
+        try raw.discardSyncSchemaForLegacyFixture()
         for statement in ["DROP TRIGGER titleWords_insert", "DROP TRIGGER titleWords_delete", "DROP TRIGGER titleWords_update", "DROP TABLE titleWords",
                           "UPDATE pages SET searchURL='www.xn--bcher-kva.test/caf%C3%A9'", "UPDATE identity SET version=2", "PRAGMA user_version=2"] {
             try raw.execute(statement)

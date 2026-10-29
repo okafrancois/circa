@@ -17,6 +17,7 @@ final class BrowserSyncRuntime: ObservableObject {
     private var state = BrowserSyncState()
     private var destination: URL?
     private var transport: (any BrowserSyncTransport)?
+    private var historyTransport: (any BrowserHistorySyncTransport)?
     private var task: Task<Void, Never>?
     private var cycle: (() async throws -> Void)?
 
@@ -56,15 +57,16 @@ final class BrowserSyncRuntime: ObservableObject {
         state.enabled = value
         try state.save(destination)
         enabled = value
-        if !value { await transport?.stop(); transport = nil; status = .off }
+        if !value { await transport?.stop(); await historyTransport?.stop(); transport = nil; historyTransport = nil; status = .off }
         else { status = .on; NSApp?.registerForRemoteNotifications(); start() }
     }
 
     func prepareForTermination() async {
         task?.cancel()
         await transport?.stop()
+        await historyTransport?.stop()
         await task?.value
-        task = nil; transport = nil
+        task = nil; transport = nil; historyTransport = nil
     }
 
     func resumeAfterCancelledTermination() {
@@ -78,8 +80,12 @@ final class BrowserSyncRuntime: ObservableObject {
                 guard let self else { return }
                 if enabled {
                     do { try await cycle?() }
-                    catch BrowserSyncError.signedOut { status = .signedOut; await transport?.stop(); transport = nil }
+                    catch BrowserSyncError.signedOut {
+                        status = .signedOut; await transport?.stop(); transport = nil
+                        await historyTransport?.stop(); historyTransport = nil
+                    }
                     catch BrowserSyncError.accountChanged {
+                        await historyTransport?.stop(); historyTransport = nil
                         status = .accountChanged; needsAccountDecision = true
                         await transport?.stop(); transport = nil
                         // Require an explicit decision; never attach the retained data to a new ID.
@@ -109,6 +115,14 @@ final class BrowserSyncRuntime: ObservableObject {
         }
         guard let transport else { return }
         status = .syncing
+        do { try await synchronizeHistory(environment, identity: identity, destination: destination) }
+        catch BrowserSyncError.signedOut { throw BrowserSyncError.signedOut }
+        catch BrowserSyncError.accountChanged { throw BrowserSyncError.accountChanged }
+        catch {
+            // A missing Production history type (or corrupt/unsupported history payload) must
+            // fail closed for this zone without interrupting organization synchronization.
+            await historyTransport?.stop(); historyTransport = nil
+        }
         let session = await environment.store.sessionDocument()
         let settings = await environment.settings.store.snapshot()
         var boostDocuments: [BrowserBoostDocument] = []
@@ -156,6 +170,34 @@ final class BrowserSyncRuntime: ObservableObject {
         try state.replica.acknowledge(projected)
         try state.save(destination)
         status = .synced(Date())
+    }
+
+    private func synchronizeHistory<Engine: BrowserEngine>(_ environment: BrowserEnvironment<Engine>,
+        identity: String, destination: URL) async throws {
+        guard enabled, !environment.isPrivate else { return }
+        if historyTransport == nil {
+            historyTransport = try BrowserHistoryCloudKitTransport(
+                destination: destination.appendingPathExtension("history.cloudkit"), identity: identity)
+        }
+        guard let historyTransport else { return }
+        let session = await environment.store.sessionDocument()
+        let now = Date()
+        var outgoing: [BrowserHistorySyncBatch] = []
+        for profile in session.profiles {
+            outgoing += try await environment.historyRecorder.syncBatches(for: profile.id, now: now)
+        }
+        let incoming = try await historyTransport.exchange(outgoing, now: now)
+        guard enabled, !Task.isCancelled, !environment.isFinalizing, !environment.settingsRemovalIsRunning else { return }
+        // Organization admission may add a profile this cycle; hold its batches in the transport
+        // until that profile is locally persistent, never invent or open an unknown profile here.
+        let current = await environment.store.sessionDocument()
+        for profile in current.profiles {
+            if try await environment.historyRecorder.applySync(incoming, for: profile.id, now: now) {
+                for controller in environment.liveControllers where controller.library.history.profileID == profile.id {
+                    controller.library.history.reload()
+                }
+            }
+        }
     }
 
     deinit { task?.cancel() }

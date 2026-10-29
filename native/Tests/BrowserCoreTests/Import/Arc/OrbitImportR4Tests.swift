@@ -264,8 +264,10 @@ struct OrbitImportR4Tests {
         let location = ArcImportDataLocation(sessionFile: fixture.sessionFile)
         let profile = ArcImportIdentity().profile(.directory("Default"))
         let database = location.historyDatabase(for: profile)
-        // The reviewer's downgrade: exact v4 triggers and version markers on a populated database.
+        // Recreate the v4 schema and version markers on a populated database.
         #expect(try sqlite(database.path, [
+            "DROP TABLE historySyncEvents", "DROP TABLE historySyncBatches",
+            "DROP TABLE historySyncState", "DROP TABLE historySyncVersions",
             "DROP TRIGGER pages_update", "DROP TRIGGER titleWords_update",
             "CREATE TRIGGER pages_update AFTER UPDATE ON pages BEGIN INSERT INTO search(search,rowid,searchURL,searchTitle) VALUES('delete',old.id,old.searchURL,old.searchTitle); INSERT INTO search(rowid,searchURL,searchTitle) VALUES(new.id,new.searchURL,new.searchTitle); END",
             "CREATE TRIGGER titleWords_update AFTER UPDATE ON pages BEGIN INSERT INTO titleWords(titleWords,rowid,searchTitle) VALUES('delete',old.id,old.searchTitle); INSERT INTO titleWords(rowid,searchTitle) VALUES(new.id,new.searchTitle); END",

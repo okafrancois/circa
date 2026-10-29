@@ -73,6 +73,7 @@ struct PaletteHistoryR3Tests {
         // every Cc and Cf scalar escaped. Updating through the triggers keeps the FTS consistent.
         let file = root.appendingPathComponent(profile.rawValue.uuidString).appendingPathComponent("history.sqlite")
         let raw = try HistoryDatabase(url: file, profileID: profile)
+        try raw.discardSyncSchemaForLegacyFixture()
         for url in affected {
             try raw.execute("UPDATE pages SET searchURL=? WHERE url=?", [.text(Self.legacySearchURL(url)), .text(url.absoluteString)])
         }
@@ -99,8 +100,8 @@ struct PaletteHistoryR3Tests {
         try await migrated.close()
 
         let inspect = try HistoryDatabase(url: file, profileID: profile)
-        #expect(try inspect.scalarInt("PRAGMA user_version") == 5)
-        #expect(try inspect.scalarInt("SELECT version FROM identity") == 5)
+        #expect(try inspect.scalarInt("PRAGMA user_version") == HistoryDatabase.currentVersion)
+        #expect(try inspect.scalarInt("SELECT version FROM identity") == HistoryDatabase.currentVersion)
         #expect(try Self.rowIDs(inspect) == untouchedRowIDs)
         for url in affected + [literal, plain] {
             let statement = try inspect.prepare("SELECT searchURL FROM pages WHERE url=?")

@@ -125,6 +125,7 @@ struct BrowserHistoryReaderTests {
         try await store.close()
         let file = root.appendingPathComponent(id.rawValue.uuidString).appendingPathComponent("history.sqlite")
         let raw = try HistoryDatabase(url: file, profileID: id)
+            try raw.discardSyncSchemaForLegacyFixture()
         try Self.populate(raw, pages: 100_000, legacyEvery: 0)
         try raw.close()
         let reopened = try BrowserHistoryStore(profileID: id, policy: .persistent, directory: root)
@@ -159,6 +160,7 @@ struct BrowserHistoryReaderTests {
             let folder = root.appendingPathComponent(id.rawValue.uuidString)
             let file = folder.appendingPathComponent("history.sqlite")
             let raw = try HistoryDatabase(url: file, profileID: id)
+            try raw.discardSyncSchemaForLegacyFixture()
             for statement in ["DROP TRIGGER titleWords_insert", "DROP TRIGGER titleWords_delete", "DROP TRIGGER titleWords_update",
                               "DROP TABLE titleWords"] { try raw.execute(statement) }
             try Self.populate(raw, pages: 100_000, legacyEvery: legacyEvery)
@@ -176,7 +178,7 @@ struct BrowserHistoryReaderTests {
             #expect(try await migrated.suggestions("synthetic", limit: 1).count == 1)
             try await migrated.close()
             let inspect = try HistoryDatabase(url: file, profileID: id)
-            #expect(try inspect.scalarInt("PRAGMA user_version") == 5)
+            #expect(try inspect.scalarInt("PRAGMA user_version") == HistoryDatabase.currentVersion)
             #expect(try inspect.scalarInt("SELECT COUNT(*) FROM pages WHERE searchURL LIKE 'www.%'") == 0)
             #expect(try inspect.scalarInt("SELECT COUNT(*) FROM search WHERE search MATCH '\"www.site\"'") == 0)
             #expect(try inspect.scalarInt("SELECT COUNT(*) FROM titleWords WHERE titleWords MATCH 'article*'") == 100_000)
