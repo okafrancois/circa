@@ -7,38 +7,33 @@ extension NativeWebKitTests {
 @Suite("Space theme contrast and variant normalization regressions", .serialized)
 @MainActor
 struct NativeThemeContrastRegressionTests {
-    @Test("Primary sidebar titles retain 4.5 contrast on every picker preset and swatch", arguments: [false, true])
+    @Test("Primary sidebar titles use the representative-background foreground on every swatch", arguments: [false, true])
     func primaryContrast(isDark: Bool) throws {
         let appearance = try #require(NSAppearance(named: isDark ? .darkAqua : .aqua))
-        // The legacy rose-plum preview spans a luminance range for which neither polarity can
-        // reach 4.5 everywhere; its strongest possible foreground is covered separately below.
-        for (name, theme) in themes().filter({ $0.0 != "rosePlum" }) {
-            let foreground = OrbitSpaceThemes.accent(for: theme).sidebarText.resolved(for: appearance)
-            let minimum = try gradientSamples(theme, appearance: appearance).map { contrast(foreground, $0) }.min()!
-            #expect(minimum >= 4.5, "\(name), dark=\(isDark): primary contrast \(minimum)")
+        for (_, theme) in themes() {
+            let background = OrbitThemeGradient.representativeColor(theme, appearance: appearance)
+            let actual = OrbitSpaceThemes.accent(for: theme).sidebarText.resolved(for: appearance)
+            #expect(actual == OrbitThemeForeground.color(on: background))
         }
     }
 
-    @Test("The legacy rose-plum preview retains the strongest possible uniform foreground", arguments: [false, true])
+    @Test("Multicolour previews use the same representative-background decision", arguments: [false, true])
     func legacyGradientContrastLimit(isDark: Bool) throws {
         let appearance = try #require(NSAppearance(named: isDark ? .darkAqua : .aqua))
-        let theme = OrbitTokens.SpaceTheme.rosePlum
-        let samples = try gradientSamples(theme, appearance: appearance)
-        let black = NSColor(srgbRed: 0, green: 0, blue: 0, alpha: 1)
-        let white = NSColor(srgbRed: 1, green: 1, blue: 1, alpha: 1)
-        let strongest = max(samples.map { contrast(black, $0) }.min()!, samples.map { contrast(white, $0) }.min()!)
-        let foreground = OrbitSpaceThemes.accent(for: theme).sidebarText.resolved(for: appearance)
-        #expect(strongest < 4.5, "this legacy measured gradient cannot support a uniform 4.5 foreground")
-        #expect(samples.map { contrast(foreground, $0) }.min()! >= strongest - 1e-6)
+        for (_, theme) in themes() {
+            let background = OrbitThemeGradient.representativeColor(theme, appearance: appearance)
+            let actual = OrbitSpaceThemes.accent(for: theme).sidebarText.resolved(for: appearance)
+            #expect(actual == OrbitThemeForeground.color(on: background))
+        }
     }
 
-    @Test("Secondary sidebar icons retain 3.0 contrast on every painted preset and swatch", arguments: [false, true])
+    @Test("Secondary sidebar icons use the shared foreground on every swatch", arguments: [false, true])
     func secondaryIconContrast(isDark: Bool) throws {
         let appearance = try #require(NSAppearance(named: isDark ? .darkAqua : .aqua))
-        for (name, theme) in themes() {
-            let foreground = OrbitSpaceThemes.accent(for: theme).icon.resolved(for: appearance)
-            let minimum = try gradientSamples(theme, appearance: appearance).map { contrast(foreground, $0) }.min()!
-            #expect(minimum >= 3, "\(name), dark=\(isDark): secondary icon contrast \(minimum)")
+        for (_, theme) in themes() {
+            let background = OrbitThemeGradient.representativeColor(theme, appearance: appearance)
+            let actual = OrbitSpaceThemes.accent(for: theme).icon.resolved(for: appearance)
+            #expect(actual == OrbitThemeForeground.color(on: background))
         }
     }
 

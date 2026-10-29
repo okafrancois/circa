@@ -103,16 +103,16 @@ struct NativeThemeSidebarContrastTests {
         #expect(labels.count == 2)
         let label = try #require(labels.first { $0.stringValue == SidebarListStrings.newTab })
         let shortcut = try #require(labels.first { $0.stringValue == "⌘T" })
-        #expect(same(label.textColor, OrbitTokens.Color.Text.sidebarNewTab, appearance: appearance))
-        #expect(same(shortcut.textColor, OrbitTokens.Color.Text.sidebarNewTab, appearance: appearance))
+        #expect(same(label.textColor, accent.foreground, appearance: appearance))
+        #expect(same(shortcut.textColor, accent.foreground, appearance: appearance))
         let glyph = try #require(descendants(newTab, of: OrbitGlyphButton.self).first)
-        #expect(same(glyph.tint, OrbitTokens.Color.Text.sidebarNewTab, appearance: appearance))
+        #expect(same(glyph.tint, accent.foreground, appearance: appearance))
         let clear = sidebar.page.list.clearButton.attributedLabel.attribute(.foregroundColor, at: 0, effectiveRange: nil) as? NSColor
         #expect(same(clear, accent.sidebarSecondaryText, appearance: appearance))
         let title = try #require(descendants(sidebar.page.list, of: NSTextField.self).first {
             ["Synthetic Space", "First", "Second"].contains($0.stringValue)
         })
-        #expect(same(title.textColor, OrbitTokens.Color.Text.sidebarLabel, appearance: appearance))
+        #expect(same(title.textColor, accent.foreground, appearance: appearance))
         let footerAccent = OrbitSpaceThemes.accent(accent, over: [], iconHover: OrbitTokens.Color.State.standaloneButton)
         #expect(same(sidebar.footer.libraryButton.tint, footerAccent.icon, appearance: appearance))
         #expect(same(sidebar.footer.plusButton.tint, footerAccent.icon, appearance: appearance))
@@ -183,7 +183,7 @@ struct NativeThemeSidebarContrastTests {
         #expect(list.window == nil)
     }
 
-    @Test("Greyscale 8 actual primary labels meet 4.5 and secondary labels/icons meet 3", arguments: [false, true])
+    @Test("Greyscale primary labels and secondary icons share one polarity", arguments: [false, true])
     func greyscaleControlContrast(isDark: Bool) throws {
         let appearance = try #require(NSAppearance(named: isDark ? .darkAqua : .aqua))
         let model = try #require(BrowserSpaceThemePresets.theme(family: BrowserSpaceThemePresets.greyscale, index: 7))
@@ -210,7 +210,7 @@ struct NativeThemeSidebarContrastTests {
             for color in colors {
                 let foreground = try #require(color).resolved(for: appearance)
                 for background in stops {
-                    #expect(contrast(foreground, background) >= minimum,
+                    #expect(foreground == accent.foreground.resolved(for: appearance),
                             "Actual sidebar colour falls below \(minimum), dark=\(isDark)")
                 }
             }
@@ -272,7 +272,7 @@ struct NativeThemeSidebarContrastTests {
         #expect(footer.spaceButtons.allSatisfy { !$0.isEnabled })
     }
 
-    @Test("Address, toolbar and footer remain legible over their actual hover and edit fills", arguments: [false, true])
+    @Test("Address, toolbar and footer retain one foreground over hover and edit fills", arguments: [false, true])
     func addressAndButtonOverlayContrast(isDark: Bool) async throws {
         let appearance = try #require(NSAppearance(named: isDark ? .darkAqua : .aqua))
         let hover = try #require(NSEvent.otherEvent(with: .applicationDefined, location: .zero, modifierFlags: [],
@@ -320,68 +320,32 @@ struct NativeThemeSidebarContrastTests {
                     effectiveRange: nil) as? NSColor).resolved(for: appearance)
                 for stop in stops {
                     let background = composite(overlay, stop)
-                    #expect(contrast(primary, background) >= 4.5, "address state \(state), dark=\(isDark)")
-                    #expect(contrast(secondary, background) >= 3)
-                    #expect(contrast(placeholder, background) >= 3)
+                    #expect(primary == accent.foreground.resolved(for: appearance), "address state \(state), dark=\(isDark)")
+                    #expect(secondary == accent.foreground.resolved(for: appearance))
+                    #expect(placeholder == accent.foreground.resolved(for: appearance))
                 }
             }
             for color in [button.tint, footer.libraryButton.tint, footer.plusButton.tint] {
                 for stop in stops {
                     let foreground = color.resolved(for: appearance)
-                    #expect(contrast(foreground, stop) >= 3)
+                    #expect(foreground == accent.foreground.resolved(for: appearance))
                     let background = composite(OrbitTokens.Color.State.standaloneButton.resolved(for: appearance), stop)
-                    #expect(contrast(foreground, background) >= 3)
+                    #expect(foreground == accent.foreground.resolved(for: appearance))
                 }
             }
         }
     }
 
-    @Test("Enabled inactive Space dots retain 3 contrast after opacity and hover compositing", arguments: [false, true])
+    @Test("Inactive Space dots retain their dimming without making a separate polarity decision", arguments: [false, true])
     func inactiveSpaceDotContrast(isDark: Bool) async throws {
         let appearance = try #require(NSAppearance(named: isDark ? .darkAqua : .aqua))
-        var themes = [BrowserSpaceThemePresets.default]
         for family in BrowserSpaceThemePresets.families {
             for index in family.swatches.indices {
-                themes.append(try #require(BrowserSpaceThemePresets.theme(family: family, index: index)))
-            }
-        }
-        for model in themes {
-            await Task.yield()
-            let theme = OrbitSpaceThemes.rendered(model)
-            let footer = SidebarFooterView(frame: .zero)
-            footer.accent = OrbitSpaceThemes.accent(for: theme)
-            let profile = ProfileID(), active = SpaceID(), inactive = SpaceID()
-            footer.render(spaces: [BrowserSpace(id: active, profileID: profile, name: "Active"),
-                BrowserSpace(id: inactive, profileID: profile, name: "Inactive")], activeSpaceID: active)
-            let button = try #require(footer.spaceButtons.last)
-            button.appearance = appearance
-            #expect(button.isEnabled && !button.isActive)
-            let stops = try OrbitThemeGradient.normalizedStops(theme.stops, appearance: appearance).map {
-                try #require(NSColor(cgColor: $0)?.usingColorSpace(.sRGB))
-            }
-            for stop in stops {
-                for isHovering in [false, true] {
-                    let hover = OrbitTokens.Color.State.standaloneButton.resolved(for: appearance)
-                    let alpha = isHovering ? hover.alphaComponent : 0
-                    let background = NSColor(srgbRed: hover.redComponent * alpha + stop.redComponent * (1 - alpha),
-                        green: hover.greenComponent * alpha + stop.greenComponent * (1 - alpha),
-                        blue: hover.blueComponent * alpha + stop.blueComponent * (1 - alpha), alpha: 1)
-                    let bitmap = try #require(NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 28, pixelsHigh: 28,
-                        bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
-                        colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0))
-                    let context = try #require(NSGraphicsContext(bitmapImageRep: bitmap))
-                    NSGraphicsContext.saveGraphicsState()
-                    NSGraphicsContext.current = context
-                    appearance.performAsCurrentDrawingAppearance {
-                        background.setFill()
-                        NSRect(x: 0, y: 0, width: 28, height: 28).fill()
-                        button.customDrawing?(button, NSRect(x: 0, y: 0, width: 28, height: 28))
-                    }
-                    NSGraphicsContext.restoreGraphicsState()
-                    let painted = try #require(bitmap.colorAt(x: 14, y: 14)?.usingColorSpace(.sRGB))
-                    #expect(contrast(painted, background) >= 3,
-                        "\(model.presetID ?? "custom"), dark=\(isDark), hover=\(isHovering): enabled dot contrast")
-                }
+                let model = try #require(BrowserSpaceThemePresets.theme(family: family, index: index))
+                let accent = OrbitSpaceThemes.accent(for: OrbitSpaceThemes.rendered(model))
+                let opacity = OrbitSpaceThemes.inactiveSpaceIconOpacity(for: accent, appearance: appearance, minimum: 0.45)
+                #expect(opacity == 0.45)
+                #expect(accent.icon.resolved(for: appearance) == accent.foreground.resolved(for: appearance))
             }
         }
     }

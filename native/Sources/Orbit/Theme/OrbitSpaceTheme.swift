@@ -59,12 +59,15 @@ enum OrbitSpaceThemes {
         case .light: .light
         case .dark: .dark
         }
-        let theme = OrbitTokens.SpaceTheme(
+        var theme = OrbitTokens.SpaceTheme(
             stops: stops, mode: mode, texture: model.noise > 0 ? .grain : .none, textureIntensity: CGFloat(model.noise),
             stopRange: .init(light: CGFloat(model.light.start)...CGFloat(model.light.end),
                              dark: CGFloat(model.dark.start)...CGFloat(model.dark.end)),
             angle: .init(light: CGFloat(model.light.angleDegrees), dark: CGFloat(model.dark.angleDegrees)),
             model: model)
+        if model.paletteVersion == 2, model.colors.count == 3 {
+            theme.meshCorners = OrbitThemeMesh.corners(model).map(color)
+        }
         if renderedThemes.count >= 256 { renderedThemes.removeAll() }
         renderedThemes[model] = theme
         return theme
@@ -87,215 +90,74 @@ enum OrbitSpaceThemes {
 
     // MARK: Accent
 
-    private static var accentThemes: [(theme: OrbitTokens.SpaceTheme, accent: OrbitTokens.ThemeAccent)] = []
+    private static var accentCache: [(theme: OrbitTokens.SpaceTheme, accent: OrbitTokens.ThemeAccent)] = []
 
     static func accent(for theme: OrbitTokens.SpaceTheme) -> OrbitTokens.ThemeAccent {
-        if let cached = accentThemes.last(where: { $0.theme == theme }) { return cached.accent }
-        var accent = adjusted(accentFamily(for: theme), theme: theme, overlays: [], iconHover: nil)
-        accent.contrastTheme = theme
-        if accentThemes.count >= 256 { accentThemes.removeAll() }
-        accentThemes.append((theme, accent))
-        return accent
-    }
-
-    private struct OverlayAccent {
-        let source: OrbitTokens.ThemeAccent
-        let overlays: [NSColor]
-        let iconHover: NSColor?
-        let result: OrbitTokens.ThemeAccent
-    }
-    private static var overlayAccents: [OverlayAccent] = []
-
-    static func accent(_ source: OrbitTokens.ThemeAccent, over overlays: [NSColor],
-                       iconHover: NSColor? = nil) -> OrbitTokens.ThemeAccent {
-        guard let theme = source.contrastTheme, !overlays.isEmpty || iconHover != nil else { return source }
-        if let cached = overlayAccents.last(where: {
-            $0.source == source && $0.overlays == overlays && $0.iconHover == iconHover
-        }) { return cached.result }
-        let result = adjusted(source, theme: theme, overlays: overlays, iconHover: iconHover)
-        if overlayAccents.count >= 1024 { overlayAccents.removeAll() }
-        overlayAccents.append(OverlayAccent(source: source, overlays: overlays, iconHover: iconHover, result: result))
-        return result
-    }
-
-    private struct InactiveIconOpacity {
-        let accent: OrbitTokens.ThemeAccent
-        let isDark: Bool
-        let minimum: CGFloat
-        let opacity: CGFloat
-    }
-    private static var inactiveIconOpacities: [InactiveIconOpacity] = []
-
-    /// Inactive Space buttons remain enabled. Keep their dimming only when the painted
-    /// result still reaches the secondary contrast tier, including the button's hover background.
-    static func inactiveSpaceIconOpacity(for accent: OrbitTokens.ThemeAccent, appearance: NSAppearance,
-                                         minimum: CGFloat) -> CGFloat {
-        guard let theme = accent.contrastTheme else { return minimum }
-        let isDark = OrbitAppearance.isDark(appearance)
-        if let cached = inactiveIconOpacities.last(where: {
-            $0.accent == accent && $0.isDark == isDark && $0.minimum == minimum
-        }) { return cached.opacity }
-        let stops = OrbitThemeGradient.normalizedStops(theme.stops, appearance: appearance).map {
-            NSColor(cgColor: $0)!.usingColorSpace(.sRGB)!
-        }
-        let hover = OrbitTokens.Color.State.standaloneButton.resolved(for: appearance)
-        var backgrounds: [NSColor] = []
-        for (a, b) in zip(stops, stops.dropFirst()) {
-            for index in 0...32 {
-                let base = blended(a, b, fraction: CGFloat(index) / 32)
-                backgrounds.append(base)
-                backgrounds.append(composite(hover, on: base))
-            }
-        }
-        let icon = accent.icon.resolved(for: appearance)
-        func contrast(at opacity: CGFloat) -> CGFloat {
-            backgrounds.map { background in
-                let a = luminance(blended(background, icon, fraction: opacity)), b = luminance(background)
-                return (max(a, b) + 0.05) / (min(a, b) + 0.05)
-            }.min() ?? 1
-        }
-        let result: CGFloat
-        if contrast(at: minimum) >= 3.05 { result = minimum }
-        else if contrast(at: 1) < 3.05 { result = 1 }
-        else {
-            var start = minimum, end: CGFloat = 1
-            for _ in 0..<24 {
-                let middle = (start + end) / 2
-                if contrast(at: middle) >= 3.05 { end = middle } else { start = middle }
-            }
-            result = end
-        }
-        if inactiveIconOpacities.count >= 256 { inactiveIconOpacities.removeAll() }
-        inactiveIconOpacities.append(InactiveIconOpacity(accent: accent, isDark: isDark, minimum: minimum, opacity: result))
-        return result
-    }
-
-    private static func adjusted(_ source: OrbitTokens.ThemeAccent, theme: OrbitTokens.SpaceTheme,
-                                 overlays: [NSColor], iconHover: NSColor?) -> OrbitTokens.ThemeAccent {
-        var accent = source
-        let light = NSAppearance(named: .aqua)!, dark = NSAppearance(named: .darkAqua)!
-        func paintedStops(_ appearance: NSAppearance) -> [CGColor] {
-            OrbitThemeGradient.normalizedStops(theme.stops, appearance: appearance).map { stop in
-                var base = NSColor(cgColor: stop)!.usingColorSpace(.sRGB)!
-                for overlay in overlays { base = composite(overlay.resolved(for: appearance), on: base) }
-                return base.cgColor
-            }
-        }
-        let lightStops = paintedStops(light), darkStops = paintedStops(dark)
-        let lightRange = luminanceRange(lightStops), darkRange = luminanceRange(darkStops)
-        func iconRange(_ stops: [CGColor], appearance: NSAppearance,
-                       base: ClosedRange<CGFloat>) -> ClosedRange<CGFloat> {
-            guard let iconHover else { return base }
-            let hover = iconHover.resolved(for: appearance)
-            let range = luminanceRange(stops.map { composite(hover, on: NSColor(cgColor: $0)!.usingColorSpace(.sRGB)!).cgColor })
-            return min(base.lowerBound, range.lowerBound)...max(base.upperBound, range.upperBound)
-        }
-        func corrected(_ preferred: NSColor, role: String, minimum: CGFloat,
-                       lightRange: ClosedRange<CGFloat>, darkRange: ClosedRange<CGFloat>) -> NSColor {
-            let a = preferred.resolved(for: light), b = preferred.resolved(for: dark)
-            let correctedLight = contrasting(a, against: lightRange, minimum: minimum)
-            let correctedDark = contrasting(b, against: darkRange, minimum: minimum)
-            guard correctedLight != a || correctedDark != b else { return preferred }
-            let name = "Orbit.Accent.contrast.\(role).\(colorKey(correctedLight)).\(colorKey(correctedDark))"
-            return NSColor(name: NSColor.Name(name)) { appearance in
-                appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? correctedDark : correctedLight
-            }
-        }
-        accent.sidebarText = corrected(accent.sidebarText, role: "primary", minimum: 4.5,
-                                       lightRange: lightRange, darkRange: darkRange)
-        accent.icon = corrected(accent.icon, role: "secondary", minimum: 3,
-                                lightRange: iconRange(lightStops, appearance: light, base: lightRange),
-                                darkRange: iconRange(darkStops, appearance: dark, base: darkRange))
-        let lightIcon = luminance(accent.icon.resolved(for: light)), darkIcon = luminance(accent.icon.resolved(for: dark))
-        accent.iconFill = corrected(accent.iconFill, role: "iconFill", minimum: 3,
-                                    lightRange: lightIcon...lightIcon, darkRange: darkIcon...darkIcon)
-        return accent
-    }
-
-    private static func composite(_ overlay: NSColor, on base: NSColor) -> NSColor {
-        let alpha = overlay.alphaComponent
-        return NSColor(srgbRed: overlay.redComponent * alpha + base.redComponent * (1 - alpha),
-                       green: overlay.greenComponent * alpha + base.greenComponent * (1 - alpha),
-                       blue: overlay.blueComponent * alpha + base.blueComponent * (1 - alpha), alpha: 1)
-    }
-
-    private static func accentFamily(for theme: OrbitTokens.SpaceTheme) -> OrbitTokens.ThemeAccent {
+        if let cached = accentCache.last(where: { $0.theme == theme }) { return cached.accent }
+        var accent: OrbitTokens.ThemeAccent
         if let model = theme.model {
             switch model.accentFamily {
-            case .defaultSpace: return .defaultSpace
+            case .defaultSpace: accent = .defaultSpace
             case let .derived(hue, saturation, strong):
-                return .derived(hue: CGFloat(hue), saturation: CGFloat(saturation), strong: strong.map(color))
+                accent = .derived(hue: CGFloat(hue), saturation: CGFloat(saturation), strong: strong.map(color))
+            }
+        } else if theme == .default { accent = .defaultSpace }
+        else if let base = theme.stops.compactMap({ $0.usingColorSpace(.sRGB) }).max(by: { $0.saturationComponent < $1.saturationComponent }) {
+            accent = .derived(hue: base.hueComponent)
+        } else { accent = .defaultSpace }
+        let foreground = theme.foregroundOverride ?? NSColor(name: nil) { appearance in
+            MainActor.assumeIsolated {
+                let background = OrbitThemeGradient.representativeColor(theme, appearance: appearance)
+                return OrbitThemeForeground.color(on: background)
             }
         }
-        guard theme != .default else { return .defaultSpace }
-        let colours = theme.stops.compactMap { $0.usingColorSpace(.sRGB) }
-        guard let base = colours.max(by: { $0.saturationComponent < $1.saturationComponent }),
-              base.saturationComponent > 0.05 else { return .defaultSpace }
-        return .derived(hue: base.hueComponent)
+        accent.sidebarText = foreground
+        accent.icon = foreground
+        accent.iconFill = NSColor(name: nil) { appearance in
+            MainActor.assumeIsolated { OrbitThemeGradient.representativeColor(theme, appearance: appearance) }
+        }
+        accent.contrastTheme = theme
+        if accentCache.count >= 256 { accentCache.removeAll() }
+        accentCache.append((theme, accent))
+        return accent
     }
 
-    private static func luminance(_ color: NSColor) -> CGFloat {
-        func linear(_ value: CGFloat) -> CGFloat {
-            let value = min(1, max(0, value))
-            return value <= 0.04045 ? value / 12.92 : pow((value + 0.055) / 1.055, 2.4)
-        }
-        return 0.2126 * linear(color.redComponent) + 0.7152 * linear(color.greenComponent) + 0.0722 * linear(color.blueComponent)
-    }
+    /// Overlays never make a separate foreground decision.
+    static func accent(_ source: OrbitTokens.ThemeAccent, over overlays: [NSColor],
+                       iconHover: NSColor? = nil) -> OrbitTokens.ThemeAccent { source }
 
-    private static func blended(_ a: NSColor, _ b: NSColor, fraction: CGFloat) -> NSColor {
-        NSColor(srgbRed: a.redComponent * (1 - fraction) + b.redComponent * fraction,
-                green: a.greenComponent * (1 - fraction) + b.greenComponent * fraction,
-                blue: a.blueComponent * (1 - fraction) + b.blueComponent * fraction, alpha: 1)
-    }
+    static func inactiveSpaceIconOpacity(for accent: OrbitTokens.ThemeAccent, appearance: NSAppearance,
+                                         minimum: CGFloat) -> CGFloat { minimum }
 
-    /// Relative luminance is convex along each encoded-sRGB gradient segment. Its maximum lies at
-    /// a stop, but its minimum can lie inside the segment (for example, a red-to-green gradient).
-    private static func luminanceRange(_ stops: [CGColor]) -> ClosedRange<CGFloat> {
-        let colors = stops.compactMap { NSColor(cgColor: $0)?.usingColorSpace(.sRGB) }
-        var lower = colors.map(luminance).min() ?? 0
-        let upper = colors.map(luminance).max() ?? 1
-        for (a, b) in zip(colors, colors.dropFirst()) {
-            var start: CGFloat = 0, end: CGFloat = 1
-            for _ in 0..<40 {
-                let first = start + (end - start) / 3, second = end - (end - start) / 3
-                if luminance(blended(a, b, fraction: first)) < luminance(blended(a, b, fraction: second)) {
-                    end = second
-                } else {
-                    start = first
-                }
-            }
-            lower = min(lower, luminance(blended(a, b, fraction: (start + end) / 2)))
-        }
-        return lower...upper
-    }
-
-    private static func contrasting(_ preferred: NSColor, against range: ClosedRange<CGFloat>, minimum: CGFloat) -> NSColor {
-        func ratio(_ color: NSColor) -> CGFloat {
-            let value = luminance(color)
-            if range.contains(value) { return 1 }
-            return value < range.lowerBound ? (range.lowerBound + 0.05) / (value + 0.05)
-                                           : (value + 0.05) / (range.upperBound + 0.05)
-        }
-        guard ratio(preferred) < minimum else { return preferred }
-        let black = NSColor(srgbRed: 0, green: 0, blue: 0, alpha: 1)
-        let white = NSColor(srgbRed: 1, green: 1, blue: 1, alpha: 1)
-        let extreme = ratio(black) >= ratio(white) ? black : white
-        // A custom gradient can have no uniform foreground meeting the tier (the legacy rosePlum
-        // preview also has this limitation). Keep the strongest polarity and preserve fills;
-        // the default and all picker swatches meet their tiers on the tested row overlays.
-        guard ratio(extreme) >= minimum + 0.02 else { return extreme }
-        var start: CGFloat = 0, end: CGFloat = 1
-        for _ in 0..<32 {
-            let middle = (start + end) / 2
-            if ratio(blended(preferred, extreme, fraction: middle)) >= minimum + 0.02 { end = middle }
-            else { start = middle }
-        }
-        return blended(preferred, extreme, fraction: end)
-    }
 }
 
 /// Gradient geometry of the window fill.
 enum OrbitThemeGradient {
+    @MainActor
+    static func representativeColor(_ theme: OrbitTokens.SpaceTheme, appearance: NSAppearance) -> NSColor {
+        color(theme, at: CGPoint(x: 210.0 / 1512, y: 217.0 / 949), appearance: appearance)
+    }
+
+    @MainActor
+    static func color(_ theme: OrbitTokens.SpaceTheme, at point: CGPoint, appearance: NSAppearance) -> NSColor {
+        let corners = theme.meshCorners?.map { $0.resolved(for: appearance) }
+        func mix(_ a: NSColor, _ b: NSColor, _ p: CGFloat) -> NSColor {
+            NSColor(srgbRed: a.redComponent + (b.redComponent - a.redComponent) * p,
+                    green: a.greenComponent + (b.greenComponent - a.greenComponent) * p,
+                    blue: a.blueComponent + (b.blueComponent - a.blueComponent) * p, alpha: 1)
+        }
+        if let c = corners {
+            return mix(mix(c[0], c[1], point.x), mix(c[2], c[3], point.x), point.y)
+        }
+        let stops = normalizedStops(theme.stops, appearance: appearance).map { NSColor(cgColor: $0)!.usingColorSpace(.sRGB)! }
+        let dark = OrbitAppearance.isDark(appearance), range = theme.stopRange.range(isDark: dark)
+        let f = axisFraction(of: CGPoint(x: point.x * 1512, y: point.y * 949), in: CGSize(width: 1512, height: 949),
+                             angleDegrees: theme.angle.degrees(isDark: dark))
+        let t = min(1, max(0, (f - range.lowerBound) / (range.upperBound - range.lowerBound))) * 2
+        let i = min(1, Int(t))
+        return mix(stops[i], stops[i + 1], t - CGFloat(i))
+    }
+
     /// Unit start and end points (unflipped layer: origin at the bottom-left) of a theme painted over a
     /// window-sized fill of `size`. : the axis runs at 43° in points from the
     /// top-left corner; the first stop sits at `range.lowerBound` and the last at `range.upperBound` of the
@@ -346,6 +208,43 @@ enum OrbitThemeGradient {
             return [a.cgColor, middle.cgColor, b.cgColor]
         default:
             return resolved.prefix(3).map(\.cgColor)
+        }
+    }
+}
+
+/// One encoded Rec. 709 luma decision for all chrome consumers.
+enum OrbitThemeForeground {
+    enum Consumer: CaseIterable {
+        case sidebarText, icons, urlText, urlIcons, newTab, footer, spaceTitle, buttons, scrollIndicators, frameEdges
+    }
+    static func isLight(on color: NSColor) -> Bool {
+        let c = color.usingColorSpace(.sRGB)!
+        return 0.2126 * c.redComponent + 0.7152 * c.greenComponent + 0.0722 * c.blueComponent < 128.0 / 255
+    }
+    static func color(on color: NSColor) -> NSColor {
+        NSColor(srgbRed: isLight(on: color) ? 244.0 / 255 : 32.0 / 255,
+                green: isLight(on: color) ? 244.0 / 255 : 32.0 / 255,
+                blue: isLight(on: color) ? 244.0 / 255 : 32.0 / 255, alpha: 1)
+    }
+}
+
+/// Bilinear two-axis fill. Coefficients are expressed in top-left unit window coordinates.
+enum OrbitThemeMesh {
+    static func weights(at p: CGPoint) -> [Double] {
+        let x = Double(p.x), y = Double(p.y)
+        let a = 0.208462371 + 0.610695848 * x - 0.204683029 * y - 0.465096687 * x * y
+        let b = 0.017415097 - 0.053193210 * x + 0.903819437 * y + 0.005882076 * x * y
+        return [a, b, 1 - a - b]
+    }
+    static func corners(_ model: BrowserSpaceTheme) -> [BrowserThemeColor] {
+        let colors = model.colors.map { BrowserRadialThemePalette.intensityAdjusted($0.sRGB, intensity: model.intensity, calibratedAt: 1) }
+        return [CGPoint(x: 0, y: 0), CGPoint(x: 1, y: 0), CGPoint(x: 0, y: 1), CGPoint(x: 1, y: 1)].map { point in
+            let w = weights(at: point)
+            func channel(_ component: (BrowserThemeColor) -> Double) -> Double {
+                let value = zip(w, colors).reduce(0) { $0 + $1.0 * component($1.1) }
+                return min(1, max(0, value - 8.0 / 255 + (model.mode == .light ? 15.0 / 255 : 0)))
+            }
+            return BrowserThemeColor(red: channel { $0.red }, green: channel { $0.green }, blue: channel { $0.blue })
         }
     }
 }

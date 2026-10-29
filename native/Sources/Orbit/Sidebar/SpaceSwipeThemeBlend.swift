@@ -38,6 +38,24 @@ struct SpaceSwipeThemeBlend {
                 appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? dark : light
             }
         }
+        result.foregroundOverride = NSColor(name: nil) { appearance in
+            MainActor.assumeIsolated {
+                blend(OrbitSpaceThemes.accent(for: source).foreground.resolvedCGColor(for: appearance),
+                      OrbitSpaceThemes.accent(for: destination).foreground.resolvedCGColor(for: appearance))
+            }
+        }
+        if source.meshCorners != nil || destination.meshCorners != nil {
+            let points = [CGPoint(x: 0, y: 0), CGPoint(x: 1, y: 0), CGPoint(x: 0, y: 1), CGPoint(x: 1, y: 1)]
+            result.meshCorners = points.map { point in
+                let l = blend(OrbitThemeGradient.color(source, at: point, appearance: light).cgColor,
+                              OrbitThemeGradient.color(destination, at: point, appearance: light).cgColor)
+                let d = blend(OrbitThemeGradient.color(source, at: point, appearance: dark).cgColor,
+                              OrbitThemeGradient.color(destination, at: point, appearance: dark).cgColor)
+                return NSColor(name: nil) { appearance in
+                    appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? d : l
+                }
+            }
+        }
         func interpolate(_ a: CGFloat, _ b: CGFloat) -> CGFloat { a + (b - a) * p }
         result.stopRange.light = interpolate(source.stopRange.light.lowerBound, destination.stopRange.light.lowerBound)...interpolate(source.stopRange.light.upperBound, destination.stopRange.light.upperBound)
         result.stopRange.dark = interpolate(source.stopRange.dark.lowerBound, destination.stopRange.dark.lowerBound)...interpolate(source.stopRange.dark.upperBound, destination.stopRange.dark.upperBound)

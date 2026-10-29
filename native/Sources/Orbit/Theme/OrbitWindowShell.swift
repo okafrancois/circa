@@ -76,6 +76,7 @@ final class OrbitWindowShell {
     var allowsResize: () -> Bool = { true }
     /// Editing inside the sidebar keeps a revealed sidebar open.
     var isHoverHeld: () -> Bool = { false }
+    var onThemePaint: ((OrbitTokens.SpaceTheme) -> Void)?
     var onPresentationChange: (() -> Void)?
     var onSidebarWidthChange: (() -> Void)?
     var onCollapseRequest: (() -> Void)?
@@ -441,7 +442,7 @@ final class OrbitWindowShell {
     /// Applies a Space theme: fill (cross-faded on Space switch), window appearance from its mode,
     /// window background for resize and full-screen transitions.
     func apply(theme newTheme: OrbitTokens.SpaceTheme, animated: Bool) {
-        guard newTheme != theme else { return }
+        guard newTheme != theme else { onThemePaint?(spaceSwipePaintedTheme ?? theme); return }
         let style = OrbitMotionStyle.resolve(animated: animated, canAnimate: canAnimate,
                                            reducedMotion: OrbitMotionPreferences.prefersReducedMotion)
         let previous = spaceSwipePaintedTheme ?? theme
@@ -463,13 +464,18 @@ final class OrbitWindowShell {
                     paintSpaceTheme(nil)
                 }
                 themeMotion.set(0)
-                themeMotion.animate(to: 1, spring: OrbitTokens.Motion.spaceSwitchSidebar, in: root)
+                themeMotion.animate(to: 1, spring: OrbitThemeTransition.spring, in: root)
             } else {
                 spaceSwipePaintedTheme = nil
                 let fade = style == .crossfade ? OrbitTokens.Motion.reducedMotionCrossfade : nil
                 themeFill.apply(newTheme, fade: fade)
                 floatingBackdrop.fill.apply(newTheme, fade: fade)
             }
+        }
+        if themeMotionSource == nil {
+            let painted = spaceSwipePaintedTheme ?? theme
+            floatingBackdrop.foreground = OrbitSpaceThemes.accent(for: painted).foreground
+            onThemePaint?(painted)
         }
         window?.appearance = OrbitAppearance.windowAppearance(for: newTheme.mode)
         updateWindowBackground()
@@ -488,6 +494,8 @@ final class OrbitWindowShell {
         spaceSwipePaintedTheme = blend == nil ? nil : painted
         themeFill.applyInteractiveTheme(painted)
         floatingBackdrop.fill.applyInteractiveTheme(painted)
+        floatingBackdrop.foreground = OrbitSpaceThemes.accent(for: painted).foreground
+        onThemePaint?(painted)
         updateWindowBackground()
     }
 

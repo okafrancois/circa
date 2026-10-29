@@ -139,6 +139,7 @@ public struct BrowserSpaceTheme: Codable, Hashable, Sendable {
     }
 
     // Codable ignores retired surface/material fields in older themes.
+    public var paletteVersion: Int? = nil
     public var presetID: String?
     public var mode: Mode
     public var colors: [BrowserThemeColor]
@@ -197,6 +198,18 @@ extension BrowserSpaceTheme {
                                  light: Gradient(stops: light), dark: Gradient(stops: dark))
     }
 
+    /// New radial picks use calibrated fills. Existing records retain their baked variants.
+    public static func radial(colors: [BrowserThemeColor], intensity: Double = defaultIntensity, noise: Double = 0,
+                              mode: Mode = .automatic, presetID: String? = nil) -> BrowserSpaceTheme {
+        var result = composed(colors: colors, intensity: intensity, noise: noise, mode: mode, presetID: presetID)
+        guard !colors.isEmpty else { return result }
+        let stops = result.colors.map { BrowserRadialThemePalette.rendered($0, intensity: result.intensity, mode: mode) }
+        result.light = Gradient(stops: stops)
+        result.dark = Gradient(stops: stops)
+        result.paletteVersion = 2
+        return result
+    }
+
     public static func lightStop(for color: BrowserThemeColor, intensity: Double) -> BrowserThemeColor {
         let (h, s, b) = color.hsb
         return BrowserThemeColor(hue: h, saturation: s * 0.8 * intensity, brightness: b)
@@ -217,6 +230,16 @@ extension BrowserSpaceTheme {
             var theme = self.colors.isEmpty ? self : BrowserSpaceThemePresets.default
             theme.mode = mode
             return theme
+        }
+        if colors == self.colors, intensity == nil, paletteVersion != 2 || mode == self.mode {
+            var result = self
+            result.noise = noise ?? self.noise
+            result.mode = mode
+            return result
+        }
+        if paletteVersion == 2 {
+            return Self.radial(colors: colors, intensity: intensity ?? self.intensity, noise: noise ?? self.noise,
+                               mode: mode, presetID: colors == self.colors ? presetID : nil)
         }
         let result = Self.composed(colors: colors, intensity: intensity ?? self.intensity, noise: noise ?? self.noise,
                                    mode: mode, presetID: colors == self.colors ? presetID : nil)

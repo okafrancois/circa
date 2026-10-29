@@ -234,6 +234,8 @@ extension OrbitTokens {
             public func degrees(isDark: Bool) -> CGFloat { isDark ? dark : light }
         }
 
+        var foregroundOverride: NSColor? = nil
+        var meshCorners: [NSColor]? = nil
         public var stops: [NSColor]
         public var mode: Mode
         public var texture: Texture
@@ -300,6 +302,7 @@ extension OrbitTokens {
         public var sidebarText: NSColor
         var contrastTheme: SpaceTheme? = nil
 
+        public var foreground: NSColor { sidebarText }
         public var sidebarSecondaryText: NSColor { icon }
 
         /// Light panes retain the Space accent; dark panes use a blue focus outline.

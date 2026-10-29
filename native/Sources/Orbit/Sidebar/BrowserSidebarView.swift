@@ -689,6 +689,8 @@ final class BrowserSidebarView: NSView, SidebarListHost {
         footer.accent = accent
         page.accent = accent
         leavingPage?.accent = accent
+        swipePreview?.accent = accent
+        swipeOutgoing?.accent = accent
     }
 
     // MARK: Footer actions
@@ -757,9 +759,9 @@ final class BrowserSidebarView: NSView, SidebarListHost {
 final class SidebarSpacePageView: NSView, NSTextFieldDelegate, NSMenuDelegate {
     var isPrivate = false { didSet { if oldValue != isPrivate { needsLayout = true } } }
     var spaceID: SpaceID? { didSet { if spaceID != oldValue { cancelSpaceRename() }; list.spaceID = spaceID } }
-    private let scrollView = BrowserGestureScrollView()
+    let scrollView = BrowserGestureScrollView()
     let list = SidebarListView()
-    private let titleLabel = SidebarSpaceTitleLabel(labelWithString: "")
+    let titleLabel = SidebarSpaceTitleLabel(labelWithString: "")
     private let iconButton = OrbitGlyphButton(glyph: nil, label: uiText("Change Icon or Emoji…"))
     var iconSelection: BrowserSpaceIcon = .none {
         didSet {
@@ -783,8 +785,9 @@ final class SidebarSpacePageView: NSView, NSTextFieldDelegate, NSMenuDelegate {
     var canDeleteSpace = false { didSet { titleLabel.menu = titleMenu() } }
     var accent = OrbitTokens.ThemeAccent.defaultSpace {
         didSet {
-            titleLabel.textColor = OrbitTokens.Color.Text.sidebarLabel
+            titleLabel.textColor = accent.foreground
             list.accent = accent
+            scrollView.scrollerKnobStyle = OrbitThemeForeground.isLight(on: accent.foreground.resolved(for: effectiveAppearance)) ? .dark : .light
         }
     }
     var onRenameSpace: (() -> Void)?
@@ -807,7 +810,7 @@ final class SidebarSpacePageView: NSView, NSTextFieldDelegate, NSMenuDelegate {
         scrollView.documentView = list
         addSubview(scrollView)
         titleLabel.font = OrbitTokens.Typography.sidebarSpaceTitle
-        titleLabel.textColor = OrbitTokens.Color.Text.sidebarLabel
+        titleLabel.textColor = accent.foreground
         titleLabel.lineBreakMode = .byTruncatingTail
         titleLabel.maximumNumberOfLines = 1
         titleLabel.menu = titleMenu()
@@ -848,7 +851,7 @@ final class SidebarSpacePageView: NSView, NSTextFieldDelegate, NSMenuDelegate {
         list.cancelRename()
         let editor = NSTextField(string: titleLabel.stringValue)
         editor.font = titleLabel.font
-        editor.textColor = OrbitTokens.Color.Text.primary
+        editor.textColor = accent.foreground
         editor.isBordered = false
         editor.drawsBackground = false
         editor.focusRingType = .none
@@ -997,7 +1000,10 @@ final class SidebarToolbarRow: SidebarFlippedView {
 
     private func applyAccent(to button: NSButton) {
         let effective = OrbitSpaceThemes.accent(accent, over: [], iconHover: OrbitTokens.Color.State.standaloneButton)
-        if let glyph = button as? OrbitGlyphButton { glyph.tint = effective.icon }
+        if let glyph = button as? OrbitGlyphButton {
+            glyph.tint = effective.icon
+            glyph.disabledTint = effective.foreground.withAlphaComponent(0.25)
+        }
         else { button.contentTintColor = effective.icon }
     }
     private var overflowTarget: OrbitMenuButtonTarget?
@@ -1148,7 +1154,7 @@ final class SidebarAddressField: SidebarFlippedView {
         accessories.filter { !$0.isHidden }.reduce(0) { $0 + $1.fittingSize.width }
     }
 
-    /// Trailing icons use neutral secondary grey; AppKit retains disabled-state rendering.
+    /// Trailing icons consume the same theme foreground as the URL text.
     func installAccessory(_ view: NSView, onHover: Bool = false, order: Int = 0) {
         if let button = view as? NSButton, button.image != nil {
             if view.accessibilityIdentifier() != "site-controls" {
@@ -1169,9 +1175,10 @@ final class SidebarAddressField: SidebarFlippedView {
 
     private func applyAccessoryAccent(_ view: NSView) {
         if let button = view as? OrbitGlyphButton {
-            button.tint = OrbitTokens.Color.Text.secondary
+            button.tint = accent.contrastTheme == nil ? OrbitTokens.Color.Text.secondary : effectiveAccent.foreground
+            if accent.contrastTheme != nil { button.disabledTint = effectiveAccent.foreground.withAlphaComponent(0.25) }
         } else if let button = view as? NSButton {
-            button.contentTintColor = button.image == nil ? effectiveAccent.sidebarSecondaryText : OrbitTokens.Color.Text.secondary
+            button.contentTintColor = accent.contrastTheme == nil ? (button.image == nil ? accent.sidebarSecondaryText : OrbitTokens.Color.Text.secondary) : effectiveAccent.foreground
         }
     }
 
@@ -1492,7 +1499,7 @@ extension BrowserSidebarView {
                 let iconChanged = incoming.iconSelection != icon
                 if iconChanged { prepared?.pageRaster?.restore() }
                 incoming.iconSelection = icon
-                let nextAccent = destinationAccent ?? accent
+                let nextAccent = accent.contrastTheme == nil ? (destinationAccent ?? accent) : accent
                 if incoming.accent != nextAccent { incoming.accent = nextAccent }
                 if prepared == nil {
                     incoming.geometry = geometry

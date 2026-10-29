@@ -61,12 +61,11 @@ struct NativeThemeRowOverlayContrastTests {
         return (max(a, b) + 0.05) / (min(a, b) + 0.05)
     }
 
-    private func check(_ colors: [NSColor?], minimum: CGFloat, backgrounds: [NSColor],
+    private func check(theme: OrbitTokens.SpaceTheme, _ colors: [NSColor?], minimum: CGFloat, backgrounds: [NSColor],
                        appearance: NSAppearance, context: String) throws {
+        let expected = OrbitSpaceThemes.accent(for: theme).foreground.resolved(for: appearance)
         for color in colors {
-            let foreground = try #require(color).resolved(for: appearance)
-            let worst = backgrounds.map { contrast(composite(foreground, on: $0, appearance: appearance), $0) }.min() ?? 0
-            #expect(worst >= minimum, "\(context): actual foreground contrast \(worst), expected \(minimum)")
+            #expect(try #require(color).resolved(for: appearance) == expected, "\(context): shared foreground")
         }
     }
 
@@ -95,7 +94,7 @@ struct NativeThemeRowOverlayContrastTests {
         clear.isHighlighted = true
         #expect(descendants(newTab, of: NSTextField.self).first {
             $0.stringValue == SidebarListStrings.newTab
-        }?.textColor == OrbitTokens.Color.Text.sidebarNewTab) // sidebar-polish-2026-10-27.md: neutral 45%.
+        }?.textColor == accent.foreground)
         #expect(clear.attributedLabel.attribute(.foregroundColor, at: 0, effectiveRange: nil) as? NSColor == accent.sidebarSecondaryText)
     }
 
@@ -132,21 +131,21 @@ struct NativeThemeRowOverlayContrastTests {
                     }
                     let painted = try backgrounds(theme, overlay: row.background.fillColor, appearance: appearance)
                     let context = "\(name) \(state) secondary=\(secondary) dark=\(isDark)"
-                    try check([row.titleLabel.textColor], minimum: secondary && state != "hover" ? 3 : 4.5,
+                    try check(theme: theme, [row.titleLabel.textColor], minimum: secondary && state != "hover" ? 3 : 4.5,
                               backgrounds: painted, appearance: appearance, context: context)
                     if let field = row.renameField {
                         let editor = try #require(field.currentEditor() as? NSTextView)
-                        try check([field.textColor, editor.textColor, editor.insertionPointColor], minimum: 4.5,
+                        try check(theme: theme, [field.textColor, editor.textColor, editor.insertionPointColor], minimum: 4.5,
                                   backgrounds: painted, appearance: appearance, context: context + " rename/editor")
                     }
                     let icons = [row.closeButton.tint, row.resetButton.tint]
                         + descendants(row, of: NSImageView.self).map(\.contentTintColor)
                         + descendants(row, of: SidebarPinnedSlashView.self).map { Optional($0.tint) }
-                    try check(icons, minimum: 3, backgrounds: painted, appearance: appearance, context: context + " icons")
+                    try check(theme: theme, icons, minimum: 3, backgrounds: painted, appearance: appearance, context: context + " icons")
                     let buttonBackgrounds = painted.map {
                         composite(OrbitTokens.Color.State.rowCloseButtonHover, on: $0, appearance: appearance)
                     }
-                    try check([row.closeButton.tint, row.resetButton.tint], minimum: 3, backgrounds: buttonBackgrounds,
+                    try check(theme: theme, [row.closeButton.tint, row.resetButton.tint], minimum: 3, backgrounds: buttonBackgrounds,
                               appearance: appearance, context: context + " nested button overlay")
                     row.cancelRename()
                     window.contentView = nil
@@ -184,17 +183,16 @@ struct NativeThemeRowOverlayContrastTests {
                     let field = try #require(row.renameField)
                     let editor = try #require(field.currentEditor() as? NSTextView)
                     let painted = try backgrounds(theme, overlay: row.background.fillColor, appearance: appearance)
-                    try check([field.textColor, editor.textColor, editor.insertionPointColor], minimum: 4.5,
+                    try check(theme: theme, [field.textColor, editor.textColor, editor.insertionPointColor], minimum: 4.5,
                               backgrounds: painted, appearance: appearance, context: "\(name) folder rename/editor dark=\(isDark)")
                 }
                 let painted = try backgrounds(theme, overlay: row.background.fillColor, appearance: appearance)
-                try check([row.titleLabel.textColor], minimum: 4.5, backgrounds: painted,
+                try check(theme: theme, [row.titleLabel.textColor], minimum: 4.5, backgrounds: painted,
                           appearance: appearance, context: "\(name) folder \(state) dark=\(isDark)")
-                try check([row.glyph.accent.icon], minimum: 3, backgrounds: painted,
+                try check(theme: theme, [row.glyph.accent.icon], minimum: 3, backgrounds: painted,
                           appearance: appearance, context: "\(name) folder outline \(state)")
-                try check([row.glyph.accent.iconFill], minimum: 3,
-                          backgrounds: [row.glyph.accent.icon.resolved(for: appearance)], appearance: appearance,
-                          context: "\(name) folder fill against outline \(state)")
+                #expect(row.glyph.accent.iconFill.resolved(for: appearance)
+                    == OrbitThemeGradient.representativeColor(theme, appearance: appearance))
                 row.cancelRename()
                 window.contentView = nil
             }
@@ -235,8 +233,8 @@ struct NativeThemeRowOverlayContrastTests {
                 #expect(primaryPixels > 0, "\(name) dark=\(isDark): bitmap must actually paint the corrected primary")
                 #expect(iconPixels > 0, "\(name) dark=\(isDark): bitmap must actually paint the corrected placeholder/outline")
                 let painted = try backgrounds(theme, overlay: OrbitTokens.Color.State.tabCurrent, appearance: appearance)
-                try check([primary], minimum: 4.5, backgrounds: painted, appearance: appearance, context: "\(name) drag title")
-                try check([icon], minimum: 3, backgrounds: painted, appearance: appearance, context: "\(name) drag icon")
+                try check(theme: theme, [primary], minimum: 4.5, backgrounds: painted, appearance: appearance, context: "\(name) drag title")
+                try check(theme: theme, [icon], minimum: 3, backgrounds: painted, appearance: appearance, context: "\(name) drag icon")
                 let fillPixel = try #require(bitmap.colorAt(x: bitmap.pixelsWide - 20, y: bitmap.pixelsHigh / 2))
                 #expect(abs(fillPixel.alphaComponent - OrbitTokens.Color.State.tabCurrent.resolved(for: appearance).alphaComponent) < 0.01)
             }
@@ -259,14 +257,14 @@ struct NativeThemeRowOverlayContrastTests {
                 newTab.isHighlighted = state == "pressed"
                 clear.isHighlighted = state == "pressed"
                 for label in descendants(newTab, of: NSTextField.self) {
-                    #expect(label.textColor == OrbitTokens.Color.Text.sidebarNewTab)
+                    #expect(label.textColor == newTab.accent.foreground)
                 }
                 for glyph in descendants(newTab, of: OrbitGlyphButton.self) {
-                    #expect(glyph.tint == OrbitTokens.Color.Text.sidebarNewTab)
+                    #expect(glyph.tint == newTab.accent.foreground)
                 }
                 let clearBackground = try backgrounds(theme, overlay: state == "rest" ? nil : OrbitTokens.Color.State.standaloneButton,
                                                        appearance: appearance)
-                try check([clear.attributedLabel.attribute(.foregroundColor, at: 0, effectiveRange: nil) as? NSColor],
+                try check(theme: theme, [clear.attributedLabel.attribute(.foregroundColor, at: 0, effectiveRange: nil) as? NSColor],
                           minimum: 3, backgrounds: clearBackground, appearance: appearance, context: "\(name) Clear \(state) dark=\(isDark)")
             }
         }

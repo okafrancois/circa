@@ -5,6 +5,7 @@ import QuartzCore
 final class OrbitThemeFillView: NSView {
     private let host = CALayer()
     private let gradient = CAGradientLayer()
+    private let mesh = CALayer()
     private let grain = OrbitGrainLayer()
     private(set) var theme: OrbitTokens.SpaceTheme = .default
     var grainNeedsDisplay: Bool { grain.needsDisplay() }
@@ -17,6 +18,7 @@ final class OrbitThemeFillView: NSView {
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         host.addSublayer(gradient)
+        host.addSublayer(mesh)
         host.addSublayer(grain)
         wantsLayer = true
         layer?.addSublayer(host)
@@ -50,6 +52,7 @@ final class OrbitThemeFillView: NSView {
         CATransaction.setDisableActions(true)
         host.frame = bounds
         gradient.frame = fill
+        mesh.frame = fill
         applyEndpoints()
         grain.frame = host.bounds
         CATransaction.commit()
@@ -113,10 +116,35 @@ final class OrbitThemeFillView: NSView {
         apply(newTheme, fade: nil)
     }
 
+    static func meshImage(_ colors: [NSColor]) -> CGImage? {
+        let side = 64
+        let c = colors.map { [$0.redComponent, $0.greenComponent, $0.blueComponent] }
+        var bytes = [UInt8](repeating: 255, count: side * side * 4)
+        for y in 0..<side {
+            for x in 0..<side {
+                let u = CGFloat(x) / CGFloat(side - 1), v = CGFloat(y) / CGFloat(side - 1)
+                for channel in 0..<3 {
+                    let top = c[0][channel] * (1 - u) + c[1][channel] * u
+                    let bottom = c[2][channel] * (1 - u) + c[3][channel] * u
+                    bytes[(y * side + x) * 4 + channel] = UInt8((min(1, max(0, top * (1 - v) + bottom * v)) * 255).rounded())
+                }
+            }
+        }
+        guard let provider = CGDataProvider(data: Data(bytes) as CFData), let space = CGColorSpace(name: CGColorSpace.sRGB) else { return nil }
+        return CGImage(width: side, height: side, bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: side * 4,
+                       space: space, bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue),
+                       provider: provider, decode: nil, shouldInterpolate: true, intent: .defaultIntent)
+    }
+
     private func refreshColors() {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         gradient.colors = resolvedStops
+        gradient.isHidden = theme.meshCorners != nil
+        mesh.isHidden = theme.meshCorners == nil
+        if let corners = theme.meshCorners {
+            mesh.contents = Self.meshImage(corners.map { $0.resolved(for: effectiveAppearance) })
+        } else { mesh.contents = nil }
         applyEndpoints()
         // The tiled grain does not depend on the colours: redrawing this full-window CPU layer
         // on every swipe frame is wasted work. Bounds and backing-scale changes redraw it separately.
@@ -209,6 +237,7 @@ final class OrbitFloatingSidebarBackdrop: NSView {
     private let dim = CALayer()
     private let edge = CAShapeLayer()
     private let observers = OrbitWorkspaceObservers()
+    var foreground: NSColor = OrbitTokens.Color.Text.primary { didSet { refreshColors() } }
     var cornerRadius: CGFloat = OrbitTokens.Radius.floatingSidebar { didSet { needsLayout = true } }
 
     override init(frame frameRect: NSRect) {
@@ -265,7 +294,7 @@ final class OrbitFloatingSidebarBackdrop: NSView {
     private func refreshColors() {
         guard let layer else { return }
         OrbitTokens.Shadow.floatingSidebar.apply(to: layer, appearance: effectiveAppearance)
-        edge.strokeColor = (NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast ? NSColor.labelColor : OrbitTokens.Color.Line.sidebarBorder)
+        edge.strokeColor = foreground.withAlphaComponent(0.12)
             .resolvedCGColor(for: effectiveAppearance)
         needsLayout = true
         dim.backgroundColor = OrbitTokens.Color.State.floatingSidebarDim.resolvedCGColor(for: effectiveAppearance)
