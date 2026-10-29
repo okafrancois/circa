@@ -252,25 +252,56 @@ enum OrbitRelaunchScenarios {
         if archiveRoundTrip, let window = windows.first(where: { $0.session.activeSplit != nil }),
            let organization = window.session.organization {
             let before = await environment.store.sessionDocument().organization
+            let selected = organization.selectedTab?.id
+            func checkArchiveSelection(_ step: String) async {
+                let ready = await until {
+                    windows.allSatisfy { candidate in
+                        guard candidate.session.organization?.allTabs.isEmpty == false else { return true }
+                        return candidate.session.snapshot?.selectedOccurrenceID != nil
+                            && candidate.session.selectedSurface?.isReady == true
+                            && candidate.session.selectedSurface?.navigationState.isLoading == false
+                            && candidate.session.selectedSurface?.navigationState.committedURL == candidate.session.organization?.selectedTab?.url
+                            && candidate.session.selectedSurface?.tabIdentity?.isHosted == true
+                    } && engine.holdingWindowTabCount == 0
+                }
+                check("archive-selection-" + step, ready)
+            }
             let ids = organization.allTabs.filter { tab in
                 if case .favorites = tab.section { return false }
                 return true
             }.map(\.id)
             window.session.archiveTabs(ids)
             await window.session.waitForPendingCommands()
+            await checkArchiveSelection("archived")
             let records = await window.session.archivedTabs().value
             check("archive-identities", Set(records.map(\.id)).isSuperset(of: ids))
-            for id in ids { window.session.restoreArchivedTab(id, activate: false) }
-            await window.session.waitForPendingCommands()
+            for (index, id) in ids.enumerated() {
+                window.session.restoreArchivedTab(id, activate: false)
+                await window.session.waitForPendingCommands()
+                check("archive-insertion-\(index)", window.session.organization?.today.first?.node == .tab(id))
+                await checkArchiveSelection("restored-\(index)")
+            }
             let reopened = await environment.store.sessionDocument().organization
             check("archive-reopen-titles", ids.allSatisfy { id in
                 reopened.tabs.first { $0.id == id }?.customTitle == before.tabs.first { $0.id == id }?.customTitle
                     && reopened.tabs.first { $0.id == id }?.url == before.tabs.first { $0.id == id }?.url
             })
-            for _ in 0...ids.count { _ = await window.session.undoOrganization().value }
+            for index in 0...ids.count {
+                check("archive-replay-\(index)", await window.session.undoOrganization().value != nil)
+                await checkArchiveSelection("undo-\(index)")
+            }
             await window.session.waitForPendingCommands()
             let undone = await environment.store.sessionDocument().organization
             check("archive-undo-layout", undone.spaces == before.spaces && undone.folders == before.folders && undone.splits == before.splits)
+            check("archive-undo-selection", selected != nil && window.session.organization?.selectedTab?.id == selected)
+            check("archive-undo-split-documents", await until {
+                guard let group = window.session.activeSplit, group.tabs.count == 2 else { return false }
+                return group.tabs.allSatisfy { tab in
+                    guard let occurrence = tab.occurrenceID, let surface = window.session.surface(for: occurrence) else { return false }
+                    return surface.isReady && !surface.navigationState.isLoading
+                        && surface.navigationState.committedURL == tab.url && surface.tabIdentity?.isHosted == true
+                }
+            })
         }
         check(archiveRoundTrip ? "archive-undo-hosted" : "hosted",
               await until { windows.allSatisfy { $0.session.selectedSurface?.tabIdentity?.isHosted == true }

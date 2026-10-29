@@ -113,6 +113,9 @@ struct WindowRecord {
     var activeSpaceID: SpaceID
     var selectedOccurrenceBySpace: [SpaceID: TabOccurrenceID] = [:]
     var occurrenceIDsBySpace: [SpaceID: [TabOccurrenceID]] = [:]
+    /// Pages loaded only to fill an archive-selection gap may be retired by its undo. Explicit
+    /// selection claims them normally; this transient provenance is never persisted.
+    var organizationFallbackOccurrences: Set<TabOccurrenceID> = []
     var placement: BrowserWindowPlacement?
     var revision: UInt64 = 0
     /// Consecutive revisions produced only by reconciling this window's occurrences after an
@@ -449,13 +452,30 @@ public actor BrowserStore {
         guard tab.windowID == windowID, tab.spaceID == window.activeSpaceID else {
             throw BrowserStoreError.occurrenceOwnedByAnotherWindow
         }
-        guard window.selectedOccurrenceBySpace[window.activeSpaceID] != occurrenceID else { ensureVisibleSplitOccurrences(in: windowID); return }
+        let visibleTabs: Set<TabID>
+        if case let .split(id)? = organization.container(of: .tab(tab.id)), let group = organization.splits[id] {
+            visibleTabs = Set(group.tabIDs)
+        } else {
+            visibleTabs = [tab.id]
+        }
+        let claimed = window.organizationFallbackOccurrences.filter { id in
+            tabs[id].map { visibleTabs.contains($0.id) } == true
+        }
+        let claimedFallback = !claimed.isEmpty
+        window.organizationFallbackOccurrences.subtract(claimed)
+        windows[windowID] = window
+        guard window.selectedOccurrenceBySpace[window.activeSpaceID] != occurrenceID else {
+            ensureVisibleSplitOccurrences(in: windowID)
+            if claimedFallback { publishOrganizationChange() }
+            return
+        }
         markViewed(window)
         window.selectedOccurrenceBySpace[window.activeSpaceID] = occurrenceID
         window.revision &+= 1
         windows[windowID] = window
         markViewed(window)
         ensureVisibleSplitOccurrences(in: windowID)
+        if claimedFallback { publishOrganizationChange() }
     }
 
     /// Applies a queued selection only while its captured window/Space authority is current.
