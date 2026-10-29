@@ -48,4 +48,29 @@ struct UIWorkTests {
         row.update(item, depth: 0)
         #expect(row.audioButton.glyph !== audio)
     }
+    @Test("Split rows skip unchanged presentations and clear transient state before reuse")
+    func splitReuse() {
+        let node = BrowserOrganizationNode.split(SplitGroupID())
+        let item = SidebarTabItem(id: TabID(), title: "Split", selected: true,
+            splitPanes: [.init(title: "Left", favicon: nil), .init(title: "Right", favicon: nil)])
+        let row = SidebarSplitRow(item: item, node: node, depth: 0)
+        row.frame = NSRect(x: 0, y: 0, width: 260, height: 36)
+        row.layoutSubtreeIfNeeded()
+        OrbitUIWorkCounters.enabled = true
+        defer { OrbitUIWorkCounters.enabled = false; OrbitUIWorkCounters.reset() }
+        OrbitUIWorkCounters.reset()
+        for _ in 0..<600 { row.updateSplit(item, node: node, depth: 0) }
+        #expect(OrbitUIWorkCounters.values["splitUpdate", default: 0] == 0)
+        row.mouseEntered(with: NSEvent())
+        row.isPressed = true
+        row.beginRename(text: item.title, font: OrbitTokens.Typography.sidebarTabTitle)
+        row.resetForReuse()
+        #expect(!row.isHovering && !row.isPressed && !row.isRenaming)
+        #expect(row.paneCells.allSatisfy { $0.isHidden && $0.label.stringValue.isEmpty && $0.icon.image == nil })
+        row.updateSplit(item, node: .split(SplitGroupID()), depth: 1)
+        #expect(row.depth == 1 && row.paneCells.count == 2)
+        #expect(row.paneCells.map { $0.label.stringValue } == ["Left", "Right"])
+        #expect(row.paneCells.allSatisfy { !$0.isHidden })
+    }
+
 }

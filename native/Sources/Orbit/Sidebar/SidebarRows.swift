@@ -500,6 +500,14 @@ class SidebarTabRow: SidebarListRow {
 @MainActor
 final class SidebarSplitRow: SidebarTabRow {
     private(set) var paneCells: [SidebarSplitPaneCell] = []
+    private var presented: Presentation?
+    private var presentedAppearance: NSAppearance.Name?
+    var splitAppearanceChanged: Bool { presentedAppearance != effectiveAppearance.name }
+    private struct Presentation: Equatable {
+        let item: SidebarTabItem
+        let node: BrowserOrganizationNode
+        let depth: Int
+    }
 
     init(item: SidebarTabItem, node: BrowserOrganizationNode, depth: Int) {
         OrbitUIWorkCounters.record("splitAllocation")
@@ -509,6 +517,10 @@ final class SidebarSplitRow: SidebarTabRow {
     required init?(coder: NSCoder) { nil }
 
     func updateSplit(_ item: SidebarTabItem, node: BrowserOrganizationNode, depth: Int) {
+        let next = Presentation(item: item, node: node, depth: depth)
+        guard presented != next || splitAppearanceChanged else { return }
+        presented = next
+        presentedAppearance = effectiveAppearance.name
         OrbitUIWorkCounters.record("splitUpdate")
         update(item, depth: depth, node: node)
         let members = item.selected && (2...3).contains(item.splitPanes.count) ? item.splitPanes : []
@@ -518,8 +530,22 @@ final class SidebarSplitRow: SidebarTabRow {
             paneCells = members.map { _ in SidebarSplitPaneCell(frame: .zero) }
             paneCells.forEach { addSubview($0, positioned: .below, relativeTo: closeButton) }
         }
-        for (cell, member) in zip(paneCells, members) { cell.present(member, accent: effectiveAccent) }
+        for (cell, member) in zip(paneCells, members) {
+            cell.isHidden = false
+            cell.present(member, accent: effectiveAccent)
+        }
         needsLayout = true
+    }
+
+    override func resetForReuse() {
+        super.resetForReuse()
+        presented = nil
+        for cell in paneCells {
+            cell.isHidden = true
+            cell.icon.image = nil
+            cell.label.stringValue = ""
+            cell.trailingInset = 4
+        }
     }
 
     override func accentDidChange() {
@@ -546,7 +572,7 @@ final class SidebarSplitRow: SidebarTabRow {
 final class SidebarSplitPaneCell: NSView {
     let icon = NSImageView()
     let label = NSTextField(labelWithString: "")
-    var trailingInset: CGFloat = 4 { didSet { needsLayout = true } }
+    var trailingInset: CGFloat = 4 { didSet { if trailingInset != oldValue { needsLayout = true } } }
     override var isFlipped: Bool { true }
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
 
