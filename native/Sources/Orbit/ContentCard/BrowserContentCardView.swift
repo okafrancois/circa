@@ -169,7 +169,7 @@ final class BrowserContentCardView: NSView {
     /// Presents an engine host view edge to edge, or the empty state for nil.
     /// Presenting the view already displayed does nothing, so the document is never reloaded.
     func present(_ view: NSView?, isSplit: Bool = false, retainingPreviousUntil capture: Task<Void, Never>? = nil,
-                 holdingPreviousUntil paint: Task<Void, Never>? = nil) {
+                 holdingPreviousUntil paint: Task<Bool, Never>? = nil) {
         let mayHold = !isPresentingSplit && !isSplit && view != nil && !returningToHeldPage
         returningToHeldPage = false
         isPresentingSplit = isSplit
@@ -224,7 +224,7 @@ final class BrowserContentCardView: NSView {
                 guard let self, self.paintHoldToken == token else { return }
                 self.retirePaintHold()
             }
-            Task { await paint.value; retire() }
+            Task { if await paint.value { retire() } }
             schedulePaintRetirement(retire)
         }
         if let headerView { clip.addSubview(headerView, positioned: .above, relativeTo: nil) }

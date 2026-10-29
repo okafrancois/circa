@@ -235,7 +235,8 @@ public protocol BrowserEngineSurface: BrowserFindSurface {
     /// Optional, bounded activation paint opportunity after the host is attached. This is a
     /// readiness barrier for retaining outgoing pixels, not a guarantee of display scanout.
     /// Nil keeps the engine's ordinary presentation path. Never reloads or captures a page.
-    func activationPaintBarrier() -> Task<Void, Never>?
+    /// Only true permits early retirement; false leaves the independent timeout in charge.
+    func activationPaintBarrier() -> Task<Bool, Never>?
 
     /// Applies the zoom policy of the engine. Engines without `nativeSiteZoom` scope the factor
     /// to the profile and host inside the adapter.
@@ -291,7 +292,7 @@ public protocol BrowserEngineSurface: BrowserFindSurface {
 
 public extension BrowserEngineSurface {
     var pagePerformance: (any BrowserPagePerformance)? { nil }
-    func activationPaintBarrier() -> Task<Void, Never>? { nil }
+    func activationPaintBarrier() -> Task<Bool, Never>? { nil }
     var passwordPrompts: (any BrowserPasswordPromptSource)? { nil }
     func setPageTintObservationEnabled(_ enabled: Bool) {}
     func reloadIgnoringCache() throws { throw BrowserEngineError.unsupportedOperation }

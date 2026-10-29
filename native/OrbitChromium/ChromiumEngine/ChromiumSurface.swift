@@ -11,21 +11,35 @@ import OSLog
 final class ChromiumHostView: NSView {
     weak var surface: ChromiumSurface?
     var linkActivation: (point: NSPoint, timestamp: TimeInterval, generation: UInt64)?
+    private(set) var paintGeometryGeneration: UInt64 = 0
     private static let signposter = OSSignposter(subsystem: "local.orbit", category: "chromium-layout")
+
+    override func viewDidChangeBackingProperties() {
+        super.viewDidChangeBackingProperties()
+        paintGeometryGeneration &+= 1
+    }
+
+    override func viewDidMoveToSuperview() {
+        super.viewDidMoveToSuperview()
+        paintGeometryGeneration &+= 1
+    }
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
+        paintGeometryGeneration &+= 1
         if window != nil, !isHiddenOrHasHiddenAncestor { surface?.hostViewDidBecomeVisible() }
         else { surface?.hostDidChange(hidden: true) }
     }
 
     override func viewDidHide() {
         super.viewDidHide()
+        paintGeometryGeneration &+= 1
         surface?.hostDidChange(hidden: true)
     }
 
     override func viewDidUnhide() {
         super.viewDidUnhide()
+        paintGeometryGeneration &+= 1
         if window != nil { surface?.hostViewDidBecomeVisible() }
     }
 
@@ -38,6 +52,26 @@ final class ChromiumHostView: NSView {
 
     override func resizeSubviews(withOldSize oldSize: NSSize) {
         fitContent()
+    }
+
+    override func setFrameOrigin(_ newOrigin: NSPoint) {
+        if newOrigin != frame.origin { paintGeometryGeneration &+= 1 }
+        super.setFrameOrigin(newOrigin)
+    }
+
+    override func setFrameSize(_ newSize: NSSize) {
+        if newSize != frame.size { paintGeometryGeneration &+= 1 }
+        super.setFrameSize(newSize)
+    }
+
+    override func setBoundsOrigin(_ newOrigin: NSPoint) {
+        if newOrigin != bounds.origin { paintGeometryGeneration &+= 1 }
+        super.setBoundsOrigin(newOrigin)
+    }
+
+    override func setBoundsSize(_ newSize: NSSize) {
+        if newSize != bounds.size { paintGeometryGeneration &+= 1 }
+        super.setBoundsSize(newSize)
     }
 
     override func didAddSubview(_ subview: NSView) {
@@ -118,6 +152,7 @@ public final class ChromiumSurface: BrowserEngineSurface {
     public var onEngineEvent: ((String, [String: String]) -> Void)?
 
     public private(set) var isDisposed = false
+    private var paintActivationID: UInt64 = 0
     private lazy var nativePerformance = ChromiumPagePerformance(token: token)
     public var pagePerformance: (any BrowserPagePerformance)? {
         guard !isDisposed, ACRPagePerformanceAvailable() == 1 else { return nil }
@@ -370,18 +405,27 @@ public final class ChromiumSurface: BrowserEngineSurface {
         return true
     }
 
-    /// A bounded renderer opportunity for live-tab paint holding; never a scanout signal.
-    public func activationPaintBarrier() -> Task<Void, Never>? {
-        guard isBrowserCreated, !isDisposed, !isSuspended, !state.isLoading else { return nil }
+    /// A submitted main-frame barrier for live-tab paint holding; never a scanout signal.
+    public func activationPaintBarrier() -> Task<Bool, Never>? {
+        guard isBrowserCreated, !isDisposed, !isSuspended, !state.isLoading,
+              let performance = pagePerformance else { return nil }
+        paintActivationID &+= 1
+        if paintActivationID == 0 { paintActivationID = 1 }
+        let activationID = paintActivationID
         let generation = documentGeneration
         return Task { [weak self] in
-            guard let self, !Task.isCancelled, self.documentGeneration == generation,
-                  self.hostView.window != nil else { return }
-            // r10 has no presentation feedback callback. Two renderer frame opportunities
-            // allow its retained surface to arrive; the shell independently caps the hold.
-            _ = await self.devToolsCall("Runtime.evaluate", params:
-                #"{"expression":"new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(()=>r(true))))","awaitPromise":true,"returnByValue":true}"#,
-                timeout: .milliseconds(150))
+            // This task runs after the synchronous card placement and native visibility /
+            // logical-tab activation. Finish layout before registering against that geometry.
+            guard let self, let host = self.hostView as? ChromiumHostView else { return false }
+            host.window?.contentView?.layoutSubtreeIfNeeded()
+            let geometry = host.paintGeometryGeneration
+            return await BrowserActivationPaintBarrier.wait(performance: performance, host: host,
+                browserID: self.browserID, activationID: activationID) { [weak self] in
+                    guard let self else { return false }
+                    return !self.isDisposed && !self.isSuspended && !self.state.isLoading
+                        && self.documentGeneration == generation && self.paintActivationID == activationID
+                        && host.paintGeometryGeneration == geometry
+                }
         }
     }
 
