@@ -6,6 +6,6 @@ The Chromium product uses `OrbitChromium/CMakeLists.txt`, the bridge and adapter
 
 See [build instructions](../docs/release/building.md) and [architecture](../docs/native-port/orbit-architecture.md). Existing historical README files in engine subdirectories describe individual development targets, not public installation instructions.
 
-Tests contain synthetic profiles, URLs and credentials. Automatic tests must use synthetic roots and a mock Keychain; do not point them at an existing browser profile. Full Swift test runs on a shared development host should be serialized with `/usr/bin/lockf -k /tmp/arcy-native-full-suite.lock swift test --package-path native`.
+Tests contain synthetic profiles, URLs and credentials. Automatic tests must use synthetic roots and a mock Keychain; do not point them at an existing browser profile. Full Swift test runs on a shared development host should be serialized with `/usr/bin/lockf -k /tmp/orbit-native-full-suite.lock swift test --package-path native`.
 
 Public repository hygiene is checked by the full Swift suite. Run it directly before committing with `python3 scripts/check-public-hygiene.py`.

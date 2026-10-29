@@ -93,7 +93,7 @@ def main():
     worker = threading.Thread(target=server.serve_forever, daemon=True)
     worker.start()
     try:
-        subprocess.run(['/usr/bin/lockf', '-k', '/tmp/arcy-gui-slot.lock', 'python3', __file__,
+        subprocess.run(['/usr/bin/lockf', '-k', '/tmp/orbit-gui-slot.lock', 'python3', __file__,
                         '--app', str(args.app.resolve()), '--output', str(root), '--phase',
                         '--port', str(server.server_port)], check=True)
     finally:

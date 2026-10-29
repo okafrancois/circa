@@ -235,7 +235,7 @@ def main():
             state["phase"], state["offer"] = name, 2 if name == "startup" else 1
             if name in ("baseline", "manual"):
                 seed(root, state["id"], manifests[1], profile_id, name)
-            subprocess.run(["/usr/bin/lockf", "-k", "/tmp/arcy-gui-slot.lock", sys.executable, str(Path(__file__).resolve()),
+            subprocess.run(["/usr/bin/lockf", "-k", "/tmp/orbit-gui-slot.lock", sys.executable, str(Path(__file__).resolve()),
                             "--app", str(args.app), "--output", str(root), "--phase", name, "--port", str(port)], check=True)
             if name == "seed":
                 results = json.loads((root / "seed/results.json").read_text())

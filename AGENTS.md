@@ -10,7 +10,7 @@ Orbit is a native macOS browser: Swift/AppKit shell (`native/Sources/Orbit`) on 
 
 ## Building and testing
 - Targeted tests: `swift test --package-path native --scratch-path <path owned by your worktree> --filter <Suite>`. Always add `LocalizationTests` to the filter: it checks every new user-facing string and literal.
-- Full suite: always behind the shared lock, `/usr/bin/lockf -k /tmp/arcy-native-full-suite.lock swift test --package-path native --scratch-path <path> --jobs 6`. A timeout in an unrelated test is rerun in isolation before blaming the lot.
+- Full suite: always behind the shared lock, `/usr/bin/lockf -k /tmp/orbit-native-full-suite.lock swift test --package-path native --scratch-path <path> --jobs 6`. A timeout in an unrelated test is rerun in isolation before blaming the lot.
 - Product: `CMAKE_BUILD_PARALLEL_LEVEL=4 python3 scripts/orbit-chromium-app.py build`. The prebuilt engine lives in `.tools/chromium-fork/distrib/` (not in Git); do not rebuild it unless the brief says so.
 - Synthetic bundle for GUI checks: `python3 scripts/orbit-app.py build --synthetic`. It must never start outside its synthetic data root.
 
@@ -20,7 +20,7 @@ Orbit is a native macOS browser: Swift/AppKit shell (`native/Sources/Orbit`) on 
 - The PM removes the whole worktree after merging; never leave large outputs there.
 
 ## GUI runs
-- Take the GUI slot with `/usr/bin/lockf -k /tmp/arcy-gui-slot.lock`, at most 60 s per session.
+- Take the GUI slot with `/usr/bin/lockf -k /tmp/orbit-gui-slot.lock`, at most 60 s per session.
 - The keyboard layout is French (AZERTY): send shortcuts by character (`osascript … keystroke "a" using command down`), never as US physical keys.
 - Never install anything in `/Applications` or `~/Applications`. After a GUI run, remove what the test bundle left: `lsregister -u`, `defaults delete <test id>`, `tccutil reset All <test id>`, test Keychain items.
 
