@@ -116,6 +116,8 @@ enum OrbitPerformanceProbe {
                     }
                     result["reenabledCycles"] = cycles
                     await scheduler.prepareForTermination()
+                } else if name == "mainthread" {
+                    result["mainthread"] = await mainthread(owner, command: command, root: root)
                 } else if name == "benchmark" {
                     result["benchmark"] = await benchmark(owner, command: command, store: environment.store)
                 } else if name == "url-pill-fixture" {
@@ -617,5 +619,145 @@ private final class OrbitPerformanceFrameCounter: NSObject {
     @objc func step(_ link: CADisplayLink) {
         targets.append(link.targetTimestamp * 1000)
         callbacks.append(ProcessInfo.processInfo.systemUptime * 1000)
+    }
+}
+
+extension OrbitPerformanceProbe {
+    private static func threadCPU() -> Double {
+        var time = timespec()
+        clock_gettime(CLOCK_THREAD_CPUTIME_ID, &time)
+        return Double(time.tv_sec) + Double(time.tv_nsec) / 1e9
+    }
+
+    private static func mainthread(_ owner: OrbitWindowController, command: [String: String], root: URL) async -> [String: Any] {
+        guard ownsWindow(owner, bundleID: "lab.orbit.orbit.perf-w2-mainthread"), let profile = owner.session.activeProfileID else { return ["ownershipRefused": true] }
+        let kind = command["kind"] ?? "switches"
+        var result: [String: Any] = [:]
+        var maxGap = 0.0
+        var lastBeat = ProcessInfo.processInfo.systemUptime
+        let heartbeat = Task { @MainActor in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .milliseconds(2))
+                let now = ProcessInfo.processInfo.systemUptime
+                maxGap = max(maxGap, (now - lastBeat) * 1000)
+                lastBeat = now
+            }
+        }
+        defer { heartbeat.cancel() }
+        if kind == "prepare" {
+            for tab in owner.session.snapshot?.tabs.prefix(3) ?? [] {
+                guard ownsWindow(owner, bundleID: "lab.orbit.orbit.perf-w2-mainthread") else { return ["ownershipRefused": true] }
+                owner.session.selectOccurrence(tab.occurrenceID)
+                await owner.session.waitForQueuedCommands()
+                if let surface = owner.session.selectedSurface { await waitForLoad(surface) }
+            }
+            return ["prepared": true]
+        }
+        if kind == "switches" {
+            var counts: [String: Int] = [:]
+            ChromiumSurface.snapshotProbe = { name, value in counts[name, default: 0] += name == "decodedBytes" ? value : 1 }
+            defer { ChromiumSurface.snapshotProbe = nil }
+            let cpu = threadCPU()
+            let tabs = Array(owner.session.snapshot?.tabs.prefix(3) ?? [])
+            for index in 0..<50 {
+                guard ownsWindow(owner, bundleID: "lab.orbit.orbit.perf-w2-mainthread"), tabs.count == 3 else { return ["ownershipRefused": true] }
+                owner.session.selectOccurrence(tabs[index % tabs.count].occurrenceID)
+                await owner.session.waitForQueuedCommands()
+                try? await Task.sleep(for: .milliseconds(12))
+            }
+            try? await Task.sleep(for: .milliseconds(700))
+            result["mainCPUms"] = (threadCPU() - cpu) * 1000
+            result["captures"] = counts
+            guard ownsWindow(owner, bundleID: "lab.orbit.orbit.perf-w2-mainthread") else { return ["ownershipRefused": true] }
+            owner.tabSwitcher.controlIsHeld = { true }
+            owner.tabSwitcher.cycle()
+            owner.tabSwitcher.show()
+            try? await Task.sleep(for: .milliseconds(300))
+            result["thumbnailCount"] = owner.session.ownedSurfaces.filter { owner.tabSwitcher.snapshots.image(for: $0) != nil }.count
+        } else if kind == "downloads" {
+            let files = root.appendingPathComponent("download-fixture")
+            let records = await Task.detached(priority: .utility) {
+                try? FileManager.default.createDirectory(at: files, withIntermediateDirectories: true)
+                return (0..<1000).map { index in
+                    let url = files.appendingPathComponent("history-\(index).bin")
+                    if index % 3 != 0 { try? Data([42]).write(to: url) }
+                    return BrowserDownloadHistoryRecord(BrowserDownloadSnapshot(
+                        key: .init(id: UUID(), profileID: profile, lifetime: UUID()), owner: .init(profileID: profile),
+                        revision: 0, sequence: 1, suggestedFilename: "history-\(index).bin", state: .complete,
+                        receivedBytes: 1, totalBytes: 1, capabilities: [], currentURL: nil, destinationURL: url,
+                        fileAvailability: .unknown, failure: nil, pendingAction: nil, isCancellationRequested: false, controlError: nil))
+                }
+            }.value
+            try? owner.downloads.coordinator.restore(records)
+            guard ownsWindow(owner, bundleID: "lab.orbit.orbit.perf-w2-mainthread") else { return ["ownershipRefused": true] }
+            owner.tabSwitcher.cancel()
+            // Measure a settled history as well as cold-open failure in the external harness.
+            _ = owner.downloads.snapshots(profileID: profile)
+            try? await Task.sleep(for: .milliseconds(500))
+            guard ownsWindow(owner, bundleID: "lab.orbit.orbit.perf-w2-mainthread") else { return ["ownershipRefused": true] }
+            var cpu = threadCPU()
+            let start = ProcessInfo.processInfo.systemUptime
+            owner.showDownloads()
+            await owner.session.waitForQueuedCommands()
+            owner.window?.contentView?.layoutSubtreeIfNeeded()
+            owner.window?.displayIfNeeded()
+            result["openCPUms"] = (threadCPU() - cpu) * 1000
+            result["openWallMs"] = (ProcessInfo.processInfo.systemUptime - start) * 1000
+            try? await Task.sleep(for: .milliseconds(500))
+            cpu = threadCPU()
+            for n in 0..<20 {
+                guard ownsWindow(owner, bundleID: "lab.orbit.orbit.perf-w2-mainthread") else { return ["ownershipRefused": true] }
+                let scroll = owner.downloadsPane.list.subviews.compactMap { $0 as? NSScrollView }.first
+                if let scroll {
+                    scroll.contentView.scroll(to: NSPoint(x: 0, y: CGFloat(n % 10) * 500))
+                    scroll.reflectScrolledClipView(scroll.contentView)
+                }
+                owner.renderDownloads()
+                owner.window?.displayIfNeeded()
+                try? await Task.sleep(for: .milliseconds(8))
+            }
+            result["scrollRefreshCPUms"] = (threadCPU() - cpu) * 1000
+            owner.downloads.destinationProvider = { _, name in files.appendingPathComponent(name) }
+            let before = owner.downloads.coordinator.allSnapshots.count
+            cpu = threadCPU()
+            if let base = command["fixture"].flatMap(URL.init(string:)) {
+                for n in 0..<5 {
+                    guard ownsWindow(owner, bundleID: "lab.orbit.orbit.perf-w2-mainthread") else { return ["ownershipRefused": true] }
+                    owner.session.openTab(url: base.appendingPathComponent("download/\(n)"))
+                    await owner.session.waitForQueuedCommands()
+                }
+                let deadline = ProcessInfo.processInfo.systemUptime + 10
+                while ProcessInfo.processInfo.systemUptime < deadline {
+                    let active = owner.downloads.coordinator.allSnapshots.dropFirst(before)
+                    if active.count == 5 && active.allSatisfy({ $0.state.isTerminal }) { break }
+                    try? await Task.sleep(for: .milliseconds(20))
+                }
+            }
+            result["fiveDownloadsCPUms"] = (threadCPU() - cpu) * 1000
+            result["downloadStates"] = owner.downloads.coordinator.allSnapshots.dropFirst(before).map { $0.state.rawValue }
+            result["historyRows"] = owner.downloads.snapshots(profileID: profile).count
+        } else if kind == "delete" {
+            let id = ProfileID()
+            let path = URL(fileURLWithPath: ChromiumRuntime.shared.rootCachePath).appendingPathComponent("profile-" + id.rawValue.uuidString.lowercased())
+            await Task.detached(priority: .utility) {
+                try? FileManager.default.createDirectory(at: path, withIntermediateDirectories: true)
+                for n in 0..<20000 { try? Data([42]).write(to: path.appendingPathComponent("file-\(n)")) }
+            }.value
+            maxGap = 0; lastBeat = ProcessInfo.processInfo.systemUptime
+            let cpu = threadCPU(), start = ProcessInfo.processInfo.systemUptime
+            do {
+                try await owner.engine.removeProfile(id)
+                result["removed"] = !FileManager.default.fileExists(atPath: path.path)
+                _ = owner.engine.profile(for: id)
+                await owner.engine.profileReady(id)
+                result["recreated"] = !owner.engine.refusedProfiles.contains(id)
+                try await owner.engine.removeProfile(id)
+            } catch { result["error"] = String(describing: error) }
+            result["deleteCPUms"] = (threadCPU() - cpu) * 1000
+            result["deleteWallMs"] = (ProcessInfo.processInfo.systemUptime - start) * 1000
+        }
+        try? await Task.sleep(for: .milliseconds(10))
+        result["longestMainGapMs"] = maxGap
+        return result
     }
 }

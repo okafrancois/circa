@@ -5,7 +5,7 @@ import ImageIO
 import UniformTypeIdentifiers
 
 @main struct SnapshotDecoderTests {
-    static func main() {
+    static func main() async {
         let context = CGContext(data: nil, width: 100, height: 50, bitsPerComponent: 8, bytesPerRow: 0,
             space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
         context.setFillColor(CGColor(red: 0.2, green: 0.4, blue: 0.6, alpha: 1))
@@ -16,13 +16,19 @@ import UniformTypeIdentifiers
         precondition(CGImageDestinationFinalize(destination))
         let response = try! JSONSerialization.data(withJSONObject: ["data": (data as Data).base64EncodedString()])
         let thumbnail = ChromiumSnapshotDecoder.decode(response, width: 40, generation: 77)!
-        precondition(thumbnail.image.width == 40 && thumbnail.image.height == 20)
-        precondition(thumbnail.documentGeneration == 77)
+        precondition(thumbnail.snapshot.image.width == 40 && thumbnail.snapshot.image.height == 20)
+        precondition(thumbnail.snapshot.documentGeneration == 77)
+        precondition(thumbnail.decodedBytes <= 40 * 20 * 8)
         let original = ChromiumSnapshotDecoder.decode(response, width: nil, generation: 78)!
-        precondition(original.image.width == 100 && original.image.height == 50)
+        precondition(original.snapshot.image.width == 100 && original.snapshot.image.height == 50)
         precondition(ChromiumSnapshotDecoder.decode(Data(), width: 40, generation: 0) == nil)
         let malformed = try! JSONSerialization.data(withJSONObject: ["data": "not-an-image"])
         precondition(ChromiumSnapshotDecoder.decode(malformed, width: 40, generation: 0) == nil)
+        let cancelled = await Task.detached {
+            withUnsafeCurrentTask { $0?.cancel() }
+            return ChromiumSnapshotDecoder.decode(response, width: 40, generation: 0) == nil
+        }.value
+        precondition(cancelled, "cancelled work never enters ImageIO")
         print("PASS snapshot dimensions, generation, full resolution and invalid payload rejection")
     }
 }

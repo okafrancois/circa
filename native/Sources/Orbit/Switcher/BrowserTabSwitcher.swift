@@ -58,7 +58,7 @@ final class BrowserTabSwitcher<Engine: BrowserEngine> {
         presentedSurface = surface
         if let surface { snapshots.cancelPendingCapture(for: surface) }
         guard let outgoing else { return nil }
-        return snapshots.request(outgoing, force: true)
+        return snapshots.request(outgoing, freshness: 0.3)
     }
 
     func renderSession() {

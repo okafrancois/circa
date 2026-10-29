@@ -159,7 +159,12 @@ public final class ChromiumSurface: BrowserEngineSurface {
     private var wasLoading = false
     private var capture: (video: Bool, audio: Bool) = (false, false)
     private var find: (token: UUID, generation: UInt64, update: @MainActor (BrowserFindUpdate) -> Void)?
-    private var devTools: [Int32: CheckedContinuation<(Bool, Data), Never>] = [:]
+    private struct DevToolsRequest {
+        var continuation: CheckedContinuation<(Bool, Data), Never>?
+    }
+    private var devTools: [Int32: DevToolsRequest] = [:]
+    private var snapshotRequestID: Int32?
+    private var snapshotCaptureInFlight = false
     private var devToolsTimeouts: [Int32: Task<Void, Never>] = [:]
     var mediaActivity = ChromiumMediaActivity()
     weak var automaticPiPSourceWindow: NSWindow?
@@ -453,14 +458,27 @@ public final class ChromiumSurface: BrowserEngineSurface {
         if !isDisposed, isBrowserCreated { _ = ACRStopFinding(token, clearSelection ? 1 : 0) }
     }
 
+    public static var snapshotProbe: ((String, Int) -> Void)?
+
     public func captureSnapshot(_ request: BrowserSnapshotRequest) async throws -> BrowserSurfaceSnapshot {
+        try Task.checkCancellation()
+        // ImageIO cannot interrupt a decode already in progress. Keep the admission slot through
+        // its completion, including cancellation, so another capture cannot overlap that worker.
+        while snapshotCaptureInFlight { try await Task.sleep(for: .milliseconds(10)) }
+        try Task.checkCancellation()
+        snapshotCaptureInFlight = true
+        defer { snapshotCaptureInFlight = false }
         guard !isDisposed else { throw BrowserEngineError.surfaceDisposed }
+        Self.snapshotProbe?("started", 0)
+        var captureSucceeded = false
+        defer { Self.snapshotProbe?(captureSucceeded ? "completed" : Task.isCancelled ? "cancelled" : "failed", 0) }
         let generation = request.documentGeneration ?? documentGeneration
         guard generation == documentGeneration else { throw BrowserEngineError.documentChanged }
         guard isBrowserCreated else { throw BrowserEngineError.snapshotUnavailable }
         var parameters: [String: Any] = ["format": "png"]
         if request.fullPage {
             let (ok, metrics) = await devToolsCall("Page.getLayoutMetrics")
+            try Task.checkCancellation()
             guard !isDisposed, generation == documentGeneration else { throw BrowserEngineError.documentChanged }
             guard ok, let object = try? JSONSerialization.jsonObject(with: metrics) as? [String: Any],
                   let size = object["cssContentSize"] as? [String: Any],
@@ -472,21 +490,26 @@ public final class ChromiumSurface: BrowserEngineSurface {
             parameters["captureBeyondViewport"] = true
             parameters["clip"] = ["x": 0, "y": 0, "width": width, "height": height, "scale": 1]
         }
+        try Task.checkCancellation()
         let json = try JSONSerialization.data(withJSONObject: parameters)
         let (success, data) = await devToolsCall("Page.captureScreenshot", params: String(decoding: json, as: UTF8.self))
         guard !isDisposed else { throw BrowserEngineError.surfaceDisposed }
         guard generation == documentGeneration else { throw BrowserEngineError.documentChanged }
+        try Task.checkCancellation()
         guard success else { throw BrowserEngineError.snapshotUnavailable }
         let width = request.width
-        let decoded = await Task.detached(priority: .utility) {
+        let worker = Task.detached(priority: .utility) {
             ChromiumSnapshotDecoder.decode(data, width: width, generation: generation)
-        }.value
+        }
+        let decoded = await withTaskCancellationHandler { await worker.value } onCancel: { worker.cancel() }
         // Decoding yields the main actor: a close, navigation or cancellation may win meanwhile.
         try Task.checkCancellation()
         guard !isDisposed else { throw BrowserEngineError.surfaceDisposed }
         guard generation == documentGeneration else { throw BrowserEngineError.documentChanged }
         guard let decoded else { throw BrowserEngineError.snapshotUnavailable }
-        return decoded
+        Self.snapshotProbe?("decodedBytes", decoded.decodedBytes)
+        captureSucceeded = true
+        return decoded.snapshot
     }
 
     /// Runs Chromium's native save pipeline. The shell may continue using archivePage for MHTML.
@@ -509,17 +532,42 @@ public final class ChromiumSurface: BrowserEngineSurface {
 
     /// Executes a DevTools protocol method on this browser. Native-side only; pages never see it.
     public func devToolsCall(_ method: String, params: String = "", timeout: Duration = .seconds(8)) async -> (Bool, Data) {
-        guard !isDisposed, isBrowserCreated else { return (false, Data()) }
-        let identifier = ACRExecuteDevToolsMethod(token, method, params)
-        guard identifier != 0 else { return (false, Data()) }
-        return await withCheckedContinuation { continuation in
-            devTools[identifier] = continuation
-            devToolsTimeouts[identifier] = Task { @MainActor [weak self] in
-                do { try await Task.sleep(for: timeout) } catch { return }
-                self?.devToolsTimeouts[identifier] = nil
-                self?.devTools.removeValue(forKey: identifier)?.resume(returning: (false, Data()))
+        // A submitted screenshot cannot be cancelled in Chromium. Keep its native slot until
+        // response/timeout even when its consumer is cancelled, and never overlap another one.
+        if method == "Page.captureScreenshot" {
+            while snapshotRequestID != nil {
+                do { try await Task.sleep(for: .milliseconds(10)) } catch { return (false, Data()) }
+                guard !isDisposed else { return (false, Data()) }
             }
         }
+        guard !Task.isCancelled, !isDisposed, isBrowserCreated else { return (false, Data()) }
+        let identifier = ACRExecuteDevToolsMethod(token, method, params)
+        guard identifier != 0 else { return (false, Data()) }
+        if method == "Page.captureScreenshot" { snapshotRequestID = identifier }
+        return await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                devTools[identifier] = DevToolsRequest(continuation: continuation)
+                devToolsTimeouts[identifier] = Task { @MainActor [weak self] in
+                    do { try await Task.sleep(for: timeout) } catch { return }
+                    self?.finishDevTools(identifier, result: (false, Data()))
+                }
+                if Task.isCancelled { cancelDevTools(identifier) }
+            }
+        } onCancel: {
+            Task { @MainActor [weak self] in self?.cancelDevTools(identifier) }
+        }
+    }
+
+    private func cancelDevTools(_ identifier: Int32) {
+        let continuation = devTools[identifier]?.continuation
+        devTools[identifier]?.continuation = nil
+        continuation?.resume(returning: (false, Data()))
+    }
+
+    private func finishDevTools(_ identifier: Int32, result: (Bool, Data)) {
+        if snapshotRequestID == identifier { snapshotRequestID = nil }
+        devToolsTimeouts.removeValue(forKey: identifier)?.cancel()
+        devTools.removeValue(forKey: identifier)?.continuation?.resume(returning: result)
     }
 
     public func requestMediaState() async -> BrowserMediaState {
@@ -585,7 +633,8 @@ public final class ChromiumSurface: BrowserEngineSurface {
         // Requests still with the delegate are answered now; its late answer is ignored.
         for request in pendingPermissions { _ = ACRResolvePermission(request, ACR_PERMISSION_DEFAULT) }
         pendingPermissions.removeAll()
-        for continuation in devTools.values { continuation.resume(returning: (false, Data())) }
+        for request in devTools.values { request.continuation?.resume(returning: (false, Data())) }
+        snapshotRequestID = nil
         devTools.removeAll()
         for task in devToolsTimeouts.values { task.cancel() }
         devToolsTimeouts.removeAll()
@@ -834,9 +883,7 @@ public final class ChromiumSurface: BrowserEngineSurface {
                 documentObserverRequest = 0
                 return
             }
-            devToolsTimeouts.removeValue(forKey: identifier)?.cancel()
-            devTools.removeValue(forKey: identifier)?
-                .resume(returning: (event.value == 1, event.payload ?? Data()))
+            finishDevTools(identifier, result: (event.value == 1, event.payload ?? Data()))
             return
         }
         if event.kind == ACR_EVENT_CREATE_ABORTED {

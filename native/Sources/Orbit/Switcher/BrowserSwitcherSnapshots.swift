@@ -13,8 +13,9 @@ final class BrowserSwitcherSnapshots<Surface: BrowserEngineSurface> {
 
     private struct Entry {
         let generation: UInt64
-        let token: UUID
-        let created: TimeInterval
+        var token: UUID
+        var created: TimeInterval
+        var imageCreated: TimeInterval? = nil
         var access: UInt64
         var image: NSImage?
         var task: Task<Void, Never>?
@@ -35,20 +36,22 @@ final class BrowserSwitcherSnapshots<Surface: BrowserEngineSurface> {
         guard admitsAttachment(surface) else { invalidate(surface); return nil }
         let key = ObjectIdentifier(surface)
         guard let entry = entries[key], entry.generation == surface.documentGeneration,
-              now() - entry.created <= maximumAge,
+              now() - (entry.imageCreated ?? entry.created) <= maximumAge,
               !surface.isDisposed, !surface.navigationState.isLoading else { return nil }
         touch(key)
         return entry.image
     }
 
-    /// force refreshes SPA pixels on every outgoing selection, even at the same generation.
+    /// Refreshing never overlaps a pending capture of the same document.
     @discardableResult
-    func request(_ surface: Surface, force: Bool = false) -> Task<Void, Never>? {
+    func request(_ surface: Surface, force: Bool = false, freshness: TimeInterval? = nil) -> Task<Void, Never>? {
         let key = ObjectIdentifier(surface)
         guard admitsAttachment(surface) else { invalidate(surface); return nil }
         guard !surface.isDisposed, !surface.navigationState.isLoading else { invalidate(surface); return nil }
-        if !force, let entry = entries[key], entry.generation == surface.documentGeneration,
-           now() - entry.created <= maximumAge { touch(key); return entry.task }
+        if let entry = entries[key], entry.generation == surface.documentGeneration {
+            if entry.task != nil { touch(key); return entry.task }
+            if !force, now() - entry.created <= (freshness ?? maximumAge) { touch(key); return nil }
+        }
         // A detached browser may return a successful white image. Do not replace its cached paint.
         guard isAttached(surface) else { return nil }
         if entries[key] == nil, entries.count >= capacity {
@@ -56,11 +59,12 @@ final class BrowserSwitcherSnapshots<Surface: BrowserEngineSurface> {
                 .min(by: { $0.value.access < $1.value.access })?.key else { return nil }
             entries.removeValue(forKey: victim)?.task?.cancel()
         }
+        let previous = entries[key].flatMap { $0.generation == surface.documentGeneration ? $0 : nil }
         invalidate(surface)
         let generation = surface.documentGeneration
         let token = UUID()
         clock &+= 1
-        entries[key] = Entry(generation: generation, token: token, created: now(), access: clock)
+        entries[key] = Entry(generation: generation, token: token, created: now(), imageCreated: previous?.imageCreated, access: clock, image: previous?.image)
         let task = Task { [weak self, weak surface] in
             guard let surface else { return }
             let result = try? await surface.captureSnapshot(.init(width: OrbitTokens.Switcher.thumbnailWidth,
@@ -75,7 +79,8 @@ final class BrowserSwitcherSnapshots<Surface: BrowserEngineSurface> {
             }
             // Retain failed attempts until invalidation/expiry, preventing retry loops on redraw.
             guard let result, result.documentGeneration == generation,
-                  !Self.isBlank(result.image) else { return }
+                  !Self.isBlank(result.image) else { self.entries[key]?.image = nil; return }
+            self.entries[key]?.imageCreated = self.now()
             self.entries[key]?.image = NSImage(cgImage: result.image, size: .zero)
             self.onChange?()
         }
@@ -119,7 +124,14 @@ final class BrowserSwitcherSnapshots<Surface: BrowserEngineSurface> {
     func cancelPendingCapture(for surface: Surface) {
         let key = ObjectIdentifier(surface)
         guard entries[key]?.task != nil else { return }
-        entries.removeValue(forKey: key)?.task?.cancel()
+        if entries[key]?.image != nil {
+            entries[key]?.task?.cancel()
+            entries[key]?.task = nil
+            entries[key]?.token = UUID()
+            if let created = entries[key]?.imageCreated { entries[key]?.created = created }
+        } else {
+            entries.removeValue(forKey: key)?.task?.cancel()
+        }
     }
 
     func invalidate(_ surface: Surface) {
