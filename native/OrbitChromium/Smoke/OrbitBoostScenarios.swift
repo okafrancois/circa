@@ -4,6 +4,7 @@ import BrowserEngine
 import BrowserShell
 import ChromiumEngine
 import Foundation
+import OrbitChromiumBridge
 
 extension OrbitSmokeDriver {
     func boostScenarios(_ application: OrbitApplication, _ environment: OrbitEnvironment,
@@ -14,6 +15,8 @@ extension OrbitSmokeDriver {
         guard let profile = window.session.selectedSurface?.profileID ?? initialProfile else { check("boosts.profile", false); return }
         let url = URL(string: "/boosts/main", relativeTo: fixture)!.absoluteURL
         func evaluate(_ source: String, _ surface: ChromiumSurface) async -> String? { try? await probe.evaluateScript(source, in: surface) }
+        let tracing = await boostTrace(begin: true)
+        check("boosts.cache-trace-start", tracing)
         do {
             // Compile the actual model, including declarative Zap and explicit JS opt-in.
             var content = BrowserBoostContent()
@@ -108,7 +111,29 @@ extension OrbitSmokeDriver {
             try? await Task.sleep(for: .milliseconds(600))
             check("boosts.removal-next-document", await evaluate("String(early === '' && !document.documentElement.dataset.started && document.documentElement.dataset.extension === 'working')", tab) == "true")
         } catch { record("boosts.operation", "failed", ["error": String(describing: error)]) }
+        let traceStopped = await boostTrace(begin: false)
+        check("boosts.cache-trace-stop", tracing && traceStopped)
+        let trace = try? Data(contentsOf: runRoot.appendingPathComponent("boost-cache-trace.json"))
+        let json = trace.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
+        let rows = json?["traceEvents"] as? [[String: Any]] ?? []
+        let fetches = rows.filter { $0["name"] as? String == "BoostSnapshotInitialFetch" }
+        let processes = Dictionary(grouping: fetches, by: { $0["pid"] as? Int ?? -1 })
+        check("boosts.cache-one-fetch-per-renderer", !processes.isEmpty && processes.values.allSatisfy { $0.count == 1 },
+              ["rendererCount": processes.count, "fetchCount": fetches.count])
     }
+    private func boostTrace(begin: Bool) async -> Bool {
+        await withCheckedContinuation { continuation in
+            let context = Unmanaged.passRetained(BoostTraceReply(continuation)).toOpaque()
+            let callback: @convention(c) (UnsafeMutableRawPointer?, Int32) -> Void = { context, ok in
+                guard let context else { return }
+                Unmanaged<BoostTraceReply>.fromOpaque(context).takeRetainedValue().continuation.resume(returning: ok == 1)
+            }
+            let accepted = begin ? ACRBoostCacheTraceBegin(callback, context) :
+                ACRBoostCacheTraceEnd(runRoot.appendingPathComponent("boost-cache-trace.json").path, callback, context)
+            if accepted != 1 { Unmanaged<BoostTraceReply>.fromOpaque(context).takeRetainedValue().continuation.resume(returning: false) }
+        }
+    }
+
 }
 
 @MainActor
@@ -123,4 +148,9 @@ private final class BoostProbeDelegate: BrowserEngineSurfaceDelegate {
     func surface(_ surface: ChromiumSurface, createSurfaceFor request: BrowserNewSurfaceRequest,
                  make: () -> ChromiumSurface) -> ChromiumSurface? { nil }
     func surface(_ surface: ChromiumSurface, didStartDownload download: any BrowserEngineDownload) { download.cancel() }
+}
+
+private final class BoostTraceReply: @unchecked Sendable {
+    let continuation: CheckedContinuation<Bool, Never>
+    init(_ continuation: CheckedContinuation<Bool, Never>) { self.continuation = continuation }
 }

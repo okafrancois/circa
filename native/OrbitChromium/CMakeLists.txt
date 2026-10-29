@@ -161,6 +161,7 @@ list(FILTER ORBIT_APP_SOURCES EXCLUDE REGEX "/Orbit/App/EngineComposition\\.swif
 list(APPEND ORBIT_APP_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/App/EngineComposition+Chromium.swift"
   "${CMAKE_CURRENT_SOURCE_DIR}/App/ProductRuntimeOptions.swift"
   "${CMAKE_CURRENT_SOURCE_DIR}/App/OrbitPerformanceProbe.swift"
+  "${CMAKE_CURRENT_SOURCE_DIR}/App/OrbitEnginePerformanceProbe.swift"
   "${CMAKE_CURRENT_SOURCE_DIR}/App/OrbitSelectionPerformanceProbe.swift"
   "${CMAKE_CURRENT_SOURCE_DIR}/App/OrbitDownloadAudioProbe.swift"
   "${CMAKE_CURRENT_SOURCE_DIR}/App/OrbitScrollWheelProbe.swift")

@@ -175,6 +175,7 @@ public struct BrowserMediaState: Sendable, Equatable {
 /// later and then reports `isTeardownComplete`; `BrowserEngine.shutdown()` waits for that.
 @MainActor
 public protocol BrowserEngineSurface: BrowserFindSurface {
+    var pagePerformance: (any BrowserPagePerformance)? { get }
     var profileID: ProfileID { get }
     /// Dedicated opt-in metadata channel, absent on engines without a native manager.
     var passwordPrompts: (any BrowserPasswordPromptSource)? { get }
@@ -289,6 +290,7 @@ public protocol BrowserEngineSurface: BrowserFindSurface {
 }
 
 public extension BrowserEngineSurface {
+    var pagePerformance: (any BrowserPagePerformance)? { nil }
     func activationPaintBarrier() -> Task<Void, Never>? { nil }
     var passwordPrompts: (any BrowserPasswordPromptSource)? { nil }
     func setPageTintObservationEnabled(_ enabled: Bool) {}

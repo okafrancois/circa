@@ -1,0 +1,727 @@
+diff --git a/libcef/browser/orbit/orbit_activation.inc b/libcef/browser/orbit/orbit_activation.inc
+new file mode 100644
+index 0000000..3651766
+--- /dev/null
++++ b/libcef/browser/orbit/orbit_activation.inc
+@@ -0,0 +1,118 @@
++// Copyright 2026 Orbit. BSD-style license; see LICENSE.
++#include "content/public/browser/navigation_handle.h"
++namespace {
++class ActivationRequest;
++using ActivationMap = std::map<int32_t, std::shared_ptr<ActivationRequest>>;
++ActivationMap& Activations() {
++  static base::NoDestructor<ActivationMap> map;
++  return *map;
++}
++class ActivationRequest final
++    : public content::WebContentsObserver,
++      public std::enable_shared_from_this<ActivationRequest> {
++ public:
++  ActivationRequest(content::WebContents* wc,
++                    int32_t id,
++                    uint64_t activation,
++                    uint64_t document,
++                    orbit_activation_callback_t cb,
++                    void* ctx)
++      : content::WebContentsObserver(wc),
++        id_(id),
++        activation_(activation),
++        document_(document),
++        cb_(cb),
++        ctx_(ctx) {}
++  void Finish(int status) {
++    if (!cb_)
++      return;
++    if (web_contents() && web_contents()->IsBeingDestroyed())
++      status = 4;
++    if (status == 1 && !PageIsVisible(web_contents()))
++      status = 3;
++    auto alive = shared_from_this();
++    auto cb = cb_;
++    cb_ = nullptr;
++    Observe(nullptr);
++    Activations().erase(id_);
++    cb(ctx_, id_, activation_, document_, status,
++       status == 1 ? base::TimeTicks::Now().since_origin().InMicroseconds()
++                   : 0);
++  }
++  void DidStartNavigation(content::NavigationHandle* n) override {
++    if (n->IsInPrimaryMainFrame())
++      Finish(2);
++  }
++  void PrimaryPageChanged(content::Page&) override { Finish(2); }
++  void OnVisibilityChanged(content::Visibility v) override {
++    if (v != content::Visibility::VISIBLE)
++      Finish(3);
++  }
++  void WebContentsDestroyed() override { Finish(4); }
++
++ private:
++  int32_t id_;
++  uint64_t activation_, document_;
++  orbit_activation_callback_t cb_;
++  void* ctx_;
++};
++int32_t ActivationFrame(int32_t id,
++                        uint64_t activation,
++                        orbit_activation_callback_t cb,
++                        void* ctx) {
++  if (!OnValidUIThread())
++    return 0;
++  // The embedder announces close before detaching its native view. This
++  // cancels pending work before visibility callbacks can win the close race.
++  if (!cb && !activation) {
++    if (auto it = Activations().find(id); it != Activations().end())
++      it->second->Finish(4);
++    return 1;
++  }
++  if (!cb || !activation)
++    return 0;
++  auto host = CefBrowserHostBase::GetBrowserForBrowserId(id);
++  auto* wc = host ? host->GetWebContents() : nullptr;
++  auto lifecycle = EnsureLifecycle(id);
++  if (!wc || !lifecycle)
++    return 0;
++  if (auto it = Activations().find(id); it != Activations().end())
++    it->second->Finish(2);
++  if (host->GetWebContents() != wc)
++    return 0;
++  // Reentrant completion may have created a successor: never overwrite its
++  // ownership.
++  if (Activations().contains(id))
++    return 0;
++  auto request = std::make_shared<ActivationRequest>(
++      wc, id, activation, lifecycle->document_id, cb, ctx);
++  Activations()[id] = request;
++  auto runner = base::SingleThreadTaskRunner::GetCurrentDefault();
++  runner->PostTask(FROM_HERE,
++                   base::BindOnce(
++                       [](std::weak_ptr<ActivationRequest> w, bool hidden) {
++                         if (hidden) {
++                           if (auto r = w.lock())
++                             r->Finish(3);
++                         }
++                       },
++                       std::weak_ptr(request), !PageIsVisible(wc)));
++  runner->PostDelayedTask(FROM_HERE,
++                          base::BindOnce(
++                              [](std::weak_ptr<ActivationRequest> w) {
++                                if (auto r = w.lock())
++                                  r->Finish(5);
++                              },
++                              std::weak_ptr(request)),
++                          base::Milliseconds(150));
++  if (PageIsVisible(wc) && wc->GetPrimaryMainFrame()) {
++    wc->GetPrimaryMainFrame()->InsertVisualStateCallback(base::BindOnce(
++        [](std::weak_ptr<ActivationRequest> w, bool ok) {
++          if (auto r = w.lock())
++            r->Finish(ok ? 1 : 2);
++        },
++        std::weak_ptr(request)));
++  }
++  return 1;
++}
++}  // namespace
+diff --git a/libcef/browser/orbit/orbit_capture.inc b/libcef/browser/orbit/orbit_capture.inc
+new file mode 100644
+index 0000000..2f90a96
+--- /dev/null
++++ b/libcef/browser/orbit/orbit_capture.inc
+@@ -0,0 +1,96 @@
++// Copyright 2026 Orbit. BSD-style license; see LICENSE.
++#include "components/viz/common/frame_sinks/copy_output_result.h"
++#include "content/public/browser/render_widget_host_view.h"
++#include "third_party/skia/include/core/SkColorSpace.h"
++namespace {
++class CaptureRequest final
++    : public content::WebContentsObserver,
++      public std::enable_shared_from_this<CaptureRequest> {
++ public:
++  CaptureRequest(content::WebContents* wc,
++                 orbit_capture_callback_t cb,
++                 void* ctx)
++      : content::WebContentsObserver(wc), cb_(cb), ctx_(ctx) {}
++  void Finish(int status, SkBitmap bitmap = {}) {
++    if (!cb_)
++      return;
++    auto cb = cb_;
++    cb_ = nullptr;
++    Observe(nullptr);
++    cb(ctx_, status, bitmap.width(), bitmap.height(), bitmap.rowBytes(),
++       static_cast<const uint8_t*>(bitmap.getPixels()), status == 1 ? 1 : 0);
++  }
++  void WebContentsDestroyed() override { Finish(-2); }
++  void PrimaryPageChanged(content::Page&) override { Finish(-4); }
++
++ private:
++  orbit_capture_callback_t cb_;
++  void* ctx_;
++};
++int32_t CaptureView(int32_t id,
++                    orbit_capture_rect_t rect,
++                    int32_t width,
++                    int32_t height,
++                    int32_t timeout,
++                    orbit_capture_callback_t cb,
++                    void* ctx) {
++  if (!OnValidUIThread() || !cb || width <= 0 || height <= 0 || width > 4096 ||
++      height > 4096 || timeout < 1 || timeout > 5000 || rect.x < 0 ||
++      rect.y < 0 || rect.width < 0 || rect.height < 0 ||
++      ((rect.width == 0) != (rect.height == 0)))
++    return 0;
++  auto host = CefBrowserHostBase::GetBrowserForBrowserId(id);
++  auto* wc = host ? host->GetWebContents() : nullptr;
++  if (!wc)
++    return 0;
++  auto request = std::make_shared<CaptureRequest>(wc, cb, ctx);
++  auto runner = base::SingleThreadTaskRunner::GetCurrentDefault();
++  runner->PostDelayedTask(
++      FROM_HERE,
++      base::BindOnce([](std::shared_ptr<CaptureRequest> r) { r->Finish(-3); },
++                     request),
++      base::Milliseconds(timeout));
++  auto* view = wc->GetRenderWidgetHostView();
++  if (!view || !PageIsVisible(wc) || !view->IsSurfaceAvailableForCopy()) {
++    runner->PostTask(
++        FROM_HERE,
++        base::BindOnce([](std::shared_ptr<CaptureRequest> r) { r->Finish(-1); },
++                       request));
++    return 1;
++  }
++  view->CopyFromSurface(
++      gfx::Rect(rect.x, rect.y, rect.width, rect.height),
++      gfx::Size(width, height), base::Milliseconds(timeout),
++      base::BindOnce(
++          [](scoped_refptr<base::SingleThreadTaskRunner> ui,
++             std::shared_ptr<CaptureRequest> request, int width, int height,
++             const content::CopyFromSurfaceResult& result) {
++            SkBitmap pixels;
++            int status = -1;
++            if (result && !result->bitmap.drawsNothing()) {
++              const auto info = SkImageInfo::Make(
++                  width, height, kBGRA_8888_SkColorType, kPremul_SkAlphaType,
++                  SkColorSpace::MakeSRGB());
++              if (pixels.tryAllocPixels(info) &&
++                  result->bitmap.width() == width &&
++                  result->bitmap.height() == height &&
++                  result->bitmap.readPixels(info, pixels.getPixels(),
++                                            pixels.rowBytes(), 0, 0))
++                status = 1;
++            } else if (!result && result.error() ==
++                                      content::CopyFromSurfaceError::kTimeout)
++              status = -3;
++            if (status != 1)
++              pixels.reset();
++            ui->PostTask(FROM_HERE,
++                         base::BindOnce(
++                             [](std::shared_ptr<CaptureRequest> r, int status,
++                                SkBitmap pixels) {
++                               r->Finish(status, std::move(pixels));
++                             },
++                             std::move(request), status, std::move(pixels)));
++          },
++          runner, request, width, height));
++  return 1;
++}
++}  // namespace
+diff --git a/libcef/browser/orbit/orbit_cef_api.h b/libcef/browser/orbit/orbit_cef_api.h
+index 77576a1..62e6f3d 100644
+--- a/libcef/browser/orbit/orbit_cef_api.h
++++ b/libcef/browser/orbit/orbit_cef_api.h
+@@ -26,7 +26,7 @@ extern "C" {
+ // Version 3 (CHROMIUM-APP-R3): additive, hold_window/release_window. Earlier
+ // versions keep their layout as the prefix of the table.
+ // Version 4 (EXTENSIONS-PRODUCT-R1): additive, native per-profile extension services.
+-#define ORBIT_CEF_API_VERSION 11u
++#define ORBIT_CEF_API_VERSION 12u
+ 
+ // Version 8. Callback once after live renderer CSS installation (1), or failure (0).
+ typedef void (*orbit_boost_ack_t)(void*, uint64_t revision, int32_t installed);
+@@ -114,6 +114,47 @@ typedef void (*orbit_password_result_t)(void*, int32_t status,
+ // Carries no secrets. One subscription per opened handle; close revokes it.
+ typedef void (*orbit_password_changed_t)(void*, int32_t event);
+ 
++// Version 12. UI-thread reads and coalesced observation. Unknown PM state
++// returns 0 (never an all-safe snapshot). Capture bits:
++// video/audio/mirror/tab/window/display.
++typedef struct {
++  uint32_t struct_size;
++  int32_t playing_media, playing_video, audio_context_running, audible, pip;
++  uint32_t capturing;
++  int32_t had_form_interaction, had_user_edits, web_lock, idb_lock, webrtc;
++  int32_t lifecycle;  // 0 running, 1 frozen, 2 discarded
++  uint64_t cannot_discard_mask, footprint_kb;
++  int32_t renderer_pid;
++  uint64_t document_id;
++} orbit_page_lifecycle_t;
++// event: 0 state changed, 1 about to discard, 2 discarded, 3 closed.
++// initiator: 0 none, 1 embedder, 2 native policy. Null state only for closed.
++typedef void (*orbit_lifecycle_callback_t)(void*,
++                                           int32_t event,
++                                           int32_t initiator,
++                                           const orbit_page_lifecycle_t*);
++typedef struct {
++  int32_t x, y, width, height;
++} orbit_capture_rect_t;
++// status: 1 captured, -1 unavailable, -2 closed, -3 timed out,
++// -4 document changed. Borrowed tightly packed premultiplied BGRA, sRGB (1).
++typedef void (*orbit_capture_callback_t)(void*,
++                                         int32_t status,
++                                         int32_t width,
++                                         int32_t height,
++                                         uint32_t row_bytes,
++                                         const uint8_t* bgra,
++                                         int32_t color_space);
++// status: 1 submitted, 2 document_changed (also superseded activation),
++// 3 hidden, 4 closed, 5 timed_out. Ticks are monotonic microseconds, only on
++// submitted.
++typedef void (*orbit_activation_callback_t)(void*,
++                                            int32_t browser_id,
++                                            uint64_t activation_id,
++                                            uint64_t document_id,
++                                            int32_t status,
++                                            int64_t submitted_ticks_us);
++
+ typedef struct {
+   uint32_t struct_size;
+   uint32_t version;
+@@ -252,6 +293,23 @@ typedef struct {
+       const orbit_password_record_t* record, const orbit_password_record_t* old_key,
+       orbit_password_result_t, void*);
+   int32_t (*password_store_observe)(uint64_t, orbit_password_changed_t, void*);
++  // Version 12. Null observer revokes; accepted async calls complete once on
++  // UI.
++  int32_t (*page_lifecycle)(int32_t, orbit_page_lifecycle_t*);
++  int32_t (*page_lifecycle_observe)(int32_t, orbit_lifecycle_callback_t, void*);
++  int32_t (*capture_view)(int32_t,
++                          orbit_capture_rect_t,
++                          int32_t out_width,
++                          int32_t out_height,
++                          int32_t timeout_ms,
++                          orbit_capture_callback_t,
++                          void*);
++  // activation_id 0 with null callback announces close and cancels pending work
++  // as closed.
++  int32_t (*activation_frame)(int32_t,
++                              uint64_t activation_id,
++                              orbit_activation_callback_t,
++                              void*);
+ } orbit_cef_api_t;
+ 
+ // Returns the API table for `version`, or NULL when unsupported.
+diff --git a/libcef/browser/orbit/orbit_cef_api.mm b/libcef/browser/orbit/orbit_cef_api.mm
+index 37b45aa..a6f5f51 100644
+--- a/libcef/browser/orbit/orbit_cef_api.mm
++++ b/libcef/browser/orbit/orbit_cef_api.mm
+@@ -32,8 +32,14 @@
+ #include "cef/libcef/browser/orbit/orbit_extensions.inc"
+ #include "cef/libcef/browser/orbit/orbit_password_store.inc"
+ 
++// Lifecycle helpers are shared by capture, activation and suspension.
++// clang-format off
+ #include "cef/libcef/browser/orbit/orbit_runtime_state.inc"
++#include "cef/libcef/browser/orbit/orbit_lifecycle.inc"
+ #include "cef/libcef/browser/orbit/orbit_suspension.inc"
++#include "cef/libcef/browser/orbit/orbit_capture.inc"
++#include "cef/libcef/browser/orbit/orbit_activation.inc"
++// clang-format on
+ 
+ namespace {
+ 
+@@ -405,7 +411,7 @@ int32_t ReleaseWindow(uint64_t window_token) {
+ 
+ const orbit_cef_api_t kApiV11 = [] {
+   auto api = kApiV10;
+-  api.struct_size = sizeof(orbit_cef_api_t);
++  api.struct_size = offsetof(orbit_cef_api_t, page_lifecycle);
+   api.version = 11u;
+   api.password_store_open = &PasswordStoreOpen;
+   api.password_store_close = &PasswordStoreClose;
+@@ -415,6 +421,16 @@ int32_t ReleaseWindow(uint64_t window_token) {
+   return api;
+ }();
+ 
++const orbit_cef_api_t kApiV12 = [] {
++  auto api = kApiV11;
++  api.struct_size = sizeof(orbit_cef_api_t);
++  api.version = 12u;
++  api.page_lifecycle = &PageLifecycle;
++  api.page_lifecycle_observe = &PageLifecycleObserve;
++  api.capture_view = &CaptureView;
++  api.activation_frame = &ActivationFrame;
++  return api;
++}();
+ }  // namespace
+ 
+ extern "C" CEF_EXPORT const orbit_cef_api_t* orbit_cef_get_api(uint32_t version);
+@@ -453,6 +469,8 @@ int32_t ReleaseWindow(uint64_t window_token) {
+       return &kApiV10;
+     case 11u:
+       return &kApiV11;
++    case 12u:
++      return &kApiV12;
+     default:
+       return nullptr;
+   }
+diff --git a/libcef/browser/orbit/orbit_lifecycle.inc b/libcef/browser/orbit/orbit_lifecycle.inc
+new file mode 100644
+index 0000000..85e42f7
+--- /dev/null
++++ b/libcef/browser/orbit/orbit_lifecycle.inc
+@@ -0,0 +1,256 @@
++// Copyright 2026 Orbit. BSD-style license; see LICENSE.
++#include "base/task/single_thread_task_runner.h"
++#include "chrome/browser/media/webrtc/media_capture_devices_dispatcher.h"
++#include "chrome/browser/media/webrtc/media_stream_capture_indicator.h"
++#include "chrome/browser/performance_manager/policies/discard_eligibility_policy.h"
++#include "chrome/browser/performance_manager/public/user_tuning/user_tuning_utils.h"
++#include "components/performance_manager/public/graph/graph.h"
++#include "components/performance_manager/public/graph/page_node.h"
++#include "components/performance_manager/public/performance_manager.h"
++#include "content/public/browser/media_player_id.h"
++#include "content/public/browser/render_frame_host.h"
++#include "content/public/browser/render_process_host.h"
++#include "content/public/browser/render_widget_host_view.h"
++#include "content/public/browser/web_contents.h"
++#include "content/public/browser/web_contents_observer.h"
++
++namespace {
++namespace pm = performance_manager;
++class LifecycleObservation;
++using LifecycleMap = std::map<int32_t, std::shared_ptr<LifecycleObservation>>;
++LifecycleMap& Lifecycles() {
++  static base::NoDestructor<LifecycleMap> map;
++  return *map;
++}
++bool PageIsVisible(content::WebContents* wc) {
++  if (!wc || wc->GetVisibility() != content::Visibility::VISIBLE)
++    return false;
++  auto* view = wc->GetRenderWidgetHostView();
++  NSView* native = wc->GetNativeView().GetNativeNSView();
++  return view && view->IsShowing() && native && native.window.isVisible &&
++         !native.isHiddenOrHasHiddenAncestor;
++}
++uint64_t NextDocumentID() {
++  static uint64_t next = 0;
++  return ++next;
++}
++class LifecycleObservation final
++    : public content::WebContentsObserver,
++      public pm::PageNodeObserver,
++      public MediaStreamCaptureIndicator::Observer,
++      public std::enable_shared_from_this<LifecycleObservation> {
++ public:
++  LifecycleObservation(int32_t id, content::WebContents* wc)
++      : content::WebContentsObserver(wc),
++        document_id(NextDocumentID()),
++        id_(id) {
++    if (pm::PerformanceManager::IsAvailable()) {
++      graph_ = pm::PerformanceManager::GetGraph();
++      graph_->AddPageNodeObserver(this);
++    }
++    indicator_ = MediaCaptureDevicesDispatcher::GetInstance()
++                     ->GetMediaStreamCaptureIndicator();
++    indicator_->AddObserver(this);
++  }
++  ~LifecycleObservation() override { Detach(); }
++  void Detach() {
++    if (graph_) {
++      graph_->RemovePageNodeObserver(this);
++      graph_ = nullptr;
++    }
++    if (indicator_) {
++      indicator_->RemoveObserver(this);
++      indicator_.reset();
++    }
++  }
++  bool Read(orbit_page_lifecycle_t* s) {
++    auto* wc = web_contents();
++    if (!wc || !pm::PerformanceManager::IsAvailable())
++      return false;
++    auto page = pm::PerformanceManager::GetPrimaryPageNodeForWebContents(wc);
++    if (!page)
++      return false;
++    *s = {};
++    s->struct_size = sizeof(*s);
++    s->playing_video = wc->GetCurrentlyPlayingVideoCount() > 0;
++    s->playing_media = !players_.empty() || s->playing_video;
++    s->audio_context_running = !audio_contexts_.empty();
++    s->audible = page->IsAudible();
++    s->pip = page->HasPictureInPicture();
++    s->had_form_interaction = page->HadFormInteraction();
++    s->had_user_edits = page->HadUserEdits();
++    s->web_lock = page->IsHoldingWebLock();
++    s->idb_lock = page->IsHoldingBlockingIndexedDBLock();
++    s->webrtc = page->UsesWebRTC();
++    s->document_id = document_id;
++    s->lifecycle = wc->WasDiscarded()
++                       ? 2
++                       : (page->GetLifecycleState() ==
++                                  pm::PageNode::LifecycleState::kFrozen
++                              ? 1
++                              : 0);
++    if (indicator_) {
++      s->capturing = (indicator_->IsCapturingVideo(wc) ? 1u : 0u) |
++                     (indicator_->IsCapturingAudio(wc) ? 2u : 0u) |
++                     (indicator_->IsBeingMirrored(wc) ? 4u : 0u) |
++                     (indicator_->IsCapturingTab(wc) ? 8u : 0u) |
++                     (indicator_->IsCapturingWindow(wc) ? 16u : 0u) |
++                     (indicator_->IsCapturingDisplay(wc) ? 32u : 0u);
++    }
++    auto* policy = pm::policies::DiscardEligibilityPolicy::GetFromGraph(
++        pm::PerformanceManager::GetGraph());
++    if (!policy)
++      return false;
++    std::vector<pm::policies::CannotDiscardReason> reasons;
++    policy->CanDiscard(page.get(), ::mojom::LifecycleUnitDiscardReason::URGENT,
++                       false, &reasons);
++    for (auto reason : reasons)
++      s->cannot_discard_mask |= uint64_t{1} << static_cast<unsigned>(reason);
++    s->footprint_kb =
++        pm::user_tuning::GetDiscardedMemoryEstimateForPage(page.get()).InKiB();
++    auto* frame = wc->GetPrimaryMainFrame();
++    if (frame)
++      s->renderer_pid = frame->GetProcess()->GetProcess().Pid();
++    return true;
++  }
++  void Notify() {
++    if (pending_ || !changed)
++      return;
++    pending_ = true;
++    base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
++        FROM_HERE, base::BindOnce(
++                       [](std::weak_ptr<LifecycleObservation> weak) {
++                         if (auto self = weak.lock()) {
++                           self->pending_ = false;
++                           self->Emit(0, 0);
++                         }
++                       },
++                       weak_from_this()));
++  }
++  void Emit(int event, int initiator) {
++    auto alive = shared_from_this();
++    orbit_page_lifecycle_t state{};
++    if (changed && Read(&state))
++      changed(context, event, initiator, &state);
++  }
++  void MediaStartedPlaying(const MediaPlayerInfo&,
++                           const content::MediaPlayerId& id) override {
++    players_.insert(id);
++    Notify();
++  }
++  void MediaStoppedPlaying(const MediaPlayerInfo&,
++                           const content::MediaPlayerId& id,
++                           MediaStoppedReason) override {
++    players_.erase(id);
++    Notify();
++  }
++  void AudioContextPlaybackStarted(const AudioContextId& id) override {
++    audio_contexts_.insert(id);
++    Notify();
++  }
++  void AudioContextPlaybackStopped(const AudioContextId& id) override {
++    audio_contexts_.erase(id);
++    Notify();
++  }
++  void OnAudioStateChanged(bool) override { Notify(); }
++  void PrimaryPageChanged(content::Page&) override {
++    document_id = NextDocumentID();
++    Notify();
++  }
++  void AboutToBeDiscarded(content::WebContents* replacement) override {
++    discard_initiator_ = embedder_discard ? 1 : 2;
++    Emit(1, discard_initiator_);
++    // Current Chromium discards in place; retain observation on older
++    // replacement paths too.
++    if (replacement && replacement != web_contents())
++      Observe(replacement);
++  }
++  void WasDiscarded() override {
++    players_.clear();
++    audio_contexts_.clear();
++    Emit(2, discard_initiator_ ? discard_initiator_ : 2);
++    Notify();
++  }
++  void WebContentsDestroyed() override {
++    auto alive = shared_from_this();
++    auto cb = changed;
++    changed = nullptr;
++    Detach();
++    Observe(nullptr);
++    Lifecycles().erase(id_);
++    if (cb)
++      cb(context, 3, 0, nullptr);
++  }
++#define ORBIT_PAGE_CHANGE(method)                    \
++  void method(const pm::PageNode* p) override {      \
++    if (p->GetWebContents().get() == web_contents()) \
++      Notify();                                      \
++  }
++  ORBIT_PAGE_CHANGE(OnIsVisibleChanged)
++  ORBIT_PAGE_CHANGE(OnIsAudibleChanged)
++  ORBIT_PAGE_CHANGE(OnHasPictureInPictureChanged)
++  ORBIT_PAGE_CHANGE(OnPageLifecycleStateChanged)
++  ORBIT_PAGE_CHANGE(OnPageIsHoldingWebLockChanged)
++  ORBIT_PAGE_CHANGE(OnPageIsHoldingBlockingIndexedDBLockChanged)
++  ORBIT_PAGE_CHANGE(OnPageUsesWebRTCChanged)
++  ORBIT_PAGE_CHANGE(OnHadFormInteractionChanged)
++  ORBIT_PAGE_CHANGE(OnHadUserEditsChanged)
++  ORBIT_PAGE_CHANGE(OnMainFrameDocumentChanged)
++#undef ORBIT_PAGE_CHANGE
++#define ORBIT_CAPTURE_CHANGE(method)                     \
++  void method(content::WebContents* wc, bool) override { \
++    if (wc == web_contents())                            \
++      Notify();                                          \
++  }
++  ORBIT_CAPTURE_CHANGE(OnIsCapturingVideoChanged)
++  ORBIT_CAPTURE_CHANGE(OnIsCapturingAudioChanged)
++  ORBIT_CAPTURE_CHANGE(OnIsBeingMirroredChanged)
++  ORBIT_CAPTURE_CHANGE(OnIsCapturingTabChanged)
++  ORBIT_CAPTURE_CHANGE(OnIsCapturingWindowChanged)
++  ORBIT_CAPTURE_CHANGE(OnIsCapturingDisplayChanged)
++#undef ORBIT_CAPTURE_CHANGE
++  orbit_lifecycle_callback_t changed = nullptr;
++  void* context = nullptr;
++  bool embedder_discard = false;
++  uint64_t document_id;
++
++ private:
++  int32_t id_;
++  raw_ptr<pm::Graph> graph_ = nullptr;
++  scoped_refptr<MediaStreamCaptureIndicator> indicator_;
++  std::set<content::MediaPlayerId> players_;
++  std::set<AudioContextId> audio_contexts_;
++  bool pending_ = false;
++  int discard_initiator_ = 0;
++};
++std::shared_ptr<LifecycleObservation> EnsureLifecycle(int32_t id) {
++  auto it = Lifecycles().find(id);
++  if (it != Lifecycles().end())
++    return it->second;
++  auto host = CefBrowserHostBase::GetBrowserForBrowserId(id);
++  auto* wc = host ? host->GetWebContents() : nullptr;
++  if (!wc)
++    return {};
++  auto observation = std::make_shared<LifecycleObservation>(id, wc);
++  Lifecycles()[id] = observation;
++  return observation;
++}
++int32_t PageLifecycle(int32_t id, orbit_page_lifecycle_t* state) {
++  if (!OnValidUIThread() || !state || state->struct_size < sizeof(*state))
++    return 0;
++  auto observation = EnsureLifecycle(id);
++  return observation && observation->Read(state);
++}
++int32_t PageLifecycleObserve(int32_t id,
++                             orbit_lifecycle_callback_t callback,
++                             void* context) {
++  if (!OnValidUIThread())
++    return 0;
++  auto observation = EnsureLifecycle(id);
++  if (!observation)
++    return 0;
++  observation->changed = callback;
++  observation->context = context;
++  return 1;
++}
++}  // namespace
+diff --git a/libcef/browser/orbit/orbit_suspension.inc b/libcef/browser/orbit/orbit_suspension.inc
+index d6d7f2e..db993b8 100644
+--- a/libcef/browser/orbit/orbit_suspension.inc
++++ b/libcef/browser/orbit/orbit_suspension.inc
+@@ -16,7 +16,10 @@ int32_t DiscardTab(int32_t id) {
+   // The embedder has synchronously checked background ownership and document safety.
+   // Hide before discarding so activation is the only trigger for lazy restoration.
+   contents->WasHidden();
++  auto observation = EnsureLifecycle(id);
++  observation->embedder_discard = true;
+   contents->Discard(base::DoNothing());
++  observation->embedder_discard = false;
+   return contents->WasDiscarded() ? 1 : 0;
+ }
+ int32_t RestoreDiscardedTab(int32_t id) {
+diff --git a/libcef/renderer/orbit_boost_renderer.cc b/libcef/renderer/orbit_boost_renderer.cc
+index 4f5cdd0..9b74de3 100644
+--- a/libcef/renderer/orbit_boost_renderer.cc
++++ b/libcef/renderer/orbit_boost_renderer.cc
+@@ -1,6 +1,11 @@
+ // Copyright 2026 Orbit. BSD-style license; see LICENSE.
+-#include "cef/libcef/renderer/orbit_boosts.h"
++#include <map>
++#include <memory>
++#include "base/memory/weak_ptr.h"
++#include "base/no_destructor.h"
++#include "base/trace_event/trace_event.h"
+ #include "cef/libcef/common/orbit_boosts.h"
++#include "cef/libcef/renderer/orbit_boosts.h"
+ #include "cef/libcef/renderer/render_manager.h"
+ #include "content/public/renderer/render_frame.h"
+ #include "content/public/renderer/render_frame_observer.h"
+@@ -10,11 +15,27 @@
+ #include "third_party/blink/public/web/web_document.h"
+ #include "third_party/blink/public/web/web_local_frame.h"
+ #include "third_party/blink/public/web/web_script_source.h"
+-#include <map>
+-#include "base/no_destructor.h"
+-#include "base/memory/weak_ptr.h"
+ namespace orbit {
+ namespace {
++struct SnapshotCache {
++  bool initialized = false;
++  std::shared_ptr<const base::DictValue> snapshot;
++  uint64_t revision = 0;
++  bool Update(const std::string& json) {
++    auto parsed = ParseBoosts(json);
++    uint64_t incoming = 0;
++    if (!parsed || !BoostRevision(*parsed, incoming) || incoming < revision)
++      return false;
++    snapshot = std::make_shared<const base::DictValue>(std::move(*parsed));
++    revision = incoming;
++    initialized = true;
++    return true;
++  }
++};
++SnapshotCache& Cache() {
++  static base::NoDestructor<SnapshotCache> cache;
++  return *cache;
++}
+ class Frame;
+ std::map<content::RenderFrame*, Frame*>& Frames() { static base::NoDestructor<std::map<content::RenderFrame*, Frame*>> frames; return *frames; }
+ int World(const std::string& id) {
+@@ -78,16 +99,28 @@ class Frame final : public content::RenderFrameObserver {
+ void BoostFrameCreated(content::RenderFrame* frame) { new Frame(frame); }
+ void BoostDocumentStart(content::RenderFrame* frame) {
+   auto it = Frames().find(frame); if (it == Frames().end()) return;
+-  // Native in-memory snapshot barrier; never calls the shell, disk or network.
+-  // This also closes navigation/update races on existing renderer processes.
+-  std::string json;
+-  CefRenderManager::Get()->GetBrowserManager()->GetBoosts(&json);
+-  auto snapshot = ParseBoosts(json);
+-  if (snapshot) it->second->Apply(*snapshot, true);
++  auto& cache = Cache();
++  if (!cache.initialized) {
++    TRACE_EVENT("browser", "BoostSnapshotInitialFetch");
++    std::string json;
++    CefRenderManager::Get()->GetBrowserManager()->GetBoosts(&json);
++    cache.Update(json);
++    // Empty/private registries are cached too; an update installs future
++    // revisions.
++    cache.initialized = true;
++  }
++  // Scripts can enter nested renderer loops; retain this revision through installation.
++  auto snapshot = cache.snapshot;
++  if (snapshot)
++    it->second->Apply(*snapshot, true);
+   else it->second->StartWithoutRegistry();
+ }
+ void BoostUpdate(const std::string& json) {
+-  auto snapshot = ParseBoosts(json); if (!snapshot) return;
+-  for (auto& [frame, observer] : Frames()) observer->Apply(*snapshot, false);
++  auto& cache = Cache();
++  if (!cache.Update(json))
++    return;
++  auto snapshot = cache.snapshot;
++  for (auto& [frame, observer] : Frames())
++    observer->Apply(*snapshot, false);
+ }
+ }  // namespace orbit
