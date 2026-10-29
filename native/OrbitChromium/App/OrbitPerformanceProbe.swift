@@ -281,6 +281,17 @@ enum OrbitPerformanceProbe {
 
 
 extension OrbitPerformanceProbe {
+    /// Refuse synthetic input unless WindowServer attributes this exact window to this process.
+    private static func ownsWindow(_ owner: OrbitWindowController) -> Bool {
+        guard Bundle.main.infoDictionary?["OrbitSyntheticBundle"] as? Bool == true,
+              Bundle.main.bundleIdentifier == "lab.orbit.orbit.perf-core-3",
+              let window = owner.window, window.isVisible,
+              let windows = CGWindowListCopyWindowInfo([.optionIncludingWindow], CGWindowID(window.windowNumber)) as? [[String: Any]]
+        else { return false }
+        return windows.contains { ($0[kCGWindowOwnerPID as String] as? Int32) == getpid()
+            && ($0[kCGWindowNumber as String] as? Int) == window.windowNumber }
+    }
+
     private static func nextPageFrame(_ surface: ChromiumSurface) async -> Bool {
         let (ok, _) = await surface.devToolsCall("Runtime.evaluate", params: #"{"expression":"new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(()=>r(true))))", "awaitPromise":true,"returnByValue":true}"#, timeout: .seconds(2))
         return ok
@@ -289,6 +300,9 @@ extension OrbitPerformanceProbe {
     /// Synthetic diagnostics report renderer frame opportunities / AppKit commits, not scanout.
     private static func benchmark(_ owner: OrbitWindowController, command: [String: String], store: BrowserStore) async -> [String: Any] {
         let kind = command["kind"] ?? "latency"
+        if kind.hasPrefix("workload-") {
+            return await workload(owner, kind: kind, store: store)
+        }
         let poster = OSSignposter(subsystem: "local.orbit", category: "performance")
         var measurements: [String: [Double]] = [:]
         let document = await store.sessionDocument()
@@ -325,6 +339,11 @@ extension OrbitPerformanceProbe {
         if kind == "scroll" {
             let clip = owner.sidebar.page.pageScrollView.contentView
             let height = max(1, (clip.documentView?.bounds.height ?? 1) - clip.bounds.height)
+            measurements["scrollRange"] = [Double(height)]
+            let counter = OrbitPerformanceFrameCounter()
+            let link = owner.sidebar.displayLink(target: counter, selector: #selector(OrbitPerformanceFrameCounter.step(_:)))
+            link.add(to: .main, forMode: .common)
+            defer { link.invalidate() }
             let origin = ProcessInfo.processInfo.systemUptime
             for i in 0..<600 {
                 let interval = poster.beginInterval("SidebarScrollCommit")
@@ -339,6 +358,8 @@ extension OrbitPerformanceProbe {
                 let remaining = origin + Double(i+1)/120 - ProcessInfo.processInfo.systemUptime
                 if remaining > 0 { try? await Task.sleep(for: .seconds(remaining)) }
             }
+            measurements["displayTargetsMs"] = counter.targets
+            measurements["displayCallbacksMs"] = counter.callbacks
             return measurements
         }
         for space in document.spaces.prefix(2) {
@@ -375,6 +396,7 @@ extension OrbitPerformanceProbe {
                 } else if task == "typing", let surface = owner.session.selectedSurface {
                     _ = await evaluate(surface, "(() => { document.querySelector('input').focus(); return {}; })()")
                     // Start at dispatch, excluding fixture focus setup.
+                    guard ownsWindow(owner) else { return ["ownershipRefused": true] }
                     let inputStart = ProcessInfo.processInfo.systemUptime
                     let (ok, _) = await surface.devToolsCall("Input.insertText", params: #"{"text":"x"}"#)
                     let frame = await nextPageFrame(surface)
@@ -388,5 +410,127 @@ extension OrbitPerformanceProbe {
             }
         }
         return measurements
+    }
+}
+
+
+extension OrbitPerformanceProbe {
+    private static func workload(_ owner: OrbitWindowController, kind: String, store: BrowserStore) async -> [String: Any] {
+        guard ownsWindow(owner) else { return ["ownershipRefused": true] }
+        let document = await store.sessionDocument()
+        var values: [String: [Double]] = [:]
+        let poster = OSSignposter(subsystem: "local.orbit", category: "performance")
+        func commit() {
+            owner.window?.displayIfNeeded()
+            CATransaction.flush()
+        }
+        func select(_ id: TabID) async -> Bool {
+            guard ownsWindow(owner) else { return false }
+            owner.session.selectTab(id)
+            await owner.session.waitForQueuedCommands()
+            guard let surface = owner.session.selectedSurface else { return false }
+            let deadline = ProcessInfo.processInfo.systemUptime + 5
+            while !surface.isReady || surface.navigationState.isLoading {
+                guard ProcessInfo.processInfo.systemUptime < deadline else { return false }
+                try? await Task.sleep(for: .milliseconds(5))
+            }
+            return await nextPageFrame(surface)
+        }
+        if kind == "workload-prepare" || kind == "workload-load" {
+            var loaded = 0
+            for space in document.spaces {
+                guard ownsWindow(owner) else { return ["ownershipRefused": true] }
+                owner.session.activateSpace(space.id)
+                await owner.session.waitForQueuedCommands()
+                let tabs = owner.session.organization?.allTabs.filter { $0.section.spaceID == space.id } ?? []
+                for tab in tabs.prefix(kind == "workload-prepare" ? 2 : tabs.count) {
+                    if await select(tab.id) { loaded += 1 }
+                }
+            }
+            if kind == "workload-load" {
+                for tab in document.organization.tabs where document.organization.favorites.contains(where: { $0.items.contains(.tab(tab.id)) }) {
+                    if await select(tab.id) { loaded += 1 }
+                }
+            }
+            owner.session.activateSpace(document.spaces[0].id)
+            await owner.session.waitForQueuedCommands()
+            return ["loaded": loaded, "surfaces": owner.session.ownedSurfaces.count]
+        }
+        if kind == "workload-dormant" {
+            for space in document.spaces {
+                owner.session.activateSpace(space.id)
+                await owner.session.waitForQueuedCommands()
+                let tabs = owner.session.organization?.allTabs.filter { $0.section.spaceID == space.id && $0.occurrenceID.flatMap { owner.session.surface(for: $0) } == nil } ?? []
+                for tab in tabs.prefix(2) {
+                    let start = ProcessInfo.processInfo.systemUptime
+                    let ok = await select(tab.id)
+                    values["dormantMs", default: []].append((ProcessInfo.processInfo.systemUptime-start)*1000)
+                    if !ok { values["failures", default: []].append(1) }
+                }
+            }
+            return values
+        }
+        if kind == "workload-latency" {
+            for i in 0..<10 {
+                for task in ["tab", "space", "palette", "paletteTyping"] {
+                    guard ownsWindow(owner) else { return ["ownershipRefused": true] }
+                    let interval = poster.beginInterval("WorkloadInteraction", id: poster.makeSignpostID(), "kind=\(task, privacy: .public)")
+                    let start = ProcessInfo.processInfo.systemUptime
+                    var ok = true
+                    if task == "tab" {
+                        let tabs = owner.session.organization?.allTabs.filter { $0.section.spaceID == owner.session.snapshot?.activeSpaceID && $0.occurrenceID.flatMap { owner.session.surface(for: $0) } != nil } ?? []
+                        if let tab = tabs.first(where: { !$0.isSelected }) { ok = await select(tab.id) }
+                        else { ok = false }
+                    } else if task == "space" {
+                        let active = owner.session.snapshot?.activeSpaceID
+                        let index = document.spaces.firstIndex(where: { $0.id == active }) ?? 0
+                        owner.session.activateSpace(document.spaces[(index+1) % document.spaces.count].id)
+                        await owner.session.waitForQueuedCommands()
+                        if let surface = owner.session.selectedSurface { ok = await nextPageFrame(surface) } else { ok = false }
+                        values["spaceFrameMs", default: []].append((ProcessInfo.processInfo.systemUptime-start)*1000)
+                        let deadline = ProcessInfo.processInfo.systemUptime + 3
+                        while owner.sidebar.isSpaceTransitionAnimating && ProcessInfo.processInfo.systemUptime < deadline {
+                            try? await Task.sleep(for: .milliseconds(2))
+                        }
+                        ok = ok && !owner.sidebar.isSpaceTransitionAnimating
+                        commit()
+                    } else if task == "palette" {
+                        owner.palette.present(.newTab)
+                        commit()
+                        values["paletteFirstMs", default: []].append((ProcessInfo.processInfo.systemUptime-start)*1000)
+                        await owner.palette.waitForResults()
+                        commit()
+                        ok = owner.palette.isPresented && !owner.palette.results.isEmpty
+                    } else {
+                        // Exercise the real field callback without posting global keyboard events.
+                        let text = "Workload \(i)"
+                        owner.palette.view.input.stringValue = text
+                        owner.palette.view.onQuery?(text)
+                        commit()
+                        values["paletteTypingFirstMs", default: []].append((ProcessInfo.processInfo.systemUptime-start)*1000)
+                        await owner.palette.waitForResults()
+                        commit()
+                        ok = owner.palette.draft == text
+                    }
+                    values[task+"Ms", default: []].append((ProcessInfo.processInfo.systemUptime-start)*1000)
+                    if !ok { values["failures", default: []].append(1) }
+                    poster.endInterval("WorkloadInteraction", interval)
+                    if task == "paletteTyping" { owner.palette.dismiss(returnFocus: true) }
+                }
+            }
+            return values
+        }
+        return ["unknownKind": kind]
+    }
+}
+
+
+@MainActor
+private final class OrbitPerformanceFrameCounter: NSObject {
+    var targets: [Double] = []
+    var callbacks: [Double] = []
+    @objc func step(_ link: CADisplayLink) {
+        targets.append(link.targetTimestamp * 1000)
+        callbacks.append(ProcessInfo.processInfo.systemUptime * 1000)
     }
 }

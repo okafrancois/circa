@@ -114,7 +114,21 @@ final class BrowserSidebarView: NSView, SidebarListHost {
     private var swipeDestinationGeometry: OrbitSidebarGeometry?
     private var swipePreviewFavorites: FavoritesGridView?
     private var swipeOutgoingFavorites: FavoritesGridView?
+    private struct SwipePreparationKey: Equatable {
+        let title: String
+        let content: SidebarListContent
+        let favorites: [FavoriteTileItem]
+        let profile: ProfileID?
+        let icon: BrowserSpaceIcon
+        let accent: OrbitTokens.ThemeAccent
+        let geometry: OrbitSidebarGeometry
+        let appearance: NSAppearance.Name
+        let scale: CGFloat
+        let reduceTransparency: Bool
+        let increaseContrast: Bool
+    }
     private struct PreparedSwipePage {
+        var key: SwipePreparationKey? = nil
         let page: SidebarSpacePageView
         let content: SidebarListContent
         let favorites: FavoritesGridView
@@ -122,9 +136,15 @@ final class BrowserSidebarView: NSView, SidebarListHost {
         let favoritesRaster: SpaceSwipeRaster?
     }
     private var preparedSwipePages: [SpaceID: PreparedSwipePage] = [:]
+    private var swipePreparationCache: [SpaceID: PreparedSwipePage] = [:]
+    private var preparedSwipePageOrder: [SpaceID] = []
+    // Keep only a few detached previews; adoption removes the page from this cache.
+    var preparedSpaceSwipePageCount: Int { swipePreparationCache.count }
+    func preparedSpaceSwipePage(for id: SpaceID) -> SidebarSpacePageView? { preparedSwipePages[id]?.page }
     private var swipePreviewRaster: SpaceSwipeRaster?
     private var swipeFavoritesRaster: SpaceSwipeRaster?
     private let ordinarySpaceMotion = OrbitSpringAnimator(value: 0, usesCoreVideoClock: true)
+    var isSpaceTransitionAnimating: Bool { ordinarySpaceMotion.isAnimating || spaceSwipe.isSettling }
     private var ordinaryOffset: CGFloat?
     private var ordinaryDirection: CGFloat = 1
     private var ordinarySourceGeometry: OrbitSidebarGeometry?
@@ -1272,16 +1292,31 @@ extension BrowserSidebarView {
     func prepareSpaceSwipeNeighbors(document: BrowserSessionDocument, active: SpaceID,
                                    resolveTheme: (SpaceID) -> OrbitTokens.SpaceTheme) {
         guard let index = document.spaces.firstIndex(where: { $0.id == active }) else { return }
+        let live = Set(document.spaces.map(\.id))
+        swipePreparationCache = swipePreparationCache.filter { live.contains($0.key) }
+        preparedSwipePageOrder = preparedSwipePageOrder.filter { swipePreparationCache[$0] != nil }
         var prepared: [SpaceID: PreparedSwipePage] = [:]
         for neighbor in [index - 1, index + 1] where document.spaces.indices.contains(neighbor) {
             let space = document.spaces[neighbor]
             let content = SpaceSwipePreview.content(document: document, spaceID: space.id, windowID: organization?.windowID, icon: previewIcon)
             let favorites = SpaceSwipePreview.favorites(document: document, spaceID: space.id, windowID: organization?.windowID, icon: previewIcon)
+            let key = SwipePreparationKey(title: space.name, content: content,
+                favorites: favorites?.items ?? [], profile: favorites?.profileID,
+                icon: resolveSpaceIcon(space.id), accent: OrbitSpaceThemes.accent(for: resolveTheme(space.id)),
+                geometry: geometry, appearance: effectiveAppearance.name, scale: window?.backingScaleFactor ?? 2,
+                reduceTransparency: NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency,
+                increaseContrast: NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast)
+            preparedSwipePageOrder.removeAll { $0 == space.id }
+            preparedSwipePageOrder.append(space.id)
+            if let cached = swipePreparationCache[space.id], cached.key == key, cached.page.superview == nil {
+                prepared[space.id] = cached
+                continue
+            }
             let incoming = SidebarSpacePageView()
             incoming.appearance = effectiveAppearance
             incoming.spaceID = space.id
-            incoming.iconSelection = resolveSpaceIcon(space.id)
-            incoming.accent = OrbitSpaceThemes.accent(for: resolveTheme(space.id))
+            incoming.iconSelection = key.icon
+            incoming.accent = key.accent
             incoming.setCommandsEnabled(false)
             incoming.setAccessibilityHidden(true)
             incoming.render(title: space.name, content: content, animated: false)
@@ -1294,11 +1329,21 @@ extension BrowserSidebarView {
             grid.frame = contentFrame(layout.favoritesFrame)
             grid.layoutSubtreeIfNeeded()
             let scale = window?.backingScaleFactor ?? 2
-            prepared[space.id] = PreparedSwipePage(page: incoming, content: content, favorites: grid,
+            let preparedPage = PreparedSwipePage(key: key, page: incoming, content: content, favorites: grid,
                 pageRaster: SpaceSwipeRaster(view: incoming, scale: scale),
                 favoritesRaster: SpaceSwipeRaster(view: grid, scale: scale))
+            prepared[space.id] = preparedPage
+            swipePreparationCache[space.id] = preparedPage
         }
+        // Only freshly validated neighbors are eligible for presentation. Older cached pages
+        // must pass the full key check before they can rejoin this inventory.
         preparedSwipePages = prepared
+        trimPreparedSwipePages()
+    }
+    private func trimPreparedSwipePages() {
+        while preparedSwipePageOrder.count > 4 {
+            swipePreparationCache.removeValue(forKey: preparedSwipePageOrder.removeFirst())
+        }
     }
     private var liveFavoritesGrid: FavoritesGridView? {
         favoritesContainer.subviews.compactMap { $0 as? FavoritesGridView }.first
@@ -1439,6 +1484,8 @@ extension BrowserSidebarView {
                 retainSpaceSwipePreview()
                 swipePreview?.removeFromSuperview()
                 let prepared = preparedSwipePages.removeValue(forKey: space.id)
+                swipePreparationCache.removeValue(forKey: space.id)
+                preparedSwipePageOrder.removeAll { $0 == space.id }
                 let incoming = prepared?.page ?? SidebarSpacePageView()
                 incoming.spaceID = space.id
                 let icon = resolveSpaceIcon(space.id)
