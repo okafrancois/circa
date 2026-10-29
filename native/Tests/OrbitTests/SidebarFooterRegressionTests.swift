@@ -120,6 +120,72 @@ struct SidebarFooterRegressionTests {
         #expect(footer.spaceButtons[0] === old)
     }
 
+    @Test("Equivalent footer paint and control state writes do not invalidate Space icons")
+    func equivalentPaintDoesNotInvalidate() {
+        let items = spaces(3)
+        let footer = SidebarFooterView()
+        footer.render(spaces: items, activeSpaceID: items[0].id)
+        let geometry = OrbitSidebarGeometry.resolve(.init(width: 240, height: 640, spaceCount: 3))
+        footer.frame = geometry.footerFrame
+        footer.apply(geometry)
+        let accent = footer.accent
+        OrbitUIWorkCounters.enabled = true
+        defer { OrbitUIWorkCounters.enabled = false; OrbitUIWorkCounters.reset() }
+        OrbitUIWorkCounters.reset()
+        footer.accent = accent
+        footer.apply(geometry)
+        footer.setCommandsEnabled(true)
+        for button in footer.spaceButtons {
+            let active = button.isActive, hover = button.hoverAmount, emphasis = button.iconEmphasis
+            button.isActive = active
+            button.hoverAmount = hover
+            button.iconEmphasis = emphasis
+            #expect(OrbitUIWorkCounters.values["glyphDirty", default: 0] == 0)
+        }
+    }
+
+    @Test("Opacity providers compare current values and retain changed appearance behavior")
+    func opacityProviderChanges() {
+        let button = SidebarSpaceButton(space: spaces(1)[0], index: 0, isActive: false)
+        OrbitUIWorkCounters.enabled = true
+        defer { OrbitUIWorkCounters.enabled = false; OrbitUIWorkCounters.reset() }
+        button.appearance = NSAppearance(named: .aqua)
+        button.inactiveOpacity = { _ in 0.5 }
+        OrbitUIWorkCounters.reset()
+        button.inactiveOpacity = { appearance in
+            appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? 0.8 : 0.5
+        }
+        #expect(OrbitUIWorkCounters.values["glyphDirty", default: 0] == 0)
+        #expect(button.inactiveOpacity(NSAppearance(named: .darkAqua)!) == 0.8)
+        button.appearance = NSAppearance(named: .darkAqua)
+        button.viewDidChangeEffectiveAppearance()
+        #expect(OrbitUIWorkCounters.values["glyphDirty", default: 0] > 0)
+        OrbitUIWorkCounters.reset()
+        button.inactiveOpacity = { _ in 0.8 }
+        #expect(OrbitUIWorkCounters.values["glyphDirty", default: 0] == 0)
+        button.inactiveOpacity = { _ in 0.6 }
+        #expect(OrbitUIWorkCounters.values["glyphDirty", default: 0] > 0)
+    }
+
+    @Test("Active and animated state changes still invalidate, including an already emphasized icon")
+    func changedPaintInvalidates() {
+        let button = SidebarSpaceButton(space: spaces(1)[0], index: 0, isActive: false)
+        OrbitUIWorkCounters.enabled = true
+        defer { OrbitUIWorkCounters.enabled = false; OrbitUIWorkCounters.reset() }
+        button.mouseEntered(with: NSEvent())
+        button.hoverAmount = 1
+        button.iconEmphasis = 1
+        OrbitUIWorkCounters.reset()
+        button.isActive = true
+        #expect(OrbitUIWorkCounters.values["glyphDirty", default: 0] > 0)
+        OrbitUIWorkCounters.reset()
+        button.hoverAmount = 0.75
+        #expect(OrbitUIWorkCounters.values["glyphDirty", default: 0] > 0)
+        OrbitUIWorkCounters.reset()
+        button.iconEmphasis = 0.5
+        #expect(OrbitUIWorkCounters.values["glyphDirty", default: 0] > 0)
+    }
+
     private func raster(_ button: SidebarSpaceButton) -> NSBitmapImageRep {
         let bitmap = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 40, pixelsHigh: 40,
                                       bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true,
