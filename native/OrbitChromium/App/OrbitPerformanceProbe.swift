@@ -70,12 +70,51 @@ enum OrbitPerformanceProbe {
             result["surfaces"] = owner.session.ownedSurfaces.count
             result["browsers"] = owner.session.ownedSurfaces.filter(\.isBrowserCreated).count
             result["windowNumber"] = owner.window?.windowNumber
+            result["syncEnabled"] = environment.sync.enabled
+            result["syncTaskScheduled"] = environment.sync.hasScheduledCycle
             let commandFile = root.appendingPathComponent("perf-command.json")
             if let data = try? Data(contentsOf: commandFile),
                let command = try? JSONSerialization.jsonObject(with: data) as? [String: String] {
                 try? FileManager.default.removeItem(at: commandFile)
                 let name = command["command"] ?? ""
-                if name == "benchmark" {
+                if name == "data-quick-wins" {
+                    if let text = command["base"], let base = URL(string: text),
+                       base.scheme == "http", base.host == "127.0.0.1" {
+                        for index in 1...3 { owner.session.openTab(url: base.appendingPathComponent("page-\(index)")) }
+                        await owner.session.waitForQueuedCommands()
+                        if let surface = owner.session.selectedSurface { await waitForLoad(surface) }
+                    }
+                    var timings: [String: Double] = [:]
+                    for count in [62, 200, 1000] {
+                        var projection = BrowserSyncProjection()
+                        let ids = (0..<count).map(String.init)
+                        projection.lists["root"] = ids
+                        for id in ids { projection.entries[id] = [:] }
+                        var replica = BrowserSyncReplica(device: "synthetic")
+                        try? replica.capture(projection)
+                        let start = ProcessInfo.processInfo.systemUptime
+                        try? replica.capture(projection)
+                        timings[String(count)] = (ProcessInfo.processInfo.systemUptime - start) * 1000
+                    }
+                    result["captureMilliseconds"] = timings
+                    // Exercise the actual runtime loop with a local closure; no cloud adapters.
+                    var cycles = 0
+                    let scheduler = BrowserSyncRuntime(destination: root.appendingPathComponent("probe-sync.json"),
+                        interval: .seconds(5)) { cycles += 1 }
+                    let start = ProcessInfo.processInfo.systemUptime
+                    try? await Task.sleep(for: .seconds(11))
+                    result["disabledCycles"] = cycles
+                    result["disabledTaskScheduled"] = scheduler.hasScheduledCycle
+                    result["disabledObservationSeconds"] = ProcessInfo.processInfo.systemUptime - start
+                    for _ in 0..<2 {
+                        try? await scheduler.setEnabled(true)
+                        try? await Task.sleep(for: .milliseconds(50))
+                        try? await scheduler.setEnabled(false)
+                        try? await Task.sleep(for: .milliseconds(50))
+                    }
+                    result["reenabledCycles"] = cycles
+                    await scheduler.prepareForTermination()
+                } else if name == "benchmark" {
                     result["benchmark"] = await benchmark(owner, command: command, store: environment.store)
                 } else if name == "url-pill-fixture" {
                     let document = await environment.store.sessionDocument()
