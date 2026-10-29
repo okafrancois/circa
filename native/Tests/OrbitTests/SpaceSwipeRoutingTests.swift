@@ -1229,7 +1229,7 @@ struct SpaceSwipeRoutingTests {
         _ = sidebar.spaceSwipe.routeScroll(try scroll(.changed, x: -300), inside: true)
         #expect(sidebar.spaceSwipe.offset < 0)
         #expect(sidebar.swipePreviewCount == 0)
-        #expect(try #require(blend).theme == .lavender)
+        #expect(try #require(blend).theme.stops == OrbitTokens.SpaceTheme.lavender.stops)
         #expect(commits == 1)
         _ = sidebar.spaceSwipe.routeScroll(try scroll(.cancelled), inside: true)
         sidebar.spaceSwipe.advance(to: 12)
@@ -1309,7 +1309,8 @@ struct SpaceSwipeRoutingTests {
         _ = sidebar.spaceSwipe.handleScroll(try scroll(.changed, x: 120), inside: true)
         #expect(sidebar.spaceSwipe.offset > 0)
         #expect(sidebar.swipePreviewCount == 0)
-        #expect(shell.themeFill.theme == .amberCoral)
+        // Endpoint paint is appearance-resolved; the shell retains the selected theme model.
+        #expect(shell.themeFill.theme.stops == OrbitTokens.SpaceTheme.amberCoral.stops)
         #expect(commits == 0)
         #expect(document.spaces.first?.id == first)
         _ = sidebar.spaceSwipe.handleScroll(try scroll(.cancelled), inside: true)
@@ -1336,8 +1337,8 @@ struct SpaceSwipeRoutingTests {
         _ = sidebar.spaceSwipe.handleScroll(try scroll(.changed, x: 120), inside: true)
         #expect(shell.theme == .lavender)
         #expect(shell.spaceSwipeBlend?.progress == 0)
-        #expect(shell.themeFill.theme == .amberCoral)
-        #expect(shell.floatingBackdrop.fill.theme == .amberCoral)
+        #expect(shell.themeFill.theme.stops == OrbitTokens.SpaceTheme.amberCoral.stops)
+        #expect(shell.floatingBackdrop.fill.theme.stops == OrbitTokens.SpaceTheme.amberCoral.stops)
         for name in [NSAppearance.Name.aqua, .darkAqua] {
             let appearance = try #require(NSAppearance(named: name))
             shell.themeFill.appearance = appearance
@@ -1373,7 +1374,7 @@ struct SpaceSwipeRoutingTests {
         _ = sidebar.spaceSwipe.handleScroll(try scroll(.changed, x: -120), inside: true)
         #expect(sidebar.spaceSwipe.offset < 0)
         #expect(sidebar.swipePreviewCount == 0)
-        #expect(shell.themeFill.theme == .lavender)
+        #expect(shell.themeFill.theme.stops == OrbitTokens.SpaceTheme.lavender.stops)
         for name in [NSAppearance.Name.aqua, .darkAqua] {
             let appearance = try #require(NSAppearance(named: name))
             shell.themeFill.appearance = appearance
@@ -1383,14 +1384,14 @@ struct SpaceSwipeRoutingTests {
         }
         _ = sidebar.spaceSwipe.handleScroll(try scroll(.changed, x: 30), inside: true)
         #expect(sidebar.spaceSwipe.offset == 0)
-        #expect(shell.themeFill.theme == .lavender)
+        #expect(shell.themeFill.theme.stops == OrbitTokens.SpaceTheme.lavender.stops)
         _ = sidebar.spaceSwipe.handleScroll(try scroll(.changed, x: 60), inside: true)
         #expect(shell.themeFill.theme != .lavender)
         _ = sidebar.spaceSwipe.handleScroll(try scroll(.changed, x: -60), inside: true)
         #expect(sidebar.spaceSwipe.offset == 0)
-        #expect(shell.themeFill.theme == .lavender)
+        #expect(shell.themeFill.theme.stops == OrbitTokens.SpaceTheme.lavender.stops)
         _ = sidebar.spaceSwipe.handleScroll(try scroll(.changed, x: -20), inside: true)
-        #expect(shell.themeFill.theme == .lavender)
+        #expect(shell.themeFill.theme.stops == OrbitTokens.SpaceTheme.lavender.stops)
         _ = sidebar.spaceSwipe.handleScroll(try scroll(.ended), inside: true)
         sidebar.spaceSwipe.advance(to: 12)
         #expect(commits == 0)

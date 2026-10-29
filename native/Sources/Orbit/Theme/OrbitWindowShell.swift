@@ -445,7 +445,7 @@ final class OrbitWindowShell {
         guard newTheme != theme else { onThemePaint?(spaceSwipePaintedTheme ?? theme); return }
         let style = OrbitMotionStyle.resolve(animated: animated, canAnimate: canAnimate,
                                            reducedMotion: OrbitMotionPreferences.prefersReducedMotion)
-        let previous = spaceSwipePaintedTheme ?? theme
+        let previous = SpaceSwipeThemeBlend.snapshot(themeFill.theme, appearance: themeFill.effectiveAppearance)
         themeMotionSource = nil
         themeMotion.set(1)
         theme = newTheme
@@ -477,7 +477,9 @@ final class OrbitWindowShell {
             floatingBackdrop.foreground = OrbitSpaceThemes.accent(for: painted).foreground
             onThemePaint?(painted)
         }
-        window?.appearance = OrbitAppearance.windowAppearance(for: newTheme.mode)
+        if themeMotionSource == nil && spaceSwipeBlend == nil {
+            window?.appearance = OrbitAppearance.windowAppearance(for: newTheme.mode)
+        }
         updateWindowBackground()
     }
 
@@ -490,6 +492,12 @@ final class OrbitWindowShell {
     }
 
     private func paintSpaceTheme(_ blend: SpaceSwipeThemeBlend?) {
+        // A mixed-mode transition resolves each endpoint in its own appearance. Automatic
+        // endpoints follow the system throughout, including before/after selection publication.
+        if let window {
+            let appearance = OrbitAppearance.windowAppearance(for: blend == nil ? theme.mode : .automatic)
+            if window.appearance != appearance { window.appearance = appearance }
+        }
         let painted = blend?.theme ?? theme
         spaceSwipePaintedTheme = blend == nil ? nil : painted
         themeFill.applyInteractiveTheme(painted)
