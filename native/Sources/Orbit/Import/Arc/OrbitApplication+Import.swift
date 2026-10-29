@@ -14,9 +14,9 @@ enum OrbitImportLaunchOptions {
 }
 
 extension OrbitApplication {
-    /// File › Import from Arc… and Arc › Import from Another Browser….
+    /// File › Import from Arc… and the first-run offer.
     func startArcImport() {
-        guard !isPreparingToQuit, let environment else { NSSound.beep(); return }
+        guard !isPreparingToQuit, !browserImport.isRunning, pendingBrowserImport == nil, let environment else { NSSound.beep(); return }
         guard let target = ArcImportLiveTarget(environment: environment) else {
             // A temporary session has nowhere durable to import into.
             ArcImportAlertPresenter().showFailure(.targetUnreadable)

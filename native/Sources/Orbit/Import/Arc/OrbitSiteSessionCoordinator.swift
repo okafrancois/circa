@@ -43,7 +43,7 @@ extension OrbitApplication {
     /// `continuingArcImport`: second step of File › Import from Arc…; engines without offline
     /// session import (WebKit previews) end the import there silently.
     func startArcSiteSessionImport(restoring: Bool = false, continuingArcImport: Bool = false) {
-        guard !isPreparingToQuit, !isImportingSiteSessions, pendingSiteSessionRequest == nil,
+        guard !isPreparingToQuit, !isImportingSiteSessions, !browserImport.isRunning, pendingBrowserImport == nil, pendingSiteSessionRequest == nil,
               let configuration = activeSiteSessionConfiguration(), let environment else {
             if !continuingArcImport { NSSound.beep() }
             return

@@ -14,6 +14,7 @@ public final class BrowserAuthenticationRun {
         public let passwords: Int
         public let unsupportedPasswords: Int
         public let passwordConflicts: Int
+        public let outcome: ArcImportOutcome?
     }
     private struct Document: Codable {
         var version = 1
@@ -29,6 +30,7 @@ public final class BrowserAuthenticationRun {
         var unsupportedPasswords: Int
         var passwordConflicts: Int? = nil
         var totalPasswords: Int? = nil
+        var outcome: ArcImportOutcome? = nil
     }
     var checkpoint: (String) throws -> Void = { _ in }
     private let root: OrbitSecureDirectory
@@ -39,7 +41,7 @@ public final class BrowserAuthenticationRun {
     public var status: Status {
         .init(profileID: document.profileID, phase: document.phase, cookies: document.cookies,
               passwords: document.totalPasswords ?? document.passwords.count, unsupportedPasswords: document.unsupportedPasswords,
-              passwordConflicts: document.passwordConflicts ?? 0)
+              passwordConflicts: document.passwordConflicts ?? 0, outcome: document.outcome)
     }
     private static let backupPaths = ["session.json", "Import/arc-import-ledger.json", "Import/space-appearance.json", "Import/arc-import-journal.json", "Chromium/Local State"]
     private var profileName: String { "profile-" + document.profileID.rawValue.uuidString.lowercased() }
@@ -212,7 +214,7 @@ public final class BrowserAuthenticationRun {
         try checkpoint("auth-applying")
         // Any error leaves the complete encrypted undo point; the caller closes its target and
         // restores before opening runtime. Interrupted .applying never replays structural apply.
-        _ = try await importer.apply(preparation, to: target)
+        run.document.outcome = try await importer.apply(preparation, to: target)
         guard !engine.exists(profileName) else { throw BrowserAuthenticationImportError.targetNotFresh }
         let destination = try engine.directory(profileName, create: true)
         for (path, bytes) in files.sorted(by: { $0.key < $1.key }) {

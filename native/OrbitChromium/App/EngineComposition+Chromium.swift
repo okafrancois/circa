@@ -115,6 +115,7 @@ enum OrbitLauncher {
         ) { _ in MainActor.assumeIsolated { OrbitLauncher.finishedLaunching = true } }
         BrowserPerformance.mark(.admission)
         OrbitPerformanceProbe.pauseBeforeRuntime(configuration)
+        var runtimeStatus: Int32 = 0
         do {
             guard let lock = dataRootLock else { throw OrbitRecoveryFailure.unsafeFilesystem }
             // Load-only root registration admission precedes every hook, CEF and restore.
@@ -124,12 +125,13 @@ enum OrbitLauncher {
             }) {
                 BrowserPerformance.mark(.authentication)
                 processSiteSessionImport(configuration)
-                startRuntime(configuration)
+                runtimeStatus = startRuntime(configuration)
             }
         } catch {
             FileHandle.standardError.write(Data("orbit: authentication recovery refused before runtime\n".utf8))
             exit(65)
         }
+        finishRuntime(runtimeStatus, configuration: configuration)
     }
 
     private static var authenticationRecoveryRelaunch = false
@@ -140,6 +142,7 @@ enum OrbitLauncher {
             if recovery.needsRecovery {
                 // The bridge must own NSApplication even when recovery precedes CEF.
                 _ = (NSClassFromString("ACRApplication") as? NSApplication.Type)?.shared
+                BrowserImportUISynthetic.applyAppearance()
                 let choice = ImportRecoveryAlert.choose()
                 let fallback = try recovery.recover(choice, holdingLock: true, checkpoint: { try ChromiumImportRecoveryProbe.checkpoint($0, configuration: configuration) })
                 try ChromiumImportRecoveryProbe.checkpoint("recovered", configuration: configuration)
@@ -198,7 +201,7 @@ enum OrbitLauncher {
         }
     }
 
-    private static func startRuntime(_ configuration: OrbitProductConfiguration) {
+    private static func startRuntime(_ configuration: OrbitProductConfiguration) -> Int32 {
         ColdLaunchOpenQueue.shared.install()
         let hooks = orbitLaunchHooks()
         hooks?.willStartRuntime(configuration)
@@ -238,13 +241,46 @@ enum OrbitLauncher {
             } else { startApplication(configuration) }
         }
         if let launchObserver { NotificationCenter.default.removeObserver(launchObserver) }
+        return withExtendedLifetime(hooks) { status }
+    }
+
+    /// The startup gate has returned, releasing its shared directory lock. CEF and the live
+    /// session are closed; the instance lease still excludes another application on this root.
+    private static func finishRuntime(_ status: Int32, configuration: OrbitProductConfiguration) {
         // This flag is set only after both the session save and pending request succeed.
         // A bounded CEF shutdown can return a nonzero status after that durable save.
+        if let job = delegate?.pendingBrowserImport {
+            // CEF is fully shut down. Keep the root-instance lock while the offline target takes
+            // its exclusive directory lock; the replacement waits for this process to exit.
+            var finished = false
+            let worker = Task.detached { try await job.run() }
+            let progress = ArcImportAlertPresenter(browserImport: true, canCancel: job.canCancel)
+            progress.showProgress(.init(job.canCancel ? .applying : .finished)) { worker.cancel() }
+            Task { @MainActor in
+                do { try await worker.value }
+                catch {
+                    BrowserImportUISynthetic.recordFailure(error, configuration: configuration)
+                    try? BrowserImportMetadata.writeResult(JSONEncoder().encode(BrowserImportResult(failed: true)), root: configuration.dataRoot)
+                    FileHandle.standardError.write(Data("orbit: browser import stopped; launch recovery retained\n".utf8))
+                }
+                finished = true
+            }
+            while !finished {
+                RunLoop.current.run(until: Date().addingTimeInterval(0.01))
+                while let event = NSApplication.shared.nextEvent(matching: .any, until: .distantPast, inMode: .default, dequeue: true) {
+                    NSApplication.shared.sendEvent(event)
+                }
+                NSApplication.shared.updateWindows()
+            }
+            progress.hideProgress()
+            delegate?.pendingBrowserImport = nil
+            authenticationRecoveryRelaunch = true
+        }
         if delegate?.wantsSiteSessionRelaunch == true || authenticationRecoveryRelaunch {
             dataRootLock?.release()
             relaunchForSiteSessionImport()
         }
-        withExtendedLifetime(hooks) { exit(status) }
+        exit(status)
     }
 
     private static func startApplication(_ configuration: OrbitProductConfiguration) {

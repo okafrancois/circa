@@ -118,6 +118,34 @@ enum OrbitPerformanceProbe {
                                 "remainingProfiles": catalog.profiles.count]
                         }
                     } catch { result["importAuth"] = ["failed": true] }
+                } else if name == "import-ui-start", ownsWindow(owner, bundleID: "lab.orbit.orbit.import-ui") {
+                    if command["appearance"] == "dark" { NSApp.appearance = NSAppearance(named: .darkAqua) }
+                    else { NSApp.appearance = NSAppearance(named: .aqua) }
+                    application.startBrowserImport()
+                    result["importUIStarted"] = true
+                } else if name == "import-ui-appearance", ownsWindow(owner, bundleID: "lab.orbit.orbit.import-ui") {
+                    NSApp.appearance = NSAppearance(named: command["appearance"] == "dark" ? .darkAqua : .aqua)
+                } else if name == "import-ui-check", ownsWindow(owner, bundleID: "lab.orbit.orbit.import-ui") {
+                    let catalog = await environment.store.catalogSnapshot()
+                    var check: [String: Any] = ["profiles": catalog.profiles.count, "spaces": catalog.spaces.count,
+                        "running": application.browserImport.isRunning]
+                    do {
+                        guard let configuration = activeSiteSessionConfiguration(), configuration.usesMockKeychain else { throw BrowserAuthenticationImportError.invalidState }
+                        let run = try BrowserAuthenticationRun.open(dataRoot: root, recoveryKey: ChromiumAuthenticationStartup.recoveryKey(configuration))
+                        check["phase"] = run.status.phase.rawValue
+                        check["passwords"] = try await environment.engine.passwordStore?.list(profileID: run.status.profileID).count
+                        if let space = catalog.spaces.first(where: { $0.profileID == run.status.profileID }) {
+                            owner.session.activateSpace(space.id)
+                            await owner.session.waitForPendingCommands()
+                            owner.session.openTab(url: URL(string: "http://127.0.0.1:18080/login")!)
+                            await owner.session.waitForPendingCommands()
+                            if let surface = owner.session.selectedSurface {
+                                await waitForLoad(surface)
+                                check["signedIn"] = await evaluate(surface, "({signedIn:document.title==='Synthetic signed in'})")?["signedIn"] as? Bool ?? false
+                            }
+                        }
+                    } catch { check["failed"] = true }
+                    result["importUI"] = check
                 } else if name == "import-recovery-fixture" {
                     result["importRecovery"] = ["started": true, "profiles": await environment.store.catalogSnapshot().profiles.count]
                 } else if name == "chromium-import-fixture" {
