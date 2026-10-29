@@ -70,6 +70,30 @@ private func tabID(at index: Int, in session: BrowserWindowSession<OrganizationS
 @Suite("Window session organization commands")
 @MainActor
 struct BrowserOrganizationSessionTests {
+    @Test("Repeated archive queries preserve command order without publishing or changing persisted state")
+    func archiveReadsDoNotPublish() async throws {
+        let fixture = try await SessionFixture.make()
+        let recorder = OrganizationRecorder()
+        let session = recorder.session(fixture.store, window: fixture.window)
+        defer { session.close() }
+        session.openTab(url: url("query-target"))
+        await session.waitForPendingCommands()
+        let id = try #require(session.organization?.selectedTab?.id)
+        session.archiveTabs([id])
+        let archived = await session.archivedTabs().value
+        #expect(archived.map(\.id).contains(id))
+        await session.waitForPendingCommands()
+        let before = await fixture.store.sessionDocument()
+        var publications = 0
+        session.onChange = { publications += 1 }
+        for _ in 0..<20 {
+            #expect(await session.archivedTabs(matching: "query-target").value.count == 1)
+        }
+        #expect(publications == 0)
+        #expect(await fixture.store.sessionDocument() == before)
+        #expect(recorder.errors.isEmpty)
+    }
+
     @Test("Archive restore and replay keep a selected surface in both windows and recover split focus")
     func archiveRestoreUndoSelection() async throws {
         let fixture = try await SessionFixture.make()
