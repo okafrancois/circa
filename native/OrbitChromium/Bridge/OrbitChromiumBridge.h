@@ -270,6 +270,9 @@ typedef enum {
   ACR_NETWORK_PRODUCT = 1
 } ACRNetworkPolicy;
 
+/* Optional synthetic startup timing tap; main thread only. 0=loaded, 1=initialize, 2=initialized. */
+void ACRSetStartupTimingCallback(void (*callback)(int32_t));
+
 /* Main thread only. Blocking CefRunMessageLoop; call before NSApplication is
  * created. root_cache_path must be an existing private directory; every
  * persistent profile path must be a child of it. Extra switches are appended

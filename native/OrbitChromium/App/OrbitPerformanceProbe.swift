@@ -5,6 +5,7 @@ import ChromiumEngine
 import Darwin
 import QuartzCore
 import OSLog
+import ObjectiveC.runtime
 
 /// Explicit synthetic measurement endpoint. Normal product startup and personal roots never
 /// enable it. Results contain counters and timestamps, never page content or destinations.
@@ -17,6 +18,7 @@ enum OrbitPerformanceProbe {
     }
     static func start(application: OrbitApplication, configuration: OrbitProductConfiguration) {
         guard configuration.syntheticGuard != nil, CommandLine.arguments.contains("--perf-probe") else { return }
+        installDrawCounter()
         let log = configuration.dataRoot.appendingPathComponent("download-events.jsonl")
         ChromiumRuntime.shared.trace = { name, fields in
             guard name == "download", let data = try? JSONSerialization.data(withJSONObject: fields, options: [.sortedKeys]) else { return }
@@ -52,13 +54,17 @@ enum OrbitPerformanceProbe {
         var result: [String: Any] = ["pid": ProcessInfo.processInfo.processIdentifier]
         var firstPaint = false
         while !Task.isCancelled {
-            try? await Task.sleep(for: .milliseconds(firstPaint ? 250 : 20))
+            try? await Task.sleep(for: .milliseconds(firstPaint && result["interactiveUptime"] != nil ? 250 : 20))
             guard let environment = application.environment,
                   let owner = environment.liveControllers.first,
                   let snapshot = owner.session.snapshot else { continue }
             if result["interactiveUptime"] == nil, owner.window?.isVisible == true,
                !owner.session.hasPendingCommands, owner.window?.firstResponder != nil {
-                result["interactiveUptime"] = ProcessInfo.processInfo.systemUptime
+                owner.window?.displayIfNeeded()
+                CATransaction.flush()
+                BrowserPerformance.mark(.windowCommitted)
+                BrowserPerformance.mark(.windowInteractive)
+                result["interactiveUptime"] = BrowserPerformance.phases["windowInteractive"]
             }
             if !firstPaint, let id = snapshot.selectedOccurrenceID, let surface = owner.session.surface(for: id),
                surface.isReady, !surface.navigationState.isLoading,
@@ -67,6 +73,7 @@ enum OrbitPerformanceProbe {
                 result["firstPaintUptime"] = ProcessInfo.processInfo.systemUptime - age
                 firstPaint = true
             }
+            result["startupPhases"] = BrowserPerformance.phases
             result["surfaces"] = owner.session.ownedSurfaces.count
             result["browsers"] = owner.session.ownedSurfaces.filter(\.isBrowserCreated).count
             result["windowNumber"] = owner.window?.windowNumber
@@ -325,7 +332,8 @@ extension OrbitPerformanceProbe {
     /// Refuse synthetic input unless WindowServer attributes this exact window to this process.
     private static func ownsWindow(_ owner: OrbitWindowController, bundleID: String = "lab.orbit.orbit.perf-core-3") -> Bool {
         guard Bundle.main.infoDictionary?["OrbitSyntheticBundle"] as? Bool == true,
-              Bundle.main.bundleIdentifier == bundleID,
+              Bundle.main.bundleIdentifier == bundleID
+                || (bundleID == "lab.orbit.orbit.perf-core-3" && Bundle.main.bundleIdentifier == "lab.orbit.orbit.perf-measure"),
               let window = owner.window, window.isVisible,
               let windows = CGWindowListCopyWindowInfo([.optionIncludingWindow], CGWindowID(window.windowNumber)) as? [[String: Any]]
         else { return false }
@@ -385,6 +393,9 @@ extension OrbitPerformanceProbe {
     /// Synthetic diagnostics report renderer frame opportunities / AppKit commits, not scanout.
     private static func benchmark(_ owner: OrbitWindowController, command: [String: String], store: BrowserStore) async -> [String: Any] {
         let kind = command["kind"] ?? "latency"
+        if kind.hasPrefix("measure-") {
+            return await measure(owner, command: command, store: store)
+        }
         if kind.hasPrefix("workload-") {
             return await workload(owner, kind: kind, store: store)
         }
@@ -458,10 +469,12 @@ extension OrbitPerformanceProbe {
         }
         for i in 0..<(Int(command["count"] ?? "25") ?? 25) {
             for task in ["tab", "space", "palette", "typing"] {
+                guard ownsWindow(owner) else { return ["ownershipRefused": true] }
                 let interval = poster.beginInterval("Interaction", id: poster.makeSignpostID(), "kind=\(task, privacy: .public)")
                 let start = ProcessInfo.processInfo.systemUptime
                 var valid = true
                 if task == "tab", let tabs = owner.session.snapshot?.tabs, tabs.count > 1 {
+                    measurements["tabSelectionChanged", default: []].append(owner.session.snapshot?.selectedOccurrenceID == tabs[i % 2].occurrenceID ? 0 : 1)
                     owner.session.selectOccurrence(tabs[i % 2].occurrenceID)
                     await owner.session.waitForQueuedCommands()
                     if let surface = owner.session.selectedSurface { valid = await nextPageFrame(surface) }
@@ -491,7 +504,10 @@ extension OrbitPerformanceProbe {
                 if task != "typing" { measurements[task+"Ms", default:[]].append((ProcessInfo.processInfo.systemUptime-start)*1000) }
                 if !valid { measurements["failures", default:[]].append(1) }
                 poster.endInterval("Interaction", interval)
-                if task == "palette" { owner.palette.dismiss(returnFocus: true) }
+                if task == "palette" {
+                    guard ownsWindow(owner) else { return ["ownershipRefused": true] }
+                    owner.palette.dismiss(returnFocus: true)
+                }
             }
         }
         return measurements
@@ -564,7 +580,10 @@ extension OrbitPerformanceProbe {
                     var ok = true
                     if task == "tab" {
                         let tabs = owner.session.organization?.allTabs.filter { $0.section.spaceID == owner.session.snapshot?.activeSpaceID && $0.occurrenceID.flatMap { owner.session.surface(for: $0) } != nil } ?? []
-                        if let tab = tabs.first(where: { !$0.isSelected }) { ok = await select(tab.id) }
+                        if let tab = tabs.first(where: { !$0.isSelected }) {
+                            values["tabSelectionChanged", default: []].append(1)
+                            ok = await select(tab.id)
+                        }
                         else { ok = false }
                     } else if task == "space" {
                         let active = owner.session.snapshot?.activeSpaceID
@@ -617,5 +636,234 @@ private final class OrbitPerformanceFrameCounter: NSObject {
     @objc func step(_ link: CADisplayLink) {
         targets.append(link.targetTimestamp * 1000)
         callbacks.append(ProcessInfo.processInfo.systemUptime * 1000)
+    }
+}
+
+
+extension OrbitPerformanceProbe {
+    private static var drawCounterInstalled = false
+    /// Install the counter only in an admitted probe process, leaving shared theme sources alone.
+    private static func installDrawCounter() {
+        guard !drawCounterInstalled,
+              let original = class_getInstanceMethod(OrbitGlyphButton.self, #selector(NSView.draw(_:))),
+              let replacement = class_getInstanceMethod(OrbitGlyphButton.self, #selector(OrbitGlyphButton.perfDraw(_:))) else { return }
+        method_exchangeImplementations(original, replacement)
+        drawCounterInstalled = true
+    }
+
+    private static func history(_ surface: ChromiumSurface) async -> [String: Any]? {
+        let (ok, data) = await surface.devToolsCall("Page.getNavigationHistory")
+        guard ok, let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let entries = json["entries"] as? [[String: Any]], let index = json["currentIndex"] else { return nil }
+        // Compare internally; never publish the destinations or titles.
+        return ["index": index, "entries": entries.map { $0["url"] as? String ?? "" }]
+    }
+    private struct WakeTrial {
+        let id: TabOccurrenceID
+        let surface: ChromiumSurface
+        let state: BrowserNavigationState
+        let history: NSDictionary
+    }
+    private static var wakeTrial: WakeTrial?
+
+    private static func measure(_ owner: OrbitWindowController, command: [String: String], store: BrowserStore) async -> [String: Any] {
+        guard ownsWindow(owner) else { return ["ownershipRefused": true] }
+        let kind = command["kind"] ?? ""
+        let document = await store.sessionDocument()
+        func settle(_ milliseconds: Int = 350) async {
+            await owner.session.waitForQueuedCommands()
+            try? await Task.sleep(for: .milliseconds(milliseconds))
+            await owner.session.waitForPendingCommands()
+            owner.window?.displayIfNeeded(); CATransaction.flush()
+        }
+        func select(_ id: TabOccurrenceID) async -> ChromiumSurface? {
+            guard ownsWindow(owner) else { return nil }
+            owner.session.selectOccurrence(id)
+            await owner.session.waitForQueuedCommands()
+            guard let surface = owner.session.selectedSurface else { return nil }
+            await waitForLoad(surface)
+            return surface
+        }
+        if kind == "measure-prepare" {
+            var loaded = 0
+            for space in document.spaces.prefix(Int(command["spaces"] ?? "5") ?? 5) {
+                guard ownsWindow(owner) else { return ["ownershipRefused": true] }
+                owner.session.activateSpace(space.id)
+                await owner.session.waitForQueuedCommands()
+                for tab in (owner.session.snapshot?.tabs ?? []).prefix(2) {
+                    if await select(tab.occurrenceID) != nil { loaded += 1 }
+                }
+            }
+            guard ownsWindow(owner) else { return ["ownershipRefused": true] }
+            owner.session.activateSpace(document.spaces[0].id)
+            await settle(700)
+            return ["loaded": loaded, "surfaces": owner.session.ownedSurfaces.count]
+        }
+        if kind == "measure-tabs" {
+            var values: [String: [Double]] = [:]
+            let tabs = owner.session.snapshot?.tabs ?? []
+            guard tabs.count >= 2 else { return ["failures": [1]] }
+            for tab in tabs.prefix(2) { _ = await select(tab.occurrenceID) }
+            await settle()
+            for i in 0..<(Int(command["count"] ?? "20") ?? 20) {
+                if command["paletteWait"] != nil {
+                    guard ownsWindow(owner) else { return ["ownershipRefused": true] }
+                    owner.palette.present(.newTab)
+                    await owner.palette.waitForResults()
+                    guard ownsWindow(owner) else { return ["ownershipRefused": true] }
+                    owner.palette.view.input.stringValue = "x"
+                    owner.palette.view.onQuery?("x")
+                    await owner.palette.waitForResults()
+                    guard ownsWindow(owner) else { return ["ownershipRefused": true] }
+                    owner.palette.dismiss(returnFocus: true)
+                    if command["paletteWait"] == "settled" { await settle(350) }
+                }
+                guard ownsWindow(owner) else { return ["ownershipRefused": true] }
+                if command["spaceWait"] != nil, document.spaces.count > 1 {
+                    let active = owner.session.snapshot?.activeSpaceID
+                    let index = document.spaces.firstIndex { $0.id == active } ?? 0
+                    owner.session.activateSpace(document.spaces[(index+1) % 2].id)
+                    await owner.session.waitForQueuedCommands()
+                    if command["spaceWait"] == "settled" {
+                        while owner.sidebar.isSpaceTransitionAnimating { try? await Task.sleep(for: .milliseconds(2)) }
+                    }
+                }
+                let currentTabs = owner.session.snapshot?.tabs ?? tabs
+                guard let tab = currentTabs.prefix(2).first(where: { $0.occurrenceID != owner.session.snapshot?.selectedOccurrenceID }) else { return ["failures": [1]] }
+                guard ownsWindow(owner) else { return ["ownershipRefused": true] }
+                let start = ProcessInfo.processInfo.systemUptime
+                let target = command["path"] == "noop" ? owner.session.snapshot?.selectedOccurrenceID ?? tab.occurrenceID : tab.occurrenceID
+                values["tabSelectionChanged", default: []].append(target == owner.session.snapshot?.selectedOccurrenceID ? 0 : 1)
+                if command["path"] == "occurrence" || command["path"] == "noop" { owner.session.selectOccurrence(target) }
+                else { owner.session.selectTab(tab.id) }
+                await owner.session.waitForQueuedCommands()
+                let queued = ProcessInfo.processInfo.systemUptime
+                guard let surface = owner.session.selectedSurface else { return ["failures": [1]] }
+                let deadline = queued + 5
+                while !surface.isReady || surface.navigationState.isLoading {
+                    guard ProcessInfo.processInfo.systemUptime < deadline else { return ["failures": [1]] }
+                    try? await Task.sleep(for: .milliseconds(5))
+                }
+                let loaded = ProcessInfo.processInfo.systemUptime
+                let ok = await nextPageFrame(surface)
+                let frame = ProcessInfo.processInfo.systemUptime
+                values["queueMs", default: []].append((queued-start)*1000)
+                values["loadWaitMs", default: []].append((loaded-queued)*1000)
+                values["frameWaitMs", default: []].append((frame-loaded)*1000)
+                values["tabMs", default: []].append((frame-start)*1000)
+                if !ok { values["failures", default: []].append(1) }
+            }
+            return values
+        }
+        if kind == "measure-counters" {
+            let tabs = owner.session.snapshot?.tabs ?? []
+            guard tabs.count >= 2 else { return ["failures": [1]] }
+            _ = await select(tabs[0].occurrenceID)
+            guard let background = await select(tabs[1].occurrenceID) else { return ["failures": [1]] }
+            _ = await select(tabs[0].occurrenceID)
+            await settle(700)
+            var results: [String: Any] = [:]
+            for action in ["title", "favicon", "navigation", "tab", "space", "character"] {
+                guard ownsWindow(owner) else { return ["ownershipRefused": true] }
+                if action == "character" { owner.palette.present(.newTab); await owner.palette.waitForResults(); await settle() }
+                guard ownsWindow(owner) else { return ["ownershipRefused": true] }
+                BrowserPerformance.resetCounters()
+                var valid = true
+                if action == "title" {
+                    valid = await evaluate(background, "(() => {document.title='Synthetic changed'; return {ok: true};})()")?["ok"] as? Bool == true
+                } else if action == "favicon" {
+                    valid = await evaluate(background, "(() => {let l=document.querySelector('link[rel=icon]') || document.head.appendChild(document.createElement('link'));l.rel='icon';l.href='/icon.svg?changed=1';return {ok:true};})()")?["ok"] as? Bool == true
+                } else if action == "navigation", let url = owner.session.selectedSurface?.currentURL {
+                    owner.session.selectedSurface?.navigate(to: url.appendingPathComponent("next"))
+                    if let surface = owner.session.selectedSurface { await waitForLoad(surface) }
+                } else if action == "tab" { owner.session.selectOccurrence(tabs[1].occurrenceID) }
+                else if action == "space", document.spaces.count > 1 { owner.session.activateSpace(document.spaces[1].id) }
+                else if action == "character" {
+                    owner.palette.view.input.stringValue = "x"
+                    owner.palette.view.onQuery?("x")
+                    await owner.palette.waitForResults()
+                    valid = owner.palette.draft == "x"
+                }
+                await settle(800)
+                results[action] = ["counters": BrowserPerformance.counters, "valid": valid]
+            }
+            guard ownsWindow(owner) else { return ["ownershipRefused": true] }
+            owner.palette.dismiss(returnFocus: true)
+            return results
+        }
+        if kind == "measure-wake-prepare" {
+            let tabs = owner.session.snapshot?.tabs ?? []
+            let index = Int(command["index"] ?? "1") ?? 1
+            guard tabs.indices.contains(index), let surface = await select(tabs[index].occurrenceID), let base = surface.currentURL else { return ["failures": [1]] }
+            if command["history"] == "1" {
+                surface.navigate(to: base.appendingPathComponent("second")); await waitForLoad(surface)
+                surface.navigate(to: base.appendingPathComponent("third")); await waitForLoad(surface)
+                _ = surface.goBack(); await waitForLoad(surface)
+            }
+            await settle(500)
+            let iconDeadline = ProcessInfo.processInfo.systemUptime + 2
+            while surface.navigationState.faviconImage == nil && ProcessInfo.processInfo.systemUptime < iconDeadline {
+                try? await Task.sleep(for: .milliseconds(10))
+            }
+            guard let history = await history(surface) else { return ["failures": [1]] }
+            wakeTrial = WakeTrial(id: tabs[index].occurrenceID, surface: surface, state: surface.navigationState, history: history as NSDictionary)
+            _ = await select(tabs[0].occurrenceID)
+            await settle(500)
+            return ["prepared": true]
+        }
+        if kind == "measure-discard", let trial = wakeTrial {
+            let count = await owner.tabSuspension.sweep(now: ProcessInfo.processInfo.systemUptime + 86401)
+            return ["discarded": trial.surface.isSuspended, "count": count, "sameSurface": owner.session.surface(for: trial.id) === trial.surface]
+        }
+        if kind == "measure-wake", let trial = wakeTrial {
+            guard ownsWindow(owner), trial.surface.isSuspended else { return ["failures": [1]] }
+            let start = ProcessInfo.processInfo.systemUptime
+            owner.session.selectOccurrence(trial.id)
+            await owner.session.waitForQueuedCommands()
+            var frame = await nextPageFrame(trial.surface)
+            let frameDeadline = start + 5
+            while !frame && ProcessInfo.processInfo.systemUptime < frameDeadline {
+                try? await Task.sleep(for: .milliseconds(2))
+                frame = await nextPageFrame(trial.surface)
+            }
+            let frameEnd = ProcessInfo.processInfo.systemUptime
+            await waitForLoad(trial.surface)
+            var paint: Double?
+            let deadline = start + 5
+            while paint == nil && ProcessInfo.processInfo.systemUptime < deadline {
+                let value = await evaluate(trial.surface, "(() => {const p=performance.getEntriesByType('paint').find(p=>p.name==='first-contentful-paint');return p?{age:(Date.now()-performance.timeOrigin-p.startTime)/1000}:{};})()")
+                if let age = value?["age"] as? Double { paint = ProcessInfo.processInfo.systemUptime-age }
+                else { try? await Task.sleep(for: .milliseconds(5)) }
+            }
+            await settle(150)
+            let iconDeadline = ProcessInfo.processInfo.systemUptime + 2
+            while trial.surface.navigationState.faviconImage == nil && ProcessInfo.processInfo.systemUptime < iconDeadline {
+                try? await Task.sleep(for: .milliseconds(10))
+            }
+            let state = trial.surface.navigationState
+            let afterHistory = await history(trial.surface)
+            let visible = trial.surface.hostView.window === owner.window && !trial.surface.hostView.isHiddenOrHasHiddenAncestor
+            return ["frameMs": (frameEnd-start)*1000, "contentPaintMs": paint.map { ($0-start)*1000 } ?? -1,
+                    "valid": frame && (paint.map { $0 >= start } ?? false) && visible && !trial.surface.isSuspended,
+                    "faviconBefore": trial.state.faviconImage != nil, "faviconAfter": state.faviconImage != nil,
+                    "faviconSourcePreserved": state.faviconURL == trial.state.faviconURL,
+                    "backBefore": trial.state.canGoBack, "forwardBefore": trial.state.canGoForward,
+                    "historyEntries": (afterHistory?["entries"] as? [String])?.count ?? 0,
+                    "titlePreserved": state.title == trial.state.title,
+                    "urlPreserved": state.committedURL == trial.state.committedURL,
+                    "faviconPreserved": state.faviconImage?.png == trial.state.faviconImage?.png && state.faviconImage != nil,
+                    "historyPreserved": afterHistory.map { trial.history.isEqual(to: $0) } ?? false,
+                    "backPreserved": state.canGoBack == trial.state.canGoBack,
+                    "forwardPreserved": state.canGoForward == trial.state.canGoForward,
+                    "sameSurface": owner.session.surface(for: trial.id) === trial.surface]
+        }
+        return ["unknownKind": kind]
+    }
+}
+
+extension OrbitGlyphButton {
+    @objc fileprivate func perfDraw(_ rect: NSRect) {
+        BrowserPerformance.count(.glyphDraws)
+        perfDraw(rect)
     }
 }

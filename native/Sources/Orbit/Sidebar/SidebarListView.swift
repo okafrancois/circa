@@ -483,6 +483,7 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
     }
 
     private func configure(_ row: SidebarListRow, with entry: SidebarListEntry) {
+        BrowserPerformance.count(.rowsConfigured)
         row.isContextTarget = contextTargets.contains(entry.node) || dragGhostNodes.contains(entry.node)
         row.leavingEntry = entry
         switch (row, entry.content) {

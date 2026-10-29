@@ -69,6 +69,7 @@ extension BrowserStore {
 
     func publishOrganizationChange() {
         organization.normalizeArchivedSpaces()
+        BrowserPerformance.count(.organizationPublications)
         organizationRevision &+= 1
         for continuation in organizationObservers.values { continuation.yield(organizationRevision) }
     }
@@ -95,6 +96,7 @@ extension BrowserStore {
     public func archivePolicy() -> BrowserArchivePolicy { organization.policy }
 
     func organizationSnapshot(for windowID: WindowID) throws -> BrowserOrganizationSnapshot {
+        BrowserPerformance.count(.sidebarProjections)
         guard let window = windows[windowID] else { throw BrowserStoreError.windowMissing }
         guard let space = spaces[window.activeSpaceID] else { throw BrowserStoreError.spaceMissing }
         var local: [TabID: BrowserTab] = [:]

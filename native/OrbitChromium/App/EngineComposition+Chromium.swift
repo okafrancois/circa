@@ -2,6 +2,7 @@ import AppKit
 import BrowserCore
 import BrowserEngine
 import ChromiumEngine
+import OrbitChromiumBridge
 import Darwin
 import Foundation
 
@@ -108,12 +109,14 @@ enum OrbitLauncher {
             FileHandle.standardError.write(Data("orbit: \(error)\n".utf8))
             exit(64)
         }
+        BrowserPerformance.mark(.admission)
         OrbitPerformanceProbe.pauseBeforeRuntime(configuration)
         do {
             guard let lock = dataRootLock else { throw OrbitRecoveryFailure.unsafeFilesystem }
             // Load-only root registration admission precedes every hook, CEF and restore.
             // Mock runs have no system storage fallback; untouched roots do not access it.
             try OrbitAuthenticationStartup.run(configuration: configuration, lock: lock) {
+                BrowserPerformance.mark(.authentication)
                 processSiteSessionImport(configuration)
                 startRuntime(configuration)
             }
@@ -167,7 +170,14 @@ enum OrbitLauncher {
         hooks?.willStartRuntime(configuration)
         let options = productRuntimeOptions(configuration, extraSwitches: hooks?.runtimeSwitches ?? [],
                                             hiddenApplication: hooks?.hiddenApplication ?? false)
+        BrowserPerformance.mark(.runtime)
+        if BrowserPerformance.enabled {
+            ACRSetStartupTimingCallback { phase in
+                BrowserPerformance.mark(phase == 0 ? .libraryLoaded : phase == 1 ? .cefInitialize : .cefInitialized)
+            }
+        }
         let status = ChromiumRuntime.shared.run(options: options) {
+            BrowserPerformance.mark(.cefReady)
             if let hooks {
                 hooks.runtimeDidBecomeReady(configuration)
                 return

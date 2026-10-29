@@ -2050,6 +2050,9 @@ bool SameDirectory(const std::string& a, const std::string& b) {
 
 }  // namespace
 
+static void (*g_startup_timing)(int32_t) = nullptr;
+extern "C" void ACRSetStartupTimingCallback(void (*callback)(int32_t)) { g_startup_timing = callback; }
+
 extern "C" int32_t ACRRun(int argc, char* argv[], const ACRRunOptions* options,
                           const ACRCallbacks* callbacks, void* context) {
   if (!NSThread.isMainThread || g_state || !options || options->struct_size != sizeof(ACRRunOptions)
@@ -2059,6 +2062,7 @@ extern "C" int32_t ACRRun(int argc, char* argv[], const ACRRunOptions* options,
   orbit_bridge::ConfigureBrowserQoS();
   @autoreleasepool {
     if (!loader.LoadInMain()) return 69;
+    if (g_startup_timing) g_startup_timing(0);
     State state;
     state.callbacks = *callbacks;
     state.context = context;
@@ -2146,11 +2150,13 @@ extern "C" int32_t ACRRun(int argc, char* argv[], const ACRRunOptions* options,
     browser_argv.push_back(program.data());
     for (auto& argument : state.browser_arguments) browser_argv.push_back(argument.data());
     browser_argv.push_back(nullptr);
+    if (g_startup_timing) g_startup_timing(1);
     if (!CefInitialize(CefMainArgs(static_cast<int>(browser_argv.size()) - 1, browser_argv.data()), settings, app,
                        nullptr)) {
       g_state = nullptr;
       return CefGetExitCode();
     }
+    if (g_startup_timing) g_startup_timing(2);
     state.initialized = true;
     CefRunMessageLoop();
     fprintf(stderr, "acr: message loop exited hosts=%zu pending=%zu\n", state.hosts.size(),
