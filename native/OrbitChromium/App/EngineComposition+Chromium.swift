@@ -117,6 +117,7 @@ enum OrbitLauncher {
             // Mock runs have no system storage fallback; untouched roots do not access it.
             try OrbitAuthenticationStartup.run(configuration: configuration, lock: lock) {
                 BrowserPerformance.mark(.authentication)
+                try prepareAuthenticationRun(configuration)
                 processSiteSessionImport(configuration)
                 startRuntime(configuration)
             }
@@ -124,6 +125,18 @@ enum OrbitLauncher {
             FileHandle.standardError.write(Data("orbit: authentication recovery refused before runtime\n".utf8))
             exit(65)
         }
+    }
+
+    private static var authenticationRun: BrowserAuthenticationRun?
+
+    private static func prepareAuthenticationRun(_ configuration: OrbitProductConfiguration) throws {
+        guard try BrowserAuthenticationRun.exists(dataRoot: configuration.dataRoot) else { return }
+        let key = try ChromiumAuthenticationStartup.recoveryKey(configuration)
+        let run = try BrowserAuthenticationRun.open(dataRoot: configuration.dataRoot, recoveryKey: key)
+        guard [.passwordsPending, .verified, .restored].contains(run.status.phase) else {
+            throw BrowserAuthenticationImportError.invalidState
+        }
+        authenticationRun = run
     }
 
     private static func processSiteSessionImport(_ configuration: OrbitProductConfiguration) {
@@ -182,6 +195,35 @@ enum OrbitLauncher {
                 hooks.runtimeDidBecomeReady(configuration)
                 return
             }
+            if let run = authenticationRun, run.status.phase == .passwordsPending {
+                Task { @MainActor in
+                    let engine = makeActiveEngine()
+                    do {
+                        guard let store = engine.passwordStore else { throw BrowserPasswordStoreError.unavailable }
+                        let counts = try await BrowserPasswordImporter.apply(run.passwordsForRuntime(), to: store, profileID: run.status.profileID)
+                        // Local-store credentials win deterministically over conflicting account-store rows.
+                        try run.markVerified(passwordConflicts: counts.conflicts)
+                        await engine.shutdown()
+                    } catch {
+                        await engine.shutdown()
+                        FileHandle.standardError.write(Data("orbit: authentication import verification failed; recovery retained\n".utf8))
+                        exit(65)
+                    }
+                    startApplication(configuration)
+                }
+            } else { startApplication(configuration) }
+        }
+        NotificationCenter.default.removeObserver(observer)
+        // This flag is set only after both the session save and pending request succeed.
+        // A bounded CEF shutdown can return a nonzero status after that durable save.
+        if delegate?.wantsSiteSessionRelaunch == true {
+            dataRootLock?.release()
+            relaunchForSiteSessionImport()
+        }
+        withExtendedLifetime(hooks) { exit(status) }
+    }
+
+    private static func startApplication(_ configuration: OrbitProductConfiguration) {
             let application = OrbitApplication()
             BrowserPerformance.mark(.applicationCreated)
             delegate = application
@@ -193,15 +235,6 @@ enum OrbitLauncher {
             if finishedLaunching {
                 application.applicationDidFinishLaunching(Notification(name: NSApplication.didFinishLaunchingNotification))
             }
-        }
-        NotificationCenter.default.removeObserver(observer)
-        // This flag is set only after both the session save and pending request succeed.
-        // A bounded CEF shutdown can return a nonzero status after that durable save.
-        if delegate?.wantsSiteSessionRelaunch == true {
-            dataRootLock?.release()
-            relaunchForSiteSessionImport()
-        }
-        withExtendedLifetime(hooks) { exit(status) }
     }
 
     private static func relaunchForSiteSessionImport() {
