@@ -100,6 +100,22 @@ class CloudProfileTests(unittest.TestCase):
         profile['Entitlements']['com.apple.developer.icloud-container-environment'] = ['Development', 'Production']
         self.assertEqual(release.cloud_entitlements(profile, self.config)['com.apple.developer.icloud-container-environment'], 'Production')
 
+    def test_macos_service_wildcard_requests_only_cloudkit(self):
+        for wildcard in ('*', ['*']):
+            profile = self.profile()
+            profile['Entitlements']['com.apple.developer.icloud-services'] = wildcard
+            profile['Entitlements']['com.apple.developer.aps-environment'] = 'production'
+            expected = release.cloud_entitlements(profile, self.config)
+            self.assertEqual(expected['com.apple.developer.icloud-services'], ['CloudKit'])
+            self.assertEqual(expected['com.apple.application-identifier'], '5Y39TTNCM7.io.github.okatech.orbit')
+            self.assertEqual(expected['com.apple.developer.aps-environment'], 'production')
+        for key in ('com.apple.application-identifier', 'com.apple.developer.icloud-container-identifiers',
+                    'com.apple.developer.team-identifier', 'com.apple.developer.icloud-container-environment'):
+            profile = self.profile()
+            profile['Entitlements'][key] = '*'
+            with self.subTest(key=key), self.assertRaises(ValueError):
+                release.cloud_entitlements(profile, self.config)
+
     def test_rejects_mismatched_capabilities_and_distribution(self):
         from datetime import datetime
         for key in self.profile()['Entitlements']:
@@ -112,9 +128,30 @@ class CloudProfileTests(unittest.TestCase):
             profile = self.profile(); profile[key] = value
             with self.subTest(key=key), self.assertRaises(ValueError):
                 release.cloud_entitlements(profile, self.config)
-        for key, value in [('get-task-allow', True), ('com.apple.developer.aps-environment', 'development')]:
+        for key, value in [('get-task-allow', True), ('com.apple.security.get-task-allow', True),
+                           ('com.apple.developer.aps-environment', 'development')]:
             profile = self.profile(); profile['Entitlements'][key] = value
             with self.assertRaises(ValueError): release.cloud_entitlements(profile, self.config)
+
+    def test_release_requires_successful_storage_free_launch(self):
+        import plistlib
+        import subprocess
+        with tempfile.TemporaryDirectory() as temporary:
+            bundle = Path(temporary) / 'Orbit.app'
+            (bundle / 'Contents').mkdir(parents=True)
+            (bundle / 'Contents/Info.plist').write_bytes(plistlib.dumps({'CFBundleExecutable': 'Orbit'}))
+            with patch.object(release, 'run', return_value=SimpleNamespace(
+                    stdout='{"icloudAvailable":true,"storageInitialized":false}')) as run:
+                release.verify_cloud_launch(bundle)
+                run.assert_called_once_with(bundle / 'Contents/MacOS/Orbit', '--orbit-verify-icloud',
+                                            capture_output=True, text=True, timeout=30)
+            for output in ('{"icloudAvailable":false,"storageInitialized":false}',
+                           '{"icloudAvailable":true,"storageInitialized":true}'):
+                with patch.object(release, 'run', return_value=SimpleNamespace(stdout=output)):
+                    with self.assertRaises(RuntimeError): release.verify_cloud_launch(bundle)
+            for error in (subprocess.CalledProcessError(-9, 'Orbit'), subprocess.TimeoutExpired('Orbit', 30)):
+                with patch.object(release, 'run', side_effect=error):
+                    with self.assertRaises(type(error)): release.verify_cloud_launch(bundle)
 
     def test_cloud_entitlements_are_applied_only_to_the_main_app(self):
         from contextlib import nullcontext

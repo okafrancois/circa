@@ -76,15 +76,44 @@ ORBIT-RENAME is merged: packaging uses the Orbit executable, icon and product id
   registrations, and only caches whose embedded app has the exact dedicated test identity.
 - No push, remote tag/release, GitHub secret or runner registration was performed.
 
-## Optional private iCloud organization sync
-- `provisioning_profile` defaults to `null`; releases without it retain the existing signing path.
-- Set it to an external Developer ID provisioning profile path (relative paths resolve beside the
-  configuration). Keep the profile outside Git. Test bundles never receive iCloud capabilities.
+## Private iCloud organization sync
+- Production config uses `~/Library/OrbitRelease/Orbit_Developer_ID.provisionprofile`.
+  Install that external profile on each release runner; keep it outside Git with mode `0600`.
+  Relative paths resolve beside the configuration; `~` expands to the runner user's home.
+  An explicitly configured missing, expired or mismatched profile aborts the release.
+  A deliberately unconfigured (`null`) profile retains the non-cloud signing path.
+  Test bundles never receive iCloud capabilities.
 - The release decodes the profile with `security cms -D`, checks expiration, distribution type,
   team, exact application ID, CloudKit container and Production environment, then embeds it at
   `Contents/embedded.provisionprofile`. Production Push capability is included when authorized.
 - Nested code is signed first. Only the host receives the profile-authorized cloud entitlements;
   the signed entitlements and signer certificate are checked against the embedded profile.
-- Before enabling this in a public release, deploy the `OrbitOrganizationV1` record type with its
-  `payload` Bytes field to the container's Production schema. The app uses only the private
-  database and its `OrbitOrganization` custom zone; no public records or Orbit account service.
+- macOS uses `com.apple.application-identifier` and `com.apple.developer.aps-environment`.
+  Apple's `icloud-services` wildcard authorizes the narrow signed request `['CloudKit']`;
+  app, team, container and Production environment still require explicit authorization.
+- Before any archive is created, the pipeline executes the signed main binary directly with
+  `--orbit-verify-icloud`. A killed process, timeout, failed entitlement admission or unexpected
+  report aborts packaging. This path exits before AppKit, CEF, preferences, Keychain, session
+  configuration or CloudKit construction; it neither contacts nor activates a running Orbit.
+  Expected output: `{"icloudAvailable":true,"storageInitialized":false}`, exit 0.
+  This checks execution admission on the runner; notarization and signature checks still apply.
+- The Production schema has `OrbitOrganizationV1.payload` (Bytes). The app uses only the private
+  database and its `OrbitOrganization` custom zone; sync remains opt-in in General Settings.
+
+### Renewing or replacing the profile
+1. Before the profile or its selected Developer ID certificate expires, generate a new **Developer
+   ID** distribution profile for App ID `io.github.okatech.orbit`, team `5Y39TTNCM7`, with iCloud /
+   CloudKit container `iCloud.io.github.okatech.orbit` and production Push enabled. Select the
+   Developer ID Application certificate matching the runner's private signing identity.
+2. Download it outside Git, decode with `security cms -D -i <profile>` and check the expiration,
+   certificate, exact app/team/container and Production environment. Preserve the old external
+   file as a private backup, then replace the configured file and set mode `0600` on each runner.
+   Renew the signing certificate separately if needed; update `identity` only when its name changes.
+3. Run `python3 scripts/test_release.py`, then a local release with a fresh `--output` directory
+   and the intended `--tag vX.Y.Z`, **without `--publish`**. This command creates no Git tag.
+   It must pass the signed launch gate, notarization and stapling before the PM publishes.
+4. Extract the resulting ZIP outside Applications. Run `codesign --verify --deep --strict <app>`,
+   `codesign -d --entitlements - <app>`, `security cms -D -i <app>/Contents/embedded.provisionprofile`,
+   `spctl -a -vv <app>` and `<app>/Contents/MacOS/Orbit --orbit-verify-icloud` (exit 0).
+   Never open the production-ID bundle normally alongside a personal Orbit for this check.
+   Retain verification evidence, then remove the local artifacts. The PM tags and publishes.
