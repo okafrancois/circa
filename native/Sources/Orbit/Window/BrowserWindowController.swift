@@ -439,6 +439,7 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
     }
 
     private func renderSessionProjection() {
+        BrowserPerformance.count(.windowProjections, window: id)
         tabSuspension?.selectionDidChange()
         if let catalog = session.catalog, catalog != publishedCatalog {
             publishedCatalog = catalog

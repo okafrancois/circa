@@ -28,6 +28,7 @@ final class OrbitApplication: NSObject, NSApplicationDelegate {
             guard let self else { return }
             onUpdaterStart?()
             updater.start(synthetic: activeSyntheticDataGuard() != nil)
+            BrowserPerformance.mark(.updaterStarted)
         }
         CATransaction.commit()
     }
@@ -141,6 +142,15 @@ final class OrbitApplication: NSObject, NSApplicationDelegate {
         present: { [weak self] controller, activate in
             guard let self, !provisionalQuickWindowWindows.contains(controller.id) else { return }
             presentAndScheduleUpdates { windowPresenter(controller, activate) }
+            BrowserPerformance.mark(.windowPresented)
+            if BrowserPerformance.enabled, controller.window?.isVisible == true {
+                controller.window?.displayIfNeeded()
+                CATransaction.flush()
+                BrowserPerformance.mark(.windowCommitted)
+                if !controller.session.hasPendingCommands, controller.window?.firstResponder != nil {
+                    BrowserPerformance.mark(.windowInteractive)
+                }
+            }
         },
         // Only termination disposes routed windows: the model is preserved for restoration.
         dispose: { controller in
@@ -152,11 +162,13 @@ final class OrbitApplication: NSObject, NSApplicationDelegate {
     /// The engine's launcher owns process entry: a Chromium build must start its runtime
     /// before `NSApplication.shared` exists.
     static func main() {
+        BrowserPerformance.mark(.main)
         if let result = BrowserSyncLaunchVerification.run(arguments: CommandLine.arguments) { exit(result) }
         OrbitLauncher.run()
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        BrowserPerformance.mark(.applicationLaunched)
         installMenus()
         windows.onError = { _ in
             if ProcessInfo.processInfo.arguments.contains("--window-diagnostics") {
@@ -190,6 +202,7 @@ final class OrbitApplication: NSObject, NSApplicationDelegate {
                 }
                 environment = OrbitEnvironment(engine: makeActiveEngine())
             }
+            BrowserPerformance.mark(.environmentReady)
             if let environment { commands.registry.useShortcutPreferences(environment.shortcutPreferences) }
             environment?.onPersistenceError = { [weak self] error in self?.presentSaveError(error) }
             environment?.onRescueNeedsWindow = { [weak self] profileID in self?.openRescueWindow(for: profileID) }

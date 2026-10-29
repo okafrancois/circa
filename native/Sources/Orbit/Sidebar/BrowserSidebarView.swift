@@ -340,6 +340,7 @@ final class BrowserSidebarView: NSView, SidebarListHost {
     /// Surface updates (loading progress, titles) re-render often: the content is rebuilt only
     /// when the snapshot, the selection or a live title changed.
     private func makeContent() -> SidebarListContent {
+        BrowserPerformance.count(.sidebarContentPasses)
         var titles: [TabID: String] = [:]
         var activities: [TabID: SidebarTabActivity] = [:]
         if let organization {
@@ -350,6 +351,7 @@ final class BrowserSidebarView: NSView, SidebarListHost {
         }
         let inputs = ContentInputs(organization: organization, selection: selection, liveTitles: titles, liveActivities: activities)
         guard inputs != contentInputs else { return cachedContent }
+        BrowserPerformance.count(.sidebarRebuilds)
         contentInputs = inputs
         cachedContent = SidebarListContent(snapshot: organization, selection: selection, liveTitle: { titles[$0.id] },
                                           liveActivity: { activities[$0.id] ?? .init() })
