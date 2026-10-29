@@ -73,4 +73,26 @@ struct UIWorkTests {
         #expect(row.paneCells.allSatisfy { !$0.isHidden })
     }
 
+    @Test("Clear metrics match attributed text and survive hover, accent and repeated positioning")
+    func clearMetrics() {
+        let button = SidebarClearButton()
+        let expected = ceil(button.attributedLabel.size().width) + 2 * OrbitTokens.Metrics.Sidebar.clearHoverPadding
+        #expect(button.preferredWidth == expected)
+        OrbitUIWorkCounters.enabled = true
+        defer { OrbitUIWorkCounters.enabled = false; OrbitUIWorkCounters.reset() }
+        OrbitUIWorkCounters.reset()
+        for _ in 0..<600 { _ = button.preferredWidth; _ = button.attributedLabel }
+        #expect(OrbitUIWorkCounters.values["clearMeasurement", default: 0] == 0)
+        #expect(OrbitUIWorkCounters.values["clearLabel", default: 0] == 0)
+        button.isHighlighted = true
+        button.accent = .defaultPurple
+        #expect(button.preferredWidth == expected)
+        _ = button.attributedLabel
+        #expect(OrbitUIWorkCounters.values["clearMeasurement", default: 0] == 0)
+        #expect(OrbitUIWorkCounters.values["clearLabel", default: 0] == 1)
+        button.title = "Synthetic wider label"
+        #expect(button.preferredWidth > expected)
+        #expect(OrbitUIWorkCounters.values["clearMeasurement", default: 0] == 1)
+    }
+
 }

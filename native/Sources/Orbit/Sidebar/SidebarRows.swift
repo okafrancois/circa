@@ -850,9 +850,36 @@ final class SidebarSeparatorView: NSView {
 
 @MainActor
 final class SidebarClearButton: NSButton {
-    var accent = OrbitTokens.ThemeAccent.defaultSpace { didSet { needsDisplay = true } }
+    var accent = OrbitTokens.ThemeAccent.defaultSpace { didSet { if accent != oldValue { needsDisplay = true } } }
     private var isHovering = false { didSet { if isHovering != oldValue { needsDisplay = true } } }
     private var hoverArea: NSTrackingArea?
+    private struct MetricsKey: Equatable {
+        let title: String
+        let font: NSFont
+        let locale: String
+    }
+    private struct PaintKey: Equatable {
+        let metrics: MetricsKey
+        let accent: OrbitTokens.ThemeAccent
+        let appearance: NSAppearance.Name
+        let enabled: Bool
+        let hovering: Bool
+        let highlighted: Bool
+    }
+    private var measured: (key: MetricsKey, size: NSSize)?
+    private var painted: (key: PaintKey, label: NSAttributedString)?
+
+    private var metricsKey: MetricsKey {
+        MetricsKey(title: title, font: OrbitTokens.Typography.sidebarClear, locale: Locale.current.identifier)
+    }
+    private var labelSize: NSSize {
+        let key = metricsKey
+        if let measured, measured.key == key { return measured.size }
+        OrbitUIWorkCounters.record("clearMeasurement")
+        let size = NSAttributedString(string: key.title, attributes: [.font: key.font]).size()
+        measured = (key, size)
+        return size
+    }
 
     init() {
         super.init(frame: .zero)
@@ -870,18 +897,28 @@ final class SidebarClearButton: NSButton {
     override var isHighlighted: Bool { didSet { needsDisplay = true } }
 
     var preferredWidth: CGFloat {
-        OrbitUIWorkCounters.record("clearMeasurement")
-        return ceil(attributedLabel.size().width) + 2 * OrbitTokens.Metrics.Sidebar.clearHoverPadding
+        ceil(labelSize.width) + 2 * OrbitTokens.Metrics.Sidebar.clearHoverPadding
     }
     var isRevealed: Bool { alphaValue > 0 }
 
     var attributedLabel: NSAttributedString {
+        let key = PaintKey(metrics: metricsKey, accent: accent, appearance: effectiveAppearance.name,
+                           enabled: isEnabled, hovering: isHovering, highlighted: isHighlighted)
+        if let painted, painted.key == key { return painted.label }
         OrbitUIWorkCounters.record("clearLabel")
         let overlays = isEnabled && (isHovering || isHighlighted) ? [OrbitTokens.Color.State.standaloneButton] : []
         let effective = OrbitSpaceThemes.accent(accent, over: overlays)
-        return NSAttributedString(string: title, attributes: [
+        let label = NSAttributedString(string: title, attributes: [
             .font: OrbitTokens.Typography.sidebarClear, .foregroundColor: effective.sidebarSecondaryText
         ])
+        painted = (key, label)
+        return label
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        painted = nil
+        needsDisplay = true
     }
 
     override func hitTest(_ point: NSPoint) -> NSView? {
@@ -908,7 +945,7 @@ final class SidebarClearButton: NSButton {
             NSBezierPath(roundedRect: bounds, xRadius: radius, yRadius: radius).fill()
         }
         let label = attributedLabel
-        let size = label.size()
+        let size = labelSize
         label.draw(at: NSPoint(x: (bounds.width - size.width) / 2, y: (bounds.height - size.height) / 2))
     }
 
