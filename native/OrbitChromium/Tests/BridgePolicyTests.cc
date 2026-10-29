@@ -276,6 +276,20 @@ void AnchoredRootRemovesOnlyItsOwnChildren() {
   Check(anchor->RemoveChild("profile-refused") == AnchoredRoot::Removal::kRemoved, "a file in place of a profile is cleaned up");
   Check(anchor->RemoveChild("profile-refused") == AnchoredRoot::Removal::kAbsent, "then absent");
 
+  mkdir((root + "/profile-worker").c_str(), 0700);
+  WriteFile(root + "/profile-worker/data", "worker");
+  symlink(outside.c_str(), (root + "/profile-worker/link").c_str());
+  std::unique_ptr<AnchoredRoot::RetiredChild> retired;
+  Check(anchor->RetireChild("profile-worker", &retired) == AnchoredRoot::Removal::kRemoved && retired,
+        "retirement returns a descriptor-owned cleanup job");
+  Check(!Exists(root + "/profile-worker"), "retirement makes the original name unavailable immediately");
+  Check(retired->Remove(), "worker removes the retired tree without bridge state");
+  Check(Exists(outside), "worker never follows a retired symlink");
+  mkdir((root + "/profile-failure").c_str(), 0000);
+  Check(anchor->RetireChild("profile-failure", &retired) == AnchoredRoot::Removal::kRemoved,
+        "unreadable tree can be atomically retired");
+  Check(!retired->Remove(), "unreadable tree cleanup reports its failure");
+
   // Review HIGH 2 repro: after start-up, the root's name is replaced by a link to another
   // directory holding a same-named profile. Nothing is removed, here or there.
   const std::string elsewhere = base + "/elsewhere";

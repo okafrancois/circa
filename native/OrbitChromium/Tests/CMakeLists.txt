@@ -99,3 +99,9 @@ target_compile_options(ChromiumNavigationMetadataTests PRIVATE ${ORBIT_SWIFT_FLA
 target_include_directories(ChromiumNavigationMetadataTests PRIVATE
   "${CMAKE_BINARY_DIR}/swift-modules" "${CMAKE_CURRENT_SOURCE_DIR}/../Bridge" "${CMAKE_CURRENT_SOURCE_DIR}")
 target_link_libraries(ChromiumNavigationMetadataTests PRIVATE BrowserEngine ChromiumLifecycleBridgeStub)
+
+add_executable(OrbitSnapshotDecoderTests Performance/SnapshotDecoderTests.swift ../ChromiumEngine/ChromiumSnapshotDecoder.swift)
+target_compile_options(OrbitSnapshotDecoderTests PRIVATE ${ORBIT_SWIFT_FLAGS} -parse-as-library)
+target_include_directories(OrbitSnapshotDecoderTests PRIVATE "${CMAKE_BINARY_DIR}/swift-modules")
+target_link_libraries(OrbitSnapshotDecoderTests PRIVATE BrowserEngine)
+set_target_properties(OrbitSnapshotDecoderTests PROPERTIES Swift_LANGUAGE_VERSION 6)

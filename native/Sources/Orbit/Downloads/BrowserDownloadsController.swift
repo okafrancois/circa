@@ -13,6 +13,7 @@ final class BrowserDownloadsController {
     var destinationProvider: DestinationProvider?
     var openFile: (URL) -> Void = { NSWorkspace.shared.open($0) }
     var revealFile: (URL) -> Void = { NSWorkspace.shared.activateFileViewerSelecting([$0]) }
+    private var deltaObservers: [UUID: (BrowserDownloadCoordinator.Delta) -> Void] = [:]
     private var observers: [UUID: () -> Void] = [:]
     private var transfers: [UUID: any BrowserEngineDownloadTransfer] = [:]
     private var pickers: [UUID: DownloadDestinationPicker] = [:]
@@ -26,18 +27,25 @@ final class BrowserDownloadsController {
             profiles = Set(history.records.map(\.profileID))
             try? coordinator.restore(history.records)
         }
-        coordinator.onChange = { [weak self] in self?.publish() }
+        coordinator.onDelta = { [weak self] in self?.publish($0) }
     }
 
     func observe(_ id: UUID, _ callback: @escaping () -> Void) { observers[id] = callback }
-    func stopObserving(_ id: UUID) { observers.removeValue(forKey: id) }
+    func observeChanges(_ id: UUID, _ callback: @escaping (BrowserDownloadCoordinator.Delta) -> Void) { deltaObservers[id] = callback }
+    func stopObserving(_ id: UUID) { observers.removeValue(forKey: id); deltaObservers.removeValue(forKey: id) }
 
-    private func publish() {
-        if let history {
+    private func publish(_ delta: BrowserDownloadCoordinator.Delta) {
+        for key in delta.removed { fileChecks[key] = nil }
+        for item in delta.changed where fileChecks[item.key]?.url != item.destinationURL || item.state != .complete {
+            fileChecks[item.key] = nil
+        }
+        if let history, delta.historyChanged {
             let records = coordinator.allSnapshots.filter { $0.state.isTerminal }.map(BrowserDownloadHistoryRecord.init)
             do { try history.save(records) } catch { onHistoryError?(error) }
         }
+        for callback in Array(deltaObservers.values) { callback(delta) }
         for callback in Array(observers.values) { callback() }
+        if delta.historyChanged { refreshFiles(delta.changed) }
     }
 
     @discardableResult
@@ -100,13 +108,78 @@ final class BrowserDownloadsController {
     private var profiles: Set<ProfileID> = []
     private var knownSnapshots: [BrowserDownloadSnapshot] { profiles.flatMap { coordinator.snapshots(profileID: $0) } }
 
+    private struct FileCheck {
+        let url: URL?
+        let token: UUID
+        var checkedAt: TimeInterval?
+    }
+    private var fileChecks: [BrowserDownloadKey: FileCheck] = [:]
+    private var fileCheckTask: Task<Void, Never>?
+    private var fileWatchers: [URL: DownloadDirectoryWatcher] = [:]
+    var fileCheck: @Sendable (URL) -> Bool = { BrowserDownloadPaths.regularFileSize($0) != nil }
+    var fileCheckNow: () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }
+
     func snapshots(profileID: ProfileID) -> [BrowserDownloadSnapshot] {
         profiles.insert(profileID)
-        for item in coordinator.snapshots(profileID: profileID) where item.state == .complete {
-            let availability: BrowserDownloadFileAvailability = item.destinationURL.flatMap(BrowserDownloadPaths.regularFileSize) == nil ? .missing : .available
-            if item.fileAvailability != availability { try? coordinator.setFileAvailability(availability, in: item.context) }
+        let items = coordinator.snapshots(profileID: profileID)
+        refreshFiles(items)
+        return items
+    }
+
+    /// Explicit invalidation is also used when a completed destination is moved or deleted.
+    func invalidateFileChecks(in directory: URL) {
+        for (key, value) in Array(fileChecks) where value.url?.deletingLastPathComponent() == directory {
+            fileChecks[key] = nil
         }
-        return coordinator.snapshots(profileID: profileID)
+        refreshFiles(coordinator.allSnapshots)
+    }
+
+    private func refreshFiles(_ items: [BrowserDownloadSnapshot]) {
+        guard !coordinator.isClosed, fileCheckTask == nil else { return }
+        let now = fileCheckNow()
+        let pending = items.filter { item in
+            guard item.state == .complete else { return false }
+            guard let check = fileChecks[item.key], check.url == item.destinationURL,
+                  let checkedAt = check.checkedAt else { return true }
+            return now - checkedAt >= 2
+        }
+        guard !pending.isEmpty else { return }
+        var tokens: [BrowserDownloadKey: UUID] = [:]
+        for item in pending {
+            let token = UUID()
+            tokens[item.key] = token
+            fileChecks[item.key] = FileCheck(url: item.destinationURL, token: token)
+        }
+        let check = fileCheck
+        let directories = Set(pending.compactMap { $0.destinationURL?.deletingLastPathComponent() }).subtracting(fileWatchers.keys)
+        fileCheckTask = Task { [weak self] in
+            let worker = Task.detached(priority: .utility) {
+                let watchers = directories.compactMap { DownloadDirectoryWatcher(directory: $0) }
+                let results = pending.map { ($0, $0.destinationURL.map(check) == true) }
+                return (results, watchers)
+            }
+            let (results, watchers) = await withTaskCancellationHandler { await worker.value } onCancel: { worker.cancel() }
+            guard let self, !Task.isCancelled, !coordinator.isClosed else { return }
+            fileCheckTask = nil
+            for watcher in watchers {
+                fileWatchers[watcher.directory] = watcher
+                watcher.start { [weak self] directory in
+                    Task { @MainActor in self?.invalidateFileChecks(in: directory) }
+                }
+            }
+            var changes: [(BrowserDownloadContext, BrowserDownloadFileAvailability)] = []
+            for (original, available) in results {
+                guard fileChecks[original.key]?.token == tokens[original.key],
+                      let current = coordinator.snapshot(for: original.key), current.state == .complete,
+                      current.destinationURL == original.destinationURL else { continue }
+                fileChecks[original.key]?.checkedAt = fileCheckNow()
+                let value: BrowserDownloadFileAvailability = available ? .available : .missing
+                if current.fileAvailability != value { changes.append((current.context, value)) }
+            }
+            coordinator.setFileAvailabilities(changes)
+            // A directory event or a completion may have invalidated an item while IO was pending.
+            refreshFiles(coordinator.allSnapshots)
+        }
     }
 
     var hasActiveTransfers: Bool {
@@ -114,7 +187,8 @@ final class BrowserDownloadsController {
     }
 
     func perform(_ action: DownloadRowPresentation.Action, in context: BrowserDownloadContext) {
-        guard let snapshot = coordinator.snapshot(for: context.key), snapshot.context == context else { return }
+        guard let context = coordinator.currentActionContext(context),
+              let snapshot = coordinator.snapshot(for: context.key), snapshot.context == context else { return }
         switch action {
         case .cancel, .pause, .resume:
             let command: BrowserDownloadAction = action == .cancel ? .cancel : action == .pause ? .pause : .resume
@@ -125,11 +199,17 @@ final class BrowserDownloadsController {
             guard snapshot.state == .complete, let url = snapshot.destinationURL else { return }
             Task { [weak self] in
                 let available = await Task.detached { BrowserDownloadPaths.regularFileSize(url) != nil }.value
-                guard let self, let current = coordinator.snapshot(for: context.key), current.context == context else { return }
+                // A background availability batch may finish during this action's own file
+                // validation. Terminal identity/owner/path must stay exact; metadata alone can
+                // advance the revision, so publish against the freshly validated context.
+                guard let self, !coordinator.isClosed, let current = coordinator.snapshot(for: context.key),
+                      current.state == .complete, current.owner == snapshot.owner,
+                      current.destinationURL == url else { return }
+                fileChecks[context.key] = nil
                 let availability: BrowserDownloadFileAvailability = available ? .available : .missing
-                guard context.revision < .max else { return }
-                let expectedRevision = context.revision + 1
-                do { try coordinator.setFileAvailability(availability, in: context) }
+                guard current.revision < .max else { return }
+                let expectedRevision = current.revision + 1
+                do { try coordinator.setFileAvailability(availability, in: current.context) }
                 catch { return }
                 guard available, !coordinator.isClosed, let refreshed = coordinator.snapshot(for: context.key),
                       refreshed.revision == expectedRevision, refreshed.state == .complete,
@@ -152,11 +232,16 @@ final class BrowserDownloadsController {
     }
 
     func shutdown() {
+        fileCheckTask?.cancel()
+        fileCheckTask = nil
+        fileChecks.removeAll()
+        fileWatchers.removeAll()
         coordinator.shutdown()
         for picker in Array(pickers.values) { picker.cancel() }
         pickers.removeAll()
         transfers.removeAll()
         observers.removeAll()
+        deltaObservers.removeAll()
     }
 }
 
@@ -187,4 +272,24 @@ private final class DownloadDestinationPicker: NSObject, NSOpenSavePanelDelegate
     }
 
     func cancel() { panel?.cancel(nil) }
+}
+
+/// The descriptor is opened on the utility worker; directory changes revoke cached existence.
+private final class DownloadDirectoryWatcher: @unchecked Sendable {
+    let directory: URL
+    private let source: DispatchSourceFileSystemObject
+    init?(directory: URL) {
+        let fd = open(directory.path, O_EVTONLY | O_CLOEXEC)
+        guard fd >= 0 else { return nil }
+        self.directory = directory
+        source = DispatchSource.makeFileSystemObjectSource(fileDescriptor: fd,
+            eventMask: [.write, .rename, .delete, .revoke], queue: .global(qos: .utility))
+        source.setCancelHandler { close(fd) }
+        source.activate()
+    }
+    func start(_ callback: @escaping @Sendable (URL) -> Void) {
+        let directory = directory
+        source.setEventHandler { callback(directory) }
+    }
+    deinit { source.cancel() }
 }

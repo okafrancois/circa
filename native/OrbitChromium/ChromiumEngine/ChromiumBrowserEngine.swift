@@ -67,6 +67,10 @@ public final class ChromiumBrowserEngine: BrowserPrivateEngine {
 
     public let persistence: BrowserWebsiteDataPersistence
     let runtime = ChromiumRuntime.shared
+    private var removingProfiles: Set<ProfileID> {
+        get { runtime.removingProfiles }
+        set { runtime.removingProfiles = newValue }
+    }
     private var profiles: [ProfileID: (token: UInt64, profile: BrowserEngineProfile)] = [:]
     // Hosted mode bookkeeping (see the `Hosted mode` extension).
     var shellWindows: [WindowID: ChromiumEngineWindow] = [:]
@@ -96,6 +100,9 @@ public final class ChromiumBrowserEngine: BrowserPrivateEngine {
     /// creation and report their navigations as failed, `profileReady` returns at once, and
     /// launch goes on for every other profile.
     public func profile(for profileID: ProfileID) -> BrowserEngineProfile {
+        guard !removingProfiles.contains(profileID) else {
+            return BrowserEngineProfile(profileID: profileID, persistence: persistence)
+        }
         if let existing = profiles[profileID] { return existing.profile }
         let token = runtime.makeToken()
         let path = persistence == .persistent ? profileDirectory(profileID) : ""
@@ -132,12 +139,14 @@ public final class ChromiumBrowserEngine: BrowserPrivateEngine {
         if runtime.registeredSurfaces.contains(where: { $0.engine === self && $0.profileID == profileID && !$0.isDisposed }) {
             throw BrowserEngineError.profileInUse
         }
+        guard removingProfiles.insert(profileID).inserted else { throw BrowserEngineError.profileInUse }
+        defer { removingProfiles.remove(profileID) }
         let deadline = ContinuousClock.now + .seconds(12)
         var released = false
         if let entry = profiles[profileID] {
             while ACRProfileBrowserCount(entry.token) != 0 {
                 guard ContinuousClock.now < deadline else { throw BrowserEngineError.profileInUse }
-                try? await Task.sleep(for: .milliseconds(20))
+                await Task { try? await Task.sleep(for: .milliseconds(20)) }.value
             }
             passwordHost.close(profileID: profileID)
             extensionHost.stopObserving(profileID)
@@ -155,7 +164,14 @@ public final class ChromiumBrowserEngine: BrowserPrivateEngine {
         var deletions = 0
         while true {
             attempts += 1
-            let result = ACRRemoveProfileDirectory(path)
+            var retirement: UInt64 = 0
+            var result = ACRRetireProfileDirectory(path, &retirement)
+            if retirement != 0 {
+                let handle = retirement
+                // Retirement cannot be abandoned by caller cancellation: the next recreation
+                // of this ID must wait for cleanup, including its exact failure outcome.
+                result = await Task.detached(priority: .utility) { ACRFinishProfileRemoval(handle) }.value
+            }
             let now = ContinuousClock.now
             switch result {
             case 2:
@@ -182,7 +198,7 @@ public final class ChromiumBrowserEngine: BrowserPrivateEngine {
                 runtime.trace?("profile-removal-timeout", ["code": String(result), "deletions": String(deletions)])
                 throw result == 0 ? BrowserEngineError.profileInUse : BrowserEngineError.profileRemovalIncomplete
             }
-            try? await Task.sleep(for: .milliseconds(50))
+            await Task { try? await Task.sleep(for: .milliseconds(50)) }.value
         }
     }
 
@@ -193,6 +209,7 @@ public final class ChromiumBrowserEngine: BrowserPrivateEngine {
     /// Laboratory only: binds a profile to CEF's global request context, where the stock SDK
     /// applies command-line extensions. Products must not share stores between profiles.
     public func laboratoryProfileUsingGlobalContext(_ profileID: ProfileID) -> BrowserEngineProfile {
+        guard !removingProfiles.contains(profileID) else { return profile(for: profileID) }
         if let existing = profiles[profileID] { return existing.profile }
         let token = runtime.makeToken()
         precondition(ACRCreateProfile(token, "@global", 1) == 1)
@@ -206,11 +223,13 @@ public final class ChromiumBrowserEngine: BrowserPrivateEngine {
 
     /// The bridge token of a profile, for laboratory introspection.
     public func profileToken(for profileID: ProfileID) -> UInt64 {
+        guard !removingProfiles.contains(profileID) else { return 0 }
         _ = profile(for: profileID)
         return profiles[profileID]!.token
     }
 
     public func profileReady(_ profileID: ProfileID) async {
+        guard !removingProfiles.contains(profileID) else { return }
         await runtime.profileReady(profileToken(for: profileID))
     }
 

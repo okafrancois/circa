@@ -43,12 +43,14 @@ extension BrowserWindowController {
         downloadsPane.list.render([])
     }
 
-    func renderDownloads() {
+    func renderDownloads(delta: BrowserDownloadCoordinator.Delta? = nil) {
         guard let profile = downloadsProfileID else { return }
         guard session.activeProfileID == profile else { downloadsPane.list.render([]); return }
         downloadsPane.setProfileName(session.catalog?.profiles.first { $0.id == profile }?.name ?? "")
         let query = downloadsPane.query.trimmingCharacters(in: .whitespacesAndNewlines)
-        let rows = downloads.snapshots(profileID: profile).map { item -> DownloadRowPresentation in
+        let incremental = delta.map { downloadsPane.list.canUpdate($0, profileID: profile) } ?? false
+        let items = incremental ? delta!.changed.filter { $0.owner.profileID == profile } : downloads.snapshots(profileID: profile)
+        let rows = items.map { item -> DownloadRowPresentation in
             let detail: String
             switch item.state {
             case .awaitingDestination: detail = uiText("Choose a Destination…")
@@ -77,6 +79,7 @@ extension BrowserWindowController {
                 fileURL: item.state == .complete && item.fileAvailability == .available ? item.destinationURL : nil,
                 startedAt: item.startedAt)
         }
-        downloadsPane.list.render(rows, query: query)
+        if incremental { downloadsPane.list.update(rows) }
+        else { downloadsPane.list.render(rows, query: query) }
     }
 }

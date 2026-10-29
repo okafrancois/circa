@@ -44,6 +44,17 @@ public struct BrowserDownloadRegistration {
 @MainActor
 public final class BrowserDownloadCoordinator {
     public var onChange: (() -> Void)?
+    /// Item notifications coalesce byte-only progress to at most ten deliveries per second.
+    /// Model reads and the legacy synchronous lifecycle observer remain exact at every report.
+    public struct Delta {
+        public let changed: [BrowserDownloadSnapshot]
+        public let removed: [BrowserDownloadKey]
+        public let historyChanged: Bool
+    }
+    public var onDelta: ((Delta) -> Void)?
+    private var pendingProgress: [BrowserDownloadKey: BrowserDownloadSnapshot] = [:]
+    private var progressTask: Task<Void, Never>?
+
     public private(set) var isClosed = false
 
     @MainActor
@@ -53,6 +64,7 @@ public final class BrowserDownloadCoordinator {
         let suggestedFilename: String
         var transfer: (any BrowserDownloadTransfer)?
         var revision: UInt64 = 0
+        var actionRevision: UInt64 = 0
         var sequence: UInt64 = 0
         var state: BrowserDownloadState = .awaitingDestination
         var receivedBytes: Int64 = 0
@@ -153,7 +165,7 @@ public final class BrowserDownloadCoordinator {
                 return .failure(.invalidUpdate)
             }
         }
-        publish()
+        publish(entry: entries[id])
         drainEffects()
         guard !isClosed else { throw BrowserDownloadError.coordinatorStopped }
         return registration
@@ -179,7 +191,7 @@ public final class BrowserDownloadCoordinator {
             entries[key.id] = entry
             order.append(key.id)
         }
-        publish()
+        publish(changed: records.compactMap { entries[$0.id]?.snapshot }, historyChanged: true)
         drainEffects()
     }
 
@@ -192,6 +204,14 @@ public final class BrowserDownloadCoordinator {
     public func snapshot(for key: BrowserDownloadKey) -> BrowserDownloadSnapshot? {
         guard let entry = entries[key.id], entry.key == key else { return nil }
         return entry.snapshot
+    }
+
+    /// A displayed row can lag byte-only progress. Rebase its action context only across those
+    /// reports; state, ownership, availability and control changes retain strict stale rejection.
+    public func currentActionContext(_ context: BrowserDownloadContext) -> BrowserDownloadContext? {
+        guard !isClosed, let entry = try? resolve(context.key),
+              context.revision >= entry.actionRevision, context.revision <= entry.revision else { return nil }
+        return entry.snapshot.context
     }
 
     /// Cancellation supersedes pending pause/resume commands before their engine effects run.
@@ -221,7 +241,7 @@ public final class BrowserDownloadCoordinator {
         entry.controlError = nil
         if action == .cancel { entry.isCancellationRequested = true }
         effects.append(.control(entry, entry.controlToken, action))
-        publish()
+        publish(entry: entry)
         drainEffects()
     }
 
@@ -234,7 +254,7 @@ public final class BrowserDownloadCoordinator {
         entry.owner = BrowserDownloadOwner(profileID: entry.owner.profileID, sourceWindowID: windowID,
                                            sourceOccurrenceID: occurrenceID)
         entry.revision += 1
-        publish()
+        publish(entry: entry)
         drainEffects()
     }
 
@@ -247,7 +267,7 @@ public final class BrowserDownloadCoordinator {
               entry.revision < .max else { return }
         entry.owner = BrowserDownloadOwner(profileID: entry.owner.profileID)
         entry.revision += 1
-        publish()
+        publish(entry: entry)
         drainEffects()
     }
 
@@ -258,8 +278,20 @@ public final class BrowserDownloadCoordinator {
         let entry = try resolve(context)
         try advance(entry)
         entry.fileAvailability = availability
-        publish()
+        publish(entry: entry)
         drainEffects()
+    }
+
+    /// Applies a background availability batch in one publication; stale contexts are ignored.
+    public func setFileAvailabilities(_ checks: [(BrowserDownloadContext, BrowserDownloadFileAvailability)]) {
+        var changed: [BrowserDownloadSnapshot] = []
+        for (context, availability) in checks {
+            guard let entry = try? resolve(context), entry.state == .complete,
+                  entry.fileAvailability != availability, (try? advance(entry)) != nil else { continue }
+            entry.fileAvailability = availability
+            changed.append(entry.snapshot)
+        }
+        if !changed.isEmpty { publish(changed: changed); drainEffects() }
     }
 
     /// Removing an active item is rejected. Cancel first and wait for a terminal engine report.
@@ -269,7 +301,7 @@ public final class BrowserDownloadCoordinator {
         guard entry.state.isTerminal else { throw BrowserDownloadError.activeDownload }
         entries.removeValue(forKey: entry.key.id)
         order.removeAll { $0 == entry.key.id }
-        publish()
+        publish(removed: [entry.key], historyChanged: true)
         drainEffects()
     }
 
@@ -291,8 +323,12 @@ public final class BrowserDownloadCoordinator {
                 ))
             }
         }
-        publish()
+        progressTask?.cancel()
+        progressTask = nil
+        pendingProgress.removeAll()
+        publish(changed: allSnapshots)
         onChange = nil
+        onDelta = nil
         drainEffects()
     }
 
@@ -334,6 +370,10 @@ public final class BrowserDownloadCoordinator {
               update.failure == nil || update.state == .failed || update.state == .interrupted else {
             throw BrowserDownloadError.invalidUpdate
         }
+        let progressOnly = entry.state == .running && update.state == .running
+            && entry.capabilities == update.capabilities && entry.currentURL == update.currentURL
+            && entry.destinationURL == update.destinationURL && entry.fileAvailability == update.fileAvailability
+            && entry.failure == update.failure && entry.pendingAction == nil && entry.controlError == nil
         try advance(entry)
         entry.sequence = update.sequence
         entry.state = update.state
@@ -360,7 +400,7 @@ public final class BrowserDownloadCoordinator {
             entry.pendingAction = nil
             entry.controlError = error
         }
-        publish()
+        publish(entry: entry, progressOnly: progressOnly, historyChanged: update.state.isTerminal)
         drainEffects()
     }
 
@@ -377,13 +417,41 @@ public final class BrowserDownloadCoordinator {
             entry.isCancellationAccepted = true
         }
         entry.pendingAction = nil
-        publish()
+        publish(entry: entry)
         drainEffects()
     }
 
-    private func publish() {
+    private func publish(entry: Entry?, progressOnly: Bool = false, historyChanged: Bool = false) {
+        publish(changed: entry.map { [$0.snapshot] } ?? [], progressOnly: progressOnly, historyChanged: historyChanged)
+    }
+
+    private func publish(changed: [BrowserDownloadSnapshot] = [], removed: [BrowserDownloadKey] = [],
+                         progressOnly: Bool = false, historyChanged: Bool = false) {
         publicationDepth += 1
         defer { publicationDepth -= 1 }
+        // Snapshot values are captured before reentrant observers can mutate the coordinator.
+        if progressOnly {
+            for item in changed { pendingProgress[item.key] = item }
+            if progressTask == nil {
+                progressTask = Task { @MainActor [weak self] in
+                    do { try await Task.sleep(for: .milliseconds(100)) } catch { return }
+                    guard let self else { return }
+                    self.progressTask = nil
+                    let items = Array(self.pendingProgress.values)
+                    self.pendingProgress.removeAll()
+                    self.publicationDepth += 1
+                    if !items.isEmpty { self.onDelta?(Delta(changed: items, removed: [], historyChanged: false)) }
+                    self.publicationDepth -= 1
+                    self.drainEffects()
+                }
+            }
+        } else {
+            for item in changed {
+                if let entry = entries[item.key.id], entry.key == item.key { entry.actionRevision = item.revision }
+            }
+            for key in changed.map(\.key) + removed { pendingProgress[key] = nil }
+            onDelta?(Delta(changed: changed, removed: removed, historyChanged: historyChanged))
+        }
         onChange?()
     }
 

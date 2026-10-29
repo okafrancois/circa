@@ -1,4 +1,6 @@
 import AppKit
+import BrowserCore
+import BrowserShell
 import Foundation
 import QuickLookThumbnailing
 import UniformTypeIdentifiers
@@ -148,6 +150,25 @@ final class BrowserDownloadsView: NSView {
             }
         }
         empty.isHidden = !visible.isEmpty
+    }
+
+    func canUpdate(_ delta: BrowserDownloadCoordinator.Delta, profileID: ProfileID) -> Bool {
+        guard delta.removed.isEmpty else { return false }
+        return delta.changed.filter { $0.owner.profileID == profileID }.allSatisfy { item in
+            presentations.contains {
+                $0.id == item.key.id && $0.lifetime == item.key.lifetime && $0.startedAt == item.startedAt
+                    && $0.title == (item.destinationURL?.lastPathComponent ?? item.suggestedFilename)
+            }
+        }
+    }
+
+    func update(_ changes: [DownloadRowPresentation]) {
+        let indexed = Dictionary(uniqueKeysWithValues: changes.map { ($0.id, $0) })
+        for index in presentations.indices {
+            guard let item = indexed[presentations[index].id] else { continue }
+            presentations[index] = item
+            rowViews[item.id]?.render(item)
+        }
     }
 
     var displayedTitles: [String] {

@@ -21,7 +21,7 @@ struct DownloadHistoryTests {
     }
 
     @Test("Terminal history restores in order with fresh lifetimes, profile isolation and working removal")
-    func restore() throws {
+    func restore() async throws {
         let root = try directory()
         defer { try? FileManager.default.removeItem(at: root) }
         let url = root.appendingPathComponent("history.json")
@@ -35,6 +35,10 @@ struct DownloadHistoryTests {
         _ = try manager.coordinator.register(owner: .init(profileID: a), transfer: HistoryTransfer())
         let restored = BrowserDownloadsController(history: try BrowserDownloadHistoryStore(destination: url))
         #expect(restored.coordinator.allSnapshots.map(\.key.id) == [first.key.id, second.key.id])
+        _ = restored.snapshots(profileID: a)
+        for _ in 0..<100 where restored.coordinator.allSnapshots.first?.fileAvailability == .unknown {
+            try await Task.sleep(for: .milliseconds(10))
+        }
         let item = try #require(restored.snapshots(profileID: a).first)
         #expect(item.key.lifetime != first.key.lifetime)
         #expect(item.fileAvailability == .missing)

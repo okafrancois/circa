@@ -3,6 +3,9 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <unistd.h>
+#include <pthread.h>
+#include <assert.h>
 
 /* Source-only authenticated-import coordinator tests inject their transport. Other lifecycle
  * targets compile the same adapter without enabling synthetic target admission. */
@@ -93,7 +96,13 @@ int32_t ACRZoom(uint64_t token, int32_t command, double *level) { *level = 0; re
 int32_t ACRSetZoomLevel(uint64_t token, double level) { return 1; }
 int32_t ACRSetAudioMuted(uint64_t token, int32_t muted) { return 1; }
 int32_t ACRIsAudioMuted(uint64_t token) { return 0; }
-int32_t ACRExecuteDevToolsMethod(uint64_t token, const char *method, const char *params) { return 0; }
+static int32_t devtools_id = 0;
+static int32_t devtools_enabled = 0;
+void ACRStubDevToolsMode(int32_t enabled) { devtools_enabled = enabled; devtools_id = 0; }
+int32_t ACRStubDevToolsID(void) { return devtools_id; }
+int32_t ACRExecuteDevToolsMethod(uint64_t token, const char *method, const char *params) {
+  return devtools_enabled && strcmp(method, "Page.captureScreenshot") == 0 ? ++devtools_id : 0;
+}
 int32_t ACRRuntimeStyle(uint64_t token) { return 0; }
 int32_t ACRBrowserID(uint64_t token) { return 0; }
 void *ACRBrowserNSView(uint64_t token) { return 0; }
@@ -172,6 +181,18 @@ int32_t ACRReleaseProfile(uint64_t profile) {
 }
 int32_t ACRProfileLoaded(const char *path) { return -1; }
 int32_t ACRRemoveProfileDirectory(const char *path) { return 1; }
+static int32_t retirement_result = 2, retirement_pending = 0;
+void ACRStubRetirementMode(int32_t result) { retirement_result = result; retirement_pending = 1; }
+int32_t ACRRetireProfileDirectory(const char *path, uint64_t *retirement) {
+  *retirement = retirement_pending ? 1 : 0;
+  retirement_pending = 0;
+  return *retirement ? 2 : 1;
+}
+int32_t ACRFinishProfileRemoval(uint64_t retirement) {
+  assert(!pthread_main_np());
+  usleep(100000);
+  return retirement_result;
+}
 int32_t ACRGetTabInfo(uint64_t token, ACRTabInfo *info) {
   StubTab *tab = stub_tab(token);
   if (!hosted_mode || !tab) return 0;

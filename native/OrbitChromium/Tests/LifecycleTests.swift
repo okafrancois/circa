@@ -422,6 +422,10 @@ struct LifecycleTests {
             engine = ChromiumBrowserEngine(persistence: .ephemeral)
         }
         precondition(result == 0 && engine != nil, "the stub must report readiness without starting CEF")
+        if CommandLine.arguments.contains("--performance-only") {
+            await performanceChecks(engine!)
+            return
+        }
         if CommandLine.arguments.contains("--review-favicon-only") {
             await reviewFaviconReceiptChecks(engine!)
             return
@@ -928,4 +932,51 @@ private func reviewFaviconReceiptChecks(_ engine: ChromiumBrowserEngine) async {
     surface.dispose()
     ACRStubAbortCreation(surface.token)
     precondition(!acceptedDifferentURL && !acceptedFile, "favicon boundary must reject stale URL and privileged source schemes independently")
+}
+
+@MainActor
+private func performanceChecks(_ backend: ChromiumBrowserEngine) async {
+    let delegate = LifecycleDelegate()
+    let surface = backend.makeSurface(profileID: ProfileID(), delegate: delegate)
+    emit(ACR_EVENT_CREATED, surface.token, value: 2)
+    emit(ACR_EVENT_DOCUMENT, surface.token, url: "about:blank")
+    ACRStubDevToolsMode(1)
+    let cancelled = Task { try await surface.captureSnapshot(.init(width: 40)) }
+    while ACRStubDevToolsID() == 0 { await Task.yield() }
+    cancelled.cancel()
+    do { _ = try await cancelled.value; preconditionFailure("cancelled capture succeeded") }
+    catch { precondition(error is CancellationError) }
+    let second = Task { await surface.devToolsCall("Page.captureScreenshot", timeout: .milliseconds(30)) }
+    try? await Task.sleep(for: .milliseconds(15))
+    precondition(ACRStubDevToolsID() == 1, "cancelled native capture still owns the slot")
+    emit(ACR_EVENT_DEVTOOLS_RESULT, surface.token, request: 1, value: 1, payload: "{}")
+    _ = await second.value
+    precondition(ACRStubDevToolsID() == 2, "late response releases the slot; next request times out once")
+    emit(ACR_EVENT_DEVTOOLS_RESULT, surface.token, request: 2, value: 1, payload: "{}")
+    let neverIssued = Task { @MainActor in
+        withUnsafeCurrentTask { $0?.cancel() }
+        return await surface.devToolsCall("Page.captureScreenshot")
+    }
+    let neverIssuedResult = await neverIssued.value
+    precondition(!neverIssuedResult.0 && ACRStubDevToolsID() == 2)
+    surface.dispose()
+    emit(ACR_EVENT_CLOSED, surface.token)
+    ACRStubDevToolsMode(0)
+    ACRStubSetPatchLevel(2)
+    let persistent = ChromiumBrowserEngine(persistence: .persistent)
+    for code: Int32 in [2, -1] {
+        let id = ProfileID()
+        ACRStubRetirementMode(code)
+        let removal = Task { try await persistent.removeProfile(id) }
+        try? await Task.sleep(for: .milliseconds(20))
+        precondition(persistent.profileToken(for: id) == 0, "recreation is refused during worker cleanup")
+        precondition(ChromiumBrowserEngine(persistence: .persistent).profileToken(for: id) == 0)
+        await persistent.profileReady(id)
+        do { try await persistent.removeProfile(id); preconditionFailure("overlapping removal accepted") }
+        catch { precondition(error as? BrowserEngineError == .profileInUse) }
+        do { try await removal.value; precondition(code == 2) }
+        catch { precondition(code == -1 && error as? BrowserEngineError == .profileRemovalIncomplete) }
+        precondition(persistent.profileToken(for: id) != 0, "recreation is possible after cleanup completion")
+    }
+    print("PASS: prompt cancellation, native capture serialization, late result/timeout races, profile cleanup ordering and failure")
 }

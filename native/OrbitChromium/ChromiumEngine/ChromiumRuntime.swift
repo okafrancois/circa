@@ -62,6 +62,7 @@ public final class ChromiumRuntime {
 
     public private(set) var isReady = false
     public private(set) var isQuitting = false
+    var removingProfiles: Set<ProfileID> = []
     public private(set) var rootCachePath = ""
     /// Diagnostic tap for the laboratory. Never receives page content beyond URLs and titles.
     public var trace: ((String, [String: String]) -> Void)?
