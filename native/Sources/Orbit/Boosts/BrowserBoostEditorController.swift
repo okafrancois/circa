@@ -8,6 +8,8 @@ final class BrowserBoostEditorController: NSWindowController {
     let editor: BrowserBoostEditorView
     var zapView: BrowserBoostZapView?
     weak var pageHost: NSView?
+    private weak var presentingWindow: NSWindow?
+    private(set) var deleteConfirmation: BrowserBoostDeleteView?
     private var resizeTimer: Timer?
     private var resizeBegan: TimeInterval?
     init(session: BrowserBoostEditorSession, parent: NSWindow, firstRun: Bool) {
@@ -20,7 +22,9 @@ final class BrowserBoostEditorController: NSWindowController {
         panel.appearance = NSAppearance(named: .aqua)
         panel.contentView = editor
         super.init(window: panel)
+        presentingWindow = parent
         editor.onClose = { [weak self] in self?.close() }
+        editor.onDelete = { [weak self] in self?.confirmDelete() }
         editor.onCode = { [weak self] in self?.showCode() }
         panel.title = uiText("Boost")
         panel.setAccessibilityLabel(uiText("Boost"))
@@ -34,7 +38,16 @@ final class BrowserBoostEditorController: NSWindowController {
     required init?(coder: NSCoder) { nil }
     func showCode() {
         guard let window else { return }
-        let code = BrowserBoostCodeView(frame: NSRect(x: 0, y: 0, width: 480, height: 588))
+        let code = BrowserBoostCodeView(session: session)
+        code.requestJavaScriptConsent = { [weak self] completion in
+            guard let self, let window = self.window, !session.isClosed else { completion(false); return }
+            let alert = NSAlert()
+            alert.messageText = uiText("Enable JavaScript for this Boost?")
+            alert.informativeText = uiText("Only enable code you trust. JavaScript can read and change this site's pages. Changes run after reloading the page; disabling or deleting a Boost cannot undo code that already ran.")
+            alert.addButton(withTitle: uiText("Enable JavaScript"))
+            alert.addButton(withTitle: uiText("Cancel"))
+            alert.beginSheetModal(for: window) { response in completion(response == .alertFirstButtonReturn) }
+        }
         code.onBack = { [weak self] in self?.showControls() }
         var frame = window.frame
         frame.origin.x -= 480 - frame.width; frame.size.width = 480
@@ -47,6 +60,31 @@ final class BrowserBoostEditorController: NSWindowController {
         frame.origin.x += frame.width - 183; frame.size.width = 183
         resize(to: frame) { [weak self] in guard let self else { return }; window.contentView = editor }
     }
+    func confirmDelete() {
+        guard deleteConfirmation == nil, !session.isClosed,
+              let parent = presentingWindow, let host = parent.contentView else { return }
+        zapView?.stop(); zapView = nil; editor.isZapping = false
+        let view = BrowserBoostDeleteView { [weak self] accepted in
+            guard let self else { return }
+            deleteConfirmation = nil
+            if accepted { session.delete() }
+            Task { [weak self] in
+                guard let self else { return }
+                await session.pending?.value
+                if session.isDeleted { close() }
+                else if !session.isClosed, let panel = window, let parent = presentingWindow {
+                    if panel.parent == nil { parent.addChildWindow(panel, ordered: .above) }
+                    panel.makeKeyAndOrderFront(nil)
+                }
+            }
+        }
+        view.frame = host.bounds; view.autoresizingMask = [.width, .height]
+        host.addSubview(view, positioned: .above, relativeTo: nil)
+        deleteConfirmation = view
+        if let window { parent.removeChildWindow(window); window.orderOut(nil) }
+        parent.makeKeyAndOrderFront(nil)
+    }
+
     private func resize(to target: NSRect, completion: (@MainActor @Sendable () -> Void)? = nil) {
         resizeTimer?.invalidate()
         guard let window else { return }
@@ -59,7 +97,7 @@ final class BrowserBoostEditorController: NSWindowController {
         let progress: [Double] = [0, 0.045, 0.123, 0.123, 0.323, 0.323, 0.471, 0.562,
             0.643, 0.710, 0.744, 0.744, 0.821, 0.869, 0.902, 0.933, 0.946, 0.963,
             0.963, 0.973, 0.985, 0.992, 0.997, 0.997, 1, 1.002, 1.002, 1]
-        resizeTimer = Timer.scheduledTimer(withTimeInterval: 1 / 60, repeats: true) { [weak self] _ in
+        resizeTimer = Timer(timeInterval: 1 / 60, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated {
                 guard let self else { return }
                 let now = ProcessInfo.processInfo.systemUptime
@@ -76,9 +114,11 @@ final class BrowserBoostEditorController: NSWindowController {
                 if sample >= Double(progress.count - 1) { self.resizeTimer?.invalidate(); self.resizeTimer = nil; window.setFrame(target, display: true); completion?() }
             }
         }
+        if let resizeTimer { RunLoop.main.add(resizeTimer, forMode: .common) }
     }
     override func close() {
         resizeTimer?.invalidate(); resizeTimer = nil
+        deleteConfirmation?.removeFromSuperview(); deleteConfirmation = nil
         zapView?.stop(); zapView = nil
         session.close()
         if let window { window.parent?.removeChildWindow(window) }
@@ -139,12 +179,16 @@ extension BrowserWindowController {
             }
         }
         let controller = BrowserBoostEditorController(session: draft, parent: parent, firstRun: firstRun)
+        controller.editor.onAllBoosts = { [weak self, weak controller] in
+            controller?.close()
+            self?.showLibrary(.boosts)
+        }
         controller.pageHost = pageCommandSurface()?.hostView
         let profile = draft.store.profileID
         draft.onCommit = { [weak self] in
             guard let self else { return }
+            defer { renderLibraryBoosts() }
             try await synchronizeBoosts(profile)
-            renderLibraryBoosts()
         }
         controller.editor.onZap = { [weak self, weak controller] in
             guard let self, let controller else { return }

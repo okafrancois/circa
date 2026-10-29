@@ -7,6 +7,8 @@ import Foundation
 final class BrowserBoostEditorSession {
     let store: BrowserBoostStore
     private(set) var boost: BrowserBoost
+    private(set) var isDeleted = false
+    private(set) var isDeleting = false
     private(set) var isClosed = false
     private(set) var error: Error?
     private(set) var pending: Task<Void, Never>?
@@ -28,19 +30,50 @@ final class BrowserBoostEditorSession {
         return BrowserBoostEditorSession(store: store, boost: boost)
     }
 
-    func edit(_ mutation: @escaping (inout BrowserBoostContent) -> Void) {
-        guard !isClosed else { return }
+    private func update(_ mutation: @escaping (inout BrowserBoost) -> Void) {
+        guard !isClosed, !isDeleting else { return }
+        enqueue { [self] in
+            var next = boost
+            mutation(&next)
+            boost = try await store.save(next, expectedRevision: boost.revision)
+        }
+    }
+
+    private func enqueue(_ operation: @escaping @MainActor () async throws -> Void) {
         let previous = pending
         pending = Task { [self] in
             await previous?.value
-            var next = boost
-            mutation(&next.content)
             do {
-                boost = try await store.save(next, expectedRevision: boost.revision)
+                try await operation()
                 error = nil
                 try await onCommit?()
             } catch { self.error = error }
             onChange?()
+        }
+    }
+
+    func edit(_ mutation: @escaping (inout BrowserBoostContent) -> Void) {
+        update { mutation(&$0.content) }
+    }
+
+    func resetAllEdits() {
+        update { $0.content = .init(); $0.javaScriptOptIn = false }
+    }
+
+    func setJavaScriptConsent(_ consent: Bool) { update { $0.javaScriptOptIn = consent } }
+
+    /// Accepted deletion drains earlier edits and prevents later writes from recreating the item.
+    func delete() {
+        guard !isClosed, !isDeleting else { return }
+        isDeleting = true
+        enqueue { [self] in
+            do {
+                try await store.remove(boost.id, expectedRevision: boost.revision)
+                isDeleted = true; isClosed = true
+            } catch {
+                isDeleting = false
+                throw error
+            }
         }
     }
 
