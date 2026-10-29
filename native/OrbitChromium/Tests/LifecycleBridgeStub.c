@@ -342,3 +342,11 @@ int32_t ACRPasswordPromptSnapshot(uint64_t surface, uint64_t profile,
 int32_t ACRPasswordPromptDecide(uint64_t surface, uint64_t profile, uint64_t generation, int32_t decision) { return 0; }
 int32_t ACRPasswordPromptReopen(uint64_t surface, uint64_t profile, uint64_t generation) { return 0; }
 int32_t ACRSetAutomaticPiP(uint64_t surface, int32_t automatic) { return 0; }
+
+int32_t ACRPasswordStoreAvailable(void) { return 0; }
+uint64_t ACRPasswordStoreOpen(uint64_t profile) { return 0; }
+void ACRPasswordStoreClose(uint64_t handle) {}
+int32_t ACRPasswordStoreList(uint64_t handle, orbit_password_result_t cb, void* context) { return 0; }
+int32_t ACRPasswordStoreWrite(uint64_t handle, int32_t operation, const orbit_password_record_t* record,
+    const orbit_password_record_t* old_key, orbit_password_result_t cb, void* context) { return 0; }
+int32_t ACRPasswordStoreObserve(uint64_t handle, orbit_password_changed_t cb, void* context) { return 0; }

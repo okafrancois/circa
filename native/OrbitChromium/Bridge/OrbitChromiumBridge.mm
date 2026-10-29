@@ -1776,7 +1776,8 @@ const orbit_cef_api_t* ResolveOrbitApi() {
   // v1. Each version's layout is the prefix of the next; a function beyond the resolved version
   // is never called.
   const orbit_cef_api_t* api = nullptr;
-  const std::pair<uint32_t, size_t> versions[] = {{10u, sizeof(orbit_cef_api_t)},
+  const std::pair<uint32_t, size_t> versions[] = {{11u, sizeof(orbit_cef_api_t)},
+                                                   {10u, offsetof(orbit_cef_api_t, password_store_open)},
                                                    {9u, offsetof(orbit_cef_api_t, popup_navigation_metadata)},
                                                    {8u, offsetof(orbit_cef_api_t, set_automatic_pip)},
                                                    {7u, offsetof(orbit_cef_api_t, boosts_replace)},
@@ -3481,4 +3482,33 @@ extern "C" int32_t ACRBoostsReplace(uint64_t profile, const char* json, uint64_t
   const auto path = found->second->GetCachePath().ToString();
   if (path.empty()) return 0;
   return g_state->orbit->boosts_replace(path.c_str(), json, revision, callback, context);
+}
+
+// Dedicated credential API; these callbacks never enter ACREvent or tracing.
+extern "C" int32_t ACRPasswordStoreAvailable(void) {
+  return g_state && g_state->orbit && g_state->orbit->version >= 11;
+}
+extern "C" uint64_t ACRPasswordStoreOpen(uint64_t profile) {
+  if (!NSThread.isMainThread || !ACRPasswordStoreAvailable() || g_state->quitting) return 0;
+  auto found = g_state->profiles.find(profile);
+  if (found == g_state->profiles.end() || !found->second || found->second->IsGlobal()) return 0;
+  const auto path = found->second->GetCachePath().ToString();
+  return path.empty() ? 0 : g_state->orbit->password_store_open(path.c_str());
+}
+extern "C" void ACRPasswordStoreClose(uint64_t handle) {
+  if (NSThread.isMainThread && ACRPasswordStoreAvailable()) g_state->orbit->password_store_close(handle);
+}
+extern "C" int32_t ACRPasswordStoreList(uint64_t handle, orbit_password_result_t cb, void* context) {
+  return NSThread.isMainThread && ACRPasswordStoreAvailable() && !g_state->quitting
+      ? g_state->orbit->password_store_list(handle, cb, context) : 0;
+}
+extern "C" int32_t ACRPasswordStoreWrite(uint64_t handle, int32_t operation,
+    const orbit_password_record_t* record, const orbit_password_record_t* old_key,
+    orbit_password_result_t cb, void* context) {
+  return NSThread.isMainThread && ACRPasswordStoreAvailable() && !g_state->quitting
+      ? g_state->orbit->password_store_write(handle, operation, record, old_key, cb, context) : 0;
+}
+extern "C" int32_t ACRPasswordStoreObserve(uint64_t handle, orbit_password_changed_t cb, void* context) {
+  return NSThread.isMainThread && ACRPasswordStoreAvailable()
+      ? g_state->orbit->password_store_observe(handle, cb, context) : 0;
 }

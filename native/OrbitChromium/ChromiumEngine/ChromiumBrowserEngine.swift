@@ -22,6 +22,11 @@ public final class ChromiumBrowserEngine: BrowserPrivateEngine {
     /// The mode in use. `.hosted` requires the patched CEF (`patchLevel >= 1`).
     public let surfaceMode: SurfaceMode
     public let kind = BrowserEngineKind.chromium
+    private lazy var passwordHost = ChromiumPasswordStore(engine: self)
+    public var passwordStore: (any BrowserPasswordStore)? {
+        guard !isShutDown, persistence == .persistent, ACRPasswordStoreAvailable() == 1 else { return nil }
+        return passwordHost
+    }
     private lazy var boostHost = ChromiumBoostHost(engine: self)
     public var boosts: (any BrowserBoostHost)? {
         guard !isShutDown, persistence == .persistent, ACRBoostsAvailable() == 1 else { return nil }
@@ -134,6 +139,7 @@ public final class ChromiumBrowserEngine: BrowserPrivateEngine {
                 guard ContinuousClock.now < deadline else { throw BrowserEngineError.profileInUse }
                 try? await Task.sleep(for: .milliseconds(20))
             }
+            passwordHost.close(profileID: profileID)
             extensionHost.stopObserving(profileID)
             guard ACRReleaseProfile(entry.token) == 1 else { throw BrowserEngineError.profileInUse }
             profiles[profileID] = nil
@@ -324,6 +330,7 @@ public final class ChromiumBrowserEngine: BrowserPrivateEngine {
     /// reports completion while a browser of this engine exists.
     @discardableResult
     public func shutdown(timeout: Duration) async -> ChromiumShutdownOutcome {
+        passwordHost.closeAll()
         extensionHost.stopObserving()
         isShutDown = true
         awaitingHostedCreation.removeAll()

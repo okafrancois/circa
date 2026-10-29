@@ -10,8 +10,8 @@ int main(int argc, char** argv) {
   assert(handle);
   auto get = reinterpret_cast<orbit_cef_get_api_t>(dlsym(handle, "orbit_cef_get_api"));
   assert(get);
-  const auto* api = get(9);
-  assert(api && api->version == 9 && api->struct_size >= sizeof(orbit_cef_api_t));
+  const auto* api = get(11);
+  assert(api && api->version == 11 && api->struct_size >= sizeof(orbit_cef_api_t));
   assert(api->window_created && api->move_tab && api->hold_window && api->extension_selection_changed);
   for (const char* name : {"orbit_cef_essentials_level", "orbit_cef_set_unowned_tab_handler",
                            "orbit_cef_extension_set_pinned", "orbit_cef_extension_shortcut"})
@@ -32,6 +32,10 @@ int main(int argc, char** argv) {
     assert(prefix && prefix->version == version && prefix->struct_size >= prefixes[version - 1]);
     assert(prefix->window_created == api->window_created && prefix->get_tab_info == api->get_tab_info);
   }
-  assert(!get(10));
+  assert(get(9)->struct_size == offsetof(orbit_cef_api_t, popup_navigation_metadata));
+  assert(get(10)->version == 10 && get(10)->struct_size == offsetof(orbit_cef_api_t, password_store_open));
+  assert(api->popup_navigation_metadata && api->password_store_open && api->password_store_close);
+  assert(api->password_store_list && api->password_store_write && api->password_store_observe);
+  assert(!get(0) && !get(12));
   dlclose(handle);
 }
