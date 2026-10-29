@@ -16,10 +16,12 @@ final class BrowserLibraryHistoryView: NSView, NSTableViewDataSource, NSTableVie
     private let removeSite = NSButton(title: libraryText("deleteSite", "Delete This Site…"), target: nil, action: nil)
     private(set) var rows: [Row] = []
     private var renderedVisits: [BrowserHistoryVisit] = []
+    private var renderedRevision: UInt64 = 0
     private var renderedQuery = ""
     private var renderedProfile: ProfileID?
     private let dates = BrowserLibraryDateObserver()
     private(set) var reloadCount = 0
+    private(set) var appendCount = 0
     var onSearch: ((String) -> Void)?
     var onMore: (() -> Void)?
     var onReload: (() -> Void)?
@@ -96,11 +98,17 @@ final class BrowserLibraryHistoryView: NSView, NSTableViewDataSource, NSTableVie
         if searchField.stringValue != model.query { searchField.stringValue = model.query }
         if renderedVisits != model.visits || renderedProfile != model.profileID || renderedQuery != model.displayedQuery {
             let preservePosition = renderedProfile == model.profileID && renderedQuery == model.displayedQuery
+            // Load More only appended a page to the rows on screen.
+            let appended = preservePosition && !renderedVisits.isEmpty && model.appendedFrom == renderedVisits.count
+                && model.visitsRevision == renderedRevision &+ 1
+            let previousCount = renderedVisits.count
             renderedProfile = model.profileID
             renderedQuery = model.displayedQuery
             renderedVisits = model.visits
-            rebuildRows(preservePosition: preservePosition)
+            if appended { appendRows(model.visits[previousCount...]) }
+            else { rebuildRows(preservePosition: preservePosition) }
         }
+        renderedRevision = model.visitsRevision
         status.stringValue = model.hasError ? libraryText("unavailable", "History is unavailable. Try Refresh.") : model.isLoading && !model.isDebouncing ? libraryText("loading", "Loading…") : model.visits.isEmpty ? (model.query.isEmpty ? libraryText("emptyHistory", "No History for This Profile") : libraryText("noResults", "No Results")) : ""
         more.isEnabled = model.hasMore && !model.isLoading
         deleteOptions.isEnabled = model.profileID != nil
@@ -150,6 +158,22 @@ final class BrowserLibraryHistoryView: NSView, NSTableViewDataSource, NSTableVie
             scroll.contentView.scroll(to: NSPoint(x: origin.x, y: min(max(0, y), max(0, table.bounds.height - scroll.contentView.bounds.height))))
             scroll.reflectScrolledClipView(scroll.contentView)
         }
+    }
+    /// Older visits go after the rows on screen: only the boundary with the last day can change,
+    /// and earlier rows keep their indices, so selection and scroll position stay exact.
+    private func appendRows(_ visits: ArraySlice<BrowserHistoryVisit>) {
+        let start = rows.count
+        var previous: Date? = rows.last { if case .day = $0 { return true }; return false }.flatMap {
+            if case let .day(day) = $0 { return day }; return nil
+        }
+        for visit in visits {
+            let day = Calendar.current.startOfDay(for: visit.visitedAt)
+            if previous != day { rows.append(.day(day)); previous = day }
+            rows.append(.visit(visit))
+        }
+        guard rows.count > start else { return }
+        table.insertRows(at: IndexSet(integersIn: start..<rows.count), withAnimation: [])
+        appendCount += 1
     }
     func numberOfRows(in tableView: NSTableView) -> Int { rows.count }
     func tableView(_ tableView: NSTableView, shouldSelectRow row: Int) -> Bool { if case .visit = rows[row] { return true }; return false }
