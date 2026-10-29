@@ -7,6 +7,8 @@ public struct BrowserPasswordImportCounts: Codable, Sendable, Equatable {
     public var conflicts = 0
     public var unsupported = 0
     public var unrepresentedNotes = 0
+    public var unrepresentedOTP = 0
+    public var unrepresentedPasskeys = 0
     public init() {}
 }
 
@@ -43,6 +45,7 @@ public enum BrowserPasswordImporter {
         let read = try BrowserPasswordCSV.read(data)
         var counts = try await apply(read.passwords, to: store, profileID: profileID)
         counts.unsupported = read.unsupported; counts.unrepresentedNotes = read.unrepresentedNotes
+        counts.unrepresentedOTP = read.unrepresentedOTP; counts.unrepresentedPasskeys = read.unrepresentedPasskeys
         return counts
     }
 }

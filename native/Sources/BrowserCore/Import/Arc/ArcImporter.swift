@@ -43,6 +43,7 @@ public struct ArcImportReport: Codable, Equatable, Sendable {
     public static let notImported = ["cookies", "passwords", "extensions", "siteData", "settings", "downloads"]
 
     public var capabilities: [String: BrowserImportCapability]?
+    public var sourceCounts: [String: Int]?
     public var formatVersion: Int?
     /// What Arc holds that maps to the native model.
     public var source = BrowserImportPlanCounts()
@@ -285,6 +286,8 @@ public struct BrowserImportOrchestrator: Sendable {
         report.diagnostics = prepared.diagnostics
         report.archiveDocumentUnreadable = prepared.archiveUnreadable
         report.capabilities = prepared.capabilities
+        report.sourceCounts = prepared.sourceCounts
+        report.notImported = prepared.notImported ?? report.notImported
         report.source = plan.counts
         report.skipped = plan.skipped
         logger.log(.parsed(spaces: report.source.spaces, favorites: report.source.favorites, pinned: report.source.pinnedTabs,

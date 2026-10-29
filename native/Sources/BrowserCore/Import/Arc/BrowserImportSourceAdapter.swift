@@ -1,7 +1,7 @@
 import Foundation
 
 public enum BrowserImportCapability: String, Codable, Sendable {
-    case supported, empty, needsExport, unsupportedVersion, failed
+    case supported, empty, needsExport, unsupportedVersion, failed, unsupported
 }
 
 public struct BrowserImportDescriptor: Sendable, Equatable {
@@ -43,6 +43,8 @@ public struct BrowserImportSourcePlan: Sendable {
     public var diagnostics = ArcSidebarDiagnostics()
     public var archiveUnreadable = false
     public var capabilities: [String: BrowserImportCapability]?
+    public var sourceCounts: [String: Int]?
+    public var notImported: [String]?
 }
 
 public protocol BrowserImportSourceAdapter: Sendable {

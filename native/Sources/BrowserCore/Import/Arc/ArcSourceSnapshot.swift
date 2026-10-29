@@ -17,7 +17,7 @@ public final class ArcSourceSnapshot: @unchecked Sendable {
     public let archive: URL?
     public let localState: URL?
     /// Arc profile directory name → private copy of its `History` database.
-    public let historyDatabases: [String: URL]
+    public internal(set) var historyDatabases: [String: URL]
     private let lock = NSLock()
     private var removed = false
 
