@@ -128,11 +128,11 @@ public struct BrowserInteractionPreferences: Codable, Equatable, Sendable {
 }
 
 public struct BrowserSettingsDocument: Codable, Equatable, Sendable {
-    public static let currentVersion = 1
+    public static let currentVersion = 2
     public var version = Self.currentVersion
     public var reducedMotion: BrowserReducedMotionSetting = .system
     public var interaction = BrowserInteractionPreferences()
-    public var memorySaver: BrowserMemorySaverSetting = .fourHours
+    public var memorySaver: BrowserMemorySaverSetting = .oneHour
     public var automaticPictureInPicture = true
     public var enablesBoostsOnWebsites = true
     public var hasSeenBoostsIntroduction = false
@@ -161,7 +161,13 @@ public struct BrowserSettingsDocument: Codable, Equatable, Sendable {
         version = try values.decode(Int.self, forKey: .version)
         reducedMotion = try values.decode(BrowserReducedMotionSetting.self, forKey: .reducedMotion)
         interaction = try values.decodeIfPresent(BrowserInteractionPreferences.self, forKey: .interaction) ?? .init()
-        memorySaver = (try? values.decode(BrowserMemorySaverSetting.self, forKey: .memorySaver)) ?? .fourHours
+        memorySaver = (try? values.decode(BrowserMemorySaverSetting.self, forKey: .memorySaver)) ?? .oneHour
+        // Version one did not record whether four hours was explicitly chosen.
+        // Migrate that former default once; subsequent explicit choices survive.
+        if version == 1 {
+            if memorySaver == .fourHours { memorySaver = .oneHour }
+            version = Self.currentVersion
+        }
         automaticPictureInPicture = try values.decodeIfPresent(Bool.self, forKey: .automaticPictureInPicture) ?? true
         hasSeenBoostsIntroduction = try values.decodeIfPresent(Bool.self, forKey: .hasSeenBoostsIntroduction) ?? false
         enablesBoostsOnWebsites = try values.decodeIfPresent(Bool.self, forKey: .enablesBoostsOnWebsites) ?? true
@@ -212,7 +218,7 @@ public actor BrowserSettingsStore {
                 migrated.reducedMotion = legacy.reduceMotion.map { $0 ? .reduce : .full } ?? .system
                 migrated.profiles = legacy.profiles ?? [:]
                 document = migrated
-            case BrowserSettingsDocument.currentVersion:
+            case 1, BrowserSettingsDocument.currentVersion:
                 document = try JSONDecoder().decode(BrowserSettingsDocument.self, from: data)
             default: throw BrowserSettingsError.unsupportedVersion
             }
