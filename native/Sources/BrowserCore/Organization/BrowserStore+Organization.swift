@@ -30,6 +30,12 @@ struct BrowserOrganizationWindowEffects: Sendable {
     let selectedTab: TabID?
 }
 
+private struct BrowserOrganizationSelectionAnchor {
+    let spaceID: SpaceID
+    let orderedTabs: [TabID]
+    let selectedTab: TabID?
+}
+
 /// A reset applied by the model; the shell navigates `occurrenceID`'s live surface to `url`.
 public struct BrowserOrganizationReset: Equatable, Sendable {
     public let tabID: TabID
@@ -215,6 +221,7 @@ extension BrowserStore {
         var occurrenceIDs = window.occurrenceIDsBySpace[spaceID, default: []]
         guard let index = occurrenceIDs.firstIndex(of: occurrenceID) else { return }
         occurrenceIDs.remove(at: index)
+        window.organizationFallbackOccurrences.remove(occurrenceID)
         if window.selectedOccurrenceBySpace[spaceID] == occurrenceID {
             window.selectedOccurrenceBySpace[spaceID] = occurrenceIDs.isEmpty
                 ? nil : occurrenceIDs[min(index, occurrenceIDs.count - 1)]
@@ -287,6 +294,45 @@ extension BrowserStore {
         }
     }
 
+    private func selectionAnchors(including windowID: WindowID?, displacedTab: TabID? = nil) -> [WindowID: BrowserOrganizationSelectionAnchor] {
+        windows.compactMapValues { window in
+            // A window that has never acquired a page in this Space stays dormant. Previously
+            // populated windows participate even when the archive temporarily emptied them.
+            guard window.id == windowID || window.occurrenceIDsBySpace[window.activeSpaceID] != nil else { return nil }
+            guard let snapshot = try? organizationSnapshot(for: window.id) else { return nil }
+            return BrowserOrganizationSelectionAnchor(spaceID: window.activeSpaceID,
+                orderedTabs: snapshot.allTabs.map(\.id),
+                selectedTab: window.id == windowID ? displacedTab ?? snapshot.selectedTab?.id : snapshot.selectedTab?.id)
+        }
+    }
+
+    /// Archive edits may remove every live occurrence while leaving dormant sidebar tabs.
+    /// Keep a surviving selection; otherwise load the next logical neighbour, then the previous
+    /// one at the end. Replays restore their recorded selection before using this fallback.
+    private func recoverSelections(_ anchors: [WindowID: BrowserOrganizationSelectionAnchor]) {
+        for (windowID, anchor) in anchors {
+            guard let window = windows[windowID], window.activeSpaceID == anchor.spaceID,
+                  visibleSelectedTabID(in: window) == nil,
+                  let snapshot = try? organizationSnapshot(for: windowID) else { continue }
+            let available = Set(snapshot.allTabs.map(\.id))
+            var candidates: [TabID] = []
+            if let selected = anchor.selectedTab, let index = anchor.orderedTabs.firstIndex(of: selected) {
+                candidates = Array(anchor.orderedTabs[index...]) + anchor.orderedTabs[..<index].reversed()
+            }
+            candidates += snapshot.allTabs.map(\.id)
+            guard let target = candidates.first(where: available.contains),
+                  let context = try? captureContext(in: windowID) else { continue }
+            let previous = Set(occurrences(in: window).map(\.occurrenceID))
+            _ = try? selectTab(target, from: context)
+            if var recovered = windows[windowID] {
+                let created = Set(occurrences(in: recovered).map(\.occurrenceID)).subtracting(previous)
+                recovered.organizationFallbackOccurrences = window.organizationFallbackOccurrences.union(created)
+                windows[windowID] = recovered
+            }
+            windows[windowID]?.recordReconciliation(from: window.revision)
+        }
+    }
+
     /// The window's current state when every change since `context` came from reconciling its
     /// occurrences after an organization change (another window's command, a replay, a sweep):
     /// same Space and profile, only selection and revision moved. Nil for any other change, such as
@@ -327,8 +373,11 @@ extension BrowserStore {
             windows[context.windowID].map { windowEffects(of: patch, in: $0) }
         }
         next.changes = BrowserOrganizationChangeSet()
+        let anchors = patch.archive.isEmpty ? [:] : selectionAnchors(including: context?.windowID,
+            displacedTab: explicitEffects?.selectedTab)
         organization = next
         if !changes.nodes.isEmpty { reconcileOccurrences() }
+        recoverSelections(anchors)
         if let action, let context, !patch.isEmpty {
             // Selection is restored only when this command displaced it, never stolen back later.
             var displaced = effects?.selectedTab
@@ -722,7 +771,7 @@ extension BrowserStore {
         }
         if activate {
             if target != context.spaceID { try activateSpace(target, in: context.windowID) }
-            openOccurrence(of: id, url: tab.url, in: context.windowID, spaceID: target, activate: true)
+            _ = try selectTab(id, from: captureContext(in: context.windowID))
         }
         return try captureWindowState(in: context.windowID)
     }
@@ -881,11 +930,13 @@ extension BrowserStore {
             next.changes = BrowserOrganizationChangeSet()
             var replayed = record
             replayed.patch.recordEvictions(from: organization, to: next, replaying: patch, undoing: undoing)
+            let anchors = record.patch.archive.isEmpty ? [:] : selectionAnchors(including: context.windowID)
             organization = next
             if undoing { journal.redo.append(replayed) } else { journal.undo.append(replayed) }
             organizationJournals[context.windowID] = journal
             reconcileOccurrences()
             if undoing { restoreWindowEffects(of: record, in: context.windowID) }
+            recoverSelections(anchors)
             publishOrganizationChange()
             return try captureWindowState(in: context.windowID)
         }
@@ -913,9 +964,12 @@ extension BrowserStore {
         guard organization.canApply(patch) else { return false }
         let removed = Set(patch.removedTabIDs)
         for (otherID, window) in windows where otherID != windowID {
-            if !removed.isEmpty, occurrences(in: window).contains(where: { removed.contains($0.id) }) { return false }
+            let claimed = Set(occurrences(in: window).filter {
+                !window.organizationFallbackOccurrences.contains($0.occurrenceID)
+            }.map(\.id))
+            if !removed.isDisjoint(with: claimed) { return false }
             guard let space = spaces[window.activeSpaceID] else { continue }
-            for visible in visibleTabIDs(in: window) {
+            for visible in visibleTabIDs(in: window) where claimed.contains(visible) {
                 let before = organization.section(of: .tab(visible))
                 let after = organization.section(of: .tab(visible), applying: patch)
                 guard before != after, let before, Self.section(before, isVisibleIn: space) else { continue }

@@ -5,6 +5,33 @@ import Testing
 /// Regression tests for the ORG-R2 cross-review findings. Every scenario uses synthetic data.
 @Suite("Organization review fixes (ORG-R2)")
 struct BrowserOrganizationReviewTests {
+    @Test("Automatic archive fallback stays reversible until another window explicitly selects it",
+          arguments: [false, true])
+    func fallbackSelectionAndReplayOwnership(claimFallback: Bool) async throws {
+        let fixture = try await OrganizationFixture.make()
+        let restored = try await fixture.open("restored")
+        _ = try await fixture.store.archiveTabs([restored], from: fixture.context())
+        _ = try await fixture.store.restoreArchivedTab(restored, activate: false, from: fixture.context())
+        let temporary = try await fixture.open("temporary", in: fixture.other)
+        _ = try await fixture.store.closeTabs([temporary], from: fixture.context(fixture.other))
+        #expect(try await fixture.organization(fixture.other).selectedTab?.id == restored)
+        if claimFallback {
+            // Selecting the already visible fallback is an explicit claim too.
+            _ = try await fixture.store.selectTab(restored, from: fixture.context(fixture.other))
+            #expect(try await fixture.organization().undoAction == nil)
+        } else {
+            for _ in 0..<2 {
+                _ = try await fixture.store.undoOrganization(from: fixture.context())
+                #expect(try await fixture.organization().allTabs.isEmpty)
+                #expect(try await fixture.organization(fixture.other).allTabs.isEmpty)
+                _ = try await fixture.store.redoOrganization(from: fixture.context())
+                #expect(try await fixture.organization().selectedTab?.id == restored)
+                #expect(try await fixture.organization(fixture.other).selectedTab?.id == restored)
+            }
+        }
+        try await fixture.validate()
+    }
+
     // MARK: Finding 1 — archive cap during undo
 
     @Test("Undoing a close with a full archive brings back the record it evicted, whatever the hash order")

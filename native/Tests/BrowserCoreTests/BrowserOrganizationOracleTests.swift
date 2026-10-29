@@ -344,8 +344,9 @@ private struct ModelWindows {
     var activeSpace: [WindowID: SpaceID] = [:]
     var visible: [WindowID: TabID] = [:]
     var live: [WindowID: Set<TabID>] = [:]
+    var claimed: [WindowID: Set<TabID>] = [:]
 
-    init(_ document: BrowserSessionDocument) {
+    init(_ document: BrowserSessionDocument, automatic: [WindowID: Set<TabOccurrenceID>] = [:]) {
         let logical = Dictionary(uniqueKeysWithValues: document.tabs.map { ($0.occurrenceID, $0.id) })
         for window in document.windows {
             activeSpace[window.id] = window.activeSpaceID
@@ -353,7 +354,12 @@ private struct ModelWindows {
                 visible[window.id] = logical[selected]
             }
         }
-        for tab in document.tabs { live[tab.windowID, default: []].insert(tab.id) }
+        for tab in document.tabs {
+            live[tab.windowID, default: []].insert(tab.id)
+            if automatic[tab.windowID]?.contains(tab.occurrenceID) != true {
+                claimed[tab.windowID, default: []].insert(tab.id)
+            }
+        }
     }
 }
 
@@ -823,15 +829,15 @@ private struct OrganizationModel {
         }
         next.normalize()
 
-        // Never remove a tab live in another window nor take another window's visible tab (or
-        // any pane of its visible group) away.
+        // Never remove a tab claimed in another window nor take its visible panes away.
+        // Automatic archive fallback is live but remains revocable until explicitly selected.
         let nextParents = next.parents
-        for (window, tabs) in windows.live where window != record.window && !tabs.isDisjoint(with: removedTabs) {
+        for (window, tabs) in windows.claimed where window != record.window && !tabs.isDisjoint(with: removedTabs) {
             return .precondition
         }
         for (window, selected) in windows.visible where window != record.window {
             guard let space = windows.activeSpace[window] else { continue }
-            for tab in current.shown(selected, currentParents) {
+            for tab in current.shown(selected, currentParents) where windows.claimed[window]?.contains(tab) == true {
                 let before = current.section(of: .tab(tab), currentParents)
                 let after = next.section(of: .tab(tab), nextParents)
                 guard before != after, let before, isVisible(before, in: space) else { continue }
@@ -900,7 +906,10 @@ struct BrowserOrganizationOracleTests {
             let preDocument = await fixture.store.sessionDocument()
             let pre = ModelState(preDocument.organization)
             let preParents = pre.parents
-            let windowsBefore = ModelWindows(preDocument)
+            // Live ownership is an input to this organization oracle, like selection and Space.
+            // Keep the graph, journal and conflict predictions independent of the implementation.
+            let automatic = await fixture.store.windows.mapValues(\.organizationFallbackOccurrences)
+            let windowsBefore = ModelWindows(preDocument, automatic: automatic)
             let context = try await fixture.context(windowID)
             let space = context.spaceID
             let snapshot = try await fixture.store.organizationSnapshot(from: context)

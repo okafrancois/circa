@@ -70,6 +70,153 @@ private func tabID(at index: Int, in session: BrowserWindowSession<OrganizationS
 @Suite("Window session organization commands")
 @MainActor
 struct BrowserOrganizationSessionTests {
+    @Test("Archive restore and replay keep a selected surface in both windows and recover split focus")
+    func archiveRestoreUndoSelection() async throws {
+        let fixture = try await SessionFixture.make()
+        let recorder = OrganizationRecorder()
+        let session = recorder.session(fixture.store, window: fixture.window)
+        let other = recorder.session(fixture.store, window: fixture.other)
+        session.surfaceLoadingPolicy = .visibleOnly
+        other.surfaceLoadingPolicy = .visibleOnly
+        defer { session.close(); other.close() }
+        session.openTab(url: url("favorite"))
+        await session.waitForPendingCommands()
+        let favorite = try #require(session.organization?.selectedTab?.id)
+        session.addToFavorites([favorite])
+        session.openTab(url: url("nested"))
+        await session.waitForPendingCommands()
+        let nested = try #require(session.organization?.selectedTab?.id)
+        session.renameTab(nested, to: "Synthetic custom title")
+        let parent = try #require(await session.createFolder(title: "Parent", at: .init(.pinned(fixture.home))).value)
+        let child = try #require(await session.createFolder(title: "Child", at: .init(.folder(parent))).value)
+        session.moveItems([.tab(nested)], to: .init(.folder(child)))
+        session.openTab(url: url("left"))
+        await session.waitForPendingCommands()
+        let left = try #require(session.organization?.selectedTab?.id)
+        session.openTab(url: url("right"))
+        await session.waitForPendingCommands()
+        let right = try #require(session.organization?.selectedTab?.id)
+        session.createSplit([left, right])
+        other.openTab(url: url("other"))
+        await session.waitForPendingCommands()
+        await other.waitForPendingCommands()
+        session.synchronizeOrganization()
+        await session.waitForPendingCommands()
+        let selected = try #require(session.organization?.selectedTab?.id)
+        let before = await fixture.store.sessionDocument().organization
+        let ids = try #require(session.organization).allTabs.filter { $0.id != favorite }.map(\.id)
+
+        func checkSelection() async {
+            other.synchronizeOrganization()
+            await other.waitForPendingCommands()
+            for window in [session, other] {
+                #expect(window.organization?.selectedTab != nil)
+                #expect(window.selectedSurface != nil)
+                #expect(window.selectedSurface?.currentURL == window.organization?.selectedTab?.url)
+            }
+        }
+
+        session.archiveTabs(ids)
+        await session.waitForPendingCommands()
+        await checkSelection()
+        for id in ids {
+            session.restoreArchivedTab(id, activate: false)
+            await session.waitForPendingCommands()
+            #expect(session.organization?.today.first?.node == .tab(id))
+            await checkSelection()
+        }
+        for _ in 0...ids.count {
+            #expect(await session.undoOrganization().value != nil)
+            await checkSelection()
+        }
+        let after = await fixture.store.sessionDocument().organization
+        #expect(after.spaces == before.spaces && after.folders == before.folders && after.splits == before.splits)
+        #expect(session.organization?.selectedTab?.id == selected)
+        #expect(session.activeSplit?.tabs.allSatisfy { tab in
+            tab.occurrenceID.flatMap { session.surface(for: $0) } != nil
+        } == true)
+        #expect(session.organization?.tab(nested)?.customTitle == "Synthetic custom title")
+        #expect(recorder.errors.isEmpty)
+    }
+
+    @Test("Background restore into an empty window materializes a page without changing Today insertion")
+    func backgroundRestoreIntoEmptyWindowSelects() async throws {
+        let fixture = try await SessionFixture.make()
+        let recorder = OrganizationRecorder()
+        let session = recorder.session(fixture.store, window: fixture.window)
+        session.surfaceLoadingPolicy = .visibleOnly
+        defer { session.close() }
+        session.openTab(url: url("only"))
+        await session.waitForPendingCommands()
+        let id = try #require(session.organization?.selectedTab?.id)
+        session.archiveTabs([id])
+        await session.waitForPendingCommands()
+        #expect(session.selectedSurface == nil && session.organization?.allTabs.isEmpty == true)
+        session.restoreArchivedTab(id, activate: false)
+        await session.waitForPendingCommands()
+        #expect(session.organization?.today.first?.node == .tab(id))
+        #expect(session.organization?.selectedTab?.id == id)
+        #expect(session.selectedSurface?.currentURL == url("only"))
+        #expect(await session.undoOrganization().value != nil)
+        #expect(session.selectedSurface == nil)
+        #expect(await session.undoOrganization().value != nil)
+        #expect(session.organization?.selectedTab?.id == id && session.selectedSurface != nil)
+        #expect(recorder.errors.isEmpty)
+    }
+
+    @Test("Archiving the last live tab loads the next logical neighbour, or the previous one at the end",
+          arguments: [false, true])
+    func archiveLoadsDormantNeighbour(atEnd: Bool) async throws {
+        let fixture = try await SessionFixture.make()
+        let recorder = OrganizationRecorder()
+        let session = recorder.session(fixture.store, window: fixture.window)
+        session.surfaceLoadingPolicy = .visibleOnly
+        defer { session.close() }
+        for path in ["first", "middle", "last"] { session.openTab(url: url(path)) }
+        await session.waitForPendingCommands()
+        let ids = try #require(session.organization).allTabs.map(\.id)
+        session.pinTabs(ids)
+        session.closeTabs(ids)
+        await session.waitForPendingCommands()
+        let order = try #require(session.organization).allTabs.map(\.id)
+        let index = atEnd ? order.count - 1 : 1
+        let selected = order[index]
+        session.selectTab(selected)
+        await session.waitForPendingCommands()
+        session.archiveTabs([selected])
+        await session.waitForPendingCommands()
+        #expect(session.organization?.selectedTab?.id == order[atEnd ? index - 1 : index + 1])
+        #expect(session.selectedSurface != nil)
+        #expect(await session.undoOrganization().value != nil)
+        #expect(session.organization?.selectedTab?.id == selected && session.selectedSurface != nil)
+        #expect(await session.redoOrganization().value != nil)
+        #expect(session.organization?.selectedTab?.id == order[atEnd ? index - 1 : index + 1])
+        #expect(session.selectedSurface != nil && recorder.errors.isEmpty)
+    }
+
+    @Test("Closing the only live Today tab loads a dormant pin and undo rematerializes the closed page")
+    func closeTodayLoadsDormantPin() async throws {
+        let fixture = try await SessionFixture.make()
+        let recorder = OrganizationRecorder()
+        let session = recorder.session(fixture.store, window: fixture.window)
+        session.surfaceLoadingPolicy = .visibleOnly
+        defer { session.close() }
+        session.openTab(url: url("pin"))
+        await session.waitForPendingCommands()
+        let pin = try #require(session.organization?.selectedTab?.id)
+        session.pinTabs([pin])
+        session.closeSelectedTab()
+        session.openTab(url: url("today"))
+        await session.waitForPendingCommands()
+        let today = try #require(session.organization?.selectedTab?.id)
+        session.closeSelectedTab()
+        await session.waitForPendingCommands()
+        #expect(session.organization?.selectedTab?.id == pin && session.selectedSurface != nil)
+        #expect(await session.undoOrganization().value != nil)
+        #expect(session.organization?.selectedTab?.id == today && session.selectedSurface?.currentURL == url("today"))
+        #expect(recorder.errors.isEmpty)
+    }
+
     @Test("The session publishes the organization with the window state and loads unloaded tabs on selection")
     func publishesAndLoadsOnSelection() async throws {
         let fixture = try await SessionFixture.make()

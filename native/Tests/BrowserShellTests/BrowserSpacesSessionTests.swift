@@ -334,7 +334,9 @@ func spacesSessionExactRowClosureCannotRetargetSelection() async throws {
     session.activateSpace(fixture.home)
     session.closeOccurrence(fixture.homeTabs[1])
     await session.waitForPendingCommands()
-    #expect(session.snapshot?.tabs.isEmpty == true && session.selectedSurface == nil)
+    #expect(session.snapshot?.tabs.count == 1)
+    #expect(session.selectedSurface?.initialURL == URL(string: "https://spaces.test/other-window"))
+    #expect(session.organization?.selectedTab?.url == session.selectedSurface?.initialURL)
     #expect(selected.disposalCount == 1)
     session.close()
     await session.waitForPendingCommands()
@@ -737,8 +739,14 @@ func spacesSessionCloseAfterExternalBackgroundChange(insertBackground: Bool) asy
     await session.waitForPendingCommands()
     #expect(recorder.errors.isEmpty)
     #expect(session.snapshot == (try await fixture.store.snapshot(of: fixture.windowID)))
-    #expect(session.snapshot?.tabs.map(\.occurrenceID) == background.map { [$0] } ?? [])
-    #expect(session.snapshot?.selectedOccurrenceID == background)
+    if let background {
+        #expect(session.snapshot?.tabs.map(\.occurrenceID) == [background])
+        #expect(session.snapshot?.selectedOccurrenceID == background)
+    } else {
+        #expect(session.snapshot?.tabs.count == 1)
+        #expect(session.snapshot?.selectedOccurrenceID == session.snapshot?.tabs.first?.occurrenceID)
+        #expect(session.selectedSurface?.initialURL == URL(string: "https://spaces.test/other-window"))
+    }
     #expect(removed.disposalCount == 1 && selected.disposalCount == 1)
     #expect(session.surface(for: fixture.homeTabs[0]) == nil && session.surface(for: fixture.homeTabs[1]) == nil)
     #expect(session.occurrenceID(for: removed) == nil && session.occurrenceID(for: selected) == nil)
@@ -852,7 +860,8 @@ func spacesSessionReconciliationCanCloseReentrantly(preserveModel: Bool) async t
     #expect(recorder.surfaces.count == 4 && recorder.surfaces.allSatisfy { $0.disposalCount == 1 })
     if preserveModel {
         let saved = try await fixture.store.snapshot(of: fixture.windowID)
-        #expect(saved.tabs.isEmpty && saved.selectedOccurrenceID == nil)
+        #expect(saved.tabs.count == 1 && saved.selectedOccurrenceID == saved.tabs.first?.occurrenceID)
+        #expect(saved.tabs.first?.url == URL(string: "https://spaces.test/other-window"))
         #expect(await fixture.store.sessionDocument().tabs.contains { $0.occurrenceID == fixture.officeTabs[0] })
     } else {
         await #expect(throws: BrowserStoreError.windowMissing) { try await fixture.store.snapshot(of: fixture.windowID) }
