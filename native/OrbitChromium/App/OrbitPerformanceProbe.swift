@@ -86,6 +86,8 @@ enum OrbitPerformanceProbe {
                 let name = command["command"] ?? ""
                 if name == "theme-fixture", ownsWindow(owner, bundleID: "lab.orbit.orbit.theme-fixture") {
                     result["themeFixture"] = await themeFixture(owner, store: environment.store, command: command)
+                } else if name == "chromium-import-fixture" {
+                    result["importFixture"] = await ChromiumImportProbe.run(root: root)
                 } else if name == "data-quick-wins" {
                     if let text = command["base"], let base = URL(string: text),
                        base.scheme == "http", base.host == "127.0.0.1" {

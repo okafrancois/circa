@@ -42,6 +42,7 @@ public struct ArcImportReport: Codable, Equatable, Sendable {
     /// Categories this importer never reads (decryption of cookies/passwords is out of scope).
     public static let notImported = ["cookies", "passwords", "extensions", "siteData", "settings", "downloads"]
 
+    public var capabilities: [String: BrowserImportCapability]?
     public var formatVersion: Int?
     /// What Arc holds that maps to the native model.
     public var source = BrowserImportPlanCounts()
@@ -180,7 +181,10 @@ enum ArcImportCheckpoint: Equatable, Sendable {
 
 /// Dry run → confirmation → apply. Work runs on the caller's task (never the main actor); the
 /// store and history actors serialize their own writes. Progress closures receive counts only.
-public struct ArcImporter: Sendable {
+public typealias ArcImporter = BrowserImportOrchestrator
+
+public struct BrowserImportOrchestrator: Sendable {
+    public var adapter: (any BrowserImportSourceAdapter)?
     public var source: URL
     public var options: ArcImportOptions
     public var probe: any ArcRunningProbe
@@ -253,8 +257,8 @@ public struct ArcImporter: Sendable {
             // journal present now means the loaded state cannot be trusted.
             try Self.refuseInterruptedRestore(target.location)
             progress(ArcImportProgress(.copying))
-            let snapshot = try ArcSourceSnapshot.capture(source: source, includeHistory: options.includeHistory,
-                                                         parent: snapshotParent, probe: probe, diskSpace: diskSpace)
+            let snapshot = try (adapter ?? ArcBrowserImportAdapter(options: options)).snapshot(
+                source: source, parent: snapshotParent, probe: probe, diskSpace: diskSpace)
             do {
                 logger.log(.snapshotCaptured(historyDatabases: snapshot.historyDatabases.count))
                 return try await prepare(snapshot, for: target, progress: progress)
@@ -271,24 +275,16 @@ public struct ArcImporter: Sendable {
                          progress: @escaping @Sendable (ArcImportProgress) -> Void) async throws -> ArcImportPreparation {
         progress(ArcImportProgress(.reading))
         var report = ArcImportReport()
-        let sidebar = try ArcJSON.parse(try readSource(snapshot.sidebar))
-        var archive: ArcJSON?
-        if let file = snapshot.archive {
-            archive = try? ArcJSON.parse(try readSource(file), allowingArray: true)
-            report.archiveDocumentUnreadable = archive == nil
-        }
-        let localState = snapshot.localState.flatMap { try? ArcJSON.parse(try readSource($0)) }
-        let graph = try ArcSidebarParser.parse(sidebar: sidebar, archive: archive, localState: localState,
-                                               legacyProfileDirectories: options.legacyProfileDirectories)
         let location = target.location
-        // Read first: profiles mapped by an earlier import keep their target (IMPORT-R2 #4).
         let ledger = try ArcImportFiles.readExisting(BrowserImportLedger.self, from: location.ledgerFile) ?? BrowserImportLedger()
-        // Whole seconds: the encoded dates (and so the projected size) do not vary between runs.
         let importedAt = Date(timeIntervalSinceReferenceDate: clock().timeIntervalSinceReferenceDate.rounded(.down))
-        let plan = ArcImportMapper.plan(graph, options: options, defaultProfileTarget: await target.defaultProfile(),
-                                        importedAt: importedAt, profileTargets: ledger.profileTargets)
-        report.formatVersion = graph.formatVersion
-        report.diagnostics = graph.diagnostics
+        let prepared = try (adapter ?? ArcBrowserImportAdapter(options: options)).makePlan(
+            snapshot: snapshot, ledger: ledger, defaultProfile: await target.defaultProfile(), importedAt: importedAt)
+        let plan = prepared.plan
+        report.formatVersion = prepared.formatVersion
+        report.diagnostics = prepared.diagnostics
+        report.archiveDocumentUnreadable = prepared.archiveUnreadable
+        report.capabilities = prepared.capabilities
         report.source = plan.counts
         report.skipped = plan.skipped
         logger.log(.parsed(spaces: report.source.spaces, favorites: report.source.favorites, pinned: report.source.pinnedTabs,
@@ -315,8 +311,7 @@ public struct ArcImporter: Sendable {
             }
             if !(await target.history.acceptsHistory(for: source.profileID)) { report.historyProfilesNotPersistent += 1 }
             do {
-                let reader = try ArcChromiumHistoryReader(snapshotFile: file, directory: source.directory,
-                                                          identity: ArcImportIdentity(namespace: options.namespace))
+                let reader = try historyReader(file: file, directory: source.directory)
                 while try reader.nextChunk(size: options.historyChunkSize) != nil {
                     try Task.checkCancellation()
                     progress(ArcImportProgress(.countingHistory, completed: index, total: total))
@@ -338,6 +333,10 @@ public struct ArcImporter: Sendable {
             logger.log(.interruptedImportDetected)
         }
         return ArcImportPreparation(report: report, plan: plan, snapshot: snapshot)
+    }
+
+    private func historyReader(file: URL, directory: String) throws -> any BrowserImportHistoryReader {
+        try (adapter ?? ArcBrowserImportAdapter(options: options)).historyReader(file: file, directory: directory)
     }
 
     private func readSource(_ url: URL) throws -> Data {
@@ -401,7 +400,6 @@ public struct ArcImporter: Sendable {
                 .map { .init(spaceID: $0.id, appearance: $0.appearance) })
             try ArcImportFiles.write(appearance, to: location.appearanceFile)
 
-            let identity = ArcImportIdentity(namespace: options.namespace)
             var processedChunks = 0
             for (index, source) in plan.historySources.enumerated() {
                 guard let file = preparation.snapshot.historyDatabases[source.directory],
@@ -411,7 +409,7 @@ public struct ArcImporter: Sendable {
                     logger.log(.historySkipped(profile: index))
                     continue
                 }
-                let reader = try ArcChromiumHistoryReader(snapshotFile: file, directory: source.directory, identity: identity)
+                let reader = try historyReader(file: file, directory: source.directory)
                 // Created and verified through descriptors; re-verified after SQLite wrote there.
                 let destination = try ArcImportFiles.historyDirectory(location, source.profileID, create: true)
                 // Pinned for the whole profile import: SQLite cannot be redirected elsewhere, and a

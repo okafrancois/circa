@@ -1351,3 +1351,5 @@
 "Translated from %@." = "Translated from %@.";
 
 "Translate this page\nto %@?" = "Translate this page\nto %@?";
+"Imported from %@ — %@" = "Imported from %@ — %@";
+"Imported Window" = "Imported Window";

@@ -89,6 +89,21 @@ public final class ArcSourceSnapshot: @unchecked Sendable {
             }
         }
 
+        return try captureManifest(source: root, plan: plan, historyDirectories: historyDirectories,
+                                   historyPrefix: "User Data/", parent: parent, probe: probe,
+                                   diskSpace: diskSpace, afterCopy: afterCopy)
+    }
+
+    /// Shared descriptor-only copy engine. Manifests are adapter-owned, bounded and non-recursive.
+    static func captureManifest(source root: URL,
+                                plan: [(relative: String, limit: Int64?, required: Bool)],
+                                historyDirectories: [String], historyPrefix: String,
+                                parent: URL, probe: any ArcRunningProbe,
+                                diskSpace: any OrbitDiskSpaceProbe, afterCopy: () -> Void = {}) throws -> ArcSourceSnapshot {
+        let parent = URL(fileURLWithPath: ArcImportPaths.resolved(parent), isDirectory: true)
+        try ArcImportPaths.validateSeparated(source: root, destination: parent)
+        guard !probe.isArcRunning(sourceRoot: root) else { throw ArcImportError.arcIsRunning }
+        let source = try OrbitSecureDirectory.open(root, create: false)
         func locate(_ relative: String) throws -> (OrbitSecureDirectory, String)? {
             let components = relative.split(separator: "/").map(String.init)
             let folder = components.dropLast().joined(separator: "/")
@@ -138,9 +153,9 @@ public final class ArcSourceSnapshot: @unchecked Sendable {
                 return FileManager.default.fileExists(atPath: url.path) ? url : nil
             }
             var histories: [String: URL] = [:]
-            for name in historyDirectories { histories[name] = copied("User Data/\(name)/History") }
+            for name in historyDirectories { histories[name] = copied("\(historyPrefix)\(name)/History") }
             return ArcSourceSnapshot(directory: directory, sidebar: directory.appendingPathComponent("StorableSidebar.json"),
-                                     archive: copied("StorableArchiveItems.json"), localState: copied("User Data/Local State"),
+                                     archive: copied("StorableArchiveItems.json"), localState: copied("\(historyPrefix)Local State"),
                                      historyDatabases: histories)
         } catch {
             try? FileManager.default.removeItem(at: directory)

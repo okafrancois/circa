@@ -12,11 +12,13 @@ public struct BrowserImportLedger: Codable, Equatable, Sendable {
     /// Arc profile → target profile chosen by the first import (`ArcProfileKey.ledgerKey`). Reused
     /// by every re-import, so Arc's Default stays attached to the same Orbit profile even after the
     /// target's first profile changes.
+    public var registrations: [String: String] = [:]
     public var profileMappings: [String: UUID] = [:]
 
     public init() {}
 
     public mutating func formUnion(_ other: BrowserImportLedger) {
+        registrations.merge(other.registrations) { first, _ in first }
         profileMappings.merge(other.profileMappings) { first, _ in first }
         profiles.formUnion(other.profiles)
         spaces.formUnion(other.spaces)
@@ -38,11 +40,12 @@ public struct BrowserImportLedger: Codable, Equatable, Sendable {
         return result
     }
 
-    private enum CodingKeys: String, CodingKey { case version, profiles, spaces, tabs, folders, archive, profileMappings }
+    private enum CodingKeys: String, CodingKey { case version, profiles, spaces, tabs, folders, archive, profileMappings, registrations }
 
     public init(from decoder: any Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        guard try container.decode(Int.self, forKey: .version) == 1 else { throw BrowserSessionError.unsupportedVersion }
+        guard try [1, 2].contains(container.decode(Int.self, forKey: .version)) else { throw BrowserSessionError.unsupportedVersion }
+        registrations = try container.decodeIfPresent([String: String].self, forKey: .registrations) ?? [:]
         profiles = Set(try container.decode([UUID].self, forKey: .profiles))
         spaces = Set(try container.decode([UUID].self, forKey: .spaces))
         tabs = Set(try container.decode([UUID].self, forKey: .tabs))
@@ -54,7 +57,8 @@ public struct BrowserImportLedger: Codable, Equatable, Sendable {
     public func encode(to encoder: any Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         func sorted(_ values: Set<UUID>) -> [UUID] { values.sorted { $0.uuidString < $1.uuidString } }
-        try container.encode(1, forKey: .version)
+        try container.encode(registrations.isEmpty ? 1 : 2, forKey: .version)
+        if !registrations.isEmpty { try container.encode(registrations, forKey: .registrations) }
         try container.encode(sorted(profiles), forKey: .profiles)
         try container.encode(sorted(spaces), forKey: .spaces)
         try container.encode(sorted(tabs), forKey: .tabs)
@@ -128,13 +132,14 @@ extension BrowserStore {
         }
         var counts = BrowserImportMergeCounts()
         var present = BrowserImportLedger()
+        if let registration = plan.registration { present.registrations[registration.namespace] = registration.sourceID }
         let saved = (profiles, spaces, profileOrder, spaceOrder)
         func restoreCatalog() { (profiles, spaces, profileOrder, spaceOrder) = saved }
 
         var usableProfiles: Set<ProfileID> = []
         for profile in plan.profiles {
             defer {
-                if usableProfiles.contains(profile.id) { present.profileMappings[profile.sourceKey.ledgerKey] = profile.id.rawValue }
+                if usableProfiles.contains(profile.id) { present.profileMappings[profile.mappingKey ?? profile.sourceKey.ledgerKey] = profile.id.rawValue }
             }
             if profiles[profile.id] != nil {
                 counts.profilesPresent += 1
