@@ -35,6 +35,7 @@ final class FavoriteIconPipeline<Surface: BrowserEngineSurface> {
         let revision: UInt64
     }
     private struct Entry {
+        var resolvedPixels: BrowserFaviconImage?
         let request: Request
         let token: UUID
         var task: Task<Void, Never>?
@@ -80,10 +81,18 @@ final class FavoriteIconPipeline<Surface: BrowserEngineSurface> {
         }
         let token = UUID()
         entries[tab.id] = Entry(request: request, token: token, image: previous?.image)
+        let reusableImage: NSImage?
+        if previous?.request.profile == request.profile, previous?.request.home == home,
+           let pixels = request.image, pixels.sourceURL == url,
+           previous?.resolvedPixels?.png == pixels.png {
+            reusableImage = previous?.image
+        } else { reusableImage = nil }
         let resolver = resolve
         let task = Task { [weak self, weak surface] in
             guard let surface else { return }
-            let image = await resolver(surface, url)
+            let image: NSImage?
+            if let reusableImage { image = reusableImage }
+            else { image = await resolver(surface, url) }
             guard !Task.isCancelled, let self, self.entries[tab.id]?.token == token,
                   isOwned(surface), !surface.isDisposed, surface.documentGeneration == request.generation,
                   !surface.navigationState.isLoading, surface.navigationState.faviconMetadataIsSettled,
@@ -92,6 +101,7 @@ final class FavoriteIconPipeline<Surface: BrowserEngineSurface> {
                   surface.navigationState.faviconURL == url,
                   surface.navigationState.faviconImage == request.image else { return }
             let retainedImage = image ?? self.entries[tab.id]?.image
+            if image != nil { self.entries[tab.id]?.resolvedPixels = request.image }
             self.entries[tab.id]?.image = retainedImage
             self.entries[tab.id]?.task = nil
             if let image { self.memoryCache.put(image, profile: request.profile, home: home) }

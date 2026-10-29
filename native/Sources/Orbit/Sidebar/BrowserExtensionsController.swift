@@ -103,9 +103,9 @@ final class BrowserExtensionsController<Engine: BrowserEngine> {
     private func retryRegistry(in profile: ProfileID) {
         guard registryRetry == nil else { return }
         registryRetry = Task { [weak self] in
-            var delay = 0.05
+            var attempt = 0
             while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(delay))
+                do { try await Task.sleep(for: .seconds(BrowserExtensionRetryPolicy.delay(attempt: attempt))) } catch { return }
                 guard !Task.isCancelled else { return }
                 guard let self else { return }
                 guard let owner, owner.acceptsCommands, toolbarProfile == profile,
@@ -117,7 +117,7 @@ final class BrowserExtensionsController<Engine: BrowserEngine> {
                     owner.siteControls.extensionInventoryBecameReady(in: profile)
                     return
                 }
-                delay = min(1, delay * 2)
+                attempt = min(11, attempt + 1)
             }
         }
     }
@@ -312,5 +312,13 @@ final class BrowserExtensionsController<Engine: BrowserEngine> {
         guard let owner, owner.acceptsCommands, owner.session.selectedSurface != nil else { return }
         render()
         owner.siteControls.toggle()
+    }
+}
+
+/// Keep fast startup retries, then probe at most once per minute on a failing profile.
+/// Ordinary renders can still subscribe immediately when navigation makes it ready.
+enum BrowserExtensionRetryPolicy {
+    static func delay(attempt: Int) -> Double {
+        min(60, 0.05 * pow(2, Double(min(11, max(0, attempt)))))
     }
 }

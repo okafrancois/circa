@@ -55,15 +55,26 @@ public struct BrowserSessionFileStore: Sendable {
     // Internal syscall seam allows deterministic short-write and pre/post-commit failure tests.
     init(operations: BrowserSessionFileOperations) { self.operations = operations }
 
+    /// Immutable bytes admitted only through document validation and canonical encoding.
+    public struct EncodedDocument: Sendable {
+        public let data: Data
+        public init(_ document: BrowserSessionDocument) throws {
+            do { data = try document.encoded() }
+            catch let error as BrowserSessionError { throw error }
+            catch { throw BrowserSessionFileError.encodingFailed }
+        }
+    }
+
     @discardableResult
     public func save(_ document: BrowserSessionDocument, to destination: URL) throws -> SaveResult {
-        let path = try Self.components(of: destination)
-        // Validation and encoding complete before any directory or temporary file is created.
-        let data: Data
-        do { data = try document.encoded() }
-        catch let error as BrowserSessionError { throw error }
-        catch { throw BrowserSessionFileError.encodingFailed }
+        _ = try Self.components(of: destination)
+        return try save(EncodedDocument(document), to: destination)
+    }
 
+    @discardableResult
+    public func save(_ document: EncodedDocument, to destination: URL) throws -> SaveResult {
+        let path = try Self.components(of: destination)
+        let data = document.data
         let parent = try Self.openParent(of: path, create: true, syncDirectory: operations.syncDirectory)
         let directory = parent.handle
         let name = path.last!

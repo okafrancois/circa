@@ -4,6 +4,25 @@ import Testing
 
 @Suite("Updater admission without network")
 struct OrbitUpdaterTests {
+    @Test("Updater starts once after the first window transaction commits")
+    @MainActor
+    func firstWindowOrdering() {
+        let app = OrbitApplication()
+        var commit: (@MainActor () -> Void)?
+        var events: [String] = []
+        app.afterWindowCommit = { commit = $0 }
+        app.onUpdaterStart = { events.append("updater") }
+        #expect(events.isEmpty)
+        app.presentAndScheduleUpdates { events.append("window") }
+        #expect(events == ["window"])
+        commit?()
+        #expect(events == ["window", "updater"])
+        commit = nil
+        app.presentAndScheduleUpdates { events.append("second-window") }
+        #expect(commit == nil)
+        #expect(events == ["window", "updater", "second-window"])
+    }
+
     private var production: [String: Any] { [
         "SUPublicEDKey": Data(repeating: 42, count: 32).base64EncodedString(),
         "SUFeedURL": "https://github.com/okafrancois/orbit-browser/releases/latest/download/appcast.xml"

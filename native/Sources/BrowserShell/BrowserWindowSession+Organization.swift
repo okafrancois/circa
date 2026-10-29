@@ -221,9 +221,8 @@ public extension BrowserWindowSession {
 
     /// A read boundary in command order, limited to this window's profile.
     func archivedTabs(matching query: String? = nil) -> Task<[BrowserArchivedTab], Never> {
-        let task = enqueueOrganizationValue { session, context in
-            let records = try await session.store.archivedTabs(from: context, matching: query)
-            return (records, try await session.store.captureWindowState(from: context))
+        let task = enqueueOrganizationRead { session, context in
+            try await session.store.archivedTabs(from: context, matching: query)
         }
         return Task { await task.value ?? [] }
     }
@@ -307,6 +306,37 @@ extension BrowserWindowSession {
         }
     }
 
+    /// Preserve command order and profile authority without installing or saving a read.
+    func enqueueOrganizationRead<Value: Sendable>(
+        _ read: @escaping @MainActor (BrowserWindowSession, BrowserContext) async throws -> Value
+    ) -> Task<Value?, Never> {
+        guard !isClosed else { return Task { nil } }
+        pendingCommandCount += 1
+        let previous = pending
+        let task = Task<Value?, Never> { [self] in
+            defer { pendingCommandCount -= 1 }
+            await previous?.value
+            guard !isClosed, var context = activeContext else { return nil }
+            do {
+                for attempt in 0..<maximumOrganizationAdoptions {
+                    do {
+                        let value = try await read(self, context)
+                        return isClosed ? nil : value
+                    } catch BrowserStoreError.staleContext where attempt + 1 < maximumOrganizationAdoptions {
+                        guard let refreshed = try await organizationContext(publish: false) else { return nil }
+                        context = refreshed
+                    }
+                }
+                return nil
+            } catch {
+                if !isClosed { onError?(error) }
+                return nil
+            }
+        }
+        pending = Task { _ = await task.value }
+        return task
+    }
+
     func enqueueOrganizationValue<Value: Sendable>(
         _ command: @escaping @MainActor (BrowserWindowSession, BrowserContext) async throws -> (Value, BrowserWindowState)
     ) -> Task<Value?, Never> {
@@ -352,7 +382,7 @@ extension BrowserWindowSession {
     /// Organization commands of other windows can change this window's selection (archiving or
     /// moving its tab) without changing its Space or profile. Organization commands target stable
     /// IDs, so they first adopt such a change instead of failing as stale.
-    func organizationContext() async throws -> BrowserContext? {
+    func organizationContext(publish: Bool = true) async throws -> BrowserContext? {
         guard !isClosed, let windowID else { return nil }
         let state = try await store.captureWindowState(in: windowID)
         guard !isClosed, let activeContext else { return nil }
@@ -360,7 +390,7 @@ extension BrowserWindowSession {
         guard state.context.spaceID == activeContext.spaceID, state.context.profileID == activeContext.profileID else {
             throw BrowserWindowSessionError.contextChangeRequiresNewSession
         }
-        if state.context != activeContext { install(state) }
+        if publish, state.context != activeContext { install(state) }
         guard !isClosed else { return nil }
         return state.context
     }

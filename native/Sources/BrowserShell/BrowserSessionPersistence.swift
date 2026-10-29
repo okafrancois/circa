@@ -29,7 +29,10 @@ public actor BrowserSessionPersistence {
         var load: @Sendable (URL, Int) throws -> BrowserSessionDocument = {
             try BrowserSessionFileStore().load(from: $0, maximumBytes: $1)
         }
-        var save: @Sendable (BrowserSessionDocument, URL) throws -> BrowserSessionFileStore.SaveResult = {
+        var encode: @Sendable (BrowserSessionDocument) throws -> BrowserSessionFileStore.EncodedDocument = {
+            try BrowserSessionFileStore.EncodedDocument($0)
+        }
+        var save: @Sendable (BrowserSessionFileStore.EncodedDocument, URL) throws -> BrowserSessionFileStore.SaveResult = {
             try BrowserSessionFileStore().save($0, to: $1)
         }
     }
@@ -44,7 +47,7 @@ public actor BrowserSessionPersistence {
     private var generation: UInt64 = 0
 
     /// The same byte budget admits reads and writes. Saving currently encodes once to check
-    /// this budget, then the file store encodes again; both operations run off the UI thread.
+    /// this budget and passes those validated bytes to the atomic writer, off the UI thread.
     public init(
         destination: URL,
         maximumBytes: Int = BrowserSessionDocument.defaultMaximumInputBytes
@@ -164,10 +167,12 @@ private final class SessionFileIO: @unchecked Sendable {
             // Keep the watermark even on failure: replacement may already have happened.
             io.latestGeneration = generation
             // Reject unreadable output before any directory, temporary file, or rename.
-            guard io.maximumBytes >= 0, try document.encoded().count <= io.maximumBytes else {
+            guard io.maximumBytes >= 0 else { throw BrowserSessionError.limitExceeded }
+            let encoded = try io.access.encode(document)
+            guard encoded.data.count <= io.maximumBytes else {
                 throw BrowserSessionError.limitExceeded
             }
-            return .saved(try io.access.save(document, io.destination))
+            return .saved(try io.access.save(encoded, io.destination))
         }
     }
 
