@@ -75,9 +75,9 @@ public struct BrowserOrganizationTabItem: Equatable, Sendable {
     public let id: TabID
     public let section: BrowserOrganizationSection
     /// This window's live destination when loaded here, otherwise the logical tab's last destination.
-    public let url: URL
+    public internal(set) var url: URL
     public let pinnedURL: URL?
-    public let pageTitle: String?
+    public internal(set) var pageTitle: String?
     public let customTitle: String?
     public let occurrenceID: TabOccurrenceID?
     /// Also true for a Favorite still live in another Space of this window: selecting it moves it.
@@ -96,7 +96,7 @@ public struct BrowserOrganizationFolderItem: Equatable, Sendable {
     public let id: FolderID
     public let title: String
     public let isCollapsed: Bool
-    public let children: [BrowserOrganizationItem]
+    public internal(set) var children: [BrowserOrganizationItem]
 }
 
 public enum BrowserOrganizationItem: Equatable, Sendable, Identifiable {
@@ -140,10 +140,10 @@ public struct BrowserOrganizationSnapshot: Equatable, Sendable {
     public let spaceID: SpaceID
     public let profileID: ProfileID
     /// Shared by every Space of `profileID`.
-    public let favorites: [BrowserOrganizationItem]
+    public internal(set) var favorites: [BrowserOrganizationItem]
     /// Shared by every window showing `spaceID`.
-    public let pinned: [BrowserOrganizationItem]
-    public let today: [BrowserOrganizationItem]
+    public internal(set) var pinned: [BrowserOrganizationItem]
+    public internal(set) var today: [BrowserOrganizationItem]
     public let isPinnedSectionCollapsed: Bool
     /// Changes whenever this profile's archive changes. The records themselves are read in
     /// command order with `archivedTabs(from:matching:)` (`BrowserWindowSession.archivedTabs`).

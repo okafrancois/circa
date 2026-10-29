@@ -32,7 +32,7 @@ public struct BrowserSplitGroup: Codable, Equatable, Sendable {
 
 public struct BrowserOrganizationSplitItem: Equatable, Sendable {
     public let group: BrowserSplitGroup
-    public let tabs: [BrowserOrganizationTabItem]
+    public internal(set) var tabs: [BrowserOrganizationTabItem]
     public var activeTab: BrowserOrganizationTabItem? { tabs.first { $0.isSelected } }
 }
 

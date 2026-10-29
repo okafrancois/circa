@@ -232,6 +232,7 @@ public final class BrowserWindowSession<Surface: BrowserSurface> {
     public private(set) var catalog: BrowserCatalogSnapshot?
     public private(set) var isClosed = false
     public var onChange: (() -> Void)?
+    public var onMetadataChange: ((Set<TabID>) -> Void)?
     public var onError: ((any Error) -> Void)?
 
     let store: BrowserStore
@@ -332,6 +333,8 @@ public final class BrowserWindowSession<Surface: BrowserSurface> {
     public var canReopenClosedTab: Bool {
         !isClosed && organization?.canRestoreArchivedTab == true
     }
+
+    public func tabID(for occurrenceID: TabOccurrenceID) -> TabID? { occurrenceTabIDs[occurrenceID] }
 
     public func surface(for occurrenceID: TabOccurrenceID) -> Surface? { surfaces[occurrenceID] }
 
@@ -699,9 +702,7 @@ public final class BrowserWindowSession<Surface: BrowserSurface> {
             try await session.withAdoptedContext { context in
                 let changed = try await session.store.updateDestination(to: url, from: authority, validating: context)
                 guard changed else { return }
-                let state = try await session.store.captureWindowState(from: context)
-                guard !session.isClosed else { return }
-                session.install(state)
+                try await session.refreshOrganizationState(allowMetadata: true)
             }
         }
     }
@@ -736,6 +737,7 @@ public final class BrowserWindowSession<Surface: BrowserSurface> {
         catalog = nil
         organizationRuntime.retire()
         onChange = nil
+        onMetadataChange = nil
         onError = nil
         onSurfaceMembershipChange = nil
         // Moves in flight from this window lose their return path and go to the rescue holder.
@@ -801,6 +803,16 @@ public final class BrowserWindowSession<Surface: BrowserSurface> {
 
     /// No actor hop or external callback occurs between acquiring a surface and recording ownership.
     /// A reentrant close retires both previously owned surfaces and the newly returned one exactly once.
+    func installMetadata(_ delta: BrowserOrganizationMetadata) {
+        guard !isClosed, let current = organizationRuntime.snapshot else { return }
+        organizationRuntime.snapshot = current.applying(delta, index: organizationRuntime.metadataIndex)
+        snapshot = snapshot?.applying(delta, indices: organizationRuntime.occurrenceIndices)
+        if !delta.tabs.isEmpty {
+            if let onMetadataChange { onMetadataChange(Set(delta.tabs.keys)) }
+            else { onChange?() }
+        }
+    }
+
     func install(_ state: BrowserWindowState) {
         guard !isClosed else { return }
         // A placeholder follows its model occurrence, including to another Space of its profile;
@@ -858,7 +870,10 @@ public final class BrowserWindowSession<Surface: BrowserSurface> {
         occurrenceTabIDs = state.occurrenceTabIDs
         snapshot = state.snapshot
         catalog = state.catalog
+        organizationRuntime.catalogRevision = state.catalogRevision
         organizationRuntime.snapshot = state.organization
+        organizationRuntime.metadataIndex = BrowserOrganizationMetadataIndex(state.organization)
+        organizationRuntime.occurrenceIndices = Dictionary(uniqueKeysWithValues: state.snapshot.tabs.enumerated().map { ($0.element.occurrenceID, $0.offset) })
         // Loads start only after ownership, membership and the new state are visible, so events
         // delivered synchronously by the engine see a consistent owner.
         if let startSurface {

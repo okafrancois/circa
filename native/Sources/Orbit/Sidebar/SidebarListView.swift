@@ -61,6 +61,7 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
     private(set) var displayedLayout = SidebarListLayout()
     /// Layout without drag gap (hidden rows excluded), the reference of drop resolution.
     private(set) var dropLayout = SidebarListLayout()
+    private var indicesByNode: [BrowserOrganizationNode: Int] = [:]
     private var entriesByNode: [BrowserOrganizationNode: SidebarListEntry] = [:]
     private var rowViews: [BrowserOrganizationNode: SidebarListRow] = [:]
     private var leavingRows: [ObjectIdentifier: (row: SidebarListRow, node: BrowserOrganizationNode)] = [:]
@@ -174,6 +175,7 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
         hasRendered = true
         let previous = self.content
         self.content = content
+        indicesByNode = Dictionary(uniqueKeysWithValues: content.entries.enumerated().map { ($0.element.node, $0.offset) })
         entriesByNode = Dictionary(content.entries.map { ($0.node, $0) }, uniquingKeysWith: { first, _ in first })
         if let pending = pendingCommit, pending.signature != content.structure {
             endPendingCommit(relayout: false)
@@ -183,8 +185,27 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
         hoverHidden.formIntersection(entriesByNode.keys)
         if let renamingNode, entriesByNode[renamingNode] == nil { rowViews[renamingNode]?.cancelRename() }
         if let folderTarget, entriesByNode[.folder(folderTarget)] == nil { self.folderTarget = nil }
-        relayout(animated: animated, previousEntries: previous)
+        if previous.structure == content.structure,
+           previous.isPinnedSectionCollapsed == content.isPinnedSectionCollapsed,
+           previous.folderStates == content.folderStates {
+            let previousByNode = Dictionary(uniqueKeysWithValues: previous.entries.map { ($0.node, $0) })
+            for entry in content.entries where previousByNode[entry.node] != entry {
+                if let row = rowViews[entry.node] { configure(row, with: entry) }
+            }
+        } else {
+            relayout(animated: animated, previousEntries: previous)
+        }
         flushPendingIntents()
+    }
+
+    /// Content-only edits preserve row geometry, pending drag state and running motion.
+    func applyMetadata(_ entries: [SidebarListEntry]) {
+        for entry in entries {
+            guard let index = indicesByNode[entry.node], entriesByNode[entry.node] != entry else { continue }
+            content.entries[index] = entry
+            entriesByNode[entry.node] = entry
+            if let row = rowViews[entry.node] { configure(row, with: entry) }
+        }
     }
 
     func setCommandsEnabled(_ enabled: Bool) {

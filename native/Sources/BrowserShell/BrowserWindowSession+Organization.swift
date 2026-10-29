@@ -10,12 +10,19 @@ public enum BrowserOrganizationReplayError: Error, Equatable, Sendable {
 @MainActor
 final class BrowserOrganizationSessionRuntime {
     var snapshot: BrowserOrganizationSnapshot?
+    var metadataIndex: BrowserOrganizationMetadataIndex?
+    var catalogRevision: UInt64 = 0
+    var occurrenceIndices: [TabOccurrenceID: Int] = [:]
     var observation: Task<Void, Never>?
+    var isObservationRequested = false
     var isRefreshQueued = false
 
     func retire() {
         observation?.cancel()
         observation = nil
+        isObservationRequested = false
+        metadataIndex = nil
+        occurrenceIndices.removeAll()
         snapshot = nil
         isRefreshQueued = false
     }
@@ -29,16 +36,33 @@ public extension BrowserWindowSession {
     /// The active Space as the sidebar shows it, published with `onChange`.
     var organization: BrowserOrganizationSnapshot? { organizationRuntime.snapshot }
 
+    func organizationTab(_ id: TabID) -> BrowserOrganizationTabItem? {
+        guard let organization else { return nil }
+        return organizationRuntime.metadataIndex?.tab(id, in: organization)
+    }
+
     func observeOrganizationChanges() {
-        guard !isClosed, organizationRuntime.observation == nil else { return }
-        organizationRuntime.observation = Task { [weak self, store] in
-            let changes = await store.organizationChanges()
-            // Changes made while subscribing are covered by one initial refresh.
-            self?.queueOrganizationRefresh()
-            for await _ in changes {
-                guard let self, !self.isClosed else { return }
-                BrowserPerformance.count(.organizationDeliveries)
-                self.queueOrganizationRefresh()
+        guard !isClosed, !organizationRuntime.isObservationRequested else { return }
+        organizationRuntime.isObservationRequested = true
+        // Reserve setup after initial adoption, so waiting for the session also waits for its
+        // subscription. A late initial refresh must not jump ahead of the next user command.
+        enqueue { session in
+            defer {
+                if session.organizationRuntime.observation == nil {
+                    session.organizationRuntime.isObservationRequested = false
+                }
+            }
+            guard let windowID = session.windowID else { return }
+            let changes = await session.store.organizationChanges(in: windowID)
+            guard !session.isClosed else { return }
+            try await session.refreshOrganizationState()
+            guard !session.isClosed else { return }
+            session.organizationRuntime.observation = Task { [weak session] in
+                for await _ in changes {
+                    guard let session, !session.isClosed else { return }
+                    BrowserPerformance.count(.organizationDeliveries)
+                    session.queueOrganizationRefresh()
+                }
             }
         }
     }
@@ -137,13 +161,15 @@ public extension BrowserWindowSession {
     /// Records the engine's title for this exact live occurrence; unchanged titles cost no command.
     /// Late callbacks for a surface this session no longer owns are ignored: its tab may have been
     /// archived by another window.
-    func updatePageTitle(for surface: Surface, to title: String?) {
+    func updatePageTitle(for surface: Surface, to title: String?,
+                         isCurrent: @escaping @MainActor () -> Bool = { true }) {
         guard !isClosed, let occurrenceID = occurrenceID(for: surface) else { return }
         let pageTitle = BrowserOrganizedTab.normalizedPageTitle(title)
-        if let item = organization?.allTabs.first(where: { $0.occurrenceID == occurrenceID }),
+        if let id = occurrenceTabIDs[occurrenceID], let item = organizationTab(id),
            item.pageTitle == pageTitle { return }
         enqueue { session in
-            guard let occurrenceID = session.occurrenceID(for: surface),
+            guard isCurrent(),
+                  let occurrenceID = session.occurrenceID(for: surface),
                   let authority = session.authorities[occurrenceID] else { return }
             do {
                 guard try await session.store.updatePageTitle(pageTitle, from: authority) else { return }
@@ -151,7 +177,7 @@ public extension BrowserWindowSession {
                     BrowserStoreError.occurrenceOwnedByAnotherWindow {
                 return
             }
-            try await session.refreshOrganizationState()
+            try await session.refreshOrganizationState(allowMetadata: true)
         }
     }
 
@@ -401,14 +427,21 @@ extension BrowserWindowSession {
         organizationRuntime.isRefreshQueued = true
         enqueue { session in
             session.organizationRuntime.isRefreshQueued = false
-            try await session.refreshOrganizationState()
+            try await session.refreshOrganizationState(allowMetadata: true)
         }
     }
 
     /// Publishes only when something visible to this window changed.
-    func refreshOrganizationState() async throws {
+    func refreshOrganizationState(allowMetadata: Bool = false) async throws {
         BrowserPerformance.count(.organizationRefreshes)
         guard !isClosed, let windowID else { return }
+        if allowMetadata, let context = activeContext, let current = organizationRuntime.snapshot,
+           let delta = try await store.organizationMetadata(since: current.organizationRevision, from: context,
+                                                           catalogRevision: organizationRuntime.catalogRevision) {
+            guard !isClosed else { return }
+            installMetadata(delta)
+            return
+        }
         let state = try await store.captureWindowState(in: windowID)
         guard !isClosed, let activeContext else { return }
         guard state.context.storeGeneration == activeContext.storeGeneration,
