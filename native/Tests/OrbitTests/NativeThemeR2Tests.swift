@@ -108,7 +108,7 @@ struct ThemeR2TokenTests {
         typealias M = OrbitTokens.Metrics
         #expect(M.CommandBar.width == 765 && M.CommandBar.top(windowHeight: 640) == 151.5)
         #expect(M.CommandBar.top(windowHeight: 949) == 306)
-        #expect(OrbitTokens.Radius.commandBar == 12 && OrbitTokens.Radius.commandBarRow == 8)
+        #expect(OrbitTokens.Radius.commandBar == 27 && OrbitTokens.Radius.commandBarRow == 8)
         #expect(OrbitTokens.Shadow.commandBar.offsetY == 24 && OrbitTokens.Shadow.commandBar.blur == 96)
         #expect(M.QuickWindow.toolbarHeight == 47 && M.QuickWindow.pageIsEdgeToEdge)
         #expect(M.Content.splitGap == 10 && M.Content.splitDividerHandle == NSSize(width: 2, height: 24))
