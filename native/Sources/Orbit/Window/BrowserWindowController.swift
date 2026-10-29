@@ -503,7 +503,6 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
             }?.name ?? OrbitShellText.emptySpaceTitle
         }
         let outgoingCapture = SpaceSwipeTrace.interval("RenderOutgoingCaptureRequest") { tabSwitcher.prepareForPresentation(selected) }
-        if let selected { contentCard.prepareToReparent(selected.hostView) }
         SpaceSwipeTrace.interval("RenderSplitReparent") { renderSplit(retainingPreviousUntil: outgoingCapture) }
         peek.revealPromotionIfPlaced(in: contentCard)
         if let selected {

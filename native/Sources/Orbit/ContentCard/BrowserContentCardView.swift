@@ -12,6 +12,9 @@ final class BrowserContentCardView: NSView {
     private let captureShield = NSView()
     private let splitBackdrop = OrbitThemeFillView()
     private var retentionTokens: [ObjectIdentifier: UUID] = [:]
+    private var paintHeldView: NSView?
+    private var paintHoldToken: UUID?
+    private var returningToHeldPage = false
     private var isPresentingSplit = false
     private var edgeConstraints: [(NSLayoutConstraint, CGFloat)] = []
     private var contentTopConstraint: NSLayoutConstraint?
@@ -78,6 +81,10 @@ final class BrowserContentCardView: NSView {
     var scheduleCaptureRetirement: @MainActor (@escaping @MainActor () -> Void) -> Void = { retire in
         Task { @MainActor in try? await Task.sleep(for: .milliseconds(500)); retire() }
     }
+    var schedulePaintRetirement: @MainActor (@escaping @MainActor () -> Void) -> Void = { retire in
+        Task { @MainActor in try? await Task.sleep(for: .milliseconds(150)); retire() }
+    }
+    func isPresenting(_ view: NSView) -> Bool { presentedView === view }
 
     var cornerRadius: CGFloat = OrbitTokens.Radius.contentCard {
         didSet { if cornerRadius != oldValue { needsLayout = true } }
@@ -161,7 +168,10 @@ final class BrowserContentCardView: NSView {
 
     /// Presents an engine host view edge to edge, or the empty state for nil.
     /// Presenting the view already displayed does nothing, so the document is never reloaded.
-    func present(_ view: NSView?, isSplit: Bool = false, retainingPreviousUntil capture: Task<Void, Never>? = nil) {
+    func present(_ view: NSView?, isSplit: Bool = false, retainingPreviousUntil capture: Task<Void, Never>? = nil,
+                 holdingPreviousUntil paint: Task<Void, Never>? = nil) {
+        let mayHold = !isPresentingSplit && !isSplit && view != nil && !returningToHeldPage
+        returningToHeldPage = false
         isPresentingSplit = isSplit
         clip.isTransparent = isSplit
         clip.layer?.masksToBounds = !isSplit
@@ -169,6 +179,10 @@ final class BrowserContentCardView: NSView {
         let presentation: NSView = view ?? emptyState
         guard presentedView !== presentation else { return }
         let previous = presentedView
+        if paint == nil || !mayHold || paintHeldView === presentation { retirePaintHold() }
+        if paint != nil, mayHold, paintHeldView == nil, previous !== emptyState {
+            paintHeldView = previous
+        }
         presentedView = presentation
         retentionTokens[ObjectIdentifier(presentation)] = nil
         if let previous, let capture {
@@ -180,14 +194,15 @@ final class BrowserContentCardView: NSView {
             let retire: @MainActor () -> Void = { [weak self, weak previous] in
                 guard let self, self.retentionTokens[key] == token else { return }
                 self.retentionTokens[key] = nil
-                guard let previous, self.presentedView !== previous, previous.superview === self.clip else { return }
+                guard let previous, self.presentedView !== previous, self.paintHeldView !== previous,
+                      previous.superview === self.clip else { return }
                 previous.removeFromSuperview()
             }
             Task { await capture.value; retire() }
             scheduleCaptureRetirement(retire)
         } else if let previous {
             retentionTokens[ObjectIdentifier(previous)] = nil
-            previous.removeFromSuperview()
+            if paintHeldView !== previous { previous.removeFromSuperview() }
         }
         // Retained outgoing documents must never show through a transparent/new host view.
         captureShield.wantsLayer = true
@@ -199,6 +214,19 @@ final class BrowserContentCardView: NSView {
         presentation.translatesAutoresizingMaskIntoConstraints = false
         let wasAttached = presentation.superview === clip
         clip.addSubview(presentation, positioned: .above, relativeTo: nil)
+        if let held = paintHeldView, let paint, held !== presentation, held.superview === clip {
+            // Keep the last displayed native pixels above the incoming host, without moving
+            // either host through an off-window parent or adding a fade.
+            clip.addSubview(held, positioned: .above, relativeTo: presentation)
+            let token = UUID()
+            paintHoldToken = token
+            let retire: @MainActor () -> Void = { [weak self] in
+                guard let self, self.paintHoldToken == token else { return }
+                self.retirePaintHold()
+            }
+            Task { await paint.value; retire() }
+            schedulePaintRetirement(retire)
+        }
         if let headerView { clip.addSubview(headerView, positioned: .above, relativeTo: nil) }
         if wasAttached { return }
         if view != nil {
@@ -226,9 +254,26 @@ final class BrowserContentCardView: NSView {
     func prepareToReparent(_ host: NSView) {
         for previous in clip.subviews where previous !== presentedView && previous !== captureShield {
             guard host === previous || host.isDescendant(of: previous) else { continue }
+            if paintHeldView === previous {
+                returningToHeldPage = true
+                retirePaintHold()
+            }
             retentionTokens[ObjectIdentifier(previous)] = nil
             previous.removeFromSuperview()
         }
+    }
+
+    private func retirePaintHold() {
+        let held = paintHeldView
+        paintHeldView = nil
+        paintHoldToken = nil
+        guard let held, held !== presentedView, held.superview === clip else { return }
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        if retentionTokens[ObjectIdentifier(held)] != nil {
+            clip.addSubview(held, positioned: .below, relativeTo: captureShield)
+        } else { held.removeFromSuperview() }
+        CATransaction.commit()
     }
 
     private func refreshCaptureShield() {

@@ -91,7 +91,13 @@ extension BrowserWindowController {
     }
 
     func renderSplit(retainingPreviousUntil capture: Task<Void, Never>? = nil) {
+        // Commit the destination wrapper, final geometry and native host together. An
+        // intermediate commit can expose the card backdrop before the hosted layer arrives.
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        defer { CATransaction.commit() }
         let selected = session.selectedSurface
+        if let selected { contentCard.prepareToReparent(selected.hostView) }
         for id in session.visibleOccurrenceIDs {
             if let surface = session.surface(for: id) { tabSuspension.prepareCover(for: surface) }
         }
@@ -119,7 +125,9 @@ extension BrowserWindowController {
         } else if let selected {
             if session.activeSplit == nil { split.expandedGroup = nil }
             let view = split.presentation(for: .single(ObjectIdentifier(selected)), configure: configureSplitView)
-            contentCard.present(view, retainingPreviousUntil: capture)
+            let paint = !contentCard.isPresenting(view) && peek.presentedSurface == nil
+                && tabSuspension.activeCoverIDs.isEmpty ? selected.activationPaintBarrier() : nil
+            contentCard.present(view, retainingPreviousUntil: capture, holdingPreviousUntil: paint)
             // Give the destination a window and its final geometry before moving the live host.
             // An off-window, zero-sized intermediate parent hides the native compositor.
             contentCard.layoutSubtreeIfNeeded()
