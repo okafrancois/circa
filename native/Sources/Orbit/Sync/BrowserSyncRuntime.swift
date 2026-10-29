@@ -21,12 +21,25 @@ final class BrowserSyncRuntime: ObservableObject {
     private var passwords: BrowserPasswordSync?
     private var historyTransport: (any BrowserHistorySyncTransport)?
     private var task: Task<Void, Never>?
+    private var isTerminating = false
+    private var interval = Duration.seconds(5)
+    var hasScheduledCycle: Bool { task != nil }
     private var cycle: (() async throws -> Void)?
 
     init() {
         available = BrowserSyncEntitlement.isAvailable()
         showsSettings = available || (Bundle.main.object(forInfoDictionaryKey: "OrbitSyntheticBundle") as? Bool == true
             && ProcessInfo.processInfo.environment["ORBIT_SYNTHETIC_SYNC_SETTINGS"] == "1")
+    }
+
+    /// A local-only scheduler seam: tests never construct a CloudKit container.
+    init(destination: URL, interval: Duration, cycle: @escaping () async throws -> Void) {
+        available = true
+        showsSettings = true
+        self.destination = destination
+        self.interval = interval
+        self.cycle = cycle
+        status = .off
     }
 
     var statusText: String {
@@ -59,11 +72,12 @@ final class BrowserSyncRuntime: ObservableObject {
         state.enabled = value
         try state.save(destination)
         enabled = value
-        if !value { await transport?.stop(); await historyTransport?.stop(); transport = nil; historyTransport = nil; await stopPasswords(); status = .off }
+        if !value { task?.cancel(); await transport?.stop(); await historyTransport?.stop(); transport = nil; historyTransport = nil; await stopPasswords(); status = .off }
         else { status = .on; NSApp?.registerForRemoteNotifications(); start() }
     }
 
     func prepareForTermination() async {
+        isTerminating = true
         task?.cancel()
         await transport?.stop()
         await historyTransport?.stop()
@@ -73,16 +87,23 @@ final class BrowserSyncRuntime: ObservableObject {
     }
 
     func resumeAfterCancelledTermination() {
+        isTerminating = false
         if enabled { start() }
     }
 
     private func start() {
-        guard task == nil else { return }
+        guard enabled, !isTerminating, task == nil else { return }
         task = Task { [weak self] in
-            while !Task.isCancelled {
-                guard let self else { return }
+            guard let self else { return }
+            defer {
+                task = nil
+                // An enable may arrive while the cancelled cycle is still unwinding.
+                start()
+            }
+            while enabled && !Task.isCancelled {
                 if enabled {
                     do { try await cycle?() }
+                    catch is CancellationError where Task.isCancelled { break }
                     catch BrowserSyncError.signedOut {
                         status = .signedOut; await stopPasswords(); await transport?.stop(); transport = nil
                         await historyTransport?.stop(); historyTransport = nil
@@ -99,7 +120,8 @@ final class BrowserSyncRuntime: ObservableObject {
                     catch BrowserSyncError.localChange { status = .on }
                     catch { status = .unavailable; await stopPasswords(); await transport?.stop(); transport = nil }
                 }
-                try? await Task.sleep(for: .seconds(5))
+                guard enabled, !Task.isCancelled else { break }
+                do { try await Task.sleep(for: interval) } catch { break }
             }
         }
     }
