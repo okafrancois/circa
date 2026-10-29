@@ -614,6 +614,15 @@ int32_t ACROpenExtensionManager(uint64_t surface_token);
 int32_t ACROpenExtensionManagerPage(uint64_t surface_token, int32_t page, const char *extension_id);
 
 int32_t ACRBrowserStateAvailable(void);
+int32_t ACRPagePerformanceAvailable(void);
+void ACRPagePerformanceClosing(uint64_t token);
+/* Native qualification tracing; borrowed callbacks complete on UI. Refused calls do not call back. */
+int32_t ACRBoostCacheTraceBegin(void (*)(void*, int32_t), void*);
+int32_t ACRBoostCacheTraceEnd(const char* path, void (*)(void*, int32_t), void*);
+int32_t ACRPageLifecycle(uint64_t token, orbit_page_lifecycle_t*);
+int32_t ACRPageLifecycleObserve(uint64_t token, orbit_lifecycle_callback_t, void*);
+int32_t ACRCaptureView(uint64_t token, orbit_capture_rect_t, int32_t, int32_t, int32_t, orbit_capture_callback_t, void*);
+int32_t ACRActivationFrame(uint64_t token, uint64_t activation_id, orbit_activation_callback_t, void*);
 int32_t ACRExtensionActionSnapshot(uint64_t surface_token, char* json, uint32_t capacity);
 
 /* Dedicated structured password callback; disabled until explicitly registered. */

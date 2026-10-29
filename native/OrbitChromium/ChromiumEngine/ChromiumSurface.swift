@@ -118,6 +118,11 @@ public final class ChromiumSurface: BrowserEngineSurface {
     public var onEngineEvent: ((String, [String: String]) -> Void)?
 
     public private(set) var isDisposed = false
+    private lazy var nativePerformance = ChromiumPagePerformance(token: token)
+    public var pagePerformance: (any BrowserPagePerformance)? {
+        guard !isDisposed, ACRPagePerformanceAvailable() == 1 else { return nil }
+        return nativePerformance
+    }
     /// True after `OnBeforeClose` (or when no browser was ever created).
     public private(set) var isTeardownComplete = false
     public private(set) var findDocumentGeneration: UInt64 = 0
@@ -624,6 +629,7 @@ public final class ChromiumSurface: BrowserEngineSurface {
     }
 
     public func dispose() {
+        nativePerformance.close()
         suspensionPaintTask?.cancel()
         suspensionPaintTask = nil
         closeCleanupTimeout?.cancel()

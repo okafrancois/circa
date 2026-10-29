@@ -1,0 +1,444 @@
+diff --git a/chrome/browser/ui/views/overlay/overlay_controls_fade_animation.cc b/chrome/browser/ui/views/overlay/overlay_controls_fade_animation.cc
+index 1adbb6d..109a640 100644
+--- a/chrome/browser/ui/views/overlay/overlay_controls_fade_animation.cc
++++ b/chrome/browser/ui/views/overlay/overlay_controls_fade_animation.cc
+@@ -5,6 +5,7 @@
+ #include "chrome/browser/ui/views/overlay/overlay_controls_fade_animation.h"
+ 
+ #include "ui/compositor/layer.h"
++#include "ui/gfx/geometry/cubic_bezier.h"
+ #include "ui/views/view.h"
+ 
+ namespace {
+@@ -15,14 +16,20 @@ constexpr base::TimeDelta kDuration = base::Milliseconds(250);
+ 
+ OverlayControlsFadeAnimation::OverlayControlsFadeAnimation(
+     const std::vector<raw_ptr<views::View>>& controls,
+-    Type type)
+-    : gfx::LinearAnimation(kDuration, kDefaultFrameRate, nullptr),
++    Type type,
++    bool automatic)
++    : gfx::LinearAnimation(automatic ? base::Milliseconds(200) : kDuration,
++                           automatic ? 120 : kDefaultFrameRate,
++                           nullptr),
+       controls_(controls),
+-      type_(type) {}
++      type_(type),
++      automatic_(automatic) {}
+ 
+ OverlayControlsFadeAnimation::~OverlayControlsFadeAnimation() = default;
+ 
+ void OverlayControlsFadeAnimation::AnimateToState(double state) {
++  if (automatic_)
++    state = gfx::CubicBezier(0.42, 0, 0.58, 1).Solve(state);
+   const double opacity = (type_ == Type::kToShown) ? state : (1.0 - state);
+   for (auto& control : controls_) {
+     control->SetVisible(opacity != 0);
+diff --git a/chrome/browser/ui/views/overlay/overlay_controls_fade_animation.h b/chrome/browser/ui/views/overlay/overlay_controls_fade_animation.h
+index 6a658e8..c1c908f 100644
+--- a/chrome/browser/ui/views/overlay/overlay_controls_fade_animation.h
++++ b/chrome/browser/ui/views/overlay/overlay_controls_fade_animation.h
+@@ -28,7 +28,8 @@ class OverlayControlsFadeAnimation : public gfx::LinearAnimation {
+   // Every element of `controls` MUST outlive `this`.
+   OverlayControlsFadeAnimation(
+       const std::vector<raw_ptr<views::View>>& controls,
+-      Type type);
++      Type type,
++      bool automatic = false);
+   OverlayControlsFadeAnimation(const OverlayControlsFadeAnimation&) = delete;
+   OverlayControlsFadeAnimation& operator=(const OverlayControlsFadeAnimation&) =
+       delete;
+@@ -42,6 +43,7 @@ class OverlayControlsFadeAnimation : public gfx::LinearAnimation {
+  private:
+   const std::vector<raw_ptr<views::View>> controls_;
+   const Type type_;
++  const bool automatic_;
+ };
+ 
+ #endif  // CHROME_BROWSER_UI_VIEWS_OVERLAY_OVERLAY_CONTROLS_FADE_ANIMATION_H_
+diff --git a/chrome/browser/ui/views/overlay/video_overlay_window_views.cc b/chrome/browser/ui/views/overlay/video_overlay_window_views.cc
+index 14cf42f..6b50adf 100644
+--- a/chrome/browser/ui/views/overlay/video_overlay_window_views.cc
++++ b/chrome/browser/ui/views/overlay/video_overlay_window_views.cc
+@@ -3,6 +3,13 @@
+ // found in the LICENSE file.
+ 
+ #include "chrome/browser/ui/views/overlay/video_overlay_window_views.h"
++#include "third_party/skia/include/core/SkPathBuilder.h"
++#include "ui/gfx/canvas.h"
++#if BUILDFLAG(IS_MAC)
++#include "ui/gfx/platform_font_mac.h"
++#endif
++#include "ui/views/animation/ink_drop.h"
++#include "ui/views/style/typography_provider.h"
+ 
+ #include <memory>
+ #include <string>
+@@ -68,6 +75,10 @@
+ #include "ui/display/display.h"
+ #include "ui/display/screen.h"
+ #include "ui/gfx/canvas.h"
++#if BUILDFLAG(IS_MAC)
++#include "ui/gfx/platform_font_mac.h"
++#endif
++#include "ui/views/animation/ink_drop.h"
+ #include "ui/gfx/favicon_size.h"
+ #include "ui/gfx/geometry/resize_utils.h"
+ #include "ui/gfx/geometry/skia_conversions.h"
+@@ -75,6 +86,7 @@
+ #include "ui/views/background.h"
+ #include "ui/views/controls/image_view.h"
+ #include "ui/views/controls/label.h"
++#include "ui/views/style/typography_provider.h"
+ #include "ui/views/widget/widget_delegate.h"
+ #include "ui/views/window/frame_view.h"
+ #include "url/origin.h"
+@@ -426,6 +438,106 @@ std::unique_ptr<content::VideoOverlayWindow> CreateVideoOverlayWindow(
+   return VideoOverlayWindowViews::Create(controller);
+ }
+ 
++namespace {
++template <typename Base>
++class AutomaticCornerButton : public Base {
++ public:
++  AutomaticCornerButton(views::Button::PressedCallback cb,
++                        bool arrow,
++                        base::RepeatingCallback<bool()> automatic)
++      : Base(std::move(cb)), arrow_(arrow), automatic_(std::move(automatic)) {}
++  void PaintButtonContents(gfx::Canvas* canvas) override {
++    if (!automatic_.Run()) {
++      Base::PaintButtonContents(canvas);
++      return;
++    }
++    cc::PaintFlags f;
++    f.setAntiAlias(true);
++    f.setColor(SkColorSetA(SK_ColorWHITE, 35));
++    canvas->DrawRoundRect(gfx::RectF(this->GetLocalBounds()), 5, f);
++    f.setColor(SK_ColorWHITE);
++    f.setStyle(cc::PaintFlags::kStroke_Style);
++    f.setStrokeWidth(1.2f);
++    SkPathBuilder path;
++    if (arrow_) {
++      path.moveTo(10, 18).lineTo(10, 10).lineTo(18, 10);
++      path.moveTo(10, 10).lineTo(18, 18);
++    } else {
++      path.moveTo(10, 10).lineTo(19, 19);
++      path.moveTo(19, 10).lineTo(10, 19);
++    }
++    canvas->DrawPath(path.detach(), f);
++  }
++
++ private:
++  bool arrow_;
++  base::RepeatingCallback<bool()> automatic_;
++};
++class AutomaticProgressView : public global_media_controls::MediaProgressView {
++ public:
++  template <typename... Args>
++  AutomaticProgressView(base::RepeatingCallback<bool()> automatic,
++                        base::RepeatingCallback<double()> progress,
++                        Args&&... args)
++      : MediaProgressView(std::forward<Args>(args)...),
++        automatic_(std::move(automatic)),
++        progress_(std::move(progress)) {}
++  void OnPaint(gfx::Canvas* canvas) override {
++    if (!automatic_.Run()) {
++      MediaProgressView::OnPaint(canvas);
++      return;
++    }
++    cc::PaintFlags f;
++    f.setAntiAlias(true);
++    f.setColor(SkColorSetA(SK_ColorWHITE, 90));
++    canvas->DrawRoundRect(gfx::RectF(8, 10, width() - 16, 4), 2, f);
++    f.setColor(SK_ColorWHITE);
++    canvas->DrawRoundRect(
++        gfx::RectF(8, 10, (width() - 16) * std::clamp(progress_.Run(), 0.0, 1.0), 4),
++        2, f);
++  }
++
++ private:
++  base::RepeatingCallback<bool()> automatic_;
++  base::RepeatingCallback<double()> progress_;
++};
++class AutomaticPlaybackButton : public PlaybackImageButton {
++ public:
++  AutomaticPlaybackButton(
++      views::Button::PressedCallback cb,
++      base::RepeatingCallback<bool()> automatic,
++      base::RepeatingCallback<VideoOverlayWindowViews::PlaybackState()> state)
++      : PlaybackImageButton(std::move(cb)),
++        automatic_(std::move(automatic)),
++        state_(std::move(state)) {}
++  void OnPaintBackground(gfx::Canvas* canvas) override {
++    if (!automatic_.Run())
++      PlaybackImageButton::OnPaintBackground(canvas);
++  }
++  void PaintButtonContents(gfx::Canvas* canvas) override {
++    if (!automatic_.Run()) {
++      PlaybackImageButton::PaintButtonContents(canvas);
++      return;
++    }
++    cc::PaintFlags f;
++    f.setAntiAlias(true);
++    f.setColor(SK_ColorWHITE);
++    if (state_.Run() == VideoOverlayWindowViews::kPlaying) {
++      canvas->DrawRoundRect(gfx::RectF(12, 2, 6, 44), 3, f);
++      canvas->DrawRoundRect(gfx::RectF(30, 2, 6, 44), 3, f);
++    } else {
++      SkPathBuilder path;
++      path.moveTo(12, 2).lineTo(42, 24).lineTo(12, 46).close();
++      canvas->DrawPath(path.detach(), f);
++    }
++  }
++
++ private:
++  base::RepeatingCallback<bool()> automatic_;
++  base::RepeatingCallback<VideoOverlayWindowViews::PlaybackState()> state_;
++};
++}  // namespace
++
+ VideoOverlayWindowViews::VideoOverlayWindowViews(
+     content::VideoPictureInPictureWindowController* controller)
+     : controller_(controller),
+@@ -837,7 +949,8 @@ void VideoOverlayWindowViews::UpdateControlsVisibility(bool is_visible,
+           std::make_unique<OverlayControlsFadeAnimation>(
+               title_and_scrim,
+               title_is_visible ? OverlayControlsFadeAnimation::Type::kToShown
+-                               : OverlayControlsFadeAnimation::Type::kToHidden);
++                               : OverlayControlsFadeAnimation::Type::kToHidden,
++              browser_initiated_automatic_pip_);
+       title_and_top_scrim_fade_animation_->Start();
+     }
+ 
+@@ -847,9 +960,10 @@ void VideoOverlayWindowViews::UpdateControlsVisibility(bool is_visible,
+           controls_container_view_, controls_scrim_view_,
+           controls_bottom_scrim_view_};
+       fade_animation_ = std::make_unique<OverlayControlsFadeAnimation>(
+-          controls, wanted_visibility
+-                        ? OverlayControlsFadeAnimation::Type::kToShown
+-                        : OverlayControlsFadeAnimation::Type::kToHidden);
++          controls,
++          wanted_visibility ? OverlayControlsFadeAnimation::Type::kToShown
++                            : OverlayControlsFadeAnimation::Type::kToHidden,
++          browser_initiated_automatic_pip_);
+       fade_animation_->Start();
+     }
+   } else {
+@@ -1014,6 +1128,13 @@ bool VideoOverlayWindowViews::ControlsHitTestContainsPoint(
+   if (!AreControlsVisible()) {
+     return false;
+   }
++  if (browser_initiated_automatic_pip_) {
++    return GetBackToTabControlsBounds().Contains(point) ||
++           GetCloseControlsBounds().Contains(point) ||
++           (play_pause_controls_view_->GetVisible() &&
++            GetPlayPauseControlsBounds().Contains(point)) ||
++           GetProgressViewBounds().Contains(point);
++  }
+   if (GetBackToTabControlsBounds().Contains(point) ||
+       GetSkipAdControlsBounds().Contains(point) ||
+       GetCloseControlsBounds().Contains(point) ||
+@@ -1074,14 +1195,32 @@ void VideoOverlayWindowViews::SetUpViews() {
+ 
+   auto controls_container_view = std::make_unique<views::View>();
+   auto title_view = std::make_unique<views::View>();
+-  auto close_controls_view = std::make_unique<CloseImageButton>(
+-      base::BindRepeating(&VideoOverlayWindowViews::CloseAndPauseIfAvailable,
+-                          base::Unretained(this)));
++  std::unique_ptr<CloseImageButton> close_controls_view =
++      std::make_unique<AutomaticCornerButton<CloseImageButton>>(
++          base::BindRepeating(
++              &VideoOverlayWindowViews::CloseAndPauseIfAvailable,
++              base::Unretained(this)),
++          false,
++          base::BindRepeating(
++              [](VideoOverlayWindowViews* o) {
++                return o->browser_initiated_automatic_pip_;
++              },
++              base::Unretained(this)));
+ 
+-  auto play_pause_controls_view =
+-      std::make_unique<PlaybackImageButton>(base::BindRepeating(
+-          [](VideoOverlayWindowViews* overlay) { overlay->TogglePlayPause(); },
+-          base::Unretained(this)));
++  std::unique_ptr<PlaybackImageButton> play_pause_controls_view =
++      std::make_unique<AutomaticPlaybackButton>(
++          base::BindRepeating(&VideoOverlayWindowViews::TogglePlayPause,
++                              base::Unretained(this)),
++          base::BindRepeating(
++              [](VideoOverlayWindowViews* o) {
++                return o->browser_initiated_automatic_pip_;
++              },
++              base::Unretained(this)),
++          base::BindRepeating(
++              [](VideoOverlayWindowViews* o) {
++                return o->playback_state_for_testing_;
++              },
++              base::Unretained(this)));
+   play_pause_controls_view->SetSize({kCenterButtonSize, kCenterButtonSize});
+ 
+   auto playback_controls_container_view = std::make_unique<views::View>();
+@@ -1123,15 +1262,22 @@ void VideoOverlayWindowViews::SetUpViews() {
+       },
+       base::Unretained(this)));
+ 
+-  auto back_to_tab_button =
+-      std::make_unique<OverlayWindowBackToTabButton>(base::BindRepeating(
+-          [](VideoOverlayWindowViews* overlay) {
+-            PictureInPictureWindowManager::GetInstance()
+-                ->ExitPictureInPictureViaWindowUi(
+-                    PictureInPictureWindowManager::UiBehavior::
+-                        kCloseWindowAndFocusOpener);
+-          },
+-          base::Unretained(this)));
++  std::unique_ptr<OverlayWindowBackToTabButton> back_to_tab_button =
++      std::make_unique<AutomaticCornerButton<OverlayWindowBackToTabButton>>(
++          base::BindRepeating(
++              [](VideoOverlayWindowViews* overlay) {
++                PictureInPictureWindowManager::GetInstance()
++                    ->ExitPictureInPictureViaWindowUi(
++                        PictureInPictureWindowManager::UiBehavior::
++                            kCloseWindowAndFocusOpener);
++              },
++              base::Unretained(this)),
++          true,
++          base::BindRepeating(
++              [](VideoOverlayWindowViews* o) {
++                return o->browser_initiated_automatic_pip_;
++              },
++              base::Unretained(this)));
+ 
+   auto replay_10_seconds_button =
+       std::make_unique<SimpleOverlayWindowImageButton>(
+@@ -1193,8 +1339,21 @@ void VideoOverlayWindowViews::SetUpViews() {
+   next_track_controls_view->SetSize(kActionButtonSize);
+ 
+   // `base::Unretained()` is okay here since we own the progress view.
+-  auto progress_view =
+-      std::make_unique<global_media_controls::MediaProgressView>(
++  std::unique_ptr<global_media_controls::MediaProgressView> progress_view =
++      std::make_unique<AutomaticProgressView>(
++          base::BindRepeating(
++              [](VideoOverlayWindowViews* o) {
++                return o->browser_initiated_automatic_pip_;
++              },
++              base::Unretained(this)),
++          base::BindRepeating(
++              [](VideoOverlayWindowViews* o) {
++                return o->position_.duration().is_positive()
++                           ? o->position_.GetPosition() /
++                                 o->position_.duration()
++                           : 0.0;
++              },
++              base::Unretained(this)),
+           /*use_squiggly_line=*/false,
+           /*playing_foreground_color_id=*/ui::kColorSysPrimary,
+           /*playing_background_color_id=*/ui::kColorSysStateDisabled,
+@@ -1484,6 +1643,75 @@ void VideoOverlayWindowViews::UpdateLayerBoundsWithLetterboxing(
+ 
+ void VideoOverlayWindowViews::OnUpdateControlsBounds() {
+   controls_container_view_->SetSize(GetBounds().size());
++  const auto ink_mode = browser_initiated_automatic_pip_
++      ? views::InkDropHost::InkDropMode::OFF : views::InkDropHost::InkDropMode::ON;
++  views::InkDrop::Get(back_to_tab_button_)->SetMode(ink_mode);
++  views::InkDrop::Get(close_controls_view_)->SetMode(ink_mode);
++  views::InkDrop::Get(play_pause_controls_view_)->SetMode(ink_mode);
++  if (browser_initiated_automatic_pip_) {
++    const auto size = GetBounds().size();
++    const int w = size.width(), h = size.height();
++    controls_scrim_view_->SetBackground(
++        views::CreateSolidBackground(SkColorSetA(SK_ColorBLACK, 85)));
++    controls_scrim_view_->SetBoundsRect(gfx::Rect(size));
++    controls_top_scrim_view_->SetBoundsRect(gfx::Rect());
++    controls_bottom_scrim_view_->SetBoundsRect(gfx::Rect());
++    title_view_->SetBoundsRect(gfx::Rect(size));
++    playback_controls_container_view_->SetBoundsRect(gfx::Rect(size));
++    playback_controls_container_view_->SetVisible(true);
++    vc_controls_container_view_->SetVisible(false);
++    favicon_view_->SetVisible(false);
++    SetSourceTitle(source_title_);
++    origin_->SetBounds(w / 2 - 32, 17, 64, 16);
++    gfx::Transform text_transform;
++    text_transform.Translate(32, 0);
++    text_transform.Scale(0.905f, 1.0f);
++    text_transform.Translate(-32, 0);
++    origin_->SetTransform(text_transform);
++    origin_->layer()->SetFillsBoundsOpaquely(false);
++    origin_->SetSubpixelRenderingEnabled(false);
++    origin_->SetEnabledColor(SK_ColorWHITE);
++    #if BUILDFLAG(IS_MAC)
++    origin_->SetFontList(gfx::FontList(gfx::Font(new gfx::PlatformFontMac(
++        gfx::PlatformFontMac::SystemFontType::kGeneral, 13))));
++#else
++    origin_->SetFontList(gfx::FontList().DeriveWithSizeDelta(13 - gfx::FontList().GetFontSize()));
++#endif
++    origin_->SetHorizontalAlignment(gfx::ALIGN_CENTER);
++    back_to_tab_button_->SetBounds(12, 12, 28, 28);
++    close_controls_view_->SetBounds(w - 41, 12, 29, 28);
++    minimize_button_->SetVisible(false);
++    play_pause_controls_view_->SetBounds(w / 2 - 24, h / 2 - 24, 48, 48);
++    play_pause_controls_view_->SetVisible(show_play_pause_button_);
++    progress_view_->SetBounds(4, h - 24, w - 8, 26);
++    timestamp_->SetVisible(false);
++    live_status_->SetVisible(false);
++    replay_10_seconds_button_->SetVisible(false);
++    forward_10_seconds_button_->SetVisible(false);
++    previous_track_controls_view_->SetVisible(false);
++    next_track_controls_view_->SetVisible(false);
++    live_caption_button_->SetVisible(false);
++    live_caption_dialog_->SetVisible(false);
++    if (toggle_mute_button_)
++      toggle_mute_button_->SetVisible(false);
++    return;
++  }
++  SetSourceTitle(source_title_);
++  favicon_view_->SetVisible(true);
++  close_controls_view_->SetSize({24, 24});
++  back_to_tab_button_->SetSize({24, 24});
++  minimize_button_->SetVisible(true);
++  live_caption_button_->SetVisible(true);
++  if (toggle_mute_button_)
++    toggle_mute_button_->SetVisible(true);
++  origin_->SetEnabledColor(ui::kColorSysOnSurface);
++  origin_->SetTransform(gfx::Transform());
++  origin_->SetSubpixelRenderingEnabled(true);
++  origin_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
++  origin_->SetFontList(views::TypographyProvider::Get().GetFont(
++      views::style::CONTEXT_LABEL, views::style::STYLE_BODY_4));
++  controls_scrim_view_->SetBackground(
++      views::CreateSolidBackground(kColorPipWindowScrimFull));
+ 
+   // Adding an extra pixel to width/height makes sure the scrim covers the
+   // entire window when the platform has fractional scaling applied.
+@@ -1733,6 +1961,7 @@ void VideoOverlayWindowViews::Close() {
+ void VideoOverlayWindowViews::ShowInactive() {
+   browser_initiated_automatic_pip_ =
+       controller_->IsBrowserInitiatedAutomaticPictureInPicture();
++  OnUpdateControlsBounds();
+   if (browser_initiated_automatic_pip_) {
+     initial_title_hide_timer_.Stop();
+     // Hide before the first visible frame; hover keeps the native animations.
+@@ -1961,7 +2190,10 @@ void VideoOverlayWindowViews::SetMediaPosition(
+ 
+ void VideoOverlayWindowViews::SetSourceTitle(
+     const std::u16string& source_title) {
+-  origin_->SetText(source_title);
++  source_title_ = source_title;
++  origin_->SetText(browser_initiated_automatic_pip_
++      ? base::UTF8ToUTF16(controller_->GetWebContents()->GetLastCommittedURL().host())
++      : source_title_);
+ }
+ 
+ void VideoOverlayWindowViews::SetFaviconImages(
+diff --git a/chrome/browser/ui/views/overlay/video_overlay_window_views.h b/chrome/browser/ui/views/overlay/video_overlay_window_views.h
+index 03b1f99..c535b53 100644
+--- a/chrome/browser/ui/views/overlay/video_overlay_window_views.h
++++ b/chrome/browser/ui/views/overlay/video_overlay_window_views.h
+@@ -480,6 +480,7 @@ class VideoOverlayWindowViews : public content::VideoOverlayWindow,
+   raw_ptr<views::View> playback_controls_container_view_ = nullptr;
+   raw_ptr<views::View> vc_controls_container_view_ = nullptr;
+   raw_ptr<views::ImageView> favicon_view_ = nullptr;
++  std::u16string source_title_;
+   raw_ptr<views::Label> origin_ = nullptr;
+   raw_ptr<CloseImageButton> close_controls_view_ = nullptr;
+   raw_ptr<OverlayWindowMinimizeButton> minimize_button_ = nullptr;

@@ -26,6 +26,7 @@
 #include "include/cef_context_menu_handler.h"
 #include "include/cef_cookie.h"
 #include "include/cef_devtools_message_observer.h"
+#include "include/cef_trace.h"
 #include "include/cef_dialog_handler.h"
 #include "include/cef_download_handler.h"
 #include "include/cef_find_handler.h"
@@ -407,6 +408,7 @@ struct State {
   // which returned true: CEF then waits for the client to destroy the view, and a second
   // CloseBrowser alone never reaches OnBeforeClose.
   void CloseHost(Host& host) {
+    ACRPagePerformanceClosing(host.token);
     host.closing_by_shell = true;
     auto browser = host.browser;
     const bool close_requested = host.close_requested;
@@ -1212,6 +1214,10 @@ class Client final : public CefClient, public CefLifeSpanHandler, public CefDisp
     const bool has_tab = g_state->orbit && g_state->orbit->get_tab_info(browser->GetIdentifier(), &tab) == 1;
     created.detail_code = has_tab ? tab.tab_id : -1;
     PostUI([token = token_] { if (g_state) g_state->CaptureHostedIdentity(token); });
+    if (g_state->orbit && g_state->orbit->version >= 12) {
+      orbit_page_lifecycle_t state{}; state.struct_size = sizeof(state);
+      g_state->orbit->page_lifecycle(browser->GetIdentifier(), &state);
+    }
     g_state->Send(created);
     if (g_state->orbit && g_state->orbit->version >= 5) {
       g_state->orbit->browser_state_observe(browser->GetIdentifier(), &RuntimeChanged, reinterpret_cast<void*>(static_cast<uintptr_t>(token_)));
@@ -1777,7 +1783,8 @@ const orbit_cef_api_t* ResolveOrbitApi() {
   // v1. Each version's layout is the prefix of the next; a function beyond the resolved version
   // is never called.
   const orbit_cef_api_t* api = nullptr;
-  const std::pair<uint32_t, size_t> versions[] = {{11u, sizeof(orbit_cef_api_t)},
+  const std::pair<uint32_t, size_t> versions[] = {{12u, sizeof(orbit_cef_api_t)},
+                                                   {11u, offsetof(orbit_cef_api_t, page_lifecycle)},
                                                    {10u, offsetof(orbit_cef_api_t, password_store_open)},
                                                    {9u, offsetof(orbit_cef_api_t, popup_navigation_metadata)},
                                                    {8u, offsetof(orbit_cef_api_t, set_automatic_pip)},
@@ -3536,4 +3543,62 @@ extern "C" int32_t ACRPasswordStoreWrite(uint64_t handle, int32_t operation,
 extern "C" int32_t ACRPasswordStoreObserve(uint64_t handle, orbit_password_changed_t cb, void* context) {
   return NSThread.isMainThread && ACRPasswordStoreAvailable()
       ? g_state->orbit->password_store_observe(handle, cb, context) : 0;
+}
+
+extern "C" int32_t ACRPagePerformanceAvailable(void) {
+  return g_state && g_state->orbit && g_state->orbit->version >= 12;
+}
+namespace {
+int32_t PerformanceBrowser(uint64_t token) {
+  if (!NSThread.isMainThread || !ACRPagePerformanceAvailable()) return -1;
+  auto* host = g_state->Find(token);
+  if (!host || !host->browser || !host->browser->IsValid() || host->closing_by_shell) return -1;
+  return host->browser->GetIdentifier();
+}
+}
+extern "C" int32_t ACRPageLifecycle(uint64_t token, orbit_page_lifecycle_t* state) {
+  int32_t id = PerformanceBrowser(token); return id < 0 ? 0 : g_state->orbit->page_lifecycle(id, state);
+}
+extern "C" int32_t ACRPageLifecycleObserve(uint64_t token, orbit_lifecycle_callback_t cb, void* ctx) {
+  int32_t id = PerformanceBrowser(token); return id < 0 ? 0 : g_state->orbit->page_lifecycle_observe(id, cb, ctx);
+}
+extern "C" int32_t ACRCaptureView(uint64_t token, orbit_capture_rect_t rect, int32_t w, int32_t h,
+    int32_t timeout, orbit_capture_callback_t cb, void* ctx) {
+  int32_t id = PerformanceBrowser(token); return id < 0 ? 0 : g_state->orbit->capture_view(id, rect, w, h, timeout, cb, ctx);
+}
+extern "C" int32_t ACRActivationFrame(uint64_t token, uint64_t activation,
+    orbit_activation_callback_t cb, void* ctx) {
+  int32_t id = PerformanceBrowser(token); return id < 0 ? 0 : g_state->orbit->activation_frame(id, activation, cb, ctx);
+}
+
+namespace {
+class BoostTraceStart final : public CefCompletionCallback {
+ public:
+  BoostTraceStart(void (*cb)(void*, int32_t), void* ctx) : cb_(cb), ctx_(ctx) {}
+  void OnComplete() override { cb_(ctx_, 1); }
+ private:
+  void (*cb_)(void*, int32_t); void* ctx_;
+  IMPLEMENT_REFCOUNTING(BoostTraceStart);
+};
+class BoostTraceEnd final : public CefEndTracingCallback {
+ public:
+  BoostTraceEnd(void (*cb)(void*, int32_t), void* ctx) : cb_(cb), ctx_(ctx) {}
+  void OnEndTracingComplete(const CefString& path) override { cb_(ctx_, !path.empty()); }
+ private:
+  void (*cb_)(void*, int32_t); void* ctx_;
+  IMPLEMENT_REFCOUNTING(BoostTraceEnd);
+};
+}
+extern "C" int32_t ACRBoostCacheTraceBegin(void (*cb)(void*, int32_t), void* ctx) {
+  if (!NSThread.isMainThread || !g_state || !cb || g_state->network_policy != ACR_NETWORK_HERMETIC) return 0;
+  return CefBeginTracing("browser", new BoostTraceStart(cb, ctx));
+}
+extern "C" int32_t ACRBoostCacheTraceEnd(const char* path, void (*cb)(void*, int32_t), void* ctx) {
+  if (!NSThread.isMainThread || !g_state || !path || path[0] != '/' || !cb || g_state->network_policy != ACR_NETWORK_HERMETIC) return 0;
+  return CefEndTracing(path, new BoostTraceEnd(cb, ctx));
+}
+
+extern "C" void ACRPagePerformanceClosing(uint64_t token) {
+  const auto id = PerformanceBrowser(token);
+  if (id >= 0) g_state->orbit->activation_frame(id, 0, nullptr, nullptr);
 }

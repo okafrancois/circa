@@ -18,6 +18,7 @@ enum OrbitPerformanceProbe {
     }
     static func start(application: OrbitApplication, configuration: OrbitProductConfiguration) {
         guard configuration.syntheticGuard != nil, CommandLine.arguments.contains("--perf-probe") else { return }
+        if Bundle.main.bundleIdentifier == "lab.orbit.orbit.engine-r11" { application.confirmQuit = { .quit } }
         installDrawCounter()
         let log = configuration.dataRoot.appendingPathComponent("download-events.jsonl")
         ChromiumRuntime.shared.trace = { name, fields in
@@ -84,6 +85,7 @@ enum OrbitPerformanceProbe {
                let command = try? JSONSerialization.jsonObject(with: data) as? [String: String] {
                 try? FileManager.default.removeItem(at: commandFile)
                 let name = command["command"] ?? ""
+                result["commandNonce"] = command["nonce"] ?? ""
                 if name == "theme-fixture", ownsWindow(owner, bundleID: "lab.orbit.orbit.theme-fixture") {
                     result["themeFixture"] = await themeFixture(owner, store: environment.store, command: command)
                 } else if name == "import-auth-check", ownsWindow(owner, bundleID: "lab.orbit.orbit.import-auth") {
@@ -322,6 +324,8 @@ enum OrbitPerformanceProbe {
                     result["suspensionChecks"] = await verifySuspension(owner, fixture: url)
                 } else if name == "scroll-wheel" {
                     result["scrollWheel"] = await OrbitScrollWheelProbe.run(owner, command: command)
+                } else if name == "native-performance" {
+                    result["nativePerformance"] = await OrbitEnginePerformanceProbe.run(owner, command: command, root: root)
                 } else if name == "download-audio" {
                     result["downloadAudio"] = await OrbitDownloadAudioProbe.run(owner, command: command, root: root)
                 } else if name == "settings" {

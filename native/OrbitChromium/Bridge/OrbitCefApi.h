@@ -26,7 +26,7 @@ extern "C" {
 // Version 3 (CHROMIUM-APP-R3): additive, hold_window/release_window. Earlier
 // versions keep their layout as the prefix of the table.
 // Version 4 (EXTENSIONS-PRODUCT-R1): additive, native per-profile extension services.
-#define ORBIT_CEF_API_VERSION 11u
+#define ORBIT_CEF_API_VERSION 12u
 
 // Version 8. Callback once after live renderer CSS installation (1), or failure (0).
 typedef void (*orbit_boost_ack_t)(void*, uint64_t revision, int32_t installed);
@@ -113,6 +113,47 @@ typedef void (*orbit_password_result_t)(void*, int32_t status,
 // event: 1 changed, 2 retained (resnapshot in either case), 3 closed.
 // Carries no secrets. One subscription per opened handle; close revokes it.
 typedef void (*orbit_password_changed_t)(void*, int32_t event);
+
+// Version 12. UI-thread reads and coalesced observation. Unknown PM state
+// returns 0 (never an all-safe snapshot). Capture bits:
+// video/audio/mirror/tab/window/display.
+typedef struct {
+  uint32_t struct_size;
+  int32_t playing_media, playing_video, audio_context_running, audible, pip;
+  uint32_t capturing;
+  int32_t had_form_interaction, had_user_edits, web_lock, idb_lock, webrtc;
+  int32_t lifecycle;  // 0 running, 1 frozen, 2 discarded
+  uint64_t cannot_discard_mask, footprint_kb;
+  int32_t renderer_pid;
+  uint64_t document_id;
+} orbit_page_lifecycle_t;
+// event: 0 state changed, 1 about to discard, 2 discarded, 3 closed.
+// initiator: 0 none, 1 embedder, 2 native policy. Null state only for closed.
+typedef void (*orbit_lifecycle_callback_t)(void*,
+                                           int32_t event,
+                                           int32_t initiator,
+                                           const orbit_page_lifecycle_t*);
+typedef struct {
+  int32_t x, y, width, height;
+} orbit_capture_rect_t;
+// status: 1 captured, -1 unavailable, -2 closed, -3 timed out,
+// -4 document changed. Borrowed tightly packed premultiplied BGRA, sRGB (1).
+typedef void (*orbit_capture_callback_t)(void*,
+                                         int32_t status,
+                                         int32_t width,
+                                         int32_t height,
+                                         uint32_t row_bytes,
+                                         const uint8_t* bgra,
+                                         int32_t color_space);
+// status: 1 submitted, 2 document_changed (also superseded activation),
+// 3 hidden, 4 closed, 5 timed_out. Ticks are monotonic microseconds, only on
+// submitted.
+typedef void (*orbit_activation_callback_t)(void*,
+                                            int32_t browser_id,
+                                            uint64_t activation_id,
+                                            uint64_t document_id,
+                                            int32_t status,
+                                            int64_t submitted_ticks_us);
 
 typedef struct {
   uint32_t struct_size;
@@ -252,6 +293,23 @@ typedef struct {
       const orbit_password_record_t* record, const orbit_password_record_t* old_key,
       orbit_password_result_t, void*);
   int32_t (*password_store_observe)(uint64_t, orbit_password_changed_t, void*);
+  // Version 12. Null observer revokes; accepted async calls complete once on
+  // UI.
+  int32_t (*page_lifecycle)(int32_t, orbit_page_lifecycle_t*);
+  int32_t (*page_lifecycle_observe)(int32_t, orbit_lifecycle_callback_t, void*);
+  int32_t (*capture_view)(int32_t,
+                          orbit_capture_rect_t,
+                          int32_t out_width,
+                          int32_t out_height,
+                          int32_t timeout_ms,
+                          orbit_capture_callback_t,
+                          void*);
+  // activation_id 0 with null callback announces close and cancels pending work
+  // as closed.
+  int32_t (*activation_frame)(int32_t,
+                              uint64_t activation_id,
+                              orbit_activation_callback_t,
+                              void*);
 } orbit_cef_api_t;
 
 // Returns the API table for `version`, or NULL when unsupported.
