@@ -42,6 +42,15 @@ struct LibraryBoostOverlayTests {
         editor.session.edit { $0.fontFamily = "Courier" }
         await editor.session.pending?.value
         #expect(await store.snapshot().boosts.first?.content.fontFamily == "Courier")
+        await owner.library.boostsTask?.value
+        owner.library.boostsView.searchField.stringValue = "Renamed"
+        owner.library.boostsView.controlTextDidChange(Notification(name: NSControl.textDidChangeNotification))
+        #expect(owner.library.boostsView.displayed.isEmpty)
+        editor.session.rename(to: "Renamed fixture")
+        await editor.session.pending?.value
+        await owner.library.boostsTask?.value
+        #expect(owner.library.boostsView.displayed.map(\.title) == ["Renamed fixture"])
+        #expect(!BrowserLibraryBoostsView.matches(editor.session.boost, query: "Synthetic"))
         owner.dismissPeek(animated: false)
         #expect(owner.boostEditor == nil)
         #expect(page.isDisposed)

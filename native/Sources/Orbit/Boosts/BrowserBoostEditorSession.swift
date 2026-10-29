@@ -56,6 +56,15 @@ final class BrowserBoostEditorSession {
         update { mutation(&$0.content) }
     }
 
+    static func canRename(to title: String) -> Bool {
+        !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    func rename(to title: String) {
+        guard Self.canRename(to: title) else { return }
+        update { $0.title = title }
+    }
+
     func resetAllEdits() {
         update { $0.content = .init(); $0.javaScriptOptIn = false }
     }

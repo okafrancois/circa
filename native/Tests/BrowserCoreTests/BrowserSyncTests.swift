@@ -43,6 +43,44 @@ struct BrowserSyncTests {
         try replica.merge(await transport.exchange(Array(replica.records.values)))
     }
 
+    @Test("Boost title changes propagate through sync and persist on the receiving Mac")
+    func boostRenameSync() async throws {
+        let root = URL(fileURLWithPath: "/private/tmp/boost-rename-sync-" + UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let source = try BrowserBoostStore(profileID: profile)
+        let target = try BrowserBoostStore(profileID: profile, persistence: .profileDirectory(root))
+        let original = try await source.save(.init(title: "Original", hostPattern: .init(host: "example.test")))
+        let session = document(), cloud = BrowserSyncMemoryCloud()
+        let a = BrowserSyncMemoryTransport(cloud: cloud, account: "synthetic")
+        let b = BrowserSyncMemoryTransport(cloud: cloud, account: "synthetic")
+        var macA = BrowserSyncReplica(device: "a"), macB = BrowserSyncReplica(device: "b")
+        func projection(_ boosts: BrowserBoostDocument) throws -> BrowserSyncProjection {
+            try BrowserSyncMapping.project(session: session, settings: .init(), boosts: [boosts])
+        }
+        try macA.capture(projection(await source.snapshot()), now: date)
+        try await exchange(&macA, a); try await exchange(&macB, b)
+        var expected = await target.snapshot()
+        let first = try BrowserSyncMapping.materialize(macB.visible, local: session, settings: .init(), boosts: [expected])
+        try await target.applySync(#require(first.boosts.first), expected: expected)
+        try macB.acknowledge(projection(await target.snapshot()))
+        var renamed = original; renamed.title = "Renamed on Mac A"
+        try await source.save(renamed, expectedRevision: original.revision)
+        try macA.capture(projection(await source.snapshot()), now: date.addingTimeInterval(1))
+        try await exchange(&macA, a); try await exchange(&macB, b)
+        expected = await target.snapshot()
+        let next = try BrowserSyncMapping.materialize(macB.visible, local: session, settings: .init(), boosts: [expected])
+        try await target.applySync(#require(next.boosts.first), expected: expected)
+        let reopened = try BrowserBoostStore(profileID: profile, persistence: .profileDirectory(root))
+        let saved = try #require(await reopened.snapshot().boosts.first)
+        #expect(saved.title == "Renamed on Mac A" && saved.id == original.id)
+        #expect(saved.content == original.content && saved.hostPattern == original.hostPattern)
+        try macB.acknowledge(projection(await target.snapshot()))
+        let records = macB.records
+        try macB.capture(projection(await target.snapshot()), now: date.addingTimeInterval(2))
+        #expect(macB.records == records)
+    }
+
     @Test("Two Macs create, reorder and move the same identities between folders without duplication")
     func twoMacOrganization() async throws {
         let cloud = BrowserSyncMemoryCloud()
