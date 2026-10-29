@@ -8,6 +8,7 @@ import UserNotifications
 @MainActor
 final class BrowserSiteControls<Engine: BrowserEngine> {
     typealias Surface = Engine.Surface
+    var extensionContextMenu: ((BrowserExtensionSummary, Surface) -> NSMenu?)?
     private weak var owner: (any BrowserSiteControlsHost<Engine>)?
     let policy = BrowserSitePermissionPolicy(store: BrowserSitePermissionStore.ephemeral())
     var preferences = try! BrowserSitePreferenceStore()
@@ -571,6 +572,10 @@ extension BrowserSiteControls {
                 let tile = SiteControlButton("", identifier: "extension-action-" + item.id) { original?.onPress?() }
                 tile.setAccessibilityLabel(item.name)
                 tile.toolTip = item.name
+                tile.contextMenuBuilder = { [weak self, weak surface] in
+                    guard valid(), let self, let surface else { return nil }
+                    return extensionContextMenu?(item, surface)
+                }
                 if let encoded = item.iconPNGBase64, encoded.count < 512 * 1024,
                    let data = Data(base64Encoded: encoded), let image = NSImage(data: data) {
                     image.size = NSSize(width: 16, height: 16); tile.image = image
