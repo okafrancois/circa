@@ -65,6 +65,9 @@ actor FavoriteIconStore {
         images[key] = image
         failures[key] = nil
         guard let file = file(profile: profile, origin: origin) else { return }
+        // Compare the actual persisted bytes: failed writes remain retryable, and a reopened
+        // cache also avoids replacing the inode for an identical engine notification.
+        if (try? Data(contentsOf: file)) == image.png { return }
         do {
             try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true,
                 attributes: [.posixPermissions: 0o700])

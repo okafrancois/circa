@@ -39,6 +39,13 @@ struct NativeFaviconReceiptTests {
         let image = pipeline.image(for: tab, surface: surface, isOwned: { $0 === surface })
         #expect(image != nil)
         #expect(image?.cgImage(forProposedRect: nil, context: nil, hints: nil)?.width == 2)
+        var redundantDecodes = 0
+        pipeline.resolve = { _, _ in redundantDecodes += 1; return nil }
+        surface.navigate(to: home)
+        _ = pipeline.image(for: tab, surface: surface, isOwned: { $0 === surface })
+        for _ in 0..<100 where completions < 3 { try await Task.sleep(for: .milliseconds(2)) }
+        #expect(redundantDecodes == 0)
+        #expect(pipeline.image(for: tab, surface: surface, isOwned: { $0 === surface }) === image)
         surface.navigate(to: URL(string: "https://away.example.test/")!)
         #expect(pipeline.image(for: tab, surface: surface, isOwned: { $0 === surface }) === image)
         let other = SiteSyntheticSurface(profileID: ProfileID(), engine: nil, siteData: .init())
