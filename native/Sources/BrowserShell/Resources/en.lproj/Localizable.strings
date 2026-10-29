@@ -1361,3 +1361,13 @@
 "Never Translate This Site" = "Never Translate This Site";
 
 "Language Settings" = "Language Settings";
+
+"An import was interrupted" = "An import was interrupted";
+
+"Restore your data from before the import, or continue without the incomplete import. Your existing profiles will be kept." = "Restore your data from before the import, or continue without the incomplete import. Your existing profiles will be kept.";
+
+"Continue without the import" = "Continue without the import";
+
+"Your previous data is ready" = "Your previous data is ready";
+
+"The import could not be restored normally. Orbit recovered your previous data and moved the incomplete import aside for safekeeping." = "The import could not be restored normally. Orbit recovered your previous data and moved the incomplete import aside for safekeeping.";

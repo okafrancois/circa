@@ -116,6 +116,8 @@ enum OrbitPerformanceProbe {
                                 "remainingProfiles": catalog.profiles.count]
                         }
                     } catch { result["importAuth"] = ["failed": true] }
+                } else if name == "import-recovery-fixture" {
+                    result["importRecovery"] = ["started": true, "profiles": await environment.store.catalogSnapshot().profiles.count]
                 } else if name == "chromium-import-fixture" {
                     result["importFixture"] = await ChromiumImportProbe.run(root: root)
                 } else if name == "data-quick-wins" {

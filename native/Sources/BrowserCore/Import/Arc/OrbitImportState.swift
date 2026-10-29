@@ -208,6 +208,15 @@ enum ArcImportFiles {
 
 /// Backups taken before every apply, restorable while Orbit is closed.
 public enum ArcImportBackups {
+    public static func interruptedImportBackup(at location: ArcImportDataLocation) throws -> String? {
+        if hasInterruptedRestore(at: location),
+           let restore = try ArcImportFiles.readExisting(ArcImportRestore.Journal.self, from: ArcImportRestore.journalFile(location)) {
+            return restore.backupID
+        }
+        let journal = try ArcImportFiles.readExisting(ArcImportJournal.self, from: location.journalFile)
+        return journal?.state == .applying ? journal?.backupID : nil
+    }
+
     /// Reuses the normal restorable backup format for a session-only catalog mutation.
     /// Cookies, storage and history are unchanged by a Space profile move.
     public static func createSessionBackup(at location: ArcImportDataLocation,
@@ -280,9 +289,9 @@ public enum ArcImportBackups {
     /// then swapped by journaled renames on the same volume, rolled back on any error, and an
     /// interrupted swap is rolled back right after the lock is taken, before anything is read.
     public static func restore(_ id: String, at location: ArcImportDataLocation, usage: any OrbitTargetUsageProbe,
-                               diskSpace: any OrbitDiskSpaceProbe = OrbitSystemDiskSpaceProbe()) throws {
-        let lock = try OrbitDataDirectoryLock.acquire(location.dataDirectory, exclusive: true)
-        defer { lock.release() }
+                               diskSpace: any OrbitDiskSpaceProbe = OrbitSystemDiskSpaceProbe(), holdingLock: Bool = false) throws {
+        let lock = holdingLock ? nil : try OrbitDataDirectoryLock.acquire(location.dataDirectory, exclusive: true)
+        defer { lock?.release() }
         guard !usage.isInUse(sessionFile: location.sessionFile) else { throw ArcImportError.targetInUse }
         try recoverInterruptedRestore(at: location, holdingLock: true)
         try ArcImportRestore(id: id, location: location).run(diskSpace: diskSpace, interruption: nil)
@@ -408,7 +417,7 @@ struct ArcImportRestore {
 
     /// Test seams: `interruption` stops after that many renames without rolling back (a crash);
     /// `failure` throws before that rename (an I/O error), which rolls back.
-    func run(diskSpace: any OrbitDiskSpaceProbe, interruption: Int?, failure: Int? = nil) throws {
+    func run(diskSpace: any OrbitDiskSpaceProbe, interruption: Int?, failure: Int? = nil, checkpoint: (String) -> Void = { _ in }) throws {
         guard id.wholeMatch(of: /[0-9TZ]{16}-[0-9a-f]{8}/) != nil else { throw ArcImportError.backupNotFound }
         let root = try OrbitSecureDirectory.open(location.dataDirectory, create: false)
         let imports = try root.directory("Import", create: true)
@@ -504,11 +513,13 @@ struct ArcImportRestore {
             // Preserve staging even when the caller cannot know whether the marker is durable.
             throw ArcImportError.restoreFailed
         }
+        checkpoint("structural-restore-journal")
         do {
             for (index, move) in moves.enumerated() {
                 if let interruption, index == interruption { return }
                 if let failure, index == failure { throw ArcImportError.restoreFailed }
                 try Self.move(move, in: root)
+                checkpoint("structural-restore-move-" + String(index))
             }
         } catch {
             // A failed rollback is still a live transaction: preserve every recovery input.
@@ -523,6 +534,7 @@ struct ArcImportRestore {
         // 4. Cleanup; the previous files are no longer needed.
         journal.phase = .cleanup
         try imports.write(try ArcImportFiles.encoder().encode(journal), to: Self.journalName)
+        checkpoint("structural-restore-cleanup")
         try imports.removeChecked(workName)
         try imports.removeChecked(Self.journalName)
         if let data = imports.read("arc-import-journal.json"),

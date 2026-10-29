@@ -70,6 +70,7 @@ protocol OrbitLaunchHooks: AnyObject {
 enum OrbitLauncher {
     private static var delegate: OrbitApplication?
     private static var finishedLaunching = false
+    private static var launchObserver: NSObjectProtocol?
     /// AppKit posted `didFinishLaunching`. The runtime can become ready before or after it; a
     /// delegate installed before it receives `applicationDidFinishLaunching` from AppKit.
     static var hasFinishedLaunching: Bool { finishedLaunching }
@@ -109,15 +110,19 @@ enum OrbitLauncher {
             FileHandle.standardError.write(Data("orbit: \(error)\n".utf8))
             exit(64)
         }
+        launchObserver = NotificationCenter.default.addObserver(
+            forName: NSApplication.didFinishLaunchingNotification, object: nil, queue: nil
+        ) { _ in MainActor.assumeIsolated { OrbitLauncher.finishedLaunching = true } }
         BrowserPerformance.mark(.admission)
         OrbitPerformanceProbe.pauseBeforeRuntime(configuration)
         do {
             guard let lock = dataRootLock else { throw OrbitRecoveryFailure.unsafeFilesystem }
             // Load-only root registration admission precedes every hook, CEF and restore.
             // Mock runs have no system storage fallback; untouched roots do not access it.
-            try OrbitAuthenticationStartup.run(configuration: configuration, lock: lock) {
-                BrowserPerformance.mark(.authentication)
+            try OrbitAuthenticationStartup.run(configuration: configuration, lock: lock, beforeStructuralRecovery: {
                 try prepareAuthenticationRun(configuration)
+            }) {
+                BrowserPerformance.mark(.authentication)
                 processSiteSessionImport(configuration)
                 startRuntime(configuration)
             }
@@ -127,15 +132,34 @@ enum OrbitLauncher {
         }
     }
 
+    private static var authenticationRecoveryRelaunch = false
     private static var authenticationRun: BrowserAuthenticationRun?
 
     private static func prepareAuthenticationRun(_ configuration: OrbitProductConfiguration) throws {
-        guard try BrowserAuthenticationRun.exists(dataRoot: configuration.dataRoot) else { return }
-        let key = try ChromiumAuthenticationStartup.recoveryKey(configuration)
-        let run = try BrowserAuthenticationRun.open(dataRoot: configuration.dataRoot, recoveryKey: key)
-        guard [.passwordsPending, .verified, .restored].contains(run.status.phase) else {
-            throw BrowserAuthenticationImportError.invalidState
+        if let recovery = try BrowserImportRecovery.open(at: configuration.dataRoot) {
+            if recovery.needsRecovery {
+                // The bridge must own NSApplication even when recovery precedes CEF.
+                _ = (NSClassFromString("ACRApplication") as? NSApplication.Type)?.shared
+                let choice = ImportRecoveryAlert.choose()
+                let fallback = try recovery.recover(choice, holdingLock: true, checkpoint: { try ChromiumImportRecoveryProbe.checkpoint($0, configuration: configuration) })
+                try ChromiumImportRecoveryProbe.checkpoint("recovered", configuration: configuration)
+                if fallback { ImportRecoveryAlert.showQuarantineNotice() }
+            } else { try recovery.finishCompleted() }
         }
+        guard try BrowserAuthenticationRun.exists(dataRoot: configuration.dataRoot) else {
+            try ImportRecoveryAlert.recoverStructural(sessionFile: configuration.sessionFile)
+            return
+        }
+        let key = try ChromiumAuthenticationStartup.recoveryKey(configuration)
+        let run = try BrowserAuthenticationRun.open(dataRoot: configuration.dataRoot, recoveryKey: key, checkpoint: { try ChromiumImportRecoveryProbe.checkpoint($0, configuration: configuration) })
+        guard [.passwordsPending, .verified, .restored].contains(run.status.phase) else {
+            _ = (NSClassFromString("ACRApplication") as? NSApplication.Type)?.shared
+            _ = ImportRecoveryAlert.choose()
+            try run.restore(confirmDeletingLaterChanges: true, usage: ImportRecoveryAlert.OfflineUsage(), holdingLock: true)
+            return
+        }
+        // Mark the startup attempt before CEF can mutate Local State or open a profile.
+        if run.status.phase == .passwordsPending { try run.beginPasswordApplication() }
         authenticationRun = run
     }
 
@@ -176,9 +200,6 @@ enum OrbitLauncher {
 
     private static func startRuntime(_ configuration: OrbitProductConfiguration) {
         ColdLaunchOpenQueue.shared.install()
-        let observer = NotificationCenter.default.addObserver(
-            forName: NSApplication.didFinishLaunchingNotification, object: nil, queue: nil
-        ) { _ in MainActor.assumeIsolated { OrbitLauncher.finishedLaunching = true } }
         let hooks = orbitLaunchHooks()
         hooks?.willStartRuntime(configuration)
         let options = productRuntimeOptions(configuration, extraSwitches: hooks?.runtimeSwitches ?? [],
@@ -195,28 +216,31 @@ enum OrbitLauncher {
                 hooks.runtimeDidBecomeReady(configuration)
                 return
             }
-            if let run = authenticationRun, run.status.phase == .passwordsPending {
+            if let run = authenticationRun, run.status.phase == .passwordsApplying {
                 Task { @MainActor in
                     let engine = makeActiveEngine()
                     do {
                         guard let store = engine.passwordStore else { throw BrowserPasswordStoreError.unavailable }
                         let counts = try await BrowserPasswordImporter.apply(run.passwordsForRuntime(), to: store, profileID: run.status.profileID)
+                        try ChromiumImportRecoveryProbe.checkpoint("auth-passwords-applied", configuration: configuration)
                         // Local-store credentials win deterministically over conflicting account-store rows.
                         try run.markVerified(passwordConflicts: counts.conflicts)
                         await engine.shutdown()
                     } catch {
                         await engine.shutdown()
                         FileHandle.standardError.write(Data("orbit: authentication import verification failed; recovery retained\n".utf8))
-                        exit(65)
+                        authenticationRecoveryRelaunch = true
+                        ChromiumRuntime.shared.requestQuit()
+                        return
                     }
                     startApplication(configuration)
                 }
             } else { startApplication(configuration) }
         }
-        NotificationCenter.default.removeObserver(observer)
+        if let launchObserver { NotificationCenter.default.removeObserver(launchObserver) }
         // This flag is set only after both the session save and pending request succeed.
         // A bounded CEF shutdown can return a nonzero status after that durable save.
-        if delegate?.wantsSiteSessionRelaunch == true {
+        if delegate?.wantsSiteSessionRelaunch == true || authenticationRecoveryRelaunch {
             dataRootLock?.release()
             relaunchForSiteSessionImport()
         }
