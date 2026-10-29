@@ -183,6 +183,7 @@ enum OrbitLauncher {
                 return
             }
             let application = OrbitApplication()
+            BrowserPerformance.mark(.applicationCreated)
             delegate = application
             OrbitPerformanceProbe.start(application: application, configuration: configuration)
             NSApplication.shared.delegate = application

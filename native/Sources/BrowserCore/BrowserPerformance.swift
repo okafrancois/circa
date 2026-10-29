@@ -13,6 +13,10 @@ public enum BrowserPerformance {
         case windowProjections, sidebarProjections, sidebarContentPasses, listProjections, sidebarRebuilds, rowsConfigured, glyphDraws, savesScheduled
     }
     public enum Phase: String, Sendable {
+        case signatureBegin, signatureReady, menusBegin, menusReady, applicationCreated
+        case windowPropertiesReady, nativeWindowReady, layoutBegin, layoutLibraryBegin, layoutLibraryReady, layoutReady
+        case sessionAdoptBegin, sessionCaptured, sessionValidated, sessionSurfacesReady, sessionNavigated, sessionRendered
+        case nativeBrowserBegin, nativeBrowserReady, windowPlacementReady, windowSessionReady
         case main, admission, authentication, runtime, libraryLoaded, cefInitialize, cefInitialized, cefReady
         case applicationLaunched, environment, sessionRead, sessionDecoded, modelRestored, themesLoaded, environmentCreated
         case settingsLoaded, iconPreload, iconsLoaded, profilesBegin, profilesReady, environmentReady, updaterStarted

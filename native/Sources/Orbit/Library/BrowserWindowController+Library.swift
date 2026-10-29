@@ -48,6 +48,15 @@ extension BrowserWindowController {
             submitInput { $0.showLibrary(category) }
         }
         view.onBack = { [weak self] in self?.submitInput { $0.hideLibrary() } }
+    }
+
+    /// Hidden category controls are built once, before their first presentation.
+    func installLibraryContentsIfNeeded() {
+        guard !library.contentsInstalled else { return }
+        library.contentsInstalled = true
+        let view = library.view
+        installDownloadsPane(in: view.body)
+        installArchive(in: view.body)
         view.body.wantsLayer = true
         let historyView = library.historyView
         historyView.translatesAutoresizingMaskIntoConstraints = false
@@ -165,6 +174,7 @@ extension BrowserWindowController {
     /// The Library retains the active Space and profile; no selection is published by this swipe.
     private func presentLibrary(_ category: BrowserLibraryCategory? = nil, interactiveWidth: CGFloat? = nil) {
         guard acceptsCommands, session.activeProfileID != nil else { return }
+        installLibraryContentsIfNeeded()
         if interactiveWidth == nil { sidebar.spaceSwipe.cancel() }
         palette.dismiss(returnFocus: false)
         if library.isPresented, let category, category != library.category, window?.isVisible == true {
@@ -252,7 +262,7 @@ extension BrowserWindowController {
     }
 
     private func finishHidingLibrary() {
-        guard !library.isPresented else { return }
+        guard library.contentsInstalled, !library.isPresented else { return }
         library.displayedProfileID = nil
         if let root = window?.contentView {
             root.addSubview(peek.overlay, positioned: .below, relativeTo: windowShell.floatingBackdrop)

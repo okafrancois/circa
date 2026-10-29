@@ -83,7 +83,7 @@ extension BrowserWindowController {
         if sidebar.isHidden != sidebarHidden { sidebar.isHidden = sidebarHidden }
         sidebar.isShellHidden = !onScreen
         sidebar.setAccessibilityHidden(!onScreen)
-        if downloadsPane.isHidden != paneHidden { downloadsPane.isHidden = paneHidden }
+        if library.contentsInstalled, downloadsPane.isHidden != paneHidden { downloadsPane.isHidden = paneHidden }
     }
 
     /// Site controls anchor to the visible sidebar address field.

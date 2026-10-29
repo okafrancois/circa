@@ -32,6 +32,29 @@ struct NativeLibraryTests {
         return (controller, a, b, other)
     }
 
+    @Test("Startup leaves hidden controls unbuilt and first Library use retains its controls")
+    func deferredStartupControls() async throws {
+        let (controller, _, _, _) = try await fixture()
+        defer { controller.session.close(); controller.window?.close() }
+        #expect(controller.findBarStorage == nil)
+        #expect(!controller.library.contentsInstalled)
+        #expect(controller.library.view.body.subviews.isEmpty)
+        controller.showLibrary(.history)
+        await controller.session.waitForPendingCommands()
+        #expect(controller.library.contentsInstalled)
+        let historyView = controller.library.historyView
+        #expect(historyView.superview === controller.library.view.body)
+        controller.hideLibrary(focus: false)
+        controller.showLibrary(.history)
+        await controller.session.waitForPendingCommands()
+        #expect(controller.library.historyView === historyView)
+        #expect(controller.findBarStorage == nil)
+        let findBar = controller.findBar
+        #expect(findBar.superview === controller.window?.contentView)
+        #expect(findBar.isHidden)
+        #expect(controller.findBar === findBar)
+    }
+
     @Test("Footer and category routes share a single Library, leave the window hidden and return to the page")
     func categoryRouting() async throws {
         let (controller, a, _, _) = try await fixture()

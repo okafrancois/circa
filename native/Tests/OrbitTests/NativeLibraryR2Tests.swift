@@ -351,6 +351,8 @@ struct RoundThree {
     @Test("Layer ordering keeps the Library below the sidebar and Peek's veil above the whole window")
     func overlayOrder() async throws {
         let f = try await LibraryR2Fixture.make()
+        // First access installs the deferred bar in its original stacking position.
+        _ = f.controller.findBar
         let children = try #require(f.controller.window?.contentView?.subviews)
         func index(_ view: NSView) throws -> Int { try #require(children.firstIndex { $0 === view }) }
         #expect(try index(f.controller.contentCard) < index(f.controller.findBar))

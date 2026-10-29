@@ -27,7 +27,11 @@ extension BrowserWindowController {
     func placeFindBar(in container: NSView, over anchor: NSView) {
         guard findBar.superview !== container else { return }
         findBar.removeFromSuperview()
-        container.addSubview(findBar)
+        if container === window?.contentView {
+            container.addSubview(findBar, positioned: .below, relativeTo: library.view)
+        } else {
+            container.addSubview(findBar)
+        }
         NSLayoutConstraint.activate([
             findBar.topAnchor.constraint(equalTo: anchor.topAnchor, constant: 8),
             findBar.trailingAnchor.constraint(equalTo: anchor.trailingAnchor, constant: -8),
@@ -90,7 +94,7 @@ extension BrowserWindowController {
     }
 
     private var isEditingFind: Bool {
-        findBar.searchField.currentEditor() != nil
+        findBarStorage?.searchField.currentEditor() != nil
             && window?.firstResponder === findBar.searchField.currentEditor()
     }
 
@@ -106,11 +110,12 @@ extension BrowserWindowController {
 
     func renderFind() {
         guard let state = findSession.state, let surface = pageCommandSurface() else {
-            findBar.isHidden = true
+            findBarStorage?.isHidden = true
             findOwner = nil
             displayedFindDocumentGeneration = 0
             return
         }
+        guard state.isVisible || findBarStorage != nil else { return }
         let ownerChanged = findOwner !== surface || displayedFindDocumentGeneration != surface.findDocumentGeneration
         placeFindBar(for: surface)
         findOwner = surface

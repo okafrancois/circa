@@ -170,7 +170,7 @@ final class SidebarSpaceSwipeController {
     /// Construct metadata-only native pages while idle. They stay detached, so neutral and
     /// vertical gestures never expose a second list. Tracking still reads a fresh document.
     private func prepareNeighbors(catalog: BrowserCatalogSnapshot, active: SpaceID) {
-        guard let loadDocument,
+        guard sidebar?.window?.isVisible == true, let loadDocument,
               preparationContext?.0 != catalog || preparationContext?.1 != active else { return }
         preparationTask?.cancel()
         preparedDocument = nil

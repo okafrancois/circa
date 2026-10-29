@@ -270,6 +270,8 @@ public final class ChromiumSurface: BrowserEngineSurface {
         hostedWindowToken = window
         isCreationPending = true
         engine?.nativeCreationStarted(token)
+        BrowserPerformance.mark(.nativeBrowserBegin)
+        defer { BrowserPerformance.mark(.nativeBrowserReady) }
         let result = ACRCreateTabSurface(token, profileToken, window, index,
                                          Unmanaged.passUnretained(hostView).toOpaque(), "")
         if result == 0 {

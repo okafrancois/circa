@@ -129,6 +129,48 @@ enum OrbitPerformanceProbe {
                     result["lists"] = await lists(owner, command: command, root: root)
                 } else if name == "ui-quick-wins", ownsWindow(owner) {
                     result["uiQuickWins"] = await uiQuickWins(owner, store: environment.store, command: command)
+                } else if name == "startup-check", ownsWindow(owner, bundleID: "lab.orbit.orbit.perf-startup") {
+                    let document = await environment.store.sessionDocument()
+                    let restored = document.windows.first { $0.id == owner.session.snapshot?.id }
+                    var check: [String: Any] = [
+                        "profiles": document.profiles.count, "spaces": document.spaces.count,
+                        "windows": document.windows.count, "tabs": document.tabs.count,
+                        "activeSpacePreserved": restored?.activeSpaceID == owner.session.snapshot?.activeSpaceID,
+                        "findDeferred": owner.findBarStorage == nil,
+                        "libraryDeferred": !owner.library.contentsInstalled,
+                        "quickWindows": environment.quickWindows.count,
+                        "quickWindowLoaded": environment.quickWindows.values.contains {
+                            $0.window?.isVisible == true && $0.surface?.navigationState.isLoading == false
+                                && $0.surface?.navigationState.committedURL?.host == "127.0.0.1"
+                        }
+                    ]
+                    if command["exercise"] == "1" {
+                        var verified = 0
+                        for space in document.spaces {
+                            guard ownsWindow(owner, bundleID: "lab.orbit.orbit.perf-startup") else { break }
+                            owner.session.activateSpace(space.id)
+                            await owner.session.waitForPendingCommands()
+                            if let surface = owner.session.selectedSurface {
+                                await waitForLoad(surface)
+                                if surface.profileID == space.profileID,
+                                   owner.session.snapshot?.activeSpaceID == space.id { verified += 1 }
+                            }
+                        }
+                        check["verifiedSpaces"] = verified
+                        if ownsWindow(owner, bundleID: "lab.orbit.orbit.perf-startup") {
+                            let begin = ProcessInfo.processInfo.systemUptime
+                            owner.showFind()
+                            await owner.session.waitForPendingCommands()
+                            check["findVisible"] = owner.findBarStorage?.isHidden == false
+                            owner.closeFind()
+                            owner.showLibrary(.history)
+                            await owner.session.waitForPendingCommands()
+                            check["libraryVisible"] = owner.library.isPresented && owner.library.contentsInstalled
+                            check["firstToolsMilliseconds"] = (ProcessInfo.processInfo.systemUptime - begin) * 1000
+                            owner.hideLibrary()
+                        }
+                    }
+                    result["startupCheck"] = check
                 } else if name == "benchmark" {
                     result["benchmark"] = await benchmark(owner, command: command, store: environment.store)
                 } else if name == "url-pill-fixture" {
