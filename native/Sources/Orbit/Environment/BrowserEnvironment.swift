@@ -63,6 +63,7 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
     var shortcutPreferences = BrowserShortcutPreferences()
     var settings = BrowserSettingsRuntime(store: try! BrowserSettingsStore())
     var boosts = BrowserBoostsRuntime()
+    let sync = BrowserSyncRuntime()
     var lastBoostsEnabled = true
     private var history = BrowserHistoryRecorder()
     var favoriteIcons: FavoriteIconStore?
@@ -170,6 +171,8 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
                 } catch { environment.onPersistenceError?(error) }
             }
         }
+        do { try environment.sync.configure(environment, destination: sessionFile.appendingPathExtension("sync.json")) }
+        catch { environment.onPersistenceError?(error) }
         if migratesThemes { environment.scheduleSave() }
         return environment
     }
@@ -633,6 +636,7 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
         guard !settingsRemovalIsRunning else { throw BrowserTerminationPreparationError.commandsDidNotSettle }
         autoArchive.scheduler.stop()
         isFinalizing = true
+        await sync.prepareForTermination()
         saveTask?.cancel()
         await saveTask?.value
         await waitForRetirements()
@@ -649,6 +653,7 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
             autoArchive.scheduler.start()
             themeEditors.thaw()
             isFinalizing = false
+            sync.resumeAfterCancelledTermination()
             throw error
         }
         // Final save done: offline imports may use the session from now on.

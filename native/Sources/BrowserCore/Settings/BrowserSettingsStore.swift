@@ -245,6 +245,11 @@ public actor BrowserSettingsStore {
         } else { document = .init() }
     }
 
+    public func applySync(_ value: BrowserSettingsDocument, expected: BrowserSettingsDocument) throws {
+        guard document == expected else { throw BrowserSyncError.localChange }
+        try publish(value)
+    }
+
     public func snapshot() -> BrowserSettingsDocument { document }
 
     public func updateInteraction(_ edit: @Sendable (inout BrowserInteractionPreferences) -> Void) throws {

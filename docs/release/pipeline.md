@@ -75,3 +75,16 @@ ORBIT-RENAME is merged: packaging uses the Orbit executable, icon and product id
 - After proof: remove test bundles/data/key, dedicated preferences, LaunchServices and TCC
   registrations, and only caches whose embedded app has the exact dedicated test identity.
 - No push, remote tag/release, GitHub secret or runner registration was performed.
+
+## Optional private iCloud organization sync
+- `provisioning_profile` defaults to `null`; releases without it retain the existing signing path.
+- Set it to an external Developer ID provisioning profile path (relative paths resolve beside the
+  configuration). Keep the profile outside Git. Test bundles never receive iCloud capabilities.
+- The release decodes the profile with `security cms -D`, checks expiration, distribution type,
+  team, exact application ID, CloudKit container and Production environment, then embeds it at
+  `Contents/embedded.provisionprofile`. Production Push capability is included when authorized.
+- Nested code is signed first. Only the host receives the profile-authorized cloud entitlements;
+  the signed entitlements and signer certificate are checked against the embedded profile.
+- Before enabling this in a public release, deploy the `OrbitOrganizationV1` record type with its
+  `payload` Bytes field to the container's Production schema. The app uses only the private
+  database and its `OrbitOrganization` custom zone; no public records or Orbit account service.

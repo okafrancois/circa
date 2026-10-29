@@ -66,6 +66,11 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
 
     private var general: some View {
         Group {
+            if model.environment.sync.showsSettings {
+                BrowserSyncSettingsRow(runtime: model.environment.sync) { value in
+                    model.perform { try await model.environment.sync.setEnabled(value) }
+                }
+            }
             panel {
                 settingRow(uiFormat("Automatically update my %@", applicationName)) {
                     BrowserAutomaticUpdateToggle(updater: runtime.updater)
@@ -400,5 +405,33 @@ private struct BrowserAutomaticUpdateToggle: View {
             set: { updater.setAutomaticallyUpdates($0) }))
             .labelsHidden().toggleStyle(.switch).controlSize(.mini)
             .accessibilityIdentifier("settings-automatic-updates")
+    }
+}
+
+@MainActor
+private struct BrowserSyncSettingsRow: View {
+    @ObservedObject var runtime: BrowserSyncRuntime
+    let save: (Bool) -> Void
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text(uiText("Sync with iCloud"))
+                Spacer()
+                Toggle(uiText("Sync with iCloud"), isOn: Binding(get: { runtime.enabled }, set: save))
+                    .labelsHidden().toggleStyle(.switch).controlSize(.mini)
+                    .disabled(!runtime.available).accessibilityIdentifier("settings-icloud-sync")
+            }
+            Text(runtime.statusText).font(.system(size: 11)).foregroundStyle(.secondary)
+                .accessibilityIdentifier("settings-icloud-sync-status")
+        }
+        .padding(12).frame(maxWidth: .infinity, alignment: .leading)
+        .background(OrbitSettingsStyle.panel, in: RoundedRectangle(cornerRadius: 6))
+        .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(OrbitSettingsStyle.border, lineWidth: 1))
+        .alert(uiText("Use a different iCloud account?"), isPresented: $runtime.needsAccountDecision) {
+            Button(uiText("Keep Sync Off"), role: .cancel) {}
+            Button(uiText("Try Again")) { save(true) }
+        } message: {
+            Text(uiText("Your local data belongs to the previous iCloud account. To keep accounts separate, sign back into that account before trying again. Your local data will stay on this Mac."))
+        }
     }
 }

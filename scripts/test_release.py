@@ -78,5 +78,72 @@ class ReleaseTests(unittest.TestCase):
             release.update_info({}, self.config, '0.1.0', 1, None, 'http://127.0.0.1:123/appcast.xml')
 
 
+class CloudProfileTests(unittest.TestCase):
+    config = {'bundle_id': 'io.github.okatech.orbit', 'team_id': '5Y39TTNCM7'}
+
+    def profile(self):
+        from datetime import datetime
+        return {'ExpirationDate': datetime(2099, 1, 1), 'TeamIdentifier': ['5Y39TTNCM7'],
+                'ProvisionsAllDevices': True, 'Entitlements': {
+                    'com.apple.developer.icloud-services': ['CloudKit'],
+                    'com.apple.developer.icloud-container-identifiers': [release.ICLOUD_CONTAINER],
+                    'com.apple.developer.icloud-container-environment': 'Production',
+                    'com.apple.application-identifier': '5Y39TTNCM7.io.github.okatech.orbit',
+                    'com.apple.developer.team-identifier': '5Y39TTNCM7'}}
+
+    def test_exact_production_profile_with_optional_push(self):
+        profile = self.profile()
+        expected = release.cloud_entitlements(profile, self.config)
+        self.assertEqual(expected, profile['Entitlements'])
+        profile['Entitlements']['com.apple.developer.aps-environment'] = 'production'
+        self.assertEqual(release.cloud_entitlements(profile, self.config), profile['Entitlements'])
+        profile['Entitlements']['com.apple.developer.icloud-container-environment'] = ['Development', 'Production']
+        self.assertEqual(release.cloud_entitlements(profile, self.config)['com.apple.developer.icloud-container-environment'], 'Production')
+
+    def test_rejects_mismatched_capabilities_and_distribution(self):
+        from datetime import datetime
+        for key in self.profile()['Entitlements']:
+            profile = self.profile()
+            profile['Entitlements'][key] = 'wrong'
+            with self.subTest(key=key), self.assertRaises(ValueError):
+                release.cloud_entitlements(profile, self.config)
+        for key, value in [('ExpirationDate', datetime(2000, 1, 1)),
+                           ('TeamIdentifier', ['OTHERTEAM']), ('ProvisionsAllDevices', False)]:
+            profile = self.profile(); profile[key] = value
+            with self.subTest(key=key), self.assertRaises(ValueError):
+                release.cloud_entitlements(profile, self.config)
+        for key, value in [('get-task-allow', True), ('com.apple.developer.aps-environment', 'development')]:
+            profile = self.profile(); profile['Entitlements'][key] = value
+            with self.assertRaises(ValueError): release.cloud_entitlements(profile, self.config)
+
+    def test_cloud_entitlements_are_applied_only_to_the_main_app(self):
+        from contextlib import nullcontext
+        import plistlib
+        with tempfile.TemporaryDirectory() as temporary:
+            bundle = Path(temporary) / 'Orbit.app'
+            helper = bundle / 'Contents/Frameworks/Orbit Helper.app/Contents/MacOS/Helper'
+            helper.parent.mkdir(parents=True)
+            helper.write_bytes(b'\xcf\xfa\xed\xfe')
+            observed = []
+            def run(arguments, **kwargs):
+                if '--entitlements' in arguments:
+                    filename = Path(arguments[arguments.index('--entitlements') + 1])
+                    observed.append((Path(arguments[-1]), plistlib.loads(filename.read_bytes())))
+                return b''
+            expected = release.cloud_entitlements(self.profile(), self.config)
+            with patch.object(local_signing, 'configured_identity', return_value=nullcontext(['--sign', 'synthetic'])), patch.object(local_signing, 'run', side_effect=run):
+                local_signing.sign_chromium_bundle(bundle, 'Developer ID Application: Synthetic', expected)
+            self.assertEqual(observed[-1][0], bundle)
+            self.assertTrue(all(observed[-1][1][key] == value for key, value in expected.items()))
+            self.assertTrue(all('com.apple.developer.icloud-services' not in values for path, values in observed[:-1]))
+            self.assertTrue(all(values['com.apple.security.cs.allow-jit'] for _, values in observed))
+
+    def test_no_profile_or_synthetic_bundle_never_embeds_cloud_capabilities(self):
+        self.assertIsNone(release.embed_cloud_profile(Path('/unused'), self.config))
+        self.assertIsNone(release.embed_cloud_profile(Path('/unused'), dict(self.config, provisioning_profile='/missing'), Path('/tmp/synthetic')))
+        with self.assertRaises(ValueError):
+            local_signing.sign_chromium_bundle(Path('/unused'), 'local', {'com.apple.developer.icloud-services': ['CloudKit']})
+
+
 if __name__ == '__main__':
     unittest.main()

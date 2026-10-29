@@ -278,10 +278,12 @@ def configured_identity(name='local'):
         yield ['--sign', matches[0], '--timestamp']
 
 
-def sign_chromium_bundle(bundle, identity_name='local'):
+def sign_chromium_bundle(bundle, identity_name='local', main_entitlements=None):
     """Sign nested Mach-O code, Sparkle services, helpers, frameworks, then the host."""
     import plistlib
     bundle = Path(bundle)
+    if main_entitlements and identity_name == 'local':
+        raise ValueError('Local test signatures cannot claim iCloud capabilities')
     with configured_identity(identity_name) as signing, tempfile.TemporaryDirectory(prefix='orbit-entitlements-') as temporary:
         entitlements = Path(temporary) / 'chromium.plist'
         entitlements.write_bytes(plistlib.dumps({
@@ -289,10 +291,14 @@ def sign_chromium_bundle(bundle, identity_name='local'):
             'com.apple.security.cs.allow-unsigned-executable-memory': True,
             'com.apple.security.cs.disable-library-validation': True,
         }))
+        host_entitlements = Path(temporary) / 'host.plist'
+        host_values = plistlib.loads(entitlements.read_bytes())
+        host_values.update(main_entitlements or {})
+        host_entitlements.write_bytes(plistlib.dumps(host_values))
         def sign_one(path, chromium=False, preserve=False):
             arguments = [CODESIGN, '--force', *signing, '--options', 'runtime']
             if chromium:
-                arguments += ['--entitlements', str(entitlements)]
+                arguments += ['--entitlements', str(host_entitlements if path == bundle else entitlements)]
             elif preserve:
                 arguments += ['--preserve-metadata=entitlements']
             run([*arguments, str(path)], label='nested code signing', timeout=120)

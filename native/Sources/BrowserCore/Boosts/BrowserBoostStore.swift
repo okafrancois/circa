@@ -70,6 +70,17 @@ public actor BrowserBoostStore {
         table = try BrowserBoostMatchTable(profileID: profileID, boosts: document.boosts)
     }
 
+    public func applySync(_ value: BrowserBoostDocument, expected: BrowserBoostDocument) throws {
+        guard document == expected, value.profileID == profileID else { throw BrowserSyncError.localChange }
+        var next = document
+        next.boosts = value.boosts.map { item in
+            var item = item
+            item.revision = document.revision + 1
+            return item
+        }
+        try publish(next)
+    }
+
     public func snapshot() -> BrowserBoostDocument { document }
     public func matchTable() -> BrowserBoostMatchTable { table }
 
