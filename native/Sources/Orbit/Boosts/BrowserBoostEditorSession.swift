@@ -30,12 +30,10 @@ final class BrowserBoostEditorSession {
         return BrowserBoostEditorSession(store: store, boost: boost)
     }
 
-    private func update(_ mutation: @escaping (inout BrowserBoost) -> Void) {
+    private func update(_ mutation: @escaping @Sendable (inout BrowserBoost) -> Void) {
         guard !isClosed, !isDeleting else { return }
         enqueue { [self] in
-            var next = boost
-            mutation(&next)
-            boost = try await store.save(next, expectedRevision: boost.revision)
+            boost = try await store.update(boost.id, mutation: mutation)
         }
     }
 
@@ -52,7 +50,7 @@ final class BrowserBoostEditorSession {
         }
     }
 
-    func edit(_ mutation: @escaping (inout BrowserBoostContent) -> Void) {
+    func edit(_ mutation: @escaping @Sendable (inout BrowserBoostContent) -> Void) {
         update { mutation(&$0.content) }
     }
 
@@ -77,7 +75,7 @@ final class BrowserBoostEditorSession {
         isDeleting = true
         enqueue { [self] in
             do {
-                try await store.remove(boost.id, expectedRevision: boost.revision)
+                try await store.removeCurrent(boost.id)
                 isDeleted = true; isClosed = true
             } catch {
                 isDeleting = false

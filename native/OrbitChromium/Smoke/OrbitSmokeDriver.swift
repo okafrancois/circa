@@ -368,7 +368,9 @@ final class OrbitSmokeDriver: OrbitLaunchHooks {
             return
         }
         if arguments.contains(where: { $0.hasPrefix("--orbit-smoke-daily3") }) {
-            if arguments.contains("--orbit-smoke-daily3-moves") {
+            if arguments.contains("--orbit-smoke-daily3-qa4") {
+                await dailyQA4(environment, first, engine)
+            } else if arguments.contains("--orbit-smoke-daily3-moves") {
                 await dailyQA3Moves(application, environment, first, engine)
             } else if arguments.contains("--orbit-smoke-daily3-surfaces") {
                 await dailyQA3Surfaces(environment, first, engine)

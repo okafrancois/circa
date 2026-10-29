@@ -102,4 +102,54 @@ struct BrowserStandaloneWindowTests {
         try await store.sessionDocument().validate()
     }
 
+    @Test("Removing a standalone's home Space retains its local tabs and selection")
+    func removedHomeSpace() async throws {
+        let store = BrowserStore()
+        let profile = await store.createProfile(name: "Synthetic")
+        let home = try await store.createSpace(name: "Source", profileID: profile)
+        let fallback = try await store.createSpace(name: "Remaining", profileID: profile)
+        let window = try await store.createStandaloneWindow(profileID: profile, homeSpaceID: home)
+        _ = try await store.openTab(url: URL(string: "https://synthetic.test/local")!, from: store.captureContext(in: window), activate: true)
+        let selected = try #require(await store.snapshot(of: window).selectedOccurrenceID)
+        try await store.removeSettingsSpace(home)
+        let snapshot = try await store.snapshot(of: window)
+        #expect(snapshot.activeSpaceID == fallback)
+        #expect(snapshot.selectedOccurrenceID == selected && snapshot.tabs.count == 1)
+        let context = try await store.captureContext(in: window)
+        #expect(try await store.organizationSnapshot(from: context).allTabs.count == 1)
+        let saved = await store.sessionDocument()
+        try saved.validate()
+        let restored = try BrowserStore(restoring: BrowserSessionDocument.decode(saved.encoded()))
+        #expect(try await restored.snapshot(of: window).selectedOccurrenceID == selected)
+    }
+
+    @Test("Home Space removal retains standalone Split occurrences and profile", arguments: [false, true], [false, true])
+    func splitHomeRemoval(otherProfile: Bool, remote: Bool) async throws {
+        let store = BrowserStore()
+        let profile = await store.createProfile(name: "Synthetic")
+        let home = try await store.createSpace(name: "Source", profileID: profile)
+        let nextProfile = otherProfile ? await store.createProfile(name: "Other") : profile
+        let fallback = try await store.createSpace(name: "Remaining", profileID: nextProfile)
+        let window = try await store.createStandaloneWindow(profileID: profile, homeSpaceID: home)
+        for path in ["first", "second"] {
+            _ = try await store.openTab(url: URL(string: "https://synthetic.test/" + path)!, from: store.captureContext(in: window), activate: true)
+        }
+        let before = try await store.snapshot(of: window)
+        let group = try await store.createSplit(before.tabs.map(\.id), from: store.captureContext(in: window))
+        let expected = await store.sessionDocument()
+        let materialized = BrowserSyncMapping.Materialized(profiles: expected.profiles, spaces: expected.spaces.filter { $0.id != home },
+            organization: BrowserOrganizationDocument(tabs: [], folders: [], favorites: [], spaces: [.init(spaceID: fallback, pinned: [], today: [])], archive: [], archivePolicy: .init()), settings: .init(), boosts: [])
+        if remote { try await store.applySync(materialized, expected: expected) }
+        else { try await store.removeSettingsSpace(home) }
+        let after = try await store.snapshot(of: window)
+        #expect(after.activeSpaceID == fallback && after.tabs.map(\.occurrenceID) == before.tabs.map(\.occurrenceID))
+        #expect(after.selectedOccurrenceID == before.selectedOccurrenceID)
+        #expect(try await store.captureContext(in: window).profileID == profile)
+        let organization = try await store.organizationSnapshot(from: store.captureContext(in: window))
+        #expect(organization.today.contains { if case let .split(item) = $0 { return item.group.id == group.0 }; return false })
+        let saved = await store.sessionDocument()
+        try saved.validate()
+        _ = try BrowserStore(restoring: BrowserSessionDocument.decode(saved.encoded()))
+    }
+
 }

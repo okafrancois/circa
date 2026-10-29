@@ -42,6 +42,36 @@ struct BrowserTranslationTests {
         #expect(page.host == nil)
     }
 
+    @Test("Never-site restores every translated document of that profile and host")
+    @MainActor func neverSiteRestoresOtherWindows() async throws {
+        NSApplication.shared.setActivationPolicy(.prohibited)
+        let environment = BrowserEnvironment(engine: PeekSyntheticEngine())
+        let first = try await environment.makeWindow()
+        let second = try await environment.makeWindow()
+        defer { first.window?.close(); second.window?.close() }
+        for (window, path) in [(first, "first"), (second, "second")] {
+            window.openTab(url: URL(string: "https://translation.test/" + path)!)
+            await window.session.waitForPendingCommands()
+            let surface = try #require(window.session.selectedSurface)
+            surface.supportsPageTranslation = true
+            window.translation.render()
+            let page = try #require(window.translation.page)
+            page.detection?.cancel()
+            page.state.detect(source: "de", preferred: ["en"], supported: true)
+            _ = page.state.begin(); page.state.complete()
+        }
+        let menu = try #require(first.translation.makeOptionsMenu())
+        menu.performActionForItem(at: 1)
+        for _ in 0..<50 { await Task.yield() }
+        #expect(first.translation.page?.state.phase == .original)
+        #expect(second.translation.page?.state.phase == .original)
+        #expect(second.session.selectedSurface?.translationRestoreCount == 1)
+        #expect(second.translation.page?.state.siteSuppressed == true)
+        let undo = try #require(first.translation.makeOptionsMenu())
+        undo.performActionForItem(at: 1)
+        #expect(second.translation.page?.state.siteSuppressed == false)
+    }
+
     @Test("Status hit testing chooses its action control before URL editing")
     @MainActor func statusHitTarget() throws {
         let root = SidebarAddressField(frame: NSRect(x: 0, y: 0, width: 300, height: 36))

@@ -329,9 +329,9 @@ final class BrowserTranslationController<Engine: BrowserEngine> {
                     && BrowserSitePreferenceStore.host(document.surface?.navigationState.committedURL) == BrowserSitePreferenceStore.host(url) {
                     document.state.suppressSite(value.neverTranslate)
                     document.onChange?()
+                    if value.neverTranslate { Task { await document.restore() } }
                 }
                 self.popover.close()
-                if value.neverTranslate { Task { await page.restore() } }
                 self.update()
             } catch { self.onPreferenceError?(error) }
         }, settings: { [weak self, weak page] in

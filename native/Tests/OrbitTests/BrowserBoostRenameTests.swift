@@ -31,6 +31,39 @@ struct BrowserBoostRenameTests {
         #expect(await store.snapshot().boosts.first?.title == "Café renamed")
     }
 
+    @Test func syncReplayDoesNotDisableOpenEditor() async throws {
+        let store = try BrowserBoostStore(profileID: ProfileID())
+        let session = try await BrowserBoostEditorSession.create(in: store, url: URL(string: "https://example.test")!, title: "Original")
+        let expected = await store.snapshot()
+        try await store.applySync(expected, expected: expected)
+        session.rename(to: "After replay")
+        session.edit { $0.customCSS = "p { color: green }" }
+        await session.pending?.value
+        #expect(session.error == nil)
+        #expect(await store.snapshot().boosts.first?.title == "After replay")
+        #expect(await store.snapshot().boosts.first?.content.customCSS == "p { color: green }")
+        session.delete()
+        await session.pending?.value
+        #expect(session.isDeleted && session.error == nil)
+        #expect(await store.snapshot().boosts.isEmpty)
+    }
+
+    @Test func remoteChangesSurviveLocalRenameAndDeletionCannotRecreate() async throws {
+        let store = try BrowserBoostStore(profileID: ProfileID())
+        let session = try await BrowserBoostEditorSession.create(in: store, url: URL(string: "https://example.test")!, title: "Original")
+        var remote = session.boost
+        remote.content.customCSS = "p { color: blue }"
+        _ = try await store.save(remote, expectedRevision: remote.revision)
+        session.rename(to: "Local name")
+        await session.pending?.value
+        #expect(session.error == nil && session.boost.content.customCSS == remote.content.customCSS)
+        try await store.removeCurrent(session.boost.id)
+        session.rename(to: "Ignored")
+        await session.pending?.value
+        #expect(session.error as? BrowserBoostError == .staleRevision)
+        #expect(await store.snapshot().boosts.isEmpty)
+    }
+
     @Test func cancelAndEmptyInputNeverWrite() async throws {
         let store = try BrowserBoostStore(profileID: ProfileID())
         let session = try await BrowserBoostEditorSession.create(in: store, url: URL(string: "https://example.test")!, title: "Original")
