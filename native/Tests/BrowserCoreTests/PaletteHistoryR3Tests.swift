@@ -74,6 +74,7 @@ struct PaletteHistoryR3Tests {
         let file = root.appendingPathComponent(profile.rawValue.uuidString).appendingPathComponent("history.sqlite")
         let raw = try HistoryDatabase(url: file, profileID: profile)
         try raw.discardSyncSchemaForLegacyFixture()
+        try raw.discardSuggestionSchemaForLegacyFixture()
         for url in affected {
             try raw.execute("UPDATE pages SET searchURL=? WHERE url=?", [.text(Self.legacySearchURL(url)), .text(url.absoluteString)])
         }

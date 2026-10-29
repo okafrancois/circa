@@ -264,6 +264,23 @@ public actor BrowserHistoryStore {
     static func suggestionStatement(_ query: String, mode: BrowserHistorySearchMode, limit: Int,
                                     now: Date) -> (sql: String, values: [HistoryValue]) {
         let matchTerms = BrowserHistoryMatching.terms(query).filter { !$0.text.isEmpty }
+        if matchTerms.isEmpty {
+            let cap = HistoryValue.number(Double(min(limit, 1000)))
+            return ("""
+                WITH RECURSIVE weights(value) AS (
+                  SELECT MAX(visits+typed*4.0) FROM pages
+                  UNION ALL SELECT (SELECT MAX(visits+typed*4.0) FROM pages WHERE (visits+typed*4.0)<weights.value)
+                  FROM weights WHERE value IS NOT NULL
+                ), candidates AS (
+                  SELECT pages.* FROM weights JOIN pages ON pages.id IN (
+                    SELECT id FROM pages WHERE (visits+typed*4.0)=weights.value ORDER BY last DESC,url ASC LIMIT ?
+                  ) WHERE weights.value IS NOT NULL
+                )
+                SELECT url,title,favicon,last,visits,typed,
+                  (visits+typed*4.0)/(1.0+MAX(0,?-last)/86400.0/7.0) AS score
+                FROM candidates ORDER BY score DESC,last DESC,url ASC LIMIT ?
+                """, [cap, .number(now.timeIntervalSince1970), cap])
+        }
         let terms = matchTerms.map(\.text)
         var values: [HistoryValue] = [.number(now.timeIntervalSince1970)]
         var clauses: [String] = []
@@ -295,10 +312,10 @@ public actor BrowserHistoryStore {
                 firstLong = false
             } else if !BrowserHistoryMatching.usesWordStart(matchTerm, in: matchTerms) {
                 if !hasDriver {
-                    // Symbol-led short query: no token index applies; bounded literal scan.
+                    // Symbol postings retain the original first 10k matching page IDs.
                     hasDriver = true
-                    clauses.append("pages.rowid IN (\(rankedArm("SELECT id,last,visits,typed FROM pages WHERE instr(searchURL,?)>0 OR instr(searchTitle,?)>0 LIMIT ?")))")
-                    values += [.text(term), .text(term), budget] + ranked
+                    clauses.append("pages.rowid IN (\(rankedArm("SELECT id,last,visits,typed FROM pages WHERE id IN (SELECT pageID FROM shortSymbols WHERE term=? ORDER BY pageID LIMIT ?)")))")
+                    values += [.text(term), budget] + ranked
                 }
                 clauses.append("(instr(searchURL,?)>0 OR instr(searchTitle,?)>0)")
                 values += [.text(term), .text(term)]
@@ -451,7 +468,7 @@ final class HistoryDatabase: @unchecked Sendable {
     private var handle: OpaquePointer?
     var changes: Int { Int(sqlite3_changes(handle)) }
 
-    static let currentVersion = 6
+    static let currentVersion = 7
 
     init(openingURL url: URL, flags: Int32) throws {
         // Checked ancestors, single-link database/sidecars, and directory identity before/after open.
@@ -464,6 +481,7 @@ final class HistoryDatabase: @unchecked Sendable {
     convenience init(url: URL, profileID: ProfileID) throws {
         try self.init(openingURL: url, flags: SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_FULLMUTEX)
         do {
+            try registerShortSymbolFunction()
             try execute("PRAGMA synchronous=FULL")
             try execute("PRAGMA secure_delete=ON")
             try execute("PRAGMA temp_store=MEMORY")
@@ -491,6 +509,7 @@ final class HistoryDatabase: @unchecked Sendable {
                         case 3: try migrateToVersionFour()
                         case 4: try migrateToVersionFive()
                         case 5: try migrateToVersionSix(profileID)
+                        case 6: try migrateToVersionSeven()
                         default: throw BrowserHistoryError.unsupportedVersion
                         }
                         migratingVersion += 1
@@ -642,6 +661,42 @@ final class HistoryDatabase: @unchecked Sendable {
             try execute("INSERT INTO historySyncVersions VALUES(?,?,?)", [.text(visit.id.uuidString),
                 .number(event.time.timeIntervalSince1970), .text(event.id.uuidString)])
         }
+    }
+
+    /// Additive acceleration only: original page/visit columns and FTS content stay intact.
+    private func migrateToVersionSeven() throws {
+        try execute("CREATE INDEX pages_weight_last ON pages((visits+typed*4.0) DESC,last DESC,url ASC)")
+        try execute("CREATE TABLE shortSymbols(term TEXT NOT NULL,pageID INTEGER NOT NULL,PRIMARY KEY(term,pageID)) WITHOUT ROWID")
+        try execute("CREATE INDEX shortSymbols_page ON shortSymbols(pageID)")
+        try execute("INSERT OR IGNORE INTO shortSymbols SELECT value,pages.id FROM pages,json_each(orbit_short_symbols(searchURL,searchTitle))")
+        try execute("CREATE TRIGGER shortSymbols_insert AFTER INSERT ON pages BEGIN INSERT OR IGNORE INTO shortSymbols SELECT value,new.id FROM json_each(orbit_short_symbols(new.searchURL,new.searchTitle)); END")
+        try execute("CREATE TRIGGER shortSymbols_delete AFTER DELETE ON pages BEGIN DELETE FROM shortSymbols WHERE pageID=old.id; END")
+        try execute("CREATE TRIGGER shortSymbols_update AFTER UPDATE OF searchURL,searchTitle ON pages WHEN old.searchURL IS NOT new.searchURL COLLATE BINARY OR old.searchTitle IS NOT new.searchTitle COLLATE BINARY BEGIN DELETE FROM shortSymbols WHERE pageID=old.id; INSERT OR IGNORE INTO shortSymbols SELECT value,new.id FROM json_each(orbit_short_symbols(new.searchURL,new.searchTitle)); END")
+    }
+
+    private func registerShortSymbolFunction() throws {
+        let result = withHandle { handle in
+            sqlite3_create_function_v2(handle, "orbit_short_symbols", 2, SQLITE_UTF8 | SQLITE_DETERMINISTIC, nil, { context, _, arguments in
+                guard let context, let arguments else { return }
+                var symbols: Set<String> = []
+                for column in 0..<2 {
+                    guard let bytes = sqlite3_value_text(arguments[column]) else { continue }
+                    let text = String(decoding: UnsafeBufferPointer(start: bytes, count: Int(sqlite3_value_bytes(arguments[column]))), as: UTF8.self)
+                    let scalars = Array(text.unicodeScalars)
+                    for index in scalars.indices {
+                        let scalar = scalars[index]
+                        guard scalar.value < 128, BrowserHistoryMatching.isSeparator(UInt8(scalar.value)) else { continue }
+                        symbols.insert(String(scalar))
+                        if index + 1 < scalars.count { symbols.insert(String(scalar) + String(scalars[index + 1])) }
+                    }
+                }
+                guard let data = try? JSONSerialization.data(withJSONObject: Array(symbols)) else { sqlite3_result_error_nomem(context); return }
+                data.withUnsafeBytes { bytes in
+                    sqlite3_result_text(context, bytes.baseAddress?.assumingMemoryBound(to: CChar.self), Int32(bytes.count), unsafeBitCast(-1, to: sqlite3_destructor_type.self))
+                }
+            }, nil, nil, nil)
+        }
+        guard result == SQLITE_OK else { throw BrowserHistoryError.storageFailure(result) }
     }
 
     static let migrationBatch = 2048

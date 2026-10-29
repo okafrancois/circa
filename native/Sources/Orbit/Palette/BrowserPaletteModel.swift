@@ -2,21 +2,21 @@ import BrowserCore
 import Foundation
 
 /// Result identities include the authority needed for activation, never just a URL.
-enum BrowserPaletteAction: Equatable {
+enum BrowserPaletteAction: Equatable, Sendable {
     case navigate(URL)
     case tab(TabID, windowID: UUID?, spaceID: SpaceID?)
     case archive(TabID)
     case command(BrowserCommandID)
 }
 
-enum BrowserPaletteSection: String, CaseIterable {
+enum BrowserPaletteSection: String, CaseIterable, Sendable {
     case address = "Go to", tabs = "Switch to Tab", pinned = "Pinned & Favorites"
     case history = "History", commands = "Orbit actions", archive = "Archived Tabs", search = "Search"
 
     var localizedTitle: String { uiText(rawValue) }
 }
 
-struct BrowserPaletteResult: Identifiable, Equatable {
+struct BrowserPaletteResult: Identifiable, Equatable, Sendable {
     let id: String
     let title: String
     let detail: String
@@ -77,19 +77,41 @@ enum BrowserPaletteRanking {
         let host: String
     }
 
+    private static func titleAndHost(_ result: BrowserPaletteResult) -> TitleAndHost? {
+        guard result.section != .commands, result.section != .address, result.section != .search,
+              !result.title.isEmpty, let host = result.url?.host?.lowercased(),
+              titleAndHostDeduplicationHosts.contains(host) else { return nil }
+        return TitleAndHost(title: result.title, host: host)
+    }
+
     static func deduplicatingTitlesAndHosts(_ results: [BrowserPaletteResult]) -> [BrowserPaletteResult] {
         var seen: Set<TitleAndHost> = []
-        return results.filter { result in
-            guard result.section != .commands, result.section != .address, result.section != .search,
-                  !result.title.isEmpty, let host = result.url?.host?.lowercased(),
-                  titleAndHostDeduplicationHosts.contains(host) else { return true }
-            return seen.insert(TitleAndHost(title: result.title, host: host)).inserted
+        return results.filter { result in titleAndHost(result).map { seen.insert($0).inserted } ?? true }
+    }
+
+    /// Search fields belong to a candidate revision, not to a comparison or keystroke.
+    struct PreparedCandidate: Sendable {
+        let result: BrowserPaletteResult
+        let title: String
+        let text: String
+        let words: [Substring]
+        let canonical: String?
+        let host: String
+        init(_ result: BrowserPaletteResult) {
+            self.result = result
+            title = BrowserSuggestionText.fold(result.title)
+            text = title + " " + (result.url.map(BrowserSuggestionText.searchableURL) ?? "")
+            words = title.split { !$0.isLetter && !$0.isNumber }
+            canonical = result.url.map(canonicalURL)
+            var value = BrowserSuggestionText.fold(result.url.flatMap { URLComponents(url: $0, resolvingAgainstBaseURL: false)?.host } ?? "")
+            if value.hasPrefix("www.") { value = String(value.dropFirst(4)) }
+            host = value
         }
     }
 
     static func results(query: String, mode: BrowserPaletteMode, resolver: AddressResolver,
                         candidates: [BrowserPaletteResult], history: [BrowserHistorySuggestion],
-                        actions: [BrowserPaletteResult], limit: Int = 40) -> [BrowserPaletteResult] {
+                        actions: [BrowserPaletteResult], limit: Int = 40, prepared: [PreparedCandidate]? = nil) -> [BrowserPaletteResult] {
         let input = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard limit > 0 else { return [] }
         let destination = try? resolver.resolve(input)
@@ -102,26 +124,53 @@ enum BrowserPaletteRanking {
         case nil: typed = nil
         }
         let matchInput = input.replacingOccurrences(of: "^https?://(www\\.)?|^www\\.", with: "", options: .regularExpression)
-        let matches = candidates.enumerated().filter { _, result in
-            BrowserSuggestionText.matches(matchInput, title: result.title, url: result.url)
-        }.sorted { a, b in
-            let left = matchScore(a.element, query: input, destination: destination)
-            let right = matchScore(b.element, query: input, destination: destination)
-            if a.element.section != b.element.section {
-                return a.element.section == .tabs || (a.element.section == .pinned && b.element.section == .archive)
+        let terms = BrowserSuggestionText.terms(matchInput)
+        let scoreTerms = BrowserSuggestionText.terms(input)
+        let folded = BrowserSuggestionText.fold(input)
+        let destinationKey: String?
+        if case .page(let url) = destination { destinationKey = canonicalURL(url) } else { destinationKey = nil }
+        var hostTerm = folded
+        if let range = hostTerm.range(of: "://") { hostTerm = String(hostTerm[range.upperBound...]) }
+        if hostTerm.hasPrefix("www.") { hostTerm = String(hostTerm.dropFirst(4)) }
+        let fields = prepared ?? candidates.map(PreparedCandidate.init)
+        var represented: Set<String> = []
+        var decorated: [(result: BrowserPaletteResult, score: Int, offset: Int)] = []
+        for (offset, field) in fields.enumerated() where terms.allSatisfy({ field.text.contains($0) }) {
+            let result = field.result
+            if result.section != .archive, let key = field.canonical { represented.insert(key) }
+            let score: Int
+            if input.isEmpty { score = 0 }
+            else if result.section == .tabs, let destinationKey, field.canonical == destinationKey { score = 3000 }
+            else if field.title == folded { score = 2000 }
+            else if result.section == .tabs, destinationKey == nil, folded.count >= 3,
+                    !folded.contains(where: \.isWhitespace), !hostTerm.isEmpty, field.host.hasPrefix(hostTerm) { score = 1000 }
+            else { score = scoreTerms.allSatisfy { term in field.words.contains { $0.hasPrefix(term) } } ? 100 : 0 }
+            decorated.append((result, score, offset))
+        }
+        // Pop only the unique prefix we can display. Deduplication happens while popping, so
+        // arbitrarily many duplicate rows can never hide the next distinct candidate.
+        func prefix(_ sections: Set<BrowserPaletteSection>, excluding: [BrowserPaletteResult] = []) -> [BrowserPaletteResult] {
+            var heap = BrowserRankingHeap(decorated.filter { sections.contains($0.result.section) }) { a, b in
+                if a.result.section != b.result.section { return a.result.section == .tabs }
+                if a.score != b.score { return a.score > b.score }
+                if a.result.scopePriority != b.result.scopePriority { return a.result.scopePriority < b.result.scopePriority }
+                return a.offset < b.offset
             }
-            if left != right { return left > right }
-            if a.element.scopePriority != b.element.scopePriority { return a.element.scopePriority < b.element.scopePriority }
-            return a.offset < b.offset
-        }.map(\.element)
-        var represented = Set(matches.filter { $0.section != .archive }.compactMap { $0.url.map(canonicalURL) })
+            var seen = Set(excluding.compactMap(titleAndHost))
+            var output: [BrowserPaletteResult] = []
+            while output.count < limit, let item = heap.popFirst() {
+                if let key = titleAndHost(item.result), !seen.insert(key).inserted { continue }
+                output.append(item.result)
+            }
+            return output
+        }
         if case .page(let url) = destination { represented.insert(canonicalURL(url)) }
         let historyRows: [BrowserPaletteResult] = history.filter { represented.insert(canonicalURL($0.url)).inserted }.map {
             .init(id: "history:\($0.url.absoluteString)", title: $0.title.isEmpty ? displayURL($0.url) : $0.title,
                   detail: displayURL($0.url), section: .history, action: .navigate($0.url),
                   faviconReference: $0.faviconReference)
         }
-        var rows = matches.filter { $0.section == .tabs || $0.section == .pinned }
+        var rows = prefix([.tabs, .pinned])
         rows += historyRows
         let hasPageMatches = !rows.isEmpty
         let isSingleTerm = BrowserSuggestionText.terms(input).count == 1
@@ -136,7 +185,7 @@ enum BrowserPaletteRanking {
             let basic = commandRows.filter { $0.action == .command(.newWindow) || $0.action == .command(.newIncognitoWindow) || $0.action == .command(.manageExtensions) || $0.action == .command(.addExtension) }
             rows = basic + rows + commandRows.filter { !basic.contains($0) }
         } else { rows += commandRows }
-        rows += matches.filter { $0.section == .archive }
+        rows += prefix([.archive], excluding: rows)
         rows = deduplicatingTitlesAndHosts(rows)
         // URL input remains authoritative (an exact open URL may switch to its live tab).
         // Text matches autocomplete first; the explicit web search is always the last row.
@@ -258,15 +307,6 @@ enum BrowserPaletteRanking {
         if let range = term.range(of: "://") { term = String(term[range.upperBound...]) }
         if term.hasPrefix("www.") { term = String(term.dropFirst(4)) }
         return !term.isEmpty && host.hasPrefix(term)
-    }
-
-    private static func matchScore(_ result: BrowserPaletteResult, query: String, destination: AddressDestination?) -> Int {
-        guard !query.isEmpty else { return 0 }
-        if result.section == .tabs, case .page(let url) = destination, result.url.map(canonicalURL) == canonicalURL(url) { return 3000 }
-        if BrowserSuggestionText.fold(result.title) == BrowserSuggestionText.fold(query) { return 2000 }
-        if isStrongMatch(result, query: query, destination: destination) { return 1000 }
-        let words = BrowserSuggestionText.fold(result.title).split { !$0.isLetter && !$0.isNumber }
-        return BrowserSuggestionText.terms(query).allSatisfy { term in words.contains { $0.hasPrefix(term) } } ? 100 : 0
     }
 
     static func localCandidates(_ snapshot: BrowserOrganizationSnapshot) -> [BrowserPaletteResult] {

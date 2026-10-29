@@ -12,6 +12,7 @@ final class BrowserPaletteFaviconCache {
     private var images: [URL: NSImage] = [:]
     private var rejected: Set<URL> = []
     private var pending: [URL: Task<Void, Never>] = [:]
+    private var notificationTask: Task<Void, Never>?
     var onChange: (() -> Void)?
 
     func image(for image: BrowserFaviconImage) -> NSImage? {
@@ -21,6 +22,7 @@ final class BrowserPaletteFaviconCache {
 
     func waitForPendingImages() async {
         for task in pending.values { await task.value }
+        await notificationTask?.value
     }
 
     func image(for url: URL) -> NSImage? {
@@ -34,13 +36,22 @@ final class BrowserPaletteFaviconCache {
             if let decoded {
                 if images.count >= 256 { images.removeAll(keepingCapacity: true) }
                 images[url] = NSImage(cgImage: decoded.image, size: NSSize(width: OrbitTokens.Metrics.CommandBar.iconTileSize, height: OrbitTokens.Metrics.CommandBar.iconTileSize))
-                onChange?()
+                if notificationTask == nil {
+                    notificationTask = Task { [weak self] in
+                        await Task.yield()
+                        guard !Task.isCancelled, let self else { return }
+                        notificationTask = nil
+                        onChange?()
+                    }
+                }
             } else { rejected.insert(url) }
         }
         return nil
     }
 
     func clear() {
+        notificationTask?.cancel()
+        notificationTask = nil
         for task in pending.values { task.cancel() }
         pending.removeAll()
         images.removeAll()

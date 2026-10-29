@@ -371,6 +371,8 @@ private final class HistoryTestSQL {
     }
     func makeLegacy(version: Int) throws {
         try execute("""
+            DROP TRIGGER shortSymbols_insert; DROP TRIGGER shortSymbols_delete; DROP TRIGGER shortSymbols_update;
+            DROP TABLE shortSymbols; DROP INDEX pages_weight_last;
             DROP TABLE historySyncEvents; DROP TABLE historySyncBatches;
             DROP TABLE historySyncState; DROP TABLE historySyncVersions;
             DROP TRIGGER pages_insert; DROP TRIGGER pages_delete; DROP TRIGGER pages_update;

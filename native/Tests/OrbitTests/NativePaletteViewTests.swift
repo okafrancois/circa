@@ -51,6 +51,22 @@ extension NativeWebKitTests {
 @Suite("Native palette reusable view", .serialized)
 @MainActor
 struct NativePaletteViewTests {
+    @Test("Unchanged presentation and selection do not reconfigure cells; one icon changes one row")
+    func presentationDiff() throws {
+        let h = PaletteViewHarness(); defer { h.close() }
+        let rows = (0..<40).map { paletteViewResult($0) }
+        h.render(rows)
+        let cells = (0..<h.table.numberOfRows).compactMap { h.table.view(atColumn: 0, row: $0, makeIfNecessary: false) as? PaletteResultCell }
+        let before = cells.map(\.configurationCount)
+        for _ in 0..<10 { h.render(rows) }
+        #expect(cells.map(\.configurationCount) == before)
+        h.view.updateSelection(1)
+        #expect(cells.map(\.configurationCount) == before)
+        h.view.favicons[rows[0].id] = NSImage(size: NSSize(width: 16, height: 16))
+        h.render(rows, selected: 1)
+        #expect(zip(cells, before).reduce(0) { $0 + $1.0.configurationCount - $1.1 } == 1)
+    }
+
     @Test("Measured header and compact result geometry keep material selection and real 16 point favicons")
     func measuredDailyGeometry() throws {
         let h = PaletteViewHarness()

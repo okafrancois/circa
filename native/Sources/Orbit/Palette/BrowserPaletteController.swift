@@ -17,6 +17,7 @@ final class BrowserPaletteController<Engine: BrowserEngine> {
     private(set) var results: [BrowserPaletteResult] = []
     private(set) var selection = BrowserPaletteSelection()
     private var candidates: [BrowserPaletteResult] = []
+    private var preparedCandidates: [BrowserPaletteRanking.PreparedCandidate] = []
     private var history: [BrowserHistorySuggestion] = []
     private var availableActions: [BrowserPaletteResult] = []
     private var queryTask: Task<Void, Never>?
@@ -101,7 +102,7 @@ final class BrowserPaletteController<Engine: BrowserEngine> {
         context = owner.session.paletteContext
         sourceContext = context
         target = nil
-        candidates = owner.session.organization.map(BrowserPaletteRanking.localCandidates) ?? []
+        installCandidates(owner.session.organization.map(BrowserPaletteRanking.localCandidates) ?? [])
         history = []
         availableActions = registry.definitions.sorted {
             BrowserDailyCommands.priority($0.id) < BrowserDailyCommands.priority($1.id)
@@ -169,7 +170,7 @@ final class BrowserPaletteController<Engine: BrowserEngine> {
             let changedProfile = ready.profileID != sourceContext?.profileID
             sourceContext = ready
             if changedProfile { history = []; faviconCache.clear() }
-            candidates = owner?.session.organization.map(BrowserPaletteRanking.localCandidates) ?? []
+            installCandidates(owner?.session.organization.map(BrowserPaletteRanking.localCandidates) ?? [])
             loadDocument(for: ready)
             query(draft, preserveSelection: !changedProfile, userInitiated: false)
         } else { renderResults() }
@@ -187,10 +188,22 @@ final class BrowserPaletteController<Engine: BrowserEngine> {
             let mapping = Dictionary(uniqueKeysWithValues: windows.compactMap { window -> (WindowID, UUID)? in
                 guard let id = window.session.snapshot?.id else { return nil }; return (id, window.id)
             })
-                candidates = BrowserPaletteRanking.candidates(document: document, profileID: ready.profileID,
-                                                          windowID: ready.windowID, spaceID: ready.spaceID, windowIDs: mapping)
+            let computed = await Task.detached(priority: .userInitiated) {
+                let candidates = BrowserPaletteRanking.candidates(document: document, profileID: ready.profileID,
+                    windowID: ready.windowID, spaceID: ready.spaceID, windowIDs: mapping)
+                return (candidates, candidates.map(BrowserPaletteRanking.PreparedCandidate.init))
+            }.value
+            guard !Task.isCancelled, isPresented, presentation == ticket,
+                  sourceContext?.profileID == ready.profileID, sourceContext?.spaceID == ready.spaceID else { return }
+            candidates = computed.0
+            preparedCandidates = computed.1
             rebuild(preserveSelection: true)
         }
+    }
+
+    private func installCandidates(_ next: [BrowserPaletteResult]) {
+        candidates = next
+        preparedCandidates = next.map(BrowserPaletteRanking.PreparedCandidate.init)
     }
 
     func query(_ text: String, preserveSelection: Bool = false, userInitiated: Bool = true) {
@@ -252,7 +265,8 @@ final class BrowserPaletteController<Engine: BrowserEngine> {
         let selectedID = preserveSelection && selectionWasMoved && results.indices.contains(selection.index) ? results[selection.index].id : nil
         results = siteSearch?.results(query: draft) ?? BrowserPaletteRanking.results(query: draft, mode: mode, resolver: owner.addressResolver,
                                                 candidates: opensEmptyAddress ? candidates.filter { $0.url?.absoluteString != "about:blank" } : candidates,
-                                                history: history, actions: opensEmptyAddress && draft.isEmpty ? [] : availableActions)
+                                                history: history, actions: opensEmptyAddress && draft.isEmpty ? [] : availableActions,
+                                                prepared: opensEmptyAddress ? preparedCandidates.filter { $0.result.url?.absoluteString != "about:blank" } : preparedCandidates)
         if let selectedID, let index = results.firstIndex(where: { $0.id == selectedID }) { selection.select(index, count: results.count) }
         else { selection.reset() }
         renderResults()
@@ -459,6 +473,7 @@ final class BrowserPaletteController<Engine: BrowserEngine> {
         context = nil
         sourceContext = nil
         candidates = []
+        preparedCandidates = []
         history = []
         results = []
         if wasPresented, returnFocus, let owner, owner.window?.isKeyWindow == true {

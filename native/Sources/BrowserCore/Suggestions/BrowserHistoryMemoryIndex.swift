@@ -51,6 +51,13 @@ public struct BrowserHistoryMemoryIndex: Sendable {
         }
     }
 
+    public struct QueryCache: Sendable {
+        fileprivate var revision: UUID?
+        fileprivate var terms: [BrowserHistoryMatching.Term] = []
+        fileprivate var matches: [Int] = []
+        public init() {}
+    }
+    private var revision = UUID()
     public let profileID: ProfileID
     public let capacity: Int
     private var entries: [Entry] = []
@@ -74,6 +81,7 @@ public struct BrowserHistoryMemoryIndex: Sendable {
 
     /// Applies an authoritative aggregate read back after a committed write.
     public mutating func upsert(_ page: BrowserHistoryIndexedPage, now: Double) {
+        revision = UUID()
         let key = page.url.absoluteString
         if let position = positions[key] { entries[position] = Entry(page); return }
         guard page.isSignificant(now: now) else { return }
@@ -84,31 +92,53 @@ public struct BrowserHistoryMemoryIndex: Sendable {
     /// Same membership, bonus and ordering as `BrowserHistoryStore.suggestions(_:mode: .substring)`,
     /// restricted to the indexed pages.
     public func suggestions(_ query: String, limit: Int = 12, now: Date = Date()) -> [BrowserHistorySuggestion] {
+        var cache = QueryCache()
+        return suggestions(query, cache: &cache, limit: limit, now: now)
+    }
+
+    /// Reuses membership, never scores: time-dependent frecency is evaluated at the caller's
+    /// exact timestamp. A short word becoming a substring can widen membership and must rescan.
+    public func suggestions(_ query: String, cache: inout QueryCache, limit: Int = 12, now: Date = Date()) -> [BrowserHistorySuggestion] {
         guard limit > 0 else { return [] }
         let terms = BrowserHistoryMatching.terms(query).filter { !$0.bytes.isEmpty }
         let first = terms.first?.bytes ?? []
         let timestamp = now.timeIntervalSince1970
         var ranked: [(bonus: Int, score: Double, index: Int)] = []
-        for (index, entry) in entries.enumerated() {
+        let canNarrow = cache.revision == revision && cache.terms.count == terms.count
+            && zip(cache.terms, terms).allSatisfy { old, new in
+                new.bytes.starts(with: old.bytes)
+                    && BrowserHistoryMatching.usesWordStart(old, in: cache.terms) == BrowserHistoryMatching.usesWordStart(new, in: terms)
+            }
+        let sameMembership = cache.revision == revision && cache.terms == terms
+        let indices = canNarrow ? cache.matches : Array(entries.indices)
+        var matches: [Int] = []
+        for index in indices {
+            let entry = entries[index]
             let quality: Int? = entry.searchURL.withUnsafeBufferPointer { url in
                 entry.searchTitle.withUnsafeBufferPointer { title in
-                    guard BrowserHistoryMatching.matches(searchURL: url, searchTitle: title, terms: terms) else { return nil }
+                    guard sameMembership || BrowserHistoryMatching.matches(searchURL: url, searchTitle: title, terms: terms) else { return nil }
                     return BrowserHistoryMatching.bonus(searchURL: url, searchTitle: title, first: first)
                 }
             }
             guard let quality else { continue }
+            matches.append(index)
             let page = entry.page
             ranked.append((quality, BrowserHistoryMatching.frecency(visits: page.visitCount, typed: page.typedCount,
                                                                     last: page.lastVisitedAt, now: timestamp), index))
         }
-        ranked.sort { a, b in
+        cache.revision = revision
+        cache.terms = terms
+        cache.matches = matches
+        var heap = BrowserRankingHeap(ranked) { a, b in
             if a.bonus != b.bonus { return a.bonus > b.bonus }
             if a.score != b.score { return a.score > b.score }
             let left = entries[a.index], right = entries[b.index]
             if left.page.lastVisitedAt != right.page.lastVisitedAt { return left.page.lastVisitedAt > right.page.lastVisitedAt }
             return left.urlBytes.lexicographicallyPrecedes(right.urlBytes)
         }
-        return ranked.prefix(min(limit, 1000)).map { item in
+        var selected: [(bonus: Int, score: Double, index: Int)] = []
+        while selected.count < min(limit, 1000), let item = heap.popFirst() { selected.append(item) }
+        return selected.map { item in
             let page = entries[item.index].page
             return BrowserHistorySuggestion(profileID: profileID, url: page.url, title: page.title,
                 faviconReference: page.faviconReference, visitCount: page.visitCount, typedCount: page.typedCount,

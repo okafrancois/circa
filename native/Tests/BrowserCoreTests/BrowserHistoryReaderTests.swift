@@ -125,7 +125,6 @@ struct BrowserHistoryReaderTests {
         try await store.close()
         let file = root.appendingPathComponent(id.rawValue.uuidString).appendingPathComponent("history.sqlite")
         let raw = try HistoryDatabase(url: file, profileID: id)
-            try raw.discardSyncSchemaForLegacyFixture()
         try Self.populate(raw, pages: 100_000, legacyEvery: 0)
         try raw.close()
         let reopened = try BrowserHistoryStore(profileID: id, policy: .persistent, directory: root)
@@ -161,6 +160,7 @@ struct BrowserHistoryReaderTests {
             let file = folder.appendingPathComponent("history.sqlite")
             let raw = try HistoryDatabase(url: file, profileID: id)
             try raw.discardSyncSchemaForLegacyFixture()
+            try raw.discardSuggestionSchemaForLegacyFixture()
             for statement in ["DROP TRIGGER titleWords_insert", "DROP TRIGGER titleWords_delete", "DROP TRIGGER titleWords_update",
                               "DROP TABLE titleWords"] { try raw.execute(statement) }
             try Self.populate(raw, pages: 100_000, legacyEvery: legacyEvery)

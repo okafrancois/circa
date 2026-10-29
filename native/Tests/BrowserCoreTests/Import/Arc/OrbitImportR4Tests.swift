@@ -266,6 +266,8 @@ struct OrbitImportR4Tests {
         let database = location.historyDatabase(for: profile)
         // Recreate the v4 schema and version markers on a populated database.
         #expect(try sqlite(database.path, [
+            "DROP TRIGGER shortSymbols_insert", "DROP TRIGGER shortSymbols_delete", "DROP TRIGGER shortSymbols_update",
+            "DROP TABLE shortSymbols", "DROP INDEX pages_weight_last",
             "DROP TABLE historySyncEvents", "DROP TABLE historySyncBatches",
             "DROP TABLE historySyncState", "DROP TABLE historySyncVersions",
             "DROP TRIGGER pages_update", "DROP TRIGGER titleWords_update",
