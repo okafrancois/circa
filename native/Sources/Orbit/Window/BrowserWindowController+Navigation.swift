@@ -97,7 +97,6 @@ extension BrowserWindowController {
 
     func refreshNavigation(for surface: Surface) {
         guard owns(surface) else { return }
-        rebuildTabStrip()
         guard session.selectedSurface === surface else { return }
         refreshPageZoom()
         renderLoadingIndicator()

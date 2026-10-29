@@ -368,6 +368,8 @@ final class BrowserSidebarView: NSView, SidebarListHost {
     }
     private var contentInputs: ContentInputs?
     private var cachedContent = SidebarListContent.empty
+    private var metadataIndex: BrowserOrganizationMetadataIndex?
+    private var contentIndices: [BrowserOrganizationNode: Int] = [:]
 
     /// Surface updates (loading progress, titles) re-render often: the content is rebuilt only
     /// when the snapshot, the selection or a live title changed.
@@ -387,7 +389,36 @@ final class BrowserSidebarView: NSView, SidebarListHost {
         contentInputs = inputs
         cachedContent = SidebarListContent(snapshot: organization, selection: selection, liveTitle: { titles[$0.id] },
                                           liveActivity: { activities[$0.id] ?? .init() })
+        metadataIndex = organization.map(BrowserOrganizationMetadataIndex.init)
+        contentIndices = Dictionary(uniqueKeysWithValues: cachedContent.entries.enumerated().map { ($0.element.node, $0.offset) })
         return cachedContent
+    }
+
+    /// Only plain tab rows use this path. Composite rows retain the full projection fallback.
+    func applyMetadata(_ ids: Set<TabID>, organization next: BrowserOrganizationSnapshot?) {
+        guard let next, let current = organization, next.windowID == current.windowID,
+              next.spaceID == current.spaceID, next.profileID == current.profileID else { return }
+        if ids.contains(where: { id in
+            metadataIndex?.requiresCompositeProjection(id) == true
+        }) {
+            render(catalog: renderedCatalog, activeSpaceID: activeSpaceID, organization: next)
+            return
+        }
+        organization = next
+        contentInputs = nil
+        var updates: [SidebarListEntry] = []
+        let multi = selection.nodes.count >= 2 ? selection.nodes : []
+        for id in ids {
+            guard let index = contentIndices[.tab(id)], let tab = metadataIndex?.tab(id, in: next) else { continue }
+            let old = cachedContent.entries[index]
+            let row = SidebarListContent.tabItem(tab, multi: multi, section: old.section,
+                liveTitle: tab.occurrenceID == nil ? nil : liveTitle(tab),
+                activity: tab.occurrenceID == nil ? .init() : liveActivity(tab))
+            let entry = SidebarListEntry(node: old.node, section: old.section, ancestors: old.ancestors, content: .tab(row))
+            if entry != old { cachedContent.entries[index] = entry; updates.append(entry) }
+        }
+        if !updates.isEmpty { BrowserPerformance.count(.sidebarContentPasses) }
+        page.list.applyMetadata(updates)
     }
 
     /// Re-renders after a local selection change, without waiting for the session.

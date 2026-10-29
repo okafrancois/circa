@@ -51,10 +51,11 @@ extension BrowserStore {
 
     /// Yields the organization revision after every change visible in some window's snapshot,
     /// including occurrences opened or closed by another window. Values may be coalesced.
-    public func organizationChanges() -> AsyncStream<UInt64> {
+    public func organizationChanges(in windowID: WindowID? = nil) -> AsyncStream<UInt64> {
         let (stream, continuation) = AsyncStream<UInt64>.makeStream(bufferingPolicy: .bufferingNewest(1))
         let id = UUID()
         organizationObservers[id] = continuation
+        organizationObserverWindows[id] = windowID
         continuation.onTermination = { [weak self] _ in
             Task { await self?.removeOrganizationObserver(id) }
         }
@@ -65,13 +66,27 @@ extension BrowserStore {
 
     func removeOrganizationObserver(_ id: UUID) {
         organizationObservers.removeValue(forKey: id)
+        organizationObserverWindows.removeValue(forKey: id)
     }
 
-    func publishOrganizationChange() {
-        organization.normalizeArchivedSpaces()
+    func publishOrganizationChange(metadata: Set<TabID>? = nil) {
+        if metadata == nil { organization.normalizeArchivedSpaces() }
         BrowserPerformance.count(.organizationPublications)
         organizationRevision &+= 1
-        for continuation in organizationObservers.values { continuation.yield(organizationRevision) }
+        if let metadata {
+            organizationMetadataHistory.append((organizationRevision, metadata))
+            if organizationMetadataHistory.count > 256 {
+                organizationMetadataFloor = organizationMetadataHistory.removeFirst().revision
+            }
+        } else {
+            organizationMetadataFloor = organizationRevision
+            organizationMetadataHistory.removeAll(keepingCapacity: true)
+        }
+        for (id, continuation) in organizationObservers {
+            if let metadata, let windowID = organizationObserverWindows[id],
+               !metadata.contains(where: { metadataIsVisible($0, in: windowID) }) { continue }
+            continuation.yield(organizationRevision)
+        }
     }
 
     // MARK: Queries
@@ -163,8 +178,19 @@ extension BrowserStore {
                           expecting expected: BrowserOrganizationSnapshot? = nil,
                           admission: BrowserSidebarSelectionAdmission? = nil) throws -> BrowserWindowState {
         guard admission?.isValid != false else { return try captureWindowState(in: context.windowID) }
-        if let expected, try organizationSnapshot(from: context) != expected {
-            throw BrowserOrganizationError.notVisibleInContext
+        if var expected {
+            // A filtered metadata publication must not invalidate an unrelated window's input.
+            // Structural history (including A→B→A) still requires the exact causal revision.
+            if expected.organizationRevision >= organizationMetadataFloor,
+               !organizationMetadataHistory.contains(where: { entry in
+                   entry.revision > expected.organizationRevision
+                       && entry.tabs.contains { metadataIsVisible($0, in: context.windowID) }
+               }) {
+                expected.organizationRevision = organizationRevision
+            }
+            if try organizationSnapshot(from: context) != expected {
+                throw BrowserOrganizationError.notVisibleInContext
+            }
         }
         let window = try organizationWindow(context)
         let section = try visibleSection(of: .tab(id), in: context)
@@ -366,8 +392,13 @@ extension BrowserStore {
         var next = organization
         next.changes = BrowserOrganizationChangeSet()
         try mutate(&next)
-        next.normalizeSplits()
-        next.normalizeArchivedSpaces()
+        let metadataOnly = !next.changes.tabMetadata.isEmpty && next.changes.nodes.isEmpty
+            && next.changes.tabFields.isEmpty && next.changes.folderTitles.isEmpty
+            && next.changes.splits.isEmpty && next.changes.archive.isEmpty && !next.changes.metadata
+        if !metadataOnly {
+            next.normalizeSplits()
+            next.normalizeArchivedSpaces()
+        }
         let changes = next.changes
         guard !changes.isEmpty else { return nil }
         if validating { try validateOrganization(next) }
@@ -393,7 +424,7 @@ extension BrowserStore {
                 spaceID: context.spaceID, patch: patch, liveTabs: effects?.liveTabs ?? [],
                 selectedTab: displaced), in: context.windowID)
         }
-        publishOrganizationChange()
+        publishOrganizationChange(metadata: metadataOnly ? changes.tabMetadata : nil)
         return patch
     }
 

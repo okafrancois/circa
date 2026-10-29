@@ -4,6 +4,7 @@ import Foundation
 struct BrowserOrganizationChangeSet: Sendable {
     var nodes: Set<BrowserOrganizationNode> = []
     var tabFields: Set<TabID> = []
+    var tabMetadata: Set<TabID> = []
     var folderTitles: Set<FolderID> = []
     var splits: Set<SplitGroupID> = []
     var archive: Set<TabID> = []
@@ -11,7 +12,7 @@ struct BrowserOrganizationChangeSet: Sendable {
     var metadata = false
 
     var isEmpty: Bool {
-        nodes.isEmpty && tabFields.isEmpty && folderTitles.isEmpty && splits.isEmpty && archive.isEmpty && !metadata
+        nodes.isEmpty && tabFields.isEmpty && tabMetadata.isEmpty && folderTitles.isEmpty && splits.isEmpty && archive.isEmpty && !metadata
     }
 }
 
@@ -296,7 +297,7 @@ struct BrowserOrganizationState: Sendable {
         if tab.customTitle != before.customTitle || tab.pinnedURL != before.pinnedURL {
             changes.tabFields.insert(id)
         }
-        if tab.url != before.url || tab.pageTitle != before.pageTitle { changes.metadata = true }
+        if tab.url != before.url || tab.pageTitle != before.pageTitle { changes.tabMetadata.insert(id) }
     }
 
     /// Not tracked: viewing time is neither visible in snapshots nor undoable.

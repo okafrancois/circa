@@ -15,6 +15,7 @@ final class FavoriteIconPipeline<Surface: BrowserEngineSurface> {
         return inlineImage(url)
     }
     var onChange: (() -> Void)?
+    var onTabChange: ((TabID) -> Void)?
     var store: FavoriteIconStore?
     var memoryCache = SidebarIconMemoryCache()
     private struct CachedIcon {
@@ -111,6 +112,7 @@ final class FavoriteIconPipeline<Surface: BrowserEngineSurface> {
                 self.cachedIcons[tab.id]?.image = image
             }
             self.onChange?()
+            self.onTabChange?(tab.id)
         }
         entries[tab.id]?.task = task
         return previous?.image ?? cachedImage
@@ -131,6 +133,7 @@ final class FavoriteIconPipeline<Surface: BrowserEngineSurface> {
             self.cachedIcons[tab.id]?.task = nil
             if let image { self.memoryCache.put(image, profile: profile, home: home) }
             self.onChange?()
+            self.onTabChange?(tab.id)
         }
     }
 

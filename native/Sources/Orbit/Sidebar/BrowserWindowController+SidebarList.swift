@@ -37,19 +37,20 @@ extension BrowserWindowController {
             return SidebarTabActivity(favicon: icon, isLoading: surface.navigationState.isLoading && !preservingSleep,
                                       isAudible: media?.isAudible ?? media?.isAudioPlaying, isAudioMuted: media?.isAudioMuted)
         }
-        sidebarIcons.onChange = { [weak self] in
-            self?.rebuildTabStrip()
+        sidebarIcons.onTabChange = { [weak self] id in
+            self?.sidebarMetadataIDs.insert(id)
+            self?.scheduleSidebarMetadata()
             self?.folderPreview.view.refreshImages()
         }
         let previousMediaHook = siteControls.onMediaStateChange
         siteControls.onMediaStateChange = { [weak self] surface, state in
             previousMediaHook?(surface, state)
             guard let self, owns(surface) else { return }
-            rebuildTabStrip()
+            queueSidebarMetadata(for: surface)
         }
         sidebarActivityObserver = engineEventHooks.observe { [weak self] surface, event in
             guard let self, owns(surface) else { return }
-            rebuildTabStrip()
+            queueSidebarMetadata(for: surface)
             if event == .stateChanged || event == .navigationFinished { siteControls.refreshMedia(surface) }
         }
         sidebar.onToggleTabAudio = { [weak self] id in

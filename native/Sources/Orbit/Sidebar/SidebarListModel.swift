@@ -110,6 +110,17 @@ struct SidebarListContent: Equatable {
         entries.first { $0.node == node }
     }
 
+    static func tabItem(_ tab: BrowserOrganizationTabItem, multi: Set<BrowserOrganizationNode>,
+                        section: SidebarListSection, liveTitle: String?, activity: SidebarTabActivity) -> SidebarTabItem {
+        SidebarTabItem(id: tab.id, occurrenceID: tab.occurrenceID,
+            title: tab.customTitle ?? liveTitle.flatMap { $0.isEmpty ? nil : $0 }
+                ?? tab.pageTitle ?? tab.url.host ?? SidebarListStrings.newTab,
+            selected: tab.isSelected, isMultiSelected: multi.contains(.tab(tab.id)), isPinned: section == .pinned,
+            isAwayFromPinnedURL: section == .pinned && tab.isAwayFromPinnedURL,
+            isOpenInAnotherWindow: tab.isOpenInAnotherWindow && !tab.isLoadedInThisWindow,
+            isLoadedInThisWindow: tab.isLoadedInThisWindow, activity: activity)
+    }
+
     init(snapshot: BrowserOrganizationSnapshot?, selection: BrowserOrganizationSelection = .init(),
          liveTitle: (BrowserOrganizationTabItem) -> String? = { _ in nil },
          liveActivity: (BrowserOrganizationTabItem) -> SidebarTabActivity = { _ in .init() }) {
@@ -124,14 +135,7 @@ struct SidebarListContent: Equatable {
             for item in items {
                 switch item {
                 case let .tab(tab):
-                    let title = tab.customTitle ?? liveTitle(tab).flatMap { $0.isEmpty ? nil : $0 }
-                        ?? tab.pageTitle ?? tab.url.host ?? SidebarListStrings.newTab
-                    let row = SidebarTabItem(
-                        id: tab.id, occurrenceID: tab.occurrenceID, title: title, selected: tab.isSelected,
-                        isMultiSelected: multi.contains(.tab(tab.id)), isPinned: section == .pinned,
-                        isAwayFromPinnedURL: section == .pinned && tab.isAwayFromPinnedURL,
-                        isOpenInAnotherWindow: tab.isOpenInAnotherWindow && !tab.isLoadedInThisWindow,
-                        isLoadedInThisWindow: tab.isLoadedInThisWindow, activity: liveActivity(tab))
+                    let row = Self.tabItem(tab, multi: multi, section: section, liveTitle: liveTitle(tab), activity: liveActivity(tab))
                     result.append(SidebarListEntry(node: .tab(tab.id), section: section, ancestors: ancestors,
                                                    content: .tab(row)))
                 case let .split(split):

@@ -268,6 +268,22 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
             self?.renderSession()
             self?.onStateChange()
         }
+        session.onMetadataChange = { [weak self] ids in
+            guard let self else { return }
+            // Split headers and pane controls remain on the full feature projection path.
+            if session.activeSplit != nil {
+                renderSession()
+                onStateChange()
+                return
+            }
+            sidebar.applyMetadata(ids, organization: session.organization)
+            folderPreview.intent.reconcile(session.organization)
+            palette.renderContext()
+            if ids.contains(where: { session.organizationTab($0).map { if case .favorites = $0.section { return true }; return false } == true }) {
+                favorites.render()
+            }
+            onStateChange()
+        }
         session.onError = { _ in NSSound.beep() }
         session.observeOrganizationChanges()
         findSession.onChange = { [weak self] in self?.renderFind() }
@@ -381,6 +397,8 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
     func prepareForTermination() {
         freezeCommandsForTermination()
         for surface in session.ownedSurfaces {
+            // Drain the final engine title even when its display-cycle batch has not fired.
+            session.updatePageTitle(for: surface, to: surface.navigationState.title)
             surface.stopLoading()
             if let url = surface.currentURL {
                 session.updateDestination(for: surface, to: url)
@@ -415,7 +433,7 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
     // MARK: Surface ownership
 
     func owns(_ surface: Surface) -> Bool {
-        !session.isClosed && session.ownedSurfaces.contains { $0 === surface }
+        !session.isClosed && session.occurrenceID(for: surface) != nil
     }
 
     /// Makes this window the receiver of a surface's engine events and observations, in the same
@@ -436,12 +454,20 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
         }
     }
 
+    let sidebarMetadataCoalescer = SidebarMetadataCoalescer()
+    var sidebarMetadataIDs: Set<TabID> = []
+    var sidebarMetadataValues: [TabOccurrenceID: SidebarEngineMetadata] = [:]
+    var sidebarMetadataSurfaces: [ObjectIdentifier: (Surface, UInt64)] = [:]
+
     func surfaceDidChange(_ surface: Surface) {
         guard !isPreparingForTermination, owns(surface) else { return }
-        if let url = surface.currentURL {
-            session.updateDestination(for: surface, to: url)
+        if let url = surface.currentURL { session.updateDestination(for: surface, to: url) }
+        if session.selectedSurface === surface {
+            session.updatePageTitle(for: surface, to: surface.navigationState.title)
+            queueSidebarMetadata(for: surface)
+        } else {
+            queueSidebarMetadata(for: surface, persist: true)
         }
-        session.updatePageTitle(for: surface, to: surface.navigationState.title)
         refreshNavigation(for: surface)
         engineEventHooks.emit(.stateChanged, for: surface)
         palette.renderContext()
@@ -459,6 +485,7 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
 
     private func renderSessionProjection() {
         BrowserPerformance.count(.windowProjections, window: id)
+        sidebarMetadataValues = sidebarMetadataValues.filter { session.tabID(for: $0.key) != nil }
         tabSuspension?.selectionDidChange()
         if let catalog = session.catalog, catalog != publishedCatalog {
             publishedCatalog = catalog
@@ -507,6 +534,7 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
         let outgoingCapture = SpaceSwipeTrace.interval("RenderOutgoingCaptureRequest") { tabSwitcher.prepareForPresentation(selected) }
         SpaceSwipeTrace.interval("RenderSplitReparent") { renderSplit(retainingPreviousUntil: outgoingCapture) }
         peek.revealPromotionIfPlaced(in: contentCard)
+        rebuildTabStrip()
         if let selected {
             refreshNavigation(for: selected)
         } else {
@@ -516,7 +544,6 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
             backButton.isEnabled = false
             forwardButton.isEnabled = false
             reloadButton.isEnabled = false
-            rebuildTabStrip()
         }
         if pillSelectionChanged { sidebar.addressContainer.endSelectionUpdate() }
         if selectionChanged, !library.isPresented, !palette.isPresented, !preserveAddressDraft, window?.isKeyWindow == true { focusSelectedDocument() }

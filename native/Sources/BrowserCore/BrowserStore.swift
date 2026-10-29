@@ -80,7 +80,7 @@ public struct BrowserWindowSnapshot: Equatable, Sendable {
     public let id: WindowID
     public let activeSpaceID: SpaceID
     public let selectedOccurrenceID: TabOccurrenceID?
-    public let tabs: [BrowserTab]
+    public internal(set) var tabs: [BrowserTab]
     public let revision: UInt64
     public var isStandalone: Bool = false
 }
@@ -101,6 +101,7 @@ public struct BrowserWindowState: Sendable {
     public let context: BrowserContext
     public let snapshot: BrowserWindowSnapshot
     public let catalog: BrowserCatalogSnapshot
+    public var catalogRevision: UInt64 = 0
     /// The complete occurrence inventory of this window. Its absence revokes a previously owned lease.
     public let occurrenceAuthorities: [TabOccurrenceID: BrowserOccurrenceAuthority]
     /// Logical identities for exactly the same active and inactive occurrence inventory.
@@ -137,18 +138,22 @@ struct WindowRecord {
 /// Owns browser state without depending on AppKit or a web engine.
 public actor BrowserStore {
     let storeGeneration = UUID()
+    var catalogRevision: UInt64 = 0
     nonisolated let spaceSettingsOwnership = BrowserSpaceSettingsOwnership()
     var profiles: [ProfileID: BrowserProfile] = [:] {
         willSet { spaceSettingsOwnership.synchronize(spaces: spaces, profiles: Set(newValue.keys), excluding: deletingProfiles, windows: windows) }
+        didSet { catalogRevision &+= 1 }
     }
     var deletingProfiles: Set<ProfileID> = [] {
         willSet { spaceSettingsOwnership.synchronize(spaces: spaces, profiles: Set(profiles.keys), excluding: newValue, windows: windows) }
+        didSet { catalogRevision &+= 1 }
     }
     var spaces: [SpaceID: BrowserSpace] = [:] {
         willSet { spaceSettingsOwnership.synchronize(spaces: newValue, profiles: Set(profiles.keys), excluding: deletingProfiles, windows: windows) }
+        didSet { catalogRevision &+= 1 }
     }
-    var profileOrder: [ProfileID] = []
-    var spaceOrder: [SpaceID] = []
+    var profileOrder: [ProfileID] = [] { didSet { catalogRevision &+= 1 } }
+    var spaceOrder: [SpaceID] = [] { didSet { catalogRevision &+= 1 } }
     var windows: [WindowID: WindowRecord] = [:] {
         willSet { spaceSettingsOwnership.synchronize(spaces: spaces, profiles: Set(profiles.keys), excluding: deletingProfiles, windows: newValue) }
     }
@@ -168,6 +173,10 @@ public actor BrowserStore {
     var organizationJournals: [WindowID: BrowserOrganizationJournal] = [:]
     var organizationObservers: [UUID: AsyncStream<UInt64>.Continuation] = [:]
     var organizationRevision: UInt64 = 0
+    var organizationObserverWindows: [UUID: WindowID] = [:]
+    var organizationMetadataHistory: [(revision: UInt64, tabs: Set<TabID>)] = []
+    var organizationMetadataFloor: UInt64 = 0
+    var metadataOccurrences: [WindowID: [TabID: TabOccurrenceID]] = [:]
     /// Spaces whose imported Orbit appearance was already considered (one-time theme migration).
     var themeImports: Set<SpaceID> = []
     /// Injected so inactivity thresholds are deterministic in tests.
@@ -348,6 +357,7 @@ public actor BrowserStore {
             organization.standalone[windowID] = nil
             organization.standaloneHomes[windowID] = nil
         }
+        metadataOccurrences[windowID] = nil
         organizationDidCloseWindow(windowID)
     }
 
@@ -400,7 +410,8 @@ public actor BrowserStore {
                 tabIDs[occurrenceID] = tab.id
             }
         }
-        return BrowserWindowState(context: context, snapshot: snapshot, catalog: catalogSnapshot(),
+        metadataOccurrences[windowID] = Dictionary(tabIDs.map { ($0.value, $0.key) }, uniquingKeysWith: { first, _ in first })
+        return BrowserWindowState(context: context, snapshot: snapshot, catalog: catalogSnapshot(), catalogRevision: catalogRevision,
                                   occurrenceAuthorities: authorities,
                                   occurrenceTabIDs: tabIDs,
                                   organization: try organizationSnapshot(for: windowID))
