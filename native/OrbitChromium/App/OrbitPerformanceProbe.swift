@@ -183,6 +183,8 @@ enum OrbitPerformanceProbe {
                     result["mainthread"] = await mainthread(owner, command: command, root: root)
                 } else if name == "lists" {
                     result["lists"] = await lists(owner, command: command, root: root)
+                } else if name == "space-compositing", ownsWindow(owner) {
+                    result["spaceCompositing"] = await spaceCompositing(owner, store: environment.store, command: command)
                 } else if name == "glyph-diagnostics", ownsWindow(owner) {
                     result["glyphDiagnostics"] = await glyphDiagnostics(owner, root: root, store: environment.store, command: command)
                 } else if name == "ui-quick-wins", ownsWindow(owner) {
@@ -1706,5 +1708,278 @@ private final class OrbitGlyphFrameSampler: NSObject {
         last = current
         guard !delta.isEmpty || !frames.isEmpty else { return }
         frames.append(["t": link?.timestamp ?? CACurrentMediaTime(), "delta": delta])
+    }
+}
+
+extension OrbitPerformanceProbe {
+    /// Space page slide diagnostics: per-frame native/visible positions, accessibility and hit-test
+    /// geometry of the moving pages, glyph draws, and input dispatched mid-slide. Synthetic only.
+    private static func spaceCompositing(_ owner: OrbitWindowController, store: BrowserStore,
+                                         command: [String: String]) async -> [String: Any] {
+        guard ownsWindow(owner), let window = owner.window, let content = window.contentView else { return ["ownershipRefused": true] }
+        OrbitUIWorkCounters.enabled = true
+        let sidebar = owner.sidebar
+        let document = await store.sessionDocument()
+        let occluded = !window.occlusionState.contains(.visible)
+        switch command["action"] {
+        case "elements":
+            return ["occluded": occluded, "pages": SpaceCompositingProbe.pages(sidebar, window: window)]
+        case "phase":
+            // Hold swipe presentations at successive offsets so earlier positions were painted first.
+            guard let active = owner.session.snapshot?.activeSpaceID,
+                  let index = document.spaces.firstIndex(where: { $0.id == active }) else { return ["badSpaces": true] }
+            let offsets = (command["offsets"] ?? "").split(separator: ",").compactMap { Double($0) }
+            let forward = offsets.last.map { $0 < 0 } ?? true
+            let targetIndex = forward ? index + 1 : index - 1
+            guard document.spaces.indices.contains(targetIndex) else { return ["badSpaces": true] }
+            let target = document.spaces[targetIndex]
+            OrbitUIWorkCounters.reset()
+            for offset in offsets {
+                guard ownsWindow(owner) else { return ["ownershipRefused": true] }
+                sidebar.showSpaceSwipe(offset: CGFloat(offset), space: target,
+                    content: SpaceSwipePreview.content(document: document, spaceID: target.id, windowID: sidebar.organization?.windowID, icon: sidebar.previewIcon),
+                    favorites: SpaceSwipePreview.favorites(document: document, spaceID: target.id, windowID: sidebar.organization?.windowID, icon: sidebar.previewIcon))
+                window.displayIfNeeded(); CATransaction.flush()
+                try? await Task.sleep(for: .milliseconds(40))
+            }
+            return ["occluded": occluded, "offset": offsets.last ?? 0, "pages": SpaceCompositingProbe.pages(sidebar, window: window),
+                    "clipped": sidebar.compositedSpaceViews.count, "counters": OrbitUIWorkCounters.values.filter { $0.key.hasPrefix("glyphDraw") }]
+        case "mixed":
+            // The mixed 10 s workload with per-frame occlusion; occluded samples are discarded by the harness.
+            let sampler = SpaceCompositingProbe.Sampler(sidebar: sidebar, window: window)
+            let link = content.displayLink(target: sampler, selector: #selector(SpaceCompositingProbe.Sampler.tick(_:)))
+            link.add(to: .main, forMode: .common)
+            let values = await uiQuickWins(owner, store: store, command: ["action": "mixed"])
+            link.invalidate()
+            return ["values": values, "occluded": occluded, "endOccluded": !window.occlusionState.contains(.visible),
+                    "occludedFrames": sampler.frames.filter { $0["occluded"] as? Bool == true }.count, "frames": sampler.frames.count]
+        case "repaint":
+            // Repaint every sidebar view at its current position, once per display cycle.
+            for _ in 0..<(Int(command["count"] ?? "") ?? 1) {
+                guard ownsWindow(owner) else { return ["ownershipRefused": true] }
+                for view in SpaceCompositingProbe.descendants(sidebar) { view.needsDisplay = true }
+                window.displayIfNeeded(); CATransaction.flush()
+                try? await Task.sleep(for: .milliseconds(60))
+            }
+            return ["occluded": occluded]
+        case "phase-end":
+            sidebar.finishSpaceSwipe(committed: nil)
+            window.displayIfNeeded(); CATransaction.flush()
+            return ["occluded": occluded, "clipped": sidebar.compositedSpaceViews.count]
+        case "switch":
+            guard let mode = command["mode"], let index = Int(command["index"] ?? ""), document.spaces.indices.contains(index) else { return ["badIndex": true] }
+            let initial = owner.session.snapshot?.activeSpaceID
+            let initialSelection = owner.session.snapshot?.selectedOccurrenceID
+            OrbitUIWorkCounters.reset()
+            SpaceCompositingProbe.installNewTabDrawLog()
+            SpaceCompositingProbe.newTabDraws.removeAll()
+            let sampler = SpaceCompositingProbe.Sampler(sidebar: sidebar, window: window)
+            let link = content.displayLink(target: sampler, selector: #selector(SpaceCompositingProbe.Sampler.tick(_:)))
+            link.add(to: .main, forMode: .common)
+            defer { link.invalidate() }
+            let start = ProcessInfo.processInfo.systemUptime
+            var input: [String: Any] = [:]
+            if let fraction = Double(command["inputAt"] ?? "") {
+                sampler.inputAt = fraction
+                sampler.inputKind = command["input"] ?? "click"
+                sampler.onInput = { report in input = report }
+            }
+            switch mode {
+            case "click":
+                guard ownsWindow(owner), sidebar.footer.spaceButtons.indices.contains(index) else { return ["ownershipRefused": true] }
+                sidebar.footer.spaceButtons[index].performClick(nil)
+            case "keyboard":
+                guard ownsWindow(owner), let event = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: .control,
+                    timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber, context: nil,
+                    characters: String(index + 1), charactersIgnoringModifiers: String(index + 1), isARepeat: false, keyCode: 0) else { return ["ownershipRefused": true] }
+                _ = NSApp.mainMenu?.performKeyEquivalent(with: event)
+            case "ordinary":
+                owner.session.activateSpace(document.spaces[index].id)
+            case "observe":
+                // A real keyboard shortcut is sent by the harness right after this command starts.
+                while !sidebar.isSpaceTransitionAnimating && ProcessInfo.processInfo.systemUptime < start + 2 {
+                    try? await Task.sleep(for: .milliseconds(1))
+                }
+            case "swipe", "interrupt":
+                func packet(_ phase: Int64, _ delta: Int32) {
+                    guard ownsWindow(owner), let cg = CGEvent(scrollWheelEvent2Source: nil, units: .pixel, wheelCount: 2, wheel1: 0, wheel2: delta, wheel3: 0) else { return }
+                    cg.setIntegerValueField(.scrollWheelEventIsContinuous, value: 1)
+                    cg.setIntegerValueField(.scrollWheelEventScrollPhase, value: phase)
+                    cg.timestamp = DispatchTime.now().uptimeNanoseconds
+                    if let event = NSEvent(cgEvent: cg) { _ = sidebar.spaceSwipe.handleScroll(event, inside: true) }
+                }
+                let sign: Int32 = index > (document.spaces.firstIndex { $0.id == initial } ?? 0) ? -1 : 1
+                packet(1, 0)
+                for _ in 0..<10 { packet(2, sign * 32); try? await Task.sleep(for: .milliseconds(16)) }
+                packet(4, 0)
+                if mode == "interrupt" {
+                    try? await Task.sleep(for: .milliseconds(65)); packet(1, 0)
+                    for _ in 0..<6 { packet(2, -sign * 28); try? await Task.sleep(for: .milliseconds(16)) }
+                    packet(4, 0)
+                }
+            default: return ["badMode": true]
+            }
+            let swipePath = sidebar.spaceSwipe.isActive
+            await owner.session.waitForQueuedCommands()
+            try? await Task.sleep(for: .milliseconds(30))
+            while sidebar.isSpaceTransitionAnimating && ProcessInfo.processInfo.systemUptime < start + 3 {
+                try? await Task.sleep(for: .milliseconds(2))
+            }
+            try? await Task.sleep(for: .milliseconds(Int(Double(command["tail"] ?? "") ?? 120)))
+            window.displayIfNeeded(); CATransaction.flush()
+            sampler.tick(nil)
+            return ["occluded": occluded, "endOccluded": !window.occlusionState.contains(.visible), "frames": sampler.frames,
+                    "start": start, "selectionChanged": initial != owner.session.snapshot?.activeSpaceID,
+                    "selectedTabChanged": initialSelection != owner.session.snapshot?.selectedOccurrenceID,
+                    "input": input, "swipePath": swipePath, "newTabDraws": SpaceCompositingProbe.newTabDraws,
+                    "activeIndex": document.spaces.firstIndex { $0.id == owner.session.snapshot?.activeSpaceID } ?? -1, "clippedAtRest": sidebar.compositedSpaceViews.count,
+                    "selectedTab": String(describing: owner.session.snapshot?.selectedOccurrenceID as Any),
+                    "totals": OrbitUIWorkCounters.values.filter { !$0.key.contains("ObjectIdentifier") && $0.key.hasPrefix("glyph") }]
+        default:
+            return ["badAction": true]
+        }
+    }
+}
+
+@MainActor
+private enum SpaceCompositingProbe {
+    /// Where the layer tree draws the view, in window coordinates (includes any layer transform).
+    static func visibleRect(_ view: NSView, window: NSWindow) -> CGRect? {
+        guard let content = window.contentView, let layer = view.layer, let root = content.layer else { return nil }
+        return content.convert(layer.convert(layer.bounds, to: root), to: nil)
+    }
+    static func describe(_ view: NSView, window: NSWindow) -> [String: Any] {
+        let native = view.convert(view.bounds, to: nil)
+        let ax = window.convertFromScreen(view.accessibilityFrame())
+        var entry: [String: Any] = ["class": String(describing: type(of: view)),
+            "native": [native.minX, native.minY, native.width, native.height],
+            "ax": [ax.minX, ax.minY, ax.width, ax.height], "axHidden": view.isAccessibilityHidden() || view.isHiddenOrHasHiddenAncestor]
+        if let visible = visibleRect(view, window: window) {
+            entry["visible"] = [visible.minX, visible.minY, visible.width, visible.height]
+            let center = NSPoint(x: visible.midX, y: visible.midY)
+            let hit = window.contentView?.hitTest(center)
+            entry["hitIsElement"] = hit.map { $0 === view || $0.isDescendant(of: view) } ?? false
+            entry["hitClass"] = hit.map { String(describing: type(of: $0)) } ?? "nil"
+        }
+        let tracking = view.convert(view.visibleRect, to: nil)
+        entry["hoverRegion"] = [tracking.minX, tracking.minY, tracking.width, tracking.height]
+        return entry
+    }
+    static func pages(_ sidebar: BrowserSidebarView, window: NSWindow) -> [[String: Any]] {
+        let pages = (sidebar.page.superview?.subviews ?? []).compactMap { $0 as? SidebarSpacePageView }
+        return pages.map { page in
+            var elements: [String: Any] = ["title": describe(page.titleLabel, window: window),
+                                           "newTab": describe(page.list.newTabRow, window: window)]
+            let rows = descendants(page.list).compactMap { $0 as? SidebarTabRow }.sorted { $0.frame.minY < $1.frame.minY }
+            for (index, row) in rows.prefix(3).enumerated() {
+                elements["row\(index)"] = describe(row, window: window)
+                elements["row\(index)Close"] = describe(row.closeButton, window: window)
+            }
+            return ["live": page === sidebar.page, "spaceIndex": page.spaceID.map { String(describing: $0).count } ?? 0,
+                    "x": page.convert(page.bounds, to: nil).minX, "subviews": page.subviews.count, "elements": elements]
+        }
+    }
+    static func descendants(_ view: NSView) -> [NSView] { view.subviews + view.subviews.flatMap(descendants) }
+
+    /// Every draw of a New Tab "+" glyph: when, where in the window, and whether it clipped.
+    static var newTabDraws: [[String: Any]] = []
+    private static var drawLogInstalled = false
+    static func installNewTabDrawLog() {
+        guard !drawLogInstalled,
+              let original = class_getInstanceMethod(OrbitGlyphButton.self, #selector(NSView.draw(_:))),
+              let replacement = class_getInstanceMethod(OrbitGlyphButton.self, #selector(OrbitGlyphButton.compositingProbeDraw(_:))) else { return }
+        method_exchangeImplementations(original, replacement)
+        drawLogInstalled = true
+    }
+
+    @MainActor
+    final class Sampler: NSObject {
+        weak var sidebar: BrowserSidebarView?
+        weak var window: NSWindow?
+        var frames: [[String: Any]] = []
+        var inputAt: Double?
+        var inputKind = "click"
+        var onInput: (([String: Any]) -> Void)?
+        private var last: [String: Int] = [:]
+        private var slideStart: CFTimeInterval?
+        init(sidebar: BrowserSidebarView, window: NSWindow) { self.sidebar = sidebar; self.window = window }
+        @objc func tick(_ link: CADisplayLink?) {
+            guard let sidebar, let window else { return }
+            let current = OrbitUIWorkCounters.values.filter { $0.key.hasPrefix("glyphDraw") }
+            var delta: [String: Int] = [:]
+            for (key, value) in current where value != last[key, default: 0] { delta[key] = value - last[key, default: 0] }
+            last = current
+            let pages = (sidebar.page.superview?.subviews ?? []).compactMap { $0 as? SidebarSpacePageView }
+            let newTab = sidebar.page.list.newTabRow
+            let native = newTab.convert(newTab.bounds, to: nil)
+            let ax = window.convertFromScreen(newTab.accessibilityFrame())
+            let visible = visibleRect(newTab, window: window) ?? .zero
+            let hit = window.contentView?.hitTest(NSPoint(x: visible.midX, y: visible.midY))
+            frames.append(["t": link?.timestamp ?? CACurrentMediaTime(), "target": link?.targetTimestamp ?? 0,
+                "pages": pages.map { ["live": $0 === sidebar.page, "x": $0.convert($0.bounds, to: nil).minX,
+                                      "visibleX": visibleRect($0, window: window)?.minX ?? -9999] },
+                "newTabX": native.minX, "newTabVisibleX": visible.minX, "newTabAXX": ax.minX,
+                "hitNewTab": hit.map { $0 === newTab || $0.isDescendant(of: newTab) } ?? false,
+                "clipped": sidebar.compositedSpaceViews.count, "delta": delta,
+                "occluded": !window.occlusionState.contains(.visible)])
+            let now = link?.timestamp ?? CACurrentMediaTime()
+            if inputAt != nil, slideStart == nil, pages.count > 1 { slideStart = now }
+            if let inputAt, let slideStart, now - slideStart >= inputAt {
+                self.inputAt = nil
+                dispatchInput(sidebar: sidebar, window: window)
+            }
+        }
+        /// In-process events through NSApplication (local monitors included), aimed at what is drawn.
+        private func dispatchInput(sidebar: BrowserSidebarView, window: NSWindow) {
+            // Aim at what is drawn: the page covering most of the sidebar, its second tab row if it has
+            // live rows (an adjacent preview is a raster without rows), else the middle of that page.
+            let pages = (sidebar.page.superview?.subviews ?? []).compactMap { $0 as? SidebarSpacePageView }
+            let width = sidebar.bounds.width
+            guard let page = pages.max(by: { a, b in
+                let fa = a.convert(a.bounds, to: sidebar), fb = b.convert(b.bounds, to: sidebar)
+                return max(0, min(fa.maxX, width) - max(fa.minX, 0)) < max(0, min(fb.maxX, width) - max(fb.minX, 0))
+            }) else { onInput?(["skipped": true]); return }
+            let rows = descendants(page.list).compactMap { $0 as? SidebarTabRow }.sorted { $0.frame.minY < $1.frame.minY }
+            let target: NSView = rows.count > 1 ? rows[1] : page
+            guard let visible = visibleRect(target, window: window) else { onInput?(["skipped": true]); return }
+            let location = NSPoint(x: visible.midX, y: rows.count > 1 ? visible.midY : visible.minY + visible.height * 0.6)
+            let hit = window.contentView?.hitTest(location)
+            let native = target.convert(target.bounds, to: nil)
+            let report: [String: Any] = ["kind": inputKind, "pageX": page.convert(page.bounds, to: nil).minX, "pageIsLive": page === sidebar.page,
+                "targetIsRow": rows.count > 1, "point": [location.x, location.y],
+                "nativeTarget": [native.minX, native.minY, native.width, native.height],
+                "visibleTarget": [visible.minX, visible.minY, visible.width, visible.height],
+                "hitIsTarget": hit.map { $0 === target || $0.isDescendant(of: target) } ?? false,
+                "hitInPage": hit.map { $0 === page || $0.isDescendant(of: page) } ?? false,
+                "hitClass": hit.map { String(describing: type(of: $0)) } ?? "nil",
+                "swipeActive": sidebar.spaceSwipe.isActive,
+                "targetTab": rows.count > 1 ? String(describing: rows[1].item.occurrenceID as Any) : "page"]
+            let types: [NSEvent.EventType] = inputKind == "hover" ? [.mouseMoved] : [.leftMouseDown, .leftMouseUp]
+            for type in types {
+                if let event = NSEvent.mouseEvent(with: type, location: location, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                    windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: type == .leftMouseUp ? 0 : 1) {
+                    NSApp.postEvent(event, atStart: false)
+                }
+            }
+            onInput?(report)
+            let row = rows.count > 1 ? rows[1] : nil
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.06) { [weak self] in
+                var later = report
+                later["hoverAfter"] = row?.isHovering ?? false
+                later["swipeActiveAfter"] = sidebar.spaceSwipe.isActive
+                self?.onInput?(later)
+            }
+        }
+    }
+}
+
+extension OrbitGlyphButton {
+    @objc fileprivate func compositingProbeDraw(_ rect: NSRect) {
+        if superview is SidebarNewTabRow {
+            let frame = convert(bounds, to: nil)
+            SpaceCompositingProbe.newTabDraws.append(["t": CACurrentMediaTime(), "x": frame.minX, "id": ObjectIdentifier(self).hashValue,
+                                                      "clips": clipsToBounds, "dirty": [rect.minX, rect.minY, rect.width, rect.height]])
+        }
+        compositingProbeDraw(rect)
     }
 }

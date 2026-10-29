@@ -148,6 +148,8 @@ final class BrowserSidebarView: NSView, SidebarListHost {
     private var swipePreviewRaster: SpaceSwipeRaster?
     private var swipeFavoritesRaster: SpaceSwipeRaster?
     private let ordinarySpaceMotion = OrbitSpringAnimator(value: 0, usesCoreVideoClock: true)
+    private let pageCompositing = SpacePageCompositing()
+    var compositedSpaceViews: [NSView] { pageCompositing.clippedViews }
     var isSpaceTransitionAnimating: Bool { ordinarySpaceMotion.isAnimating || spaceSwipe.isSettling }
     private var ordinaryOffset: CGFloat?
     private var ordinaryDirection: CGFloat = 1
@@ -754,6 +756,7 @@ final class BrowserSidebarView: NSView, SidebarListHost {
             outgoing.removeFromSuperview()
             ordinaryOutgoingFavorites?.removeFromSuperview(); ordinaryOutgoingFavorites = nil
             ordinarySourceGeometry = nil; ordinaryOffset = nil
+            restorePageCompositingAtRest()
             needsLayout = true
             return
         }
@@ -771,6 +774,7 @@ final class BrowserSidebarView: NSView, SidebarListHost {
             outgoing?.removeFromSuperview(); self.leavingPage = nil
             self.ordinaryOutgoingFavorites?.removeFromSuperview(); self.ordinaryOutgoingFavorites = nil
             self.ordinaryOffset = nil; self.ordinarySourceGeometry = nil
+            self.restorePageCompositingAtRest()
             self.needsLayout = true
         }
         needsLayout = true
@@ -1494,6 +1498,7 @@ extension BrowserSidebarView {
             leavingPage?.removeFromSuperview(); leavingPage = nil
             ordinaryOutgoingFavorites?.removeFromSuperview(); ordinaryOutgoingFavorites = nil
             ordinaryOffset = nil; ordinarySourceGeometry = nil
+            restorePageCompositingAtRest()
         }
         guard ordinaryOutgoingFavorites == nil else { return }
         ordinarySourceGeometry = geometry
@@ -1563,7 +1568,17 @@ extension BrowserSidebarView {
     /// Preserve AppKit's native scroll, paint and descendant image-layer coordinates.
     private func positionSpaceSwipeView(_ view: NSView, frame: CGRect, x: CGFloat) {
         let positioned = frame.offsetBy(dx: x, dy: 0)
-        if view.frame != positioned { view.frame = positioned }
+        if view.frame != positioned { pageCompositing.include(view); view.frame = positioned }
+    }
+
+    /// Native frames still move every frame; a page's drawing leaves are composited once it moves.
+    private func compositeIfMoving(_ view: NSView?, to frame: CGRect) {
+        if let view, view.frame != frame { pageCompositing.include(view) }
+    }
+
+    private func restorePageCompositingAtRest() {
+        guard swipeOffset == nil, leavingPage == nil else { return }
+        pageCompositing.restore()
     }
 
     private func retainSpaceSwipePreview() {
@@ -1578,13 +1593,21 @@ extension BrowserSidebarView {
         let sourceGeometry = ordinarySourceGeometry ?? geometry
         let targetGeometry = geometry(favorites: favoriteCount, page: page)
         CATransaction.begin(); CATransaction.setDisableActions(true)
-        leavingPage.frame = contentFrame(sourceGeometry.pageFrame, x: offset)
+        let leavingFrame = contentFrame(sourceGeometry.pageFrame, x: offset)
+        compositeIfMoving(leavingPage, to: leavingFrame)
+        leavingPage.frame = leavingFrame
         leavingPage.geometry = sourceGeometry
-        ordinaryOutgoingFavorites?.frame = contentFrame(sourceGeometry.favoritesFrame, x: offset)
+        let outgoingFavoritesFrame = contentFrame(sourceGeometry.favoritesFrame, x: offset)
+        compositeIfMoving(ordinaryOutgoingFavorites, to: outgoingFavoritesFrame)
+        ordinaryOutgoingFavorites?.frame = outgoingFavoritesFrame
         let incomingX = offset + ordinaryDirection * bounds.width
-        page.frame = contentFrame(targetGeometry.pageFrame, x: incomingX)
+        let incomingFrame = contentFrame(targetGeometry.pageFrame, x: incomingX)
+        compositeIfMoving(page, to: incomingFrame)
+        page.frame = incomingFrame
         page.geometry = targetGeometry
-        favoritesContainer.frame = contentFrame(targetGeometry.favoritesFrame, x: ordinarySharesFavorites ? 0 : incomingX)
+        let favoritesFrame = contentFrame(targetGeometry.favoritesFrame, x: ordinarySharesFavorites ? 0 : incomingX)
+        compositeIfMoving(favoritesContainer, to: favoritesFrame)
+        favoritesContainer.frame = favoritesFrame
         CATransaction.commit()
     }
 
@@ -1817,6 +1840,7 @@ extension BrowserSidebarView {
         pageContainer.scrollReceiver = page.pageScrollView
         page.layer?.setAffineTransform(.identity)
         favoritesContainer.layer?.setAffineTransform(.identity)
+        restorePageCompositingAtRest()
         CATransaction.commit()
     }
 }
