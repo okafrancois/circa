@@ -214,11 +214,17 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
         id: UUID = UUID(),
         spaceID requestedSpaceID: SpaceID? = nil,
         opensInitialTab: Bool = true,
+        standalone: Bool = false,
         onInput: ((@escaping @MainActor (WindowController) -> Void) -> Void)? = nil,
         onClose: @escaping () -> Void = {},
         onActivate: @escaping () -> Void = {}
     ) async throws -> WindowController {
-        let restoredID = restoredWindowIDs.first { $0.rawValue == id }
+        var restoredID = restoredWindowIDs.first { $0.rawValue == id }
+        if standalone, restoredID == nil, let home = requestedSpaceID {
+            let context = await store.catalogSnapshot()
+            guard let profile = context.spaces.first(where: { $0.id == home })?.profileID else { throw BrowserStoreError.spaceMissing }
+            restoredID = try await store.createStandaloneWindow(profileID: profile, homeSpaceID: home)
+        }
         let spaceID: SpaceID
         if let restoredID {
             let context = try await store.captureContext(in: restoredID)

@@ -7,13 +7,15 @@ public struct BrowserWindowPlacement: Codable, Equatable, Sendable {
     public let width: Double
     public let height: Double
     public let sidebarWidth: Double
+    public let isFullScreen: Bool?
 
-    public init(x: Double, y: Double, width: Double, height: Double, sidebarWidth: Double) {
+    public init(x: Double, y: Double, width: Double, height: Double, sidebarWidth: Double, isFullScreen: Bool? = nil) {
         self.x = x
         self.y = y
         self.width = width
         self.height = height
         self.sidebarWidth = sidebarWidth
+        self.isFullScreen = isFullScreen
     }
 
     public var isUsable: Bool {

@@ -70,6 +70,18 @@ extension BrowserWindowController {
         sidebar.onRenameDidEnd = { [weak self] in self?.windowShell.hoverHoldDidChange() }
         // ARCHIVE-UI's hook keeps visible and media tabs (archive-r2).
         sidebar.onClearToday = { [weak self] in self?.submitInput { $0.clearTodayFromArchiveCommand() } }
+        sidebar.page.list.prepareDesktopPreview = { [weak self] payload in
+            guard let self, let tab = payload.nodes.first?.tabID, let surface = liveSidebarSurface(of: tab) else { return }
+            let generation = surface.documentGeneration
+            let viewport = surface.hostView.bounds.size
+            Task { [weak self, weak surface] in
+                guard let surface, let snapshot = try? await surface.captureSnapshot(.init(width: 1024, documentGeneration: generation)),
+                      surface.documentGeneration == generation else { return }
+                self?.sidebar.page.list.desktopPreview = NSImage(cgImage: snapshot.image, size: viewport)
+                self?.sidebar.page.list.desktopPreviewBackground = NSBitmapImageRep(cgImage: snapshot.image).colorAt(x: 0, y: 0) ?? .windowBackgroundColor
+            }
+        }
+        sidebar.onTearOff = { [weak self] payload, point in self?.onTearOffTab?(payload, point) }
         sidebar.onDrop = { [weak self] payload, destination, changes in
             self?.submitInput { $0.performSidebarDrop(payload, to: destination, changesOrganization: changes) }
         }
@@ -175,7 +187,9 @@ extension BrowserWindowController {
                   sourceSnapshot.spaceID == payload.spaceID, sourceSnapshot.profileID == payload.profileID,
                   payload.nodes.allSatisfy({ sourceSnapshot.item(for: $0) != nil }) else { return }
         }
-        let crossesSpace = snapshot.spaceID != payload.spaceID
+        let crossesSpace = payload.sourceWindow != id && (snapshot.spaceID != payload.spaceID
+            || source?.session.snapshot?.isStandalone == true || session.snapshot?.isStandalone == true)
+        let destination = session.snapshot?.isStandalone == true ? BrowserOrganizationDestination(.standalone(snapshot.windowID), position: destination.position) : destination
         if crossesSpace {
             // Release before changing shared placement: reconciliation must never dispose the
             // document being moved. The receiver records placement and undo with adoption.
@@ -482,7 +496,7 @@ extension BrowserOrganizationContainer {
         switch self {
         case .pinned: return true
         case .folder: return true
-        case .favorites, .today, .split: return false
+        case .favorites, .today, .split, .standalone: return false
         }
     }
 }

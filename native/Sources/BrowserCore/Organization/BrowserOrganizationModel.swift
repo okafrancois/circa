@@ -89,6 +89,8 @@ public enum BrowserOrganizationContainer: Hashable, Sendable {
     case today(SpaceID)
     case folder(FolderID)
     case split(SplitGroupID)
+    /// A machine-local ordered list owned by one standalone window.
+    case standalone(WindowID)
 
     public init(_ section: BrowserOrganizationSection) {
         switch section {
@@ -104,7 +106,7 @@ public enum BrowserOrganizationContainer: Hashable, Sendable {
         case let .favorites(id): return .favorites(id)
         case let .pinned(id): return .pinned(id)
         case let .today(id): return .today(id)
-        case .folder, .split: return nil
+        case .folder, .split, .standalone: return nil
         }
     }
 }

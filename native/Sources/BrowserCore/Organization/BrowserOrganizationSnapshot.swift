@@ -266,6 +266,9 @@ public struct BrowserOrganizationSnapshot: Equatable, Sendable {
             guard let entry = catalog.spaces.first(where: { $0.id == space }) else { return .itemMissing }
             guard entry.profileID == profileID else { return .crossProfileMove }
             target = destination.container.rootSection!
+        case let .standalone(owner):
+            guard owner == windowID else { return .notVisibleInContext }
+            target = .today(spaceID)
         case .split: return .invalidDestination
         case let .folder(folder):
             guard let section = sections[.folder(folder)], let chain = folderChains[folder] else {
@@ -284,6 +287,7 @@ public struct BrowserOrganizationSnapshot: Equatable, Sendable {
             case let .folder(folder):
                 guard case let .folder(folderItem)? = item(for: .folder(folder)) else { return .notVisibleInContext }
                 siblings = folderItem.children
+            case .standalone: siblings = today
             case .split: return .invalidDestination
             case .favorites: siblings = favorites
             case let .pinned(space): siblings = space == spaceID ? pinned : []

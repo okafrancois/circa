@@ -12,7 +12,7 @@ extension BrowserWindowController {
         sidebar.configureNewSpacePage = { [weak self] in self?.configureSpaceCreation($0) }
         sidebar.spaceSwipe.allowsInput = { [weak self] in
             guard let self else { return false }
-            return acceptsCommands && !session.isClosed && !palette.isPresented && !library.isPresented && !peek.isPresented
+            return session.snapshot?.isStandalone != true && acceptsCommands && !session.isClosed && !palette.isPresented && !library.isPresented && !peek.isPresented
                 && !siteControls.isPopoverShown && themeEditor == nil && tabSwitcher.view.superview == nil
         }
         sidebar.spaceSwipe.loadDocument = { [weak self] in
@@ -76,6 +76,7 @@ extension BrowserWindowController {
         SpaceSwipeTrace.tabStrip {
             folderPreview.intent.reconcile(session.organization)
             updateSidebarUndoRouter()
+            sidebar.standaloneProfileName = session.snapshot?.isStandalone == true ? session.catalog?.profiles.first(where: { $0.id == session.activeProfileID })?.name : nil
             sidebar.render(catalog: session.catalog, activeSpaceID: session.snapshot?.activeSpaceID,
                            organization: session.organization)
         }

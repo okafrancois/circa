@@ -50,6 +50,8 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
     lazy var passwordPrompt = BrowserPasswordPromptPresenter(owner: self)
     let sidebarIcons = FavoriteIconPipeline<Surface>()
     var sidebarActivityObserver: BrowserHookRegistration?
+    var onTearOffTab: ((SidebarDragPayload, NSPoint) -> Void)?
+    var restoresFullScreen = false
     let folderPreview = FolderPreviewController<Surface>()
     var favorites: BrowserFavoritesController<Engine>!
     var sidebarWidth: NSLayoutConstraint!

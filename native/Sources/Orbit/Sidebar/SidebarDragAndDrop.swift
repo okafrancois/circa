@@ -139,7 +139,7 @@ final class SidebarDropCoordinator {
     static func validate(_ payload: SidebarDragPayload, to destination: BrowserOrganizationDestination,
                          snapshot: BrowserOrganizationSnapshot, catalog: BrowserCatalogSnapshot) -> BrowserOrganizationError? {
         guard payload.profileID == snapshot.profileID else { return .crossProfileMove }
-        if payload.spaceID == snapshot.spaceID {
+        if payload.spaceID == snapshot.spaceID, payload.nodes.allSatisfy({ snapshot.item(for: $0) != nil }) {
             return snapshot.validateMove(payload.nodes, to: destination, catalog: catalog)
         }
         if case .favorites = destination.container { return .notVisibleInContext }

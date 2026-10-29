@@ -17,6 +17,7 @@ protocol SidebarListHost: AnyObject {
     func list(_ list: SidebarListView, dragPayloadFor node: BrowserOrganizationNode, grabOffsetX: CGFloat) -> SidebarDragPayload?
     func list(_ list: SidebarListView, dragDidChange payload: SidebarDragPayload?)
     func list(_ list: SidebarListView, dragLeftWindow payload: SidebarDragPayload)
+    func list(_ list: SidebarListView, tearOff payload: SidebarDragPayload, at point: NSPoint) -> Bool
     /// The row Return renames: the anchor of the selection or the selected tab.
     func listCurrentNode(_ list: SidebarListView) -> BrowserOrganizationNode?
     func listCancelSelection(_ list: SidebarListView)
@@ -28,6 +29,7 @@ protocol SidebarListHost: AnyObject {
 }
 
 extension SidebarListHost {
+    func list(_ list: SidebarListView, tearOff payload: SidebarDragPayload, at point: NSPoint) -> Bool { false }
     func list(_ list: SidebarListView, toggleAudio tab: TabID) {}
     func list(_ list: SidebarListView, dragLeftWindow payload: SidebarDragPayload) {}
 }
@@ -65,6 +67,7 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
     private var tabPool: [SidebarTabRow] = []
     private var folderPool: [SidebarFolderRow] = []
     private var enteringNodes: Set<BrowserOrganizationNode> = []
+    var isStandalone = false
     var spaceID: SpaceID?
     var spaceTitleCenterY: CGFloat = 0 { didSet { if spaceTitleCenterY != oldValue { relayout(animated: false) } } }
     var accent = OrbitTokens.ThemeAccent.defaultSpace {
@@ -85,6 +88,17 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
     var onFolderHover: ((SidebarListRow, Bool) -> Void)?
     var onPreviewInvalidated: ((SidebarListRow) -> Void)?
 
+    var prepareDesktopPreview: ((SidebarDragPayload) -> Void)?
+    var desktopPreview: NSImage?
+    var desktopPreviewBackground = NSColor.windowBackgroundColor
+    private var desktopPreviewStart: TimeInterval?
+    private var desktopPreviewTimer: Timer?
+    private weak var desktopDragSession: NSDraggingSession?
+    private var desktopRowImage: NSImage?
+    private var desktopTileImage: NSImage?
+    private var desktopDragPoint: NSPoint = .zero
+    private var dragCancelled = false
+    private var dragCancelMonitor: Any?
     private var sourceHidden: Set<BrowserOrganizationNode> = []
     private var hoverHidden: Set<BrowserOrganizationNode> = []
     private var gap: SidebarDropGap?
@@ -396,7 +410,7 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
         let textMinX = clearButton.frame.minX + Metrics.clearHoverPadding
         let lineEnd = clearButton.isRevealed ? textMinX - Metrics.clearSeparatorGap : bounds.width - Metrics.separatorInsetX
         separator.frame = NSRect(x: Metrics.separatorInsetX, y: lineY, width: max(0, lineEnd - Metrics.separatorInsetX), height: line)
-        separator.isHidden = !displayedLayout.isSeparatorVisible
+        separator.isHidden = isStandalone || !displayedLayout.isSeparatorVisible
     }
 
     override func layout() {
@@ -744,6 +758,11 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
         guard commandsEnabled,
               let payload = host?.list(self, dragPayloadFor: row.node, grabOffsetX: grabPoint.x - row.iconX) else { return }
         isDragging = true
+        dragCancelled = false
+        dragCancelMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            if event.keyCode == 53 { self?.dragCancelled = true }
+            return event
+        }
         pointerDown = nil
         cancelRename()
         let lifted = liftedRows(for: payload.nodes)
@@ -761,10 +780,15 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
         }
         dragSelectionToRestore = lifted.first(where: { $0.tab?.selected == true })?.tab?.id
         localDrag = payload
+        desktopPreview = nil
+        prepareDesktopPreview?(payload)
         localDropWasNoOp = false
         let session = beginDraggingSession(with: items, event: event, source: self)
         session.animatesToStartingPositionsOnCancelOrFail = true
         session.draggingFormation = .none
+        desktopDragSession = session
+        desktopTileImage = lifted.first.map { SidebarTearOffPreview.tile(title: $0.title, icon: $0.tab?.favicon ?? $0.tab?.activity.favicon ?? OrbitGlyph.faviconPlaceholder) }
+        desktopRowImage = lifted.first.map { SidebarDragImage.render($0, size: row.frame.size, accent: accent, appearance: effectiveAppearance) }
         sourceHidden = Set(lifted.map(\.node))
         liftedNodes.formUnion(sourceHidden)
         relayout(animated: true)
@@ -780,6 +804,20 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
               let window else { return }
         let point = convert(window.convertPoint(fromScreen: screenPoint), from: nil)
         let outside = point.x < bounds.minX || point.x > bounds.maxX || !window.frame.contains(screenPoint)
+        desktopDragPoint = screenPoint
+        if !window.frame.contains(screenPoint), desktopPreviewStart == nil {
+            desktopPreviewStart = CACurrentMediaTime()
+            desktopPreviewTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 120, repeats: true) { [weak self] _ in
+                MainActor.assumeIsolated { self?.updateDesktopDragImage() }
+            }
+            if let desktopPreviewTimer { RunLoop.main.add(desktopPreviewTimer, forMode: .common) }
+        } else if window.frame.contains(screenPoint), desktopPreviewStart != nil {
+            desktopPreviewTimer?.invalidate()
+            desktopPreviewTimer = nil
+            desktopPreviewStart = nil
+        }
+        updateDesktopDragImage()
+        session.animatesToStartingPositionsOnCancelOrFail = window.frame.contains(screenPoint)
         if !window.frame.contains(screenPoint), !announcedWindowDeparture {
             announcedWindowDeparture = true
             host?.list(self, dragLeftWindow: payload)
@@ -793,9 +831,37 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
         relayout(animated: true)
     }
 
+    private func updateDesktopDragImage() {
+        guard let session = desktopDragSession, let start = desktopPreviewStart,
+              let row = desktopRowImage, let tile = desktopTileImage, let document = desktopPreview, let window else { return }
+        let image = SidebarTearOffPreview.render(document: document, row: row, tile: tile, elapsed: CACurrentMediaTime() - start, sourceWidth: window.frame.width, background: desktopPreviewBackground)
+        let point = convert(window.convertPoint(fromScreen: desktopDragPoint), from: nil)
+        session.enumerateDraggingItems(options: [], for: self, classes: [NSPasteboardItem.self], searchOptions: [:]) { item, _, _ in
+            item.setDraggingFrame(NSRect(x: point.x - 12, y: point.y - image.size.height / 2,
+                                         width: image.size.width, height: image.size.height), contents: image)
+        }
+    }
+
     func ignoreModifierKeys(for session: NSDraggingSession) -> Bool { true }
 
     func draggingSession(_ session: NSDraggingSession, endedAt screenPoint: NSPoint, operation: NSDragOperation) {
+        desktopPreviewTimer?.invalidate()
+        desktopPreviewTimer = nil
+        desktopPreviewStart = nil
+        desktopDragSession = nil
+        desktopRowImage = nil
+        desktopTileImage = nil
+        desktopPreview = nil
+        if let dragCancelMonitor { NSEvent.removeMonitor(dragCancelMonitor) }
+        dragCancelMonitor = nil
+        let tornOff: Bool
+        if let payload = localDrag, let window,
+           SidebarTearOffRelease.accepts(operation: operation, cancelled: dragCancelled,
+               mouseIsDown: NSEvent.pressedMouseButtons & 1 != 0,
+               sourceFrame: window.frame,
+               otherWindowFrames: NSApp.windows.filter { $0 !== window && $0.isVisible && $0.level == .normal }.map(\.frame), point: screenPoint) {
+            tornOff = host?.list(self, tearOff: payload, at: screenPoint) == true
+        } else { tornOff = false }
         isDragging = false
         sourceOutsideSidebar = false
         announcedWindowDeparture = false
@@ -805,7 +871,7 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
         localDrag = nil
         let lifted = sourceHidden
         sourceHidden = []
-        if operation.isEmpty, let tab = dragSelectionToRestore {
+        if operation.isEmpty, !tornOff, let tab = dragSelectionToRestore {
             host?.list(self, activate: .tab(tab), modifiers: [])
         }
         dragSelectionToRestore = nil

@@ -34,7 +34,7 @@ extension BrowserWindowController {
         let frame = window.styleMask.contains(.fullScreen) || windowShell.isFullScreen
             ? windowedFrame ?? window.frame : window.frame
         return BrowserWindowPlacement(x: frame.minX, y: frame.minY, width: frame.width, height: frame.height,
-                                      sidebarWidth: windowShell.preferredSidebarWidth)
+                                      sidebarWidth: windowShell.preferredSidebarWidth, isFullScreen: window.styleMask.contains(.fullScreen) || windowShell.isFullScreen)
     }
 
     func restoreWindowPlacement(_ placement: BrowserWindowPlacement?) {
@@ -53,5 +53,6 @@ extension BrowserWindowController {
         window.setFrame(frame, display: false)
         windowedFrame = frame
         windowShell.setSidebarWidth(placement.sidebarWidth)
+        restoresFullScreen = placement.isFullScreen == true
     }
 }

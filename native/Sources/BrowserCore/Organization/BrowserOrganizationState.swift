@@ -32,6 +32,8 @@ struct BrowserOrganizationState: Sendable {
     var favorites: [ProfileID: [BrowserOrganizationNode]] = [:]
     var pinned: [SpaceID: [BrowserOrganizationNode]] = [:]
     var today: [SpaceID: [BrowserOrganizationNode]] = [:]
+    var standalone: [WindowID: [BrowserOrganizationNode]] = [:]
+    var standaloneHomes: [WindowID: SpaceID] = [:]
     var collapsedPinnedSections: Set<SpaceID> = []
     /// Newest first.
     var archive: [BrowserArchivedTab] = []
@@ -55,6 +57,7 @@ struct BrowserOrganizationState: Sendable {
         case let .favorites(id): return favorites[id] ?? []
         case let .pinned(id): return pinned[id] ?? []
         case let .today(id): return today[id] ?? []
+        case let .standalone(id): return standalone[id] ?? []
         case let .folder(id): return folders[id]?.children ?? []
         case let .split(id): return splits[id]?.tabIDs.map(BrowserOrganizationNode.tab) ?? []
         }
@@ -79,10 +82,12 @@ struct BrowserOrganizationState: Sendable {
             guard steps <= folders.count + splits.count else { return nil }
             current = parents[parent]
         }
+        if case let .standalone(id) = current { return standaloneHomes[id].map { .today($0) } }
         return current?.rootSection
     }
 
     func section(ofContainer container: BrowserOrganizationContainer) -> BrowserOrganizationSection? {
+        if case let .standalone(id) = container { return standaloneHomes[id].map { .today($0) } }
         if let root = container.rootSection { return root }
         guard let node = container.owningNode, contains(node) else { return nil }
         return section(of: node)
@@ -175,6 +180,7 @@ struct BrowserOrganizationState: Sendable {
             case let .favorites(id): return (0, id.rawValue.uuidString)
             case let .pinned(id): return (1, id.rawValue.uuidString)
             case let .today(id): return (2, id.rawValue.uuidString)
+            case let .standalone(id): return (2, id.rawValue.uuidString)
             case let .folder(id): return (3, id.rawValue.uuidString)
             case let .split(id): return (4, id.rawValue.uuidString)
             }
@@ -203,6 +209,7 @@ struct BrowserOrganizationState: Sendable {
         case let .favorites(id): favorites[id] = nodes.isEmpty ? nil : nodes
         case let .pinned(id): pinned[id] = nodes.isEmpty ? nil : nodes
         case let .today(id): today[id] = nodes.isEmpty ? nil : nodes
+        case let .standalone(id): standalone[id] = nodes
         case let .folder(id): folders[id]?.children = nodes
         case let .split(id):
             if var split = splits[id] {
@@ -539,6 +546,7 @@ struct BrowserOrganizationState: Sendable {
         for (id, nodes) in favorites { record(nodes, in: .favorites(id)) }
         for (id, nodes) in pinned { record(nodes, in: .pinned(id)) }
         for (id, nodes) in today { record(nodes, in: .today(id)) }
+        for (id, nodes) in standalone { record(nodes, in: .standalone(id)) }
         for (id, folder) in folders { record(folder.children, in: .folder(id)) }
         for (id, split) in splits { record(split.tabIDs.map(BrowserOrganizationNode.tab), in: .split(id)) }
     }
@@ -610,6 +618,10 @@ struct BrowserOrganizationState: Sendable {
         for (id, nodes) in today {
             guard spaces[id] != nil else { throw BrowserSessionError.spaceMissing }
             try visit(nodes, section: .today(id))
+        }
+        for (id, nodes) in standalone {
+            guard let home = standaloneHomes[id], spaces[home] != nil else { throw BrowserSessionError.spaceMissing }
+            try visit(nodes, section: .today(home))
         }
         guard collapsedPinnedSections.allSatisfy({ spaces[$0] != nil }) else { throw BrowserSessionError.spaceMissing }
         // Unreachable folders, including cycles detached from every root, are orphans.
@@ -716,10 +728,10 @@ extension BrowserOrganizationState {
             .map { BrowserOrganizationDocument.SpaceSections(spaceID: $0, pinned: pinned[$0] ?? [],
                 today: today[$0] ?? [], isPinnedCollapsed: collapsedPinnedSections.contains($0)) }
         return BrowserOrganizationDocument(
-            tabs: tabs.values.sorted { $0.id.rawValue.uuidString < $1.id.rawValue.uuidString },
+            tabs: tabs.values.filter { standaloneOwner(of: .tab($0.id)) == nil }.sorted { $0.id.rawValue.uuidString < $1.id.rawValue.uuidString },
             folders: folders.values.sorted { $0.id.rawValue.uuidString < $1.id.rawValue.uuidString },
             favorites: favoriteEntries, spaces: spaceEntries, archive: archive, archivePolicy: policy,
-            splits: splits.values.sorted { $0.id.rawValue.uuidString < $1.id.rawValue.uuidString }, archivedSpaces: archivedSpaces)
+            splits: splits.values.filter { standaloneOwner(of: .split($0.id)) == nil }.sorted { $0.id.rawValue.uuidString < $1.id.rawValue.uuidString }, archivedSpaces: archivedSpaces)
     }
 }
 
@@ -940,6 +952,7 @@ extension BrowserOrganizationState {
             guard steps <= folders.count + splits.count + patch.folderRecords.count + patch.splitRecords.count else { return nil }
             current = container(of: parent)
         }
+        if case let .standalone(id) = current { return standaloneHomes[id].map { .today($0) } }
         return current?.rootSection
     }
 

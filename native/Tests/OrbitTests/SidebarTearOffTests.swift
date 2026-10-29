@@ -1,5 +1,8 @@
 import AppKit
 import Testing
+import BrowserCore
+import BrowserShell
+import WebKitEngine
 @testable import Orbit
 
 @Suite("Sidebar tear-off placement")
@@ -51,4 +54,124 @@ struct SidebarTearOffPlacementTests {
     private func placement(_ point: NSPoint, fullScreen: Bool = false) -> SidebarTearOffPlacement {
         SidebarTearOffPlacement(sourceSize: size, dropPoint: point, displays: [display], sourceIsFullScreen: fullScreen)
     }
+}
+
+extension NativeWebKitTests {
+@MainActor
+@Suite("Standalone live tab transfer", .serialized)
+struct SidebarTearOffLiveTests {
+    @Test("Reordering a standalone list keeps its documents in the same window")
+    func reorderLocalTabs() async throws {
+        NSApplication.shared.setActivationPolicy(.prohibited)
+        let environment = BrowserEnvironment(engine: SiteSyntheticEngine())
+        let (home, _) = try await environment.initialContext.value
+        let window = try await environment.makeWindow(spaceID: home, opensInitialTab: false, standalone: true)
+        defer { window.window?.close() }
+        for path in ["first", "second", "third"] {
+            window.session.openTab(url: URL(string: "https://synthetic.test/" + path)!, activate: true)
+            await window.session.waitForPendingCommands()
+        }
+        let tabs = try #require(window.session.organization?.allTabs)
+        let last = try #require(tabs.last)
+        let surface = try #require(window.liveSidebarSurface(of: last.id))
+        let requests = surface.requestedURLs
+        let payload = try #require(window.sidebar.list(window.sidebar.page.list, dragPayloadFor: .tab(last.id), grabOffsetX: 0))
+        window.performSidebarDrop(payload, to: .init(.today(home), position: .start), changesOrganization: true)
+        await window.session.waitForPendingCommands()
+        #expect(window.session.organization?.allTabs.map(\.id) == [last.id] + tabs.dropLast().map(\.id))
+        #expect(window.liveSidebarSurface(of: last.id) === surface && surface.requestedURLs == requests)
+    }
+
+    @Test("Last-tab tear-off and return retain the live surface, history and unsaved edits without resizing the empty source")
+    func liveDocumentAndReturn() async throws {
+        NSApplication.shared.setActivationPolicy(.prohibited)
+        let engine = SiteSyntheticEngine()
+        let environment = BrowserEnvironment(engine: engine)
+        let (home, _) = try await environment.initialContext.value
+        let source = try await environment.makeWindow(spaceID: home, opensInitialTab: false)
+        defer { source.window?.close() }
+        source.session.openTab(url: URL(string: "https://synthetic.test/first")!, activate: true)
+        await source.session.waitForPendingCommands()
+        let tab = try #require(source.session.organization?.selectedTab?.id)
+        let surface = try #require(source.liveSidebarSurface(of: tab))
+        surface.navigate(to: URL(string: "https://synthetic.test/edited")!)
+        await source.session.waitForPendingCommands()
+        let form = NSTextField(string: "Unsaved synthetic edit")
+        surface.documentView.addSubview(form)
+        let requests = surface.requestedURLs
+        let frame = try #require(source.window?.frame)
+        let receiver = try await environment.makeWindow(spaceID: home, opensInitialTab: false, standalone: true)
+        defer { receiver.window?.close() }
+        let move = try #require(source.moveSurface(surface, to: receiver, replacingExisting: true))
+        #expect(await move.value != nil)
+        await source.session.waitForPendingCommands()
+        await receiver.session.waitForPendingCommands()
+        #expect(receiver.session.selectedSurface === surface && receiver.session.organization?.selectedTab?.id == tab)
+        #expect(source.session.organization?.allTabs.isEmpty == true && source.session.snapshot?.tabs.isEmpty == true)
+        #expect(source.window?.frame == frame && source.window != nil)
+        #expect(surface.requestedURLs == requests && form.superview === surface.documentView)
+        #expect(form.stringValue == "Unsaved synthetic edit" && surface.navigationState.canGoBack)
+        let payload = try #require(receiver.sidebar.list(receiver.sidebar.page.list, dragPayloadFor: .tab(tab), grabOffsetX: 0))
+        source.performSidebarDrop(payload, to: .init(.today(home)), changesOrganization: true)
+        for _ in 0..<5 {
+            await source.session.waitForPendingCommands()
+            await receiver.session.waitForPendingCommands()
+            await Task.yield()
+        }
+        #expect(source.session.selectedSurface === surface && source.session.organization?.selectedTab?.id == tab)
+        #expect(receiver.session.snapshot?.tabs.isEmpty == true && receiver.window != nil)
+        #expect(surface.requestedURLs == requests && !surface.isDisposed)
+        #expect(surface.goBack()?.path == "/first")
+    }
+
+    @Test("Window orchestration inherits fullscreen without invoking native fullscreen in hidden tests", arguments: [false, true])
+    func fullscreenOrchestration(_ fullScreen: Bool) async throws {
+        NSApplication.shared.setActivationPolicy(.prohibited)
+        let environment = BrowserEnvironment(engine: WebKitBrowserEngine())
+        var toggles = 0
+        let app = OrbitApplication(environment: environment, windowPresenter: { controller, _ in
+            controller.toggleNativeFullScreen = { _ in toggles += 1 }
+        })
+        defer { app.windows.shutdown() }
+        _ = app.windows.newWindow()
+        await app.windows.waitForPendingCommands()
+        let source = try #require(app.windows.selectedWindow)
+        await source.session.waitForPendingCommands()
+        if source.session.selectedSurface == nil {
+            source.session.openTab(url: URL(string: "about:blank")!, activate: true)
+            await source.session.waitForPendingCommands()
+        }
+        let tab = try #require(source.session.organization?.selectedTab?.id)
+        let surface = try #require(source.liveSidebarSurface(of: tab))
+        let frame = try #require(source.window?.frame)
+        if fullScreen, let window = source.window {
+            source.windowWillEnterFullScreen(Notification(name: NSWindow.willEnterFullScreenNotification, object: window))
+            NotificationCenter.default.post(name: NSWindow.willEnterFullScreenNotification, object: window)
+        }
+        let payload = try #require(source.sidebar.list(source.sidebar.page.list, dragPayloadFor: .tab(tab), grabOffsetX: 0))
+        app.tearOff(payload, from: source, at: NSPoint(x: 1250, y: 450))
+        for _ in 0..<200 {
+            if app.windows.windows.count == 2 { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        let destination = try #require(app.windows.windows.values.first { $0 !== source })
+        #expect(destination.session.selectedSurface === surface)
+        #expect(destination.window?.frame.size == frame.size)
+        #expect(toggles == (fullScreen ? 1 : 0))
+        #expect(source.session.organization?.allTabs.isEmpty == true && source.window != nil)
+    }
+
+    @Test("Escape, a held button and an accepted in-window drop never become desktop tear-offs")
+    func releaseAdmission() {
+        let source = NSRect(x: 80, y: 100, width: 900, height: 750)
+        let outside = NSPoint(x: 1250, y: 450)
+        #expect(SidebarTearOffRelease.accepts(operation: [], cancelled: false, mouseIsDown: false, sourceFrame: source, otherWindowFrames: [], point: outside))
+        #expect(!SidebarTearOffRelease.accepts(operation: [], cancelled: true, mouseIsDown: false, sourceFrame: source, otherWindowFrames: [], point: outside))
+        #expect(!SidebarTearOffRelease.accepts(operation: [], cancelled: false, mouseIsDown: true, sourceFrame: source, otherWindowFrames: [], point: outside))
+        #expect(!SidebarTearOffRelease.accepts(operation: .move, cancelled: false, mouseIsDown: false, sourceFrame: source, otherWindowFrames: [], point: outside))
+        #expect(!SidebarTearOffRelease.accepts(operation: [], cancelled: false, mouseIsDown: false, sourceFrame: source, otherWindowFrames: [], point: NSPoint(x: source.midX, y: source.midY)))
+        #expect(!SidebarTearOffRelease.accepts(operation: [], cancelled: false, mouseIsDown: false, sourceFrame: source, otherWindowFrames: [NSRect(x: 1100, y: 0, width: 900, height: 750)], point: outside))
+    }
+}
+
 }

@@ -82,6 +82,7 @@ public struct BrowserWindowSnapshot: Equatable, Sendable {
     public let selectedOccurrenceID: TabOccurrenceID?
     public let tabs: [BrowserTab]
     public let revision: UInt64
+    public var isStandalone: Bool = false
 }
 
 /// Identifies one existing occurrence independently of active Space and selection.
@@ -117,6 +118,7 @@ struct WindowRecord {
     /// selection claims them normally; this transient provenance is never persisted.
     var organizationFallbackOccurrences: Set<TabOccurrenceID> = []
     var placement: BrowserWindowPlacement?
+    var standaloneProfileID: ProfileID?
     var revision: UInt64 = 0
     /// Consecutive revisions produced only by reconciling this window's occurrences after an
     /// organization change made elsewhere; any other revision change starts outside the range.
@@ -152,7 +154,17 @@ public actor BrowserStore {
     }
     var tabs: [TabOccurrenceID: BrowserTab] = [:]
     // Sidebar organization shared by windows; commands live in Organization/BrowserStore+Organization.swift.
-    var organization = BrowserOrganizationState()
+    var organization = BrowserOrganizationState() {
+        didSet {
+            // Replacing shared organization (for example after import or remote reconciliation)
+            // cannot erase window-local records which are deliberately absent from that document.
+            for id in oldValue.standalone.keys where organization.standalone[id] == nil {
+                guard let home = oldValue.standaloneHomes[id], let profile = windows[id]?.standaloneProfileID else { continue }
+                let local = oldValue.standaloneDocument(id, profileID: profile)
+                try? organization.restoreStandalone(local, windowID: id, home: home)
+            }
+        }
+    }
     var organizationJournals: [WindowID: BrowserOrganizationJournal] = [:]
     var organizationObservers: [UUID: AsyncStream<UInt64>.Continuation] = [:]
     var organizationRevision: UInt64 = 0
@@ -176,6 +188,7 @@ public actor BrowserStore {
         for saved in document.windows {
             var window = WindowRecord(id: saved.id, activeSpaceID: saved.activeSpaceID)
             window.placement = saved.placement
+            window.standaloneProfileID = saved.standalone?.profileID
             for group in saved.spaces {
                 window.occurrenceIDsBySpace[group.spaceID] = group.occurrenceIDs
                 window.selectedOccurrenceBySpace[group.spaceID] = group.selectedOccurrenceID
@@ -183,6 +196,9 @@ public actor BrowserStore {
             windows[saved.id] = window
         }
         organization = try BrowserOrganizationState(document: document.organization)
+        for saved in document.windows {
+            if let local = saved.standalone { try organization.restoreStandalone(local, windowID: saved.id, home: saved.activeSpaceID) }
+        }
         themeImports = Set(document.themeImports)
         spaceSettingsOwnership.synchronize(spaces: spaces, profiles: Set(profiles.keys), excluding: deletingProfiles, windows: windows)
     }
@@ -212,7 +228,10 @@ public actor BrowserStore {
                     selectedOccurrenceID: window.selectedOccurrenceBySpace[spaceID]
                 )
             }
-            return BrowserSessionDocument.Window(id: window.id, activeSpaceID: window.activeSpaceID, spaces: groups, placement: window.placement)
+            return BrowserSessionDocument.Window(id: window.id, activeSpaceID: window.activeSpaceID, spaces: groups, placement: window.placement,
+                standalone: window.standaloneProfileID.map { profile in
+                    organization.standaloneDocument(window.id, profileID: profile)
+                })
         }
         return BrowserSessionDocument(
             profiles: profileOrder.compactMap { profiles[$0] },
@@ -319,6 +338,16 @@ public actor BrowserStore {
         for occurrenceIDs in window.occurrenceIDsBySpace.values {
             for occurrenceID in occurrenceIDs { tabs.removeValue(forKey: occurrenceID) }
         }
+        if window.standaloneProfileID != nil {
+            for node in organization.standalone[windowID] ?? [] {
+                let ids = organization.tabIDs(in: node)
+                for id in ids { organization.detach(.tab(id)); organization.tabs[id] = nil }
+                organization.detach(node)
+                if let group = node.splitID { organization.splits[group] = nil }
+            }
+            organization.standalone[windowID] = nil
+            organization.standaloneHomes[windowID] = nil
+        }
         organizationDidCloseWindow(windowID)
     }
 
@@ -326,6 +355,7 @@ public actor BrowserStore {
         guard let space = spaces[spaceID] else { throw BrowserStoreError.spaceMissing }
         try requireAvailableProfile(space.profileID)
         guard var window = windows[windowID] else { throw BrowserStoreError.windowMissing }
+        guard window.standaloneProfileID == nil else { throw BrowserStoreError.staleContext }
         guard window.activeSpaceID != spaceID else { ensureVisibleSplitOccurrences(in: windowID); return }
         markViewed(window)
         window.activeSpaceID = spaceID
@@ -366,7 +396,7 @@ public actor BrowserStore {
                     throw BrowserStoreError.occurrenceOwnedByAnotherWindow
                 }
                 authorities[occurrenceID] = BrowserOccurrenceAuthority(storeGeneration: storeGeneration,
-                    windowID: windowID, spaceID: spaceID, profileID: space.profileID, occurrenceID: occurrenceID)
+                    windowID: windowID, spaceID: spaceID, profileID: window.standaloneProfileID ?? space.profileID, occurrenceID: occurrenceID)
                 tabIDs[occurrenceID] = tab.id
             }
         }
@@ -397,12 +427,13 @@ public actor BrowserStore {
         guard let window = windows[windowID] else { throw BrowserStoreError.windowMissing }
         let spaceID = window.activeSpaceID
         guard let space = spaces[spaceID] else { throw BrowserStoreError.spaceMissing }
-        try requireAvailableProfile(space.profileID)
+        let profileID = window.standaloneProfileID ?? space.profileID
+        try requireAvailableProfile(profileID)
         return BrowserContext(
             storeGeneration: storeGeneration,
             windowID: windowID,
             spaceID: spaceID,
-            profileID: space.profileID,
+            profileID: profileID,
             selectedOccurrenceID: window.selectedOccurrenceBySpace[spaceID],
             revision: window.revision
         )
@@ -413,7 +444,7 @@ public actor BrowserStore {
               let window = windows[context.windowID],
               let space = spaces[window.activeSpaceID], !deletingProfiles.contains(space.profileID) else { return false }
         return window.activeSpaceID == context.spaceID
-            && space.profileID == context.profileID
+            && (window.standaloneProfileID ?? space.profileID) == context.profileID
             && window.selectedOccurrenceBySpace[context.spaceID] == context.selectedOccurrenceID
             && window.revision == context.revision
     }
@@ -616,7 +647,7 @@ public actor BrowserStore {
             activeSpaceID: window.activeSpaceID,
             selectedOccurrenceID: window.selectedOccurrenceBySpace[window.activeSpaceID],
             tabs: occurrenceIDs.compactMap { tabs[$0] },
-            revision: window.revision
+            revision: window.revision, isStandalone: window.standaloneProfileID != nil
         )
     }
 }

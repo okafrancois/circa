@@ -97,6 +97,7 @@ private struct ModelState: Equatable {
 
     static func owner(_ container: Container) -> Node? {
         switch container {
+        case .standalone: preconditionFailure("Standalone ownership has dedicated coverage")
         case let .folder(id): return .folder(id)
         case let .split(id): return .split(id)
         default: return nil
@@ -183,6 +184,7 @@ private struct ModelState: Equatable {
 
     private func rank(_ container: Container) -> (Int, String) {
         switch container {
+        case .standalone: preconditionFailure("Standalone ownership has dedicated coverage")
         case let .favorites(id): return (0, id.rawValue.uuidString)
         case let .pinned(id): return (1, id.rawValue.uuidString)
         case let .today(id): return (2, id.rawValue.uuidString)
@@ -467,6 +469,7 @@ private struct OrganizationModel {
         }
         let target: Section
         switch container {
+        case .standalone: preconditionFailure("Standalone ownership has dedicated coverage")
         case .split: return nil
         case let .favorites(id): target = .favorites(id)
         case let .pinned(id): target = .pinned(id)
