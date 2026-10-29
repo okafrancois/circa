@@ -172,6 +172,11 @@ public final class ChromiumSurface: BrowserEngineSurface {
     private var documentObserverReady = false
     private var documentObserverRequest: Int32 = 0
     public internal(set) var isSuspended = false
+    var suspensionPaintEnabled = false
+    var suspensionMainFrame: String?
+    var suspensionLoader: String?
+    var suspensionPaintTask: Task<Void, Never>?
+    public internal(set) var suspensionPaintGeneration: UInt64?
     var isProtectedFromSuspension: Bool {
         !documentObserverReady || !mediaActivity.webAudioReady || !mediaActivity.mediaReady || mediaActivity.isPlaying
             || mediaActivity.audioPlaying != false || isElementFullscreen
@@ -554,6 +559,8 @@ public final class ChromiumSurface: BrowserEngineSurface {
     }
 
     public func dispose() {
+        suspensionPaintTask?.cancel()
+        suspensionPaintTask = nil
         closeCleanupTimeout?.cancel()
         closeCleanupTimeout = nil
         observePasswordPrompt(nil)
@@ -876,6 +883,7 @@ public final class ChromiumSurface: BrowserEngineSurface {
         switch event.kind {
         case ACR_EVENT_MEDIA_ACTIVITY:
             if let method = event.detail, let payload = event.payload {
+                receiveSuspensionPaint(method: method, payload: payload)
                 mediaActivity.receive(method: method, payload: payload)
                 onChange?()
             }

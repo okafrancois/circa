@@ -92,6 +92,9 @@ extension BrowserWindowController {
 
     func renderSplit(retainingPreviousUntil capture: Task<Void, Never>? = nil) {
         let selected = session.selectedSurface
+        for id in session.visibleOccurrenceIDs {
+            if let surface = session.surface(for: id) { tabSuspension.prepareCover(for: surface) }
+        }
         contentCard.splitTheme = windowShell.theme
         if let group = session.activeSplit, split.expandedGroup != group.group.id || selected == nil {
             let view = split.presentation(for: .group(group.group.id), configure: configureSplitView)

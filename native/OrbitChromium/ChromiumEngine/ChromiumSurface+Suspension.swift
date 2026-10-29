@@ -127,3 +127,48 @@ extension ChromiumSurface {
         onEngineEvent?("suspension-restored", [:])
     }
 }
+
+extension ChromiumSurface {
+    public var supportsSuspensionPaint: Bool { true }
+
+    public func prepareSuspensionPaint() async -> Bool {
+        guard !isDisposed else { return false }
+        if suspensionPaintEnabled { return true }
+        let (ok, data) = await devToolsCall("Page.getFrameTree")
+        guard ok, let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let tree = object["frameTree"] as? [String: Any], let frame = tree["frame"] as? [String: Any],
+              let id = frame["id"] as? String else { return false }
+        suspensionMainFrame = id
+        suspensionLoader = frame["loaderId"] as? String
+        let (enabled, _) = await devToolsCall("Page.setLifecycleEventsEnabled", params: #"{"enabled":true}"#)
+        suspensionPaintEnabled = enabled && !isDisposed
+        return suspensionPaintEnabled
+    }
+
+    func receiveSuspensionPaint(method: String, payload: Data) {
+        guard suspensionPaintEnabled, method == "Page.frameNavigated" || method == "Page.lifecycleEvent",
+              let object = try? JSONSerialization.jsonObject(with: payload) as? [String: Any] else { return }
+        if method == "Page.frameNavigated", let frame = object["frame"] as? [String: Any], frame["parentId"] == nil {
+            suspensionMainFrame = frame["id"] as? String
+            suspensionLoader = frame["loaderId"] as? String
+            suspensionPaintGeneration = nil
+            suspensionPaintTask?.cancel()
+        } else if method == "Page.lifecycleEvent", object["name"] as? String == "firstContentfulPaint",
+                  object["frameId"] as? String == suspensionMainFrame,
+                  let loader = object["loaderId"] as? String, loader == suspensionLoader {
+            let generation = documentGeneration
+            suspensionPaintTask?.cancel()
+            suspensionPaintTask = Task { [weak self] in
+                guard let self else { return }
+                // FCP is renderer paint, not scanout. Give the native compositor two frame
+                // opportunities before exposing it; the shell also has a bounded timeout.
+                let (ok, _) = await devToolsCall("Runtime.evaluate", params: #"{"expression":"new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(()=>r(true))))","awaitPromise":true,"returnByValue":true}"#)
+                guard ok, !Task.isCancelled, !isDisposed, documentGeneration == generation,
+                      suspensionLoader == loader else { return }
+                suspensionPaintGeneration = generation
+                onEngineEvent?("suspension-content-painted", ["generation": String(generation)])
+                onChange?()
+            }
+        }
+    }
+}

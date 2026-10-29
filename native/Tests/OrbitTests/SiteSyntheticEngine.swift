@@ -148,6 +148,10 @@ final class SiteSyntheticSurface: BrowserEngineSurface {
 
     // Opt-in native-discard fixture; other suites retain the unsupported default.
     var allowsSuspension = false
+    var supportsSuspensionPaint = false
+    var suspensionPaintGeneration: UInt64?
+    func prepareSuspensionPaint() async -> Bool { supportsSuspensionPaint }
+    var snapshotHandler: ((BrowserSnapshotRequest) async throws -> BrowserSurfaceSnapshot)?
     var suspensionCapture: (() async -> BrowserSuspensionState?)?
     var suspensionCount = 0
     func captureStateForSuspension() async -> BrowserSuspensionState? {
@@ -249,6 +253,7 @@ final class SiteSyntheticSurface: BrowserEngineSurface {
     func stopFinding(clearSelection: Bool) {}
 
     func captureSnapshot(_ request: BrowserSnapshotRequest) async throws -> BrowserSurfaceSnapshot {
+        if let snapshotHandler { return try await snapshotHandler(request) }
         throw BrowserEngineError.unsupportedOperation
     }
 
