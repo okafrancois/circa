@@ -1,5 +1,6 @@
 import Testing
 import AppKit
+import BrowserCore
 @testable import Orbit
 
 struct BrowserTranslationTests {
@@ -114,6 +115,82 @@ struct BrowserTranslationTests {
         state.complete()
         #expect(state.phase == .unavailable)
     }
+    @Test("Target selection rejects unsupported pairs and restores an actionable state")
+    func targetChoice() {
+        var state = BrowserTranslationState()
+        let accepted1 = state.selectTarget("fr", supported: true)
+        #expect(!accepted1)
+        state.detect(source: "de", preferred: ["en"], supported: true)
+        let accepted2 = state.selectTarget("fr", supported: false)
+        #expect(!accepted2)
+        let accepted3 = state.selectTarget("de-DE", supported: true)
+        #expect(!accepted3)
+        #expect(state.target == "en" && state.phase == .available)
+        let accepted4 = state.begin()
+        #expect(accepted4)
+        state.complete()
+        let accepted5 = state.selectTarget("fr", supported: true)
+        #expect(accepted5)
+        #expect(state.target == "fr" && state.phase == .available)
+        let accepted6 = state.begin()
+        #expect(accepted6)
+        state.complete()
+        state.restore()
+        #expect(state.target == "fr" && state.phase == .original)
+        let accepted7 = state.selectTarget("zh-Hant", supported: true)
+        #expect(accepted7)
+        #expect(Locale.Language(identifier: state.target).script?.identifier == "Hant")
+    }
+
+    @Test("A suppressed host retains explicit manual controls without offering translation")
+    func suppressionState() {
+        var state = BrowserTranslationState()
+        state.suppressSite(true)
+        state.detect(source: "de", preferred: ["en"], supported: true)
+        #expect(!state.offersTranslation)
+        #expect(state.source == "de")
+        state.suppressSite(false)
+        #expect(state.offersTranslation)
+    }
+
+    @Test("The menu invokes only the recorded actions with their document target")
+    @MainActor func optionsActions() throws {
+        NSApplication.shared.setActivationPolicy(.prohibited)
+        var chosen = "", toggles = 0, settings = 0
+        let menu = BrowserTranslationOptionsMenu(targets: ["en", "fr"], suppressed: true,
+            choose: { chosen = $0 }, toggleSite: { toggles += 1 }, settings: { settings += 1 })
+        #expect(menu.items.map(\.title) == [uiText("Choose Another Language"), uiText("Never Translate This Site"), "", uiText("Language Settings")])
+        #expect(menu.items[1].state == .on)
+        let languages = try #require(menu.items[0].submenu)
+        languages.performActionForItem(at: 1)
+        #expect(chosen == "fr")
+        menu.performActionForItem(at: 1)
+        menu.performActionForItem(at: 3)
+        #expect(toggles == 1 && settings == 1)
+    }
+
+    @Test("Regular windows share host preferences; an independent private environment never inherits them")
+    @MainActor func privatePreferences() async throws {
+        NSApplication.shared.setActivationPolicy(.prohibited)
+        let normal = BrowserEnvironment(engine: PeekSyntheticEngine())
+        let first = try await normal.makeWindow(), second = try await normal.makeWindow()
+        let ephemeral = BrowserEnvironment(engine: PeekSyntheticEngine())
+        ephemeral.isPrivate = true
+        let privateWindow = try await ephemeral.makeWindow()
+        defer {
+            for window in [first, second, privateWindow] { window.session.close(); window.window?.close() }
+        }
+        let url = URL(string: "https://translation.test/")!
+        let profile = try await normal.initialContext.value.1
+        var value = BrowserSitePreferences(); value.neverTranslate = true
+        try first.translation.preferences.set(value, url: url, profileID: profile)
+        #expect(second.translation.preferences.preferences(url: url, profileID: profile).neverTranslate)
+        #expect(!privateWindow.translation.preferences.preferences(url: url, profileID: profile).neverTranslate)
+        try privateWindow.translation.preferences.set(value, url: url, profileID: profile)
+        #expect(privateWindow.translation.preferences.preferences(url: url, profileID: profile).neverTranslate)
+        #expect(!BrowserEnvironment(engine: PeekSyntheticEngine()).sitePreferences.preferences(url: url, profileID: profile).neverTranslate)
+    }
+
     @Test func languageDetectionUsesContent() {
         #expect(BrowserTranslationState.detectLanguage(text: "Ein Baum ist eine verholzte Pflanze mit einer Wurzel, einem Stamm und einer Krone. Die meisten Bäume haben viele grüne Blätter.", hint: "en") == "de")
         #expect(BrowserTranslationState.detectLanguage(text: "Hi", hint: "de") == nil)

@@ -7,6 +7,18 @@ struct BrowserTranslationState: Equatable {
     private(set) var source = ""
     private(set) var target = ""
 
+    private(set) var siteSuppressed = false
+    var offersTranslation: Bool { phase == .available && !siteSuppressed }
+    mutating func suppressSite(_ suppressed: Bool) { siteSuppressed = suppressed }
+
+    /// An explicit choice retains script/region distinctions supported by the translation service.
+    mutating func selectTarget(_ identifier: String, supported: Bool) -> Bool {
+        guard phase != .unavailable, supported, let code = Self.languageCode(identifier), code != source else { return false }
+        target = Locale.Language(identifier: identifier).minimalIdentifier
+        phase = .available
+        return true
+    }
+
     mutating func detect(source: String?, preferred: [String], supported: Bool) {
         guard let source = source.flatMap(Self.languageCode),
               let target = preferred.first.flatMap(Self.languageCode), supported,

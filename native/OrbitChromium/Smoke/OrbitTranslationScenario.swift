@@ -31,11 +31,14 @@ enum OrbitTranslationScenario {
             button.performClick(nil)
             return await OrbitRelaunchScenarios.until { window.translation.popover.isShown }
         }
-        let theme = OrbitTokens.SpaceTheme(stops: [NSColor(srgbRed: 40/255, green: 37/255, blue: 55/255, alpha: 1)], mode: .dark, texture: .none, textureIntensity: 0)
+        let optionsRun = ProcessInfo.processInfo.arguments.contains("--translation-options")
+        let theme = optionsRun
+            ? OrbitTokens.SpaceTheme(stops: [NSColor(srgbRed: 224/255, green: 222/255, blue: 241/255, alpha: 1)], mode: .light, texture: .none, textureIntensity: 0)
+            : OrbitTokens.SpaceTheme(stops: [NSColor(srgbRed: 40/255, green: 37/255, blue: 55/255, alpha: 1)], mode: .dark, texture: .none, textureIntensity: 0)
         func capture(_ name: String) async {
             try? await Task.sleep(for: .milliseconds(250))
             window.windowShell.apply(theme: theme, animated: false)
-            window.window?.appearance = NSAppearance(named: .darkAqua)
+            window.window?.appearance = NSAppearance(named: optionsRun ? .aqua : .darkAqua)
             window.window?.displayIfNeeded()
             CATransaction.flush()
             guard owned(window.window) else { check("capture-owner", false); return }
@@ -44,12 +47,13 @@ enum OrbitTranslationScenario {
             try? process.run(); process.waitUntilExit()
         }
         window.window?.setFrame(NSRect(x: 0, y: 80, width: 1506, height: 949), display: true)
-        OrbitSpaceThemes.resolver = { _, _ in OrbitTokens.SpaceTheme(stops: [NSColor(srgbRed: 40/255, green: 37/255, blue: 55/255, alpha: 1)], mode: .dark, texture: .none, textureIntensity: 0) }
+        OrbitSpaceThemes.resolver = { _, _ in theme }
         window.sidebarWidth.constant = 500
-        window.windowShell.apply(theme: OrbitTokens.SpaceTheme(stops: [NSColor(srgbRed: 40/255, green: 37/255, blue: 55/255, alpha: 1)], mode: .dark, texture: .none, textureIntensity: 0), animated: false)
+        window.windowShell.apply(theme: theme, animated: false)
+        window.window?.appearance = NSAppearance(named: optionsRun ? .aqua : .darkAqua)
         window.showWindow(nil); window.window?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
-        let url = URL(string: "https://de.wikipedia.org/wiki/Baum")!
+        let url = URL(string: ProcessInfo.processInfo.arguments.contains("--translation-options") ? "https://de.wikipedia.org/wiki/Berlin" : "https://de.wikipedia.org/wiki/Baum")!
         window.openTab(url: url)
         await window.session.waitForPendingCommands()
         guard await OrbitRelaunchScenarios.until({ window.session.selectedSurface?.navigationState.committedURL == url && window.session.selectedSurface?.navigationState.isLoading == false }),
@@ -65,6 +69,88 @@ enum OrbitTranslationScenario {
         tab.focusDocument()
         record("translation.pair", "observed", ["source": page.state.source, "target": page.state.target])
         check("available", true); await capture("offer")
+        if ProcessInfo.processInfo.arguments.contains("--translation-options") {
+            // Capture only this process's windows, including native menus and popovers.
+            func captureOwned(_ name: String) {
+                guard owned(window.window), let rows = CGWindowListCopyWindowInfo(.optionOnScreenOnly, kCGNullWindowID) as? [[String: Any]] else { return }
+                var manifest: [[String: Any]] = []
+                for row in rows.reversed() where (row[kCGWindowOwnerPID as String] as? Int32) == getpid() {
+                    guard let bounds = row[kCGWindowBounds as String] as? [String: Any] else { continue }
+                    manifest.append(["bounds": bounds])
+                }
+                // A native window capture includes its popover/menu hierarchy on this OS.
+                let process = Process(); process.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
+                process.arguments = ["-x", "-o", "-l", String(window.window!.windowNumber), root.appendingPathComponent(name + ".png").path]
+                try? process.run(); process.waitUntilExit()
+                try? JSONSerialization.data(withJSONObject: manifest).write(to: root.appendingPathComponent(name + ".json"))
+            }
+            func openOptions(_ name: String) async -> BrowserTranslationOptionsMenu? {
+                _ = await OrbitRelaunchScenarios.until { window.translation.page?.targets.isEmpty == false }
+                window.translation.popover.close()
+                try? await Task.sleep(for: .milliseconds(200))
+                guard await clickStatus() else { return nil }
+                guard await OrbitRelaunchScenarios.until({
+                    guard let view = window.translation.popover.contentViewController?.view as? BrowserTranslationPopover,
+                          view.options.window?.isVisible == true else { return false }
+                    return owned(view.options.window)
+                }), let view = window.translation.popover.contentViewController?.view as? BrowserTranslationPopover,
+                      owned(view.options.window) else { return nil }
+                captureOwned(name + "-popup")
+                // The tracking loop runs in common modes, so the timer can capture and dismiss it.
+                let timer = Timer(timeInterval: 0.5, target: TranslationMenuCapture {
+                    captureOwned(name)
+                    window.translation.optionsMenu?.cancelTracking()
+                }, selector: #selector(TranslationMenuCapture.fire), userInfo: nil, repeats: false)
+                RunLoop.main.add(timer, forMode: .common)
+                // Recheck the exact target after capture, immediately before dispatch.
+                guard owned(view.options.window) else { return nil }
+                view.options.performClick(nil)
+                return window.translation.makeOptionsMenu()
+            }
+            guard await OrbitRelaunchScenarios.until({ page.targets.contains("fr") }),
+                  let menu = await openOptions("options-menu"), let languages = menu.items.first?.submenu,
+                  let french = languages.items.firstIndex(where: { $0.representedObject as? String == "fr" }),
+                  owned(window.window) else { check("options-open", false); return }
+            check("options-open", true)
+            languages.performActionForItem(at: french)
+            let deadline = ContinuousClock.now + .seconds(43)
+            while page.state.phase != .translated && ContinuousClock.now < deadline {
+                try? await Task.sleep(for: .milliseconds(100))
+            }
+            check("french-translated", page.state.phase == .translated && page.state.target == "fr")
+            if let failure = page.failure {
+                record("translation.failure-diagnostic", "observed", ["stage": failure.stage, "domain": failure.domain, "code": failure.code])
+            }
+            let frenchText = await evaluate("document.querySelector('p').innerText", tab: tab) ?? ""
+            check("french-content", frenchText.contains("Berlin") && !frenchText.contains("Dieser Artikel"))
+            captureOwned("french-result")
+            guard let never = await openOptions("never-site-before"), owned(window.window) else { return }
+            never.performActionForItem(at: 1)
+            check("never-site", await OrbitRelaunchScenarios.until { page.state.siteSuppressed && !page.state.offersTranslation && page.state.phase == .original })
+            captureOwned("never-site-result")
+            guard let checked = await openOptions("never-site-check") else { return }
+            check("never-checked", checked.items[1].state == .on)
+            window.translation.popover.close()
+            tab.reload()
+            check("reload-suppressed", await OrbitRelaunchScenarios.until {
+                window.translation.page !== page && window.translation.page?.state.siteSuppressed == true
+                    && window.translation.page?.state.phase == .available && !tab.navigationState.isLoading
+            })
+            captureOwned("never-site-reloaded")
+            guard let undo = await openOptions("never-site-undo"), owned(window.window) else { return }
+            check("reload-checked", undo.items[1].state == .on)
+            undo.performActionForItem(at: 1)
+            check("never-undo", window.translation.page?.state.offersTranslation == true)
+            guard let restored = await openOptions("site-preference-restored"), owned(window.window) else { return }
+            check("undo-unchecked", restored.items[1].state == .off)
+            restored.performActionForItem(at: 3)
+            await window.session.waitForPendingCommands()
+            check("language-settings", await OrbitRelaunchScenarios.until { window.session.selectedSurface?.navigationState.committedURL?.absoluteString.hasPrefix("chrome://settings/languages") == true })
+            _ = await OrbitRelaunchScenarios.until { window.session.selectedSurface?.navigationState.isLoading == false }
+            try? await Task.sleep(for: .milliseconds(750))
+            captureOwned("language-settings")
+            return
+        }
         guard owned(window.window) else { check("offer-owner", false); return }
         check("offer-click", await clickStatus())
         await capture("popup")
@@ -131,4 +217,11 @@ enum OrbitTranslationScenario {
               let remote = json["result"] as? [String: Any] else { return nil }
         return remote["value"] as? String
     }
+}
+
+@MainActor
+private final class TranslationMenuCapture: NSObject {
+    private let capture: () -> Void
+    init(_ capture: @escaping () -> Void) { self.capture = capture }
+    @objc func fire() { capture() }
 }

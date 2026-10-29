@@ -1,5 +1,6 @@
 import AppKit
 import BrowserEngine
+import BrowserCore
 import SwiftUI
 @preconcurrency import Translation
 
@@ -13,6 +14,8 @@ final class BrowserPageTranslation: ObservableObject {
     var host: NSView?
     var detection: Task<Void, Never>?
     private var revision = 0
+    private var targetRevision = 0
+    private(set) var targets: [String] = []
     private var privateWindow = false
     private var usesHighFidelity = false
     private(set) var failure: (stage: String, domain: String, code: Int)?
@@ -42,12 +45,66 @@ final class BrowserPageTranslation: ObservableObject {
                 state.detect(source: source, preferred: preferred,
                              supported: availability == .installed || (!privateWindow && availability == .supported))
                 onChange?()
+                await loadTargets()
             } catch { /* A navigation or unsupported document has no offer. */ }
         }
     }
 
+    /// The service is authoritative; private documents expose installed pairs only.
+    private func strategy(for target: String) async -> Bool? {
+        let source = Locale.Language(identifier: state.source)
+        let target = Locale.Language(identifier: target)
+        let classic: LanguageAvailability
+        if #available(macOS 26.4, *) { classic = LanguageAvailability(preferredStrategy: .lowLatency) }
+        else { classic = LanguageAvailability() }
+        let status = await classic.status(from: source, to: target)
+        if status == .installed { return false }
+        if #available(macOS 26.4, *) {
+            let high = await LanguageAvailability(preferredStrategy: .highFidelity).status(from: source, to: target)
+            if high == .installed || (!privateWindow && status == .unsupported && high == .supported) { return true }
+        }
+        return !privateWindow && status == .supported ? false : nil
+    }
+
+    func loadTargets() async {
+        var languages = await languageAvailability().supportedLanguages
+        if #available(macOS 26.4, *) {
+            languages += await LanguageAvailability(preferredStrategy: .highFidelity).supportedLanguages
+        }
+        var supported: [String] = []
+        for language in languages {
+            guard isCurrent, !Task.isCancelled else { return }
+            let identifier = language.minimalIdentifier
+            if !supported.contains(identifier), await strategy(for: identifier) != nil { supported.append(identifier) }
+        }
+        guard isCurrent, !Task.isCancelled else { return }
+        targets = supported.sorted {
+            Self.languageName($0).localizedStandardCompare(Self.languageName($1)) == .orderedAscending
+        }
+        onChange?()
+    }
+
+    static func languageName(_ identifier: String) -> String {
+        // Language names are supplied and localized by Foundation, not English lookup keys.
+        Locale.current.localizedString(forIdentifier: identifier) ?? identifier
+    }
+
+    func chooseTarget(_ target: String, in root: NSView) async {
+        targetRevision += 1
+        let selection = targetRevision
+        guard targets.contains(target), let highFidelity = await strategy(for: target),
+              isCurrent, targetRevision == selection else { return }
+        // Restore originals before changing models; translated text must never become the source.
+        await restore(cancelTargetSelection: false)
+        guard isCurrent, targetRevision == selection, state.phase != .failed,
+              state.selectTarget(target, supported: true) else { return }
+        usesHighFidelity = highFidelity
+        begin(in: root)
+    }
+
     func begin(in root: NSView) {
         guard isCurrent, state.begin() else { return }
+        targetRevision += 1
         revision += 1
         if host == nil {
             let view = NSHostingView(rootView: TranslationTaskView(model: self))
@@ -123,19 +180,22 @@ final class BrowserPageTranslation: ObservableObject {
         texts.map { TranslationSession.Request(sourceText: $0.text.trimmingCharacters(in: .whitespacesAndNewlines), clientIdentifier: $0.id) }
     }
 
-    func restore() async {
+    func restore(cancelTargetSelection: Bool = true) async {
         guard let surface, isCurrent else { return }
+        if cancelTargetSelection { targetRevision += 1 }
         revision += 1
+        let request = revision
         configuration = nil
         do {
             try await surface.restoreTranslation()
-            guard isCurrent else { return }
+            guard isCurrent, revision == request else { return }
             state.restore()
-        } catch { if isCurrent { state.fail() } }
+        } catch { if isCurrent, revision == request { state.fail() } }
         onChange?()
     }
 
     func retire() {
+        targetRevision += 1
         revision += 1
         detection?.cancel(); detection = nil
         configuration = nil
@@ -177,6 +237,9 @@ final class BrowserTranslationController<Engine: BrowserEngine> {
         set { owner?.translationPages.pages = newValue }
     }
     let popover = NSPopover()
+    var preferences = try! BrowserSitePreferenceStore()
+    var onPreferenceError: ((any Error) -> Void)?
+    private(set) var optionsMenu: BrowserTranslationOptionsMenu?
     private var presentedPage: BrowserPageTranslation?
     init(owner: BrowserWindowController<Engine>) {
         self.owner = owner
@@ -213,6 +276,10 @@ final class BrowserTranslationController<Engine: BrowserEngine> {
             page.onChange = { [weak self] in self?.update() }
             page.detect(privateWindow: owner.isPrivateWindow)
         }
+        for surface in owner.session.ownedSurfaces {
+            pages[ObjectIdentifier(surface)]?.state.suppressSite(preferences.preferences(
+                url: surface.navigationState.committedURL, profileID: surface.profileID).neverTranslate)
+        }
         update()
     }
     private func update() {
@@ -221,14 +288,16 @@ final class BrowserTranslationController<Engine: BrowserEngine> {
         owner?.addressField.setAccessibilityCustomActions(status == nil ? [] : [
             NSAccessibilityCustomAction(name: uiText("Translate")) { [weak self] in self?.show(); return true }
         ])
-        if popover.isShown, presentedPage !== page { popover.close() }
+        if popover.isShown, presentedPage !== page { optionsMenu?.cancelTracking(); popover.close() }
     }
     func show() {
-        guard let owner, let page, page.state.phase != .unavailable else { return }
+        guard let owner, let page, page.isCurrent, page.state.phase != .unavailable else { return }
         if popover.isShown { popover.close(); return }
         presentedPage = page
-        let view = BrowserTranslationPopover(state: page.state) { [weak self, weak page, weak owner] in
-            guard let self, let page, let owner, self.page === page else { return }
+        let view = BrowserTranslationPopover(state: page.state, options: { [weak self] button in
+            self?.showOptions(from: button)
+        }) { [weak self, weak page, weak owner] in
+            guard let self, let page, let owner, self.page === page, page.isCurrent else { return }
             popover.close()
             if page.state.phase == .translated { Task { await page.restore() } }
             else if let root = owner.window?.contentView { page.begin(in: root) }
@@ -242,7 +311,50 @@ final class BrowserTranslationController<Engine: BrowserEngine> {
         rect.size.height = 1
         popover.show(relativeTo: rect, of: anchor, preferredEdge: anchor.isFlipped ? .maxY : .minY)
     }
+    func makeOptionsMenu() -> BrowserTranslationOptionsMenu? {
+        guard let owner, let page, page.isCurrent, let surface = owner.session.selectedSurface else { return nil }
+        let url = surface.navigationState.committedURL, profile = surface.profileID
+        let suppressed = preferences.preferences(url: url, profileID: profile).neverTranslate
+        return BrowserTranslationOptionsMenu(targets: page.targets, suppressed: suppressed, choose: { [weak self, weak page] target in
+            guard let self, let page, self.page === page, page.isCurrent, let root = self.owner?.window?.contentView else { return }
+            self.popover.close()
+            Task { await page.chooseTarget(target, in: root) }
+        }, toggleSite: { [weak self, weak page] in
+            guard let self, let page, self.page === page, page.isCurrent else { return }
+            var value = self.preferences.preferences(url: url, profileID: profile)
+            value.neverTranslate.toggle()
+            do {
+                try self.preferences.set(value, url: url, profileID: profile)
+                for document in self.pages.values where document.surface?.profileID == profile
+                    && BrowserSitePreferenceStore.host(document.surface?.navigationState.committedURL) == BrowserSitePreferenceStore.host(url) {
+                    document.state.suppressSite(value.neverTranslate)
+                    document.onChange?()
+                }
+                self.popover.close()
+                if value.neverTranslate { Task { await page.restore() } }
+                self.update()
+            } catch { self.onPreferenceError?(error) }
+        }, settings: { [weak self, weak page] in
+            guard let self, let page, self.page === page, page.isCurrent, let owner = self.owner else { return }
+            self.popover.close()
+            owner.openTab(url: URL(string: "chrome://settings/languages")!)
+        })
+    }
+
+    private func showOptions(from button: NSButton) {
+        guard let menu = makeOptionsMenu(), let sourceWindow = button.window,
+              let root = owner?.window?.contentView, let destinationWindow = root.window else { return }
+        let screen = sourceWindow.convertPoint(toScreen: button.convert(
+            NSPoint(x: button.bounds.midX, y: button.bounds.midY), to: nil))
+        let point = root.convert(destinationWindow.convertPoint(fromScreen: screen), from: nil)
+        optionsMenu = menu
+        popover.close()
+        menu.popUp(positioning: nil, at: point, in: root)
+        optionsMenu = nil
+    }
+
     func close() {
+        optionsMenu?.cancelTracking()
         popover.close()
         // A released surface belongs to its receiver or the rescue holder, even if this
         // window closes while adoption is pending. Only retire documents still owned here.
@@ -252,14 +364,20 @@ final class BrowserTranslationController<Engine: BrowserEngine> {
     }
 }
 
-/// 236 × 100 pt content, 32 pt language badge, 104 × 32 pt actions and 10 pt insets.
+/// 236 pt content width, 32 pt language badge, 104 × 32 pt actions and 10 pt insets.
 @MainActor
 final class BrowserTranslationPopover: NSView {
     let primary: NSButton
-    init(state: BrowserTranslationState, action: @escaping () -> Void) {
+    let options: NSButton
+    init(state: BrowserTranslationState, options onOptions: @escaping (NSButton) -> Void = { _ in }, action: @escaping () -> Void) {
         let translated = state.phase == .translated
         primary = TranslationActionButton(translated ? uiText("Use Original") : uiText("Translate"), identifier: "translation-primary", onPress: action)
-        super.init(frame: NSRect(x: 0, y: 0, width: 236, height: translated ? 96 : 100))
+        options = TranslationActionButton(uiText("Options"), identifier: "translation-options", onPress: {})
+        super.init(frame: NSRect(x: 0, y: 0, width: 236, height: translated ? 100 : 102))
+        (options as? TranslationActionButton)?.onPress = { [weak options] in
+            if let options { onOptions(options) }
+        }
+        (options as? TranslationActionButton)?.secondary = true
         let badge = NSView()
         let badgeLabel = NSTextField(labelWithString: uiText("Aa"))
         badgeLabel.frame = NSRect(x: 0, y: 6, width: 32, height: 20)
@@ -277,12 +395,13 @@ final class BrowserTranslationPopover: NSView {
         label.preferredMaxLayoutWidth = 178
         let labelHeight = label.fittingSize.height
         label.frame = NSRect(x: 50, y: badge.frame.midY - labelHeight / 2, width: 178, height: labelHeight)
-        primary.frame = NSRect(x: 122, y: 8, width: 104, height: 32)
-        for button in [primary] {
+        primary.frame = NSRect(x: 122, y: 10, width: 104, height: 32)
+        options.frame = NSRect(x: 10, y: 10, width: 104, height: 32)
+        for button in [primary, options] {
             button.bezelStyle = .rounded; button.font = .systemFont(ofSize: 14, weight: .semibold)
         }
         primary.isEnabled = [.available, .original, .failed, .translated].contains(state.phase)
-        for view in [badge, label, primary] { addSubview(view) }
+        for view in [badge, label, options, primary] { addSubview(view) }
     }
     required init?(coder: NSCoder) { nil }
 }
@@ -290,7 +409,8 @@ final class BrowserTranslationPopover: NSView {
 /// Dark controls paint their complete 32 pt frame with 6 pt corners.
 @MainActor
 private final class TranslationActionButton: NSButton {
-    private var onPress: (() -> Void)?
+    var onPress: (() -> Void)?
+    var secondary = false
     convenience init(_ title: String, identifier: String, onPress: @escaping () -> Void) {
         self.init(frame: .zero)
         self.title = title
@@ -301,9 +421,13 @@ private final class TranslationActionButton: NSButton {
     }
     @objc private func press() { if isEnabled { onPress?() } }
     override func draw(_ dirtyRect: NSRect) {
-        guard OrbitAppearance.isDark(effectiveAppearance) else { super.draw(dirtyRect); return }
+        let dark = OrbitAppearance.isDark(effectiveAppearance)
+        guard dark || secondary else { super.draw(dirtyRect); return }
         let path = NSBezierPath(roundedRect: bounds.insetBy(dx: 0.5, dy: 0.5), xRadius: 6, yRadius: 6)
-        if isEnabled {
+        if secondary {
+            NSColor.labelColor.withAlphaComponent(0.08).setFill()
+            path.fill()
+        } else if isEnabled {
             let bottom = NSColor(srgbRed: 100/255, green: 99/255, blue: 120/255, alpha: 1)
             let top = NSColor(srgbRed: 108/255, green: 107/255, blue: 125/255, alpha: 1)
             NSGradient(starting: bottom, ending: top)?.draw(in: path, angle: 90)
@@ -323,7 +447,7 @@ private final class TranslationActionButton: NSButton {
         style.lineBreakMode = .byTruncatingTail
         let attributes: [NSAttributedString.Key: Any] = [
             .font: font ?? NSFont.systemFont(ofSize: 14, weight: .semibold),
-            .foregroundColor: NSColor(srgbRed: 202/255, green: 201/255, blue: 224/255, alpha: 1),
+            .foregroundColor: dark ? NSColor(srgbRed: 202/255, green: 201/255, blue: 224/255, alpha: 1) : NSColor.secondaryLabelColor,
             .paragraphStyle: style
         ]
         let height = (title as NSString).size(withAttributes: attributes).height

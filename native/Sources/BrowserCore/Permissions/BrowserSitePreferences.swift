@@ -3,7 +3,16 @@ import Foundation
 public struct BrowserSitePreferences: Codable, Equatable, Sendable {
     public var developerMode = false
     public var automaticPictureInPicture = true
+    public var neverTranslate = false
     public init() {}
+
+    private enum CodingKeys: String, CodingKey { case developerMode, automaticPictureInPicture, neverTranslate }
+    public init(from decoder: any Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        developerMode = try values.decodeIfPresent(Bool.self, forKey: .developerMode) ?? false
+        automaticPictureInPicture = try values.decodeIfPresent(Bool.self, forKey: .automaticPictureInPicture) ?? true
+        neverTranslate = try values.decodeIfPresent(Bool.self, forKey: .neverTranslate) ?? false
+    }
 }
 
 /// Orbit's Developer Mode is host-scoped. Schemes and ports of one host share preferences
