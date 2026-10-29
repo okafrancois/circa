@@ -204,7 +204,9 @@ public final class ChromiumSurface: BrowserEngineSurface {
     }
     private var devTools: [Int32: DevToolsRequest] = [:]
     private var snapshotRequestID: Int32?
-    private var snapshotCaptureInFlight = false
+    var snapshotCaptureInFlight = false
+    private var nativeSnapshotToken: UUID?
+    private var nativeSnapshotContinuation: CheckedContinuation<BrowserNativeCapture, any Error>?
     private var devToolsTimeouts: [Int32: Task<Void, Never>] = [:]
     var mediaActivity = ChromiumMediaActivity()
     weak var automaticPiPSourceWindow: NSWindow?
@@ -535,9 +537,7 @@ public final class ChromiumSurface: BrowserEngineSurface {
         try Task.checkCancellation()
         // ImageIO cannot interrupt a decode already in progress. Keep the admission slot through
         // its completion, including cancellation, so another capture cannot overlap that worker.
-        while snapshotCaptureInFlight { try await Task.sleep(for: .milliseconds(10)) }
-        try Task.checkCancellation()
-        snapshotCaptureInFlight = true
+        try await beginSnapshotCapture()
         defer { snapshotCaptureInFlight = false }
         guard !isDisposed else { throw BrowserEngineError.surfaceDisposed }
         Self.snapshotProbe?("started", 0)
@@ -546,6 +546,28 @@ public final class ChromiumSurface: BrowserEngineSurface {
         let generation = request.documentGeneration ?? documentGeneration
         guard generation == documentGeneration else { throw BrowserEngineError.documentChanged }
         guard isBrowserCreated else { throw BrowserEngineError.snapshotUnavailable }
+        let size = hostView.bounds.size
+        let scale = hostView.window?.backingScaleFactor ?? hostView.layer?.contentsScale ?? 1
+        if !request.fullPage, let api = pagePerformance,
+           let target = ChromiumSnapshotDecoder.nativeRequest(size: size, scale: scale, width: request.width) {
+            let captured = try await captureNativeSnapshot(api, request: target)
+            Self.snapshotProbe?("native-\(captured.status.rawValue)", 0)
+            try Task.checkCancellation()
+            guard !isDisposed else { throw BrowserEngineError.surfaceDisposed }
+            guard generation == documentGeneration, captured.status != .documentChanged else { throw BrowserEngineError.documentChanged }
+            guard size == hostView.bounds.size,
+                  scale == (hostView.window?.backingScaleFactor ?? hostView.layer?.contentsScale ?? 1) else {
+                throw BrowserEngineError.snapshotUnavailable
+            }
+            if captured.status == .closed { throw BrowserEngineError.surfaceDisposed }
+            if let image = ChromiumSnapshotDecoder.nativeImage(captured) {
+                Self.snapshotProbe?("transportBytes", captured.pixels.count)
+                Self.snapshotProbe?("decodedBytes", captured.pixels.count)
+                captureSucceeded = true
+                return BrowserSurfaceSnapshot(image: image, documentGeneration: generation)
+            }
+            // Older engines, hidden/unavailable surfaces and failed readbacks retain the PNG path.
+        }
         var parameters: [String: Any] = ["format": "png"]
         if request.fullPage {
             let (ok, metrics) = await devToolsCall("Page.getLayoutMetrics")
@@ -568,6 +590,7 @@ public final class ChromiumSurface: BrowserEngineSurface {
         guard generation == documentGeneration else { throw BrowserEngineError.documentChanged }
         try Task.checkCancellation()
         guard success else { throw BrowserEngineError.snapshotUnavailable }
+        Self.snapshotProbe?("transportBytes", data.count)
         let width = request.width
         let worker = Task.detached(priority: .utility) {
             ChromiumSnapshotDecoder.decode(data, width: width, generation: generation)
@@ -581,6 +604,48 @@ public final class ChromiumSurface: BrowserEngineSurface {
         Self.snapshotProbe?("decodedBytes", decoded.decodedBytes)
         captureSucceeded = true
         return decoded.snapshot
+    }
+
+    /// A cancelled CDP response still owns its slot until callback/timeout. Native captures
+    /// likewise retain admission until their exactly-once completion, including cancelled tint.
+    func beginSnapshotCapture() async throws {
+        while snapshotCaptureInFlight || snapshotRequestID != nil || nativeSnapshotToken != nil {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        try Task.checkCancellation()
+        guard !isDisposed else { throw BrowserEngineError.surfaceDisposed }
+        snapshotCaptureInFlight = true
+    }
+
+    /// Cancellation releases the consumer promptly. The readback keeps its slot until its
+    /// callback, so a cancelled tint/thumbnail cannot overlap the next capture.
+    func captureNativeSnapshot(_ api: any BrowserPagePerformance, request: BrowserNativeCaptureRequest) async throws -> BrowserNativeCapture {
+        try Task.checkCancellation()
+        let token = UUID()
+        nativeSnapshotToken = token
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                nativeSnapshotContinuation = continuation
+                Task { @MainActor [weak self] in
+                    let result = await api.capture(request)
+                    guard let self, self.nativeSnapshotToken == token else { return }
+                    self.nativeSnapshotToken = nil
+                    let consumer = self.nativeSnapshotContinuation
+                    self.nativeSnapshotContinuation = nil
+                    consumer?.resume(returning: result)
+                }
+                if Task.isCancelled { cancelNativeSnapshot(token) }
+            }
+        } onCancel: {
+            Task { @MainActor [weak self] in self?.cancelNativeSnapshot(token) }
+        }
+    }
+
+    private func cancelNativeSnapshot(_ token: UUID) {
+        guard nativeSnapshotToken == token else { return }
+        let consumer = nativeSnapshotContinuation
+        nativeSnapshotContinuation = nil
+        consumer?.resume(throwing: CancellationError())
     }
 
     /// Runs Chromium's native save pipeline. The shell may continue using archivePage for MHTML.

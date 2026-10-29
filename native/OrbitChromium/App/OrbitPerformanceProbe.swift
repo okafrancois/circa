@@ -377,6 +377,8 @@ enum OrbitPerformanceProbe {
                     result["suspensionChecks"] = await verifySuspension(owner, fixture: url)
                 } else if name == "scroll-wheel" {
                     result["scrollWheel"] = await OrbitScrollWheelProbe.run(owner, command: command)
+                } else if name == "thumbnail-performance", ownsWindow(owner, bundleID: "lab.orbit.orbit.perf-r11-thumbs") {
+                    result["thumbnailPerformance"] = await OrbitThumbnailPerformanceProbe.run(owner, command: command, root: root)
                 } else if name == "native-performance" {
                     result["nativePerformance"] = await OrbitEnginePerformanceProbe.run(owner, command: command, root: root)
                 } else if name == "download-audio" {

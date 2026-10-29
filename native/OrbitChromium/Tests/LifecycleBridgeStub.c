@@ -6,6 +6,7 @@
 #include <unistd.h>
 #include <pthread.h>
 #include <assert.h>
+#include <stdlib.h>
 
 /* Source-only authenticated-import coordinator tests inject their transport. Other lifecycle
  * targets compile the same adapter without enabling synthetic target admission. */
@@ -371,3 +372,32 @@ int32_t ACRPasswordStoreList(uint64_t handle, orbit_password_result_t cb, void* 
 int32_t ACRPasswordStoreWrite(uint64_t handle, int32_t operation, const orbit_password_record_t* record,
     const orbit_password_record_t* old_key, orbit_password_result_t cb, void* context) { return 0; }
 int32_t ACRPasswordStoreObserve(uint64_t handle, orbit_password_changed_t cb, void* context) { return 0; }
+
+/* Native readback fixture: completion remains pending until explicitly released by the test. */
+static int32_t capture_enabled, capture_count, capture_width, capture_height;
+static orbit_capture_callback_t capture_callback;
+static void *capture_context;
+void ACRStubCaptureMode(int32_t enabled) { capture_enabled = enabled; capture_count = 0; }
+int32_t ACRStubCaptureCount(void) { return capture_count; }
+int32_t ACRPagePerformanceAvailable(void) { return capture_enabled; }
+int32_t ACRPageLifecycle(uint64_t token, orbit_page_lifecycle_t *state) { return 0; }
+int32_t ACRPageLifecycleObserve(uint64_t token, orbit_lifecycle_callback_t cb, void *context) { return 0; }
+void ACRPagePerformanceClosing(uint64_t token) {}
+int32_t ACRActivationFrame(uint64_t token, uint64_t activation, orbit_activation_callback_t cb, void *context) { return 0; }
+int32_t ACRCaptureView(uint64_t token, orbit_capture_rect_t rect, int32_t width, int32_t height,
+                     int32_t timeout, orbit_capture_callback_t cb, void *context) {
+  if (!capture_enabled) return 0;
+  assert(!capture_callback);
+  ++capture_count; capture_width = width; capture_height = height;
+  capture_callback = cb; capture_context = context;
+  return 1;
+}
+void ACRStubCaptureFinish(int32_t status) {
+  orbit_capture_callback_t cb = capture_callback; void *context = capture_context;
+  capture_callback = NULL; capture_context = NULL;
+  if (!cb) return;
+  size_t size = (size_t)capture_width * capture_height * 4;
+  uint8_t *pixels = calloc(1, size);
+  cb(context, status, capture_width, capture_height, capture_width * 4, pixels, 1);
+  free(pixels);
+}

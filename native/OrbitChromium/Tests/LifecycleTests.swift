@@ -940,6 +940,38 @@ private func performanceChecks(_ backend: ChromiumBrowserEngine) async {
     let surface = backend.makeSurface(profileID: ProfileID(), delegate: delegate)
     emit(ACR_EVENT_CREATED, surface.token, value: 2)
     emit(ACR_EVENT_DOCUMENT, surface.token, url: "about:blank")
+    surface.hostView.frame.size = CGSize(width: 1000, height: 600)
+    ACRStubCaptureMode(1)
+    ACRStubDevToolsMode(1)
+    let firstNative = Task { try await surface.captureSnapshot(.init(width: 200)) }
+    while ACRStubCaptureCount() == 0 { await Task.yield() }
+    firstNative.cancel()
+    do { _ = try await firstNative.value; preconditionFailure("cancelled readback succeeded") } catch is CancellationError {} catch { preconditionFailure("wrong cancellation") }
+    let secondNative = Task { try await surface.captureSnapshot(.init(width: 200)) }
+    try? await Task.sleep(for: .milliseconds(25))
+    precondition(ACRStubCaptureCount() == 1 && ACRStubDevToolsID() == 0, "cancelled native work keeps admission until its callback")
+    ACRStubCaptureFinish(1)
+    while ACRStubCaptureCount() != 2 { await Task.yield() }
+    ACRStubCaptureFinish(1)
+    let image = try! await secondNative.value
+    precondition(image.image.width == 200 && image.image.height == 120 && ACRStubDevToolsID() == 0)
+    let changed = Task { try await surface.captureSnapshot(.init(width: 200)) }
+    while ACRStubCaptureCount() != 3 { await Task.yield() }
+    emit(ACR_EVENT_DOCUMENT, surface.token, url: "about:blank")
+    ACRStubCaptureFinish(1)
+    do { _ = try await changed.value; preconditionFailure("stale document succeeded") } catch { precondition(error as? BrowserEngineError == .documentChanged) }
+    let resized = Task { try await surface.captureSnapshot(.init(width: 200)) }
+    while ACRStubCaptureCount() != 4 { await Task.yield() }
+    surface.hostView.frame.size.width = 900
+    ACRStubCaptureFinish(1)
+    do { _ = try await resized.value; preconditionFailure("stale geometry succeeded") } catch { precondition(error as? BrowserEngineError == .snapshotUnavailable) }
+    let unavailable = Task { try await surface.captureSnapshot(.init(width: 200)) }
+    while ACRStubCaptureCount() != 5 { await Task.yield() }
+    ACRStubCaptureFinish(-1)
+    while ACRStubDevToolsID() == 0 { await Task.yield() }
+    unavailable.cancel(); _ = try? await unavailable.value
+    emit(ACR_EVENT_DEVTOOLS_RESULT, surface.token, request: UInt64(ACRStubDevToolsID()), value: 0)
+    ACRStubCaptureMode(0)
     ACRStubDevToolsMode(1)
     let cancelled = Task { try await surface.captureSnapshot(.init(width: 40)) }
     while ACRStubDevToolsID() == 0 { await Task.yield() }
