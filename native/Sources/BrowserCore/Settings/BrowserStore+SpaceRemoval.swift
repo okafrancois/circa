@@ -11,6 +11,7 @@ public extension BrowserStore {
         guard let fallback = spaceOrder.first(where: {
             $0 != id && spaces[$0].map { !deletingProfiles.contains($0.profileID) } == true
         }) else { throw BrowserSettingsError.lastSpace }
+        rehomeStandaloneWindows(excluding: [id])
         organization.removeSpace(space, at: clock())
         for key in Array(organizationJournals.keys) {
             guard var journal = organizationJournals[key] else { continue }
@@ -20,7 +21,7 @@ public extension BrowserStore {
         }
         let sameProfile = spaceOrder.first { $0 != id && spaces[$0]?.profileID == space.profileID }
         for key in Array(windows.keys) {
-            guard var window = windows[key] else { continue }
+            guard var window = windows[key], window.standaloneProfileID == nil else { continue }
             let occurrences = window.occurrenceIDsBySpace.removeValue(forKey: id) ?? []
             for occurrence in occurrences { tabs[occurrence] = nil }
             window.selectedOccurrenceBySpace[id] = nil

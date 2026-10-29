@@ -64,3 +64,27 @@ public extension BrowserStore {
         return id
     }
 }
+
+extension BrowserStore {
+    /// Removing a shared Space changes only the context of a local window. Its occurrences
+    /// keep their identities, live documents and selection under the original profile.
+    func rehomeStandaloneWindows(excluding removed: Set<SpaceID> = []) {
+        for id in Array(windows.keys) {
+            guard let window = windows[id], let profile = window.standaloneProfileID,
+                  let home = organization.standaloneHomes[id], spaces[home] == nil || removed.contains(home),
+                  let destination = spaceOrder.first(where: { !removed.contains($0) && spaces[$0]?.profileID == profile })
+                    ?? spaceOrder.first(where: { !removed.contains($0) }) else { continue }
+            let selected = window.selectedOccurrenceBySpace[home]
+            organization.standaloneHomes[id] = destination
+            for occurrence in window.occurrenceIDsBySpace[home] ?? [] {
+                relocateOccurrence(occurrence, to: destination, in: id)
+            }
+            windows[id]?.occurrenceIDsBySpace[home] = nil
+            windows[id]?.selectedOccurrenceBySpace[home] = nil
+            windows[id]?.activeSpaceID = destination
+            windows[id]?.selectedOccurrenceBySpace[destination] = selected
+            windows[id]?.revision &+= 1
+            windows[id]?.recordReconciliation(from: window.revision)
+        }
+    }
+}

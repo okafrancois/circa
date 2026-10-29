@@ -105,6 +105,21 @@ public actor BrowserBoostStore {
         return boost
     }
 
+    /// Applies one accepted editor action to the latest identity in a single actor turn.
+    /// Sync or another editor may have changed unrelated fields since presentation.
+    public func update(_ id: BrowserBoostID, mutation: @Sendable (inout BrowserBoost) -> Void) throws -> BrowserBoost {
+        guard var current = document.boosts.first(where: { $0.id == id }) else { throw BrowserBoostError.staleRevision }
+        let revision = current.revision
+        mutation(&current)
+        return try save(current, expectedRevision: revision)
+    }
+
+    /// An explicit delete acts on the current identity, without recreating a remote deletion.
+    public func removeCurrent(_ id: BrowserBoostID) throws {
+        guard let current = document.boosts.first(where: { $0.id == id }) else { throw BrowserBoostError.staleRevision }
+        try remove(id, expectedRevision: current.revision)
+    }
+
     public func remove(_ id: BrowserBoostID, expectedRevision: UInt64) throws {
         guard let boost = document.boosts.first(where: { $0.id == id }), boost.revision == expectedRevision else {
             throw BrowserBoostError.staleRevision

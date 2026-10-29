@@ -302,6 +302,7 @@ extension BrowserStore {
         for key in windows.keys {
             if let active = windows[key]?.activeSpaceID, spaces[active] == nil { windows[key]?.activeSpaceID = spaceOrder[0] }
         }
+        rehomeStandaloneWindows()
         reconcileOccurrences()
         for key in windows.keys {
             windows[key]?.occurrenceIDsBySpace = windows[key]?.occurrenceIDsBySpace.filter { spaces[$0.key] != nil } ?? [:]

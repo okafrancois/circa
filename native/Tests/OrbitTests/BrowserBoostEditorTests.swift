@@ -45,14 +45,14 @@ struct BrowserBoostEditorTests {
         #expect(await store.snapshot().boosts.first?.content.textTransform == .uppercase)
     }
 
-    @Test func staleEditorCannotOverwriteAnotherWindow() async throws {
+    @Test func concurrentEditorPreservesOtherWindowFields() async throws {
         let store = try BrowserBoostStore(profileID: ProfileID())
         let first = try await BrowserBoostEditorSession.create(in: store, url: URL(string: "https://example.test")!, title: "Synthetic")
         let second = BrowserBoostEditorSession(store: store, boost: first.boost)
         first.edit { $0.textTransform = .uppercase }; await first.pending?.value
         second.edit { $0.fontFamily = "Courier" }; await second.pending?.value
-        #expect(second.error as? BrowserBoostError == .staleRevision)
-        #expect(await store.snapshot().boosts.first?.content.fontFamily == nil)
+        #expect(second.error == nil)
+        #expect(await store.snapshot().boosts.first?.content.fontFamily == "Courier")
         #expect(await store.snapshot().boosts.first?.content.textTransform == .uppercase)
     }
 
