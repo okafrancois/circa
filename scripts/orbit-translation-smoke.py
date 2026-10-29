@@ -39,6 +39,8 @@ def phase(args):
                f'--orbit-data-root={root}/data', f'--orbit-smoke-run={phase}',
                '--orbit-smoke-fixture=http://127.0.0.1:9/', '--orbit-smoke-phase=fresh',
                '--orbit-smoke-translation', '-AppleLanguages', '(en)', '-AppleLocale', 'en_US']
+    if args.options:
+        command.append('--translation-options')
     if args.probe_only:
         command.append('--translation-probe-only')
     with lab.OwnedProcessRun() as owner:
@@ -50,7 +52,10 @@ def phase(args):
     assert not results['aborted'] and all(row['status'] != 'failed' for row in results['results'])
     proven = {row['id'] for row in results['results'] if row['status'] == 'proven'}
     required = {'page-loaded', 'chromium-no-key-refused'}
-    if not args.probe_only:
+    if args.options:
+        required |= {'options-open', 'french-translated', 'french-content', 'never-site', 'never-checked',
+                     'reload-suppressed', 'reload-checked', 'never-undo', 'undo-unchecked', 'language-settings'}
+    elif not args.probe_only:
         required |= {'available', 'offer-click', 'original-click', 'translated', 'english-heading', 'same-document', 'translated-move', 'restored', 'german-heading', 'dynamic-content', 'interactive', 'dynamic-restored'}
     assert {'translation.' + name for name in required} <= proven
     print(f'Translation smoke: {len(required)} checks passed; clean normal shutdown')
@@ -62,6 +67,7 @@ def main():
     parser.add_argument('--output', type=Path, required=True,
                         help='Bundle must be baked with --synthetic-root <output>/data')
     parser.add_argument('--probe-only', action='store_true')
+    parser.add_argument('--options', action='store_true')
     parser.add_argument('--phase', action='store_true')
     args = parser.parse_args()
     root = args.output.resolve()
@@ -73,6 +79,8 @@ def main():
     (root / '.orbit-chromium-lab').write_text(lab.MARKER)
     command = ['/usr/bin/lockf', '-k', '/tmp/orbit-gui-slot.lock', 'python3', __file__,
                '--app', str(args.app.resolve()), '--output', str(root), '--phase']
+    if args.options:
+        command.append('--options')
     if args.probe_only:
         command.append('--probe-only')
     subprocess.run(command, check=True)

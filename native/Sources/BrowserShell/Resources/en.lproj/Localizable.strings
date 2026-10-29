@@ -1353,3 +1353,11 @@
 "Translate this page\nto %@?" = "Translate this page\nto %@?";
 "Imported from %@ — %@" = "Imported from %@ — %@";
 "Imported Window" = "Imported Window";
+
+"Options" = "Options";
+
+"Choose Another Language" = "Choose Another Language";
+
+"Never Translate This Site" = "Never Translate This Site";
+
+"Language Settings" = "Language Settings";

@@ -27,6 +27,34 @@ struct BrowserSitePreferenceTests {
         #expect(FileManager.default.fileExists(atPath: file.appendingPathExtension("backup").path))
     }
 
+    @Test("Never-translate is durable per host/profile, undoable and backward compatible")
+    func translationPreference() throws {
+        let root = URL(fileURLWithPath: "/private/tmp/translation-preferences-" + UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let file = root.appendingPathComponent("preferences.json")
+        let profile = ProfileID(), other = ProfileID()
+        let url = URL(string: "https://example.test/page")!
+        let store = try BrowserSitePreferenceStore(destination: file)
+        var value = store.preferences(url: url, profileID: profile)
+        value.neverTranslate = true
+        try store.set(value, url: url, profileID: profile)
+        let restarted = try BrowserSitePreferenceStore(destination: file)
+        #expect(restarted.preferences(url: URL(string: "http://example.test:8080/next"), profileID: profile).neverTranslate)
+        #expect(!restarted.preferences(url: url, profileID: other).neverTranslate)
+        #expect(!restarted.preferences(url: URL(string: "https://sub.example.test"), profileID: profile).neverTranslate)
+        value.neverTranslate = false
+        try restarted.set(value, url: url, profileID: profile)
+        #expect(try !BrowserSitePreferenceStore(destination: file).preferences(url: url, profileID: profile).neverTranslate)
+        let old = try JSONDecoder().decode(BrowserSitePreferences.self, from: Data(#"{"developerMode":true,"automaticPictureInPicture":false}"#.utf8))
+        #expect(old.developerMode && !old.automaticPictureInPicture && !old.neverTranslate)
+        let memory = try BrowserSitePreferenceStore()
+        value.neverTranslate = true
+        try memory.set(value, url: url, profileID: profile)
+        #expect(try !BrowserSitePreferenceStore().preferences(url: url, profileID: profile).neverTranslate)
+        #expect(try !BrowserSitePreferenceStore(destination: file).preferences(url: url, profileID: profile).neverTranslate)
+    }
+
     @Test("Only nondefault permissions enter the compact site panel; a dismissed request stays hidden")
     func contextualPermissions() async throws {
         let store = BrowserSitePermissionStore.ephemeral(), profile = ProfileID(), other = ProfileID()

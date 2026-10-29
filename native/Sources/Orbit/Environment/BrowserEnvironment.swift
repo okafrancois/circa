@@ -311,6 +311,8 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
             self?.sidebarIconMemory.image(profile: profile, home: home)
         }
         controller.siteControls.policy.store = permissions
+        controller.translation.preferences = sitePreferences
+        controller.translation.onPreferenceError = { [weak self] in self?.onPersistenceError?($0) }
         controller.siteControls.preferences = sitePreferences
         controller.siteControls.onPreferencesChange = { [weak self] in
             guard let self else { return }
