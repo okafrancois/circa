@@ -23,7 +23,7 @@ struct NativeSidebarHoverHoldTests {
 
     /// Timer-driven transitions can land late under full-suite load; wait for them, bounded.
     private func settle(_ condition: () -> Bool) async throws {
-        let deadline = ContinuousClock.now + .seconds(3)
+        let deadline = ContinuousClock.now + .seconds(10)
         while !condition() && ContinuousClock.now < deadline {
             try await Task.sleep(for: .milliseconds(20))
         }
