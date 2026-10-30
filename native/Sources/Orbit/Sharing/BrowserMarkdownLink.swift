@@ -7,6 +7,7 @@ enum BrowserMarkdownLink {
             .replacingOccurrences(of: "\\", with: "\\\\")
             .replacingOccurrences(of: "[", with: "\\[")
             .replacingOccurrences(of: "]", with: "\\]")
+            .replacingOccurrences(of: "|", with: "\\|")
             .replacingOccurrences(of: "\n", with: " ")
             .replacingOccurrences(of: "\r", with: " ")
         let destination = url.absoluteString.replacingOccurrences(of: "(", with: "%28")

@@ -120,6 +120,41 @@ extension NativeWebKitTests {
 @Suite(.serialized)
 @MainActor
 struct SidebarListWindowTests {
+    @Test("Command-click selection copies URLs in sidebar order and exposes the Command Bar action")
+    func copySelectionAndNestedFolder() async throws {
+        let harness = try await SidebarListHarness(); defer { harness.shutdown() }
+        let c = harness.window
+        let first = try #require(await harness.openTab("https://copy.test/first?utm_source=mail", activate: true))
+        let second = try #require(await harness.openTab("https://copy.test/second?fbclid=synthetic"))
+        c.sidebar.list(c.list, activate: .tab(second), modifiers: .command)
+        #expect(c.sidebar.selection.nodes == [.tab(first), .tab(second)])
+        #expect(harness.registry.dispatch(.copyURL, origin: .keyboard))
+        await harness.settle()
+        #expect(NSPasteboard.general.string(forType: .string) == "https://copy.test/second\nhttps://copy.test/first")
+        let definition = try #require(OrbitCommandCatalog.definitions.first { $0.id == .sidebarCopyLinks })
+        #expect(definition.title == "Copy URLs" && OrbitCommandCatalog.isCommandBarAction(definition))
+        let outer = try #require(await c.session.createFolder(title: "Outer", at: .init(.pinned(harness.spaceID)), containing: [.tab(first)]).value)
+        _ = try #require(await c.session.createFolder(title: "Inner", at: .init(.folder(outer)), containing: [.tab(second)]).value)
+        await harness.settle()
+        let nodes = c.sidebar.prepareContextMenu(for: .folder(outer))
+        let normal = try #require(c.makeSidebarContextMenu(for: nodes))
+        #expect(normal.menu.items.contains { $0.title == "Copy All Links" })
+        #expect(!normal.menu.items.contains { $0.title == "Copy All Links as Markdown" })
+        normal.menu.performActionForItem(at: normal.menu.indexOfItem(withTitle: "Copy All Links"))
+        await harness.settle()
+        #expect(NSPasteboard.general.string(forType: .string) == "https://copy.test/first\nhttps://copy.test/second")
+        let option = try #require(c.makeSidebarContextMenu(for: nodes, modifiers: .option))
+        #expect(option.menu.items.contains { $0.title == "Copy All Links as Markdown" })
+        #expect(!option.menu.items.contains { $0.title == "Copy All Links" })
+        option.menu.performActionForItem(at: option.menu.indexOfItem(withTitle: "Copy All Links as Markdown"))
+        await harness.settle()
+        #expect(NSPasteboard.general.string(forType: .string)?.components(separatedBy: "\n").count == 2)
+        normal.menu.performActionForItem(at: normal.menu.indexOfItem(withTitle: "Duplicate"))
+        await harness.settle()
+        #expect(c.organization.pinned.count == 2)
+        c.sidebar.endContextMenu()
+    }
+
     @Test("Conversion menu targets preserve destination order and reject stale catalog delivery")
     func conversionMenus() async throws {
         let harness = try await SidebarListHarness()
@@ -536,7 +571,7 @@ struct SidebarListWindowTests {
         // Folder menu entries.
         let folderMenu = try #require(c.makeSidebarContextMenu(for: c.sidebar.prepareContextMenu(for: .folder(folder))))
         #expect(folderMenu.menu.items.map { $0.isSeparatorItem ? "—" : $0.title } == [
-            "New Nested Folder…", "Turn “Group” into Space", "—", "Move to", "Rename", "—", "Copy All Links", "Copy All Links as Markdown", "—",
+            "New Nested Folder…", "Turn “Group” into Space", "—", "Move to", "Rename", "Duplicate", "—", "Copy All Links", "—",
             "Delete", "Archive Folder"])
         folderMenu.menu.performActionForItem(at: folderMenu.menu.indexOfItem(withTitle: "Delete"))
         await harness.settle()

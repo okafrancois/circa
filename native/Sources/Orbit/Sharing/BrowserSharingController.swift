@@ -1,5 +1,6 @@
 import AppKit
 import BrowserShell
+import BrowserCore
 import BrowserEngine
 import QuartzCore
 
@@ -31,20 +32,32 @@ final class BrowserSharingController<Engine: BrowserEngine>: NSObject, NSSharing
             guard let owner, let surface, owner.pageCommandSurface() === surface,
                   !surface.isDisposed, surface.documentGeneration == generation,
                   let url = surface.navigationState.url else { return }
-            NSPasteboard.general.clearContents()
-            NSPasteboard.general.setString(BrowserMarkdownLink.format(title: surface.navigationState.title, url: url), forType: .string)
+            owner.sharing.copyText(BrowserMarkdownLink.format(title: surface.navigationState.title, url: BrowserCopyURLCleaner.clean(url)))
         }
     }
 
     func copyLink() {
-        owner?.session.performOnSelectedSurface { [weak self] surface in
-            guard let self, let url = surface.navigationState.url else { return }
-            copy(url, in: owner?.contentCard)
+        guard let owner else { return }
+        if owner.isPeekPageFocused, let url = owner.presentedPeekSurface?.navigationState.url {
+            copy(url, in: owner.contentCard)
+        } else if owner.sidebar.selection.nodes.count >= 2 {
+            owner.copySidebarLinks(markdown: false)
+        } else {
+            owner.session.performOnSelectedSurface { [weak self] surface in
+                guard let self, let url = surface.navigationState.url else { return }
+                copy(url, in: owner.contentCard)
+            }
         }
     }
 
+    func copyText(_ text: String) {
+        NSPasteboard.general.clearContents()
+        guard NSPasteboard.general.setString(text, forType: .string) else { return }
+        if let view = owner?.contentCard { toast.show(in: view) }
+    }
+
     func copy(_ url: URL, in view: NSView?) {
-        guard BrowserLinkPasteboard.write(url) else { return }
+        guard BrowserLinkPasteboard.write(BrowserCopyURLCleaner.clean(url)) else { return }
         if let view { toast.show(in: view) }
     }
 

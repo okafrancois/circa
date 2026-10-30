@@ -585,8 +585,8 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
     @objc func navigateToEnteredAddress(_ sender: Any?) { submitEnteredAddress() }
     @objc func resetPageZoom(_ sender: Any?) { resetPageZoomFromControl() }
     @objc func copyAddressFromPill(_ sender: Any?) {
-        guard acceptsCommands, let url = session.selectedSurface?.currentURL else { return }
-        guard BrowserLinkPasteboard.write(url) else { return }
+        guard acceptsCommands, let url = (presentedPeekSurface ?? session.selectedSurface)?.currentURL else { return }
+        guard BrowserLinkPasteboard.write(BrowserCopyURLCleaner.clean(url)) else { return }
         (sender as? PillCopyLinkButton)?.confirmCopied()
     }
 
