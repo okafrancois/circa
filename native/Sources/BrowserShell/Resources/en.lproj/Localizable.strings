@@ -1708,3 +1708,11 @@
 "Add Top Split" = "Add Top Split";
 "Add Bottom Split" = "Add Bottom Split";
 "New Vertical Split View" = "New Vertical Split View";
+
+// Site search settings
+"Site Search" = "Site Search";
+"Shortcut" = "Shortcut";
+"URL" = "URL";
+"Add" = "Add";
+"Enabled" = "Enabled";
+"Perplexity" = "Perplexity";

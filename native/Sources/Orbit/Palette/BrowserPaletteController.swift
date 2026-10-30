@@ -53,6 +53,16 @@ final class BrowserPaletteController<Engine: BrowserEngine> {
     private(set) var completedQuery = ""
     private var lastQuery = ""
     private(set) var draft = ""
+    var siteSearches = BrowserSiteSearch.builtIns {
+        didSet {
+            guard oldValue != siteSearches, isPresented else { return }
+            if let active = siteSearch {
+                siteSearch = siteSearches.first { $0.id == active.id && $0.isEnabled }
+                view.setSiteSearch(siteSearch, animated: false)
+            }
+            query(draft, preserveSelection: true, userInitiated: false)
+        }
+    }
     private(set) var siteSearch: BrowserPaletteSiteSearch?
     private var selectionWasMoved = false
     var isPresented: Bool { !view.isHidden }
@@ -377,7 +387,7 @@ final class BrowserPaletteController<Engine: BrowserEngine> {
                 icons[result.id] = owner.sidebarIcons.memoryCache.image(profile: profileID, home: home)
             }
         }
-        view.siteSearchHint = siteSearch == nil ? BrowserPaletteSiteSearch.matching(draft) : nil
+        view.siteSearchHint = siteSearch == nil ? BrowserPaletteSiteSearch.matching(draft, in: siteSearches) : nil
         view.favicons = icons
         view.render(results, selected: selection.index)
         if results.indices.contains(selection.index), siteSearch == nil {
@@ -401,7 +411,7 @@ final class BrowserPaletteController<Engine: BrowserEngine> {
 
     @discardableResult
     func enterSiteSearch() -> Bool {
-        guard isPresented, siteSearch == nil, let site = BrowserPaletteSiteSearch.matching(draft) else { return false }
+        guard isPresented, siteSearch == nil, let site = BrowserPaletteSiteSearch.matching(draft, in: siteSearches) else { return false }
         siteSearch = site
         history = []
         view.setSiteSearch(site, animated: true)

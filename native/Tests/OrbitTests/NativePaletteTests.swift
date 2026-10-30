@@ -679,6 +679,35 @@ struct NativePaletteTests {
         try await h.close()
     }
 
+    @Test("A persisted user entry uses the built-in Tab handoff and cannot be entered after disabling or deletion")
+    func userSiteSearchHandoff() async throws {
+        let h = try await PaletteHarness()
+        let settings = try BrowserSettingsStore()
+        let custom = BrowserSiteSearch(name: "Synthetic Search", shortcut: "lab", template: "https://search.example.test/?q=%s")
+        try await settings.saveSiteSearch(custom)
+        h.window.palette.siteSearches = await settings.snapshot().siteSearches
+        await h.show()
+        let palette = try #require(h.window.palette)
+        palette.query("lab")
+        #expect(palette.view.siteSearchHint == custom)
+        #expect(palette.view.control(palette.view.input, textView: NSTextView(), doCommandBy: #selector(NSResponder.insertTab(_:))))
+        #expect(palette.siteSearch == custom && palette.draft.isEmpty)
+        palette.query("café 猫 & #")
+        palette.accept()
+        await h.settle()
+        #expect(h.window.session.selectedSurface?.currentURL == custom.url(for: "café 猫 & #"))
+        try await settings.setSiteSearchEnabled(custom.id, false)
+        palette.siteSearches = await settings.snapshot().siteSearches
+        await h.show()
+        palette.query("lab")
+        #expect(palette.view.siteSearchHint == nil && !palette.enterSiteSearch())
+        try await settings.removeSiteSearch(custom.id)
+        palette.siteSearches = await settings.snapshot().siteSearches
+        palette.query("lab")
+        #expect(!palette.enterSiteSearch())
+        try await h.close()
+    }
+
     @Test("First results stay synchronous while 100k history is searched off the main actor")
     func latency100k() async throws {
         let h = try await PaletteHarness()

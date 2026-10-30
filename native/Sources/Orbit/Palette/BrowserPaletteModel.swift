@@ -385,6 +385,7 @@ extension SearchEngine {
         case .google: uiText("Google")
         case .duckDuckGo: uiText("DuckDuckGo")
         case .bing: uiText("Bing")
+        case .perplexity: uiText("Perplexity")
         }
     }
 }

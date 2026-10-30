@@ -29,6 +29,7 @@ final class BrowserSettingsModel<Engine: BrowserEngine>: ObservableObject {
     let runtime: BrowserSettingsRuntime
     let shortcuts: [BrowserCommandDefinition]
     let defaultBrowser: BrowserDefaultBrowserService
+    @Published var showsSiteSearchSettings = false
     @Published var focusNewProfile = false
     @Published var settingsSection: BrowserSettingsSection? = .general
     var selectSettingsSection: ((BrowserSettingsSection) -> Bool)?
