@@ -120,7 +120,7 @@ struct QuickWindowToolbarTests {
         #expect(root.bounds.maxX - toast.frame.maxX == 4)
         #expect(root.isFlipped ? toast.frame.minY == 8 : root.bounds.maxY - toast.frame.maxY == 8)
         #expect(BrowserQuickWindowCopyFeedback.fadeInDuration == TimeInterval(1) / 15)
-        #expect(BrowserQuickWindowCopyFeedback.visibleDuration == 3.2)
+        #expect(BrowserQuickWindowCopyFeedback.visibleDuration == 4.88)
         #expect(BrowserQuickWindowCopyFeedback.fadeOutDuration == 0)
         #expect(BrowserQuickWindowCopyFeedback.dismissalDuration == 0.2)
         for scale in [CGFloat(0.01), 0.5, 1] {

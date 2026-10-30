@@ -10,7 +10,8 @@ final class BrowserQuickWindowCopyFeedback: NSView {
     static let fadeInDuration: TimeInterval = 1 / 15
     static let entranceDuration: TimeInterval = 0.25
     static let dismissalDuration: TimeInterval = 0.2
-    static let visibleDuration: TimeInterval = 3.2
+    // Measured hold from first visible frame to the start of the shrink.
+    static let visibleDuration: TimeInterval = 4.88
     static let fadeOutDuration: TimeInterval = 0
     let label = NSTextField(labelWithString: uiText("Copied Current URL"))
     let shareButton = BrowserQuickWindowButton()
