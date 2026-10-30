@@ -9,22 +9,52 @@ final class ChromiumNativePageServices: BrowserNativePageServices {
     private var securityListeners: [UUID: AsyncStream<BrowserPageSecurityState>.Continuation] = [:]
     private var fullscreenListeners: [UUID: AsyncStream<BrowserPageFullscreenChange>.Continuation] = [:]
     private var mediaListeners: [UUID: AsyncStream<BrowserMediaSessionState>.Continuation] = [:]
-    init(token: UInt64) { self.token = token }
+    private let dataRoot: URL?
+    private var diagnosticOperation: Task<Bool, Never>?
+    private var ownsTracing = false
+    init(token: UInt64, dataRoot: URL?) { self.token = token; self.dataRoot = dataRoot }
+
+    /// End while the native browser is still live, even when its shell tab was closed.
+    func closeAfterTracing(_ completion: @escaping @MainActor () -> Void) {
+        guard diagnosticOperation != nil || ownsTracing else { close(); completion(); return }
+        Task {
+            _ = await diagnosticOperation?.value
+            if ownsTracing, let dataRoot {
+                let file = dataRoot.appendingPathComponent("trace-discard-\(UUID().uuidString).json")
+                _ = await endTracing(to: file)
+                try? FileManager.default.removeItem(at: file)
+            }
+            close()
+            completion()
+        }
+    }
 
     var supportsTaskManager: Bool { !closed && ACREngineDiagnosticCapabilities() & 1 != 0 }
     var supportsTracing: Bool { !closed && ACREngineDiagnosticCapabilities() & 2 != 0 }
     func openTaskManager() -> Bool { supportsTaskManager && ACRTaskManager(token) == 1 }
     func beginTracing(categories: String) async -> Bool {
         guard supportsTracing, !categories.utf8.contains(0) else { return false }
-        return await traceOperation { callback, context in
-            ACRTraceBegin(token, categories, callback, context)
+        guard diagnosticOperation == nil, !ownsTracing else { return false }
+        let operation = Task {
+            let success = await traceOperation { ACRTraceBegin(token, categories, $0, $1) }
+            ownsTracing = success
+            diagnosticOperation = nil
+            return success
         }
+        diagnosticOperation = operation
+        return await operation.value
     }
     func endTracing(to file: URL) async -> Bool {
         guard supportsTracing, file.isFileURL, !file.path.utf8.contains(0) else { return false }
-        return await traceOperation { callback, context in
-            ACRTraceEnd(token, file.path, callback, context)
+        guard diagnosticOperation == nil else { return false }
+        let operation = Task {
+            let success = await traceOperation { ACRTraceEnd(token, file.path, $0, $1) }
+            if success { ownsTracing = false }
+            diagnosticOperation = nil
+            return success
         }
+        diagnosticOperation = operation
+        return await operation.value
     }
     private final class TraceReply {
         let continuation: CheckedContinuation<Bool, Never>

@@ -157,7 +157,7 @@ struct IdleUpdateTests {
     func diagnosticRefusal() {
         let registry = OrbitApplication().makeCommandSystem().registry
         for id: BrowserCommandID in [.openTaskManager, .recordTrace] {
-            #expect(!registry.isImplemented(id))
+            #expect(registry.isImplemented(id))
             #expect(!registry.isEnabled(id))
         }
         #expect(!BrowserNavigationPolicy.isChromiumSettingsURL(URL(string: "chrome://tracing")!))

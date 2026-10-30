@@ -9,6 +9,11 @@ import Testing
 private final class ExtensionControlProbe: BrowserExtensionHost {
     var supportsActions = false
     var supportsPinning = false
+    var supportsOptionsPages = true
+    var optionsCalls: [(String, ObjectIdentifier)] = []
+    func openOptions(extensionID: String, on surface: any BrowserEngineSurface) throws {
+        optionsCalls.append((extensionID, ObjectIdentifier(surface)))
+    }
     var registryReady = true
     var unavailableSurfaces: Set<ObjectIdentifier> = []
     var observationAttempts = 0
@@ -71,6 +76,58 @@ extension NativeWebKitTests {
 @Suite("Native extension controls", .serialized)
 @MainActor
 struct NativeExtensionControlsTests {
+    @Test("Options appears only with snapshot availability and dispatches on the exact live surface", arguments: [nil, false, true] as [Bool?])
+    func optionsAvailability(available: Bool?) async throws {
+        NSApplication.shared.setActivationPolicy(.prohibited)
+        let engine = SiteSyntheticEngine(), host = ExtensionControlProbe()
+        host.supportsPinning = true; host.item.isPinned = true
+        host.item.hasOptionsPage = available
+        engine.extensions = host
+        let environment = BrowserEnvironment(engine: engine)
+        let owner = try await environment.makeWindow()
+        defer { owner.session.close(); owner.window?.close() }
+        owner.openTab(url: URL(string: "https://options.invalid")!)
+        await owner.session.waitForPendingCommands()
+        let surface = try #require(owner.session.selectedSurface)
+        owner.extensionControls.render()
+        let menu = try #require(owner.extensionControls.contextMenu(for: host.item, surface: surface))
+        let index = menu.indexOfItem(withTitle: "Options")
+        #expect((index >= 0) == (available == true))
+        if index >= 0 {
+            menu.performActionForItem(at: index)
+            #expect(host.optionsCalls.count == 1)
+            #expect(host.optionsCalls.first?.0 == host.item.id)
+            #expect(host.optionsCalls.first?.1 == ObjectIdentifier(surface))
+            host.item.hasOptionsPage = false
+            menu.performActionForItem(at: index)
+            #expect(host.optionsCalls.count == 1)
+            host.item.hasOptionsPage = true
+            owner.openTab(url: URL(string: "https://other.invalid")!)
+            await owner.session.waitForPendingCommands()
+            menu.performActionForItem(at: index)
+            #expect(host.optionsCalls.count == 1)
+        }
+        #expect(!menu.items.contains { $0.title.contains("private") || $0.title.contains("Incognito") })
+        try await environment.finalize()
+    }
+
+    @Test("Options is disabled when the backend cannot open it")
+    func unsupportedOptions() async throws {
+        let engine = SiteSyntheticEngine(), host = ExtensionControlProbe()
+        host.item.hasOptionsPage = true; host.supportsOptionsPages = false
+        engine.extensions = host
+        let environment = BrowserEnvironment(engine: engine)
+        let owner = try await environment.makeWindow()
+        defer { owner.session.close(); owner.window?.close() }
+        owner.openTab(url: URL(string: "about:blank")!)
+        await owner.session.waitForPendingCommands()
+        let surface = try #require(owner.session.selectedSurface)
+        let menu = try #require(owner.extensionControls.contextMenu(for: host.item, surface: surface))
+        #expect(menu.item(withTitle: "Options")?.isEnabled == false)
+        #expect(host.optionsCalls.isEmpty)
+        try await environment.finalize()
+    }
+
     @Test("Cycling follows pin order, wraps, skips disabled actions and opens only on release")
     func cyclingOrderAndRelease() async throws {
         NSApplication.shared.setActivationPolicy(.prohibited)

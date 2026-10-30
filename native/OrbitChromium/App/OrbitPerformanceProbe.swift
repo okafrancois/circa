@@ -516,6 +516,8 @@ enum OrbitPerformanceProbe {
                     result["navigationHistory"] = await OrbitNavigationHistoryProbe.run(owner, command: command, root: root)
                 } else if name == "security-pill" {
                     result["securityPill"] = await OrbitSecurityPillProbe.run(owner, command: command, root: root)
+                } else if name == "r14-shell" {
+                    result["r14Shell"] = await OrbitR14ShellProbe.run(owner, application: application)
                 } else if name == "native-weekly" {
                     result["nativeWeekly"] = await OrbitEngineSecurityProbe.weekly(owner, root: root)
                 } else if name == "native-security" {

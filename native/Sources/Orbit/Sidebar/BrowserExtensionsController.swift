@@ -389,6 +389,15 @@ final class BrowserExtensionsController<Engine: BrowserEngine> {
             catch { owner.session.onError?(error) }
         }
         menu.addItem(.separator())
+        if item.hasOptionsPage == true {
+            menu.addAction(uiText("Options"), enabled: item.isEnabled && host.supportsOptionsPages) { [weak owner, weak surface] in
+                guard valid(), let owner, let surface, host.supportsOptionsPages,
+                      let current = try? host.installedExtensions(on: surface).first(where: { $0.id == item.id }),
+                      current.isEnabled, current.hasOptionsPage == true else { return }
+                do { try host.openOptions(extensionID: item.id, on: surface) }
+                catch { owner.session.onError?(error) }
+            }
+        }
         if let manager = owner.engine.extensionManagement {
             menu.addAction(uiText("Manage Extension")) { [weak owner, weak surface] in
                 guard valid(), let owner, let surface else { return }
