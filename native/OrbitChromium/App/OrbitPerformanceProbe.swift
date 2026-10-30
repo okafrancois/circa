@@ -86,7 +86,9 @@ enum OrbitPerformanceProbe {
                 try? FileManager.default.removeItem(at: commandFile)
                 let name = command["command"] ?? ""
                 result["commandNonce"] = command["nonce"] ?? ""
-                if name == "folder-hover", ownsWindow(owner, bundleID: "lab.orbit.orbit.folder-hover") {
+                if name == "split-divider" {
+                    result["splitDivider"] = await splitDividerFixture(owner, command: command)
+                } else if name == "folder-hover", ownsWindow(owner, bundleID: "lab.orbit.orbit.folder-hover") {
                     result["folderHoverActionUptime"] = ProcessInfo.processInfo.systemUptime
                     result["folderHover"] = await folderHoverFixture(owner, store: environment.store, command: command)
                 } else if name == "theme-fixture", ownsWindow(owner, bundleID: "lab.orbit.orbit.theme-fixture") {
@@ -2131,5 +2133,53 @@ extension OrbitPerformanceProbe {
         }
         await owner.session.waitForPendingCommands()
         return true
+    }
+}
+
+
+extension OrbitPerformanceProbe {
+    /// Hermetic two-document fixture for pointer resizing and compositor measurements.
+    private static func splitDividerFixture(_ owner: OrbitWindowController, command: [String: String]) async -> [String: Any] {
+        let bundleID = "lab.orbit.orbit.split-divider"
+        guard Bundle.main.infoDictionary?["OrbitSyntheticBundle"] as? Bool == true,
+              Bundle.main.bundleIdentifier == bundleID,
+              let ownWindow = owner.window, NSApp.windows.contains(where: { $0 === ownWindow }) else {
+            return ["ownershipRefused": true]
+        }
+        ownWindow.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        guard ownsWindow(owner, bundleID: bundleID) else { return ["ownershipRefused": true] }
+        if command["action"] == "seed", let base = command["base"],
+           let url = URL(string: base), url.scheme == "http", url.host == "127.0.0.1" {
+            owner.window?.setFrame(NSRect(x: 0, y: 0, width: 1280, height: 940), display: true)
+            owner.session.openTab(url: url.appendingPathComponent("alpha"))
+            await owner.session.waitForPendingCommands()
+            owner.session.addSplitPane(url: url.appendingPathComponent("gamma"))
+            await owner.session.waitForPendingCommands()
+            for surface in owner.session.ownedSurfaces { await waitForLoad(surface) }
+        }
+        guard ownsWindow(owner, bundleID: bundleID), let window = owner.window,
+              let group = owner.session.activeSplit else { return ["missingSplit": true] }
+        owner.window?.contentView?.layoutSubtreeIfNeeded()
+        func screenRect(_ view: NSView) -> [Double] {
+            let r = window.convertToScreen(view.convert(view.bounds, to: nil))
+            let top = NSScreen.screens.first?.frame.maxY ?? 0
+            return [r.minX, top - r.maxY, r.width, r.height]
+        }
+        var result: [String: Any] = ["pid": getpid(), "window": window.windowNumber,
+            "ratios": group.group.ratios,
+            "panes": group.group.tabIDs.compactMap { owner.split.view.panes[$0].map(screenRect) },
+            "dividers": owner.split.view.dividers.map(screenRect)]
+        var pages: [[String: Any]] = []
+        for id in group.group.tabIDs {
+            guard let occurrence = owner.session.organization?.tab(id)?.occurrenceID,
+                  let surface = owner.session.surface(for: occurrence) else { continue }
+            if command["action"] == "arm" {
+                _ = await evaluate(surface, "(() => { window.resizeSamples=[]; let last=0; function tick(t) { resizeSamples.push({t,dt:last?t-last:0,w:innerWidth}); last=t; if(resizeSamples.length<1200) requestAnimationFrame(tick); } requestAnimationFrame(tick); return {}; })()")
+            }
+            if let state = await evaluate(surface, "({width:innerWidth, ready:document.readyState, samples:window.resizeSamples||[]})") { pages.append(state) }
+        }
+        result["pages"] = pages
+        return result
     }
 }
