@@ -216,6 +216,11 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
                             }.labelsHidden().pickerStyle(.menu).frame(width: 135).accessibilityIdentifier("settings-search-engine")
                         }
                         rule
+                        liveToggle("Show search suggestions", value: runtime.document.profile(profile).showSearchSuggestions,
+                                   identifier: "settings-search-suggestions") { value in
+                            try await model.updateProfile(profile) { $0.showSearchSuggestions = value }
+                        }
+                        rule
                         settingRow("Archive tabs after") {
                             Picker(uiText("Archive tabs after"), selection: Binding(get: { model.archiveThreshold }, set: { value in
                                 guard let value else { return }

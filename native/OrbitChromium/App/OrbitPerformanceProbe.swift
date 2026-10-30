@@ -20,7 +20,7 @@ enum OrbitPerformanceProbe {
     static func start(application: OrbitApplication, configuration: OrbitProductConfiguration) {
         guard configuration.syntheticGuard != nil, CommandLine.arguments.contains("--perf-probe") else { return }
         if ["lab.orbit.orbit.engine-r11", "lab.orbit.orbit.engine-r12"].contains(Bundle.main.bundleIdentifier ?? "") { application.confirmQuit = { .quit } }
-        if Bundle.main.bundleIdentifier == "lab.orbit.orbit.pinned-tabs" {
+        if ["lab.orbit.orbit.pinned-tabs", "lab.orbit.orbit.search-suggestions"].contains(Bundle.main.bundleIdentifier ?? "") {
             application.confirmQuit = { .quit }
             application.windowPresenter = { controller, _ in
                 controller.window?.setFrame(NSRect(x: -2000, y: -1200, width: 1280, height: 900), display: false)
@@ -95,7 +95,9 @@ enum OrbitPerformanceProbe {
                 try? FileManager.default.removeItem(at: commandFile)
                 let name = command["command"] ?? ""
                 result["commandNonce"] = command["nonce"] ?? ""
-                if name == "pinned-tabs" {
+                if name == "search-suggestions" {
+                    result["searchSuggestions"] = await searchSuggestions(owner, root: root, command: command)
+                } else if name == "pinned-tabs" {
                     result["pinnedTabs"] = await OrbitPinnedTabProbe.run(owner, root: root, command: command)
                 } else if name == "split-divider" {
                     result["splitDivider"] = await splitDividerFixture(owner, command: command)
@@ -2198,5 +2200,54 @@ extension OrbitPerformanceProbe {
         }
         result["pages"] = pages
         return result
+    }
+}
+
+
+extension OrbitPerformanceProbe {
+    /// Offscreen real-engine proof using a confined loopback suggestion endpoint.
+    private static func searchSuggestions(_ owner: OrbitWindowController, root: URL, command: [String: String]) async -> [String: Any] {
+        func owns() -> Bool {
+            guard Bundle.main.bundleIdentifier == "lab.orbit.orbit.search-suggestions",
+                  let configuration = activeSiteSessionConfiguration(), configuration.syntheticGuard != nil,
+                  configuration.usesMockKeychain, let window = owner.window,
+                  NSApp.windows.contains(where: { $0 === window }),
+                  let windows = CGWindowListCopyWindowInfo(.optionIncludingWindow, CGWindowID(window.windowNumber)) as? [[String: Any]] else { return false }
+            return windows.contains { ($0[kCGWindowOwnerPID as String] as? Int32) == getpid()
+                && ($0[kCGWindowNumber as String] as? Int) == window.windowNumber }
+        }
+        guard owns(), let base = command["base"].flatMap(URL.init(string:)),
+              base.scheme == "http", base.host == "127.0.0.1", base.user == nil, base.password == nil else { return ["refused": true] }
+        owner.palette.searchSuggestions = BrowserSearchSuggestions(endpoint: { _, query in
+            var components = URLComponents(url: base.appendingPathComponent("suggest"), resolvingAgainstBaseURL: false)!
+            components.queryItems = [URLQueryItem(name: "q", value: query)]
+            return components.url
+        })
+        guard owns() else { return ["refused": true] }
+        owner.palette.present(.newTab)
+        await owner.palette.waitForResults()
+        guard owns() else { return ["refused": true] }
+        owner.palette.query("nebula")
+        let localCount = owner.palette.results.count
+        await owner.palette.waitForResults()
+        guard owns(), let host = owner.window?.contentView else { return ["refused": true] }
+        host.layoutSubtreeIfNeeded()
+        owner.window?.displayIfNeeded()
+        CATransaction.flush()
+        guard let bitmap = host.bitmapImageRepForCachingDisplay(in: host.bounds) else { return ["captureFailed": true] }
+        host.cacheDisplay(in: host.bounds, to: bitmap)
+        guard let data = bitmap.representation(using: .png, properties: [:]) else { return ["captureFailed": true] }
+        try? data.write(to: root.appendingPathComponent("suggestions.png"))
+        let remoteCount = owner.palette.results.filter { $0.remoteSuggestion != nil }.count
+        var deleted = false
+        if let row = owner.palette.results.firstIndex(where: { $0.remoteSuggestion != nil }) {
+            guard owns() else { return ["refused": true] }
+            owner.palette.move(row - owner.palette.selection.index)
+            guard owns() else { return ["refused": true] }
+            owner.palette.deleteSuggestion()
+            deleted = owner.palette.results.filter { $0.remoteSuggestion != nil }.count == remoteCount - 1
+        }
+        owner.palette.dismiss(returnFocus: false)
+        return ["pid": getpid(), "offscreen": true, "localCount": localCount, "remoteCount": remoteCount, "deleted": deleted]
     }
 }

@@ -27,6 +27,7 @@ struct BrowserPaletteResult: Identifiable, Equatable, Sendable {
     var scopePriority: Int = 0
     var faviconReference: URL? = nil
     var shortcut: String = ""
+    var remoteSuggestion: String? = nil
 
     var url: URL? {
         if case .navigate(let url) = action { return url }; return sourceURL
@@ -208,6 +209,22 @@ enum BrowserPaletteRanking {
             return Array(rows.prefix(limit - 1)) + [typed]
         }
         return Array(rows.prefix(input.isEmpty ? min(limit, 8) : limit))
+    }
+
+    /// Keep local results and the explicit query, adding only distinct remote searches.
+    @MainActor
+    static func merging(_ remote: [String], into local: [BrowserPaletteResult], engine: SearchEngine) -> [BrowserPaletteResult] {
+        var seenURLs = Set(local.compactMap { $0.url.map(canonicalURL) })
+        var seenText = Set(local.filter { $0.section != .commands }.map { BrowserSearchSuggestions.identity($0.title) })
+        let searches = remote.compactMap { text -> BrowserPaletteResult? in
+            let url = engine.searchURL(for: text)
+            guard seenText.insert(BrowserSearchSuggestions.identity(text)).inserted,
+                  seenURLs.insert(canonicalURL(url)).inserted else { return nil }
+            return .init(id: "remote:\(engine.rawValue):\(BrowserSearchSuggestions.identity(text))", title: text,
+                         detail: "", section: .search, action: .navigate(url), remoteSuggestion: text)
+        }
+        let explicit = local.filter { $0.id == "search" }
+        return Array((local.filter { $0.id != "search" } + searches).prefix(40 - explicit.count)) + explicit
     }
 
     /// Palette-only presentation: keep the navigation URL and search index unchanged.

@@ -399,6 +399,28 @@ public actor BrowserHistoryStore {
         return count
     }
 
+    /// Remove all visits for one exact URL, retaining per-visit sync tombstones.
+    @discardableResult public func deleteSuggestions(url: URL, now: Date = Date()) throws -> Int {
+        guard let database else { return 0 }
+        let count = try database.transaction {
+            let statement = try database.prepare("SELECT id FROM visits WHERE url=?")
+            try database.bind(statement, [.text(url.absoluteString)])
+            defer { sqlite3_finalize(statement) }
+            var ids: [UUID] = []
+            while try database.next(statement) {
+                if let id = UUID(uuidString: database.text(statement, 0)) { ids.append(id) }
+            }
+            if !applyingHistorySync {
+                for id in ids {
+                    try appendSyncEvent(BrowserHistorySyncEvent(deletion: BrowserHistorySyncDeletion(.visit(id), now: now), time: now))
+                }
+            }
+            return try deleteRows(clause: "url=?", values: [.text(url.absoluteString)])
+        }
+        maintenanceStatus = database.checkpoint()
+        return count
+    }
+
     func deleteRows(clause: String, values: [HistoryValue]) throws -> Int {
         guard let database else { return 0 }
         let count = try database.transaction {
