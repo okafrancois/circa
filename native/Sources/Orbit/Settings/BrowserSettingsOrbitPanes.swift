@@ -358,10 +358,21 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
     }
 
     private var shortcuts: some View {
-        BrowserShortcutSettingsPane(preferences: model.environment.shortcutPreferences,
-            definitions: model.settingsShortcuts, conflictDefinitions: model.shortcuts,
-            openExtensionSettings: model.selectedProfileID.map { profile in { open(.extensionShortcuts, profile: profile) } },
-            extensionSettingsAvailable: model.selectedProfileID.map { model.canOpenExtensionSettings(profile: $0) } ?? false)
+        VStack(alignment: .leading, spacing: 18) {
+            panel {
+                settingRow("Site Search") {
+                    Button(uiText("Manage")) { model.showsSiteSearchSettings = true }
+                        .accessibilityIdentifier("settings-site-search-manage")
+                        .sheet(isPresented: $model.showsSiteSearchSettings) {
+                            BrowserSiteSearchSettings(model: model, runtime: runtime)
+                        }
+                }
+            }
+            BrowserShortcutSettingsPane(preferences: model.environment.shortcutPreferences,
+                definitions: model.settingsShortcuts, conflictDefinitions: model.shortcuts,
+                openExtensionSettings: model.selectedProfileID.map { profile in { open(.extensionShortcuts, profile: profile) } },
+                extensionSettingsAvailable: model.selectedProfileID.map { model.canOpenExtensionSettings(profile: $0) } ?? false)
+        }
     }
 
     private var about: some View {

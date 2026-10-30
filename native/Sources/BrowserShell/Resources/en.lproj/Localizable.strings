@@ -1681,3 +1681,11 @@
 "%d passwords found" = "%d passwords found";
 
 "Coming from Arc? Your Spaces, tabs and passwords come with you, even after Arc stops working." = "Coming from Arc? Your Spaces, tabs and passwords come with you, even after Arc stops working.";
+
+// Site search settings
+"Site Search" = "Site Search";
+"Shortcut" = "Shortcut";
+"URL" = "URL";
+"Add" = "Add";
+"Enabled" = "Enabled";
+"Perplexity" = "Perplexity";

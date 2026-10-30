@@ -4,12 +4,14 @@ public enum SearchEngine: String, Codable, Sendable, CaseIterable {
     case google
     case duckDuckGo
     case bing
+    case perplexity
 
     /// Public OpenSearch JSON endpoints. Engines without an endpoint return nil.
     public func suggestionURL(for query: String) -> URL? {
         let base: String
         let format: URLQueryItem?
         switch self {
+        case .perplexity: return nil
         case .google:
             base = "https://suggestqueries.google.com/complete/search"
             format = URLQueryItem(name: "client", value: "firefox")
@@ -32,6 +34,7 @@ public enum SearchEngine: String, Codable, Sendable, CaseIterable {
         case .google: base = "https://www.google.com/search"
         case .duckDuckGo: base = "https://duckduckgo.com/"
         case .bing: base = "https://www.bing.com/search"
+        case .perplexity: base = "https://www.perplexity.ai/search"
         }
         var components = URLComponents(string: base)!
         components.queryItems = [URLQueryItem(name: "q", value: query)]
