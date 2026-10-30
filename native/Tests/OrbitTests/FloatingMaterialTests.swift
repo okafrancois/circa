@@ -30,6 +30,21 @@ struct FloatingMaterialTests {
         }
     }
 
+    @Test func menuRowSelectionFillsWithSystemAccentAndKeepsDestructiveInk() throws {
+        let accent = OrbitTokens.ThemeAccent.defaultPurple
+        let row = CreationMenuRow(title: "Delete", symbol: "trash", enabled: true,
+                                  identifier: "test-row", accent: accent, destructive: true)
+        row.appearance = try #require(NSAppearance(named: .aqua))
+        let fields = row.subviews.compactMap { $0 as? NSTextField }
+        let title = try #require(fields.first { $0.stringValue == "Delete" })
+        #expect(title.textColor == .systemRed)
+        row.setSelected(true)
+        #expect(row.layer?.backgroundColor == NSColor.controlAccentColor.resolvedCGColor(for: row.effectiveAppearance))
+        #expect(title.textColor == OrbitFloatingMaterial.accentText)
+        row.setSelected(false)
+        #expect(title.textColor == .systemRed)
+    }
+
     @Test func contrastCalculationUsesLinearSRGB() {
         #expect(abs(OrbitFloatingMaterial.contrast(.black, .white) - 21) < 0.0001)
         #expect(OrbitFloatingMaterial.contrast(.white, .white) == 1)

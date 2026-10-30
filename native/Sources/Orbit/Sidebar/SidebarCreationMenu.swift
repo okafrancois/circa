@@ -140,14 +140,12 @@ final class CreationMenuRow: NSView {
         wantsLayer = true
         layer?.cornerRadius = OrbitTokens.Radius.plusMenuRow
         icon.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)
-        icon.contentTintColor = OrbitFloatingMaterial.body
         title.stringValue = text
         title.font = OrbitTokens.Typography.menuItem
         title.lineBreakMode = .byTruncatingTail
-        title.textColor = OrbitFloatingMaterial.body
         shortcut.stringValue = keys
         shortcut.font = OrbitTokens.Typography.menuShortcut
-        shortcut.textColor = OrbitFloatingMaterial.secondary
+        applyInk(selected: false)
         shortcut.alignment = .right
         for child in [icon, title, shortcut] { child.setAccessibilityElement(false); addSubview(child) }
         alphaValue = enabled ? 1 : 0.4
@@ -174,8 +172,16 @@ final class CreationMenuRow: NSView {
         addTrackingArea(NSTrackingArea(rect: bounds, options: [.mouseEnteredAndExited, .activeInKeyWindow], owner: self))
     }
     func setSelected(_ selected: Bool) {
-        layer?.backgroundColor = (selected ? NSColor.controlAccentColor.withAlphaComponent(0.12) : .clear).resolvedCGColor(for: effectiveAppearance)
+        // Selected rows fill with the system accent, like native menus.
+        layer?.backgroundColor = (selected ? NSColor.controlAccentColor : .clear).resolvedCGColor(for: effectiveAppearance)
+        applyInk(selected: selected)
         setAccessibilitySelected(selected)
+    }
+    private func applyInk(selected: Bool) {
+        let ink = selected ? OrbitFloatingMaterial.accentText : destructive ? NSColor.systemRed : OrbitFloatingMaterial.body
+        icon.contentTintColor = ink
+        title.textColor = ink
+        shortcut.textColor = selected ? ink.withAlphaComponent(0.7) : OrbitFloatingMaterial.secondary
     }
     override func mouseEntered(with event: NSEvent) { onHover?() }
     override func hitTest(_ point: NSPoint) -> NSView? {
