@@ -10,6 +10,7 @@ import OSLog
 @MainActor
 final class ChromiumHostView: NSView {
     weak var surface: ChromiumSurface?
+    var linkActivationModifiers: BrowserModifierKeys = []
     var linkActivation: (point: NSPoint, timestamp: TimeInterval, generation: UInt64)?
     private(set) var paintGeometryGeneration: UInt64 = 0
     private static let signposter = OSSignposter(subsystem: "local.orbit", category: "chromium-layout")
@@ -112,6 +113,12 @@ final class ChromiumHostView: NSView {
             surface?.hostViewDidBecomeVisible()
             if type == .leftMouseDown, let event = NSApp.currentEvent, let surface {
                 let local = convert(event.locationInWindow, from: nil)
+                var modifiers: BrowserModifierKeys = []
+                if event.modifierFlags.contains(.command) { modifiers.insert(.command) }
+                if event.modifierFlags.contains(.shift) { modifiers.insert(.shift) }
+                if event.modifierFlags.contains(.option) { modifiers.insert(.option) }
+                if event.modifierFlags.contains(.control) { modifiers.insert(.control) }
+                linkActivationModifiers = modifiers
                 linkActivation = (NSPoint(x: local.x, y: isFlipped ? local.y : bounds.height - local.y),
                                   event.timestamp, surface.documentGeneration)
             }
@@ -882,7 +889,7 @@ public final class ChromiumSurface: BrowserEngineSurface {
             : (userGesture ? .linkActivation : .other)
         // The new browser is created by CEF after OnBeforePopup returns; it is not ready yet.
         let request = BrowserNewSurfaceRequest(url: url.flatMap(URL.init(string:)),
-                                               modifiers: Self.modifiers(disposition),
+                                               modifiers: userGesture ? recentLinkModifiers ?? Self.modifiers(disposition) : Self.modifiers(disposition),
                                                kind: kind, httpMethod: method,
                                                hasBody: known ? metadata.has_body != 0 : nil,
                                                isUserGesture: userGesture,
@@ -999,7 +1006,8 @@ public final class ChromiumSurface: BrowserEngineSurface {
         let shellStarted = destination != nil && destination == requestedDestination
         let kind = Self.navigationKind(request, shellStarted: shellStarted, pendingKind: pendingKind)
         if request.isMainFrame, kind == .backForward || kind == .reload { pendingKind = nil }
-        let action = BrowserNavigationAction(url: destination, isMainFrame: request.isMainFrame, kind: kind,
+        let action = BrowserNavigationAction(url: destination, isMainFrame: request.isMainFrame,
+                                             modifiers: kind == .linkActivation ? recentLinkModifiers ?? [] : [], kind: kind,
                                              httpMethod: request.method, hasBody: request.hasBody,
                                              isUserGesture: request.userGesture, parentFrameURL: request.parentURL.flatMap(URL.init(string:)))
         onEngineEvent?("before-browse", ["url": request.url ?? "", "main": String(request.isMainFrame),
@@ -1026,11 +1034,20 @@ public final class ChromiumSurface: BrowserEngineSurface {
         }
     }
 
+    private var recentLinkModifiers: BrowserModifierKeys? {
+        guard let host = hostView as? ChromiumHostView, let activation = host.linkActivation,
+              activation.generation == documentGeneration,
+              ProcessInfo.processInfo.systemUptime - activation.timestamp < 1,
+              NSApp.currentEvent?.type != .keyDown else { return nil }
+        return host.linkActivationModifiers
+    }
+
     static func modifiers(_ disposition: Int32) -> BrowserModifierKeys {
         switch disposition {
         case 3: [.command, .shift]   // CEF_WOD_NEW_FOREGROUND_TAB
         case 4: [.command]           // CEF_WOD_NEW_BACKGROUND_TAB
         case 6: [.shift]             // CEF_WOD_NEW_WINDOW
+        case 7: [.option]            // CEF_WOD_SAVE_TO_DISK
         default: []
         }
     }
@@ -1090,6 +1107,7 @@ public final class ChromiumSurface: BrowserEngineSurface {
         switch event.kind {
         case ACR_EVENT_MEDIA_ACTIVITY:
             if let method = event.detail, let payload = event.payload {
+                if method == "Runtime.bindingCalled" { receiveOptionLink(payload) }
                 audioContexts.receive(method: method, payload: payload)
                 receiveSuspensionPaint(method: method, payload: payload)
                 onChange?()
@@ -1112,6 +1130,7 @@ public final class ChromiumSurface: BrowserEngineSurface {
             // waiting for the reply here would delay that document by the command timeout.
             _ = ACRExecuteDevToolsMethod(token, "Page.enable", "")
             observePageLifecycle()
+            installOptionLinks()
             Task { [weak self] in
                 guard let self else { return }
                 let (ok, _) = await self.devToolsCall("WebAudio.enable")

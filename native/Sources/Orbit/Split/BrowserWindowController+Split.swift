@@ -161,12 +161,12 @@ extension BrowserWindowController {
         session.performWindowAction { [weak self] in self?.focusSelectedDocument() }
     }
 
-    func addSplitFromSelection(at index: Int? = nil) {
+    func addSplitFromSelection(at index: Int? = nil, orientation: BrowserSplitOrientation? = nil) {
         guard acceptsCommands, canAddSplitPane else { return }
         let ids = sidebar.selection.orderedNodes(in: session.organization!).compactMap(\.tabID)
-        if ids.count >= 2 { session.createSplit(ids) }
+        if ids.count >= 2 { session.createSplit(ids, orientation: orientation ?? .horizontal) }
         else {
-            session.addSplitPane(at: index)
+            session.addSplitPane(orientation: orientation, at: index)
             session.performWindowAction { [weak self] in
                 guard let self, session.activeSplit != nil,
                       session.organization?.selectedTab?.url.absoluteString == "about:blank" else { return }
@@ -180,18 +180,15 @@ extension BrowserWindowController {
               payload.sourceWindow == id, payload.profileID == organization.profileID,
               payload.spaceID == organization.spaceID, payload.nodes.count == 1,
               let tabID = payload.nodes.first?.tabID, tabID != selected.id,
-              let tab = organization.tab(tabID), tab.section == selected.section,
+              let tab = organization.tab(tabID), tab.section != .favorites(organization.profileID),
               organization.split(containing: tabID) == nil else { return false }
         if case .favorites = selected.section { return false }
         return (session.activeSplit?.tabs.count ?? 1) < BrowserSplitGroup.maximumPanes
     }
 
     func dropIntoSplit(_ payload: SidebarDragPayload, orientation: BrowserSplitOrientation, leading: Bool) {
-        guard canDropIntoSplit(payload), let tab = payload.nodes.first?.tabID,
-              let selected = session.organization?.selectedTab else { return }
-        if let group = session.activeSplit {
-            session.addSplitPane(tab, to: group.group.id, at: leading ? 0 : group.tabs.count, orientation: orientation)
-        } else { session.createSplit(leading ? [tab, selected.id] : [selected.id, tab], orientation: orientation) }
+        guard canDropIntoSplit(payload), let tab = payload.nodes.first?.tabID else { return }
+        session.openTabInSplit(tab, orientation: orientation, leading: leading)
     }
 }
 

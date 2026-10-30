@@ -29,7 +29,7 @@ enum OrbitPerformanceProbe {
                 controller.window?.makeKey()
             }
         }
-        if [OrbitNavigationHistoryProbe.bundleID, OrbitTabErgonomicsProbe.bundleID, "lab.orbit.orbit.pinned-tabs", "lab.orbit.orbit.search-suggestions", "lab.orbit.orbit.circa-rename", "lab.orbit.orbit.local-files-pdf", "lab.orbit.orbit.local-files-restore"].contains(Bundle.main.bundleIdentifier ?? "") {
+        if [OrbitNavigationHistoryProbe.bundleID, OrbitTabErgonomicsProbe.bundleID, "lab.orbit.orbit.pinned-tabs", "lab.orbit.orbit.search-suggestions", "lab.orbit.orbit.circa-rename", "lab.orbit.orbit.local-files-pdf", "lab.orbit.orbit.local-files-restore", "lab.orbit.orbit.p2-split"].contains(Bundle.main.bundleIdentifier ?? "") {
             application.confirmQuit = { .quit }
             application.windowPresenter = { controller, _ in
                 controller.window?.setFrame(NSRect(x: -2000, y: -1200, width: 1280, height: 900), display: false)
@@ -114,6 +114,8 @@ enum OrbitPerformanceProbe {
                     result["branding"] = await OrbitBrandingProbe.run(application, environment: environment, owner: owner, root: root, appearance: command["appearance"] ?? "light")
                 } else if name == "pinned-tabs" {
                     result["pinnedTabs"] = await OrbitPinnedTabProbe.run(owner, store: environment.store, root: root, command: command)
+                } else if name == "p2-split" {
+                    result["splitParity"] = await splitParity(application, owner: owner, root: root, command: command)
                 } else if name == "split-divider" {
                     result["splitDivider"] = await splitDividerFixture(owner, command: command)
                 } else if name == "folder-hover", ownsWindow(owner, bundleID: "lab.orbit.orbit.folder-hover") {
@@ -2345,5 +2347,105 @@ extension OrbitPerformanceProbe {
             }
             return result
         } catch { return ["failed": true] }
+    /// Opt-in, confined real-engine exercise of split entry points and their native menus.
+    private static func splitParity(_ application: OrbitApplication, owner: OrbitWindowController,
+                                    root: URL, command: [String: String]) async -> [String: Any] {
+        func owns() -> Bool { ownsWindow(owner, bundleID: "lab.orbit.orbit.p2-split") }
+        guard owns(), let confinement = activeSyntheticDataGuard(), (try? confinement.checkInside(root)) != nil,
+              let base = command["base"].flatMap(URL.init(string:)), base.scheme == "http", base.host == "127.0.0.1" else { return ["refused": true] }
+        let appearance = command["appearance"] == "dark" ? "dark" : "light"
+        NSApp.appearance = NSAppearance(named: appearance == "dark" ? .darkAqua : .aqua)
+        var checks: [String: Bool] = [:]
+        func settle() async {
+            await owner.session.waitForPendingCommands()
+            for surface in owner.session.ownedSurfaces { await waitForLoad(surface) }
+            owner.window?.contentView?.layoutSubtreeIfNeeded()
+        }
+        func capture(_ name: String) {
+            guard owns(), let view = owner.window?.contentView,
+                  let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return }
+            view.cacheDisplay(in: view.bounds, to: bitmap)
+            try? bitmap.representation(using: .png, properties: [:])?.write(to: root.appendingPathComponent(name + "-" + appearance + ".png"))
+        }
+        guard owns() else { return ["refused": true] }
+        owner.session.openTab(url: base.appendingPathComponent("alpha"))
+        await settle()
+        guard owns(), let first = owner.session.selectedSurface else { return ["refused": true] }
+        let isolation = await evaluate(first, "({isolated:typeof globalThis.__orbitOptionLink==='undefined'})")
+        checks["isolatedBinding"] = isolation?["isolated"] as? Bool == true
+        // Trusted Chromium input exercises the native modified-link route, rather than a DOM click.
+        for type in ["mousePressed", "mouseReleased"] {
+            guard owns() else { return ["refused": true] }
+            _ = await first.devToolsCall("Input.dispatchMouseEvent", params: "{\"type\":\"" + type + "\",\"x\":80,\"y\":40,\"button\":\"left\",\"clickCount\":1,\"modifiers\":1}")
+        }
+        try? await Task.sleep(for: .milliseconds(500))
+        await settle()
+        checks["optionLink"] = owner.session.activeSplit?.tabs.count == 2 && first.currentURL?.path == "/alpha"
+        // Keep exercising other commands if the native link path refused this fixture.
+        if owner.session.activeSplit == nil { owner.session.addSplitPane(url: base.appendingPathComponent("beta")); await settle() }
+        guard owns(), let group = owner.session.activeSplit else { return ["refused": true] }
+        let contextNodes: [BrowserOrganizationNode] = [.split(group.group.id)]
+        _ = owner.sidebar.prepareContextMenu(for: contextNodes[0])
+        let menu = owner.makeSidebarContextMenu(for: contextNodes)?.menu
+        checks["muteSubmenus"] = group.tabs.allSatisfy { tab in
+            menu?.items.contains { $0.title == (tab.title ?? tab.url.absoluteString) && $0.submenu?.items.first?.title == uiText("Mute") } == true
+        }
+        checks["duplicateMenu"] = menu?.items.contains { $0.title == uiText("Duplicate") } == true
+        if owns(), let menu {
+            let capture = SplitParityMenuCapture(menu: menu, file: root.appendingPathComponent("split-menu-" + appearance + ".png"))
+            let timer = Timer(timeInterval: 0.25, target: capture, selector: #selector(SplitParityMenuCapture.capture), userInfo: nil, repeats: false)
+            RunLoop.main.add(timer, forMode: .common)
+            menu.popUp(positioning: nil, at: NSPoint(x: 8, y: (NSScreen.main?.frame.maxY ?? 900) - 8), in: nil)
+        }
+        owner.sidebar.endContextMenu()
+        guard owns() else { return ["refused": true] }
+        owner.session.duplicateSplit(group.group.id)
+        await settle()
+        checks["duplicate"] = owner.session.activeSplit?.group.id != group.group.id && owner.session.activeSplit?.tabs.count == 2
+        if let id = owner.session.activeSplit?.group.id {
+            guard owns() else { return ["refused": true] }
+            owner.session.orientSplit(id, to: .vertical)
+            await settle()
+            checks["vertical"] = owner.session.activeSplit?.group.orientation == .vertical
+        }
+        for _ in 0..<2 {
+            guard owns() else { return ["refused": true] }
+            owner.session.addSplitPane(url: base.appendingPathComponent("extra")); await settle()
+        }
+        checks["fourPaneLimit"] = !owner.canAddSplitPane && owner.session.activeSplit?.tabs.count == 4
+        capture("four-panes")
+        guard owns(), let full = owner.session.activeSplit else { return ["refused": true] }
+        owner.session.unsplit(full.group.id); await settle()
+        checks["separate"] = owner.session.activeSplit == nil
+        guard owns() else { return ["refused": true] }
+        owner.palette.present(.newTab)
+        owner.palette.query("Add Split")
+        await owner.palette.waitForResults()
+        capture("command-bar")
+        checks["directionalCommands"] = [BrowserCommandID.addRightSplit, .addLeftSplit, .addTopSplit, .addBottomSplit].allSatisfy { id in
+            owner.palette.results.contains { $0.action == .command(id) }
+        }
+        owner.palette.dismiss(returnFocus: false)
+        return ["pid": getpid(), "checks": checks, "passed": checks.values.allSatisfy { $0 }, "offscreen": true]
+    }
+}
+
+
+@MainActor
+private final class SplitParityMenuCapture: NSObject {
+    let menu: NSMenu
+    let file: URL
+    init(menu: NSMenu, file: URL) { self.menu = menu; self.file = file }
+    @objc func capture() {
+        defer { menu.cancelTracking() }
+        guard Bundle.main.bundleIdentifier == "lab.orbit.orbit.p2-split",
+              let confinement = activeSyntheticDataGuard(), (try? confinement.checkInside(file)) != nil else { return }
+        let rows = CGWindowListCopyWindowInfo(.optionOnScreenOnly, kCGNullWindowID) as? [[String: Any]] ?? []
+        guard let row = rows.first(where: { ($0[kCGWindowOwnerPID as String] as? Int32) == getpid()
+            && ($0[kCGWindowLayer as String] as? Int ?? 0) > 0 }), let number = row[kCGWindowNumber as String] as? Int else { return }
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
+        process.arguments = ["-x", "-o", "-l", String(number), file.path]
+        try? process.run(); process.waitUntilExit()
     }
 }

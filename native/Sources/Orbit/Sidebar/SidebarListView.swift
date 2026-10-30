@@ -750,7 +750,7 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
     func rowMouseDown(_ row: SidebarListRow, with event: NSEvent) {
         if renameTimer != nil { cancelRename() }
         window?.makeFirstResponder(self)
-        let modifiers = event.modifierFlags.intersection([.command, .shift])
+        let modifiers = event.modifierFlags.intersection([.command, .shift, .option])
         if event.clickCount == 2, modifiers.isEmpty {
             pointerDown = nil
             if row.node.folderID != nil { host?.list(self, activate: row.node, modifiers: []) }

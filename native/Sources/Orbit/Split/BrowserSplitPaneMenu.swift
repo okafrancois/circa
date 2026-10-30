@@ -52,7 +52,7 @@ extension BrowserWindowController {
 }
 
 @MainActor
-private final class BrowserSplitMenuItem: NSMenuItem {
+final class BrowserSplitMenuItem: NSMenuItem {
     private let handler: () -> Void
     init(title: String, handler: @escaping () -> Void) {
         self.handler = handler
