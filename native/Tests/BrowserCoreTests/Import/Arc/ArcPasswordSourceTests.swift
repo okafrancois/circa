@@ -78,8 +78,12 @@ import Testing
         let expectedNames = preparation.plan.profiles.filter { $0.sourceDirectory != nil }.map(\.name)
         #expect(preparation.report.passwordProfiles?.map(\.name) == expectedNames)
         #expect(preparation.report.passwordProfiles?.map(\.count) == [7, 7, 0])
+        let encoded = try JSONEncoder().encode(preparation.report)
+        for name in expectedNames { #expect(encoded.range(of: Data(name.utf8)) == nil) }
         if ProcessInfo.processInfo.environment["ORBIT_PASSWORD_EXPORT_REVIEW"] == "1" {
-            try JSONEncoder().encode(preparation.report).write(to: URL(fileURLWithPath: "/private/tmp/import-arc-passwords/review-report.json"))
+            try encoded.write(to: URL(fileURLWithPath: "/private/tmp/import-arc-passwords/review-report.json"))
+            // Synthetic presentation evidence only; production report serialization omits names.
+            try JSONEncoder().encode(expectedNames).write(to: URL(fileURLWithPath: "/private/tmp/import-arc-passwords/review-profile-names.json"))
         }
         preparation.discard(); await target.close()
         withExtendedLifetime(databases) {}

@@ -37,7 +37,7 @@ public struct ArcImportProgress: Sendable, Equatable {
     public var fraction: Double? { total > 0 ? min(1, Double(completed) / Double(total)) : nil }
 }
 
-/// Dry-run report. Profile display names are for presentation, not diagnostic logging.
+/// Dry-run report. Encoded reports contain counts only; profile labels are presentation-only.
 public struct ArcImportReport: Codable, Equatable, Sendable {
     /// Categories outside the structural and subsequent authentication steps.
     public static let notImported = ["cookies", "extensions", "siteData", "settings", "downloads"]
@@ -48,6 +48,14 @@ public struct ArcImportReport: Codable, Equatable, Sendable {
         public init(name: String, directory: String, count: Int) {
             self.name = name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? directory : name
             self.count = count
+        }
+        public init(from decoder: Decoder) throws {
+            name = ""
+            count = try decoder.singleValueContainer().decode(Int.self)
+        }
+        public func encode(to encoder: Encoder) throws {
+            var container = encoder.singleValueContainer()
+            try container.encode(count)
         }
     }
     public var passwordProfiles: [PasswordProfile]?

@@ -82,7 +82,9 @@ enum ArcPasswordProductProbe {
             NSApp.appearance = NSAppearance(named: appearance == "dark" ? .darkAqua : .aqua)
             let panel: NSAlert
             if action == "confirmation" {
-                let report = try JSONDecoder().decode(ArcImportReport.self, from: Data(contentsOf: root.appendingPathComponent("password-probe-report.json")))
+                var report = try JSONDecoder().decode(ArcImportReport.self, from: Data(contentsOf: root.appendingPathComponent("password-probe-report.json")))
+                let names = try JSONDecoder().decode([String].self, from: Data(contentsOf: root.appendingPathComponent("password-probe-profile-names.json")))
+                report.passwordProfiles = zip(names, report.passwordProfiles ?? []).map { .init(name: $0.0, directory: "", count: $0.1.count) }
                 panel = ArcImportAlertPresenter.confirmationAlert(report)
             } else if action == "review-result" {
                 // Presentation-only input: recapture copy without replaying an import.
@@ -118,7 +120,11 @@ enum ArcPasswordProductProbe {
         func hideProgress() {}
         func confirmReducedImport(_ report: ArcImportReport, excluding parts: ArcImportExclusions) async -> Bool { false }
         func confirm(_ report: ArcImportReport) async -> Bool {
-            do { try JSONEncoder().encode(report).write(to: root.appendingPathComponent("password-probe-report.json")); return true }
+            do {
+                try JSONEncoder().encode(report).write(to: root.appendingPathComponent("password-probe-report.json"))
+                try JSONEncoder().encode(report.passwordProfiles?.map(\.name) ?? []).write(to: root.appendingPathComponent("password-probe-profile-names.json"))
+                return true
+            }
             catch { return false }
         }
         func showCompletion(_ outcome: ArcImportOutcome) {}
