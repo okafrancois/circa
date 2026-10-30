@@ -10,6 +10,7 @@ enum BrowserSplitTokens {
     static let minimumPaneExtent: CGFloat = 120 // estimate; scales down at smaller sizes
     static let edgeBand: CGFloat = 48 // estimate
     static let focusFade = OrbitTokens.Motion.splitFocusCrossfade
+    static let dividerHoverTiming = OrbitAnimationTiming(duration: 0.15, x1: 1.0 / 3, y1: 1, x2: 2.0 / 3, y2: 1)
 }
 
 struct BrowserSplitGeometry {
@@ -29,7 +30,11 @@ struct BrowserSplitGeometry {
         var panes: [CGRect] = [], dividers: [CGRect] = []
         for (index, ratio) in ratios.enumerated() {
             let last = index == ratios.count - 1
-            let size = last ? max(0, (horizontal ? bounds.maxX : bounds.maxY) - cursor) : available * ratio / total
+            let rawSize = last ? max(0, (horizontal ? bounds.maxX : bounds.maxY) - cursor) : available * ratio / total
+            // Remove arithmetic noise at integral extents so native engine viewports do not
+            // truncate a nominal 320-point pane to 319 CSS pixels. Preserve fractional ratios.
+            let integral = rawSize.rounded()
+            let size = abs(rawSize - integral) < 0.000_001 ? integral : rawSize
             panes.append(horizontal ? CGRect(x: cursor, y: bounds.minY, width: size, height: max(0, bounds.height))
                                     : CGRect(x: bounds.minX, y: cursor, width: max(0, bounds.width), height: size))
             cursor += size
