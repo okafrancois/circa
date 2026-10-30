@@ -4,8 +4,9 @@ import Darwin
 import Foundation
 import OSLog
 
-/// Optional live-tab budget, off unless the hidden `OrbitLiveTabBudget` default (or the
-/// `-OrbitLiveTabBudget N` launch argument) is positive. Memory Saver "Never" also disables it.
+/// Live-tab budget, `defaultLimit` unless the hidden `OrbitLiveTabBudget` default (or the
+/// `-OrbitLiveTabBudget N` launch argument) overrides it; 0 or less turns it off.
+/// Memory Saver "Never" also disables it.
 struct BrowserLiveTabBudget: Equatable, Sendable {
     enum Scope: String, Sendable { case global, profile }
     /// Live background tabs kept per group; protected tabs count but are never discarded.
@@ -15,8 +16,9 @@ struct BrowserLiveTabBudget: Equatable, Sendable {
     var minimumBackgroundAge: TimeInterval = 300
 
     static let limitKey = "OrbitLiveTabBudget", scopeKey = "OrbitLiveTabBudgetScope"
+    static let defaultLimit = 12
     static func configured(_ defaults: UserDefaults = .standard) -> Self? {
-        let limit = defaults.integer(forKey: limitKey)
+        let limit = defaults.object(forKey: limitKey) == nil ? defaultLimit : defaults.integer(forKey: limitKey)
         guard limit > 0 else { return nil }
         return .init(limit: limit, scope: Scope(rawValue: defaults.string(forKey: scopeKey) ?? "") ?? .global)
     }

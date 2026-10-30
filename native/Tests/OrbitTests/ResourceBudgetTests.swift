@@ -110,7 +110,7 @@ struct ResourceBudgetTests {
         #expect(keys.filter(plan.admits) == [keys[0], keys[1]])
     }
 
-    @Test("No budget plans nothing; the hidden default enables it only with a positive limit")
+    @Test("No budget plans nothing; the default limit is 12 and the hidden default overrides or disables it")
     func configuration() throws {
         var fixture = Fixture(nil)
         fixture.add(shown: 0, lifecycle: state())
@@ -118,7 +118,10 @@ struct ResourceBudgetTests {
         let suite = "orbit.tests.live-tab-budget.\(UUID().uuidString)"
         let defaults = try #require(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
-        #expect(BrowserLiveTabBudget.configured(defaults) == nil)
+        #expect(BrowserLiveTabBudget.configured(defaults) == .init(limit: BrowserLiveTabBudget.defaultLimit))
+        #expect(BrowserLiveTabBudget.defaultLimit == 12)
+        defaults.set(24, forKey: BrowserLiveTabBudget.limitKey)
+        #expect(BrowserLiveTabBudget.configured(defaults) == .init(limit: 24))
         defaults.set(0, forKey: BrowserLiveTabBudget.limitKey)
         #expect(BrowserLiveTabBudget.configured(defaults) == nil)
         defaults.set(-3, forKey: BrowserLiveTabBudget.limitKey)
