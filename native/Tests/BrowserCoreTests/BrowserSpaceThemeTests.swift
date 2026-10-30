@@ -371,3 +371,51 @@ struct BrowserSpaceThemeImportTests {
         #expect(try BrowserSessionDocument.decode(await store.sessionDocument().encoded()).themeImports.count == 3)
     }
 }
+
+extension BrowserSpaceThemeImportTests {
+    private var singleColorFixture: ArcSpaceAppearance {
+        appearance(#"""
+        {"background":{"single":{"_0":{"isVibrant":true,
+          "style":{"color":{"_0":{"blendedSingleColor":{"_0":{
+            "translucencyStyle":"light","color":{"red":0.71,"green":0.64,"blue":0.72,"colorSpace":"extendedSRGB"},
+            "modifiers":{"intensityFactor":0.8,"overlay":"grain","noiseFactor":0}}}}}},
+          "contentOverBackgroundAppearance":"light"}}},
+          "primaryColorPalette":{"tintedLight":{"red":0.94,"green":0.93,"blue":0.95}},
+          "semanticColorPalette":{"appearanceBased":{"light":{},"dark":{}}}}
+        """#, hex: "#f0edf2")
+    }
+
+    @Test("Single blended colour imports its appearance and modifiers without a palette fallback")
+    func singleColorAppearance() throws {
+        let theme = try #require(ArcSpaceThemeImport.theme(for: singleColorFixture))
+        #expect(theme.mode == .light && theme.intensity == 0.8 && theme.noise == 0)
+        #expect(theme.colors == [BrowserThemeColor(red: 0.71, green: 0.64, blue: 0.72)])
+        let fallback = singleColorFixture.theme!.replacingOccurrences(of: "\"translucencyStyle\":\"light\",", with: "")
+        #expect(ArcSpaceThemeImport.theme(for: appearance(fallback))?.mode == .light)
+        let dark = singleColorFixture.theme!.replacingOccurrences(of: "\"translucencyStyle\":\"light\"", with: "\"translucencyStyle\":\"dark\"")
+        #expect(ArcSpaceThemeImport.theme(for: appearance(dark))?.mode == .dark)
+    }
+
+    @Test("An unchanged previously imported single-colour theme is repaired, preserving edits and resets")
+    func repairSingleColorAppearance() async throws {
+        let f = try await ThemeFixture.make()
+        let legacy = try #require(ArcSpaceThemeImport.theme(for: singleColorFixture, decodeSingleColor: false))
+        var document = await f.store.sessionDocument()
+        var encoded = try #require(try JSONSerialization.jsonObject(with: document.encoded()) as? [String: Any])
+        encoded["themeImports"] = [f.home, f.work].map { ["rawValue": $0.rawValue.uuidString] }
+        document = try BrowserSessionDocument.decode(JSONSerialization.data(withJSONObject: encoded))
+        let store = try BrowserStore(restoring: document)
+        try await store.setSpaceTheme(legacy, for: f.home)
+        let userTheme = BrowserSpaceTheme.composed(colors: [BrowserThemeColor(hex: 0x884488)], mode: .dark)
+        try await store.setSpaceTheme(userTheme, for: f.work)
+        var sidecar = BrowserSpaceAppearanceDocument()
+        sidecar.addMissing([.init(spaceID: f.home, appearance: singleColorFixture), .init(spaceID: f.work, appearance: singleColorFixture)])
+        #expect(await store.migrateImportedSpaceThemes(sidecar) == [f.home])
+        #expect(try await store.spaceTheme(f.home)?.mode == .light)
+        #expect(try await store.spaceTheme(f.work) == userTheme)
+        #expect(await store.migrateImportedSpaceThemes(sidecar).isEmpty)
+        try await store.setSpaceTheme(nil, for: f.home)
+        #expect(await store.migrateImportedSpaceThemes(sidecar).isEmpty)
+        #expect(try await store.spaceTheme(f.home) == nil)
+    }
+}
