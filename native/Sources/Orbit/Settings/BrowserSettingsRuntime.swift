@@ -111,6 +111,7 @@ final class BrowserWindowSettings {
         guard let profileID = owner.session.activeProfileID else { return }
         let settings = runtime.document.profile(profileID)
         owner.addressResolver.searchEngine = settings.searchEngine
+        owner.palette.showsSearchSuggestions = settings.showSearchSuggestions
         owner.peek.settings.opensPinnedLinksInPeek = settings.opensPinnedLinksInPeek
         owner.peek.settings.shiftClickOpensPeek = settings.shiftClickOpensPeek
     }

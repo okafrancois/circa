@@ -310,6 +310,13 @@ final class BrowserHistoryRecorder {
         }
     }
 
+    func deleteSuggestions(for profileID: ProfileID, url: URL) async throws -> Int {
+        await flush()
+        let wasWarm = beginBulkMutation(for: profileID)
+        defer { endBulkMutation(for: profileID, rebuild: wasWarm) }
+        return try await access(profileID: profileID, disabled: 0) { try await $0.deleteSuggestions(url: url) }
+    }
+
     /// Clears the cooldown and attempt budget for an explicit user retry.
     /// Automatic opening attempts: immediately, after 5 s, after 30 s; then cached indefinitely.
     func retryOpening(for profileID: ProfileID) {

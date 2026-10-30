@@ -50,6 +50,10 @@ final class BrowserHistoryEngineObserver<Surface: BrowserEngineSurface> {
     /// Opens the store and warms the memory index off the main actor.
     func prepareSuggestions(for profileID: ProfileID) async { await recorder.prepareSuggestions(for: profileID) }
 
+    func deleteSuggestions(for profileID: ProfileID, url: URL) async throws -> Int {
+        try await recorder.deleteSuggestions(for: profileID, url: url)
+    }
+
     func markTypedNavigation(_ surface: Surface, url: URL) { recorder.markTypedNavigation(surface, url: url) }
 
     private func surfaceDidCommitNavigation(_ surface: Surface) {

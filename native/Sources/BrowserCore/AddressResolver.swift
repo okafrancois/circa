@@ -5,6 +5,27 @@ public enum SearchEngine: String, Codable, Sendable, CaseIterable {
     case duckDuckGo
     case bing
 
+    /// Public OpenSearch JSON endpoints. Engines without an endpoint return nil.
+    public func suggestionURL(for query: String) -> URL? {
+        let base: String
+        let format: URLQueryItem?
+        switch self {
+        case .google:
+            base = "https://suggestqueries.google.com/complete/search"
+            format = URLQueryItem(name: "client", value: "firefox")
+        case .duckDuckGo:
+            base = "https://duckduckgo.com/ac/"
+            format = URLQueryItem(name: "type", value: "list")
+        case .bing:
+            base = "https://www.bing.com/osjson.aspx"
+            format = nil
+        }
+        var components = URLComponents(string: base)!
+        components.queryItems = [format].compactMap { $0 } + [URLQueryItem(name: self == .bing ? "query" : "q", value: query)]
+        components.percentEncodedQuery = components.percentEncodedQuery?.replacingOccurrences(of: "+", with: "%2B")
+        return components.url
+    }
+
     public func searchURL(for query: String) -> URL {
         let base: String
         switch self {

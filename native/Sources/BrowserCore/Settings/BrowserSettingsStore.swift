@@ -25,16 +25,18 @@ public enum BrowserMemorySaverSetting: String, Codable, CaseIterable, Sendable {
 
 public struct BrowserProfileSettings: Codable, Equatable, Sendable {
     public var searchEngine: SearchEngine = .google
+    public var showSearchSuggestions = true
     public var opensPinnedLinksInPeek = true
     public var shiftClickOpensPeek = true
     public var extensionPinOrder: [String] = []
     public init() {}
     private enum CodingKeys: String, CodingKey {
-        case searchEngine, opensPinnedLinksInPeek, shiftClickOpensPeek, extensionPinOrder
+        case showSearchSuggestions, searchEngine, opensPinnedLinksInPeek, shiftClickOpensPeek, extensionPinOrder
     }
     public init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
         searchEngine = try values.decode(SearchEngine.self, forKey: .searchEngine)
+        showSearchSuggestions = try values.decodeIfPresent(Bool.self, forKey: .showSearchSuggestions) ?? true
         opensPinnedLinksInPeek = try values.decode(Bool.self, forKey: .opensPinnedLinksInPeek)
         shiftClickOpensPeek = try values.decode(Bool.self, forKey: .shiftClickOpensPeek)
         extensionPinOrder = (try? values.decode([String].self, forKey: .extensionPinOrder)) ?? []

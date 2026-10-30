@@ -756,3 +756,58 @@ private extension BrowserStore {
 private final class PaletteFocusWindow: NSWindow {
     override var isKeyWindow: Bool { true }
 }
+
+extension NativeWebKitTests.NativePaletteTests {
+    @Test("Suggestion deletion uses the declared shortcut and removes every visit for only the selected URL")
+    func deleteHistorySuggestion() async throws {
+        let h = try await PaletteHarness()
+        let url = URL(string: "https://suggestion.test/remove")!, keep = URL(string: "https://suggestion.test/keep")!
+        let visits = [BrowserHistoryVisit(url: url, title: "Suggestion removal"), BrowserHistoryVisit(url: url, title: "Suggestion removal"),
+                      BrowserHistoryVisit(url: keep, title: "Suggestion kept")]
+        #expect(try await h.recorder.importDocument(.init(profileID: h.profileID, visits: visits)) == 3)
+        await h.recorder.prepareSuggestions(for: h.profileID)
+        await h.show()
+        h.window.palette.query("suggestion")
+        await h.window.palette.waitForResults()
+        let row = try #require(h.window.palette.results.firstIndex { $0.section == .history && $0.url == url })
+        h.window.palette.move(row - h.window.palette.selection.index)
+        let shortcut = try #require(h.registry.definition(.removeSuggestion)?.shortcuts.first)
+        #expect(shortcut.key == "\u{7f}")
+        #expect(shortcut.modifiers.rawValue == NSEvent.ModifierFlags([.command, .option]).rawValue)
+        #expect(h.registry.dispatch(.removeSuggestion, origin: .keyboard))
+        await h.window.palette.waitForDeletion()
+        await h.window.palette.waitForResults()
+        #expect(!h.window.palette.results.contains { $0.url == url })
+        #expect(try await h.recorder.visits(for: h.profileID).map(\.url) == [keep])
+        await h.recorder.prepareSuggestions(for: h.profileID)
+        #expect(!h.recorder.cachedSuggestions(for: h.profileID, query: "suggestion").contains { $0.url == url })
+        let batches = try await h.recorder.syncBatches(for: h.profileID)
+        #expect(Set(batches.flatMap(\.events).compactMap { $0.deletion?.visitID }) == Set(visits.prefix(2).map(\.id)))
+        try await h.close()
+    }
+
+    @Test("Remote suggestions arrive independently of local rows and deletion hides them for the palette session")
+    func remoteSuggestionIntegration() async throws {
+        let h = try await PaletteHarness()
+        h.window.palette.searchSuggestions = PaletteSuggestionURLProtocol.service()
+        await h.show()
+        h.window.palette.query("orbit")
+        #expect(h.window.palette.results.contains { $0.id == "search" })
+        #expect(!h.window.palette.results.contains { $0.remoteSuggestion != nil })
+        let selected = h.window.palette.results[h.window.palette.selection.index].id
+        await h.window.palette.waitForResults()
+        #expect(h.window.palette.results[h.window.palette.selection.index].id == selected)
+        let row = try #require(h.window.palette.results.firstIndex { $0.remoteSuggestion == "orbit news" })
+        h.window.palette.move(row - h.window.palette.selection.index)
+        #expect(h.registry.dispatch(.removeSuggestion, origin: .keyboard))
+        #expect(!h.window.palette.results.contains { $0.remoteSuggestion == "orbit news" })
+        h.window.palette.dismiss(returnFocus: false)
+        await h.show()
+        h.window.palette.query("orbit")
+        await h.window.palette.waitForResults()
+        #expect(!h.window.palette.results.contains { $0.remoteSuggestion == "orbit news" })
+        h.window.palette.showsSearchSuggestions = false
+        #expect(!h.window.palette.results.contains { $0.remoteSuggestion != nil })
+        try await h.close()
+    }
+}

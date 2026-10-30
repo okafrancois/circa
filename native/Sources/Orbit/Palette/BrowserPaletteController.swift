@@ -21,6 +21,20 @@ final class BrowserPaletteController<Engine: BrowserEngine> {
     private var history: [BrowserHistorySuggestion] = []
     private var availableActions: [BrowserPaletteResult] = []
     private var queryTask: Task<Void, Never>?
+    var searchSuggestions = BrowserSearchSuggestions() {
+        didSet {
+            oldValue.onChange = nil
+            oldValue.cancel()
+            searchSuggestions.onChange = { [weak self] in
+                self?.remoteResultsChanged()
+            }
+        }
+    }
+    private var deletionTask: Task<Void, Never>?
+    private var deletingHistory: Set<String> = []
+    var showsSearchSuggestions = true {
+        didSet { if oldValue != showsSearchSuggestions, isPresented { refreshSearchSuggestions() } }
+    }
     private var documentTask: Task<Void, Never>?
     private var presentationTask: Task<Void, Never>?
     private var warmupTask: Task<Void, Never>?
@@ -51,11 +65,15 @@ final class BrowserPaletteController<Engine: BrowserEngine> {
         await warmupTask?.value
         await documentTask?.value
         await queryTask?.value
+        await searchSuggestions.waitForResults()
     }
     func waitForAcceptance() async { await acceptTask?.value }
 
     init(owner: BrowserWindowController<Engine>) {
         self.owner = owner
+        searchSuggestions.onChange = { [weak self] in
+            self?.remoteResultsChanged()
+        }
         view.onQuery = { [weak self] in self?.query($0) }
         view.onMove = { [weak self] in self?.move($0) }
         view.onDismiss = { [weak self] in self?.dismiss() }
@@ -84,6 +102,7 @@ final class BrowserPaletteController<Engine: BrowserEngine> {
             previousResponder = field ?? responder
             previousOccurrence = owner.session.snapshot?.selectedOccurrenceID
         }
+        searchSuggestions.cancel()
         queryTask?.cancel()
         documentTask?.cancel()
         presentationTask?.cancel()
@@ -239,6 +258,7 @@ final class BrowserPaletteController<Engine: BrowserEngine> {
             let cached = owner.historyObserver.cachedSuggestions(for: profileID, query: text)
             history = BrowserPaletteRanking.rankedHistory(history + cached, query: text)
         }
+        refreshSearchSuggestions()
         rebuild(preserveSelection: preserveSelection)
         guard siteSearch == nil, let owner, let profileID = sourceContext?.profileID else { return }
         queryTask = Task { [weak self, weak owner] in
@@ -261,13 +281,67 @@ final class BrowserPaletteController<Engine: BrowserEngine> {
         }
     }
 
+    private func remoteResultsChanged() {
+        guard isPresented else { return }
+        // A network response must not replace the user's selected destination.
+        let moved = selectionWasMoved
+        selectionWasMoved = true
+        rebuild(preserveSelection: true)
+        selectionWasMoved = moved
+    }
+
+    private func refreshSearchSuggestions() {
+        guard let owner, let profileID = sourceContext?.profileID, isPresented, siteSearch == nil else {
+            searchSuggestions.cancel(); return
+        }
+        searchSuggestions.update(query: draft, engine: owner.addressResolver.searchEngine, profileID: profileID,
+                                 enabled: showsSearchSuggestions, isPrivate: owner.isPrivateWindow)
+    }
+
+    var canDeleteSuggestion: Bool {
+        guard isPresented, results.indices.contains(selection.index) else { return false }
+        let result = results[selection.index]
+        return result.section == .history || result.remoteSuggestion != nil
+    }
+
+    func deleteSuggestion() {
+        guard canDeleteSuggestion, let owner, let profileID = sourceContext?.profileID else { return }
+        let result = results[selection.index]
+        if let text = result.remoteSuggestion {
+            searchSuggestions.hide(text, engine: owner.addressResolver.searchEngine)
+        } else if let url = result.url {
+            let previous = deletionTask
+            deletingHistory.insert(url.absoluteString)
+            queryTask?.cancel()
+            generation = UUID()
+            rebuild(preserveSelection: true)
+            deletionTask = Task { [weak self, weak owner] in
+                await previous?.value
+                guard let owner else { return }
+                do {
+                    _ = try await owner.historyObserver.deleteSuggestions(for: profileID, url: url)
+                    if self?.sourceContext?.profileID == profileID { self?.history.removeAll { $0.url == url } }
+                }
+                catch { owner.session.onError?(error) }
+                guard let self else { return }
+                deletingHistory.remove(url.absoluteString)
+                if sourceContext?.profileID == profileID, isPresented { query(draft, preserveSelection: true, userInitiated: false) }
+            }
+        }
+    }
+
+    func waitForDeletion() async { await deletionTask?.value }
+
     private func rebuild(preserveSelection: Bool) {
         guard let owner else { return }
         let selectedID = preserveSelection && selectionWasMoved && results.indices.contains(selection.index) ? results[selection.index].id : nil
         results = siteSearch?.results(query: draft) ?? BrowserPaletteRanking.results(query: draft, mode: mode, resolver: owner.addressResolver,
                                                 candidates: opensEmptyAddress ? candidates.filter { $0.url?.absoluteString != "about:blank" } : candidates,
-                                                history: history, actions: opensEmptyAddress && draft.isEmpty ? [] : availableActions,
+                                                history: history.filter { !deletingHistory.contains($0.url.absoluteString) }, actions: opensEmptyAddress && draft.isEmpty ? [] : availableActions,
                                                 prepared: opensEmptyAddress ? preparedCandidates.filter { $0.result.url?.absoluteString != "about:blank" } : preparedCandidates)
+        if siteSearch == nil {
+            results = BrowserPaletteRanking.merging(searchSuggestions.values, into: results, engine: owner.addressResolver.searchEngine)
+        }
         if let selectedID, let index = results.firstIndex(where: { $0.id == selectedID }) { selection.select(index, count: results.count) }
         else { selection.reset() }
         renderResults()
@@ -466,6 +540,7 @@ final class BrowserPaletteController<Engine: BrowserEngine> {
         view.isHidden = true
         siteSearch = nil
         view.setSiteSearch(nil, animated: false)
+        searchSuggestions.cancel()
         queryTask?.cancel()
         documentTask?.cancel()
         presentationTask?.cancel()
