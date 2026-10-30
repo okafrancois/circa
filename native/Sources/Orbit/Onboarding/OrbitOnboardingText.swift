@@ -17,7 +17,8 @@ enum OrbitOnboardingText {
     static func counter(_ step: Int) -> String { uiFormat("STEP %d OF 7", step) }
     static func sticker(duration: Double?, sync: Bool) -> String {
         let privacy = sync ? uiText("synced to your iCloud") : uiText("nothing uploaded")
-        return duration.map { uiFormat("%d s · %@", Int($0.rounded()), privacy) } ?? privacy
+        // A sub-second import still reads as one second, never "0 s".
+        return duration.map { uiFormat("%d s · %@", max(1, Int($0.rounded())), privacy) } ?? privacy
     }
     static var next: String { uiText("Next") }
     static var back: String { uiText("Back") }

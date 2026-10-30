@@ -176,6 +176,7 @@ struct OnboardingTests {
         #expect(OrbitOnboardingText.sticker(duration: nil, sync: true) == uiText("synced to your iCloud"))
         #expect(OrbitOnboardingText.sticker(duration: 12.6, sync: false) == uiFormat("%d s · %@", 13, uiText("nothing uploaded")))
         #expect(OrbitOnboardingText.sticker(duration: 12.6, sync: true) == uiFormat("%d s · %@", 13, uiText("synced to your iCloud")))
+        #expect(OrbitOnboardingText.sticker(duration: 0.2, sync: false) == uiFormat("%d s · %@", 1, uiText("nothing uploaded")))
     }
 
     @Test("Checkbox profiles and radio choices expose accessible labels")

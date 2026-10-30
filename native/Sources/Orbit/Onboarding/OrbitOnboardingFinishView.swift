@@ -46,7 +46,8 @@ final class OrbitOnboardingFinishView: NSView {
         for (index, chip) in chips.enumerated() {
             let label = NSTextField(labelWithString: chip)
             label.font = OrbitOnboardingFonts.mono(12); label.textColor = .white
-            let width = ceil(label.intrinsicContentSize.width) + 44
+            // A little slack keeps the last monospaced glyph from clipping.
+            let width = ceil(label.intrinsicContentSize.width) + 4 + 44
             let view = OrbitOnboardingFlippedView(frame: NSRect(x: 0, y: 0, width: width, height: 34))
             view.wantsLayer = true; view.layer?.cornerRadius = 17
             view.layer?.backgroundColor = NSColor.white.withAlphaComponent(0.08).cgColor
