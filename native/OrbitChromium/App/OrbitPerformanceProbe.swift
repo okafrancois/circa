@@ -2765,6 +2765,24 @@ extension OrbitPerformanceProbe {
         checks["swipeStarted"] = owner.sidebar.spaceSwipe.switchToSpace(firstSpace)
         checks["missingFramesSettled"] = await drain()
         checks["destinationSelected"] = owner.session.snapshot?.activeSpaceID == firstSpace
+        stage("library-hover")
+        // Replay only AppKit notifications; never put the user's display in fullscreen.
+        NotificationCenter.default.post(name: NSWindow.willEnterFullScreenNotification, object: window)
+        owner.setSidebarVisible(false, animated: false)
+        owner.windowShell.hoverReveal.pointerEnteredEdge()
+        try? await Task.sleep(for: .milliseconds(200))
+        checks["hoverBeforeLibrary"] = owner.windowShell.hoverReveal.isRevealed
+        owner.library.swipe.beginOpening?()
+        owner.library.swipe.finish?(true, 0)
+        let libraryEnd = ProcessInfo.processInfo.systemUptime + 3
+        while owner.windowShell.hoverReveal.phase != .idle, ProcessInfo.processInfo.systemUptime < libraryEnd {
+            try? await Task.sleep(for: .milliseconds(10))
+        }
+        checks["libraryHoverRetired"] = owner.windowShell.hoverReveal.phase == .idle && !owner.windowShell.isFloatingRevealed
+        checks["libraryBackdropRetired"] = owner.windowShell.floatingBackdrop.alphaValue == 0
+        owner.hideLibrary()
+        NotificationCenter.default.post(name: NSWindow.willExitFullScreenNotification, object: window)
+        NotificationCenter.default.post(name: NSWindow.didExitFullScreenNotification, object: window)
         owner.session.activateSpace(secondSpace)
         _ = await drain()
         stage("close-stalled")
