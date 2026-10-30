@@ -21,9 +21,18 @@ struct NativeSidebarHoverHoldTests {
         return (window, shell)
     }
 
+    /// Timer-driven transitions can land late under full-suite load; wait for them, bounded.
+    private func settle(_ condition: () -> Bool) async throws {
+        let deadline = ContinuousClock.now + .seconds(3)
+        while !condition() && ContinuousClock.now < deadline {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+    }
+
     private func reveal(_ shell: OrbitWindowShell) async throws {
         shell.hoverReveal.pointerEnteredEdge()
         try await Task.sleep(for: .milliseconds(150))
+        try await settle { shell.hoverReveal.isRevealed }
         #expect(shell.hoverReveal.isRevealed)
     }
 
@@ -45,6 +54,7 @@ struct NativeSidebarHoverHoldTests {
         try await reveal(shell)
         shell.hoverReveal.pointerExitedPanel()
         try await Task.sleep(for: .milliseconds(100))
+        try await settle { shell.hoverReveal.phase == .idle }
         #expect(shell.hoverReveal.phase == .idle)
     }
 
@@ -62,6 +72,7 @@ struct NativeSidebarHoverHoldTests {
         ownedPresentation = false
         shell.hoverHoldDidChange()
         try await Task.sleep(for: .milliseconds(100))
+        try await settle { shell.hoverReveal.phase == .idle }
         #expect(shell.hoverReveal.phase == .idle && !shell.isDocked)
         shell.setDocked(true, animated: false)
         shell.hoverHoldDidChange()
@@ -80,6 +91,7 @@ struct NativeSidebarHoverHoldTests {
         #expect(shell.hoverReveal.isHeld() && shell.hoverReveal.phase == .revealed)
         NotificationCenter.default.post(name: NSMenu.didEndTrackingNotification, object: menu)
         try await Task.sleep(for: .milliseconds(100))
+        try await settle { shell.hoverReveal.phase == .idle }
         #expect(!shell.hoverReveal.isHeld() && shell.hoverReveal.phase == .idle)
     }
 }
