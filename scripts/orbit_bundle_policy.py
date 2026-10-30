@@ -78,7 +78,9 @@ def validate_bundle_contents(bundle):
         allowed = path in {'Info.plist', 'PkgInfo', 'MacOS', 'MacOS/Orbit', 'MacOS/Orbit', 'Resources', 'Frameworks', '_CodeSignature', '_CodeSignature/CodeResources'}
         if parts[1] == 'Resources' and len(parts) > 2:
             tail = parts[2:]
-            allowed = len(tail) == 1 and tail[0] in {'LICENSE.txt', 'Orbit.icns', 'OrbitLabNative_BrowserShell.bundle'}
+            allowed = len(tail) == 1 and tail[0] in {'LICENSE.txt', 'Orbit.icns', 'Circa.sdef', 'OrbitLabNative_BrowserShell.bundle'}
+            if tail == ('Circa.sdef',) and (entry.is_symlink() or not entry.is_file()):
+                raise RuntimeError('Invalid scripting dictionary resource: ' + str(relative))
             if tail[0] in {'en.lproj', 'fr.lproj'}:
                 allowed = len(tail) == 1 or (len(tail) == 2 and tail[1] == 'InfoPlist.strings')
                 if entry.is_symlink() or (len(tail) == 1 and not entry.is_dir()) or (len(tail) == 2 and not entry.is_file()):

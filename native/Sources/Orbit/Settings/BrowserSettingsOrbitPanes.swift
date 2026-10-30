@@ -381,6 +381,10 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
     private var advanced: some View {
         Group {
             panel {
+                liveToggle("Allow JavaScript from Apple Events",
+                           value: runtime.document.allowJavaScriptFromAppleEvents,
+                           identifier: "settings-apple-events-javascript", save: runtime.setAllowJavaScriptFromAppleEvents)
+                rule
                 liveToggle("Enable Picture in Picture when you leave a video tab",
                            value: runtime.document.automaticPictureInPicture,
                            identifier: "settings-automatic-pip", icon: "rectangle.on.rectangle", save: model.setAutomaticPictureInPicture)

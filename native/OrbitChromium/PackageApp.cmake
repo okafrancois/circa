@@ -28,6 +28,7 @@ file(REMOVE_RECURSE "${APP}")
 file(MAKE_DIRECTORY "${APP}/Contents/MacOS" "${APP}/Contents/Resources")
 file(COPY_FILE "${EXECUTABLE}" "${APP}/Contents/MacOS/Orbit")
 file(COPY_FILE "${INFO_PLIST}" "${APP}/Contents/Info.plist")
+file(COPY "${CMAKE_CURRENT_LIST_DIR}/../Scripting/Circa.sdef" DESTINATION "${APP}/Contents/Resources")
 file(COPY "${BUILD_DIRECTORY}/OrbitLabNative_BrowserShell.bundle" DESTINATION "${APP}/Contents/Resources")
 file(COPY "${CMAKE_CURRENT_LIST_DIR}/App/Branding/Orbit.icns"
     "${CMAKE_CURRENT_LIST_DIR}/App/Branding/en.lproj"

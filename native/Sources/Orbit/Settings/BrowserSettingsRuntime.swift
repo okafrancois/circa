@@ -51,6 +51,12 @@ final class BrowserSettingsRuntime: ObservableObject {
 
     static var enablesBoostsTitle: String { uiText("Enable Boosts on websites you visit") }
 
+    func setAllowJavaScriptFromAppleEvents(_ enabled: Bool) async throws {
+        do { try await store.setAllowJavaScriptFromAppleEvents(enabled) }
+        catch { await refresh(); throw error }
+        await refresh()
+    }
+
     func markBoostsIntroductionSeen() async throws {
         try await store.markBoostsIntroductionSeen()
         await refresh()

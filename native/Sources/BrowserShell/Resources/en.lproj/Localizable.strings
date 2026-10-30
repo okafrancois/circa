@@ -1702,3 +1702,11 @@
 
 "Are you sure you'd like to Clear Archive?" = "Are you sure you'd like to Clear Archive?";
 "This action is permanent." = "This action is permanent.";
+
+// Browser automation
+"Enable “Allow JavaScript from Apple Events” in Settings to run JavaScript." = "Enable “Allow JavaScript from Apple Events” in Settings to run JavaScript.";
+"Target and focus the private window before accessing its content." = "Target and focus the private window before accessing its content.";
+"The scripting object is no longer available." = "The scripting object is no longer available.";
+"The URL is invalid." = "The URL is invalid.";
+"This scripting operation is not supported." = "This scripting operation is not supported.";
+"The scripting operation could not be completed." = "The scripting operation could not be completed.";
