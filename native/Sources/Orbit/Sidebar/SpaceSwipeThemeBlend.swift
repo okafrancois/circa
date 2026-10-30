@@ -12,6 +12,10 @@ struct SpaceSwipeThemeBlend {
     let progress: CGFloat
 
     var theme: OrbitTokens.SpaceTheme {
+        // Each endpoint owns its appearance. In particular a fixed dark destination must
+        // never borrow the outgoing window's light variant before selection publication.
+        let source = Self.endpoint(source)
+        let destination = Self.endpoint(destination)
         let p = min(1, max(0, progress))
         if p == 0 { return source }
         if p == 1 { return destination }
@@ -38,12 +42,9 @@ struct SpaceSwipeThemeBlend {
                 appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? dark : light
             }
         }
-        result.foregroundOverride = NSColor(name: nil) { appearance in
-            MainActor.assumeIsolated {
-                blend(OrbitSpaceThemes.accent(for: source).foreground.resolvedCGColor(for: appearance),
-                      OrbitSpaceThemes.accent(for: destination).foreground.resolvedCGColor(for: appearance))
-            }
-        }
+        // Decide polarity from this frame's fill. Fading opposing foregrounds through grey
+        // makes both endpoints unreadable around the middle of a transition.
+        result.foregroundOverride = nil
         if source.meshCorners != nil || destination.meshCorners != nil {
             let points = [CGPoint(x: 0, y: 0), CGPoint(x: 1, y: 0), CGPoint(x: 0, y: 1), CGPoint(x: 1, y: 1)]
             result.meshCorners = points.map { point in
@@ -67,4 +68,29 @@ struct SpaceSwipeThemeBlend {
         result.textureIntensity = interpolate(sourceIntensity, targetIntensity)
         return result
     }
+
+    /// Fixed modes become appearance-independent paint; automatic endpoints remain dynamic.
+    /// The window follows the system while blending so automatic does not inherit a neighbor's mode.
+    private static func endpoint(_ theme: OrbitTokens.SpaceTheme) -> OrbitTokens.SpaceTheme {
+        guard let appearance = OrbitAppearance.windowAppearance(for: theme.mode) else { return theme }
+        return snapshot(theme, appearance: appearance)
+    }
+
+    /// Retarget from the last submitted paint, including an interrupted blend, without resolving
+    /// it again after the window adopts another Space's appearance.
+    static func snapshot(_ theme: OrbitTokens.SpaceTheme, appearance: NSAppearance) -> OrbitTokens.SpaceTheme {
+        var result = theme
+        result.stops = theme.stops.map { $0.resolved(for: appearance) }
+        result.meshCorners = theme.meshCorners?.map { $0.resolved(for: appearance) }
+        result.foregroundOverride = OrbitSpaceThemes.accent(for: theme).foreground.resolved(for: appearance)
+        let dark = OrbitAppearance.isDark(appearance)
+        let range = theme.stopRange.range(isDark: dark)
+        let angle = theme.angle.degrees(isDark: dark)
+        result.stopRange = .init(light: range, dark: range)
+        result.angle = .init(light: angle, dark: angle)
+        result.mode = .automatic
+        result.model = nil
+        return result
+    }
+
 }

@@ -814,7 +814,19 @@ final class BrowserSidebarView: NSView, SidebarListHost {
 
     // MARK: Accent
 
+    private func previewRasterMatches(_ raster: SpaceSwipeRaster, accent: OrbitTokens.ThemeAccent) -> Bool {
+        let background = accent.contrastTheme.map {
+            OrbitThemeGradient.representativeColor($0, appearance: effectiveAppearance)
+        }
+        return raster.matchesPaint(foreground: accent.foreground, background: background, appearance: effectiveAppearance)
+    }
+
     func applyAccent(_ accent: OrbitTokens.ThemeAccent) {
+        if let raster = swipePreviewRaster,
+           !previewRasterMatches(raster, accent: accent) {
+            raster.restore()
+            swipePreviewRaster = nil
+        }
         self.accent = accent
         if addressContainer.accent != accent { addressContainer.accent = accent }
         if navigationContainer.accent != accent { navigationContainer.accent = accent }
@@ -1518,7 +1530,8 @@ extension BrowserSidebarView {
             grid.layoutSubtreeIfNeeded()
             let scale = window?.backingScaleFactor ?? 2
             let preparedPage = PreparedSwipePage(key: key, page: incoming, content: content, favorites: grid,
-                pageRaster: SpaceSwipeRaster(view: incoming, scale: scale),
+                pageRaster: SpaceSwipeRaster(view: incoming, scale: scale, foreground: incoming.accent.foreground,
+                    overlays: incoming.list.subviews.compactMap { ($0 as? SidebarListRow)?.background.fillColor }),
                 favoritesRaster: SpaceSwipeRaster(view: grid, scale: scale))
             prepared[space.id] = preparedPage
             swipePreparationCache[space.id] = preparedPage
@@ -1697,9 +1710,13 @@ extension BrowserSidebarView {
                 incoming.spaceID = space.id
                 let icon = resolveSpaceIcon(space.id)
                 let iconChanged = incoming.iconSelection != icon
-                if iconChanged { prepared?.pageRaster?.restore() }
-                incoming.iconSelection = icon
                 let nextAccent = accent.contrastTheme == nil ? (destinationAccent ?? accent) : accent
+                let inkChanged = prepared?.pageRaster.map {
+                    !previewRasterMatches($0, accent: nextAccent)
+                } ?? false
+                if iconChanged || inkChanged { prepared?.pageRaster?.restore() }
+                incoming.appearance = nil
+                incoming.iconSelection = icon
                 if incoming.accent != nextAccent { incoming.accent = nextAccent }
                 if prepared == nil {
                     incoming.geometry = geometry
@@ -1710,7 +1727,7 @@ extension BrowserSidebarView {
                 pageContainer.addSubview(incoming)
                 swipePreview = incoming
                 swipePreviewContent = prepared?.content
-                swipePreviewRaster = iconChanged ? nil : prepared?.pageRaster
+                swipePreviewRaster = iconChanged || inkChanged ? nil : prepared?.pageRaster
                 swipeFavoritesRaster = prepared?.favoritesRaster
                 swipePreviewFavorites?.removeFromSuperview()
                 swipePreviewFavorites = prepared?.favorites
