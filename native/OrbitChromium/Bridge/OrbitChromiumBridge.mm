@@ -408,6 +408,7 @@ struct State {
   // which returned true: CEF then waits for the client to destroy the view, and a second
   // CloseBrowser alone never reaches OnBeforeClose.
   void CloseHost(Host& host) {
+    ACRNativePageServicesClosing(host.token);
     ACRPagePerformanceClosing(host.token);
     host.closing_by_shell = true;
     auto browser = host.browser;
@@ -1783,7 +1784,9 @@ const orbit_cef_api_t* ResolveOrbitApi() {
   // v1. Each version's layout is the prefix of the next; a function beyond the resolved version
   // is never called.
   const orbit_cef_api_t* api = nullptr;
-  const std::pair<uint32_t, size_t> versions[] = {{13u, sizeof(orbit_cef_api_t)},
+  const std::pair<uint32_t, size_t> versions[] = {{15u, sizeof(orbit_cef_api_t)},
+                                                   {14u, offsetof(orbit_cef_api_t, media_snapshot)},
+                                                   {13u, offsetof(orbit_cef_api_t, permission_accept_once)},
                                                    {12u, offsetof(orbit_cef_api_t, memory_dump)},
                                                    {11u, offsetof(orbit_cef_api_t, page_lifecycle)},
                                                    {10u, offsetof(orbit_cef_api_t, password_store_open)},
@@ -1888,6 +1891,15 @@ class App final : public CefApp, public CefBrowserProcessHandler {
         if (separator == std::string::npos) command->AppendSwitch(name);
         else command->AppendSwitchWithValue(name, value.substr(separator + 1));
       }
+    }
+    // Confined mixed-content fixture: fixed loopback mapping, never product argv.
+    if (g_state && g_state->secure_storage == ACR_SECURE_STORAGE_MOCK &&
+        [[NSBundle mainBundle].bundleIdentifier isEqualToString:@"lab.orbit.orbit.engine-r13"] &&
+        [[NSBundle mainBundle].infoDictionary[@"OrbitSyntheticBundle"] boolValue] &&
+        [[NSProcessInfo processInfo].arguments containsObject:@"--orbit-security-fixture"]) {
+      command->AppendSwitch("allow-running-insecure-content");
+      command->AppendSwitchWithValue("host-resolver-rules",
+          "MAP mixed.example.invalid 127.0.0.1, MAP * ~NOTFOUND, EXCLUDE 127.0.0.1");
     }
     if (g_state && g_state->auth_synthetic) {
       command->RemoveSwitch("load-extension");
@@ -2677,9 +2689,19 @@ extern "C" int32_t ACRResolvePermission(uint64_t request, ACRPermissionDecision 
   g_state->permissions.erase(found);
   if (pending.media) {
     // Default for Alloy is deny; grant only the requested device types.
-    if (decision == ACR_PERMISSION_GRANT) pending.media->Continue(pending.mask);
+    if (decision == ACR_PERMISSION_GRANT || decision == ACR_PERMISSION_GRANT_ONCE) pending.media->Continue(pending.mask);
     else pending.media->Cancel();
   } else if (pending.prompt) {
+    if (decision == ACR_PERMISSION_GRANT_ONCE) {
+      if (!g_state->orbit || g_state->orbit->version < 14 ||
+          !g_state->Find(pending.surface) || !g_state->Find(pending.surface)->browser ||
+          !g_state->orbit->permission_accept_once(g_state->Find(pending.surface)->browser->GetIdentifier(), pending.prompt_id)) {
+        // Refuse the ephemeral request without remembering an unwanted block.
+        pending.prompt->Continue(CEF_PERMISSION_RESULT_IGNORE);
+        return 0;
+      }
+      return 1;
+    }
     pending.prompt->Continue(decision == ACR_PERMISSION_GRANT ? CEF_PERMISSION_RESULT_ACCEPT
         : decision == ACR_PERMISSION_DENY ? CEF_PERMISSION_RESULT_DENY : CEF_PERMISSION_RESULT_IGNORE);
   }
@@ -3610,4 +3632,56 @@ extern "C" int32_t ACRBoostCacheTraceEnd(const char* path, void (*cb)(void*, int
 extern "C" void ACRPagePerformanceClosing(uint64_t token) {
   const auto id = PerformanceBrowser(token);
   if (id >= 0) g_state->orbit->activation_frame(id, 0, nullptr, nullptr);
+}
+
+extern "C" int32_t ACRNativePageServicesVersion(void) {
+  return g_state && g_state->orbit && g_state->orbit->version >= 14 ? g_state->orbit->version : 0;
+}
+namespace {
+int32_t NativePageBrowser(uint64_t token) {
+  return ACRNativePageServicesVersion() ? PerformanceBrowser(token) : -1;
+}
+}
+extern "C" int32_t ACRNativePageRead(uint64_t token, int32_t kind, char* out, uint32_t capacity) {
+  int32_t id = NativePageBrowser(token);
+  if (id < 0) return -1;
+  const auto* api = g_state->orbit;
+  switch (kind) {
+    case 0: return api->security_state(id, out, capacity);
+    case 1: return api->committed_url(id, out, capacity);
+    case 2: return api->navigation_entries(id, out, capacity);
+    case 3: return api->version >= 15 ? api->media_snapshot(id, out, capacity) : -1;
+    default: return -1;
+  }
+}
+extern "C" int32_t ACRSecurityDisplay(const char* url, int32_t scheme, char* out, uint32_t capacity) {
+  return NSThread.isMainThread && ACRNativePageServicesVersion()
+      ? g_state->orbit->security_display(url, scheme, out, capacity) : -1;
+}
+extern "C" int32_t ACRSecurityObserve(uint64_t token, orbit_json_changed_t cb, void* ctx) {
+  int32_t id = NativePageBrowser(token);
+  return id < 0 ? 0 : g_state->orbit->security_observe(id, cb, ctx);
+}
+extern "C" int32_t ACRFullscreenObserve(uint64_t token, orbit_fullscreen_changed_t cb, void* ctx) {
+  int32_t id = NativePageBrowser(token);
+  return id < 0 ? 0 : g_state->orbit->fullscreen_observe(id, cb, ctx);
+}
+extern "C" int32_t ACRNavigationGoIndex(uint64_t token, int32_t index) {
+  int32_t id = NativePageBrowser(token);
+  return id < 0 ? 0 : g_state->orbit->navigation_go_index(id, index);
+}
+extern "C" int32_t ACRMediaObserve(uint64_t token, orbit_json_changed_t cb, void* ctx) {
+  int32_t id = NativePageBrowser(token);
+  return id < 0 || g_state->orbit->version < 15 ? 0 : g_state->orbit->media_observe(id, cb, ctx);
+}
+extern "C" int32_t ACRMediaAction(uint64_t token, int32_t action, double seconds) {
+  int32_t id = NativePageBrowser(token);
+  return id < 0 || g_state->orbit->version < 15 ? 0 : g_state->orbit->media_action(id, action, seconds);
+}
+extern "C" void ACRNativePageServicesClosing(uint64_t token) {
+  int32_t id = NativePageBrowser(token);
+  if (id < 0) return;
+  g_state->orbit->security_observe(id, nullptr, nullptr);
+  g_state->orbit->fullscreen_observe(id, nullptr, nullptr);
+  if (g_state->orbit->version >= 15) g_state->orbit->media_observe(id, nullptr, nullptr);
 }

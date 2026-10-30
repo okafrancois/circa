@@ -102,7 +102,8 @@ typedef enum {
 typedef enum {
   ACR_PERMISSION_DEFAULT = 0,
   ACR_PERMISSION_GRANT = 1,
-  ACR_PERMISSION_DENY = 2
+  ACR_PERMISSION_DENY = 2,
+  ACR_PERMISSION_GRANT_ONCE = 3
 } ACRPermissionDecision;
 
 typedef enum {
@@ -643,6 +644,19 @@ int32_t ACRPasswordPromptObserve(uint64_t surface, uint64_t profile, orbit_passw
 int32_t ACRPasswordPromptSnapshot(uint64_t surface, uint64_t profile, orbit_password_prompt_t* snapshot);
 int32_t ACRPasswordPromptDecide(uint64_t surface, uint64_t profile, uint64_t generation, int32_t decision);
 int32_t ACRPasswordPromptReopen(uint64_t surface, uint64_t profile, uint64_t generation);
+/* Native side API v14/v15. All calls on UI. JSON/origin callbacks borrow their bytes.
+ * Text reads return required byte count (-1 unavailable), writing only if capacity > count.
+ * kind: 0 security JSON, 1 committed URL, 2 navigation JSON, 3 media JSON. */
+int32_t ACRNativePageServicesVersion(void);
+int32_t ACRNativePageRead(uint64_t token, int32_t kind, char*, uint32_t capacity);
+int32_t ACRSecurityDisplay(const char* url, int32_t scheme, char*, uint32_t capacity);
+int32_t ACRSecurityObserve(uint64_t token, orbit_json_changed_t, void*);
+int32_t ACRFullscreenObserve(uint64_t token, orbit_fullscreen_changed_t, void*);
+int32_t ACRNavigationGoIndex(uint64_t token, int32_t index);
+int32_t ACRMediaObserve(uint64_t token, orbit_json_changed_t, void*);
+int32_t ACRMediaAction(uint64_t token, int32_t action, double seconds);
+void ACRNativePageServicesClosing(uint64_t token);
+
 #ifdef __cplusplus
 }
 #endif

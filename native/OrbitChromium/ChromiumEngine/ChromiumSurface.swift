@@ -155,6 +155,11 @@ public final class ChromiumSurface: BrowserEngineSurface {
     var secureInputHostHidden = false
     public private(set) var isDisposed = false
     private var paintActivationID: UInt64 = 0
+    private lazy var nativeServices = ChromiumNativePageServices(token: token)
+    public var nativePageServices: (any BrowserNativePageServices)? {
+        guard !isDisposed, ACRNativePageServicesVersion() >= 14 else { return nil }
+        return nativeServices
+    }
     private lazy var nativePerformance = ChromiumPagePerformance(token: token)
     public var pagePerformance: (any BrowserPagePerformance)? {
         guard !isDisposed, ACRPagePerformanceAvailable() == 1 else { return nil }
@@ -783,6 +788,7 @@ public final class ChromiumSurface: BrowserEngineSurface {
         zoomsAwaitingCommit.removeAll()
         pendingMute = nil
         keyReceipts.removeAll()
+        nativeServices.close()
         releasePageRequests()
         let neverCreated = awaitsHostedCreation
         awaitsHostedCreation = false
@@ -1043,6 +1049,7 @@ public final class ChromiumSurface: BrowserEngineSurface {
             return
         }
         if event.kind == ACR_EVENT_CLOSED {
+            nativeServices.close()
             finishDownloadSourcePreparation(false)
             isBrowserCreated = false
             isCreationPending = false
@@ -1267,7 +1274,7 @@ public final class ChromiumSurface: BrowserEngineSurface {
                 onEngineEvent?("permission-late-answer-ignored", ["request": String(request)])
                 return
             }
-            _ = ACRResolvePermission(request, decision == .grant ? ACR_PERMISSION_GRANT
+            _ = ACRResolvePermission(request, decision == .grantOnce ? ACR_PERMISSION_GRANT_ONCE : decision == .grant ? ACR_PERMISSION_GRANT
                                      : decision == .deny ? ACR_PERMISSION_DENY : ACR_PERMISSION_DEFAULT)
             onEngineEvent?("permission-resolved", ["request": String(request), "decision": "\(decision)"])
         }

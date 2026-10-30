@@ -262,6 +262,8 @@ public struct BrowserPermissionRequest: Sendable, Equatable {
 
 public enum BrowserPermissionDecision: Sendable, Equatable {
     case grant
+    /// Ephemeral native permission. Unsupported engines/kinds must refuse it.
+    case grantOnce
     case deny
     /// Let the engine apply its default behaviour, usually its own prompt.
     case engineDefault

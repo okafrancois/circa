@@ -7,7 +7,7 @@
   "notarytool_profile": "orbit-notary",
   "public_ed_key": "/AjwXDiBlg9R1aYMbpCIEKXNDW6w1ZlWd1UPqps0ZlI=",
   "keychain_account": "orbit-browser",
-  "cef_flavor": "orbit-engine-extensions-r12",
+  "cef_flavor": "orbit-engine-extensions-r13",
   "sparkle_version": "2.10.1",
   "sparkle_sha256": "1a856d2a9edb8e628de88121d7be04cf0e2167f8641650b78fca00b14244cf27",
   "team_id": "5Y39TTNCM7",

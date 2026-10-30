@@ -34,6 +34,6 @@ struct MemoryDumpContractTests {
         let bridge = try String(contentsOf: native.appendingPathComponent("OrbitChromium/Bridge/OrbitChromiumBridge.mm"), encoding: .utf8)
         #expect(!bridge.contains("RWHVMacHasFocusReturnsFalseForNonKeyWindow"))
         #expect(bridge.contains("{12u, offsetof(orbit_cef_api_t, memory_dump)}"))
-        #expect(bridge.contains("{13u, sizeof(orbit_cef_api_t)}"))
+        #expect(bridge.contains("{13u, offsetof(orbit_cef_api_t, permission_accept_once)}"))
     }
 }

@@ -632,7 +632,7 @@ final class WebKitNavigationBridge: NSObject, WKNavigationDelegate, WKUIDelegate
         let decision = await delegate.surface(surface, requestsPermission: request)
         guard !surface.isDisposed, surface.findDocumentGeneration == generation else { return .deny }
         switch decision {
-        case .grant: return .grant
+        case .grant, .grantOnce: return .grant
         case .deny: return .deny
         case .engineDefault: return .prompt
         }
