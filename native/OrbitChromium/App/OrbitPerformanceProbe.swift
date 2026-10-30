@@ -104,7 +104,9 @@ enum OrbitPerformanceProbe {
                 try? FileManager.default.removeItem(at: commandFile)
                 let name = command["command"] ?? ""
                 result["commandNonce"] = command["nonce"] ?? ""
-                if name == "local-files" {
+                if name == "scripting-self" {
+                    result["scripting"] = await OrbitScriptingProbe.run(application, owner: owner, root: root, command: command)
+                } else if name == "local-files" {
                     result["localFiles"] = await OrbitLocalFilesProbe.run(application, owner: owner, root: root, command: command)
                 } else if name == "search-suggestions" {
                     result["searchSuggestions"] = await searchSuggestions(owner, root: root, command: command)

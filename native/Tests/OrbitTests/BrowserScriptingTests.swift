@@ -98,6 +98,60 @@ struct BrowserScriptingTests {
     @Test("Cocoa specifiers resolve tabs by id, index and title")
     func specifiers() throws {
         _ = NSApplication.shared
+        try loadDictionary()
+        let description = try #require(NSScriptSuiteRegistry.shared().classDescription(withAppleEventCode: "sPaC".utf8.reduce(UInt32(0)) { ($0 << 8) | UInt32($1) }))
+        let scripting = BrowserScriptingController()
+        let window = CircaScriptWindow(id: "window", mode: "normal", scripting: scripting, isFocused: { false }, title: { "Window" })
+        let space = CircaScriptSpace(id: "space", title: "Space", window: window)
+        let tab = CircaScriptTab(id: "stable", title: "Page", url: "about:blank", location: "unpinned", loading: false, space: space)
+        space.appleScriptTabs = [tab]
+        let specs: [NSScriptObjectSpecifier] = [
+            NSUniqueIDSpecifier(containerClassDescription: description, containerSpecifier: nil, key: "appleScriptTabs", uniqueID: "stable"),
+            NSIndexSpecifier(containerClassDescription: description, containerSpecifier: nil, key: "appleScriptTabs", index: 0),
+            NSNameSpecifier(containerClassDescription: description, containerSpecifier: nil, key: "appleScriptTabs", name: "Page")
+        ]
+        for spec in specs { #expect((spec.objectsByEvaluating(withContainers: space) as? CircaScriptTab)?.id == "stable") }
+    }
+
+    @Test("Suspended get reads raw scalar and empty or populated list values without packaging a second reply")
+    func getValues() throws {
+        _ = NSApplication.shared
+        try loadDictionary()
+        let application = OrbitApplication()
+        let previousDelegate = NSApp.delegate
+        NSApp.delegate = application
+        defer { NSApp.delegate = previousDelegate }
+        let scripting = application.scripting
+        let window = CircaScriptWindow(id: "get-window", mode: "normal", scripting: scripting,
+                                       isFocused: { false }, title: { "Window" })
+        scripting.windows = [window]
+        let space = CircaScriptSpace(id: "get-space", title: "Space", window: window)
+        window.appleScriptSpaces = [space]
+        let registry = NSScriptSuiteRegistry.shared()
+        func code(_ text: String) -> FourCharCode { text.utf8.reduce(0) { ($0 << 8) | UInt32($1) } }
+        let description = try #require(registry.commandDescription(withAppleEventClass: code("core"), andAppleEventCode: code("getd")))
+        let tabs = NSPropertySpecifier(containerClassDescription: window.classDescription as! NSScriptClassDescription,
+                                      containerSpecifier: window.objectSpecifier, key: "appleScriptTabs")
+        let tabDescription = try #require(registry.classDescription(withAppleEventCode: code("tAbB")))
+        let titles = NSPropertySpecifier(containerClassDescription: tabDescription, containerSpecifier: tabs, key: "title")
+        func read(_ value: Any) -> Any? {
+            let command = CircaGetScriptCommand(commandDescription: description)
+            command.directParameter = value
+            return command.readValue()
+        }
+        #expect((read(titles) as? [String]) == [])
+        for (id, title) in [("first", "First"), ("second", "Second")] {
+            space.appleScriptTabs.append(CircaScriptTab(id: id, title: title, url: "about:blank",
+                location: "unpinned", loading: false, space: space))
+        }
+        #expect((read(titles) as? [String]) == ["First", "Second"])
+        let firstTitle = NSPropertySpecifier(containerClassDescription: tabDescription,
+                                            containerSpecifier: space.appleScriptTabs[0].objectSpecifier, key: "title")
+        #expect(read(firstTitle) as? String == "First")
+        #expect(read("literal") as? String == "literal")
+    }
+
+    private func loadDictionary() throws {
         let temporary = FileManager.default.temporaryDirectory.appendingPathComponent("CircaScripting-" + UUID().uuidString + ".bundle")
         defer { try? FileManager.default.removeItem(at: temporary) }
         let resources = temporary.appendingPathComponent("Contents/Resources")
@@ -114,18 +168,6 @@ struct BrowserScriptingTests {
         try compile.run(); compile.waitUntilExit()
         #expect(compile.terminationStatus == 0)
         NSScriptSuiteRegistry.shared().loadSuites(from: try #require(Bundle(url: temporary)))
-        let description = try #require(NSScriptSuiteRegistry.shared().classDescription(withAppleEventCode: "sPaC".utf8.reduce(UInt32(0)) { ($0 << 8) | UInt32($1) }))
-        let scripting = BrowserScriptingController()
-        let window = CircaScriptWindow(id: "window", mode: "normal", scripting: scripting, isFocused: { false }, title: { "Window" })
-        let space = CircaScriptSpace(id: "space", title: "Space", window: window)
-        let tab = CircaScriptTab(id: "stable", title: "Page", url: "about:blank", location: "unpinned", loading: false, space: space)
-        space.appleScriptTabs = [tab]
-        let specs: [NSScriptObjectSpecifier] = [
-            NSUniqueIDSpecifier(containerClassDescription: description, containerSpecifier: nil, key: "appleScriptTabs", uniqueID: "stable"),
-            NSIndexSpecifier(containerClassDescription: description, containerSpecifier: nil, key: "appleScriptTabs", index: 0),
-            NSNameSpecifier(containerClassDescription: description, containerSpecifier: nil, key: "appleScriptTabs", name: "Page")
-        ]
-        for spec in specs { #expect((spec.objectsByEvaluating(withContainers: space) as? CircaScriptTab)?.id == "stable") }
     }
 }
 }

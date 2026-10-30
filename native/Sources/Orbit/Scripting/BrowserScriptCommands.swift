@@ -12,7 +12,7 @@ private func scriptController() -> BrowserScriptingController? {
 }
 
 @objc(CircaGetScriptCommand)
-final class CircaGetScriptCommand: NSGetCommand {
+final class CircaGetScriptCommand: NSScriptCommand {
     override func execute() -> Any? {
         let reference = MainThreadScriptCommand(self)
         MainActor.assumeIsolated {
@@ -21,7 +21,12 @@ final class CircaGetScriptCommand: NSGetCommand {
         }
         return nil
     }
-    private func readValue() -> Any? { super.execute() }
+    // NSGetCommand.execute packages a reply using the current event context. That context
+    // has ended after suspension; evaluate the raw value and let resumeExecution package it.
+    func readValue() -> Any? {
+        if let specifier = directParameter as? NSScriptObjectSpecifier { return specifier.objectsByEvaluatingSpecifier }
+        return directParameter
+    }
 }
 
 @objc(CircaCountScriptCommand)
