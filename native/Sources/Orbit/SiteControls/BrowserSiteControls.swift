@@ -1,7 +1,6 @@
 import AppKit
 import BrowserCore
 import BrowserEngine
-import UserNotifications
 
 /// Window-owned feature object. Every delayed action is tied to the exact surface, committed
 /// document generation and selection epoch; switching A → B → A never revives old actions.
@@ -31,9 +30,8 @@ final class BrowserSiteControls<Engine: BrowserEngine> {
     private var sharePicker: NSSharingServicePicker?
     private let permissionPanel = BrowserSitePopover()
     private(set) var notificationSettingsPrompt: NotificationSettingsPromptView?
-    var notificationsAuthorized: () async -> Bool = {
-        let settings = await UNUserNotificationCenter.current().notificationSettings()
-        return [.authorized, .provisional].contains(settings.authorizationStatus)
+    var authorizeNotifications: () async -> Bool = {
+        await BrowserNotificationAuthorization.shared.authorize()
     }
     var openNotificationSettings: () -> Void = {
         if let url = URL(string: "x-apple.systempreferences:com.apple.Notifications-Settings.extension") {
@@ -198,9 +196,12 @@ final class BrowserSiteControls<Engine: BrowserEngine> {
         }
         if decision == .grant || !isCurrent(surface, generation: generation, epoch: epoch) { statusMessage = nil }
         if decision == .grant, allowedNotifications {
+            // Register the main app at the explicit site grant, before Chromium can deliver.
+            // OS refusal never revokes the separate, persisted site permission.
+            let authorized = await authorizeNotifications()
+            guard !authorized else { return decision }
             Task { [weak self, weak surface] in
-                guard let self, let surface, owner.window?.isKeyWindow == true,
-                      !(await notificationsAuthorized()) else { return }
+                guard let self, let surface else { return }
                 try? await Task.sleep(for: .milliseconds(500))
                 guard isCurrent(surface, generation: generation, epoch: epoch),
                       owner.window?.isKeyWindow == true, let root = owner.window?.contentView else { return }

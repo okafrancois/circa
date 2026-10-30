@@ -1,5 +1,6 @@
 import AppKit
 import QuartzCore
+import CoreText
 
 /// App-level notification access follows the site's grant and never changes that grant.
 @MainActor
@@ -114,6 +115,20 @@ final class NotificationSettingsButton: NSButton {
     override var isFlipped: Bool { true }
     init() { super.init(frame: .zero); isBordered = false; setButtonType(.momentaryPushIn) }
     required init?(coder: NSCoder) { nil }
+    private var hintLine: CTLine {
+        CTLineCreateWithAttributedString(NSAttributedString(string: hint, attributes: [
+            .font: NSFont.systemFont(ofSize: 12, weight: .semibold),
+            .foregroundColor: NSColor.white.withAlphaComponent(0.7)
+        ]))
+    }
+    var keycapLayout: (cap: NSRect, glyph: NSRect) {
+        let cap = NSRect(x: bounds.width - (hint == "↩" ? 39 : 46), y: 8,
+                         width: hint == "↩" ? 28 : 35, height: 20)
+        let ink = CTLineGetImageBounds(hintLine, nil)
+        let size = hint == "↩" ? NSSize(width: 12, height: 10) : ink.size
+        return (cap, NSRect(x: cap.midX - size.width / 2, y: cap.midY - size.height / 2,
+                            width: size.width, height: size.height))
+    }
     override func draw(_ dirtyRect: NSRect) {
         let fill = primary ? NSColor(srgbRed: 58/255, green: 45/255, blue: 1, alpha: 1) : NSColor(srgbRed: 49/255, green: 44/255, blue: 91/255, alpha: 1)
         fill.withAlphaComponent(isHighlighted ? 0.8 : 1).setFill()
@@ -122,11 +137,20 @@ final class NotificationSettingsButton: NSButton {
         NSColor.white.withAlphaComponent(0.25).setStroke(); path.lineWidth = 1; path.stroke()
         let text = NSAttributedString(string: title, attributes: [.font: NSFont.systemFont(ofSize: 13, weight: .medium), .foregroundColor: NSColor.white])
         text.draw(at: NSPoint(x: 11, y: (bounds.height - text.size().height) / 2))
-        let badge = NSRect(x: bounds.width - 46, y: 8, width: 35, height: 20)
+        let (badge, glyph) = keycapLayout
         NSColor.white.withAlphaComponent(0.15).setFill()
         NSBezierPath(roundedRect: badge, xRadius: 3, yRadius: 3).fill()
-        let label = NSAttributedString(string: hint, attributes: [.font: NSFont.systemFont(ofSize: 12, weight: .semibold), .foregroundColor: NSColor.white.withAlphaComponent(0.7)])
-        label.draw(at: NSPoint(x: badge.midX - label.size().width / 2, y: badge.midY - label.size().height / 2))
+        let line = hintLine
+        let ink = CTLineGetImageBounds(line, nil)
+        guard ink.width > 0, ink.height > 0, let context = NSGraphicsContext.current?.cgContext else { return }
+        // Center the painted glyph, rather than its font's ascent/descent box.
+        context.saveGState()
+        context.translateBy(x: glyph.minX, y: glyph.maxY)
+        context.scaleBy(x: glyph.width / ink.width, y: -glyph.height / ink.height)
+        context.textMatrix = .identity
+        context.textPosition = NSPoint(x: -ink.minX, y: -ink.minY)
+        CTLineDraw(line, context)
+        context.restoreGState()
     }
 }
 

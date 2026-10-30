@@ -25,6 +25,59 @@ extension NativeWebKitTests {
 @Suite("Site controls engine integration", .serialized)
 @MainActor
 struct SiteControlsEngineTests {
+    @Test("An explicit notification Allow registers the app before completing the site request",
+          arguments: [true, false])
+    func notificationAuthorizationTrigger(osAllows: Bool) async throws {
+        NSApplication.shared.setActivationPolicy(.prohibited)
+        let environment = BrowserEnvironment(engine: SiteSyntheticEngine())
+        let window = try await environment.makeWindow()
+        defer { window.window?.close() }
+        window.submitAddress("https://example.test")
+        await window.session.waitForPendingCommands()
+        let surface = try #require(window.session.selectedSurface)
+        let origin = BrowserSiteOrigin(requestOrigin: "https://example.test")!
+        var authorizations = 0
+        window.siteControls.authorizeNotifications = {
+            authorizations += 1
+            #expect(await window.siteControls.policy.store.setting(for: .notifications,
+                origin: origin, profileID: surface.profileID) == .allow)
+            return osAllows
+        }
+        window.siteControls.permissionPrompt = { _, _ in .alwaysAllow }
+        #expect(authorizations == 0)
+        let request = BrowserPermissionRequest(kind: .notifications, origin: origin.value, isMainFrame: true)
+        #expect(await surface.requestPermission(request) == .grant)
+        #expect(authorizations == 1)
+        // Cached grants don't cause another shell authorization or change the web grant.
+        #expect(await surface.requestPermission(request) == .grant)
+        #expect(authorizations == 1)
+        #expect(await surface.requestPermission(BrowserPermissionRequest(kind: .camera,
+            origin: origin.value, isMainFrame: true)) == .grant)
+        #expect(authorizations == 1)
+        #expect(!window.window!.isVisible)
+    }
+
+    @Test("Refused and stale notification choices never ask macOS", arguments: ["block", "dismiss", "stale"])
+    func notificationAuthorizationExcluded(choice: String) async throws {
+        NSApplication.shared.setActivationPolicy(.prohibited)
+        let environment = BrowserEnvironment(engine: SiteSyntheticEngine())
+        let window = try await environment.makeWindow()
+        defer { window.window?.close() }
+        window.submitAddress("https://example.test")
+        await window.session.waitForPendingCommands()
+        let surface = try #require(window.session.selectedSurface)
+        var authorizations = 0
+        window.siteControls.authorizeNotifications = { authorizations += 1; return true }
+        window.siteControls.permissionPrompt = { _, _ in
+            if choice == "stale" { surface.reload(); return .alwaysAllow }
+            return choice == "block" ? .block : .dismiss
+        }
+        #expect(await surface.requestPermission(BrowserPermissionRequest(kind: .notifications,
+            origin: "https://example.test", isMainFrame: true)) == .deny)
+        #expect(authorizations == 0)
+        #expect(!window.window!.isVisible)
+    }
+
     @Test("Synthetic engine requests use the owning profile and never fall through to an engine prompt")
     func syntheticEngineDecisions() async throws {
         NSApplication.shared.setActivationPolicy(.prohibited)

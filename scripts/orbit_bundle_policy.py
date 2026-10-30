@@ -2,6 +2,7 @@
 import argparse
 from pathlib import Path
 import plistlib
+import shutil
 
 FRAMEWORK = 'Chromium Embedded Framework.framework'
 HELPERS = ['Orbit Helper' + suffix + '.app' for suffix in ('', ' (GPU)', ' (Renderer)', ' (Plugin)', ' (Alerts)')]
@@ -20,7 +21,7 @@ def helper_bundle_identifier(bundle_id, suffix='', synthetic=False):
 
 
 def set_helper_bundle_identifiers(bundle):
-    """Assign identities to staged copies before signing, including CMake smoke bundles."""
+    """Assign identities and notification branding to staged copies before signing."""
     bundle = Path(bundle)
     info = plistlib.loads((bundle / 'Contents/Info.plist').read_bytes())
     for name in HELPERS:
@@ -30,6 +31,13 @@ def set_helper_bundle_identifiers(bundle):
         helper = plistlib.loads(path.read_bytes())
         helper['CFBundleIdentifier'] = helper_bundle_identifier(
             info['CFBundleIdentifier'], suffix, info.get('OrbitSyntheticBundle', False))
+        if variant == 'alerts':
+            # The notification service has its own identity but presents the browser's brand.
+            helper.update(CFBundleDisplayName=info.get('CFBundleDisplayName', info['CFBundleName']),
+                          CFBundleIconFile='Orbit.icns', NSUserNotificationAlertStyle='alert')
+            resources = path.parent / 'Resources'
+            resources.mkdir(exist_ok=True)
+            shutil.copyfile(bundle / 'Contents/Resources/Orbit.icns', resources / 'Orbit.icns')
         path.write_bytes(plistlib.dumps(helper))
 
 
@@ -96,6 +104,10 @@ def validate_bundle_contents(bundle):
                 allowed = '/'.join(tail) in {'', 'Contents', 'Contents/Info.plist', 'Contents/PkgInfo',
                     'Contents/MacOS', 'Contents/MacOS/' + executable,
                     'Contents/_CodeSignature', 'Contents/_CodeSignature/CodeResources'}
+                if name == 'Orbit Helper (Alerts).app' and tail in {
+                    ('Contents', 'Resources'), ('Contents', 'Resources', 'Orbit.icns')
+                }:
+                    allowed = True
             elif name == 'Sparkle.framework':
                 # Pinned upstream runtime: version links, locales, headers and nested signed code.
                 allowed = True

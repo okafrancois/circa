@@ -92,6 +92,52 @@ struct PermissionPromptTests {
         #expect(prompt.superview == nil)
     }
 
+    @Test("Notification keycap glyphs have symmetric painted insets at both display scales and appearances")
+    func keycapInsets() throws {
+        for appearance in [NSAppearance.Name.aqua, .darkAqua] {
+            for scale in [1, 2] {
+                for hint in ["↩", "ESC"] {
+                    let button = NotificationSettingsButton()
+                    button.frame = NSRect(x: 0, y: 0, width: 217, height: 36)
+                    button.primary = true
+                    button.hint = hint
+                    button.appearance = NSAppearance(named: appearance)
+                    let (cap, glyph) = button.keycapLayout
+                    #expect(cap.size == NSSize(width: hint == "↩" ? 28 : 35, height: 20))
+                    #expect(cap.contains(glyph))
+                    #expect(abs(glyph.minX - cap.minX - (cap.maxX - glyph.maxX)) < 0.001)
+                    #expect(abs(glyph.minY - cap.minY - (cap.maxY - glyph.maxY)) < 0.001)
+                    let bitmap = try #require(NSBitmapImageRep(bitmapDataPlanes: nil,
+                        pixelsWide: 217 * scale, pixelsHigh: 36 * scale, bitsPerSample: 8,
+                        samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+                        colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0))
+                    let context = try #require(NSGraphicsContext(bitmapImageRep: bitmap)?.cgContext)
+                    NSGraphicsContext.saveGraphicsState()
+                    context.translateBy(x: 0, y: CGFloat(36 * scale))
+                    context.scaleBy(x: CGFloat(scale), y: -CGFloat(scale))
+                    NSGraphicsContext.current = NSGraphicsContext(cgContext: context, flipped: true)
+                    button.effectiveAppearance.performAsCurrentDrawingAppearance { button.draw(button.bounds) }
+                    NSGraphicsContext.restoreGraphicsState()
+                    var painted: NSRect = .null
+                    let pixels = cap.applying(CGAffineTransform(scaleX: CGFloat(scale), y: CGFloat(scale)))
+                    for y in Int(pixels.minY)..<Int(pixels.maxY) {
+                        for x in Int(pixels.minX)..<Int(pixels.maxX) {
+                            let color = try #require(bitmap.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB))
+                            if color.redComponent > 0.6 && color.greenComponent > 0.6 {
+                                painted = painted.union(NSRect(x: x, y: y, width: 1, height: 1))
+                            }
+                        }
+                    }
+                    #expect(!painted.isNull)
+                    #expect(painted.minX > pixels.minX && painted.maxX < pixels.maxX)
+                    #expect(painted.minY > pixels.minY && painted.maxY < pixels.maxY)
+                    #expect(abs(painted.minX - pixels.minX - (pixels.maxX - painted.maxX)) <= 1)
+                    #expect(abs(painted.minY - pixels.minY - (pixels.maxY - painted.maxY)) <= 1)
+                }
+            }
+        }
+    }
+
     @Test("Immediate dismissal invalidates before closing and preserves later motion preferences")
     func immediateDismissal() {
         for animates in [true, false] {
