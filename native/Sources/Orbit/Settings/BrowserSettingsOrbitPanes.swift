@@ -261,12 +261,8 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
                                     model.perform { try await model.setArchiveThreshold(value, profile: profile) }
                                 }
                             })) {
-                                Text(uiText("12 hours")).tag(Optional(BrowserAutoArchiveThreshold.twelveHours))
-                                Text(uiText("24 hours")).tag(Optional(BrowserAutoArchiveThreshold.oneDay))
-                                Text(uiText("7 days")).tag(Optional(BrowserAutoArchiveThreshold.sevenDays))
-                                Text(uiText("30 days")).tag(Optional(BrowserAutoArchiveThreshold.thirtyDays))
-                                if let current = model.archiveThreshold, !standardArchiveThresholds.contains(current) {
-                                    Text(current == .never ? uiText("Never") : uiText("Custom Delay")).tag(Optional(current))
+                                ForEach(BrowserArchiveSettingsChange.options(current: model.archiveThreshold), id: \.self) { threshold in
+                                    Text(BrowserArchiveSettingsChange.label(threshold)).tag(Optional(threshold))
                                 }
                             }.labelsHidden().pickerStyle(.menu).frame(width: 110).accessibilityIdentifier("settings-auto-archive")
                         }
@@ -478,7 +474,6 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
         let query = shortcutQuery.trimmingCharacters(in: .whitespacesAndNewlines)
         return model.settingsShortcuts.filter { query.isEmpty || $0.localizedTitle.localizedStandardContains(query) || $0.menu.localizedStandardContains(query) }
     }
-    private var standardArchiveThresholds: [BrowserAutoArchiveThreshold] { [.twelveHours, .oneDay, .sevenDays, .thirtyDays] }
     private var appIcon: some View {
         SettingsAppIcon()
     }

@@ -12,6 +12,9 @@ final class BrowserArchivePresentation {
         let threshold: BrowserAutoArchiveThreshold
         let inheritsThreshold: Bool
     }
+    /// Tests can answer the production confirmation without showing a window.
+    var confirmation: (@MainActor (NSAlert) async -> NSApplication.ModalResponse)?
+    var confirmationTask: Task<Void, Never>?
     var collectProtection: @MainActor () async -> Set<TabID> = { [] }
     lazy var view = BrowserArchiveView()
     var isPresented = false
@@ -45,7 +48,8 @@ extension BrowserWindowController {
             submitInput { controller in
                 guard controller.session.activeProfileID == profile else { return }
                 controller.session.restoreArchivedTab(id)
-                controller.hideArchive()
+                // Returning focus before restore completes can reactivate the displaced page.
+                controller.session.performWindowAction { [weak controller] in controller?.hideArchive() }
             }
         }
         view.onDelete = { [weak self] id in
@@ -109,15 +113,24 @@ extension BrowserWindowController {
     func confirmClearArchive() {
         session.performWindowAction { [weak self] in
             guard let self, let window, let profile = session.activeProfileID else { return }
-            let alert = OrbitFloatingMaterial.alert()
-            alert.messageText = archiveText("clearConfirmation", "Clear Archive for This Profile?")
-            alert.informativeText = archiveText("clearExplanation", "Archived tabs from other profiles will be kept.")
-            alert.addButton(withTitle: archiveText("delete", "Delete")); alert.addButton(withTitle: archiveText("cancel", "Cancel"))
-            alert.beginSheetModal(for: window) { [weak self] response in
+            let alert = makeClearArchiveAlert()
+            let respond: (NSApplication.ModalResponse) -> Void = { [weak self] response in
                 guard response == .alertFirstButtonReturn else { return }
                 self?.submitInput { $0.session.clearArchive(inProfile: profile) }
             }
+            if let present = archive.confirmation {
+                archive.confirmationTask = Task { respond(await present(alert)) }
+            } else { alert.beginSheetModal(for: window, completionHandler: respond) }
         }
+    }
+
+    func makeClearArchiveAlert() -> NSAlert {
+        let alert = OrbitFloatingMaterial.alert()
+        alert.messageText = uiText("Are you sure you'd like to Clear Archive?")
+        alert.informativeText = uiText("This action is permanent.")
+        alert.addButton(withTitle: uiText("Clear Archive"))
+        alert.addButton(withTitle: uiText("Cancel"))
+        return alert
     }
 
     /// SB-LIST hook for the Today separator's Clear button. The store protects visible tabs.

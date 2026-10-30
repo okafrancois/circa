@@ -1699,3 +1699,6 @@
 "Could not remove the API key from Keychain." = "Could not remove the API key from Keychain.";
 "Restart Circa to turn Safe Browsing off. It is still configured for this session." = "Restart Circa to turn Safe Browsing off. It is still configured for this session.";
 "No API key set. Restart Circa to turn Safe Browsing off for the next session." = "No API key set. Restart Circa to turn Safe Browsing off for the next session.";
+
+"Are you sure you'd like to Clear Archive?" = "Are you sure you'd like to Clear Archive?";
+"This action is permanent." = "This action is permanent.";

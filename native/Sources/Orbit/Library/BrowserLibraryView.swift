@@ -12,6 +12,7 @@ final class BrowserLibraryView: NSView {
     let railBackground = NSView()
     private(set) var categoryButtons: [BrowserLibraryCategory: BrowserLibraryCategoryButton] = [:]
     private let rail = NSView()
+    var onClearArchive: (() -> Void)?
     var onCategory: ((BrowserLibraryCategory) -> Void)?
     var onBack: (() -> Void)?
     var onGeometryChange: (() -> Void)?
@@ -34,6 +35,9 @@ final class BrowserLibraryView: NSView {
             let button = BrowserLibraryCategoryButton(category: category)
             button.target = self
             button.action = #selector(selectCategory(_:))
+            if category == .archive {
+                button.contextMenu = { [weak self] in self?.archiveContextMenu() }
+            }
             categoryButtons[category] = button
             rail.addSubview(button)
         }
@@ -93,6 +97,14 @@ final class BrowserLibraryView: NSView {
         guard acceptsLibraryInput else { return }
         onCategory?(sender.category)
     }
+    func archiveContextMenu() -> NSMenu? {
+        guard acceptsLibraryInput else { return nil }
+        let menu = NSMenu()
+        menu.autoenablesItems = false
+        menu.addItem(withTitle: uiText("Clear Archive"), action: #selector(clearArchive), keyEquivalent: "").target = self
+        return menu
+    }
+    @objc private func clearArchive() { if acceptsLibraryInput { onClearArchive?() } }
     @objc private func goBack() { onBack?() }
 
     override func viewDidChangeEffectiveAppearance() {
@@ -111,6 +123,8 @@ final class BrowserLibraryView: NSView {
 final class BrowserLibraryCategoryButton: NSButton {
     override var alignmentRectInsets: NSEdgeInsets { .init() }
     let category: BrowserLibraryCategory
+    var contextMenu: (() -> NSMenu?)?
+    override func menu(for event: NSEvent) -> NSMenu? { contextMenu?() ?? super.menu(for: event) }
     private var hovered = false
     private var tracking: NSTrackingArea?
     init(category: BrowserLibraryCategory) {

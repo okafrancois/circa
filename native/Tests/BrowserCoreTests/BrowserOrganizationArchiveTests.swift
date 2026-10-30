@@ -260,4 +260,57 @@ struct BrowserOrganizationArchiveTests {
         #expect(await restored.sessionDocument().organization.archive == [record])
     }
 
+    @Test("Restore falls back to the current Space when its origin was deleted")
+    func deletedOrigin() async throws {
+        let f = try await OrganizationFixture.make()
+        let id = try await f.open("deleted-origin")
+        _ = try await f.store.archiveTabs([id], from: f.context())
+        try await f.activate(f.leisure)
+        try await f.store.removeSettingsSpace(f.home)
+        let state = try await f.store.restoreArchivedTab(id, activate: true, from: f.context())
+        #expect(state.context.spaceID == f.leisure && state.organization.selectedTab?.id == id)
+        try await f.validate()
+    }
+
+    @Test("First matching live ATC rule overrides the origin, even across profiles; defaults do not")
+    func restoreRouting() async throws {
+        let f = try await OrganizationFixture.make()
+        let id = try await f.open("routed")
+        _ = try await f.store.archiveTabs([id], from: f.context())
+        try await f.activate(f.leisure)
+        var routing = BrowserLinkRouting()
+        routing.defaultDestination = .space(f.lab)
+        var state = try await f.store.restoreArchivedTab(id, activate: true, from: f.context(), routing: routing)
+        #expect(state.context.spaceID == f.home)
+        _ = try await f.store.archiveTabs([id], from: f.context())
+        routing.rules = [
+            .init(value: "routed", spaceID: SpaceID()),
+            .init(value: "unmatched", spaceID: f.leisure),
+            .init(value: "routed", spaceID: f.lab),
+            .init(value: "routed", spaceID: f.leisure)
+        ]
+        state = try await f.store.restoreArchivedTab(id, activate: true, from: f.context(), routing: routing)
+        #expect(state.context.spaceID == f.lab && state.context.profileID == f.work)
+        #expect(state.organization.selectedTab?.id == id)
+        #expect(await f.store.sessionDocument().organization.archive.isEmpty)
+        try await f.validate()
+    }
+
+    @Test("Clear Archive permanently clears only the current profile and its replay history")
+    func permanentClear() async throws {
+        let f = try await OrganizationFixture.make()
+        let keep = try await f.open("keep")
+        _ = try await f.store.renameTab(keep, to: "Synthetic rename", from: f.context())
+        let id = try await f.open("clear")
+        _ = try await f.store.archiveTabs([id], from: f.context())
+        let state = try await f.store.clearArchive(from: f.context())
+        #expect(state.organization.archivedTabCount == 0 && state.organization.undoAction == .renameTab)
+        let undone = try await f.store.undoOrganization(from: f.context())
+        #expect(undone.organization.tab(keep)?.customTitle == nil)
+        #expect(undone.organization.archivedTabCount == 0 && undone.organization.undoAction == nil)
+        let reopened = try BrowserStore(restoring: BrowserSessionDocument.decode(await f.store.sessionDocument().encoded()))
+        #expect(await reopened.sessionDocument().organization.archive.isEmpty)
+        try await f.validate()
+    }
+
 }

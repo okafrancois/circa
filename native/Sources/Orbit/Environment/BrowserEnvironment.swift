@@ -356,6 +356,7 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
         controller.settingsPreferences?.apply(to: controller)
         controller.renderChrome()
         controller.settingsPreferences?.renderIcons(in: controller)
+        controller.session.archiveLinkRouting = { [weak self] in self?.settings.document.linkRouting ?? .init() }
         controller.archive.collectProtection = { [weak self] in await self?.autoArchive.protectedTabs(forClearToday: true) ?? [] }
         autoArchive.register(controller.session)
         autoArchive.scheduler.start()

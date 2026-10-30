@@ -5,6 +5,7 @@ import BrowserEngine
 extension BrowserWindowController {
     func installLibrary(in root: NSView) {
         let view = library.view
+        view.onClearArchive = { [weak self] in self?.submitInput { $0.confirmClearArchive() } }
         view.translatesAutoresizingMaskIntoConstraints = false
         view.isHidden = true
         root.addSubview(view)

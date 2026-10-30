@@ -874,12 +874,17 @@ extension BrowserStore {
     /// Restores an archived tab of the context's profile to the top of Today in its original Space,
     /// or in the current Space if the original no longer belongs to the profile. With `activate`, the
     /// window switches to that Space and selects the tab. Identity and custom title are preserved.
-    /// A standalone window restores into its own local list instead.
-    public func restoreArchivedTab(_ id: TabID, activate: Bool, from context: BrowserContext) throws -> BrowserWindowState {
+    /// A matching link route takes precedence over the origin. A standalone window restores locally.
+    public func restoreArchivedTab(_ id: TabID, activate: Bool, from context: BrowserContext,
+                                   routing: BrowserLinkRouting = .init()) throws -> BrowserWindowState {
         let window = try organizationWindow(context)
         guard let record = organization.archivedTab(id) else { throw BrowserOrganizationError.archivedTabMissing }
         guard record.profileID == context.profileID else { throw BrowserOrganizationError.notVisibleInContext }
-        let target = window.standaloneProfileID == nil && spaces[record.spaceID]?.profileID == record.profileID ? record.spaceID : context.spaceID
+        let origin = spaces[record.spaceID]?.profileID == record.profileID ? record.spaceID : context.spaceID
+        // Only explicit matching rules override the archive's origin; the external-link default
+        // destination does not apply to a restore. Ignore routes whose Space was removed.
+        let routed = routing.rules.first { spaces[$0.spaceID] != nil && $0.matches(record.tab.url) }?.spaceID
+        let target = window.standaloneProfileID == nil ? (routed ?? origin) : context.spaceID
         var tab = record.tab
         tab.liveFolderChild = nil
         tab.pinnedURL = nil
@@ -895,12 +900,12 @@ extension BrowserStore {
         return try captureWindowState(in: context.windowID)
     }
 
-    public func restoreMostRecentArchivedTab(from context: BrowserContext) throws -> BrowserWindowState {
+    public func restoreMostRecentArchivedTab(from context: BrowserContext, routing: BrowserLinkRouting = .init()) throws -> BrowserWindowState {
         _ = try organizationWindow(context)
         guard let record = organization.archive.first(where: {
             $0.profileID == context.profileID && $0.reason != .automatic
         }) else { throw BrowserOrganizationError.archivedTabMissing }
-        return try restoreArchivedTab(record.id, activate: true, from: context)
+        return try restoreArchivedTab(record.id, activate: true, from: context, routing: routing)
     }
 
     public func deleteArchivedTabs(_ ids: [TabID], from context: BrowserContext) throws -> BrowserWindowState {
@@ -918,10 +923,18 @@ extension BrowserStore {
     public func clearArchive(from context: BrowserContext) throws -> BrowserWindowState {
         _ = try organizationWindow(context)
         let ids = organization.archive.filter { $0.profileID == context.profileID }.map(\.id)
-        organization.archivedSpaces.removeAll { $0.space.profileID == context.profileID }
-        publishOrganizationChange()
-        guard !ids.isEmpty else { return try captureWindowState(in: context.windowID) }
-        return try deleteArchivedTabs(ids, from: context)
+        // Retire only replays that could recover these records; unrelated edits remain undoable.
+        let cleared = Set(ids)
+        for key in Array(organizationJournals.keys) {
+            organizationJournals[key]?.undo.removeAll { !cleared.isDisjoint(with: $0.patch.archive.keys) }
+            organizationJournals[key]?.redo.removeAll { !cleared.isDisjoint(with: $0.patch.archive.keys) }
+        }
+        try commitOrganization { state in
+            state.archivedSpaces.removeAll { $0.space.profileID == context.profileID }
+            state.changes.metadata = true
+            for id in ids { state.removeArchive(id) }
+        }
+        return try captureWindowState(in: context.windowID)
     }
 
     /// Archives Today tabs whose last view is at least their profile's threshold old. Favorites and
