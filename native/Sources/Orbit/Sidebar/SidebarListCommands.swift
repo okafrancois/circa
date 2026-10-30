@@ -14,7 +14,7 @@ enum SidebarListCommands {
               requirement: .window, owner: "MENUS", sources: ["Browser command"]),
         .init(id: .sidebarMuteTab, title: "Mute Tab", menu: "Sidebar", shortcuts: [], scope: .browser,
               requirement: .window, owner: "MENUS", sources: ["Browser command"]),
-        .init(id: .sidebarCopyLinks, title: "Copy URL", menu: "Sidebar", shortcuts: [], scope: .browser,
+        .init(id: .sidebarCopyLinks, title: "Copy URLs", menu: "Sidebar", shortcuts: [], scope: .browser,
               requirement: .window, owner: "MENUS", sources: ["Browser command"]),
         .init(id: .sidebarCopyMarkdownLinks, title: "Copy Link as Markdown", menu: "Sidebar", shortcuts: [], scope: .browser,
               requirement: .window, owner: "MENUS", sources: ["Browser command"]),
@@ -51,7 +51,8 @@ enum SidebarListCommands {
         window(.sidebarEditPinnedURL, validate: { $0.sidebarSingleTab?.pinnedURL != nil }) { $0.presentPinnedURLEditor() }
         window(.sidebarCopyLinks, validate: { !$0.sidebarLinkTargets.isEmpty }) { $0.copySidebarLinks(markdown: false) }
         window(.sidebarCopyMarkdownLinks, validate: { !$0.sidebarLinkTargets.isEmpty }) { $0.copySidebarLinks(markdown: true) }
-        window(.sidebarDuplicate, validate: { $0.sidebarTabTargets.count == 1 }) { controller in
+        window(.sidebarDuplicate, validate: { $0.sidebarTabTargets.count == 1 || $0.sidebarFolderTarget != nil }) { controller in
+            if let folder = controller.sidebarFolderTarget { controller.session.duplicateFolder(folder); return }
             guard let id = controller.sidebarTabTargets.first, let tab = controller.session.organization?.tab(id) else { return }
             controller.hideLibrary()
             controller.duplicateSidebarTab(tab.id)
@@ -108,7 +109,7 @@ enum SidebarListCommands {
 
     /// Entries of a row context menu, in groups separated by separators.
     static func contextCommands(for nodes: [BrowserOrganizationNode],
-                                in organization: BrowserOrganizationSnapshot?) -> [[BrowserCommandID]] {
+                                in organization: BrowserOrganizationSnapshot?, option: Bool = false) -> [[BrowserCommandID]] {
         guard let organization, !nodes.isEmpty else { return [] }
         let tabs = nodes.flatMap { node -> [TabID] in
             if let id = node.tabID { return [id] }
@@ -116,7 +117,7 @@ enum SidebarListCommands {
             return []
         }
         if nodes.count == 1, nodes[0].folderID != nil {
-            return [[.newFolder, .sidebarConvertFolderToSpace], [.renameCurrentItem], [.sidebarCopyLinks, .sidebarCopyMarkdownLinks],
+            return [[.newFolder, .sidebarConvertFolderToSpace], [.renameCurrentItem, .sidebarDuplicate], [option ? .sidebarCopyMarkdownLinks : .sidebarCopyLinks],
                     [.sidebarDeleteFolder, .sidebarDeleteFolderAndTabs]]
         }
         if nodes.count == 1, let id = nodes[0].tabID, let tab = organization.tab(id) {

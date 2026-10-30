@@ -264,7 +264,7 @@ enum OrbitCommandCatalog {
 
     static func isCommandBarAction(_ definition: BrowserCommandDefinition) -> Bool {
         definition.scope == .browser && !hiddenCommands.contains(definition.id) && !structuralIDs.contains(definition.id)
-            && !["Sidebar", "FavoritesContext", "Page Context"].contains(definition.menu)
+            && (definition.id == .sidebarCopyLinks || !["Sidebar", "FavoritesContext", "Page Context"].contains(definition.menu))
     }
 
     static var actionDefinitions: [BrowserCommandDefinition] { definitions.filter { !structuralIDs.contains($0.id) } }

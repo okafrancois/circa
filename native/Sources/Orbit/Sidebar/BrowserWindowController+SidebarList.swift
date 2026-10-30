@@ -342,9 +342,9 @@ extension BrowserWindowController {
 
     /// Builds the row menu with the registry and a captured target; nil when no registry owns the
     /// window or its session is busy (callers retry after publication).
-    func makeSidebarContextMenu(for nodes: [BrowserOrganizationNode]) -> (menu: NSMenu, owner: AnyObject)? {
+    func makeSidebarContextMenu(for nodes: [BrowserOrganizationNode], modifiers: NSEvent.ModifierFlags = []) -> (menu: NSMenu, owner: AnyObject)? {
         let organization = session.organization
-        let groups = SidebarListCommands.contextCommands(for: nodes, in: organization)
+        let groups = SidebarListCommands.contextCommands(for: nodes, in: organization, option: modifiers.contains(.option))
         guard !groups.isEmpty, let built = SidebarCommandHub.contextMenu(for: self, commands: groups) else { return nil }
         for item in built.menu.items {
             guard let value = item.identifier?.rawValue, let id = BrowserCommandID(rawValue: value),
@@ -384,7 +384,7 @@ extension BrowserWindowController {
     }
 
     func showSidebarContextMenu(for nodes: [BrowserOrganizationNode], event: NSEvent, in view: NSView) {
-        if let built = makeSidebarContextMenu(for: nodes) {
+        if let built = makeSidebarContextMenu(for: nodes, modifiers: event.modifierFlags) {
             NSMenu.popUpContextMenu(built.menu, with: event, for: view)
             endSidebarContextMenu(retaining: built.owner)
             return
@@ -398,7 +398,7 @@ extension BrowserWindowController {
         Task { [weak self, weak view] in
             guard let self else { return }
             await session.waitForQueuedCommands()
-            guard let view, view.window != nil, let built = makeSidebarContextMenu(for: nodes) else {
+            guard let view, view.window != nil, let built = makeSidebarContextMenu(for: nodes, modifiers: event.modifierFlags) else {
                 sidebar.endContextMenu()
                 return
             }
@@ -463,11 +463,10 @@ extension BrowserWindowController {
 
     func copySidebarLinks(markdown: Bool) {
         let links = sidebarLinkTargets.map { tab in
-            markdown ? BrowserMarkdownLink.format(title: tab.title, url: tab.url) : tab.url.absoluteString
+            markdown ? BrowserMarkdownLink.format(title: tab.title, url: BrowserCopyURLCleaner.clean(tab.url)) : BrowserCopyURLCleaner.clean(tab.url).absoluteString
         }
         guard !links.isEmpty else { return }
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(links.joined(separator: "\n"), forType: .string)
+        sharing.copyText(links.joined(separator: "\n"))
     }
 
     var sidebarFolderTarget: FolderID? {

@@ -147,6 +147,13 @@ public extension BrowserWindowSession {
         }
     }
 
+    @discardableResult
+    func duplicateFolder(_ id: FolderID) -> Task<FolderID?, Never> {
+        enqueueOrganizationValue { session, context in
+            try await session.store.duplicateFolder(id, from: context)
+        }
+    }
+
     func renameFolder(_ id: FolderID, to title: String) {
         enqueueOrganization { session, context in try await session.store.renameFolder(id, to: title, from: context) }
     }

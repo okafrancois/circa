@@ -283,6 +283,7 @@ enum SidebarUndoStrings {
         case .removeFromFavorites: english = uiText("Remove from Favorites")
         case .exportSpace: english = uiText("Export Space into Folder")
         case .convertFolderToSpace: english = uiText("Turn Folder into Space")
+        case .duplicateFolder: english = uiText("Duplicate")
         case .createFolder: english = uiText("New Folder")
         case .importBookmarks: english = uiText("Import Bookmarks")
         case .renameFolder: english = uiText("Rename Folder")

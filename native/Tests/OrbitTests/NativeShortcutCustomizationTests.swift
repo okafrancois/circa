@@ -17,6 +17,19 @@ struct NativeShortcutCustomizationTests {
             charactersIgnoringModifiers: key, isARepeat: false, keyCode: code))
     }
 
+    @Test("Removing or remapping Copy URL frees its default character shortcut")
+    func copyURLCanBeRemoved() throws {
+        let preferences = BrowserShortcutPreferences()
+        let definitions = OrbitCommandCatalog.definitions
+        let copy = try #require(definitions.first { $0.id == .copyURL })
+        let chord = try #require(preferences.bindings(for: copy).first)
+        try preferences.setShortcut(nil, for: .copyURL, definitions: definitions)
+        #expect(preferences.bindings(for: copy).isEmpty)
+        try preferences.setShortcut(chord, for: .sidebarCopyLinks, definitions: definitions)
+        try preferences.setShortcut(.init(key: "c", modifiers: [.command, .control, .option]), for: .copyURL, definitions: definitions)
+        #expect(preferences.bindings(for: copy).count == 1)
+    }
+
     @Test("Character-based recording survives persistence, updates routing, removes and resets")
     func persistenceAndImmediateRouting() throws {
         _ = NSApplication.shared

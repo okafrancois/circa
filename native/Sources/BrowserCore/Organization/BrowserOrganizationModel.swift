@@ -346,7 +346,7 @@ extension BrowserArchivePolicy: Codable {
 public enum BrowserOrganizationAction: String, Sendable, Equatable {
     case moveItems, pinTabs, unpinTabs, addToFavorites, removeFromFavorites
     case exportSpace, convertFolderToSpace
-    case createFolder, renameFolder, deleteFolder, renameTab, importBookmarks
+    case createFolder, duplicateFolder, renameFolder, deleteFolder, renameTab, importBookmarks
     case changeTabIcon, editPinnedURL
     case archiveTabs, closeTabs, clearToday, restoreArchivedTab, deleteArchivedTabs
     case createSplit, addSplitPane, closeSplitPane, unsplit, swapSplitPanes, orientSplit, resizeSplit
