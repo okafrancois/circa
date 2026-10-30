@@ -25,10 +25,14 @@ public extension BrowserWindowSession {
         let authority = occurrence.flatMap { authorities[$0] }
         let ownership = BrowserSurfaceProvenance.ownedRecord(for: surface, owner: self)
         pendingCommandCount += 1
+        let diagnostic = trackCommand(kind: #function)
         let previous = pending
         let activation = Task<Bool, Never> { [self] in
             defer { pendingCommandCount -= 1 }
+            defer { diagnostic.finish() }
             await previous?.value
+            activeCommandDiagnostic = diagnostic
+            diagnostic.step = "model-or-surface-publication"
             guard !isClosed, let occurrence, let authority, let ownership,
                   surfaces[occurrence] === surface, authorities[occurrence] == authority,
                   BrowserSurfaceProvenance.ownedRecord(for: surface, owner: self) === ownership else { return false }

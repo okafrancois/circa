@@ -2182,3 +2182,26 @@ extension NativeWebKitTests.SpaceSwipeRoutingTests {
         #expect(sidebar.swipePreviewCount == 0)
     }
 }
+
+extension NativeWebKitTests.SpaceSwipeRoutingTests {
+    @Test("A lost display callback releases settlement without revoking the destination")
+    func spaceSwipeLostFramesCannotStallCommands() async throws {
+        let (window, sidebar, _, _) = try await fixture(crossProfile: true)
+        defer { sidebar.spaceSwipe.detach(); window.close() }
+        sidebar.spaceSwipe.settlementWaitLimit = .milliseconds(30)
+        var captured: SpaceSwipeAdmission?
+        sidebar.spaceSwipe.commit = { _, _, admission, _, _ in captured = admission }
+        _ = sidebar.spaceSwipe.handleScroll(try scroll(.began), inside: true)
+        _ = sidebar.spaceSwipe.handleScroll(try scroll(.changed, x: -100), inside: true)
+        for _ in 0..<10 { await Task.yield() }
+        _ = sidebar.spaceSwipe.handleScroll(try scroll(.ended), inside: true)
+        var released = false
+        let waiter = Task { await sidebar.spaceSwipe.waitForSettlement(); released = true }
+        let deadline = ContinuousClock.now + .seconds(1)
+        while !released, ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(5)) }
+        #expect(released)
+        #expect(captured?.state == .pending)
+        sidebar.spaceSwipe.cancel()
+        await waiter.value
+    }
+}

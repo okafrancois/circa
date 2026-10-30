@@ -20,7 +20,8 @@ int main() {
     }
     assert(activations == 1 && loop.size() == 1);
     turn();  // A nested message pump must still not activate reentrantly.
-    assert(activations == 1 && loop.size() == 1);
+    assert(activations == 1 && loop.empty());
+    // A nested drain can now return instead of finding another copy of its work.
     assert(scope.ActivateOrDefer(activate, [](auto) { return false; }) == 0);
   }
   assert(activations == 1);
@@ -34,5 +35,32 @@ int main() {
   live = false;  // Closing a surface before the next turn revokes activation.
   turn();
   assert(activations == 2 && loop.empty());
-  std::cout << "Native command activation regression: 4 scenarios passed\n";
+  bool accept = true;
+  auto flaky = [&](std::function<void()> task) {
+    if (!accept) return false;
+    loop.push_back(std::move(task)); return true;
+  };
+  {
+    orbit_bridge::NativeCommandScope::Command duplicate(scope);
+    scope.ActivateOrDefer(activate, flaky);
+    turn();
+    assert(loop.empty());
+    accept = false;
+  }
+  assert(loop.empty() && activations == 2);
+  accept = true;
+  scope.ActivateOrDefer(activate, post);
+  assert(activations == 3 && loop.size() == 1);
+  turn();
+  assert(activations == 4 && loop.empty());
+  {
+    orbit_bridge::NativeCommandScope::Command duplicate(scope);
+    scope.ActivateOrDefer(activate, post);
+    turn();
+    assert(loop.empty());
+    scope.Cancel();
+  }
+  assert(loop.empty() && activations == 4);
+  assert(scope.ActivateOrDefer(activate, post) == 0);
+  std::cout << "Native command activation regression: 6 scenarios passed\n";
 }

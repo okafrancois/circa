@@ -37,6 +37,14 @@ enum OrbitPerformanceProbe {
                 controller.window?.makeKey()
             }
         }
+        if Bundle.main.bundleIdentifier == "lab.orbit.orbit.window-freeze" {
+            application.confirmQuit = { .quit }
+            application.windowPresenter = { controller, _ in
+                controller.window?.setFrame(NSRect(x: -2200, y: -1200, width: 1100, height: 800), display: false)
+                controller.window?.orderBack(nil)
+                controller.window?.makeKey()
+            }
+        }
         installDrawCounter()
         let log = configuration.dataRoot.appendingPathComponent("download-events.jsonl")
         ChromiumRuntime.shared.trace = { name, fields in
@@ -138,6 +146,8 @@ enum OrbitPerformanceProbe {
                 } else if name == "resource-coordinator", ownsWindow(owner, bundleID: "lab.orbit.orbit.perf-coord-0") {
                     application.confirmQuit = { .quit }
                     result["resourceCoordinator"] = await OrbitResourcePerformanceProbe.run(owner, store: environment.store, command: command)
+                } else if name == "window-freeze", ownsWindow(owner, bundleID: "lab.orbit.orbit.window-freeze") {
+                    result["windowFreeze"] = await windowFreeze(owner, store: environment.store, command: command)
                 } else if name == "tab-open", Bundle.main.bundleIdentifier == OrbitTabOpenProbe.bundleID {
                     application.confirmQuit = { .quit }
                     result["tabOpen"] = await OrbitTabOpenProbe.run(owner, store: environment.store, command: command)
@@ -2649,5 +2659,126 @@ extension OrbitPerformanceProbe {
             result["windows"] = NSApp.windows.filter(\.isVisible).map { NSStringFromRect($0.frame) }
         } catch { result["failed"] = String(describing: type(of: error)) }
         return result
+    }
+}
+
+
+extension OrbitPerformanceProbe {
+    /// Confined lifecycle and missing-frame qualification on real hosted tabs.
+    private static func windowFreeze(_ owner: OrbitWindowController, store: BrowserStore,
+                                     command: [String: String]) async -> [String: Any] {
+        let bundleID = "lab.orbit.orbit.window-freeze"
+        guard ownsWindow(owner, bundleID: bundleID),
+              let configuration = activeSiteSessionConfiguration(), configuration.syntheticGuard != nil,
+              configuration.usesMockKeychain, let window = owner.window,
+              let base = command["base"].flatMap(URL.init(string:)),
+              base.scheme == "http", base.host == "127.0.0.1", base.user == nil, base.password == nil
+        else { return ["refused": true] }
+        func stage(_ value: String) {
+            try? value.write(to: configuration.dataRoot.appendingPathComponent("freeze-stage.txt"), atomically: true, encoding: .utf8)
+        }
+        func drain(_ seconds: Double = 3) async -> Bool {
+            let end = ProcessInfo.processInfo.systemUptime + seconds
+            while owner.session.hasPendingCommands, ProcessInfo.processInfo.systemUptime < end {
+                try? await Task.sleep(for: .milliseconds(5))
+            }
+            return !owner.session.hasPendingCommands
+        }
+        func click(_ view: NSView) async -> Bool {
+            let point = view.convert(NSPoint(x: view.bounds.midX, y: view.bounds.midY), to: nil)
+            for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
+                guard ownsWindow(owner, bundleID: bundleID), view.window === window,
+                      let event = NSEvent.mouseEvent(with: type, location: point, modifierFlags: [],
+                        timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
+                        context: nil, eventNumber: 0, clickCount: 1, pressure: type == .leftMouseDown ? 1 : 0) else { return false }
+                NSApp.postEvent(event, atStart: false)
+            }
+            try? await Task.sleep(for: .milliseconds(100))
+            return true
+        }
+        stage("seed")
+        owner.palette.dismiss()
+        let firstSpace = owner.session.snapshot!.activeSpaceID
+        let profile = await store.createProfile(name: "Synthetic Profile 2")
+        guard let secondSpace = try? await store.createSpace(name: "Synthetic secondary", profileID: profile) else { return ["seedFailed": true] }
+        owner.session.activateSpace(secondSpace)
+        guard await drain() else { return ["activationStalled": true] }
+        var tabs: [TabOccurrenceID] = []
+        for i in 0..<8 {
+            owner.session.openTab(url: base.appendingPathComponent("page-\(i)"))
+            guard await drain(), let id = owner.session.snapshot?.selectedOccurrenceID else { return ["openStalled": true] }
+            tabs.append(id)
+            let end = ProcessInfo.processInfo.systemUptime + 2
+            while owner.session.selectedSurface?.navigationState.isLoading == true, ProcessInfo.processInfo.systemUptime < end {
+                try? await Task.sleep(for: .milliseconds(10))
+            }
+        }
+        if let tab = owner.session.tabID(for: tabs[0]) { owner.session.addToFavorites([tab]) }
+        guard await drain() else { return ["favoriteStalled": true] }
+        owner.resources.coordinator.budget = .init(limit: 2, minimumBackgroundAge: 0)
+        let discarded = await owner.tabSuspension.sweep(now: owner.tabSuspension.clock() + 3601)
+        var checks: [String: Any] = ["profiles": owner.engine.profileCount, "tabs": tabs.count,
+                                   "discards": discarded, "budget": 2]
+        stage("lifecycle")
+        let neighbor = NSWindow(contentRect: NSRect(x: -2200, y: -1200, width: 300, height: 200),
+                                styleMask: [.titled, .closable], backing: .buffered, defer: false)
+        neighbor.isReleasedWhenClosed = false
+        for cycle in 0..<6 {
+            guard ownsWindow(owner, bundleID: bundleID) else { return ["ownershipLost": true] }
+            neighbor.makeKeyAndOrderFront(nil)
+            if cycle % 2 == 0 {
+                NSApp.hide(nil)
+                try? await Task.sleep(for: .milliseconds(100))
+                NSApp.unhide(nil)
+                NSApp.activate(ignoringOtherApps: true)
+                try? await Task.sleep(for: .milliseconds(100))
+            }
+            NotificationCenter.default.post(name: NSWorkspace.willSleepNotification, object: nil)
+            NotificationCenter.default.post(name: NSWorkspace.didWakeNotification, object: nil)
+            NotificationCenter.default.post(name: NSWindow.didChangeOcclusionStateNotification, object: window)
+            NSApp.appearance = NSAppearance(named: cycle % 2 == 0 ? .darkAqua : .aqua)
+            window.makeKeyAndOrderFront(nil)
+            try? await Task.sleep(for: .milliseconds(100))
+            guard ownsWindow(owner, bundleID: bundleID) else { return ["ownershipLost": true] }
+            let tab = owner.session.tabID(for: tabs[(cycle + 1) % tabs.count])
+            if let tab, let row = owner.sidebar.page.list.row(for: .tab(tab)) {
+                guard await click(row) else { return ["clickRefused": true] }
+            }
+            guard await drain() else { return ["lifecycleStalled": cycle] }
+            checks["tabSelected\(cycle)"] = owner.session.snapshot?.selectedOccurrenceID == tabs[(cycle + 1) % tabs.count]
+            if let tile = owner.sidebar.favoritesContainer.subviews.compactMap({ $0 as? FavoritesGridView }).first?.tiles.first {
+                guard await click(tile) else { return ["clickRefused": true] }
+            }
+            guard await drain() else { return ["favoriteStalled": cycle] }
+            checks["favoriteSelected\(cycle)"] = owner.session.snapshot?.selectedOccurrenceID == tabs[0]
+        }
+        neighbor.close()
+        checks["lifecycleCycles"] = 6
+        checks["secondaryProfileSelected"] = owner.session.activeProfileID == profile
+        stage("missing-frames")
+        // Inject a stopped display link; use the same production Space-click admission path.
+        owner.sidebar.spaceSwipe.automaticallyAdvances = false
+        owner.sidebar.spaceSwipe.settlementWaitLimit = .milliseconds(100)
+        owner.sidebar.spaceSwipe.validate(catalog: owner.session.catalog, active: secondSpace)
+        try? await Task.sleep(for: .milliseconds(100))
+        guard ownsWindow(owner, bundleID: bundleID) else { return ["ownershipLost": true] }
+        checks["swipeStarted"] = owner.sidebar.spaceSwipe.switchToSpace(firstSpace)
+        checks["missingFramesSettled"] = await drain()
+        checks["destinationSelected"] = owner.session.snapshot?.activeSpaceID == firstSpace
+        owner.session.activateSpace(secondSpace)
+        _ = await drain()
+        stage("close-stalled")
+        var release: CheckedContinuation<Void, Never>?
+        owner.session.activateSpaceFromSwipe(secondSpace, catalog: owner.session.catalog!,
+            waitForPresentation: { await withCheckedContinuation { release = $0 } },
+            isCurrent: { true }, completion: { _ in })
+        while release == nil { await Task.yield() }
+        guard ownsWindow(owner, bundleID: bundleID) else { release?.resume(); return ["ownershipLost": true] }
+        checks["closeAccepted"] = owner.palette.registry?.dispatch(.closeWindow, origin: .menu)
+        checks["closedWhileStalled"] = owner.session.isClosed
+        release?.resume()
+        _ = await drain()
+        stage("done")
+        return checks
     }
 }

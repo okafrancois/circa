@@ -314,10 +314,14 @@ public extension BrowserWindowSession {
         completion: @escaping @MainActor (UInt64?) -> Void = { _ in }
     ) -> Task<UInt64?, Never> {
         guard !isClosed else { completion(nil); return Task { nil } }
+        let diagnostic = trackCommand(kind: #function)
         let previous = pending
         pendingCommandCount += 1
         let replay = Task<UInt64?, Never> { [self] in
+            defer { diagnostic.finish() }
             await previous?.value
+            activeCommandDiagnostic = diagnostic
+            diagnostic.step = "model-or-surface-publication"
             var replayedID: UInt64?
             defer {
                 pendingCommandCount -= 1
@@ -359,10 +363,10 @@ public extension BrowserWindowSession {
 }
 
 extension BrowserWindowSession {
-    func enqueueOrganization(
+    func enqueueOrganization(kind: String = #function,
         _ command: @escaping @MainActor (BrowserWindowSession, BrowserContext) async throws -> BrowserWindowState
     ) {
-        enqueue { session in
+        enqueue(kind: kind) { session in
             guard let state = try await session.runOrganizationCommand(command) else { return }
             guard !session.isClosed else { return }
             session.install(state)
@@ -375,10 +379,14 @@ extension BrowserWindowSession {
     ) -> Task<Value?, Never> {
         guard !isClosed else { return Task { nil } }
         pendingCommandCount += 1
+        let diagnostic = trackCommand(kind: #function)
         let previous = pending
         let task = Task<Value?, Never> { [self] in
             defer { pendingCommandCount -= 1 }
+            defer { diagnostic.finish() }
             await previous?.value
+            activeCommandDiagnostic = diagnostic
+            diagnostic.step = "model-or-surface-publication"
             guard !isClosed, var context = activeContext else { return nil }
             do {
                 for attempt in 0..<maximumOrganizationAdoptions {
@@ -405,10 +413,14 @@ extension BrowserWindowSession {
     ) -> Task<Value?, Never> {
         guard !isClosed else { return Task { nil } }
         pendingCommandCount += 1
+        let diagnostic = trackCommand(kind: #function)
         let previous = pending
         let task = Task<Value?, Never> { [self] in
             defer { pendingCommandCount -= 1 }
+            defer { diagnostic.finish() }
             await previous?.value
+            activeCommandDiagnostic = diagnostic
+            diagnostic.step = "model-or-surface-publication"
             guard !isClosed else { return nil }
             do {
                 guard let (value, state) = try await runOrganizationCommand(command) else { return nil }

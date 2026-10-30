@@ -4,6 +4,7 @@ public extension BrowserWindowSession {
     /// Media collection joins this window's command queue; no detached UI task can reorder Clear.
     func clearTodayPreservingVisibleTabs(protection: @escaping @MainActor () async -> Set<TabID>) {
         enqueueOrganization { session, context in
+            session.activeCommandDiagnostic?.step = "archive-media-protection"
             let protected = await protection()
             return try await session.store.clearTodayPreservingVisibleTabs(protecting: protected, from: context)
         }

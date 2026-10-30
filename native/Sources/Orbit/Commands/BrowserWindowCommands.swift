@@ -79,7 +79,8 @@ enum BrowserWindowCommands {
         window(.copyURLAsMarkdown) { $0.sharing.copyMarkdownLink() }
         window(.share) { $0.sharing.sharePage() }
         window(.closeWindow) { controller in
-            controller.session.performWindowAction { [weak controller] in controller?.window?.performClose(nil) }
+            // Closing revokes session authority synchronously, even while its FIFO is stalled.
+            controller.window?.performClose(nil)
         }
         window(.enterExitFullScreen) { controller in
             controller.session.performWindowAction { [weak controller] in controller?.window?.toggleFullScreen(nil) }

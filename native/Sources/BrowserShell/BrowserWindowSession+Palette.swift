@@ -67,10 +67,14 @@ extension BrowserWindowSession {
     func paletteOperation(_ action: @escaping @MainActor (BrowserWindowSession, BrowserContext) async throws -> Bool) -> Task<Bool, Never> {
         guard !isClosed else { return Task { false } }
         pendingCommandCount += 1
+        let diagnostic = trackCommand(kind: #function)
         let previous = pending
         let task = Task<Bool, Never> { [self] in
             defer { pendingCommandCount -= 1 }
+            defer { diagnostic.finish() }
             await previous?.value
+            activeCommandDiagnostic = diagnostic
+            diagnostic.step = "model-or-surface-publication"
             guard !isClosed, !Task.isCancelled else { return false }
             do {
                 return try await runOrganizationCommand { session, context in
