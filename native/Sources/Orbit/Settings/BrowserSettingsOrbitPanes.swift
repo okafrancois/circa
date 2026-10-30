@@ -118,13 +118,30 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
                         OrbitIcon.view(sfName: "person.crop.circle", pointSize: 20).font(.system(size: 20)).frame(width: 20, height: 20)
                         VStack(alignment: .leading, spacing: 2) {
                             Text(uiText("Profile Settings")).fontWeight(.medium)
-                            Text(uiText("Manage your default search engine, Auto-Archive, and downloads in Profile Settings."))
+                            Text(uiText("Manage your default search engine and Auto-Archive in Profile Settings."))
                                 .font(Font(BrandFonts.ui(12))).foregroundStyle(.secondary)
                         }
                         Spacer()
                         OrbitIcon.view(sfName: "chevron.right", pointSize: 14).font(.system(size: 14)).frame(width: 14, height: 14).foregroundStyle(.secondary)
                     }.padding(14).contentShape(Rectangle())
                 }.buttonStyle(.plain).accessibilityIdentifier("settings-open-profiles")
+            }
+
+            panel {
+                settingRow("Save downloads to", icon: "folder") {
+                    Button { model.chooseDownloadFolder?() } label: {
+                        Text(runtime.document.downloads.folderURL.path.replacingOccurrences(
+                            of: FileManager.default.homeDirectoryForCurrentUser.path + "/", with: "~/"))
+                            .lineLimit(1).truncationMode(.middle)
+                    }
+                    .help(runtime.document.downloads.folderURL.path)
+                    .accessibilityIdentifier("settings-download-folder")
+                }
+                rule
+                liveToggle("Ask where to save each file", value: runtime.document.downloads.asksWhereToSave,
+                           identifier: "settings-ask-download-location") { value in
+                    try await runtime.updateDownloads { $0.asksWhereToSave = value }
+                }
             }
 
             panel {
@@ -262,7 +279,7 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
                                 .accessibilityIdentifier("settings-manage-extensions")
                         }
                         rule
-                        settingRow("Downloads, languages, and site settings", icon: "arrow.down.circle") {
+                        settingRow("Languages and site settings", icon: "arrow.down.circle") {
                             Button(uiText("More Settings…")) { open(.chromium, profile: profile) }
                                 .disabled(!model.canOpenChromiumSettings(profile: profile))
                                 .accessibilityIdentifier("settings-chromium-profile")

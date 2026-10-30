@@ -50,6 +50,7 @@ final class BrowserSettingsModel<Engine: BrowserEngine>: ObservableObject {
     @Published var errorMessage: String?
     @Published var siteDataRequest: BrowserSettingsSiteDataRequest?
     /// Opens the theme editor of a Space over the Settings window (set by its window controller).
+    var chooseDownloadFolder: (() -> Void)?
     var presentThemeEditor: ((SpaceID) -> Void)?
     var presentBrowserForProfile: ((ProfileID) async throws -> BrowserWindowController<Engine>)?
     var shortcutIsImplemented: ((BrowserCommandID) -> Bool)?

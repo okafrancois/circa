@@ -25,6 +25,12 @@ final class BrowserSettingsRuntime: ObservableObject {
         onChange?()
     }
 
+    func updateDownloads(_ edit: @Sendable (inout BrowserDownloadPreferences) -> Void) async throws {
+        do { try await store.updateDownloads(edit) }
+        catch { await refresh(); throw error }
+        await refresh()
+    }
+
     func updateInteraction(_ edit: @Sendable (inout BrowserInteractionPreferences) -> Void) async throws {
         do { try await store.updateInteraction(edit) }
         catch { await refresh(); throw error }

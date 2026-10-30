@@ -129,11 +129,23 @@ public struct BrowserInteractionPreferences: Codable, Equatable, Sendable {
     public init() {}
 }
 
+/// Device-local download choices shared by normal and private windows.
+public struct BrowserDownloadPreferences: Codable, Equatable, Sendable {
+    public var folderPath: String?
+    public var asksWhereToSave = false
+    public init() {}
+    public var folderURL: URL {
+        folderPath.map { URL(fileURLWithPath: $0, isDirectory: true) }
+            ?? FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Downloads", isDirectory: true)
+    }
+}
+
 public struct BrowserSettingsDocument: Codable, Equatable, Sendable {
     public static let currentVersion = 2
     public var version = Self.currentVersion
     public var reducedMotion: BrowserReducedMotionSetting = .system
     public var interaction = BrowserInteractionPreferences()
+    public var downloads = BrowserDownloadPreferences()
     public var memorySaver: BrowserMemorySaverSetting = .oneHour
     public var automaticPictureInPicture = true
     public var enablesBoostsOnWebsites = true
@@ -155,7 +167,7 @@ public struct BrowserSettingsDocument: Codable, Equatable, Sendable {
     public var spaces: [SpaceID: BrowserSpaceSettings] = [:]
     public init() {}
     private enum CodingKeys: String, CodingKey {
-        case automaticPictureInPicture, hasSeenBoostsIntroduction, enablesBoostsOnWebsites, interaction, memorySaver, linkRouting, version, reducedMotion, profiles, spaces, opensExternalLinksInQuickWindow, lastActiveWindowID, lastActiveSpaceID
+        case downloads, automaticPictureInPicture, hasSeenBoostsIntroduction, enablesBoostsOnWebsites, interaction, memorySaver, linkRouting, version, reducedMotion, profiles, spaces, opensExternalLinksInQuickWindow, lastActiveWindowID, lastActiveSpaceID
     }
     public init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
@@ -163,6 +175,7 @@ public struct BrowserSettingsDocument: Codable, Equatable, Sendable {
         version = try values.decode(Int.self, forKey: .version)
         reducedMotion = try values.decode(BrowserReducedMotionSetting.self, forKey: .reducedMotion)
         interaction = try values.decodeIfPresent(BrowserInteractionPreferences.self, forKey: .interaction) ?? .init()
+        downloads = try values.decodeIfPresent(BrowserDownloadPreferences.self, forKey: .downloads) ?? .init()
         memorySaver = (try? values.decode(BrowserMemorySaverSetting.self, forKey: .memorySaver)) ?? .oneHour
         // Version one did not record whether four hours was explicitly chosen.
         // Migrate that former default once; subsequent explicit choices survive.
@@ -238,6 +251,12 @@ public actor BrowserSettingsStore {
     public func updateInteraction(_ edit: @Sendable (inout BrowserInteractionPreferences) -> Void) throws {
         var next = document
         edit(&next.interaction)
+        try publish(next)
+    }
+
+    public func updateDownloads(_ edit: @Sendable (inout BrowserDownloadPreferences) -> Void) throws {
+        var next = document
+        edit(&next.downloads)
         try publish(next)
     }
 

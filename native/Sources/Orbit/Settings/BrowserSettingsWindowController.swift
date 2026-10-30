@@ -42,6 +42,22 @@ final class BrowserSettingsWindowController<Engine: BrowserEngine>: NSWindowCont
     var themeEditor: OrbitThemeEditorController?
     let themeUndoManager = OrbitThemeUndoManager()
 
+    private func chooseDownloadFolder() {
+        guard let window, window.attachedSheet == nil else { return }
+        let panel = NSOpenPanel()
+        panel.title = uiText("Save downloads to")
+        panel.prompt = uiText("Choose")
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.canCreateDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.directoryURL = model.runtime.document.downloads.folderURL
+        panel.beginSheetModal(for: window) { [weak model] response in
+            guard response == .OK, let path = panel.url?.path, let model else { return }
+            model.perform { try await model.runtime.updateDownloads { $0.folderPath = path } }
+        }
+    }
+
     func windowWillReturnUndoManager(_ window: NSWindow) -> UndoManager? { themeUndoManager }
 
     init(model: BrowserSettingsModel<Engine>, appearanceOverride: NSAppearance.Name? = OrbitAppearance.launchOverride) {
@@ -63,6 +79,7 @@ final class BrowserSettingsWindowController<Engine: BrowserEngine>: NSWindowCont
         window.contentViewController = NSHostingController(rootView: BrowserSettingsView(model: model, runtime: model.runtime))
         super.init(window: window)
         themeUndoManager.registry = model.environment.themeEditors
+        model.chooseDownloadFolder = { [weak self] in self?.chooseDownloadFolder() }
         window.delegate = self
         let toolbar = NSToolbar(identifier: "orbit-settings-categories")
         toolbar.delegate = self

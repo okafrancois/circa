@@ -11,6 +11,13 @@ final class BrowserDownloadsController {
     typealias DestinationProvider = @MainActor (BrowserDownloadOwner, String) async -> URL?
     let coordinator = BrowserDownloadCoordinator()
     var destinationProvider: DestinationProvider?
+    var preferencesProvider: @MainActor () -> BrowserDownloadPreferences = { .init() }
+    struct SaveRequest {
+        let filename: String
+        let directory: URL
+        let explanation: String?
+    }
+    var saveSheetProvider: (@MainActor (SaveRequest) async -> URL?)?
     var openFile: (URL) -> Void = { NSWorkspace.shared.open($0) }
     var revealFile: (URL) -> Void = { NSWorkspace.shared.activateFileViewerSelecting([$0]) }
     private var deltaObservers: [UUID: (BrowserDownloadCoordinator.Delta) -> Void] = [:]
@@ -56,11 +63,7 @@ final class BrowserDownloadsController {
         let transfer = download.makeTransfer { [weak self, weak sourceWindow] filename in
             guard let self, !coordinator.isClosed else { return nil }
             if let destinationProvider { return await destinationProvider(owner, filename) }
-            guard let sourceWindow, sourceWindow.isVisible else { return nil }
-            let picker = DownloadDestinationPicker()
-            pickers[id] = picker
-            defer { pickers.removeValue(forKey: id) }
-            return await picker.choose(filename: filename, window: sourceWindow)
+            return await chooseDestination(filename: filename, sourceWindow: sourceWindow, id: id)
         }
         do {
             let registration = try coordinator.register(owner: owner, transfer: transfer,
@@ -78,6 +81,25 @@ final class BrowserDownloadsController {
             transfer.invalidate()
             return nil
         }
+    }
+
+    func chooseDestination(filename: String, sourceWindow: NSWindow?, id: UUID = UUID()) async -> URL? {
+        let preferences = preferencesProvider()
+        let folder = preferences.folderURL
+        let destination = await Task.detached(priority: .utility) {
+            BrowserDownloadPaths.uniqueDestination(filename: filename, in: folder)
+        }.value
+        guard !Task.isCancelled, !coordinator.isClosed else { return nil }
+        if !preferences.asksWhereToSave, let destination { return destination }
+        let request = SaveRequest(filename: BrowserDownloadPaths.suggestedFilename(filename), directory: folder,
+            explanation: destination != nil ? nil :
+                uiText("Orbit can’t save to the download folder. It may be missing or not writable. Choose another location."))
+        if let saveSheetProvider { return await saveSheetProvider(request) }
+        guard let sourceWindow, sourceWindow.isVisible, !coordinator.isClosed else { return nil }
+        let picker = DownloadDestinationPicker()
+        pickers[id] = picker
+        defer { pickers.removeValue(forKey: id) }
+        return await picker.choose(request: request, window: sourceWindow)
     }
 
     /// Completes the provisional owner of a download started while its source tab was being
@@ -249,10 +271,12 @@ final class BrowserDownloadsController {
 private final class DownloadDestinationPicker: NSObject, NSOpenSavePanelDelegate {
     private var panel: NSSavePanel?
 
-    func choose(filename: String, window: NSWindow) async -> URL? {
+    func choose(request: BrowserDownloadsController.SaveRequest, window: NSWindow) async -> URL? {
         let panel = NSSavePanel()
         panel.title = uiText("Save Download")
-        panel.nameFieldStringValue = filename
+        panel.nameFieldStringValue = request.filename
+        panel.directoryURL = request.directory
+        if let explanation = request.explanation { panel.message = explanation }
         panel.canCreateDirectories = true
         panel.delegate = self
         self.panel = panel

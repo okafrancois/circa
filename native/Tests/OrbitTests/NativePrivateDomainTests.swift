@@ -11,6 +11,21 @@ extension NativeWebKitTests {
 @Suite("Private domain security", .serialized)
 @MainActor
 struct NativePrivateDomainTests {
+    @Test("Private downloads use current global folder choices without sharing download history")
+    func downloadPreferences() async throws {
+        let normal = BrowserEnvironment(engine: PrivateTestEngine())
+        let scope = BrowserPrivateDomainFactory(normalEnvironment: normal, build: { PrivateTestEngine() }).makeScope()
+        let lease = try await scope.acquire()
+        let memory = try scope.environment(for: lease)
+        try await normal.settings.updateDownloads { $0.folderPath = "/tmp/synthetic-downloads" }
+        #expect(memory.downloads.preferencesProvider() == normal.settings.document.downloads)
+        try await normal.settings.updateDownloads { $0.asksWhereToSave = true }
+        #expect(memory.downloads.preferencesProvider().asksWhereToSave)
+        #expect(memory.downloads !== normal.downloads)
+        #expect(memory.settings.document.downloads == BrowserDownloadPreferences())
+        try await scope.release(lease)
+    }
+
     @Test("Persistent private factories are refused before profile creation or navigation")
     func persistentAdmission() throws {
         let engine = PrivateTestEngine(persistence: .persistent)
