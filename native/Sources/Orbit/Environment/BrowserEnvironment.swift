@@ -72,6 +72,8 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
     let sidebarIconMemory = SidebarIconMemoryCache()
     /// The explicit session destination; nil for temporary sessions (no import target).
     private(set) var sessionFile: URL?
+    /// No Orbit data existed when this launch opened the data directory (first-run onboarding).
+    private(set) var launchedOnFreshDataDirectory = false
     private var dataDirectoryLock: OrbitDataDirectoryLock?
     var historyRecorder: BrowserHistoryRecorder { history }
     var permissions = BrowserSitePermissionStore.ephemeral()
@@ -96,6 +98,8 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
         // this session while Orbit uses it, and Orbit does not open it during one. A restore
         // interrupted mid-swap is rolled back first.
         BrowserPerformance.mark(.environment)
+        // Before this launch writes anything; the launcher checked the engine root before it started.
+        let fresh = BrowserOnboardingEligibility.isFresh(sessionFile: sessionFile, engineRootHadData: activeEngineRootHadDataAtLaunch())
         let location = ArcImportDataLocation(sessionFile: sessionFile)
         try ArcImportBackups.recoverInterruptedRestore(at: location)
         let lock = try OrbitDataDirectoryLock.acquire(location.dataDirectory, exclusive: false, validatingPath: false)
@@ -144,6 +148,7 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
         }
         environment.shortcutPreferences = BrowserShortcutPreferences(destination: sessionFile.appendingPathExtension("shortcuts.json"))
         environment.sessionFile = sessionFile
+        environment.launchedOnFreshDataDirectory = fresh
         environment.boosts = BrowserBoostsRuntime(directory: sessionFile.deletingLastPathComponent()
             .appendingPathComponent("Boosts", isDirectory: true),
             hostOverride: Bundle.main.object(forInfoDictionaryKey: "OrbitSyntheticBundle") as? Bool == true

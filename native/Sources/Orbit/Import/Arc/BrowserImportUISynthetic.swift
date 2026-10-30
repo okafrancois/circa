@@ -8,9 +8,12 @@ import Security
 /// Explicitly signed fixture bundle only. A mock run never falls through to real discovery or
 /// system Keychain queries. Inventory is confined to its baked data root.
 enum BrowserImportUISynthetic {
+    /// Signed synthetic bundles that drive the browser import through their fixture sources.
+    static let fixtureBundles: Set<String> = ["lab.orbit.orbit.import-ui", "lab.orbit.orbit.onboard-1"]
+    static var isFixtureBundle: Bool { fixtureBundles.contains(Bundle.main.bundleIdentifier ?? "") }
     struct Inventory: Codable { var browsers: [String]; var keyStatus: String? }
     @MainActor static func applyAppearance() {
-        guard Bundle.main.bundleIdentifier == "lab.orbit.orbit.import-ui", activeSiteSessionConfiguration()?.usesMockKeychain == true else { return }
+        guard isFixtureBundle, activeSiteSessionConfiguration()?.usesMockKeychain == true else { return }
         _ = (NSClassFromString("ACRApplication") as? NSApplication.Type)?.shared
         NSApplication.shared.appearance = NSAppearance(named: CommandLine.arguments.contains("--import-ui-dark") ? .darkAqua : .aqua)
     }
@@ -18,7 +21,7 @@ enum BrowserImportUISynthetic {
         configuration.dataRoot.deletingLastPathComponent().appendingPathComponent("Sources")
     }
     static func checkSource(_ file: URL, configuration: OrbitProductConfiguration) throws {
-        guard configuration.usesMockKeychain, Bundle.main.bundleIdentifier == "lab.orbit.orbit.import-ui" else {
+        guard configuration.usesMockKeychain, isFixtureBundle else {
             throw BrowserAuthenticationImportError.invalidState
         }
         let guardRoot = SyntheticDataGuard(syntheticRoot: sourceRoot(configuration), personalLocations: configuration.personalLocations)
@@ -33,7 +36,7 @@ enum BrowserImportUISynthetic {
     static func choices(_ configuration: OrbitProductConfiguration) throws -> [BrowserImportChoice] {
         guard let confinement = configuration.syntheticGuard else { return [] }
         try confinement.checkRoot()
-        guard Bundle.main.bundleIdentifier == "lab.orbit.orbit.import-ui" else { return [] }
+        guard isFixtureBundle else { return [] }
         let file = configuration.dataRoot.appendingPathComponent("import-ui-inventory.json")
         try confinement.checkInside(file)
         let inventory = try JSONDecoder().decode(Inventory.self, from: Data(contentsOf: file))
@@ -43,7 +46,7 @@ enum BrowserImportUISynthetic {
         return BrowserImportInventory.choices(descriptors: descriptors, support: sourceRoot(configuration))
     }
     static func sourcePassword(_ configuration: OrbitProductConfiguration) throws -> Data {
-        guard configuration.usesMockKeychain, Bundle.main.bundleIdentifier == "lab.orbit.orbit.import-ui",
+        guard configuration.usesMockKeychain, isFixtureBundle,
               let confinement = configuration.syntheticGuard else { throw BrowserAuthenticationImportError.invalidState }
         try confinement.checkRoot()
         let inventory = try JSONDecoder().decode(Inventory.self, from: Data(contentsOf: configuration.dataRoot.appendingPathComponent("import-ui-inventory.json")))
@@ -69,7 +72,7 @@ enum BrowserImportUISynthetic {
     }
 
     static func recordFailure(_ error: any Error, configuration: OrbitProductConfiguration) {
-        guard configuration.usesMockKeychain, Bundle.main.bundleIdentifier == "lab.orbit.orbit.import-ui" else { return }
+        guard configuration.usesMockKeychain, isFixtureBundle else { return }
         let description: String
         if let value = error as? ArcImportError { description = String(describing: value) }
         else if let value = error as? BrowserAuthenticationImportError { description = String(describing: value) }
@@ -78,7 +81,7 @@ enum BrowserImportUISynthetic {
         try? Data(description.utf8).write(to: configuration.dataRoot.appendingPathComponent("import-ui-failure"))
     }
     static func checkpoint(_ point: String, configuration: OrbitProductConfiguration) throws {
-        guard configuration.usesMockKeychain, Bundle.main.bundleIdentifier == "lab.orbit.orbit.import-ui",
+        guard configuration.usesMockKeychain, isFixtureBundle,
               let confinement = configuration.syntheticGuard else { return }
         try confinement.checkRoot()
         if ProcessInfo.processInfo.environment["ORBIT_IMPORT_UI_PAUSE"] == point { Thread.sleep(forTimeInterval: 3) }
