@@ -19,6 +19,10 @@ struct BrowserAddressPresentation: Equatable {
     init(url: URL?, security: BrowserPageSecurityState?, format: (URL) -> String?) {
         guard let url else { value = ""; label = ""; connection = .unavailable; return }
         let scheme = url.scheme?.lowercased()
+        // A local file the user opened shows its own name; it carries no site identity to spoof.
+        if scheme == "file", url.isFileURL, !url.lastPathComponent.isEmpty, url.lastPathComponent != "/" {
+            value = url.absoluteString; label = url.lastPathComponent; connection = .unavailable; return
+        }
         // Only hierarchical web identities can expose an address. Non-web and opaque URLs
         // are redacted in the editor and accessibility value as well as the resting label.
         guard ["http", "https"].contains(scheme ?? ""), url.host?.isEmpty == false else {

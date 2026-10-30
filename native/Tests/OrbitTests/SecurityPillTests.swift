@@ -53,7 +53,7 @@ struct SecurityPillTests {
     func opaque() {
         for text in ["data:text/html,synthetic-secret", "blob:https://example.test/synthetic-secret",
                      "javascript:synthetic-secret", "custom:synthetic-secret", "about:blank#synthetic-secret",
-                     "file:///synthetic-secret", "orbit:settings?synthetic-secret"] {
+                     "orbit:settings?synthetic-secret"] {
             var formatterCalled = false
             let address = BrowserAddressPresentation(url: URL(string: text), security: try! pageSecurity(level: 3), format: { _ in formatterCalled = true; return "synthetic-secret" })
             let field = OrbitLocationField()
@@ -62,6 +62,15 @@ struct SecurityPillTests {
             #expect(field.securityIcon.isHidden && !formatterCalled)
             #expect(address.connection == .unavailable)
         }
+    }
+
+    @Test("A local file shows its own name, keeps its path for editing and never shows a lock")
+    func localFile() {
+        var formatterCalled = false
+        let url = URL(fileURLWithPath: "/tmp/Synthetic Report.pdf")
+        let address = BrowserAddressPresentation(url: url, security: try! pageSecurity(level: 3), format: { _ in formatterCalled = true; return "spoof" })
+        #expect(address.label == "Synthetic Report.pdf" && address.value == url.absoluteString)
+        #expect(address.connection == .unavailable && !formatterCalled)
     }
 
     @Test("Certificate errors interstitials and both mixed-content kinds never show a secure lock")
