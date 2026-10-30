@@ -74,8 +74,9 @@ public enum BrowserSyncMapping {
         let folders = Dictionary(uniqueKeysWithValues: organization.folders.map { ($0.id, $0) })
         let splits = Dictionary(uniqueKeysWithValues: organization.splits.map { ($0.id, $0) })
         func visit(_ nodes: [BrowserOrganizationNode], parent: String, root: String) throws {
-            result.lists[parent] = nodes.map(nodeID)
-            for node in nodes {
+            let sharedNodes = nodes.filter { $0.tabID.flatMap { tabs[$0]?.liveFolderChild } == nil }
+            result.lists[parent] = sharedNodes.map(nodeID)
+            for node in sharedNodes {
                 let key = nodeID(node)
                 result.roots[key] = root
                 switch node {
@@ -83,12 +84,12 @@ public enum BrowserSyncMapping {
                     if let tab = tabs[tabID] {
                         // A pinned tab's home destination syncs; transient away navigation does not.
                         var shared = tab; shared.url = tab.pinnedURL ?? tab.url
-                        result.entries[key] = try fields(shared, excluding: ["lastActiveAt"])
+                        result.entries[key] = try fields(shared, excluding: ["lastActiveAt", "liveFolderChild"])
                     }
                 case .folder(let folderID):
                     if let folder = folders[folderID] {
                         result.entries[key] = try fields(folder, excluding: ["children", "isCollapsed"])
-                        try visit(folder.children, parent: key, root: root)
+                        try visit(folder.liveFolder == nil ? folder.children : [], parent: key, root: root)
                     }
                 case .split(let splitID):
                     if let split = splits[splitID] {
@@ -141,6 +142,8 @@ public enum BrowserSyncMapping {
         let localTabs = Dictionary(local.organization.tabs.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         let localFolders = Dictionary(local.organization.folders.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         let localSplits = Dictionary(local.organization.splits.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        let localState = try BrowserOrganizationState(document: local.organization)
+        var retainedGeneratedIDs: Set<TabID> = []
         let localSections = Dictionary(local.organization.spaces.map { ($0.spaceID, $0) }, uniquingKeysWith: { first, _ in first })
         func ordered(_ keys: [String]) -> [String] {
             keys.sorted {
@@ -155,6 +158,8 @@ public enum BrowserSyncMapping {
         let spaceValues = try Dictionary(uniqueKeysWithValues: entries("space").map { ($0.0, try decode(BrowserSpace.self, $0.1)) })
         let spaces = ordered(Array(spaceValues.keys)).compactMap { spaceValues[$0] }.filter { profileIDs.contains($0.profileID) }
         let spaceIDs = Set(spaces.map(\.id))
+        let spaceProfiles = Dictionary(uniqueKeysWithValues: spaces.map { ($0.id, $0.profileID) })
+        let localSpaceProfiles = Dictionary(local.spaces.map { ($0.id, $0.profileID) }, uniquingKeysWith: { first, _ in first })
         var roots = Set(spaces.map { id("pinned", $0.id.rawValue) })
         roots.formUnion(profiles.map { id("favorites", $0.id.rawValue) })
         let nodeKeys = Set(records.keys.filter { node($0) != nil && placement($0) != nil })
@@ -181,6 +186,7 @@ public enum BrowserSyncMapping {
             switch node {
             case .tab(let tabID):
                 var values = data
+                values.removeValue(forKey: "liveFolderChild")
                 let existing = localTabs[tabID]
                 values["lastActiveAt"] = try BrowserSyncReplica.encodeValue(existing?.lastActiveAt ?? Date())
                 var tab = try decode(BrowserOrganizedTab.self, values)
@@ -189,9 +195,28 @@ public enum BrowserSyncMapping {
                 return [node]
             case .folder(let folderID):
                 var values = data
-                values["children"] = try BrowserSyncReplica.encodeValue(try (children[key] ?? []).flatMap(build))
+                values["children"] = try BrowserSyncReplica.encodeValue([BrowserOrganizationNode]())
                 values["isCollapsed"] = try BrowserSyncReplica.encodeValue(localFolders[folderID]?.isCollapsed ?? false)
-                sharedFolders.append(try decode(BrowserOrganizedFolder.self, values))
+                var folder = try decode(BrowserOrganizedFolder.self, values)
+                if let config = folder.liveFolder {
+                    // Only the same local scope/configuration can retain this Mac's provider cache.
+                    // A new Mac always gets an empty folder and waits for its own provider.
+                    if let old = localFolders[folderID], old.liveFolder == config,
+                       localState.section(of: .folder(folderID)).map({ section in
+                           section.spaceID.map { space in
+                               id("pinned", space.rawValue) == placement(key)?.root
+                                   && localSpaceProfiles[space] == spaceProfiles[space]
+                           } == true
+                       }) == true {
+                        let cached = old.children.compactMap { $0.tabID.flatMap { localTabs[$0] } }.filter {
+                            $0.liveFolderChild?.folderID == folderID && $0.liveFolderChild?.identity.provider == config.provider
+                        }
+                        folder.children = cached.map { .tab($0.id) }
+                        sharedTabs.append(contentsOf: cached)
+                        retainedGeneratedIDs.formUnion(cached.map(\.id))
+                    }
+                } else { folder.children = try (children[key] ?? []).flatMap(build) }
+                sharedFolders.append(folder)
                 return [node]
             case .split:
                 let nodes = try (children[key] ?? []).flatMap(build)
@@ -231,12 +256,23 @@ public enum BrowserSyncMapping {
                 }
             }
         }
-        let sections = try spaces.map { space in
+        var sections = try spaces.map { space in
             let old = localSections[space.id]
             return BrowserOrganizationDocument.SpaceSections(spaceID: space.id,
                 pinned: try (children[id("pinned", space.id.rawValue)] ?? []).flatMap(build),
                 today: keepLocal(old?.today ?? []),
                 isPinnedCollapsed: old?.isPinnedCollapsed ?? false)
+        }
+        // A remotely deleted/reconfigured folder must not destroy an open local page.
+        let openIDs = Set(local.tabs.map(\.id))
+        for tab in local.organization.tabs where tab.liveFolderChild != nil && !retainedGeneratedIDs.contains(tab.id) && openIDs.contains(tab.id) {
+            guard let owner = localState.section(of: .tab(tab.id))?.spaceID,
+                  let index = sections.firstIndex(where: { $0.spaceID == owner }) else { continue }
+            var ordinary = tab; ordinary.liveFolderChild = nil; ordinary.pinnedURL = nil
+            sharedTabs.append(ordinary)
+            let old = sections[index]
+            sections[index] = .init(spaceID: owner, pinned: old.pinned, today: old.today + [.tab(tab.id)],
+                                    isPinnedCollapsed: old.isPinnedCollapsed)
         }
         var nextSettings = settings
         var policy = local.organization.archivePolicy
@@ -294,9 +330,21 @@ extension BrowserStore {
         guard !value.spaces.isEmpty, !value.profiles.isEmpty else { throw BrowserSyncError.invalidRecord }
         let state = try BrowserOrganizationState(document: value.organization)
         try state.validate(profiles: Set(value.profiles.map(\.id)), spaces: Dictionary(uniqueKeysWithValues: value.spaces.map { ($0.id, $0.profileID) }))
+        let previousSpaceProfiles = spaces.mapValues(\.profileID)
         profiles = Dictionary(uniqueKeysWithValues: value.profiles.map { ($0.id, $0) })
         spaces = Dictionary(uniqueKeysWithValues: value.spaces.map { ($0.id, $0) })
         profileOrder = value.profiles.map(\.id); spaceOrder = value.spaces.map(\.id)
+        for old in organization.folders.values {
+            guard let config = old.liveFolder,
+                  let space = organization.section(of: .folder(old.id))?.spaceID,
+                  let profile = previousSpaceProfiles[space], profiles[profile] != nil else { continue }
+            if state.folders[old.id]?.liveFolder == nil {
+                disableLiveFolderRecreation(config.provider, profileID: profile)
+            } else if state.folders[old.id]?.liveFolder != config {
+                _ = try advanceLiveFolderGeneration(for: config.provider, profileID: profile)
+            }
+        }
+        liveFolderLocalStores = liveFolderLocalStores.filter { profiles[$0.key] != nil }
         organization = state
         themeImports = themeImports.intersection(Set(spaceOrder))
         for key in windows.keys {

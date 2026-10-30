@@ -139,12 +139,15 @@ public struct BrowserOrganizedTab: Codable, Equatable, Sendable {
     public internal(set) var customTitle: String?
     /// Reference URL of a Favorite or Pinned tab. Always nil in Today.
     public internal(set) var pinnedURL: URL?
+    /// Provider ownership and cached revision; machine-local and excluded from sync.
+    public internal(set) var liveFolderChild: BrowserLiveFolderChild?
     public let createdAt: Date
     /// Last time the tab was the visible selection of a window. Basis of auto-archiving.
     public internal(set) var lastActiveAt: Date
 
     public init(id: TabID, url: URL, pageTitle: String? = nil, customTitle: String? = nil,
-                pinnedURL: URL? = nil, createdAt: Date, lastActiveAt: Date) {
+                pinnedURL: URL? = nil, createdAt: Date, lastActiveAt: Date,
+                liveFolderChild: BrowserLiveFolderChild? = nil) {
         self.id = id
         self.url = url
         self.pageTitle = pageTitle
@@ -152,6 +155,7 @@ public struct BrowserOrganizedTab: Codable, Equatable, Sendable {
         self.pinnedURL = pinnedURL
         self.createdAt = createdAt
         self.lastActiveAt = lastActiveAt
+        self.liveFolderChild = liveFolderChild
     }
 
     /// The custom title wins over the web title; callers localize their own fallback.
@@ -169,14 +173,17 @@ public struct BrowserOrganizedFolder: Codable, Equatable, Sendable {
     public internal(set) var title: String
     public internal(set) var isCollapsed: Bool
     public internal(set) var children: [BrowserOrganizationNode]
+    public internal(set) var liveFolder: BrowserLiveFolderConfiguration?
     public let createdAt: Date
 
     public init(id: FolderID, title: String, isCollapsed: Bool = false,
-                children: [BrowserOrganizationNode] = [], createdAt: Date) {
+                children: [BrowserOrganizationNode] = [], createdAt: Date,
+                liveFolder: BrowserLiveFolderConfiguration? = nil) {
         self.id = id
         self.title = title
         self.isCollapsed = isCollapsed
         self.children = children
+        self.liveFolder = liveFolder
         self.createdAt = createdAt
     }
 }
@@ -334,6 +341,7 @@ public enum BrowserFolderDeletion: Sendable, Equatable {
 
 public enum BrowserOrganizationError: Error, Equatable, Sendable {
     case itemMissing
+    case providerOwnedItem
     case archivedTabMissing
     /// The item exists but is not in the captured window's Space or profile.
     case notVisibleInContext

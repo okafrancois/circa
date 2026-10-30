@@ -10,6 +10,7 @@ extension BrowserStore {
         guard let first = ids.first, let placement = organization.placement(of: .tab(first)) else {
             throw BrowserOrganizationError.itemMissing
         }
+        try requireOrdinaryTabs(ids)
         let section = try splitSection(of: .tab(first), in: context)
         for id in ids {
             guard try splitSection(of: .tab(id), in: context) == section else { throw BrowserSplitError.incompatibleSection }
@@ -41,6 +42,7 @@ extension BrowserStore {
         guard let selected = context.selectedOccurrenceID.flatMap({ tabs[$0]?.id }) else {
             throw BrowserSplitError.paneMissing
         }
+        try requireOrdinaryTabs([selected])
         let section = try splitSection(of: .tab(selected), in: context)
         let existing = organization.container(of: .tab(selected))?.owningNode?.splitID
         if let existing, organization.splits[existing]!.tabIDs.count >= BrowserSplitGroup.maximumPanes {
@@ -71,6 +73,7 @@ extension BrowserStore {
     public func addPane(_ tabID: TabID, to groupID: SplitGroupID, at index: Int? = nil, orientation: BrowserSplitOrientation? = nil,
                         from context: BrowserContext) throws -> BrowserWindowState {
         _ = try organizationWindow(context)
+        try requireOrdinaryTabs([tabID])
         let section = try splitSection(of: .split(groupID), in: context)
         guard let group = organization.splits[groupID], group.tabIDs.count < BrowserSplitGroup.maximumPanes else {
             throw BrowserSplitError.invalidPaneCount
