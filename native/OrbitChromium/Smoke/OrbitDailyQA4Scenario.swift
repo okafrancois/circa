@@ -96,3 +96,84 @@ extension OrbitSmokeDriver {
         } catch { check("combined-flow", false); event("daily4.error", ["type": String(describing: error)]) }
     }
 }
+
+extension OrbitSmokeDriver {
+    /// Exercises installer races and persisted Space state in the real synthetic product.
+    func dailyQA5(_ application: OrbitApplication, _ environment: OrbitEnvironment,
+                  _ owner: OrbitWindowController, _ engine: ChromiumBrowserEngine) async {
+        func check(_ name: String, _ value: Bool) { self.check("daily5." + name, value) }
+        let updater = environment.settings.updater
+        defer {
+            updater.fetchLatestVersion = nil; updater.discardPendingUpdate = nil
+            updater.downloadLatestUpdate = nil; updater.installPendingUpdate = nil
+        }
+        var firstReply: CheckedContinuation<String, Never>?
+        var requests = 0
+        updater.fetchLatestVersion = {
+            requests += 1
+            if requests == 1 { return await withCheckedContinuation { firstReply = $0 } }
+            return "27"
+        }
+        updater.prepared(version: "25")
+        guard await until(2, { firstReply != nil }), let reply = firstReply else { check("feed-started", false); return }
+        updater.prepared(version: "27")
+        _ = await until(2) { updater.readyVersion == "27" }
+        reply.resume(returning: "25")
+        for _ in 0..<10 { await Task.yield() }
+        check("superseded-feed", requests == 2 && updater.readyVersion == "27")
+        var cancellation: CheckedContinuation<Void, Never>?
+        updater.fetchLatestVersion = { "29" }
+        updater.discardPendingUpdate = { await withCheckedContinuation { cancellation = $0 } }
+        updater.prepared(version: "27")
+        guard await until(2, { cancellation != nil }), let cancelled = cancellation else { check("cancel-started", false); return }
+        updater.prepared(version: "29")
+        _ = await until(2) { updater.readyVersion == "29" }
+        cancelled.resume()
+        for _ in 0..<10 { await Task.yield() }
+        check("superseded-cancel", updater.pendingVersion == "29" && updater.readyVersion == "29")
+
+        do {
+            owner.showWindow(nil); owner.window?.makeKeyAndOrderFront(nil)
+            let url = fixture.appendingPathComponent("fixture")
+            owner.submitAddress(url.absoluteString)
+            guard let surface = await committed(owner, url), let home = owner.session.snapshot?.activeSpaceID,
+                  let profile = owner.session.activeProfileID, let selected = owner.session.organization?.selectedTab else {
+                check("fixture", false); return
+            }
+            owner.session.pinTabs([selected.id])
+            owner.session.setPinnedSectionCollapsed(true)
+            await owner.session.waitForPendingCommands()
+            owner.sidebar.updateReady = true // Exercise the card without enabling a synthetic updater feed.
+            owner.sidebar.layoutSubtreeIfNeeded()
+            check("collapsed-card", owner.sidebar.page.disclosure.isCollapsed && !owner.sidebar.updateCard.isHidden
+                  && owner.sidebar.updateCard.frame.maxY <= owner.sidebar.footer.frame.minY)
+            let second = try await environment.store.createSpace(name: "Synthetic second", profileID: profile)
+            owner.session.activateSpace(second)
+            await owner.session.waitForPendingCommands()
+            check("space-card", owner.sidebar.updateReady && owner.session.organization?.isPinnedSectionCollapsed == false)
+            owner.session.activateSpace(home)
+            await owner.session.waitForPendingCommands()
+            check("collapse-return", owner.session.organization?.isPinnedSectionCollapsed == true && owner.session.selectedSurface === surface)
+            let saved = await environment.store.sessionDocument()
+            let restored = try BrowserStore(restoring: BrowserSessionDocument.decode(saved.encoded()))
+            check("collapse-restart", await restored.sessionDocument().organization.spaces.first { $0.spaceID == home }?.isPinnedCollapsed == true)
+
+            let foreign = await environment.store.createProfile(name: "Synthetic destination")
+            let destination = try await environment.store.createSpace(name: "Synthetic foreign Space", profileID: foreign)
+            let little = try await environment.makeQuickWindow(spaceID: home, url: url)
+            application.configureQuickWindow(little)
+            little.showWindow(nil)
+            let original = little.surface
+            application.showQuickWindowSpaces(little)
+            _ = await until(2) { little.spaceChooser?.rows.contains { $0.id == destination.rawValue.uuidString } == true }
+            check("all-profile-chooser", little.spaceChooser?.rows.contains { $0.id == destination.rawValue.uuidString } == true)
+            application.promoteQuickWindow(little, to: destination)
+            await application.waitForQuickWindowCommands()
+            let target = application.windows.windows.values.first { $0.session.snapshot?.activeSpaceID == destination }
+            check("foreign-selection", target?.session.activeProfileID == foreign
+                  && target?.session.selectedSurface?.profileID == foreign && target?.session.selectedSurface !== original)
+            if let target { _ = await committed(target, url) }
+            check("foreign-load", target?.session.selectedSurface?.navigationState.committedURL == url && little.isClosed)
+        } catch { check("interaction", false) }
+    }
+}
