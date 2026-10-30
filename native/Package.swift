@@ -19,7 +19,7 @@ let package = Package(
         .target(name: "BrowserCore"),
         .executableTarget(name: "OrbitLiveSessionTool", dependencies: ["BrowserCore"]),
         // Engine-independent coordinators generic over minimal surface protocols.
-        .target(name: "BrowserShell", dependencies: ["BrowserCore"], resources: [.process("Resources"), .copy("Icons")]),
+        .target(name: "BrowserShell", dependencies: ["BrowserCore"], resources: [.process("Resources"), .copy("Icons"), .copy("AppIcons")]),
         // Engine contract: surfaces, delegate events, profiles, capabilities. No engine imports.
         .target(name: "BrowserEngine", dependencies: ["BrowserCore", "BrowserShell"]),
         // Acceptance checks every engine adapter must pass; used by test targets only.

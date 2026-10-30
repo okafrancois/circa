@@ -1619,3 +1619,22 @@
 "Turn “%@” into Space" = "Turn “%@” into Space";
 "Export Space into Folder" = "Export Space into Folder";
 "Turn Folder into Space" = "Turn Folder into Space";
+
+// Application icon choices
+"Bow" = "Bow";
+"Paper" = "Paper";
+"Afterglow" = "Afterglow";
+"Riso" = "Riso";
+"Ink" = "Ink";
+"The default: the sticker on the dark stage." = "The default: the sticker on the dark stage.";
+"The sticker on warm paper." = "The sticker on warm paper.";
+"White bands on the Sunset gradient." = "White bands on the Sunset gradient.";
+"Lit outlines over a night horizon." = "Lit outlines over a night horizon.";
+"White bands on frosted glass." = "White bands on frosted glass.";
+"Two inks printed slightly off register." = "Two inks printed slightly off register.";
+"One colour, paper on ink." = "One colour, paper on ink.";
+"Current icon" = "Current icon";
+"Choose how Orbit looks in the Dock and the Finder." = "Choose how Orbit looks in the Dock and the Finder.";
+"App Icon…" = "App Icon…";
+"Restore Default" = "Restore Default";
+"Use Icon" = "Use Icon";
