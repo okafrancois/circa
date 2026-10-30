@@ -23,6 +23,8 @@ final class SiteSyntheticEngine: BrowserEngine, BrowserSitePermissionAvailabilit
     let capabilities: BrowserEngineCapabilities = [.liveSurfaceTransfer, .audioMuting, .audibleState, .mediaPlaybackState, .mediaCapturePermissions]
     let readiness: Readiness
     var extensionManagement: (any BrowserExtensionManagement)? { extensions }
+    var diagnosticRoot: URL?
+    func diagnosticDataRoot(for profileID: ProfileID) -> URL? { diagnosticRoot }
     var extensions: (any BrowserExtensionHost)?
     var conformanceProbe: (any BrowserEngineConformanceProbe<SiteSyntheticSurface>)? { SiteSyntheticConformanceProbe() }
     private(set) var profiles: [ProfileID: BrowserEngineProfile] = [:]

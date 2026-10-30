@@ -11,6 +11,7 @@ enum BrowserWindowCommands {
                                                pasteboardString: @escaping () -> String? = { NSPasteboard.general.string(forType: .string) }) {
         BrowserSiteCommands.install(in: registry)
         BrowserDailyCommands.install(in: registry)
+        BrowserDiagnosticCommands.install(in: registry)
         BrowserBookmarkCommands.install(in: registry)
         OrbitShellCommands.install(in: registry)
         BrowserSwitcherCommands.install(in: registry)

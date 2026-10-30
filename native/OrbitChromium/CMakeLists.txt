@@ -176,6 +176,7 @@ list(APPEND ORBIT_APP_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/App/EngineComposition
   "${CMAKE_CURRENT_SOURCE_DIR}/App/OrbitSiteSearchProbe.swift"
   "${CMAKE_CURRENT_SOURCE_DIR}/App/OrbitEnginePerformanceProbe.swift"
   "${CMAKE_CURRENT_SOURCE_DIR}/App/OrbitEngineSecurityProbe.swift"
+  "${CMAKE_CURRENT_SOURCE_DIR}/App/OrbitR14ShellProbe.swift"
   "${CMAKE_CURRENT_SOURCE_DIR}/App/OrbitPermissionsProbe.swift"
   "${CMAKE_CURRENT_SOURCE_DIR}/App/OrbitNavigationHistoryProbe.swift"
   "${CMAKE_CURRENT_SOURCE_DIR}/App/OrbitSecurityPillProbe.swift"

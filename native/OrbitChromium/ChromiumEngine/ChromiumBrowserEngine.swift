@@ -202,6 +202,11 @@ public final class ChromiumBrowserEngine: BrowserPrivateEngine {
         }
     }
 
+    public func diagnosticDataRoot(for profileID: ProfileID) -> URL? {
+        guard !isShutDown, persistence == .persistent, !removingProfiles.contains(profileID) else { return nil }
+        return URL(fileURLWithPath: profileDirectory(profileID), isDirectory: true)
+    }
+
     private func profileDirectory(_ profileID: ProfileID) -> String {
         runtime.rootCachePath + "/profile-" + profileID.rawValue.uuidString.lowercased()
     }

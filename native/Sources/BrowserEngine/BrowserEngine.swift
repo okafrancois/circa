@@ -145,6 +145,9 @@ public protocol BrowserEngine: AnyObject {
     /// Resolves, creating on first use, the isolated store of a profile.
     func profile(for profileID: ProfileID) -> BrowserEngineProfile
 
+    /// Persistent engine-owned directory for local diagnostics; nil for private/unsupported stores.
+    func diagnosticDataRoot(for profileID: ProfileID) -> URL?
+
     /// Creates a live surface in the profile's store, bound to `delegate` (held weakly).
     /// Creation never loads: the surface delivers no delegate event and starts no request until
     /// the caller's first command. The caller records ownership and observers, sets `placement`,
@@ -209,6 +212,7 @@ public protocol BrowserEngine: AnyObject {
 }
 
 public extension BrowserEngine {
+    func diagnosticDataRoot(for profileID: ProfileID) -> URL? { nil }
     var passwordStore: (any BrowserPasswordStore)? { nil }
     var boosts: (any BrowserBoostHost)? { nil }
     var extensionManagement: (any BrowserExtensionManagement)? { nil }

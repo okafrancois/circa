@@ -299,7 +299,7 @@ struct NativeCommandTests {
         // + local Share and page-context Share (2), sidebar tab navigation (4), Select Space 1–9 (9).
         let implemented = system.registry.definitions.filter { system.registry.isImplemented($0.id) }.map(\.id.rawValue)
         // Includes 24 additional native responder actions, Network Inspector, Exit, Media and two support actions.
-        #expect(implemented.count == 228, "\(implemented.count): \(implemented.sorted())")
+        #expect(implemented.count == 231, "\(implemented.count): \(implemented.sorted())")
         #expect(system.registry.isImplemented(.cycleExtensions))
         #expect(system.registry.isImplemented(.checkForUpdates))
         #expect(system.registry.isImplemented(.toggleDeveloperMode))

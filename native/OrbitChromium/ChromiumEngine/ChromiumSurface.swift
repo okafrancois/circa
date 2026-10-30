@@ -163,7 +163,7 @@ public final class ChromiumSurface: BrowserEngineSurface {
     var secureInputHostHidden = false
     public private(set) var isDisposed = false
     private var paintActivationID: UInt64 = 0
-    private lazy var nativeServices = ChromiumNativePageServices(token: token)
+    private lazy var nativeServices = ChromiumNativePageServices(token: token, dataRoot: engine?.diagnosticDataRoot(for: profileID))
     public var nativePageServices: (any BrowserNativePageServices)? {
         guard !isDisposed, ACRNativePageServicesVersion() >= 14 else { return nil }
         return nativeServices
@@ -803,7 +803,6 @@ public final class ChromiumSurface: BrowserEngineSurface {
         zoomsAwaitingCommit.removeAll()
         pendingMute = nil
         keyReceipts.removeAll()
-        nativeServices.close()
         releasePageRequests()
         let neverCreated = awaitsHostedCreation
         awaitsHostedCreation = false
@@ -819,7 +818,9 @@ public final class ChromiumSurface: BrowserEngineSurface {
         hostView.removeFromSuperview()
         // A download belongs to the application, not to this tab. Retain its detached native
         // browser until the last terminal callback, otherwise CEF silently drops those updates.
-        if downloads.isEmpty { _ = ACRCloseSurface(token) }
+        nativeServices.closeAfterTracing { [self] in
+            if downloads.isEmpty { _ = ACRCloseSurface(token) }
+        }
         if !isBrowserCreated && !isCreationPending { isTeardownComplete = true }
     }
 
