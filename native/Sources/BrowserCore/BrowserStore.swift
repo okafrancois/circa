@@ -245,6 +245,8 @@ public actor BrowserStore {
     }
 
     public func sessionDocument() -> BrowserSessionDocument {
+        let perfStart = BrowserPerformance.begin()
+        defer { BrowserPerformance.end(.sessionDocument, since: perfStart) }
         let savedWindows = windows.values.sorted { $0.id.rawValue.uuidString < $1.id.rawValue.uuidString }.map { window in
             let spaceIDs = Set(window.occurrenceIDsBySpace.keys)
                 .union(window.selectedOccurrenceBySpace.keys).union([window.activeSpaceID])
@@ -411,6 +413,8 @@ public actor BrowserStore {
     }
 
     public func captureWindowState(in windowID: WindowID) throws -> BrowserWindowState {
+        let perfStart = BrowserPerformance.begin()
+        defer { BrowserPerformance.end(.storeCapture, since: perfStart) }
         let context = try captureContext(in: windowID)
         let snapshot = try snapshot(of: windowID)
         guard let window = windows[windowID] else { throw BrowserStoreError.windowMissing }
@@ -481,6 +485,8 @@ public actor BrowserStore {
     /// Creates a tab in the captured window and Space. Background creation leaves selection unchanged.
     @discardableResult
     public func openTab(url: URL, from context: BrowserContext, activate: Bool) throws -> TabOccurrenceID {
+        let perfStart = BrowserPerformance.begin()
+        defer { BrowserPerformance.end(.storeOpen, since: perfStart) }
         guard isCurrent(context), var window = windows[context.windowID] else {
             throw BrowserStoreError.staleContext
         }

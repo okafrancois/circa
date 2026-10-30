@@ -27,6 +27,18 @@ public enum BrowserPerformance {
         case settingsLoaded, iconPreload, iconsLoaded, profilesBegin, profilesReady, environmentReady, updaterStarted
         case windowBegin, windowBuilt, windowReady, windowPresented, windowCommitted, windowInteractive
     }
+    public enum Work: String, Sendable {
+        case commandQueue, storeOpen, storeCapture, organizationPublish, sidebarProjection
+        case sessionInstall, windowRender, nativeBrowser, sessionDocument, sessionSave
+        case storeOpenAwait, storeContextAwait, storeCaptureAwait
+    }
+    public static func begin() -> Double { enabled ? ProcessInfo.processInfo.systemUptime : 0 }
+    public static func end(_ work: Work, since start: Double) {
+        guard enabled else { return }
+        recorder.record(work, start: start, end: ProcessInfo.processInfo.systemUptime)
+    }
+    public static func resetWork() { guard enabled else { return }; recorder.resetWork() }
+    public static var work: [[String: Any]] { recorder.work }
     static let recorder = Recorder()
     public static func count(_ counter: Counter, window: UUID? = nil, amount: Int = 1) {
         guard enabled else { return }
@@ -46,9 +58,19 @@ public enum BrowserPerformance {
 
     final class Recorder: @unchecked Sendable {
         private let lock = NSLock()
+        private var intervals: [(Work, Double, Double)] = []
         private var counts: [String: Int] = [:]
         private var windows: Set<UUID> = []
         private var timestamps: [String: Double] = [:]
+        func record(_ work: Work, start: Double, end: Double) {
+            lock.lock(); defer { lock.unlock() }
+            if intervals.count < 20000 { intervals.append((work, start, end)) }
+        }
+        func resetWork() { lock.lock(); defer { lock.unlock() }; intervals.removeAll(keepingCapacity: true) }
+        var work: [[String: Any]] {
+            lock.lock(); defer { lock.unlock() }
+            return intervals.map { ["work": $0.0.rawValue, "start": $0.1, "end": $0.2] }
+        }
         func count(_ counter: Counter, window: UUID? = nil, amount: Int = 1) {
             lock.lock(); defer { lock.unlock() }
             counts[counter.rawValue, default: 0] += amount

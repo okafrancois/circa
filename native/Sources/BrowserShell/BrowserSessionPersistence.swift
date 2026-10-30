@@ -92,6 +92,8 @@ public actor BrowserSessionPersistence {
     /// a newer request. Callers must observe errors rather than silently dropping failed saves.
     @discardableResult
     public func saveCurrentState(from store: BrowserStore) async throws -> SaveResult {
+        let perfStart = BrowserPerformance.begin()
+        defer { BrowserPerformance.end(.sessionSave, since: perfStart) }
         switch state {
         case .requiresLoad: throw PersistenceError.loadRequired
         case .loading: throw PersistenceError.loadInProgress

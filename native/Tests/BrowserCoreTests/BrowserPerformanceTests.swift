@@ -30,4 +30,17 @@ import Testing
         #expect(recorder.counters["windowsRefreshed"] == 0)
         #expect(recorder.phases["main"] == first)
     }
+    @Test func boundedWorkIntervalsResetIndependentlyOfStartup() {
+        let recorder = BrowserPerformance.Recorder()
+        recorder.mark(.main)
+        for _ in 0..<20001 { recorder.record(.storeCapture, start: 10, end: 10.125) }
+        #expect(recorder.work.count == 20000)
+        #expect(recorder.work.first?["work"] as? String == "storeCapture")
+        #expect(recorder.work.first?["start"] as? Double == 10)
+        #expect(recorder.work.first?["end"] as? Double == 10.125)
+        recorder.resetWork()
+        #expect(recorder.work.isEmpty)
+        #expect(recorder.phases["main"] != nil)
+    }
+
 }
