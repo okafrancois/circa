@@ -102,7 +102,7 @@ struct SidebarSpaceIndependentReviewTests {
         menu.handle(#selector(NSResponder.insertNewline(_:)))
         #expect(performed == [.moveRight])
         let rows = menu.view.subviews.compactMap { $0 as? CreationMenuRow }
-        #expect(rows.count == 6)
+        #expect(rows.count == 7)
         #expect(rows[3].accessibilityRole() == .menuItem)
         #expect(!rows[3].accessibilityPerformPress())
         #expect(rows[0].accessibilityPerformPress())

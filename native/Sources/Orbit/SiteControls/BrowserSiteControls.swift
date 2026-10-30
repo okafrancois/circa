@@ -727,7 +727,7 @@ extension BrowserSiteControls {
                 rows.append(SiteControlButton(siteText("extensions.remove", "Remove…"), identifier: "extension-remove-" + item.id) { [weak self, weak surface] in
                     guard valid(), let self, let surface, let window = self.owner?.window else { return }
                     self.panel.close()
-                    let alert = NSAlert()
+                    let alert = OrbitFloatingMaterial.alert()
                     alert.messageText = String(format: siteText("extensions.removeConfirm", "Remove %@?"), item.name)
                     alert.informativeText = siteText("extensions.removeInfo", "This removes the extension from this profile.")
                     alert.addButton(withTitle: siteText("extensions.removeAccept", "Remove"))

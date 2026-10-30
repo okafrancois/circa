@@ -1,17 +1,22 @@
 # Orbit application identity
 
-`Orbit.svg` follows the App icon section in `docs/brand/orbit/orbit-da.html`:
-an open Halo/Dawn/Sun ring and warm white satellite on orbital ink.
-The tile has 23% corner radii, 72% mark scale and a transparent outer margin.
+`Orbit.icns` is the Bow default, copied unchanged from
+`native/Sources/BrowserShell/AppIcons/stage.icns`. Run
+`python3 scripts/orbit-app-icon.py` to synchronize it. CMake, synthetic packaging,
+release packaging and the notification helper all use this same file and
+`CFBundleIconFile = Orbit.icns`. The release DMG contains the packaged application;
+it has no separate icon artwork or background image.
 
-Regenerate `Orbit.icns` and the review PNG with `python3 scripts/orbit-app-icon.py`.
-The macOS CoreSVG renderer draws the vector directly at each resolution.
-The ICNS contains 16, 32, 128, 256 and 512 point representations at both scales
-(including 64px and 1024px Retina images). The generator checks decoded pixels.
+The seven application icon choices ship as complete ICNS files and chooser PNGs.
+Their ICNS representations preserve the full master at 128 pixels and above,
+the medium master at 32–64 pixels, and the tiny master at 16 pixels.
 
-Production identity is defined in `native/Sources/BrowserCore/ProductIdentity.swift`.
-CMake and Python packaging read those literals. The executable and Swift modules
-retain their internal Orbit names. The stable development signing certificate is
-preserved; production builds use the new bundle identifier.
-
-`Orbit.icns` and its provenance remain historical Orbit assets, unused by Orbit packaging.
+The selected identifier is stored in application preferences. On every launch,
+including the first launch after an automatic update replaces the bundle, Orbit
+sets the running Dock image and tries to set the bundle's Finder icon using public
+AppKit APIs. If the bundle cannot be changed, the Dock choice and preference still
+work; Finder keeps the icon it can read. A later launch retries the bundle write.
+Restore Default removes the preference and requests removal of the custom Finder
+icon, exposing the shipped Bow icon. Removal can also fail on a non-writable bundle;
+the running Dock nevertheless returns to Bow. Finder may refresh its cached icon
+asynchronously. Application resources and code signatures are never rewritten.

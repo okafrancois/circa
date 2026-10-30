@@ -132,7 +132,7 @@ struct PermissionPromptTests {
                     #expect(painted.minX > pixels.minX && painted.maxX < pixels.maxX)
                     #expect(painted.minY > pixels.minY && painted.maxY < pixels.maxY)
                     #expect(abs(painted.minX - pixels.minX - (pixels.maxX - painted.maxX)) <= 1)
-                    #expect(abs(painted.minY - pixels.minY - (pixels.maxY - painted.maxY)) <= 1)
+                    #expect(abs(painted.minY - pixels.minY - (pixels.maxY - painted.maxY)) <= 1, "\(hint), \(appearance), \(scale)x")
                 }
             }
         }

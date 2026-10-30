@@ -1,4 +1,5 @@
 import AppKit
+import BrowserShell
 import BrowserCore
 
 @MainActor
@@ -17,8 +18,8 @@ final class SitePermissionPromptView: NSView {
         symbolName = Self.symbol(for: permissions)
         badge = SitePermissionBadge(symbol: symbolName)
         message = NSTextField(wrappingLabelWithString: Self.message(origin: origin, permissions: permissions))
-        message.font = .systemFont(ofSize: 14, weight: .medium)
-        message.textColor = .labelColor
+        message.font = BrandTextStyle.ui.font(size: 14, weight: .medium)
+        message.textColor = OrbitFloatingMaterial.body
         message.preferredMaxLayoutWidth = 176
         message.cell?.wraps = true
         message.cell?.isScrollable = false
@@ -85,7 +86,7 @@ private final class SitePermissionBadge: NSView {
 
     init(symbol: String) {
         icon = NSImageView(image: OrbitGlyph.symbol(symbol, pointSize: 16) ?? NSImage())
-        icon.contentTintColor = .labelColor
+        icon.contentTintColor = OrbitFloatingMaterial.body
         super.init(frame: NSRect(x: 0, y: 0, width: 32, height: 32))
         addSubview(icon)
         setAccessibilityHidden(true)
@@ -97,7 +98,7 @@ private final class SitePermissionBadge: NSView {
     }
     override func draw(_ dirtyRect: NSRect) {
         let circle = NSBezierPath(ovalIn: bounds)
-        NSColor.labelColor.withAlphaComponent(0.04).setFill()
+        OrbitFloatingMaterial.body.withAlphaComponent(0.04).setFill()
         circle.fill()
         NSGraphicsContext.saveGraphicsState()
         circle.addClip()
@@ -117,7 +118,7 @@ private final class SitePermissionActionButton: NSButton {
         self.onPress = onPress
         super.init(frame: .zero)
         self.title = title
-        font = .systemFont(ofSize: 15, weight: .semibold)
+        font = BrandTextStyle.ui.font(size: 15, weight: .semibold)
         isBordered = false
         setButtonType(.momentaryPushIn)
         target = self
@@ -137,7 +138,7 @@ private final class SitePermissionActionButton: NSButton {
     override func mouseEntered(with event: NSEvent) { hovered = true; needsDisplay = true }
     override func mouseExited(with event: NSEvent) { hovered = false; needsDisplay = true }
     override func draw(_ dirtyRect: NSRect) {
-        NSColor.labelColor.withAlphaComponent(isHighlighted ? 0.18 : hovered ? 0.12 : 0.06).setFill()
+        OrbitFloatingMaterial.body.withAlphaComponent(isHighlighted ? 0.18 : hovered ? 0.12 : 0.06).setFill()
         NSBezierPath(roundedRect: bounds, xRadius: 6, yRadius: 6).fill()
         super.draw(dirtyRect)
     }

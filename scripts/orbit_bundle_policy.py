@@ -1,5 +1,6 @@
 """Strict product bundle layout checks, shared by unsigned CMake staging and signing."""
 import argparse
+import json
 from pathlib import Path
 import plistlib
 import shutil
@@ -10,6 +11,16 @@ ORBIT_RESOURCE_FILES = frozenset({
     'README.md', 'sign-color.pdf', 'sign-color.svg',
     'vector-provenance.json', 'wordmark.pdf', 'wordmark.svg',
 })
+ICON_CATALOG = json.loads((Path(__file__).resolve().parents[1] /
+    'native/Sources/BrowserShell/Icons/catalog.json').read_text())
+ICON_RESOURCE_FILES = frozenset({'catalog.json'} | {
+    f'template/{size}/{name}.pdf' for size in (16, 20, 24) for name in ICON_CATALOG['template']
+} | {f'color/24/{name}.svg' for name in ICON_CATALOG['color']})
+ICON_RESOURCE_DIRECTORIES = frozenset(str(parent) for name in ICON_RESOURCE_FILES
+    for parent in Path(name).parents if str(parent) != '.') | {'', 'template', 'color'}
+BRAND_FONT_FILES = frozenset({'intertight.ttf', 'geistmono.ttf', 'gloock.ttf', 'intertight-OFL.txt', 'geistmono-OFL.txt', 'gloock-OFL.txt', 'mark.pdf'})
+APP_ICON_IDS = ('stage', 'paper', 'sunset', 'afterglow', 'frost', 'riso', 'ink')
+APP_ICON_FILES = frozenset(f'{icon}.{ext}' for icon in APP_ICON_IDS for ext in ('icns', 'png'))
 BUILD_SUFFIXES = {'.d', '.o', '.a', '.swiftmodule', '.swiftdoc', '.swiftsourceinfo', '.dia', '.dsym'}
 
 
@@ -52,6 +63,8 @@ def validate_bundle_contents(bundle):
     bundle = Path(bundle)
     reject_build_artifacts(bundle)
     orbit_directories = set()
+    icon_directories = set()
+    app_icon_directories = set()
     for entry in bundle.rglob('*'):
         relative = entry.relative_to(bundle)
         parts = relative.parts
@@ -80,8 +93,30 @@ def validate_bundle_contents(bundle):
                 localized_file = (len(resource) == 2 and resource[0].endswith('.lproj') and
                                   resource[1] in {'Localizable.strings', 'Localizable.stringsdict'})
                 allowed = allowed or (len(resource) == 1 and resource[0].endswith('.lproj')) or localized_file
+                if resource[:1] == ('AppIcons',):
+                    allowed = len(resource) == 1 or (len(resource) == 2 and resource[1] in APP_ICON_FILES)
+                    if entry.is_symlink() or (len(resource) == 1 and not entry.is_dir()) or (len(resource) == 2 and not entry.is_file()):
+                        raise RuntimeError('Invalid app icon resource type refused: ' + str(relative))
+                    if allowed:
+                        app_icon_directories.add(entry if len(resource) == 1 else entry.parent)
+                if resource[:1] == ('Icons',):
+                    icon = '/'.join(resource[1:])
+                    icon_file = icon in ICON_RESOURCE_FILES
+                    icon_directory = icon in ICON_RESOURCE_DIRECTORIES
+                    allowed = icon_file or icon_directory
+                    if entry.is_symlink() or (icon_file and not entry.is_file()) or (icon_directory and not entry.is_dir()):
+                        raise RuntimeError('Invalid interface icon resource type refused: ' + str(relative))
+                    if allowed:
+                        icon_directories.add(entry.parents[len(resource) - 2] if len(resource) > 1 else entry)
                 if localized_file and (entry.is_symlink() or not entry.is_file()):
                     raise RuntimeError('Invalid shared localization resource type refused: ' + str(relative))
+                font_directory = resource == ('BrandFonts',)
+                font_file = ((len(resource) == 1 and resource[0] in BRAND_FONT_FILES) or
+                             (len(resource) == 2 and resource[0] == 'BrandFonts' and resource[1] in BRAND_FONT_FILES))
+                if font_directory or font_file:
+                    if entry.is_symlink() or (font_directory and not entry.is_dir()) or (font_file and not entry.is_file()):
+                        raise RuntimeError('Invalid onboarding font resource: ' + str(relative))
+                    allowed = True
                 # CMake retains Orbit/; SwiftPM flattens processed resource filenames.
                 # Admit only this exact group, never arbitrary SVG/PDF/JSON/Markdown files.
                 orbit_directory = resource == ('Orbit',)
@@ -129,6 +164,22 @@ def validate_bundle_contents(bundle):
             raise RuntimeError('Unexpected bundle content: ' + str(relative))
         if entry.is_symlink() and (not entry.exists() or not entry.resolve().is_relative_to(bundle.resolve())):
             raise RuntimeError('External or broken bundle symlink refused: ' + str(relative))
+
+    if len(app_icon_directories) > 1:
+        raise RuntimeError('Ambiguous app icon resource layouts refused')
+    for directory in app_icon_directories:
+        for name in sorted(APP_ICON_FILES):
+            resource = directory / name
+            if resource.is_symlink() or not resource.is_file():
+                raise RuntimeError('Missing or invalid required app icon resource: ' + str(resource.relative_to(bundle)))
+
+    if len(icon_directories) > 1:
+        raise RuntimeError('Ambiguous interface icon resource layouts refused')
+    for directory in icon_directories:
+        for name in sorted(ICON_RESOURCE_FILES):
+            resource = directory / name
+            if resource.is_symlink() or not resource.is_file():
+                raise RuntimeError('Missing or invalid required interface icon resource: ' + str(resource.relative_to(bundle)))
 
     # Legacy bundles without Orbit remain valid. Once present, all six resources are required
     # together in one layout; partial, split and duplicate groups cannot silently ship.

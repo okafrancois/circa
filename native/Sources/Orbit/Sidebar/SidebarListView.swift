@@ -148,6 +148,12 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
     }
     private var pendingReveal: PendingIntent?
     private var pendingRename: PendingIntent?
+    private var renameTimer: (any OrbitCancellable)?
+    private var renameGeneration: UInt64 = 0
+    static let creationRenameDelay: TimeInterval = 0.25
+    var scheduleRename: (TimeInterval, @escaping @MainActor () -> Void) -> any OrbitCancellable = {
+        OrbitRunLoopTimer(after: $0, $1)
+    }
     private var contextTargets: Set<BrowserOrganizationNode> = []
     private var isTodayHovered = false { didSet { if isTodayHovered != oldValue { refreshClear() } } }
     private var trackingArea: NSTrackingArea?
@@ -742,6 +748,7 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
     // MARK: Row events
 
     func rowMouseDown(_ row: SidebarListRow, with event: NSEvent) {
+        if renameTimer != nil { cancelRename() }
         window?.makeFirstResponder(self)
         let modifiers = event.modifierFlags.intersection([.command, .shift])
         if event.clickCount == 2, modifiers.isEmpty {
@@ -798,8 +805,18 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
 
 
     /// Starts editing `node`'s title; deferred until its row exists (e.g. a folder just created).
-    func beginRename(_ node: BrowserOrganizationNode) {
+    func beginRename(_ node: BrowserOrganizationNode, after delay: TimeInterval = 0) {
         guard commandsEnabled else { return }
+        renameGeneration &+= 1
+        renameTimer?.cancel(); renameTimer = nil
+        if delay > 0 {
+            let generation = renameGeneration
+            renameTimer = scheduleRename(delay) { [weak self] in
+                guard let self, self.renameGeneration == generation, self.entriesByNode[node] != nil else { return }
+                self.beginRename(node)
+            }
+            return
+        }
         let now = ProcessInfo.processInfo.systemUptime
         pendingRename = PendingIntent(node: node, since: now)
         pendingReveal = PendingIntent(node: node, since: now)
@@ -807,6 +824,8 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
     }
 
     func cancelRename() {
+        renameGeneration &+= 1
+        renameTimer?.cancel(); renameTimer = nil
         pendingRename = nil
         if let renamingNode { rowViews[renamingNode]?.cancelRename() }
     }
@@ -835,13 +854,14 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
         case (36, true), (76, true):
             if let node = host?.listCurrentNode(self) { beginRename(node) } else { super.keyDown(with: event) }
         case (53, true):
+            cancelRename()
             host?.listCancelSelection(self)
         default:
             super.keyDown(with: event)
         }
     }
 
-    override func cancelOperation(_ sender: Any?) { host?.listCancelSelection(self) }
+    override func cancelOperation(_ sender: Any?) { cancelRename(); host?.listCancelSelection(self) }
 
     @objc func undo(_ sender: Any?) { if commandsEnabled { host?.list(self, undo: false, sender: sender) } }
     @objc func redo(_ sender: Any?) { if commandsEnabled { host?.list(self, undo: true, sender: sender) } }
@@ -1167,7 +1187,7 @@ enum SidebarDragImage {
             font = OrbitTokens.Typography.sidebarTabTitle
             let iconSize = Metrics.faviconSize
             let iconRect = NSRect(x: iconX, y: (rect.height - iconSize) / 2, width: iconSize, height: iconSize)
-            if let favicon = item.favicon ?? item.activity.favicon {
+            if let favicon = SpaceIconImages.tabImage(item.customIcon) ?? item.favicon ?? item.activity.favicon {
                 favicon.draw(in: iconRect, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
             } else if let placeholder = OrbitGlyph.faviconPlaceholder {
                 OrbitGlyph.drawTemplate(placeholder, centeredIn: iconRect, tint: accent.icon)

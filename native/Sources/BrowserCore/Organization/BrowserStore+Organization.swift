@@ -134,7 +134,7 @@ extension BrowserStore {
                         pageTitle: entry.pageTitle, customTitle: entry.customTitle, occurrenceID: occurrenceID,
                         isLoadedInThisWindow: live != nil,
                         isSelected: occurrenceID != nil && occurrenceID == selected,
-                        isOpenInAnotherWindow: remote.contains(id), lastActiveAt: entry.lastActiveAt))
+                        isOpenInAnotherWindow: remote.contains(id), lastActiveAt: entry.lastActiveAt, customIcon: entry.customIcon))
                 case let .split(id):
                     guard let split = organization.splits[id] else { return nil }
                     let panes = items(split.tabIDs.map(BrowserOrganizationNode.tab), section: section).compactMap { item -> BrowserOrganizationTabItem? in
@@ -702,6 +702,30 @@ extension BrowserStore {
         return try captureWindowState(in: context.windowID)
     }
 
+    public func changeTabIcon(_ id: TabID, to icon: BrowserSpaceIcon?, from context: BrowserContext) throws -> BrowserWindowState {
+        _ = try organizationWindow(context)
+        _ = try visibleSection(of: .tab(id), in: context)
+        try requireOrdinaryTabs([id])
+        guard icon?.isValid != false else { throw BrowserOrganizationError.invalidIcon }
+        let value = icon == BrowserSpaceIcon.none ? nil : icon
+        try commitOrganization(.changeTabIcon, in: context) { state in
+            state.updateTab(id) { $0.customIcon = value }
+        }
+        return try captureWindowState(in: context.windowID)
+    }
+
+    /// Changes the home destination without discarding the occurrence's current navigation.
+    public func editPinnedURL(_ id: TabID, to url: URL, from context: BrowserContext) throws -> BrowserWindowState {
+        _ = try organizationWindow(context)
+        _ = try visibleSection(of: .tab(id), in: context)
+        try requireOrdinaryTabs([id])
+        guard organization.tabs[id]?.pinnedURL != nil else { throw BrowserOrganizationError.notPinned }
+        try commitOrganization(.editPinnedURL, in: context) { state in
+            state.updateTab(id) { $0.pinnedURL = url }
+        }
+        return try captureWindowState(in: context.windowID)
+    }
+
     /// Updates the web title of an exact occurrence, like `updateDestination(to:from:validating:)`.
     @discardableResult
     public func updatePageTitle(
@@ -994,7 +1018,7 @@ extension BrowserStore {
             do {
                 try next.apply(patch, preconditionsChecked: true)
                 next.normalizeArchivedSpaces()
-                try validateOrganization(next)
+                try next.validate(profiles: Set(profiles.keys), spaces: catalogApplying(patch).mapValues(\.profileID))
             } catch {
                 discarded = true
                 break
@@ -1006,6 +1030,7 @@ extension BrowserStore {
             organization = next
             if undoing { journal.redo.append(replayed) } else { journal.undo.append(replayed) }
             organizationJournals[context.windowID] = journal
+            applyCatalog(patch, in: context.windowID)
             reconcileOccurrences()
             if undoing { restoreWindowEffects(of: record, in: context.windowID) }
             recoverSelections(anchors)
@@ -1033,7 +1058,7 @@ extension BrowserStore {
 
     /// Replays only keys still holding this command’s values and preserves other windows’ live tabs.
     func canReplay(_ patch: BrowserOrganizationPatch, issuedIn windowID: WindowID) -> Bool {
-        guard organization.canApply(patch) else { return false }
+        guard organization.canApply(patch), canApplyCatalog(patch) else { return false }
         let removed = Set(patch.removedTabIDs)
         for (otherID, window) in windows where otherID != windowID {
             let claimed = Set(occurrences(in: window).filter {

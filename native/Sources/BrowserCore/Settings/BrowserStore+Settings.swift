@@ -119,7 +119,7 @@ extension BrowserStore {
 
 extension BrowserOrganizationUndoRecord {
     func touchesSettingsSpace(_ id: SpaceID) -> Bool {
-        if spaceID == id { return true }
+        if spaceID == id || patch.spaceRecords[id] != nil { return true }
         func matches(_ container: BrowserOrganizationContainer?) -> Bool {
             switch container { case .pinned(let candidate)?, .today(let candidate)?: candidate == id; default: false }
         }
