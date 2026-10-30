@@ -98,8 +98,10 @@ struct OrbitIconTests {
     func sourceCoverage() throws {
         let native = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
         let sources = native.appendingPathComponent("Sources/Orbit")
+        // Onboarding keeps its own reviewed artwork, like the empty-state and new-Space illustrations.
         let exclusions: Set<String> = ["SpaceIconImages.swift", "OrbitIcon.swift", "BrowserLibraryEmptyView.swift",
-                                       "BrowserLibraryMediaView.swift", "SidebarNewSpacePageView.swift"]
+                                       "BrowserLibraryMediaView.swift", "SidebarNewSpacePageView.swift",
+                                       "OrbitOnboardingControls.swift", "OrbitOnboardingSyncDiagram.swift"]
         let files = try #require(FileManager.default.enumerator(at: sources, includingPropertiesForKeys: nil))
         for case let file as URL in files where file.pathExtension == "swift" {
             let source = try String(contentsOf: file, encoding: .utf8)
