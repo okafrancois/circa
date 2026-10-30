@@ -1,4 +1,5 @@
 import AppKit
+import BrowserShell
 import BrowserEngine
 import QuartzCore
 
@@ -13,7 +14,7 @@ final class BrowserSharingController<Engine: BrowserEngine>: NSObject, NSSharing
     init(owner: BrowserWindowController<Engine>) {
         self.owner = owner
         super.init()
-        button.image = NSImage(systemSymbolName: "square.and.arrow.up", accessibilityDescription: uiText("Share…"))
+        button.image = OrbitIcon.image(sfName: "square.and.arrow.up", pointSize: 16, accessibilityDescription: uiText("Share…"))
         button.toolTip = uiText("Share…")
         button.onPress = { [weak self] in self?.showMenu() }
     }
@@ -73,12 +74,12 @@ final class BrowserSharingController<Engine: BrowserEngine>: NSObject, NSSharing
         let menu = NSMenu()
         let copy = NSMenuItem(title: uiText("Copy Link"), action: #selector(copySelectedLink), keyEquivalent: "C")
         copy.keyEquivalentModifierMask = [.command]
-        copy.image = NSImage(systemSymbolName: "link", accessibilityDescription: nil)
+        copy.image = OrbitIcon.image(sfName: "link", pointSize: 16, accessibilityDescription: nil)
         copy.target = self
         menu.addItem(copy)
         menu.addItem(.separator())
         let share = NSMenuItem(title: uiText("Share…"), action: #selector(shareSelectedPage), keyEquivalent: "")
-        share.image = NSImage(systemSymbolName: "square.and.arrow.up", accessibilityDescription: nil)
+        share.image = OrbitIcon.image(sfName: "square.and.arrow.up", pointSize: 16, accessibilityDescription: nil)
         share.target = self
         menu.addItem(share)
         menu.popUp(positioning: nil, at: NSPoint(x: 0, y: button.bounds.minY), in: button)
@@ -100,10 +101,10 @@ final class BrowserCopiedToast: NSView {
         layer?.backgroundColor = NSColor(srgbRed: 0.12, green: 0.13, blue: 0.17, alpha: 0.96).cgColor
         layer?.cornerRadius = 12
         layer?.masksToBounds = true
-        let icon = NSImageView(image: NSImage(systemSymbolName: "checkmark", accessibilityDescription: nil)!)
+        let icon = NSImageView(image: OrbitIcon.image(sfName: "checkmark", pointSize: 16, accessibilityDescription: nil)!)
         icon.contentTintColor = .white
         let label = NSTextField(labelWithString: uiText("Copied"))
-        label.font = .systemFont(ofSize: 13, weight: .medium)
+        label.font = BrandTextStyle.ui.font(size: 13, weight: .medium)
         label.textColor = .white
         let row = NSStackView(views: [icon, label])
         row.spacing = 7

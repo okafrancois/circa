@@ -950,7 +950,7 @@ extension NativeWebKitTests.NativeSettingsTests {
             let image = try #require(OrbitSecondaryIdentity.image(name))
             #expect(image.representations.contains { $0 is NSPDFImageRep })
         }
-        for section in [BrowserSettingsSection.general, .appearance, .about, .profiles, .spaces, .shortcuts, .links, .icon, .privacy, .advanced] {
+        for section in [BrowserSettingsSection.general, .appearance, .about, .profiles, .spaces, .shortcuts, .links, .privacy, .advanced] {
             model.settingsSection = section
             window.contentViewController = NSHostingController(rootView: BrowserSettingsView(model: model, runtime: model.runtime))
             let view = try #require(window.contentView)
@@ -975,33 +975,34 @@ extension NativeWebKitTests.NativeSettingsTests {
         let hosting = try #require(window.contentViewController)
         let toolbar = try #require(window.toolbar)
         #expect(window.toolbarStyle == .preference)
+        #expect(window.titleVisibility == .hidden && window.isOpaque)
         #expect(window.titlebarSeparatorStyle == .line)
-        #expect(toolbar.displayMode == .iconAndLabel)
+        #expect(toolbar.displayMode == .iconOnly)
         #expect(!toolbar.allowsUserCustomization && !toolbar.autosavesConfiguration)
         let identifiers = BrowserSettingsSection.allCases.map(\.toolbarIdentifier)
         #expect(toolbar.items.map(\.itemIdentifier) == identifiers)
-        #expect(controller.toolbarSelectableItemIdentifiers(toolbar) == identifiers)
+        #expect(controller.toolbarSelectableItemIdentifiers(toolbar).isEmpty)
         for (section, item) in zip(BrowserSettingsSection.allCases, toolbar.items) {
-            #expect(item.view == nil) // Native toolbar items, not custom SwiftUI button views.
-            #expect(item.label == section.title && item.image != nil)
+            #expect(item.view is BrowserSettingsToolbarButton)
+            #expect(item.label == section.toolbarTitle && item.image != nil)
             #expect(item.image?.accessibilityDescription == section.title)
             #expect(item.itemIdentifier.rawValue == "settings-category-" + section.rawValue)
             #expect(NSApplication.shared.sendAction(try #require(item.action), to: item.target, from: item))
             #expect(model.settingsSection == section)
-            #expect(toolbar.selectedItemIdentifier == section.toolbarIdentifier)
+            #expect(controller.selectedToolbarIdentifier == section.toolbarIdentifier)
             #expect(item.menuFormRepresentation?.state == .on)
             #expect(window.contentViewController === hosting)
         }
         model.settingsSection = .profiles
         await withCheckedContinuation { continuation in DispatchQueue.main.async { continuation.resume() } }
-        #expect(toolbar.selectedItemIdentifier == BrowserSettingsSection.profiles.toolbarIdentifier)
+        #expect(controller.selectedToolbarIdentifier == BrowserSettingsSection.profiles.toolbarIdentifier)
         await model.reload()
         window.close()
         // The application retains this controller on Close; no show/order call is needed
         // to exercise the same reopen path and retained selection.
         _ = controller.window
         #expect(model.settingsSection == .profiles)
-        #expect(toolbar.selectedItemIdentifier == BrowserSettingsSection.profiles.toolbarIdentifier)
+        #expect(controller.selectedToolbarIdentifier == BrowserSettingsSection.profiles.toolbarIdentifier)
         #expect(!window.isVisible)
     }
 
@@ -1024,7 +1025,7 @@ extension NativeWebKitTests.NativeSettingsTests {
                 #expect(menu.title == section.title)
                 #expect(menu.keyEquivalent == String(index + 1) && menu.keyEquivalentModifierMask == .command)
                 #expect(NSApplication.shared.sendAction(try #require(menu.action), to: menu.target, from: menu))
-                #expect(model.settingsSection == section && toolbar.selectedItemIdentifier == section.toolbarIdentifier)
+                #expect(model.settingsSection == section && controller.selectedToolbarIdentifier == section.toolbarIdentifier)
                 window.contentView?.layoutSubtreeIfNeeded()
                 #expect(window.contentViewController === hosting)
                 #expect(try #require(window.contentView).bounds.width <= size.width + 1)
@@ -1075,7 +1076,7 @@ extension NativeWebKitTests.NativeSettingsTests {
         let general = try #require(window.toolbar?.items.first)
         #expect(NSApplication.shared.sendAction(try #require(general.action), to: general.target, from: general))
         #expect(model.settingsSection == .spaces)
-        #expect(window.toolbar?.selectedItemIdentifier == nil)
+        #expect(controller.selectedToolbarIdentifier == nil)
         try await model.updateSpace(space.id) { $0.icon = "🌿" }
         await model.reload()
         #expect(field.currentEditor() === editor && editor.hasMarkedText())
@@ -1266,7 +1267,7 @@ extension NativeWebKitTests.NativeSettingsTests {
     @Test("Settings toolbar contains the public Orbit categories and resizing retains its top edge")
     func orbitSettingsCategoriesAndResize() async throws {
         NSApplication.shared.setActivationPolicy(.prohibited)
-        #expect(BrowserSettingsSection.allCases == [.general, .profiles, .shortcuts, .links, .icon, .advanced])
+        #expect(BrowserSettingsSection.allCases == [.general, .profiles, .shortcuts, .links, .advanced, .about])
         let model = settingsModel(BrowserEnvironment(engine: SettingsFixtureEngine()))
         await model.reload()
         let controller = BrowserSettingsWindowController(model: model)

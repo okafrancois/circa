@@ -1,6 +1,7 @@
 import BrowserCore
 import Combine
 import SwiftUI
+import BrowserShell
 
 /// Composition and intermediate invalid input belong to the draft, never to the persisted file.
 @MainActor
@@ -8,6 +9,7 @@ final class BrowserSettingsIconDraft: ObservableObject {
     @Published var text: String
     @Published private var persisted: BrowserSpaceIcon
     var canSubmit: Bool { BrowserSpaceIcon(legacyIcon: text) != persisted && BrowserSpaceSettings.isValidIcon(text) }
+    var hasEdits: Bool { text != Self.text(persisted) }
     var isValid: Bool { BrowserSpaceSettings.isValidIcon(text) }
     convenience init(icon: String) { self.init(choice: BrowserSpaceIcon(legacyIcon: icon)) }
     init(choice: BrowserSpaceIcon) { text = Self.text(choice); persisted = choice }
@@ -29,14 +31,33 @@ final class BrowserSettingsIconDraft: ObservableObject {
 struct BrowserSettingsIconEditor: View {
     let choice: BrowserSpaceIcon
     let save: (String) -> Void
+    let compact: Bool
+    @FocusState private var isFocused: Bool
     @StateObject private var draft: BrowserSettingsIconDraft
-    init(choice: BrowserSpaceIcon, save: @escaping (String) -> Void) {
+    init(choice: BrowserSpaceIcon, compact: Bool = false, save: @escaping (String) -> Void) {
         self.choice = choice
+        self.compact = compact
         self.save = save
         _draft = StateObject(wrappedValue: BrowserSettingsIconDraft(choice: choice))
     }
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
+          if compact {
+            HStack(spacing: 6) {
+              if choice != .none, draft.text.isEmpty {
+                Menu {
+                    Button(uiText("Clear Icon")) { save("") }
+                } label: { BrowserSettingsIconPreview(choice: choice).frame(width: 20, height: 20) }
+                    .menuStyle(.borderlessButton).frame(width: 30)
+              }
+              TextField(settingsText("spaceIcon", "Icon (one character or emoji)"), text: $draft.text)
+                .textFieldStyle(.roundedBorder).multilineTextAlignment(.center).frame(width: 52, height: 26)
+                .focused($isFocused).onSubmit { if draft.hasEdits { draft.submit(save) } }
+                .onChange(of: isFocused) { _, focused in if !focused && draft.hasEdits { draft.submit(save) } }
+                .accessibilityIdentifier("settings-space-icon")
+                .help(SpaceIconImages.label(choice))
+            }
+          } else {
             HStack {
                 BrowserSettingsIconPreview(choice: choice).frame(width: 28, height: 28)
                 Text(SpaceIconImages.label(choice))
@@ -49,9 +70,10 @@ struct BrowserSettingsIconEditor: View {
                     .accessibilityIdentifier("settings-space-icon")
                 Button(settingsText("applyIcon", "Apply")) { draft.submit(save) }.disabled(!draft.canSubmit)
             }
+          }
             if !draft.isValid {
                 Text(settingsText("invalidIcon", "Choose a single character or emoji for the Space icon."))
-                    .font(.system(size: 12)).foregroundStyle(.secondary)
+                    .font(Font(BrandFonts.ui(12))).foregroundStyle(.secondary)
             }
         }.onChange(of: choice) { _, choice in draft.receivePersisted(choice) }
     }

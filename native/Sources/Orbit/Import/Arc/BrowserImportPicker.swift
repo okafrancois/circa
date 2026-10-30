@@ -56,7 +56,7 @@ private final class BrowserImportSourcePopup: NSPopUpButton, NSMenuDelegate {
 @MainActor
 final class BrowserImportPicker {
     func choose(_ choices: [BrowserImportChoice], exportProfile: Bool = false) -> BrowserImportChoice? {
-        let alert = NSAlert()
+        let alert = OrbitFloatingMaterial.alert()
         alert.messageText = uiText("Import from Another Browser")
         if choices.isEmpty {
             alert.informativeText = uiText("No supported browsers were detected. Install a supported browser, then try again.")
@@ -159,7 +159,7 @@ final class BrowserImportPicker {
     }
 
     func passwordCSVChoice() -> Int {
-        let alert = NSAlert()
+        let alert = OrbitFloatingMaterial.alert()
         alert.messageText = uiText("Include Exported Passwords?")
         alert.informativeText = uiText("Orbit cannot read Firefox or Zen passwords directly. Select an exported logins CSV, or continue with the other available data.")
         alert.addButton(withTitle: uiText("Choose Password CSV…"))
@@ -169,14 +169,14 @@ final class BrowserImportPicker {
     }
 
     func confirm(title: String, message: String, button: String) -> Bool {
-        let alert = NSAlert()
+        let alert = OrbitFloatingMaterial.alert()
         alert.messageText = title; alert.informativeText = message
         alert.addButton(withTitle: button); alert.addButton(withTitle: uiText("Cancel"))
         return alert.runModal() == .alertFirstButtonReturn
     }
 
     func failure(_ error: any Error) {
-        let alert = NSAlert()
+        let alert = OrbitFloatingMaterial.alert()
         alert.alertStyle = .warning
         alert.messageText = uiText("Browser Import Could Not Be Completed")
         alert.informativeText = BrowserImportText.failure(error)

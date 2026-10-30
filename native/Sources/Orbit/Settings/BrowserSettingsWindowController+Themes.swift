@@ -45,12 +45,27 @@ struct BrowserSettingsThemeSwatch: View {
     let theme: BrowserSpaceTheme?
 
     var body: some View {
-        let stops = (theme ?? BrowserSpaceThemePresets.default).light.stops
-        Circle()
-            .fill(LinearGradient(colors: stops.map { Color(nsColor: OrbitSpaceThemes.color($0)) },
-                                 startPoint: .topLeading, endPoint: .bottomTrailing))
-            .overlay(Circle().strokeBorder(Color.primary.opacity(0.15), lineWidth: 1))
+        BrowserSettingsThemeGradient(theme: theme)
+            .clipShape(Circle())
             .frame(width: 18, height: 18)
             .accessibilityHidden(true)
+    }
+}
+
+/// Uses the stored angle and stop locations at the actual preview aspect ratio.
+struct BrowserSettingsThemeGradient: View {
+    let theme: BrowserSpaceTheme?
+    var body: some View {
+        GeometryReader { geometry in
+            let gradient = (theme ?? BrowserSpaceThemePresets.default).light
+            let angle = gradient.angleDegrees * .pi / 180
+            let width = max(1, geometry.size.width), height = max(1, geometry.size.height)
+            let length = abs(width * cos(angle)) + abs(height * sin(angle))
+            let dx = cos(angle) * length / width / 2, dy = sin(angle) * length / height / 2
+            LinearGradient(stops: gradient.stops.enumerated().map { index, color in
+                .init(color: Color(nsColor: OrbitSpaceThemes.color(color)),
+                      location: gradient.locations?[index] ?? Double(index) / Double(max(1, gradient.stops.count - 1)))
+            }, startPoint: UnitPoint(x: 0.5 - dx, y: 0.5 - dy), endPoint: UnitPoint(x: 0.5 + dx, y: 0.5 + dy))
+        }
     }
 }

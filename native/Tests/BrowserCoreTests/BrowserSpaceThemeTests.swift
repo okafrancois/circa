@@ -310,6 +310,7 @@ struct BrowserSpaceThemeImportTests {
         {"style":{"basicColor":{"_0":{"r":1.4,"g":0.5,"b":0,"alpha":1}}},"windowAppearance":"light"}
         """
         let basic = try #require(ArcSpaceThemeImport.theme(for: appearance(flat)))
+        #expect(!basic.frost)
         #expect(basic.colors == [BrowserThemeColor(red: 1, green: 0.5, blue: 0)] && basic.mode == .light)
         let palette = try #require(ArcSpaceThemeImport.theme(for: appearance(#"{"primaryColorPalette":{}}"#, hex: "#336699")))
         #expect(palette.colors == [BrowserThemeColor(hex: 0x336699)] && palette.mode == .automatic)

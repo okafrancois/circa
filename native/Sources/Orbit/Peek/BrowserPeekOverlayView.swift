@@ -1,4 +1,5 @@
 import AppKit
+import BrowserShell
 import QuartzCore
 
 /// The Peek overlay above the whole browser window: a dimming scrim and a floating card made of a
@@ -532,6 +533,7 @@ final class BrowserPeekToolbarView: NSView {
     init() {
         super.init(frame: .zero)
         wantsLayer = true
+        addressLabel.font = BrandTextStyle.ui.font(size: 13)
         addressLabel.setAccessibilityIdentifier("peek-address")
         addressLabel.isHidden = true
         addSubview(addressLabel)
@@ -578,7 +580,7 @@ final class BrowserPeekToolbarButton: NSButton {
 
     init(symbol: String, label: String, identifier: String) {
         super.init(frame: .zero)
-        image = NSImage(systemSymbolName: symbol, accessibilityDescription: label)
+        image = OrbitIcon.image(sfName: symbol, pointSize: OrbitTokens.Metrics.Peek.controlGlyphSize, accessibilityDescription: label)
         imagePosition = .imageOnly
         isBordered = false
         bezelStyle = .regularSquare

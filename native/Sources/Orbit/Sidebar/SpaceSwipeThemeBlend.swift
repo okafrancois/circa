@@ -35,6 +35,7 @@ struct SpaceSwipeThemeBlend {
         }
         var result = source
         result.model = nil
+        result.frostAmount = source.frostAmount + (destination.frostAmount - source.frostAmount) * p
         result.stops = (0..<3).map { index in
             let light = blend(sourceLight[index], targetLight[index])
             let dark = blend(sourceDark[index], targetDark[index])
