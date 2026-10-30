@@ -127,6 +127,7 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
             // Keep the session usable and leave unreadable/future history untouched.
             environment.onPersistenceError?(error)
         }
+        environment.downloads.preferencesProvider = { [weak environment] in environment?.settings.document.downloads ?? .init() }
         environment.downloads.onHistoryError = { [weak environment] in environment?.onPersistenceError?($0) }
         environment.profileRemovalJournal = removals
         do {
@@ -229,6 +230,7 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
                 self?.catalogDidChange(await store.catalogSnapshot())
             }
         }
+        downloads.preferencesProvider = { [weak self] in self?.settings.document.downloads ?? .init() }
         settings.onChange = { [weak self] in self?.settingsDidChange() }
         rescue.onRescue = { [weak self] _ in self?.rehomeRescuedSurfaces() }
         rescue.onRescueReadinessChange = { [weak self] in self?.rehomeRescuedSurfaces() }

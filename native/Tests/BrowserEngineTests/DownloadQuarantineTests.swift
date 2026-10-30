@@ -17,13 +17,14 @@ struct DownloadQuarantineTests {
     }
 
     @Test("Finalization preserves quarantine, source metadata and bytes, including destination collisions",
-          arguments: [false, true])
-    func stagingAttributes(collision: Bool) throws {
+          arguments: [false, true], [false, true])
+    func stagingAttributes(collision: Bool, automatic: Bool) throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("orbit-quarantine-" + UUID().uuidString)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: false)
         defer { try? FileManager.default.removeItem(at: root) }
         let target = root.appendingPathComponent("fixture.dmg")
-        let staging = try BrowserDownloadStagingFile(destination: target)
+        let selected = automatic ? try #require(BrowserDownloadPaths.uniqueDestination(filename: "fixture.dmg", in: root)) : target
+        let staging = try BrowserDownloadStagingFile(destination: selected)
         let bytes = Data([1, 2, 3, 4])
         try bytes.write(to: staging.file)
         let attributes = [

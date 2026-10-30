@@ -6,7 +6,19 @@ import ChromiumEngine
 extension OrbitSmokeDriver {
     /// Downloads only synthetic loopback fixtures; never opens or reveals the completed files.
     func quarantineScenario(_ environment: OrbitEnvironment, _ owner: OrbitWindowController) async {
-        environment.downloads.destinationProvider = { [runRoot] _, name in runRoot.appendingPathComponent(name) }
+        let folderPath = runRoot.path
+        try? await environment.settings.updateDownloads {
+            $0.folderPath = folderPath
+            $0.asksWhereToSave = false
+        }
+        environment.downloads.saveSheetProvider = { [weak self] _ in
+            self?.check("quarantine.unexpected-save-sheet", false)
+            return nil
+        }
+        check("quarantine.automatic-destination", environment.downloads.destinationProvider == nil)
+        let reopened = try? BrowserSettingsStore(destination: environment.sessionFile?.appendingPathExtension("settings.json"))
+        let saved = await reopened?.snapshot().downloads
+        check("quarantine.preferences-persisted", saved?.folderPath == runRoot.path && saved?.asksWhereToSave == false)
         let source = fixture.appendingPathComponent("source")
         for name in ["fixture.app.zip", "ordinary.txt"] {
             // Each fixture gets a fresh document so Chromium's multiple-download policy

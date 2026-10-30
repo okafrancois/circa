@@ -28,7 +28,7 @@ public final class BrowserDownloadStagingFile {
         guard !discarded, BrowserDownloadPaths.regularFileSize(file) != nil else {
             throw CocoaError(.fileWriteFileExists)
         }
-        for candidate in Self.candidates(for: destination) where BrowserDownloadPaths.isValidDestination(candidate) {
+        for candidate in BrowserDownloadPaths.candidates(for: destination) where BrowserDownloadPaths.isValidDestination(candidate) {
             do {
                 // Same-volume move preserves the engine's quarantine and source metadata;
                 // fails rather than replacing a file created in the meantime.
@@ -40,16 +40,6 @@ public final class BrowserDownloadStagingFile {
             }
         }
         throw CocoaError(.fileWriteFileExists)
-    }
-
-    static func candidates(for destination: URL) -> [URL] {
-        let directory = destination.deletingLastPathComponent()
-        let ext = destination.pathExtension
-        let base = ext.isEmpty ? destination.lastPathComponent : destination.deletingPathExtension().lastPathComponent
-        return [destination] + (1...999).map { index in
-            let name = "\(base) (\(index))"
-            return directory.appendingPathComponent(ext.isEmpty ? name : name + "." + ext)
-        }
     }
 
     public func discard() {

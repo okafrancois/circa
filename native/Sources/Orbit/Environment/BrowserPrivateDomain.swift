@@ -12,11 +12,13 @@ enum BrowserPrivateDomainError: Error, Equatable {
 @MainActor
 final class BrowserPrivateDomainFactory<Engine: BrowserPrivateEngine> {
     private weak var normalEngine: Engine?
+    fileprivate let downloadPreferences: @MainActor () -> BrowserDownloadPreferences
     private let build: @MainActor () async throws -> Engine
     private(set) var quarantinedScopes: [UUID: BrowserPrivateDomainScope<Engine>] = [:]
 
     init(normalEnvironment: BrowserEnvironment<Engine>, build: @escaping @MainActor () async throws -> Engine) {
         normalEngine = normalEnvironment.engine
+        downloadPreferences = { [weak normalEnvironment] in normalEnvironment?.settings.document.downloads ?? .init() }
         self.build = build
         PrivateEngineReservations.markNormal(normalEnvironment.engine)
     }
@@ -105,6 +107,7 @@ final class BrowserPrivateDomainScope<Engine: BrowserPrivateEngine> {
             creation = Task {
                 let engine = try await factory.admittedEngine()
                 let environment = try BrowserEnvironment(memoryOnlyEngine: engine)
+                environment.downloads.preferencesProvider = factory.downloadPreferences
                 let (_, profileID) = try await environment.initialContext.value
                 let candidate = Context(environment: environment, profileID: profileID)
                 // Retain failed initialization too: cleanup failure must remain retryable.

@@ -1646,3 +1646,9 @@
 "⌘" = "⌘";
 
 "W" = "W";
+
+"Save downloads to" = "Save downloads to";
+"Ask where to save each file" = "Ask where to save each file";
+"Orbit can’t save to the download folder. It may be missing or not writable. Choose another location." = "Orbit can’t save to the download folder. It may be missing or not writable. Choose another location.";
+"Manage your default search engine and Auto-Archive in Profile Settings." = "Manage your default search engine and Auto-Archive in Profile Settings.";
+"Languages and site settings" = "Languages and site settings";

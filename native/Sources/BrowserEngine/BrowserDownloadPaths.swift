@@ -26,6 +26,22 @@ public enum BrowserDownloadPaths {
             && directory.boolValue && FileManager.default.isWritableFile(atPath: parent)
     }
 
+    /// Selection does not create a file: Chromium annotates its own private staging file.
+    public static func uniqueDestination(filename: String, in folder: URL) -> URL? {
+        candidates(for: folder.appendingPathComponent(suggestedFilename(filename)))
+            .first(where: isValidDestination)
+    }
+
+    static func candidates(for destination: URL) -> [URL] {
+        let directory = destination.deletingLastPathComponent()
+        let ext = destination.pathExtension
+        let base = ext.isEmpty ? destination.lastPathComponent : destination.deletingPathExtension().lastPathComponent
+        return [destination] + (1...999).map { index in
+            let name = "\(base) (\(index))"
+            return directory.appendingPathComponent(ext.isEmpty ? name : name + "." + ext)
+        }
+    }
+
     public static func regularFileSize(_ url: URL) -> Int64? {
         guard url.isFileURL, let attributes = try? FileManager.default.attributesOfItem(atPath: url.path),
               attributes[.type] as? FileAttributeType == .typeRegular else { return nil }
