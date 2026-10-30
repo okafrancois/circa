@@ -23,10 +23,55 @@ struct SitePermissionPolicyTests {
                 prompts += 1
                 return .allowOnce
             }
-            #expect(result == .grant)
+            #expect(result == .grantOnce)
         }
         #expect(prompts == 2)
         #expect(await policy.store.setting(for: .camera, origin: origin, profileID: profile) == .ask)
+    }
+
+    @Test("Captured prompt kinds reach the existing UI, including same-origin embedded media",
+          arguments: [BrowserPermissionKind.camera, .microphone, .cameraAndMicrophone, .geolocation,
+                      .notifications, .other("clipboardRead")], [true, false])
+    func auditedKinds(kind: BrowserPermissionKind, mainFrame: Bool) async throws {
+        let policy = BrowserSitePermissionPolicy(store: .ephemeral())
+        var prompts = 0
+        let request = BrowserPermissionRequest(kind: kind, origin: origin.value, isMainFrame: mainFrame)
+        #expect(await policy.resolve(request, profileID: profile, isCurrent: { true }) { _, _ in
+            prompts += 1
+            return .allowOnce
+        } == .grantOnce)
+        #expect(prompts == 1)
+        #expect(await policy.store.configuredOrigins(profileID: profile).isEmpty)
+    }
+
+    @Test("Uncaptured engine prompt kinds remain refused", arguments: (0..<30).filter { ![2, 4, 8, 12, 15].contains($0) })
+    func uncapturedKinds(bit: Int) async throws {
+        let policy = BrowserSitePermissionPolicy(store: .ephemeral())
+        #expect(await policy.resolve(.init(kind: .other("cef-permission-\(UInt32(1) << bit)"), origin: origin.value, isMainFrame: true),
+                                    profileID: profile, isCurrent: { true }) { _, _ in
+            Issue.record("An unrecognized capability reached the prompt")
+            return .alwaysAllow
+        } == .deny)
+    }
+
+    @Test("One-time decisions do not create or alter the permission file or profile settings")
+    func onceLeavesDiskUntouched() async throws {
+        let directory = URL(fileURLWithPath: "/private/tmp/Orbit-Permissions-" + UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let file = directory.appendingPathComponent("permissions.json")
+        let policy = BrowserSitePermissionPolicy(store: try BrowserSitePermissionStore(destination: file))
+        var persisted = 0
+        policy.onPersistedDecision = { _, _, _, _ in persisted += 1 }
+        #expect(await policy.resolve(request, profileID: profile, isCurrent: { true }) { _, _ in .allowOnce } == .grantOnce)
+        #expect(!FileManager.default.fileExists(atPath: file.path))
+        try await policy.store.set(.block, for: [.notifications], origin: origin, profileID: profile)
+        let before = try Data(contentsOf: file)
+        #expect(await policy.resolve(request, profileID: profile, isCurrent: { true }) { _, _ in .allowOnce } == .grantOnce)
+        #expect(try Data(contentsOf: file) == before)
+        #expect(persisted == 0)
+        let reopened = try BrowserSitePermissionStore(destination: file)
+        #expect(await reopened.setting(for: .camera, origin: origin, profileID: profile) == .ask)
+        #expect(await reopened.setting(for: .camera, origin: origin, profileID: ProfileID()) == .ask)
     }
 
     @Test("Always allow and block are applied through later requests without prompting")
@@ -39,7 +84,7 @@ struct SitePermissionPolicyTests {
         try await policy.store.set(.block, for: [.camera], origin: origin, profileID: profile)
         #expect(await policy.resolve(request, profileID: profile, isCurrent: { true }) { _, _ in prompted = true; return .alwaysAllow } == .deny)
         #expect(!prompted)
-        #expect(await policy.resolve(request, profileID: ProfileID(), isCurrent: { true }) { _, _ in .dismiss } == .deny)
+        #expect(await policy.resolve(request, profileID: ProfileID(), isCurrent: { true }) { _, _ in .dismiss } == .dismiss)
     }
 
     @Test("A blocked microphone refuses a combined request despite an allowed camera")
@@ -65,13 +110,12 @@ struct SitePermissionPolicyTests {
         #expect(await policy.store.setting(for: .camera, origin: origin, profileID: profile) == .ask)
     }
 
-    @Test("Unknown kinds third-party frames insecure sites and malformed origins fail closed")
+    @Test("Unknown kinds insecure sites and malformed origins fail closed")
     func unsupportedRequests() async throws {
         let policy = BrowserSitePermissionPolicy(store: try BrowserSitePermissionStore())
         var prompted = false
         for request in [
             BrowserPermissionRequest(kind: .other("unknown"), origin: origin.value, isMainFrame: true),
-            BrowserPermissionRequest(kind: .camera, origin: origin.value, isMainFrame: false),
             BrowserPermissionRequest(kind: .camera, origin: "http://example.test", isMainFrame: true),
             BrowserPermissionRequest(kind: .camera, origin: "https://example.test/private", isMainFrame: true)
         ] {

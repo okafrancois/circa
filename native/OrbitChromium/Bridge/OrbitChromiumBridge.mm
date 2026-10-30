@@ -172,6 +172,7 @@ struct PendingPermission {
   uint32_t mask = 0;
   uint64_t surface = 0;
   uint64_t prompt_id = 0;
+  std::string origin;
 };
 
 struct PendingPolicy {
@@ -1540,7 +1541,7 @@ class Client final : public CefClient, public CefLifeSpanHandler, public CefDisp
                                       CefRefPtr<CefMediaAccessCallback> callback) override {
     if (!g_state || g_state->quitting || !g_state->hosts.contains(token_)) return false;
     const uint64_t id = g_state->next_request++;
-    g_state->permissions[id] = {callback, nullptr, mask, token_, 0};
+    g_state->permissions[id] = {callback, nullptr, mask, token_, 0, origin.ToString()};
     SendPermission(id, origin, mask, frame && frame->IsMain(), 1);
     return true;
   }
@@ -1548,7 +1549,7 @@ class Client final : public CefClient, public CefLifeSpanHandler, public CefDisp
                               uint32_t mask, CefRefPtr<CefPermissionPromptCallback> callback) override {
     if (!g_state || g_state->quitting || !g_state->hosts.contains(token_)) return false;
     const uint64_t id = g_state->next_request++;
-    g_state->permissions[id] = {nullptr, callback, mask, token_, prompt_id};
+    g_state->permissions[id] = {nullptr, callback, mask, token_, prompt_id, origin.ToString()};
     SendPermission(id, origin, mask, 1, 2);
     return true;
   }
@@ -1900,6 +1901,13 @@ class App final : public CefApp, public CefBrowserProcessHandler {
       command->AppendSwitch("allow-running-insecure-content");
       command->AppendSwitchWithValue("host-resolver-rules",
           "MAP mixed.example.invalid 127.0.0.1, MAP * ~NOTFOUND, EXCLUDE 127.0.0.1");
+    }
+    // Fixed fake devices only in the confined permission fixture; no real TCC services.
+    if (g_state && g_state->secure_storage == ACR_SECURE_STORAGE_MOCK &&
+        [[NSBundle mainBundle].bundleIdentifier isEqualToString:@"lab.orbit.orbit.sec-permissions"] &&
+        [[NSBundle mainBundle].infoDictionary[@"OrbitSyntheticBundle"] boolValue] &&
+        [[NSProcessInfo processInfo].arguments containsObject:@"--orbit-permissions-fixture"]) {
+      command->AppendSwitch("use-fake-device-for-media-stream");
     }
     if (g_state && g_state->auth_synthetic) {
       command->RemoveSwitch("load-extension");
@@ -2687,6 +2695,40 @@ extern "C" int32_t ACRResolvePermission(uint64_t request, ACRPermissionDecision 
   if (found == g_state->permissions.end()) return 0;
   const auto pending = found->second;
   g_state->permissions.erase(found);
+  // Transient choices must not train persistent re-grant heuristics or dismissal embargoes.
+  // CEF invokes an already-presented prompt callback synchronously on this UI thread.
+  // Preserve the existing origin metadata, including unrelated capability history.
+  struct TransientMetadata {
+    CefRefPtr<CefRequestContext> context;
+    std::string origin;
+    CefRefPtr<CefValue> blocker, actions, action_pref, prompt_count;
+    ~TransientMetadata() {
+      if (!context) return;
+      context->SetWebsiteSetting(origin, CefString(), CEF_CONTENT_SETTING_TYPE_PERMISSION_AUTOBLOCKER_DATA, blocker);
+      context->SetWebsiteSetting(origin, CefString(), CEF_CONTENT_SETTING_TYPE_PERMISSION_ACTIONS_HISTORY, actions);
+      CefString error;
+      context->SetPreference("profile.content_settings.permission_actions", action_pref, error);
+      context->SetPreference("profile.one_time_permission_prompts_decided_count", prompt_count, error);
+    }
+  } metadata;
+  if (pending.prompt && (decision == ACR_PERMISSION_GRANT_ONCE || decision == ACR_PERMISSION_DEFAULT)) {
+    if (auto* host = g_state->Find(pending.surface); host && host->browser) {
+      metadata.context = host->browser->GetHost()->GetRequestContext();
+      metadata.origin = pending.origin;
+      auto copy = [&](cef_content_setting_types_t type) -> CefRefPtr<CefValue> {
+        auto value = metadata.context->GetWebsiteSetting(metadata.origin, CefString(), type);
+        return value && value->IsValid() && value->GetType() != VTYPE_NULL ? value->Copy() : nullptr;
+      };
+      metadata.blocker = copy(CEF_CONTENT_SETTING_TYPE_PERMISSION_AUTOBLOCKER_DATA);
+      metadata.actions = copy(CEF_CONTENT_SETTING_TYPE_PERMISSION_ACTIONS_HISTORY);
+      metadata.action_pref = metadata.context->GetPreference("profile.content_settings.permission_actions");
+      metadata.prompt_count = metadata.context->GetPreference("profile.one_time_permission_prompts_decided_count");
+      if (metadata.action_pref && metadata.action_pref->GetType() == VTYPE_DICTIONARY &&
+          metadata.action_pref->GetDictionary()->GetSize() == 0) metadata.action_pref = nullptr;
+      if (metadata.prompt_count && metadata.prompt_count->GetType() == VTYPE_INT &&
+          metadata.prompt_count->GetInt() == 0) metadata.prompt_count = nullptr;
+    }
+  }
   if (pending.media) {
     // Default for Alloy is deny; grant only the requested device types.
     if (decision == ACR_PERMISSION_GRANT || decision == ACR_PERMISSION_GRANT_ONCE) pending.media->Continue(pending.mask);

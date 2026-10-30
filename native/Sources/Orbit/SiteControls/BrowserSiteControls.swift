@@ -38,6 +38,8 @@ final class BrowserSiteControls<Engine: BrowserEngine> {
             NSWorkspace.shared.open(url)
         }
     }
+    private var permissionRequestActive = false
+    private var permissionWaiters: [CheckedContinuation<Void, Never>] = []
     private var pendingPermission: ((BrowserSitePermissionChoice) -> Void)?
     /// The document whose request the pending prompt answers.
     private var pendingPermissionSurface: ObjectIdentifier?
@@ -164,7 +166,7 @@ final class BrowserSiteControls<Engine: BrowserEngine> {
     private func isCurrent(_ surface: Surface, generation: UInt64, epoch: UInt64) -> Bool {
         guard let owner else { return false }
         return self.epoch == epoch && !owner.isPreparingForTermination && owner.isSitePermissionTarget(surface)
-            && surface.findDocumentGeneration == generation
+            && !surface.isSuspended && surface.findDocumentGeneration == generation
     }
 
     func request(_ request: BrowserPermissionRequest, from surface: Surface) async -> BrowserPermissionDecision {
@@ -174,6 +176,14 @@ final class BrowserSiteControls<Engine: BrowserEngine> {
               BrowserSiteOrigin(requestOrigin: request.origin) == committedOrigin else { return .deny }
         let generation = surface.findDocumentGeneration
         let epoch = epoch
+        // Each native request gets its own turn; concurrent requests must not dismiss each other.
+        if permissionRequestActive {
+            await withCheckedContinuation { permissionWaiters.append($0) }
+        } else { permissionRequestActive = true }
+        defer {
+            if permissionWaiters.isEmpty { permissionRequestActive = false }
+            else { permissionWaiters.removeFirst().resume() }
+        }
         var allowedNotifications = false
         let decision = await policy.resolve(request, profileID: surface.profileID,
             isCurrent: { [weak self, weak surface] in
@@ -194,7 +204,7 @@ final class BrowserSiteControls<Engine: BrowserEngine> {
         if decision == .deny, let message = statusMessage, isCurrent(surface, generation: generation, epoch: epoch), owner.window?.isKeyWindow == true {
             showMessage(message)
         }
-        if decision == .grant || !isCurrent(surface, generation: generation, epoch: epoch) { statusMessage = nil }
+        if decision == .grant || decision == .grantOnce || !isCurrent(surface, generation: generation, epoch: epoch) { statusMessage = nil }
         if decision == .grant, allowedNotifications {
             // Register the main app at the explicit site grant, before Chromium can deliver.
             // OS refusal never revokes the separate, persisted site permission.

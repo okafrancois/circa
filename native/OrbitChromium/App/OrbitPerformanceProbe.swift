@@ -19,9 +19,9 @@ enum OrbitPerformanceProbe {
     }
     static func start(application: OrbitApplication, configuration: OrbitProductConfiguration) {
         guard configuration.syntheticGuard != nil, CommandLine.arguments.contains("--perf-probe") else { return }
-        if ["lab.orbit.orbit.engine-r11", "lab.orbit.orbit.engine-r12", "lab.orbit.orbit.engine-r13"].contains(Bundle.main.bundleIdentifier ?? "") { application.confirmQuit = { .quit } }
-        if Bundle.main.bundleIdentifier == "lab.orbit.orbit.engine-r13",
-           CommandLine.arguments.contains("--orbit-security-fixture") {
+        if ["lab.orbit.orbit.engine-r11", "lab.orbit.orbit.engine-r12", "lab.orbit.orbit.engine-r13", "lab.orbit.orbit.sec-permissions"].contains(Bundle.main.bundleIdentifier ?? "") { application.confirmQuit = { .quit } }
+        if ["lab.orbit.orbit.engine-r13", "lab.orbit.orbit.sec-permissions"].contains(Bundle.main.bundleIdentifier ?? ""),
+           CommandLine.arguments.contains("--orbit-security-fixture") || CommandLine.arguments.contains("--orbit-permissions-fixture") {
             application.windowPresenter = { controller, _ in
                 controller.window?.setFrame(NSRect(x: -2000, y: -1200, width: 1280, height: 900), display: false)
                 controller.window?.orderBack(nil)
@@ -450,6 +450,8 @@ enum OrbitPerformanceProbe {
                     result["scrollWheel"] = await OrbitScrollWheelProbe.run(owner, command: command)
                 } else if name == "thumbnail-performance", ownsWindow(owner, bundleID: "lab.orbit.orbit.perf-r11-thumbs") {
                     result["thumbnailPerformance"] = await OrbitThumbnailPerformanceProbe.run(owner, command: command, root: root)
+                } else if name == "permissions" {
+                    result["permissions"] = await OrbitPermissionsProbe.run(owner, environment: environment, root: root, command: command)
                 } else if name == "native-security" {
                     result["nativeSecurity"] = await OrbitEngineSecurityProbe.run(owner, command: command)
                 } else if name == "native-performance" {

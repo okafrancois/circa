@@ -33,17 +33,17 @@ struct PermissionPromptTests {
         _ = (button.target as? NSObject)?.perform(button.action, with: button)
     }
 
-    @Test("Not Now blocks the origin; Allow respects fresh screen-capture grants")
+    @Test("Not Now defers without a block; Allow respects fresh screen-capture grants")
     func choices() {
-        var blocked = false
+        var dismissed = false
         var persisted = false
         var allowedOnce = false
         let prompt = SitePermissionPromptView(origin: origin, permissions: [.notifications]) {
-            if case .block = $0 { blocked = true }
+            if case .dismiss = $0 { dismissed = true }
             if case .alwaysAllow = $0 { persisted = true }
         }
         press(prompt.notNowButton)
-        #expect(blocked)
+        #expect(dismissed)
         #expect(!persisted)
         press(prompt.allowButton)
         #expect(persisted)

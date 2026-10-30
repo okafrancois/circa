@@ -106,7 +106,7 @@ struct NativeQuickWindowR2Tests {
         let otherProfile = try await environment.store.createSettingsFixtureProfileWithSpace(name: "Synthetic separate permissions")
         let otherSpace = try #require(await environment.store.catalogSnapshot().spaces.first { $0.profileID == otherProfile }?.id)
         let other = try await environment.makeQuickWindow(spaceID: otherSpace, url: url)
-        #expect(await other.surface(try #require(other.surface), requestsPermission: request) == .deny)
+        #expect(await other.surface(try #require(other.surface), requestsPermission: request) == .dismiss)
         #expect(await little.surface(surface, requestsPermission: .init(kind: .camera, origin: "https://foreign.test", isMainFrame: true)) == .deny)
         try await permissions.set(.ask, for: [.camera], origin: origin, profileID: little.profileID)
         let entered = AsyncStream<Void>.makeStream(), gate = AsyncStream<Void>.makeStream()
