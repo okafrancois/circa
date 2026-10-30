@@ -1456,3 +1456,34 @@
 "not supported for Safari exports" = "not supported for Safari exports";
 "not supported" = "not supported";
 "Some history could not be read and was not imported." = "Some history could not be read and was not imported.";
+
+/* First-run onboarding. */
+"Welcome to Orbit" = "Welcome to Orbit";
+"Welcome to Orbit." = "Welcome to Orbit.";
+"Get Started" = "Get Started";
+"Next" = "Next";
+"Skip for now" = "Skip for now";
+"Bring your browser along." = "Bring your browser along.";
+"Move your tabs, bookmarks, history and passwords into Orbit, so everything is where you left it." = "Move your tabs, bookmarks, history and passwords into Orbit, so everything is where you left it.";
+"macOS may ask to unlock the other browser’s passwords when the import starts." = "macOS may ask to unlock the other browser’s passwords when the import starts.";
+"No thanks, I’ll start fresh." = "No thanks, I’ll start fresh.";
+"No other browser was found. Start fresh." = "No other browser was found. Start fresh.";
+"Browsers to import from" = "Browsers to import from";
+"Profile to import" = "Profile to import";
+"Take your Spaces everywhere." = "Take your Spaces everywhere.";
+"Orbit can keep your Spaces, tabs and settings in sync through your private iCloud account. No Orbit account needed." = "Orbit can keep your Spaces, tabs and settings in sync through your private iCloud account. No Orbit account needed.";
+"iCloud sync isn’t available in this copy of Orbit. You can keep everything on this Mac." = "iCloud sync isn’t available in this copy of Orbit. You can keep everything on this Mac.";
+"Sign in to iCloud in System Settings to sync. You can turn sync on later in Orbit Settings." = "Sign in to iCloud in System Settings to sync. You can turn sync on later in Orbit Settings.";
+"YES," = "YES,";
+"sync with iCloud." = "sync with iCloud.";
+"NO," = "NO,";
+"keep it on this Mac." = "keep it on this Mac.";
+"Make it feel like yours." = "Make it feel like yours.";
+"Pick a color for your first Space. You can change it anytime from the sidebar." = "Pick a color for your first Space. You can change it anytime from the sidebar.";
+"Open your links in Orbit?" = "Open your links in Orbit?";
+"Make Orbit your default browser so links from other apps open here. You can change it anytime in System Settings." = "Make Orbit your default browser so links from other apps open here. You can change it anytime in System Settings.";
+"open my links in Orbit." = "open my links in Orbit.";
+"not right now." = "not right now.";
+"You’re all set." = "You’re all set.";
+"Your first Space is ready. Orbit is yours to explore." = "Your first Space is ready. Orbit is yours to explore.";
+"Your first Space is ready. Orbit brings in your browser data as soon as you start." = "Your first Space is ready. Orbit brings in your browser data as soon as you start.";

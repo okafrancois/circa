@@ -38,6 +38,12 @@ func activeDefaultSessionFile() -> URL {
 /// A synthetic (mock Keychain) run keeps every session file inside its synthetic data root.
 func activeSyntheticDataGuard() -> SyntheticDataGuard? { launchedConfiguration?.syntheticGuard }
 
+/// Written once by `OrbitLauncher.run()` before the runtime populates `Chromium/`.
+nonisolated(unsafe) private var launchedEngineRootHadData = false
+
+/// The engine root held data before this launch started the runtime (first-run onboarding).
+func activeEngineRootHadDataAtLaunch() -> Bool { launchedEngineRootHadData }
+
 /// The stable signing certificate's SHA-1, built in by CMake (`ORBIT_STABLE_SIGNING_ROOT`, from the
 /// local identity's public `identity.json`); empty when the build had none: product mode refuses.
 func activeDeveloperSigningTeam() -> String? { OrbitStableSigning.developerTeamID }
@@ -103,6 +109,7 @@ enum OrbitLauncher {
             configuration = prepared.0
             dataRootLock = prepared.1
             launchedConfiguration = configuration
+            launchedEngineRootHadData = BrowserOnboardingEligibility.directoryHasEntries(configuration.engineRoot)
         } catch is OrbitRecoveryFailure {
             FileHandle.standardError.write(Data("orbit: authentication recovery refused before runtime\n".utf8))
             exit(65)

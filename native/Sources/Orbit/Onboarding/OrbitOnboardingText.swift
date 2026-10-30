@@ -1,0 +1,43 @@
+import Foundation
+
+/// Orbit's own onboarding copy; every string is localizable.
+@MainActor
+enum OrbitOnboardingText {
+    static var windowTitle: String { uiText("Welcome to Orbit") }
+    static var welcomeHeadline: String { uiText("Welcome to Orbit.") }
+    static var getStarted: String { uiText("Get Started") }
+    static var next: String { uiText("Next") }
+    static var back: String { uiText("Back") }
+    static var skip: String { uiText("Skip for now") }
+
+    static var importTitle: String { uiText("Bring your browser along.") }
+    static var importBody: String { uiText("Move your tabs, bookmarks, history and passwords into Orbit, so everything is where you left it.") }
+    static var importNote: String { uiText("macOS may ask to unlock the other browser’s passwords when the import starts.") }
+    static var importNone: String { uiText("No thanks, I’ll start fresh.") }
+    static var importNoneEmpty: String { uiText("No other browser was found. Start fresh.") }
+    static var importListLabel: String { uiText("Browsers to import from") }
+    static var profileListLabel: String { uiText("Profile to import") }
+
+    static var syncTitle: String { uiText("Take your Spaces everywhere.") }
+    static var syncBody: String { uiText("Orbit can keep your Spaces, tabs and settings in sync through your private iCloud account. No Orbit account needed.") }
+    static var syncUnavailable: String { uiText("iCloud sync isn’t available in this copy of Orbit. You can keep everything on this Mac.") }
+    static var syncSignedOut: String { uiText("Sign in to iCloud in System Settings to sync. You can turn sync on later in Orbit Settings.") }
+    static var syncYesStrong: String { uiText("YES,") }
+    static var syncYes: String { uiText("sync with iCloud.") }
+    static var syncNoStrong: String { uiText("NO,") }
+    static var syncNo: String { uiText("keep it on this Mac.") }
+
+    static var themeTitle: String { uiText("Make it feel like yours.") }
+    static var themeBody: String { uiText("Pick a color for your first Space. You can change it anytime from the sidebar.") }
+
+    static var defaultTitle: String { uiText("Open your links in Orbit?") }
+    static var defaultBody: String { uiText("Make Orbit your default browser so links from other apps open here. You can change it anytime in System Settings.") }
+    static var defaultYesStrong: String { uiText("YES,") }
+    static var defaultYes: String { uiText("open my links in Orbit.") }
+    static var defaultNoStrong: String { uiText("NO,") }
+    static var defaultNo: String { uiText("not right now.") }
+
+    static var finishTitle: String { uiText("You’re all set.") }
+    static var finishBody: String { uiText("Your first Space is ready. Orbit is yours to explore.") }
+    static var finishImportBody: String { uiText("Your first Space is ready. Orbit brings in your browser data as soon as you start.") }
+}
