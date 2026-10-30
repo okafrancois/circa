@@ -213,7 +213,7 @@ public struct BrowserArchivedTab: Codable, Equatable, Sendable, Identifiable {
         case removed
     }
 
-    public enum Origin: String, Codable, Sendable { case favorites, pinned, today }
+    public enum Origin: String, Codable, Sendable { case favorites, pinned, today, quickWindow }
 
     public var id: TabID { tab.id }
     /// The logical tab as it was when archived; restoration keeps its identity and custom title.
@@ -222,6 +222,7 @@ public struct BrowserArchivedTab: Codable, Equatable, Sendable, Identifiable {
     /// The Space it was archived from. For a Favorite, the Space where the command was issued.
     public let spaceID: SpaceID
     public let origin: Origin
+    public var isLittleWindow: Bool { origin == .quickWindow }
     public let reason: Reason
     public let archivedAt: Date
     /// Optional for existing sessions. Explicitly retains a historical origin after its Space
@@ -246,6 +247,8 @@ public struct BrowserAutoArchiveThreshold: Hashable, Sendable {
     private init(interval: TimeInterval?) { self.interval = interval }
 
     public static let never = BrowserAutoArchiveThreshold(interval: nil)
+    public static let oneHour = BrowserAutoArchiveThreshold(interval: 3600)
+    public static let sixHours = BrowserAutoArchiveThreshold(interval: 6 * 3600)
     public static let twelveHours = BrowserAutoArchiveThreshold(interval: 12 * 3600)
     public static let oneDay = BrowserAutoArchiveThreshold(interval: 24 * 3600)
     public static let sevenDays = BrowserAutoArchiveThreshold(interval: 7 * 24 * 3600)

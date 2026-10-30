@@ -12,7 +12,7 @@ extension OrbitApplication {
             ?? sourceID.flatMap { inheritedWindowProfiles[$0] }
         for url in urls {
             let request = BrowserQuickWindowOpenRequest(url: url, profileID: sourceProfileID,
-                opensInQuickWindow: routing.defaultDestination == .quickWindow)
+                opensInQuickWindow: routing.defaultDestination == .quickWindow, isExternalOpen: true)
             quickWindowOpenRequests.append(request)
             enqueueQuickWindowCommand { [weak self] in
                 guard let self, let environment else { return }
@@ -34,8 +34,7 @@ extension OrbitApplication {
                     request.spaceID = captured?.spaceID
                     request.profileID = captured?.profileID ?? sourceProfileID
                     do {
-                        let little = try await environment.makeQuickWindow(spaceID: request.spaceID, url: url,
-                                                                         preferredProfileID: request.profileID)
+                        let little = try await environment.makeExternalQuickWindow(url: url, spaceID: request.spaceID, profileID: request.profileID)
                         request.spaceID = little.sourceSpaceID
                         request.profileID = little.profileID
                         configureQuickWindow(little)

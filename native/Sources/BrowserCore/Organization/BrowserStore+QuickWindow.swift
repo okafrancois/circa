@@ -10,7 +10,7 @@ public extension BrowserStore {
             : spaceOrder.first { spaces[$0]?.profileID == record.profileID }
         guard profiles[record.profileID] != nil else { throw BrowserStoreError.profileMissing }
         var saved = BrowserArchivedTab(tab: record.tab, profileID: record.profileID, spaceID: destination ?? record.spaceID,
-                                       origin: .today, reason: .closed, archivedAt: record.archivedAt)
+                                       origin: .quickWindow, reason: record.reason, archivedAt: record.archivedAt)
         if destination == nil, let owner = spaces[record.spaceID]?.profileID, owner != record.profileID {
             saved.spaceProfileWasChanged = true
         }

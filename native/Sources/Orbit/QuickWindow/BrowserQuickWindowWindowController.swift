@@ -24,6 +24,9 @@ final class BrowserQuickWindowWindowController<Engine: BrowserEngine>: NSWindowC
     var onArchive: ((Surface) -> Void)?
     let archiveID = TabID()
     let openedAt = ContinuousClock.now
+    var archiveOpenedAt = Date()
+    var externalURLKey: String?
+    private(set) var isAutoArchiving = false
     let findBar = BrowserFindBarView(frame: .zero)
     let findSession = BrowserFindSession<Surface>()
     var copyURLWriter: (URL) -> Void = { url in
@@ -167,7 +170,7 @@ final class BrowserQuickWindowWindowController<Engine: BrowserEngine>: NSWindowC
     /// failure restore this same document, binding and host. No fallback is used on failure.
     @discardableResult
     func promote(to destination: BrowserWindowController<Engine>) -> Task<TabOccurrenceID?, Never>? {
-        guard !isClosed, promotion == nil, !isPreparingForTermination, destination.acceptsCommands,
+        guard !isClosed, promotion == nil, !isPreparingForTermination, !isAutoArchiving, destination.acceptsCommands,
               destination.engine === engine, destination.session.activeProfileID == profileID,
               let surface, !surface.isDisposed, container.owns(surface) else { return nil }
         guard engine.capabilities.contains(.liveSurfaceTransfer) else {
@@ -379,11 +382,20 @@ final class BrowserQuickWindowWindowController<Engine: BrowserEngine>: NSWindowC
     }
     func windowDidResize(_ notification: Notification) { reapplyTrafficLightsAfterWindowLayout() }
     func windowDidBecomeKey(_ notification: Notification) { reapplyTrafficLightsAfterWindowLayout() }
-    func windowShouldClose(_ sender: NSWindow) -> Bool { !isPromotionInProgress && !isPreparingForTermination }
+    func windowShouldClose(_ sender: NSWindow) -> Bool { !isPromotionInProgress && !isPreparingForTermination && !isAutoArchiving }
     func windowWillClose(_ notification: Notification) {
         if let surface, container.owns(surface) { onArchive?(surface) }
         retire()
     }
+
+    func beginAutoArchive() -> Bool {
+        guard !isClosed, !isPromotionInProgress, !isPreparingForTermination, !isAutoArchiving,
+              let surface, !surface.isDisposed, container.owns(surface) else { return false }
+        isAutoArchiving = true
+        return true
+    }
+
+    func endAutoArchive() { isAutoArchiving = false }
 
     /// Only called after a successful application save, or when this synthetic owner is disposed.
     func retire() {
