@@ -47,6 +47,7 @@ enum OrbitPerformanceProbe {
                 controller.window?.makeKey()
             }
         }
+        OrbitDailyQA9Probe.configure(application)
         installDrawCounter()
         let log = configuration.dataRoot.appendingPathComponent("download-events.jsonl")
         ChromiumRuntime.shared.trace = { name, fields in
@@ -84,6 +85,17 @@ enum OrbitPerformanceProbe {
         var firstPaint = false
         while !Task.isCancelled {
             try? await Task.sleep(for: .milliseconds(firstPaint && result["interactiveUptime"] != nil ? 250 : 20))
+            // A synthetic close probe can retire its final window. Quit must remain reachable
+            // without a live session, and must not wait for another page-paint query.
+            let pendingFile = root.appendingPathComponent("perf-command.json")
+            if let data = try? Data(contentsOf: pendingFile),
+               let pending = try? JSONSerialization.jsonObject(with: data) as? [String: String],
+               pending["command"] == "quit" {
+                try? FileManager.default.removeItem(at: pendingFile)
+                write(result, to: output)
+                NSApp.terminate(nil)
+                return
+            }
             guard let environment = application.environment,
                   let owner = environment.liveControllers.first,
                   let snapshot = owner.session.snapshot else { continue }
@@ -97,6 +109,7 @@ enum OrbitPerformanceProbe {
             }
             if !firstPaint, let id = snapshot.selectedOccurrenceID, let surface = owner.session.surface(for: id),
                surface.isReady, !surface.navigationState.isLoading,
+               ["http", "https"].contains(surface.navigationState.committedURL?.scheme ?? ""),
                let paint = await evaluate(surface, "(() => { const p=performance.getEntriesByType('paint').find(p=>p.name==='first-contentful-paint'); return p ? {age:(Date.now()-performance.timeOrigin-p.startTime)/1000} : {}; })()"),
                let age = paint["age"] as? Double {
                 result["firstPaintUptime"] = ProcessInfo.processInfo.systemUptime - age
@@ -114,7 +127,9 @@ enum OrbitPerformanceProbe {
                 try? FileManager.default.removeItem(at: commandFile)
                 let name = command["command"] ?? ""
                 result["commandNonce"] = command["nonce"] ?? ""
-                if name == "command-gaps" {
+                if name == "daily-qa9" {
+                    result["dailyQA9"] = await OrbitDailyQA9Probe.run(application, owner: owner, command: command)
+                } else if name == "command-gaps" {
                     result["commandGaps"] = await OrbitCommandGapsProbe.run(owner)
                 } else if name == "local-files" {
                     result["localFiles"] = await OrbitLocalFilesProbe.run(application, owner: owner, root: root, command: command)

@@ -22,7 +22,10 @@ enum OrbitTabErgonomicsProbe {
         func stage(_ name: String) { try? name.write(to: root.appendingPathComponent("tabs-stage.txt"), atomically: true, encoding: .utf8) }
         stage("start")
         owner.palette.dismiss()
-        window.makeKey()
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        try? await Task.sleep(for: .milliseconds(150))
+        guard owns(owner), window.isKeyWindow else { return ["activationRefused": true] }
         owner.focusSelectedDocument()
         var checks: [String: Any] = ["pid": getpid(), "offscreen": true]
         owner.palette.showsSearchSuggestions = false
@@ -52,6 +55,10 @@ enum OrbitTabErgonomicsProbe {
         await settle(owner)
         stage("duplicate-adopted")
         if let surface = owner.session.selectedSurface { await load(surface) }
+        checks["originalPath"] = original.currentURL?.path ?? ""
+        checks["duplicatePath"] = owner.session.selectedSurface?.currentURL?.path ?? ""
+        checks["duplicateRenderer"] = owner.session.selectedSurface?.pagePerformance?.lifecycle()?.rendererPID ?? 0
+        checks["originalHistoryPaths"] = history?.entries.map { $0.url.path } ?? []
         checks["duplicate"] = owner.session.snapshot!.tabs.count == before + 1 && owner.session.selectedSurface !== original
             && owner.session.selectedSurface?.currentURL == original.currentURL
         if let duplicate = owner.session.selectedSurface, duplicate !== original {
@@ -60,6 +67,7 @@ enum OrbitTabErgonomicsProbe {
                 && copied?.currentIndex == history?.currentIndex
             duplicate.goForward()
             await load(duplicate)
+            checks["forwardPath"] = duplicate.currentURL?.path ?? ""
             checks["duplicateForward"] = duplicate.currentURL?.path == "/third"
             checks["duplicateIndependent"] = original.currentURL?.path == "/second"
         }
@@ -158,6 +166,7 @@ enum OrbitTabErgonomicsProbe {
     }
 
     private static func settle(_ owner: OrbitWindowController) async {
+        await (NSApp.delegate as? OrbitApplication)?.windows.waitForPendingCommands()
         for _ in 0..<20 { await owner.session.waitForPendingCommands(); await Task.yield() }
         try? await Task.sleep(for: .milliseconds(180))
         await owner.session.waitForPendingCommands()
@@ -166,7 +175,7 @@ enum OrbitTabErgonomicsProbe {
     private static func load(_ surface: ChromiumSurface) async {
         let deadline = ProcessInfo.processInfo.systemUptime + 4
         repeat { try? await Task.sleep(for: .milliseconds(20)) }
-        while (!surface.isReady || surface.navigationState.isLoading) && ProcessInfo.processInfo.systemUptime < deadline
+        while (!surface.isReady || surface.navigationState.isLoading || surface.currentURL == nil) && ProcessInfo.processInfo.systemUptime < deadline
     }
     private static func loading(_ surface: ChromiumSurface) async {
         let deadline = ProcessInfo.processInfo.systemUptime + 2
