@@ -1,5 +1,6 @@
 import AppKit
 import BrowserCore
+import BrowserEngine
 import Testing
 @testable import Orbit
 
@@ -11,7 +12,8 @@ struct URLPillSwitchTests {
         let field = OrbitLocationField(frame: NSRect(x: 0, y: 0, width: 240, height: 24))
         field.font = .systemFont(ofSize: 13)
         for (url, symbol) in [("https://example.org/path", "lock.fill"), ("http://example.org/path", "lock.slash.fill")] {
-            field.stringValue = url
+            let presentation = BrowserAddressPresentation(url: URL(string: url), security: try pageSecurity(level: symbol == "lock.fill" ? 3 : 0), format: { $0.host })
+            field.refreshAddress(url, in: nil, presentation: presentation)
             field.layoutSubtreeIfNeeded()
             #expect(field.stringValue == url) // Editing/AX retain the unshortened destination.
             #expect(field.securitySymbol == symbol)
@@ -46,12 +48,14 @@ struct URLPillSwitchTests {
         let source = SpaceID(), target = SpaceID()
         let field = OrbitLocationField()
         field.statusForSpace = { $0 == target ? "Synthetic status" : nil }
-        field.stringValue = "http://example.org/"
-        field.setAddress("https://example.net/", from: source, to: target, spaces: [], awaitingPublication: true)
+        let original = BrowserAddressPresentation(url: URL(string: "http://example.org/"), security: nil, format: { $0.host })
+        let destination = BrowserAddressPresentation(url: URL(string: "https://example.net/"), security: try! pageSecurity(level: 3), format: { $0.host })
+        field.refreshAddress(original.value, in: source, presentation: original)
+        field.setAddress(destination.value, from: source, to: target, spaces: [], awaitingPublication: true, presentation: destination)
         #expect(field.hasStatus && field.security == .https)
         field.refreshAddress("http://example.org/late", in: source)
         #expect(field.security == .https && field.stringValue == "https://example.net/")
-        field.finishSpaceTransition("http://example.org/", in: source, spaces: [])
+        field.finishSpaceTransition(original.value, in: source, spaces: [], presentation: original)
         #expect(!field.hasStatus && field.security == .insecure && field.pendingSpaceID == nil)
     }
 

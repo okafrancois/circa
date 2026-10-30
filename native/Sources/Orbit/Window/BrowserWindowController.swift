@@ -99,6 +99,7 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
     let library = BrowserLibraryPresentation()
     var boostsRuntime: BrowserBoostsRuntime?
     var boostEditor: BrowserBoostEditorController?
+    let addressSecurityObservation = BrowserSecurityObservation()
     var boostTask: Task<Void, Never>?
     var boostsIntroduced = false
     var bookmarkTransfer: BrowserBookmarkTransferController<Engine>?
@@ -538,9 +539,9 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
             displayedOccurrenceID = session.snapshot?.selectedOccurrenceID
             displayedSpaceID = session.snapshot?.activeSpaceID
             if !preserveAddressDraft {
-                let url = selected?.navigationState.url ?? session.organization?.selectedTab?.url
-                addressField.setAddress(url?.absoluteString ?? "", from: previousSpaceID,
-                                        to: displayedSpaceID, spaces: session.catalog?.spaces ?? [])
+                let address = BrowserAddressPresentation(surface: selected)
+                addressField.setAddress(address.value, from: previousSpaceID,
+                                        to: displayedSpaceID, spaces: session.catalog?.spaces ?? [], presentation: address)
             }
         }
         if selected == nil {
@@ -556,7 +557,8 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
             refreshNavigation(for: selected)
         } else {
             if window?.firstResponder !== addressField.currentEditor() {
-                addressField.refreshAddress(session.organization?.selectedTab?.url.absoluteString ?? "", in: session.snapshot?.activeSpaceID)
+                addressSecurityObservation.observe(nil, changed: {})
+                addressField.refreshAddress("", in: session.snapshot?.activeSpaceID)
             }
             backButton.isEnabled = false
             forwardButton.isEnabled = false

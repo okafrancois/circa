@@ -74,6 +74,7 @@ final class BrowserSiteControls<Engine: BrowserEngine> {
         onPreferencesChange?()
         return true
     }
+    private let securityObservation = BrowserSecurityObservation()
     private var mediaTasks: [ObjectIdentifier: Task<Void, Never>] = [:]
     private var mediaRefreshNeeded: Set<ObjectIdentifier> = []
     var permissionsUnavailable = false
@@ -119,6 +120,11 @@ final class BrowserSiteControls<Engine: BrowserEngine> {
     func render() {
         guard let owner else { return }
         let surface = owner.siteControlSurface
+        securityObservation.observe(owner.siteControlsClosed ? nil : surface?.nativePageServices) { [weak self] in
+            guard let self else { return }
+            // Invalidate even a connection-detail page: it captured the previous security state.
+            self.panel.close()
+        }
         if lastSelectedSurface !== surface {
             if let previous = lastSelectedSurface, owner.owns(previous), !owner.siteControlsClosed {
                 let settings = preferences.preferences(url: previous.navigationState.committedURL, profileID: previous.profileID)
@@ -327,7 +333,7 @@ final class BrowserSiteControls<Engine: BrowserEngine> {
         let generation = surface.findDocumentGeneration
         let epoch = epoch
         let request = presentationGeneration
-        let url = surface.navigationState.committedURL
+        let url = surface.nativePageServices != nil ? surface.nativePageServices?.committedURL() : surface.navigationState.committedURL
         let origin = url.flatMap(BrowserSiteOrigin.init(url:))
         presentationTask = Task { [weak self, weak surface] in
             guard let self, let surface,
@@ -344,7 +350,7 @@ final class BrowserSiteControls<Engine: BrowserEngine> {
             let media = await surface.requestMediaState()
             guard canPresent(surface, document: generation, selection: epoch, request: request) else { return }
             let model = BrowserSiteControlsModel(url: url, zoom: surface.pageZoom, permissions: settings,
-                media: media, capabilities: owner.engine.capabilities, canClearData: owner.engine is any BrowserSiteOriginDataAccess)
+                media: media, capabilities: owner.engine.capabilities, canClearData: owner.engine is any BrowserSiteOriginDataAccess, security: surface.nativePageServices?.securityState())
             var visible = relevant
             if media.camera == .active || media.camera == .muted { visible.insert(.camera) }
             if media.microphone == .active || media.microphone == .muted { visible.insert(.microphone) }

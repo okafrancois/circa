@@ -1895,12 +1895,24 @@ class App final : public CefApp, public CefBrowserProcessHandler {
     }
     // Confined mixed-content fixture: fixed loopback mapping, never product argv.
     if (g_state && g_state->secure_storage == ACR_SECURE_STORAGE_MOCK &&
-        [[NSBundle mainBundle].bundleIdentifier isEqualToString:@"lab.orbit.orbit.engine-r13"] &&
+        ([[NSBundle mainBundle].bundleIdentifier isEqualToString:@"lab.orbit.orbit.engine-r13"] ||
+         [[NSBundle mainBundle].bundleIdentifier isEqualToString:@"lab.orbit.orbit.sec-pill"]) &&
         [[NSBundle mainBundle].infoDictionary[@"OrbitSyntheticBundle"] boolValue] &&
         [[NSProcessInfo processInfo].arguments containsObject:@"--orbit-security-fixture"]) {
       command->AppendSwitch("allow-running-insecure-content");
+      if ([[NSBundle mainBundle].bundleIdentifier isEqualToString:@"lab.orbit.orbit.sec-pill"]) {
+        disabled.push_back("AutoupgradeMixedContent");
+        // Trust only the ephemeral loopback fixture key, without touching the OS trust store.
+        for (NSString* argument in [NSProcessInfo processInfo].arguments) {
+          if (![argument hasPrefix:@"--orbit-security-spki="]) continue;
+          NSString* hash = [argument substringFromIndex:22];
+          NSData* decoded = [[NSData alloc] initWithBase64EncodedString:hash options:0];
+          if (decoded.length == 32)
+            command->AppendSwitchWithValue("ignore-certificate-errors-spki-list", hash.UTF8String);
+        }
+      }
       command->AppendSwitchWithValue("host-resolver-rules",
-          "MAP mixed.example.invalid 127.0.0.1, MAP * ~NOTFOUND, EXCLUDE 127.0.0.1");
+          "MAP mixed.example.invalid 127.0.0.1, MAP xn--pple-43d.com 127.0.0.1, MAP * ~NOTFOUND, EXCLUDE 127.0.0.1");
     }
     // Fixed fake devices only in the confined permission fixture; no real TCC services.
     if (g_state && g_state->secure_storage == ACR_SECURE_STORAGE_MOCK &&
