@@ -401,3 +401,15 @@ void ACRStubCaptureFinish(int32_t status) {
   cb(context, status, capture_width, capture_height, capture_width * 4, pixels, 1);
   free(pixels);
 }
+
+/* Optional native services are unavailable in this lifecycle-only fixture. */
+int32_t ACRMemoryDump(orbit_memory_callback_t callback, void *context) { return 0; }
+int32_t ACRNativePageServicesVersion(void) { return 0; }
+int32_t ACRNativePageRead(uint64_t token, int32_t kind, char *output, uint32_t capacity) { return 0; }
+int32_t ACRSecurityDisplay(const char *url, int32_t scheme, char *output, uint32_t capacity) { return 0; }
+int32_t ACRSecurityObserve(uint64_t token, orbit_json_changed_t callback, void *context) { return 0; }
+int32_t ACRFullscreenObserve(uint64_t token, orbit_fullscreen_changed_t callback, void *context) { return 0; }
+int32_t ACRNavigationGoIndex(uint64_t token, int32_t index) { return 0; }
+int32_t ACRMediaObserve(uint64_t token, orbit_json_changed_t callback, void *context) { return 0; }
+int32_t ACRMediaAction(uint64_t token, int32_t action, double seconds) { return 0; }
+void ACRNativePageServicesClosing(uint64_t token) {}

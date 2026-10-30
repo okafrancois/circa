@@ -850,3 +850,121 @@ private final class SplitNativeStateSignal: @unchecked Sendable {
         return lock.withLock { state }
     }
 }
+
+extension NativeWebKitTests.NativeSplitTests {
+    @Test("Option-click duplicates the current tab, joins another sidebar tab, and separates a grouped row")
+    func optionSidebar() async throws {
+        let (_, window, first) = try await makeWindow()
+        defer { window.session.close(); window.window?.close() }
+        let firstID = try #require(window.session.organization?.selectedTab?.id)
+        window.sidebar.list(window.sidebar.page.list, activate: .tab(firstID), modifiers: [.option])
+        await settle(window)
+        let group = try #require(window.session.activeSplit)
+        #expect(group.tabs.count == 2 && group.tabs.allSatisfy { $0.url == first.currentURL })
+        #expect(window.session.selectedSurface !== first)
+        window.sidebar.list(window.sidebar.page.list, activate: .split(group.group.id), modifiers: [.option])
+        await settle(window)
+        #expect(window.session.activeSplit == nil)
+        #expect(window.session.organization?.allTabs.count == 2)
+        window.sidebar.list(window.sidebar.page.list, activate: .tab(firstID), modifiers: [.option])
+        await settle(window)
+        #expect(window.session.activeSplit?.tabs.count == 2)
+        #expect(window.session.ownedSurfaces.contains { $0 === first })
+    }
+
+    @Test("Option-clicked links use both engine routes and refuse a fifth pane without navigation or orphan targets")
+    func optionLinksAndLimit() async throws {
+        let (environment, window, first) = try await makeWindow()
+        defer { window.session.close(); window.window?.close() }
+        first.clickLink(to: URL(string: "https://split.test/navigation")!, modifiers: [.option])
+        await settle(window)
+        #expect(first.currentURL?.path == "/left")
+        #expect(window.session.activeSplit?.tabs.count == 2)
+        let second = try #require(window.session.selectedSurface)
+        let child = try #require(second.openNewTarget(URL(string: "https://split.test/target")!, modifiers: [.option]))
+        await settle(window)
+        #expect(window.session.activeSplit?.tabs.count == 3)
+        #expect(window.session.selectedSurface === child && child.requestedURLs.count == 1)
+        window.addSplitFromSelection()
+        await settle(window)
+        window.palette.dismiss(returnFocus: false)
+        let current = try #require(window.session.selectedSurface)
+        let made = environment.engine.surfaces.count
+        let url = current.currentURL
+        current.clickLink(to: URL(string: "https://split.test/refused")!, modifiers: [.option])
+        #expect(current.openNewTarget(URL(string: "https://split.test/refused-target")!, modifiers: [.option]) == nil)
+        window.sidebar.list(window.sidebar.page.list, activate: .tab(window.session.organization!.selectedTab!.id), modifiers: [.option])
+        await settle(window)
+        #expect(window.session.activeSplit?.tabs.count == 4)
+        #expect(current.currentURL == url && environment.engine.surfaces.count == made)
+        let paneMenu = window.makeSplitPaneMenu(window.session.organization!.selectedTab!.id)
+        #expect(paneMenu.items.filter { [uiText("Add Right Split"), uiText("Add Left Split")].contains($0.title) }.allSatisfy { !$0.isEnabled })
+        let request = BrowserContextMenuRequest(location: .zero, pageURL: current.currentURL,
+            linkURL: URL(string: "https://split.test/context-refused")!, documentGeneration: current.documentGeneration)
+        window.pageInteraction.menu = .init(surface: current, surfaceKey: ObjectIdentifier(current), request: request)
+        window.performPageContextCommand(.pageOpenLinkInSplitView)
+        await settle(window)
+        #expect(window.session.activeSplit?.tabs.count == 4 && environment.engine.surfaces.count == made)
+        #expect(!window.canAddSplitPane)
+    }
+
+    @Test("All existing content-edge drop directions retain a pinned source and reject a fifth pane",
+          arguments: [BrowserSplitOrientation.horizontal, .vertical], [false, true])
+    func pinnedEdgeDrop(_ orientation: BrowserSplitOrientation, leading: Bool) async throws {
+        let (_, window, _) = try await makeWindow()
+        defer { window.session.close(); window.window?.close() }
+        let source = try #require(window.session.organization?.selectedTab?.id)
+        window.session.pinTabs([source])
+        await settle(window)
+        window.session.openTab(url: URL(string: "https://split.test/target")!)
+        await settle(window)
+        let target = try #require(window.session.organization?.selectedTab?.id)
+        let organization = try #require(window.session.organization)
+        let payload = SidebarDragPayload(sourceWindow: window.id, spaceID: organization.spaceID,
+            profileID: organization.profileID, nodes: [.tab(source)], rowCount: 1, grabOffsetX: 0)
+        #expect(window.canDropIntoSplit(payload))
+        window.dropIntoSplit(payload, orientation: orientation, leading: leading)
+        await settle(window)
+        let group = try #require(window.session.activeSplit)
+        #expect(group.group.tabIDs == (leading ? [source,target] : [target,source]))
+        #expect(group.group.orientation == orientation)
+        #expect(window.session.organization?.pinned.map(\.node) == [.split(group.group.id)])
+        for _ in 0..<2 { window.session.addSplitPane(); await settle(window) }
+        window.session.openTab(url: URL(string: "https://split.test/extra")!)
+        await settle(window)
+        let extra = try #require(window.session.organization?.selectedTab?.id)
+        window.session.selectSplit(group.group.id)
+        await settle(window)
+        let fifth = SidebarDragPayload(sourceWindow: window.id, spaceID: organization.spaceID,
+            profileID: organization.profileID, nodes: [.tab(extra)], rowCount: 1, grabOffsetX: 0)
+        #expect(!window.canDropIntoSplit(fifth))
+        window.dropIntoSplit(fifth, orientation: orientation, leading: leading)
+        await settle(window)
+        #expect(window.session.activeSplit?.tabs.count == 4)
+    }
+}
+
+struct SplitLinkRoutingTests {
+    @Test("Only sole-Option user links qualify; forms, scripts, subframes and other gestures keep their route")
+    func excludesOtherRequests() {
+        var request = BrowserPeekLinkRequest(kind: .navigation, sourceRole: .unpinned,
+            sourceURL: URL(string: "https://split.test/source"), destinationURL: URL(string: "https://split.test/link"),
+            modifiers: [.option], buttonNumber: 0, isMainFrame: true, isUserLinkActivation: true, isReplayableRequest: true)
+        #expect(BrowserSplitLinkRouting.accepts(request))
+        request.isReplayableRequest = false
+        #expect(!BrowserSplitLinkRouting.accepts(request))
+        request.kind = .newTarget
+        #expect(BrowserSplitLinkRouting.accepts(request))
+        request.isUserLinkActivation = false
+        #expect(!BrowserSplitLinkRouting.accepts(request))
+        request.isUserLinkActivation = true
+        for modifiers: BrowserModifierKeys in [[], [.shift], [.option, .command], [.option, .shift], [.option, .control]] {
+            request.modifiers = modifiers
+            #expect(!BrowserSplitLinkRouting.accepts(request))
+        }
+        request.modifiers = [.option]; request.isMainFrame = false
+        #expect(!BrowserSplitLinkRouting.accepts(request))
+        request.isMainFrame = true; request.buttonNumber = 1
+        #expect(!BrowserSplitLinkRouting.accepts(request))
+    }
+}

@@ -597,7 +597,8 @@ class DevToolsObserver final : public CefDevToolsMessageObserver {
     if (!g_state || (name != "WebAudio.contextCreated" && name != "WebAudio.contextChanged"
                      && name != "WebAudio.contextWillBeDestroyed" && name != "Media.playerEventsAdded"
                      && name != "Media.playerPropertiesChanged" && name != "Media.playersCreated"
-                     && name != "Page.frameNavigated" && name != "Page.lifecycleEvent")) return;
+                     && name != "Page.frameNavigated" && name != "Page.lifecycleEvent"
+                     && name != "Runtime.bindingCalled")) return;
     auto event = g_state->Event(ACR_EVENT_MEDIA_ACTIVITY, token_);
     event.detail = name.c_str();
     event.payload = params;

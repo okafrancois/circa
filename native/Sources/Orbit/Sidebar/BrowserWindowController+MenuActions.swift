@@ -27,6 +27,10 @@ extension BrowserWindowController {
 
     func toggleSidebarMute() {
         guard let surface = sidebarMuteSurface else { return }
+        toggleSplitPaneMute(surface)
+    }
+
+    func toggleSplitPaneMute(_ surface: Surface) {
         let generation = surface.documentGeneration
         Task { [weak self, weak surface] in
             guard let self, let surface else { return }

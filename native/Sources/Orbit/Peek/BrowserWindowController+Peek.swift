@@ -159,6 +159,25 @@ extension BrowserWindowController {
                                    metadata: pendingNavigationMetadata(on: source) ?? BrowserNavigationMetadata(
                                     kind: request.kind == .linkActivation && request.isUserGesture != false ? .linkActivation : .other,
                                     httpMethod: request.httpMethod, hasBody: request.hasBody != false))
+        if BrowserSplitLinkRouting.accepts(link), session.selectedSurface === source {
+            guard canAddSplitPane, !session.hasPendingCommands else { return .handled(nil) }
+            // Borrow the transient owner without presenting an overlay. The original engine
+            // request moves to the split through the same live-surface handoff as a Peek.
+            let child = make()
+            guard peek.claim(child) else { return .handled(nil) }
+            let outcome = BrowserPeekTransfer.handOff(child, from: peek) { transfer in
+                session.acceptSplitTransfer(transfer, bind: { [weak self] in self?.bindSurface($0) })
+            }
+            guard case .accepted(let adoption) = outcome else {
+                peek.container.dispose(child)
+                return .handled(nil)
+            }
+            reconcileTransferredSurface(child, after: adoption)
+            Task { [weak self, weak child] in
+                if await adoption.value == nil, let child { self?.peek.container.dispose(child) }
+            }
+            return .handled(child)
+        }
         guard case .peek(let trigger) = BrowserPeekRouting.decide(link, settings: peek.settings) else { return .declined }
         let child = make()
         guard peek.claim(child) else { return .handled(nil) }
@@ -180,6 +199,10 @@ extension BrowserWindowController {
                                    metadata: pendingNavigationMetadata(on: source) ?? BrowserNavigationMetadata(
                                     kind: action.kind == .linkActivation && action.isUserGesture != false ? .linkActivation : .other,
                                     httpMethod: action.httpMethod, hasBody: action.hasBody != false))
+        if BrowserSplitLinkRouting.accepts(link), session.selectedSurface === source {
+            if canAddSplitPane { session.addSplitPane(url: url) }
+            return .handled(.cancel)
+        }
         guard case .peek(let trigger) = BrowserPeekRouting.decide(link, settings: peek.settings) else { return .declined }
         let origin = peekActivationPoint(in: source)
         let generation = source.documentGeneration

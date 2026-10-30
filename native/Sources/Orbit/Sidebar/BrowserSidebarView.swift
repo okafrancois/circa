@@ -176,6 +176,7 @@ final class BrowserSidebarView: NSView, SidebarListHost {
 
     // Organization projection (SB-LIST).
     private(set) var organization: BrowserOrganizationSnapshot?
+    var onOptionSelectNode: ((BrowserOrganizationNode) -> Void)?
     var onSelectSplit: ((SplitGroupID) -> Void)?
     private(set) var selection = BrowserOrganizationSelection()
     private var lastSelectedTabID: TabID?
@@ -526,6 +527,10 @@ final class BrowserSidebarView: NSView, SidebarListHost {
 
     func list(_ list: SidebarListView, activate node: BrowserOrganizationNode, modifiers: NSEvent.ModifierFlags) {
         guard commandsEnabled, let organization, list === page.list else { return }
+        if modifiers == [.option], node.tabID != nil || node.splitID != nil {
+            onOptionSelectNode?(node)
+            return
+        }
         if modifiers.contains(.command) {
             if selection.isEmpty, let selected = organization.selectedTab, organization.rowNode(for: selected.id) != node {
                 selection.select(organization.rowNode(for: selected.id), in: organization)

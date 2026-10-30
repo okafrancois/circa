@@ -63,6 +63,12 @@ extension BrowserWindowController {
                 controller.siteControls.refreshMedia(surface)
             }
         }
+        sidebar.onOptionSelectNode = { [weak self] node in
+            self?.submitInput { controller in
+                if let group = node.splitID { controller.session.unsplit(group) }
+                else if let tab = node.tabID { controller.session.openTabInSplit(tab) }
+            }
+        }
         sidebar.onSelectSplit = { [weak self] id in self?.submitInput { $0.session.selectSplit(id) } }
         sidebar.onSelectTab = { [weak self] id in self?.submitInput { $0.activateSidebarTab(id) } }
         sidebar.onCloseTabs = { [weak self] ids in self?.submitInput { $0.performSidebarRowAction(ids) } }
@@ -310,6 +316,24 @@ extension BrowserWindowController {
         for item in built.menu.items.reversed() where item.isSeparatorItem {
             guard let index = built.menu.items.firstIndex(of: item) else { continue }
             if index == 0 || index == built.menu.items.count - 1 || built.menu.items[index - 1].isSeparatorItem { built.menu.removeItem(item) }
+        }
+        if nodes.count == 1, let groupID = nodes.first?.splitID,
+           case let .split(group)? = organization?.item(for: .split(groupID)) {
+            for tab in group.tabs.reversed() {
+                let parent = NSMenuItem(title: tab.title ?? tab.url.absoluteString, action: nil, keyEquivalent: "")
+                let submenu = NSMenu()
+                let surface = liveSidebarSurface(of: tab.id)
+                let muted = surface.flatMap { siteControls.mediaStates[ObjectIdentifier($0)]?.isAudioMuted } == true
+                let mute = BrowserSplitMenuItem(title: muted ? uiText("Unmute") : uiText("Mute")) { [weak self, weak surface] in
+                    guard let self, let surface, self.session.organization?.split(containing: tab.id)?.group == group.group,
+                          self.owns(surface) else { return }
+                    self.toggleSplitPaneMute(surface)
+                }
+                mute.isEnabled = engine.capabilities.contains(.audioMuting) && surface != nil
+                submenu.addItem(mute)
+                parent.submenu = submenu
+                built.menu.insertItem(parent, at: 0)
+            }
         }
         let move = SidebarMoveMenu(owner: self, nodes: nodes)
         if let move {

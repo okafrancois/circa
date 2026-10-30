@@ -1681,3 +1681,7 @@
 "%d passwords found" = "%d passwords found";
 
 "Coming from Arc? Your Spaces, tabs and passwords come with you, even after Arc stops working." = "Coming from Arc? Your Spaces, tabs and passwords come with you, even after Arc stops working.";
+
+"Add Top Split" = "Add Top Split";
+"Add Bottom Split" = "Add Bottom Split";
+"New Vertical Split View" = "New Vertical Split View";

@@ -51,7 +51,11 @@ enum SidebarListCommands {
         window(.sidebarEditPinnedURL, validate: { $0.sidebarSingleTab?.pinnedURL != nil }) { $0.presentPinnedURLEditor() }
         window(.sidebarCopyLinks, validate: { !$0.sidebarLinkTargets.isEmpty }) { $0.copySidebarLinks(markdown: false) }
         window(.sidebarCopyMarkdownLinks, validate: { !$0.sidebarLinkTargets.isEmpty }) { $0.copySidebarLinks(markdown: true) }
-        window(.sidebarDuplicate, validate: { $0.sidebarTabTargets.count == 1 }) { controller in
+        window(.sidebarDuplicate, validate: { $0.sidebarTabTargets.count == 1 || $0.sidebar.commandTargets().count == 1 && $0.sidebar.commandTargets().first?.splitID != nil }) { controller in
+            if let group = controller.sidebar.commandTargets().first?.splitID {
+                controller.session.duplicateSplit(group)
+                return
+            }
             guard let id = controller.sidebarTabTargets.first, let tab = controller.session.organization?.tab(id) else { return }
             controller.hideLibrary()
             controller.session.openTab(url: tab.url)
@@ -140,7 +144,8 @@ enum SidebarListCommands {
         groups.append([.pinUnpinTab, .newFolder])
         if tabs.count == 1 { groups.append([.sidebarMuteTab]) }
         if nodes.count == 1, nodes[0].splitID != nil {
-            groups.append([.separatePageFromSplitView, .unsplitAllPanes, .toggleSplitOrientation, .swapSplitPanes])
+            groups.append([.sidebarDuplicate])
+            groups.append([.separatePageFromSplitView, .unsplitAllPanes, .convertToVerticalSplitView, .convertToHorizontalSplitView, .swapSplitPanes])
         }
         if tabs.contains(where: { organization.tab($0)?.isAwayFromPinnedURL == true }) { groups.append([.resetTabToOriginalURL]) }
         if !tabs.isEmpty {

@@ -216,6 +216,8 @@ enum BrowserCommandID: String, CaseIterable, Sendable {
     case sidebarConvertFolderToSpace
     case sidebarDeleteFolder
     case sidebarDeleteFolderAndTabs
+    case addRightSplit, addLeftSplit, addTopSplit, addBottomSplit, newVerticalSplitView
+    case convertToVerticalSplitView, convertToHorizontalSplitView
     case toggleSplitOrientation, swapSplitPanes, unsplitAllPanes
     case focusNextSplitPane, focusPreviousSplitPane
     case importFromArc

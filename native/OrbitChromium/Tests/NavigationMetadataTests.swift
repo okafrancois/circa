@@ -69,7 +69,28 @@ struct NavigationMetadataTests {
         _ = source.decideNavigation(.init(url: target, isMainFrame: true, userGesture: false,
             isRedirect: false, transitionType: 7, method: "POST", hasBody: true))
         precondition(delegate.actions.last!.kind == .formSubmission && delegate.actions.last!.hasBody == true)
+        precondition(ChromiumSurface.modifiers(7) == [.option])
+        let host = source.hostView as! ChromiumHostView
+        host.linkActivation = (.zero, ProcessInfo.processInfo.systemUptime, source.documentGeneration)
+        host.linkActivationModifiers = [.option]
+        _ = source.decideNavigation(.init(url: target, isMainFrame: true, userGesture: true,
+            isRedirect: false, transitionType: 0, method: "GET", hasBody: false))
+        precondition(delegate.actions.last!.modifiers == [.option])
+        _ = source.decideNavigation(.init(url: target, isMainFrame: true, userGesture: true,
+            isRedirect: false, transitionType: 7, method: "POST", hasBody: true))
+        precondition(delegate.actions.last!.modifiers.isEmpty)
+        host.linkActivation = (.zero, ProcessInfo.processInfo.systemUptime - 2, source.documentGeneration)
+        _ = source.decideNavigation(.init(url: target, isMainFrame: true, userGesture: true,
+            isRedirect: false, transitionType: 0, method: "GET", hasBody: false))
+        precondition(delegate.actions.last!.modifiers.isEmpty)
+        let binding = try! JSONSerialization.data(withJSONObject: ["name": "__orbitOptionLink", "payload": target])
+        source.receiveOptionLink(binding)
+        precondition(delegate.actions.last!.modifiers == [.option] && delegate.actions.last!.kind == .linkActivation)
+        let before = delegate.actions.count
+        source.receiveOptionLink(try! JSONSerialization.data(withJSONObject: ["name": "other", "payload": target]))
+        source.receiveOptionLink(try! JSONSerialization.data(withJSONObject: ["name": "__orbitOptionLink", "payload": "javascript:void(0)"]))
+        precondition(delegate.actions.count == before)
         source.dispose()
-        print("PASS: original popup POST/GET/form metadata, gesture independence, unknown fallback, history/reload actions")
+        print("PASS: popup metadata, gesture independence, history/reload, Option modifiers and isolated link routing")
     }
 }
