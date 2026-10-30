@@ -15,6 +15,7 @@
   <key>CFBundleVersion</key><string>1</string>
   <key>CFBundleShortVersionString</key><string>0.1</string>
   <key>LSMinimumSystemVersion</key><string>15.0</string>
+  <key>LSFileQuarantineEnabled</key><true/>
   <key>NSPrincipalClass</key><string>ACRApplication</string>
   <key>LSUIElement</key><true/>
   <key>NSHighResolutionCapable</key><true/>

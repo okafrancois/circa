@@ -58,6 +58,7 @@ def bundle_info(version, bundle_id=BUNDLE_ID, principal='ACRApplication'):
         'CFBundleInfoDictionaryVersion': '6.0', 'CFBundleVersion': numeric_version,
         'OrbitBuildRevision': version,
         'CFBundleShortVersionString': version, 'LSMinimumSystemVersion': '15.0',
+        'LSFileQuarantineEnabled': True,
         'NSPrincipalClass': principal, 'NSHighResolutionCapable': True,
         'NSSupportsAutomaticTermination': False, 'NSSupportsSuddenTermination': False,
         'NSCameraUsageDescription': 'Orbit utilise la caméra uniquement pour les sites que vous autorisez.',

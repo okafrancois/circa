@@ -16,6 +16,7 @@
   <key>CFBundleVersion</key><string>1</string>
   <key>CFBundleShortVersionString</key><string>0.1</string>
   <key>LSMinimumSystemVersion</key><string>15.0</string>
+  <key>LSFileQuarantineEnabled</key><true/>
   <key>NSCameraUsageDescription</key><string>Orbit utilise la caméra uniquement pour les sites que vous autorisez.</string>
   <key>NSMicrophoneUsageDescription</key><string>Orbit utilise le microphone uniquement pour les sites que vous autorisez.</string>
   <key>NSLocationUsageDescription</key><string>Orbit partage votre localisation uniquement avec les sites que vous autorisez.</string>

@@ -51,7 +51,7 @@ def update_info(info, config, version, build, local_test_root=None, feed_url=Non
                 CFBundleVersion=str(build), OrbitDeveloperTeamID=config.get('team_id', ''), SUFeedURL=feed_url or
                 f"https://github.com/{config['repository']}/releases/latest/download/appcast.xml",
                 SUPublicEDKey=key, SUEnableAutomaticChecks=True, SUAutomaticallyUpdate=True,
-                SUScheduledCheckInterval=3600)
+                SUScheduledCheckInterval=3600, LSFileQuarantineEnabled=True)
     for name in ('OrbitSyntheticBundle', 'OrbitDataRoot', 'OrbitUseMockKeychain', 'OrbitUpdaterLocalTest',
                  'LSUIElement', 'LSBackgroundOnly'):
         info.pop(name, None)

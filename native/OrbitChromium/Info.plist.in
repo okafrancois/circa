@@ -9,6 +9,7 @@
   <key>CFBundleVersion</key><string>1</string>
   <key>CFBundleShortVersionString</key><string>0.1</string>
   <key>LSMinimumSystemVersion</key><string>15.0</string>
+  <key>LSFileQuarantineEnabled</key><true/>
   <key>NSPrincipalClass</key><string>ACRApplication</string>
   <!-- Hidden laboratory bundle: declared as an agent so that LaunchServices never reverts it to a
        regular (Dock, menu bar) application. R2: runs 20261025T105255Z and 105627Z saw the
