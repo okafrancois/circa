@@ -76,6 +76,9 @@ extension OrbitApplication {
             NSApp.activate(ignoringOtherApps: true)
             openQuickWindow()
         }
+        BrowserDataCommands.install(in: registry, dataRoot: { [weak self] in
+            self?.environment?.sessionFile?.deletingLastPathComponent()
+        })
         installSettingsCommands(in: registry)
         BrowserWindowCommands.install(in: registry, commandKeyWindow: keyWindow)
         BrowserPeekCommands.install(in: registry)

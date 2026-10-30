@@ -18,6 +18,7 @@ enum BrowserLibraryCommands {
             if controller.library.isPresented { controller.hideLibrary() }
             else { controller.showLibrary() }
         }
+        try! registry.register(.viewMedia) { controller, _ in controller.showLibrary(.media) }
         try! registry.register(.viewHistory) { controller, _ in controller.showLibrary(.history) }
         try! registry.register(.viewDownloads) { controller, _ in controller.showLibrary(.downloads) }
     }

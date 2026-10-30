@@ -30,11 +30,26 @@ extension BrowserWindowController {
         recordExplicitInput()
     }
 
+    var canExitCurrentContext: Bool {
+        library.isPresented || ((!isTextFieldEditing || palette.isPresented) && (isPeekPresented
+            || elementFullscreenSurfaceKey != nil || window?.styleMask.contains(.fullScreen) == true))
+    }
+
+    func exitCurrentContext() {
+        guard canExitCurrentContext else { return }
+        if library.isPresented { hideLibrary() }
+        else if isPeekPresented { dismissPeek() }
+        else if !exitElementFullscreenIfNeeded(), let window, window.styleMask.contains(.fullScreen) {
+            toggleNativeFullScreen(window)
+        }
+    }
+
     /// Stop at this window: text actions for an unfocused captured window cannot escape to
     /// another window's responder chain. Native validation gets the actual selector.
-    func commandResponder(for action: Selector, keyWindow: NSWindow? = NSApp.keyWindow) -> NSResponder? {
+    func commandResponder(for action: Selector, keyWindow: NSWindow? = NSApp.keyWindow, tag: Int = 0) -> NSResponder? {
         guard window === keyWindow else { return nil }
         let item = NSMenuItem(title: "", action: action, keyEquivalent: "")
+        item.tag = tag
         var responder = window?.firstResponder
         while let current = responder {
             if current.responds(to: action) {

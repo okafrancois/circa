@@ -29,10 +29,12 @@ enum OrbitPerformanceProbe {
                 controller.window?.makeKey()
             }
         }
-        if [OrbitNavigationHistoryProbe.bundleID, OrbitTabErgonomicsProbe.bundleID, "lab.orbit.orbit.pinned-tabs", "lab.orbit.orbit.search-suggestions", "lab.orbit.orbit.circa-rename", "lab.orbit.orbit.local-files-pdf", "lab.orbit.orbit.local-files-restore", "lab.orbit.orbit.p2-split", "lab.orbit.orbit.p2-extensions", "lab.orbit.orbit.site-search", "lab.orbit.orbit.updater-input"].contains(Bundle.main.bundleIdentifier ?? "") {
+        if [OrbitCommandGapsProbe.bundleID, OrbitNavigationHistoryProbe.bundleID, OrbitTabErgonomicsProbe.bundleID, "lab.orbit.orbit.pinned-tabs", "lab.orbit.orbit.search-suggestions", "lab.orbit.orbit.circa-rename", "lab.orbit.orbit.local-files-pdf", "lab.orbit.orbit.local-files-restore", "lab.orbit.orbit.p2-split", "lab.orbit.orbit.p2-extensions", "lab.orbit.orbit.site-search", "lab.orbit.orbit.updater-input"].contains(Bundle.main.bundleIdentifier ?? "") {
             application.confirmQuit = { .quit }
             application.windowPresenter = { controller, _ in
-                controller.window?.setFrame(NSRect(x: -2000, y: -1200, width: 1280, height: 900), display: false)
+                let origin = Bundle.main.bundleIdentifier == OrbitCommandGapsProbe.bundleID
+                    ? NSPoint(x: -4000, y: 100) : NSPoint(x: -2000, y: -1200)
+                controller.window?.setFrame(NSRect(origin: origin, size: NSSize(width: 1280, height: 900)), display: false)
                 controller.window?.orderBack(nil)
                 controller.window?.makeKey()
             }
@@ -104,7 +106,9 @@ enum OrbitPerformanceProbe {
                 try? FileManager.default.removeItem(at: commandFile)
                 let name = command["command"] ?? ""
                 result["commandNonce"] = command["nonce"] ?? ""
-                if name == "local-files" {
+                if name == "command-gaps" {
+                    result["commandGaps"] = await OrbitCommandGapsProbe.run(owner)
+                } else if name == "local-files" {
                     result["localFiles"] = await OrbitLocalFilesProbe.run(application, owner: owner, root: root, command: command)
                 } else if name == "tab-ergonomics" {
                     result["tabErgonomics"] = await OrbitTabErgonomicsProbe.run(owner, root: root, command: command)
