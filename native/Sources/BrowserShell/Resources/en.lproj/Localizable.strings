@@ -1587,3 +1587,5 @@
 "Edit…" = "Edit…";
 
 "To continue, please type the name of this Space:" = "To continue, please type the name of this Space:";
+
+"Version %@ (%@)" = "Version %@ (%@)";

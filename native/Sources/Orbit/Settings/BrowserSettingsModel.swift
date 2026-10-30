@@ -281,10 +281,12 @@ final class BrowserSettingsModel<Engine: BrowserEngine>: ObservableObject {
         if selectedProfileID == id { selectedProfileID = nil; selectionGeneration = UUID() }
     }
 
-    func createSpace(name: String, profile: ProfileID) async throws {
-        _ = try await environment.store.createSpace(name: name, profileID: profile)
+    @discardableResult
+    func createSpace(name: String, profile: ProfileID) async throws -> SpaceID {
+        let id = try await environment.store.createSpace(name: name, profileID: profile)
         await environment.refreshSettingsCatalog()
         await reload()
+        return id
     }
 
     func deleteSpace(_ id: SpaceID, expectedProfileID: ProfileID? = nil) async throws {

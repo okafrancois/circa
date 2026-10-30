@@ -5,6 +5,7 @@ import BrowserShell
 import SwiftUI
 
 enum OrbitSettingsStyle {
+    static let destructiveColor = NSColor.systemRed
     static let foreground = color(light: 0x141317, dark: 0xF4F1EC)
     static let background = Color(nsColor: windowColor)
     static let panel = color(light: 0xFFFFFF, dark: 0x222128)
@@ -34,6 +35,7 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
     @ObservedObject var runtime: BrowserSettingsRuntime
     let deleteProfile: (BrowserProfile) -> Void
     @State private var newProfileName = ""
+    @State private var showsNewProfile = false
     @FocusState private var newProfileFocused: Bool
     @State private var newSpaceName = ""
     @State private var shortcutQuery = ""
@@ -69,14 +71,9 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
         .accessibilityIdentifier("settings-pane-" + (model.settingsSection ?? .general).rawValue)
         .sheet(isPresented: Binding(get: { renamingProfile != nil }, set: { if !$0 { renamingProfile = nil } })) {
           if let profile = renamingProfile {
-            VStack(alignment: .leading, spacing: 16) {
-                Text(uiText("Rename")).font(Font(BrandTextStyle.title.font(size: 22)))
-                BrowserSettingsNameEditor(name: profile.name) { name in
-                    model.perform { try await model.renameProfile(profile.id, name: name); renamingProfile = nil }
-                }
-                if let error = model.errorMessage { Text(error).foregroundStyle(.red).font(Font(BrandFonts.ui(12))) }
-                HStack { Spacer(); Button(uiText("Cancel")) { renamingProfile = nil }.keyboardShortcut(.cancelAction) }
-            }.padding(22).frame(width: 396).settingsFrost()
+            BrowserSettingsRenameForm(name: profile.name, error: model.errorMessage, save: { name in
+                model.perform { try await model.renameProfile(profile.id, name: name); renamingProfile = nil }
+            }, cancel: { renamingProfile = nil })
           }
         }
         .sheet(item: $archiveChange) { change in
@@ -118,14 +115,14 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
             panel {
                 Button { model.navigate(to: .profiles) } label: {
                     HStack(spacing: 12) {
-                        OrbitIcon.view(sfName: "person.crop.circle", pointSize: 20).frame(width: 20, height: 20)
+                        OrbitIcon.view(sfName: "person.crop.circle", pointSize: 20).font(.system(size: 20)).frame(width: 20, height: 20)
                         VStack(alignment: .leading, spacing: 2) {
                             Text(uiText("Profile Settings")).fontWeight(.medium)
                             Text(uiText("Manage your default search engine, Auto-Archive, and downloads in Profile Settings."))
                                 .font(Font(BrandFonts.ui(12))).foregroundStyle(.secondary)
                         }
                         Spacer()
-                        OrbitIcon.view(sfName: "chevron.right", pointSize: 14).frame(width: 14, height: 14).foregroundStyle(.secondary)
+                        OrbitIcon.view(sfName: "chevron.right", pointSize: 14).font(.system(size: 14)).frame(width: 14, height: 14).foregroundStyle(.secondary)
                     }.padding(14).contentShape(Rectangle())
                 }.buttonStyle(.plain).accessibilityIdentifier("settings-open-profiles")
             }
@@ -149,12 +146,10 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
     private var profiles: some View {
         HStack(alignment: .top, spacing: 20) {
             VStack(alignment: .leading, spacing: 4) {
-                Text(uiText("Profiles")).font(Font(BrandFonts.ui(12, weight: .semibold))).foregroundStyle(.secondary)
-                    .padding(.horizontal, 8).padding(.bottom, 8)
                 ForEach(model.catalog.profiles, id: \.id) { profile in
                     Button { model.selectProfile(profile.id) } label: {
                         HStack(spacing: 8) {
-                            OrbitIcon.view(sfName: "person.crop.circle", pointSize: 13)
+                            BrowserSettingsThemeSwatch(theme: profileTheme(profile.id))
                             Text(profile.name).lineLimit(2)
                             Spacer(minLength: 0)
                         }
@@ -168,28 +163,43 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
                     .accessibilityAddTraits(model.selectedProfileID == profile.id ? .isSelected : [])
                     .accessibilityIdentifier("settings-profile-" + profile.id.rawValue.uuidString)
                 }
-                Divider().padding(.vertical, 8)
-                TextField(uiText("Profile Name"), text: $newProfileName)
-                    .textFieldStyle(.roundedBorder).accessibilityIdentifier("settings-new-profile-name")
-                    .focused($newProfileFocused)
-                    .onAppear { newProfileFocused = model.focusNewProfile; model.focusNewProfile = false }
-                    .onChange(of: model.focusNewProfile) { _, value in
-                        if value { newProfileFocused = true; model.focusNewProfile = false }
+                if showsNewProfile {
+                    TextField(uiText("Profile Name"), text: $newProfileName)
+                        .textFieldStyle(.roundedBorder).accessibilityIdentifier("settings-new-profile-name")
+                        .focused($newProfileFocused)
+                    HStack {
+                        Button(uiText("Cancel")) { showsNewProfile = false }
+                        Button(uiText("New Profile")) {
+                            let name = newProfileName
+                            model.perform {
+                                try await model.createProfile(name: name)
+                                if newProfileName == name { newProfileName = ""; showsNewProfile = false }
+                            }
+                        }.disabled(newProfileName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                            .accessibilityIdentifier("settings-create-profile")
                     }
-                Button(uiText("New Profile"), systemImage: "plus") {
-                    let name = newProfileName
-                    model.perform {
-                        try await model.createProfile(name: name)
-                        if newProfileName == name { newProfileName = "" }
-                    }
+                } else {
+                    Button {
+                        showsNewProfile = true; newProfileFocused = true
+                    } label: {
+                        HStack(spacing: 8) {
+                            OrbitIcon.view(sfName: "plus", pointSize: 14).font(.system(size: 14))
+                            Text(uiText("New Profile"))
+                            Spacer(minLength: 0)
+                        }.padding(.horizontal, 8).padding(.vertical, 9).contentShape(Rectangle())
+                    }.buttonStyle(.plain).foregroundStyle(.secondary)
+                        .accessibilityIdentifier("settings-new-profile")
                 }
-                .disabled(newProfileName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                .accessibilityIdentifier("settings-create-profile")
-            }.frame(width: 136)
+            }.frame(width: 150)
+                .onAppear { if model.focusNewProfile { showsNewProfile = true; newProfileFocused = true; model.focusNewProfile = false } }
+                .onChange(of: model.focusNewProfile) { _, value in
+                    if value { showsNewProfile = true; newProfileFocused = true; model.focusNewProfile = false }
+                }
             VStack(alignment: .leading, spacing: 16) {
                 if let profile = model.selectedProfileID,
                    let entry = model.catalog.profiles.first(where: { $0.id == profile }) {
-                    HStack {
+                    HStack(spacing: 10) {
+                        BrowserSettingsThemeSwatch(theme: profileTheme(profile)).scaleEffect(1.65).frame(width: 30, height: 30)
                         Text(entry.name).font(Font(BrandTextStyle.title.font(size: 28)))
                         Spacer()
                         Button(uiText("Rename")) { renamingProfile = entry }.accessibilityIdentifier("settings-rename-profile")
@@ -226,23 +236,27 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
                     }
                     Text(uiText("Pinned tabs and Favorites are never auto-archived.")).font(Font(BrandFonts.ui(12))).foregroundStyle(.secondary)
                     panel {
-                        settingRow("Spaces") {
-                            VStack(alignment: .trailing, spacing: 5) {
-                                Text(model.catalog.spaces.filter { $0.profileID == profile }.map(\.name).joined(separator: ", "))
-                                    .font(Font(BrandFonts.ui(12))).foregroundStyle(.secondary)
-                                Button(uiText("Edit…")) { model.navigate(to: .spaces) }
-                                    .accessibilityIdentifier("settings-edit-spaces")
+                        HStack(spacing: 12) {
+                            VStack(alignment: .leading, spacing: 7) {
+                                Text(uiText("Spaces")).fontWeight(.medium)
+                                ViewThatFits(in: .horizontal) {
+                                    spaceChips(profile)
+                                    Text(model.catalog.spaces.filter { $0.profileID == profile }.map(\.name).joined(separator: ", "))
+                                        .font(Font(BrandFonts.ui(12))).foregroundStyle(.secondary)
+                                }
                             }
-                        }
+                            Spacer(minLength: 0)
+                            Button(uiText("Edit…")) { model.navigate(to: .spaces) }.accessibilityIdentifier("settings-edit-spaces")
+                        }.padding(.horizontal, 14).padding(.vertical, 8).frame(minHeight: 62)
                     }
                     panel {
-                        settingRow("Extensions") {
+                        settingRow("Extensions", icon: "puzzlepiece.extension") {
                             Button(uiText("Manage…")) { open(.extensions, profile: profile) }
                                 .disabled(!model.canOpenExtensionSettings(profile: profile))
                                 .accessibilityIdentifier("settings-manage-extensions")
                         }
                         rule
-                        settingRow("Downloads, languages, and site settings") {
+                        settingRow("Downloads, languages, and site settings", icon: "arrow.down.circle") {
                             Button(uiText("More Settings…")) { open(.chromium, profile: profile) }
                                 .disabled(!model.canOpenChromiumSettings(profile: profile))
                                 .accessibilityIdentifier("settings-chromium-profile")
@@ -261,8 +275,7 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
                         }
                     }
                     HStack {
-                        Spacer()
-                        Button(uiText("Delete Profile…"), role: .destructive) { deleteProfile(entry) }
+                        Button(uiText("Delete Profile…"), role: .destructive) { deleteProfile(entry) }.settingsDestructive()
                             .disabled(model.profileRemovalUnavailableReason != nil)
                             .help(model.profileRemovalUnavailableReason ?? uiText("Delete this Profile"))
                             .accessibilityIdentifier("settings-delete-profile")
@@ -310,7 +323,7 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
                 }.toggleStyle(SettingsSwitchStyle())
             }
             panel {
-                settingRow(uiFormat("Choose where links open inside %@.", applicationName)) {
+                settingRow(uiFormat("Choose where links open inside %@.", applicationName), icon: "arrow.turn.down.right") {
                     Button(uiText("Air Traffic Control…")) { showsAirTrafficControl = true }
                         .accessibilityIdentifier("settings-air-traffic-control")
                         .sheet(isPresented: $showsAirTrafficControl) {
@@ -337,14 +350,18 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
             panel {
                 liveToggle("Enable Picture in Picture when you leave a video tab",
                            value: runtime.document.automaticPictureInPicture,
-                           identifier: "settings-automatic-pip", save: model.setAutomaticPictureInPicture)
-                Toggle(BrowserSettingsRuntime.enablesBoostsTitle, isOn: Binding(
+                           identifier: "settings-automatic-pip", icon: "rectangle.on.rectangle", save: model.setAutomaticPictureInPicture)
+                rule
+                HStack(spacing: 12) {
+                  OrbitIcon.view(sfName: "paintbrush.pointed", pointSize: 20).font(.system(size: 20)).frame(width: 20, height: 20)
+                  Toggle(BrowserSettingsRuntime.enablesBoostsTitle, isOn: Binding(
                     get: { runtime.document.enablesBoostsOnWebsites },
                     set: { value in model.perform { try await runtime.setEnablesBoostsOnWebsites(value) } }
-                )).toggleStyle(SettingsSwitchStyle()).padding(12).accessibilityIdentifier("settings-enables-boosts")
+                )).toggleStyle(SettingsSwitchStyle()).accessibilityIdentifier("settings-enables-boosts")
+                }.padding(.horizontal, 14).padding(.vertical, 8).frame(minHeight: 44)
             }
             panel {
-                settingRow("Put inactive tabs to sleep after") {
+                settingRow("Put inactive tabs to sleep after", icon: "moon.stars") {
                     Picker(uiText("Memory Saver"), selection: Binding(get: { runtime.document.memorySaver }, set: { value in
                         model.perform { try await model.setMemorySaver(value) }
                     })) {
@@ -360,7 +377,7 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
                         .help(uiText("Keeps pinned tabs, edited forms and active media awake. Sleeping tabs reload when selected."))
                 }
                 rule
-                settingRow("Animations") {
+                settingRow("Animations", icon: "sparkles") {
                     Picker(uiText("Animations"), selection: Binding(get: { runtime.document.reducedMotion }, set: { value in
                         model.perform { try await model.setReducedMotion(value) }
                     })) {
@@ -371,13 +388,13 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
                 }
                 rule
                 liveToggle(uiFormat("Play %@ sound effects", applicationName), value: runtime.document.interaction.playSoundEffects,
-                           identifier: "settings-sound-effects", save: model.setPlaySoundEffects)
+                           identifier: "settings-sound-effects", icon: "speaker.wave.2", save: model.setPlaySoundEffects)
                 rule
                 liveToggle("Haptic feedback when reordering tabs", value: runtime.document.interaction.hapticFeedback,
-                           identifier: "settings-reorder-haptics", save: model.setHapticFeedback)
+                           identifier: "settings-reorder-haptics", icon: "hand.raised", save: model.setHapticFeedback)
             }
             panel {
-                settingRow("Website data and permissions") {
+                settingRow("Website data and permissions", icon: "lock") {
                     Button(uiText("Manage…")) { model.navigate(to: .privacy) }
                         .accessibilityIdentifier("settings-site-data")
                 }
@@ -385,6 +402,24 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
             Text(model.safeBrowsingAvailable ? uiText("Warnings for dangerous sites and downloads are on.")
                  : uiText("Safe Browsing is unavailable in this build."))
                 .font(Font(BrandFonts.ui(12))).foregroundStyle(.secondary)
+        }
+    }
+
+    private func profileTheme(_ profile: ProfileID) -> BrowserSpaceTheme? {
+        guard let space = model.catalog.spaces.first(where: { $0.profileID == profile }) else { return nil }
+        return space.theme ?? runtime.document.space(space.id).palette.themeModel
+    }
+
+    private func spaceChips(_ profile: ProfileID) -> some View {
+        HStack(spacing: 6) {
+            ForEach(model.catalog.spaces.filter { $0.profileID == profile }, id: \.id) { space in
+                HStack(spacing: 5) {
+                    BrowserSettingsThemeSwatch(theme: space.theme ?? runtime.document.space(space.id).palette.themeModel)
+                        .scaleEffect(0.85).frame(width: 16, height: 16)
+                    Text(space.name).lineLimit(1)
+                }.padding(.horizontal, 5).padding(.vertical, 4)
+                    .background(OrbitSettingsStyle.background, in: Capsule())
+            }
         }
     }
 
@@ -407,20 +442,24 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
     private var appIcon: some View {
         SettingsAppIcon()
     }
-    private var rule: some View { Rectangle().fill(OrbitSettingsStyle.border).frame(height: 1).padding(.horizontal, 8) }
+    private var rule: some View { SettingsRule() }
     private func panel<Content: View>(@ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 0, content: content)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(OrbitSettingsStyle.panel, in: RoundedRectangle(cornerRadius: 12))
             .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(OrbitSettingsStyle.border, lineWidth: 1))
     }
-    private func settingRow<Control: View>(_ title: String, @ViewBuilder control: () -> Control) -> some View {
-        HStack(spacing: 12) { Text(uiText(title)).fixedSize(horizontal: false, vertical: true); Spacer(minLength: 8); control() }
+    private func settingRow<Control: View>(_ title: String, icon: String? = nil, @ViewBuilder control: () -> Control) -> some View {
+        HStack(spacing: 12) {
+            if let icon { OrbitIcon.view(sfName: icon, pointSize: 20).font(.system(size: 20)).frame(width: 20, height: 20) }
+            Text(uiText(title)).fontWeight(.medium).fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 8); control()
+        }
             .padding(.horizontal, 14).padding(.vertical, 8).frame(minHeight: 44)
     }
-    private func liveToggle(_ title: String, value: Bool, identifier: String,
+    private func liveToggle(_ title: String, value: Bool, identifier: String, icon: String? = nil,
                             save: @escaping (Bool) async throws -> Void) -> some View {
-        settingRow(title) {
+        settingRow(title, icon: icon) {
             Toggle(uiText(title), isOn: Binding(get: { value }, set: { next in
                 model.perform { try await save(next) }
             })).labelsHidden().toggleStyle(.switch).controlSize(.small).accessibilityIdentifier(identifier)
@@ -447,18 +486,19 @@ private struct BrowserSyncSettingsRow: View {
     @ObservedObject var runtime: BrowserSyncRuntime
     let save: (Bool) -> Void
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                Text(uiText("Sync with iCloud"))
+        HStack(spacing: 12) {
+            OrbitIcon.view(sfName: "arrow.clockwise", pointSize: 20).font(.system(size: 20)).frame(width: 20, height: 20)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(uiText("Sync with iCloud")).fontWeight(.medium)
+                Text(runtime.statusText).font(Font(BrandFonts.ui(12))).foregroundStyle(.secondary)
+                    .accessibilityIdentifier("settings-icloud-sync-status")
+            }
                 Spacer()
                 Toggle(uiText("Sync with iCloud"), isOn: Binding(get: { runtime.enabled }, set: save))
                     .labelsHidden().toggleStyle(.switch).controlSize(.small)
                     .disabled(!runtime.available).accessibilityIdentifier("settings-icloud-sync")
-            }
-            Text(runtime.statusText).font(Font(BrandFonts.ui(12))).foregroundStyle(.secondary)
-                .accessibilityIdentifier("settings-icloud-sync-status")
         }
-        .padding(12).frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 14).padding(.vertical, 8).frame(minHeight: 50).frame(maxWidth: .infinity, alignment: .leading)
         .background(OrbitSettingsStyle.panel, in: RoundedRectangle(cornerRadius: 12))
         .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(OrbitSettingsStyle.border, lineWidth: 1))
         .alert(uiText("Use a different iCloud account?"), isPresented: $runtime.needsAccountDecision) {

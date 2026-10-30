@@ -330,7 +330,6 @@ private enum BrowserSettingsConfirmation: Identifiable {
 struct BrowserSettingsView<Engine: BrowserEngine>: View {
     @ObservedObject var model: BrowserSettingsModel<Engine>
     @ObservedObject var runtime: BrowserSettingsRuntime
-    @State private var newSpaceName = ""
     @State private var selectedSpaceID: SpaceID?
     @State private var deletingSpace: BrowserSpace?
     @State private var deletionSpaceName = ""
@@ -378,11 +377,14 @@ struct BrowserSettingsView<Engine: BrowserEngine>: View {
                 } else if let profile = model.selectedProfileID {
                     ScrollView {
                       VStack(alignment: .leading, spacing: 16) {
-                        Text((model.settingsSection ?? .general).title).font(Font(BrandTextStyle.title.font(size: 28)))
-                        if model.settingsSection != .shortcuts && model.settingsSection != .advanced {
+                        if model.settingsSection != .spaces {
+                          HStack {
+                            Text((model.settingsSection ?? .general).title).font(Font(BrandTextStyle.title.font(size: 28)))
+                            Spacer()
                             Picker(text("selectedProfile", "Profile"), selection: Binding(get: { profile }, set: { model.selectProfile($0) })) {
                                 ForEach(model.catalog.profiles, id: \.id) { Text($0.name).tag($0.id) }
-                            }.accessibilityIdentifier("settings-profile")
+                            }.labelsHidden().pickerStyle(.menu).frame(width: 160).accessibilityIdentifier("settings-profile")
+                          }
                         }
                         switch model.settingsSection ?? .general {
                         case .spaces: spaces(profile)
@@ -422,7 +424,7 @@ struct BrowserSettingsView<Engine: BrowserEngine>: View {
                             guard deletionProfileName == profile.name else { return }
                             deletingProfile = nil
                             model.perform { try await model.deleteProfile(profile.id) }
-                        }.disabled(deletionProfileName != profile.name || model.isBusy)
+                        }.settingsDestructive().disabled(deletionProfileName != profile.name || model.isBusy)
                             .accessibilityIdentifier("settings-confirm-delete-profile")
                     }
                 }.padding(24).frame(width: 420).settingsFrost()
@@ -450,7 +452,7 @@ struct BrowserSettingsView<Engine: BrowserEngine>: View {
                             guard deletionSpaceName == space.name else { return }
                             deletingSpace = nil
                             model.perform { try await model.deleteSpace(space.id, expectedProfileID: space.profileID) }
-                        }.disabled(deletionSpaceName != space.name || model.isBusy)
+                        }.settingsDestructive().disabled(deletionSpaceName != space.name || model.isBusy)
                     }
                 case .clearData(let request):
                     Text(text("clearDataTitle", "Clear Site Data?")).font(Font(BrandTextStyle.title.font(size: 22)))
@@ -463,7 +465,7 @@ struct BrowserSettingsView<Engine: BrowserEngine>: View {
                         Button(text("clear", "Clear"), role: .destructive) {
                             model.siteDataRequest = nil
                             model.perform { try await model.clearSiteData(request) }
-                        }
+                        }.settingsDestructive()
                     }
                 }
             }.padding(22).frame(width: 420).font(Font(BrandFonts.ui(13))).settingsFrost()
@@ -473,123 +475,156 @@ struct BrowserSettingsView<Engine: BrowserEngine>: View {
     @ViewBuilder private func spaces(_ profile: ProfileID) -> some View {
         let available = model.catalog.spaces.filter { $0.profileID == profile }
         HStack(alignment: .top, spacing: 20) {
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: 4) {
                 ForEach(available, id: \.id) { space in
-                    Button { selectedSpaceID = space.id } label: {
-                        HStack(spacing: 8) {
-                            BrowserSettingsThemeSwatch(theme: space.theme ?? runtime.document.space(space.id).palette.themeModel)
-                            Text(space.name)
-                            Spacer(minLength: 0)
-                        }.padding(8).background((selectedSpaceID ?? available.first?.id) == space.id ? Color.accentColor : .clear, in: RoundedRectangle(cornerRadius: 8))
-                    }.buttonStyle(.plain)
-                        .foregroundStyle((selectedSpaceID ?? available.first?.id) == space.id ? .white : OrbitSettingsStyle.foreground)
-                }
-                Divider().padding(.vertical, 6)
-                createSpaceForm(profile)
-                if model.archivedSpaces.contains(where: { $0.space.profileID == profile }) {
-                    DisclosureGroup(uiText("Archived Spaces")) {
-                        ForEach(model.archivedSpaces.filter { $0.space.profileID == profile }) { saved in
-                            VStack(alignment: .leading, spacing: 6) {
-                                Text(saved.space.name)
-                                Button(uiText("Restore Space")) { model.perform { try await model.restoreSpace(saved.id, expectedProfileID: saved.space.profileID) } }
-                                    .accessibilityIdentifier("settings-restore-space")
-                            }
+                    BrowserSettingsSpaceRow(space: space,
+                        theme: space.theme ?? runtime.document.space(space.id).palette.themeModel,
+                        icon: runtime.document.space(space.id).iconSelection,
+                        isSelected: (selectedSpaceID ?? available.first?.id) == space.id) {
+                            selectedSpaceID = space.id
                         }
-                    }
                 }
-            }.frame(width: 150)
+                Button {
+                    model.perform { selectedSpaceID = try await model.createSpace(name: uiText("New Space"), profile: profile) }
+                } label: {
+                    HStack(spacing: 8) {
+                        OrbitIcon.view(sfName: "plus", pointSize: 14).font(.system(size: 14))
+                        Text(uiText("New Space"))
+                        Spacer(minLength: 0)
+                    }.padding(.horizontal, 10).padding(.vertical, 9).contentShape(Rectangle())
+                }.buttonStyle(.plain).foregroundStyle(.secondary).accessibilityIdentifier("settings-create-space")
+                DisclosureGroup(uiText("Archived Spaces")) {
+                    ForEach(model.archivedSpaces.filter { $0.space.profileID == profile }) { saved in
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(saved.space.name)
+                            Button(uiText("Restore Space")) {
+                                model.perform { try await model.restoreSpace(saved.id, expectedProfileID: saved.space.profileID) }
+                            }.accessibilityIdentifier("settings-restore-space")
+                        }.padding(.vertical, 4)
+                    }
+                }.foregroundStyle(.secondary).padding(.top, 12)
+            }.frame(width: 164)
             if let space = available.first(where: { $0.id == selectedSpaceID }) ?? available.first {
                 VStack(alignment: .leading, spacing: 12) {
                     Text(space.name).font(Font(BrandTextStyle.title.font(size: 22)))
-                        .frame(maxWidth: .infinity, minHeight: 74, alignment: .bottomLeading).padding(12)
-                        .background(LinearGradient(colors: (space.theme ?? runtime.document.space(space.id).palette.themeModel ?? BrowserSpaceThemePresets.default).light.stops.map {
-                            Color(nsColor: OrbitSpaceThemes.color($0))
-                        }, startPoint: .topLeading, endPoint: .bottomTrailing), in: RoundedRectangle(cornerRadius: 12))
+                        .foregroundStyle(.white).padding(.horizontal, 12).padding(.vertical, 10)
+                        .frame(maxWidth: .infinity, minHeight: 74, maxHeight: 74, alignment: .bottomLeading)
+                        .background {
+                            BrowserSettingsThemeGradient(theme: space.theme ?? runtime.document.space(space.id).palette.themeModel)
+                                .clipShape(RoundedRectangle(cornerRadius: 12))
+                        }
                     SettingsCard {
-                        VStack(alignment: .leading, spacing: 14) {
-                            BrowserSettingsNameEditor(name: space.name) { name in model.perform { try await model.renameSpace(space.id, name: name) } }
-                                .accessibilityIdentifier("settings-space-name")
-                            Divider()
-                            BrowserSettingsIconEditor(choice: runtime.document.space(space.id).iconSelection) { value in
+                        SettingsDetailRow(title: text("name", "Name")) {
+                            BrowserSettingsNameEditor(name: space.name, compact: true) { name in
+                                model.perform { try await model.renameSpace(space.id, name: name) }
+                            }.frame(width: 180).accessibilityIdentifier("settings-space-name")
+                        }
+                        SettingsRule()
+                        SettingsDetailRow(title: uiText("Icon")) {
+                            BrowserSettingsIconEditor(choice: runtime.document.space(space.id).iconSelection, compact: true) { value in
                                 model.queueSpaceIconEdit(spaceID: space.id, profileID: space.profileID, icon: BrowserSpaceIcon(legacyIcon: value))
                             }.disabled(runtime.isUnavailable)
-                            Divider()
-                            HStack {
-                                Text(text("spaceColor", "Theme Color"))
-                                Spacer()
-                                BrowserSettingsGradientPicker(model: model, space: space)
-                                    .accessibilityIdentifier("settings-space-theme")
-                            }
-                            Divider()
+                        }
+                        SettingsRule()
+                        SettingsDetailRow(title: text("spaceColor", "Theme Color")) {
+                            BrowserSettingsGradientPicker(model: model, space: space)
+                                .accessibilityIdentifier("settings-space-theme")
+                        }
+                        SettingsRule()
+                        SettingsDetailRow(title: text("spaceProfile", "Profile")) {
                             Picker(text("spaceProfile", "Profile"), selection: Binding(get: { space.profileID }, set: { target in
                                 model.perform { try await model.assignSpace(space.id, profile: target) }
                             })) {
                                 ForEach(model.catalog.profiles, id: \.id) { Text($0.name).tag($0.id) }
-                            }
-                        }.padding(14)
+                            }.labelsHidden().pickerStyle(.menu).frame(width: 160)
+                                .accessibilityIdentifier("settings-space-profile")
+                        }
                     }.id(space.id)
-                    Text(text("spaceProfileNote", "Changing a profile requires an empty Space that is not open in a window.")).font(Font(BrandFonts.ui(12))).foregroundStyle(.secondary)
                     Button(uiText("Delete Space…"), role: .destructive) { deletionSpaceName = ""; deletingSpace = space }
+                        .settingsDestructive()
                         .disabled(model.catalog.spaces.count < 2 || runtime.isUnavailable)
                         .accessibilityIdentifier("settings-delete-space")
-                }.frame(maxWidth: .infinity)
+                    Text(text("spaceProfileNote", "Changing a profile requires an empty Space that is not open in a window."))
+                        .font(Font(BrandFonts.ui(12))).foregroundStyle(.secondary)
+                }.frame(maxWidth: .infinity, alignment: .leading)
             }
         }
     }
 
-    @ViewBuilder private func createSpaceForm(_ profile: ProfileID) -> some View {
-        TextField(uiText("Space Name"), text: $newSpaceName)
-            .accessibilityIdentifier("settings-new-space-name")
-        Button(uiText("Create Space")) {
-            let name = newSpaceName
-            model.perform { try await model.createSpace(name: name, profile: profile); if newSpaceName == name { newSpaceName = "" } }
-        }.disabled(newSpaceName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            .accessibilityIdentifier("settings-create-space")
-    }
-
     @ViewBuilder private func privacy(_ profile: ProfileID) -> some View {
-        SettingsCard { VStack(alignment: .leading, spacing: 12) {
-            Text(text("siteData", "Website Data")).fontWeight(.semibold)
-            Text(text("siteDataNote", "Website data belongs to this profile. Clearing it does not remove your browsing history or saved permission choices.")).foregroundStyle(.secondary)
-            Button(text("clearSiteData", "Clear Site Data for This Profile…")) { model.perform { try await model.reviewSiteData(origin: nil, profile: profile) } }
-                .disabled(!model.supportsSiteData)
-        }.padding(14) }
-        SettingsCard { VStack(alignment: .leading, spacing: 12) {
-            Text(text("sitePermissions", "Site Permissions")).fontWeight(.semibold)
-            if model.permissionsUnavailable {
-                Text(text("permissionsUnavailable", "Saved permissions could not be opened. The existing file is kept and access remains restricted.")).foregroundStyle(.red)
-            } else if model.permissionRows.isEmpty {
-                Text(text("noSites", "No saved site permissions for this profile.")).foregroundStyle(.secondary)
-            }
-            ForEach(model.permissionRows) { row in
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack {
-                        Text(row.origin.value).font(Font(BrandFonts.ui(11))).foregroundStyle(.secondary).textSelection(.enabled)
-                        Spacer()
-                        if row.permission == model.permissionRows.first(where: { $0.origin == row.origin })?.permission {
-                            Button(text("clearSite", "Clear Site Data…")) { model.perform { try await model.reviewSiteData(origin: row.origin, profile: profile) } }
-                                .disabled(!model.supportsSiteData)
-                        }
-                    }
-                    Picker(row.permission.displayTitle, selection: Binding(get: { row.setting }, set: { value in
-                        model.perform { try await model.changePermission(row, setting: value, profile: profile) }
-                    })) {
-                        ForEach(BrowserSitePermissionSetting.allCases.filter { $0 != .allow || row.permission.supportsPersistentAllow }, id: \.self) { value in
-                            Text(permissionName(value)).tag(value)
-                        }
-                    }
+        SettingsCard {
+            HStack(spacing: 12) {
+                OrbitIcon.view(sfName: "trash", pointSize: 20).font(.system(size: 20)).frame(width: 20, height: 20)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(text("siteData", "Website Data")).fontWeight(.medium)
+                    Text(text("siteDataNote", "Website data belongs to this profile. Clearing it does not remove your browsing history or saved permission choices."))
+                        .font(Font(BrandFonts.ui(12))).foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 8)
+                Button(text("clearSiteData", "Clear Site Data for This Profile…")) {
+                    model.perform { try await model.reviewSiteData(origin: nil, profile: profile) }
+                }.disabled(!model.supportsSiteData)
+            }.padding(.horizontal, 14).padding(.vertical, 8)
+        }
+        Text(text("sitePermissions", "Site Permissions")).font(Font(BrandFonts.ui(14, weight: .semibold))).padding(.top, 4)
+        SettingsCard {
+            VStack(alignment: .leading, spacing: 0) {
+                if model.permissionsUnavailable {
+                    Text(text("permissionsUnavailable", "Saved permissions could not be opened. The existing file is kept and access remains restricted."))
+                        .foregroundStyle(.red).padding(14)
+                } else if model.permissionRows.isEmpty {
+                    Text(text("noSites", "No saved site permissions for this profile.")).foregroundStyle(.secondary).padding(14)
+                }
+                ForEach(permissionOrigins, id: \.self) { origin in
+                    HStack(spacing: 12) {
+                        OrbitIcon.view(sfName: "globe", pointSize: 20).font(.system(size: 20)).frame(width: 20, height: 20)
+                        VStack(alignment: .leading, spacing: 6) {
+                            Text(origin.value).fontWeight(.medium).textSelection(.enabled)
+                            Button(text("clearSite", "Clear Site Data…")) {
+                                model.perform { try await model.reviewSiteData(origin: origin, profile: profile) }
+                            }.disabled(!model.supportsSiteData)
+                        }.frame(width: 160, alignment: .leading)
+                        ScrollView(.horizontal) {
+                          HStack(spacing: 12) {
+                           ForEach(model.permissionRows.filter { $0.origin == origin }) { row in
+                            VStack(spacing: 4) {
+                                Text(row.permission.displayTitle).font(Font(BrandFonts.ui(11))).foregroundStyle(.secondary)
+                                Picker(row.permission.displayTitle, selection: Binding(get: { row.setting }, set: { value in
+                                    model.perform { try await model.changePermission(row, setting: value, profile: profile) }
+                                })) {
+                                    ForEach(BrowserSitePermissionSetting.allCases.filter { $0 != .allow || row.permission.supportsPersistentAllow }, id: \.self) { value in
+                                        Text(permissionName(value)).tag(value)
+                                    }
+                                }.labelsHidden().pickerStyle(.menu).frame(width: 85)
+                            }
+                           }
+                          }
+                        }.frame(height: 64)
+                    }.padding(14)
+                    SettingsRule()
                 }
             }
-            Text(text("permissionLimits", "Only permissions supported by the current engine are editable. Some changes require reloading the website.")).font(Font(BrandFonts.ui(12))).foregroundStyle(.secondary)
-        }.padding(14) }
-        SettingsCard { VStack(alignment: .leading, spacing: 12) {
-            Text(text("safeBrowsing", "Safe Browsing")).fontWeight(.semibold)
-            if model.safeBrowsingAvailable {
-                Text(text("safeBrowsingOn", "Warnings for dangerous sites and downloads are on.")).foregroundStyle(.secondary)
-            } else {
-                Text(text("safeBrowsingUnavailable", "Unavailable in this build. Orbit does not warn about dangerous sites or downloads.")).foregroundStyle(.secondary)
-            }
-        }.padding(14) }
+        }
+        Text(text("permissionLimits", "Only permissions supported by the current engine are editable. Some changes require reloading the website."))
+            .font(Font(BrandFonts.ui(12))).foregroundStyle(.secondary)
+        SettingsCard {
+            HStack(spacing: 12) {
+                OrbitIcon.view(sfName: "checkmark", pointSize: 20).font(.system(size: 20)).frame(width: 20, height: 20)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(text("safeBrowsing", "Safe Browsing")).fontWeight(.medium)
+                    Text(model.safeBrowsingAvailable
+                        ? text("safeBrowsingOn", "Warnings for dangerous sites and downloads are on.")
+                        : text("safeBrowsingUnavailable", "Unavailable in this build. Orbit does not warn about dangerous sites or downloads."))
+                        .font(Font(BrandFonts.ui(12))).foregroundStyle(.secondary)
+                }
+            }.padding(.horizontal, 14).padding(.vertical, 8).frame(minHeight: 50)
+        }
+    }
+
+    private var permissionOrigins: [BrowserSiteOrigin] {
+        model.permissionRows.reduce(into: []) { origins, row in
+            if !origins.contains(row.origin) { origins.append(row.origin) }
+        }
     }
 
     @ViewBuilder private var appearance: some View {
@@ -621,18 +656,28 @@ struct BrowserSettingsView<Engine: BrowserEngine>: View {
 @MainActor
 struct BrowserSettingsNameEditor: View {
     let name: String
+    let compact: Bool
     let save: (String) -> Void
     @StateObject private var draft: BrowserSettingsNameDraft
-    init(name: String, save: @escaping (String) -> Void) {
-        self.name = name; self.save = save
+    init(name: String, compact: Bool = false, save: @escaping (String) -> Void) {
+        self.name = name; self.compact = compact; self.save = save
         _draft = StateObject(wrappedValue: BrowserSettingsNameDraft(name: name))
     }
     var body: some View {
-        HStack {
+        Group {
+          if compact {
+            BrowserSettingsNameField(draft: draft, onSubmit: { draft.submit(save) }, savesOnEndEditing: true)
+                .padding(.horizontal, 9).frame(height: 26)
+                .background(OrbitSettingsStyle.panel, in: RoundedRectangle(cornerRadius: 7))
+                .overlay(RoundedRectangle(cornerRadius: 7).strokeBorder(OrbitSettingsStyle.border))
+          } else {
+           HStack {
             LabeledContent(settingsText("name", "Name")) {
                 BrowserSettingsNameField(draft: draft) { draft.submit(save) }
             }
             Button(settingsText("rename", "Rename")) { draft.submit(save) }.disabled(!draft.canSubmit)
+           }
+          }
         }.onChange(of: name) { _, value in draft.receivePersisted(value) }
     }
 }

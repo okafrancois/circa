@@ -91,7 +91,12 @@ struct BrowserSettingsGradientPicker<Engine: BrowserEngine>: View {
     let space: BrowserSpace
     @State private var isPresented = false
     var body: some View {
-        Button(settingsText("editThemeColor", "Edit Theme Color…")) { isPresented.toggle() }
+        Button { isPresented.toggle() } label: {
+            HStack(spacing: 6) {
+                BrowserSettingsThemeSwatch(theme: space.theme ?? model.runtime.document.space(space.id).palette.themeModel)
+                Text(settingsText("editThemeColor", "Edit Theme Color…"))
+            }
+        }
             .popover(isPresented: $isPresented, arrowEdge: .bottom) {
                 HStack(spacing: 8) {
                     ForEach(BrandPalette.spaceGradients, id: \.id) { gradient in
@@ -133,4 +138,29 @@ struct SettingsAppIcon: View {
             if let mark = BrandFonts.mark { Image(nsImage: mark).resizable().scaledToFit().padding(22) }
         }.clipShape(RoundedRectangle(cornerRadius: 26)).accessibilityLabel(uiText("App Icon"))
     }
+}
+
+/// Explicit ink is needed for destructive bordered buttons on macOS.
+extension View {
+    func settingsDestructive() -> some View {
+        buttonStyle(.bordered)
+            .tint(Color(nsColor: OrbitSettingsStyle.destructiveColor))
+            .foregroundStyle(Color(nsColor: OrbitSettingsStyle.destructiveColor))
+    }
+}
+
+struct SettingsDetailRow<Content: View>: View {
+    let title: String
+    @ViewBuilder var content: Content
+    var body: some View {
+        HStack(spacing: 12) {
+            Text(title).fontWeight(.medium)
+            Spacer(minLength: 8)
+            content
+        }.padding(.horizontal, 14).padding(.vertical, 8).frame(minHeight: 44)
+    }
+}
+
+struct SettingsRule: View {
+    var body: some View { Rectangle().fill(OrbitSettingsStyle.border).frame(height: 1) }
 }

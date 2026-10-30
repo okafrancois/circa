@@ -87,10 +87,17 @@ struct BrowserShortcutSettingsPane: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 8) {
-                TextField(uiText("Search shortcuts"), text: $query).textFieldStyle(.roundedBorder)
-                    .accessibilityIdentifier("settings-search-shortcuts")
+                HStack(spacing: 6) {
+                    OrbitIcon.view(sfName: "magnifyingglass", pointSize: 14).font(.system(size: 14)).foregroundStyle(.secondary)
+                    TextField(uiText("Search shortcuts"), text: $query).textFieldStyle(.plain)
+                        .accessibilityIdentifier("settings-search-shortcuts")
+                }.padding(.horizontal, 9).frame(height: 26)
+                    .background(OrbitSettingsStyle.panel, in: RoundedRectangle(cornerRadius: 7))
+                    .overlay(RoundedRectangle(cornerRadius: 7).strokeBorder(OrbitSettingsStyle.border))
                 if let openExtensionSettings {
-                    Button(uiText("Extension Shortcuts…"), action: openExtensionSettings)
+                    Button(action: openExtensionSettings) {
+                        Label { Text(uiText("Extension Shortcuts…")) } icon: { OrbitIcon.view(sfName: "puzzlepiece.extension", pointSize: 14).font(.system(size: 14)) }
+                    }
                         .disabled(!extensionSettingsAvailable).accessibilityIdentifier("settings-extension-shortcuts")
                 }
             }
@@ -127,7 +134,10 @@ struct BrowserShortcutSettingsPane: View {
             }
             ScrollView {
               LazyVStack(spacing: 0) {
-                ForEach(filtered, id: \.id) { command in
+                ForEach(Array(Set(filtered.map(\.menu))).sorted(), id: \.self) { menu in
+                  Text(uiText(menu)).font(Font(BrandFonts.ui(11, weight: .semibold))).foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 14).padding(.top, 14).padding(.bottom, 6)
+                  ForEach(filtered.filter { $0.menu == menu }, id: \.id) { command in
                     HStack(spacing: 8) {
                         Text(command.localizedTitle).frame(maxWidth: .infinity, alignment: .leading)
                         BrowserShortcutRecorder(title: preferences.bindings(for: command).isEmpty ? "—" : preferences.bindings(for: command).map(shortcutLabel).joined(separator: " / "),
@@ -141,11 +151,12 @@ struct BrowserShortcutSettingsPane: View {
                             Divider()
                             Button(uiText("Remove Shortcut")) { change { try preferences.setShortcut(nil, for: command.id, definitions: conflictDefinitions) } }
                             Button(uiText("Reset to Default")) { change { try preferences.reset(command.id) } }
-                        } label: { OrbitIcon.view(sfName: "ellipsis.circle", pointSize: 13) }
+                        } label: { OrbitIcon.view(sfName: "ellipsis.circle", pointSize: 13).font(.system(size: 13)) }
                         .menuStyle(.borderlessButton).menuIndicator(.hidden).frame(width: 26)
                         .accessibilityLabel(command.localizedTitle + " " + uiText("Shortcut options"))
                     }.padding(.horizontal, 10).padding(.vertical, 5)
-                    Divider()
+                    SettingsRule()
+                  }
                 }
             }
               }
