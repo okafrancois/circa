@@ -782,7 +782,10 @@ struct NativeThemeShellTests {
     @Test("The site-controls entry point sits at the trailing end of the sidebar address field and follows it")
     func siteControlsInAddressField() async throws {
         NSApplication.shared.setActivationPolicy(.prohibited)
-        let controller = try await PreviewEnvironment().makeWindow()
+        let controller = try await BrowserEnvironment(engine: SiteSyntheticEngine()).makeWindow()
+        // Site actions belong to a committed document, rather than the initial pending tab.
+        controller.submitAddress("https://layout.test/")
+        await controller.session.waitForPendingCommands()
         defer { controller.window?.close() }
         let window = try #require(controller.window)
         let root = try #require(window.contentView)

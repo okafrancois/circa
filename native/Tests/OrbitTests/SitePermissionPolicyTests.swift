@@ -91,11 +91,11 @@ struct SitePermissionPolicyTests {
         #expect(await policy.store.setting(for: .camera, origin: origin, profileID: profile) == .block)
     }
 
-    @Test("Popover distinguishes transport inference internal pages and unknown audio state")
+    @Test("Popover keeps HTTPS security unknown without native evidence")
     func viewModel() {
         let secure = BrowserSiteControlsModel(url: URL(string: origin.value), zoom: 1.25, permissions: [.camera: .ask],
             capabilities: [.audioMuting], canClearData: true)
-        #expect(secure.connection == .https)
+        #expect(secure.connection == .unavailable)
         #expect(secure.zoomPercent == 125)
         #expect(!secure.canMute)
         #expect(secure.media.isAudible == nil)

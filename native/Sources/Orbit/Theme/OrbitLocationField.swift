@@ -2,7 +2,7 @@ import AppKit
 import BrowserShell
 import BrowserCore
 
-/// Native editing/AX keep the full URL. The resting text, security glyph and optional status
+/// Editing/AX keep the committed web URL or a redacted label. Resting text, glyph and status
 /// share a clipped presentation group; selection replaces known text without a blank frame.
 @MainActor
 final class OrbitLocationField: NSTextField {
@@ -35,6 +35,8 @@ final class OrbitLocationField: NSTextField {
     /// Status producers supply their own localized message. No URL/domain heuristic fabricates one.
     var statusForSpace: ((SpaceID?) -> String?)?
     private var replacingSpace = false
+    private(set) var presentation: BrowserAddressPresentation?
+    private var applyingPresentation = false
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
@@ -86,6 +88,7 @@ final class OrbitLocationField: NSTextField {
 
     override var stringValue: String {
         didSet {
+            if !applyingPresentation { presentation = nil }
             let wasEmpty = oldValue.isEmpty
             refreshDisplayLabel()
             onAddressChange?(!stringValue.isEmpty)
@@ -96,30 +99,37 @@ final class OrbitLocationField: NSTextField {
         }
     }
 
-    func refreshAddress(_ value: String, in space: SpaceID?) {
+    func refreshAddress(_ value: String, in space: SpaceID?, presentation: BrowserAddressPresentation? = nil) {
         guard pendingSpaceID == nil || pendingSpaceID == space else { return }
-        stringValue = value
+        applyValue(value, presentation: presentation)
     }
 
-    func finishSpaceTransition(_ value: String, in space: SpaceID?, spaces: [BrowserSpace]) {
+    func finishSpaceTransition(_ value: String, in space: SpaceID?, spaces: [BrowserSpace], presentation: BrowserAddressPresentation? = nil) {
         let pending = pendingSpaceID
         pendingSpaceID = nil
         guard pending != nil else { return }
-        applyAddress(value, in: space, animated: pending != space)
+        applyAddress(value, in: space, animated: pending != space, presentation: presentation)
     }
 
     func setAddress(_ value: String, from source: SpaceID?, to destination: SpaceID?, spaces: [BrowserSpace],
-                    awaitingPublication: Bool = false) {
+                    awaitingPublication: Bool = false, presentation: BrowserAddressPresentation? = nil) {
         if awaitingPublication { pendingSpaceID = destination }
         else if pendingSpaceID == destination { pendingSpaceID = nil }
         else if pendingSpaceID != nil { return }
-        applyAddress(value, in: destination, animated: source != nil && source != destination)
+        applyAddress(value, in: destination, animated: source != nil && source != destination, presentation: presentation)
     }
 
-    private func applyAddress(_ value: String, in space: SpaceID?, animated: Bool) {
+    private func applyValue(_ value: String, presentation: BrowserAddressPresentation?) {
+        self.presentation = presentation
+        applyingPresentation = true
+        stringValue = presentation?.value ?? value
+        applyingPresentation = false
+    }
+
+    private func applyAddress(_ value: String, in space: SpaceID?, animated: Bool, presentation: BrowserAddressPresentation?) {
         layoutSubtreeIfNeeded()
         replacingSpace = animated
-        stringValue = value
+        applyValue(value, presentation: presentation)
         replacingSpace = false
         if let statusForSpace { setStatus(statusForSpace(space), animated: animated) }
         else if animated || value.isEmpty { setStatus(nil, animated: animated) }
@@ -195,9 +205,7 @@ final class OrbitLocationField: NSTextField {
     private func refreshDisplayLabel() {
         textMask.isHidden = currentEditor() != nil
         let empty = stringValue.isEmpty
-        if let url = URL(string: stringValue) {
-            security = BrowserSiteControlsModel(url: url, zoom: 1, permissions: [:], capabilities: [], canClearData: false).connection
-        } else { security = .unavailable }
+        security = presentation?.connection ?? .unavailable
         let symbol: String?
         switch security {
         case .https: symbol = "lock.fill"
@@ -206,9 +214,7 @@ final class OrbitLocationField: NSTextField {
         }
         let label: String
         if empty { label = placeholderAttributedString?.string ?? placeholderString ?? String() }
-        else if let url = URL(string: stringValue), ["http", "https"].contains(url.scheme?.lowercased() ?? ""), let host = url.host {
-            label = host.hasPrefix("www.") ? String(host.dropFirst(4)) : host
-        } else { label = stringValue }
+        else { label = presentation?.label ?? uiText("Page") }
         if displayLabel.stringValue != label { displayLabel.stringValue = label }
         let labelFont = font ?? OrbitTokens.Typography.addressField
         if displayLabel.font != labelFont { displayLabel.font = labelFont }

@@ -34,6 +34,8 @@ extension BrowserWindowController {
 
     func submitEnteredAddress() {
         let input = addressField.stringValue
+        let address = BrowserAddressPresentation(surface: session.selectedSurface)
+        addressField.refreshAddress(address.value, in: session.snapshot?.activeSpaceID, presentation: address)
         submitInput { $0.submitAddress(input) }
     }
 
@@ -66,7 +68,8 @@ extension BrowserWindowController {
         // AppKit dispatches the Return action after ending editing. Preserve its input.
         let movement = (notification.userInfo?["NSTextMovement"] as? NSNumber)?.intValue
         guard movement != NSTextMovement.return.rawValue else { return }
-        addressField.stringValue = session.selectedSurface?.navigationState.url?.absoluteString ?? ""
+        let address = BrowserAddressPresentation(surface: session.selectedSurface)
+        addressField.refreshAddress(address.value, in: session.snapshot?.activeSpaceID, presentation: address)
     }
 
     func navigateBack() {
@@ -101,10 +104,14 @@ extension BrowserWindowController {
         refreshPageZoom()
         renderLoadingIndicator()
         renderDeveloperToolbar()
+        addressSecurityObservation.observe(surface.nativePageServices) { [weak self, weak surface] in
+            guard let self, let surface, !self.isPreparingForTermination else { return }
+            self.refreshNavigation(for: surface)
+        }
         let state = surface.navigationState
         if window?.firstResponder !== addressField.currentEditor() {
-            let url = state.url ?? session.organization?.selectedTab?.url
-            addressField.refreshAddress(url?.absoluteString ?? "", in: session.snapshot?.activeSpaceID)
+            let address = BrowserAddressPresentation(surface: surface)
+            addressField.refreshAddress(address.value, in: session.snapshot?.activeSpaceID, presentation: address)
         }
         if backButton.isEnabled != state.canGoBack { backButton.isEnabled = state.canGoBack }
         if forwardButton.isEnabled != state.canGoForward { forwardButton.isEnabled = state.canGoForward }
