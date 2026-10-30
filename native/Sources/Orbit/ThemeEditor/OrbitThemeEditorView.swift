@@ -448,8 +448,7 @@ final class OrbitThemeEditorButton: NSButton {
         isBordered = false
         title = ""
         imagePosition = .imageOnly
-        image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)?
-            .withSymbolConfiguration(.init(pointSize: pointSize, weight: .medium))
+        image = OrbitIcon.image(sfName: symbol, pointSize: pointSize, accessibilityDescription: nil, weight: .medium)
         contentTintColor = tint
         setButtonType(.momentaryChange)
         target = self

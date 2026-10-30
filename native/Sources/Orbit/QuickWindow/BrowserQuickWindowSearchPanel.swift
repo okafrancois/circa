@@ -87,13 +87,13 @@ final class BrowserQuickWindowSearchPanel: NSObject, NSWindowDelegate, NSTextFie
         placeholder.font = input.font
         placeholder.setAccessibilityElement(false)
         root.addSubview(placeholder)
-        searchIcon.image = NSImage(systemSymbolName: "magnifyingglass", accessibilityDescription: nil)
+        searchIcon.image = OrbitIcon.image(sfName: "magnifyingglass", pointSize: 16, accessibilityDescription: nil)
         searchIcon.setAccessibilityElement(false)
         closeButton.isBordered = false
         closeButton.alwaysHighlighted = kind == .address
         closeButton.wantsLayer = true
         closeButton.layer?.cornerRadius = 8
-        closeButton.image = NSImage(systemSymbolName: kind == .address ? "xmark" : "chevron.up", accessibilityDescription: nil)
+        closeButton.image = OrbitIcon.image(sfName: kind == .address ? "xmark" : "chevron.up", pointSize: 16, accessibilityDescription: nil)
         closeButton.setAccessibilityLabel(kind == .address ? uiText("Close Little Orbit") : uiText("Close"))
         closeButton.target = self; closeButton.action = #selector(cancel)
         divider.wantsLayer = true
@@ -132,7 +132,7 @@ final class BrowserQuickWindowSearchPanel: NSObject, NSWindowDelegate, NSTextFie
 
     func setEditingDocument(_ editing: Bool) {
         editingDocument = editing
-        searchIcon.image = NSImage(systemSymbolName: editing ? "globe" : "magnifyingglass", accessibilityDescription: nil)
+        searchIcon.image = OrbitIcon.image(sfName: editing ? "globe" : "magnifyingglass", pointSize: 16, accessibilityDescription: nil)
         closeButton.setAccessibilityLabel(editing ? uiText("Close") : uiText("Close Little Orbit"))
     }
 
@@ -296,9 +296,8 @@ private final class QuickWindowSearchRowButton: NSButton {
         let iconSize: CGFloat = isAddress ? 20 : 16
         let textX: CGFloat = isAddress ? 42 : 46
         let color: NSColor = selected && isAddress ? .white : .labelColor
-        let image = row.image.flatMap { image in image.isTemplate ? image.withSymbolConfiguration(.init(paletteColors: [color])) : image }
-        image?.draw(in: NSRect(x: isAddress ? 12 : 15, y: (bounds.height - iconSize) / 2, width: iconSize, height: iconSize), from: .zero,
-                        operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
+        OrbitIcon.draw(row.image, in: NSRect(x: isAddress ? 12 : 15, y: (bounds.height - iconSize) / 2,
+                                             width: iconSize, height: iconSize), tint: color)
         let font = NSFont.systemFont(ofSize: 13, weight: .medium)
         let title = NSAttributedString(string: row.title, attributes: [.font: font, .foregroundColor: color])
         let titleWidth = min(title.size().width, max(0, bounds.width - 66))

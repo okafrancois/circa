@@ -13,7 +13,7 @@ final class BrowserBoostDeleteView: NSView {
         card.wantsLayer = true; card.layer?.cornerRadius = 18
         card.layer?.backgroundColor = NSColor(srgbRed: 0.082, green: 0.11, blue: 0.18, alpha: 1).cgColor
         addSubview(card)
-        let icon = NSImageView(image: NSImage(systemSymbolName: "puzzlepiece.extension", accessibilityDescription: nil)!)
+        let icon = NSImageView(image: OrbitIcon.image(sfName: "puzzlepiece.extension", pointSize: 38, accessibilityDescription: nil)!)
         icon.symbolConfiguration = .init(pointSize: 38, weight: .regular)
         icon.imageScaling = .scaleProportionallyUpOrDown
         icon.contentTintColor = NSColor(calibratedWhite: 0.9, alpha: 1)

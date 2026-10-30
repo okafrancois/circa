@@ -52,7 +52,7 @@ final class BrowserSidebarView: NSView, SidebarListHost {
     var windowIdentifier: UUID?
     var standaloneProfileName: String?
     private let standaloneProfilePill = NSTextField(labelWithString: "")
-    private let standaloneProfileIcon = NSImageView(image: NSImage(systemSymbolName: "face.smiling.fill", accessibilityDescription: nil) ?? NSImage())
+    private let standaloneProfileIcon = NSImageView(image: OrbitIcon.image(sfName: "face.smiling.fill", pointSize: 12, accessibilityDescription: nil) ?? NSImage())
     var onFolderHover: ((SidebarListRow, Bool) -> Void)?
     var onPreviewInvalidated: ((SidebarListRow) -> Void)?
     var onSelectTab: ((TabID) -> Void)?
@@ -1358,7 +1358,11 @@ final class SidebarAddressField: SidebarFlippedView {
     func installAccessory(_ view: NSView, onHover: Bool = false, order: Int = 0) {
         if let button = view as? NSButton, button.image != nil {
             if view.accessibilityIdentifier() != "site-controls" {
-                button.image = button.image?.withSymbolConfiguration(.init(pointSize: 14, weight: .regular))
+                if button.image?.representations.contains(where: { $0 is NSPDFImageRep }) == true {
+                    button.image?.size = NSSize(width: 14, height: 14)
+                } else {
+                    button.image = button.image?.withSymbolConfiguration(.init(pointSize: 14, weight: .regular))
+                }
             }
             (button as? SiteControlButton)?.usesURLPillStyle = true
             button.isBordered = false

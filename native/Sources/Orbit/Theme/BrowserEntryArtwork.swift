@@ -3,9 +3,6 @@ import AppKit
 /// Small outline artwork in a 28 pt, top-left coordinate system.
 @MainActor
 enum BrowserEntryArtwork {
-    static let selectedBoostFill = NSColor(srgbRed: 30 / 255, green: 40 / 255, blue: 253 / 255, alpha: 1)
-    static let selectedBoostOutline = NSColor(srgbRed: 231 / 255, green: 231 / 255, blue: 252 / 255, alpha: 1)
-
     private static func path(_ points: [NSPoint], closed: Bool = false) -> NSBezierPath {
         let path = NSBezierPath()
         if let first = points.first { path.move(to: first) }
@@ -19,13 +16,6 @@ enum BrowserEntryArtwork {
 
     private static func stroke(_ points: [(CGFloat, CGFloat)], closed: Bool = false) {
         path(points.map { NSPoint(x: $0.0, y: $0.1) }, closed: closed).stroke()
-    }
-
-    private static func rounded(_ rect: NSRect, radius: CGFloat = 2, width: CGFloat = 1.7) -> NSBezierPath {
-        let result = NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius)
-        result.lineWidth = width
-        result.lineJoinStyle = .round
-        return result
     }
 
     private static func star(x: CGFloat, y: CGFloat, radius: CGFloat) {
@@ -67,65 +57,16 @@ enum BrowserEntryArtwork {
     }
 
     static func drawLibrary(_ category: BrowserLibraryCategory, in rect: NSRect, foreground: NSColor, selected: Bool, flipped: Bool) {
-        NSGraphicsContext.saveGraphicsState()
-        defer { NSGraphicsContext.restoreGraphicsState() }
-        let transform = NSAffineTransform()
-        transform.translateX(by: rect.minX, yBy: flipped ? rect.minY : rect.maxY)
-        transform.scaleX(by: rect.width / 28, yBy: (flipped ? 1 : -1) * rect.height / 28)
-        transform.concat()
-        foreground.setStroke(); foreground.setFill()
+        let name: String
         switch category {
-        case .boosts:
-            let outline = selected ? selectedBoostOutline : foreground
-            let fill = selected ? selectedBoostFill : nil
-            let plate = rounded(NSRect(x: 5, y: 2.2, width: 19.7, height: 19.7), radius: 3)
-            let tilt = AffineTransform(translationByX: 14.8, byY: 12)
-            let rotation = NSAffineTransform(transform: tilt)
-            rotation.rotate(byDegrees: -16)
-            rotation.translateX(by: -14.8, yBy: -12)
-            plate.transform(using: rotation as AffineTransform)
-            if let fill { fill.setFill(); plate.fill() }
-            // Leave a break behind the brush handle.
-            NSGraphicsContext.saveGraphicsState()
-            let clip = NSBezierPath(rect: NSRect(x: 0, y: 0, width: 28, height: 28))
-            clip.append(NSBezierPath(rect: NSRect(x: 0, y: 11, width: 15.5, height: 17)))
-            clip.windingRule = .evenOdd; clip.addClip()
-            outline.setStroke(); plate.stroke()
-            NSGraphicsContext.restoreGraphicsState()
-            outline.setStroke(); outline.setFill()
-            brush(fill: fill)
-            outline.setFill()
-            star(x: 18.3, y: 4.7, radius: 1.8)
-            star(x: 21.3, y: 7.9, radius: 2.7)
-        case .media:
-            stroke([(3.8, 19.3), (3, 19.1), (1.9, 6.7), (18.5, 4.9), (19, 8.8)])
-            rounded(NSRect(x: 7, y: 10, width: 19, height: 14), radius: 1.6).stroke()
-            NSBezierPath(ovalIn: NSRect(x: 11, y: 13, width: 4, height: 4)).fill()
-            path([.init(x: 7, y: 22), .init(x: 13, y: 17.7), .init(x: 17, y: 20.5),
-                  .init(x: 21.2, y: 16.5), .init(x: 26, y: 20), .init(x: 26, y: 24), .init(x: 7, y: 24)], closed: true).fill()
-        case .downloads:
-            let circle = NSBezierPath(ovalIn: NSRect(x: 4.3, y: 4.3, width: 19.4, height: 19.4))
-            circle.lineWidth = 1.7; circle.stroke()
-            stroke([(14, 9), (14, 18.7)])
-            stroke([(10.4, 15.2), (14, 18.8), (17.6, 15.2)])
-        case .spaces:
-            let back = rounded(NSRect(x: 4, y: 4, width: 14, height: 19), radius: 1.7)
-            let rotation = NSAffineTransform(); rotation.translateX(by: 11, yBy: 13.5)
-            rotation.rotate(byDegrees: -18); rotation.translateX(by: -11, yBy: -13.5)
-            back.transform(using: rotation as AffineTransform)
-            NSGraphicsContext.saveGraphicsState()
-            let clip = NSBezierPath(rect: NSRect(x: 0, y: 0, width: 28, height: 28))
-            clip.append(NSBezierPath(rect: NSRect(x: 10, y: 8, width: 16, height: 20)))
-            clip.windingRule = .evenOdd; clip.addClip(); back.stroke()
-            NSGraphicsContext.restoreGraphicsState()
-            rounded(NSRect(x: 10, y: 8, width: 14, height: 19), radius: 1.7).stroke()
-        case .archive:
-            rounded(NSRect(x: 4.5, y: 5.7, width: 19, height: 4), radius: 1).stroke()
-            stroke([(6, 10), (6, 22), (7, 23), (21, 23), (22, 22), (22, 10)])
-            stroke([(11, 14), (17, 14)])
-        case .history:
-            OrbitGlyph.symbol("clock", pointSize: 24, weight: .regular)?.draw(in: NSRect(x: 0, y: 0, width: 28, height: 28))
+        case .media: name = "photo.on.rectangle"
+        case .downloads: name = "arrow.down.circle"
+        case .spaces: name = "rectangle.on.rectangle"
+        case .boosts: name = "paintbrush.pointed.fill"
+        case .archive: name = "archivebox"
+        case .history: name = "clock"
         }
+        OrbitIcon.draw(OrbitIcon.image(sfName: name, pointSize: rect.width), in: rect, tint: foreground)
     }
 
     static var boostAction: NSImage {

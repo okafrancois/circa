@@ -139,7 +139,7 @@ final class CreationMenuRow: NSView {
         super.init(frame: .zero)
         wantsLayer = true
         layer?.cornerRadius = OrbitTokens.Radius.plusMenuRow
-        icon.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)
+        icon.image = OrbitIcon.image(sfName: symbol, pointSize: OrbitTokens.Metrics.Sidebar.plusMenuIconSize, accessibilityDescription: nil)
         icon.contentTintColor = destructive ? .systemRed : OrbitTokens.Color.Text.commandBarPrimary
         title.stringValue = text
         title.font = OrbitTokens.Typography.menuItem

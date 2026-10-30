@@ -240,7 +240,7 @@ final class BrowserExtensionsController<Engine: BrowserEngine> {
             }
             if let image = icon(for: item) { action.image = image }
             else if action.image == nil {
-                action.image = NSImage(systemSymbolName: "puzzlepiece.extension", accessibilityDescription: item.name)
+                action.image = OrbitIcon.image(sfName: "puzzlepiece.extension", pointSize: 16, accessibilityDescription: item.name)
             }
             // Pending selection blocks actions without washing out already decoded pixels.
             (action.cell as? NSButtonCell)?.imageDimsWhenDisabled = false

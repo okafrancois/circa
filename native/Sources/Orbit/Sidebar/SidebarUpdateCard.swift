@@ -19,7 +19,7 @@ final class SidebarUpdateCard: NSView {
         layer?.addSublayer(outline)
         outline.lineWidth = 1
         outline.lineDashPattern = [4, 3]
-        icon.image = NSImage(systemSymbolName: "arrow.down.circle.fill", accessibilityDescription: nil)
+        icon.image = OrbitIcon.image(sfName: "arrow.down.circle.fill", pointSize: 16, accessibilityDescription: nil)
         icon.imageScaling = .scaleProportionallyUpOrDown
         title.font = .systemFont(ofSize: 13, weight: .semibold)
         body.font = .systemFont(ofSize: 12)
