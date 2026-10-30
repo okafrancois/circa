@@ -194,10 +194,10 @@
 			<string>%d passwords added</string>
 		</dict>
 	</dict>
-	<key>%d passwords already in Orbit</key>
+	<key>%d passwords already in %@</key>
 	<dict>
 		<key>NSStringLocalizedFormatKey</key>
-		<string>%#@count@</string>
+		<string>%1$#@count@</string>
 		<key>count</key>
 		<dict>
 			<key>NSStringFormatSpecTypeKey</key>
@@ -205,15 +205,15 @@
 			<key>NSStringFormatValueTypeKey</key>
 			<string>d</string>
 			<key>one</key>
-			<string>%d password already in Orbit</string>
+			<string>%1$d password already in %2$@</string>
 			<key>other</key>
-			<string>%d passwords already in Orbit</string>
+			<string>%1$d passwords already in %2$@</string>
 		</dict>
 	</dict>
-	<key>%d passwords not replaced (Orbit's version kept)</key>
+	<key>%d passwords not replaced (%@'s version kept)</key>
 	<dict>
 		<key>NSStringLocalizedFormatKey</key>
-		<string>%#@count@</string>
+		<string>%1$#@count@</string>
 		<key>count</key>
 		<dict>
 			<key>NSStringFormatSpecTypeKey</key>
@@ -221,9 +221,9 @@
 			<key>NSStringFormatValueTypeKey</key>
 			<string>d</string>
 			<key>one</key>
-			<string>%d password not replaced (Orbit's version kept)</string>
+			<string>%1$d password not replaced (%2$@'s version kept)</string>
 			<key>other</key>
-			<string>%d passwords not replaced (Orbit's version kept)</string>
+			<string>%1$d passwords not replaced (%2$@'s version kept)</string>
 		</dict>
 	</dict>
 	<key>%d passwords skipped</key>

@@ -39,7 +39,7 @@ enum ArcImportText {
         }
         lines.append("")
         lines.append(passwordsAvailable
-            ? uiText("Passwords and connections are imported in the next step, after restarting Circa. Extensions and settings are not imported.")
+            ? uiFormat("Passwords and connections are imported in the next step, after restarting %@. Extensions and settings are not imported.", ProductIdentity.displayName)
             : uiText("Not imported: passwords, sign-ins (cookies), extensions, site data and settings."))
         lines.append(uiText("Circa keeps a backup of its current session and history. Nothing opens automatically."))
         return lines.joined(separator: "\n")

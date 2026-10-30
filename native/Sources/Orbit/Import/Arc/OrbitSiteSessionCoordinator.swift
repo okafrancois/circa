@@ -11,13 +11,13 @@ enum ArcSiteSessionAlerts {
         let alert = OrbitFloatingMaterial.alert()
         if restoring {
             alert.messageText = uiText("Restore Connections Before the Last Import?")
-            alert.informativeText = uiText("Circa will save your tabs and restart. Cookies and site storage will return to their state before the last import. Imported passwords that are still unchanged will be removed.")
+            alert.informativeText = uiFormat("%@ will save your tabs and restart. Cookies and site storage will return to their state before the last import. Imported passwords that are still unchanged will be removed.", ProductIdentity.displayName)
         } else if orbitRunning {
             alert.messageText = uiText("Quit Arc to Import Your Connections")
             alert.informativeText = uiText("Arc must be closed to copy its connections. Circa will then save your tabs and restart. Allow access to Arc Safe Storage when macOS asks. Existing Circa connections are backed up before importing.")
         } else {
             alert.messageText = uiText("Import Connections from Arc?")
-            alert.informativeText = uiText("Circa will save your tabs and restart. Allow access to Arc Safe Storage when macOS asks. Arc connections replace matching cookies and site storage in the corresponding profiles. Passwords are added while existing Circa passwords are kept. A backup lets you undo the import.")
+            alert.informativeText = uiFormat("%1$@ will save your tabs and restart. Allow access to Arc Safe Storage when macOS asks. Arc connections replace matching cookies and site storage in the corresponding profiles. Passwords are added while existing %1$@ passwords are kept. A backup lets you undo the import.", ProductIdentity.displayName)
         }
         alert.addButton(withTitle: uiText(restoring ? "Restore and Restart" : orbitRunning ? "Quit Arc" : "Import and Restart"))
         alert.addButton(withTitle: uiText("Cancel"))

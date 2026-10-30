@@ -104,7 +104,7 @@ LOCALIZED_IMPORT_KEYS = frozenset(expand(key) for key in [
  'Coming from {source}? Your Spaces, tabs and passwords come with you, even after {source} stops working.',
  'Coming from {source}? Your Spaces and tabs come with you, even after {source} stops working.',
  'Passwords and connections were skipped. Your existing data was kept. Check that {source} is closed and allow Keychain access, then try again.',
- 'Orbit will save your tabs and restart. Allow access to {source} Safe Storage when macOS asks. {source} connections replace matching cookies and site storage in the corresponding profiles. Passwords are added while existing Orbit passwords are kept. A backup lets you undo the import.',
+ '%1$@ will save your tabs and restart. Allow access to {source} Safe Storage when macOS asks. {source} connections replace matching cookies and site storage in the corresponding profiles. Passwords are added while existing %1$@ passwords are kept. A backup lets you undo the import.',
  '{source} is open. Quit {source}, then try again.',
  'Circa can copy your Spaces, profiles, Favorites, pinned tabs and folders, Today tabs and history from '
  '{source}. {source} must be closed during the copy; Circa never quits it.',

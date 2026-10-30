@@ -10,6 +10,16 @@ enum ArcPasswordProductProbe {
     static var isEnabled: Bool { Bundle.main.bundleIdentifier == bundleID && activeSiteSessionConfiguration()?.usesMockKeychain == true }
     static var autoConfirm = false
     private static var alert: NSAlert?
+    private static func recordedJobID(root: URL) throws -> UUID? {
+        if let id = try ArcPasswordImportJournal.activeID(root: root) { return id }
+        let file = root.appendingPathComponent("password-probe-job.json")
+        if let data = try? Data(contentsOf: file) { return try JSONDecoder().decode(UUID.self, from: data) }
+        if let id = try? ArcSiteSessionImport(dataRoot: root).latestPasswordJobID {
+            try JSONEncoder().encode(id).write(to: file, options: .atomic)
+            return id
+        }
+        return nil
+    }
     static func present(_ value: NSAlert) {
         alert?.window.orderOut(nil); alert = value
         value.layout(); value.window.center(); value.window.makeKeyAndOrderFront(nil)
@@ -60,7 +70,7 @@ enum ArcPasswordProductProbe {
                     }
                 }
                 var result: [String: Any] = ["storeRows": total, "blocklisted": blocked, "edited": edited]
-                if let id = try ArcPasswordImportJournal.activeID(root: root) {
+                if let id = try recordedJobID(root: root) {
                     let job = try ArcPasswordImportPreparation.open(id, configuration: configuration)
                     result["phase"] = job.phase.rawValue
                     result["added"] = job.counts.added; result["alreadyPresent"] = job.counts.alreadyPresent
@@ -85,7 +95,7 @@ enum ArcPasswordProductProbe {
             } else if action == "missing" || action == "denied" {
                 panel = ArcSiteSessionAlerts.resultAlert(nil, failed: true)!
             } else {
-                guard let id = try ArcPasswordImportJournal.activeID(root: root) else { return ["failed": true] }
+                guard let id = try recordedJobID(root: root) else { return ["failed": true] }
                 let job = try ArcPasswordImportPreparation.open(id, configuration: configuration)
                 var counts = job.counts
                 if action == "zero" { counts = .init(); counts.added = 1 }

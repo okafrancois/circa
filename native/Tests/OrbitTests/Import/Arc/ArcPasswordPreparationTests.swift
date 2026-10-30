@@ -49,11 +49,11 @@ struct ArcPasswordPreparationTests {
         var counts = ArcPasswordImportJournal.Counts()
         #expect(ArcPasswordImportText.result(counts, restored: false).isEmpty)
         counts.kept = 1
-        #expect(ArcPasswordImportText.result(counts, restored: false) == "1 password not replaced (Orbit's version kept)")
+        #expect(ArcPasswordImportText.result(counts, restored: false) == "1 password not replaced (Circa's version kept)")
         counts.added = 1; counts.alreadyPresent = 2; counts.kept = 3; counts.skipped = 4
         let text = ArcPasswordImportText.result(counts, restored: false)
         #expect(text.contains("1 password added") && !text.contains("1 passwords"))
-        #expect(text.contains("2 passwords already in Orbit") && text.contains("3 passwords not replaced (Orbit's version kept)"))
+        #expect(text.contains("2 passwords already in Circa") && text.contains("3 passwords not replaced (Circa's version kept)"))
         #expect(text.contains("4 passwords skipped") && !text.contains("0 "))
     }
 }
