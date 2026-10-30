@@ -587,15 +587,20 @@ final class BrowserQuickWindowWindowController<Engine: BrowserEngine>: NSWindowC
 
     @objc private func showQuickWindowSiteControls(_ sender: Any?) { siteControls.show() }
     @objc private func showQuickWindowExtensions(_ sender: NSButton) {
-        guard acceptsCommands, surface != nil, let host = engine.extensions else { return }
+        guard let menu = extensionMenu() else { return }
+        menu.popUp(positioning: nil, at: NSPoint(x: 0, y: sender.bounds.height), in: sender)
+    }
+
+    func extensionMenu() -> NSMenu? {
+        guard acceptsCommands, let surface, let host = engine.extensions else { return nil }
         let menu = NSMenu()
-        for item in (try? host.installedExtensions(in: profileID)) ?? [] where item.isEnabled && item.hasAction {
+        for item in (try? host.installedExtensions(on: surface)) ?? [] where item.isEnabled && item.hasAction {
             let entry = NSMenuItem(title: item.name, action: #selector(performQuickWindowExtension(_:)), keyEquivalent: "")
             entry.target = self; entry.representedObject = item.id
             menu.addItem(entry)
         }
         if menu.items.isEmpty { menu.addItem(withTitle: uiText("No extensions in this profile."), action: nil, keyEquivalent: "") }
-        menu.popUp(positioning: nil, at: NSPoint(x: 0, y: sender.bounds.height), in: sender)
+        return menu
     }
     @objc private func performQuickWindowExtension(_ sender: NSMenuItem) {
         guard acceptsCommands, let surface, let id = sender.representedObject as? String else { return }

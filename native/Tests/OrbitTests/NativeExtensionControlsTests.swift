@@ -1,6 +1,7 @@
 import AppKit
 import BrowserCore
 import BrowserEngine
+import BrowserShell
 import Testing
 @testable import Orbit
 
@@ -18,8 +19,10 @@ private final class ExtensionControlProbe: BrowserExtensionHost {
     var requestedProfiles: [ProfileID] = []
     var toggles: [(String, ProfileID, Bool)] = []
     var actionSurface: (any BrowserEngineSurface)?
+    var actionIDs: [String] = []
     var actionAnchor: NSView?
     var pinChanges: [(String, ProfileID, Bool)] = []
+    var detailsID: String?
     var managedSurface: (any BrowserEngineSurface)?
     var shortcutsSurface: (any BrowserEngineSurface)?
     var item = BrowserExtensionSummary(id: "abcdefghijklmnopabcdefghijklmnop", name: "Synthetic Extension",
@@ -48,8 +51,12 @@ private final class ExtensionControlProbe: BrowserExtensionHost {
     }
     func remove(extensionID: String, in profileID: ProfileID) throws { }
     func openManagement(on surface: any BrowserEngineSurface) throws { managedSurface = surface }
+    func openDetails(extensionID: String, on surface: any BrowserEngineSurface) throws {
+        detailsID = extensionID; managedSurface = surface
+    }
     func openShortcuts(on surface: any BrowserEngineSurface) throws { shortcutsSurface = surface }
     func performAction(extensionID: String, on surface: any BrowserEngineSurface, anchor: NSView) throws {
+        actionIDs.append(extensionID)
         actionSurface = surface
         actionAnchor = anchor
     }
@@ -64,6 +71,173 @@ extension NativeWebKitTests {
 @Suite("Native extension controls", .serialized)
 @MainActor
 struct NativeExtensionControlsTests {
+    @Test("Cycling follows pin order, wraps, skips disabled actions and opens only on release")
+    func cyclingOrderAndRelease() async throws {
+        NSApplication.shared.setActivationPolicy(.prohibited)
+        let engine = SiteSyntheticEngine(), host = ExtensionControlProbe()
+        host.supportsActions = true; host.supportsPinning = true
+        engine.extensions = host
+        let environment = BrowserEnvironment(engine: engine)
+        let owner = try await environment.makeWindow()
+        defer { owner.session.close(); owner.window?.close() }
+        owner.submitAddress("https://extensions.example.invalid")
+        await owner.session.waitForPendingCommands()
+        let surface = try #require(owner.session.selectedSurface)
+        var disabled = BrowserExtensionSummary(id: String(repeating: "c", count: 32), name: "Disabled", version: "1",
+            isEnabled: true, hasAction: true, isPinned: true)
+        disabled.actionState = .init(title: "Disabled", badgeText: "", badgeBackgroundColor: 0, isEnabled: false)
+        let first = String(repeating: "b", count: 32), second = String(repeating: "a", count: 32)
+        host.itemsByProfile[surface.profileID] = [
+            .init(id: first, name: "First", version: "1", isEnabled: true, hasAction: true, isPinned: true),
+            disabled,
+            .init(id: second, name: "Second", version: "1", isEnabled: true, hasAction: true, isPinned: true)]
+        owner.extensionControls.render()
+        func highlighted() -> String? {
+            owner.sidebar.extensionsContainer.subviews.compactMap { $0 as? NSButton }.first { $0.isHighlighted }?.accessibilityIdentifier()
+        }
+        for expected in [first, second, first] {
+            owner.extensionControls.cycle(holding: .command)
+            #expect(highlighted() == "pinned-extension-" + expected)
+            #expect(host.actionIDs.isEmpty)
+        }
+        owner.extensionControls.finishCycle()
+        #expect(host.actionIDs == [first])
+        #expect(highlighted() == nil && !owner.extensionControls.isCycling)
+        owner.extensionControls.finishCycle()
+        #expect(host.actionIDs.count == 1)
+        owner.extensionControls.cycle()
+        #expect(host.actionIDs == [first, first])
+        try await environment.finalize()
+    }
+
+    @Test("Command routing honours website priority and handles repeated taps and modifier release")
+    func cyclingCommandPriority() async throws {
+        NSApplication.shared.setActivationPolicy(.prohibited)
+        let engine = SiteSyntheticEngine(), host = ExtensionControlProbe()
+        host.supportsActions = true; host.supportsPinning = true; host.item.isPinned = true
+        engine.extensions = host
+        let environment = BrowserEnvironment(engine: engine)
+        let router = BrowserWindowRouter(create: { id in try await environment.makeWindow(id: id) },
+            present: { _, _ in }, dispose: { $0.session.close(); $0.window?.close() })
+        defer { router.shutdown() }
+        let registry = try BrowserCommandRegistry(router: router, state: { $0?.commandState ?? .init() })
+        BrowserDailyCommands.install(in: registry)
+        router.newWindow()
+        await router.waitForPendingCommands()
+        let owner = try #require(router.selectedWindow)
+        owner.submitAddress("https://extensions.example.invalid")
+        await owner.session.waitForPendingCommands()
+        let key = try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: .command,
+            timestamp: 1, windowNumber: owner.window!.windowNumber, context: nil, characters: "e",
+            charactersIgnoringModifiers: "e", isARepeat: false, keyCode: 14))
+        let keyboard = BrowserCommandKeyboard(registry: registry, acceptsKeyboard: { true }, firstResponder: { nil })
+        #expect(!keyboard.handle(key))
+        try registry.shortcutPreferences.setPriority(.browser, for: .cycleExtensions)
+        #expect(keyboard.handle(key))
+        #expect(owner.extensionControls.isCycling && host.actionIDs.isEmpty)
+        #expect(keyboard.handle(key))
+        let release = try #require(NSEvent.keyEvent(with: .flagsChanged, location: .zero, modifierFlags: [],
+            timestamp: 2, windowNumber: owner.window!.windowNumber, context: nil, characters: "",
+            charactersIgnoringModifiers: "", isARepeat: false, keyCode: 55))
+        #expect(!keyboard.handle(release))
+        #expect(host.actionIDs == [host.item.id])
+        try registry.shortcutPreferences.setPriority(.websites, for: .cycleExtensions)
+        #expect(!keyboard.handle(key))
+        #expect(host.actionIDs.count == 1)
+        owner.session.close()
+        try await environment.finalize()
+    }
+
+    @Test("A pending extension cycle is revoked by navigation, selection, removal and focus loss",
+          arguments: ["navigation", "selection", "removal", "focus"])
+    func cycleRevocation(reason: String) async throws {
+        NSApplication.shared.setActivationPolicy(.prohibited)
+        let engine = SiteSyntheticEngine(), host = ExtensionControlProbe()
+        host.supportsActions = true; host.supportsPinning = true; host.item.isPinned = true
+        engine.extensions = host
+        let environment = BrowserEnvironment(engine: engine)
+        let owner = try await environment.makeWindow()
+        defer { owner.session.close(); owner.window?.close() }
+        owner.submitAddress("https://extensions.example.invalid")
+        await owner.session.waitForPendingCommands()
+        owner.extensionControls.cycle(holding: .command)
+        switch reason {
+        case "navigation": owner.session.selectedSurface?.navigate(to: URL(string: "https://extensions.example.invalid/new")!)
+        case "selection": owner.openTab(url: URL(string: "https://extensions.example.invalid/other")!)
+        case "removal": host.item.isPinned = false; host.changes.emit(owner.session.selectedSurface!.profileID)
+        default: NotificationCenter.default.post(name: NSWindow.didResignKeyNotification, object: owner.window)
+        }
+        await owner.session.waitForPendingCommands()
+        owner.extensionControls.finishCycle()
+        #expect(host.actionIDs.isEmpty && !owner.extensionControls.isCycling)
+        try await environment.finalize()
+    }
+
+    @Test("Little windows expose live actions and retain their own toolbar popup anchor")
+    func littleWindowActions() async throws {
+        NSApplication.shared.setActivationPolicy(.prohibited)
+        let engine = SiteSyntheticEngine(), host = ExtensionControlProbe()
+        host.supportsActions = true
+        engine.extensions = host
+        let environment = BrowserEnvironment(engine: engine)
+        let little = try await environment.makeQuickWindow(url: URL(string: "https://extensions.example.invalid")!)
+        defer { little.close() }
+        let menu = try #require(little.extensionMenu())
+        #expect(menu.items.map(\.title) == [host.item.name])
+        menu.performActionForItem(at: 0)
+        #expect(host.actionSurface === little.surface)
+        #expect(host.actionAnchor === little.extensionsButton)
+        #expect(host.actionAnchor?.window === little.window)
+        little.close()
+        try await environment.finalize()
+    }
+
+    @Test("The existing icon menu exposes management, unpin and removal for the originating extension")
+    func iconSettingsMenu() async throws {
+        NSApplication.shared.setActivationPolicy(.prohibited)
+        let engine = SiteSyntheticEngine(), host = ExtensionControlProbe()
+        host.supportsActions = true; host.supportsPinning = true; host.item.isPinned = true
+        engine.extensions = host
+        let environment = BrowserEnvironment(engine: engine)
+        let owner = try await environment.makeWindow()
+        defer { owner.session.close(); owner.window?.close() }
+        owner.submitAddress("https://extensions.example.invalid")
+        await owner.session.waitForPendingCommands()
+        let pin = try #require(owner.sidebar.extensionsContainer.subviews.first as? SiteControlButton)
+        let menu = try #require(pin.contextMenuBuilder?())
+        #expect(menu.items.map(\.title).contains("Remove from Circa"))
+        #expect(menu.items.map(\.title).contains("Unpin"))
+        menu.performActionForItem(at: menu.indexOfItem(withTitle: "Manage Extension"))
+        #expect(host.detailsID == host.item.id && host.managedSurface === owner.session.selectedSurface)
+        try await environment.finalize()
+    }
+
+    @Test("Overflow cycling anchors to the persistent toolbar while direct pins retain their geometry")
+    func cyclePopupAnchorGeometry() async throws {
+        NSApplication.shared.setActivationPolicy(.prohibited)
+        let engine = SiteSyntheticEngine(), host = ExtensionControlProbe()
+        host.supportsActions = true; host.supportsPinning = true; host.item.isPinned = true
+        engine.extensions = host
+        let environment = BrowserEnvironment(engine: engine)
+        let owner = try await environment.makeWindow()
+        defer { owner.session.close(); owner.window?.close() }
+        owner.submitAddress("https://extensions.example.invalid")
+        await owner.session.waitForPendingCommands()
+        owner.window?.contentView?.layoutSubtreeIfNeeded()
+        let pin = try #require(owner.sidebar.extensionsContainer.subviews.first as? SiteControlButton)
+        let bounds = pin.convert(pin.bounds, to: owner.window?.contentView)
+        #expect(bounds.width == SidebarExtensionStrip.hitSize && bounds.height == SidebarExtensionStrip.hitSize)
+        pin.onPress?()
+        #expect(host.actionAnchor === pin)
+        owner.sidebar.extensionsContainer.availableWidth = 0
+        owner.extensionControls.cycle(holding: .command)
+        owner.sidebar.extensionsContainer.availableWidth = 0
+        owner.extensionControls.finishCycle()
+        #expect(host.actionAnchor === owner.siteControls.actionAnchor)
+        #expect(host.actionAnchor?.window === owner.window)
+        try await environment.finalize()
+    }
+
     @Test("Selected-tab badges update both anchors without replacing their views")
     func tabBadgesFollowSelection() async throws {
         NSApplication.shared.setActivationPolicy(.prohibited)

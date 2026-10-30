@@ -299,7 +299,8 @@ struct NativeCommandTests {
         // + local Share and page-context Share (2), sidebar tab navigation (4), Select Space 1–9 (9).
         let implemented = system.registry.definitions.filter { system.registry.isImplemented($0.id) }.map(\.id.rawValue)
         // Boost creation, the Library destination and folder promotion add executable bindings.
-        #expect(implemented.count == 197, "\(implemented.count): \(implemented.sorted())")
+        #expect(implemented.count == 198, "\(implemented.count): \(implemented.sorted())")
+        #expect(system.registry.isImplemented(.cycleExtensions))
         #expect(system.registry.isImplemented(.checkForUpdates))
         #expect(system.registry.isImplemented(.toggleDeveloperMode))
         #expect(system.registry.isImplemented(.newIncognitoWindow))
@@ -321,7 +322,7 @@ struct NativeCommandTests {
         #expect(system.registry.isImplemented(.newQuickWindowWindow))
         #expect(!system.registry.isImplemented(.newChatGPTMessage))
         // Unsupported declarations retain no handler until their behavior is specified.
-        for id: BrowserCommandID in [.blankWindow, .showHideToolbar, .joinMeeting, .cycleExtensions,
+        for id: BrowserCommandID in [.blankWindow, .showHideToolbar, .joinMeeting,
                                      .peekEmail, .copyURLAsQuote, .exit] {
             #expect(!system.registry.isImplemented(id))
         }
