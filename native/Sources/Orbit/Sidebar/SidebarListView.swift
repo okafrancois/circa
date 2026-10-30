@@ -68,6 +68,15 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
     private var tabPool: [SidebarTabRow] = []
     private var folderPool: [SidebarFolderRow] = []
     private var splitPool: [SidebarSplitRow] = []
+    private struct PinnedMotion {
+        let segment: OrbitTimedSegment
+        let expanded: SidebarListLayout
+    }
+    private var pinnedMotion: PinnedMotion?
+    var onPinnedExpansionChange: ((CGFloat) -> Void)?
+    var pinnedExpansion: CGFloat {
+        pinnedMotion.map { CGFloat($0.segment.value(at: animator.now)) } ?? (content.isPinnedSectionCollapsed ? 0 : 1)
+    }
     private var enteringNodes: Set<BrowserOrganizationNode> = []
     var isStandalone = false
     var spaceID: SpaceID?
@@ -258,11 +267,31 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
         let previous = previousEntries ?? content
         let previousByNode = Dictionary(previous.entries.map { ($0.node, $0) }, uniquingKeysWith: { first, _ in first })
         let newNodes = Set(displayedLayout.rows.map(\.node))
+        let toggledPinned = previous.isPinnedSectionCollapsed != content.isPinnedSectionCollapsed
+        let timing = toggledPinned
+            ? (content.isPinnedSectionCollapsed ? SidebarSpaceDisclosure.collapseTiming : SidebarSpaceDisclosure.expandTiming)
+            : OrbitAnimationTiming.tabList
+        if toggledPinned, style == .spring {
+            let from = pinnedMotion.map { $0.segment.value(at: time) } ?? (previous.isPinnedSectionCollapsed ? 0.0 : 1.0)
+            let expanded = content.isPinnedSectionCollapsed ? (pinnedMotion?.expanded ?? old) : displayedLayout
+            pinnedMotion = PinnedMotion(segment: OrbitTimedSegment(from: from, target: content.isPinnedSectionCollapsed ? 0 : 1,
+                                                                   start: time, timing: timing), expanded: expanded)
+            // A rapid reversal recovers the same native rows before the pool can rebind them.
+            for (key, leaving) in leavingRows where newNodes.contains(leaving.node) {
+                rowViews[leaving.node] = leaving.row
+                leaving.row.commandsEnabled = commandsEnabled
+                leavingRows[key] = nil
+            }
+        } else if pinnedMotion != nil {
+            finishPinnedMotion()
+        }
         if style == .spring {
             for placement in displayedLayout.rows {
                 let slot = SidebarListSlot.node(placement.node)
                 if let current = animator.value(of: slot, at: time) ?? old.centerY(of: slot) {
-                    animator.move(slot, from: current, to: placement.centerY, at: time)
+                    animator.move(slot, from: current, to: placement.centerY, timing: timing, at: time)
+                } else if toggledPinned, placement.section == .pinned {
+                    // Section rows are revealed by their row-height clips, without a content reload.
                 } else if let origin = enteringOrigin(of: placement.node, old: old, time: time, previous: previousByNode) {
                     // A folder child slides out of its folder.
                     animator.move(slot, from: origin, to: placement.centerY, at: time)
@@ -274,7 +303,7 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
             }
             for slot in [SidebarListSlot.separator, .newTab] {
                 let current = animator.value(of: slot, at: time) ?? old.centerY(of: slot) ?? 0
-                animator.move(slot, from: current, to: displayedLayout.centerY(of: slot) ?? 0, at: time)
+                animator.move(slot, from: current, to: displayedLayout.centerY(of: slot) ?? 0, timing: timing, at: time)
             }
         } else {
             animator.stopAll()
@@ -285,7 +314,10 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
         let hidden = hiddenNodes
         for row in old.rows where !newNodes.contains(row.node) {
             guard let view = rowViews.removeValue(forKey: row.node) else { continue }
-            if style == .spring, !hidden.contains(row.node) {
+            if toggledPinned, pinnedMotion != nil, row.section == .pinned {
+                view.commandsEnabled = false
+                leavingRows[ObjectIdentifier(view)] = (view, row.node)
+            } else if style == .spring, !hidden.contains(row.node) {
                 startLeaving(view, node: row.node, old: old, time: time)
             } else {
                 recycle(view)
@@ -301,7 +333,10 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
         enteringNodes.removeAll()
         positionViews(at: time)
         onLayoutChange?()
-        if style == .spring { animator.run(in: self) }
+        if style == .spring {
+            if !animator.isAnimating { finishPinnedMotion() }
+            animator.run(in: self)
+        }
     }
 
     /// A row entering under a folder that was collapsed starts at that folder's position.
@@ -355,8 +390,25 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
     }
 
     private func animationFrame(at time: CFTimeInterval) {
+        if let motion = pinnedMotion, motion.segment.isSettled(at: time) { finishPinnedMotion() }
         materialize(at: time)
         positionViews(at: time)
+    }
+
+    private func finishPinnedMotion() {
+        pinnedMotion = nil
+        for row in rowViews.values { restorePinnedRow(row) }
+        for (key, leaving) in leavingRows where leaving.row.leavingEntry?.section == .pinned {
+            recycle(leaving.row)
+            leavingRows[key] = nil
+        }
+        onPinnedExpansionChange?(content.isPinnedSectionCollapsed ? 0 : 1)
+    }
+
+    private func restorePinnedRow(_ row: SidebarListRow) {
+        row.layer?.mask = nil
+        row.titleLabel.alphaValue = 1
+        row.alphaValue = 1
     }
 
     /// Displayed centre of a slot now: its spring, or its resting layout position.
@@ -419,6 +471,28 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
             let y = animator.value(of: .node(leaving.node), at: time) ?? leaving.row.frame.midY
             leaving.row.frame = rowFrame(centerY: y)
         }
+        if let motion = pinnedMotion {
+            let expansion = CGFloat(motion.segment.value(at: time))
+            let collapsedY = spaceTitleCenterY + Metrics.newTabCenterFromSpaceTitleWhenEmpty
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            for placement in motion.expanded.rows where placement.section == .pinned {
+                guard let row = rowViews[placement.node] ?? leavingRows.values.first(where: { $0.node == placement.node })?.row else { continue }
+                let y = collapsedY + (placement.centerY - collapsedY) * expansion
+                row.frame = rowFrame(centerY: y)
+                row.wantsLayer = true
+                let mask = row.layer?.mask ?? CALayer()
+                mask.backgroundColor = NSColor.black.cgColor
+                mask.frame = NSRect(x: 0, y: (1 - expansion) * Metrics.rowHeight / 2,
+                                    width: row.bounds.width, height: Metrics.rowHeight * expansion)
+                row.layer?.mask = mask
+                // Removed text leaves immediately; its icon follows the finite row update.
+                row.titleLabel.alphaValue = content.isPinnedSectionCollapsed ? 0 : 1
+                row.alphaValue = expansion
+            }
+            CATransaction.commit()
+            onPinnedExpansionChange?(expansion)
+        }
         let separatorY = displayedCenterY(of: .separator, at: time) ?? 0
         let newTabY = displayedCenterY(of: .newTab, at: time) ?? 0
         newTabRow.frame = rowFrame(centerY: newTabY)
@@ -433,7 +507,7 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
         let textMinX = clearButton.frame.minX + Metrics.clearHoverPadding
         let lineEnd = clearButton.isRevealed ? textMinX - Metrics.clearSeparatorGap : bounds.width - Metrics.separatorInsetX
         separator.frame = NSRect(x: Metrics.separatorInsetX, y: lineY, width: max(0, lineEnd - Metrics.separatorInsetX), height: line)
-        separator.isHidden = isStandalone || !displayedLayout.isSeparatorVisible
+        separator.isHidden = isStandalone || !displayedLayout.isSeparatorVisible || pinnedMotion != nil
     }
 
     override func layout() {
@@ -544,6 +618,7 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
 
     private func recycle(_ row: SidebarListRow) {
         row.layer?.removeAnimation(forKey: "orbit.rowFade")
+        restorePinnedRow(row)
         row.cancelRename()
         row.resetForReuse()
         row.isHidden = true
@@ -568,6 +643,7 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
         super.viewDidMoveToWindow()
         guard window == nil else { return }
         animator.stopAll()
+        finishPinnedMotion()
         for (_, leaving) in leavingRows { recycle(leaving.row) }
         leavingRows.removeAll()
         positionViews(at: animator.now)
