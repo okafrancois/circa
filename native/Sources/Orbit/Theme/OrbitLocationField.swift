@@ -1,4 +1,5 @@
 import AppKit
+import BrowserShell
 import BrowserCore
 
 /// Native editing/AX keep the full URL. The resting text, security glyph and optional status
@@ -77,7 +78,7 @@ final class OrbitLocationField: NSTextField {
             statusLabel.trailingAnchor.constraint(equalTo: textGroup.trailingAnchor, constant: -2), statusPosition
         ])
         statusLabel.alphaValue = 0
-        searchIcon.image = NSImage(systemSymbolName: "magnifyingglass", accessibilityDescription: nil)
+        searchIcon.image = OrbitIcon.image(sfName: "magnifyingglass", pointSize: 14, accessibilityDescription: nil)
         refreshDisplayLabel()
     }
 
@@ -211,7 +212,7 @@ final class OrbitLocationField: NSTextField {
         if displayLabel.stringValue != label { displayLabel.stringValue = label }
         let labelFont = font ?? OrbitTokens.Typography.addressField
         if displayLabel.font != labelFont { displayLabel.font = labelFont }
-        let statusFont = NSFont.systemFont(ofSize: labelFont.pointSize - 1)
+        let statusFont = BrandTextStyle.ui.font(size: labelFont.pointSize - 1)
         if statusLabel.font != statusFont { statusLabel.font = statusFont }
         let color = textColor ?? OrbitTokens.Color.Text.baseSecondary
         if displayLabel.textColor != color { displayLabel.textColor = color }
@@ -221,8 +222,7 @@ final class OrbitLocationField: NSTextField {
         securityIcon.isHidden = symbol == nil
         if let symbol, securitySymbol != symbol {
             securitySymbol = symbol
-            securityIcon.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)?
-                .withSymbolConfiguration(.init(pointSize: labelFont.pointSize, weight: .regular))
+            securityIcon.image = OrbitIcon.image(sfName: symbol, pointSize: labelFont.pointSize, accessibilityDescription: nil)
         }
         if symbol == nil { securitySymbol = nil }
         securityIcon.toolTip = security == .https ? uiText("Secure connection") : security == .insecure ? uiText("Connection is not secure") : nil

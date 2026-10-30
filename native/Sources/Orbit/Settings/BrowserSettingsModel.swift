@@ -31,6 +31,11 @@ final class BrowserSettingsModel<Engine: BrowserEngine>: ObservableObject {
     let defaultBrowser: BrowserDefaultBrowserService
     @Published var focusNewProfile = false
     @Published var settingsSection: BrowserSettingsSection? = .general
+    var selectSettingsSection: ((BrowserSettingsSection) -> Bool)?
+    func navigate(to section: BrowserSettingsSection) {
+        if let selectSettingsSection { _ = selectSettingsSection(section) }
+        else { settingsSection = section }
+    }
     @Published private(set) var catalog = BrowserCatalogSnapshot(profiles: [], spaces: [])
     @Published private(set) var selectedProfileID: ProfileID?
     @Published private(set) var appearanceSpaceID: SpaceID?
@@ -276,10 +281,12 @@ final class BrowserSettingsModel<Engine: BrowserEngine>: ObservableObject {
         if selectedProfileID == id { selectedProfileID = nil; selectionGeneration = UUID() }
     }
 
-    func createSpace(name: String, profile: ProfileID) async throws {
-        _ = try await environment.store.createSpace(name: name, profileID: profile)
+    @discardableResult
+    func createSpace(name: String, profile: ProfileID) async throws -> SpaceID {
+        let id = try await environment.store.createSpace(name: name, profileID: profile)
         await environment.refreshSettingsCatalog()
         await reload()
+        return id
     }
 
     func deleteSpace(_ id: SpaceID, expectedProfileID: ProfileID? = nil) async throws {

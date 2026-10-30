@@ -38,9 +38,20 @@ enum BrowserSplitCommands {
                 controller.focusSplitPane(offset: offset)
             }
         }
-        try! registry.register(.addSplitView, validate: { $0.canAddSplitPane && !$0.isPeekPresented }) { [weak registry] controller, _ in
+        try! registry.register(.addSplitView, validate: { controller in
+            guard !controller.isPeekPresented else { return false }
+            if let id = controller.sidebar.contextMenuNodes.first?.tabID,
+               let tab = controller.session.organization?.tab(id) {
+                if case .favorites = tab.section { return false }
+                return true
+            }
+            return controller.canAddSplitPane
+        }) { [weak registry] controller, _ in
             controller.palette.registry = registry
-            controller.addSplitFromSelection()
+            if let id = controller.sidebar.contextMenuNodes.first?.tabID {
+                controller.session.selectTab(id)
+                controller.session.performWindowAction { [weak controller] in controller?.addSplitFromSelection() }
+            } else { controller.addSplitFromSelection() }
         }
         group(.closeThisSplitPane) { controller, split in
             if let active = split.activeTab ?? split.tabs.first { controller.session.closeSplitPane(active.id) }

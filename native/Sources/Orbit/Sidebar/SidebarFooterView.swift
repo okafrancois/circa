@@ -1,4 +1,5 @@
 import AppKit
+import BrowserShell
 import BrowserCore
 import CoreImage
 
@@ -11,6 +12,8 @@ final class SidebarFooterView: NSView {
     private(set) var spaceButtons: [SidebarSpaceButton] = []
     private var spaces: [BrowserSpace] = []
     private let creationDot = NSView()
+    let background = OrbitSurfaceBackgroundView(cornerRadius: 10)
+    private let backgroundContainer = SidebarFlippedView()
     var creationProgress: CGFloat = 0 { didSet { needsLayout = true } }
     private var activeSpaceID: SpaceID?
     private var commandsEnabled = true
@@ -34,6 +37,8 @@ final class SidebarFooterView: NSView {
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
+        addSubview(backgroundContainer)
+        backgroundContainer.addSubview(background)
         for button in [libraryButton, plusButton] { addSubview(button) }
         creationDot.wantsLayer = true
         creationDot.layer?.cornerRadius = 4
@@ -87,7 +92,7 @@ final class SidebarFooterView: NSView {
     }
 
     private var foregroundAccent: OrbitTokens.ThemeAccent {
-        OrbitSpaceThemes.accent(accent, over: [], iconHover: OrbitTokens.Color.State.standaloneButton)
+        OrbitFloatingMaterial.sidebarInk(accent)
     }
 
     private func configureContrast(of button: OrbitGlyphButton) {
@@ -97,18 +102,21 @@ final class SidebarFooterView: NSView {
         if let space = button as? SidebarSpaceButton {
             space.inactiveOpacity = { appearance in
                 OrbitSpaceThemes.inactiveSpaceIconOpacity(for: foreground, appearance: appearance,
-                    minimum: Metrics.footerInactiveSpaceOpacity)
+                    minimum: (foreground.contrastTheme?.frostAmount ?? 0) > 0 ? 1 : Metrics.footerInactiveSpaceOpacity)
             }
         }
     }
 
     private func refreshAccent() {
+        background.applyFrost(accent)
         // Disabled controls keep their separate tint; enabled inactive dots dim only while legible.
         for button in [libraryButton, plusButton] + spaceButtons { configureContrast(of: button) }
     }
 
     /// Lays the footer out from the sidebar geometry (centres in footer coordinates).
     func apply(_ geometry: OrbitSidebarGeometry) {
+        backgroundContainer.frame = NSRect(x: 8, y: geometry.footerCenterY - 20, width: max(0, bounds.width - 16), height: 40)
+        background.frame = backgroundContainer.bounds
         let size = Metrics.footerButtonSize
         let y = geometry.footerCenterY - size / 2
         libraryButton.frame = NSRect(x: geometry.libraryCenterX - size / 2, y: y, width: size, height: size)
@@ -361,7 +369,7 @@ final class SidebarSpaceButton: OrbitGlyphButton {
             }
             if let button = button as? SidebarSpaceButton, !button.settingsIcon.isEmpty, button.presentation == .icons {
                 if button.emojiImage == nil {
-                    let text = NSAttributedString(string: button.settingsIcon, attributes: [.font: NSFont.systemFont(ofSize: 12)])
+                    let text = NSAttributedString(string: button.settingsIcon, attributes: [.font: BrandTextStyle.ui.font(size: 12)])
                     let image = NSImage(size: text.size(), flipped: false) { _ in text.draw(at: .zero); return true }
                     button.emojiImage = image
                     button.inactiveEmojiImage = Self.grayscale(image)
@@ -493,8 +501,7 @@ final class SidebarSpaceTooltip: NSView {
             }
         }
     }
-    private let material = NSVisualEffectView()
-    private let tint = NSView()
+    private let material = OrbitFrostView(radius: 14)
     private let label = NSTextField(labelWithString: "")
     private var keycaps: [NSTextField] = []
     private(set) var name = ""
@@ -507,21 +514,12 @@ final class SidebarSpaceTooltip: NSView {
         layer?.shadowOpacity = 0.22
         layer?.shadowRadius = 8
         layer?.shadowOffset = NSSize(width: 0, height: -2)
-        material.material = .popover
-        material.blendingMode = .withinWindow
-        material.state = .active
-        material.appearance = NSAppearance(named: .darkAqua)
-        material.wantsLayer = true
-        material.layer?.cornerRadius = 14
-        material.layer?.masksToBounds = true
-        tint.wantsLayer = true
-        tint.layer?.backgroundColor = NSColor(srgbRed: 0.10, green: 0.09, blue: 0.11, alpha: 0.84).cgColor
-        tint.layer?.cornerRadius = 14
-        label.font = .systemFont(ofSize: 12, weight: .semibold)
+        material.fixedVariant = .dark
+        label.font = BrandTextStyle.ui.font(size: 12, weight: .semibold)
         label.textColor = NSColor(white: 0.96, alpha: 1)
         label.maximumNumberOfLines = 1
         label.lineBreakMode = .byTruncatingTail
-        for view in [material, tint, label] { addSubview(view) }
+        for view in [material, label] { addSubview(view) }
         setAccessibilityIdentifier("space-hover-capsule")
         setAccessibilityElement(true)
         setAccessibilityRole(.group)
@@ -539,7 +537,7 @@ final class SidebarSpaceTooltip: NSView {
         keycaps.forEach { $0.removeFromSuperview() }
         keycaps = (shortcut ?? "").map { character in
             let key = NSTextField(labelWithString: String(character))
-            key.font = .systemFont(ofSize: 11, weight: .semibold)
+            key.attributedStringValue = BrandTextStyle.mono.attributedString(String(character), size: 11, weight: .semibold)
             key.textColor = NSColor(white: 0.27, alpha: 1)
             key.alignment = .center
             key.wantsLayer = true
@@ -565,7 +563,6 @@ final class SidebarSpaceTooltip: NSView {
         }
         let size = NSSize(width: label.frame.maxX + gap + keysWidth + 10, height: 28)
         material.frame = NSRect(origin: .zero, size: size)
-        tint.frame = material.frame
         setAccessibilityLabel(name)
         setAccessibilityValue(shortcut ?? "")
         return size

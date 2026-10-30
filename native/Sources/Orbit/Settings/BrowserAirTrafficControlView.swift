@@ -13,14 +13,9 @@ struct BrowserAirTrafficControlView<Engine: BrowserEngine>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             HStack {
-                Text(uiText("Air Traffic Control")).font(.system(size: 21, weight: .semibold))
+                Text(uiText("Air Traffic Control")).font(Font(BrandTextStyle.title.font(size: 22)))
                 Spacer()
-                Button(uiText("New Route"), systemImage: "plus") {
-                    if let space = model.catalog.spaces.first {
-                        drafts.append(.init(value: "", spaceID: space.id))
-                    }
-                }.disabled(model.catalog.spaces.isEmpty || drafts.contains { !$0.isValid })
-                    .accessibilityIdentifier("routing-new-route")
+
             }
             Text(uiFormat("Routes let you choose where specific sites open inside %@. For example, you can route Spotify links to always open inside your Personal space.", BrowserCommandMenus<BrowserWindowController<Engine>>.applicationDisplayName))
                 .foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
@@ -31,7 +26,7 @@ struct BrowserAirTrafficControlView<Engine: BrowserEngine>: View {
                     }
                     if drafts.isEmpty {
                         VStack(spacing: 10) {
-                            Image(systemName: "arrow.turn.down.right").font(.system(size: 28, weight: .light))
+                            OrbitIcon.view(sfName: "arrow.turn.down.right", pointSize: 28).font(.system(size: 28, weight: .light))
                             Text(uiText("Create a route to send links to a Space automatically."))
                         }.foregroundStyle(.secondary).frame(maxWidth: .infinity, minHeight: 110)
                     }
@@ -39,8 +34,14 @@ struct BrowserAirTrafficControlView<Engine: BrowserEngine>: View {
             }.frame(minHeight: 130, maxHeight: 290)
             Divider()
             HStack {
-                Text(uiText("Default")).fontWeight(.medium)
+                Button(uiText("New Route"), systemImage: "plus") {
+                    if let space = model.catalog.spaces.first {
+                        drafts.append(.init(value: "", spaceID: space.id))
+                    }
+                }.disabled(model.catalog.spaces.isEmpty || drafts.contains { !$0.isValid })
+                    .accessibilityIdentifier("routing-new-route")
                 Spacer()
+                Text(uiText("Default")).fontWeight(.medium)
                 Picker(uiText("Default destination"), selection: Binding(get: { runtime.document.linkRouting.defaultDestination }, set: { destination in
                     model.perform {
                         try await runtime.store.setLinkDefaultDestination(destination)
@@ -53,62 +54,54 @@ struct BrowserAirTrafficControlView<Engine: BrowserEngine>: View {
                     ForEach(model.catalog.spaces, id: \.id) { space in
                         Text(spaceLabel(space)).tag(BrowserLinkDefaultDestination.space(space.id))
                     }
-                }.labelsHidden().frame(width: 250).accessibilityIdentifier("routing-default")
+                }.labelsHidden().frame(width: 190).accessibilityIdentifier("routing-default")
             }
             HStack {
                 Text(uiText("Routes apply to links from other apps. The first matching route wins."))
-                    .font(.system(size: 11)).foregroundStyle(.secondary)
+                    .font(Font(BrandFonts.ui(11))).foregroundStyle(.secondary)
                 Spacer()
                 Button(uiText("Done")) { dismiss() }.keyboardShortcut(.defaultAction)
                     .disabled(drafts.contains { !$0.isValid } || model.isBusy)
                     .accessibilityIdentifier("routing-done")
             }
-            if let error = model.errorMessage { Text(error).foregroundStyle(.red).font(.system(size: 12)) }
+            if let error = model.errorMessage { Text(error).foregroundStyle(.red).font(Font(BrandFonts.ui(12))) }
         }
-        .padding(24).frame(width: 650)
-        .font(.system(size: 13)).foregroundStyle(OrbitSettingsStyle.foreground)
-        .background(OrbitSettingsStyle.background)
+        .padding(22).frame(width: 560)
+        .font(Font(BrandFonts.ui(13))).foregroundStyle(OrbitSettingsStyle.foreground)
+        .settingsFrost()
         .disabled(!model.acceptsActions || runtime.isUnavailable)
         .onAppear { drafts = runtime.document.linkRouting.rules.filter { route in model.catalog.spaces.contains { $0.id == route.spaceID } } }
     }
 
     private func routeRow(_ binding: Binding<BrowserLinkRoute>) -> some View {
         let route = binding.wrappedValue
-        return HStack(alignment: .center, spacing: 12) {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack(spacing: 8) {
-                    Text(uiText("If URL"))
-                    Picker(uiText("URL match"), selection: binding.match) {
-                        Text(uiText("contains")).tag(BrowserLinkMatch.contains)
-                        Text(uiText("is equal to")).tag(BrowserLinkMatch.equals)
-                        Text(uiText("host is")).tag(BrowserLinkMatch.host)
-                    }.labelsHidden().frame(width: 120).accessibilityIdentifier("routing-match-" + route.id.uuidString)
-                    TextField(uiText("example.org"), text: binding.value)
-                        .textFieldStyle(.roundedBorder).accessibilityIdentifier("routing-value-" + route.id.uuidString)
-                }
-                HStack {
-                    Image(systemName: "arrow.turn.down.right").foregroundStyle(.secondary)
-                    Text(uiText("Open in"))
-                    Picker(uiText("Destination Space"), selection: binding.spaceID) {
-                        ForEach(model.catalog.spaces, id: \.id) { space in Text(spaceLabel(space)).tag(space.id) }
-                    }.labelsHidden().accessibilityIdentifier("routing-space-" + route.id.uuidString)
-                    Spacer()
-                }
-            }
-            VStack(spacing: 5) {
-                Button { move(route.id, offset: -1) } label: { Image(systemName: "chevron.up") }
+        return HStack(alignment: .center, spacing: 8) {
+            Picker(uiText("URL match"), selection: binding.match) {
+                Text(uiText("contains")).tag(BrowserLinkMatch.contains)
+                Text(uiText("is equal to")).tag(BrowserLinkMatch.equals)
+                Text(uiText("host is")).tag(BrowserLinkMatch.host)
+            }.labelsHidden().frame(width: 100).accessibilityIdentifier("routing-match-" + route.id.uuidString)
+                .help(uiText("If URL"))
+            TextField(uiText("example.org"), text: binding.value)
+                .textFieldStyle(.roundedBorder).accessibilityIdentifier("routing-value-" + route.id.uuidString)
+            Picker(uiText("Destination Space"), selection: binding.spaceID) {
+                ForEach(model.catalog.spaces, id: \.id) { space in Text(spaceLabel(space)).tag(space.id) }
+            }.labelsHidden().frame(width: 140).accessibilityIdentifier("routing-space-" + route.id.uuidString)
+                .help(uiText("Open in"))
+            HStack(spacing: 5) {
+                Button { move(route.id, offset: -1) } label: { OrbitIcon.view(sfName: "chevron.up", pointSize: 13).font(.system(size: 13)) }
                     .disabled(drafts.contains { !$0.isValid } || drafts.first?.id == route.id).help(uiText("Move route up"))
-                Button { move(route.id, offset: 1) } label: { Image(systemName: "chevron.down") }
+                Button { move(route.id, offset: 1) } label: { OrbitIcon.view(sfName: "chevron.down", pointSize: 13).font(.system(size: 13)) }
                     .disabled(drafts.contains { !$0.isValid } || drafts.last?.id == route.id).help(uiText("Move route down"))
             }.buttonStyle(.plain)
             Button {
                 drafts.removeAll { $0.id == route.id }
                 model.perform { try await runtime.store.removeLinkRoute(route.id); await runtime.refresh() }
-            } label: { Image(systemName: "minus.circle.fill").foregroundStyle(.secondary) }
+            } label: { OrbitIcon.view(sfName: "minus.circle.fill", pointSize: 13).font(.system(size: 13)).foregroundStyle(.secondary) }
                 .buttonStyle(.plain).help(uiText("Remove route"))
                 .accessibilityLabel(uiText("Remove route"))
         }
-        .padding(12).background(OrbitSettingsStyle.panel, in: RoundedRectangle(cornerRadius: 7))
+        .padding(10).background(OrbitSettingsStyle.panel, in: RoundedRectangle(cornerRadius: 7))
         .overlay(RoundedRectangle(cornerRadius: 7).stroke(OrbitSettingsStyle.border, lineWidth: 1))
         .onChange(of: route) { _, changed in
             guard changed.isValid else { return }

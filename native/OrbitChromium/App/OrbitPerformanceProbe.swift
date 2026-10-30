@@ -86,7 +86,10 @@ enum OrbitPerformanceProbe {
                 try? FileManager.default.removeItem(at: commandFile)
                 let name = command["command"] ?? ""
                 result["commandNonce"] = command["nonce"] ?? ""
-                if name == "theme-fixture", ownsWindow(owner, bundleID: "lab.orbit.orbit.theme-fixture") {
+                if name == "folder-hover", ownsWindow(owner, bundleID: "lab.orbit.orbit.folder-hover") {
+                    result["folderHoverActionUptime"] = ProcessInfo.processInfo.systemUptime
+                    result["folderHover"] = await folderHoverFixture(owner, store: environment.store, command: command)
+                } else if name == "theme-fixture", ownsWindow(owner, bundleID: "lab.orbit.orbit.theme-fixture") {
                     result["themeFixture"] = await themeFixture(owner, store: environment.store, command: command)
                 } else if name == "resource-coordinator", ownsWindow(owner, bundleID: "lab.orbit.orbit.perf-coord-0") {
                     application.confirmQuit = { .quit }
@@ -616,6 +619,20 @@ extension OrbitPerformanceProbe {
         guard ownsWindow(owner, bundleID: "lab.orbit.orbit.theme-fixture") else { return false }
         do {
             switch command["action"] {
+            case "seed":
+                for (index, title) in ["Mail", "Calendar", "Notes", "Design review", "Team calendar", "Q4 roadmap"].enumerated() {
+                    guard ownsWindow(owner, bundleID: "lab.orbit.orbit.theme-fixture") else { return false }
+                    owner.session.openTab(url: URL(string: "https://fixture.invalid/\(index)")!)
+                    await owner.session.waitForPendingCommands()
+                    guard let tab = owner.session.organization?.selectedTab?.id,
+                          let windowID = owner.session.snapshot?.id else { return false }
+                    let context = try await store.captureContext(in: windowID)
+                    _ = try await store.renameTab(tab, to: title, from: context)
+                    if index < 3 { _ = try await store.addToFavorites([tab], from: context) }
+                    else { _ = try await store.pinTabs([tab], from: context) }
+                }
+                owner.session.refreshCatalog()
+                await owner.session.waitForPendingCommands()
             case "create":
                 guard let profile = owner.session.activeProfileID else { return false }
                 _ = try await store.createSpace(name: command["name"] ?? "Synthetic Theme", profileID: profile)
@@ -628,6 +645,19 @@ extension OrbitPerformanceProbe {
                 await owner.session.waitForQueuedCommands()
             case "open": owner.presentActiveSpaceThemeEditor()
             case "close": owner.themeEditor?.close(animated: false)
+            case "preset":
+                guard let editor = owner.themeEditor, let index = Int(command["index"] ?? ""),
+                      editor.view.swatches.indices.contains(index), !editor.view.swatches[index].isHidden,
+                      let target = editor.view.window,
+                      let windows = CGWindowListCopyWindowInfo([.optionIncludingWindow], CGWindowID(target.windowNumber)) as? [[String: Any]],
+                      windows.contains(where: { ($0[kCGWindowOwnerPID as String] as? Int32) == getpid()
+                          && ($0[kCGWindowNumber as String] as? Int) == target.windowNumber }) else { return false }
+                editor.view.swatches[index].performClick(nil)
+            case "frost":
+                guard let editor = owner.themeEditor,
+                      ownsWindow(owner, bundleID: "lab.orbit.orbit.theme-fixture") else { return false }
+                editor.view.frostSwitch.state = command["enabled"] == "true" ? .on : .off
+                _ = editor.view.frostSwitch.sendAction(editor.view.frostSwitch.action, to: editor.view.frostSwitch.target)
             case "pick":
                 guard let editor = owner.themeEditor, let u = Double(command["u"] ?? ""),
                       let v = Double(command["v"] ?? "") else { return false }
@@ -640,13 +670,16 @@ extension OrbitPerformanceProbe {
                 guard let space = owner.session.snapshot?.activeSpaceID, let profile = owner.session.activeProfileID else { return false }
                 let colors = (command["colors"] ?? "").split(separator: ",").compactMap { BrowserThemeColor(hexString: String($0)) }
                 guard !colors.isEmpty else { return false }
-                let model: BrowserSpaceTheme
+                var model: BrowserSpaceTheme
                 if command["baked"] == "true" {
                     model = BrowserSpaceTheme(mode: .automatic, colors: [], intensity: 0.78, noise: 0,
                                               light: .init(stops: colors), dark: .init(stops: colors))
                 } else {
                     model = .radial(colors: colors, intensity: Double(command["intensity"] ?? "0.78") ?? 0.78)
                 }
+                owner.window?.makeFirstResponder(nil)
+                model.frost = command["frost"] == "true"
+                if let appearance = command["appearance"] { model.mode = appearance == "dark" ? .dark : .light }
                 _ = try await owner.session.setSpaceTheme(model, for: space, profileID: profile)
             default: return false
             }
@@ -2071,5 +2104,32 @@ extension OrbitGlyphButton {
                                                       "clips": clipsToBounds, "dirty": [rect.minX, rect.minY, rect.width, rect.height]])
         }
         compositingProbeDraw(rect)
+    }
+}
+
+
+extension OrbitPerformanceProbe {
+    /// Confined fixture for real-engine sidebar interaction and motion checks.
+    private static func folderHoverFixture(_ owner: OrbitWindowController, store: BrowserStore,
+                                           command: [String: String]) async -> Bool {
+        guard ownsWindow(owner, bundleID: "lab.orbit.orbit.folder-hover") else { return false }
+        switch command["action"] {
+        case "seed":
+            guard owner.session.snapshot?.activeSpaceID != nil else { return false }
+            for title in ["Alpha", "Beta", "Gamma"] {
+                guard ownsWindow(owner, bundleID: "lab.orbit.orbit.folder-hover") else { return false }
+                owner.session.openTab(url: URL(string: "http://127.0.0.1:18743/" + title.lowercased())!)
+                await owner.session.waitForPendingCommands()
+                guard let tab = owner.session.organization?.selectedTab?.id else { return false }
+                owner.session.renameTab(tab, to: title)
+                if title == "Alpha" { owner.session.pinTabs([tab]) }
+                await owner.session.waitForPendingCommands()
+            }
+        case "create": owner.createSidebarFolder()
+        case "show": owner.window?.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true)
+        default: return false
+        }
+        await owner.session.waitForPendingCommands()
+        return true
     }
 }

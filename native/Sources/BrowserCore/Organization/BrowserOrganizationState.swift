@@ -294,7 +294,7 @@ struct BrowserOrganizationState: Sendable {
         body(&tab)
         guard tab != before else { return }
         tabs[id] = tab
-        if tab.customTitle != before.customTitle || tab.pinnedURL != before.pinnedURL {
+        if tab.customTitle != before.customTitle || tab.pinnedURL != before.pinnedURL || tab.customIcon != before.customIcon {
             changes.tabFields.insert(id)
         }
         if tab.url != before.url || tab.pageTitle != before.pageTitle { changes.tabMetadata.insert(id) }
@@ -687,6 +687,9 @@ struct BrowserOrganizationState: Sendable {
     private static func validateTab(_ tab: BrowserOrganizedTab) throws {
         try BrowserSessionDocument.validateDestination(tab.url)
         if let pinnedURL = tab.pinnedURL { try BrowserSessionDocument.validateDestination(pinnedURL) }
+        if let icon = tab.customIcon, !icon.isValid || icon == .none {
+            throw BrowserOrganizationError.invalidIcon
+        }
         if let title = tab.customTitle, (try? validatedTitle(title)) != title {
             throw BrowserSessionError.organizationInvalidTitle
         }
@@ -760,10 +763,11 @@ struct BrowserValueChange<Value: Equatable & Sendable>: Sendable {
 
 struct BrowserTabFieldChange: Sendable {
     var customTitle: BrowserValueChange<String?>?
+    var customIcon: BrowserValueChange<BrowserSpaceIcon?>?
     var pinnedURL: BrowserValueChange<URL?>?
 
     var reversed: BrowserTabFieldChange {
-        BrowserTabFieldChange(customTitle: customTitle?.reversed, pinnedURL: pinnedURL?.reversed)
+        BrowserTabFieldChange(customTitle: customTitle?.reversed, customIcon: customIcon?.reversed, pinnedURL: pinnedURL?.reversed)
     }
 }
 
@@ -842,10 +846,13 @@ struct BrowserOrganizationPatch: Sendable {
             if before.customTitle != after.customTitle {
                 change.customTitle = BrowserValueChange(before: before.customTitle, after: after.customTitle)
             }
+            if before.customIcon != after.customIcon {
+                change.customIcon = BrowserValueChange(before: before.customIcon, after: after.customIcon)
+            }
             if before.pinnedURL != after.pinnedURL {
                 change.pinnedURL = BrowserValueChange(before: before.pinnedURL, after: after.pinnedURL)
             }
-            if change.customTitle != nil || change.pinnedURL != nil { tabFields[id] = change }
+            if change.customTitle != nil || change.customIcon != nil || change.pinnedURL != nil { tabFields[id] = change }
         }
         for id in changes.folderTitles {
             guard let before = old.folders[id], let after = new.folders[id], before.title != after.title else { continue }
@@ -926,7 +933,7 @@ extension BrowserArchivedTab {
         guard let other else { return false }
         return id == other.id && archivedAt == other.archivedAt && reason == other.reason && origin == other.origin
             && profileID == other.profileID && spaceID == other.spaceID
-            && tab.customTitle == other.tab.customTitle && tab.pinnedURL == other.tab.pinnedURL
+            && tab.customTitle == other.tab.customTitle && tab.customIcon == other.tab.customIcon && tab.pinnedURL == other.tab.pinnedURL
     }
 }
 
@@ -984,7 +991,7 @@ extension BrowserOrganizationState {
         for (id, change) in patch.tabRecords {
             if let recorded = change.before {
                 // Removing a tab overwrites all of its user fields: a rename or re-pin since conflicts.
-                guard let tab = tabs[id], tab.customTitle == recorded.customTitle,
+                guard let tab = tabs[id], tab.customTitle == recorded.customTitle, tab.customIcon == recorded.customIcon,
                       tab.pinnedURL == recorded.pinnedURL else { return false }
             } else if tabs[id] != nil {
                 return false
@@ -1001,6 +1008,7 @@ extension BrowserOrganizationState {
         for (id, change) in patch.tabFields {
             guard let tab = tabs[id] else { return false }
             if let title = change.customTitle, tab.customTitle != title.before { return false }
+            if let icon = change.customIcon, tab.customIcon != icon.before { return false }
             if let url = change.pinnedURL, tab.pinnedURL != url.before { return false }
         }
         for (id, change) in patch.folderTitles where folders[id]?.title != change.before { return false }
@@ -1065,6 +1073,7 @@ extension BrowserOrganizationState {
         for (id, change) in patch.tabFields {
             updateTab(id) { tab in
                 if let title = change.customTitle { tab.customTitle = title.after }
+                if let icon = change.customIcon { tab.customIcon = icon.after }
                 if let url = change.pinnedURL { tab.pinnedURL = url.after }
             }
         }
