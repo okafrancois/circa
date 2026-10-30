@@ -73,7 +73,7 @@ struct NativePaletteViewTests {
         defer { h.close() }
         let favicon = NSImage(size: NSSize(width: 16, height: 16))
         h.view.input.stringValue = "result"
-        h.view.accent = .systemPurple
+        #expect(h.view.accent == NSColor.controlAccentColor)
         h.view.favicons = ["synthetic-0": favicon]
         h.render([paletteViewResult(0, section: .tabs)])
         let cell = try #require(h.table.view(atColumn: 0, row: 0, makeIfNecessary: true) as? PaletteResultCell)
@@ -89,7 +89,7 @@ struct NativePaletteViewTests {
         #expect(cell.detailLabel.stringValue == "— result-0.test")
         #expect(cell.actionLabel.stringValue == "Switch to Tab" && !cell.actionLabel.isHidden)
         #expect(cell.titleLabel.textColor == cell.actionLabel.textColor)
-        #expect(cell.background.layer?.backgroundColor == OrbitTokens.Color.State.commandBarRowSelected.resolvedCGColor(for: cell.effectiveAppearance))
+        #expect(cell.background.layer?.backgroundColor == NSColor.controlAccentColor.withAlphaComponent(0.12).resolvedCGColor(for: cell.effectiveAppearance))
         #expect(cell.icon.contentTintColor == nil)
         for size in [NSSize(width: 1024, height: 640), NSSize(width: 1512, height: 949)] {
             let panel = BrowserPaletteView.panelFrame(in: size)
@@ -107,19 +107,19 @@ struct NativePaletteViewTests {
         h.render([paletteViewResult(0)])
         let cell = try #require(h.table.view(atColumn: 0, row: 0, makeIfNecessary: true) as? PaletteResultCell)
         let material = h.view.material
-        #expect(material.blendingMode == .withinWindow && material.state == .active)
+        #expect(material.effect.blendingMode == .withinWindow && material.effect.state == .active)
         #expect(material.superview === h.view.panel && h.view.panel.subviews.first === material)
         #expect(material.frame == h.view.panel.bounds && material.layer?.masksToBounds == true)
         #expect(material.hitTest(NSPoint(x: 20, y: 20)) == nil)
-        #expect(!material.isHidden && h.view.panel.layer?.backgroundColor?.alpha == 0)
-        #expect(cell.background.layer?.backgroundColor?.alpha == 0.10)
+        #expect(!material.effect.isHidden && h.view.panel.layer?.backgroundColor?.alpha == 0)
+        #expect(cell.background.layer?.backgroundColor?.alpha == 0.12)
         h.view.refreshMaterial(reduceTransparency: true)
-        #expect(material.isHidden && !h.view.usesMaterial)
-        #expect(h.view.panel.layer?.backgroundColor == OrbitTokens.Color.Surface.commandBar.resolvedCGColor(for: h.view.effectiveAppearance))
-        #expect(cell.background.layer?.backgroundColor == h.view.accent.resolvedCGColor(for: cell.effectiveAppearance))
+        #expect(material.effect.isHidden && !h.view.usesMaterial)
+        #expect(material.style.tintOpacity == 1)
+        #expect(cell.background.layer?.backgroundColor == h.view.accent.withAlphaComponent(0.12).resolvedCGColor(for: cell.effectiveAppearance))
         h.view.refreshMaterial(reduceTransparency: false)
-        #expect(!material.isHidden && h.view.usesMaterial)
-        #expect(cell.background.layer?.backgroundColor?.alpha == 0.10)
+        #expect(!material.effect.isHidden && h.view.usesMaterial)
+        #expect(cell.background.layer?.backgroundColor?.alpha == 0.12)
         #expect(h.table.view(atColumn: 0, row: 0, makeIfNecessary: false) === cell)
     }
 
@@ -158,7 +158,7 @@ struct NativePaletteViewTests {
         cell.mouseEntered(with: event)
         #expect(cell.background.layer?.backgroundColor == OrbitTokens.Color.State.commandBarRowHover.resolvedCGColor(for: cell.effectiveAppearance))
         h.view.updateSelection(1)
-        #expect(cell.background.layer?.backgroundColor == OrbitTokens.Color.State.commandBarRowSelected.resolvedCGColor(for: cell.effectiveAppearance))
+        #expect(cell.background.layer?.backgroundColor == NSColor.controlAccentColor.withAlphaComponent(0.12).resolvedCGColor(for: cell.effectiveAppearance))
         h.render([paletteViewResult(0), paletteViewResult(3)])
         #expect(cell.background.layer?.backgroundColor == NSColor.clear.resolvedCGColor(for: cell.effectiveAppearance))
     }

@@ -4,6 +4,10 @@ import BrowserEngine
 
 enum SidebarListCommands {
     static let definitions: [BrowserCommandDefinition] = [
+        .init(id: .sidebarChangeTabIcon, title: "Change Icon…", menu: "Sidebar", shortcuts: [], scope: .browser,
+              requirement: .window, owner: "OBJECT-EDITING", sources: ["Browser command"]),
+        .init(id: .sidebarEditPinnedURL, title: "Edit Pinned Page", menu: "Sidebar", shortcuts: [], scope: .browser,
+              requirement: .window, owner: "OBJECT-EDITING", sources: ["Browser command"]),
         .init(id: .sidebarArchiveTabsAbove, title: "Archive Tabs Above", menu: "Sidebar", shortcuts: [], scope: .browser,
               requirement: .window, owner: "MENUS", sources: ["Browser command"]),
         .init(id: .sidebarArchiveTabsBelow, title: "Archive Tabs Below", menu: "Sidebar", shortcuts: [], scope: .browser,
@@ -41,6 +45,8 @@ enum SidebarListCommands {
                 action(controller)
             }
         }
+        window(.sidebarChangeTabIcon, validate: { $0.sidebarSingleTab != nil }) { $0.presentTabIconPicker() }
+        window(.sidebarEditPinnedURL, validate: { $0.sidebarSingleTab?.pinnedURL != nil }) { $0.presentPinnedURLEditor() }
         window(.sidebarCopyLinks, validate: { !$0.sidebarLinkTargets.isEmpty }) { $0.copySidebarLinks(markdown: false) }
         window(.sidebarCopyMarkdownLinks, validate: { !$0.sidebarLinkTargets.isEmpty }) { $0.copySidebarLinks(markdown: true) }
         window(.sidebarDuplicate, validate: { $0.sidebarTabTargets.count == 1 }) { controller in
@@ -108,6 +114,14 @@ enum SidebarListCommands {
             return [[.newFolder], [.renameCurrentItem], [.sidebarCopyLinks, .sidebarCopyMarkdownLinks],
                     [.sidebarDeleteFolder, .sidebarDeleteFolderAndTabs]]
         }
+        if nodes.count == 1, let id = nodes[0].tabID, let tab = organization.tab(id) {
+            var editing: [BrowserCommandID] = [.sidebarChangeTabIcon, .renameCurrentItem, .sidebarMuteTab]
+            if tab.pinnedURL != nil { editing.append(.sidebarEditPinnedURL) }
+            var groups: [[BrowserCommandID]] = [[.sidebarCopyLinks], editing, [.addSplitView, .sidebarDuplicate]]
+            if tab.pinnedURL != nil { groups.append([.pinUnpinTab]) }
+            else { groups.append([.sidebarCloseItems, .sidebarArchiveTabsBelow]) }
+            return groups
+        }
         var groups: [[BrowserCommandID]] = []
         groups.append([.sidebarCopyLinks, .sidebarCopyMarkdownLinks])
         if nodes.count == 1, nodes[0].splitID == nil { groups.append([.renameCurrentItem, .sidebarDuplicate]) }
@@ -136,12 +150,14 @@ enum SidebarListCommands {
         let plural = tabs.count > 1
         func text(_ key: String, _ english: String) -> String { SidebarListStrings.string("menu.\(key)", english) }
         switch id {
-        case .renameCurrentItem: return text("rename", "Rename")
-        case .sidebarCopyLinks: return nodes.contains(where: { $0.folderID != nil }) ? uiText("Copy All Links") : uiText(plural ? "Copy URLs" : "Copy URL")
+        case .renameCurrentItem: return nodes.count == 1 && nodes[0].tabID != nil ? uiText("Rename…") : text("rename", "Rename")
+        case .addSplitView: return tabs.first?.pinnedURL == nil ? uiText("Open in Split View") : uiText("Add Split View")
+        case .sidebarMuteTab: return uiText("Mute")
+        case .sidebarCopyLinks: return nodes.contains(where: { $0.folderID != nil }) ? uiText("Copy All Links") : uiText(plural ? "Copy URLs" : "Copy Link")
         case .sidebarCopyMarkdownLinks: return nodes.contains(where: { $0.folderID != nil }) ? uiText("Copy All Links as Markdown") : uiText(plural ? "Copy Links as Markdown" : "Copy Link as Markdown")
         case .pinUnpinTab:
             let allPinned = !tabs.isEmpty && tabs.allSatisfy { if case .pinned = $0.section { return true }; return false }
-            return allPinned ? (plural ? text("unpinTabs", "Unpin Tabs") : text("unpinTab", "Unpin Tab"))
+            return allPinned ? (plural ? text("unpinTabs", "Unpin Tabs") : uiText("Remove Pin"))
                 : (plural ? text("pinTabs", "Pin Tabs") : text("pinTab", "Pin Tab"))
         case .sidebarAddToFavorites: return text("addToFavorites", "Add to Favorites")
         case .newFolder:

@@ -89,7 +89,7 @@ final class OrbitThemeEditorController {
     static let opacityAnimationKey = "orbit.themeEditor.opacity"
 
     init(spaceID: SpaceID, profileID: ProfileID, stored: BrowserSpaceTheme?, initial: BrowserSpaceTheme,
-         scopeDescription: String? = nil, commit: @escaping Commit, replay: @escaping Replay) {
+         scopeDescription: String? = nil, spaceName: String? = nil, commit: @escaping Commit, replay: @escaping Replay) {
         self.spaceID = spaceID
         self.profileID = profileID
         original = stored
@@ -97,8 +97,8 @@ final class OrbitThemeEditorController {
         self.commit = commit
         self.replay = replay
         view = OrbitThemeEditorView(state: OrbitThemeEditorState(theme: initial))
+        if let spaceName { view.spaceName = spaceName }
         if let scopeDescription {
-            view.surfaceScope.stringValue = scopeDescription
             view.surfaceScope.toolTip = scopeDescription
         }
         view.onChange = { [weak self] state in self?.stateDidChange(state) }
@@ -213,6 +213,12 @@ final class OrbitThemeEditorController {
             NSSound.beep()
             close()
         }
+    }
+
+    /// Embedded flows wait for the final persisted draft before preparing their next stage.
+    func finishEditing() async {
+        close(animated: false)
+        await finishTask?.value
     }
 
     /// Ends the session: dismisses the panel, writes the final draft, then registers one undo step.

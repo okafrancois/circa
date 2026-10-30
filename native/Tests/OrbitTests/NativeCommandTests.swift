@@ -36,7 +36,7 @@ struct NativeCommandTests {
     func catalogCoverage() throws {
         #expect(OrbitCommandCatalog.declarations.count == 179)
         #expect(OrbitCommandCatalog.structuralIDs.count == 14)
-        #expect(OrbitCommandCatalog.actionDefinitions.count == 250) // Includes local page sharing.
+        #expect(OrbitCommandCatalog.actionDefinitions.count == 252) // Includes local page sharing.
         #expect(OrbitCommandCatalog.declarations.allSatisfy { $0.localizesKey })
         #expect(OrbitCommandCatalog.declarations.filter { !$0.key.isEmpty }.count == 85)
         #expect(OrbitCommandCatalog.declarations.filter { !$0.key.isEmpty && $0.modifierMask == nil }.map(\.source) == ["menu.declaration.25", "menu.declaration.117"])
@@ -299,7 +299,7 @@ struct NativeCommandTests {
         // + local Share and page-context Share (2), sidebar tab navigation (4), Select Space 1–9 (9).
         let implemented = system.registry.definitions.filter { system.registry.isImplemented($0.id) }.map(\.id.rawValue)
         // Boost creation and the Library destination add two executable bindings.
-        #expect(implemented.count == 185, "\(implemented.count): \(implemented.sorted())")
+        #expect(implemented.count == 187, "\(implemented.count): \(implemented.sorted())")
         #expect(system.registry.isImplemented(.checkForUpdates))
         #expect(system.registry.isImplemented(.toggleDeveloperMode))
         #expect(system.registry.isImplemented(.newIncognitoWindow))

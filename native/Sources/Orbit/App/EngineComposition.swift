@@ -34,6 +34,9 @@ func activeDeveloperSigningTeam() -> String? { nil }
 
 func activeStableSigningRoot() -> String? { nil }
 
+/// WebKit previews have no separate engine root.
+func activeEngineRootHadDataAtLaunch() -> Bool { false }
+
 /// Process entry for this build. WebKit needs nothing before AppKit starts.
 @MainActor
 enum OrbitLauncher {

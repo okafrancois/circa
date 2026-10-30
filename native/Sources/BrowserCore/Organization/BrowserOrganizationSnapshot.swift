@@ -87,6 +87,7 @@ public struct BrowserOrganizationTabItem: Equatable, Sendable {
     public let isOpenInAnotherWindow: Bool
     /// Local activation timestamp; absent values are never inferred from creation/import dates.
     public var lastActiveAt: Date? = nil
+    public var customIcon: BrowserSpaceIcon? = nil
 
     public var title: String? { customTitle ?? pageTitle }
     public var isAwayFromPinnedURL: Bool { pinnedURL.map { $0 != url } ?? false }

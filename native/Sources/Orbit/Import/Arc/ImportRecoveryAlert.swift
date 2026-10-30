@@ -18,7 +18,7 @@ enum ImportRecoveryAlert {
     static func choose() -> BrowserImportRecovery.Choice {
         NSApplication.shared.setActivationPolicy(.regular)
         NSApplication.shared.finishLaunching()
-        let alert = NSAlert()
+        let alert = OrbitFloatingMaterial.alert()
         alert.alertStyle = .warning
         alert.messageText = uiText("An import was interrupted")
         alert.informativeText = uiText("Restore your data from before the import, or continue without the incomplete import. Your existing profiles will be kept.")
@@ -29,7 +29,7 @@ enum ImportRecoveryAlert {
         return alert.runModal() == .alertSecondButtonReturn ? .continueWithoutImport : .restore
     }
     static func showQuarantineNotice() {
-        let alert = NSAlert()
+        let alert = OrbitFloatingMaterial.alert()
         alert.messageText = uiText("Your previous data is ready")
         alert.informativeText = uiText("The import could not be restored normally. Orbit recovered your previous data and moved the incomplete import aside for safekeeping.")
         alert.addButton(withTitle: uiText("OK"))
