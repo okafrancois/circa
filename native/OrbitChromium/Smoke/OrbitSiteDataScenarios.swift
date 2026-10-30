@@ -84,7 +84,13 @@ enum OrbitSiteDataScenarios {
 
             var prompts = 0
             window.siteControls.permissionPrompt = { _, _ in prompts += 1; return .alwaysAllow }
-            defer { window.siteControls.permissionPrompt = nil }
+            // Hidden engine checks must never present an OS authorization dialog.
+            let authorizeNotifications = window.siteControls.authorizeNotifications
+            window.siteControls.authorizeNotifications = { true }
+            defer {
+                window.siteControls.permissionPrompt = nil
+                window.siteControls.authorizeNotifications = authorizeNotifications
+            }
             try await window.siteControls.policy.store.reset(origin: origin, profileID: tab.profileID)
             await engine.revokeSitePermission(nil, origin: origin, profileID: tab.profileID)
             _ = await loaded(tab)

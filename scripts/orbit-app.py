@@ -19,7 +19,7 @@ import subprocess
 import tempfile
 import time
 
-from orbit_bundle_policy import helper_bundle_identifier, reject_build_artifacts, validate_bundle_contents
+from orbit_bundle_policy import helper_bundle_identifier, reject_build_artifacts, set_helper_bundle_identifiers, validate_bundle_contents
 from product_identity import BUNDLE_ID, PRODUCT_NAME
 from local_signing import SIGNING_DIRECTORY, unlocked_identity, sign_chromium_bundle
 
@@ -345,6 +345,7 @@ def assemble(source_app, executable, framework, helpers_dir, output, bundle_id, 
         info['CFBundleVersion'] = metadata['CFBundleVersion']
         write_info(helper, info)
     write_info(output, metadata)
+    set_helper_bundle_identifiers(output)
     ensure_private_links(output)
     validate_bundle_contents(output)
     signatures = sign(output)
