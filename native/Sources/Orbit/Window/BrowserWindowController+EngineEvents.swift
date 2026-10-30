@@ -130,6 +130,9 @@ extension BrowserWindowController: BrowserEngineSurfaceDelegate {
 
     func navigationActionPolicy(for action: BrowserNavigationAction, in surface: Surface) -> BrowserNavigationActionPolicy {
         guard holdsForNavigation(surface) else { return .cancel }
+        if action.isMainFrame != false, [.typed, .reload, .backForward].contains(action.kind), let url = action.url {
+            restoreLocalDocumentGrant(for: surface, target: url)
+        }
         if !isPreparingForTermination, handleExternalApplicationLink(action, from: surface) { return .cancel }
         return BrowserNavigationPolicy.action(action, surface: surface, held: true,
             routesEnabled: !isPreparingForTermination && owns(surface), hooks: engineEventHooks,

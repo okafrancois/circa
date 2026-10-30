@@ -298,7 +298,7 @@ struct BrowserOrganizationState: Sendable {
             changes.tabFields.insert(id)
         }
         if tab.url != before.url || tab.pageTitle != before.pageTitle { changes.tabMetadata.insert(id) }
-        if tab.pinnedLandingAlias != before.pinnedLandingAlias { changes.metadata = true }
+        if tab.pinnedLandingAlias != before.pinnedLandingAlias || tab.localDocument != before.localDocument { changes.metadata = true }
     }
 
     /// Not tracked: viewing time is neither visible in snapshots nor undoable.

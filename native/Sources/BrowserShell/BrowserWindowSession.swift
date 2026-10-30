@@ -477,6 +477,35 @@ public final class BrowserWindowSession<Surface: BrowserSurface> {
         }
     }
 
+    /// This entry point is reserved for accepted native file input, never engine/model URLs.
+    public func openLocalDocument(_ url: URL, at destination: BrowserOrganizationDestination? = nil) {
+        enqueue { session in
+            guard let context = try await session.validatedContext(),
+                  let document = BrowserLocalDocument(userOpened: url, profileID: context.profileID) else { return }
+            var tab: BrowserTab?
+            try await session.createTab(url: url, activate: true, from: context, onCreate: { tab = $0 }, localDocument: document)
+            if let destination, let tab, let current = session.activeContext {
+                let state = try await session.store.moveItems([.tab(tab.id)], to: destination, from: current)
+                session.install(state)
+            }
+        }
+    }
+
+    public func localDocument(for surface: Surface) -> BrowserLocalDocument? {
+        guard let occurrence = occurrenceID(for: surface), let id = tabID(for: occurrence) else { return nil }
+        return organization?.tab(id)?.localDocument
+    }
+
+    public func recordUserOpenedLocalDocument(_ url: URL, for surface: Surface) {
+        guard let occurrence = occurrenceID(for: surface), let authority = authorities[occurrence],
+              let document = BrowserLocalDocument(userOpened: url, profileID: authority.profileID) else { return }
+        enqueue { session in
+            guard session.authorities[occurrence] == authority, session.surface(for: occurrence) === surface else { return }
+            try await session.store.recordLocalDocument(document, from: authority)
+            try await session.refreshOrganizationState()
+        }
+    }
+
     /// History gestures retain their source authority and insert a background Today tab beside it.
     public func openNavigationTab(url: URL, nextTo occurrence: TabOccurrenceID) {
         guard let context = activeContext else { return }
@@ -679,7 +708,8 @@ public final class BrowserWindowSession<Surface: BrowserSurface> {
                   let occurrenceID = context.selectedOccurrenceID,
                   let url = session.surfaces[occurrenceID]?.currentURL
                     ?? session.snapshot?.tabs.first(where: { $0.occurrenceID == occurrenceID })?.url else { return }
-            try await session.createTab(url: url, activate: true, from: context)
+            let document = session.occurrenceTabIDs[occurrenceID].flatMap { session.organization?.tab($0)?.localDocument }
+            try await session.createTab(url: url, activate: true, from: context, localDocument: document)
         }
     }
 
@@ -998,7 +1028,7 @@ public final class BrowserWindowSession<Surface: BrowserSurface> {
 
     func createTab(url: URL, activate: Bool, from capturedContext: BrowserContext? = nil,
                    expectedProfileID: ProfileID? = nil, onCreate: ((BrowserTab) -> Void)? = nil,
-                   nextTo: TabID? = nil) async throws {
+                   nextTo: TabID? = nil, localDocument: BrowserLocalDocument? = nil) async throws {
         let context: BrowserContext
         if let capturedContext {
             try validateContext(capturedContext)
@@ -1010,7 +1040,7 @@ public final class BrowserWindowSession<Surface: BrowserSurface> {
             try await withAdoptedContext { current in
                 guard expectedProfileID == nil || current.profileID == expectedProfileID else { return }
                 let perfStart = BrowserPerformance.begin()
-                let tab = try await store.openTabAndCaptureDelivery(url: url, from: current, activate: activate)
+                let tab = try await store.openTabAndCaptureDelivery(url: url, from: current, activate: activate, localDocument: localDocument)
                 BrowserPerformance.end(.storeOpenAwait, since: perfStart)
                 onCreate?(tab)
                 created = (current, tab)
@@ -1023,7 +1053,7 @@ public final class BrowserWindowSession<Surface: BrowserSurface> {
             }
             return
         }
-        let tab = try await store.openTabAndCaptureDelivery(url: url, from: context, activate: activate, nextTo: nextTo)
+        let tab = try await store.openTabAndCaptureDelivery(url: url, from: context, activate: activate, nextTo: nextTo, localDocument: localDocument)
         requestedSurfaceIDs.insert(tab.occurrenceID)
         onCreate?(tab)
         if let state = try await stateAfterMutation(context,

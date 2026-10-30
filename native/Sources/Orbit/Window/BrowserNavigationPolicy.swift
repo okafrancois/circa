@@ -66,7 +66,7 @@ enum BrowserNavigationPolicy {
     static func authorizeLocalDocument(_ url: URL, for surface: AnyObject) {
         files = files.filter { $0.value.surface != nil }
         guard url.isFileURL, url.host == nil || url.host == "" else { return }
-        let canonical = url.resolvingSymlinksInPath().standardizedFileURL
+        let canonical = URL(fileURLWithPath: BrowserLocalDocument.canonicalPath(for: url))
         let key = ObjectIdentifier(surface)
         if let grant = files[key], grant.surface === surface { grant.urls.insert(canonical) }
         else { files[key] = FileGrant(surface: surface, url: canonical) }
@@ -76,8 +76,8 @@ enum BrowserNavigationPolicy {
                                                                  kind: BrowserNavigationKind? = nil) -> Bool {
         guard url.isFileURL, url.host == nil || url.host == "", url.user == nil, url.password == nil, url.port == nil,
               let grant = files[ObjectIdentifier(surface)], grant.surface === surface else { return false }
-        let candidate = url.resolvingSymlinksInPath().standardizedFileURL
-        guard grant.urls.contains(where: { $0.path == candidate.path }) else { return false }
+        let candidate = BrowserLocalDocument.canonicalPath(for: url)
+        guard grant.urls.contains(where: { $0.path == candidate }) else { return false }
         return kind == nil || kind == .typed || kind == .reload || kind == .backForward
     }
 
@@ -90,7 +90,7 @@ enum BrowserNavigationPolicy {
               parent.host == "mhjfbmdgcfjbbpaeojofohoefgiehjai",
               parent.user == nil, parent.password == nil, parent.port == nil,
               let committed = surface.navigationState.committedURL, committed.isFileURL,
-              committed.resolvingSymlinksInPath().standardizedFileURL.path == url.resolvingSymlinksInPath().standardizedFileURL.path else { return false }
+              BrowserLocalDocument.canonicalPath(for: committed) == BrowserLocalDocument.canonicalPath(for: url) else { return false }
         return allowsFile(url, surface: surface)
     }
 

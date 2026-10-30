@@ -29,7 +29,7 @@ enum OrbitPerformanceProbe {
                 controller.window?.makeKey()
             }
         }
-        if [OrbitNavigationHistoryProbe.bundleID, OrbitTabErgonomicsProbe.bundleID, "lab.orbit.orbit.pinned-tabs", "lab.orbit.orbit.search-suggestions", "lab.orbit.orbit.circa-rename", "lab.orbit.orbit.local-files-pdf"].contains(Bundle.main.bundleIdentifier ?? "") {
+        if [OrbitNavigationHistoryProbe.bundleID, OrbitTabErgonomicsProbe.bundleID, "lab.orbit.orbit.pinned-tabs", "lab.orbit.orbit.search-suggestions", "lab.orbit.orbit.circa-rename", "lab.orbit.orbit.local-files-pdf", "lab.orbit.orbit.local-files-restore"].contains(Bundle.main.bundleIdentifier ?? "") {
             application.confirmQuit = { .quit }
             application.windowPresenter = { controller, _ in
                 controller.window?.setFrame(NSRect(x: -2000, y: -1200, width: 1280, height: 900), display: false)

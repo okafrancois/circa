@@ -9,7 +9,7 @@ import QuartzCore
 enum OrbitLocalFilesProbe {
     static func run(_ app: OrbitApplication, owner: OrbitWindowController, root: URL,
                     command: [String: String]) async -> [String: Any] {
-        guard Bundle.main.bundleIdentifier == "lab.orbit.orbit.local-files-pdf",
+        guard ["lab.orbit.orbit.local-files-pdf", "lab.orbit.orbit.local-files-restore"].contains(Bundle.main.bundleIdentifier ?? ""),
               let confinement = activeSyntheticDataGuard(), (try? confinement.checkInside(root)) != nil,
               let window = owner.window,
               NSRunningApplication.current.processIdentifier == getpid(), window.windowController === owner else { return ["refused": true] }
@@ -67,6 +67,7 @@ enum OrbitLocalFilesProbe {
                 "entered": entered.rawValue, "prepared": prepared, "ungrantedBeforeDrop": before == .cancel,
                 "ungrantedAfterHover": afterHover == .cancel]
         }
+        if operation == "restore-check" { try? await Task.sleep(for: .seconds(2)) }
         if let sheet = window.attachedSheet {
             captureView(sheet.contentView, to: captures.appendingPathComponent("open-panel-" + appearance + ".png"))
         }
@@ -79,12 +80,12 @@ enum OrbitLocalFilesProbe {
             result["loading"] = surface.navigationState.isLoading
             result["document"] = await OrbitPerformanceProbe.evaluate(surface,
                 "({title:document.title, contentType:document.contentType, embeds:[...document.querySelectorAll('embed')].map(e=>({type:e.type,src:e.src})), text:document.body?.innerText.slice(0,120)})") ?? [:]
-            if operation == "inspect" {
+            if operation == "inspect" || operation == "restore-check" {
                 var events: [[String: String]] = []
                 surface.onEngineEvent = { name, fields in
                     if ["before-browse", "load-error", "commit"].contains(name) { events.append(fields.merging(["event": name]) { a, _ in a }) }
                 }
-                surface.reload()
+                if operation == "inspect" { surface.reload() }
                 try? await Task.sleep(for: .seconds(2))
                 result["events"] = events
                 let (ok, treeData) = await surface.devToolsCall("Page.getFrameTree")
@@ -109,7 +110,7 @@ enum OrbitLocalFilesProbe {
             }
             let (ok, targets) = await surface.devToolsCall("Target.getTargets", params: "{}")
             if ok, let json = try? JSONSerialization.jsonObject(with: targets) { result["targets"] = json }
-            if operation == "capture", let snapshot = try? await surface.captureSnapshot(.init(width: 1024, documentGeneration: surface.documentGeneration)) {
+            if ["capture", "restore-check"].contains(operation), let snapshot = try? await surface.captureSnapshot(.init(width: 1024, documentGeneration: surface.documentGeneration)) {
                 let bitmap = NSBitmapImageRep(cgImage: snapshot.image)
                 try? bitmap.representation(using: .png, properties: [:])?.write(to: captures.appendingPathComponent("pdf-" + appearance + ".png"))
                 captureView(window.contentView, to: captures.appendingPathComponent("browser-" + appearance + ".png"))
