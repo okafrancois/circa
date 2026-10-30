@@ -101,6 +101,10 @@ final class SiteSyntheticDocumentView: NSView {
 
 @MainActor
 final class SiteSyntheticSurface: BrowserEngineSurface {
+    var automaticPiPUpdates: [(selected: Bool, allowed: Bool)] = []
+    func updateAutomaticPictureInPicture(isSelected: Bool, allowed: Bool) {
+        automaticPiPUpdates.append((isSelected, allowed))
+    }
     var nativePageServices: (any BrowserNativePageServices)?
     let profileID: ProfileID
     /// A plain parent view, like the `NSView` handed to CEF; it is not itself focusable.

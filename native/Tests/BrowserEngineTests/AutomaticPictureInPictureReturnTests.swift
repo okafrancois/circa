@@ -41,6 +41,26 @@ struct AutomaticPictureInPictureReturnTests {
         #expect(page.evaluateScript("exits === 0")!.toBool())
     }
 
+    @Test("A meeting video remains eligible with camera or microphone capture", arguments: ["video", "audio"])
+    func meetingVideo(kind: String) throws {
+        let page = try makePage()
+        page.evaluateScript("video.srcObject = {getTracks:()=>[{kind:'\(kind)',readyState:'live'}]}")
+        #expect(try run(BrowserAutomaticPiPScript.enter, in: page))
+        #expect(try run(BrowserAutomaticPiPScript.returnToSource, in: page))
+    }
+
+    @Test("Automatic video eligibility rejects unavailable, hidden, paused and opted-out players", arguments: [
+        "document.pictureInPictureEnabled=false", "document.querySelectorAll=()=>[]",
+        "video.paused=true", "video.ended=true", "video.readyState=1", "video.videoWidth=0",
+        "video.disablePictureInPicture=true", "video.checkVisibility=()=>false",
+        "video.getBoundingClientRect=()=>({width:640,height:360,bottom:-10,right:700,top:-370,left:60})"
+    ])
+    func videoEligibility(mutation: String) throws {
+        let page = try makePage()
+        page.evaluateScript(mutation)
+        #expect(try !run(BrowserAutomaticPiPScript.enter, in: page))
+    }
+
     private func makePage() throws -> JSContext {
         let page = try #require(JSContext())
         page.evaluateScript(#"""

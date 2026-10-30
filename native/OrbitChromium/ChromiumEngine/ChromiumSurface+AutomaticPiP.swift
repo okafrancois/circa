@@ -34,7 +34,7 @@ extension ChromiumSurface {
     /// Each frame gets an isolated world. Cross-origin players use their own native DOM and
     /// permissions policy; no Node/IPC is exposed and page replacements of DOM APIs do not run.
     private func reconcileAutomaticPiP(enter: Bool, returning: Bool, generation: UInt64) async {
-        if returning {
+        if returning || !enter {
             guard let session = automaticPiPSession else { return }
             automaticPiPSession = nil
             guard session.generation == generation else { return }
