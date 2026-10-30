@@ -66,7 +66,7 @@ enum ArcImportText {
     }
 
     static var localFilesHint: String {
-        uiText("Coming from Arc? Orbit imports your Spaces, tabs and folders from the files Arc keeps on this Mac, even after Arc stops working.")
+        uiText("Coming from Arc? Your Spaces and tabs come with you, even after Arc stops working.")
     }
 
     static var importRest: String { uiText("Import the Rest") }
