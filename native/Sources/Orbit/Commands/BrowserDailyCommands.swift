@@ -6,6 +6,11 @@ import BrowserEngine
 enum BrowserDailyCommands {
     static func install<Engine: BrowserEngine>(in registry: BrowserCommandRegistry<BrowserWindowController<Engine>>) {
         BrowserPasswordCommands.install(in: registry)
+        try! registry.register(.releaseNotes, validate: { _ in OrbitReleaseNotes.runningVersionURL() != nil }) { controller, _ in
+            guard let url = OrbitReleaseNotes.runningVersionURL(), let context = controller.session.paletteContext else { return }
+            controller.hideLibrary()
+            controller.session.openTab(url: url, from: context)
+        }
         try! registry.register(.manageExtensions, validate: {
             $0.engine.extensionManagement != nil && $0.session.selectedSurface != nil
         }) { controller, _ in
@@ -48,6 +53,7 @@ enum BrowserDailyCommands {
 
     static func aliases(_ id: BrowserCommandID) -> String {
         switch id {
+        case .releaseNotes: "What's New|What’s New|See What’s New"
         case .newBoost: "New Boost|Create Boost"
         case .viewBoosts: "View Boosts"
         case .newWindow: "New Window|Nouvelle fenêtre|Ouvrir une nouvelle fenêtre"

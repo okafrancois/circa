@@ -185,7 +185,16 @@ final class OrbitSmokeDriver: OrbitLaunchHooks {
             ChromiumRuntime.shared.requestQuit()
             return
         }
-        NSApp.terminate(nil)
+        if arguments.contains("--orbit-smoke-idle-update"), let application {
+            let updater = application.updater
+            updater.idleSignals = { .init(idleSeconds: 600, mediaPlaying: false) }
+            updater.mediaPreventsAutomaticInstallation = { false }
+            updater.fetchLatestVersion = { "27" }
+            // No Sparkle instance, feed, download or installer is constructed in this smoke.
+            updater.installPendingUpdate = { NSApp.terminate(nil) }
+            updater.prepared(version: "27")
+            Task { await updater.attemptAutomaticInstallation() }
+        } else { NSApp.terminate(nil) }
         // A cancelled termination (for example a save error, whose alert HiddenGuard refuses)
         // must not leave the run alive: record it, then quit the runtime without the session.
         Task { @MainActor in
@@ -482,6 +491,18 @@ final class OrbitSmokeDriver: OrbitLaunchHooks {
             await OrbitProfileScenarios.run(application: application, environment: environment,
                 fixture: fixture, restoring: phase == .restore, record: record)
         } else if arguments.contains("--orbit-smoke-relaunch") {
+            if arguments.contains("--orbit-smoke-idle-update"), phase == .restore {
+                do { try await environment.restoreQuickWindowsAfterUpdate(present: application.quickWindowPresenter) }
+                catch { check("update.checkpoint-load", false) }
+                let littleRestored = await OrbitRelaunchScenarios.until {
+                    environment.quickWindows.count == 1
+                        && environment.quickWindows.values.first?.surface?.isReady == true
+                        && environment.quickWindows.values.first?.surface?.navigationState.committedURL == page("relaunch-little")
+                        && environment.quickWindows.values.first?.surface?.navigationState.isLoading == false
+                }
+                check("update.little-restored", littleRestored)
+                environment.retireQuickWindows()
+            }
             await OrbitRelaunchScenarios.session(application: application, environment: environment,
                 engine: engine, fixture: fixture, root: runRoot, restored: restored.count, restoring: phase == .restore, record: record)
         } else { switch phase {

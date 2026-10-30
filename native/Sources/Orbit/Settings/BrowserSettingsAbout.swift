@@ -14,6 +14,8 @@ struct BrowserSettingsAbout: View {
             Text(ProductIdentity.displayName).font(Font(BrandTextStyle.title.font(size: 36))).kerning(BrandTextStyle.title.tracking(size: 36))
             Text(uiText("Everything revolves around you.")).foregroundStyle(.secondary)
             Text(version).font(Font(BrandFonts.mono(11))).foregroundStyle(.secondary)
+                .textSelection(.enabled)
+                .help(uiText("Copy Version"))
             Group {
                 if updater.canCheckForUpdates {
                     updateButton.keyboardShortcut(.defaultAction)
@@ -35,6 +37,8 @@ struct BrowserSettingsAbout: View {
     static func versionDescription(info: [String: Any]) -> String {
         let version = info["CFBundleShortVersionString"] as? String ?? uiText("Development build")
         let build = info["CFBundleVersion"] as? String ?? uiText("Development build")
-        return uiFormat("Version %@ (%@)", version, build)
+        let app = uiFormat("Version %@ (%@)", version, build)
+        guard let chromium = info["OrbitChromiumVersion"] as? String, !chromium.isEmpty else { return app }
+        return app + " · " + uiFormat("Chromium %@", chromium)
     }
 }

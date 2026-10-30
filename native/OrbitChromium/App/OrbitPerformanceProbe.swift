@@ -108,6 +108,11 @@ enum OrbitPerformanceProbe {
                     result["localFiles"] = await OrbitLocalFilesProbe.run(application, owner: owner, root: root, command: command)
                 } else if name == "search-suggestions" {
                     result["searchSuggestions"] = await searchSuggestions(owner, root: root, command: command)
+                } else if name == "updater-developer" {
+                    result["updaterDeveloper"] = await updaterDeveloper(application, owner: owner, command: command)
+                } else if name == "updater-about" {
+                    result["branding"] = await OrbitBrandingProbe.run(application, environment: environment, owner: owner,
+                        root: root, appearance: command["appearance"] ?? "light", aboutOnly: true)
                 } else if name == "branding-capture" {
                     result["branding"] = await OrbitBrandingProbe.run(application, environment: environment, owner: owner, root: root, appearance: command["appearance"] ?? "light")
                 } else if name == "pinned-tabs" {
@@ -650,6 +655,52 @@ extension OrbitPerformanceProbe {
         }
         return ["firstMS": first, "finalMS": final, "arrowMS": arrows,
                 "results": owner.palette.results.count, "window": owner.window?.windowNumber ?? 0]
+    }
+
+    private static func updaterDeveloper(_ application: OrbitApplication, owner: OrbitWindowController,
+                                         command: [String: String]) async -> [String: Any] {
+        guard ownsWindow(owner, bundleID: "lab.orbit.orbit.circa-rename"),
+              let text = command["url"], let url = URL(string: text),
+              url.scheme == "http", url.host == "localhost" else { return ["refused": true] }
+        owner.openTab(url: url)
+        await owner.session.waitForQueuedCommands()
+        guard let surface = owner.session.selectedSurface else { return ["missingSurface": true] }
+        for _ in 0..<200 where surface.navigationState.committedURL != url || surface.navigationState.isLoading {
+            try? await Task.sleep(for: .milliseconds(25))
+        }
+        guard ownsWindow(owner, bundleID: "lab.orbit.orbit.circa-rename") else { return ["ownershipLost": true] }
+        let preferences = owner.siteControls.preferences
+        let automatic = preferences.preferences(url: url, profileID: surface.profileID).developerMode
+        let target = application.commands.registry.captureTarget(windowID: owner.id)
+        let toggled = application.commands.registry.dispatch(.toggleDeveloperMode, origin: .keyboard, target: target)
+        await owner.session.waitForQueuedCommands()
+        let disabled = !preferences.preferences(url: url, profileID: surface.profileID).developerMode
+        guard ownsWindow(owner, bundleID: "lab.orbit.orbit.circa-rename") else { return ["ownershipLost": true] }
+        _ = application.commands.registry.dispatch(.toggleDeveloperMode, origin: .keyboard,
+            target: application.commands.registry.captureTarget(windowID: owner.id))
+        await owner.session.waitForQueuedCommands()
+        let updater = OrbitUpdater()
+        var installs = 0
+        var signals = OrbitIdleUpdateSignals(idleSeconds: 0, mediaPlaying: false)
+        updater.idleSignals = { signals }
+        updater.mediaPreventsAutomaticInstallation = { false }
+        updater.fetchLatestVersion = { "27" }
+        updater.installPendingUpdate = { installs += 1 }
+        updater.prepared(version: "27")
+        await updater.attemptAutomaticInstallation()
+        let activeDeferred = installs == 0
+        signals.idleSeconds = 600; signals.mediaPlaying = true
+        await updater.attemptAutomaticInstallation()
+        let mediaDeferred = installs == 0
+        signals.mediaPlaying = false
+        await updater.attemptAutomaticInstallation()
+        let systemSignals = OrbitIdleUpdateSignalsSource().sample(mediaPlaying: false)
+        return ["localhostAutomatic": automatic, "toggleOff": toggled && disabled,
+                "toggleOn": preferences.preferences(url: url, profileID: surface.profileID).developerMode,
+                "activeDeferred": activeDeferred, "mediaDeferred": mediaDeferred, "idleInstalledFake": installs == 1,
+                "systemIdleSignal": systemSignals.idleSeconds.isFinite,
+                "version": BrowserSettingsAbout.versionDescription(info: Bundle.main.infoDictionary ?? [:]),
+                "nativeLifecycle": surface.pagePerformance?.lifecycle() != nil]
     }
 
     private static func ownsWindow(_ owner: OrbitWindowController, bundleID: String = "lab.orbit.orbit.perf-core-3") -> Bool {

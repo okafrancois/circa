@@ -7,7 +7,7 @@ import QuartzCore
 @MainActor
 enum OrbitBrandingProbe {
     static func run(_ application: OrbitApplication, environment: OrbitEnvironment,
-                    owner: OrbitWindowController, root: URL, appearance: String) async -> [String: Any] {
+                    owner: OrbitWindowController, root: URL, appearance: String, aboutOnly: Bool = false) async -> [String: Any] {
         guard Bundle.main.bundleIdentifier == "lab.orbit.orbit.circa-rename",
               let confinement = activeSyntheticDataGuard(), (try? confinement.checkInside(root)) != nil else { return ["refused": true] }
         let directory = root.appendingPathComponent("captures")
@@ -38,6 +38,7 @@ enum OrbitBrandingProbe {
             settingsModel.settingsSection = .about
             try? await Task.sleep(for: .milliseconds(400))
             try capture(settings.window, "about")
+            if aboutOnly { return ["completed": true] }
             let welcome = OrbitOnboardingWindowController(flow: .init(sources: [], syncAvailability: .unavailable), services: .init(), themeTarget: nil)
             defer { welcome.close() }
             try capture(welcome.window, "onboarding-welcome")
