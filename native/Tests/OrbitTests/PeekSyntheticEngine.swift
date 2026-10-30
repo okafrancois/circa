@@ -116,6 +116,12 @@ final class PeekSyntheticSurface: BrowserEngineSurface, BrowserLinkGeometrySourc
         hostView.addSubview(documentView)
     }
 
+    /// Installs an engine commit without a request, for navigation-boundary tests.
+    func commitSyntheticDocument(_ url: URL) {
+        history.append(url)
+        index = history.count - 1
+    }
+
     var currentURL: URL? { history.indices.contains(index) ? history[index] : nil }
 
     var navigationState: BrowserNavigationState {

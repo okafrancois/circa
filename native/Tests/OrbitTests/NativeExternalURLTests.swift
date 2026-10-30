@@ -110,7 +110,7 @@ struct NativeExternalURLTests {
         #expect(controller.window?.isVisible == false)
     }
 
-    @Test("External delivery rejects internal schemes and unrelated local files")
+    @Test("External delivery rejects internal schemes and nonlocal file authorities")
     func allowedExternalSchemes() {
         for text in ["chrome://settings", "javascript:alert(1)", "about:blank", "data:text/html,test", "https:///", "relative"] {
             #expect(ExternalURLResolver.resolve(URL(string: text)!) == nil)
@@ -119,7 +119,7 @@ struct NativeExternalURLTests {
         #expect(ExternalURLResolver.resolve(URL(string: "http://synthetic.invalid/")!) != nil)
         #expect(ExternalURLResolver.resolve(URL(string: "file://remote.invalid/synthetic.html")!) == nil)
         #expect(ExternalURLResolver.resolve(URL(fileURLWithPath: "/tmp/synthetic.txt")) == nil)
-        #expect(ExternalURLResolver.resolve(URL(fileURLWithPath: "/tmp/synthetic.html")) != nil)
+        #expect(ExternalURLResolver.resolve(URL(fileURLWithPath: "/nonexistent/synthetic.html")) == nil)
     }
 
     @Test("Internet shortcut documents resolve only bounded HTTP and HTTPS destinations")
@@ -139,6 +139,7 @@ struct NativeExternalURLTests {
         try Data(repeating: 65, count: 65_537).write(to: webloc)
         #expect(ExternalURLResolver.resolve(webloc) == nil)
         let html = directory.appendingPathComponent("synthetic.html")
+        try Data().write(to: html)
         #expect(ExternalURLResolver.resolve(html) == html)
     }
 

@@ -20,7 +20,7 @@ enum OrbitPerformanceProbe {
     static func start(application: OrbitApplication, configuration: OrbitProductConfiguration) {
         guard configuration.syntheticGuard != nil, CommandLine.arguments.contains("--perf-probe") else { return }
         if ["lab.orbit.orbit.engine-r11", "lab.orbit.orbit.engine-r12"].contains(Bundle.main.bundleIdentifier ?? "") { application.confirmQuit = { .quit } }
-        if ["lab.orbit.orbit.pinned-tabs", "lab.orbit.orbit.search-suggestions", "lab.orbit.orbit.circa-rename"].contains(Bundle.main.bundleIdentifier ?? "") {
+        if ["lab.orbit.orbit.pinned-tabs", "lab.orbit.orbit.search-suggestions", "lab.orbit.orbit.circa-rename", "lab.orbit.orbit.local-files-pdf"].contains(Bundle.main.bundleIdentifier ?? "") {
             application.confirmQuit = { .quit }
             application.windowPresenter = { controller, _ in
                 controller.window?.setFrame(NSRect(x: -2000, y: -1200, width: 1280, height: 900), display: false)
@@ -95,7 +95,9 @@ enum OrbitPerformanceProbe {
                 try? FileManager.default.removeItem(at: commandFile)
                 let name = command["command"] ?? ""
                 result["commandNonce"] = command["nonce"] ?? ""
-                if name == "search-suggestions" {
+                if name == "local-files" {
+                    result["localFiles"] = await OrbitLocalFilesProbe.run(application, owner: owner, root: root, command: command)
+                } else if name == "search-suggestions" {
                     result["searchSuggestions"] = await searchSuggestions(owner, root: root, command: command)
                 } else if name == "branding-capture" {
                     result["branding"] = await OrbitBrandingProbe.run(application, environment: environment, owner: owner, root: root, appearance: command["appearance"] ?? "light")

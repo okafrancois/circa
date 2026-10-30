@@ -92,6 +92,9 @@ extension BrowserWindowController {
             }
         }
         sidebar.onTearOff = { [weak self] payload, point in self?.onTearOffTab?(payload, point) }
+        sidebar.onFileDrop = { [weak self] urls, destination in
+            self?.submitInput { $0.openLocalFiles(urls, at: destination) }
+        }
         sidebar.onDrop = { [weak self] payload, destination, changes in
             self?.submitInput { $0.performSidebarDrop(payload, to: destination, changesOrganization: changes) }
         }

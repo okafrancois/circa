@@ -215,14 +215,14 @@ struct NativeQuickWindowTests {
         BrowserQuickWindowCommands.install(in: registry, active: { active && !little.isClosed ? little : nil },
             promote: { _ in promoted += 1 }, chooseSpace: { _ in choices += 1 })
         #expect(registry.activeScope == .quickWindow)
-        #expect(registry.resolve(.init(key: "o", modifiers: .command)) == .promoteQuickWindow)
-        #expect(registry.dispatch(.promoteQuickWindow, origin: .keyboard))
+        #expect(registry.resolve(.init(key: "o", modifiers: .command)) == nil)
+        #expect(registry.dispatch(.promoteQuickWindow, origin: .menu))
         #expect(registry.dispatch(.chooseQuickWindowSpace, origin: .menu))
         #expect(promoted == 1 && choices == 1)
         #expect(registry.resolve(.init(key: "w", modifiers: .command)) == .closeQuickWindow)
         #expect(registry.resolve(.init(key: "\u{1b}", modifiers: [])) == nil, "Escape remains with the page/editor")
         active = false
-        #expect(!registry.dispatch(.promoteQuickWindow, origin: .keyboard))
+        #expect(!registry.dispatch(.promoteQuickWindow, origin: .menu))
         #expect(!registry.dispatch(.closeQuickWindow, origin: .keyboard))
         active = true
         #expect(registry.dispatch(.closeQuickWindow, origin: .keyboard))

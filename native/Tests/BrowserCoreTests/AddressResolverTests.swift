@@ -44,7 +44,7 @@ func resolveSearchQueries() throws {
 @Test("Unsafe schemes, embedded credentials, blank input and invalid ports are rejected")
 func rejectUnsafeAddresses() {
     let resolver = AddressResolver()
-    for input in ["javascript:alert(1)", "javascript:123", "data:text/html,example", "file:///tmp/test", "chrome://extensions", "mailto:test@example.test"] {
+    for input in ["javascript:alert(1)", "javascript:123", "data:text/html,example", "chrome://extensions", "mailto:test@example.test"] {
         #expect(throws: AddressResolutionError.unsupportedScheme) { try resolver.resolve(input) }
     }
     #expect(throws: AddressResolutionError.credentialsNotAllowed) {

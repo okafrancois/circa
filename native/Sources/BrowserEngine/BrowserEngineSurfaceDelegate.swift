@@ -69,12 +69,15 @@ public struct BrowserNavigationAction: Sendable, Equatable {
     /// Whether a user gesture started the navigation (CEF `user_gesture`); nil when unknown.
     public var isUserGesture: Bool?
     public var disposition: BrowserNavigationDisposition
+    /// Engine-reported parent frame. Nil for main frames and adapters without this metadata.
+    public var parentFrameURL: URL?
 
     public init(url: URL?, shouldPerformDownload: Bool = false, isMainFrame: Bool? = nil,
                 modifiers: BrowserModifierKeys = [], buttonNumber: Int = 0,
                 kind: BrowserNavigationKind = .other, httpMethod: String? = nil, hasBody: Bool? = nil,
-                isUserGesture: Bool? = nil, disposition: BrowserNavigationDisposition = .currentTab) {
+                isUserGesture: Bool? = nil, disposition: BrowserNavigationDisposition = .currentTab, parentFrameURL: URL? = nil) {
         self.url = url
+        self.parentFrameURL = parentFrameURL
         self.shouldPerformDownload = shouldPerformDownload
         self.isMainFrame = isMainFrame
         self.modifiers = modifiers
@@ -327,6 +330,9 @@ public enum BrowserKeyRouting {
 public protocol BrowserEngineSurfaceDelegate<Surface>: AnyObject {
     associatedtype Surface: BrowserEngineSurface
 
+    /// A completed native drop, never a renderer request. Return true after accepting it.
+    func surface(_ surface: Surface, openDroppedFiles urls: [URL]) -> Bool
+
     func surfaceDidStartNavigation(_ surface: Surface)
     /// A new main-frame document committed and is displayable: find and zoom state of the previous
     /// document is obsolete. This is the contract-level signal that an engine-created surface has
@@ -416,6 +422,7 @@ public protocol BrowserEngineSurfaceDelegate<Surface>: AnyObject {
 }
 
 public extension BrowserEngineSurfaceDelegate {
+    func surface(_ surface: Surface, openDroppedFiles urls: [URL]) -> Bool { false }
     func surfaceDidRequestActivation(_ surface: Surface) {}
     func surface(_ surface: Surface, didNavigateWithinDocument navigation: BrowserSameDocumentNavigation) {}
 

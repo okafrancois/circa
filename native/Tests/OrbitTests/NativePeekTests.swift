@@ -169,7 +169,7 @@ struct NativePeekTests {
         #expect(controller.session.selectedSurface === peeked)
     }
 
-    @Test("⌘O promotes the Peek through the registry")
+    @Test("Peek promotion remains available through the menu registry")
     func commandPromotion() async throws {
         let (environment, controller, tab) = try await makePeekWindow()
         defer { controller.window?.close() }
@@ -177,8 +177,8 @@ struct NativePeekTests {
         defer { _ = router }
         #expect(!registry.isEnabled(.openQuickWindowOrPeekIn))
         let peeked = try #require(tab.openNewTarget(URL(string: "https://other.org/x")!, modifiers: [.shift]))
-        #expect(registry.resolve(BrowserShortcut(key: "o", modifiers: [.command])) == .openQuickWindowOrPeekIn)
-        #expect(registry.dispatch(.openQuickWindowOrPeekIn, origin: .keyboard))
+        #expect(registry.resolve(BrowserShortcut(key: "o", modifiers: [.command])) == nil)
+        #expect(registry.dispatch(.openQuickWindowOrPeekIn, origin: .menu))
         await router.waitForPendingCommands()
         await controller.session.waitForPendingCommands()
         #expect(controller.session.selectedSurface === peeked)

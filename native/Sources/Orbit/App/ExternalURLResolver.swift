@@ -12,7 +12,7 @@ enum ExternalURLResolver {
         guard url.host == nil || url.host == "" || url.host?.lowercased() == "localhost" else { return nil }
         let kind = url.pathExtension.lowercased()
         guard kind == "webloc" || kind == "url" else {
-            return ["html", "htm", "xhtml"].contains(kind) ? url : nil
+            return LocalFileOpen.validURL(url)
         }
         guard (try? url.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true,
               let handle = try? FileHandle(forReadingFrom: url) else { return nil }

@@ -1017,6 +1017,12 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
 
     var dropTargetView: NSView { self }
 
+    func localFileDropProposal(at point: NSPoint, in snapshot: BrowserOrganizationSnapshot, count: Int) -> SidebarDropProposal {
+        SidebarDropResolver.resolve(y: point.y, iconX: point.x,
+            layout: presentedDropLayout(at: animator.now), entries: content.entries, spaceID: snapshot.spaceID,
+            draggedRows: count, isPinnedCollapsed: content.isPinnedSectionCollapsed)
+    }
+
     func dropProposal(for payload: SidebarDragPayload, at point: NSPoint,
                       in snapshot: BrowserOrganizationSnapshot) -> SidebarDropProposal? {
         isCrossWindowHover = payload.nodes.count == 1 && payload.nodes.first?.tabID != nil

@@ -464,9 +464,14 @@ public final class BrowserWindowSession<Surface: BrowserSurface> {
         }
     }
 
-    public func openTab(url: URL = URL(string: "about:blank")!, activate: Bool = true) {
+    public func openTab(url: URL = URL(string: "about:blank")!, activate: Bool = true, at destination: BrowserOrganizationDestination? = nil) {
         enqueue { session in
-            try await session.createTab(url: url, activate: activate)
+            var tab: BrowserTab?
+            try await session.createTab(url: url, activate: activate, onCreate: { tab = $0 })
+            if let destination, let tab, let context = session.activeContext {
+                let state = try await session.store.moveItems([.tab(tab.id)], to: destination, from: context)
+                session.install(state)
+            }
         }
     }
 

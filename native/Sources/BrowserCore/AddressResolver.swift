@@ -67,6 +67,15 @@ public struct AddressResolver: Sendable {
     public func resolve(_ text: String) throws -> AddressDestination {
         let input = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !input.isEmpty else { throw AddressResolutionError.emptyInput }
+        if input.hasPrefix("/") || input.hasPrefix("~/") {
+            return .page(URL(fileURLWithPath: (input as NSString).expandingTildeInPath).standardizedFileURL)
+        }
+        if input.lowercased().hasPrefix("file://") {
+            guard let url = URL(string: input), url.isFileURL,
+                  url.host == nil || url.host == "" || url.host?.lowercased() == "localhost",
+                  url.user == nil, url.password == nil, url.port == nil else { throw AddressResolutionError.invalidAddress }
+            return .page(URL(fileURLWithPath: url.path).standardizedFileURL)
+        }
         if input.hasPrefix("?") {
             return try search(String(input.dropFirst()).trimmingCharacters(in: .whitespacesAndNewlines))
         }

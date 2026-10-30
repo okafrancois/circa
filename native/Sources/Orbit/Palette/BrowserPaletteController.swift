@@ -457,6 +457,7 @@ final class BrowserPaletteController<Engine: BrowserEngine> {
                 owner.hideLibrary(focus: false)
                 let accepted = owner.session.navigateFromPalette(from: context, newTab: newTab) { [weak owner] surface in
                     guard let owner else { return }
+                    owner.authorizeEnteredFile(url, for: surface)
                     if BrowserPaletteRanking.recordsTypedVisit(result) { owner.historyObserver.markTypedNavigation(surface, url: url) }
                     if !newTab, surface.navigationState.url == url { surface.reload() }
                     else { surface.navigate(to: url) }

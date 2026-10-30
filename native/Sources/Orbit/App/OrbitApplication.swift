@@ -9,6 +9,7 @@ import BrowserShell
 @main
 @MainActor
 final class OrbitApplication: NSObject, NSApplicationDelegate {
+    var chooseLocalFiles: @MainActor (NSWindow?, @escaping @MainActor ([URL]) -> Void) -> Void = LocalFileOpen.choose
     private(set) var environment: OrbitEnvironment?
     private let inactiveUpdater = OrbitUpdater()
     var updater: OrbitUpdater { environment?.settings.updater ?? inactiveUpdater }
@@ -283,6 +284,10 @@ final class OrbitApplication: NSObject, NSApplicationDelegate {
 
     private func routeExternalURLs(_ urls: [URL]) {
         guard !urls.isEmpty, let environment, !isPreparingToQuit else { return }
+        let files = urls.filter(\.isFileURL)
+        if !files.isEmpty { openLocalFiles(files) }
+        let urls = urls.filter { !$0.isFileURL }
+        guard !urls.isEmpty else { return }
         selectNormalWindowForExternalRequest()
         let routing = environment.settings.document.linkRouting
         if !routing.rules.isEmpty || { if case .space = routing.defaultDestination { return true }; return false }() {

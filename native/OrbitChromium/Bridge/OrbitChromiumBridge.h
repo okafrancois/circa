@@ -186,6 +186,8 @@ typedef struct {
   const char *method;
   /* 1 when the request carries post data, 0 when it carries none. */
   int32_t has_body;
+  /* Engine-owned parent frame URL, never supplied by page script. NULL for a main frame. */
+  const char *parent_url;
 } ACRNavigationInfo;
 
 /* Synchronous navigation decision from CefRequestHandler::OnBeforeBrowse

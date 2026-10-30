@@ -36,12 +36,12 @@ struct NativeCommandTests {
     func catalogCoverage() throws {
         #expect(OrbitCommandCatalog.declarations.count == 179)
         #expect(OrbitCommandCatalog.structuralIDs.count == 14)
-        #expect(OrbitCommandCatalog.actionDefinitions.count == 253) // Includes local page sharing.
+        #expect(OrbitCommandCatalog.actionDefinitions.count == 254) // Includes local page sharing.
         #expect(OrbitCommandCatalog.declarations.allSatisfy { $0.localizesKey })
-        #expect(OrbitCommandCatalog.declarations.filter { !$0.key.isEmpty }.count == 85)
+        #expect(OrbitCommandCatalog.declarations.filter { !$0.key.isEmpty }.count == 84)
         #expect(OrbitCommandCatalog.declarations.filter { !$0.key.isEmpty && $0.modifierMask == nil }.map(\.source) == ["menu.declaration.25", "menu.declaration.117"])
         #expect(Set(OrbitCommandCatalog.declarations.map(\.source)).count == 179)
-        #expect(OrbitCommandCatalog.supplemental.count == 26)
+        #expect(OrbitCommandCatalog.supplemental.count == 27)
         #expect(Set(OrbitCommandCatalog.definitions.map(\.id)) == Set(BrowserCommandID.allCases))
         #expect(OrbitCommandCatalog.definitions.allSatisfy { !$0.sources.isEmpty && !$0.owner.isEmpty })
         let router = commandRouter()
@@ -213,7 +213,7 @@ struct NativeCommandTests {
         #expect(registry.resolve(.init(key: "n", modifiers: [.command, .shift])) == .newIncognitoWindow)
         #expect(registry.resolve(.init(key: "o", modifiers: [.command])) == nil)
         router.selectedWindow?.state.scope = .quickWindow
-        #expect(registry.resolve(.init(key: "o", modifiers: [.command]), scope: .quickWindow) == .promoteQuickWindow)
+        #expect(registry.resolve(.init(key: "o", modifiers: [.command]), scope: .quickWindow) == nil)
         router.shutdown()
     }
 
@@ -299,7 +299,7 @@ struct NativeCommandTests {
         // + local Share and page-context Share (2), sidebar tab navigation (4), Select Space 1–9 (9).
         let implemented = system.registry.definitions.filter { system.registry.isImplemented($0.id) }.map(\.id.rawValue)
         // Boost creation, the Library destination and folder promotion add executable bindings.
-        #expect(implemented.count == 189, "\(implemented.count): \(implemented.sorted())")
+        #expect(implemented.count == 190, "\(implemented.count): \(implemented.sorted())")
         #expect(system.registry.isImplemented(.checkForUpdates))
         #expect(system.registry.isImplemented(.toggleDeveloperMode))
         #expect(system.registry.isImplemented(.newIncognitoWindow))
@@ -362,7 +362,7 @@ struct NativeCommandTests {
         }
         let file = try #require(bar.items.first { $0.title == "File" }?.submenu)
         #expect(file.items.filter { !$0.isSeparatorItem && !$0.isHidden }.compactMap(\.identifier?.rawValue) == [
-            "newTab", "newWindow", "newIncognitoWindow", "newQuickWindowWindow", "restoreLastClosedTab", "openCommandBar", "newProfile",
+            "newTab", "newWindow", "newIncognitoWindow", "newQuickWindowWindow", "restoreLastClosedTab", "openFile", "openCommandBar", "newProfile",
             "closeWindow", "archiveTab", "share", "capture", "captureFullPage", "savePageAs", "print", "importFromArc"
         ])
         let edit = try #require(bar.items.first { $0.title == "Edit" }?.submenu)
@@ -470,6 +470,7 @@ struct NativeCommandTests {
           New Little Circa Window [newQuickWindowWindow] ⌥⌘N
           Restore Last Closed Tab [restoreLastClosedTab] ⇧⌘T
           ---
+          Open File… [openFile] ⌘O
           Open Command Bar [openCommandBar] ⌘L
           ---
           New Boost [newBoost] (hidden)
@@ -615,7 +616,7 @@ struct NativeCommandTests {
           Join Meeting [joinMeeting] ⌃⌘J (hidden) (key when hidden)
           Peek Email… [peekEmail] ⇧⌘E (hidden) (key when hidden)
           Pin/Unpin Tab [pinUnpinTab] ⌘D
-          Open Little Circa or Peek in… [openQuickWindowOrPeekIn] ⌘O (key when hidden)
+          Open Little Circa or Peek in… [openQuickWindowOrPeekIn] (key when hidden)
           New Folder… [newFolder]
           Duplicate [duplicate] (key when hidden)
           Rename Current Item [renameCurrentItem] (hidden) (key when hidden)

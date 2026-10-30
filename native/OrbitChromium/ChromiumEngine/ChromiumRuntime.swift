@@ -352,6 +352,7 @@ public final class ChromiumRuntime {
 
 /// Owned copy of a borrowed `ACRNavigationInfo` (ABI 7).
 struct ChromiumNavigationRequest {
+    let parentURL: String?
     let url: String?
     let isMainFrame: Bool
     let userGesture: Bool
@@ -361,6 +362,7 @@ struct ChromiumNavigationRequest {
     let hasBody: Bool
 
     init(_ info: ACRNavigationInfo) {
+        parentURL = info.parent_url.map { String(cString: $0) }
         url = info.url.map { String(cString: $0) }
         isMainFrame = info.is_main_frame != 0
         userGesture = info.user_gesture != 0
@@ -371,7 +373,8 @@ struct ChromiumNavigationRequest {
     }
 
     init(url: String?, isMainFrame: Bool, userGesture: Bool, isRedirect: Bool,
-         transitionType: UInt32 = 0, method: String? = nil, hasBody: Bool = false) {
+         transitionType: UInt32 = 0, method: String? = nil, hasBody: Bool = false, parentURL: String? = nil) {
+        self.parentURL = parentURL
         self.url = url
         self.isMainFrame = isMainFrame
         self.userGesture = userGesture

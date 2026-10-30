@@ -413,7 +413,7 @@ struct NativeQuickWindowR2Tests {
         #expect(copied == surface.currentURL)
         #expect(bar.performKeyEquivalent(with: try event("p")))
         #expect(engine.printedSurfaces == [ObjectIdentifier(surface)])
-        #expect(little.openButton.toolTip?.contains("⌘O") == true)
+        #expect(little.openButton.toolTip?.contains("⌘O") != true)
         #expect(little.openButton.accessibilityLabel()?.contains(little.sourceSpaceName) == true)
         active = false
         #expect(!registry.isEnabled(.find) && !registry.isEnabled(.print))
@@ -431,8 +431,10 @@ struct NativeQuickWindowR2Tests {
         let environment = PreviewEnvironment()
         let main = try await environment.makeWindow()
         defer { environment.retireQuickWindows(); main.window?.close() }
-        let little = try await environment.makeQuickWindow(url: file)
+        let little = try await environment.makeQuickWindow()
         let surface = try #require(little.surface)
+        BrowserNavigationPolicy.authorizeLocalDocument(file, for: surface)
+        surface.navigate(to: file)
         try await quickWindowR2Wait { surface.webView.title == "Scoped local fixture" && !surface.webView.isLoading }
         _ = try await surface.webView.evaluateJavaScript("document.getElementById('draft').value='retained';void 0")
         let promotion = try #require(little.promote(to: main))
@@ -449,7 +451,7 @@ struct NativeQuickWindowR2Tests {
         let http = BrowserNavigationAction(url: URL(string: "https://little-r2.test/routed")!)
         #expect(BrowserNavigationPolicy.action(http, surface: otherSurface, held: true, routesEnabled: true, hooks: other.engineEventHooks) == .cancel)
         #expect(routed == 1)
-        main.openTab(url: file)
+        main.openLocalFiles([file])
         await main.session.waitForPendingCommands()
         let mainLocal = try #require(main.session.selectedSurface)
         try await quickWindowR2Wait { mainLocal.webView.title == "Scoped local fixture" }

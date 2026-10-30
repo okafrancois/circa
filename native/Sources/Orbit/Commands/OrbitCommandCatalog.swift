@@ -2,6 +2,7 @@ import AppKit
 
 /// Semantic IDs shared by menus, keyboard input, context menus and the command palette.
 enum BrowserCommandID: String, CaseIterable, Sendable {
+    case openFile
     case boostGallery
     case showHideSidebar
     case newChatGPTMessage
@@ -401,7 +402,7 @@ enum OrbitCommandCatalog {
         .init(command: .copy, title: "Copy", menu: "Edit", key: "c", modifierMask: 1048576, localizesKey: true, source: "menu.declaration.129", owner: "SHELL"),
         .init(command: .developerTools, title: "Developer Tools", menu: "Developer", key: "i", modifierMask: 1572864, localizesKey: true, source: "menu.declaration.130", owner: "ENGINE/SHELL"),
         .init(command: .blankWindow, title: "Blank Window", menu: "File", key: "n", modifierMask: 1310720, localizesKey: true, source: "menu.declaration.131", owner: "ENGINE/SHELL"),
-        .init(command: .openQuickWindowOrPeekIn, title: "Open Little Circa or Peek in…", menu: "Tabs", key: "o", modifierMask: 1048576, localizesKey: true, source: "menu.declaration.132", owner: "LITTLE/PEEK"),
+        .init(command: .openQuickWindowOrPeekIn, title: "Open Little Circa or Peek in…", menu: "Tabs", key: "", modifierMask: 1048576, localizesKey: true, source: "menu.declaration.132", owner: "LITTLE/PEEK"),
         .init(command: .restoreData, title: "Restore Data", menu: "Help", key: "", modifierMask: nil, localizesKey: true, source: "menu.declaration.133", owner: "SHELL"),
         .init(command: .viewEaselsNotes, title: "View Easels & Notes", menu: "Window", key: "", modifierMask: nil, localizesKey: true, source: "menu.declaration.134", owner: "LIBRARY"),
         .init(command: .troubleshooting, title: "Troubleshooting", menu: "Help", key: "", modifierMask: nil, localizesKey: true, source: "menu.declaration.135", owner: "SHELL"),
@@ -451,6 +452,8 @@ enum OrbitCommandCatalog {
     ]
 
     static let supplemental: [BrowserCommandDefinition] = [
+        .init(id: .openFile, title: "Open File…", menu: "File", shortcuts: [.init(key: "o", modifiers: .command)],
+              scope: .browser, requirement: .application, owner: "FILES", sources: ["Browser command"]),
         .init(id: .openPasswordManager, title: "Manage Passwords", menu: "Command Bar", shortcuts: [],
               scope: .browser, requirement: .window, owner: "PASSWORDS", sources: ["Browser command"]),
         .init(id: .selectTab1, title: "Select Tab 1", menu: "Tabs", shortcuts: [.init(key: "1", modifiers: .init(rawValue: 1048576))], scope: .browser, requirement: .window, owner: "ORG", sources: ["Browser command"]),
@@ -472,7 +475,7 @@ enum OrbitCommandCatalog {
         .init(id: .selectTab9, title: "Select Tab 9", menu: "Tabs", shortcuts: [.init(key: "9", modifiers: .init(rawValue: 1048576))], scope: .browser, requirement: .window, owner: "ORG", sources: ["Browser command"]),
         .init(id: .selectSpace9, title: "Select Space 9", menu: "Tabs", shortcuts: [.init(key: "9", modifiers: .init(rawValue: 262144))], scope: .browser, requirement: .window, owner: "ORG", sources: ["Browser command"]),
         .init(id: .closeSwitcherTab, title: "Close Selected Switcher Tab", menu: "Tabs", shortcuts: [.init(key: "w", modifiers: .init(rawValue: 262144))], scope: .switcher, requirement: .window, owner: "PALETTE", sources: ["Browser command"]),
-        .init(id: .promoteQuickWindow, title: "Open Little Circa in Last Space", menu: "Tabs", shortcuts: [.init(key: "o", modifiers: .init(rawValue: 1048576))], scope: .quickWindow, requirement: .window, owner: "LITTLE", sources: ["Browser command"]),
+        .init(id: .promoteQuickWindow, title: "Open Little Circa in Last Space", menu: "Tabs", shortcuts: [], scope: .quickWindow, requirement: .window, owner: "LITTLE", sources: ["Browser command"]),
         .init(id: .chooseQuickWindowSpace, title: "Open Little Circa in Space…", menu: "Tabs", shortcuts: [.init(key: "o", modifiers: .init(rawValue: 1179648))], scope: .quickWindow, requirement: .window, owner: "LITTLE", sources: ["Browser command"]),
         .init(id: .dismissPeek, title: "Close Peek", menu: "Tabs", shortcuts: [.init(key: "\u{1b}", modifiers: .init(rawValue: 0))], scope: .peek, requirement: .window, owner: "PEEK", sources: ["Browser command"]),
         .init(id: .cycleExtensions, title: "Cycle Pinned Extensions", menu: "Tabs", shortcuts: [.init(key: "e", modifiers: .init(rawValue: 1048576))], scope: .browser, requirement: .window, owner: "EXTENSIONS", sources: ["Browser command"]),

@@ -80,6 +80,7 @@ extension OrbitApplication {
         BrowserWindowCommands.install(in: registry, commandKeyWindow: keyWindow)
         BrowserPeekCommands.install(in: registry)
         installQuickWindowCommands(in: registry)
+        application(.openFile) { [weak self] in self?.presentOpenFile() }
         application(.newWindow) { [weak self] in self?.createCommandWindow() }
         application(.newIncognitoWindow) { [weak self] in self?.createPrivateCommandWindow() }
         try! registry.registerWhenWindowMissing(.newTab, withOrigin: { [weak self] origin in

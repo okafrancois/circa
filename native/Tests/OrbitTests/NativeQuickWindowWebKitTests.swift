@@ -165,7 +165,7 @@ struct NativeQuickWindowWebKitTests {
         main.session.activateSpace(destinationSpace)
         await main.session.waitForPendingCommands()
         #expect(little.openButton.title == "Open in Synthetic destination")
-        #expect(little.openButton.shortcut == "⌘O")
+        #expect(little.openButton.shortcut.isEmpty)
         #expect(little.sourceSpaceID == sourceSpace && little.profileID == profile)
         app.promoteQuickWindow(little)
         await app.waitForQuickWindowCommands()
