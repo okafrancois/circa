@@ -118,6 +118,15 @@ def phase(args):
     assert process.returncode == 0 and not owner.remaining and not owner.forced_signals, 'Unclean exit; stop GUI QA'
     print(json.dumps({'step': args.step, 'seconds': record['seconds'], 'checks': result.get(args.result_key)}))
     checks = result.get(args.result_key, {})
+    if args.probe == 'daily-qa9' and args.step == 'commands':
+        required = {command + suffix for command in ('makeUpperCase', 'makeLowerCase', 'capitalize')
+                    for suffix in ('SelectAll', 'SelectionReady', 'RegistryAccepted', 'RegistryDelivered', 'RegistryEffect',
+                                   'MenuSelectAll', 'MenuAccepted', 'MenuEffect')}
+        assert all(checks.get(key) is True for key in required), checks
+    if args.probe == 'tab-ergonomics':
+        required = {'duplicate', 'duplicateHistory', 'duplicateModelURL', 'duplicatePill', 'duplicateSidebar',
+                    'duplicateDocument', 'forwardAccepted', 'duplicateForward', 'forwardDocument', 'duplicateIndependent'}
+        assert all(checks.get(key) is True for key in required), checks
     failures = [key for key, value in checks.items() if value is False]
     if args.step == 'performance':
         assert checks.get('loaded') == checks.get('tabs') == 20, checks

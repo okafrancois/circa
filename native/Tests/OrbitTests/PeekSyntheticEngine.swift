@@ -43,7 +43,7 @@ final class PeekSyntheticEngine: BrowserEngine, BrowserNavigationMetadataSource 
 
     /// What a native extension system does for `chrome.tabs.create`: the tab is offered to its
     /// window before it exists, then loads. Nil when no handler takes it.
-    func createEngineTab(in windowID: WindowID, url: URL, profileID: ProfileID, foreground: Bool) -> PeekSyntheticSurface? {
+    func createEngineTab(in windowID: WindowID, url: URL?, profileID: ProfileID, foreground: Bool) -> PeekSyntheticSurface? {
         guard let adopt = tabAdoption[windowID] else { return nil }
         var created: PeekSyntheticSurface?
         let accepted = adopt(BrowserEngineTabRequest(url: url, profileID: profileID, isForeground: foreground)) {
@@ -57,7 +57,7 @@ final class PeekSyntheticEngine: BrowserEngine, BrowserNavigationMetadataSource 
             created?.dispose()
             return nil
         }
-        accepted.navigate(to: url)
+        if let url { accepted.navigate(to: url) }
         return accepted
     }
 

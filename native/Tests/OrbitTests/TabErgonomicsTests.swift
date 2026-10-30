@@ -60,13 +60,17 @@ struct TabErgonomicsTests {
         original.navigate(to: URL(string: "http://127.0.0.1/third")!)
         original.goBack()
         let before = owner.session.snapshot!.tabs.count
-        owner.duplicateSidebarTab()
+        #expect(BrowserTabErgonomics.handle(try click(owner, view: owner.reloadButton, flags: .command), in: owner))
         for _ in 0..<20 { await owner.session.waitForPendingCommands(); await Task.yield() }
         let clone = try #require(owner.session.selectedSurface)
         #expect(clone !== original)
         #expect(owner.session.snapshot?.tabs.count == before + 1)
+        #expect(clone.currentURL?.path == "/second")
+        #expect(owner.session.organization?.selectedTab?.url == clone.currentURL)
+        #expect(owner.session.snapshot?.tabs.first { $0.occurrenceID == owner.session.snapshot?.selectedOccurrenceID }?.url == clone.currentURL)
         #expect(clone.navigationState.canGoBack && clone.navigationState.canGoForward)
         clone.goForward()
+        await owner.session.waitForPendingCommands()
         #expect(clone.currentURL?.path == "/third")
         #expect(original.currentURL?.path == "/second")
         clone.goBack()
