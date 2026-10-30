@@ -89,7 +89,7 @@ struct QuickWindowCompactSurfaceTests {
         #expect(little.window?.minSize == OrbitTokens.Metrics.QuickWindow.minimumSize)
     }
 
-    @Test("The Space chooser filters the captured profile and transfers the live document to the selected Space")
+    @Test("The Space chooser lists all profiles in sidebar order with icons and keeps same-profile promotion live")
     func chooseSpace() async throws {
         NSApplication.shared.setActivationPolicy(.prohibited)
         let environment = PreviewEnvironment()
@@ -102,18 +102,22 @@ struct QuickWindowCompactSurfaceTests {
         let profile = try #require(main.session.activeProfileID)
         let destination = try await environment.store.createSpace(name: "Synthetic destination", profileID: profile)
         let foreign = await environment.store.createProfile(name: "Synthetic foreign profile")
-        _ = try await environment.store.createSpace(name: "Foreign hidden Space", profileID: foreign)
+        let foreignSpace = try await environment.store.createSpace(name: "Synthetic foreign Space", profileID: foreign)
+        try await environment.store.moveSpace(foreignSpace, before: destination)
         let little = try await environment.makeQuickWindow(url: URL(string: "https://synthetic.invalid/live")!)
         app.configureQuickWindow(little)
         app.showQuickWindowSpaces(little)
         for _ in 0..<10 { await Task.yield() }
         let chooser = try #require(little.spaceChooser)
-        #expect(!chooser.rows.contains { $0.title == "Foreign hidden Space" })
+        let catalog = await environment.store.catalogSnapshot()
+        #expect(chooser.rows.map(\.id) == catalog.spaces.map { $0.id.rawValue.uuidString })
+        #expect(chooser.rows.allSatisfy { $0.image != nil && $0.iconBackground != nil })
         #expect(chooser.preferredSize.height == 46 + CGFloat(chooser.rows.count) * 46)
         #expect(chooser.selectedIndex == -1)
         chooser.onQuery?("Synthetic destination")
         #expect(chooser.rows.map(\.title) == ["Synthetic destination"])
         let surface = try #require(little.surface)
+        let document = surface.webView
         chooser.rows[0].accept()
         await app.waitForQuickWindowCommands()
         #expect(little.isClosed)
@@ -121,6 +125,7 @@ struct QuickWindowCompactSurfaceTests {
         #expect(target === main)
         #expect(app.windows.windows.count == 1)
         #expect(target.session.selectedSurface === surface)
+        #expect(target.session.selectedSurface?.webView === document)
     }
 }
 }
