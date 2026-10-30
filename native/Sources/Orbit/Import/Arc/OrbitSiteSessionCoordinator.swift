@@ -7,13 +7,13 @@ enum ArcSiteSessionAlerts {
         let alert = OrbitFloatingMaterial.alert()
         if restoring {
             alert.messageText = uiText("Restore Connections Before the Last Import?")
-            alert.informativeText = uiText("Orbit will save your tabs and restart. Cookies and site storage will return to their state before the last import.")
+            alert.informativeText = uiText("Circa will save your tabs and restart. Cookies and site storage will return to their state before the last import.")
         } else if orbitRunning {
             alert.messageText = uiText("Quit Arc to Import Your Connections")
-            alert.informativeText = uiText("Arc must be closed to copy its connections. Orbit will then save your tabs and restart. Allow access to Arc Safe Storage when macOS asks. Existing Orbit connections are backed up before importing.")
+            alert.informativeText = uiText("Arc must be closed to copy its connections. Circa will then save your tabs and restart. Allow access to Arc Safe Storage when macOS asks. Existing Circa connections are backed up before importing.")
         } else {
             alert.messageText = uiText("Import Connections from Arc?")
-            alert.informativeText = uiText("Orbit will save your tabs and restart. Allow access to Arc Safe Storage when macOS asks. Arc connections replace matching cookies and site storage in the corresponding profiles. A backup lets you undo the import.")
+            alert.informativeText = uiText("Circa will save your tabs and restart. Allow access to Arc Safe Storage when macOS asks. Arc connections replace matching cookies and site storage in the corresponding profiles. A backup lets you undo the import.")
         }
         alert.addButton(withTitle: uiText(restoring ? "Restore and Restart" : orbitRunning ? "Quit Arc" : "Import and Restart"))
         alert.addButton(withTitle: uiText("Cancel"))
@@ -90,7 +90,7 @@ extension OrbitApplication {
                     sourceRoot: source.appendingPathComponent("User Data", isDirectory: true), profiles: pairs)
                 NSApp.terminate(nil)
             } catch {
-                showSiteSessionMessage("Connections Could Not Be Imported", "Orbit could not find the imported Arc profiles. Choose File → Import from Arc… again.")
+                showSiteSessionMessage("Connections Could Not Be Imported", "Circa could not find the imported Arc profiles. Choose File → Import from Arc… again.")
             }
         }
     }

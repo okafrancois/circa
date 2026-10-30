@@ -98,17 +98,17 @@ ALLOWED_TEXT = {path: tuple(expand(value) for value in values) for path, values 
  'scripts/orbit-extension-update-smoke.py': ['/tmp/{lower}y-gui-slot.lock']}.items()}
 
 LOCALIZED_IMPORT_KEYS = frozenset(expand(key) for key in [
- 'Coming from {source}? Orbit imports your Spaces, tabs and folders from the files {source} keeps on this Mac, even after {source} stops working.',
+ 'Coming from {source}? Your Spaces and tabs come with you, even after {source} stops working.',
  '{source} is open. Quit {source}, then try again.',
- 'Orbit can copy your Spaces, profiles, Favorites, pinned tabs and folders, Today tabs and history from '
- '{source}. {source} must be closed during the copy; Orbit never quits it.',
- 'Orbit reads a consistent copy of your {source} data, which requires {source} to be closed. Quit '
- '{source} (⌘Q), then choose Check Again. Orbit never quits {source} for you.',
- '{source}’s Spaces and tabs would make Orbit’s session too large to open (%@ of %@ allowed). Nothing '
+ 'Circa can copy your Spaces, profiles, Favorites, pinned tabs and folders, Today tabs and history from '
+ '{source}. {source} must be closed during the copy; Circa never quits it.',
+ 'Circa reads a consistent copy of your {source} data, which requires {source} to be closed. Quit '
+ '{source} (⌘Q), then choose Check Again. Circa never quits {source} for you.',
+ '{source}’s Spaces and tabs would make Circa’s session too large to open (%@ of %@ allowed). Nothing '
  'was imported.',
- '{source}’s data changed while Orbit was reading it. Quit {source}, then try again.',
- '{source}’s data folder and Orbit’s data folder overlap. Choose a separate copy of {source}’s data.',
- 'Bring Your {source} Spaces to Orbit?',
+ '{source}’s data changed while Circa was reading it. Quit {source}, then try again.',
+ '{source}’s data folder and Circa’s data folder overlap. Choose a separate copy of {source}’s data.',
+ 'Bring Your {source} Spaces to Circa?',
  'Choose {source}’s data folder, or a copy of it.',
  'Copying {source} data…',
  'Import from {source}',
@@ -120,10 +120,10 @@ LOCALIZED_IMPORT_KEYS = frozenset(expand(key) for key in [
  'Quit {source}',
  'Quit {source} to Import',
  'This version of {source}’s data could not be read. Nothing was imported.',
- '{source} must be closed to copy its connections. Orbit will then save your tabs and restart. Allow '
- 'access to {source} Safe Storage when macOS asks. Existing Orbit connections are backed up before '
+ '{source} must be closed to copy its connections. Circa will then save your tabs and restart. Allow '
+ 'access to {source} Safe Storage when macOS asks. Existing Circa connections are backed up before '
  'importing.',
- 'Orbit will save your tabs and restart. Allow access to {source} Safe Storage when macOS asks. '
+ 'Circa will save your tabs and restart. Allow access to {source} Safe Storage when macOS asks. '
  '{source} connections replace matching cookies and site storage in the corresponding profiles. A '
  'backup lets you undo the import.',
  'Import Connections from {source}?',

@@ -38,7 +38,7 @@ struct NativeViewSourcePolicyTests {
         "view-source: https://example.test/", "view-source:https%3A//example.test/"
     ]
 
-    @Test("Main, presented Peek and Little Orbit apply the same source boundary to actions and responses")
+    @Test("Main, presented Peek and Little Circa apply the same source boundary to actions and responses")
     func shellPolicyMatrix() async throws {
         NSApplication.shared.setActivationPolicy(.prohibited)
         let environment = BrowserEnvironment(engine: PeekSyntheticEngine())
@@ -70,7 +70,7 @@ struct NativeViewSourcePolicyTests {
         }
     }
 
-    @Test("Initial Little Orbit and Peek new-target loads cannot bypass the wrapped URL boundary")
+    @Test("Initial Little Circa and Peek new-target loads cannot bypass the wrapped URL boundary")
     func initialRoutes() async throws {
         NSApplication.shared.setActivationPolicy(.prohibited)
         let environment = BrowserEnvironment(engine: PeekSyntheticEngine())

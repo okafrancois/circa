@@ -49,7 +49,7 @@ extension BrowserWindowController {
         }
     }
 
-    /// Accepts a surface released by another owner (window, Peek, Little Orbit, rescue holder) as a
+    /// Accepts a surface released by another owner (window, Peek, Little Circa, rescue holder) as a
     /// tab of the active Space; this window becomes its delegate in the same turn. Events that
     /// arrive before the tab is recorded are reconciled when recording resolves. Refused (the
     /// transfer stays pending and returns to its source) while the window prepares to quit.

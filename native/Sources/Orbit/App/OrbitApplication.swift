@@ -225,9 +225,9 @@ final class OrbitApplication: NSObject, NSApplicationDelegate {
                 let alert = OrbitFloatingMaterial.alert()
                 alert.messageText = uiText("Could Not Restore the Local Session")
                 if (error as? ArcImportError) == .restoreJournalUnreadable {
-                    alert.informativeText = uiText("A restore of this session was interrupted and its journal cannot be read. Orbit did not open the session and kept every file. Run “orbit-import recover-restore”, or open a temporary session meanwhile.")
+                    alert.informativeText = uiText("A restore of this session was interrupted and its journal cannot be read. Circa did not open the session and kept every file. Run “orbit-import recover-restore”, or open a temporary session meanwhile.")
                 } else if (error as? ArcImportError) == .targetInUse {
-                    alert.informativeText = uiText("An Orbit import or restore is using this session. Open Orbit again when it finishes; meanwhile you can open a temporary session.")
+                    alert.informativeText = uiText("An Circa import or restore is using this session. Open Circa again when it finishes; meanwhile you can open a temporary session.")
                 } else {
                     alert.informativeText = uiText("Your existing session file is kept. You can open a temporary session without changing it.")
                 }

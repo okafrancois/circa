@@ -4,7 +4,7 @@ import Testing
 @testable import Orbit
 
 extension NativeWebKitTests {
-@Suite("Orbit Command Bar, Peek and Little Orbit motion", .serialized)
+@Suite("Orbit Command Bar, Peek and Little Circa motion", .serialized)
 @MainActor
 struct MotionATests {
     @Test("Immediate Split promotion cancels an unfinished background transition")
@@ -152,7 +152,7 @@ struct MotionATests {
         #expect(card.layer?.position == CGPoint(x: 700, y: 390))
     }
 
-    @Test("Little Orbit uses the same AppKit panel window family with no second content zoom")
+    @Test("Little Circa uses the same AppKit panel window family with no second content zoom")
     func nativePanelPresentation() {
         _ = NSApplication.shared
         let panel = BrowserQuickWindowPanel(contentRect: NSRect(x: 0, y: 0, width: 490, height: 329),

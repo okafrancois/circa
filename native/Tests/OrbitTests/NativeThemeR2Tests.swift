@@ -103,7 +103,7 @@ extension NativeWebKitTests {
 @Suite("Theme R2 — tokens for other surfaces")
 @MainActor
 struct ThemeR2TokenTests {
-    @Test("Command bar, Little Orbit, Peek, split and radii carry the round 2 measurements")
+    @Test("Command bar, Little Circa, Peek, split and radii carry the round 2 measurements")
     func surfaceTokens() {
         typealias M = OrbitTokens.Metrics
         #expect(M.CommandBar.width == 765 && M.CommandBar.top(windowHeight: 640) == 151.5)

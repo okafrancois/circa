@@ -42,15 +42,15 @@ struct OrbitProductConfiguration: Equatable {
 
         var description: String {
             switch self {
-            case .unpackagedBundle: "Unpackaged build cannot start; package Orbit first"
+            case .unpackagedBundle: "Unpackaged build cannot start; package Circa first"
             case .testBundleNeedsIsolation: "Test bundle requires a baked synthetic root and mock Keychain"
             case .productBundleHasSyntheticSettings: "Product bundle refuses synthetic Info.plist settings"
             case .dataRootNotAbsolute: "--orbit-data-root needs an absolute path"
             case .repeatedOption(let name): "\(name) is given more than once"
             case .mockKeychainNeedsSyntheticRoot: "--use-mock-keychain requires an explicit synthetic --orbit-data-root"
-            case .mockKeychainOnPersonalRoot: "--use-mock-keychain refuses the personal Orbit data root and ~/Library"
+            case .mockKeychainOnPersonalRoot: "--use-mock-keychain refuses the personal Circa data root and ~/Library"
             case .retiredOption(let name): "\(name) is retired; use --orbit-data-root (the engine root is its Chromium/ child)"
-            case .productBuildRefused(let reason): "this build cannot run as the Orbit product (\(reason)); synthetic runs need --use-mock-keychain and --orbit-data-root"
+            case .productBuildRefused(let reason): "this build cannot run as the Circa product (\(reason)); synthetic runs need --use-mock-keychain and --orbit-data-root"
             }
         }
     }

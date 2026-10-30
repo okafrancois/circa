@@ -12,10 +12,13 @@ struct TypeRevertTests {
         let sources = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
             .deletingLastPathComponent().appendingPathComponent("Sources/Orbit")
         let allowed: [String: [String]] = [
+            "Onboarding/OrbitOnboardingWelcome.swift": ["headline.attributedStringValue"],
+            "Onboarding/OrbitOnboardingFinishView.swift": ["title.attributedStringValue"],
+            "Onboarding/OrbitOnboardingCard.swift": [".font: OrbitOnboardingFonts.title"],
             "Onboarding/OrbitOnboardingMetrics.swift": ["static func title(_ size: CGFloat)"],
             "Settings/BrowserSettingsAbout.swift": ["Text(ProductIdentity.displayName)"],
             "Settings/BrowserSettingsOrbitPanes.swift": ["Text((model.settingsSection ?? .general).title)",
-                "Text(entry.name)", "Text(uiText(\"Little Orbit\"))"],
+                "Text(entry.name)", "Text(uiText(\"Little Circa\"))"],
             "Settings/BrowserSettingsWindowController.swift": ["Text((model.settingsSection ?? .general).title)", "Text(space.name)"]
         ]
         let files = try #require(FileManager.default.enumerator(at: sources, includingPropertiesForKeys: nil))
@@ -32,7 +35,7 @@ struct TypeRevertTests {
             }
             #expect(!source.contains("NSFont(name: \"Gloock"))
         }
-        #expect(headings == 7)
+        #expect(headings == 10)
     }
 
     @Test("Sidebar geometry and text metrics match the previous system-font rows")

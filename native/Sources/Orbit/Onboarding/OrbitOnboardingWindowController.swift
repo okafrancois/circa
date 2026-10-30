@@ -341,7 +341,7 @@ final class OrbitOnboardingWindowController: NSWindowController {
     private func text(for step: BrowserOnboardingRecord.Step) -> (String, String, String?) {
         switch step {
         case .welcome, .importSource:
-            return (OrbitOnboardingText.importTitle, OrbitOnboardingText.importBody, OrbitOnboardingText.importNote)
+            return (OrbitOnboardingText.importTitle, OrbitOnboardingText.importBody, OrbitOnboardingText.importNote(sources: flow.sources))
         case .sync:
             let body = switch flow.syncAvailability {
             case .available: OrbitOnboardingText.syncBody

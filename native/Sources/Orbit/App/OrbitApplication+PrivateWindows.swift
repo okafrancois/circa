@@ -66,7 +66,7 @@ extension OrbitApplication {
         try? await privateWindowFactory?.retryQuarantinedScopes()
     }
 
-    /// External links and Little Orbit destinations must never inherit a private profile.
+    /// External links and Little Circa destinations must never inherit a private profile.
     func selectNormalWindowForExternalRequest() {
         let pendingPrivate = windows.selectedWindowID.flatMap { privateWindows[$0] } != nil
         guard pendingPrivate || windows.selectedWindow?.isPrivateWindow == true else { return }

@@ -223,7 +223,7 @@ struct NativeQuickWindowR3Tests {
         #expect(await environment.store.sessionDocument().tabs.filter { $0.url == url }.count == 1)
     }
 
-    @Test("A Little Orbit fallback reveals its delivered page instead of leaving Library in front")
+    @Test("A Little Circa fallback reveals its delivered page instead of leaving Library in front")
     func fallbackHidesLibrary() async throws {
         NSApplication.shared.setActivationPolicy(.prohibited)
         let environment = PreviewEnvironment()

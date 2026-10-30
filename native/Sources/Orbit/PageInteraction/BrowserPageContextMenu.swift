@@ -272,7 +272,7 @@ enum BrowserPageContextCommands {
     }
 }
 
-/// The page menu of a Little Orbit window (no command registry of its own there): the same model and
+/// The page menu of a Little Circa window (no command registry of its own there): the same model and
 /// labels, performed through a closure for the captured document.
 @MainActor
 final class BrowserQuickWindowPageMenu: NSObject {

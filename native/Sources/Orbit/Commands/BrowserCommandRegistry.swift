@@ -1,7 +1,7 @@
 import AppKit
 import BrowserShell
 
-/// Scope is part of a binding: a Little Orbit command must never fall through to a main tab.
+/// Scope is part of a binding: a Little Circa command must never fall through to a main tab.
 enum BrowserCommandScope: String, Sendable { case browser, responder, palette, switcher, quickWindow, peek }
 enum BrowserCommandRequirement: Sendable { case application, window, surface, url, back, forward, loading, reopen, responder }
 enum BrowserCommandOrigin: Sendable, Equatable { case menu, keyboard, palette, contextMenu }

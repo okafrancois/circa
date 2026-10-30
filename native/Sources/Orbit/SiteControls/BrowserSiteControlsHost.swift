@@ -6,7 +6,7 @@ enum BrowserSiteTopAction: CaseIterable {
     case newBoost, captureRegion, captureFullPage
 }
 
-/// The same SITE coordinator serves tabs, Peek and Little Orbit. Hosts supply only ownership,
+/// The same SITE coordinator serves tabs, Peek and Little Circa. Hosts supply only ownership,
 /// document selection and an anchor; permission policy and persistence remain shared.
 @MainActor
 protocol BrowserSiteControlsHost<Engine>: AnyObject {
@@ -30,7 +30,7 @@ protocol BrowserSiteControlsHost<Engine>: AnyObject {
     func performSiteAction(_ action: BrowserSiteTopAction, on surface: Engine.Surface)
 }
 
-// Hosts without a Space sidebar (Little Orbit) have no interactive presentation to retire.
+// Hosts without a Space sidebar (Little Circa) have no interactive presentation to retire.
 extension BrowserSiteControlsHost {
     func prepareForSiteControlsPresentation() {}
     var allowsAutomaticPictureInPicture: Bool { true }

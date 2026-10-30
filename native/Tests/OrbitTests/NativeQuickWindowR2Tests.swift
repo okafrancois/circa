@@ -45,7 +45,7 @@ extension NativeWebKitTests {
 @Suite(.serialized)
 @MainActor
 struct NativeQuickWindowR2Tests {
-    @Test("Little Orbit has normal window level and successive windows cascade without activation")
+    @Test("Little Circa has normal window level and successive windows cascade without activation")
     func windowLevelAndCascade() async throws {
         NSApplication.shared.setActivationPolicy(.prohibited)
         let environment = PreviewEnvironment()
@@ -57,7 +57,7 @@ struct NativeQuickWindowR2Tests {
         #expect(!NSApp.isActive)
     }
 
-    @Test("Little Orbit history records once, follows transfer metadata, and excludes ephemeral profiles")
+    @Test("Little Circa history records once, follows transfer metadata, and excludes ephemeral profiles")
     func historyAndPrivacy() async throws {
         NSApplication.shared.setActivationPolicy(.prohibited)
         let root = try quickWindowR2Root()
@@ -133,7 +133,7 @@ struct NativeQuickWindowR2Tests {
         #expect(await little.surface(surface, requestsPermission: .init(kind: .camera, origin: "https://little-r2.test", isMainFrame: true)) == .deny)
     }
 
-    @Test("Quit checkpoints an open persistent Little Orbit in the archive without losing its history or duplicating retries")
+    @Test("Quit checkpoints an open persistent Little Circa in the archive without losing its history or duplicating retries")
     func quitPreservesURL() async throws {
         NSApplication.shared.setActivationPolicy(.prohibited)
         let root = try quickWindowR2Root()
@@ -162,7 +162,7 @@ struct NativeQuickWindowR2Tests {
         try await recorder.close()
     }
 
-    @Test("Normal close makes a persistent Little Orbit available to Reopen Closed Tab")
+    @Test("Normal close makes a persistent Little Circa available to Reopen Closed Tab")
     func closeArchives() async throws {
         NSApplication.shared.setActivationPolicy(.prohibited)
         let engine = PeekSyntheticEngine()
@@ -182,7 +182,7 @@ struct NativeQuickWindowR2Tests {
         #expect(main.session.selectedSurface?.currentURL == url)
     }
 
-    @Test("Pending Little Orbit snapshots respect profile quarantine and a completed user deletion")
+    @Test("Pending Little Circa snapshots respect profile quarantine and a completed user deletion")
     func archiveProfileDeletion() async throws {
         NSApplication.shared.setActivationPolicy(.prohibited)
         let engine = PeekSyntheticEngine()
@@ -284,7 +284,7 @@ struct NativeQuickWindowR2Tests {
         #expect(environment.quickWindows.isEmpty && main.session.activeProfileID == profile)
     }
 
-    @Test("A Space reassigned by Settings cannot move a captured Little Orbit request to another profile")
+    @Test("A Space reassigned by Settings cannot move a captured Little Circa request to another profile")
     func reassignedSpaceKeepsCapturedProfile() async throws {
         NSApplication.shared.setActivationPolicy(.prohibited)
         let environment = BrowserEnvironment(engine: PeekSyntheticEngine())
@@ -301,7 +301,7 @@ struct NativeQuickWindowR2Tests {
         #expect(little.sourceSpaceID == main.session.snapshot?.activeSpaceID)
     }
 
-    @Test("Failed Little Orbit creation falls back to a main tab for both a URL and an empty request")
+    @Test("Failed Little Circa creation falls back to a main tab for both a URL and an empty request")
     func creationFallback() async throws {
         NSApplication.shared.setActivationPolicy(.prohibited)
         let environment = PreviewEnvironment()
@@ -365,7 +365,7 @@ struct NativeQuickWindowR2Tests {
         #expect(await environment.store.sessionDocument().windows.isEmpty)
     }
 
-    @Test("The real monitor and menu route Little Orbit page commands while the browser router has no target")
+    @Test("The real monitor and menu route Little Circa page commands while the browser router has no target")
     func pageCommandRoutes() async throws {
         NSApplication.shared.setActivationPolicy(.prohibited)
         let engine = SyntheticEngine()
@@ -482,7 +482,7 @@ struct NativeQuickWindowR2Tests {
         try await reopened.finalize()
     }
 
-    @Test("The copy fallback never creates an about:blank tab for an empty Little Orbit")
+    @Test("The copy fallback never creates an about:blank tab for an empty Little Circa")
     func emptyCopyFallback() async throws {
         NSApplication.shared.setActivationPolicy(.prohibited)
         let environment = BrowserEnvironment(engine: QuickWindowR2LimitedEngine())
@@ -537,14 +537,14 @@ struct NativeQuickWindowR2Tests {
 }
 
 extension NativeWebKitTests.NativeQuickWindowR2Tests {
-    @Test("Deleting the final Space of a profile archives persistent Little Orbit documents and excludes ephemeral ones", arguments: [false, true])
+    @Test("Deleting the final Space of a profile archives persistent Little Circa documents and excludes ephemeral ones", arguments: [false, true])
     func deletingSpaceArchivesQuickWindow(isPersistent: Bool) async throws {
         NSApplication.shared.setActivationPolicy(.prohibited)
         let engine = PeekSyntheticEngine()
         let environment = BrowserEnvironment(engine: engine)
         let main = try await environment.makeWindow()
         defer { environment.retireQuickWindows(); main.window?.close() }
-        let profile = try await environment.store.createSettingsFixtureProfileWithSpace(name: "Little Orbit deletion")
+        let profile = try await environment.store.createSettingsFixtureProfileWithSpace(name: "Little Circa deletion")
         let space = try #require(await environment.store.catalogSnapshot().spaces.first { $0.profileID == profile }?.id)
         if isPersistent { engine.persistentProfiles.insert(profile) }
         let little = try await environment.makeQuickWindow(spaceID: space, url: URL(string: "https://little-r2.test/deleted-space")!)

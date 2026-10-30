@@ -278,7 +278,7 @@ enum BrowserSettingsSection: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .appearance: uiText("Appearance")
-        case .about: uiText("About Orbit")
+        case .about: uiText("About Circa")
         case .general: settingsText("general", "General")
         case .profiles: settingsText("profiles", "Profiles")
         case .spaces: settingsText("spaces", "Spaces")
@@ -379,7 +379,7 @@ struct BrowserSettingsView<Engine: BrowserEngine>: View {
                       VStack(alignment: .leading, spacing: 16) {
                         if model.settingsSection != .spaces {
                           HStack {
-                            Text((model.settingsSection ?? .general).title).font(Font(BrandTextStyle.title.font(size: 28)))
+                            Text((model.settingsSection ?? .general).title).font(Font(BrandTextStyle.title.font(size: 28))).kerning(BrandTextStyle.title.tracking(size: 28))
                             Spacer()
                             Picker(text("selectedProfile", "Profile"), selection: Binding(get: { profile }, set: { model.selectProfile($0) })) {
                                 ForEach(model.catalog.profiles, id: \.id) { Text($0.name).tag($0.id) }
@@ -613,7 +613,7 @@ struct BrowserSettingsView<Engine: BrowserEngine>: View {
                     Text(text("safeBrowsing", "Safe Browsing")).fontWeight(.medium)
                     Text(model.safeBrowsingAvailable
                         ? text("safeBrowsingOn", "Warnings for dangerous sites and downloads are on.")
-                        : text("safeBrowsingUnavailable", "Unavailable in this build. Orbit does not warn about dangerous sites or downloads."))
+                        : text("safeBrowsingUnavailable", "Unavailable in this build. Circa does not warn about dangerous sites or downloads."))
                         .font(Font(BrandFonts.ui(12))).foregroundStyle(.secondary)
                 }
             }.padding(.horizontal, 14).padding(.vertical, 8).frame(minHeight: 50)

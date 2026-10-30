@@ -238,7 +238,7 @@ struct NativeThemeLifecycleRegressionTests {
         #expect(main.window?.isVisible == false)
     }
 
-    @Test("Little Orbit keeps its dark window surfaces in dark, light and automatic Space modes")
+    @Test("Little Circa keeps its dark window surfaces in dark, light and automatic Space modes")
     func quickWindowAppearance() async throws {
         NSApplication.shared.setActivationPolicy(.prohibited)
         let environment = Environment(engine: PeekSyntheticEngine())
@@ -258,7 +258,7 @@ struct NativeThemeLifecycleRegressionTests {
         #expect(little.window?.isVisible == false)
     }
 
-    @Test("Settings edits repaint Little Orbit without a browser window")
+    @Test("Settings edits repaint Little Circa without a browser window")
     func settingsOnlyPropagation() async throws {
         NSApplication.shared.setActivationPolicy(.prohibited)
         let environment = Environment(engine: PeekSyntheticEngine())
@@ -276,14 +276,14 @@ struct NativeThemeLifecycleRegressionTests {
         let draft = editor.draft
         editor.close(animated: false)
         await editor.waitUntilFinished()
-        try await waitForNativeState("Settings theme reaches Little Orbit") {
+        try await waitForNativeState("Settings theme reaches Little Circa") {
             little.toolbar.fill.theme == OrbitSpaceThemes.rendered(draft)
         }
         #expect(little.window?.appearance?.name == .darkAqua)
         #expect(environment.liveControllers.isEmpty)
     }
 
-    @Test("Store changes propagate automatically to browser windows and surviving Little Orbits")
+    @Test("Store changes propagate automatically to browser windows and surviving Little Circas")
     func automaticPropagation() async throws {
         NSApplication.shared.setActivationPolicy(.prohibited)
         let environment = Environment(engine: PeekSyntheticEngine())

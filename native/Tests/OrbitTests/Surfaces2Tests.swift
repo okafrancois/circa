@@ -31,7 +31,7 @@ struct Surfaces2Tests {
         #expect(!controller.isPeekPresented)
     }
 
-    @Test("Little Orbit keeps the full editable URL while rendering its compact domain")
+    @Test("Little Circa keeps the full editable URL while rendering its compact domain")
     func quickWindowAddressAndCopy() async throws {
         NSApplication.shared.setActivationPolicy(.prohibited)
         let environment = BrowserEnvironment(engine: PeekSyntheticEngine())

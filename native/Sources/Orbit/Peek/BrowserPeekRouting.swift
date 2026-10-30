@@ -62,7 +62,7 @@ enum BrowserPeekTrigger: Sendable, Equatable {
 
 enum BrowserPeekRoutingDecision: Sendable, Equatable {
     case peek(BrowserPeekTrigger)
-    /// The window keeps its default behaviour (tab, background tab, Little Orbit, in place).
+    /// The window keeps its default behaviour (tab, background tab, Little Circa, in place).
     case decline
 }
 
@@ -81,7 +81,7 @@ enum BrowserPeekRouting {
         if modifiers == [.shift] {
             return settings.shiftClickOpensPeek ? .peek(.shiftClick) : .decline
         }
-        // ⌘ (background tab), ⌥⌘ (Little Orbit), ⌃ and ⇧⌘ keep their own meaning.
+        // ⌘ (background tab), ⌥⌘ (Little Circa), ⌃ and ⇧⌘ keep their own meaning.
         guard modifiers.isEmpty, settings.opensPinnedLinksInPeek else { return .decline }
         guard request.sourceRole == .pinned || request.sourceRole == .favorite else { return .decline }
         guard let source = request.sourceURL, let sourceSite = site(of: source),

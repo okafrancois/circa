@@ -4,7 +4,7 @@ import Testing
 @testable import BrowserCore
 
 struct BrowserQuickWindowSettingsTests {
-    @Test("Existing v1 settings gain Little Orbit routing without changing profile, Space or motion choices")
+    @Test("Existing v1 settings gain Little Circa routing without changing profile, Space or motion choices")
     func additiveMigration() throws {
         var document = BrowserSettingsDocument()
         let profile = ProfileID(), space = SpaceID()

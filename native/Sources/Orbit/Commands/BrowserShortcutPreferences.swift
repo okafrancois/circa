@@ -17,7 +17,7 @@ enum BrowserShortcutWebsitePriority: String, Codable, CaseIterable {
     case browser, websites, both
     var title: String {
         switch self {
-        case .browser: uiText("Prefer Orbit")
+        case .browser: uiText("Prefer Circa")
         case .websites: uiText("Prefer Websites")
         case .both: uiText("Use Both")
         }

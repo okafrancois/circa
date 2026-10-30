@@ -17,7 +17,7 @@ from urllib.parse import urlsplit
 from sparkle_setup import ROOT, ensure_sparkle
 from orbit_bundle_policy import set_helper_bundle_identifiers, validate_bundle_contents
 from local_signing import configured_identity
-from product_identity import BUNDLE_ID, PRODUCT_NAME
+from product_identity import BUNDLE_ID, DISPLAY_NAME, PRODUCT_NAME
 
 
 def run(*arguments, **kwargs):
@@ -47,7 +47,7 @@ def update_info(info, config, version, build, local_test_root=None, feed_url=Non
     if key and len(base64.b64decode(key, validate=True)) != 32:
         raise ValueError('public_ed_key must be a base64 Ed25519 public key')
     info.update(CFBundleIdentifier=config['bundle_id'], CFBundleName=config['name'],
-                CFBundleDisplayName=config['name'], CFBundleShortVersionString=version,
+                CFBundleDisplayName=PRODUCT_NAME, LSHasLocalizedDisplayName=True, CFBundleShortVersionString=version,
                 CFBundleVersion=str(build), OrbitDeveloperTeamID=config.get('team_id', ''), SUFeedURL=feed_url or
                 f"https://github.com/{config['repository']}/releases/latest/download/appcast.xml",
                 SUPublicEDKey=key, SUEnableAutomaticChecks=True, SUAutomaticallyUpdate=True,
@@ -247,7 +247,7 @@ def main():
         config['provisioning_profile'] = str((args.config.parent / Path(config['provisioning_profile']).expanduser()).resolve())
     if args.test_notarize_app_only and not args.local_test_root:
         raise ValueError('--test-notarize-app-only requires an isolated test bundle')
-    if not args.local_test_root and (config['name'] != PRODUCT_NAME or config['bundle_id'] != BUNDLE_ID):
+    if not args.local_test_root and (config['name'] != DISPLAY_NAME or config['bundle_id'] != BUNDLE_ID):
         raise ValueError('Release name and bundle_id must match BrowserCore/ProductIdentity.swift')
     version = release_version(args.tag)
     require_notary_profile(config)
@@ -277,7 +277,7 @@ def main():
     if archive.exists() or dmg.exists():
         raise ValueError('Version artifacts already exist; choose a new version or output directory')
     with tempfile.TemporaryDirectory(prefix='orbit-release-', dir=output) as temporary:
-        app = Path(temporary) / (config['name'] + '.app')
+        app = Path(temporary) / (PRODUCT_NAME + '.app')
         prepare_bundle(source, app, config, version, build, args.local_test_root, args.feed_url)
         profile = config.get('notarytool_profile')
         if profile:

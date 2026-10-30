@@ -12,7 +12,7 @@ set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${ORBIT_IDENTITY
 file(READ "${ORBIT_IDENTITY_SOURCE}" ORBIT_IDENTITY)
 string(REGEX MATCH "bundleIdentifier = \"([^\"]+)\"" ORBIT_ID_MATCH "${ORBIT_IDENTITY}")
 set(ORBIT_BUNDLE_ID "${CMAKE_MATCH_1}")
-string(REGEX MATCH "displayName = \"([^\"]+)\"" ORBIT_NAME_MATCH "${ORBIT_IDENTITY}")
+string(REGEX MATCH "executableName = \"([^\"]+)\"" ORBIT_NAME_MATCH "${ORBIT_IDENTITY}")
 set(ORBIT_PRODUCT_NAME "${CMAKE_MATCH_1}")
 file(REAL_PATH "${CMAKE_BINARY_DIR}" ORBIT_BUILD_DIRECTORY)
 cmake_path(IS_PREFIX CMAKE_CURRENT_SOURCE_DIR "${ORBIT_BUILD_DIRECTORY}" NORMALIZE ORBIT_BUILD_INSIDE)
@@ -165,6 +165,7 @@ list(FILTER ORBIT_APP_SOURCES EXCLUDE REGEX "/Orbit/App/EngineComposition\\.swif
 list(APPEND ORBIT_APP_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/App/EngineComposition+Chromium.swift"
   "${CMAKE_CURRENT_SOURCE_DIR}/App/ProductRuntimeOptions.swift"
   "${CMAKE_CURRENT_SOURCE_DIR}/App/OrbitPerformanceProbe.swift"
+  "${CMAKE_CURRENT_SOURCE_DIR}/App/OrbitBrandingProbe.swift"
   "${CMAKE_CURRENT_SOURCE_DIR}/App/OrbitEnginePerformanceProbe.swift"
   "${CMAKE_CURRENT_SOURCE_DIR}/App/OrbitResourcePerformanceProbe.swift"
   "${CMAKE_CURRENT_SOURCE_DIR}/App/OrbitResourceBudgetProbe.swift"

@@ -683,7 +683,7 @@ extension BrowserSiteControls {
             status: permissionsUnavailable ? siteText("permissions.unavailable", "Permissions unavailable. Access is denied and the existing file is kept. Windows and tabs are still saved.") : statusMessage)
     }
 
-    /// Uses the selected live surface, including Peek/Little Orbit. Revalidates after
+    /// Uses the selected live surface, including Peek/Little Circa. Revalidates after
     /// confirmation so switching tabs, profiles or windows cannot retarget a mutation.
     @discardableResult
     func appendExtensionRows(to rows: inout [NSView], surface: Surface,

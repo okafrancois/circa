@@ -18,7 +18,7 @@ ICON_RESOURCE_FILES = frozenset({'catalog.json'} | {
 } | {f'color/24/{name}.svg' for name in ICON_CATALOG['color']})
 ICON_RESOURCE_DIRECTORIES = frozenset(str(parent) for name in ICON_RESOURCE_FILES
     for parent in Path(name).parents if str(parent) != '.') | {'', 'template', 'color'}
-BRAND_FONT_FILES = frozenset({'gloock.ttf', 'gloock-OFL.txt', 'mark.pdf'})
+BRAND_FONT_FILES = frozenset({'mark.pdf'})
 APP_ICON_IDS = ('stage', 'paper', 'sunset', 'afterglow', 'frost', 'riso', 'ink')
 APP_ICON_FILES = frozenset(f'{icon}.{ext}' for icon in APP_ICON_IDS for ext in ('icns', 'png'))
 BUILD_SUFFIXES = {'.d', '.o', '.a', '.swiftmodule', '.swiftdoc', '.swiftsourceinfo', '.dia', '.dsym'}
@@ -44,7 +44,7 @@ def set_helper_bundle_identifiers(bundle):
             info['CFBundleIdentifier'], suffix, info.get('OrbitSyntheticBundle', False))
         if variant == 'alerts':
             # The notification service has its own identity but presents the browser's brand.
-            helper.update(CFBundleDisplayName=info.get('CFBundleDisplayName', info['CFBundleName']),
+            helper.update(CFBundleDisplayName=info['CFBundleName'],
                           CFBundleIconFile='Orbit.icns', NSUserNotificationAlertStyle='alert')
             resources = path.parent / 'Resources'
             resources.mkdir(exist_ok=True)

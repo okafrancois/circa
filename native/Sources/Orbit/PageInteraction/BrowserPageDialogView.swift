@@ -36,7 +36,7 @@ struct BrowserPageDialogResult: Equatable {
 /// A dialog over one document only, the way Chromium shows tab-modal dialogs: a card at the top
 /// center of the page over a light scrim that takes the page's mouse events. It is a subview of the
 /// surface's host view, so it follows its tab (hidden with it, shown again with it), its Split pane,
-/// its Peek and its Little Orbit window, and never covers another document.
+/// its Peek and its Little Circa window, and never covers another document.
 @MainActor
 final class BrowserPageDialogView: NSView {
     let spec: BrowserPageDialogSpec

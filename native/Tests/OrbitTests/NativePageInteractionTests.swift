@@ -68,33 +68,33 @@ struct NativePageInteractionTests {
         host.subviews.compactMap { $0 as? BrowserPageDialogView }.last
     }
 
-    @Test("Little Orbit cancels obsolete page dialogs on navigation and disposal")
+    @Test("Little Circa cancels obsolete page dialogs on navigation and disposal")
     func quickWindowPageDialogLifecycle() async throws {
         NSApplication.shared.setActivationPolicy(.prohibited)
         let environment = PageEnvironment(engine: SyntheticEngine())
         defer { environment.retireQuickWindows() }
         let little = try await environment.makeQuickWindow(url: URL(string: "https://little.test/first")!)
         let surface = try #require(little.surface)
-        try await waitForPage("Little Orbit load") { surface.navigationState.committedURL != nil }
+        try await waitForPage("Little Circa load") { surface.navigationState.committedURL != nil }
         let center = BrowserPageDialogCenter.shared
         let key = ObjectIdentifier(surface)
         let challenge = BrowserAuthenticationChallenge(origin: "https://little.test", host: "little.test", port: 443,
                                                         realm: "Synthetic", scheme: "basic", isProxy: false)
         let credentials = Task { await little.surface(surface, requestsCredentialsFor: challenge) }
-        try await waitForPage("Little Orbit authentication") { center.presentedDialog(for: key)?.kind == .authentication }
+        try await waitForPage("Little Circa authentication") { center.presentedDialog(for: key)?.kind == .authentication }
         surface.navigate(to: URL(string: "https://little.test/second")!)
-        try await waitForPage("Little Orbit new document") { surface.navigationState.committedURL?.path == "/second" }
+        try await waitForPage("Little Circa new document") { surface.navigationState.committedURL?.path == "/second" }
         #expect(await credentials.value == nil)
         #expect(center.pendingCount(for: key) == 0)
         little.surface(surface, rendererDidTerminate: .crashed)
         #expect(center.isCrashedPageShown(for: key))
         surface.navigate(to: URL(string: "https://little.test/third")!)
-        try await waitForPage("Little Orbit reload") { surface.navigationState.committedURL?.path == "/third" }
+        try await waitForPage("Little Circa reload") { surface.navigationState.committedURL?.path == "/third" }
         #expect(!center.isCrashedPageShown(for: key))
         little.surface(surface, rendererDidBecomeUnresponsive: true)
-        try await waitForPage("Little Orbit unresponsive") { center.presentedDialog(for: key)?.kind == .unresponsive }
+        try await waitForPage("Little Circa unresponsive") { center.presentedDialog(for: key)?.kind == .unresponsive }
         surface.navigate(to: URL(string: "https://little.test/fourth")!)
-        try await waitForPage("Little Orbit responsive new document") { surface.navigationState.committedURL?.path == "/fourth" }
+        try await waitForPage("Little Circa responsive new document") { surface.navigationState.committedURL?.path == "/fourth" }
         await Task.yield()
         #expect(surface.performedPageCommands.isEmpty, "automatic dismissal never requests renderer termination")
         little.surface(surface, rendererDidBecomeUnresponsive: true)
@@ -103,13 +103,13 @@ struct NativePageInteractionTests {
         #expect(center.pendingCount(for: key) == 0, "recovery before presentation cancels the queued request")
         let dialog = Task { await little.surface(surface, runJavaScriptDialog:
             BrowserJavaScriptDialog(kind: .confirm, message: "Synthetic close", origin: "https://little.test")) }
-        try await waitForPage("Little Orbit confirm") { center.presentedDialog(for: key)?.kind == .confirm }
+        try await waitForPage("Little Circa confirm") { center.presentedDialog(for: key)?.kind == .confirm }
         little.retire()
         #expect(await dialog.value == .cancel)
         #expect(center.pendingCount(for: key) == 0)
     }
 
-    @Test("A Little Orbit crashed-page Reload follows its surface through promotion")
+    @Test("A Little Circa crashed-page Reload follows its surface through promotion")
     func quickWindowCrashedReloadAfterPromotion() async throws {
         NSApplication.shared.setActivationPolicy(.prohibited)
         let environment = PageEnvironment(engine: SyntheticEngine())
@@ -117,7 +117,7 @@ struct NativePageInteractionTests {
         defer { environment.retireQuickWindows(); main.window?.close() }
         let little = try await environment.makeQuickWindow(url: URL(string: "https://little.test/reload")!)
         let surface = try #require(little.surface)
-        try await waitForPage("Little Orbit reload document") { surface.navigationState.committedURL != nil }
+        try await waitForPage("Little Circa reload document") { surface.navigationState.committedURL != nil }
         little.surface(surface, rendererDidTerminate: .crashed)
         let overlay = try #require(surface.hostView.subviews.compactMap { $0 as? BrowserPageCrashedView }.first)
         let generation = surface.documentGeneration

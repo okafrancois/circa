@@ -45,9 +45,9 @@ func printJSON<Value: Encodable>(_ value: Value) {
 func report(_ error: any Error) -> Never {
     switch error as? ArcImportError {
     case .arcIsRunning?: fail("arc-import: Arc is running. Quit Arc (⌘Q) and run again; this tool never quits Arc.", .orbitRunning)
-    case .targetInUse?: fail("arc-import: the session is used by a running Orbit or another import. Quit Orbit (or wait) and run again.", .targetInUse)
+    case .targetInUse?: fail("arc-import: the session is used by a running Circa or another import. Quit Circa (or wait) and run again.", .targetInUse)
     case let .sessionTooLarge(projected, limit)?:
-        fail("arc-import: the merged session would be \(projected) bytes, above the \(limit)-byte limit Orbit reads at launch. Nothing was changed. See sessionBudget in the dry run: --no-archive and --no-today leave those parts out.", .tooLarge)
+        fail("arc-import: the merged session would be \(projected) bytes, above the \(limit)-byte limit Circa reads at launch. Nothing was changed. See sessionBudget in the dry run: --no-archive and --no-today leave those parts out.", .tooLarge)
     case let .insufficientDiskSpace(required, available)?:
         fail("arc-import: not enough free disk space (\(required) bytes needed, \(available) available). Nothing was changed.", .disk)
     case .symbolicLinkInPath?: fail("arc-import: a path component is a symbolic link; refused.", .failure)
@@ -57,7 +57,7 @@ func report(_ error: any Error) -> Never {
     case .hardLinkedFile?: fail("arc-import: a file of the session or its history has several hard links; refused.", .failure)
     case .stateFileUnreadable?: fail("arc-import: an import state file (ledger or journal) is unreadable; nothing was changed.", .blocked)
     case .backupInvalid?: fail("arc-import: the backup is incomplete or does not match its profiles; nothing was changed.", .failure)
-    case .sourceOverlapsTarget?: fail("arc-import: the Arc folder and Orbit's data folder overlap; refused.", .failure)
+    case .sourceOverlapsTarget?: fail("arc-import: the Arc folder and Circa's data folder overlap; refused.", .failure)
     case .confirmationMismatch?: fail("arc-import: the confirmation code does not match a fresh dry run (counts changed or code mistyped). Run dry-run again and confirm the new code.", .confirmation)
     case let code?: fail("arc-import: failed (\(code)).", .failure)
     case nil: fail("arc-import: failed (unexpected).", .failure)

@@ -18,7 +18,7 @@ extension OrbitApplication {
             let permitted = !synthetic || activeSiteSessionConfiguration().map {
                 (try? BrowserImportUISynthetic.checkDirectory(arc, configuration: $0)) != nil
             } == true
-            if permitted, FileManager.default.fileExists(atPath: arc.appendingPathComponent("StorableSidebar.json").path) {
+            if permitted, ArcImportText.localFilesHint(source: arc) != nil {
                 let descriptor = ArcBrowserImportAdapter().descriptor
                 let metadata = try? BrowserImportMetadata.read(root: arc.appendingPathComponent("User Data"), name: "Local State", limit: 16 * 1024 * 1024)
                 let profiles = metadata.flatMap { try? ArcBrowserImportAdapter().discoverProfiles(metadata: $0) } ?? []
@@ -68,5 +68,13 @@ extension OrbitOnboardingFlow {
     var importsSpaceConfiguration: Bool {
         if case let .browser(id, _) = importChoice { return id == OrbitApplication.onboardingArcSourceID }
         return false
+    }
+}
+
+
+extension OrbitOnboardingText {
+    static func importNote(sources: [OrbitOnboardingSource]) -> String {
+        sources.contains { $0.id == OrbitApplication.onboardingArcSourceID }
+            ? ArcImportText.localFilesHint : importNote
     }
 }

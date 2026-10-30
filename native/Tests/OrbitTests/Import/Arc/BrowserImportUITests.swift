@@ -94,8 +94,8 @@ struct BrowserImportUITests {
         for omitted in ["0 ", "1 passwords", "1 cookies", "archived", "unsupported", "kept", "Bookmarks:", "History:", "Open tabs:", "Available"] {
             #expect(!result.contains(omitted))
         }
-        #expect(BrowserImportText.review(.init()).hasPrefix(uiText("A new Orbit profile will be created.")))
-        #expect(BrowserImportText.completion(nil) == uiText("Added a new Orbit profile."))
+        #expect(BrowserImportText.review(.init()).hasPrefix(uiText("A new Circa profile will be created.")))
+        #expect(BrowserImportText.completion(nil) == uiText("Added a new Circa profile."))
     }
     @Test func completionKeepsOnlyApplicableWarningsAndCounts() {
         var report = ArcImportReport()

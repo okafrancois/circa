@@ -4,11 +4,11 @@ import Foundation
 enum BrowserImportText {
     static func review(_ report: ArcImportReport, passwordCSV: Bool = false, sourceID: String? = nil) -> String {
         let counts = structuralCounts(report.target, history: report.history.importable)
-        var lines = [counts.isEmpty ? uiText("A new Orbit profile will be created.")
-            : uiFormat("A new Orbit profile will receive %@.", ListFormatter.localizedString(byJoining: counts))]
+        var lines = [counts.isEmpty ? uiText("A new Circa profile will be created.")
+            : uiFormat("A new Circa profile will receive %@.", ListFormatter.localizedString(byJoining: counts))]
         let categories = availability(report, passwordCSV: passwordCSV, sourceID: sourceID)
         if !categories.isEmpty { lines.append(categories) }
-        lines.append(uiText("Orbit will save your current session and restart to import. Nothing opens automatically. Restore can undo this import, replacing later session edits and removing the imported profile."))
+        lines.append(uiText("Circa will save your current session and restart to import. Nothing opens automatically. Restore can undo this import, replacing later session edits and removing the imported profile."))
         return lines.joined(separator: "\n\n")
     }
 
@@ -19,7 +19,7 @@ enum BrowserImportText {
         let addedPasswords = max(0, passwords - keptPasswords)
         if addedPasswords > 0 { counts.append(uiText("%ld passwords", count: addedPasswords)) }
         if cookies > 0 { counts.append(uiText("%ld cookies", count: cookies)) }
-        var lines = [counts.isEmpty ? uiText("Added a new Orbit profile.")
+        var lines = [counts.isEmpty ? uiText("Added a new Circa profile.")
             : uiFormat("Added a new profile with %@.", ListFormatter.localizedString(byJoining: counts))]
         if unsupportedPasswords > 0 { lines.append(uiText("%ld passwords could not be imported.", count: unsupportedPasswords)) }
         if keptPasswords > 0 { lines.append(uiText("%ld existing passwords were kept.", count: keptPasswords)) }
@@ -101,13 +101,13 @@ enum BrowserImportText {
         case BrowserAuthenticationImportError.invalidCSV:
             uiText("The password CSV could not be read. Nothing was imported. Choose a fresh logins export from the source browser.")
         case ArcImportError.arcIsRunning:
-            uiText("The source browser is open. Quit it, then try again. Orbit never quits it for you.")
+            uiText("The source browser is open. Quit it, then try again. Circa never quits it for you.")
         case ArcImportError.sourceNotFound:
             uiText("The selected profile could not be found or read. Nothing was imported. Check the source browser’s profile and file access, then try again.")
         case ArcImportError.sourceChangedDuringCopy:
-            uiText("The source data changed while Orbit was reading it. Quit the source browser, then try again.")
+            uiText("The source data changed while Circa was reading it. Quit the source browser, then try again.")
         default:
-            uiText("The import could not be completed. Your previous data is kept in the import recovery record if changes began. Relaunch Orbit to restore it, then try a fresh source export.")
+            uiText("The import could not be completed. Your previous data is kept in the import recovery record if changes began. Relaunch Circa to restore it, then try a fresh source export.")
         }
     }
 }

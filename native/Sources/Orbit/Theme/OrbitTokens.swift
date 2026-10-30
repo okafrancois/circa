@@ -83,7 +83,7 @@ extension OrbitTokens {
             public static let preview = NSColor.orbitDynamic("Surface.preview", light: .orbitSRGB(0xFFFFFF), dark: .orbitSRGB(0x212222))
             public static let splitToolbar = NSColor.orbitDynamic("Surface.splitToolbar", light: preview, dark: NSColor(white: 0.31, alpha: 1))
             public static let splitToolbarEmphasized = NSColor.orbitDynamic("Surface.splitToolbarEmphasized", light: preview, dark: .orbitSRGB(0xFFFFFF))
-            ///  — Little Orbit input.
+            ///  — Little Circa input.
             public static let secondaryWindowInput = NSColor.orbitDynamic("Surface.secondaryWindowInput", light: .orbitSRGB(0xFAFBFF), dark: .orbitSRGB(0x0E0F10))
             public static let menu = NSColor.orbitDynamic("Surface.menu", light: .orbitSRGB(0xFAFBFF), dark: .orbitSRGB(0x393841))
             public static let libraryBackground = NSColor.orbitDynamic("Surface.libraryBackground", light: .orbitSRGB(0xF7F7F7), dark: .orbitSRGB(0x1E1E1F))
@@ -421,7 +421,7 @@ extension OrbitTokens {
             public static let trafficLightFirstCenterX: CGFloat = 20
             public static let trafficLightCenterY: CGFloat = 24       // , from window top
             public static let minimumSize = NSSize(width: 600, height: 400)
-            ///  — Little Orbit window buttons at 17 / 40 / 63, y 23.5.
+            ///  — Little Circa window buttons at 17 / 40 / 63, y 23.5.
             public static let quickWindowTrafficLightFirstCenterX: CGFloat = 17
             public static let quickWindowTrafficLightCenterY: CGFloat = 23.5
         }

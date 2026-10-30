@@ -52,7 +52,7 @@ struct BrowserAirTrafficControlView<Engine: BrowserEngine>: View {
                         await runtime.refresh()
                     }
                 })) {
-                    Text(uiText("Little Orbit")).tag(BrowserLinkDefaultDestination.quickWindow)
+                    Text(uiText("Little Circa")).tag(BrowserLinkDefaultDestination.quickWindow)
                     Text(uiText("Most Recent Space")).tag(BrowserLinkDefaultDestination.mostRecentSpace)
                     Divider()
                     ForEach(model.catalog.spaces, id: \.id) { space in

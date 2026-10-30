@@ -110,7 +110,7 @@ struct NativeLinkRoutingTests {
         #expect(app.unroutedQuickWindowURLs.isEmpty)
     }
 
-    @Test("Cold external delivery honors a fixed default Space without Little Orbit")
+    @Test("Cold external delivery honors a fixed default Space without Little Circa")
     func fixedDefaultAndDeletedRule() async throws {
         NSApplication.shared.setActivationPolicy(.prohibited)
         let environment = PreviewEnvironment()

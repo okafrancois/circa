@@ -24,7 +24,7 @@ final class OrbitOnboardingTextPage: NSView {
         titleStyle.maximumLineHeight = M.titleLineHeight
         titleStyle.lineBreakMode = .byWordWrapping
         title.attributedStringValue = NSAttributedString(string: titleText, attributes: [
-            .font: OrbitOnboardingFonts.title, .foregroundColor: OrbitOnboardingColors.title, .paragraphStyle: titleStyle
+            .font: OrbitOnboardingFonts.title, .kern: BrandTextStyle.title.tracking(size: OrbitOnboardingFonts.title.pointSize), .foregroundColor: OrbitOnboardingColors.title, .paragraphStyle: titleStyle
         ])
         let bodyStyle = NSMutableParagraphStyle()
         bodyStyle.minimumLineHeight = M.bodyLineHeight

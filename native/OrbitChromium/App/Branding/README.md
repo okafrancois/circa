@@ -20,3 +20,16 @@ Restore Default removes the preference and requests removal of the custom Finder
 icon, exposing the shipped Bow icon. Removal can also fail on a non-writable bundle;
 the running Dock nevertheless returns to Bow. Finder may refresh its cached icon
 asynchronously. Application resources and code signatures are never rewritten.
+
+
+The displayed product name is Circa. `Orbit.app`, its executable and module names,
+bundle identifiers, update identity, data directories and secure-storage names remain
+stable for existing installations. `CFBundleName` is Circa. The raw
+`CFBundleDisplayName` deliberately remains Orbit: macOS compares that value with
+the bundle filename before accepting a localized display name. Both localized
+InfoPlist names are Circa, with `LSHasLocalizedDisplayName` enabled. This metadata
+exception lets Finder, LaunchServices, Dock and the app switcher display Circa
+while updates continue replacing Orbit.app in place. The notification helper uses
+the visible product name rather than the raw compatibility display name.
+
+See [Apple's display-name rule](https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html#//apple_ref/doc/uid/TP40009249-SW13).

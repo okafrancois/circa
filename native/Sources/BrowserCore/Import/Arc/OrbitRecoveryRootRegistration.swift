@@ -155,7 +155,7 @@ public final class OrbitRecoveryRootRegistration {
 
 extension OrbitNativeRecoveryKeyProvider.Product {
     var recoveryService: String {
-        self == .daily ? ProductIdentity.displayName + " Authentication Recovery v1" : "Orbit Live Authentication Recovery v1"
+        self == .daily ? ProductIdentity.keychainAccount + " Authentication Recovery v1" : "Orbit Live Authentication Recovery v1"
     }
 }
 

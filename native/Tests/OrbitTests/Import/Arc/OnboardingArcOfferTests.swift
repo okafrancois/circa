@@ -69,8 +69,23 @@ struct ArcSunsetOnboardingTests {
     }
     @Test("The timeless import hint describes supported structural data")
     func hint() {
-        #expect(ArcImportText.localFilesHint.contains("even after Arc stops working"))
+        #expect(ArcImportText.localFilesHint == "Coming from Arc? Your Spaces and tabs come with you, even after Arc stops working.")
         #expect(!ArcImportText.localFilesHint.contains("passwords"))
         #expect(ArcImportText.confirmation(.init()).contains(ArcImportText.localFilesHint))
+    }
+}
+
+
+extension ArcSunsetOnboardingTests {
+    @Test("Import hints depend on source data rather than an installed application")
+    func dataOnlyHint() {
+        let source = URL(fileURLWithPath: "/tmp/synthetic-import-source")
+        #expect(ArcImportText.localFilesHint(source: source, fileExists: { _ in false }) == nil)
+        #expect(ArcImportText.localFilesHint(source: source, fileExists: {
+            $0 == source.appendingPathComponent("StorableSidebar.json").path
+        }) == ArcImportText.localFilesHint)
+        let dataOnly = OrbitOnboardingSource(id: OrbitApplication.onboardingArcSourceID, name: "Arc", bundleIdentifier: nil, profiles: [])
+        #expect(OrbitOnboardingText.importNote(sources: [dataOnly]) == ArcImportText.localFilesHint)
+        #expect(OrbitOnboardingText.importNote(sources: []) == OrbitOnboardingText.importNote)
     }
 }

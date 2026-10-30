@@ -10,7 +10,7 @@ struct BrowserArchiveSettingsChange: Identifiable {
     let threshold: BrowserAutoArchiveThreshold
 
     var title: String {
-        guard let interval = threshold.interval else { return uiText("Orbit will never auto-archive your tabs.") }
+        guard let interval = threshold.interval else { return uiText("Circa will never auto-archive your tabs.") }
         let label: String
         switch interval {
         case 12 * 3600: label = uiText("12 hours")
@@ -19,6 +19,6 @@ struct BrowserArchiveSettingsChange: Identifiable {
         case 30 * 24 * 3600: label = uiText("30 days")
         default: label = uiText("Custom Delay")
         }
-        return uiFormat("Orbit will now archive your tabs after %@", label)
+        return uiFormat("Circa will now archive your tabs after %@", label)
     }
 }
