@@ -5,7 +5,7 @@ import SQLite3
 /// Encrypted write-ahead state for a merge into existing profiles. All mutations run before
 /// windows and sync exist. An identical external re-save cannot be distinguished from replay.
 public final class ArcPasswordImportJournal: @unchecked Sendable {
-    public enum Phase: String, Codable, Sendable { case staged, pending, applying, complete, undoPending, restored }
+    public enum Phase: String, Codable, Sendable { case staged, pending, applying, complete, undoPending, restored, abandoned }
     public enum State: String, Codable, Sendable { case pending, absent, intent, owned, present, conflict, removed, retained }
     public struct Row: Codable, Sendable {
         public var profile: ProfileID
@@ -69,15 +69,56 @@ public final class ArcPasswordImportJournal: @unchecked Sendable {
     }
     public func activate(restoring: Bool = false) throws {
         if restoring {
-            guard phase == .complete || phase == .undoPending || phase == .restored else { throw BrowserAuthenticationImportError.invalidState }
-            if phase != .restored { document.phase = .undoPending }
+            try prepareUndo()
         } else {
             guard phase == .staged || phase == .pending else { throw BrowserAuthenticationImportError.invalidState }
             document.phase = .pending
+            try save("pending")
         }
-        try save(restoring ? "undo-pending" : "pending")
-        try directory.write(JSONEncoder().encode(id), to: "active.json")
+        try Self.requestStartup(root: URL(fileURLWithPath: directory.path).deletingLastPathComponent(), id: id)
         try checkpoint("password-active")
+    }
+    public static func requestStartup(root: URL, id: UUID) throws {
+        try OrbitSecureDirectory.open(root, create: false).directory("ArcPasswordImport", create: false)
+            .write(JSONEncoder().encode(id), to: "active.json")
+    }
+    /// Recovery may undo a partially applied job without scheduling another automatic attempt.
+    public func prepareUndo() throws {
+        guard phase != .staged else { throw BrowserAuthenticationImportError.invalidState }
+        if phase != .restored { document.phase = .undoPending }
+        try save("undo-pending")
+    }
+    public func abandon() throws {
+        document.phase = .abandoned
+        document.sourcePassword = Data(); document.targetPassword = Data()
+        for index in document.rows.indices { document.rows[index].credential.password = "" }
+        try save("abandoned")
+    }
+    /// Requires no decryption key. Persist this before presenting the recovery decision so a
+    /// crash while the alert is open cannot replay writes or prompt again on the next launch.
+    public static func suspendStartup(root: URL) throws {
+        let directory = try OrbitSecureDirectory.open(root, create: false).directory("ArcPasswordImport", create: false)
+        if directory.exists("active.json") {
+            try directory.rename("active.json", to: directory, "abandoned-" + UUID().uuidString + ".json")
+        }
+    }
+    public static func finishStartup(root: URL) throws {
+        try OrbitSecureDirectory.open(root, create: false).directory("ArcPasswordImport", create: false).removeChecked("active.json")
+    }
+    /// Preserve unreadable records and failed restores; never delete their encrypted evidence.
+    public static func quarantine(root: URL, id: UUID?) throws {
+        let parent = try OrbitSecureDirectory.open(root, create: false)
+        guard parent.exists("ArcPasswordImport") else { return }
+        if let id {
+            let directory = try parent.directory("ArcPasswordImport", create: false)
+            let name = id.uuidString + ".sealed"
+            if directory.exists(name) {
+                let quarantine = try directory.directory("quarantine", create: true)
+                try directory.rename(name, to: quarantine, UUID().uuidString + ".sealed")
+            }
+        } else {
+            try parent.rename("ArcPasswordImport", to: parent, "ArcPasswordImport-quarantine-" + UUID().uuidString)
+        }
     }
     public func hash(_ password: String) -> Data {
         Data(HMAC<SHA256>.authenticationCode(for: Data(("password-value-v1:" + password).utf8), using: key))

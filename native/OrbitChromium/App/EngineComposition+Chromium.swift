@@ -187,6 +187,15 @@ enum OrbitLauncher {
         let importer = ArcSiteSessionImport(dataRoot: configuration.dataRoot)
         do {
             if let data = try? Data(contentsOf: importer.pendingFile),
+               let request = try? JSONDecoder().decode(ArcSiteSessionRequest.self, from: data), let id = request.passwordJobID {
+                // Recover a crash between scheduling the connection request and activating its
+                // password job. Unreadable jobs still reach the in-app recovery decision.
+                try ArcPasswordImportJournal.requestStartup(root: configuration.dataRoot, id: id)
+                if request.action == .restore {
+                    try ArcPasswordImportPreparation.open(id, configuration: configuration).prepareUndo()
+                }
+            }
+            if let data = try? Data(contentsOf: importer.pendingFile),
                let request = try? JSONDecoder().decode(ArcSiteSessionRequest.self, from: data),
                request.action == .importSessions,
                request.sourceRoot.standardizedFileURL == ArcSourceSnapshot.defaultSourceRoot.appendingPathComponent("User Data").standardizedFileURL,
@@ -244,26 +253,23 @@ enum OrbitLauncher {
                 return
             }
             Task { @MainActor in
-                do {
-                    try await BrowserPasswordStartupGate.run(apply: {
-                        if let id = try ArcPasswordImportJournal.activeID(root: configuration.dataRoot) {
-                            let journal = try ArcPasswordImportPreparation.open(id, configuration: configuration)
-                            if [.pending, .applying, .undoPending].contains(journal.phase) {
-                                let engine = makeActiveEngine()
-                                do {
-                                    guard let store = engine.passwordStore else { throw BrowserPasswordStoreError.unavailable }
-                                    try await ArcPasswordImportRunner.run(journal, store: store)
-                                    passwordImportResult = journal.counts
-                                    passwordImportRestored = journal.phase == .restored
-                                    await engine.shutdown()
-                                } catch { await engine.shutdown(); throw error }
-                            }
+                await BrowserPasswordStartupGate.run(root: configuration.dataRoot,
+                    open: { try ArcPasswordImportPreparation.open($0, configuration: configuration) },
+                    apply: { journal in
+                        let engine = makeActiveEngine()
+                        do {
+                            guard let store = engine.passwordStore else { throw BrowserPasswordStoreError.unavailable }
+                            try await ArcPasswordImportRunner.run(journal, store: store)
+                            await engine.shutdown()
+                        } catch { await engine.shutdown(); throw error }
+                    }, completed: { journal in
+                        if journal.phase == .restored {
+                            try ArcSiteSessionImport(dataRoot: configuration.dataRoot).markPasswordsRestored(jobID: journal.id)
                         }
-                    }, startApplication: { startAfterPasswordImport(configuration) })
-                } catch {
-                    FileHandle.standardError.write(Data("orbit: password import recovery retained; startup stopped\n".utf8))
-                    ChromiumRuntime.shared.requestQuit()
-                }
+                        passwordImportResult = journal.counts
+                        passwordImportRestored = journal.phase == .restored
+                    }, choose: { ImportRecoveryAlert.choose() },
+                    startApplication: { startAfterPasswordImport(configuration) })
             }
         }
         if let launchObserver { NotificationCenter.default.removeObserver(launchObserver) }

@@ -28,20 +28,32 @@ struct ArcPasswordPreparationTests {
         #expect(try FileManager.default.contentsOfDirectory(atPath: target.path).isEmpty)
     }
     @Test func hintRequiresAvailableStore() {
-        var report = ArcImportReport(); report.passwordProfileCounts = [2, 0]
+        var report = ArcImportReport(); report.passwordProfiles = [.init(name: "Work", directory: "Profile 1", count: 2), .init(name: "", directory: "Default", count: 0)]
         let available = ArcImportText.confirmation(report, passwordsAvailable: true)
         #expect(available.contains("Coming from Arc? Your Spaces, tabs and passwords come with you, even after Arc stops working."))
+        #expect(available.contains("Work: 2 passwords found") && !available.contains("Profile 1:"))
         #expect(available.contains("2 passwords found") && !available.contains("0 passwords found"))
         let unavailable = ArcImportText.confirmation(report, passwordsAvailable: false)
         #expect(!unavailable.contains("tabs and passwords come with you") && !unavailable.contains("passwords found"))
     }
+    @Test func profileDisplayNamesAndFolderFallback() {
+        var report = ArcImportReport()
+        report.passwordProfiles = [.init(name: "Personal", directory: "Default", count: 7),
+            .init(name: "", directory: "Profile 1", count: 3)]
+        let text = ArcImportText.confirmation(report, passwordsAvailable: true)
+        #expect(text.contains("Personal: 7 passwords found") && !text.contains("Default:"))
+        #expect(text.contains("Profile 1: 3 passwords found"))
+    }
+
     @Test func localizedCountsOmitZero() {
         var counts = ArcPasswordImportJournal.Counts()
         #expect(ArcPasswordImportText.result(counts, restored: false).isEmpty)
+        counts.kept = 1
+        #expect(ArcPasswordImportText.result(counts, restored: false) == "1 password not replaced (Orbit's version kept)")
         counts.added = 1; counts.alreadyPresent = 2; counts.kept = 3; counts.skipped = 4
         let text = ArcPasswordImportText.result(counts, restored: false)
         #expect(text.contains("1 password added") && !text.contains("1 passwords"))
-        #expect(text.contains("2 passwords already in Orbit") && text.contains("3 passwords kept Orbit’s version"))
+        #expect(text.contains("2 passwords already in Orbit") && text.contains("3 passwords not replaced (Orbit's version kept)"))
         #expect(text.contains("4 passwords skipped") && !text.contains("0 "))
     }
 }

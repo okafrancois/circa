@@ -42,6 +42,7 @@ struct LocalizationTests {
     func localizedPluralCounts() {
         for (key, singular, plural) in [
             ("%ld passwords", "1 password", "2 passwords"),
+            ("%d passwords not replaced (Orbit's version kept)", "1 password not replaced (Orbit's version kept)", "2 passwords not replaced (Orbit's version kept)"),
             ("%ld cookies", "1 cookie", "2 cookies"),
             ("%ld Spaces", "1 Space", "2 Spaces"),
             ("%ld tabs and folders", "1 tab or folder", "2 tabs and folders"),

@@ -167,9 +167,19 @@ public struct ArcSiteSessionImport {
             try writeBackup(backup, at: url)
             result.profiles += 1
         }
-        backup.passwordsRestored = true
         try writeBackup(backup, at: url)
         return result
+    }
+
+    /// The live-store undo must finish before this backup ceases to be restorable.
+    public func markPasswordsRestored(jobID: UUID) throws {
+        for url in try backupDirectories() {
+            var backup = try readBackup(url)
+            if backup.passwordJobID == jobID {
+                backup.passwordsRestored = true
+                try writeBackup(backup, at: url)
+            }
+        }
     }
 
     /// Discarding the undo point also erases its encrypted password ownership record.

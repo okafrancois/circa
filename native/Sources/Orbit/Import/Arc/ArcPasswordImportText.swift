@@ -10,7 +10,7 @@ enum ArcPasswordImportText {
         } else {
             if counts.added > 0 { lines.append(uiText("%d passwords added", count: counts.added)) }
             if counts.alreadyPresent > 0 { lines.append(uiText("%d passwords already in Orbit", count: counts.alreadyPresent)) }
-            if counts.kept > 0 { lines.append(uiText("%d passwords kept Orbit’s version", count: counts.kept)) }
+            if counts.kept > 0 { lines.append(uiText("%d passwords not replaced (Orbit's version kept)", count: counts.kept)) }
             if counts.skipped > 0 { lines.append(uiText("%d passwords skipped", count: counts.skipped)) }
         }
         return lines.joined(separator: "\n")

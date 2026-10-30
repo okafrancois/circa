@@ -37,12 +37,20 @@ public struct ArcImportProgress: Sendable, Equatable {
     public var fraction: Double? { total > 0 ? min(1, Double(completed) / Double(total)) : nil }
 }
 
-/// Dry-run report. Counts only: safe to show, log and paste into a report.
+/// Dry-run report. Profile display names are for presentation, not diagnostic logging.
 public struct ArcImportReport: Codable, Equatable, Sendable {
     /// Categories outside the structural and subsequent authentication steps.
     public static let notImported = ["cookies", "extensions", "siteData", "settings", "downloads"]
 
-    public var passwordProfileCounts: [Int]?
+    public struct PasswordProfile: Codable, Equatable, Sendable {
+        public let name: String
+        public let count: Int
+        public init(name: String, directory: String, count: Int) {
+            self.name = name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? directory : name
+            self.count = count
+        }
+    }
+    public var passwordProfiles: [PasswordProfile]?
     public var capabilities: [String: BrowserImportCapability]?
     public var sourceCounts: [String: Int]?
     public var formatVersion: Int?
@@ -290,9 +298,10 @@ public struct BrowserImportOrchestrator: Sendable {
         report.sourceCounts = prepared.sourceCounts
         report.notImported = prepared.notImported ?? report.notImported
         if adapter == nil || adapter is ArcBrowserImportAdapter {
-            report.passwordProfileCounts = plan.profiles.compactMap { profile in
+            report.passwordProfiles = plan.profiles.compactMap { profile in
                 profile.sourceDirectory.map { directory in
-                    (snapshot.passwordDatabases[directory] ?? []).reduce(0) { $0 + ((try? ArcPasswordImportSource.count(snapshotFile: $1)) ?? 0) }
+                    ArcImportReport.PasswordProfile(name: profile.name, directory: directory,
+                        count: (snapshot.passwordDatabases[directory] ?? []).reduce(0) { $0 + ((try? ArcPasswordImportSource.count(snapshotFile: $1)) ?? 0) })
                 }
             }
         }

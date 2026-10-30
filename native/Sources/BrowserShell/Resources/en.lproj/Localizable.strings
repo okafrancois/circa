@@ -1675,7 +1675,7 @@
 
 "%d passwords already in Orbit" = "%d passwords already in Orbit";
 
-"%d passwords kept Orbit’s version" = "%d passwords kept Orbit’s version";
+"%d passwords not replaced (Orbit's version kept)" = "%d passwords not replaced (Orbit's version kept)";
 
 "%d passwords skipped" = "%d passwords skipped";
 

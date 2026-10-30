@@ -74,6 +74,12 @@ enum ArcPasswordProductProbe {
             if action == "confirmation" {
                 let report = try JSONDecoder().decode(ArcImportReport.self, from: Data(contentsOf: root.appendingPathComponent("password-probe-report.json")))
                 panel = ArcImportAlertPresenter.confirmationAlert(report)
+            } else if action == "review-result" {
+                // Presentation-only input: recapture copy without replaying an import.
+                let counts = try JSONDecoder().decode(ArcPasswordImportJournal.Counts.self,
+                    from: Data(contentsOf: root.appendingPathComponent("password-review-counts.json")))
+                var sessions = ArcSiteSessionResult(); sessions.profiles = 2
+                panel = ArcSiteSessionAlerts.resultAlert(sessions, passwords: counts)!
             } else if action == "restart-confirmation" || action == "restore-confirmation" {
                 panel = ArcSiteSessionAlerts.confirmationAlert(orbitRunning: false, restoring: action == "restore-confirmation")
             } else if action == "missing" || action == "denied" {

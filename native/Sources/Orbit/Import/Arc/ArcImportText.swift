@@ -25,8 +25,8 @@ enum ArcImportText {
             uiFormat("Archived tabs: %@", number(target.archivedTabsAdded)),
             uiFormat("History visits: %@", number(report.history.importable)),
         ]
-        for (index, count) in (passwordsAvailable ? report.passwordProfileCounts ?? [] : []).enumerated() where count > 0 {
-            lines.append(uiFormat("Profile %@: %@", number(index + 1), uiText("%d passwords found", count: count)))
+        for profile in (passwordsAvailable ? report.passwordProfiles ?? [] : []) where profile.count > 0 {
+            lines.append(uiFormat("%@: %@", profile.name, uiText("%d passwords found", count: profile.count)))
         }
         if target.itemsPresent > 0 {
             lines.append(uiFormat("Already imported and kept as they are: %@", number(target.itemsPresent)))

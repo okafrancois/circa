@@ -35,7 +35,9 @@ public enum ArcPasswordImportRunner {
             try Task.checkCancellation()
             let found = listings[row.profile]?.first(where: { sameIdentity($0, row.credential) })
             if restoring {
-                guard row.state == .owned else { continue }
+                // An intent may have reached the store immediately before a crash. The absent
+                // baseline plus matching hash establishes ownership under startup exclusion.
+                guard row.state == .owned || row.state == .intent else { continue }
                 if let found {
                     if journal.hash(found.passwordValue) == row.hash,
                        found.primaryKey == record(row.credential).primaryKey,
@@ -76,11 +78,42 @@ public enum ArcPasswordImportRunner {
     }
 }
 
-/// Awaiting this gate is mandatory: a failure must not release windows or sync.
+/// Windows/pages and sync wait for application or the user's recovery decision. Import
+/// failure must never prevent launch, including when the recovery key or journal is lost.
 @MainActor
 public enum BrowserPasswordStartupGate {
-    public static func run(apply: () async throws -> Void, startApplication: () -> Void) async throws {
-        try await apply()
-        startApplication()
+    public static func run(root: URL, open: (UUID) throws -> ArcPasswordImportJournal,
+                           apply: (ArcPasswordImportJournal) async throws -> Void,
+                           completed: (ArcPasswordImportJournal) throws -> Void = { _ in },
+                           choose: () -> BrowserImportRecovery.Choice, startApplication: () -> Void) async {
+        defer { startApplication() }
+        var id: UUID?
+        var journal: ArcPasswordImportJournal?
+        do {
+            guard let active = try ArcPasswordImportJournal.activeID(root: root) else { return }
+            id = active
+            let loaded = try open(active); journal = loaded
+            if [.pending, .applying, .undoPending].contains(loaded.phase) { try await apply(loaded) }
+            if [.complete, .restored].contains(loaded.phase) { try completed(loaded) }
+            try ArcPasswordImportJournal.finishStartup(root: root)
+        } catch {
+            do { try ArcPasswordImportJournal.suspendStartup(root: root) }
+            catch { try? ArcPasswordImportJournal.quarantine(root: root, id: nil) }
+            try? journal?.abandon()
+            // The pointer is durably retired before the alert; the backup still links to the
+            // sealed ownership record for a later explicit Restore after Continue.
+            switch choose() {
+            case .continueWithoutImport:
+                break
+            case .restore:
+                do {
+                    guard let id else { throw BrowserAuthenticationImportError.invalidState }
+                    let loaded = try journal ?? open(id)
+                    try loaded.prepareUndo()
+                    try await apply(loaded)
+                    try completed(loaded)
+                } catch { try? ArcPasswordImportJournal.quarantine(root: root, id: id) }
+            }
+        }
     }
 }

@@ -23,7 +23,22 @@ import Testing
         #expect(!FileManager.default.fileExists(atPath: root.appendingPathComponent("ArcPasswordImport/" + journal.id.uuidString + ".sealed").path))
     }
 
-    @Test func decodeAndWAL() throws {
+    @Test func connectionRestoreKeepsPasswordBackupUntilStoreUndoFinishes() throws {
+        let root = URL(fileURLWithPath: "/private/tmp/password-backup-" + UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let journal = try ArcPasswordImportJournal.create(root: root, key: SymmetricKey(size: .bits256), groups: [], skipped: 0,
+            sourcePassword: Data("source".utf8), targetPassword: Data("target".utf8))
+        let sessions = ArcSiteSessionImport(dataRoot: root)
+        _ = try sessions.run(.init(sourceRoot: root.appendingPathComponent("Source"), profiles: [], passwordJobID: journal.id), keys: journal.connectionKeys())
+        _ = try sessions.restoreLatest()
+        #expect(sessions.hasBackup)
+        #expect(try sessions.latestPasswordJobID == journal.id)
+        try sessions.markPasswordsRestored(jobID: journal.id)
+        #expect(!sessions.hasBackup)
+    }
+
+    @Test func decodeAndWAL() async throws {
         let exported = ProcessInfo.processInfo.environment["ORBIT_PASSWORD_EXPORT_FIXTURE"] == "1"
         let root = exported ? URL(fileURLWithPath: "/private/tmp/import-arc-passwords/gui/ArcSource")
             : URL(fileURLWithPath: "/private/tmp/orbit-password-source-" + UUID().uuidString)
@@ -55,6 +70,18 @@ import Testing
         #expect(result.groups[0].1.last?.blocked == true)
         #expect(result.groups[0].1.last?.username.isEmpty == true)
         #expect(result.groups[0].1.last?.password.isEmpty == true)
+        let fixture = try OrbitImportTestFixture(); defer { fixture.remove() }
+        _ = try await fixture.seedExistingSession()
+        let target = try fixture.target()
+        let importer = ArcImporter(source: root, probe: BrowserImportRunningProbe(running: { false }))
+        let preparation = try await importer.prepare(for: target)
+        let expectedNames = preparation.plan.profiles.filter { $0.sourceDirectory != nil }.map(\.name)
+        #expect(preparation.report.passwordProfiles?.map(\.name) == expectedNames)
+        #expect(preparation.report.passwordProfiles?.map(\.count) == [7, 7, 0])
+        if ProcessInfo.processInfo.environment["ORBIT_PASSWORD_EXPORT_REVIEW"] == "1" {
+            try JSONEncoder().encode(preparation.report).write(to: URL(fileURLWithPath: "/private/tmp/import-arc-passwords/review-report.json"))
+        }
+        preparation.discard(); await target.close()
         withExtendedLifetime(databases) {}
     }
 }
