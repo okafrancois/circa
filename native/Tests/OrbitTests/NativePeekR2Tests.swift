@@ -190,7 +190,7 @@ struct NativePeekR2Tests {
             prompts.append(origin.value)
             return .allowOnce
         }
-        #expect(await peeked.requestPermission(request) == .grant)
+        #expect(await peeked.requestPermission(request) == .grantOnce)
         #expect(prompts == [origin.value], "the Peek document reached the prompt, it was not refused outright")
         controller.siteControls.permissionPrompt = { _, _ in .dismiss }
         try await controller.siteControls.policy.store.set(.allow, for: [.camera], origin: origin, profileID: peeked.profileID)

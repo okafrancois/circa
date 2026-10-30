@@ -1282,18 +1282,25 @@ public final class ChromiumSurface: BrowserEngineSurface {
         }
     }
 
-    static func permissionKind(mask: UInt32, media: Bool) -> BrowserPermissionKind {
+    /// Match the entire mask: an unrecognized capability must never receive a partial grant.
+    public static func permissionKind(mask: UInt32, media: Bool) -> BrowserPermissionKind {
         if media {
-            let audio = mask & 1 != 0, video = mask & 2 != 0
-            return audio && video ? .cameraAndMicrophone : video ? .camera : audio ? .microphone : .other("media")
+            switch mask {
+            case 1: return .microphone
+            case 2: return .camera
+            case 3: return .cameraAndMicrophone
+            default: return .other("cef-media-\(mask)")
+            }
         }
-        if mask & (1 << 2) != 0 && mask & (1 << 12) != 0 { return .cameraAndMicrophone }
-        if mask & (1 << 2) != 0 { return .camera }
-        if mask & (1 << 12) != 0 { return .microphone }
-        if mask & (1 << 8) != 0 { return .geolocation }
-        if mask & (1 << 15) != 0 { return .notifications }
-        if mask & (1 << 4) != 0 { return .other(BrowserSitePermission.clipboardRead.rawValue) }
-        return .other("cef-permission-\(mask)")
+        switch mask {
+        case 1 << 2: return .camera
+        case 1 << 12: return .microphone
+        case (1 << 2) | (1 << 12): return .cameraAndMicrophone
+        case 1 << 8: return .geolocation
+        case 1 << 15: return .notifications
+        case 1 << 4: return .other(BrowserSitePermission.clipboardRead.rawValue)
+        default: return .other("cef-permission-\(mask)")
+        }
     }
 
     private func handleDownload(_ event: ChromiumEvent) {

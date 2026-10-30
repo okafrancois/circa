@@ -73,7 +73,7 @@ struct SiteControlsEngineTests {
             return choice == "block" ? .block : .dismiss
         }
         #expect(await surface.requestPermission(BrowserPermissionRequest(kind: .notifications,
-            origin: "https://example.test", isMainFrame: true)) == .deny)
+            origin: "https://example.test", isMainFrame: true)) == (choice == "dismiss" ? .dismiss : .deny))
         #expect(authorizations == 0)
         #expect(!window.window!.isVisible)
     }
@@ -90,10 +90,10 @@ struct SiteControlsEngineTests {
         let origin = BrowserSiteOrigin(requestOrigin: "https://example.test")!
         let request = BrowserPermissionRequest(kind: .camera, origin: origin.value, isMainFrame: true)
         // Hidden windows do not show permission UI or invoke system services.
-        #expect(await surface.requestPermission(request) == .deny)
+        #expect(await surface.requestPermission(request) == .dismiss)
         try await window.siteControls.policy.store.set(.allow, for: [.camera], origin: origin, profileID: surface.profileID)
         #expect(await surface.requestPermission(request) == .grant)
-        #expect(await surface.requestPermission(BrowserPermissionRequest(kind: .cameraAndMicrophone, origin: origin.value, isMainFrame: true)) == .deny)
+        #expect(await surface.requestPermission(BrowserPermissionRequest(kind: .cameraAndMicrophone, origin: origin.value, isMainFrame: true)) == .dismiss)
         try await window.siteControls.policy.store.set(.block, for: [.camera], origin: origin, profileID: surface.profileID)
         #expect(await surface.requestPermission(request) == .deny)
         let foreign = environment.engine.makeSurface(profileID: ProfileID(), delegate: window)
@@ -139,6 +139,119 @@ struct SiteControlsEngineTests {
         #expect(await task.value == .deny)
         #expect(await window.siteControls.policy.store.setting(for: .camera, origin: origin, profileID: surface.profileID) == .ask)
         #expect(window.window?.isVisible == false)
+    }
+
+    @Test("Not Now defers each request without storing a block across reload and navigation")
+    func notNowLifetime() async throws {
+        NSApplication.shared.setActivationPolicy(.prohibited)
+        let environment = BrowserEnvironment(engine: SiteSyntheticEngine())
+        let window = try await environment.makeWindow()
+        defer { window.window?.close() }
+        window.submitAddress("https://example.test")
+        await window.session.waitForPendingCommands()
+        let surface = try #require(window.session.selectedSurface)
+        var prompts = 0
+        window.siteControls.permissionPrompt = { _, _ in prompts += 1; return .dismiss }
+        for step in 0..<3 {
+            if step == 1 { surface.reload() }
+            if step == 2 { surface.navigate(to: URL(string: "https://example.test/next")!) }
+            #expect(await surface.requestPermission(.init(kind: .camera, origin: "https://example.test", isMainFrame: true)) == .dismiss)
+        }
+        #expect(prompts == 3)
+        #expect(await window.siteControls.policy.store.configuredOrigins(profileID: surface.profileID).isEmpty)
+    }
+
+    @Test("Concurrent requests each reach the presenter after the previous decision")
+    func concurrentRequests() async throws {
+        NSApplication.shared.setActivationPolicy(.prohibited)
+        let environment = BrowserEnvironment(engine: SiteSyntheticEngine())
+        let window = try await environment.makeWindow()
+        defer { window.window?.close() }
+        window.submitAddress("https://example.test")
+        await window.session.waitForPendingCommands()
+        let surface = try #require(window.session.selectedSurface)
+        var entered: [BrowserSitePermission] = []
+        var continuation: CheckedContinuation<BrowserSitePermissionChoice, Never>?
+        window.siteControls.permissionPrompt = { _, permissions in
+            entered += permissions
+            if entered.count == 1 { return await withCheckedContinuation { continuation = $0 } }
+            return .allowOnce
+        }
+        let first = Task { await surface.requestPermission(.init(kind: .camera, origin: "https://example.test", isMainFrame: true)) }
+        for _ in 0..<100 where continuation == nil { await Task.yield() }
+        let response = try #require(continuation)
+        let second = Task { await surface.requestPermission(.init(kind: .microphone, origin: "https://example.test", isMainFrame: true)) }
+        for _ in 0..<10 { await Task.yield() }
+        #expect(entered == [.camera])
+        response.resume(returning: .dismiss)
+        #expect(await first.value == .dismiss)
+        #expect(await second.value == .grantOnce)
+        #expect(entered == [.camera, .microphone])
+    }
+
+    @Test("One-time shell grants are requested again after reload, document navigation and disposal",
+          arguments: ["reload", "navigate-back", "close", "discard", "unload"])
+    func oneTimeLifetime(action: String) async throws {
+        NSApplication.shared.setActivationPolicy(.prohibited)
+        let environment = BrowserEnvironment(engine: SiteSyntheticEngine())
+        let window = try await environment.makeWindow()
+        defer { window.window?.close() }
+        window.submitAddress("https://example.test")
+        await window.session.waitForPendingCommands()
+        var surface = try #require(window.session.selectedSurface)
+        let profile = surface.profileID
+        let request = BrowserPermissionRequest(kind: .camera, origin: "https://example.test", isMainFrame: true)
+        var prompts = 0
+        window.siteControls.permissionPrompt = { _, _ in prompts += 1; return .allowOnce }
+        #expect(await surface.requestPermission(request) == .grantOnce)
+        switch action {
+        case "reload": surface.reload()
+        case "navigate-back":
+            surface.navigate(to: URL(string: "https://other.test")!)
+            _ = surface.goBack()
+        case "discard":
+            surface.isSuspended = true
+            #expect(await surface.requestPermission(request) == .deny)
+            surface.isSuspended = false
+            surface.reload()
+        case "unload":
+            surface.navigate(to: URL(string: "about:blank")!)
+            #expect(await surface.requestPermission(request) == .deny)
+            surface.navigate(to: URL(string: "https://example.test")!)
+        default:
+            // Closing retires the surface; a newly opened document has no shell grant.
+            surface.dispose()
+            #expect(await surface.requestPermission(request) == .deny)
+            window.openTab(url: URL(string: "https://example.test")!)
+            await window.session.waitForPendingCommands()
+            surface = try #require(window.session.selectedSurface)
+        }
+        #expect(await surface.requestPermission(request) == .grantOnce)
+        #expect(prompts == 2)
+        #expect(await window.siteControls.policy.store.configuredOrigins(profileID: profile).isEmpty)
+        #expect(!window.window!.isVisible)
+    }
+
+    @Test("Two profile windows sharing a permission store always prompt independently")
+    func onceProfileIsolation() async throws {
+        NSApplication.shared.setActivationPolicy(.prohibited)
+        let environment = BrowserEnvironment(engine: SiteSyntheticEngine())
+        let first = try await environment.makeWindow()
+        let profile = try await environment.store.createSettingsFixtureProfileWithSpace(name: "Synthetic permissions")
+        let space = try #require(await environment.store.catalogSnapshot().spaces.first { $0.profileID == profile }?.id)
+        let second = try await environment.makeWindow(spaceID: space)
+        defer { first.window?.close(); second.window?.close() }
+        var prompts = 0
+        for window in [first, second] {
+            window.submitAddress("https://example.test")
+            await window.session.waitForPendingCommands()
+            window.siteControls.permissionPrompt = { _, _ in prompts += 1; return .allowOnce }
+            let surface = try #require(window.session.selectedSurface)
+            #expect(await surface.requestPermission(.init(kind: .camera, origin: "https://example.test", isMainFrame: true)) == .grantOnce)
+            #expect(await window.siteControls.policy.store.configuredOrigins(profileID: surface.profileID).isEmpty)
+        }
+        #expect(first.session.selectedSurface?.profileID != second.session.selectedSurface?.profileID)
+        #expect(prompts == 2)
     }
 
     @Test("Corrupt or future permission files preserve a healthy restored tab session",

@@ -26,9 +26,8 @@ final class SitePermissionPromptView: NSView {
         headerHeight = max(32, ceil(message.cell!.cellSize(forBounds:
             NSRect(x: 0, y: 0, width: 176, height: 1000)).height))
         notNowButton = SitePermissionActionButton(uiText("Not Now"), identifier: "permission-not-now") {
-            // Orbit reports denied even after reloading after Not Now. Closing the popover
-            // without choosing still uses the coordinator's non-persistent dismissal.
-            onChoice(.block)
+            // Deferral leaves both shell and engine site settings unchanged.
+            onChoice(.dismiss)
         }
         allowButton = SitePermissionActionButton(uiText("Allow"), identifier: "permission-allow") {
             onChoice(permissions.allSatisfy(\.supportsPersistentAllow) ? .alwaysAllow : .allowOnce)

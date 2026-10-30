@@ -633,7 +633,7 @@ final class WebKitNavigationBridge: NSObject, WKNavigationDelegate, WKUIDelegate
         guard !surface.isDisposed, surface.findDocumentGeneration == generation else { return .deny }
         switch decision {
         case .grant, .grantOnce: return .grant
-        case .deny: return .deny
+        case .deny, .dismiss: return .deny
         case .engineDefault: return .prompt
         }
     }

@@ -265,6 +265,8 @@ public enum BrowserPermissionDecision: Sendable, Equatable {
     /// Ephemeral native permission. Unsupported engines/kinds must refuse it.
     case grantOnce
     case deny
+    /// Dismiss this request without saving an allow or block.
+    case dismiss
     /// Let the engine apply its default behaviour, usually its own prompt.
     case engineDefault
 }

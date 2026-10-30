@@ -39,7 +39,7 @@ struct ShareNotificationTests {
         #expect(await restored.resolve(request, profileID: ProfileID(), isCurrent: { true }) { _, _ in prompts += 1; return .alwaysAllow } == .grant)
         #expect(prompts == 1)
         let other = BrowserPermissionRequest(kind: .notifications, origin: "http://localhost:48731", isMainFrame: true)
-        #expect(await restored.resolve(other, profileID: profile, isCurrent: { true }) { _, _ in prompts += 1; return .dismiss } == .deny)
+        #expect(await restored.resolve(other, profileID: profile, isCurrent: { true }) { _, _ in prompts += 1; return .dismiss } == .dismiss)
         #expect(prompts == 2)
         try await restored.store.reset(origin: origin, profileID: profile)
         #expect(await restored.resolve(request, profileID: profile, isCurrent: { true }) { _, _ in .alwaysAllow } == .grant)

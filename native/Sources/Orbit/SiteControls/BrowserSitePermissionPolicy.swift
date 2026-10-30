@@ -31,7 +31,7 @@ final class BrowserSitePermissionPolicy {
                  isCurrent: @escaping @MainActor () -> Bool,
                  prompt: @escaping @MainActor (BrowserSiteOrigin, [BrowserSitePermission]) async -> BrowserSitePermissionChoice
     ) async -> BrowserPermissionDecision {
-        guard isCurrent(), request.isMainFrame, let origin = BrowserSiteOrigin(requestOrigin: request.origin),
+        guard isCurrent(), let origin = BrowserSiteOrigin(requestOrigin: request.origin),
               let permissions = Self.permissions(for: request.kind), !permissions.isEmpty else { return .deny }
         // No new hardware grants on insecure remote origins. Loopback is allowed for fixtures.
         guard Self.isTrustworthy(origin) else { return .deny }
@@ -43,6 +43,7 @@ final class BrowserSitePermissionPolicy {
         if settings.allSatisfy({ $0 == .allow }) { return .grant }
         let choice = await prompt(origin, permissions)
         guard isCurrent(), !Task.isCancelled else { return .deny }
+        if choice == .dismiss { return .dismiss }
         do {
             let accepted = try await store.commit(choice, for: permissions, origin: origin,
                                                    profileID: profileID, expectedRevision: state.revision)
@@ -51,7 +52,12 @@ final class BrowserSitePermissionPolicy {
                 await onPersistedDecision?(profileID, origin, permissions, choice == .block ? .block : .allow)
             }
             guard isCurrent(), !Task.isCancelled else { return .deny }
-            return choice == .allowOnce || choice == .alwaysAllow ? .grant : .deny
+            switch choice {
+            case .allowOnce: return .grantOnce
+            case .alwaysAllow: return .grant
+            case .block: return .deny
+            case .dismiss: return .dismiss
+            }
         } catch {
             if choice == .block { await onPersistedDecision?(profileID, origin, permissions, .block) }
             onPersistenceFailure?(choice)
