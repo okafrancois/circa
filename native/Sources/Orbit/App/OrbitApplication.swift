@@ -53,6 +53,10 @@ final class OrbitApplication: NSObject, NSApplicationDelegate {
     var pendingSiteSessionRequest: ArcSiteSessionRequest?
     var wantsSiteSessionRelaunch = false
     var pendingBrowserImport: BrowserImportOfflineJob?
+    /// First-run onboarding of this launch; main windows are held until it hands off.
+    var onboarding: OrbitOnboardingWindowController?
+    var heldOnboardingWindows: [OrbitWindowController] = []
+    var onOnboardingFinished: ((BrowserOnboardingRecord) -> Void)?
     lazy var browserImport = BrowserImportCoordinator()
     var settingsWindow: BrowserSettingsWindowController<ActiveEngine>?
     lazy var commands = makeCommandSystem()
@@ -163,6 +167,7 @@ final class OrbitApplication: NSObject, NSApplicationDelegate {
         },
         present: { [weak self] controller, activate in
             guard let self, !provisionalQuickWindowWindows.contains(controller.id) else { return }
+            if holdsWindowForOnboarding(controller) { return }
             presentAndScheduleUpdates {
                 windowPresenter(controller, activate)
                 if activate, controller.session.snapshot?.isStandalone == true { controller.focusSelectedDocument() }
@@ -242,6 +247,7 @@ final class OrbitApplication: NSObject, NSApplicationDelegate {
             }
             environment?.onPersistenceSuccess = { [weak self] in self?.didPresentSaveError = false }
             let restoredWindowCount = environment?.restoredWindowIDs.count ?? 0
+            await prepareOnboarding()
             if let ids = environment?.restoredWindowIDs, !ids.isEmpty {
                 for id in ids { windows.newWindow(id: id.rawValue) }
             } else if pendingExternalURLs.isEmpty || environment?.settings.document.opensExternalLinksInQuickWindow != true {
@@ -250,7 +256,8 @@ final class OrbitApplication: NSObject, NSApplicationDelegate {
             finishExternalURLStartup()
             presentSiteSessionImportOutcome()
             presentBrowserImportResult()
-            offerArcImportIfFirstRun(restoredWindowCount: restoredWindowCount)
+            if let onboarding { onboarding.present() }
+            else { offerArcImportIfFirstRun(restoredWindowCount: restoredWindowCount) }
         }
     }
 
@@ -267,7 +274,7 @@ final class OrbitApplication: NSObject, NSApplicationDelegate {
     }
 
     private func drainPendingExternalURLs() {
-        guard externalURLStartupComplete, !isPreparingToQuit else { return }
+        guard externalURLStartupComplete, !isPreparingToQuit, onboarding == nil else { return }
         let urls = pendingExternalURLs
         pendingExternalURLs.removeAll()
         routeExternalURLs(urls)
@@ -354,7 +361,9 @@ final class OrbitApplication: NSObject, NSApplicationDelegate {
     }
 
     func confirmQuitIfNeeded() -> Bool {
-        if pendingSiteSessionRequest == nil, pendingBrowserImport == nil, environment?.settings.document.interaction.warnBeforeQuitting == true {
+        // No tabs are on screen during the first-run onboarding: quitting needs no confirmation.
+        if onboarding == nil, pendingSiteSessionRequest == nil, pendingBrowserImport == nil,
+           environment?.settings.document.interaction.warnBeforeQuitting == true {
             switch confirmQuit() {
             case .cancel: return false
             case .quit: break

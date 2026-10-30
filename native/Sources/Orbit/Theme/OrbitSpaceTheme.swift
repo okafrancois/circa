@@ -154,9 +154,15 @@ enum OrbitThemeGradient {
         let dark = OrbitAppearance.isDark(appearance), range = theme.stopRange.range(isDark: dark)
         let f = axisFraction(of: CGPoint(x: point.x * 1512, y: point.y * 949), in: CGSize(width: 1512, height: 949),
                              angleDegrees: theme.angle.degrees(isDark: dark))
-        let t = min(1, max(0, (f - range.lowerBound) / (range.upperBound - range.lowerBound))) * 2
-        let i = min(1, Int(t))
-        return mix(stops[i], stops[i + 1], t - CGFloat(i))
+        let t = min(1, max(0, (f - range.lowerBound) / (range.upperBound - range.lowerBound)))
+        let locations = theme.model?.gradient(isDark: dark).locations ?? [0, 0.5, 1]
+        if locations.count == 3 {
+            let i = t < CGFloat(locations[1]) ? 0 : 1
+            let lower = CGFloat(locations[i]), upper = CGFloat(locations[i + 1])
+            return mix(stops[i], stops[i + 1], (t - lower) / (upper - lower))
+        }
+        let index = min(1, Int(t * 2))
+        return mix(stops[index], stops[index + 1], t * 2 - CGFloat(index))
     }
 
     /// Unit start and end points (unflipped layer: origin at the bottom-left) of a theme painted over a
