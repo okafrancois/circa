@@ -413,7 +413,7 @@ struct NativeQuickWindowR2Tests {
         #expect(copied == surface.currentURL)
         #expect(bar.performKeyEquivalent(with: try event("p")))
         #expect(engine.printedSurfaces == [ObjectIdentifier(surface)])
-        #expect(little.openButton.toolTip?.contains("⌘O") != true)
+        #expect(little.openButton.toolTip?.contains("⌘O") == true)
         #expect(little.openButton.accessibilityLabel()?.contains(little.sourceSpaceName) == true)
         active = false
         #expect(!registry.isEnabled(.find) && !registry.isEnabled(.print))

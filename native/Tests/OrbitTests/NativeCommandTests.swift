@@ -38,7 +38,7 @@ struct NativeCommandTests {
         #expect(OrbitCommandCatalog.structuralIDs.count == 14)
         #expect(OrbitCommandCatalog.actionDefinitions.count == 254) // Includes local page sharing.
         #expect(OrbitCommandCatalog.declarations.allSatisfy { $0.localizesKey })
-        #expect(OrbitCommandCatalog.declarations.filter { !$0.key.isEmpty }.count == 84)
+        #expect(OrbitCommandCatalog.declarations.filter { !$0.key.isEmpty }.count == 85)
         #expect(OrbitCommandCatalog.declarations.filter { !$0.key.isEmpty && $0.modifierMask == nil }.map(\.source) == ["menu.declaration.25", "menu.declaration.117"])
         #expect(Set(OrbitCommandCatalog.declarations.map(\.source)).count == 179)
         #expect(OrbitCommandCatalog.supplemental.count == 27)
@@ -213,7 +213,7 @@ struct NativeCommandTests {
         #expect(registry.resolve(.init(key: "n", modifiers: [.command, .shift])) == .newIncognitoWindow)
         #expect(registry.resolve(.init(key: "o", modifiers: [.command])) == nil)
         router.selectedWindow?.state.scope = .quickWindow
-        #expect(registry.resolve(.init(key: "o", modifiers: [.command]), scope: .quickWindow) == nil)
+        #expect(registry.resolve(.init(key: "o", modifiers: [.command]), scope: .quickWindow) == .promoteQuickWindow)
         router.shutdown()
     }
 
@@ -470,7 +470,7 @@ struct NativeCommandTests {
           New Little Circa Window [newQuickWindowWindow] ⌥⌘N
           Restore Last Closed Tab [restoreLastClosedTab] ⇧⌘T
           ---
-          Open File… [openFile] ⌘O
+          Open File… [openFile]
           Open Command Bar [openCommandBar] ⌘L
           ---
           New Boost [newBoost] (hidden)
@@ -616,7 +616,7 @@ struct NativeCommandTests {
           Join Meeting [joinMeeting] ⌃⌘J (hidden) (key when hidden)
           Peek Email… [peekEmail] ⇧⌘E (hidden) (key when hidden)
           Pin/Unpin Tab [pinUnpinTab] ⌘D
-          Open Little Circa or Peek in… [openQuickWindowOrPeekIn] (key when hidden)
+          Open Little Circa or Peek in… [openQuickWindowOrPeekIn] ⌘O (key when hidden)
           New Folder… [newFolder]
           Duplicate [duplicate] (key when hidden)
           Rename Current Item [renameCurrentItem] (hidden) (key when hidden)

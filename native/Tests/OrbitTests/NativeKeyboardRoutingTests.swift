@@ -147,7 +147,7 @@ struct NativeKeyboardRoutingTests {
         let router = router()
         defer { router.shutdown() }
         let registry = try BrowserCommandRegistry(router: router, state: { $0?.state ?? .init() })
-        for id in [BrowserCommandID.dismissPeek, .closeQuickWindow, .closeSwitcherTab, .removeSuggestion, .openQuickWindowOrPeekIn] {
+        for id in [BrowserCommandID.dismissPeek, .promoteQuickWindow, .closeSwitcherTab, .removeSuggestion, .openQuickWindowOrPeekIn] {
             try registry.register(id) { $0.received.append(id); _ = $1 }
         }
         router.newWindow()
@@ -157,16 +157,16 @@ struct NativeKeyboardRoutingTests {
         let keyboard = BrowserCommandKeyboard(registry: registry, acceptsKeyboard: { true })
         #expect(keyboard.handle(try event("\u{1b}", code: 53, flags: [])))
         scope = .quickWindow
-        #expect(keyboard.handle(try event("w", code: 13)))
+        #expect(keyboard.handle(try event("o", code: 31)))
         scope = .switcher
         #expect(keyboard.handle(try event("w", code: 13, flags: [.control])))
         scope = .palette
         #expect(keyboard.handle(try event("\u{7f}", code: 51, flags: [.command, .option])))
-        #expect(router.selectedWindow?.received == [.dismissPeek, .closeQuickWindow, .closeSwitcherTab, .removeSuggestion])
+        #expect(router.selectedWindow?.received == [.dismissPeek, .promoteQuickWindow, .closeSwitcherTab, .removeSuggestion])
         scope = .quickWindow
-        registry.registerPrerequisite(.closeQuickWindow) { _, _ in false }
-        #expect(keyboard.handle(try event("w", code: 13))) // Disabled contextual bindings remain reserved.
-        #expect(registry.resolve(.init(key: "w", modifiers: .command)) == nil)
+        registry.registerPrerequisite(.promoteQuickWindow) { _, _ in false }
+        #expect(keyboard.handle(try event("o", code: 31))) // Disabled contextual bindings remain reserved.
+        #expect(registry.resolve(.init(key: "o", modifiers: .command)) == nil)
         registry.unregisterScopeProvider("feature-overlay")
         #expect(registry.activeScope == .browser)
     }

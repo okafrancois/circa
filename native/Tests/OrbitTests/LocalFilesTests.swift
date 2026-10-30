@@ -73,7 +73,7 @@ struct LocalFilesTests {
         try await fixture { pdf, html in
             let app = OrbitApplication(environment: PreviewEnvironment(), windowPresenter: { _, _ in })
             defer { app.windows.shutdown() }
-            #expect(app.commands.registry.definition(.openFile)?.shortcuts == [.init(key: "o", modifiers: .command)])
+            #expect(app.commands.registry.definition(.openFile)?.shortcuts == [])
             app.chooseLocalFiles = { _, completion in completion([]) }
             #expect(app.commands.registry.dispatch(.openFile, origin: .menu))
             #expect(app.windows.selectedWindowID == nil)
@@ -86,7 +86,7 @@ struct LocalFilesTests {
             let bar = app.commands.menus.makeMenuBar()
             let file = try #require(bar.items.first { $0.title == uiText("File") }?.submenu)
             let item = try #require(file.items.first { $0.identifier?.rawValue == BrowserCommandID.openFile.rawValue })
-            #expect(item.title == uiText("Open File…") && item.keyEquivalent == "o")
+            #expect(item.title == uiText("Open File…") && item.keyEquivalent.isEmpty)
         }
     }
 
