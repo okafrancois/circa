@@ -241,11 +241,20 @@ struct ArcPasswordImportTests {
             #expect(store.rows[Self.profile]?.count == 4)
         } else { #expect(job.phase == .restored && store.rows[Self.profile]?.count == 2) }
     }
-    @Test func sigkillDuringDecisionDoesNotRepeat() throws {
+    /// Child crash tests must not block unrelated MainActor transfer deadlines.
+    private func launchAndWait(_ process: Process) async throws {
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            process.terminationHandler = { _ in continuation.resume() }
+            do { try process.run() }
+            catch { process.terminationHandler = nil; continuation.resume(throwing: error) }
+        }
+    }
+
+    @Test func sigkillDuringDecisionDoesNotRepeat() async throws {
         let root = try temporary(); defer { try? FileManager.default.removeItem(at: root) }
         let journal = try job(root); try journal.activate()
         try JSONEncoder().encode(journal.id).write(to: root.appendingPathComponent("id.json"))
-        func child(killPoint: String) throws -> Process {
+        func child(killPoint: String) async throws -> Process {
             let process = Process(); process.executableURL = URL(fileURLWithPath: CommandLine.arguments[0])
             var args: [String] = []
             if let index = CommandLine.arguments.firstIndex(of: "--test-bundle-path") { args += ["--test-bundle-path", CommandLine.arguments[index + 1]] }
@@ -253,17 +262,17 @@ struct ArcPasswordImportTests {
             var env = ProcessInfo.processInfo.environment
             env["ORBIT_PASSWORD_CHILD_ROOT"] = root.path; env["ORBIT_PASSWORD_ALERT_CHILD"] = "1"; env["ORBIT_PASSWORD_KILL"] = killPoint
             process.environment = env; process.standardOutput = FileHandle.nullDevice; process.standardError = FileHandle.nullDevice
-            try process.run(); process.waitUntilExit(); return process
+            try await launchAndWait(process); return process
         }
-        let killed = try child(killPoint: "password-alert")
+        let killed = try await child(killPoint: "password-alert")
         #expect(killed.terminationReason == .uncaughtSignal && killed.terminationStatus == SIGKILL)
         #expect(try ArcPasswordImportJournal.activeID(root: root) == nil)
-        #expect(try child(killPoint: "").terminationStatus == 0)
+        #expect(try await child(killPoint: "").terminationStatus == 0)
         #expect(FileManager.default.fileExists(atPath: root.appendingPathComponent("launched").path))
         #expect(FileManager.default.fileExists(atPath: root.appendingPathComponent("ArcPasswordImport/" + journal.id.uuidString + ".sealed").path))
     }
 
-    @Test func sigkillMatrix() throws {
+    @Test func sigkillMatrix() async throws {
         let apply = ["password-pending", "password-active", "password-baseline", "password-intent:0", "password-after-add:0", "password-owned:0",
                      "password-intent:3", "password-after-add:3", "password-owned:3", "password-verified", "password-complete"]
         let undo = ["password-undo-pending", "password-before-remove:0", "password-after-remove:0", "password-removed:0",
@@ -273,7 +282,7 @@ struct ArcPasswordImportTests {
             let job = try job(root)
             try JSONEncoder().encode(job.id).write(to: root.appendingPathComponent("id.json"))
             let store = ImportPasswordStore(); try seed(store); store.persisted = root.appendingPathComponent("mock-store.sealed"); try store.save()
-            func child(kill point: String, restoring: Bool) throws -> Process {
+            func child(kill point: String, restoring: Bool) async throws -> Process {
                 let process = Process(); process.executableURL = URL(fileURLWithPath: CommandLine.arguments[0])
                 var args: [String] = []
                 if let index = CommandLine.arguments.firstIndex(of: "--test-bundle-path") { args += ["--test-bundle-path", CommandLine.arguments[index + 1]] }
@@ -281,13 +290,13 @@ struct ArcPasswordImportTests {
                 var env = ProcessInfo.processInfo.environment
                 env["ORBIT_PASSWORD_CHILD_ROOT"] = root.path; env["ORBIT_PASSWORD_KILL"] = point; env["ORBIT_PASSWORD_UNDO"] = restoring ? "1" : "0"
                 process.environment = env; process.standardOutput = FileHandle.nullDevice; process.standardError = FileHandle.nullDevice
-                try process.run(); process.waitUntilExit(); return process
+                try await launchAndWait(process); return process
             }
-            if undo.contains(point) { #expect(try child(kill: "", restoring: false).terminationStatus == 0) }
-            let killed = try child(kill: point, restoring: undo.contains(point))
+            if undo.contains(point) { #expect(try await child(kill: "", restoring: false).terminationStatus == 0) }
+            let killed = try await child(kill: point, restoring: undo.contains(point))
             #expect(killed.terminationReason == .uncaughtSignal && killed.terminationStatus == SIGKILL, "Missing checkpoint: \(point)")
-            #expect(try child(kill: "", restoring: undo.contains(point)).terminationStatus == 0, "Replay failed: \(point)")
-            #expect(try child(kill: "", restoring: undo.contains(point)).terminationStatus == 0, "Second replay failed: \(point)")
+            #expect(try await child(kill: "", restoring: undo.contains(point)).terminationStatus == 0, "Replay failed: \(point)")
+            #expect(try await child(kill: "", restoring: undo.contains(point)).terminationStatus == 0, "Second replay failed: \(point)")
         }
     }
 }
