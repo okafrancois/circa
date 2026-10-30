@@ -201,6 +201,36 @@ extension NativeWebKitTests.FloatingAlertMaterialTests {
         frost.refresh(reduceTransparency: false)
         #expect(frost.style.variant == .dark)
         parent.appearance = nil
-        #expect(panel.appearance == nil)
+        #expect(OrbitAppearance.isDark(panel.effectiveAppearance))
+    }
+}
+
+
+extension FloatingMaterialTests {
+    @Test("Rename dialog tint and scrim follow automatic appearance and live switches")
+    func renameAppearance() throws {
+        let original = NSApp.appearance
+        defer { NSApp.appearance = original }
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 900, height: 650),
+                              styleMask: [.borderless], backing: .buffered, defer: true)
+        window.isReleasedWhenClosed = false
+        defer { window.close() }
+        let rename = BrowserBoostRenameView(name: "Synthetic Boost") { _ in }
+        rename.frame = window.contentView!.bounds
+        window.contentView = rename
+        let scrim = try #require(rename.subviews.first)
+        let frost = try #require(rename.subviews.flatMap(\.subviews).compactMap { $0 as? OrbitFrostView }.first)
+        #expect(rename.appearance == nil)
+        #expect(frost.style.variant == (OrbitAppearance.isDark(window.effectiveAppearance) ? .dark : .light))
+        for name in [NSAppearance.Name.aqua, .darkAqua, .aqua] {
+            window.appearance = NSAppearance(named: name)
+            rename.viewDidChangeEffectiveAppearance()
+            frost.refresh(reduceTransparency: false)
+            let dark = name == .darkAqua
+            #expect(frost.style.variant == (dark ? .dark : .light))
+            let scrimColor = try #require(scrim.layer?.backgroundColor.flatMap { NSColor(cgColor: $0)?.usingColorSpace(.sRGB) })
+            #expect(abs(scrimColor.alphaComponent - 0.4) < 0.001)
+            #expect(dark ? scrimColor.redComponent == 0 : scrimColor.redComponent > 0.8)
+        }
     }
 }

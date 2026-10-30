@@ -96,3 +96,37 @@ struct BrandTypeTests {
         }
     }
 }
+
+
+extension BrandTypeTests {
+    @Test("Dialog and empty titles use readable display sizes and remain inside their layouts")
+    func titleGeometry() throws {
+        let empty = BrowserLibraryEmptyView(frame: NSRect(x: 0, y: 0, width: 500, height: 120))
+        empty.configure(symbol: "tray", title: "No Downloads")
+        empty.layoutSubtreeIfNeeded()
+        #expect(empty.message.font?.familyName == "Gloock")
+        #expect(empty.message.font?.pointSize == 22)
+        #expect(empty.bounds.contains(empty.message.alignmentRect(forFrame: empty.message.frame)))
+        #expect(empty.message.frame.height >= empty.message.intrinsicContentSize.height)
+        empty.frame.size.height = 164
+        empty.configure(symbol: "tray", title: "No Downloads", query: "Synthetic query")
+        empty.layoutSubtreeIfNeeded()
+        #expect(empty.bounds.contains(empty.message.alignmentRect(forFrame: empty.message.frame)))
+        #expect(empty.message.frame.height >= empty.message.intrinsicContentSize.height)
+        #expect(OrbitTokens.Typography.emptyStateDetail.familyName == "Inter Tight")
+        let alert = OrbitFrostAlert()
+        alert.messageText = "Remove this Space?"
+        alert.informativeText = "Tabs in this Space will be archived."
+        alert.addButton(withTitle: "Cancel")
+        let window = alert.preparedWindow()
+        defer { window.close() }
+        let content = try #require(window.contentView)
+        content.layoutSubtreeIfNeeded()
+        let title = try #require(content.subviews.compactMap { $0 as? NSTextField }.first { $0.stringValue == alert.messageText })
+        let detail = try #require(content.subviews.compactMap { $0 as? NSTextField }.first { $0.stringValue == alert.informativeText })
+        #expect(title.font?.familyName == "Gloock" && title.font?.pointSize == 22)
+        #expect(detail.font?.familyName == "Inter Tight")
+        #expect(content.bounds.contains(title.frame))
+        #expect(title.frame.height >= title.intrinsicContentSize.height)
+    }
+}

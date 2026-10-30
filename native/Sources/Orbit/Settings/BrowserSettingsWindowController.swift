@@ -404,7 +404,6 @@ struct BrowserSettingsView<Engine: BrowserEngine>: View {
         .controlSize(.small)
         .frame(minWidth: 640, minHeight: 400)
         .foregroundStyle(OrbitSettingsStyle.foreground)
-        .tint(Color(nsColor: .controlAccentColor))
         .toggleStyle(.switch)
         .background(OrbitSettingsStyle.background)
         .task { await model.reload() }

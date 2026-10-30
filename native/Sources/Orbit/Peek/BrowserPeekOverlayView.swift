@@ -580,7 +580,7 @@ final class BrowserPeekToolbarButton: NSButton {
 
     init(symbol: String, label: String, identifier: String) {
         super.init(frame: .zero)
-        image = OrbitIcon.image(sfName: symbol, pointSize: OrbitTokens.Metrics.Peek.controlGlyphSize, accessibilityDescription: label)
+        image = OrbitIcon.image(sfName: symbol, pointSize: OrbitTokens.Metrics.Peek.controlGlyphSize, accessibilityDescription: label, weight: .medium)
         imagePosition = .imageOnly
         isBordered = false
         bezelStyle = .regularSquare

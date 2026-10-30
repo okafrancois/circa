@@ -14,9 +14,48 @@ struct OrbitIconTests {
             let url = try #require(OrbitIcon.resourceURL(sfName: "gearshape", pointSize: pointSize))
             #expect(url.path.contains("template/\(master)/gearshape.pdf"))
             let image = try #require(OrbitIcon.image(sfName: "gearshape", pointSize: pointSize))
-            #expect(image.size == NSSize(width: pointSize, height: pointSize))
-            #expect(image.isTemplate && image.representations.contains { $0 is NSPDFImageRep })
+            #expect(image.size == NSImage(systemSymbolName: "gearshape", accessibilityDescription: nil)?.withSymbolConfiguration(.init(pointSize: pointSize, weight: .regular))?.size)
+            #expect(image.isTemplate && image.representations.contains { $0 is NSCustomImageRep })
         }
+    }
+
+    @Test("Template ink matches the original symbol at sidebar and toolbar sizes and weights")
+    func renderedInkParity() throws {
+        for (name, size, weight): (String, CGFloat, NSFont.Weight) in [
+            ("sidebar.left", 13, .medium), ("arrow.left", 12, .medium),
+            ("arrow.clockwise", 14, .medium), ("plus", 13, .medium),
+            ("ellipsis", 12, .bold), ("xmark", 10, .semibold),
+            ("globe", 20, .regular), ("gearshape", 24, .regular), ("plus", 20, .regular),
+            ("plus", 20, .bold), ("plus", 20, .regular)
+        ] {
+            let original = try #require(NSImage(systemSymbolName: name, accessibilityDescription: nil)?
+                .withSymbolConfiguration(.init(pointSize: size, weight: weight)))
+            let replacement = try #require(OrbitIcon.image(sfName: name, pointSize: size, weight: weight))
+            let expected = try #require(OrbitIcon.inkBounds(of: original))
+            let actual = try #require(OrbitIcon.inkBounds(of: replacement))
+            #expect(replacement.size == original.size)
+            #expect(replacement.alignmentRect == original.alignmentRect)
+            #expect(abs(actual.width - expected.width) <= 0.5, "Width: \(name), \(weight)")
+            #expect(abs(actual.height - expected.height) <= 0.5, "Height: \(name), \(weight)")
+            #expect(abs(actual.minX - expected.minX) <= 0.5)
+            #expect(abs(actual.minY - expected.minY) <= 0.5)
+        }
+        for name in OrbitIcon.colorNames {
+            #expect(OrbitIcon.image(sfName: name, pointSize: 24, variant: .color)?.size == NSSize(width: 24, height: 24))
+        }
+    }
+
+    @Test("URL accessories retain template ink and resolve it at their final symbol size")
+    func accessorySizing() throws {
+        let pill = SidebarAddressField(frame: NSRect(x: 0, y: 0, width: 312, height: 36))
+        let button = SiteControlButton("", identifier: "share-page", onPress: {})
+        button.image = try #require(OrbitIcon.image(sfName: "square.and.arrow.up", pointSize: 16))
+        pill.installAccessory(button)
+        let actual = try #require(button.image)
+        let expected = try #require(OrbitIcon.image(sfName: "square.and.arrow.up", pointSize: 14))
+        #expect(actual.size == expected.size)
+        #expect(OrbitIcon.inkBounds(of: actual) == OrbitIcon.inkBounds(of: expected))
+        #expect(actual.isTemplate)
     }
 
     @Test("Every shipped optical master and colour asset loads and rasterizes")
@@ -25,7 +64,7 @@ struct OrbitIconTests {
         for name in OrbitIcon.templateNames {
             for size: CGFloat in [16, 20, 24] {
                 let image = try #require(OrbitIcon.image(sfName: name, pointSize: size), "Missing \(name) at \(size)")
-                #expect(image.representations.contains { $0 is NSPDFImageRep })
+                #expect(image.representations.contains { $0 is NSCustomImageRep })
                 #expect(image.isTemplate && image.tiffRepresentation != nil)
             }
         }
@@ -46,7 +85,7 @@ struct OrbitIconTests {
         first.size = NSSize(width: 30, height: 30)
         first.isTemplate = false
         let second = try #require(OrbitIcon.image(sfName: "globe", pointSize: 16))
-        #expect(second.size == NSSize(width: 16, height: 16) && second.isTemplate)
+        #expect(second.size == NSImage(systemSymbolName: "globe", accessibilityDescription: nil)?.withSymbolConfiguration(.init(pointSize: 16, weight: .regular))?.size && second.isTemplate)
         #expect(second.accessibilityDescription == nil)
     }
 
@@ -55,7 +94,7 @@ struct OrbitIconTests {
         for name in ["globe", "lock.fill", "key.fill", "magnifyingglass", "bell.fill", "camera.fill", "location.fill"] {
             let space = try #require(SpaceIconImages.template(name, pointSize: 20))
             let chrome = try #require(OrbitIcon.image(sfName: name, pointSize: 20))
-            #expect(!space.representations.contains { $0 is NSPDFImageRep } && chrome.representations.contains { $0 is NSPDFImageRep })
+            #expect(!space.representations.contains { $0 is NSCustomImageRep } && chrome.representations.contains { $0 is NSCustomImageRep })
         }
     }
 
@@ -90,7 +129,7 @@ struct OrbitIconTests {
         for name in ["box.truck", "face.smiling.inverse", "flag", "gift", "heart", "mug", "rosette", "sun.max"] {
             #expect(OrbitIcon.resourceURL(sfName: name, pointSize: 16) == nil)
             let image = try #require(OrbitIcon.image(sfName: name, pointSize: 16))
-            #expect(!image.representations.contains { $0 is NSPDFImageRep })
+            #expect(!image.representations.contains { $0 is NSCustomImageRep })
         }
     }
 

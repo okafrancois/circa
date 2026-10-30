@@ -150,6 +150,7 @@ final class OrbitFrostView: NSView {
     required init?(coder: NSCoder) { nil }
     override var isFlipped: Bool { true }
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
+    override func viewDidMoveToWindow() { super.viewDidMoveToWindow(); refresh() }
     override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); refresh() }
     override func layout() {
         super.layout()
@@ -212,7 +213,7 @@ final class OrbitFrostAlert: NSAlert {
         image.heightAnchor.constraint(equalToConstant: 64).isActive = true
         content.addArrangedSubview(image)
         let title = NSTextField(wrappingLabelWithString: messageText)
-        title.font = BrandTextStyle.title.font(size: 15)
+        title.font = BrandTextStyle.title.font(size: 22)
         title.textColor = OrbitFloatingMaterial.body
         content.addArrangedSubview(title)
         if !informativeText.isEmpty {
@@ -304,9 +305,9 @@ private final class OrbitFloatingAlertPanel: NSPanel {
     private var appearanceObservation: NSKeyValueObservation?
 
     func followAppearance(of parent: NSWindow?, fallback: NSAppearance?) {
-        appearance = parent?.appearance ?? fallback
+        appearance = parent?.effectiveAppearance ?? fallback
         appearanceObservation = parent?.observe(\.effectiveAppearance, options: [.new]) { [weak self] parent, _ in
-            MainActor.assumeIsolated { self?.appearance = parent.appearance }
+            MainActor.assumeIsolated { self?.appearance = parent.effectiveAppearance }
         }
     }
 

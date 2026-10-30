@@ -18,7 +18,6 @@ final class BrowserLibraryBoostsView: NSView, NSSearchFieldDelegate {
         super.init(frame: frame)
         searchField.placeholderString = uiText("Search Boosts…")
         searchField.delegate = self; searchField.setAccessibilityIdentifier("library-boosts-search")
-        empty.message.font = BrandTextStyle.title.font(size: 16)
         BrowserLibraryStyle.configure(scroll); scroll.documentView = list
         for view in [searchField, scroll, empty] { addSubview(view) }
     }
@@ -32,7 +31,7 @@ final class BrowserLibraryBoostsView: NSView, NSSearchFieldDelegate {
         for (index, boost) in displayed.enumerated() {
             rows[boost.id]?.frame = NSRect(x: 12, y: 8 + CGFloat(index) * 66, width: max(0, list.bounds.width - 24), height: 58)
         }
-        empty.frame = NSRect(x: 16, y: bounds.height / 2 - 32, width: max(0, bounds.width - 32), height: 104)
+        empty.frame = NSRect(x: 16, y: bounds.height / 2 - 32, width: max(0, bounds.width - 32), height: 164)
     }
     func selectProfile(_ profile: ProfileID) {
         guard self.profile != profile else { return }

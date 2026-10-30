@@ -59,6 +59,12 @@ final class BrowserPageDialogView: NSView {
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("init(coder:) is unavailable") }
 
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        card.layer?.backgroundColor = NSColor.windowBackgroundColor.resolvedCGColor(for: effectiveAppearance)
+        card.layer?.borderColor = NSColor.separatorColor.resolvedCGColor(for: effectiveAppearance)
+    }
+
     // The page under the scrim receives no pointer events while the dialog is up.
     override func hitTest(_ point: NSPoint) -> NSView? {
         guard !isHidden, frame.contains(point) else { return nil }
@@ -116,9 +122,10 @@ final class BrowserPageDialogView: NSView {
         card.addSubview(stack)
 
         let title = NSTextField(wrappingLabelWithString: spec.title)
-        title.font = BrandTextStyle.title.font(size: 13)
+        title.font = BrandTextStyle.title.font(size: 22)
         title.isSelectable = false
         stack.addArrangedSubview(title)
+        title.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
         if let message = spec.message, !message.isEmpty {
             let label = NSTextField(wrappingLabelWithString: Self.displayed(message))
             label.font = BrandTextStyle.ui.font(size: 13)

@@ -45,7 +45,7 @@ final class FolderPreviewView: NSView, NSSearchFieldDelegate {
         search.delegate = self
         search.sendsSearchStringImmediately = true
         search.sendsWholeSearchString = false
-        empty.font = BrandTextStyle.title.font(size: 13)
+        empty.font = OrbitTokens.Typography.emptyStateTitle
         search.font = BrandTextStyle.ui.font(size: 13)
         search.controlSize = .small
         search.focusRingType = .none
@@ -58,7 +58,7 @@ final class FolderPreviewView: NSView, NSSearchFieldDelegate {
         scroll.contentView.postsBoundsChangedNotifications = true
         NotificationCenter.default.addObserver(self, selector: #selector(clipBoundsDidChange(_:)),
                                                name: NSView.boundsDidChangeNotification, object: scroll.contentView)
-        empty.frame = NSRect(x: 10, y: 12, width: 260, height: 24)
+        empty.frame = NSRect(x: 10, y: 12, width: 260, height: 30)
         empty.textColor = OrbitFloatingMaterial.secondary
         empty.isHidden = true
         document.addSubview(empty)
