@@ -15,6 +15,12 @@ import Testing
         }
         #expect(recorder.counters["organizationRefreshes"] == 800)
         #expect(recorder.counters["windowsRefreshed"] == 1)
+        recorder.count(.resourceSweepNanoseconds, amount: 500)
+        recorder.count(.resourceSweepNanoseconds, amount: 300)
+        recorder.set(.resourceTabs, 62)
+        recorder.set(.resourceTabs, 61)
+        #expect(recorder.counters["resourceSweepNanoseconds"] == 800)
+        #expect(recorder.counters["resourceTabs"] == 61)
         recorder.mark(.main)
         let first = recorder.phases["main"]
         recorder.mark(.main)

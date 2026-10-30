@@ -76,6 +76,8 @@ final class BrowserTabSuspensionController<Engine: BrowserEngine> {
         restoring.removeAll()
     }
 
+    func isPolicySuspended(_ occurrence: TabOccurrenceID) -> Bool { suspended[occurrence] != nil }
+
     func icon(for occurrence: TabOccurrenceID) -> NSImage? {
         guard let owner, let tab = owner.session.snapshot?.tabs.first(where: { $0.occurrenceID == occurrence }),
               let (profile, url, image) = sleepingIcons[occurrence],
@@ -109,6 +111,7 @@ final class BrowserTabSuspensionController<Engine: BrowserEngine> {
 
     /// Called before reparenting makes the native host visible (and resumes its renderer).
     func prepareCover(for surface: Surface) {
+        owner?.resources?.willActivate(surface)
         guard let owner, let id = owner.session.occurrenceID(for: surface) else { return }
         if activeCovers[id] != nil { return }
         guard let cover = covers.value(for: id) else { return }
@@ -204,6 +207,7 @@ final class BrowserTabSuspensionController<Engine: BrowserEngine> {
     /// always obtained from the actual engine, then selection/document/ownership are rechecked.
     @discardableResult
     func sweep(now: TimeInterval = ProcessInfo.processInfo.systemUptime) async -> Int {
+        owner?.resources?.sweep()
         guard !isSweeping, let owner, !owner.session.isClosed, !owner.isPreparingForTermination,
               let interval = (owner.settingsPreferences?.runtime.document.memorySaver ?? .oneHour).interval else { return 0 }
         isSweeping = true

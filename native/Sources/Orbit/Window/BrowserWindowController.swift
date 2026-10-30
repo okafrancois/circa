@@ -21,6 +21,7 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
     private let onActivate: () -> Void
     private(set) var session: BrowserWindowSession<Surface>!
     var tabSuspension: BrowserTabSuspensionController<Engine>!
+    var resources: BrowserWindowResources<Engine>!
 
     // MARK: Address and navigation controls
     let addressField = OrbitLocationField()
@@ -260,6 +261,7 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
         }
         session.surfaceLoadingPolicy = .visibleOnly
         tabSuspension = BrowserTabSuspensionController(owner: self, store: store)
+        resources = BrowserWindowResources(owner: self)
         session.rescueContainer = rescue
         tabSwitcher = BrowserTabSwitcher(owner: self)
         session.onSurfaceMembershipChange = { [weak self] surface, membership in
@@ -325,6 +327,8 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
         }
     }
 
+    func windowDidChangeOcclusionState(_ notification: Notification) { resources?.reconcile() }
+
     func windowDidResignKey(_ notification: Notification) { passwordPrompt.close() }
 
     func windowWillClose(_ notification: Notification) {
@@ -337,6 +341,7 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
         library.boostsTask?.cancel()
         capture.cancel()
         tabSuspension.close()
+        resources.close()
         extensionControls.close()
         bookmarkTransfer?.cancel()
         library.isPresented = false
@@ -490,6 +495,7 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
         sidebarMetadataValues = sidebarMetadataValues.filter { session.tabID(for: $0.key) != nil }
         historyObserver.activateProfile(session.activeProfileID)
         tabSuspension?.selectionDidChange()
+        resources?.reconcile()
         if let catalog = session.catalog, catalog != publishedCatalog {
             publishedCatalog = catalog
             onCatalogChange(catalog)
