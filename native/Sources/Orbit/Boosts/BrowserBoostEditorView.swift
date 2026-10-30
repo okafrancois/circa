@@ -1,4 +1,5 @@
 import AppKit
+import BrowserShell
 import BrowserCore
 
 @MainActor
@@ -83,7 +84,7 @@ final class BrowserBoostEditorView: NSView {
         place(fontTray, 18, 273, 147, 120)
         for (index, family) in Self.fontFamilies.enumerated() {
             let button = BoostButton(title: uiText("Aa"))
-            button.font = family.flatMap { NSFont(name: $0, size: 11) } ?? .systemFont(ofSize: 11)
+            button.font = family.flatMap { NSFont(name: $0, size: 11) } ?? BrandTextStyle.ui.font(size: 11)
             button.contentTintColor = NSColor(calibratedWhite: 0.6, alpha: 1)
             button.fill = .clear
             button.setAccessibilityLabel(family ?? uiText("Default"))
@@ -116,10 +117,10 @@ final class BrowserBoostEditorView: NSView {
         place(zap, 18, 461, 147, 38); place(code, 18, 514, 147, 38)
         zapGlyph.frame = NSRect(x: 137, y: 471, width: 18, height: 18)
         zapGlyph.image = OrbitIcon.image(sfName: "bolt.fill", pointSize: 16, accessibilityDescription: nil); zapGlyph.contentTintColor = .darkGray; addSubview(zapGlyph)
-        zapCount.font = .systemFont(ofSize: 13, weight: .medium); zapCount.alignment = .right
+        zapCount.font = BrandTextStyle.mono.font(size: 13, weight: .medium); zapCount.alignment = .right
         place(zapCount, 131, 470, 26, 20)
         let codeGlyph = NSTextField(labelWithString: uiText("{}"))
-        codeGlyph.font = .monospacedSystemFont(ofSize: 17, weight: .medium)
+        codeGlyph.font = BrandTextStyle.mono.font(size: 17, weight: .medium)
         place(codeGlyph, 137, 522, 22, 24)
         if firstRun {
             let intro = BrowserBoostIntroductionView(host: session.boost.hostPattern.host)
@@ -175,11 +176,11 @@ final class BrowserBoostEditorView: NSView {
             button.fill = selectedFontIndex == index ? .black.withAlphaComponent(0.12) : .clear
         }
         let transform = session.boost.content.textTransform
-        textCase.fill = transform == nil ? NSColor(calibratedWhite: 0.92, alpha: 1) : .systemOrange
+        textCase.fill = transform == nil ? NSColor(calibratedWhite: 0.92, alpha: 1) : .controlAccentColor
         textCase.contentTintColor = transform == nil ? .darkGray : .white
         textCase.title = transform == .uppercase ? uiText("AA") : transform == .lowercase ? uiText("aa") : transform == .capitalize ? uiText("Aa") : uiText("Case")
         let zoom = session.boost.content.textZoom
-        size.fill = zoom == nil ? NSColor(calibratedWhite: 0.92, alpha: 1) : .systemOrange
+        size.fill = zoom == nil ? NSColor(calibratedWhite: 0.92, alpha: 1) : .controlAccentColor
         size.contentTintColor = zoom == nil ? .darkGray : .white
         zap.fill = isZapping ? .darkGray : NSColor(calibratedWhite: 0.92, alpha: 1)
         zap.contentTintColor = isZapping ? .white : .darkGray
@@ -210,7 +211,7 @@ final class BoostButton: NSButton {
     }
     override init(frame: NSRect) {
         super.init(frame: frame)
-        isBordered = false; font = .systemFont(ofSize: 13, weight: .medium)
+        isBordered = false; font = BrandTextStyle.ui.font(size: 13, weight: .medium)
         contentTintColor = .darkGray; focusRingType = .none
         target = self; action = #selector(performAction)
     }
@@ -226,14 +227,14 @@ final class BoostButton: NSButton {
             if outlinesShortcutBadge { NSColor.white.withAlphaComponent(0.4).setStroke(); path.lineWidth = 1; path.stroke() }
             else { shortcutBadgeColor.setFill(); path.fill() }
             let label = shortcutBadge as NSString
-            let attributes: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: outlinesShortcutBadge ? 17 : 10, weight: .semibold), .foregroundColor: shortcutBadgeTextColor]
+            let attributes: [NSAttributedString.Key: Any] = [.font: BrandTextStyle.mono.font(size: outlinesShortcutBadge ? 17 : 10, weight: .semibold), .foregroundColor: shortcutBadgeTextColor]
             let size = label.size(withAttributes: attributes)
             label.draw(at: NSPoint(x: badge.midX - size.width / 2, y: badge.midY - size.height / 2), withAttributes: attributes)
-            (title as NSString).draw(at: NSPoint(x: 12, y: (bounds.height - 16) / 2), withAttributes: [.font: NSFont.systemFont(ofSize: 13), .foregroundColor: contentTintColor ?? .white])
+            (title as NSString).draw(at: NSPoint(x: 12, y: (bounds.height - 16) / 2), withAttributes: [.font: BrandTextStyle.ui.font(size: 13), .foregroundColor: contentTintColor ?? .white])
             return
         }
         let paragraph = NSMutableParagraphStyle(); paragraph.alignment = alignment; paragraph.lineBreakMode = lineBreakMode
-        let attributes: [NSAttributedString.Key: Any] = [.font: font ?? .systemFont(ofSize: 13),
+        let attributes: [NSAttributedString.Key: Any] = [.font: font ?? BrandTextStyle.ui.font(size: 13),
             .foregroundColor: contentTintColor ?? NSColor.darkGray, .paragraphStyle: paragraph]
         let height = (title as NSString).size(withAttributes: attributes).height
         let inset: CGFloat = alignment == .left ? 12 : 0

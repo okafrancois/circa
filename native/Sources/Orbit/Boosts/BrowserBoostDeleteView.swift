@@ -1,4 +1,5 @@
 import AppKit
+import BrowserShell
 
 /// A centered destructive confirmation. Presentation reuses the editor's plain native behavior.
 @MainActor
@@ -19,10 +20,10 @@ final class BrowserBoostDeleteView: NSView {
         icon.contentTintColor = OrbitFloatingMaterial.body
         icon.frame = NSRect(x: 40, y: 48, width: 50, height: 38); card.addSubview(icon)
         let title = NSTextField(labelWithString: uiText("Delete this Boost?"))
-        title.font = .systemFont(ofSize: 18, weight: .semibold); title.textColor = OrbitFloatingMaterial.body
+        title.font = BrandTextStyle.title.font(size: 18); title.textColor = OrbitFloatingMaterial.body
         title.frame = NSRect(x: 38, y: 116, width: 374, height: 28); card.addSubview(title)
         let message = NSTextField(labelWithString: uiText("This can’t be undone."))
-        message.font = .systemFont(ofSize: 14); message.textColor = OrbitFloatingMaterial.secondary
+        message.font = BrandTextStyle.ui.font(size: 14); message.textColor = OrbitFloatingMaterial.secondary
         message.frame = NSRect(x: 38, y: 156, width: 374, height: 24); card.addSubview(message)
         let cancel = BoostButton(title: uiText("Cancel"))
         cancel.setAccessibilityLabel(uiText("Cancel")); cancel.keyEquivalent = "\u{1b}"
@@ -30,7 +31,7 @@ final class BrowserBoostDeleteView: NSView {
         cancel.fill = .clear
         cancel.contentTintColor = OrbitFloatingMaterial.body; cancel.cornerRadius = 6
         cancel.wantsLayer = true; cancel.layer?.borderWidth = 1
-        cancel.layer?.borderColor = NSColor(srgbRed: 0.4, green: 0.38, blue: 0.65, alpha: 1).cgColor
+        cancel.layer?.borderColor = NSColor.controlAccentColor.cgColor
         cancel.layer?.cornerRadius = 6
         cancel.frame = NSRect(x: 206, y: 208, width: 109, height: 36)
         cancel.actionBlock = { [weak self] in self?.finish(false) }; card.addSubview(cancel)

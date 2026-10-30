@@ -234,12 +234,6 @@ final class OrbitOnboardingWindowController: NSWindowController {
         alert.messageText = uiText("Could Not Complete Setup")
         alert.informativeText = uiText("Your data is kept. You can try again, or go back and skip the import.")
         alert.addButton(withTitle: uiText("OK"))
-        alert.layout()
-        func styleTitle(_ view: NSView) {
-            if let field = view as? NSTextField, field.stringValue == alert.messageText { field.font = BrandTextStyle.title.font(size: 18) }
-            view.subviews.forEach(styleTitle)
-        }
-        if let content = alert.window.contentView { styleTitle(content) }
         if let window { alert.beginSheetModal(for: window) }
     }
 

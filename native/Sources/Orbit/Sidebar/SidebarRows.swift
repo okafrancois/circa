@@ -1,4 +1,5 @@
 import AppKit
+import BrowserShell
 import BrowserCore
 
 private typealias Metrics = OrbitTokens.Metrics.Sidebar
@@ -192,7 +193,7 @@ class SidebarListRow: NSView, NSTextFieldDelegate {
     private func refreshFieldEditor() {
         guard let editor = renameField?.currentEditor() as? NSTextView else { return }
         editor.textColor = effectiveAccent.sidebarText
-        editor.insertionPointColor = effectiveAccent.sidebarText
+        editor.insertionPointColor = .controlAccentColor
     }
 
     func controlTextDidBeginEditing(_ notification: Notification) { refreshFieldEditor() }
@@ -772,6 +773,7 @@ final class SidebarNewTabRow: NSButton {
         label.font = OrbitTokens.Typography.sidebarNewTab
         // : hint typography (13 regular, label colour).
         shortcut.font = OrbitTokens.Typography.menuShortcut
+        shortcut.attributedStringValue = BrandTextStyle.mono.attributedString(shortcut.stringValue, size: 13)
         refreshAccent()
         shortcut.alignment = .right
         shortcut.isHidden = true

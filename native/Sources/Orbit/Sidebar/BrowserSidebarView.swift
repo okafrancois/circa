@@ -1,4 +1,5 @@
 import AppKit
+import BrowserShell
 import BrowserCore
 
 private typealias Metrics = OrbitTokens.Metrics.Sidebar
@@ -24,7 +25,7 @@ final class BrowserSidebarView: NSView, SidebarListHost {
     }
     private let privateIndicator: NSTextField = {
         let label = NSTextField(labelWithString: uiText("Private"))
-        label.font = .systemFont(ofSize: 12, weight: .semibold)
+        label.font = BrandTextStyle.ui.font(size: 12, weight: .semibold)
         label.textColor = .secondaryLabelColor
         label.alignment = .center
         label.setAccessibilityIdentifier("private-window-indicator")
@@ -269,7 +270,7 @@ final class BrowserSidebarView: NSView, SidebarListHost {
         addressContainer.frame = geometry.addressFrame
         if let name = standaloneProfileName {
             if standaloneProfilePill.superview == nil {
-                standaloneProfilePill.font = .systemFont(ofSize: 11)
+                standaloneProfilePill.font = BrandTextStyle.ui.font(size: 11)
                 standaloneProfilePill.maximumNumberOfLines = 1
                 standaloneProfilePill.textColor = .secondaryLabelColor
                 standaloneProfilePill.wantsLayer = true
@@ -282,7 +283,7 @@ final class BrowserSidebarView: NSView, SidebarListHost {
                 let paragraph = NSMutableParagraphStyle()
                 paragraph.firstLineHeadIndent = 16
                 standaloneProfilePill.attributedStringValue = NSAttributedString(string: name,
-                    attributes: [.paragraphStyle: paragraph, .font: NSFont.systemFont(ofSize: 11), .foregroundColor: NSColor.secondaryLabelColor])
+                    attributes: [.paragraphStyle: paragraph, .font: BrandTextStyle.ui.font(size: 11), .foregroundColor: NSColor.secondaryLabelColor])
             }
             standaloneProfileIcon.frame = NSRect(x: 4, y: 5, width: 10, height: 10)
             standaloneProfilePill.frame = NSRect(x: 8, y: geometry.addressFrame.maxY + 10, width: standaloneProfilePill.fittingSize.width + 28, height: 20)
@@ -1402,7 +1403,7 @@ final class SidebarAddressField: SidebarFlippedView {
         if field.textColor != effective.sidebarText { field.textColor = effective.sidebarText }
         if let editor = field.currentEditor() as? NSTextView {
             if editor.textColor != effective.sidebarText { editor.textColor = effective.sidebarText }
-            if editor.insertionPointColor != effective.sidebarText { editor.insertionPointColor = effective.sidebarText }
+            if editor.insertionPointColor != .controlAccentColor { editor.insertionPointColor = .controlAccentColor }
         }
         if let placeholder = field.placeholderAttributedString?.string ?? field.placeholderString,
            field.placeholderAttributedString?.attribute(.foregroundColor, at: 0, effectiveRange: nil) as? NSColor

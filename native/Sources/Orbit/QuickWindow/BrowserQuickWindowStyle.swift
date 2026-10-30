@@ -1,4 +1,5 @@
 import AppKit
+import BrowserShell
 
 extension OrbitTokens.Metrics.QuickWindow {
     static let minimumSize = NSSize(width: 480, height: 240)
@@ -57,9 +58,9 @@ final class BrowserQuickWindowAddressField: NSTextField {
         let paragraph = NSMutableParagraphStyle()
         paragraph.alignment = .center
         paragraph.lineBreakMode = .byTruncatingMiddle
-        let attributes: [NSAttributedString.Key: Any] = [.font: font ?? NSFont.systemFont(ofSize: 13),
+        let attributes: [NSAttributedString.Key: Any] = [.font: font ?? BrandTextStyle.ui.font(size: 13),
             .foregroundColor: textColor ?? NSColor.labelColor, .paragraphStyle: paragraph]
-        let height = ceil((font ?? NSFont.systemFont(ofSize: 13)).boundingRectForFont.height)
+        let height = ceil((font ?? BrandTextStyle.ui.font(size: 13)).boundingRectForFont.height)
         text.draw(in: NSRect(x: 30, y: (bounds.height - height) / 2,
                             width: max(0, bounds.width - 60), height: height), withAttributes: attributes)
     }
@@ -115,12 +116,12 @@ final class BrowserQuickWindowOpenButton: NSButton {
         let paragraph = NSMutableParagraphStyle()
         paragraph.lineBreakMode = .byTruncatingTail
         let hintWidth: CGFloat = shortcut.isEmpty ? 0 : 34
-        let text = NSAttributedString(string: title, attributes: [.font: font ?? NSFont.systemFont(ofSize: 13),
+        let text = NSAttributedString(string: title, attributes: [.font: font ?? BrandTextStyle.ui.font(size: 13),
             .foregroundColor: color.withAlphaComponent(isEnabled ? 1 : 0.4), .paragraphStyle: paragraph])
         text.draw(in: NSRect(x: 8, y: (bounds.height - text.size().height) / 2,
                             width: max(0, bounds.width - hintWidth - 14), height: text.size().height))
         guard !shortcut.isEmpty else { return }
-        let hint = NSAttributedString(string: shortcut, attributes: [.font: NSFont.systemFont(ofSize: 12, weight: .semibold),
+        let hint = BrandTextStyle.mono.attributedString(shortcut, size: 12, weight: .semibold, attributes: [
             .foregroundColor: color.withAlphaComponent(0.65)])
         let rect = NSRect(x: bounds.maxX - hintWidth, y: (bounds.height - 20) / 2, width: 30, height: 20)
         color.withAlphaComponent(0.08).setFill()

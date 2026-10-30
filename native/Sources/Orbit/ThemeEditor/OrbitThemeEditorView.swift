@@ -1,4 +1,5 @@
 import AppKit
+import BrowserShell
 import BrowserCore
 import QuartzCore
 
@@ -28,10 +29,12 @@ final class OrbitThemeEditorView: NSView {
     var state: OrbitThemeEditorState { didSet { if state != oldValue { render() } } }
     var onChange: ((OrbitThemeEditorState) -> Void)?
     var onDismiss: (() -> Void)?
-    /// A caller may supply a local preset row without changing the product editor’s palette.
-    var scopedPresets: [OrbitThemeEditorPreset]? { didSet { render() } }
+    /// The shared preset row is presentation-only; opening the editor never rewrites its draft.
+    var scopedPresets: [OrbitThemeEditorPreset]? = OrbitThemeEditorPreset.brand { didSet { render() } }
+    var spaceName: String = uiText("This Space") { didSet { render() } }
 
     let surfaceScope = NSTextField(labelWithString: uiText("This Space · captured profile"))
+    let themeName = NSTextField(labelWithString: "")
     let material = NSView()
     let field = OrbitThemeFieldView()
     let placeholder = NSTextField(labelWithString: "")
@@ -117,14 +120,19 @@ final class OrbitThemeEditorView: NSView {
         addSubview(intensitySlider)
         addSubview(grainDial)
 
-        surfaceScope.frame = NSRect(x: 20, y: 494, width: 316, height: 18)
-        surfaceScope.font = .systemFont(ofSize: 11, weight: .semibold)
+        themeName.frame = NSRect(x: 20, y: 490, width: 148, height: 26)
+        themeName.font = BrandTextStyle.title.font(size: 18)
+        themeName.lineBreakMode = .byTruncatingTail
+        addSubview(themeName)
+        surfaceScope.frame = NSRect(x: 178, y: 497, width: 158, height: 18)
+        surfaceScope.font = BrandTextStyle.mono.font(size: 10, weight: .medium)
+        surfaceScope.alignment = .right
         surfaceScope.lineBreakMode = .byTruncatingTail
         surfaceScope.toolTip = surfaceScope.stringValue
         addSubview(surfaceScope)
         frostDivider.boxType = .separator
         frostDivider.frame = NSRect(x: 20, y: 522, width: 316, height: 1)
-        frostLabel.font = .systemFont(ofSize: 13, weight: .medium)
+        frostLabel.font = BrandTextStyle.ui.font(size: 13, weight: .medium)
         frostLabel.frame = NSRect(x: 20, y: 536, width: 240, height: 18)
         frostSwitch.setAccessibilityLabel(OrbitThemeEditorText.frost)
         frostSwitch.target = self
@@ -195,6 +203,13 @@ final class OrbitThemeEditorView: NSView {
 
     /// Projects `state`; also called when the appearance changes (layer colours are resolved).
     func render() {
+        let presets = scopedPresets ?? []
+        themeName.stringValue = presets.first { $0.theme.presetID == state.theme.presetID }?.title ?? (state.theme.presetID == BrowserSpaceThemePresets.defaultID ? uiText("Default") : uiText("Custom"))
+        themeName.toolTip = themeName.stringValue
+        surfaceScope.stringValue = uiFormat("Theme · %@", spaceName).localizedUppercase
+        surfaceScope.toolTip = surfaceScope.stringValue
+        themeName.textColor = OrbitTokens.Color.Text.primary
+        surfaceScope.textColor = OrbitTokens.Color.Text.secondary
         frostSwitch.state = state.theme.frost ? .on : .off
         let appearance = effectiveAppearance
         CATransaction.begin()
@@ -237,6 +252,7 @@ final class OrbitThemeEditorView: NSView {
                         var theme = preset.theme
                         theme.mode = state.theme.mode
                         theme.noise = state.theme.noise
+                        theme.frost = state.theme.frost
                         state = OrbitThemeEditorState(theme: theme)
                     }
                 }
@@ -813,4 +829,11 @@ struct OrbitThemeEditorPreset {
     let theme: BrowserSpaceTheme
     let colors: [NSColor]
     let locations: [NSNumber]
+
+    static var brand: [Self] {
+        BrandPalette.spaceGradients.map { preset in
+            .init(title: uiText(preset.name), theme: preset.theme(),
+                  colors: preset.stops.map(OrbitSpaceThemes.color), locations: preset.locations.map { NSNumber(value: $0) })
+        }
+    }
 }

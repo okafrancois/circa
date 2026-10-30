@@ -1,4 +1,5 @@
 import AppKit
+import BrowserShell
 import BrowserCore
 import Testing
 @testable import Orbit
@@ -24,7 +25,7 @@ struct QuickWindowCompactSurfaceTests {
         #expect(OrbitAppearance.isDark(window.effectiveAppearance))
         #expect(OrbitAppearance.isDark(little.toolbar.fill.effectiveAppearance))
         #expect(little.toolbar.fill.theme == theme)
-        #expect(little.addressField.font == NSFont.systemFont(ofSize: 13, weight: .medium))
+        #expect(little.addressField.font == BrandTextStyle.ui.font(size: 13, weight: .medium))
         let input = try #require(little.prepareCompactInput())
         #expect(OrbitAppearance.isDark(input.window.effectiveAppearance))
         #expect(OrbitAppearance.isDark(input.input.effectiveAppearance))

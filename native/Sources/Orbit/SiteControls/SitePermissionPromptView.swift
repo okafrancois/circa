@@ -1,4 +1,5 @@
 import AppKit
+import BrowserShell
 import BrowserCore
 
 @MainActor
@@ -17,7 +18,7 @@ final class SitePermissionPromptView: NSView {
         symbolName = Self.symbol(for: permissions)
         badge = SitePermissionBadge(symbol: symbolName)
         message = NSTextField(wrappingLabelWithString: Self.message(origin: origin, permissions: permissions))
-        message.font = .systemFont(ofSize: 14, weight: .medium)
+        message.font = BrandTextStyle.ui.font(size: 14, weight: .medium)
         message.textColor = OrbitFloatingMaterial.body
         message.preferredMaxLayoutWidth = 176
         message.cell?.wraps = true
@@ -117,7 +118,7 @@ private final class SitePermissionActionButton: NSButton {
         self.onPress = onPress
         super.init(frame: .zero)
         self.title = title
-        font = .systemFont(ofSize: 15, weight: .semibold)
+        font = BrandTextStyle.ui.font(size: 15, weight: .semibold)
         isBordered = false
         setButtonType(.momentaryPushIn)
         target = self

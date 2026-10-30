@@ -1,4 +1,5 @@
 import AppKit
+import BrowserShell
 import BrowserEngine
 
 @MainActor
@@ -51,12 +52,12 @@ final class BrowserPasswordPromptView: NSView {
         // The key is vertical, with its teeth pointing down.
         icon.addSubview(key)
         panel.addSubview(icon)
-        titleLabel.font = .systemFont(ofSize: 18, weight: .semibold)
+        titleLabel.font = BrandTextStyle.title.font(size: 18)
         titleLabel.textColor = .white
         titleLabel.lineBreakMode = .byTruncatingMiddle
         titleLabel.frame = NSRect(x: 36, y: 132, width: 374, height: 24)
         panel.addSubview(titleLabel)
-        detailLabel.font = .systemFont(ofSize: 14, weight: .medium)
+        detailLabel.font = BrandTextStyle.ui.font(size: 14, weight: .medium)
         detailLabel.textColor = OrbitFloatingMaterial.Style(variant: .dark, reducesTransparency: false).secondary
         detailLabel.frame = NSRect(x: 36, y: 98, width: 384, height: 22)
         panel.addSubview(detailLabel)
@@ -160,7 +161,7 @@ private final class PasswordPromptButton: NSButton {
         (primary ? NSColor.controlAccentColor : NSColor.white.withAlphaComponent(0.10)).setFill()
         path.fill()
         BrowserPasswordPromptView.color(100, 94, 172).setStroke(); path.lineWidth = 1; path.stroke()
-        let font = NSFont.systemFont(ofSize: 13, weight: .medium)
+        let font = BrandTextStyle.ui.font(size: 13, weight: .medium)
         let ink = primary ? OrbitFloatingMaterial.accentText : NSColor.white
         let attributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: ink]
         let textWidth = (title as NSString).size(withAttributes: attributes).width
@@ -174,7 +175,7 @@ private final class PasswordPromptButton: NSButton {
             let badge = NSBezierPath(roundedRect: rect, xRadius: 4, yRadius: 4)
             badge.fill()
             if primary { NSColor.white.withAlphaComponent(0.2).setStroke(); badge.lineWidth = 1; badge.stroke() }
-            let hintAttributes: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: hint == "↩" ? 18 : 10, weight: hint == "↩" ? .regular : .bold), .foregroundColor: ink]
+            let hintAttributes: [NSAttributedString.Key: Any] = [.font: BrandTextStyle.mono.font(size: hint == "↩" ? 18 : 10, weight: hint == "↩" ? .regular : .bold), .foregroundColor: ink]
             let size = (hint as NSString).size(withAttributes: hintAttributes)
             (hint as NSString).draw(at: NSPoint(x: rect.midX - size.width / 2, y: rect.midY - size.height / 2), withAttributes: hintAttributes)
         }

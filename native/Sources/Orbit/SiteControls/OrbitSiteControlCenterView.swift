@@ -1,4 +1,5 @@
 import AppKit
+import BrowserShell
 import BrowserCore
 
 /// runtime geometry: a 236 pt content view, 48 × 32 pt tiles on a 56 pt pitch.
@@ -26,7 +27,7 @@ final class OrbitSiteControlCenterView: NSView {
         self.manage = manage; self.secure = secure; self.more = more
         if let status {
             let field = NSTextField(wrappingLabelWithString: status)
-            field.font = .systemFont(ofSize: 12)
+            field.font = BrandTextStyle.ui.font(size: 12)
             field.textColor = OrbitFloatingMaterial.secondary
             message = field
             messageHeight = ceil((status as NSString).boundingRect(
@@ -39,11 +40,11 @@ final class OrbitSiteControlCenterView: NSView {
         super.init(frame: NSRect(x: 0, y: 0, width: 236, height: height))
         setAccessibilityIdentifier("siteControlCenterView")
         for label in [extensionTitle, settingsTitle] {
-            label.font = .systemFont(ofSize: 15, weight: .bold)
+            label.font = BrandTextStyle.ui.font(size: 15, weight: .bold)
             label.textColor = OrbitFloatingMaterial.body
         }
         manage.isBordered = false
-        manage.font = .systemFont(ofSize: 13)
+        manage.font = BrandTextStyle.ui.font(size: 13)
         manage.contentTintColor = OrbitFloatingMaterial.secondary
         manage.alphaValue = 0
         manage.setAccessibilityHidden(true)
@@ -276,9 +277,9 @@ final class ControlCenterPermissionPicker: NSPopUpButton {
         let title = permission.displayTitle as NSString
         let paragraph = NSMutableParagraphStyle(); paragraph.lineBreakMode = .byTruncatingTail
         title.draw(in: NSRect(x: 41, y: 0, width: bounds.width - 41, height: 18), withAttributes: [
-            .font: NSFont.systemFont(ofSize: 15, weight: .semibold), .foregroundColor: OrbitFloatingMaterial.body, .paragraphStyle: paragraph])
+            .font: BrandTextStyle.ui.font(size: 15, weight: .semibold), .foregroundColor: OrbitFloatingMaterial.body, .paragraphStyle: paragraph])
         (titleOfSelectedItem ?? "").draw(in: NSRect(x: 41, y: 18, width: bounds.width - 41, height: 16), withAttributes: [
-            .font: NSFont.systemFont(ofSize: 13), .foregroundColor: OrbitFloatingMaterial.secondary])
+            .font: BrandTextStyle.ui.font(size: 13), .foregroundColor: OrbitFloatingMaterial.secondary])
     }
 }
 
@@ -311,10 +312,10 @@ final class ControlCenterSettingButton: NSButton {
         if let symbol { OrbitGlyph.draw(symbol, centeredIn: NSRect(x: 0, y: 0, width: 32, height: 32), tint: active ? .windowBackgroundColor : .secondaryLabelColor, in: self) }
         let paragraph = NSMutableParagraphStyle(); paragraph.lineBreakMode = .byTruncatingTail
         (rowTitle as NSString).draw(in: NSRect(x: 41, y: 0, width: bounds.width - 41, height: 18), withAttributes: [
-            .font: NSFont.systemFont(ofSize: 15, weight: .semibold), .foregroundColor: OrbitFloatingMaterial.body,
+            .font: BrandTextStyle.ui.font(size: 15, weight: .semibold), .foregroundColor: OrbitFloatingMaterial.body,
             .paragraphStyle: paragraph])
         (subtitle as NSString).draw(in: NSRect(x: 41, y: 18, width: bounds.width - 41, height: 16), withAttributes: [
-            .font: NSFont.systemFont(ofSize: 13), .foregroundColor: OrbitFloatingMaterial.secondary])
+            .font: BrandTextStyle.ui.font(size: 13), .foregroundColor: OrbitFloatingMaterial.secondary])
     }
 }
 

@@ -1,4 +1,5 @@
 import AppKit
+import BrowserShell
 
 /// Public AppKit material and a bounded tint keep floating content readable even when
 /// the backdrop is completely black or white. The tint is independent of Space colours.
@@ -211,22 +212,26 @@ final class OrbitFrostAlert: NSAlert {
         image.heightAnchor.constraint(equalToConstant: 64).isActive = true
         content.addArrangedSubview(image)
         let title = NSTextField(wrappingLabelWithString: messageText)
-        title.font = .systemFont(ofSize: 15, weight: .semibold)
+        title.font = BrandTextStyle.title.font(size: 15)
         title.textColor = OrbitFloatingMaterial.body
         content.addArrangedSubview(title)
         if !informativeText.isEmpty {
             let detail = NSTextField(wrappingLabelWithString: informativeText)
-            detail.font = .systemFont(ofSize: 13)
+            detail.font = BrandTextStyle.body.font(size: 13)
             detail.textColor = OrbitFloatingMaterial.secondary
             content.addArrangedSubview(detail)
         }
         let accessoryWidth = max(accessoryView?.fittingSize.width ?? 0, accessoryView?.frame.width ?? 0)
         if let accessoryView { content.addArrangedSubview(accessoryView) }
-        if showsSuppressionButton, let suppressionButton { content.addArrangedSubview(suppressionButton) }
+        if showsSuppressionButton, let suppressionButton {
+            suppressionButton.font = BrandTextStyle.ui.font(size: 13)
+            content.addArrangedSubview(suppressionButton)
+        }
         let row = NSStackView(views: Array(buttons.reversed()))
         row.orientation = .horizontal
         row.spacing = 8
         for button in buttons {
+            button.font = BrandTextStyle.ui.font(size: 13)
             button.widthAnchor.constraint(greaterThanOrEqualToConstant: 80).isActive = true
             button.heightAnchor.constraint(equalToConstant: 32).isActive = true
         }

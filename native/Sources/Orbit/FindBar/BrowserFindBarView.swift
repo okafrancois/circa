@@ -1,4 +1,5 @@
 import AppKit
+import BrowserShell
 
 /// Presents native engine results; this view neither searches pages nor owns query state.
 @MainActor
@@ -27,7 +28,7 @@ final class BrowserFindBarView: NSView, NSSearchFieldDelegate {
         searchField.recentsAutosaveName = nil
         searchField.delegate = self
         searchField.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        statusLabel.font = .systemFont(ofSize: 11)
+        statusLabel.font = BrandTextStyle.mono.font(size: 11)
         statusLabel.textColor = .secondaryLabelColor
         statusLabel.lineBreakMode = .byTruncatingTail
         statusLabel.alignment = .right
@@ -38,7 +39,7 @@ final class BrowserFindBarView: NSView, NSSearchFieldDelegate {
         configure(closeButton, symbol: "xmark", label: uiText("Close Find"), action: #selector(close(_:)))
         caseButton.setButtonType(.pushOnPushOff)
         caseButton.isBordered = false
-        caseButton.font = .systemFont(ofSize: 11, weight: .medium)
+        caseButton.font = BrandTextStyle.ui.font(size: 11, weight: .medium)
         caseButton.target = self
         caseButton.action = #selector(changeCase(_:))
         caseButton.toolTip = uiText("Match Case")

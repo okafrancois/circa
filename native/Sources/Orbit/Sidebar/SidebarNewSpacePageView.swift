@@ -1,4 +1,5 @@
 import AppKit
+import BrowserShell
 import BrowserCore
 
 /// A pager-local draft: nothing is persisted until Create. Both pickers are shared with Spaces.
@@ -34,15 +35,15 @@ final class SidebarNewSpacePageView: NSView, NSTextFieldDelegate {
     override init(frame: NSRect) {
         super.init(frame: frame)
         wantsLayer = true
-        title.font = .systemFont(ofSize: 17, weight: .semibold)
+        title.font = BrandTextStyle.ui.font(size: 17, weight: .semibold)
         title.alignment = .center
-        detail.font = .systemFont(ofSize: 14, weight: .regular)
+        detail.font = BrandTextStyle.ui.font(size: 14, weight: .regular)
         detail.alignment = .center
         detail.maximumNumberOfLines = 2
-        profileLabel.font = .systemFont(ofSize: 13, weight: .semibold)
+        profileLabel.font = BrandTextStyle.ui.font(size: 13, weight: .semibold)
         for field in [title, detail, profileLabel] { field.textColor = .labelColor }
         name.placeholderString = uiText("Space name…")
-        name.font = .systemFont(ofSize: 14, weight: .semibold)
+        name.font = BrandTextStyle.ui.font(size: 14, weight: .semibold)
         name.isBordered = false; name.isBezeled = false; name.drawsBackground = false
         name.focusRingType = .none
         name.delegate = self
@@ -53,14 +54,14 @@ final class SidebarNewSpacePageView: NSView, NSTextFieldDelegate {
         profileName.delegate = self
         profiles.setAccessibilityLabel(uiText("Browsing Profile"))
         profiles.target = self; profiles.action = #selector(profileChanged)
-        profiles.font = .systemFont(ofSize: 12, weight: .semibold)
+        profiles.font = BrandTextStyle.ui.font(size: 12, weight: .semibold)
         profiles.isBordered = false
         profiles.cell = SpaceCreationProfileCell(textCell: "", pullsDown: false)
         profiles.target = self; profiles.action = #selector(profileChanged)
-        profiles.font = .systemFont(ofSize: 12, weight: .semibold)
+        profiles.font = BrandTextStyle.ui.font(size: 12, weight: .semibold)
         for button in [iconButton, themeButton, createButton, backButton] {
             button.isBordered = false; button.target = self
-            button.font = .systemFont(ofSize: 13, weight: .semibold)
+            button.font = BrandTextStyle.ui.font(size: 13, weight: .semibold)
         }
         iconButton.action = #selector(chooseIcon)
         iconButton.setAccessibilityLabel(uiText("Change Space Icon or Emoji"))
@@ -72,7 +73,7 @@ final class SidebarNewSpacePageView: NSView, NSTextFieldDelegate {
         createButton.setAccessibilityIdentifier("space-create-submit")
         backButton.action = #selector(back)
         backButton.link = true
-        backButton.font = .systemFont(ofSize: 12, weight: .semibold)
+        backButton.font = BrandTextStyle.ui.font(size: 12, weight: .semibold)
         backButton.setAccessibilityIdentifier("space-create-cancel")
         profileGlyph.image = NSImage(size: NSSize(width: 12, height: 14), flipped: true) { _ in
             NSColor.secondaryLabelColor.setStroke()
@@ -214,7 +215,7 @@ final class SidebarNewSpacePageView: NSView, NSTextFieldDelegate {
         profileRow.frame = NSRect(x: inset, y: 236, width: width, height: 36)
         profileGlyph.frame = NSRect(x: 10, y: 11, width: 12, height: 14)
         profileLabel.frame = NSRect(x: 32, y: 10, width: 48, height: 20)
-        let popupWidth = min(max(65, (profiles.titleOfSelectedItem ?? "").size(withAttributes: [.font: NSFont.systemFont(ofSize: 12, weight: .semibold)]).width + 32), max(65, width - 115))
+        let popupWidth = min(max(65, (profiles.titleOfSelectedItem ?? "").size(withAttributes: [.font: BrandTextStyle.ui.font(size: 12, weight: .semibold)]).width + 32), max(65, width - 115))
         profiles.frame = NSRect(x: 80, y: 7, width: popupWidth, height: 22)
         profileInfo.frame = NSRect(x: width - 22, y: 12, width: 12, height: 12)
         themeButton.frame = NSRect(x: inset, y: 280, width: width, height: 36)
@@ -258,7 +259,7 @@ final class SpaceCreationButton: NSButton {
             NSBezierPath(roundedRect: bounds, xRadius: primary ? 8 : 6, yRadius: primary ? 8 : 6).fill()
         }
         let color: NSColor = primary ? NSColor.white.withAlphaComponent(isEnabled ? 1 : 0.4) : link ? .secondaryLabelColor : .labelColor
-        let text = NSAttributedString(string: title, attributes: [.font: font ?? NSFont.systemFont(ofSize: 13, weight: .semibold), .foregroundColor: color])
+        let text = NSAttributedString(string: title, attributes: [.font: font ?? BrandTextStyle.ui.font(size: 13, weight: .semibold), .foregroundColor: color])
         let size = text.size(), x = symbol == nil ? (bounds.width - size.width) / 2 : 32
         text.draw(at: NSPoint(x: x, y: (bounds.height - size.height) / 2))
         if let symbol, let image = OrbitIcon.image(sfName: symbol, pointSize: 14, accessibilityDescription: nil) {
@@ -272,7 +273,7 @@ private final class SpaceCreationProfileCell: NSPopUpButtonCell {
     override func draw(withFrame cellFrame: NSRect, in controlView: NSView) {
         NSColor.labelColor.withAlphaComponent(0.12).setFill()
         NSBezierPath(roundedRect: cellFrame, xRadius: 11, yRadius: 11).fill()
-        let text = NSAttributedString(string: title, attributes: [.font: NSFont.systemFont(ofSize: 12, weight: .semibold), .foregroundColor: NSColor.labelColor])
+        let text = NSAttributedString(string: title, attributes: [.font: BrandTextStyle.ui.font(size: 12, weight: .semibold), .foregroundColor: NSColor.labelColor])
         text.draw(at: NSPoint(x: cellFrame.minX + 9, y: cellFrame.midY - text.size().height / 2))
         OrbitIcon.draw(OrbitIcon.image(sfName: "chevron.down", pointSize: 10, accessibilityDescription: nil),
                        in: NSRect(x: cellFrame.maxX - 18, y: cellFrame.midY - 5, width: 10, height: 10), tint: .labelColor)

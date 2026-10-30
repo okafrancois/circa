@@ -1,4 +1,5 @@
 import AppKit
+import BrowserShell
 import BrowserCore
 
 enum FolderPreviewMetrics {
@@ -38,13 +39,14 @@ final class FolderPreviewView: NSView, NSSearchFieldDelegate {
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         OrbitFloatingMaterial.install(in: self, radius: FolderPreviewMetrics.cornerRadius)
-        title.font = .systemFont(ofSize: 14, weight: .semibold)
+        title.font = BrandTextStyle.ui.font(size: 14, weight: .semibold)
         search.placeholderString = uiText("Search folder")
         search.setAccessibilityLabel(uiText("Search folder"))
         search.delegate = self
         search.sendsSearchStringImmediately = true
         search.sendsWholeSearchString = false
-        search.font = .systemFont(ofSize: 13)
+        empty.font = BrandTextStyle.title.font(size: 13)
+        search.font = BrandTextStyle.ui.font(size: 13)
         search.controlSize = .small
         search.focusRingType = .none
         scroll.documentView = document
@@ -168,10 +170,10 @@ final class FolderPreviewView: NSView, NSSearchFieldDelegate {
         let recency = result.tab.lastActiveAt == nil ? [] : [Self.recency(result.tab.lastActiveAt)]
         let detail = (result.path + (result.split == nil ? [] : [uiText("Split View")]) + recency).joined(separator: " · ")
         let text = NSMutableAttributedString(string: result.title, attributes: [
-            .font: NSFont.systemFont(ofSize: 13), .foregroundColor: OrbitFloatingMaterial.body])
+            .font: BrandTextStyle.ui.font(size: 13), .foregroundColor: OrbitFloatingMaterial.body])
         if !detail.isEmpty {
             text.append(NSAttributedString(string: "\n" + detail, attributes: [
-                .font: NSFont.systemFont(ofSize: 11), .foregroundColor: OrbitFloatingMaterial.secondary]))
+                .font: BrandTextStyle.ui.font(size: 11), .foregroundColor: OrbitFloatingMaterial.secondary]))
         }
         let paragraph = NSMutableParagraphStyle()
         paragraph.lineBreakMode = .byTruncatingTail
