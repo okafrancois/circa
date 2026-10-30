@@ -1373,10 +1373,12 @@ final class SidebarAddressField: SidebarFlippedView {
     func installAccessory(_ view: NSView, onHover: Bool = false, order: Int = 0) {
         if let button = view as? NSButton, button.image != nil {
             if view.accessibilityIdentifier() != "site-controls" {
-                if button.image?.representations.contains(where: { $0 is NSPDFImageRep }) == true {
+                if let source = button.image, let image = OrbitIcon.reconfiguredTemplate(source, pointSize: 14, weight: .regular) {
+                    button.image = image
+                } else if button.image?.representations.contains(where: { $0 is NSPDFImageRep }) == true {
                     button.image?.size = NSSize(width: 14, height: 14)
                 } else {
-                    button.image = button.image?.withSymbolConfiguration(.init(pointSize: 14, weight: .regular))
+                    button.image = button.image?.withSymbolConfiguration(.init(pointSize: 14, weight: .regular)) ?? button.image
                 }
             }
             (button as? SiteControlButton)?.usesURLPillStyle = true

@@ -20,9 +20,8 @@ final class BrowserBoostRenameView: NSView, NSTextFieldDelegate {
         self.completion = completion
         super.init(frame: .zero)
         wantsLayer = true
-        appearance = NSAppearance(named: .aqua)
         dim.wantsLayer = true
-        dim.layer?.backgroundColor = NSColor(srgbRed: 0.82, green: 0.82, blue: 0.86, alpha: 0.4).cgColor
+        refreshScrim()
         addSubview(dim)
         addSubview(shadowView)
         card.wantsLayer = true; card.layer?.cornerRadius = 16
@@ -33,14 +32,14 @@ final class BrowserBoostRenameView: NSView, NSTextFieldDelegate {
         tile.wantsLayer = true; tile.layer?.cornerRadius = 13
         tile.layer?.backgroundColor = NSColor(srgbRed: 0.90, green: 0.90, blue: 0.935, alpha: 1).cgColor
         card.addSubview(tile)
-        let icon = NSImageView(image: OrbitIcon.image(sfName: "text.bubble.fill", pointSize: 30, accessibilityDescription: nil)!)
+        let icon = NSImageView(image: OrbitIcon.image(sfName: "text.bubble.fill", pointSize: 30, accessibilityDescription: nil, weight: .medium)!)
         icon.symbolConfiguration = .init(pointSize: 30, weight: .medium)
         icon.contentTintColor = NSColor(srgbRed: 0.10, green: 0.11, blue: 0.13, alpha: 1)
         icon.frame = NSRect(x: 13, y: 13, width: 36, height: 36); tile.addSubview(icon)
         let title = NSTextField(labelWithString: uiText("Rename Boost?"))
-        title.font = BrandTextStyle.title.font(size: 18)
+        title.font = BrandTextStyle.title.font(size: 22)
         title.textColor = OrbitFloatingMaterial.body
-        title.frame = NSRect(x: 38, y: 116, width: 374, height: 26); card.addSubview(title)
+        title.frame = NSRect(x: 38, y: 116, width: 374, height: 30); card.addSubview(title)
         let fieldBorder = NSView(frame: NSRect(x: 38, y: 162, width: 374, height: 37))
         fieldBorder.wantsLayer = true; fieldBorder.layer?.cornerRadius = 5
         fieldBorder.layer?.backgroundColor = NSColor.white.cgColor
@@ -81,6 +80,16 @@ final class BrowserBoostRenameView: NSView, NSTextFieldDelegate {
         dim.frame = bounds
         card.frame = NSRect(x: (bounds.width - 450) / 2, y: (bounds.height - 284) / 2 + offset, width: 450, height: 284)
         shadowView.frame = card.frame.insetBy(dx: -64, dy: -64)
+    }
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        refreshScrim()
+    }
+    private func refreshScrim() {
+        let color = OrbitAppearance.isDark(effectiveAppearance)
+            ? NSColor.black.withAlphaComponent(0.4)
+            : NSColor(srgbRed: 0.82, green: 0.82, blue: 0.86, alpha: 0.4)
+        dim.layer?.backgroundColor = color.cgColor
     }
     func present() {
         layoutSubtreeIfNeeded()

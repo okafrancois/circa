@@ -31,7 +31,7 @@ final class BrowserPasswordPromptView: NSView {
         dimmer.layer?.backgroundColor = NSColor.black.cgColor
         addSubview(dimmer)
         panel.wantsLayer = true
-        OrbitFloatingMaterial.install(in: panel, radius: 16).fixedVariant = .dark
+        OrbitFloatingMaterial.install(in: panel, radius: 16)
         panel.layer?.cornerRadius = 16
         panel.layer?.borderWidth = 1
         panel.layer?.borderColor = Self.color(55, 60, 76).cgColor
@@ -52,13 +52,13 @@ final class BrowserPasswordPromptView: NSView {
         // The key is vertical, with its teeth pointing down.
         icon.addSubview(key)
         panel.addSubview(icon)
-        titleLabel.font = BrandTextStyle.title.font(size: 18)
-        titleLabel.textColor = .white
+        titleLabel.font = BrandTextStyle.title.font(size: 22)
+        titleLabel.textColor = OrbitFloatingMaterial.body
         titleLabel.lineBreakMode = .byTruncatingMiddle
-        titleLabel.frame = NSRect(x: 36, y: 132, width: 374, height: 24)
+        titleLabel.frame = NSRect(x: 36, y: 132, width: 374, height: 30)
         panel.addSubview(titleLabel)
         detailLabel.font = BrandTextStyle.ui.font(size: 14, weight: .medium)
-        detailLabel.textColor = OrbitFloatingMaterial.Style(variant: .dark, reducesTransparency: false).secondary
+        detailLabel.textColor = OrbitFloatingMaterial.secondary
         detailLabel.frame = NSRect(x: 36, y: 98, width: 384, height: 22)
         panel.addSubview(detailLabel)
         if !updating { addButton(uiText("Never on this site"), hint: nil, decision: .never, x: 28, width: 130) }
@@ -162,7 +162,7 @@ private final class PasswordPromptButton: NSButton {
         path.fill()
         BrowserPasswordPromptView.color(100, 94, 172).setStroke(); path.lineWidth = 1; path.stroke()
         let font = BrandTextStyle.ui.font(size: 13, weight: .medium)
-        let ink = primary ? OrbitFloatingMaterial.accentText : NSColor.white
+        let ink = primary ? OrbitFloatingMaterial.accentText : OrbitFloatingMaterial.body
         let attributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: ink]
         let textWidth = (title as NSString).size(withAttributes: attributes).width
         let badgeWidth: CGFloat = hint == nil ? 0 : hint == "↩" ? 28 : 35

@@ -291,7 +291,7 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
     private var links: some View {
         Group {
             HStack(spacing: 15) {
-                OrbitIcon.view(sfName: "macwindow.on.rectangle", pointSize: 38).font(.system(size: 38, weight: .ultraLight)).foregroundStyle(Color.accentColor)
+                OrbitIcon.view(sfName: "macwindow.on.rectangle", pointSize: 38, weight: .ultraLight).font(.system(size: 38, weight: .ultraLight)).foregroundStyle(OrbitSettingsStyle.foreground)
                 VStack(alignment: .leading, spacing: 5) {
                     Text(uiText("Little Orbit")).font(Font(BrandTextStyle.title.font(size: 28)))
                     Text(uiText("A smaller, simpler window for quick lookups and links from other apps."))
@@ -384,7 +384,9 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
                         Text(uiText("Follow System")).tag(BrowserReducedMotionSetting.system)
                         Text(uiText("Reduce Motion")).tag(BrowserReducedMotionSetting.reduce)
                         Text(uiText("Full Motion")).tag(BrowserReducedMotionSetting.full)
-                    }.labelsHidden().pickerStyle(.segmented).frame(width: 300).accessibilityIdentifier("settings-reduced-motion")
+                    }.labelsHidden().pickerStyle(.segmented)
+                        .tint(Color(nsColor: .controlColor)).foregroundStyle(OrbitSettingsStyle.foreground)
+                        .frame(width: 300).accessibilityIdentifier("settings-reduced-motion")
                 }
                 rule
                 liveToggle(uiFormat("Play %@ sound effects", applicationName), value: runtime.document.interaction.playSoundEffects,

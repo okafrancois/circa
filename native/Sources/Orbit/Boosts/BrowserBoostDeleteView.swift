@@ -20,8 +20,8 @@ final class BrowserBoostDeleteView: NSView {
         icon.contentTintColor = OrbitFloatingMaterial.body
         icon.frame = NSRect(x: 40, y: 48, width: 50, height: 38); card.addSubview(icon)
         let title = NSTextField(labelWithString: uiText("Delete this Boost?"))
-        title.font = BrandTextStyle.title.font(size: 18); title.textColor = OrbitFloatingMaterial.body
-        title.frame = NSRect(x: 38, y: 116, width: 374, height: 28); card.addSubview(title)
+        title.font = BrandTextStyle.title.font(size: 22); title.textColor = OrbitFloatingMaterial.body
+        title.frame = NSRect(x: 38, y: 116, width: 374, height: 30); card.addSubview(title)
         let message = NSTextField(labelWithString: uiText("This can’t be undone."))
         message.font = BrandTextStyle.ui.font(size: 14); message.textColor = OrbitFloatingMaterial.secondary
         message.frame = NSRect(x: 38, y: 156, width: 374, height: 24); card.addSubview(message)

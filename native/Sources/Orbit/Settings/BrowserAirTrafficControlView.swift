@@ -32,7 +32,7 @@ struct BrowserAirTrafficControlView<Engine: BrowserEngine>: View {
                     }
                     if editor.routes.isEmpty {
                         VStack(spacing: 10) {
-                            OrbitIcon.view(sfName: "arrow.turn.down.right", pointSize: 28).font(.system(size: 28, weight: .light))
+                            OrbitIcon.view(sfName: "arrow.turn.down.right", pointSize: 28, weight: .light).font(.system(size: 28, weight: .light))
                             Text(uiText("Create a route to send links to a Space automatically."))
                         }.foregroundStyle(.secondary).frame(maxWidth: .infinity, minHeight: 110)
                     }

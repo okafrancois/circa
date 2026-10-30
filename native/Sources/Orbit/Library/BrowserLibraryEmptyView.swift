@@ -12,17 +12,18 @@ final class BrowserLibraryEmptyView: NSView {
     override init(frame: NSRect) {
         super.init(frame: frame)
         icon.imageScaling = .scaleProportionallyUpOrDown
-        message.font = BrandTextStyle.title.font(size: 14)
+        message.font = OrbitTokens.Typography.emptyStateTitle
         message.alignment = .center
         for view in [icon, message] { view.translatesAutoresizingMaskIntoConstraints = false; addSubview(view) }
         iconWidth = icon.widthAnchor.constraint(equalToConstant: 48)
         iconHeight = icon.heightAnchor.constraint(equalToConstant: 48)
         messageGap = message.topAnchor.constraint(equalTo: icon.bottomAnchor, constant: 16)
         NSLayoutConstraint.activate([
-            heightAnchor.constraint(equalToConstant: 104),
+            heightAnchor.constraint(greaterThanOrEqualToConstant: 104),
             icon.topAnchor.constraint(equalTo: topAnchor), icon.centerXAnchor.constraint(equalTo: centerXAnchor),
             iconWidth, iconHeight, messageGap,
-            message.leadingAnchor.constraint(equalTo: leadingAnchor), message.trailingAnchor.constraint(equalTo: trailingAnchor)
+            message.leadingAnchor.constraint(equalTo: leadingAnchor), message.trailingAnchor.constraint(equalTo: trailingAnchor),
+            message.bottomAnchor.constraint(lessThanOrEqualTo: bottomAnchor)
         ])
         updateColors()
     }
