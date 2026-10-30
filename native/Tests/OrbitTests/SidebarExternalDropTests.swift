@@ -70,7 +70,7 @@ struct SidebarExternalDropTests {
             #expect(owner.sidebar.performDragOperation(drag))
             #expect(moved == payload.nodes)
             #expect(externalCalls == 0)
-            #expect(owner.openedLocalDocuments.isEmpty)
+            #expect(consentedDocuments(owner).isEmpty)
         }
     }
 
@@ -86,7 +86,7 @@ struct SidebarExternalDropTests {
             #expect(owner.sidebar.draggingEntered(drag).isEmpty)
             #expect(!owner.sidebar.prepareForDragOperation(drag))
             #expect(!owner.sidebar.performDragOperation(drag))
-            #expect(owner.openedLocalDocuments.isEmpty)
+            #expect(consentedDocuments(owner).isEmpty)
         }
     }
 
@@ -108,7 +108,7 @@ struct SidebarExternalDropTests {
             #expect(owner.sidebar.draggingEntered(drag) == .copy)
             #expect(owner.sidebar.draggingUpdated(drag) == .copy)
             #expect(owner.sidebar.prepareForDragOperation(drag))
-            #expect(owner.openedLocalDocuments.isEmpty)
+            #expect(consentedDocuments(owner).isEmpty)
             #expect(policy(owner, pdf, surface: original) == .cancel)
             #expect(owner.session.snapshot?.tabs.count == before)
             #expect(owner.sidebar.performDragOperation(drag))
@@ -117,7 +117,7 @@ struct SidebarExternalDropTests {
             #expect(opened !== original)
             #expect(owner.session.organization?.selectedTab?.url == pdf)
             #expect(owner.session.snapshot?.tabs.count == before.map { $0 + 1 })
-            #expect(owner.openedLocalDocuments == [pdf])
+            #expect(consentedDocuments(owner) == [BrowserLocalDocument.canonicalPath(for: pdf)])
             #expect(policy(owner, pdf, surface: opened) == .allow)
             #expect(policy(owner, html, surface: opened) == .cancel)
             #expect(policy(owner, pdf, surface: original) == .cancel)
@@ -139,7 +139,7 @@ struct SidebarExternalDropTests {
             #expect(owner.sidebar.performDragOperation(drag))
             await owner.session.waitForPendingCommands()
             #expect(owner.session.selectedSurface?.currentURL == (web ? url : SearchEngine.duckDuckGo.searchURL(for: "synthetic search")))
-            #expect(owner.openedLocalDocuments.isEmpty)
+            #expect(consentedDocuments(owner).isEmpty)
         }
     }
 
@@ -155,7 +155,7 @@ struct SidebarExternalDropTests {
             #expect(owner.sidebar.draggingEntered(drag).isEmpty)
             #expect(!owner.sidebar.prepareForDragOperation(drag))
             #expect(!owner.sidebar.performDragOperation(drag))
-            #expect(owner.openedLocalDocuments.isEmpty)
+            #expect(consentedDocuments(owner).isEmpty)
             #expect(policy(owner, pdf, surface: original) == .cancel)
             owner.openLocalFiles([pdf])
             await owner.session.waitForPendingCommands()
@@ -183,7 +183,7 @@ struct SidebarExternalDropTests {
             pasteboard.setString(pdf.absoluteString, forType: .string)
             #expect(!owner.sidebar.performDragOperation(drag))
             #expect(!owner.sidebar.commitExternalDrop())
-            #expect(owner.openedLocalDocuments.isEmpty)
+            #expect(consentedDocuments(owner).isEmpty)
         }
     }
 
@@ -200,7 +200,7 @@ struct SidebarExternalDropTests {
             owner.sidebar.setCommandsEnabled(false)
             #expect(!owner.sidebar.performDragOperation(drag))
             #expect(!owner.sidebar.prepareForDragOperation(drag))
-            #expect(owner.openedLocalDocuments.isEmpty)
+            #expect(consentedDocuments(owner).isEmpty)
         }
     }
 }
@@ -238,4 +238,10 @@ private final class SidebarExternalDraggingInfo: NSObject, NSDraggingInfo {
     func enumerateDraggingItems(options enumOpts: NSDraggingItemEnumerationOptions, for view: NSView?,
                                 classes classArray: [AnyClass], searchOptions: [NSPasteboard.ReadingOptionKey: Any],
                                 using block: (NSDraggingItem, Int, UnsafeMutablePointer<ObjCBool>) -> Void) {}
+}
+
+/// Paths with durable user consent across every tab of the window's organization.
+@MainActor
+private func consentedDocuments<Engine: BrowserEngine>(_ owner: BrowserWindowController<Engine>) -> Set<String> {
+    Set(owner.session.organization?.allTabs.compactMap { $0.localDocument?.canonicalPath } ?? [])
 }
