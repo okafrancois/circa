@@ -42,7 +42,7 @@ final class BrowserSettingsNameTextField: NSTextField, NSTextFieldDelegate {
         isSelectable = true
         isBordered = false
         drawsBackground = false
-        font = BrandFonts.ui(13)
+        font = BrandFonts.ui(NSFont.systemFontSize)
         delegate = self
         setContentHuggingPriority(.defaultLow, for: .horizontal)
     }
@@ -123,7 +123,7 @@ struct BrowserSettingsRenameForm: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text(uiText("Rename")).font(Font(BrandTextStyle.title.font(size: 22)))
+            Text(uiText("Rename")).font(Font(BrandTextStyle.ui.font(size: 22, weight: .semibold)))
             BrowserSettingsNameField(draft: draft) { draft.submit(save) }
                 .padding(.horizontal, 9).frame(height: 26)
                 .background(OrbitSettingsStyle.panel, in: RoundedRectangle(cornerRadius: 7))

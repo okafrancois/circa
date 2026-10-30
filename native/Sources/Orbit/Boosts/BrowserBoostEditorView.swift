@@ -120,7 +120,7 @@ final class BrowserBoostEditorView: NSView {
         zapCount.font = BrandTextStyle.mono.font(size: 13, weight: .medium); zapCount.alignment = .right
         place(zapCount, 131, 470, 26, 20)
         let codeGlyph = NSTextField(labelWithString: uiText("{}"))
-        codeGlyph.font = BrandTextStyle.mono.font(size: 17, weight: .medium)
+        codeGlyph.font = .monospacedSystemFont(ofSize: 17, weight: .medium)
         place(codeGlyph, 137, 522, 22, 24)
         if firstRun {
             let intro = BrowserBoostIntroductionView(host: session.boost.hostPattern.host)

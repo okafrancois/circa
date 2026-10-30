@@ -410,7 +410,7 @@ struct BrowserSettingsView<Engine: BrowserEngine>: View {
         .sheet(isPresented: Binding(get: { deletingProfile != nil }, set: { if !$0 { deletingProfile = nil } })) {
             if let profile = deletingProfile {
                 VStack(alignment: .leading, spacing: 16) {
-                    Text(uiText("Delete this Profile")).font(Font(BrandTextStyle.title.font(size: 22)))
+                    Text(uiText("Delete this Profile")).font(.headline)
                     Text(profile.name)
                     Text(uiText("Deleting this Profile will permanently remove any cookies, history, preferences, and logins that belong to this Profile."))
                     Text(uiText("To continue, please type the name of this Profile:"))
@@ -439,7 +439,7 @@ struct BrowserSettingsView<Engine: BrowserEngine>: View {
             VStack(alignment: .leading, spacing: 16) {
                 switch confirmation {
                 case .deleteSpace(let space):
-                    Text(uiFormat("Delete your “%@” Space?", space.name)).font(Font(BrandTextStyle.title.font(size: 22)))
+                    Text(uiFormat("Delete your “%@” Space?", space.name)).font(Font(BrandTextStyle.ui.font(size: 22, weight: .semibold)))
                     Text(uiText("This will archive all the tabs and folders inside it."))
                     Text(uiText("To continue, please type the name of this Space:"))
                     TextField(uiText("Space Name"), text: $deletionSpaceName)
@@ -454,7 +454,7 @@ struct BrowserSettingsView<Engine: BrowserEngine>: View {
                         }.settingsDestructive().disabled(deletionSpaceName != space.name || model.isBusy)
                     }
                 case .clearData(let request):
-                    Text(text("clearDataTitle", "Clear Site Data?")).font(Font(BrandTextStyle.title.font(size: 22)))
+                    Text(text("clearDataTitle", "Clear Site Data?")).font(Font(BrandTextStyle.ui.font(size: 22, weight: .semibold)))
                     Text(request.profileName)
                     Text(request.origin == nil ? text("allSiteData", "All websites") : request.domains.joined(separator: ", "))
                     Text(text("clearDataMessage", "This signs you out of the affected websites and removes their stored data. Other profiles are kept."))

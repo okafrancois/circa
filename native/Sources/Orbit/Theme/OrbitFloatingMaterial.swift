@@ -221,7 +221,7 @@ final class OrbitFrostAlert: NSAlert {
         image.heightAnchor.constraint(equalToConstant: 64).isActive = true
         content.addArrangedSubview(image)
         let title = NSTextField(wrappingLabelWithString: messageText)
-        title.font = BrandTextStyle.title.font(size: 22)
+        title.font = BrandTextStyle.ui.font(size: 13, weight: .semibold)
         title.textColor = OrbitFloatingMaterial.body
         content.addArrangedSubview(title)
         if !informativeText.isEmpty {

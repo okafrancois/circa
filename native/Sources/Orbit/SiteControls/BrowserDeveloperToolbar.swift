@@ -42,7 +42,7 @@ final class BrowserDeveloperToolbar: NSView {
         lock.setAccessibilityLabel(uiText("Site Settings"))
         lock.toolTip = uiText("Site Settings")
         lock.onPress = { [weak self] in self?.onSiteControls?() }
-        address.font = BrandTextStyle.mono.font(size: 9.5, weight: .regular)
+        address.font = NSFont.monospacedSystemFont(ofSize: 9.5, weight: .regular)
         address.isBordered = false; address.isBezeled = false; address.drawsBackground = false
         address.focusRingType = .none
         address.lineBreakMode = .byTruncatingMiddle

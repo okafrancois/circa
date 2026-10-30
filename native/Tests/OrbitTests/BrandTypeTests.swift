@@ -8,7 +8,7 @@ import Testing
 @Suite(.serialized)
 @MainActor
 struct BrandTypeTests {
-    @Test("A mixed-font menu shortcut keeps its final glyph inside the unchanged row")
+    @Test("System menu shortcuts retain the prior native width and row baseline")
     func menuShortcutGeometry() throws {
         let row = CreationMenuRow(title: "New Space", symbol: "plus", shortcut: "⌘⇧N", enabled: true,
                                   identifier: "type-shortcut", accent: .defaultSpace)
@@ -17,10 +17,25 @@ struct BrandTypeTests {
         let shortcut = try #require(row.subviews.compactMap { $0 as? NSTextField }.first { $0.stringValue == "⌘⇧N" })
         let text = shortcut.attributedStringValue
         #expect(text.attribute(.font, at: 0, effectiveRange: nil) as? NSFont == NSFont.systemFont(ofSize: 13))
-        #expect((text.attribute(.font, at: 2, effectiveRange: nil) as? NSFont)?.familyName == "Geist Mono")
-        #expect(shortcut.frame.width >= ceil(text.size().width) + 4)
+        #expect(text.attribute(.font, at: 2, effectiveRange: nil) as? NSFont == NSFont.systemFont(ofSize: 13))
+        #expect(shortcut.frame.width == shortcut.intrinsicContentSize.width)
+        #expect(shortcut.frame.origin.y == 11)
         #expect(shortcut.frame.height == 18)
         #expect(row.bounds.contains(shortcut.frame))
+    }
+
+    @Test("Command Bar shortcut runs retain the previous medium system weight")
+    func commandShortcutFont() throws {
+        let view = BrowserPaletteView(frame: NSRect(x: 0, y: 0, width: 800, height: 520))
+        view.isHidden = false
+        view.render([.init(id: "new", title: "New Tab", detail: "Open a new tab", section: .commands,
+                           action: .command(.newTab), shortcut: "⌘T")], selected: 0)
+        func labels(_ view: NSView) -> [NSTextField] {
+            view.subviews.flatMap { ($0 as? NSTextField).map { [$0] } ?? labels($0) }
+        }
+        let hint = try #require(labels(view).first { $0.stringValue == "⌘T" })
+        #expect(hint.attributedStringValue.attribute(.font, at: 1, effectiveRange: nil) as? NSFont
+            == NSFont.systemFont(ofSize: 13, weight: .medium))
     }
 
     @Test("The editor shows six shared gradients in order and applies them without losing controls")
@@ -67,16 +82,16 @@ struct BrandTypeTests {
         #expect(view.swatches.allSatisfy { !$0.isSelected })
     }
 
-    @Test("Shared UI tokens keep their sizes and use brand faces")
+    @Test("Shared UI tokens restore system fonts without moving editor controls")
     func roles() {
-        #expect(OrbitTokens.Typography.sidebarTabTitle.familyName == "Inter Tight")
+        #expect(OrbitTokens.Typography.sidebarTabTitle == NSFont.systemFont(ofSize: 14))
         #expect(OrbitTokens.Typography.sidebarTabTitle.pointSize == 14)
-        #expect(OrbitTokens.Typography.menuShortcut.familyName == "Geist Mono")
-        #expect(OrbitTokens.Typography.emptyStateTitle.familyName == "Gloock")
+        #expect(OrbitTokens.Typography.menuShortcut == NSFont.systemFont(ofSize: 13))
+        #expect(OrbitTokens.Typography.emptyStateTitle == NSFont.systemFont(ofSize: 13, weight: .semibold))
         let editor = OrbitThemeEditorView(state: .init(theme: BrandPalette.spaceGradients[0].theme()))
         #expect(editor.field.frame == OrbitThemeEditorMetrics.field)
-        #expect(editor.themeName.font?.familyName == "Gloock")
-        #expect(editor.surfaceScope.font?.familyName == "Geist Mono")
+        #expect(editor.themeName.font == NSFont.systemFont(ofSize: 18, weight: .semibold))
+        #expect(editor.surfaceScope.font == NSFont.systemFont(ofSize: 11, weight: .semibold))
         #expect(editor.themeName.frame.maxY < 522)
     }
 
@@ -104,8 +119,8 @@ extension BrandTypeTests {
         let empty = BrowserLibraryEmptyView(frame: NSRect(x: 0, y: 0, width: 500, height: 120))
         empty.configure(symbol: "tray", title: "No Downloads")
         empty.layoutSubtreeIfNeeded()
-        #expect(empty.message.font?.familyName == "Gloock")
-        #expect(empty.message.font?.pointSize == 22)
+        #expect(empty.message.font == NSFont.systemFont(ofSize: 14))
+        #expect(empty.message.font?.pointSize == 14)
         #expect(empty.bounds.contains(empty.message.alignmentRect(forFrame: empty.message.frame)))
         #expect(empty.message.frame.height >= empty.message.intrinsicContentSize.height)
         empty.frame.size.height = 164
@@ -113,7 +128,7 @@ extension BrandTypeTests {
         empty.layoutSubtreeIfNeeded()
         #expect(empty.bounds.contains(empty.message.alignmentRect(forFrame: empty.message.frame)))
         #expect(empty.message.frame.height >= empty.message.intrinsicContentSize.height)
-        #expect(OrbitTokens.Typography.emptyStateDetail.familyName == "Inter Tight")
+        #expect(OrbitTokens.Typography.emptyStateDetail == NSFont.systemFont(ofSize: 13))
         let alert = OrbitFrostAlert()
         alert.messageText = "Remove this Space?"
         alert.informativeText = "Tabs in this Space will be archived."
@@ -124,8 +139,8 @@ extension BrandTypeTests {
         content.layoutSubtreeIfNeeded()
         let title = try #require(content.subviews.compactMap { $0 as? NSTextField }.first { $0.stringValue == alert.messageText })
         let detail = try #require(content.subviews.compactMap { $0 as? NSTextField }.first { $0.stringValue == alert.informativeText })
-        #expect(title.font?.familyName == "Gloock" && title.font?.pointSize == 22)
-        #expect(detail.font?.familyName == "Inter Tight")
+        #expect(title.font == NSFont.systemFont(ofSize: 13, weight: .semibold))
+        #expect(detail.font == NSFont.systemFont(ofSize: 13))
         #expect(content.bounds.contains(title.frame))
         #expect(title.frame.height >= title.intrinsicContentSize.height)
     }

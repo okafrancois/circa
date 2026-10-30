@@ -64,6 +64,7 @@ final class BrowserLibraryBoostsView: NSView, NSSearchFieldDelegate {
         }
         scroll.isHidden = displayed.isEmpty
         empty.isHidden = !displayed.isEmpty
+        empty.message.font = BrandTextStyle.ui.font(size: 16, weight: .semibold)
         empty.configure(symbol: "paintbrush.pointed", title: uiText("Nothing Boosted Yet!"), query: query)
         needsLayout = true
     }

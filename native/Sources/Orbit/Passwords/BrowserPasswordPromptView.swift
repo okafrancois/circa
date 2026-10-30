@@ -52,7 +52,7 @@ final class BrowserPasswordPromptView: NSView {
         // The key is vertical, with its teeth pointing down.
         icon.addSubview(key)
         panel.addSubview(icon)
-        titleLabel.font = BrandTextStyle.title.font(size: 22)
+        titleLabel.font = BrandTextStyle.ui.font(size: 18, weight: .semibold)
         titleLabel.textColor = OrbitFloatingMaterial.body
         titleLabel.lineBreakMode = .byTruncatingMiddle
         titleLabel.frame = NSRect(x: 36, y: 132, width: 374, height: 30)

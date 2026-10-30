@@ -28,8 +28,8 @@ final class SidebarUpdateCard: NSView {
         paper.shadowOffset = CGSize(width: 0, height: -8)
         icon.image = BrandFonts.mark
         icon.imageScaling = .scaleProportionallyUpOrDown
-        title.font = BrandTextStyle.title.font(size: 17)
-        body.font = BrandTextStyle.body.font(size: 11.5)
+        title.font = BrandTextStyle.ui.font(size: 13, weight: .semibold)
+        body.font = BrandTextStyle.body.font(size: 12)
         title.textColor = BrandPalette.ink; body.textColor = BrandPalette.ink2
         title.alignment = .center; body.alignment = .center
         title.lineBreakMode = .byTruncatingTail; body.lineBreakMode = .byWordWrapping

@@ -78,7 +78,7 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
         }
         .sheet(item: $archiveChange) { change in
             VStack(alignment: .leading, spacing: 16) {
-                Text(change.title).font(Font(BrandTextStyle.title.font(size: 22)))
+                Text(change.title).font(Font(BrandTextStyle.ui.font(size: 22, weight: .semibold)))
                 Text(uiFormat("Would you like to apply this change to all of your Profiles, or only your %@ Profile?", change.profileName))
                     .foregroundStyle(.secondary)
                 HStack {

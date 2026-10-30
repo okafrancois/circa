@@ -54,7 +54,7 @@ final class BrowserLibraryHistoryView: NSView, NSTableViewDataSource, NSTableVie
         status.font = OrbitTokens.Typography.emptyStateDetail
         status.textColor = OrbitTokens.Color.Text.secondary
         let reload = NSButton(title: libraryText("refresh", "Refresh"), target: self, action: #selector(refresh))
-        searchField.font = BrandTextStyle.body.font(size: 14)
+        searchField.font = BrandTextStyle.body.font(size: NSFont.systemFontSize)
         for control in [more, open, remove, removeSite, reload, deleteOptions] { control.font = BrandTextStyle.ui.font(size: 13) }
         deleteOptions.addItems(withTitles: [libraryText("clearHistory", "Clear History…"), libraryText("lastHour", "Last Hour…"), libraryText("lastDay", "Last 24 Hours…"), libraryText("dateRange", "Date Range…"), libraryText("allTime", "All Time…")])
         deleteOptions.target = self; deleteOptions.action = #selector(deleteRange)

@@ -403,7 +403,7 @@ extension OrbitTokens {
         ///  — Space tooltip "Work ⌃2"
         public static let tooltip = BrandTextStyle.ui.font(size: 11, weight: .medium)
         public static let quickWindowDomain = BrandTextStyle.ui.font(size: 12, weight: .medium)
-        public static let emptyStateTitle = BrandTextStyle.title.font(size: 22)
+        public static let emptyStateTitle = BrandTextStyle.ui.font(size: 13, weight: .semibold)
         public static let emptyStateDetail = BrandTextStyle.ui.font(size: 13, weight: .regular)
         ///  — page-zoom percentage shown inside the address field.
         public static let addressAccessory = BrandTextStyle.mono.font(size: 11, weight: .medium)

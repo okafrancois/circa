@@ -12,7 +12,7 @@ final class BrowserLibraryEmptyView: NSView {
     override init(frame: NSRect) {
         super.init(frame: frame)
         icon.imageScaling = .scaleProportionallyUpOrDown
-        message.font = OrbitTokens.Typography.emptyStateTitle
+        message.font = BrandTextStyle.ui.font(size: 14)
         message.alignment = .center
         for view in [icon, message] { view.translatesAutoresizingMaskIntoConstraints = false; addSubview(view) }
         iconWidth = icon.widthAnchor.constraint(equalToConstant: 48)

@@ -122,7 +122,7 @@ final class BrowserPageDialogView: NSView {
         card.addSubview(stack)
 
         let title = NSTextField(wrappingLabelWithString: spec.title)
-        title.font = BrandTextStyle.title.font(size: 22)
+        title.font = BrandTextStyle.ui.font(size: 13, weight: .semibold)
         title.isSelectable = false
         stack.addArrangedSubview(title)
         title.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
@@ -241,7 +241,7 @@ final class BrowserPageCrashedView: NSView {
         icon.symbolConfiguration = .init(pointSize: 40, weight: .regular)
         icon.contentTintColor = .secondaryLabelColor
         let title = NSTextField(labelWithString: uiText("Aw, Snap!"))
-        title.font = BrandTextStyle.title.font(size: 20)
+        title.font = BrandTextStyle.ui.font(size: 20, weight: .semibold)
         let message = NSTextField(wrappingLabelWithString: uiText("Something went wrong while displaying this webpage."))
         message.font = BrandTextStyle.body.font(size: 13)
         message.alignment = .center

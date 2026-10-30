@@ -4,7 +4,7 @@ import CoreText
 /// Shared brand font registration, with a system fallback for resource or registration failures.
 public enum BrandFonts {
     private static let weightAxis = "wght".utf8.reduce(UInt32(0)) { ($0 << 8) | UInt32($1) }
-    public static let filenames = ["intertight.ttf", "geistmono.ttf", "gloock.ttf"]
+    public static let filenames = ["intertight.ttf", "gloock.ttf"]
     private static let registration: (succeeded: Bool, attempts: Int) = {
         var success = true
         var attempts = 0
@@ -20,6 +20,10 @@ public enum BrandFonts {
     public static var registered: Bool { registration.succeeded }
     static var registrationAttempts: Int { registration.attempts }
     public static func ui(_ size: CGFloat, weight: NSFont.Weight = .regular) -> NSFont {
+        BrandTextStyle.ui.font(size: size, weight: weight)
+    }
+    /// Onboarding copy retains its dedicated face; browser chrome uses the system roles.
+    public static func onboardingBody(_ size: CGFloat, weight: NSFont.Weight = .regular) -> NSFont {
         guard registered, let face = NSFont(name: "InterTight-Regular", size: size) ?? NSFont(name: "Inter Tight", size: size) else { return .systemFont(ofSize: size, weight: weight) }
         return withWeight(weight, font: face)
     }
@@ -43,7 +47,7 @@ public enum BrandFonts {
     }
 }
 
-/// All Orbit-drawn text uses these roles. Native system panels keep AppKit's typography.
+/// Browser text uses system roles; selected branded headings use the display title role.
 public enum BrandTextStyle: CaseIterable {
     case body, ui, caption, mono, title
 
@@ -54,30 +58,19 @@ public enum BrandTextStyle: CaseIterable {
     /// Injectable availability makes failure handling testable without unregistering process fonts.
     func resolvedFont(size: CGFloat, weight: NSFont.Weight = .regular, registrationAvailable: Bool,
                       lookup: (String, CGFloat) -> NSFont? = { NSFont(name: $0, size: $1) }) -> NSFont {
-        let fallback = self == .mono ? NSFont.monospacedSystemFont(ofSize: size, weight: weight)
-                                    : NSFont.systemFont(ofSize: size, weight: weight)
+        let fallback = NSFont.systemFont(ofSize: size, weight: weight)
         guard registrationAvailable else { return fallback }
         switch self {
-        case .body, .ui, .caption: return BrandFonts.ui(size, weight: weight)
-        case .mono:
-            guard let face = lookup("GeistMono-Regular", size) else { return fallback }
-            return BrandFonts.withWeight(weight, font: face)
+        case .body, .ui, .caption, .mono: return fallback
         case .title: return lookup("Gloock-Regular", size) ?? fallback
         }
     }
 
-    /// Shortcut letters and numbers use the mono face; modifier symbols retain macOS glyphs.
+    /// Shortcut letters, digits and modifier symbols share the system face.
     public func attributedString(_ text: String, size: CGFloat, weight: NSFont.Weight = .regular,
                                  attributes: [NSAttributedString.Key: Any] = [:]) -> NSAttributedString {
         var attributes = attributes
         attributes[.font] = font(size: size, weight: weight)
-        let result = NSMutableAttributedString(string: text, attributes: attributes)
-        if self == .mono {
-            for range in text.ranges(of: /[⌘⇧⌥⌃]/) {
-                result.addAttribute(.font, value: NSFont.systemFont(ofSize: size, weight: weight),
-                                    range: NSRange(range, in: text))
-            }
-        }
-        return result
+        return NSAttributedString(string: text, attributes: attributes)
     }
 }

@@ -5,53 +5,63 @@ import Testing
 
 @MainActor
 struct BrandFontsTests {
-    @Test("Font roles fall back without changing point size or registration state")
+    @Test("Browser roles match the system face at every requested size and weight")
+    func systemRoles() {
+        for style in [BrandTextStyle.ui, .body, .caption, .mono] {
+            for size: CGFloat in [10, 13, 14, 18] {
+                for weight: NSFont.Weight in [.regular, .medium, .semibold, .bold] {
+                    let expected = NSFont.systemFont(ofSize: size, weight: weight)
+                    #expect(style.font(size: size, weight: weight) == expected)
+                    #expect(style.resolvedFont(size: size, weight: weight, registrationAvailable: true,
+                        lookup: { _, _ in Issue.record("System roles must not look up bundled faces"); return nil }) == expected)
+                }
+            }
+        }
+        #expect(BrandFonts.ui(15) == NSFont.systemFont(ofSize: 15))
+        #expect(BrandFonts.mono(12) == NSFont.systemFont(ofSize: 12))
+    }
+
+    @Test("Missing display resources fall back without changing point size or weight")
     func fallback() {
         for style in BrandTextStyle.allCases {
-            let fallback = style.resolvedFont(size: 14, weight: .semibold, registrationAvailable: false)
-            let expected = style == .mono ? NSFont.monospacedSystemFont(ofSize: 14, weight: .semibold)
-                                         : NSFont.systemFont(ofSize: 14, weight: .semibold)
-            #expect(fallback == expected)
+            #expect(style.resolvedFont(size: 14, weight: .semibold, registrationAvailable: false)
+                == NSFont.systemFont(ofSize: 14, weight: .semibold))
         }
-        for style in [BrandTextStyle.title, .mono] {
-            let missing = style.resolvedFont(size: 13, registrationAvailable: true, lookup: { _, _ in nil })
-            #expect(missing.pointSize == 13)
-            #expect(missing.familyName != "Gloock" && missing.familyName != "Geist Mono")
-        }
+        #expect(BrandTextStyle.title.resolvedFont(size: 13, registrationAvailable: true, lookup: { _, _ in nil })
+            == NSFont.systemFont(ofSize: 13))
     }
 
     @Test("Repeated role lookups reuse one process registration")
     func once() {
         let attempts = BrandFonts.registrationAttempts
-        #expect(attempts == 3)
+        #expect(attempts == 2)
         for _ in 0..<20 {
             for style in BrandTextStyle.allCases { _ = style.font(size: 14) }
         }
         #expect(BrandFonts.registrationAttempts == attempts)
     }
 
-    @Test("Shortcut modifier glyphs use the system font inside mono text")
+    @Test("Shortcut digits and modifier glyphs retain one system font")
     func modifiers() {
-        let text = BrandTextStyle.mono.attributedString("⌘⇧⌥⌃T12", size: 13)
-        for index in 0..<7 {
-            let font = text.attribute(.font, at: index, effectiveRange: nil) as? NSFont
-            if index < 4 { #expect(font == NSFont.systemFont(ofSize: 13)) }
-            else { #expect(font?.familyName == "Geist Mono") }
+        let text = BrandTextStyle.mono.attributedString("⌘⇧⌥⌃T12", size: 13, weight: .medium)
+        for index in 0..<text.length {
+            #expect(text.attribute(.font, at: index, effectiveRange: nil) as? NSFont
+                == NSFont.systemFont(ofSize: 13, weight: .medium))
         }
     }
 
-    @Test("The three shared OFL fonts register and the final mark is one bundled asset")
+    @Test("Only onboarding copy and branded titles need bundled fonts")
     func registration() {
-        #expect(BrandFonts.filenames == ["intertight.ttf", "geistmono.ttf", "gloock.ttf"])
+        #expect(BrandFonts.filenames == ["intertight.ttf", "gloock.ttf"])
         #expect(BrandFonts.registered)
-        #expect(BrandFonts.ui(15).familyName?.contains("Inter Tight") == true)
-        #expect(BrandFonts.mono(12).familyName?.contains("Geist Mono") == true)
+        #expect(BrandFonts.onboardingBody(15).familyName == "Inter Tight")
         #expect(BrandTextStyle.title.font(size: 40).familyName == "Gloock")
         #expect(BrandFonts.mark != nil)
-        for name in ["intertight-OFL", "geistmono-OFL", "gloock-OFL"] {
+        for name in ["intertight-OFL", "gloock-OFL"] {
             #expect(BrowserText.resourceBundle?.url(forResource: name, withExtension: "txt", subdirectory: "BrandFonts")
                 ?? BrowserText.resourceBundle?.url(forResource: name, withExtension: "txt") != nil)
         }
+        #expect(BrowserText.resourceBundle?.url(forResource: "geistmono", withExtension: "ttf") == nil)
     }
 }
 

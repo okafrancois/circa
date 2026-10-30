@@ -39,7 +39,7 @@ final class NotificationSettingsPromptView: NSView {
         icon.image = NSApp.applicationIconImage
         card.addSubview(icon)
         let title = NSTextField(labelWithString: uiText("Orbit Needs Notifications Permission"))
-        title.font = BrandTextStyle.title.font(size: 20)
+        title.font = BrandTextStyle.ui.font(size: 18, weight: .semibold)
         title.textColor = .white
         title.frame = NSRect(x: 38, y: 118, width: 380, height: 30)
         card.addSubview(title)
