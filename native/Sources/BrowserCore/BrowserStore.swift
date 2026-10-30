@@ -168,6 +168,7 @@ public actor BrowserStore {
     }
     var profileOrder: [ProfileID] = [] { didSet { catalogRevision &+= 1 } }
     var spaceOrder: [SpaceID] = [] { didSet { catalogRevision &+= 1 } }
+    var closedWindows: [BrowserClosedWindow] = []
     var windows: [WindowID: WindowRecord] = [:] {
         willSet { spaceSettingsOwnership.synchronize(spaces: spaces, profiles: Set(profiles.keys), excluding: deletingProfiles, windows: newValue) }
     }
@@ -365,6 +366,11 @@ public actor BrowserStore {
         guard let window = windows.removeValue(forKey: windowID) else {
             throw BrowserStoreError.windowMissing
         }
+        closedWindows.append(BrowserClosedWindow(window: window,
+            tabs: occurrences(in: window), standalone: window.standaloneProfileID.map {
+                organization.standaloneDocument(windowID, profileID: $0)
+            }, closedAt: clock()))
+        if closedWindows.count > 20 { closedWindows.removeFirst() }
         for occurrenceIDs in window.occurrenceIDsBySpace.values {
             for occurrenceID in occurrenceIDs {
                 tabs.removeValue(forKey: occurrenceID)

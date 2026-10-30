@@ -6,6 +6,7 @@ import Foundation
 public protocol BrowserSurface: AnyObject {
     var currentURL: URL? { get }
     func dispose()
+    func setSidebarInputTabID(_ id: TabID)
     /// Keeps the engine's session controller while releasing its renderer. A refusal must
     /// never fall back to URL replay, which would destroy opaque history and POST state.
     func suspendInPlace() -> BrowserSurfaceSuspensionResult
@@ -14,6 +15,7 @@ public protocol BrowserSurface: AnyObject {
 public enum BrowserSurfaceSuspensionResult { case unsupported, refused, suspended }
 
 public extension BrowserSurface {
+    func setSidebarInputTabID(_ id: TabID) {}
     func suspendInPlace() -> BrowserSurfaceSuspensionResult { .unsupported }
 }
 
@@ -967,6 +969,7 @@ public final class BrowserWindowSession<Surface: BrowserSurface> {
             organizationRuntime.metadataIndex = BrowserOrganizationMetadataIndex(state.organization)
             organizationRuntime.occurrenceIndices = Dictionary(uniqueKeysWithValues: state.snapshot.tabs.enumerated().map { ($0.element.occurrenceID, $0.offset) })
         }
+        for tab in state.snapshot.tabs { surfaces[tab.occurrenceID]?.setSidebarInputTabID(tab.id) }
         // Loads start only after ownership, membership and the new state are visible, so events
         // delivered synchronously by the engine see a consistent owner.
         if let startSurface {

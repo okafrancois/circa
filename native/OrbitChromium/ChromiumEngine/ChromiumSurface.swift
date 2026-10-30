@@ -412,10 +412,19 @@ public final class ChromiumSurface: BrowserEngineSurface {
     /// First responder on CEF's child browser view, then `SetFocus(true)` on the host. A hosted
     /// tab also becomes the active tab of its logical Browser (the focused Split pane is the
     /// active tab for extensions).
+    var sidebarInputTabID: TabID?
+    public func setSidebarInputTabID(_ id: TabID) { sidebarInputTabID = id }
+
     @discardableResult
     public func focusDocument() -> Bool {
-        guard !isDisposed, let window = hostView.window else { return false }
+        guard !isDisposed, let window = hostView.window else {
+            BrowserSidebarInputDiagnostics.record("native-focus", tab: sidebarInputTabID,
+                reason: isDisposed ? "surface-disposed" : "host-detached")
+            return false
+        }
         guard isBrowserCreated, let view = ACRBrowserNSView(token) else {
+            BrowserSidebarInputDiagnostics.record("native-focus", tab: sidebarInputTabID,
+                reason: isBrowserCreated ? "browser-view-missing" : "browser-pending")
             pendingCommands.append(.focus)
             needBrowser()
             return true
@@ -937,6 +946,14 @@ public final class ChromiumSurface: BrowserEngineSurface {
         // Enter/Space can activate a focused link. Never reuse a preceding mouse click for it.
         (hostView as? ChromiumHostView)?.linkActivation = nil
         guard Self.isShortcutCandidate(event), let delegate else { return (false, false) }
+        let modifiers = event.modifierFlags.intersection([.command, .shift, .option, .control])
+        if key.isEditableFieldFocused, modifiers == [.command] || modifiers == [.command, .shift],
+           event.charactersIgnoringModifiers?.lowercased() == "z" {
+            // A tracked shortcut is consumed after the renderer declines it. Native editing
+            // must retain the untracked Chrome fallback, including an empty undo stack.
+            BrowserSidebarInputDiagnostics.record("native-undo", tab: sidebarInputTabID, reason: "editor-owned")
+            return (false, false)
+        }
         switch delegate.surface(self, willSendKeyToPage: event) {
         case .browser:
             return (true, false)
@@ -952,6 +969,11 @@ public final class ChromiumSurface: BrowserEngineSurface {
         guard let index = keyReceipts.firstIndex(where: { $0.id == key.keyID }) else { return false }
         let receipt = keyReceipts.remove(at: index).receipt
         guard !isDisposed, let event = key.event, let delegate else { return false }
+        let modifiers = event.modifierFlags.intersection([.command, .shift, .option, .control])
+        if modifiers == [.command], event.charactersIgnoringModifiers?.lowercased() == "z" {
+            guard !key.isEditableFieldFocused else { return false }
+            if delegate.surface(self, performNonEditingUndo: event, receipt: receipt) { return true }
+        }
         let handled = delegate.surface(self, pageDidNotHandleKey: event, receipt: receipt)
         onEngineEvent?("unhandled-key", ["handled": String(handled)])
         return handled

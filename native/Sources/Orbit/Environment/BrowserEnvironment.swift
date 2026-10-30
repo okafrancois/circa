@@ -19,6 +19,17 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
     var isPrivate = false
     var quickWindows: [WindowID: BrowserQuickWindowWindowController<Engine>] = [:]
     var lastUsedSpaceID: SpaceID?
+    private(set) var lastClosedWindowDate: Date?
+    var onReopenClosedWindow: ((WindowID) -> Void)?
+
+    func reopenClosedWindow() async throws -> WindowController? {
+        await waitForRetirements()
+        guard let id = try await store.reopenLastClosedWindow() else { return nil }
+        lastClosedWindowDate = await store.lastClosedWindowDate
+        restoredWindowIDs.append(id)
+        if let onReopenClosedWindow { onReopenClosedWindow(id); return nil }
+        return try await makeWindow(id: id.rawValue, opensInitialTab: false)
+    }
     var onQuickWindowDestinationChange: (() -> Void)?
     let store: BrowserStore
     let translationPages = BrowserTranslationPages()
@@ -303,6 +314,16 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
                 self?.onQuickWindowDestinationChange?()
             }
         )
+        controller.sidebar.undoRouter.closedItemDate = { [weak self, weak controller] in
+            let peek = controller?.canReopenPeek == true ? controller?.peek.lastDismissed?.closedAt : nil
+            return [self?.lastClosedWindowDate, peek].compactMap { $0 }.max()
+        }
+        controller.sidebar.undoRouter.reopenClosedItem = { [weak self, weak controller] in
+            guard let self else { return }
+            if let controller, controller.canReopenPeek, let date = controller.peek.lastDismissed?.closedAt,
+               lastClosedWindowDate.map({ date > $0 }) ?? true { controller.reopenClosedPeek() }
+            else { Task { do { _ = try await self.reopenClosedWindow() } catch { controller?.session.onError?(error) } } }
+        }
         BrowserPerformance.mark(.windowBuilt)
         if let restoredID {
             let placement = await store.sessionDocument().windows.first { $0.id == restoredID }?.placement
@@ -602,6 +623,7 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
         retiringSessions[key] = session
         Task { [weak self] in
             await session.waitForPendingCommands()
+            self?.lastClosedWindowDate = await self?.store.lastClosedWindowDate
             self?.retiringSessions.removeValue(forKey: key)
             self?.scheduleSave()
         }

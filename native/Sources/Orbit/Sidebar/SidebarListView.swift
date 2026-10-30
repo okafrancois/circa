@@ -1,5 +1,6 @@
 import AppKit
 import BrowserCore
+import BrowserShell
 
 private typealias Metrics = OrbitTokens.Metrics.Sidebar
 
@@ -751,7 +752,7 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
         if renameTimer != nil { cancelRename() }
         window?.makeFirstResponder(self)
         let modifiers = event.modifierFlags.intersection([.command, .shift, .option])
-        if event.clickCount == 2, modifiers.isEmpty {
+        if event.clickCount == 2, modifiers.isEmpty, row.isSelected || row.node.folderID != nil {
             pointerDown = nil
             if row.node.folderID != nil { host?.list(self, activate: row.node, modifiers: []) }
             beginRename(row.node)
@@ -775,9 +776,17 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
 
     func rowMouseUp(_ row: SidebarListRow, with event: NSEvent) {
         row.isPressed = false
-        guard let down = pointerDown, down.node == row.node else { return }
+        let down = pointerDown
         pointerDown = nil
-        guard !isDragging, commandsEnabled, row.bounds.contains(row.convert(event.locationInWindow, from: nil)) else { return }
+        let reason: String
+        if isDragging { reason = "drag-started" }
+        else if !commandsEnabled || !row.commandsEnabled { reason = "disabled" }
+        else if down == nil { reason = "no-pressed-state" }
+        else if down?.node != row.node || rowViews[row.node] !== row { reason = "stale-node" }
+        else if !row.bounds.contains(row.convert(event.locationInWindow, from: nil)) { reason = "outside-row" }
+        else { reason = "accepted" }
+        BrowserSidebarInputDiagnostics.record("mouse-up", tab: row.node.tabID, reason: reason)
+        guard reason == "accepted", let down else { return }
         host?.list(self, activate: row.node, modifiers: down.modifiers)
     }
 
@@ -787,7 +796,10 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
     }
 
     func rowPerformPress(_ row: SidebarListRow) -> Bool {
-        guard commandsEnabled else { return false }
+        let reason = !commandsEnabled || !row.commandsEnabled ? "disabled"
+            : rowViews[row.node] !== row ? "stale-node" : host == nil ? "missing-host" : "accepted"
+        BrowserSidebarInputDiagnostics.record("row-press", tab: row.node.tabID, reason: reason)
+        guard reason == "accepted" else { return false }
         host?.list(self, activate: row.node, modifiers: [])
         return true
     }
@@ -884,6 +896,7 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
     private func beginDrag(from row: SidebarListRow, event: NSEvent, grabPoint: NSPoint) {
         guard commandsEnabled,
               let payload = host?.list(self, dragPayloadFor: row.node, grabOffsetX: grabPoint.x - row.iconX) else { return }
+        BrowserSidebarInputDiagnostics.record("drag", tab: row.node.tabID, reason: "threshold-crossed")
         isDragging = true
         dragCancelled = false
         dragCancelMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in

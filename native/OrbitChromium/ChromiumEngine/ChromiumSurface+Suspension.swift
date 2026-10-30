@@ -136,7 +136,10 @@ extension ChromiumSurface {
 
     func resumeDiscardedTab() {
         guard isSuspended, !isDisposed else { return }
-        guard ACRRestoreDiscardedTab(token) == 1 else { return }
+        let accepted = ACRRestoreDiscardedTab(token) == 1
+        BrowserSidebarInputDiagnostics.record("native-wake", tab: sidebarInputTabID,
+            reason: accepted ? "restored" : "wake-refused")
+        guard accepted else { return }
         isSuspended = false
         onEngineEvent?("suspension-restored", [:])
     }

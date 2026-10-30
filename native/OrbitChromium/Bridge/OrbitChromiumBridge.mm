@@ -1,5 +1,6 @@
 #import <AppKit/AppKit.h>
 #import <objc/runtime.h>
+#import <os/log.h>
 #include "OrbitChromiumBridge.h"
 #import "OrbitApplicationLifecycle.h"
 #include "OrbitBridgeFiles.h"
@@ -3051,15 +3052,24 @@ extern "C" int32_t ACRSafeBrowsingEnabled(uint64_t profile) {
   return value->GetBool() ? 1 : 0;
 }
 
-extern "C" int32_t ACRActivateSurface(uint64_t token) {
-  ACR_HOST(token);
-  if (!host->window || !g_state->orbit) return 0;
+static int32_t ActivateSurface(uint64_t token, std::string tab) {
+  static os_log_t input_log = os_log_create("local.orbit", "sidebar-input");
+  const auto trace = [token, tab](uint64_t ticket, const char* outcome) {
+    os_log_with_type(input_log, OS_LOG_TYPE_INFO,
+        "stage=activation-ticket tab=%{public}s surface=%{public}llu ticket=%{public}llu result=%{public}s",
+        tab.c_str(), (unsigned long long)token, (unsigned long long)ticket, outcome);
+  };
+  if (!NSThread.isMainThread || !g_state) { trace(0, "runtime-unavailable"); return 0; }
+  auto* host = g_state->Find(token);
+  if (!host || !host->window || !g_state->orbit) { trace(0, "host-unavailable"); return 0; }
   const auto window = host->window;
   auto browser = host->browser;
-  return g_native_command_scope.ActivateOrDefer([token, window, browser] {
-    if (!g_state || !g_state->orbit) return int32_t{0};
+  return g_native_command_scope.ActivateOrDefer([token, window, browser, trace] {
+    if (!g_state || !g_state->orbit) { trace(0, "runtime-retired"); return int32_t{0}; }
     auto* current = g_state->Find(token);
-    if (!current || current->window != window || current->browser != browser || current->closing_by_shell) return int32_t{0};
+    if (!current) { trace(0, "host-retired"); return int32_t{0}; }
+    if (current->window != window || current->browser != browser) { trace(0, "host-moved"); return int32_t{0}; }
+    if (current->closing_by_shell) { trace(0, "host-closing"); return int32_t{0}; }
     const auto result = g_state->orbit->activate_tab(browser->GetIdentifier());
     if (result == 1 && g_state) {
       auto* live = g_state->Find(token);
@@ -3067,7 +3077,14 @@ extern "C" int32_t ACRActivateSurface(uint64_t token) {
         g_state->ExtensionSelectionChanged(window, live);
     }
     return result;
-  }, PostUI);
+  }, PostUI, window, trace);
+}
+
+extern "C" int32_t ACRActivateSurface(uint64_t token) { return ActivateSurface(token, "none"); }
+
+extern "C" int32_t ACRActivateSidebarSurface(uint64_t token, const char* identifier) {
+  NSUUID* uuid = identifier ? [[NSUUID alloc] initWithUUIDString:[NSString stringWithUTF8String:identifier]] : nil;
+  return ActivateSurface(token, uuid ? uuid.UUIDString.UTF8String : "none");
 }
 
 extern "C" int32_t ACRGetTabInfo(uint64_t token, ACRTabInfo* info) {

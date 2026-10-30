@@ -83,7 +83,11 @@ extension BrowserWindowController {
             }
         }
         sidebar.onSelectSplit = { [weak self] id in self?.submitInput { $0.session.selectSplit(id) } }
-        sidebar.onSelectTab = { [weak self] id in self?.submitInput { $0.activateSidebarTab(id) } }
+        sidebar.onSelectTab = { [weak self] id in
+            BrowserSidebarInputDiagnostics.record("select-input", tab: id,
+                reason: self?.acceptsCommands == true ? "submitted" : "controller-disabled")
+            self?.submitInput { $0.activateSidebarTab(id) }
+        }
         sidebar.onCloseTabs = { [weak self] ids in self?.submitInput { $0.performSidebarRowAction(ids) } }
         sidebar.onSetPinnedSectionCollapsed = { [weak self] id, collapsed in
             self?.submitInput { controller in
@@ -141,9 +145,15 @@ extension BrowserWindowController {
     func activateSidebarTab(_ id: TabID, expecting expected: BrowserOrganizationSnapshot? = nil,
                             admission: BrowserSidebarSelectionAdmission? = nil,
                             isCurrent: @escaping @MainActor () -> Bool = { true }) {
-        guard acceptsCommands, admission?.isValid != false, isCurrent(), expected == nil || expected == session.organization else { return }
+        let reason = !acceptsCommands ? "controller-disabled" : admission?.isValid == false ? "admission-revoked"
+            : !isCurrent() ? "superseded" : expected != nil && expected != session.organization ? "stale-projection" : "accepted"
+        BrowserSidebarInputDiagnostics.record("controller-select", tab: id, window: session.snapshot?.id, reason: reason)
+        guard reason == "accepted" else { return }
         hideLibrary()
-        if let item = session.organization?.tab(id), item.isSelected, session.selectedSurface != nil {
+        if !session.hasPendingCommands, let item = session.organization?.tab(id),
+           let occurrence = item.occurrenceID, occurrence == session.snapshot?.selectedOccurrenceID,
+           session.selectedSurface != nil {
+            BrowserSidebarInputDiagnostics.record("selection", tab: id, window: session.snapshot?.id, reason: "already-selected")
             focusSelectedDocument()
             return
         }

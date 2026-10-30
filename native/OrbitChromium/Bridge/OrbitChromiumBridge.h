@@ -481,6 +481,8 @@ int32_t ACRCreateTabSurface(uint64_t surface_token, uint64_t profile_token, uint
 int32_t ACRAttachSurfaceView(uint64_t surface_token, void *nsview);
 /* Makes the tab surface the active tab of its logical Browser (tabs.onActivated). */
 int32_t ACRActivateSurface(uint64_t surface_token);
+/* Diagnostic identity accepts only a UUID; no page metadata crosses this seam. */
+int32_t ACRActivateSidebarSurface(uint64_t surface_token, const char* tab_uuid);
 /* (ABI 8, side API v2: ACRPatchLevel() >= 2) Moves a tab surface to index (-1 or past the end
  * appends) of the logical Browser of (window_token, its profile), keeping its WebContents,
  * browser, extension tabId, history and form state (tabs.onDetached/onAttached), or reorders it
