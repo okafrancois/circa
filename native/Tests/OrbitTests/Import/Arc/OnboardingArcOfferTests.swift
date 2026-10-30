@@ -30,3 +30,22 @@ struct OnboardingArcOfferTests {
         #expect(flow.canAdvance)
     }
 }
+
+extension OnboardingArcOfferTests {
+    @Test("An Arc import skips both inherited steps; Back jumps over their dimmed dots")
+    @MainActor
+    func inheritedSteps() {
+        let source = OrbitOnboardingSource(id: OrbitApplication.onboardingArcSourceID, name: "Arc", bundleIdentifier: nil, profiles: [])
+        var flow = OrbitOnboardingFlow(step: .importSource, sources: [source], syncAvailability: .available)
+        flow.select(source: source)
+        #expect(flow.skippedSteps == [.favourites, .theme])
+        #expect(flow.advance() && flow.step == .sync)
+        flow.selectSync(false)
+        #expect(flow.advance() && flow.step == .defaultBrowser)
+        #expect(flow.goBack() && flow.step == .sync)
+        #expect(flow.goBack() && flow.step == .importSource)
+        flow.importChoice = BrowserOnboardingRecord.ImportChoice.none
+        #expect(flow.skippedSteps.isEmpty)
+        #expect(flow.advance() && flow.step == .favourites)
+    }
+}

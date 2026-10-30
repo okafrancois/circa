@@ -5,7 +5,7 @@ import BrowserCore
 /// after the last step, through the existing import flows.
 extension OrbitApplication {
     /// The source whose import runs in place (File › Import from Arc…) rather than through the picker.
-    static var onboardingArcSourceID: String { ArcBrowserImportAdapter().descriptor.id }
+    nonisolated static var onboardingArcSourceID: String { ArcBrowserImportAdapter().descriptor.id }
 
     /// Arc first (when its data folder exists), then the detected Chromium family, Safari, then
     /// Firefox and Zen, each with its profiles (metadata only).
@@ -15,10 +15,16 @@ extension OrbitApplication {
         // A synthetic run looks only at its explicit Arc fixture, never at the personal folder.
         if !synthetic || arguments.contains("--arc-import-source") {
             let arc = OrbitImportLaunchOptions.source(arguments)
-            if FileManager.default.fileExists(atPath: arc.appendingPathComponent("StorableSidebar.json").path) {
+            let permitted = !synthetic || activeSiteSessionConfiguration().map {
+                (try? BrowserImportUISynthetic.checkDirectory(arc, configuration: $0)) != nil
+            } == true
+            if permitted, FileManager.default.fileExists(atPath: arc.appendingPathComponent("StorableSidebar.json").path) {
                 let descriptor = ArcBrowserImportAdapter().descriptor
+                let metadata = try? BrowserImportMetadata.read(root: arc.appendingPathComponent("User Data"), name: "Local State", limit: 16 * 1024 * 1024)
+                let profiles = metadata.flatMap { try? ArcBrowserImportAdapter().discoverProfiles(metadata: $0) } ?? []
                 sources.append(OrbitOnboardingSource(id: descriptor.id, name: descriptor.name,
-                                                     bundleIdentifier: descriptor.bundleID, profiles: []))
+                                                     bundleIdentifier: descriptor.bundleID,
+                                                     profiles: profiles.map { .init(directory: $0.directory, name: $0.name.isEmpty ? $0.directory : $0.name) }))
             }
         }
         guard let configuration = activeSiteSessionConfiguration(),
@@ -55,5 +61,12 @@ extension OrbitApplication {
             if sourceID == Self.onboardingArcSourceID { startArcImport() }
             else { browserImport.start(application: self, preselected: .init(sourceID: sourceID, profileDirectory: profileDirectory)) }
         }
+    }
+}
+
+extension OrbitOnboardingFlow {
+    var importsSpaceConfiguration: Bool {
+        if case let .browser(id, _) = importChoice { return id == OrbitApplication.onboardingArcSourceID }
+        return false
     }
 }

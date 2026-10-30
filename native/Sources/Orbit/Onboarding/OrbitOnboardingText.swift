@@ -4,14 +4,27 @@ import Foundation
 @MainActor
 enum OrbitOnboardingText {
     static var windowTitle: String { uiText("Welcome to Orbit") }
-    static var welcomeHeadline: String { uiText("Welcome to Orbit.") }
-    static var getStarted: String { uiText("Get Started") }
+    static var welcomeHeadline: String { uiText("Welcome home.") }
+    static var getStarted: String { uiText("Open Orbit") }
+    static var start: String { uiText("Start") }
+    static var bringOver: String { uiText("Bring it over") }
+    static var welcomeBody: String { uiText("Let’s set up your browser. Six short steps, about a minute, and nothing leaves your Mac.") }
+    static var welcomeSticker: String { uiText("Your Spaces come too →") }
+    static var favouritesTitle: String { uiText("Pin your favourites.") }
+    static var favouritesBody: String { uiText("Pick a few sites to keep at the top of the sidebar, in every Space. You can change them any time.") }
+    static var favouritesImportedBody: String { uiText("These are the sites you visited most. Pick the ones you want at the top of the sidebar, in every Space.") }
+    static func favouriteHint(_ count: Int) -> String { uiFormat("%d selected · add more from the sidebar menu", count) }
+    static func counter(_ step: Int) -> String { uiFormat("STEP %d OF 7", step) }
+    static func sticker(duration: Double?, sync: Bool) -> String {
+        let privacy = sync ? uiText("synced to your iCloud") : uiText("nothing uploaded")
+        return duration.map { uiFormat("%d s · %@", Int($0.rounded()), privacy) } ?? privacy
+    }
     static var next: String { uiText("Next") }
     static var back: String { uiText("Back") }
     static var skip: String { uiText("Skip for now") }
 
-    static var importTitle: String { uiText("Bring your browser along.") }
-    static var importBody: String { uiText("Move your tabs, bookmarks, history and passwords into Orbit, so everything is where you left it.") }
+    static var importTitle: String { uiText("Bring your browser over.") }
+    static var importBody: String { uiText("Tabs, Spaces, bookmarks, history and passwords move into Orbit. Nothing is uploaded, and the other browser stays exactly as it is.") }
     static var importNote: String { uiText("macOS may ask to unlock the other browser’s passwords when the import starts.") }
     static var importNone: String { uiText("No thanks, I’ll start fresh.") }
     static var importNoneEmpty: String { uiText("No other browser was found. Start fresh.") }
@@ -28,7 +41,7 @@ enum OrbitOnboardingText {
     static var syncNo: String { uiText("keep it on this Mac.") }
 
     static var themeTitle: String { uiText("Make it feel like yours.") }
-    static var themeBody: String { uiText("Pick a color for your first Space. You can change it anytime from the sidebar.") }
+    static var themeBody: String { uiText("Pick a colour for your first Space, or drag the two dots to mix your own. You can change it any time from the sidebar.") }
 
     static var defaultTitle: String { uiText("Open your links in Orbit?") }
     static var defaultBody: String { uiText("Make Orbit your default browser so links from other apps open here. You can change it anytime in System Settings.") }
@@ -37,7 +50,7 @@ enum OrbitOnboardingText {
     static var defaultNoStrong: String { uiText("NO,") }
     static var defaultNo: String { uiText("not right now.") }
 
-    static var finishTitle: String { uiText("You’re all set.") }
+    static var finishTitle: String { uiText("Your Spaces are waiting.") }
     static var finishBody: String { uiText("Your first Space is ready. Orbit is yours to explore.") }
-    static var finishImportBody: String { uiText("Your first Space is ready. Orbit brings in your browser data as soon as you start.") }
+    static var finishImportBody: String { uiText("Everything is right where you left it.") }
 }

@@ -9,7 +9,7 @@ import Security
 /// system Keychain queries. Inventory is confined to its baked data root.
 enum BrowserImportUISynthetic {
     /// Signed synthetic bundles that drive the browser import through their fixture sources.
-    static let fixtureBundles: Set<String> = ["lab.orbit.orbit.import-ui", "lab.orbit.orbit.onboard-1"]
+    static let fixtureBundles: Set<String> = ["lab.orbit.orbit.import-ui", "lab.orbit.orbit.onboard-1", "lab.orbit.orbit.onboard-bow"]
     static var isFixtureBundle: Bool { fixtureBundles.contains(Bundle.main.bundleIdentifier ?? "") }
     struct Inventory: Codable { var browsers: [String]; var keyStatus: String? }
     @MainActor static func applyAppearance() {

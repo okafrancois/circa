@@ -7,10 +7,10 @@ public struct BrowserOnboardingRecord: Codable, Equatable, Sendable {
     public enum State: String, Codable, Sendable { case started, completed }
 
     public enum Step: String, Codable, Sendable, CaseIterable {
-        case welcome, importSource, sync, theme, defaultBrowser, finish
+        case welcome, importSource, favourites, sync, theme, defaultBrowser, finish
     }
 
-    /// The source chosen on the import step; the import itself runs after the last step.
+    /// The source chosen on the import step; it is applied before the first runtime window opens.
     public enum ImportChoice: Codable, Equatable, Sendable {
         case none
         /// A detected source (`BrowserImportDescriptor.id`) and, when it has profiles, one of them.
@@ -24,6 +24,21 @@ public struct BrowserOnboardingRecord: Codable, Equatable, Sendable {
     public var importChoice: ImportChoice?
     public var syncChoice: Bool?
     public var defaultBrowserChoice: Bool?
+    public var selectedProfiles: [String]?
+    public var favourites: [BrowserOnboardingFavourite]?
+    public var importDuration: Double?
+    public var importApplied: Bool?
+    public var favouritesSkipped: Bool?
+    public var importSummary: ImportSummary?
+
+    public struct ImportSummary: Codable, Equatable, Sendable {
+        public let spaces: Int
+        public let pinnedTabs: Int
+        public let passwords: Int
+        public init(spaces: Int, pinnedTabs: Int, passwords: Int) {
+            self.spaces = spaces; self.pinnedTabs = pinnedTabs; self.passwords = passwords
+        }
+    }
 
     public init(state: State, step: Step, date: Date = Date(), importChoice: ImportChoice? = nil,
                 syncChoice: Bool? = nil, defaultBrowserChoice: Bool? = nil) {

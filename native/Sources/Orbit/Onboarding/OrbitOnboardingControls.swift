@@ -1,5 +1,6 @@
 import AppKit
 import QuartzCore
+import BrowserShell
 
 private typealias M = OrbitOnboardingMetrics
 
@@ -7,6 +8,7 @@ private typealias M = OrbitOnboardingMetrics
 @MainActor
 final class OrbitOnboardingPrimaryButton: NSButton {
     var accent: NSColor = OrbitOnboardingColors.accent { didSet { refresh() } }
+    var labelColor: NSColor = .white { didSet { refresh() } }
     var onPress: (() -> Void)?
 
     init() {
@@ -18,7 +20,7 @@ final class OrbitOnboardingPrimaryButton: NSButton {
         layer?.cornerCurve = .continuous
         target = self
         action = #selector(press)
-        focusRingType = .none
+        focusRingType = .exterior
         refresh()
     }
 
@@ -33,8 +35,11 @@ final class OrbitOnboardingPrimaryButton: NSButton {
         let alpha = isEnabled ? 1 : M.disabledLabelAlpha
         let paragraph = NSMutableParagraphStyle()
         paragraph.alignment = .center
+        image = NSImage(systemSymbolName: "arrow.right", accessibilityDescription: nil)?.withSymbolConfiguration(
+            NSImage.SymbolConfiguration(pointSize: 13, weight: .semibold).applying(.init(paletteColors: [labelColor])))
+        imagePosition = .imageTrailing; imageHugsTitle = true
         attributedTitle = NSAttributedString(string: title, attributes: [
-            .font: OrbitOnboardingFonts.button, .foregroundColor: NSColor.white.withAlphaComponent(alpha), .paragraphStyle: paragraph
+            .font: OrbitOnboardingFonts.button, .foregroundColor: labelColor.withAlphaComponent(alpha), .paragraphStyle: paragraph
         ])
     }
 
@@ -58,7 +63,7 @@ final class OrbitOnboardingLinkButton: NSButton {
         self.title = title
         target = self
         action = #selector(press)
-        focusRingType = .none
+        focusRingType = .exterior
         imagePosition = .imageLeading
         setAccessibilityRole(.button)
         setAccessibilityLabel(title)
@@ -256,9 +261,14 @@ final class OrbitOnboardingBrowserRow: OrbitOnboardingOptionCard {
         }
         label.stringValue = title
         label.font = OrbitOnboardingFonts.browser
+        if let newline = title.firstIndex(of: "\n") {
+            let attributed = NSMutableAttributedString(string: title, attributes: [.font: OrbitOnboardingFonts.browser, .foregroundColor: OrbitOnboardingColors.browserLabel])
+            attributed.addAttributes([.font: OrbitOnboardingFonts.mono(11), .foregroundColor: BrandPalette.ink3], range: NSRange(title.index(after: newline)..<title.endIndex, in: title))
+            label.attributedStringValue = attributed
+        }
         label.textColor = OrbitOnboardingColors.browserLabel
-        label.maximumNumberOfLines = multiline ? 2 : 1
-        label.lineBreakMode = multiline ? .byWordWrapping : .byTruncatingTail
+        label.maximumNumberOfLines = 2
+        label.lineBreakMode = .byWordWrapping
         let width = bounds.width - M.browserLabelX - (image == nil ? 20 : M.browserTileWidth + 12)
         let height = ceil(label.sizeThatFits(NSSize(width: width, height: 100)).height)
         label.frame = NSRect(x: M.browserLabelX, y: (bounds.height - height) / 2, width: width, height: height)
@@ -274,7 +284,7 @@ final class OrbitOnboardingBrowserRow: OrbitOnboardingOptionCard {
 @MainActor
 final class OrbitOnboardingProfileList: NSView {
     var accent: NSColor = OrbitOnboardingColors.accent { didSet { refresh() } }
-    var selected: String? { didSet { refresh() } }
+    var selectedProfiles: Set<String> = [] { didSet { refresh() } }
     var onSelect: ((String) -> Void)?
     private(set) var rows: [OrbitOnboardingProfileRow] = []
 
@@ -292,7 +302,7 @@ final class OrbitOnboardingProfileList: NSView {
             rows.append(row)
         }
         setAccessibilityElement(true)
-        setAccessibilityRole(.radioGroup)
+        setAccessibilityRole(.group)
         setAccessibilityLabel(OrbitOnboardingText.profileListLabel)
     }
 
@@ -302,7 +312,7 @@ final class OrbitOnboardingProfileList: NSView {
     func refresh() {
         for row in rows {
             row.accent = accent
-            row.isSelected = row.profile.directory == selected
+            row.isSelected = selectedProfiles.contains(row.profile.directory)
         }
     }
 }
@@ -353,7 +363,7 @@ final class OrbitOnboardingProfileRow: NSView {
         label.frame = NSRect(x: circle.maxX + 12, y: (bounds.height - height) / 2, width: width - circle.maxX - 24, height: height)
         addSubview(label)
         setAccessibilityElement(true)
-        setAccessibilityRole(.radioButton)
+        setAccessibilityRole(.checkBox)
         setAccessibilityLabel(profile.name)
         refresh()
     }

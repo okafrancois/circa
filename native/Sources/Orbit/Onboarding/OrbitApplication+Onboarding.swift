@@ -118,6 +118,7 @@ extension OrbitApplication {
         let flow = OrbitOnboardingFlow(step: step, sources: await onboardingSources(synthetic: synthetic),
                                        syncAvailability: onboardingSyncAvailability(), restoring: record)
         var services = OrbitOnboardingServices()
+        services.waitsForBrowserPreview = true
         services.persist = { record in try? BrowserOnboardingFiles.save(record, dataDirectory: dataDirectory) }
         services.setSync = { [weak environment] enabled in
             if OrbitOnboardingSyntheticSeam.isActive {
@@ -127,6 +128,7 @@ extension OrbitApplication {
             guard let environment, environment.sync.available, environment.sync.enabled != enabled else { return }
             try? await environment.sync.setEnabled(enabled)
         }
+        services.isDefaultBrowser = { synthetic ? nil : BrowserDefaultBrowserService().status().isOrbit }
         services.requestDefaultBrowser = {
             if OrbitOnboardingSyntheticSeam.isActive {
                 OrbitOnboardingSyntheticSeam.record("defaultBrowser", dataDirectory: dataDirectory)
@@ -138,7 +140,14 @@ extension OrbitApplication {
         }
         services.finish = { [weak self] record, controller in self?.completeOnboarding(record, controller: controller, dataDirectory: dataDirectory) }
         services.sourceArtwork = { source in OrbitOnboardingArtwork.artwork(for: source, synthetic: synthetic) }
-        onboarding = OrbitOnboardingWindowController(flow: flow, services: services, themeTarget: target)
+        if let cover = OrbitOnboardingStartup.cover, cover.step == .finish {
+            cover.services = services
+            onboarding = cover
+            OrbitOnboardingStartup.cover = nil
+        } else {
+            onboarding = OrbitOnboardingWindowController(flow: flow, services: services, themeTarget: target)
+        }
+        if record?.importApplied == true, let enabled = flow.syncChoice { await services.setSync(enabled) }
     }
 
     func onboardingSyncAvailability() -> OrbitOnboardingSyncAvailability {
@@ -151,6 +160,7 @@ extension OrbitApplication {
     func holdsWindowForOnboarding(_ controller: OrbitWindowController) -> Bool {
         guard onboarding != nil else { return false }
         heldOnboardingWindows.append(controller)
+        if heldOnboardingWindows.count == 1, let window = controller.window { onboarding?.stageBrowserWindow(window) }
         return true
     }
 
@@ -158,6 +168,7 @@ extension OrbitApplication {
     /// then one transaction (measured hand-off: within one frame). The chosen import starts after.
     func completeOnboarding(_ record: BrowserOnboardingRecord, controller: OrbitOnboardingWindowController, dataDirectory: URL) {
         try? BrowserOnboardingFiles.save(record, dataDirectory: dataDirectory)
+        controller.releaseBrowserPreview()
         let frame = controller.window?.frame
         onboarding = nil
         let held = heldOnboardingWindows
@@ -184,7 +195,7 @@ extension OrbitApplication {
             if held.isEmpty, windows.windows.isEmpty, !windows.hasPendingWindow { windows.newWindow() }
             finishExternalURLStartup()
             onOnboardingFinished?(record)
-            startOnboardingImport(record.importChoice)
+            if record.importApplied != true { startOnboardingImport(record.importChoice) }
         }
         // A window that has never been on screen needs a few frames for its first render.
         if staged { DispatchQueue.main.asyncAfter(deadline: .now() + Self.handOffStaging) { MainActor.assumeIsolated { swap() } } }

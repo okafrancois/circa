@@ -1487,3 +1487,87 @@
 "You’re all set." = "You’re all set.";
 "Your first Space is ready. Orbit is yours to explore." = "Your first Space is ready. Orbit is yours to explore.";
 "Your first Space is ready. Orbit brings in your browser data as soon as you start." = "Your first Space is ready. Orbit brings in your browser data as soon as you start.";
+
+"Welcome home." = "Welcome home.";
+
+"Open Orbit" = "Open Orbit";
+
+"Start" = "Start";
+
+"Bring it over" = "Bring it over";
+
+"Let’s set up your browser. Six short steps, about a minute, and nothing leaves your Mac." = "Let’s set up your browser. Six short steps, about a minute, and nothing leaves your Mac.";
+
+"Your Spaces come too →" = "Your Spaces come too →";
+
+"Pin your favourites." = "Pin your favourites.";
+
+"Pick a few sites to keep at the top of the sidebar, in every Space. You can change them any time." = "Pick a few sites to keep at the top of the sidebar, in every Space. You can change them any time.";
+
+"These are the sites you visited most. Pick the ones you want at the top of the sidebar, in every Space." = "These are the sites you visited most. Pick the ones you want at the top of the sidebar, in every Space.";
+
+"%d selected · add more from the sidebar menu" = "%d selected · add more from the sidebar menu";
+
+"STEP %d OF 7" = "STEP %d OF 7";
+
+"synced to your iCloud" = "synced to your iCloud";
+
+"nothing uploaded" = "nothing uploaded";
+
+"%d s · %@" = "%d s · %@";
+
+"Bring your browser over." = "Bring your browser over.";
+
+"Tabs, Spaces, bookmarks, history and passwords move into Orbit. Nothing is uploaded, and the other browser stays exactly as it is." = "Tabs, Spaces, bookmarks, history and passwords move into Orbit. Nothing is uploaded, and the other browser stays exactly as it is.";
+
+"Pick a colour for your first Space, or drag the two dots to mix your own. You can change it any time from the sidebar." = "Pick a colour for your first Space, or drag the two dots to mix your own. You can change it any time from the sidebar.";
+
+"Your Spaces are waiting." = "Your Spaces are waiting.";
+
+"Everything is right where you left it." = "Everything is right where you left it.";
+
+"Pinned tabs" = "Pinned tabs";
+
+"%d favourites" = "%d favourites";
+
+"iCloud" = "iCloud";
+
+"Default browser" = "Default browser";
+
+"%d visits" = "%d visits";
+
+"Make Orbit your default browser?" = "Make Orbit your default browser?";
+
+"Use Orbit" = "Use Orbit";
+
+"Preview of the macOS default browser confirmation" = "Preview of the macOS default browser confirmation";
+
+"Could Not Complete Setup" = "Could Not Complete Setup";
+
+"Your data is kept. You can try again, or go back and skip the import." = "Your data is kept. You can try again, or go back and skip the import.";
+
+"%d profiles" = "%d profiles";
+
+"Keep current browser" = "Keep current browser";
+
+"Coral" = "Coral";
+
+"Cobalt" = "Cobalt";
+
+"Sunset" = "Sunset";
+
+"Mint" = "Mint";
+
+"Night" = "Night";
+
+"Lilac" = "Lilac";
+
+"%d Spaces" = "%d Spaces";
+
+"%d pinned tabs" = "%d pinned tabs";
+
+"%d passwords" = "%d passwords";
+
+"Spaces · pinned tabs · themes · Boosts · passwords (encrypted)" = "Spaces · pinned tabs · themes · Boosts · passwords (encrypted)";
+
+"how it looks in the sidebar" = "how it looks in the sidebar";

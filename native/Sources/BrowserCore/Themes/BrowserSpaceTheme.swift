@@ -117,6 +117,8 @@ public struct BrowserSpaceTheme: Codable, Hashable, Sendable {
     public struct Gradient: Codable, Hashable, Sendable {
         /// One to three stops, first at `start` and last at `end` along the axis.
         public var stops: [BrowserThemeColor]
+        /// Optional stop positions; old records retain their uniformly spaced stops.
+        public var locations: [Double]? = nil
         /// Axis angle in degrees from +x toward +y, top-left origin, in points.
         public var angleDegrees: Double
         /// Positions of the first and last stop as fractions of the window's projection on the axis.
@@ -124,8 +126,9 @@ public struct BrowserSpaceTheme: Codable, Hashable, Sendable {
         public var end: Double
 
         public init(stops: [BrowserThemeColor], angleDegrees: Double = BrowserSpaceTheme.defaultAngleDegrees,
-                    start: Double = 0, end: Double = 1) {
+                    start: Double = 0, end: Double = 1, locations: [Double]? = nil) {
             self.stops = stops
+            self.locations = locations
             self.angleDegrees = angleDegrees
             self.start = start
             self.end = end
@@ -133,6 +136,11 @@ public struct BrowserSpaceTheme: Codable, Hashable, Sendable {
 
         public var isValid: Bool {
             (1...BrowserSpaceTheme.maximumColors).contains(stops.count) && stops.allSatisfy(\.isValid)
+                && (locations.map { values in
+                    values.count == stops.count && values.first == 0 && values.last == 1
+                        && values.allSatisfy { $0.isFinite && (0...1).contains($0) }
+                        && zip(values, values.dropFirst()).allSatisfy { $0 < $1 }
+                } ?? true)
                 && angleDegrees.isFinite && (0..<360).contains(angleDegrees)
                 && start.isFinite && end.isFinite && 0 <= start && start < end && end <= 1
         }

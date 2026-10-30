@@ -24,16 +24,22 @@ enum OrbitOnboardingSyncAvailability: Equatable, Sendable {
     case available, signedOut, unavailable
 }
 
-/// The onboarding's navigation and choices, without AppKit. Steps: welcome, import, sync, theme,
+/// The onboarding's navigation and choices, without AppKit. Steps: welcome, import, favourites, sync, theme,
 /// default browser, finish.
 struct OrbitOnboardingFlow: Equatable {
     typealias Step = BrowserOnboardingRecord.Step
-    static let steps: [Step] = [.welcome, .importSource, .sync, .theme, .defaultBrowser, .finish]
+    static let steps: [Step] = [.welcome, .importSource, .favourites, .sync, .theme, .defaultBrowser, .finish]
 
     private(set) var step: Step
     var importChoice: BrowserOnboardingRecord.ImportChoice?
     var syncChoice: Bool?
     var defaultBrowserChoice: Bool?
+    var selectedProfiles: Set<String> = []
+    var favourites = BrowserOnboardingFavourite.starter
+    var importDuration: Double?
+    var importSummary: BrowserOnboardingRecord.ImportSummary?
+    var importApplied = false
+    var favouritesSkipped = false
     let sources: [OrbitOnboardingSource]
     let syncAvailability: OrbitOnboardingSyncAvailability
 
@@ -43,9 +49,18 @@ struct OrbitOnboardingFlow: Equatable {
         self.sources = sources
         self.syncAvailability = syncAvailability
         if let record {
-            importChoice = record.importChoice.flatMap { Self.isOffered($0, in: sources) ? $0 : nil }
+            importChoice = record.importChoice.flatMap { record.importApplied == true || Self.isOffered($0, in: sources) ? $0 : nil }
             syncChoice = record.syncChoice
             defaultBrowserChoice = record.defaultBrowserChoice
+            selectedProfiles = Set(record.selectedProfiles ?? [])
+            favourites = record.favourites ?? BrowserOnboardingFavourite.starter
+            importDuration = record.importDuration
+            importSummary = record.importSummary
+            importApplied = record.importApplied == true
+            favouritesSkipped = record.favouritesSkipped == true
+        }
+        if selectedProfiles.isEmpty, record?.selectedProfiles == nil, case let .browser(_, profile) = importChoice, let profile {
+            selectedProfiles = [profile]
         }
         // A single possible answer is preselected; the reference keeps Next disabled until a choice.
         if sources.isEmpty, importChoice == nil { importChoice = BrowserOnboardingRecord.ImportChoice.none }
@@ -62,21 +77,24 @@ struct OrbitOnboardingFlow: Equatable {
     }
 
     var index: Int { Self.steps.firstIndex(of: step) ?? 0 }
-    var hasBack: Bool { [.sync, .theme, .defaultBrowser].contains(step) }
-    var hasSkip: Bool { step == .theme }
-    var isCardStep: Bool { step != .welcome }
+    var skippedSteps: Set<Step> { importsSpaceConfiguration ? [.favourites, .theme] : [] }
+    var effectiveSteps: [Step] { Self.steps.filter { !skippedSteps.contains($0) } }
+    var hasBack: Bool { step != .welcome && step != .finish && !importApplied }
+    var selectedFavourites: [BrowserOnboardingFavourite] { favourites.filter(\.selected) }
+    var hasSkip: Bool { [.importSource, .favourites, .theme].contains(step) }
+    var isCardStep: Bool { step != .welcome && step != .finish }
 
     var canAdvance: Bool {
         switch step {
-        case .welcome, .theme, .finish: true
-        case .importSource: importChoice != nil
+        case .welcome, .favourites, .theme, .finish: true
+        case .importSource: importChoice != nil && (selectedSource?.profiles.isEmpty != false || !selectedProfiles.isEmpty)
         case .sync: syncChoice != nil
         case .defaultBrowser: defaultBrowserChoice != nil
         }
     }
 
     @MainActor var primaryTitle: String {
-        step == .finish ? OrbitOnboardingText.getStarted : OrbitOnboardingText.next
+        step == .finish ? OrbitOnboardingText.getStarted : step == .importSource ? OrbitOnboardingText.bringOver : OrbitOnboardingText.next
     }
 
     /// The source currently selected on the import step, if any.
@@ -87,11 +105,13 @@ struct OrbitOnboardingFlow: Equatable {
 
     mutating func select(source: OrbitOnboardingSource) {
         importChoice = source.choice(profile: source.profiles.first?.directory)
+        selectedProfiles = Set(source.profiles.map(\.directory))
     }
 
     mutating func select(profile: String, of source: OrbitOnboardingSource) {
         guard source.profiles.contains(where: { $0.directory == profile }) else { return }
-        importChoice = source.choice(profile: profile)
+        if selectedProfiles.contains(profile) { selectedProfiles.remove(profile) } else { selectedProfiles.insert(profile) }
+        importChoice = source.choice(profile: source.profiles.first { selectedProfiles.contains($0.directory) }?.directory)
     }
 
     mutating func selectSync(_ value: Bool) {
@@ -101,20 +121,28 @@ struct OrbitOnboardingFlow: Equatable {
 
     @discardableResult
     mutating func advance() -> Bool {
-        guard canAdvance, index + 1 < Self.steps.count else { return false }
-        step = Self.steps[index + 1]
+        guard canAdvance, let i = effectiveSteps.firstIndex(of: step), i + 1 < effectiveSteps.count else { return false }
+        step = effectiveSteps[i + 1]
         return true
     }
 
     @discardableResult
     mutating func goBack() -> Bool {
         guard hasBack else { return false }
-        step = Self.steps[index - 1]
+        guard let i = effectiveSteps.firstIndex(of: step), i > 0 else { return false }
+        step = effectiveSteps[i - 1]
         return true
     }
 
     func record(_ state: BrowserOnboardingRecord.State, date: Date = Date()) -> BrowserOnboardingRecord {
-        BrowserOnboardingRecord(state: state, step: step, date: date, importChoice: importChoice,
+        var record = BrowserOnboardingRecord(state: state, step: step, date: date, importChoice: importChoice,
                                 syncChoice: syncChoice, defaultBrowserChoice: defaultBrowserChoice)
+        record.selectedProfiles = selectedProfiles.sorted()
+        record.favourites = favourites
+        record.importDuration = importDuration
+        record.importSummary = importSummary
+        record.importApplied = importApplied
+        record.favouritesSkipped = favouritesSkipped
+        return record
     }
 }

@@ -28,6 +28,8 @@ final class OrbitThemeEditorView: NSView {
     var state: OrbitThemeEditorState { didSet { if state != oldValue { render() } } }
     var onChange: ((OrbitThemeEditorState) -> Void)?
     var onDismiss: (() -> Void)?
+    /// A caller may supply a local preset row without changing the product editor’s palette.
+    var scopedPresets: [OrbitThemeEditorPreset]? { didSet { render() } }
 
     let surfaceScope = NSTextField(labelWithString: uiText("This Space · captured profile"))
     let material = NSVisualEffectView()
@@ -197,12 +199,39 @@ final class OrbitThemeEditorView: NSView {
         for button in [removeButton, addButton, previousButton, nextButton] {
             button.tint = button.isEnabled ? OrbitThemeEditorColors.control : OrbitThemeEditorColors.inactive
         }
-        let family = state.family
-        for (index, swatch) in swatches.enumerated() {
-            swatch.color = family.swatches.indices.contains(index) ? OrbitSpaceThemes.color(family.swatches[index]) : .clear
-            swatch.isSelected = state.selectedSwatch == index
-            swatch.setAccessibilityLabel(OrbitThemeEditorText.swatch(family, index + 1))
-            swatch.refresh()
+        if let presets = scopedPresets {
+            previousButton.isHidden = true; nextButton.isHidden = true
+            let left = M.swatchCenter(0).x, right = M.swatchCenter(8).x
+            for (index, swatch) in swatches.enumerated() {
+                guard presets.indices.contains(index) else { swatch.isHidden = true; continue }
+                let preset = presets[index]
+                swatch.isHidden = false
+                swatch.frame.origin.x = left + CGFloat(index) * (right - left) / CGFloat(max(1, presets.count - 1)) - swatch.frame.width / 2
+                swatch.gradientStops = preset.colors
+                swatch.gradientLocations = preset.locations
+                swatch.gradientAngle = preset.theme.light.angleDegrees
+                swatch.selectionColor = .controlAccentColor
+                swatch.color = preset.colors.first ?? .clear
+                swatch.isSelected = state.theme.presetID == preset.theme.presetID
+                swatch.setAccessibilityLabel(preset.title)
+                swatch.onPress = { [weak self] in
+                    self?.edit { state in
+                        var theme = preset.theme
+                        theme.mode = state.theme.mode
+                        theme.noise = state.theme.noise
+                        state = OrbitThemeEditorState(theme: theme)
+                    }
+                }
+                swatch.refresh()
+            }
+        } else {
+            let family = state.family
+            for (index, swatch) in swatches.enumerated() {
+                swatch.color = family.swatches.indices.contains(index) ? OrbitSpaceThemes.color(family.swatches[index]) : .clear
+                swatch.isSelected = state.selectedSwatch == index
+                swatch.setAccessibilityLabel(OrbitThemeEditorText.swatch(family, index + 1))
+                swatch.refresh()
+            }
         }
         intensitySlider.isActive = state.hasColor
         intensitySlider.value = state.theme.intensity
@@ -468,7 +497,11 @@ final class OrbitThemeSwatchButton: NSButton {
     var onPress: (() -> Void)?
     var color: NSColor = .clear
     var isSelected = false
-    private let disc = CALayer()
+    var gradientStops: [NSColor]?
+    var gradientLocations: [NSNumber]?
+    var gradientAngle = BrowserSpaceTheme.defaultAngleDegrees
+    var selectionColor: NSColor?
+    private let disc = CAGradientLayer()
     private let ring = CAShapeLayer()
 
     init() {
@@ -501,12 +534,17 @@ final class OrbitThemeSwatchButton: NSButton {
         disc.frame = CGRect(x: bounds.midX - side / 2, y: bounds.midY - side / 2, width: side, height: side)
         disc.cornerRadius = side / 2
         disc.backgroundColor = color.cgColor
+        disc.colors = gradientStops?.map(\.cgColor)
+        disc.locations = gradientLocations
+        let angle = gradientAngle * .pi / 180
+        disc.startPoint = CGPoint(x: 0.5 - cos(angle) / 2, y: 0.5 + sin(angle) / 2)
+        disc.endPoint = CGPoint(x: 0.5 + cos(angle) / 2, y: 0.5 - sin(angle) / 2)
         disc.borderWidth = 1.5
         disc.borderColor = color.blended(withFraction: 0.15, of: .black)?.cgColor
         let ringInset = OrbitThemeEditorMetrics.swatchRing / 2
         ring.frame = bounds
         ring.path = CGPath(ellipseIn: bounds.insetBy(dx: ringInset, dy: ringInset), transform: nil)
-        ring.strokeColor = OrbitThemeEditorColors.swatchRing.resolvedCGColor(for: effectiveAppearance)
+        ring.strokeColor = (selectionColor ?? OrbitThemeEditorColors.swatchRing).resolvedCGColor(for: effectiveAppearance)
         ring.isHidden = !isSelected
         CATransaction.commit()
         state = isSelected ? .on : .off
@@ -749,4 +787,12 @@ final class OrbitThemeGrainDial: NSView {
 
     override func drawFocusRingMask() { NSBezierPath(ovalIn: bounds.insetBy(dx: 2, dy: 2)).fill() }
     override var focusRingMaskBounds: NSRect { bounds }
+}
+
+@MainActor
+struct OrbitThemeEditorPreset {
+    let title: String
+    let theme: BrowserSpaceTheme
+    let colors: [NSColor]
+    let locations: [NSNumber]
 }

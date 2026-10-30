@@ -10,6 +10,7 @@ ORBIT_RESOURCE_FILES = frozenset({
     'README.md', 'sign-color.pdf', 'sign-color.svg',
     'vector-provenance.json', 'wordmark.pdf', 'wordmark.svg',
 })
+BRAND_FONT_FILES = frozenset({'intertight.ttf', 'geistmono.ttf', 'gloock.ttf', 'intertight-OFL.txt', 'geistmono-OFL.txt', 'gloock-OFL.txt', 'mark.pdf'})
 BUILD_SUFFIXES = {'.d', '.o', '.a', '.swiftmodule', '.swiftdoc', '.swiftsourceinfo', '.dia', '.dsym'}
 
 
@@ -82,6 +83,13 @@ def validate_bundle_contents(bundle):
                 allowed = allowed or (len(resource) == 1 and resource[0].endswith('.lproj')) or localized_file
                 if localized_file and (entry.is_symlink() or not entry.is_file()):
                     raise RuntimeError('Invalid shared localization resource type refused: ' + str(relative))
+                font_directory = resource == ('BrandFonts',)
+                font_file = ((len(resource) == 1 and resource[0] in BRAND_FONT_FILES) or
+                             (len(resource) == 2 and resource[0] == 'BrandFonts' and resource[1] in BRAND_FONT_FILES))
+                if font_directory or font_file:
+                    if entry.is_symlink() or (font_directory and not entry.is_dir()) or (font_file and not entry.is_file()):
+                        raise RuntimeError('Invalid onboarding font resource: ' + str(relative))
+                    allowed = True
                 # CMake retains Orbit/; SwiftPM flattens processed resource filenames.
                 # Admit only this exact group, never arbitrary SVG/PDF/JSON/Markdown files.
                 orbit_directory = resource == ('Orbit',)
