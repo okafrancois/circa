@@ -136,7 +136,7 @@ struct NativeThemeRowOverlayContrastTests {
                     let context = "\(name) \(state) secondary=\(secondary) dark=\(isDark)"
                     try check(theme: theme, [row.titleLabel.textColor], minimum: secondary && state != "hover" ? 3 : 4.5,
                               backgrounds: painted, appearance: appearance, context: context,
-                              expectedInk: state == "selected" ? (secondary ? OrbitTokens.Color.State.pinnedSelectedIcon : OrbitTokens.Color.State.pinnedSelectedText) : nil)
+                              expectedInk: state == "selected" && !isDark ? (secondary ? OrbitTokens.Color.State.pinnedSelectedIcon : OrbitTokens.Color.State.pinnedSelectedText) : nil)
                     if let field = row.renameField {
                         let editor = try #require(field.currentEditor() as? NSTextView)
                         #expect(editor.insertionPointColor == NSColor.controlAccentColor)
@@ -147,13 +147,13 @@ struct NativeThemeRowOverlayContrastTests {
                         + descendants(row, of: NSImageView.self).map(\.contentTintColor)
                         + descendants(row, of: SidebarPinnedSlashView.self).map { Optional($0.tint) }
                     try check(theme: theme, icons, minimum: 3, backgrounds: painted, appearance: appearance, context: context + " icons",
-                              expectedInk: state == "selected" ? OrbitTokens.Color.State.pinnedSelectedIcon : nil)
+                              expectedInk: state == "selected" && !isDark ? OrbitTokens.Color.State.pinnedSelectedIcon : nil)
                     let buttonBackgrounds = painted.map {
                         composite(OrbitTokens.Color.State.rowCloseButtonHover, on: $0, appearance: appearance)
                     }
                     try check(theme: theme, [row.closeButton.tint], minimum: 3, backgrounds: buttonBackgrounds,
                               appearance: appearance, context: context + " nested button overlay",
-                              expectedInk: state == "selected" ? OrbitTokens.Color.State.pinnedSelectedIcon : nil)
+                              expectedInk: state == "selected" && !isDark ? OrbitTokens.Color.State.pinnedSelectedIcon : nil)
                     row.cancelRename()
                     window.contentView = nil
                 }

@@ -177,8 +177,19 @@ class SidebarListRow: NSView, NSTextFieldDelegate {
         needsLayout = true
     }
 
+    /// The opaque pinned card was measured on a light Space; dark Spaces keep the shared selected style.
+    private var usesPinnedSelectedCard: Bool {
+        guard let row = self as? SidebarTabRow, row.item.isPinned && isSelected else { return false }
+        return !OrbitAppearance.isDark(effectiveAppearance)
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        refreshFill()
+    }
+
     private func refreshForeground() {
-        if let row = self as? SidebarTabRow, row.item.isPinned && isSelected {
+        if usesPinnedSelectedCard {
             background.fillColor = OrbitTokens.Color.State.pinnedSelected
             background.applyFrost(.defaultSpace)
             effectiveAccent = accent
@@ -236,8 +247,7 @@ class SidebarListRow: NSView, NSTextFieldDelegate {
         let state = OrbitTokens.Color.State.self
         if isSelected || isRenaming {
             stateFill = isRenaming ? state.renamingRow : state.tabCurrent
-            background.outerShadow = (self as? SidebarTabRow)?.item.isPinned == true
-                ? OrbitTokens.Shadow.pinnedSelected : OrbitTokens.Shadow.tabSelected
+            background.outerShadow = usesPinnedSelectedCard ? OrbitTokens.Shadow.pinnedSelected : OrbitTokens.Shadow.tabSelected
             return
         }
         background.outerShadow = nil

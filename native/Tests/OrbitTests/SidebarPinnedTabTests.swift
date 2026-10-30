@@ -101,7 +101,7 @@ struct SidebarPinnedTabTests {
 }
 
 extension NativeWebKitTests.SidebarPinnedTabTests {
-    @Test("Selected pin card geometry and ink are independent of appearance")
+    @Test("Selected pin card is opaque in light Spaces and keeps the shared style in dark Spaces")
     func selectedPinGeometry() {
         let row = SidebarTabRow(item: .init(id: TabID(), title: "Illustrated Atlas — Field Notes", selected: true,
             isPinned: true, isLoadedInThisWindow: true), depth: 1)
@@ -114,12 +114,13 @@ extension NativeWebKitTests.SidebarPinnedTabTests {
         #expect(row.titleLabel.frame.minX == 47 && row.titleLabel.frame.minY == 9.5)
         #expect(row.closeButton.frame.midX == 463)
         #expect(row.background.cornerRadius == 11)
+        row.appearance = NSAppearance(named: .aqua)
         #expect(row.background.outerShadow?.blur == 2 && row.background.outerShadow?.offsetY == 1)
-        for name in [NSAppearance.Name.aqua, .darkAqua] {
-            row.appearance = NSAppearance(named: name)
-            row.refreshFill()
-            #expect(row.background.fillColor == OrbitTokens.Color.State.pinnedSelected)
-            #expect(row.titleLabel.textColor == OrbitTokens.Color.State.pinnedSelectedText)
-        }
+        #expect(row.background.fillColor == OrbitTokens.Color.State.pinnedSelected)
+        #expect(row.titleLabel.textColor == OrbitTokens.Color.State.pinnedSelectedText)
+        row.appearance = NSAppearance(named: .darkAqua)
+        #expect(row.background.fillColor != OrbitTokens.Color.State.pinnedSelected)
+        #expect(row.background.outerShadow?.color == OrbitTokens.Color.ShadowColor.tabSelected)
+        #expect(row.titleLabel.textColor != OrbitTokens.Color.State.pinnedSelectedText)
     }
 }
