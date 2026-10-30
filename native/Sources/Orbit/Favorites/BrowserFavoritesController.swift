@@ -142,6 +142,7 @@ final class BrowserFavoritesController<Engine: BrowserEngine> {
         grid.commandsEnabled = !owner.isPreparingForTermination && !session.isClosed
         grid.minimumTileWidth = owner.sidebar.favoriteMinimumTileWidth
         owner.sidebar.favoriteCount = items.count
+        grid.accent = owner.sidebar.currentThemeAccent
         grid.render(items, profileID: snapshot?.profileID)
     }
 

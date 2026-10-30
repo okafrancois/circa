@@ -234,6 +234,7 @@ extension OrbitTokens {
             public func degrees(isDark: Bool) -> CGFloat { isDark ? dark : light }
         }
 
+        var frostAmount: CGFloat = 0
         var foregroundOverride: NSColor? = nil
         var meshCorners: [NSColor]? = nil
         public var stops: [NSColor]

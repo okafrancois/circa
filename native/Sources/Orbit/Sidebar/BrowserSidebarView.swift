@@ -168,6 +168,7 @@ final class BrowserSidebarView: NSView, SidebarListHost {
     private var renderedCatalog: BrowserCatalogSnapshot?
     private var activeSpaceID: SpaceID?
     private var commandsEnabled = true
+    var currentThemeAccent: OrbitTokens.ThemeAccent { accent }
     private var accent = OrbitTokens.ThemeAccent.defaultSpace
     private(set) var geometry = OrbitSidebarGeometry.resolve(.init(height: 640))
 
@@ -828,6 +829,10 @@ final class BrowserSidebarView: NSView, SidebarListHost {
     }
 
     func applyAccent(_ accent: OrbitTokens.ThemeAccent) {
+        if (accent.contrastTheme?.frostAmount ?? 0) > 0 {
+            swipePreviewRaster?.restore(); swipePreviewRaster = nil
+            swipeFavoritesRaster?.restore(); swipeFavoritesRaster = nil
+        }
         if let raster = swipePreviewRaster,
            !previewRasterMatches(raster, accent: accent) {
             raster.restore()
@@ -836,6 +841,8 @@ final class BrowserSidebarView: NSView, SidebarListHost {
         self.accent = accent
         if addressContainer.accent != accent { addressContainer.accent = accent }
         if navigationContainer.accent != accent { navigationContainer.accent = accent }
+        liveFavoritesGrid?.accent = accent
+        for grid in [swipePreviewFavorites, swipeOutgoingFavorites, ordinaryOutgoingFavorites] { grid?.accent = accent }
         footer.accent = accent
         updateCard.accent = accent
         page.accent = accent
@@ -1278,7 +1285,7 @@ final class SidebarAddressField: SidebarFlippedView {
     private weak var field: NSTextField?
     var accent = OrbitTokens.ThemeAccent.defaultSpace { didSet { if accent != oldValue { refreshAccent() } } }
     var effectiveAccent: OrbitTokens.ThemeAccent {
-        OrbitSpaceThemes.accent(accent, over: background.fillColor.map { [$0] } ?? [])
+        OrbitFloatingMaterial.sidebarInk(accent)
     }
     var isEditing = false { didSet { if isEditing != oldValue { refresh() } } }
     private var isHovering = false { didSet { if isHovering != oldValue { refresh() } } }
@@ -1387,6 +1394,7 @@ final class SidebarAddressField: SidebarFlippedView {
     }
 
     private func refreshAccent() {
+        background.applyFrost(accent, selected: isEditing)
         for accessory in accessories { applyAccessoryAccent(accessory) }
         // Explicit manually supplied accents preserve an installed editor's independent styling.
         guard accent.contrastTheme != nil, let field else { return }
@@ -1489,6 +1497,7 @@ extension BrowserSidebarView {
     }
     private func frozenFavorites(_ items: [FavoriteTileItem], profile: ProfileID?, attach: Bool = true) -> FavoritesGridView {
         let grid = FavoritesGridView()
+        grid.accent = accent
         grid.commandsEnabled = false
         grid.animatesChanges = false
         grid.minimumTileWidth = favoriteMinimumTileWidth
@@ -1537,6 +1546,7 @@ extension BrowserSidebarView {
             incoming.layoutSubtreeIfNeeded()
             let grid = frozenFavorites(favorites?.items ?? [], profile: favorites?.profileID, attach: false)
             grid.appearance = effectiveAppearance
+            grid.accent = key.accent
             grid.frame = contentFrame(layout.favoritesFrame)
             grid.layoutSubtreeIfNeeded()
             let scale = window?.backingScaleFactor ?? 2

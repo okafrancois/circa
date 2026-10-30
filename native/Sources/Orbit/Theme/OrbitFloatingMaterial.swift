@@ -10,7 +10,8 @@ enum OrbitFloatingMaterial {
     struct Style {
         let variant: Variant
         let reducesTransparency: Bool
-        var tintOpacity: CGFloat { reducesTransparency ? 1 : (variant == .light ? 0.64 : 0.76) }
+        var selectedSidebarSurface = false
+        var tintOpacity: CGFloat { reducesTransparency ? 1 : (variant == .light ? (selectedSidebarSurface ? 0.72 : 0.64) : 0.76) }
         var tint: NSColor { variant == .light ? .white : NSColor(srgbRed: 14/255, green: 14/255, blue: 17/255, alpha: 1) }
         var body: NSColor { variant == .light ? NSColor(srgbRed: 20/255, green: 19/255, blue: 23/255, alpha: 1) : NSColor(white: 0.97, alpha: 1) }
         var secondary: NSColor { variant == .light ? NSColor(srgbRed: 55/255, green: 52/255, blue: 62/255, alpha: 1) : NSColor(srgbRed: 208/255, green: 205/255, blue: 214/255, alpha: 1) }
@@ -77,6 +78,21 @@ enum OrbitFloatingMaterial {
         return frost
     }
 
+    /// Keep the material polarity tied to the same painted fill as sidebar ink.
+    static func sidebarInk(_ accent: OrbitTokens.ThemeAccent) -> OrbitTokens.ThemeAccent {
+        guard let theme = accent.contrastTheme, theme.frostAmount > 0 else { return accent }
+        var result = accent
+        let ink = NSColor(name: nil) { appearance in
+            MainActor.assumeIsolated {
+                let variant: Variant = OrbitThemeForeground.isLight(on: accent.foreground.resolved(for: appearance)) ? .light : .dark
+                return Style(variant: variant, reducesTransparency: false).body
+            }
+        }
+        result.sidebarText = ink
+        result.icon = ink
+        return result
+    }
+
     static func alert() -> NSAlert {
         let alert = OrbitFrostAlert()
         alert.window.isOpaque = false
@@ -96,6 +112,8 @@ final class OrbitFrostView: NSView {
     private let tint = NSView()
     private let highlight = CAGradientLayer()
     private let observers = OrbitWorkspaceObservers()
+    var sidebarForeground: NSColor? { didSet { refresh() } }
+    var selectedSidebarSurface = false { didSet { refresh() } }
     var fixedVariant: OrbitFloatingMaterial.Variant? { didSet { refresh() } }
     private(set) var style: OrbitFloatingMaterial.Style!
 
@@ -141,6 +159,10 @@ final class OrbitFrostView: NSView {
     func refresh(reduceTransparency: Bool = NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency) {
         let appearance = fixedVariant.map { NSAppearance(named: $0 == .dark ? .darkAqua : .aqua)! } ?? effectiveAppearance
         style = OrbitFloatingMaterial.style(for: appearance, reduceTransparency: reduceTransparency)
+        if let sidebarForeground {
+            style = .init(variant: OrbitThemeForeground.isLight(on: sidebarForeground.resolved(for: appearance)) ? .light : .dark,
+                          reducesTransparency: reduceTransparency, selectedSidebarSurface: selectedSidebarSurface)
+        }
         CATransaction.begin(); CATransaction.setDisableActions(true)
         effect.appearance = appearance
         effect.state = reduceTransparency ? .inactive : .active

@@ -219,11 +219,29 @@ final class OrbitSurfaceBackgroundView: NSView {
     private let fill = CALayer()
     private let shadowCaster = CALayer()
     private let shadowMask = CAShapeLayer()
+    private(set) var frost: OrbitFrostView?
     var fillColor: NSColor? { didSet { refresh() } }
     var cornerRadius: CGFloat { didSet { needsLayout = true } }
     var outerShadow: OrbitTokens.ShadowSpec? { didSet { refresh(); needsLayout = true } }
     var borderColor: NSColor? { didSet { refresh() } }
     var borderWidth: CGFloat = 0 { didSet { refresh() } }
+
+    func applyFrost(_ accent: OrbitTokens.ThemeAccent, selected: Bool = false) {
+        let amount = accent.contrastTheme?.frostAmount ?? 0
+        if amount > 0, frost == nil {
+            frost = OrbitFloatingMaterial.install(in: self, radius: cornerRadius)
+        }
+        if let frost {
+            frost.sidebarForeground = accent.foreground
+            frost.selectedSidebarSurface = selected
+            frost.isHidden = amount == 0
+            frost.alphaValue = amount
+        }
+        // Retain the old overlay below the material during a progress-driven transition.
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        fill.opacity = Float(1 - amount)
+        CATransaction.commit()
+    }
 
     init(cornerRadius: CGFloat) {
         self.cornerRadius = cornerRadius

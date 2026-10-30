@@ -42,6 +42,9 @@ final class OrbitThemeEditorView: NSView {
     private(set) var swatches: [OrbitThemeSwatchButton] = []
     let intensitySlider = OrbitThemeWaveSlider()
     let grainDial = OrbitThemeGrainDial()
+    let frostSwitch = NSSwitch()
+    let frostLabel = NSTextField(labelWithString: OrbitThemeEditorText.frost)
+    private let frostDivider = NSBox()
     private(set) var handles: [OrbitThemeHandleView] = []
     static let modes: [BrowserSpaceTheme.Mode] = [.automatic, .light, .dark]
 
@@ -117,6 +120,15 @@ final class OrbitThemeEditorView: NSView {
         surfaceScope.lineBreakMode = .byTruncatingTail
         surfaceScope.toolTip = surfaceScope.stringValue
         addSubview(surfaceScope)
+        frostDivider.boxType = .separator
+        frostDivider.frame = NSRect(x: 20, y: 522, width: 316, height: 1)
+        frostLabel.font = .systemFont(ofSize: 13, weight: .medium)
+        frostLabel.frame = NSRect(x: 20, y: 536, width: 240, height: 18)
+        frostSwitch.setAccessibilityLabel(OrbitThemeEditorText.frost)
+        frostSwitch.target = self
+        frostSwitch.action = #selector(changeFrost(_:))
+        frostSwitch.frame = NSRect(x: 298, y: 532, width: 38, height: 22)
+        for control in [frostDivider, frostLabel, frostSwitch] { addSubview(control) }
         setAccessibilityElement(true)
         setAccessibilityRole(.popover)
         setAccessibilityLabel(OrbitThemeEditorText.title)
@@ -144,6 +156,8 @@ final class OrbitThemeEditorView: NSView {
     required init?(coder: NSCoder) { nil }
 
     override var isFlipped: Bool { true }
+
+    @objc private func changeFrost(_ sender: NSSwitch) { edit { $0.setFrost(sender.state == .on) } }
 
     private func edit(_ change: (inout OrbitThemeEditorState) -> Void) {
         var next = state
@@ -179,6 +193,7 @@ final class OrbitThemeEditorView: NSView {
 
     /// Projects `state`; also called when the appearance changes (layer colours are resolved).
     func render() {
+        frostSwitch.state = state.theme.frost ? .on : .off
         let appearance = effectiveAppearance
         CATransaction.begin()
         CATransaction.setDisableActions(true)

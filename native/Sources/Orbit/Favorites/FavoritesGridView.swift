@@ -5,6 +5,7 @@ import BrowserCore
 final class FavoritesGridView: NSView, NSDraggingSource, FavoritesLocalDragSource {
     private(set) var items: [FavoriteTileItem] = []
     private(set) var tiles: [FavoriteTileView] = []
+    var accent = OrbitTokens.ThemeAccent.defaultSpace { didSet { for tile in tiles { tile.accent = accent } } }
     var animatesChanges = true
     var minimumTileWidth = OrbitTokens.Metrics.Sidebar.favoriteMinimumTileWidth { didSet { if minimumTileWidth != oldValue { needsLayout = true } } }
     var onDragWillBegin: (() -> Void)?
@@ -63,6 +64,7 @@ final class FavoritesGridView: NSView, NSDraggingSource, FavoritesLocalDragSourc
         tiles = items.map { item in
             if let tile = existing.removeValue(forKey: item.tab.id) { tile.update(item); return tile }
             let tile = FavoriteTileView(item: item)
+            tile.accent = accent
             tile.commandsEnabled = commandsEnabled
             tile.onSelect = { [weak self] in self?.onSelect?(item.tab.id) }
             tile.onDrag = { [weak self, weak tile] event in

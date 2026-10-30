@@ -65,6 +65,7 @@ enum OrbitSpaceThemes {
                              dark: CGFloat(model.dark.start)...CGFloat(model.dark.end)),
             angle: .init(light: CGFloat(model.light.angleDegrees), dark: CGFloat(model.dark.angleDegrees)),
             model: model)
+        theme.frostAmount = model.frost ? 1 : 0
         if model.paletteVersion == 2, model.colors.count == 3 {
             theme.meshCorners = OrbitThemeMesh.corners(model).map(color)
         }

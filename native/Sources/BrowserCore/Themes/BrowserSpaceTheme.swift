@@ -139,6 +139,7 @@ public struct BrowserSpaceTheme: Codable, Hashable, Sendable {
     }
 
     // Codable ignores retired surface/material fields in older themes.
+    public var frost: Bool = false
     public var paletteVersion: Int? = nil
     public var presetID: String?
     public var mode: Mode
@@ -149,7 +150,8 @@ public struct BrowserSpaceTheme: Codable, Hashable, Sendable {
     public var dark: Gradient
 
     public init(presetID: String? = nil, mode: Mode, colors: [BrowserThemeColor], intensity: Double, noise: Double,
-                light: Gradient, dark: Gradient) {
+                light: Gradient, dark: Gradient, frost: Bool = false) {
+        self.frost = frost
         self.presetID = presetID
         self.mode = mode
         self.colors = colors
@@ -157,6 +159,23 @@ public struct BrowserSpaceTheme: Codable, Hashable, Sendable {
         self.noise = noise
         self.light = light
         self.dark = dark
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case paletteVersion, presetID, mode, colors, intensity, noise, light, dark, frost
+    }
+
+    public init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        paletteVersion = try values.decodeIfPresent(Int.self, forKey: .paletteVersion)
+        presetID = try values.decodeIfPresent(String.self, forKey: .presetID)
+        mode = try values.decode(Mode.self, forKey: .mode)
+        colors = try values.decode([BrowserThemeColor].self, forKey: .colors)
+        intensity = try values.decode(Double.self, forKey: .intensity)
+        noise = try values.decode(Double.self, forKey: .noise)
+        light = try values.decode(Gradient.self, forKey: .light)
+        dark = try values.decode(Gradient.self, forKey: .dark)
+        frost = try values.decodeIfPresent(Bool.self, forKey: .frost) ?? false
     }
 
     public var isValid: Bool {
@@ -229,6 +248,7 @@ extension BrowserSpaceTheme {
         if colors.isEmpty {
             var theme = self.colors.isEmpty ? self : BrowserSpaceThemePresets.default
             theme.mode = mode
+            theme.frost = frost
             return theme
         }
         if colors == self.colors, intensity == nil, paletteVersion != 2 || mode == self.mode {
@@ -238,11 +258,14 @@ extension BrowserSpaceTheme {
             return result
         }
         if paletteVersion == 2 {
-            return Self.radial(colors: colors, intensity: intensity ?? self.intensity, noise: noise ?? self.noise,
+            var result = Self.radial(colors: colors, intensity: intensity ?? self.intensity, noise: noise ?? self.noise,
                                mode: mode, presetID: colors == self.colors ? presetID : nil)
+            result.frost = frost
+            return result
         }
-        let result = Self.composed(colors: colors, intensity: intensity ?? self.intensity, noise: noise ?? self.noise,
+        var result = Self.composed(colors: colors, intensity: intensity ?? self.intensity, noise: noise ?? self.noise,
                                    mode: mode, presetID: colors == self.colors ? presetID : nil)
+        result.frost = frost
         return result
     }
 }
