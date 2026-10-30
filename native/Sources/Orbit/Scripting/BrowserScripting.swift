@@ -38,7 +38,7 @@ final class BrowserScriptingController {
     static func applicationClassDescription(for hostClass: AnyClass) -> NSScriptClassDescription? {
         // Native engine hosts may subclass NSApplication without registering another dictionary class.
         (NSClassDescription(for: hostClass) as? NSScriptClassDescription)
-            ?? NSScriptSuiteRegistry.shared().classDescription(withAppleEventCode: 0x63617070)
+            ?? NSScriptSuiteRegistry.shared().classDescription(withAppleEventCode: "capp".utf8.reduce(0) { ($0 << 8) | UInt32($1) })
     }
 
     /// Reply conversion accepts references, not model wrappers, for declared specifier results.
