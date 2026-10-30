@@ -29,7 +29,7 @@ final class BrowserQuickWindowWindowController<Engine: BrowserEngine>: NSWindowC
     var copyURLWriter: (URL) -> Void = { url in
         BrowserLinkPasteboard.write(url)
     }
-    let copiedToast = BrowserCopiedToast()
+    let copiedToast = BrowserQuickWindowCopyFeedback()
     var sharingPicker: NSSharingServicePicker?
     var promotionShortcut: (() -> String?)?
 
@@ -47,9 +47,9 @@ final class BrowserQuickWindowWindowController<Engine: BrowserEngine>: NSWindowC
     var onDownload: ((Surface, any BrowserEngineDownload) -> Void)?
     let addressField = BrowserQuickWindowAddressField()
     let openButton = BrowserQuickWindowOpenButton()
-    let copyAddressButton = NSButton()
+    let copyAddressButton = BrowserQuickWindowButton()
     private var trafficLights: OrbitTrafficLights?
-    let spaceButton = NSButton()
+    let spaceButton = BrowserQuickWindowButton()
     let toolbar = BrowserQuickWindowToolbarView(frame: .zero)
     let openGroup = BrowserQuickWindowOpenGroup()
     private let page = NSView()
@@ -68,8 +68,8 @@ final class BrowserQuickWindowWindowController<Engine: BrowserEngine>: NSWindowC
     private var inputQueryRevision = UUID()
     private var compactQuery = ""
     private let inputFavicons = BrowserPaletteFaviconCache()
-    let sourceSpaceBadge = NSButton()
-    let extensionsButton = NSButton()
+    let sourceSpaceBadge = BrowserQuickWindowButton()
+    let extensionsButton = BrowserQuickWindowButton()
     private var openGroupWidth: NSLayoutConstraint?
     private let inputToken = UUID()
 
@@ -390,6 +390,7 @@ final class BrowserQuickWindowWindowController<Engine: BrowserEngine>: NSWindowC
         guard !isClosed else { return }
         isClosed = true
         inputQueryTask?.cancel()
+        copiedToast.dismiss(presentation: copiedToast.presentation)
         compactInput?.close()
         spaceChooser?.close()
         siteControls.cancelPermission()
@@ -557,7 +558,7 @@ final class BrowserQuickWindowWindowController<Engine: BrowserEngine>: NSWindowC
         surface.focusDocument()
     }
     @objc private func copyAddress(_ sender: Any?) {
-        copyCurrentURL()
+        copyURL()
     }
     func showSpaceChooser(_ rows: [BrowserQuickWindowSearchRow]) {
         guard acceptsCommands, let window else { return }

@@ -107,9 +107,16 @@ final class BrowserQuickWindowOpenGroup: NSView {
     }
 }
 
+/// Bound each toolbar arrow to its control, including disabled controls.
+@MainActor
+class BrowserQuickWindowButton: NSButton {
+    var arrowCursorRect: NSRect { bounds.intersection(visibleRect) }
+    override func resetCursorRects() { addCursorRect(arrowCursorRect, cursor: .arrow) }
+}
+
 /// A compact keyboard hint and disclosure separator painted without intercepting the button.
 @MainActor
-final class BrowserQuickWindowOpenButton: NSButton {
+final class BrowserQuickWindowOpenButton: BrowserQuickWindowButton {
     var shortcut = "" { didSet { needsDisplay = true } }
     override func draw(_ dirtyRect: NSRect) {
         let color = contentTintColor ?? NSColor.labelColor

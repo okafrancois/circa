@@ -22,8 +22,10 @@ struct QuickWindowToolbarTests {
                 let regions = little.addressField.textCursorRects
                 for button in [little.sourceSpaceBadge, little.extensionsButton, little.copyAddressButton,
                                little.openButton, little.spaceButton] {
-                    let rect = little.addressField.convert(button.bounds, from: button)
-                    #expect(regions.allSatisfy { !$0.intersects(rect) })
+                    #expect(button.bounds.contains(button.arrowCursorRect))
+                    #expect(!button.arrowCursorRect.isEmpty)
+                    let rect = little.addressField.convert(button.arrowCursorRect, from: button)
+                    #expect(regions.allSatisfy { !$0.intersects(rect) }, "control=\(button.accessibilityLabel() ?? button.title) rect=\(rect) regions=\(regions)")
                     #expect(little.toolbar.hitTest(little.toolbar.superview!.convert(
                         NSPoint(x: button.bounds.midX, y: button.bounds.midY), from: button)) === button)
                 }
@@ -89,6 +91,79 @@ struct QuickWindowToolbarTests {
         #expect(BrowserLinkPasteboard.write(url, to: board))
         #expect(board.string(forType: .string) == url.absoluteString)
         #expect(board.string(forType: .URL) == url.absoluteString)
+    }
+
+    @Test("Copy feedback has localized text, fixed window insets and bounded timing")
+    func copyFeedbackGeometry() async throws {
+        NSApplication.shared.setActivationPolicy(.prohibited)
+        let environment = BrowserEnvironment(engine: PeekSyntheticEngine())
+        let little = try await environment.makeQuickWindow(url: URL(string: "https://synthetic.invalid/copy")!)
+        defer { environment.retireQuickWindows() }
+        let window = try #require(little.window)
+        let toast = little.copiedToast
+        let board = NSPasteboard.withUniqueName()
+        defer { board.releaseGlobally() }
+        little.copyURLWriter = { BrowserLinkPasteboard.write($0, to: board) }
+        window.setContentSize(NSSize(width: 800, height: 360))
+        window.contentView?.layoutSubtreeIfNeeded()
+        little.copyAddressButton.performClick(nil)
+        let root = try #require(window.contentView)
+        #expect(toast.superview === root)
+        let copyPoint = root.convert(NSPoint(x: little.copyAddressButton.bounds.midX,
+                                            y: little.copyAddressButton.bounds.midY), from: little.copyAddressButton)
+        #expect(toast.hitTest(copyPoint) == nil)
+        #expect(toast.hitTest(root.convert(NSPoint(x: toast.shareButton.bounds.midX,
+                                                  y: toast.shareButton.bounds.midY), from: toast.shareButton)) === toast.shareButton)
+        #expect(toast.label.stringValue == "Copied Current URL")
+        #expect(toast.accessibilityLabel() == toast.label.stringValue)
+        #expect(toast.frame.size == NSSize(width: 205, height: 48))
+        #expect(root.bounds.maxX - toast.frame.maxX == 4)
+        #expect(root.isFlipped ? toast.frame.minY == 8 : root.bounds.maxY - toast.frame.maxY == 8)
+        #expect(BrowserQuickWindowCopyFeedback.fadeInDuration == TimeInterval(1) / 15)
+        #expect(BrowserQuickWindowCopyFeedback.visibleDuration == 3.2)
+        #expect(BrowserQuickWindowCopyFeedback.fadeOutDuration == 0)
+        #expect(BrowserQuickWindowCopyFeedback.dismissalDuration == 0.2)
+        for scale in [CGFloat(0.01), 0.5, 1] {
+            let transform = BrowserQuickWindowCopyFeedback.topAnchoredTransform(scale: scale)
+            #expect(abs(48 * transform.m22 + transform.m42 - 48) < 0.001)
+            #expect(abs(102.5 * transform.m11 + transform.m41 - 102.5) < 0.001)
+        }
+        #expect(board.string(forType: .string) == "https://synthetic.invalid/copy")
+        #expect(board.string(forType: .URL) == board.string(forType: .string))
+        window.setContentSize(NSSize(width: 960, height: 480))
+        root.layoutSubtreeIfNeeded()
+        #expect(root.bounds.maxX - toast.frame.maxX == 4)
+        #expect(root.isFlipped ? toast.frame.minY == 8 : root.bounds.maxY - toast.frame.maxY == 8)
+        little.retire()
+        #expect(toast.superview == nil)
+    }
+
+    @Test("Repeated copy restarts feedback without letting an earlier dismissal remove it")
+    func repeatedCopyFeedback() async throws {
+        NSApplication.shared.setActivationPolicy(.prohibited)
+        let environment = BrowserEnvironment(engine: PeekSyntheticEngine())
+        let little = try await environment.makeQuickWindow(url: URL(string: "https://synthetic.invalid/repeated")!)
+        defer { environment.retireQuickWindows() }
+        var copies = 0
+        little.copyURLWriter = { _ in copies += 1 }
+        little.copyAddressButton.performClick(nil)
+        let toast = little.copiedToast
+        let first = toast.presentation
+        try await Task.sleep(for: .milliseconds(250))
+        little.copyURL()
+        #expect(toast.presentation == first + 1)
+        #expect(copies == 2)
+        toast.dismiss(presentation: first)
+        #expect(toast.superview != nil)
+        try await Task.sleep(for: .seconds(3))
+        #expect(toast.superview != nil)
+        #expect(toast.alphaValue == 1)
+        try await Task.sleep(for: .milliseconds(800))
+        #expect(toast.superview == nil)
+        little.copyAddressButton.performClick(nil)
+        #expect(toast.superview != nil && toast.alphaValue == 1)
+        toast.dismiss(presentation: toast.presentation)
+        #expect(toast.superview == nil && toast.alphaValue == 1)
     }
 
     @Test("Main sidebar toolbar and address accessories do not overlap the text cursor")
