@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import BrowserShell
 
 /// A native field editor reports composition separately from its SwiftUI text binding. Marked
 /// text must never be replaced by a catalog refresh, including before the binding has changed.
@@ -37,7 +38,7 @@ final class BrowserSettingsNameTextField: NSTextField, NSTextFieldDelegate {
         isSelectable = true
         isBordered = false
         drawsBackground = false
-        font = .systemFont(ofSize: NSFont.systemFontSize)
+        font = BrandFonts.ui(13)
         delegate = self
         setContentHuggingPriority(.defaultLow, for: .horizontal)
     }

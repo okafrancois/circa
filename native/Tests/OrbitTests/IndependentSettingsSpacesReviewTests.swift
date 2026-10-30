@@ -149,8 +149,8 @@ struct IndependentSettingsSpacesReviewTests {
         #expect(controller.selectSection(.about))
         #expect(field.currentEditor() == nil && submissions == 0)
         #expect(draft.text == "Unsubmitted Draft")
-        // settings-window-2026-10-27.md: About is a deep link outside the six toolbar tabs.
-        #expect(window.toolbar?.selectedItemIdentifier == nil)
+        // About is the sixth visible category.
+        #expect(controller.selectedToolbarIdentifier == BrowserSettingsSection.about.toolbarIdentifier)
         #expect(model.settingsSection == .about && window.title == BrowserSettingsSection.about.title)
         #expect(!window.isVisible)
     }
@@ -173,7 +173,7 @@ struct IndependentSettingsSpacesReviewTests {
             let menu = try #require(item.menuFormRepresentation)
             #expect(NSApplication.shared.sendAction(try #require(menu.action), to: menu.target, from: menu))
             #expect(model.settingsSection == .links)
-            #expect(window.toolbar?.selectedItemIdentifier == BrowserSettingsSection.links.toolbarIdentifier)
+            #expect(controller.selectedToolbarIdentifier == BrowserSettingsSection.links.toolbarIdentifier)
         }
         model.resumeAfterCancelledTermination()
         #expect(controller.selectSection(.general))
@@ -199,7 +199,7 @@ struct IndependentSettingsSpacesReviewTests {
                 charactersIgnoringModifiers: key, isARepeat: false, keyCode: numberKeyCodes[index]))
             #expect(window.performKeyEquivalent(with: event))
             #expect(model.settingsSection == section)
-            #expect(window.toolbar?.selectedItemIdentifier == section.toolbarIdentifier)
+            #expect(controller.selectedToolbarIdentifier == section.toolbarIdentifier)
         }
         #expect(!window.isVisible)
     }

@@ -13,7 +13,7 @@ struct BrowserAirTrafficControlView<Engine: BrowserEngine>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             HStack {
-                Text(uiText("Air Traffic Control")).font(.system(size: 21, weight: .semibold))
+                Text(uiText("Air Traffic Control")).font(Font(BrandTextStyle.title.font(size: 22)))
                 Spacer()
                 Button(uiText("New Route"), systemImage: "plus") {
                     if let space = model.catalog.spaces.first {
@@ -57,17 +57,17 @@ struct BrowserAirTrafficControlView<Engine: BrowserEngine>: View {
             }
             HStack {
                 Text(uiText("Routes apply to links from other apps. The first matching route wins."))
-                    .font(.system(size: 11)).foregroundStyle(.secondary)
+                    .font(Font(BrandFonts.ui(11))).foregroundStyle(.secondary)
                 Spacer()
                 Button(uiText("Done")) { dismiss() }.keyboardShortcut(.defaultAction)
                     .disabled(drafts.contains { !$0.isValid } || model.isBusy)
                     .accessibilityIdentifier("routing-done")
             }
-            if let error = model.errorMessage { Text(error).foregroundStyle(.red).font(.system(size: 12)) }
+            if let error = model.errorMessage { Text(error).foregroundStyle(.red).font(Font(BrandFonts.ui(12))) }
         }
-        .padding(24).frame(width: 650)
-        .font(.system(size: 13)).foregroundStyle(OrbitSettingsStyle.foreground)
-        .background(OrbitSettingsStyle.background)
+        .padding(22).frame(width: 560)
+        .font(Font(BrandFonts.ui(13))).foregroundStyle(OrbitSettingsStyle.foreground)
+        .settingsFrost()
         .disabled(!model.acceptsActions || runtime.isUnavailable)
         .onAppear { drafts = runtime.document.linkRouting.rules.filter { route in model.catalog.spaces.contains { $0.id == route.spaceID } } }
     }
