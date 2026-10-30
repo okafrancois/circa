@@ -9,6 +9,8 @@ endforeach()
 if(NOT EXISTS "${SOURCE}/en.lproj/Localizable.strings" OR IS_SYMLINK "${DESTINATION}")
   message(FATAL_ERROR "Missing English localization or unsafe resource destination")
 endif()
+# Start from an empty resource tree so incremental builds never keep removed resources.
+file(REMOVE_RECURSE "${DESTINATION}/Contents/Resources")
 file(MAKE_DIRECTORY "${DESTINATION}/Contents/Resources")
 file(COPY "${SOURCE}/" DESTINATION "${DESTINATION}/Contents/Resources")
 file(WRITE "${DESTINATION}/Contents/Info.plist" [=[<?xml version="1.0" encoding="UTF-8"?>
