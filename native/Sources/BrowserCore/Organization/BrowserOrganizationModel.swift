@@ -137,6 +137,7 @@ public struct BrowserOrganizedTab: Codable, Equatable, Sendable {
     /// Last web title reported by the engine. Distinct from the user's custom title.
     public internal(set) var pageTitle: String?
     public internal(set) var customTitle: String?
+    public internal(set) var customIcon: BrowserSpaceIcon?
     /// Reference URL of a Favorite or Pinned tab. Always nil in Today.
     public internal(set) var pinnedURL: URL?
     /// Provider ownership and cached revision; machine-local and excluded from sync.
@@ -147,11 +148,12 @@ public struct BrowserOrganizedTab: Codable, Equatable, Sendable {
 
     public init(id: TabID, url: URL, pageTitle: String? = nil, customTitle: String? = nil,
                 pinnedURL: URL? = nil, createdAt: Date, lastActiveAt: Date,
-                liveFolderChild: BrowserLiveFolderChild? = nil) {
+                liveFolderChild: BrowserLiveFolderChild? = nil, customIcon: BrowserSpaceIcon? = nil) {
         self.id = id
         self.url = url
         self.pageTitle = pageTitle
         self.customTitle = customTitle
+        self.customIcon = customIcon
         self.pinnedURL = pinnedURL
         self.createdAt = createdAt
         self.lastActiveAt = lastActiveAt
@@ -329,6 +331,7 @@ extension BrowserArchivePolicy: Codable {
 public enum BrowserOrganizationAction: String, Sendable, Equatable {
     case moveItems, pinTabs, unpinTabs, addToFavorites, removeFromFavorites
     case createFolder, renameFolder, deleteFolder, renameTab, importBookmarks
+    case changeTabIcon, editPinnedURL
     case archiveTabs, closeTabs, clearToday, restoreArchivedTab, deleteArchivedTabs
     case createSplit, addSplitPane, closeSplitPane, unsplit, swapSplitPanes, orientSplit, resizeSplit
 }
@@ -351,6 +354,7 @@ public enum BrowserOrganizationError: Error, Equatable, Sendable {
     /// The anchor is not a child of the destination container.
     case invalidPosition
     case invalidTitle
+    case invalidIcon
     case notPinned
     case emptySelection
     case nothingToUndo

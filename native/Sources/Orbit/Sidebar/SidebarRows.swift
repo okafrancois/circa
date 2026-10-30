@@ -372,10 +372,10 @@ class SidebarTabRow: SidebarListRow {
         slash.tint = effectiveAccent.icon
         audioButton.tint = effectiveAccent.icon
         loadingIndicator.tint = effectiveAccent.icon
-        favicon.contentTintColor = displayedFavicon == nil ? effectiveAccent.icon : nil
+        favicon.contentTintColor = displayedFavicon == nil || displayedFavicon?.isTemplate == true ? effectiveAccent.icon : nil
     }
     var isResetButtonVisible: Bool { !resetButton.isHidden }
-    private var displayedFavicon: NSImage? { item.favicon ?? item.activity.favicon }
+    private var displayedFavicon: NSImage? { SpaceIconImages.tabImage(item.customIcon) ?? item.favicon ?? item.activity.favicon }
     var showsAudio: Bool { item.activity.isAudible == true || item.activity.isAudioMuted == true }
 
     func update(_ item: SidebarTabItem, depth: Int, node: BrowserOrganizationNode? = nil) {
@@ -386,7 +386,7 @@ class SidebarTabRow: SidebarListRow {
         if titleLabel.textColor != titleColor { titleLabel.textColor = titleColor }
         let image = displayedFavicon ?? faviconPlaceholder
         if favicon.image !== image { favicon.image = image }
-        let tint = displayedFavicon == nil ? effectiveAccent.icon : nil
+        let tint = displayedFavicon == nil || displayedFavicon?.isTemplate == true ? effectiveAccent.icon : nil
         if favicon.contentTintColor != tint { favicon.contentTintColor = tint }
         loadingIndicator.isLoading = item.activity.isLoading
         let muted = item.activity.isAudioMuted == true

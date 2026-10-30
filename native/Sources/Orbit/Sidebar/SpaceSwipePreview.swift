@@ -17,7 +17,7 @@ enum SpaceSwipePreview {
             guard let item = tabs[id] else { return nil }
             let image = document.spaces.first { $0.id == spaceID }.flatMap { icon($0.profileID, item.pinnedURL ?? item.url) }
             return SidebarTabItem(id: id, title: item.resolvedTitle ?? item.url.host ?? SidebarListStrings.newTab,
-                                  selected: id == selectedTab, favicon: image, isPinned: pinned)
+                                  selected: id == selectedTab, favicon: image, isPinned: pinned, customIcon: item.customIcon)
         }
         func append(_ nodes: [BrowserOrganizationNode], section: SidebarListSection, ancestors: [FolderID]) {
             for node in nodes where visited.insert(node).inserted {

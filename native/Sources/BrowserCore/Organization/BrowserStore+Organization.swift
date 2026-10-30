@@ -134,7 +134,7 @@ extension BrowserStore {
                         pageTitle: entry.pageTitle, customTitle: entry.customTitle, occurrenceID: occurrenceID,
                         isLoadedInThisWindow: live != nil,
                         isSelected: occurrenceID != nil && occurrenceID == selected,
-                        isOpenInAnotherWindow: remote.contains(id), lastActiveAt: entry.lastActiveAt))
+                        isOpenInAnotherWindow: remote.contains(id), lastActiveAt: entry.lastActiveAt, customIcon: entry.customIcon))
                 case let .split(id):
                     guard let split = organization.splits[id] else { return nil }
                     let panes = items(split.tabIDs.map(BrowserOrganizationNode.tab), section: section).compactMap { item -> BrowserOrganizationTabItem? in
@@ -698,6 +698,30 @@ extension BrowserStore {
         let customTitle = trimmed.isEmpty ? nil : try BrowserOrganizationState.validatedTitle(trimmed)
         try commitOrganization(.renameTab, in: context) { state in
             state.updateTab(id) { $0.customTitle = customTitle }
+        }
+        return try captureWindowState(in: context.windowID)
+    }
+
+    public func changeTabIcon(_ id: TabID, to icon: BrowserSpaceIcon?, from context: BrowserContext) throws -> BrowserWindowState {
+        _ = try organizationWindow(context)
+        _ = try visibleSection(of: .tab(id), in: context)
+        try requireOrdinaryTabs([id])
+        guard icon?.isValid != false else { throw BrowserOrganizationError.invalidIcon }
+        let value = icon == BrowserSpaceIcon.none ? nil : icon
+        try commitOrganization(.changeTabIcon, in: context) { state in
+            state.updateTab(id) { $0.customIcon = value }
+        }
+        return try captureWindowState(in: context.windowID)
+    }
+
+    /// Changes the home destination without discarding the occurrence's current navigation.
+    public func editPinnedURL(_ id: TabID, to url: URL, from context: BrowserContext) throws -> BrowserWindowState {
+        _ = try organizationWindow(context)
+        _ = try visibleSection(of: .tab(id), in: context)
+        try requireOrdinaryTabs([id])
+        guard organization.tabs[id]?.pinnedURL != nil else { throw BrowserOrganizationError.notPinned }
+        try commitOrganization(.editPinnedURL, in: context) { state in
+            state.updateTab(id) { $0.pinnedURL = url }
         }
         return try captureWindowState(in: context.windowID)
     }
