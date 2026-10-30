@@ -128,8 +128,8 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
             }
 
             panel {
-                settingRow(uiText("Archive Little Circas after:"), icon: "archivebox") {
-                    Picker(uiText("Archive Little Circas after:"), selection: Binding(
+                settingRow("Archive Little Circas after", icon: "archivebox") {
+                    Picker(uiText("Archive Little Circas after"), selection: Binding(
                         get: { runtime.document.quickWindowArchiveThreshold },
                         set: { value in model.perform { try await runtime.setQuickWindowArchiveThreshold(value) } }
                     )) {
