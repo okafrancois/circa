@@ -1,4 +1,5 @@
 import AppKit
+import BrowserShell
 
 extension OrbitTokens.Metrics.QuickWindow {
     static let minimumSize = NSSize(width: 480, height: 240)
@@ -57,9 +58,9 @@ final class BrowserQuickWindowAddressField: NSTextField {
         let paragraph = NSMutableParagraphStyle()
         paragraph.alignment = .center
         paragraph.lineBreakMode = .byTruncatingMiddle
-        let attributes: [NSAttributedString.Key: Any] = [.font: font ?? NSFont.systemFont(ofSize: 13),
+        let attributes: [NSAttributedString.Key: Any] = [.font: font ?? BrandTextStyle.ui.font(size: 13),
             .foregroundColor: textColor ?? NSColor.labelColor, .paragraphStyle: paragraph]
-        let height = ceil((font ?? NSFont.systemFont(ofSize: 13)).boundingRectForFont.height)
+        let height = ceil((font ?? BrandTextStyle.ui.font(size: 13)).boundingRectForFont.height)
         text.draw(in: NSRect(x: 30, y: (bounds.height - height) / 2,
                             width: max(0, bounds.width - 60), height: height), withAttributes: attributes)
     }
@@ -80,7 +81,11 @@ final class BrowserQuickWindowToolbarView: NSView {
     weak var addressField: BrowserQuickWindowAddressField?
     override init(frame: NSRect) {
         super.init(frame: frame)
+        wantsLayer = true
+        layer?.masksToBounds = true
         addSubview(fill)
+        let frost = OrbitFloatingMaterial.install(in: self, radius: 0)
+        addSubview(frost, positioned: .above, relativeTo: fill)
     }
     required init?(coder: NSCoder) { nil }
     override func resetCursorRects() { addCursorRect(bounds, cursor: .arrow) }
@@ -98,25 +103,32 @@ final class BrowserQuickWindowOpenGroup: NSView {
     override var wantsUpdateLayer: Bool { true }
     override func updateLayer() {
         layer?.cornerRadius = OrbitTokens.Metrics.QuickWindow.openInCornerRadius
-        layer?.backgroundColor = accent.menuSurface.cgColor
+        layer?.backgroundColor = NSColor.controlAccentColor.withAlphaComponent(0.12).cgColor
     }
+}
+
+/// Bound each toolbar arrow to its control, including disabled controls.
+@MainActor
+class BrowserQuickWindowButton: NSButton {
+    var arrowCursorRect: NSRect { bounds.intersection(visibleRect) }
+    override func resetCursorRects() { addCursorRect(arrowCursorRect, cursor: .arrow) }
 }
 
 /// A compact keyboard hint and disclosure separator painted without intercepting the button.
 @MainActor
-final class BrowserQuickWindowOpenButton: NSButton {
+final class BrowserQuickWindowOpenButton: BrowserQuickWindowButton {
     var shortcut = "" { didSet { needsDisplay = true } }
     override func draw(_ dirtyRect: NSRect) {
         let color = contentTintColor ?? NSColor.labelColor
         let paragraph = NSMutableParagraphStyle()
         paragraph.lineBreakMode = .byTruncatingTail
         let hintWidth: CGFloat = shortcut.isEmpty ? 0 : 34
-        let text = NSAttributedString(string: title, attributes: [.font: font ?? NSFont.systemFont(ofSize: 13),
+        let text = NSAttributedString(string: title, attributes: [.font: font ?? BrandTextStyle.ui.font(size: 13),
             .foregroundColor: color.withAlphaComponent(isEnabled ? 1 : 0.4), .paragraphStyle: paragraph])
         text.draw(in: NSRect(x: 8, y: (bounds.height - text.size().height) / 2,
                             width: max(0, bounds.width - hintWidth - 14), height: text.size().height))
         guard !shortcut.isEmpty else { return }
-        let hint = NSAttributedString(string: shortcut, attributes: [.font: NSFont.systemFont(ofSize: 12, weight: .semibold),
+        let hint = BrandTextStyle.mono.attributedString(shortcut, size: 12, weight: .semibold, attributes: [
             .foregroundColor: color.withAlphaComponent(0.65)])
         let rect = NSRect(x: bounds.maxX - hintWidth, y: (bounds.height - 20) / 2, width: 30, height: 20)
         color.withAlphaComponent(0.08).setFill()

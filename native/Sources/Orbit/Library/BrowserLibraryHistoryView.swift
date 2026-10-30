@@ -1,4 +1,5 @@
 import AppKit
+import BrowserShell
 import BrowserCore
 
 @MainActor
@@ -44,7 +45,7 @@ final class BrowserLibraryHistoryView: NSView, NSTableViewDataSource, NSTableVie
         super.init(frame: frame)
         let title = NSTextField(labelWithString: libraryText("history", "History"))
         title.font = OrbitTokens.Typography.commandBarInput
-        profileLabel.font = OrbitTokens.Typography.menuShortcut
+        profileLabel.font = BrandTextStyle.caption.font(size: 13)
         profileLabel.textColor = OrbitTokens.Color.Text.secondary
         searchField.placeholderString = libraryText("searchHistory", "Search History")
         searchField.maximumRecents = 0; searchField.recentsAutosaveName = nil
@@ -53,6 +54,8 @@ final class BrowserLibraryHistoryView: NSView, NSTableViewDataSource, NSTableVie
         status.font = OrbitTokens.Typography.emptyStateDetail
         status.textColor = OrbitTokens.Color.Text.secondary
         let reload = NSButton(title: libraryText("refresh", "Refresh"), target: self, action: #selector(refresh))
+        searchField.font = BrandTextStyle.body.font(size: 14)
+        for control in [more, open, remove, removeSite, reload, deleteOptions] { control.font = BrandTextStyle.ui.font(size: 13) }
         deleteOptions.addItems(withTitles: [libraryText("clearHistory", "Clear History…"), libraryText("lastHour", "Last Hour…"), libraryText("lastDay", "Last 24 Hours…"), libraryText("dateRange", "Date Range…"), libraryText("allTime", "All Time…")])
         deleteOptions.target = self; deleteOptions.action = #selector(deleteRange)
         deleteOptions.setAccessibilityLabel(libraryText("clearHistory", "Clear History…"))
@@ -190,8 +193,13 @@ final class BrowserLibraryHistoryView: NSView, NSTableViewDataSource, NSTableVie
             label.textColor = OrbitTokens.Color.Text.secondary
             label.setAccessibilityRole(NSAccessibility.Role(rawValue: "AXHeading"))
         case .visit(let visit):
-            label.stringValue = uiFormat("%@ · %@\n%@", timeFormatter.string(from: visit.visitedAt), visit.title.isEmpty ? visit.url.host ?? visit.url.absoluteString : visit.title, visit.url.absoluteString)
-            label.font = OrbitTokens.Typography.sidebarTabTitle
+            let time = timeFormatter.string(from: visit.visitedAt)
+            let value = uiFormat("%@ · %@\n%@", time, visit.title.isEmpty ? visit.url.host ?? visit.url.absoluteString : visit.title, visit.url.absoluteString)
+            let text = NSMutableAttributedString(string: value, attributes: [.font: OrbitTokens.Typography.sidebarTabTitle])
+            if let range = value.range(of: time) {
+                text.addAttribute(.font, value: BrandTextStyle.mono.font(size: 14), range: NSRange(range, in: value))
+            }
+            label.attributedStringValue = text
             label.textColor = OrbitTokens.Color.Text.primary
         }
         return cell

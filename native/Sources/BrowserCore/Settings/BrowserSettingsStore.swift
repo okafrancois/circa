@@ -47,7 +47,7 @@ public enum BrowserSpacePalette: String, Codable, CaseIterable, Sendable {
 }
 
 /// A Space has exactly one icon. SF Symbol identifiers are data, never grapheme strings.
-public enum BrowserSpaceIcon: Equatable, Hashable, Sendable {
+public enum BrowserSpaceIcon: Codable, Equatable, Hashable, Sendable {
     case none
     case grapheme(String)
     case systemSymbol(String)

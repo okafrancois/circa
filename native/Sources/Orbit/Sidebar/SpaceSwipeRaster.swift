@@ -14,7 +14,12 @@ final class SpaceSwipeRaster {
     var size: CGSize { layer.bounds.size }
 
     init?(view: NSView, scale: CGFloat, foreground: NSColor? = nil, overlays: [NSColor] = []) {
-        guard view.bounds.width > 0, view.bounds.height > 0,
+        // A bitmap cannot retain a live within-window backdrop material.
+        func containsFrost(_ view: NSView) -> Bool {
+            if let frost = view as? OrbitFrostView, !frost.isHidden, frost.alphaValue > 0 { return true }
+            return view.subviews.contains(where: containsFrost)
+        }
+        guard !containsFrost(view), view.bounds.width > 0, view.bounds.height > 0,
               let bitmap = NSBitmapImageRep(bitmapDataPlanes: nil,
                 pixelsWide: Int(ceil(view.bounds.width * scale)),
                 pixelsHigh: Int(ceil(view.bounds.height * scale)), bitsPerSample: 8,

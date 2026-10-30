@@ -32,7 +32,7 @@ struct SpacesSwitcherTests {
         #expect(SidebarSpaceTooltip.appearanceDelay == 0.45)
         #expect(capsule.name == "Research" && capsule.shortcut == "⌃4")
         #expect(capsule.subviews.compactMap { ($0 as? NSTextField)?.stringValue } == ["Research", "⌃", "4"])
-        #expect(capsule.subviews.compactMap { $0 as? NSVisualEffectView }.count == 1)
+        #expect(capsule.subviews.compactMap { $0 as? OrbitFrostView }.count == 1)
         #expect(BrowserSpaceCommands.shortcutLabel(at: 0) == "⌃1")
         #expect(BrowserSpaceCommands.shortcutLabel(at: 8) == "⌃9")
         #expect(BrowserSpaceCommands.shortcutLabel(at: 9) == nil)

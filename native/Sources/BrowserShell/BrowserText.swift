@@ -21,6 +21,11 @@ public enum BrowserText {
             ?? resourceBundle?.url(forResource: name, withExtension: fileExtension)
     }
 
+    /// Interface icon resources retain their optical-size directories in every build system.
+    public static func iconResource(_ name: String, extension fileExtension: String) -> URL? {
+        resourceBundle?.url(forResource: name, withExtension: fileExtension, subdirectory: "Icons")
+    }
+
     public static func string(_ english: String) -> String {
         guard let bundle = resourceBundle else { return english }
         return NSLocalizedString(english, bundle: bundle, value: english, comment: "Browser interface")

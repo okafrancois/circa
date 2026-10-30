@@ -83,6 +83,8 @@ struct OrbitThemeEditorState: Equatable {
     /// A swatch replaces the selected colour, or becomes the first one. A one-colour theme built from a
     /// swatch remembers it (`presetID`).
     mutating func chooseSwatch(_ index: Int) {
+        let frost = theme.frost
+        defer { theme.frost = frost }
         guard family.swatches.indices.contains(index) else { return }
         let swatch = family.swatches[index]
         if let selected = selectedIndex, theme.colors.indices.contains(selected), theme.colors.count > 1 {
@@ -98,6 +100,8 @@ struct OrbitThemeEditorState: Equatable {
     mutating func showFamily(offset: Int) {
         familyIndex = min(BrowserSpaceThemePresets.families.count - 1, max(0, familyIndex + offset))
     }
+
+    mutating func setFrost(_ enabled: Bool) { theme.frost = enabled }
 
     mutating func setMode(_ mode: BrowserSpaceTheme.Mode) { theme = theme.recomposed(mode: mode) }
 
@@ -128,6 +132,8 @@ struct OrbitThemeEditorState: Equatable {
     }
 
     private mutating func setColors(_ colors: [BrowserThemeColor], intensity: Double? = nil) {
+        let frost = theme.frost
+        defer { theme.frost = frost }
         if colors.isEmpty {
             var reset = BrowserSpaceThemePresets.default
             reset.mode = theme.mode

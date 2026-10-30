@@ -46,6 +46,7 @@ final class FavoriteIconPipeline<Surface: BrowserEngineSurface> {
 
     func image(for tab: BrowserOrganizationTabItem, surface: Surface?,
                isOwned: @escaping @MainActor (Surface) -> Bool) -> NSImage? {
+        if let image = SpaceIconImages.tabImage(tab.customIcon) { return image }
         if case .favorites(let profile) = tab.section {
             if entries[tab.id]?.request.profile != profile {
                 entries.removeValue(forKey: tab.id)?.task?.cancel()

@@ -57,7 +57,7 @@ extension OrbitApplication {
             }
         }
         if let profileID { settingsWindow?.model.selectProfile(profileID) }
-        if let section { settingsWindow?.model.settingsSection = section }
+        if let section { settingsWindow?.model.navigate(to: section) }
         settingsWindow?.model.perform { [weak self] in await self?.settingsWindow?.model.reload() }
         settingsWindow?.showWindow(nil)
         settingsWindow?.window?.makeKeyAndOrderFront(nil)
