@@ -49,6 +49,9 @@ extension BrowserWindowController {
     }
 
     private func configureSplitView(_ view: BrowserSplitView) {
+        view.onConfigureHistory = { [weak self] id, interaction, direction in
+            self?.configureHistoryInteraction(interaction, direction: direction, tabID: id)
+        }
         view.onFocus = { [weak self] id in
             guard let self, acceptsCommands else { return }
             submitInput { controller in

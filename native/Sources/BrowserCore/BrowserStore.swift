@@ -488,7 +488,7 @@ public actor BrowserStore {
 
     /// Creates a tab in the captured window and Space. Background creation leaves selection unchanged.
     @discardableResult
-    public func openTab(url: URL, from context: BrowserContext, activate: Bool) throws -> TabOccurrenceID {
+    public func openTab(url: URL, from context: BrowserContext, activate: Bool, nextTo: TabID? = nil) throws -> TabOccurrenceID {
         let perfStart = BrowserPerformance.begin()
         defer { BrowserPerformance.end(.storeOpen, since: perfStart) }
         guard isCurrent(context), var window = windows[context.windowID] else {
@@ -505,13 +505,13 @@ public actor BrowserStore {
             window.revision &+= 1
         }
         windows[context.windowID] = window
-        organizationDidOpen(tab)
+        organizationDidOpen(tab, nextTo: nextTo)
         return occurrenceID
     }
 
     /// Captures the successful mutation before another actor turn can close its window.
-    public func openTabAndCaptureDelivery(url: URL, from context: BrowserContext, activate: Bool) throws -> BrowserTab {
-        let occurrenceID = try openTab(url: url, from: context, activate: activate)
+    public func openTabAndCaptureDelivery(url: URL, from context: BrowserContext, activate: Bool, nextTo: TabID? = nil) throws -> BrowserTab {
+        let occurrenceID = try openTab(url: url, from: context, activate: activate, nextTo: nextTo)
         guard let tab = tabs[occurrenceID] else { throw BrowserStoreError.tabMissing }
         return tab
     }

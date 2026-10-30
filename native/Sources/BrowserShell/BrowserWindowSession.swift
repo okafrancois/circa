@@ -470,6 +470,16 @@ public final class BrowserWindowSession<Surface: BrowserSurface> {
         }
     }
 
+    /// History gestures retain their source authority and insert a background Today tab beside it.
+    public func openNavigationTab(url: URL, nextTo occurrence: TabOccurrenceID) {
+        guard let context = activeContext else { return }
+        enqueue { session in
+            guard session.activeContext == context,
+                  let source = session.snapshot?.tabs.first(where: { $0.occurrenceID == occurrence }) else { return }
+            try await session.createTab(url: url, activate: false, from: context, nextTo: source.id)
+        }
+    }
+
     /// A native presentation cannot retarget creation after queued Space/profile selection.
     public func openTab(url: URL, from context: BrowserContext) {
         enqueue { session in
@@ -980,7 +990,8 @@ public final class BrowserWindowSession<Surface: BrowserSurface> {
     }
 
     func createTab(url: URL, activate: Bool, from capturedContext: BrowserContext? = nil,
-                   expectedProfileID: ProfileID? = nil, onCreate: ((BrowserTab) -> Void)? = nil) async throws {
+                   expectedProfileID: ProfileID? = nil, onCreate: ((BrowserTab) -> Void)? = nil,
+                   nextTo: TabID? = nil) async throws {
         let context: BrowserContext
         if let capturedContext {
             try validateContext(capturedContext)
@@ -1005,7 +1016,7 @@ public final class BrowserWindowSession<Surface: BrowserSurface> {
             }
             return
         }
-        let tab = try await store.openTabAndCaptureDelivery(url: url, from: context, activate: activate)
+        let tab = try await store.openTabAndCaptureDelivery(url: url, from: context, activate: activate, nextTo: nextTo)
         requestedSurfaceIDs.insert(tab.occurrenceID)
         onCreate?(tab)
         if let state = try await stateAfterMutation(context,

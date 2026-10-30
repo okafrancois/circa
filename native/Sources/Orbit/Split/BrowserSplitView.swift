@@ -32,6 +32,7 @@ final class BrowserSplitView: NSView {
     var onFocus: ((TabID) -> Void)?
     var onClose: ((TabID) -> Void)?
     var onResize: (([Double]) -> Void)?
+    var onConfigureHistory: ((TabID, BrowserNavigationButtonInteraction, BrowserNavigationHistoryMenu.Direction) -> Void)?
     var onNavigate: ((TabID, NavigationAction) -> Void)?
     var canDrop: ((SidebarDragPayload) -> Bool)?
     var onDrop: ((SidebarDragPayload, BrowserSplitOrientation, Bool) -> Void)?
@@ -112,6 +113,7 @@ final class BrowserSplitView: NSView {
         onClose = nil
         onResize = nil
         onNavigate = nil
+        onConfigureHistory = nil
         canDrop = nil
         onDrop = nil
     }
@@ -177,6 +179,8 @@ final class BrowserSplitView: NSView {
                 card.onFocus = { [weak self] in self?.onFocus?(pane.id) }
                 card.onClose = { [weak self] in self?.onClose?(pane.id) }
                 card.onNavigate = { [weak self] action in self?.onNavigate?(pane.id, action) }
+                onConfigureHistory?(pane.id, card.back.navigation, .back)
+                onConfigureHistory?(pane.id, card.forward.navigation, .forward)
                 panes[pane.id] = card
                 addSubview(card, positioned: .below, relativeTo: dropHint)
             }
@@ -383,8 +387,8 @@ final class BrowserSplitPaneView: NSView {
     let page = NSView()
     let clip = BrowserSplitClipView()
     let address = NSButton(title: "", target: nil, action: nil)
-    let back = NSButton()
-    let forward = NSButton()
+    let back = BrowserNavigationImageButton()
+    let forward = BrowserNavigationImageButton()
     let reload = NSButton()
     let siteControls = NSButton()
     let splitToggle = NSButton()
