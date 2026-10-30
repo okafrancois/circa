@@ -10,8 +10,8 @@ int main(int argc, char** argv) {
   assert(handle);
   auto get = reinterpret_cast<orbit_cef_get_api_t>(dlsym(handle, "orbit_cef_get_api"));
   assert(get);
-  const auto* api = get(13);
-  assert(api && api->version == 13 && api->struct_size >= sizeof(orbit_cef_api_t));
+  const auto* api = get(16);
+  assert(api && api->version == 16 && api->struct_size >= sizeof(orbit_cef_api_t));
   assert(api->window_created && api->move_tab && api->hold_window && api->extension_selection_changed);
   for (const char* name : {"orbit_cef_essentials_level", "orbit_cef_set_unowned_tab_handler",
                            "orbit_cef_extension_set_pinned", "orbit_cef_extension_shortcut"})
@@ -40,6 +40,12 @@ int main(int argc, char** argv) {
   assert(api->page_lifecycle && api->page_lifecycle_observe && api->capture_view && api->activation_frame);
   assert(get(12)->version == 12 && get(12)->struct_size == offsetof(orbit_cef_api_t, memory_dump));
   assert(api->memory_dump);
-  assert(!get(0) && !get(14));
+  assert(get(13)->struct_size == offsetof(orbit_cef_api_t, permission_accept_once));
+  assert(get(14)->struct_size == offsetof(orbit_cef_api_t, media_snapshot));
+  assert(get(15)->struct_size == offsetof(orbit_cef_api_t, diagnostic_capabilities));
+  assert(api->permission_accept_once && api->security_state && api->navigation_entries && api->media_action);
+  assert(api->diagnostic_capabilities && api->task_manager && api->trace_begin && api->trace_end);
+  assert(api->extension_options_open && api->extension_incognito_set);
+  assert(!get(0) && !get(17));
   dlclose(handle);
 }

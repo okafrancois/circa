@@ -53,11 +53,21 @@ public struct BrowserMediaSessionState: Codable, Sendable, Equatable {
     public let playbackRate: Double?
 }
 
-/// These read-only snapshots and UI-thread streams never require a renderer script.
+/// Native snapshots, UI-thread streams and explicit diagnostics never require a renderer script.
 /// A closed surface returns nil/refused and finishes its streams. Callers choose when
 /// to observe; no production polling is installed by the engine wrapper.
 @MainActor
 public protocol BrowserNativePageServices: AnyObject {
+    var supportsTaskManager: Bool { get }
+    var supportsTracing: Bool { get }
+    @discardableResult func openTaskManager() -> Bool
+    /// Process-wide diagnostic recording. One persistent profile owns the session.
+    /// Await begin before end; stop on a live surface in that profile before engine shutdown.
+    /// No implicit recording.
+    func beginTracing(categories: String) async -> Bool
+    /// A new file below the persistent profile's data root, with an existing parent.
+    /// True means the native completion callback confirmed a written file.
+    func endTracing(to file: URL) async -> Bool
     func securityState() -> BrowserPageSecurityState?
     func securityChanges() -> AsyncStream<BrowserPageSecurityState>
     func fullscreenChanges() -> AsyncStream<BrowserPageFullscreenChange>
@@ -69,4 +79,12 @@ public protocol BrowserNativePageServices: AnyObject {
     func mediaState() -> BrowserMediaSessionState?
     func mediaChanges() -> AsyncStream<BrowserMediaSessionState>
     @discardableResult func mediaAction(_ action: BrowserMediaAction, seconds: Double) -> Bool
+}
+
+public extension BrowserNativePageServices {
+    var supportsTaskManager: Bool { false }
+    var supportsTracing: Bool { false }
+    func openTaskManager() -> Bool { false }
+    func beginTracing(categories: String) async -> Bool { false }
+    func endTracing(to file: URL) async -> Bool { false }
 }

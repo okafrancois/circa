@@ -28,6 +28,11 @@ public struct BrowserExtensionSummary: Sendable, Equatable, Codable {
     public var actionState: BrowserExtensionActionState?
     public var defaultActionState: BrowserExtensionActionState?
     public var actionBadgeText: String?
+    /// nil means the loaded backend cannot report this field.
+    public var hasOptionsPage: Bool?
+    public var optionsURL: URL?
+    public var canAllowIncognito: Bool?
+    public var isAllowedInIncognito: Bool?
 
     public init(id: String, name: String, version: String, isEnabled: Bool, hasAction: Bool,
                 isPinned: Bool? = nil, iconPNGBase64: String? = nil, actionBadgeText: String? = nil) {
@@ -77,6 +82,11 @@ public protocol BrowserExtensionHost: BrowserExtensionManagement {
     /// True only when the backend can run genuine actions, including native anchored popups.
     var supportsActions: Bool { get }
     var supportsPinning: Bool { get }
+    var supportsOptionsPages: Bool { get }
+    var supportsIncognitoPreference: Bool { get }
+    func openOptions(extensionID: String, on surface: any BrowserEngineSurface) throws
+    /// Changes only the persistent profile preference; does not enable ephemeral private engines.
+    func setAllowedInIncognito(_ allowed: Bool, extensionID: String, in profileID: ProfileID) throws
     func setPinned(_ pinned: Bool, extensionID: String, in profileID: ProfileID) throws
     func setActionAnchor(_ anchor: NSView, on surface: any BrowserEngineSurface)
 }
@@ -138,6 +148,14 @@ public extension BrowserExtensionHost {
         try installedExtensions(in: surface.profileID)
     }
     var supportsPinning: Bool { false }
+    var supportsOptionsPages: Bool { false }
+    var supportsIncognitoPreference: Bool { false }
+    func openOptions(extensionID: String, on surface: any BrowserEngineSurface) throws {
+        throw BrowserEngineError.unsupportedOperation
+    }
+    func setAllowedInIncognito(_ allowed: Bool, extensionID: String, in profileID: ProfileID) throws {
+        throw BrowserEngineError.unsupportedOperation
+    }
     func setPinned(_ pinned: Bool, extensionID: String, in profileID: ProfileID) throws {
         throw BrowserEngineError.unsupportedOperation
     }

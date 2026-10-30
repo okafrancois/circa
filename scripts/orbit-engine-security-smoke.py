@@ -123,7 +123,7 @@ def phase(args):
     assert process.returncode == 0 and not owner.remaining and not owner.forced_signals
     checks['guiSeconds'] = time.monotonic() - started
     (root / 'verification.json').write_text(json.dumps(checks, indent=2) + '\n')
-    pins = json.loads((REPO / 'native/OrbitChromium/cef-patches/engine-r13/source.json').read_text())
+    pins = json.loads((REPO / 'native/OrbitChromium/cef-patches/engine-r14/source.json').read_text())
     version = json.loads(checks['version'])
     assert version['product'] == 'Chrome/' + pins['chromium_tag'], checks
     assert version['revision'].lstrip('@') == pins['chromium_commit'], checks

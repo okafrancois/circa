@@ -6,7 +6,7 @@ import ChromiumEngine
 @MainActor
 enum OrbitEngineSecurityProbe {
     private static func owns(_ owner: OrbitWindowController) -> Bool {
-        guard Bundle.main.bundleIdentifier == "lab.orbit.orbit.engine-r13",
+        guard ["lab.orbit.orbit.engine-r13", "lab.orbit.orbit.engine-r14"].contains(Bundle.main.bundleIdentifier ?? ""),
               Bundle.main.infoDictionary?["OrbitSyntheticBundle"] as? Bool == true,
               Bundle.main.infoDictionary?["OrbitUseMockKeychain"] as? Bool == true,
               let window = owner.window, NSApp.windows.contains(where: { $0 === window }) else { return false }
@@ -120,6 +120,86 @@ enum OrbitEngineSecurityProbe {
         }
         result["securityEvents"] = securityEvents
         return result
+    }
+    static func weekly(_ owner: OrbitWindowController, root: URL) async -> [String: Any] {
+        guard owns(owner), Bundle.main.bundleIdentifier == "lab.orbit.orbit.engine-r14" else {
+            return ["ownershipRefused": true]
+        }
+        owner.session.openTab(url: URL(string: "about:blank")!)
+        await owner.session.waitForQueuedCommands()
+        guard let tab = owner.session.selectedSurface, let api = tab.nativePageServices,
+              let extensions = owner.engine.extensions else { return ["unavailable": true] }
+        await loaded(tab)
+        var checks: [String: Any] = [:]
+        func ownedWindow(_ window: NSWindow) -> Bool {
+            let rows = CGWindowListCopyWindowInfo(.optionIncludingWindow, CGWindowID(window.windowNumber)) as? [[String: Any]] ?? []
+            return rows.contains { ($0[kCGWindowOwnerPID as String] as? Int32) == getpid() }
+        }
+        checks["taskCapability"] = api.supportsTaskManager
+        let before = Set(NSApp.windows.map(ObjectIdentifier.init))
+        guard owns(owner) else { return checks }
+        checks["taskAccepted"] = api.openTaskManager()
+        try? await Task.sleep(for: .milliseconds(500))
+        let created = NSApp.windows.filter { !before.contains(ObjectIdentifier($0)) && $0.isVisible }
+        checks["taskOwnedWindow"] = created.count == 1 && created.allSatisfy(ownedWindow)
+        for window in created where ownedWindow(window) {
+            // Direct AppKit operation on this process's verified native window.
+            window.performClose(nil)
+        }
+        try? await Task.sleep(for: .milliseconds(100))
+        checks["taskClosed"] = created.allSatisfy { !$0.isVisible }
+        checks["traceCapability"] = api.supportsTracing
+        checks["traceStarted"] = await api.beginTracing(categories: "browser,toplevel")
+        checks["duplicateBeginRefused"] = !(await api.beginTracing(categories: "browser"))
+        checks["escapeRefused"] = !(await api.endTracing(to: root.appendingPathComponent("escape.json")))
+        try? await Task.sleep(for: .milliseconds(200))
+        let profile = root.appendingPathComponent("Chromium/profile-" + tab.profileID.rawValue.uuidString.lowercased())
+        let trace = profile.appendingPathComponent("weekly-trace.json")
+        checks["traceCompleted"] = await api.endTracing(to: trace)
+        checks["tracePath"] = trace.path
+        checks["traceBytes"] = (try? Data(contentsOf: trace).count) ?? 0
+        checks["duplicateEndRefused"] = !(await api.endTracing(to: profile.appendingPathComponent("duplicate.json")))
+        checks["optionsCapability"] = extensions.supportsOptionsPages
+        checks["incognitoCapability"] = extensions.supportsIncognitoPreference
+        var fixture: BrowserExtensionSummary?
+        for _ in 0..<40 {
+            fixture = (try? extensions.installedExtensions(in: tab.profileID))?.first { $0.name == "Weekly fixture" }
+            if fixture != nil { break }
+            try? await Task.sleep(for: .milliseconds(50))
+        }
+        guard let fixture else { checks["extensionMissing"] = true; return checks }
+        checks["extensionID"] = fixture.id
+        checks["hasOptionsPage"] = fixture.hasOptionsPage
+        checks["optionsURL"] = fixture.optionsURL?.absoluteString
+        checks["canAllowIncognito"] = fixture.canAllowIncognito
+        checks["incognitoInitiallyOff"] = fixture.isAllowedInIncognito == false
+        do {
+            guard owns(owner) else { return checks }
+            try extensions.openOptions(extensionID: fixture.id, on: tab)
+            checks["optionsOpened"] = true
+            try? await Task.sleep(for: .milliseconds(500))
+            checks["optionsNavigated"] = owner.session.ownedSurfaces.contains {
+                $0.profileID == tab.profileID && $0.nativePageServices?.committedURL() == fixture.optionsURL
+            }
+        } catch { checks["optionsOpened"] = false }
+        do {
+            guard owns(owner) else { return checks }
+            try extensions.setAllowedInIncognito(true, extensionID: fixture.id, in: tab.profileID)
+            for _ in 0..<40 {
+                if (try? extensions.installedExtensions(in: tab.profileID))?.first(where: { $0.id == fixture.id })?.isAllowedInIncognito == true {
+                    checks["incognitoEnabled"] = true; break
+                }
+                try? await Task.sleep(for: .milliseconds(25))
+            }
+            try extensions.setAllowedInIncognito(false, extensionID: fixture.id, in: tab.profileID)
+            for _ in 0..<40 {
+                if (try? extensions.installedExtensions(in: tab.profileID))?.first(where: { $0.id == fixture.id })?.isAllowedInIncognito == false {
+                    checks["incognitoReset"] = true; break
+                }
+                try? await Task.sleep(for: .milliseconds(25))
+            }
+        } catch { checks["incognitoError"] = true }
+        return checks
     }
     @MainActor
     private final class PermissionDelegate: BrowserEngineSurfaceDelegate {
