@@ -132,6 +132,13 @@ public actor BrowserSessionPersistence {
         }
     }
 
+    /// A caller may veto teardown after the durable save if the user became active again.
+    /// The saved document stays intact and subsequent mutations can be persisted normally.
+    public func resumeAfterCancelledFinalization() {
+        guard state == .finalized else { return }
+        state = .ready
+    }
+
     private func nextGeneration() -> UInt64 {
         generation += 1
         return generation

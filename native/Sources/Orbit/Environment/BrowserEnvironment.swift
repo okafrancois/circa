@@ -687,7 +687,7 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
     }
 
     /// Call only after the windows have stopped publishing and their command queues are drained.
-    func finalize() async throws {
+    func finalize(permitsTermination: () -> Bool = { true }) async throws {
         guard !settingsRemovalIsRunning else { throw BrowserTerminationPreparationError.commandsDidNotSettle }
         autoArchive.scheduler.stop()
         quickWindowArchiveTimer?.cancel()
@@ -705,7 +705,12 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
             guard await themeEditors.finishAll() else { throw BrowserTerminationPreparationError.themeCommitFailed }
             try await flushQuickWindowArchives()
             await captureWindowPlacements()
+            guard permitsTermination() else { throw CancellationError() }
             if let persistence { try await persistence.finalize(from: store) }
+            guard permitsTermination() else {
+                await persistence?.resumeAfterCancelledFinalization()
+                throw CancellationError()
+            }
         } catch {
             autoArchive.scheduler.start()
             startQuickWindowArchiveTimer()

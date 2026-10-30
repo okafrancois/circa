@@ -1716,3 +1716,6 @@
 "Add" = "Add";
 "Enabled" = "Enabled";
 "Perplexity" = "Perplexity";
+
+"Copy Version" = "Copy Version";
+"Chromium %@" = "Chromium %@";

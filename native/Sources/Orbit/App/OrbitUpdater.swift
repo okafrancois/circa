@@ -50,6 +50,47 @@ final class OrbitUpdater: NSObject, ObservableObject {
     private var newestVersion: String?
     private var freshnessTimer: Timer?
     private var isQuitting = false
+    private var idleTimer: Timer?
+    private var automaticAttemptInProgress = false
+    private(set) var automaticRelaunchRequested = false
+    var idleSignals: (() -> OrbitIdleUpdateSignals)?
+    var mediaPreventsAutomaticInstallation: (() async -> Bool)?
+
+    var permitsAutomaticTermination: Bool {
+        !automaticRelaunchRequested || (automaticallyUpdates && idleSignals?().permitsInstallation == true)
+    }
+
+    func cancelAutomaticRelaunch() {
+        automaticRelaunchRequested = false
+        isRestartingForUpdate = false
+        #if canImport(Sparkle)
+        installing = false
+        #endif
+    }
+
+    /// Repeated ticks reschedule a blocked update without consuming its installer callback.
+    func attemptAutomaticInstallation() async {
+        guard !automaticAttemptInProgress, !automaticRelaunchRequested, !isQuitting,
+              automaticallyUpdates, pendingVersion != nil, let installPendingUpdate,
+              idleSignals?().permitsInstallation == true else { return }
+        automaticAttemptInProgress = true
+        defer { automaticAttemptInProgress = false }
+        let revision = pendingRevision
+        guard await validatePendingUpdate(),
+              await mediaPreventsAutomaticInstallation?() == false,
+              pendingRevision == revision, pendingVersion != nil, !isQuitting,
+              automaticallyUpdates, idleSignals?().permitsInstallation == true else { return }
+        automaticRelaunchRequested = true
+        isRestartingForUpdate = true
+        installPendingUpdate()
+    }
+
+    private func scheduleIdleInstallation() {
+        guard idleTimer == nil else { return }
+        idleTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
+            Task { @MainActor in await self?.attemptAutomaticInstallation() }
+        }
+    }
     private(set) var isRestartingForUpdate = false
     private var pendingRevision: UInt64 = 0
     private var refreshTask: (revision: UInt64, task: Task<Bool, Never>)?
@@ -279,13 +320,18 @@ extension OrbitUpdater: SPUUpdaterDelegate {
                  immediateInstallationBlock immediateInstallHandler: @escaping () -> Void) -> Bool {
         record("ready-on-quit")
         prepared(version: item.versionString)
-        return false
+        installPendingUpdate = { [weak self] in
+            self?.installing = true
+            immediateInstallHandler()
+        }
+        scheduleIdleInstallation()
+        return true
     }
 
     func updater(_ updater: SPUUpdater, didAbortWithError error: Error) {
         if !discarding {
             readyVersion = nil; pendingVersion = nil
-            replacing = false; installing = false; isRestartingForUpdate = false
+            replacing = false; installing = false; cancelAutomaticRelaunch()
         }
         record("aborted")
     }
@@ -355,6 +401,7 @@ extension OrbitUpdater: SPUUpdaterDelegate {
             }
         }
         if let extractingVersion { prepared(version: extractingVersion) }
+        scheduleIdleInstallation()
     }
 
     func updater(_ updater: SPUUpdater, willInstallUpdate item: SUAppcastItem) {

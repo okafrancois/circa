@@ -52,5 +52,6 @@
   <key>SUEnableAutomaticChecks</key><true/>
   <key>SUAutomaticallyUpdate</key><true/>
   <key>SUScheduledCheckInterval</key><integer>3600</integer>
+  <key>OrbitChromiumVersion</key><string>@ORBIT_CHROMIUM_VERSION@</string>
   <key>OrbitEngine</key><string>chromium</string>
 </dict></plist>
