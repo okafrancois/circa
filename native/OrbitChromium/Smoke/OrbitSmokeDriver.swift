@@ -307,7 +307,7 @@ final class OrbitSmokeDriver: OrbitLaunchHooks {
             && !arguments.contains("--orbit-smoke-relaunch") && !arguments.contains("--orbit-smoke-private-domain")
             && !arguments.contains("--orbit-smoke-profiles") && !arguments.contains("--orbit-smoke-site-data")
             && !arguments.contains("--orbit-smoke-space-profile") && !arguments.contains("--orbit-smoke-archive-auto")
-            && !arguments.contains("--orbit-smoke-passwords") {
+            && !arguments.contains("--orbit-smoke-passwords") && !arguments.contains("--orbit-smoke-quarantine") {
             if arguments.contains("--orbit-smoke-isolated-application") {
                 // Supplemental lane only: the original conformance result remains separate.
                 // No application assertion below is omitted or relaxed.
@@ -358,6 +358,11 @@ final class OrbitSmokeDriver: OrbitLaunchHooks {
             return
         }
         check("app.window", true, ["windows": application.windows.windows.count, "restored": restored.count])
+        if arguments.contains("--orbit-smoke-quarantine") {
+            await quarantineScenario(environment, first)
+            finish(aborted: false)
+            return
+        }
         if arguments.contains("--orbit-smoke-translation") {
             await OrbitTranslationScenario.run(window: first, environment: environment, root: runRoot, probeOnly: arguments.contains("--translation-probe-only"), record: record)
             finish(aborted: false)

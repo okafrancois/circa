@@ -46,6 +46,16 @@ class ReleaseTests(unittest.TestCase):
         self.assertEqual(info['SUScheduledCheckInterval'], 3600)
         self.assertTrue(info['SUAutomaticallyUpdate'])
 
+    def test_release_enables_quarantine_even_for_older_source_bundles(self):
+        for source in ({}, {'LSFileQuarantineEnabled': False}):
+            with self.subTest(source=source):
+                info = release.update_info(source, self.config, '0.1.0', 123)
+                self.assertIs(info.get('LSFileQuarantineEnabled'), True)
+        config = dict(self.config, bundle_id='io.github.okatech.orbit.test.update')
+        info = release.update_info({}, config, '0.1.0', 123, Path('/tmp/test'),
+                                   'http://127.0.0.1:12345/appcast.xml')
+        self.assertIs(info.get('LSFileQuarantineEnabled'), True)
+
     def test_feed_requires_the_newest_release_and_a_full_signed_archive(self):
         with tempfile.TemporaryDirectory() as temporary:
             feed = Path(temporary) / 'appcast.xml'

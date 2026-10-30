@@ -30,7 +30,8 @@ public final class BrowserDownloadStagingFile {
         }
         for candidate in Self.candidates(for: destination) where BrowserDownloadPaths.isValidDestination(candidate) {
             do {
-                // Same-volume move; fails rather than replacing a file created in the meantime.
+                // Same-volume move preserves the engine's quarantine and source metadata;
+                // fails rather than replacing a file created in the meantime.
                 try FileManager.default.moveItem(at: file, to: candidate)
                 discard()
                 return candidate

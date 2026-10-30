@@ -52,6 +52,16 @@ class ResourceAssemblyTests(unittest.TestCase):
 
 
 class SyntheticDefaultTests(unittest.TestCase):
+    def test_download_quarantine_is_enabled_in_templates_and_packaged_metadata(self):
+        root = Path(__file__).resolve().parents[1]
+        for variant in ('', 'App', 'Smoke'):
+            with self.subTest(template=variant):
+                info = plistlib.loads((root / 'native/OrbitChromium' / variant / 'Info.plist.in').read_bytes())
+                self.assertIs(info.get('LSFileQuarantineEnabled'), True)
+        for bundle_id in (app.BUNDLE_ID, app.LIVE_BUNDLE_ID, 'lab.orbit.orbit.synthetic'):
+            with self.subTest(bundle_id=bundle_id):
+                self.assertIs(app.bundle_info('0.1.0', bundle_id).get('LSFileQuarantineEnabled'), True)
+
     def test_alert_service_keeps_its_identity_and_presents_the_browser_name_and_icon(self):
         with tempfile.TemporaryDirectory() as temporary:
             bundle = Path(temporary) / 'Orbit.app'
