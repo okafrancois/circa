@@ -26,6 +26,7 @@ final class CircaGetScriptCommand: NSScriptCommand {
     @MainActor
     func readValue() -> Any? {
         func evaluate(_ value: Any?) -> Any? {
+            let value = BrowserScriptingController.decodedScriptValue(value)
             if let specifier = value as? NSScriptObjectSpecifier { return specifier.objectsByEvaluatingSpecifier }
             if let values = value as? [Any] { return values.map { evaluate($0) ?? NSNull() } }
             return value
@@ -47,9 +48,9 @@ final class CircaCountScriptCommand: NSCountCommand {
     @MainActor
     func countValue() -> Any? {
         var value: Any?
-        if let specifier = directParameter as? NSScriptObjectSpecifier { value = specifier.objectsByEvaluatingSpecifier }
-        else { value = directParameter }
-        if let code = evaluatedArguments?["ObjectClass"] as? NSNumber,
+        if let specifier = BrowserScriptingController.decodedScriptValue(directParameter) as? NSScriptObjectSpecifier { value = specifier.objectsByEvaluatingSpecifier }
+        else { value = BrowserScriptingController.decodedScriptValue(directParameter) }
+        if let code = BrowserScriptingController.decodedScriptValue(evaluatedArguments?["ObjectClass"]) as? NSNumber,
            let object = value as? NSObject,
            let description = object.classDescription as? NSScriptClassDescription,
            let key = description.key(withAppleEventCode: code.uint32Value) {
@@ -73,9 +74,9 @@ final class CircaSetScriptCommand: NSScriptCommand {
 
     @MainActor
     func setValue() async throws -> Any? {
-        guard let property = directParameter as? NSPropertySpecifier, property.key == "URL",
+        guard let property = BrowserScriptingController.decodedScriptValue(directParameter) as? NSPropertySpecifier, property.key == "URL",
               let tab = property.container?.objectsByEvaluatingSpecifier as? CircaScriptTab,
-              let value = evaluatedArguments?["Value"] as? String,
+              let value = BrowserScriptingController.decodedScriptValue(evaluatedArguments?["Value"]) as? String,
               let url = URL(string: value), url.scheme != nil else { throw BrowserScriptError.invalidURL }
         _ = try await tab.action(.navigate(url))
         return nil
@@ -96,31 +97,28 @@ final class CircaMakeScriptCommand: NSCreateCommand {
 
     @MainActor
     func makeValue(_ scripting: BrowserScriptingController) async throws -> NSScriptObjectSpecifier {
-        let properties = resolvedKeyDictionary
-        if createClassDescription.implementationClassName == NSStringFromClass(CircaScriptWindow.self) {
-            let window = try await scripting.createWindow(properties["mode"] as? String ?? "normal")
-            guard let specifier = window.objectSpecifier else { throw BrowserScriptError.unavailable }
-            return specifier
+        if arguments?["Location"] == nil, scripting.windows.isEmpty,
+           createClassDescription.implementationClassName == NSStringFromClass(CircaScriptTab.self) {
+            _ = try await scripting.createWindow("normal")
         }
-        guard createClassDescription.implementationClassName == NSStringFromClass(CircaScriptTab.self) else { throw BrowserScriptError.unsupported }
-        var destination: Any? = (receiversSpecifier ?? directParameter as? NSScriptObjectSpecifier)?.objectsByEvaluatingSpecifier
-        if let position = arguments?["Location"] as? NSPositionalSpecifier {
-            position.setInsertionClassDescription(createClassDescription)
-            position.evaluate()
-            destination = position.insertionContainer
-        } else if let location = evaluatedArguments?["Location"] { destination = location }
-        let space = destination as? CircaScriptSpace
-        let window = space?.window ?? destination as? CircaScriptWindow ?? scripting.windows.first
-        let target: CircaScriptWindow
-        if let window { target = window } else { target = try await scripting.createWindow("normal") }
-        let value = properties["URL"] as? String ?? "about:blank"
-        guard let url = URL(string: value), url.scheme != nil else { throw BrowserScriptError.invalidURL }
-        let id = try await target.makeTab(url, space?.id)
-        await scripting.refresh()
-        guard let tab = scripting.windows.first(where: { $0.id == target.id })?.appleScriptTabs.first(where: { $0.id == id }) else {
-            throw BrowserScriptError.unavailable
+        scripting.creation = nil
+        defer { scripting.creation = nil }
+        // Cocoa resolves the insertion location, calls the container's factory, then its
+        // ordered KVC accessor. Session creation must settle before packaging the reply.
+        let result = super.performDefaultImplementation()
+        let draft = (result as? NSScriptObjectSpecifier)?.objectsByEvaluatingSpecifier ?? result
+        // The provisional inventory object exists only for Cocoa's synchronous insertion;
+        // it must not survive a rejected session command or appear in the next inventory.
+        if let tab = draft as? CircaScriptTab, let space = tab.space,
+           let index = space.appleScriptTabs.firstIndex(where: { $0 === tab }) {
+            space.removeTab(at: index)
+        } else if let window = draft as? CircaScriptWindow,
+                  let index = scripting.windows.firstIndex(where: { $0 === window }) {
+            NSApp.removeScriptWindow(at: index)
         }
-        guard let specifier = tab.objectSpecifier else { throw BrowserScriptError.unavailable }
+        guard scriptErrorNumber == 0, let create = scripting.creation else { throw BrowserScriptError.unavailable }
+        let object = try await create()
+        guard let specifier = object.objectSpecifier else { throw BrowserScriptError.unavailable }
         return specifier
     }
 }
@@ -139,11 +137,11 @@ final class CircaActionScriptCommand: NSScriptCommand {
 
     @MainActor
     func actionValue(_ scripting: BrowserScriptingController) async throws -> Any? {
-        let receiver = (receiversSpecifier ?? directParameter as? NSScriptObjectSpecifier)?.objectsByEvaluatingSpecifier
+        let receiver = (receiversSpecifier ?? BrowserScriptingController.decodedScriptValue(directParameter) as? NSScriptObjectSpecifier)?.objectsByEvaluatingSpecifier
         let targets: [Any] = (receiver as? [Any]) ?? receiver.map { [$0] } ?? []
         let name = commandDescription.commandName.lowercased().replacingOccurrences(of: " ", with: "")
         if name == "openlocation" {
-            guard let value = directParameter as? String, let url = URL(string: value), url.scheme != nil else { throw BrowserScriptError.invalidURL }
+            guard let value = BrowserScriptingController.decodedScriptValue(directParameter) as? String, let url = URL(string: value), url.scheme != nil else { throw BrowserScriptError.invalidURL }
             let window: CircaScriptWindow
             if let existing = scripting.windows.first(where: { !$0.incognito }) { window = existing }
             else { window = try await scripting.createWindow("normal") }
@@ -168,7 +166,7 @@ final class CircaActionScriptCommand: NSScriptCommand {
             case "goforward": action = .forward
             case "stop": action = .stop
             case "execute":
-                guard let script = evaluatedArguments?["javascript"] as? String else { throw BrowserScriptError.unsupported }
+                guard let script = BrowserScriptingController.decodedScriptValue(evaluatedArguments?["javascript"]) as? String else { throw BrowserScriptError.unsupported }
                 result = try await scripting.execute(script, in: tab)
                 continue
             default: throw BrowserScriptError.unsupported

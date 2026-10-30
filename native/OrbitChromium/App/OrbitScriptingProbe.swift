@@ -62,7 +62,7 @@ enum OrbitScriptingProbe {
                 """)
             _ = try await script("make-set-read", """
                 set initialCount to count tabs of window 1
-                set createdTab to make new tab at end of tabs of window 1 with properties {URL:"about:blank#created"}
+                set createdTab to make new tab at end of tabs of front window with properties {URL:"about:blank#created"}
                 set createdID to id of createdTab
                 if (count tabs of window 1) is not initialCount + 1 then error "Create failed"
                 delay 0.3
@@ -130,6 +130,19 @@ enum OrbitScriptingProbe {
                 focus (space 1 of window 1)
                 if id of active space of window 1 is not id of space 1 of window 1 then error "Space focus failed"
                 return count spaceNames
+                """)
+            _ = try await script("default-tab-active-set-window", """
+                set defaultTab to make new tab with properties {URL:"about:blank#default"}
+                if id of active tab of front window is not id of defaultTab then error "Default selection failed"
+                set URL of active tab of front window to "about:blank#active-set"
+                delay 0.2
+                if URL of defaultTab is not "about:blank#active-set" then error "Active URL did not change"
+                close defaultTab
+                set initialWindows to count windows
+                set createdWindow to make new window
+                if (count windows) is not initialWindows + 1 then error "Window creation failed"
+                close createdWindow
+                return "default-and-window-ok"
                 """)
             _ = try await script("make-private", """
                 set privateWindow to make new window with properties {mode:"incognito"}

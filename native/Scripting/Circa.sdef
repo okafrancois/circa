@@ -80,13 +80,13 @@
     </class>
     <class name="application" code="capp">
       <cocoa class="NSApplication"/>
-      <element type="window" access="r">
+      <element type="window" access="rw">
         <cocoa key="appleScriptWindows"/>
       </element>
       <element type="space" access="r">
         <cocoa key="appleScriptSpaces"/>
       </element>
-      <element type="tab" access="r">
+      <element type="tab" access="rw">
         <cocoa key="appleScriptTabs"/>
       </element>
       <property name="name" code="pnam" type="text" access="r">

@@ -67,6 +67,11 @@
 @end
 
 @implementation ACRApplication
+- (NSClassDescription*)classDescription {
+  // Cocoa evaluates insertion locations against the host instance as well as its specifiers.
+  return [[NSScriptSuiteRegistry sharedScriptSuiteRegistry] classDescriptionWithAppleEventCode:'capp']
+      ?: [super classDescription];
+}
 - (BOOL)isHandlingSendEvent { return handlingSendEvent_; }
 - (void)setHandlingSendEvent:(BOOL)value { handlingSendEvent_ = value; }
 - (void)sendEvent:(NSEvent*)event {

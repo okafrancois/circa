@@ -1,4 +1,5 @@
 import AppKit
+import Carbon
 import BrowserCore
 import BrowserEngine
 import BrowserShell
@@ -11,6 +12,9 @@ final class BrowserScriptingController {
     var createWindow: (String) async throws -> CircaScriptWindow = { _ in throw BrowserScriptError.unavailable }
     var allowsJavaScript: () -> Bool = { false }
     var targetWindowID: String?
+    // NSCreateCommand's synchronous factory/insertion phase is followed by the ordered
+    // asynchronous session mutation before the command resumes with the canonical object.
+    var creation: (() async throws -> NSObject)?
     private var pending: Task<Void, Never>?
 
     func submit(_ command: NSScriptCommand, action: @escaping @MainActor () async throws -> Any?) {
@@ -24,8 +28,8 @@ final class BrowserScriptingController {
             let previousTopLevel = context.topLevelObject
             context.topLevelObject = NSApp
             defer { context.topLevelObject = previousTopLevel }
-            targetWindowID = explicitWindow(in: command.receiversSpecifier ?? command.directParameter as? NSScriptObjectSpecifier)
-            do { command.resumeExecution(withResult: Self.replyValue(try await action())) }
+            targetWindowID = explicitWindow(in: command.receiversSpecifier ?? Self.decodedScriptValue(command.directParameter) as? NSScriptObjectSpecifier)
+            do { command.resumeExecution(withResult: try Self.replyValue(try await action(), returnType: command.commandDescription.returnType)) }
             catch {
                 command.scriptErrorNumber = (error as? BrowserScriptError)?.code ?? -10000
                 command.scriptErrorString = (error as? BrowserScriptError)?.message ?? uiText("The scripting operation could not be completed.")
@@ -41,6 +45,23 @@ final class BrowserScriptingController {
             ?? NSScriptSuiteRegistry.shared().classDescription(withAppleEventCode: "capp".utf8.reduce(0) { ($0 << 8) | UInt32($1) })
     }
 
+    /// Sdef "any" parameters preserve raw descriptors, unlike script-suite declarations.
+    /// Decode references before evaluating them so scalar counts and privacy scope use the model.
+    static func decodedScriptValue(_ value: Any?) -> Any? {
+        if let descriptor = value as? NSAppleEventDescriptor {
+            switch descriptor.descriptorType {
+            case typeObjectSpecifier: return NSScriptObjectSpecifier(descriptor: descriptor)
+            case typeAEList:
+                return (0..<descriptor.numberOfItems).map { decodedScriptValue(descriptor.atIndex($0 + 1)) ?? NSNull() }
+            case typeUnicodeText, typeUTF8Text, typeChar: return descriptor.stringValue
+            case typeType: return NSNumber(value: descriptor.typeCodeValue)
+            default: return descriptor
+            }
+        }
+        if let values = value as? [Any] { return values.map { decodedScriptValue($0) ?? NSNull() } }
+        return value
+    }
+
     /// Reply conversion accepts references, not model wrappers, for declared specifier results.
     static func replyValue(_ value: Any?) -> Any? {
         switch value {
@@ -49,6 +70,40 @@ final class BrowserScriptingController {
         case let tab as CircaScriptTab: return tab.objectSpecifier
         case let values as [Any]: return values.map { replyValue($0) ?? NSNull() }
         default: return value
+        }
+    }
+
+    static func replyValue(_ value: Any?, returnType: String?) throws -> Any? {
+        let result = replyValue(value)
+        // Native sdef "any" results require an already encoded descriptor. Script-suite
+        // dictionaries instead declare "id", which Cocoa converts from ordinary objects.
+        guard returnType == "any" || returnType == "NSAppleEventDescriptor" else { return result }
+        return try replyDescriptor(result)
+    }
+
+    private static func replyDescriptor(_ value: Any?) throws -> NSAppleEventDescriptor {
+        switch value {
+        case nil, is NSNull: return .null()
+        case let descriptor as NSAppleEventDescriptor: return descriptor
+        case let specifier as NSScriptObjectSpecifier:
+            guard let descriptor = specifier.descriptor else { throw BrowserScriptError.unavailable }
+            return descriptor
+        case let string as String: return NSAppleEventDescriptor(string: string)
+        case let number as NSNumber:
+            if CFGetTypeID(number) == CFBooleanGetTypeID() { return NSAppleEventDescriptor(boolean: number.boolValue) }
+            if String(cString: number.objCType) == "d" || String(cString: number.objCType) == "f" {
+                return NSAppleEventDescriptor(double: number.doubleValue)
+            }
+            var integer = number.int64Value
+            guard let descriptor = withUnsafeBytes(of: &integer, { NSAppleEventDescriptor(descriptorType: typeSInt64, data: Data($0)) }) else {
+                throw BrowserScriptError.unsupported
+            }
+            return descriptor
+        case let values as [Any]:
+            let list = NSAppleEventDescriptor.list()
+            for (index, value) in values.enumerated() { list.insert(try replyDescriptor(value), at: index + 1) }
+            return list
+        default: throw BrowserScriptError.unsupported
         }
     }
 
@@ -113,9 +168,35 @@ final class CircaScriptWindow: NSObject {
     @objc var title: String { canReadPrivateContent ? titleValue() : "" }
     @objc var name: String { title }
 
+    @objc(valueInAppleScriptTabsWithUniqueID:)
+    func scriptTab(withID id: String) -> CircaScriptTab? { appleScriptTabs.first { $0.id == id } }
+    @objc(valueInAppleScriptSpacesWithUniqueID:)
+    func scriptSpace(withID id: String) -> CircaScriptSpace? { appleScriptSpaces.first { $0.id == id } }
+
     init(id: String, mode: String, scripting: BrowserScriptingController, isFocused: @escaping () -> Bool,
          title: @escaping () -> String) {
         self.id = id; self.mode = mode; self.scripting = scripting; self.isFocused = isFocused; titleValue = title
+    }
+    @objc(insertObject:inAppleScriptTabsAtIndex:)
+    func insertTab(_ tab: CircaScriptTab, at index: Int) {
+        guard let space = tab.space ?? activeSpace ?? appleScriptSpaces.first else { return }
+        space.insertTab(tab, at: min(index, space.appleScriptTabs.count))
+    }
+    @objc(removeObjectFromAppleScriptTabsAtIndex:)
+    func removeTab(at index: Int) {
+        guard appleScriptTabs.indices.contains(index), let space = appleScriptTabs[index].space,
+              let local = space.appleScriptTabs.firstIndex(where: { $0.id == appleScriptTabs[index].id }) else { return }
+        space.removeTab(at: local)
+    }
+    override func newScriptingObject(of objectClass: AnyClass, forValueForKey key: String,
+                                     withContentsValue contents: Any?, properties: [String: Any]) -> Any? {
+        let arguments = MainThreadScriptingProperties(contents: contents, properties: properties)
+        return mainThreadScriptingObject {
+            guard objectClass == CircaScriptTab.self, key == "appleScriptTabs",
+                  let space = activeSpace ?? appleScriptSpaces.first else { return nil }
+            return space.newScriptingObject(of: objectClass, forValueForKey: key,
+                                            withContentsValue: arguments.contents, properties: arguments.properties)
+        }
     }
     override var objectSpecifier: NSScriptObjectSpecifier? {
         mainThreadSpecifier {
@@ -136,7 +217,42 @@ final class CircaScriptSpace: NSObject {
     weak var window: CircaScriptWindow?
     var focus: () async throws -> Void = {}
     @objc var appleScriptTabs: [CircaScriptTab] = []
+    @objc(valueInAppleScriptTabsWithUniqueID:)
+    func scriptTab(withID id: String) -> CircaScriptTab? { appleScriptTabs.first { $0.id == id } }
     init(id: String, title: String, window: CircaScriptWindow) { self.id = id; self.title = title; self.window = window }
+    @objc(insertObject:inAppleScriptTabsAtIndex:)
+    func insertTab(_ tab: CircaScriptTab, at index: Int) {
+        guard !appleScriptTabs.contains(where: { $0.id == tab.id }) else { return }
+        tab.space = self
+        appleScriptTabs.insert(tab, at: max(0, min(index, appleScriptTabs.count)))
+    }
+    @objc(removeObjectFromAppleScriptTabsAtIndex:)
+    func removeTab(at index: Int) {
+        guard appleScriptTabs.indices.contains(index) else { return }
+        appleScriptTabs.remove(at: index)
+    }
+    override func newScriptingObject(of objectClass: AnyClass, forValueForKey key: String,
+                                     withContentsValue contents: Any?, properties: [String: Any]) -> Any? {
+        let arguments = MainThreadScriptingProperties(contents: contents, properties: properties)
+        return mainThreadScriptingObject {
+            guard objectClass == CircaScriptTab.self, key == "appleScriptTabs",
+                  let window, let scripting = window.scripting else { return nil }
+            let value = BrowserScriptingController.decodedScriptValue(arguments.properties["URL"]) as? String ?? "about:blank"
+            let draft = CircaScriptTab(id: UUID().uuidString, title: "", url: value,
+                                       location: "unpinned", loading: false, space: self)
+            scripting.creation = {
+                guard let url = Foundation.URL(string: value) else { throw BrowserScriptError.invalidURL }
+                try scripting.validateNavigation(url)
+                let createdID = try await window.makeTab(url, self.id)
+                await scripting.refresh()
+                guard let tab = scripting.windows.first(where: { $0.id == window.id })?.appleScriptTabs.first(where: { $0.id == createdID }) else {
+                    throw BrowserScriptError.unavailable
+                }
+                return tab
+            }
+            return draft
+        }
+    }
     override var objectSpecifier: NSScriptObjectSpecifier? {
         mainThreadSpecifier {
             guard let window, let parent = window.objectSpecifier,
@@ -182,6 +298,55 @@ extension NSApplication {
     @objc var appleScriptWindows: [CircaScriptWindow] { (delegate as? OrbitApplication)?.scripting.windows ?? [] }
     @objc var appleScriptSpaces: [CircaScriptSpace] { appleScriptWindows.filter { !$0.incognito }.first?.appleScriptSpaces ?? [] }
     @objc var appleScriptTabs: [CircaScriptTab] { appleScriptWindows.flatMap(\.appleScriptTabs) }
+    @objc(valueInAppleScriptWindowsWithUniqueID:)
+    func scriptWindow(withID id: String) -> CircaScriptWindow? { appleScriptWindows.first { $0.id == id } }
+    @objc(valueInAppleScriptSpacesWithUniqueID:)
+    func scriptSpace(withID id: String) -> CircaScriptSpace? { appleScriptSpaces.first { $0.id == id } }
+    @objc(valueInAppleScriptTabsWithUniqueID:)
+    func scriptTab(withID id: String) -> CircaScriptTab? { appleScriptTabs.first { $0.id == id } }
+    @objc(insertObject:inAppleScriptWindowsAtIndex:)
+    func insertScriptWindow(_ window: CircaScriptWindow, at index: Int) {
+        guard let scripting = (delegate as? OrbitApplication)?.scripting,
+              !scripting.windows.contains(where: { $0.id == window.id }) else { return }
+        scripting.windows.insert(window, at: max(0, min(index, scripting.windows.count)))
+    }
+    // NSApplication's scripting category uses these legacy default-location selectors.
+    @objc(insertInAppleScriptWindows:)
+    func insertScriptWindow(_ window: CircaScriptWindow) { insertScriptWindow(window, at: appleScriptWindows.count) }
+    @objc(removeObjectFromAppleScriptWindowsAtIndex:)
+    func removeScriptWindow(at index: Int) {
+        guard let scripting = (delegate as? OrbitApplication)?.scripting, scripting.windows.indices.contains(index) else { return }
+        scripting.windows.remove(at: index)
+    }
+    @objc(insertObject:inAppleScriptTabsAtIndex:)
+    func insertScriptTab(_ tab: CircaScriptTab, at index: Int) {
+        (tab.window ?? appleScriptWindows.first)?.insertTab(tab, at: index)
+    }
+    @objc(insertInAppleScriptTabs:)
+    func insertScriptTab(_ tab: CircaScriptTab) { insertScriptTab(tab, at: appleScriptTabs.count) }
+    @objc(removeObjectFromAppleScriptTabsAtIndex:)
+    func removeScriptTab(at index: Int) {
+        guard appleScriptTabs.indices.contains(index), let space = appleScriptTabs[index].space,
+              let local = space.appleScriptTabs.firstIndex(where: { $0.id == appleScriptTabs[index].id }) else { return }
+        space.removeTab(at: local)
+    }
+    override open func newScriptingObject(of objectClass: AnyClass, forValueForKey key: String,
+                                          withContentsValue contents: Any?, properties: [String: Any]) -> Any? {
+        let arguments = MainThreadScriptingProperties(contents: contents, properties: properties)
+        return mainThreadScriptingObject {
+            guard let scripting = (delegate as? OrbitApplication)?.scripting else { return nil }
+            if objectClass == CircaScriptWindow.self, key == "appleScriptWindows" {
+                let mode = BrowserScriptingController.decodedScriptValue(arguments.properties["mode"]) as? String ?? "normal"
+                scripting.creation = { try await scripting.createWindow(mode) }
+                return CircaScriptWindow(id: UUID().uuidString, mode: mode, scripting: scripting,
+                                         isFocused: { false }, title: { "" })
+            }
+            guard objectClass == CircaScriptTab.self, key == "appleScriptTabs",
+                  let window = scripting.windows.first else { return nil }
+            return window.newScriptingObject(of: objectClass, forValueForKey: key,
+                                             withContentsValue: arguments.contents, properties: arguments.properties)
+        }
+    }
 }
 
 // Cocoa's NSObject override is nonisolated, but its scripting entry point runs on the main thread.
@@ -192,4 +357,19 @@ private final class MainThreadScriptSpecifier: @unchecked Sendable {
 
 private func mainThreadSpecifier(_ body: @MainActor () -> NSScriptObjectSpecifier?) -> NSScriptObjectSpecifier? {
     MainActor.assumeIsolated { MainThreadScriptSpecifier(body()) }.value
+}
+
+private final class MainThreadScriptingObject: @unchecked Sendable {
+    let value: Any?
+    init(_ value: Any?) { self.value = value }
+}
+
+private func mainThreadScriptingObject(_ body: @MainActor () -> Any?) -> Any? {
+    MainActor.assumeIsolated { MainThreadScriptingObject(body()) }.value
+}
+
+private final class MainThreadScriptingProperties: @unchecked Sendable {
+    let contents: Any?
+    let properties: [String: Any]
+    init(contents: Any?, properties: [String: Any]) { self.contents = contents; self.properties = properties }
 }

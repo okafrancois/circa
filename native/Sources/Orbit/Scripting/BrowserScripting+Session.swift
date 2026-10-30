@@ -6,20 +6,31 @@ import BrowserShell
 extension BrowserScriptingController {
     /// Inventory is read in command order; inactive Spaces do not need renderer creation.
     func capture<Engine: BrowserEngine>(_ owner: BrowserWindowController<Engine>, environment: BrowserEnvironment<Engine>) async -> CircaScriptWindow {
-        let session = owner.session!
+        await capture(session: owner.session, windowID: owner.id.uuidString,
+            mode: owner.isPrivateWindow ? "incognito" : "normal", environment: environment,
+            isFocused: { [weak owner] in owner?.window?.isKeyWindow == true && NSApp.isActive },
+            title: { [weak owner] in owner?.window?.title ?? "" },
+            focus: { [weak owner] in owner?.window?.makeKeyAndOrderFront(nil); NSApp.activate() },
+            close: { [weak owner] in owner?.window?.performClose(nil) },
+            isAvailable: { [weak owner] in owner?.acceptsCommands == true })
+    }
+
+    /// The scripting model can also be exercised with a headless synthetic session.
+    func capture<Engine: BrowserEngine>(session: BrowserWindowSession<Engine.Surface>, windowID: String,
+        mode: String, environment: BrowserEnvironment<Engine>, isFocused: @escaping () -> Bool,
+        title: @escaping () -> String, focus: @escaping () -> Void, close: @escaping () -> Void,
+        isAvailable: @escaping () -> Bool) async -> CircaScriptWindow {
         await session.waitForPendingCommands()
         let document = await environment.store.sessionDocument()
-        let window = CircaScriptWindow(id: owner.id.uuidString, mode: owner.isPrivateWindow ? "incognito" : "normal",
-            scripting: self, isFocused: { [weak owner] in owner?.window?.isKeyWindow == true && NSApp.isActive },
-            title: { [weak owner] in owner?.window?.title ?? "" })
-        window.focus = { [weak owner] in owner?.window?.makeKeyAndOrderFront(nil); NSApp.activate() }
-        window.close = { [weak owner] in owner?.window?.performClose(nil) }
+        let window = CircaScriptWindow(id: windowID, mode: mode, scripting: self, isFocused: isFocused, title: title)
+        window.focus = focus
+        window.close = close
         window.selectedTabID = { [weak session] in session?.organization?.selectedTab?.id.rawValue.uuidString }
         window.selectedSpaceID = { [weak session] in session?.snapshot?.activeSpaceID.rawValue.uuidString }
-        window.makeTab = { [weak owner, weak self] url, spaceID in
+        window.makeTab = { [weak self] url, spaceID in
             guard let self else { throw BrowserScriptError.unavailable }
             try validateNavigation(url)
-            guard let owner, owner.acceptsCommands else { throw BrowserScriptError.unavailable }
+            guard isAvailable() else { throw BrowserScriptError.unavailable }
             if let spaceID, let uuid = UUID(uuidString: spaceID) { session.activateSpace(SpaceID(uuid)) }
             guard let tab = await session.openTabForDelivery(url: url).value else { throw BrowserScriptError.unavailable }
             return tab.id.rawValue.uuidString
@@ -28,8 +39,8 @@ extension BrowserScriptingController {
         let spaces = document.spaces.filter { !standalone || $0.id == session.snapshot?.activeSpaceID }
         for record in spaces {
             let space = CircaScriptSpace(id: record.id.rawValue.uuidString, title: record.name, window: window)
-            space.focus = { [weak owner, weak window] in
-                guard let owner, owner.acceptsCommands else { throw BrowserScriptError.unavailable }
+            space.focus = { [weak window] in
+                guard isAvailable() else { throw BrowserScriptError.unavailable }
                 session.activateSpace(record.id); await session.waitForPendingCommands(); window?.focus()
             }
             let sections = document.organization.spaces.first { $0.spaceID == record.id }
@@ -53,8 +64,8 @@ extension BrowserScriptingController {
                 let wrapper = CircaScriptTab(id: id.rawValue.uuidString, title: live?.title ?? tab.customTitle ?? tab.pageTitle ?? "",
                     url: (surface?.currentURL ?? live?.url ?? tab.url).absoluteString, location: location,
                     loading: surface?.navigationState.isLoading ?? false, space: space)
-                wrapper.action = { [weak owner, weak window, weak self] action in
-                    guard let owner, owner.acceptsCommands else { throw BrowserScriptError.unavailable }
+                wrapper.action = { [weak window, weak self] action in
+                    guard isAvailable() else { throw BrowserScriptError.unavailable }
                     if case .close = action {
                         session.activateSpace(record.id); session.closeTabs([id]); await session.waitForPendingCommands(); return nil
                     }

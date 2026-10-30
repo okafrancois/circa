@@ -1,5 +1,6 @@
 import AppKit
 import BrowserCore
+import BrowserEngine
 import BrowserShell
 import BrowserEngineConformance
 import Testing
@@ -152,6 +153,14 @@ struct BrowserScriptingTests {
         let firstURL = NSPropertySpecifier(containerClassDescription: tabDescription,
                                           containerSpecifier: space.appleScriptTabs[0].objectSpecifier, key: "URL")
         #expect(read([firstTitle, firstURL]) as? [String] == ["First", "about:blank"])
+        let nativeReply = try #require(try BrowserScriptingController.replyValue(read([firstTitle, firstURL]), returnType: "any") as? NSAppleEventDescriptor)
+        #expect(nativeReply.numberOfItems == 2)
+        #expect(nativeReply.atIndex(1)?.stringValue == "First")
+        #expect(nativeReply.atIndex(2)?.stringValue == "about:blank")
+        let activeReply = try #require(try BrowserScriptingController.replyValue(space.appleScriptTabs[0], returnType: "any") as? NSAppleEventDescriptor)
+        #expect((NSScriptObjectSpecifier(descriptor: activeReply)?.objectsByEvaluatingSpecifier as? CircaScriptTab)?.id == "first")
+        #expect(try BrowserScriptingController.replyValue([], returnType: "any") is NSAppleEventDescriptor)
+        #expect(try BrowserScriptingController.replyValue(true, returnType: "any") is NSAppleEventDescriptor)
     }
 
     @Test("Every dictionary property and element evaluates through Cocoa KVC with the declared class")
@@ -408,7 +417,156 @@ struct BrowserScriptingTests {
         #expect(reference.descriptor?.descriptorType == eventCode("obj "))
     }
 
+    @Test("Headless Cocoa creation, reply round trips and commands mutate synthetic sessions")
+    func cocoaSessionCommands() async throws {
+        try loadDictionary()
+        _ = NSApplication.shared
+        let app = OrbitApplication()
+        let previous = NSApp.delegate
+        let context = NSScriptExecutionContext.shared()
+        let previousTop = context.topLevelObject
+        NSApp.delegate = app; context.topLevelObject = NSApp
+        let fixture = HeadlessScriptingSession(scripting: app.scripting)
+        defer {
+            fixture.close()
+            NSApp.delegate = previous; context.topLevelObject = previousTop
+        }
+        app.scripting.refresh = { await fixture.refresh() }
+        app.scripting.createWindow = { try await fixture.makeWindow($0) }
+        _ = try await fixture.makeWindow("normal")
+
+        func roundTrip(_ specifier: NSScriptObjectSpecifier) throws -> NSScriptObjectSpecifier {
+            let descriptor = try #require(specifier.descriptor)
+            #expect(descriptor.descriptorType == eventCode("obj "))
+            return try #require(NSScriptObjectSpecifier(descriptor: descriptor))
+        }
+        func make(_ code: String, location: NSPositionalSpecifier? = nil,
+                  properties: [String: Any] = [:]) async throws -> NSScriptObjectSpecifier {
+            let command = CircaMakeScriptCommand(commandDescription: try commandDescription("core", "crel"))
+            command.arguments = ["ObjectClass": eventCode(code), "KeyDictionary": properties]
+            if let location { command.arguments?["Location"] = location }
+            let reference = try await command.makeValue(app.scripting)
+            #expect(context.topLevelObject as? NSApplication === NSApp)
+            #expect(reference.objectsByEvaluatingSpecifier != nil, "Returned reference unavailable: \(reference), windows: \(fixture.scripting.windows.map(\.id)), error: \(reference.evaluationErrorNumber)")
+            return try roundTrip(reference)
+        }
+        let front = NSIndexSpecifier(containerClassDescription: try #require(NSApp.classDescription as? NSScriptClassDescription),
+                                     containerSpecifier: nil, key: "appleScriptWindows", index: 0)
+        // This is the exact collection insertion form produced by "end of tabs of front window".
+        let tabs = NSPropertySpecifier(containerClassDescription: try #require(fixture.scripting.windows[0].classDescription as? NSScriptClassDescription),
+                                       containerSpecifier: front, key: "appleScriptTabs")
+        func countTabs(_ expected: Int) throws {
+            for (receiver, arguments) in [(front as Any, ["ObjectClass": eventCode("tAbB")]),
+                                           (tabs as Any, [:]),
+                                           (try #require(front.descriptor) as Any, ["ObjectClass": eventCode("tAbB")]),
+                                           (try #require(tabs.descriptor) as Any, [:])] {
+                let count = CircaCountScriptCommand(commandDescription: try commandDescription("core", "cnte"))
+                count.directParameter = receiver; count.arguments = arguments
+                #expect(count.countValue() as? Int == expected)
+            }
+        }
+        try countTabs(0)
+        let created = try await make("tAbB", location: NSPositionalSpecifier(position: .end, objectSpecifier: tabs),
+                                     properties: ["URL": "about:blank#created"])
+        let tab = try #require(created.objectsByEvaluatingSpecifier as? CircaScriptTab)
+        #expect(tab.URL == "about:blank#created")
+        #expect(fixture.sessions[0].session.organization?.selectedTab?.id.rawValue.uuidString == tab.id)
+        #expect(fixture.scripting.windows[0].appleScriptTabs.count == 1)
+        try countTabs(1)
+        let active = NSPropertySpecifier(containerClassDescription: try #require(fixture.scripting.windows[0].classDescription as? NSScriptClassDescription),
+                                         containerSpecifier: front, key: "activeTab")
+        let get = CircaGetScriptCommand(commandDescription: try commandDescription("core", "getd"))
+        get.directParameter = try #require(active.descriptor)
+        let activeReply = try #require(BrowserScriptingController.replyValue(get.readValue()) as? NSScriptObjectSpecifier)
+        #expect((try roundTrip(activeReply).objectsByEvaluatingSpecifier as? CircaScriptTab)?.id == tab.id)
+        let set = CircaSetScriptCommand(commandDescription: try commandDescription("core", "setd"))
+        set.directParameter = try #require(NSPropertySpecifier(containerClassDescription: try #require(tab.classDescription as? NSScriptClassDescription),
+                                                  containerSpecifier: active, key: "URL").descriptor)
+        set.arguments = ["Value": "about:blank#changed"]
+        _ = try await set.setValue()
+        #expect(fixture.sessions[0].session.selectedSurface?.currentURL?.absoluteString == "about:blank#changed")
+
+        func action(_ suite: String, _ code: String, target: NSScriptObjectSpecifier = created,
+                    arguments: [String: Any] = [:]) async throws -> Any? {
+            await app.scripting.refresh()
+            let command = CircaActionScriptCommand(commandDescription: try commandDescription(suite, code))
+            command.directParameter = try #require(target.descriptor); command.arguments = arguments
+            return try await command.actionValue(app.scripting)
+        }
+        _ = try await action("CrSe", "lect")
+        _ = try await action("CrSu", "Rlod")
+        _ = try await action("CrSu", "Back")
+        #expect(fixture.sessions[0].session.selectedSurface?.currentURL?.absoluteString == "about:blank#created")
+        _ = try await action("CrSu", "Fwd ")
+        #expect(fixture.sessions[0].session.selectedSurface?.currentURL?.absoluteString == "about:blank#changed")
+        _ = try await action("CrSu", "stop")
+        await #expect(throws: BrowserScriptError.javaScriptDisabled) {
+            _ = try await action("CrSu", "ExJa", arguments: ["javascript": "'synthetic-text'"])
+        }
+        #expect(fixture.executions == 0)
+        app.scripting.allowsJavaScript = { true }
+        #expect(try await action("CrSu", "ExJa", arguments: ["javascript": "'synthetic-text'"]) as? String == "synthetic-text")
+        #expect(fixture.executions == 1)
+        let space = try #require(app.scripting.windows[0].appleScriptSpaces.first?.objectSpecifier)
+        _ = try await action("SpaF", "ocus", target: space)
+        #expect(fixture.focused == fixture.sessions[0].id)
+        _ = try await action("core", "clos")
+        await app.scripting.refresh()
+        #expect(!app.scripting.windows.flatMap(\.appleScriptTabs).contains { $0.id == tab.id })
+        let defaultTab = try await make("tAbB", properties: ["URL": "about:blank#default"])
+        #expect((defaultTab.objectsByEvaluatingSpecifier as? CircaScriptTab)?.URL == "about:blank#default")
+        try countTabs(1)
+        // Exercise the unmodified Cocoa command itself, not just the asynchronous adapter.
+        let container = try #require(app.scripting.windows.first)
+        try #require(container.responds(to: NSSelectorFromString("insertObject:inAppleScriptTabsAtIndex:")))
+        let raw = NSCreateCommand(commandDescription: try commandDescription("core", "crel"))
+        raw.arguments = ["ObjectClass": eventCode("tAbB"), "KeyDictionary": ["URL": "about:blank#cocoa"],
+                         "Location": NSPositionalSpecifier(position: .end, objectSpecifier: tabs)]
+        let rawReply = try #require(raw.performDefaultImplementation() as? NSScriptObjectSpecifier)
+        let provisional = try #require(rawReply.objectsByEvaluatingSpecifier as? CircaScriptTab)
+        #expect(container.appleScriptTabs.contains { $0 === provisional })
+        let complete = try #require(app.scripting.creation)
+        let materialized = try await complete()
+        app.scripting.creation = nil
+        #expect((materialized as? CircaScriptTab)?.URL == "about:blank#cocoa")
+        try countTabs(2)
+        #expect(try roundTrip(#require(materialized.objectSpecifier)).objectsByEvaluatingSpecifier is CircaScriptTab)
+        let newWindow = try await make("WiND")
+        #expect(newWindow.objectsByEvaluatingSpecifier is CircaScriptWindow)
+        #expect(fixture.sessions.count == 2)
+        let privateWindow = try await make("WiND", properties: ["mode": "incognito"])
+        let privateTabs = NSPropertySpecifier(containerClassDescription: try #require((privateWindow.objectsByEvaluatingSpecifier as? CircaScriptWindow)?.classDescription as? NSScriptClassDescription),
+                                              containerSpecifier: privateWindow, key: "appleScriptTabs")
+        let privateTab = try await make("tAbB", location: NSPositionalSpecifier(position: .end, objectSpecifier: privateTabs),
+                                        properties: ["URL": "about:blank#private"])
+        let secret = try #require(privateTab.objectsByEvaluatingSpecifier as? CircaScriptTab)
+        #expect(secret.URL.isEmpty && secret.title.isEmpty)
+        let privateID = try #require(secret.window?.id)
+        app.scripting.targetWindowID = privateID
+        #expect(secret.URL == "about:blank#private")
+        fixture.focused = nil
+        #expect(secret.URL.isEmpty)
+        await #expect(throws: BrowserScriptError.privateContent) {
+            _ = try await action("CrSu", "ExJa", target: privateTab, arguments: ["javascript": "'synthetic-text'"])
+        }
+    }
+
     private func specifierError(_ specifier: NSScriptObjectSpecifier) -> Int { specifier.evaluationErrorNumber }
+
+    @Test("Creation containers expose ordered Cocoa insertion and removal accessors")
+    func creationAccessors() throws {
+        try loadDictionary()
+        _ = NSApplication.shared
+        let scripting = BrowserScriptingController()
+        let window = CircaScriptWindow(id: "window", mode: "normal", scripting: scripting,
+                                       isFocused: { false }, title: { "Window" })
+        let space = CircaScriptSpace(id: "space", title: "Space", window: window)
+        for (container, key) in [(NSApp as NSObject, "AppleScriptWindows"), (NSApp as NSObject, "AppleScriptTabs"),
+                                 (window, "AppleScriptTabs"), (space, "AppleScriptTabs")] {
+            #expect(container.responds(to: NSSelectorFromString("insertObject:in\(key)AtIndex:")))
+            #expect(container.responds(to: NSSelectorFromString("removeObjectFrom\(key)AtIndex:")))
+        }
+    }
 
     private func eventCode(_ text: String) -> FourCharCode { text.utf8.reduce(0) { ($0 << 8) | UInt32($1) } }
 
@@ -442,3 +600,65 @@ struct BrowserScriptingTests {
 }
 
 private final class ScriptHostFixtureApplication: NSApplication {}
+
+/// Uses the production inventory/action adapter without allocating an NSWindow or sending events.
+@MainActor
+private final class HeadlessScriptingSession: BrowserEngineSurfaceDelegate {
+    struct Entry {
+        let id: String
+        let mode: String
+        let environment: BrowserEnvironment<SyntheticEngine>
+        let session: BrowserWindowSession<SyntheticSurface>
+    }
+    let scripting: BrowserScriptingController
+    var sessions: [Entry] = []
+    var focused: String?
+    var executions = 0
+    init(scripting: BrowserScriptingController) { self.scripting = scripting }
+    func makeWindow(_ mode: String) async throws -> CircaScriptWindow {
+        let environment = BrowserEnvironment(engine: SyntheticEngine())
+        let session = BrowserWindowSession(store: environment.store, makeSurface: { profile, url in
+            let surface = environment.engine.makeSurface(profileID: profile, delegate: self)
+            surface.navigate(to: url)
+            return surface
+        })
+        let id = UUID().uuidString
+        sessions.insert(Entry(id: id, mode: mode, environment: environment, session: session), at: 0)
+        focused = id
+        await refresh()
+        return scripting.windows[0]
+    }
+    func refresh() async {
+        var windows: [CircaScriptWindow] = []
+        for entry in sessions {
+            let window = await scripting.capture(session: entry.session, windowID: entry.id, mode: entry.mode,
+                environment: entry.environment, isFocused: { self.focused == entry.id }, title: { "Synthetic window" },
+                focus: { self.focused = entry.id }, close: { entry.session.close() }, isAvailable: { !entry.session.isClosed })
+            // The synthetic renderer has no JS runtime; simulate its textual result at the engine boundary.
+            for tab in window.appleScriptTabs {
+                let action = tab.action
+                tab.action = { request in
+                    if case .javascript = request { self.executions += 1; return "synthetic-text" }
+                    return try await action(request)
+                }
+            }
+            windows.append(window)
+        }
+        scripting.windows = windows
+    }
+    func surfaceDidStartNavigation(_ surface: SyntheticSurface) {}
+    func surfaceDidCommitNavigation(_ surface: SyntheticSurface) {}
+    func surfaceDidFinishNavigation(_ surface: SyntheticSurface) {}
+    func surfaceDidFailNavigation(_ surface: SyntheticSurface) {}
+    func surfaceDidRequestClose(_ surface: SyntheticSurface) {}
+    func surface(_ surface: SyntheticSurface, decidePolicyFor action: BrowserNavigationAction,
+                 decision: BrowserPolicyDecision<BrowserNavigationActionPolicy>) { decision.decide(.allow) }
+    func surface(_ surface: SyntheticSurface, createSurfaceFor request: BrowserNewSurfaceRequest,
+                 make: () -> SyntheticSurface) -> SyntheticSurface? { nil }
+    func surface(_ surface: SyntheticSurface, didStartDownload download: any BrowserEngineDownload) {}
+    func close() {
+        scripting.refresh = {}; scripting.createWindow = { _ in throw BrowserScriptError.unavailable }
+        scripting.windows = []
+        for entry in sessions { entry.session.close(); entry.environment.autoArchive.scheduler.stop() }
+    }
+}
