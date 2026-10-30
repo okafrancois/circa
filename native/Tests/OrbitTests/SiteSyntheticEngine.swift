@@ -110,7 +110,6 @@ final class SiteSyntheticSurface: BrowserEngineSurface {
     weak var engine: SiteSyntheticEngine?
     let siteData: SiteSyntheticSiteData
     var placement = BrowserSurfacePlacement.detached
-    var nativePageServices: (any BrowserNativePageServices)?
     var onChange: (() -> Void)?
     var onDispose: (() -> Void)?
     private(set) var isDisposed = false
