@@ -514,12 +514,12 @@ final class BrowserQuickWindowWindowController<Engine: BrowserEngine>: NSWindowC
         openButton.font = font
         let accent = OrbitSpaceThemes.accent(for: theme)
         openGroup.accent = accent
-        openButton.contentTintColor = accent.sidebarText
-        spaceButton.contentTintColor = accent.sidebarText
-        addressField.textColor = accent.sidebarText
-        copyAddressButton.contentTintColor = accent.sidebarText.withAlphaComponent(0.55)
-        extensionsButton.contentTintColor = accent.sidebarText.withAlphaComponent(0.55)
-        sourceSpaceBadge.contentTintColor = accent.sidebarText
+        openButton.contentTintColor = OrbitFloatingMaterial.body
+        spaceButton.contentTintColor = OrbitFloatingMaterial.body
+        addressField.textColor = OrbitFloatingMaterial.body
+        copyAddressButton.contentTintColor = OrbitFloatingMaterial.secondary
+        extensionsButton.contentTintColor = OrbitFloatingMaterial.secondary
+        sourceSpaceBadge.contentTintColor = OrbitFloatingMaterial.body
         sourceSpaceBadge.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.08).cgColor
     }
 

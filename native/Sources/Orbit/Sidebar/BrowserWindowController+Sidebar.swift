@@ -145,7 +145,7 @@ extension BrowserWindowController {
         session.performWindowAction { [weak self] in
             guard let self, let window,
                   let space = session.catalog?.spaces.first(where: { $0.id == id }) else { return }
-            let alert = NSAlert()
+            let alert = OrbitFloatingMaterial.alert()
             alert.messageText = uiFormat("Delete your “%@” Space?", space.name)
             alert.informativeText = uiText("This will archive all the tabs and folders inside it.")
             alert.addButton(withTitle: uiText("Delete"))
@@ -182,7 +182,7 @@ extension BrowserWindowController {
 
     private func presentRenameSpaceSheet(_ id: SpaceID) {
         guard acceptsCommands, let window, let space = session.catalog?.spaces.first(where: { $0.id == id }) else { return }
-        let alert = NSAlert()
+        let alert = OrbitFloatingMaterial.alert()
         alert.messageText = uiText("Rename Space")
         alert.addButton(withTitle: uiText("Save"))
         alert.addButton(withTitle: uiText("Cancel"))

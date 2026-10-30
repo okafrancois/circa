@@ -30,7 +30,7 @@ final class OrbitThemeEditorView: NSView {
     var onDismiss: (() -> Void)?
 
     let surfaceScope = NSTextField(labelWithString: uiText("This Space · captured profile"))
-    let material = NSVisualEffectView()
+    let material = NSView()
     let field = OrbitThemeFieldView()
     let placeholder = NSTextField(labelWithString: "")
     let modeHighlight = CALayer()
@@ -51,12 +51,11 @@ final class OrbitThemeEditorView: NSView {
         wantsLayer = true
         layer?.cornerRadius = M.cornerRadius
         layer?.masksToBounds = true
-        material.material = .popover
-        material.blendingMode = .behindWindow
-        material.state = .active
+        material.wantsLayer = true
         material.frame = bounds
         material.autoresizingMask = [.width, .height]
         addSubview(material)
+        updateOpaqueBackground()
 
         field.frame = M.field
         field.onPick = { [weak self] unit in self?.edit { $0.pick(at: unit) } }
@@ -127,8 +126,8 @@ final class OrbitThemeEditorView: NSView {
 
     /// The compact picker opens at the color controls; the scope label remains scrollable.
     func makePickerViewport() -> NSScrollView {
-        // The native popover supplies its own material. Avoid compositing it twice.
-        material.isHidden = true
+        // Keep the editor opaque even inside a native popover.
+        material.isHidden = false
         let scroll = NSScrollView(frame: NSRect(origin: .zero, size: M.pickerSize))
         scroll.drawsBackground = false
         scroll.hasVerticalScroller = true
@@ -136,6 +135,10 @@ final class OrbitThemeEditorView: NSView {
         scroll.documentView = self
         scroll.contentView.scroll(to: .zero)
         return scroll
+    }
+
+    private func updateOpaqueBackground() {
+        material.layer?.backgroundColor = NSColor.windowBackgroundColor.resolvedCGColor(for: effectiveAppearance)
     }
 
     required init?(coder: NSCoder) { nil }
@@ -244,6 +247,7 @@ final class OrbitThemeEditorView: NSView {
 
     override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
+        updateOpaqueBackground()
         render()
         for swatch in swatches { swatch.refresh() }
         intensitySlider.refresh()

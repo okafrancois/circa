@@ -35,7 +35,8 @@ struct SpaceIconPickerTests {
         #expect(scroll.documentView === editor)
         #expect(editor.visibleRect.minY == 0)
         #expect(editor.visibleRect.intersects(editor.surfaceScope.frame))
-        #expect(editor.material.isHidden)
+        #expect(!editor.material.isHidden)
+        #expect(editor.material.layer?.backgroundColor?.alpha == 1)
         #expect(editor.frame.height == 520)
     }
 

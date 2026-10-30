@@ -27,7 +27,7 @@ final class OrbitSiteControlCenterView: NSView {
         if let status {
             let field = NSTextField(wrappingLabelWithString: status)
             field.font = .systemFont(ofSize: 12)
-            field.textColor = .secondaryLabelColor
+            field.textColor = OrbitFloatingMaterial.secondary
             message = field
             messageHeight = ceil((status as NSString).boundingRect(
                 with: NSSize(width: 216, height: CGFloat.greatestFiniteMagnitude),
@@ -40,11 +40,11 @@ final class OrbitSiteControlCenterView: NSView {
         setAccessibilityIdentifier("siteControlCenterView")
         for label in [extensionTitle, settingsTitle] {
             label.font = .systemFont(ofSize: 15, weight: .bold)
-            label.textColor = .labelColor
+            label.textColor = OrbitFloatingMaterial.body
         }
         manage.isBordered = false
         manage.font = .systemFont(ofSize: 13)
-        manage.contentTintColor = .secondaryLabelColor
+        manage.contentTintColor = OrbitFloatingMaterial.secondary
         manage.alphaValue = 0
         manage.setAccessibilityHidden(true)
         separator.boxType = .separator
@@ -98,7 +98,7 @@ final class OrbitSiteControlCenterView: NSView {
         button.toolTip = label
         button.wantsLayer = true
         button.layer?.cornerRadius = 16
-        button.layer?.backgroundColor = NSColor.labelColor.withAlphaComponent(0.04).cgColor
+        button.layer?.backgroundColor = OrbitFloatingMaterial.body.withAlphaComponent(0.04).cgColor
         return button
     }
 
@@ -196,7 +196,7 @@ final class ControlCenterActionTile: NSView {
                        ending: NSColor(white: 0.07, alpha: 1))?.draw(in: path, angle: 90)
             NSColor.white.withAlphaComponent(0.28).setStroke(); path.lineWidth = 0.5; path.stroke()
         } else {
-            NSColor.labelColor.withAlphaComponent(hovered ? 0.10 : 0.055).setFill(); path.fill()
+            OrbitFloatingMaterial.body.withAlphaComponent(hovered ? 0.10 : 0.055).setFill(); path.fill()
         }
     }
 }
@@ -222,7 +222,7 @@ final class ControlCenterPinButton: NSButton {
         context.saveGState()
         context.beginTransparencyLayer(auxiliaryInfo: nil)
         defer { context.endTransparencyLayer(); context.restoreGState() }
-        NSColor.labelColor.withAlphaComponent(isHighlighted ? 0.65 : (isPinned ? 1 : 0.33)).setFill()
+        OrbitFloatingMaterial.body.withAlphaComponent(isHighlighted ? 0.65 : (isPinned ? 1 : 0.33)).setFill()
         NSBezierPath(ovalIn: bounds).fill()
         // 8 pt black symbol, rotation 0.5759586531581288 rad (33°).
         if let image = OrbitGlyph.symbol("pin.fill", pointSize: 8, weight: .black) {
@@ -270,15 +270,15 @@ final class ControlCenterPermissionPicker: NSPopUpButton {
         onSelect(BrowserSitePermissionSetting.allCases[indexOfSelectedItem])
     }
     override func draw(_ dirtyRect: NSRect) {
-        NSColor.labelColor.withAlphaComponent(0.18).setFill()
+        OrbitFloatingMaterial.body.withAlphaComponent(0.18).setFill()
         NSBezierPath(ovalIn: NSRect(x: 0, y: 0, width: 32, height: 32)).fill()
         if let symbol { OrbitGlyph.draw(symbol, centeredIn: NSRect(x: 0, y: 0, width: 32, height: 32), tint: .secondaryLabelColor, in: self) }
         let title = permission.displayTitle as NSString
         let paragraph = NSMutableParagraphStyle(); paragraph.lineBreakMode = .byTruncatingTail
         title.draw(in: NSRect(x: 41, y: 0, width: bounds.width - 41, height: 18), withAttributes: [
-            .font: NSFont.systemFont(ofSize: 15, weight: .semibold), .foregroundColor: NSColor.labelColor, .paragraphStyle: paragraph])
+            .font: NSFont.systemFont(ofSize: 15, weight: .semibold), .foregroundColor: OrbitFloatingMaterial.body, .paragraphStyle: paragraph])
         (titleOfSelectedItem ?? "").draw(in: NSRect(x: 41, y: 18, width: bounds.width - 41, height: 16), withAttributes: [
-            .font: NSFont.systemFont(ofSize: 13), .foregroundColor: NSColor.secondaryLabelColor])
+            .font: NSFont.systemFont(ofSize: 13), .foregroundColor: OrbitFloatingMaterial.secondary])
     }
 }
 
@@ -306,15 +306,15 @@ final class ControlCenterSettingButton: NSButton {
     required init?(coder: NSCoder) { nil }
     @objc private func pressed() { onPress() }
     override func draw(_ dirtyRect: NSRect) {
-        NSColor.labelColor.withAlphaComponent(active ? 0.92 : 0.18).setFill()
+        OrbitFloatingMaterial.body.withAlphaComponent(active ? 0.92 : 0.18).setFill()
         NSBezierPath(ovalIn: NSRect(x: 0, y: 0, width: 32, height: 32)).fill()
         if let symbol { OrbitGlyph.draw(symbol, centeredIn: NSRect(x: 0, y: 0, width: 32, height: 32), tint: active ? .windowBackgroundColor : .secondaryLabelColor, in: self) }
         let paragraph = NSMutableParagraphStyle(); paragraph.lineBreakMode = .byTruncatingTail
         (rowTitle as NSString).draw(in: NSRect(x: 41, y: 0, width: bounds.width - 41, height: 18), withAttributes: [
-            .font: NSFont.systemFont(ofSize: 15, weight: .semibold), .foregroundColor: NSColor.labelColor,
+            .font: NSFont.systemFont(ofSize: 15, weight: .semibold), .foregroundColor: OrbitFloatingMaterial.body,
             .paragraphStyle: paragraph])
         (subtitle as NSString).draw(in: NSRect(x: 41, y: 18, width: bounds.width - 41, height: 16), withAttributes: [
-            .font: NSFont.systemFont(ofSize: 13), .foregroundColor: NSColor.secondaryLabelColor])
+            .font: NSFont.systemFont(ofSize: 13), .foregroundColor: OrbitFloatingMaterial.secondary])
     }
 }
 

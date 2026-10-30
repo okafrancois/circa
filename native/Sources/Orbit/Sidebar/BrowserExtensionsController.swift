@@ -314,7 +314,7 @@ final class BrowserExtensionsController<Engine: BrowserEngine> {
         menu.addItem(.separator())
         menu.addAction(uiText("Remove from Orbit")) { [weak owner, weak surface] in
             guard valid(), let owner, let surface, let window = owner.window else { return }
-            let alert = NSAlert()
+            let alert = OrbitFloatingMaterial.alert()
             alert.messageText = String(format: uiText("Remove %@?"), item.name)
             alert.addButton(withTitle: uiText("Remove")); alert.addButton(withTitle: uiText("Cancel"))
             alert.beginSheetModal(for: window) { response in

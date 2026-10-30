@@ -80,7 +80,11 @@ final class BrowserQuickWindowToolbarView: NSView {
     weak var addressField: BrowserQuickWindowAddressField?
     override init(frame: NSRect) {
         super.init(frame: frame)
+        wantsLayer = true
+        layer?.masksToBounds = true
         addSubview(fill)
+        let frost = OrbitFloatingMaterial.install(in: self, radius: 0)
+        addSubview(frost, positioned: .above, relativeTo: fill)
     }
     required init?(coder: NSCoder) { nil }
     override func resetCursorRects() { addCursorRect(bounds, cursor: .arrow) }
@@ -98,7 +102,7 @@ final class BrowserQuickWindowOpenGroup: NSView {
     override var wantsUpdateLayer: Bool { true }
     override func updateLayer() {
         layer?.cornerRadius = OrbitTokens.Metrics.QuickWindow.openInCornerRadius
-        layer?.backgroundColor = accent.menuSurface.cgColor
+        layer?.backgroundColor = NSColor.controlAccentColor.withAlphaComponent(0.12).cgColor
     }
 }
 

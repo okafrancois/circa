@@ -16,6 +16,7 @@ final class SidebarUpdateCard: NSView {
     override init(frame: NSRect) {
         super.init(frame: frame)
         wantsLayer = true
+        OrbitFloatingMaterial.install(in: self)
         layer?.addSublayer(outline)
         outline.lineWidth = 1
         outline.lineDashPattern = [4, 3]
@@ -40,15 +41,15 @@ final class SidebarUpdateCard: NSView {
     override var mouseDownCanMoveWindow: Bool { false }
     override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); refreshColors() }
     private func refreshColors() {
-        let foreground = accent.foreground
+        let foreground = OrbitFloatingMaterial.body
         effectiveAppearance.performAsCurrentDrawingAppearance {
             outline.strokeColor = foreground.withAlphaComponent(0.24).cgColor
             outline.fillColor = foreground.withAlphaComponent(0.035).cgColor
         }
         title.textColor = foreground
-        body.textColor = foreground.withAlphaComponent(0.7)
+        body.textColor = OrbitFloatingMaterial.secondary
         icon.contentTintColor = foreground
-        restart.contentTintColor = foreground
+        restart.contentTintColor = .controlAccentColor
     }
     override func layout() {
         super.layout()
