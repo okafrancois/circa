@@ -1,6 +1,7 @@
 import BrowserCore
 import Combine
 import SwiftUI
+import BrowserShell
 
 /// Composition and intermediate invalid input belong to the draft, never to the persisted file.
 @MainActor
@@ -51,7 +52,7 @@ struct BrowserSettingsIconEditor: View {
             }
             if !draft.isValid {
                 Text(settingsText("invalidIcon", "Choose a single character or emoji for the Space icon."))
-                    .font(.system(size: 12)).foregroundStyle(.secondary)
+                    .font(Font(BrandFonts.ui(12))).foregroundStyle(.secondary)
             }
         }.onChange(of: choice) { _, choice in draft.receivePersisted(choice) }
     }

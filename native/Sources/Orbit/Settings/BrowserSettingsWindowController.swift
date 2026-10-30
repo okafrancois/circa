@@ -2,6 +2,7 @@ import AppKit
 import BrowserCore
 import BrowserEngine
 import Combine
+import BrowserShell
 import SwiftUI
 
 /// CMD deliberately leaves standard shortcuts to auxiliary key windows. Handle native Close
@@ -32,6 +33,9 @@ final class BrowserSettingsWindow: NSWindow {
 final class BrowserSettingsWindowController<Engine: BrowserEngine>: NSWindowController, NSWindowDelegate, NSToolbarDelegate {
     let model: BrowserSettingsModel<Engine>
     private var sectionObservation: AnyCancellable?
+    private var displayedSection: BrowserSettingsSection?
+    private let selectionPill = BrowserSettingsSelectionPill()
+    private var outgoingPane: CALayer?
     static var minimumContentSize: NSSize { NSSize(width: 684, height: 400) }
 
     /// The theme editor opened from the Spaces section.
@@ -45,6 +49,7 @@ final class BrowserSettingsWindowController<Engine: BrowserEngine>: NSWindowCont
         let window = BrowserSettingsWindow(contentRect: NSRect(x: 0, y: 0, width: 684, height: 400),
                               styleMask: [.titled, .closable], backing: .buffered, defer: true)
         window.title = (model.settingsSection ?? .general).title
+        window.titleVisibility = .hidden
         window.appearance = OrbitAppearance.windowAppearance(for: .automatic, override: appearanceOverride)
         window.identifier = NSUserInterfaceItemIdentifier("orbit-settings")
         window.isReleasedWhenClosed = false
@@ -52,7 +57,7 @@ final class BrowserSettingsWindowController<Engine: BrowserEngine>: NSWindowCont
         window.toolbarStyle = .preference
         window.titlebarSeparatorStyle = .line
         window.titlebarAppearsTransparent = true
-        window.backgroundColor = .windowBackgroundColor
+        window.backgroundColor = OrbitSettingsStyle.toolbarColor
         window.isOpaque = true
         window.isMovableByWindowBackground = false
         window.contentViewController = NSHostingController(rootView: BrowserSettingsView(model: model, runtime: model.runtime))
@@ -61,17 +66,19 @@ final class BrowserSettingsWindowController<Engine: BrowserEngine>: NSWindowCont
         window.delegate = self
         let toolbar = NSToolbar(identifier: "orbit-settings-categories")
         toolbar.delegate = self
-        toolbar.displayMode = .iconAndLabel
+        toolbar.displayMode = .iconOnly
         toolbar.allowsUserCustomization = false
         toolbar.autosavesConfiguration = false
         window.toolbar = toolbar
         window.selectCategory = { [weak self] section in self?.selectSection(section) ?? false }
+        model.selectSettingsSection = { [weak self] section in self?.selectSection(section) ?? false }
         // Keep the hosting view alive: catalog publications must not recreate drafts or IME editors.
         sectionObservation = model.$settingsSection.sink { [weak self] section in
             // @Published delivers before storing the value. Resizing can run AppKit's nested
             // display loop; defer that work so SwiftUI never consumes the old pane's value.
             DispatchQueue.main.async { [weak self] in
-                guard let self, self.model.settingsSection == section else { return }
+                guard let self, self.model.settingsSection == section,
+                      self.displayedSection != (section ?? .general) else { return }
                 self.applySection(section ?? .general)
             }
         }
@@ -83,14 +90,18 @@ final class BrowserSettingsWindowController<Engine: BrowserEngine>: NSWindowCont
     private func applySection(_ section: BrowserSettingsSection) {
         for item in window?.toolbar?.items ?? [] {
             guard let tab = BrowserSettingsSection.allCases.first(where: { $0.toolbarIdentifier == item.itemIdentifier }) else { continue }
-            item.image = OrbitIcon.image(sfName: tab.symbol, pointSize: 24, variant: tab == section ? .template : .color,
+            item.image = OrbitIcon.image(sfName: tab.symbol, pointSize: 24, variant: .color,
                                          accessibilityDescription: tab.title)
         }
         guard let window else { return }
         let identifier = section.toolbarIdentifier
-        window.toolbar?.selectedItemIdentifier = BrowserSettingsSection.allCases.contains(section) ? identifier : nil
+        window.toolbar?.selectedItemIdentifier = nil
         window.title = section.title
+        let changed = displayedSection != nil && displayedSection != section
         resize(for: section)
+        updateSelectionPill(animated: changed)
+        if changed { animatePane() }
+        displayedSection = section
         for item in window.toolbar?.items ?? [] {
             item.menuFormRepresentation?.state = item.itemIdentifier == identifier ? .on : .off
         }
@@ -103,7 +114,14 @@ final class BrowserSettingsWindowController<Engine: BrowserEngine>: NSWindowCont
         let top = window.frame.maxY
         let frame = NSRect(x: window.frame.minX, y: top - size.height, width: size.width, height: size.height)
         guard frame != window.frame else { return }
-        window.setFrame(frame, display: true, animate: window.isVisible && !OrbitMotionPreferences.prefersReducedMotion)
+        guard window.isVisible && !OrbitMotionPreferences.prefersReducedMotion else {
+            window.setFrame(frame, display: true); return
+        }
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = BrowserSettingsMotion.resizeDuration
+            context.timingFunction = BrowserSettingsMotion.timingFunction
+            window.animator().setFrame(frame, display: true)
+        }
     }
 
     func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
@@ -114,18 +132,26 @@ final class BrowserSettingsWindowController<Engine: BrowserEngine>: NSWindowCont
         toolbarDefaultItemIdentifiers(toolbar)
     }
 
-    func toolbarSelectableItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        toolbarDefaultItemIdentifiers(toolbar)
+    func toolbarSelectableItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] { [] }
+
+    var selectedToolbarIdentifier: NSToolbarItem.Identifier? {
+        let section = model.settingsSection ?? .general
+        return BrowserSettingsSection.allCases.contains(section) ? section.toolbarIdentifier : nil
     }
 
     func toolbar(_ toolbar: NSToolbar, itemForItemIdentifier identifier: NSToolbarItem.Identifier,
                  willBeInsertedIntoToolbar flag: Bool) -> NSToolbarItem? {
         guard let section = BrowserSettingsSection.allCases.first(where: { $0.toolbarIdentifier == identifier }) else { return nil }
         let item = NSToolbarItem(itemIdentifier: identifier)
-        item.label = section.title
-        item.paletteLabel = section.title
+        item.label = section.toolbarTitle
+        item.paletteLabel = section.toolbarTitle
         item.toolTip = section.title
-        item.image = OrbitIcon.image(sfName: section.symbol, pointSize: 24, variant: section == (model.settingsSection ?? .general) ? .template : .color, accessibilityDescription: section.title)
+        item.image = OrbitIcon.image(sfName: section.symbol, pointSize: 24, variant: .color, accessibilityDescription: section.title)
+        let button = BrowserSettingsToolbarButton(section: section)
+        button.target = self
+        button.action = #selector(selectToolbarItem(_:))
+        item.view = button
+        item.isBordered = false
         item.target = self
         item.action = #selector(selectToolbarItem(_:))
         // Standard toolbar items derive their accessible name from the label and image;
@@ -142,13 +168,13 @@ final class BrowserSettingsWindowController<Engine: BrowserEngine>: NSWindowCont
     }
 
     @objc private func selectToolbarItem(_ sender: Any) {
-        let identifier = (sender as? NSToolbarItem)?.itemIdentifier
+        let identifier = (sender as? NSToolbarItem)?.itemIdentifier ?? (sender as? BrowserSettingsToolbarButton)?.section.toolbarIdentifier
         let rawValue = (sender as? NSMenuItem)?.representedObject as? String
         guard let section = BrowserSettingsSection.allCases.first(where: {
             $0.toolbarIdentifier == identifier || $0.rawValue == rawValue
         }) else { return }
         if !selectSection(section) {
-            window?.toolbar?.selectedItemIdentifier = (model.settingsSection ?? .general).toolbarIdentifier
+            window?.toolbar?.selectedItemIdentifier = nil
         }
     }
 
@@ -158,21 +184,95 @@ final class BrowserSettingsWindowController<Engine: BrowserEngine>: NSWindowCont
               (window.firstResponder as? NSTextInputClient)?.hasMarkedText() != true else { return false }
         if model.settingsSection != section {
             guard window.makeFirstResponder(nil) else { return false }
+            prepareOutgoingPane()
             model.settingsSection = section
         }
-        applySection(section)
+        if displayedSection != section { applySection(section) }
         return true
     }
 
-    func windowDidBecomeKey(_ notification: Notification) { model.perform { [model] in await model.reload() } }
+    private func updateSelectionPill(animated: Bool) {
+        guard let window, let items = window.toolbar?.items else { return }
+        let views = items.compactMap(\.view)
+        guard let first = views.first else { return }
+        var ancestor = first.superview
+        while let candidate = ancestor, !views.allSatisfy({ $0.isDescendant(of: candidate) }) { ancestor = candidate.superview }
+        guard let host = ancestor else { return }
+        host.layoutSubtreeIfNeeded()
+        if selectionPill.superview !== host {
+            selectionPill.removeFromSuperview()
+            selectionPill.wantsLayer = true
+            selectionPill.layer?.cornerRadius = 8
+            host.addSubview(selectionPill, positioned: .below, relativeTo: nil)
+        }
+        selectionPill.layer?.backgroundColor = OrbitSettingsStyle.selectionColor.resolved(for: window.effectiveAppearance).cgColor
+        let selected = items.first { $0.itemIdentifier == selectedToolbarIdentifier }?.view
+        selectionPill.isHidden = selected == nil
+        guard let selected else { return }
+        let frame = selected.convert(selected.bounds, to: host)
+        if animated && !OrbitMotionPreferences.prefersReducedMotion {
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = BrowserSettingsMotion.pillDuration
+                context.timingFunction = BrowserSettingsMotion.timingFunction
+                selectionPill.animator().setFrameOrigin(frame.origin)
+                selectionPill.animator().setFrameSize(frame.size)
+            }
+        } else { selectionPill.frame = frame }
+    }
+
+    private func prepareOutgoingPane() {
+        guard let window, window.isVisible, !OrbitMotionPreferences.prefersReducedMotion,
+              let view = window.contentView, let root = view.superview,
+              let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return }
+        view.cacheDisplay(in: view.bounds, to: bitmap)
+        outgoingPane?.removeFromSuperlayer()
+        let outgoing = CALayer()
+        outgoing.contents = bitmap.cgImage
+        outgoing.frame = view.convert(view.bounds, to: root)
+        root.wantsLayer = true
+        root.layer?.addSublayer(outgoing)
+        outgoingPane = outgoing
+    }
+
+    private func animatePane() {
+        if let outgoing = outgoingPane {
+            outgoingPane = nil
+            CATransaction.begin()
+            CATransaction.setCompletionBlock { outgoing.removeFromSuperlayer() }
+            let exit = CABasicAnimation(keyPath: "opacity")
+            exit.fromValue = 1; exit.toValue = 0; exit.duration = BrowserSettingsMotion.exitDuration
+            exit.timingFunction = CAMediaTimingFunction(name: .easeIn)
+            outgoing.opacity = 0
+            outgoing.add(exit, forKey: "exit")
+            CATransaction.commit()
+        }
+        guard let view = window?.contentView, window?.isVisible == true,
+              !OrbitMotionPreferences.prefersReducedMotion else { return }
+        view.wantsLayer = true
+        let fade = CABasicAnimation(keyPath: "opacity")
+        fade.fromValue = 0; fade.toValue = 1
+        fade.beginTime = CACurrentMediaTime() + BrowserSettingsMotion.enterDelay
+        fade.duration = BrowserSettingsMotion.enterDuration
+        fade.fillMode = .backwards
+        fade.timingFunction = BrowserSettingsMotion.timingFunction
+        let rise = CABasicAnimation(keyPath: "transform.translation.y")
+        rise.fromValue = view.layer?.superlayer?.isGeometryFlipped == true ? BrowserSettingsMotion.rise : -BrowserSettingsMotion.rise
+        rise.toValue = 0
+        rise.beginTime = fade.beginTime; rise.duration = fade.duration
+        rise.fillMode = .backwards; rise.timingFunction = BrowserSettingsMotion.timingFunction
+        view.layer?.add(fade, forKey: "pane-fade")
+        view.layer?.add(rise, forKey: "pane-rise")
+    }
+
+    func windowDidBecomeKey(_ notification: Notification) { updateSelectionPill(animated: false); model.perform { [model] in await model.reload() } }
 
     required init?(coder: NSCoder) { nil }
 }
 
 enum BrowserSettingsSection: String, CaseIterable, Identifiable {
-    case general, profiles, spaces, shortcuts, links, icon, privacy, advanced, appearance, about
-    // Space/theme tools and About retain their deep links without adding non-Orbit toolbar tabs.
-    static let allCases: [Self] = [.general, .profiles, .shortcuts, .links, .icon, .advanced]
+    case general, profiles, spaces, shortcuts, links, privacy, advanced, appearance, about
+    // Auxiliary panes retain their deep links outside the six toolbar categories.
+    static let allCases: [Self] = [.general, .profiles, .shortcuts, .links, .advanced, .about]
     var id: String { rawValue }
     var toolbarIdentifier: NSToolbarItem.Identifier { .init("settings-category-" + rawValue) }
     var title: String {
@@ -184,21 +284,20 @@ enum BrowserSettingsSection: String, CaseIterable, Identifiable {
         case .spaces: settingsText("spaces", "Spaces")
         case .shortcuts: settingsText("shortcuts", "Shortcuts")
         case .links: uiText("Links")
-        case .icon: uiText("Icon")
         case .privacy: settingsText("privacy", "Privacy & Site Settings")
         case .advanced: settingsText("advanced", "Advanced")
         }
     }
+    var toolbarTitle: String { self == .about ? uiText("About") : title }
     var symbol: String {
         switch self {
         case .appearance: "paintpalette"
-        case .about: "info.circle"
+        case .about: "app.dashed"
         case .general: "gearshape"
         case .profiles: "person"
         case .spaces: "square.grid.2x2"
         case .shortcuts: "keyboard"
         case .links: "macwindow.on.rectangle"
-        case .icon: "app.dashed"
         case .privacy: "hand.raised"
         case .advanced: "slider.horizontal.3"
         }
@@ -207,9 +306,9 @@ enum BrowserSettingsSection: String, CaseIterable, Identifiable {
         switch self {
         case .general: 400
         case .profiles: 500
-        case .shortcuts: 510
-        case .links: 520
-        case .icon: 400
+        case .shortcuts: 590
+        case .links: 410
+        case .about: 400
         case .advanced: 460
         default: 540
         }
@@ -232,7 +331,9 @@ struct BrowserSettingsView<Engine: BrowserEngine>: View {
     @ObservedObject var model: BrowserSettingsModel<Engine>
     @ObservedObject var runtime: BrowserSettingsRuntime
     @State private var newSpaceName = ""
+    @State private var selectedSpaceID: SpaceID?
     @State private var deletingSpace: BrowserSpace?
+    @State private var deletionSpaceName = ""
     @State private var deletionProfileName = ""
     @State private var deletingProfile: BrowserProfile?
 
@@ -260,7 +361,7 @@ struct BrowserSettingsView<Engine: BrowserEngine>: View {
                     }.padding(.horizontal, 24).padding(.bottom, 12)
                 }
                 if let error = model.errorMessage {
-                    Text(error).foregroundStyle(.red).font(.system(size: 12))
+                    Text(error).foregroundStyle(.red).font(Font(BrandFonts.ui(12)))
                         .padding(.horizontal, 24).padding(.bottom, 12)
                         .accessibilityIdentifier("settings-error")
                 }
@@ -275,7 +376,9 @@ struct BrowserSettingsView<Engine: BrowserEngine>: View {
                 } else if model.settingsSection == .about {
                     ScrollView { OrbitSecondaryAbout().padding(24) }
                 } else if let profile = model.selectedProfileID {
-                    Form {
+                    ScrollView {
+                      VStack(alignment: .leading, spacing: 16) {
+                        Text((model.settingsSection ?? .general).title).font(Font(BrandTextStyle.title.font(size: 28)))
                         if model.settingsSection != .shortcuts && model.settingsSection != .advanced {
                             Picker(text("selectedProfile", "Profile"), selection: Binding(get: { profile }, set: { model.selectProfile($0) })) {
                                 ForEach(model.catalog.profiles, id: \.id) { Text($0.name).tag($0.id) }
@@ -286,9 +389,8 @@ struct BrowserSettingsView<Engine: BrowserEngine>: View {
                         case .privacy: privacy(profile)
                         default: EmptyView()
                         }
+                      }.padding(.horizontal, 28).padding(.top, 22).padding(.bottom, 26)
                     }
-                    .formStyle(.grouped)
-                    .scrollContentBackground(.hidden)
                     .disabled(!model.acceptsActions)
                 } else {
                     Text(text("loading", "Choose an available profile.")).padding(24)
@@ -296,17 +398,18 @@ struct BrowserSettingsView<Engine: BrowserEngine>: View {
                 }
             }.frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .font(.system(size: 13))
+        .font(Font(BrandFonts.ui(13)))
         .controlSize(.small)
         .frame(minWidth: 640, minHeight: 400)
         .foregroundStyle(OrbitSettingsStyle.foreground)
-        .tint(.blue)
+        .tint(Color(nsColor: .controlAccentColor))
+        .toggleStyle(.switch)
         .background(OrbitSettingsStyle.background)
         .task { await model.reload() }
         .sheet(isPresented: Binding(get: { deletingProfile != nil }, set: { if !$0 { deletingProfile = nil } })) {
             if let profile = deletingProfile {
                 VStack(alignment: .leading, spacing: 16) {
-                    Text(uiText("Delete this Profile")).font(.headline)
+                    Text(uiText("Delete this Profile")).font(Font(BrandTextStyle.title.font(size: 22)))
                     Text(profile.name)
                     Text(uiText("Deleting this Profile will permanently remove any cookies, history, preferences, and logins that belong to this Profile."))
                     Text(uiText("To continue, please type the name of this Profile:"))
@@ -322,71 +425,114 @@ struct BrowserSettingsView<Engine: BrowserEngine>: View {
                         }.disabled(deletionProfileName != profile.name || model.isBusy)
                             .accessibilityIdentifier("settings-confirm-delete-profile")
                     }
-                }.padding(24).frame(width: 420)
+                }.padding(24).frame(width: 420).settingsFrost()
             }
         }
-        .alert(item: Binding<BrowserSettingsConfirmation?>(get: {
+        .sheet(item: Binding<BrowserSettingsConfirmation?>(get: {
             if let deletingSpace { return .deleteSpace(deletingSpace) }
             if let request = model.siteDataRequest { return .clearData(request) }
             return nil
         }, set: { value in
-            if case nil = value { deletingProfile = nil; deletingSpace = nil; model.siteDataRequest = nil }
+            if case nil = value { deletingSpace = nil; model.siteDataRequest = nil }
         })) { confirmation in
-            switch confirmation {
-            case .deleteSpace(let space):
-                return Alert(title: Text(uiFormat("Delete your “%@” Space?", space.name)),
-                             message: Text(uiText("This will archive all the tabs and folders inside it.")),
-                             primaryButton: .destructive(Text(uiText("Delete"))) { model.perform { try await model.deleteSpace(space.id, expectedProfileID: space.profileID) } },
-                             secondaryButton: .cancel())
-            case .clearData(let request):
-                let scope = request.origin == nil ? text("allSiteData", "All websites") : request.domains.joined(separator: ", ")
-                return Alert(title: Text(text("clearDataTitle", "Clear Site Data?")),
-                             message: Text(request.profileName + "\n" + scope + "\n" + text("clearDataMessage", "This signs you out of the affected websites and removes their stored data. Other profiles are kept.")),
-                             primaryButton: .destructive(Text(text("clear", "Clear"))) { model.perform { try await model.clearSiteData(request) } },
-                             secondaryButton: .cancel())
-            }
+            VStack(alignment: .leading, spacing: 16) {
+                switch confirmation {
+                case .deleteSpace(let space):
+                    Text(uiFormat("Delete your “%@” Space?", space.name)).font(Font(BrandTextStyle.title.font(size: 22)))
+                    Text(uiText("This will archive all the tabs and folders inside it."))
+                    Text(uiText("To continue, please type the name of this Space:"))
+                    TextField(uiText("Space Name"), text: $deletionSpaceName)
+                        .accessibilityIdentifier("settings-confirm-space-name")
+                    HStack {
+                        Spacer()
+                        Button(uiText("Cancel")) { deletingSpace = nil }.keyboardShortcut(.cancelAction)
+                        Button(uiText("Delete"), role: .destructive) {
+                            guard deletionSpaceName == space.name else { return }
+                            deletingSpace = nil
+                            model.perform { try await model.deleteSpace(space.id, expectedProfileID: space.profileID) }
+                        }.disabled(deletionSpaceName != space.name || model.isBusy)
+                    }
+                case .clearData(let request):
+                    Text(text("clearDataTitle", "Clear Site Data?")).font(Font(BrandTextStyle.title.font(size: 22)))
+                    Text(request.profileName)
+                    Text(request.origin == nil ? text("allSiteData", "All websites") : request.domains.joined(separator: ", "))
+                    Text(text("clearDataMessage", "This signs you out of the affected websites and removes their stored data. Other profiles are kept."))
+                    HStack {
+                        Spacer()
+                        Button(uiText("Cancel")) { model.siteDataRequest = nil }.keyboardShortcut(.cancelAction)
+                        Button(text("clear", "Clear"), role: .destructive) {
+                            model.siteDataRequest = nil
+                            model.perform { try await model.clearSiteData(request) }
+                        }
+                    }
+                }
+            }.padding(22).frame(width: 420).font(Font(BrandFonts.ui(13))).settingsFrost()
         }
     }
 
     @ViewBuilder private func spaces(_ profile: ProfileID) -> some View {
-        Section(uiText("Create a Space")) { createSpaceForm(profile) }
-        if model.archivedSpaces.contains(where: { $0.space.profileID == profile }) {
-            Section(uiText("Archived Spaces")) {
-                ForEach(model.archivedSpaces.filter { $0.space.profileID == profile }) { saved in
-                    HStack {
-                        Text(saved.space.name)
-                        Spacer()
-                        Button(uiText("Restore Space")) { model.perform { try await model.restoreSpace(saved.id, expectedProfileID: saved.space.profileID) } }
-                            .accessibilityIdentifier("settings-restore-space")
+        let available = model.catalog.spaces.filter { $0.profileID == profile }
+        HStack(alignment: .top, spacing: 20) {
+            VStack(alignment: .leading, spacing: 6) {
+                ForEach(available, id: \.id) { space in
+                    Button { selectedSpaceID = space.id } label: {
+                        HStack(spacing: 8) {
+                            BrowserSettingsThemeSwatch(theme: space.theme ?? runtime.document.space(space.id).palette.themeModel)
+                            Text(space.name)
+                            Spacer(minLength: 0)
+                        }.padding(8).background((selectedSpaceID ?? available.first?.id) == space.id ? Color.accentColor : .clear, in: RoundedRectangle(cornerRadius: 8))
+                    }.buttonStyle(.plain)
+                        .foregroundStyle((selectedSpaceID ?? available.first?.id) == space.id ? .white : OrbitSettingsStyle.foreground)
+                }
+                Divider().padding(.vertical, 6)
+                createSpaceForm(profile)
+                if model.archivedSpaces.contains(where: { $0.space.profileID == profile }) {
+                    DisclosureGroup(uiText("Archived Spaces")) {
+                        ForEach(model.archivedSpaces.filter { $0.space.profileID == profile }) { saved in
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text(saved.space.name)
+                                Button(uiText("Restore Space")) { model.perform { try await model.restoreSpace(saved.id, expectedProfileID: saved.space.profileID) } }
+                                    .accessibilityIdentifier("settings-restore-space")
+                            }
+                        }
                     }
                 }
-            }
-        }
-        ForEach(model.catalog.spaces.filter { $0.profileID == profile }, id: \.id) { space in
-            Section(space.name) {
-                // The enclosing ForEach owns Space identity. Sibling editors must never share an explicit ID.
-                BrowserSettingsNameEditor(name: space.name) { name in model.perform { try await model.renameSpace(space.id, name: name) } }
-                    .accessibilityIdentifier("settings-space-name")
-                BrowserSettingsIconEditor(choice: runtime.document.space(space.id).iconSelection) { value in
-                    model.queueSpaceIconEdit(spaceID: space.id, profileID: space.profileID, icon: BrowserSpaceIcon(legacyIcon: value))
-                }.disabled(runtime.isUnavailable)
-                // Space themes: the Space's stored theme, else its legacy palette (no longer editable here).
-                HStack {
-                    Text(text("spaceColor", "Theme Color"))
-                    Spacer()
-                    BrowserSettingsThemeSwatch(theme: space.theme ?? runtime.document.space(space.id).palette.themeModel)
-                    Button(text("editThemeColor", "Edit Theme Color…")) { model.presentThemeEditor?(space.id) }
-                        .accessibilityIdentifier("settings-space-theme")
-                }
-                Picker(text("spaceProfile", "Profile"), selection: Binding(get: { space.profileID }, set: { target in
-                    model.perform { try await model.assignSpace(space.id, profile: target) }
-                })) {
-                    ForEach(model.catalog.profiles, id: \.id) { Text($0.name).tag($0.id) }
-                }
-                Text(text("spaceProfileNote", "Changing a profile requires an empty Space that is not open in a window.")).font(.system(size: 12)).foregroundStyle(.secondary)
-                Button(uiText("Delete Space…"), role: .destructive) { deletingSpace = space }
-                    .disabled(model.catalog.spaces.count < 2 || runtime.isUnavailable)
-                    .accessibilityIdentifier("settings-delete-space")
+            }.frame(width: 150)
+            if let space = available.first(where: { $0.id == selectedSpaceID }) ?? available.first {
+                VStack(alignment: .leading, spacing: 12) {
+                    Text(space.name).font(Font(BrandTextStyle.title.font(size: 22)))
+                        .frame(maxWidth: .infinity, minHeight: 74, alignment: .bottomLeading).padding(12)
+                        .background(LinearGradient(colors: (space.theme ?? runtime.document.space(space.id).palette.themeModel ?? BrowserSpaceThemePresets.default).light.stops.map {
+                            Color(nsColor: OrbitSpaceThemes.color($0))
+                        }, startPoint: .topLeading, endPoint: .bottomTrailing), in: RoundedRectangle(cornerRadius: 12))
+                    SettingsCard {
+                        VStack(alignment: .leading, spacing: 14) {
+                            BrowserSettingsNameEditor(name: space.name) { name in model.perform { try await model.renameSpace(space.id, name: name) } }
+                                .accessibilityIdentifier("settings-space-name")
+                            Divider()
+                            BrowserSettingsIconEditor(choice: runtime.document.space(space.id).iconSelection) { value in
+                                model.queueSpaceIconEdit(spaceID: space.id, profileID: space.profileID, icon: BrowserSpaceIcon(legacyIcon: value))
+                            }.disabled(runtime.isUnavailable)
+                            Divider()
+                            HStack {
+                                Text(text("spaceColor", "Theme Color"))
+                                Spacer()
+                                BrowserSettingsGradientPicker(model: model, space: space)
+                                    .accessibilityIdentifier("settings-space-theme")
+                            }
+                            Divider()
+                            Picker(text("spaceProfile", "Profile"), selection: Binding(get: { space.profileID }, set: { target in
+                                model.perform { try await model.assignSpace(space.id, profile: target) }
+                            })) {
+                                ForEach(model.catalog.profiles, id: \.id) { Text($0.name).tag($0.id) }
+                            }
+                        }.padding(14)
+                    }.id(space.id)
+                    Text(text("spaceProfileNote", "Changing a profile requires an empty Space that is not open in a window.")).font(Font(BrandFonts.ui(12))).foregroundStyle(.secondary)
+                    Button(uiText("Delete Space…"), role: .destructive) { deletionSpaceName = ""; deletingSpace = space }
+                        .disabled(model.catalog.spaces.count < 2 || runtime.isUnavailable)
+                        .accessibilityIdentifier("settings-delete-space")
+                }.frame(maxWidth: .infinity)
             }
         }
     }
@@ -402,12 +548,14 @@ struct BrowserSettingsView<Engine: BrowserEngine>: View {
     }
 
     @ViewBuilder private func privacy(_ profile: ProfileID) -> some View {
-        Section(text("siteData", "Website Data")) {
+        SettingsCard { VStack(alignment: .leading, spacing: 12) {
+            Text(text("siteData", "Website Data")).fontWeight(.semibold)
             Text(text("siteDataNote", "Website data belongs to this profile. Clearing it does not remove your browsing history or saved permission choices.")).foregroundStyle(.secondary)
             Button(text("clearSiteData", "Clear Site Data for This Profile…")) { model.perform { try await model.reviewSiteData(origin: nil, profile: profile) } }
                 .disabled(!model.supportsSiteData)
-        }
-        Section(text("sitePermissions", "Site Permissions")) {
+        }.padding(14) }
+        SettingsCard { VStack(alignment: .leading, spacing: 12) {
+            Text(text("sitePermissions", "Site Permissions")).fontWeight(.semibold)
             if model.permissionsUnavailable {
                 Text(text("permissionsUnavailable", "Saved permissions could not be opened. The existing file is kept and access remains restricted.")).foregroundStyle(.red)
             } else if model.permissionRows.isEmpty {
@@ -416,7 +564,7 @@ struct BrowserSettingsView<Engine: BrowserEngine>: View {
             ForEach(model.permissionRows) { row in
                 VStack(alignment: .leading, spacing: 4) {
                     HStack {
-                        Text(row.origin.value).font(.system(size: 11)).foregroundStyle(.secondary).textSelection(.enabled)
+                        Text(row.origin.value).font(Font(BrandFonts.ui(11))).foregroundStyle(.secondary).textSelection(.enabled)
                         Spacer()
                         if row.permission == model.permissionRows.first(where: { $0.origin == row.origin })?.permission {
                             Button(text("clearSite", "Clear Site Data…")) { model.perform { try await model.reviewSiteData(origin: row.origin, profile: profile) } }
@@ -432,15 +580,16 @@ struct BrowserSettingsView<Engine: BrowserEngine>: View {
                     }
                 }
             }
-            Text(text("permissionLimits", "Only permissions supported by the current engine are editable. Some changes require reloading the website.")).font(.system(size: 12)).foregroundStyle(.secondary)
-        }
-        Section(text("safeBrowsing", "Safe Browsing")) {
+            Text(text("permissionLimits", "Only permissions supported by the current engine are editable. Some changes require reloading the website.")).font(Font(BrandFonts.ui(12))).foregroundStyle(.secondary)
+        }.padding(14) }
+        SettingsCard { VStack(alignment: .leading, spacing: 12) {
+            Text(text("safeBrowsing", "Safe Browsing")).fontWeight(.semibold)
             if model.safeBrowsingAvailable {
                 Text(text("safeBrowsingOn", "Warnings for dangerous sites and downloads are on.")).foregroundStyle(.secondary)
             } else {
                 Text(text("safeBrowsingUnavailable", "Unavailable in this build. Orbit does not warn about dangerous sites or downloads.")).foregroundStyle(.secondary)
             }
-        }
+        }.padding(14) }
     }
 
     @ViewBuilder private var appearance: some View {

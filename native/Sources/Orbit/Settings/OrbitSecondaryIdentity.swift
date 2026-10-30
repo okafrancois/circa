@@ -56,7 +56,7 @@ struct OrbitSecondaryAbout: View {
         VStack(spacing: 18) {
             OrbitSecondaryMark().frame(width: 92, height: 92)
             OrbitSecondaryMark(wordmark: true).frame(height: 44)
-            Text(uiText("A little clarity in your browsing.")).font(.system(size: 16, weight: .medium))
+            Text(uiText("A little clarity in your browsing.")).font(Font(BrandFonts.ui(16, weight: .medium)))
             Text(version).font(.caption).foregroundStyle(.secondary)
             Rectangle().fill(OrbitSecondaryIdentity.clay).frame(width: 32, height: 2)
             Text(uiText("Built for macOS. Your profiles and browsing data stay on this Mac."))
