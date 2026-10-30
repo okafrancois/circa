@@ -501,6 +501,7 @@ struct SidebarListWindowTests {
         c.sidebar.endContextMenu()
         let folder = try #require(c.organization.pinned.compactMap { $0.node.folderID }.first)
         #expect(c.organization.location(of: .tab(t))?.1 == [folder])
+        try await Task.sleep(for: .seconds(SidebarListView.creationRenameDelay + 0.05))
         #expect(c.list.renamingNode == .folder(folder))
         c.list.cancelRename()
         // Folder menu entries.

@@ -240,6 +240,7 @@ class SidebarListRow: NSView, NSTextFieldDelegate {
     func beginRename(text: String, font: NSFont) {
         guard renameField == nil, let window else { return }
         onPreviewInvalidated?(self)
+        if let tab = self as? SidebarTabRow { SidebarTabHoverCard.shared.invalidate(tab) }
         let field = NSTextField(string: text)
         field.font = font
         field.textColor = effectiveAccent.sidebarText
@@ -358,6 +359,16 @@ class SidebarTabRow: SidebarListRow {
     override var isMultiSelected: Bool { item.isMultiSelected }
     var isCloseButtonVisible: Bool { closeButton.alphaValue > 0 }
 
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        if window == nil { SidebarTabHoverCard.shared.invalidate(self) }
+    }
+
+    override func viewDidHide() {
+        super.viewDidHide()
+        SidebarTabHoverCard.shared.invalidate(self)
+    }
+
     private var titleColor: NSColor {
         // Another-window rows stay secondary until hovered; they are still actionable, not disabled.
         item.isOpenInAnotherWindow && !isHovering ? effectiveAccent.sidebarSecondaryText : effectiveAccent.sidebarText
@@ -412,6 +423,7 @@ class SidebarTabRow: SidebarListRow {
         setAccessibilityValue(value.joined(separator: ", "))
         setAccessibilitySelected(item.selected || item.isMultiSelected)
         refreshControls()
+        SidebarTabHoverCard.shared.refresh(self)
         refreshFill()
         if changed { needsLayout = true }
     }
@@ -451,6 +463,7 @@ class SidebarTabRow: SidebarListRow {
 
     override func hoverDidChange() {
         super.hoverDidChange()
+        SidebarTabHoverCard.shared.hover(self, inside: isHovering)
         refreshControls()
         titleLabel.textColor = titleColor
         // : the close button fades in over 0.12 s.
@@ -463,12 +476,14 @@ class SidebarTabRow: SidebarListRow {
 
     override func commandsDidChange() {
         super.commandsDidChange()
+        SidebarTabHoverCard.shared.refresh(self)
         closeButton.isEnabled = commandsEnabled
         resetButton.isEnabled = commandsEnabled
         audioButton.isEnabled = commandsEnabled && item.activity.isAudioMuted != nil
     }
 
     override func resetForReuse() {
+        SidebarTabHoverCard.shared.invalidate(self)
         super.resetForReuse()
         closeButton.setAccessibilityLabel(nil)
         resetButton.setAccessibilityLabel(nil)

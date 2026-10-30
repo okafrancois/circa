@@ -189,7 +189,7 @@ enum SidebarListStrings {
     }
 
     static var newTab: String { OrbitShellText.newTab }
-    static var newFolder: String { string("list.newFolder", "New Folder") }
+    static var newFolder: String { uiText("Untitled") }
     static var clear: String { string("list.clear", "Clear") }
     static var selected: String { OrbitShellText.selected }
     static var expanded: String { string("list.expanded", "Expanded") }

@@ -480,7 +480,7 @@ extension BrowserWindowController {
         let creation = session.createFolder(title: SidebarListStrings.newFolder, at: destination, containing: contents)
         Task { [weak self] in
             guard let id = await creation.value, let self else { return }
-            sidebar.beginRename(.folder(id))
+            sidebar.beginRename(.folder(id), after: SidebarListView.creationRenameDelay)
         }
     }
 
