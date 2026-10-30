@@ -48,7 +48,7 @@ final class BrowserBoostIntroductionView: NSView {
         card.wantsLayer = true; card.layer?.backgroundColor = NSColor.white.cgColor
         addSubview(card)
         let glyph = NSImageView(frame: NSRect(x: 65, y: 254, width: 58, height: 58))
-        glyph.image = NSImage(systemSymbolName: "paintbrush.pointed.fill", accessibilityDescription: nil)
+        glyph.image = OrbitIcon.image(sfName: "paintbrush.pointed.fill", pointSize: 32, accessibilityDescription: nil)
         glyph.imageScaling = .scaleProportionallyUpOrDown
         glyph.contentTintColor = Self.accent; addSubview(glyph)
         let heading = NSTextField(wrappingLabelWithString: uiText("Edit the Internet with Boosts"))

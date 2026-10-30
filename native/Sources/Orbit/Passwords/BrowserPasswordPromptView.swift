@@ -30,7 +30,7 @@ final class BrowserPasswordPromptView: NSView {
         dimmer.layer?.backgroundColor = NSColor.black.cgColor
         addSubview(dimmer)
         panel.wantsLayer = true
-        panel.layer?.backgroundColor = Self.color(20, 26, 42).cgColor
+        OrbitFloatingMaterial.install(in: panel, radius: 16).fixedVariant = .dark
         panel.layer?.cornerRadius = 16
         panel.layer?.borderWidth = 1
         panel.layer?.borderColor = Self.color(55, 60, 76).cgColor
@@ -45,8 +45,7 @@ final class BrowserPasswordPromptView: NSView {
         icon.layer?.backgroundColor = Self.color(49, 54, 80).cgColor
         icon.layer?.cornerRadius = 13
         let key = NSImageView(frame: NSRect(x: 16, y: 13, width: 30, height: 36))
-        key.image = NSImage(systemSymbolName: "key.fill", accessibilityDescription: nil)?
-            .withSymbolConfiguration(.init(pointSize: 30, weight: .regular))
+        key.image = OrbitIcon.image(sfName: "key.fill", pointSize: 30, accessibilityDescription: nil)
         key.contentTintColor = .white
         key.imageScaling = .scaleProportionallyDown
         // The key is vertical, with its teeth pointing down.
@@ -58,7 +57,7 @@ final class BrowserPasswordPromptView: NSView {
         titleLabel.frame = NSRect(x: 36, y: 132, width: 374, height: 24)
         panel.addSubview(titleLabel)
         detailLabel.font = .systemFont(ofSize: 14, weight: .medium)
-        detailLabel.textColor = Self.color(183, 186, 199)
+        detailLabel.textColor = OrbitFloatingMaterial.Style(variant: .dark, reducesTransparency: false).secondary
         detailLabel.frame = NSRect(x: 36, y: 98, width: 384, height: 22)
         panel.addSubview(detailLabel)
         if !updating { addButton(uiText("Never on this site"), hint: nil, decision: .never, x: 28, width: 130) }
@@ -158,11 +157,12 @@ private final class PasswordPromptButton: NSButton {
     required init?(coder: NSCoder) { nil }
     override func draw(_ dirtyRect: NSRect) {
         let path = NSBezierPath(roundedRect: bounds.insetBy(dx: 0.5, dy: 0.5), xRadius: 6, yRadius: 6)
-        BrowserPasswordPromptView.color(primary ? 43 : 42, primary ? 50 : 40, primary ? 250 : 88).setFill()
+        (primary ? NSColor.controlAccentColor : NSColor.white.withAlphaComponent(0.10)).setFill()
         path.fill()
         BrowserPasswordPromptView.color(100, 94, 172).setStroke(); path.lineWidth = 1; path.stroke()
         let font = NSFont.systemFont(ofSize: 13, weight: .medium)
-        let attributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: NSColor.white]
+        let ink = primary ? OrbitFloatingMaterial.accentText : NSColor.white
+        let attributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: ink]
         let textWidth = (title as NSString).size(withAttributes: attributes).width
         let badgeWidth: CGFloat = hint == nil ? 0 : hint == "↩" ? 28 : 35
         let total = textWidth + (hint == nil ? 0 : badgeWidth + 8)
@@ -174,7 +174,7 @@ private final class PasswordPromptButton: NSButton {
             let badge = NSBezierPath(roundedRect: rect, xRadius: 4, yRadius: 4)
             badge.fill()
             if primary { NSColor.white.withAlphaComponent(0.2).setStroke(); badge.lineWidth = 1; badge.stroke() }
-            let hintAttributes: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: hint == "↩" ? 18 : 10, weight: hint == "↩" ? .regular : .bold), .foregroundColor: NSColor.white.withAlphaComponent(0.65)]
+            let hintAttributes: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: hint == "↩" ? 18 : 10, weight: hint == "↩" ? .regular : .bold), .foregroundColor: ink]
             let size = (hint as NSString).size(withAttributes: hintAttributes)
             (hint as NSString).draw(at: NSPoint(x: rect.midX - size.width / 2, y: rect.midY - size.height / 2), withAttributes: hintAttributes)
         }

@@ -287,7 +287,7 @@ final class BrowserQuickWindowWindowController<Engine: BrowserEngine>: NSWindowC
         compactInput.render(results.compactMap { result in
             guard let url = result.url else { return nil }
             let image = result.faviconReference.flatMap { inputFavicons.image(for: $0) }
-                ?? NSImage(systemSymbolName: result.symbol, accessibilityDescription: nil)
+                ?? OrbitIcon.image(sfName: result.symbol, pointSize: 20, accessibilityDescription: nil)
             return BrowserQuickWindowSearchRow(id: result.id, title: isEditingAddress && result.section == .address ? query : result.title,
                 detail: result.section == .address || result.section == .search ? "" : BrowserSuggestionText.displayURL(url), image: image) { [weak self] in
                     self?.acceptCompactURL(url, typed: result.section == .address)
@@ -440,12 +440,12 @@ final class BrowserQuickWindowWindowController<Engine: BrowserEngine>: NSWindowC
         openButton.action = #selector(openInOrbit(_:))
         openButton.toolTip = uiText("Open in Orbit")
         openButton.setAccessibilityLabel(uiText("Open in Orbit"))
-        spaceButton.image = NSImage(systemSymbolName: "chevron.down", accessibilityDescription: uiText("Choose Space"))
+        spaceButton.image = OrbitIcon.image(sfName: "chevron.down", pointSize: 16, accessibilityDescription: uiText("Choose Space"))
         spaceButton.isBordered = false
         spaceButton.target = self
         spaceButton.action = #selector(chooseDestination(_:))
         spaceButton.setAccessibilityLabel(uiText("Choose Space"))
-        copyAddressButton.image = NSImage(systemSymbolName: "link", accessibilityDescription: uiText("Copy URL"))
+        copyAddressButton.image = OrbitIcon.image(sfName: "link", pointSize: 16, accessibilityDescription: uiText("Copy URL"))
         copyAddressButton.isBordered = false
         copyAddressButton.target = self
         copyAddressButton.action = #selector(copyAddress(_:))
@@ -458,7 +458,7 @@ final class BrowserQuickWindowWindowController<Engine: BrowserEngine>: NSWindowC
         sourceSpaceBadge.wantsLayer = true
         sourceSpaceBadge.layer?.cornerRadius = 10
         sourceSpaceBadge.setAccessibilityLabel(uiText("Space"))
-        extensionsButton.image = NSImage(systemSymbolName: "puzzlepiece.extension", accessibilityDescription: uiText("Extensions Menu"))
+        extensionsButton.image = OrbitIcon.image(sfName: "puzzlepiece.extension", pointSize: 16, accessibilityDescription: uiText("Extensions Menu"))
         extensionsButton.isBordered = false
         extensionsButton.target = self
         extensionsButton.action = #selector(showQuickWindowExtensions(_:))
@@ -514,12 +514,12 @@ final class BrowserQuickWindowWindowController<Engine: BrowserEngine>: NSWindowC
         openButton.font = font
         let accent = OrbitSpaceThemes.accent(for: theme)
         openGroup.accent = accent
-        openButton.contentTintColor = accent.sidebarText
-        spaceButton.contentTintColor = accent.sidebarText
-        addressField.textColor = accent.sidebarText
-        copyAddressButton.contentTintColor = accent.sidebarText.withAlphaComponent(0.55)
-        extensionsButton.contentTintColor = accent.sidebarText.withAlphaComponent(0.55)
-        sourceSpaceBadge.contentTintColor = accent.sidebarText
+        openButton.contentTintColor = OrbitFloatingMaterial.body
+        spaceButton.contentTintColor = OrbitFloatingMaterial.body
+        addressField.textColor = OrbitFloatingMaterial.body
+        copyAddressButton.contentTintColor = OrbitFloatingMaterial.secondary
+        extensionsButton.contentTintColor = OrbitFloatingMaterial.secondary
+        sourceSpaceBadge.contentTintColor = OrbitFloatingMaterial.body
         sourceSpaceBadge.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.08).cgColor
     }
 

@@ -8,6 +8,7 @@ from pathlib import Path
 import json
 import re
 import subprocess
+import struct
 import sys
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -197,6 +198,54 @@ def check_path(path):
     return []
 
 
+def font_metadata(data):
+    """Read human-readable OpenType naming records, never executable glyph instructions.
+
+    Layout: https://learn.microsoft.com/typography/opentype/spec/name
+    Invalid metadata is refused rather than silently exempting a resource.
+    """
+    if len(data) < 12 or data[:4] not in (bytes([0, 1, 0, 0]), b"OTTO"):
+        raise ValueError("invalid font header")
+    count = struct.unpack_from(">H", data, 4)[0]
+    if not 1 <= count <= 4096 or 12 + count * 16 > len(data):
+        raise ValueError("invalid font directory")
+    naming = None
+    for index in range(count):
+        tag, _, offset, length = struct.unpack_from(">4sIII", data, 12 + index * 16)
+        if offset > len(data) or length > len(data) - offset:
+            raise ValueError("invalid font table bounds")
+        if tag == b"name":
+            if naming is not None:
+                raise ValueError("duplicate naming table")
+            naming = data[offset:offset + length]
+    if naming is None or len(naming) < 6:
+        raise ValueError("missing naming table")
+    version, records, storage = struct.unpack_from(">HHH", naming)
+    if version not in (0, 1) or 6 + records * 12 > storage or storage > len(naming):
+        raise ValueError("invalid naming records")
+    result = []
+    def read_string(length, offset, codec):
+        start = storage + offset
+        if start > len(naming) or length > len(naming) - start:
+            raise ValueError("invalid naming string")
+        return naming[start:start + length].decode(codec)
+    for index in range(records):
+        platform, encoding, _, _, length, offset = struct.unpack_from(">HHHHHH", naming, 6 + index * 12)
+        codec = "utf-16-be" if platform in (0, 3) or (platform == 2 and encoding == 1) else "mac_roman" if platform == 1 else "latin-1"
+        result.append(read_string(length, offset, codec))
+    if version == 1:
+        position = 6 + records * 12
+        if position + 2 > storage:
+            raise ValueError("missing language records")
+        languages = struct.unpack_from(">H", naming, position)[0]
+        if position + 2 + languages * 4 > storage:
+            raise ValueError("invalid language records")
+        for index in range(languages):
+            length, offset = struct.unpack_from(">HH", naming, position + 2 + index * 4)
+            result.append(read_string(length, offset, "utf-16-be"))
+    return "\n".join(result)
+
+
 def check_repository(root):
     # The index defines what can be published. Read current bytes so edits are checked
     # before staging too; staged deletions disappear naturally from this list.
@@ -212,6 +261,14 @@ def check_repository(root):
             text = str(file.readlink())
         elif file.is_file():
             data = file.read_bytes()
+            if file.suffix.lower() in {".ttf", ".otf"}:
+                try:
+                    text = font_metadata(data)
+                except (ValueError, UnicodeError, struct.error):
+                    findings.append((path, 0, "invalid OpenType metadata"))
+                    continue
+                findings.extend(check_text(path, text))
+                continue
             try:
                 text = data.decode("utf-8")
             except UnicodeDecodeError:

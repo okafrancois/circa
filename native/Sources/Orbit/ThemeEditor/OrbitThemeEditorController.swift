@@ -215,6 +215,12 @@ final class OrbitThemeEditorController {
         }
     }
 
+    /// Embedded flows wait for the final persisted draft before preparing their next stage.
+    func finishEditing() async {
+        close(animated: false)
+        await finishTask?.value
+    }
+
     /// Ends the session: dismisses the panel, writes the final draft, then registers one undo step.
     func close(animated: Bool = true) {
         guard !isClosed else { return }

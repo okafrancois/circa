@@ -38,6 +38,12 @@ func activeDefaultSessionFile() -> URL {
 /// A synthetic (mock Keychain) run keeps every session file inside its synthetic data root.
 func activeSyntheticDataGuard() -> SyntheticDataGuard? { launchedConfiguration?.syntheticGuard }
 
+/// Written once by `OrbitLauncher.run()` before the runtime populates `Chromium/`.
+nonisolated(unsafe) private var launchedEngineRootHadData = false
+
+/// The engine root held data before this launch started the runtime (first-run onboarding).
+func activeEngineRootHadDataAtLaunch() -> Bool { launchedEngineRootHadData }
+
 /// The stable signing certificate's SHA-1, built in by CMake (`ORBIT_STABLE_SIGNING_ROOT`, from the
 /// local identity's public `identity.json`); empty when the build had none: product mode refuses.
 func activeDeveloperSigningTeam() -> String? { OrbitStableSigning.developerTeamID }
@@ -103,6 +109,7 @@ enum OrbitLauncher {
             configuration = prepared.0
             dataRootLock = prepared.1
             launchedConfiguration = configuration
+            launchedEngineRootHadData = BrowserOnboardingEligibility.directoryHasEntries(configuration.engineRoot)
         } catch is OrbitRecoveryFailure {
             FileHandle.standardError.write(Data("orbit: authentication recovery refused before runtime\n".utf8))
             exit(65)
@@ -117,6 +124,13 @@ enum OrbitLauncher {
         OrbitPerformanceProbe.pauseBeforeRuntime(configuration)
         var runtimeStatus: Int32 = 0
         do {
+            if OrbitOnboardingStartup.shouldRun(configuration: configuration, engineRootHadData: launchedEngineRootHadData) {
+                guard let initialLock = dataRootLock else { throw OrbitRecoveryFailure.unsafeFilesystem }
+                try OrbitAuthenticationStartup.run(configuration: configuration, lock: initialLock,
+                    beforeStructuralRecovery: { try prepareAuthenticationRun(configuration, beginPasswords: false) }, runtimeStart: {})
+                try OrbitOnboardingStartup.run(configuration: configuration, engineRootHadData: launchedEngineRootHadData)
+            }
+
             guard let lock = dataRootLock else { throw OrbitRecoveryFailure.unsafeFilesystem }
             // Load-only root registration admission precedes every hook, CEF and restore.
             // Mock runs have no system storage fallback; untouched roots do not access it.
@@ -137,7 +151,7 @@ enum OrbitLauncher {
     private static var authenticationRecoveryRelaunch = false
     private static var authenticationRun: BrowserAuthenticationRun?
 
-    private static func prepareAuthenticationRun(_ configuration: OrbitProductConfiguration) throws {
+    private static func prepareAuthenticationRun(_ configuration: OrbitProductConfiguration, beginPasswords: Bool = true) throws {
         if let recovery = try BrowserImportRecovery.open(at: configuration.dataRoot) {
             if recovery.needsRecovery {
                 // The bridge must own NSApplication even when recovery precedes CEF.
@@ -145,6 +159,7 @@ enum OrbitLauncher {
                 BrowserImportUISynthetic.applyAppearance()
                 let choice = ImportRecoveryAlert.choose()
                 let fallback = try recovery.recover(choice, holdingLock: true, checkpoint: { try ChromiumImportRecoveryProbe.checkpoint($0, configuration: configuration) })
+                try OrbitOnboardingImportRecovery.didRestore(configuration: configuration)
                 try ChromiumImportRecoveryProbe.checkpoint("recovered", configuration: configuration)
                 if fallback { ImportRecoveryAlert.showQuarantineNotice() }
             } else { try recovery.finishCompleted() }
@@ -159,10 +174,12 @@ enum OrbitLauncher {
             _ = (NSClassFromString("ACRApplication") as? NSApplication.Type)?.shared
             _ = ImportRecoveryAlert.choose()
             try run.restore(confirmDeletingLaterChanges: true, usage: ImportRecoveryAlert.OfflineUsage(), holdingLock: true)
+            try OrbitOnboardingImportRecovery.reconcile(run.status, configuration: configuration)
             return
         }
+        try OrbitOnboardingImportRecovery.reconcile(run.status, configuration: configuration)
         // Mark the startup attempt before CEF can mutate Local State or open a profile.
-        if run.status.phase == .passwordsPending { try run.beginPasswordApplication() }
+        if beginPasswords, run.status.phase == .passwordsPending { try run.beginPasswordApplication() }
         authenticationRun = run
     }
 
@@ -224,10 +241,14 @@ enum OrbitLauncher {
                     let engine = makeActiveEngine()
                     do {
                         guard let store = engine.passwordStore else { throw BrowserPasswordStoreError.unavailable }
-                        let counts = try await BrowserPasswordImporter.apply(run.passwordsForRuntime(), to: store, profileID: run.status.profileID)
+                        var conflicts = 0
+                        for group in try run.passwordGroupsForRuntime() {
+                            let counts = try await BrowserPasswordImporter.apply(group.passwords, to: store, profileID: group.profileID)
+                            conflicts += counts.conflicts
+                        }
                         try ChromiumImportRecoveryProbe.checkpoint("auth-passwords-applied", configuration: configuration)
                         // Local-store credentials win deterministically over conflicting account-store rows.
-                        try run.markVerified(passwordConflicts: counts.conflicts)
+                        try run.markVerified(passwordConflicts: conflicts)
                         await engine.shutdown()
                     } catch {
                         await engine.shutdown()

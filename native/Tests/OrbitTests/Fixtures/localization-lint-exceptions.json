@@ -164,7 +164,8 @@
     "\"opacity\"",
     "\"splitFocus\"",
     "\"square.split.2x1\"",
-    "\"xmark\""
+    "\"xmark\"",
+    "\"slider.horizontal.3\""
   ],
   "ThemeEditor/OrbitThemeEditorView.swift": [
     "\"dotGridBuild\"",
