@@ -67,7 +67,9 @@ final class FavoriteTileView: NSView {
     override var mouseDownCanMoveWindow: Bool { false }
     override var acceptsFirstResponder: Bool { true }
 
-    func update(_ item: FavoriteTileItem) {
+    func update(_ projected: FavoriteTileItem) {
+        var item = projected
+        item.favicon = SpaceIconImages.tabImage(item.tab.customIcon) ?? item.favicon
         if self.item.favicon !== item.favicon || favicon.image == nil {
             let presentation = item.favicon.flatMap(Self.iconPresentation)
             selectionTint = presentation?.tint

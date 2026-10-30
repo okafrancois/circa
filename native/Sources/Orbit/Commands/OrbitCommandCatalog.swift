@@ -209,6 +209,7 @@ enum BrowserCommandID: String, CaseIterable, Sendable {
     case sidebarCopyLinks
     case sidebarCopyMarkdownLinks
     case sidebarDuplicate
+    case sidebarChangeTabIcon, sidebarEditPinnedURL
     case sidebarArchiveOtherTabs, sidebarArchiveTabsAbove, sidebarArchiveTabsBelow, sidebarMuteTab
     case sidebarAddToFavorites
     case sidebarCloseItems

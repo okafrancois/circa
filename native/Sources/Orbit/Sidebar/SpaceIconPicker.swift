@@ -5,6 +5,8 @@ import BrowserCore
 @MainActor
 final class SpaceIconPicker: NSViewController, NSSearchFieldDelegate {
     enum Mode: Int { case emoji, icons }
+    enum Purpose { case space, tab }
+    private let purpose: Purpose
 
     static let size = NSSize(width: 270, height: 270)
     let popup = SpacePickerPopover()
@@ -17,7 +19,7 @@ final class SpaceIconPicker: NSViewController, NSSearchFieldDelegate {
     private let detail = NSTextField(labelWithString: "")
     private var categoryButtons: [NSButton] = []
     private let catalog: SpaceIconPickerCatalog
-    private let currentChoice: BrowserSpaceIcon
+    private var currentChoice: BrowserSpaceIcon
     private let accent: OrbitTokens.ThemeAccent
     private var finished = false
     private weak var previousResponder: NSResponder?
@@ -32,7 +34,8 @@ final class SpaceIconPicker: NSViewController, NSSearchFieldDelegate {
         self.init(currentChoice: BrowserSpaceIcon(legacyIcon: currentIcon), accent: accent, catalog: catalog)
     }
 
-    init(currentChoice: BrowserSpaceIcon, accent: OrbitTokens.ThemeAccent, catalog: SpaceIconPickerCatalog = .shared) {
+    init(currentChoice: BrowserSpaceIcon, accent: OrbitTokens.ThemeAccent, catalog: SpaceIconPickerCatalog = .shared, purpose: Purpose = .space) {
+        self.purpose = purpose
         self.currentChoice = currentChoice
         if case .systemSymbol = currentChoice { mode = .icons }
         self.accent = accent
@@ -55,7 +58,7 @@ final class SpaceIconPicker: NSViewController, NSSearchFieldDelegate {
     override func loadView() {
         let content = SpaceIconPickerContent(frame: NSRect(origin: .zero, size: Self.size))
         content.setAccessibilityRole(.popover)
-        content.setAccessibilityLabel(uiText("Change Space Icon or Emoji"))
+        content.setAccessibilityLabel(purpose == .tab ? uiText("Change Tab Icon") : uiText("Change Space Icon or Emoji"))
         content.onKey = { [weak self] in self?.handle($0) ?? false }
         let width = Self.size.width, inset: CGFloat = 10
 
@@ -109,6 +112,15 @@ final class SpaceIconPicker: NSViewController, NSSearchFieldDelegate {
         removeButton.target = self
         removeButton.action = #selector(removeIcon(_:))
         removeButton.isEnabled = currentChoice != .none
+        if purpose == .tab {
+            removeButton.title = uiText("Reset Icon")
+            removeButton.image = OrbitIcon.image(sfName: "trash", pointSize: 12, accessibilityDescription: uiText("Reset Icon"))
+            removeButton.imagePosition = .imageOnly
+            removeButton.isBordered = false
+            removeButton.frame = NSRect(x: 198, y: 12, width: 24, height: 24)
+            removeButton.isHidden = currentChoice == .none
+            content.addSubview(removeButton)
+        }
         removeButton.setAccessibilityIdentifier("space-icon-picker-remove")
         paletteButton.target = self
         paletteButton.action = #selector(showCharacterPalette(_:))
@@ -132,13 +144,13 @@ final class SpaceIconPicker: NSViewController, NSSearchFieldDelegate {
     var canPresent: Bool { !finished && popup.window == nil }
 
     @discardableResult
-    func show(relativeTo button: NSView) -> Bool {
+    func show(relativeTo button: NSView, anchor: NSRect? = nil) -> Bool {
         guard canPresent, let window = button.window, window.isVisible,
               !button.isHiddenOrHasHiddenAncestor else { return false }
         _ = view
         previousResponder = window.firstResponder
         sourceWindow = window
-        popup.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+        popup.show(relativeTo: anchor ?? button.bounds, of: button, preferredEdge: .minY)
         guard let panel = popup.window, panel.isVisible, !finished else {
             popup.performClose(nil)
             return false
@@ -161,8 +173,15 @@ final class SpaceIconPicker: NSViewController, NSSearchFieldDelegate {
         case .grapheme: guard mode == .emoji else { return }
         case .systemSymbol: guard mode == .icons, SpaceSymbolCatalog.contains(choice) else { return }
         }
-        finished = true
-        popup.performClose(nil)
+        if purpose == .space {
+            finished = true
+            popup.performClose(nil)
+        } else {
+            currentChoice = choice
+            removeButton.isHidden = choice == .none
+            removeButton.isEnabled = choice != .none
+            grid.menu?.items.last?.isEnabled = choice != .none
+        }
         onChooseIcon?(choice)
         switch choice {
         case .none: onChoose?("")
@@ -201,7 +220,8 @@ final class SpaceIconPicker: NSViewController, NSSearchFieldDelegate {
         guard !finished, !isComposing else { return false }
         switch selector {
         case #selector(NSResponder.cancelOperation(_:)):
-            if !search.stringValue.isEmpty { setSearch("") } else { cancel() }
+            if purpose == .tab { cancel() }
+            else if !search.stringValue.isEmpty { setSearch("") } else { cancel() }
         case #selector(NSResponder.insertNewline(_:)):
             if let choice = grid.selectedItem?.choice { choose(choice) }
         case #selector(NSResponder.moveDown(_:)):

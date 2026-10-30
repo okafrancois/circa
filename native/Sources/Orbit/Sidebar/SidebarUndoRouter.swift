@@ -286,6 +286,8 @@ enum SidebarUndoStrings {
         case .renameFolder: english = uiText("Rename Folder")
         case .deleteFolder: english = uiText("Delete Folder")
         case .renameTab: english = uiText("Rename Tab")
+        case .changeTabIcon: english = uiText("Change Tab Icon")
+        case .editPinnedURL: english = uiText("Edit Pinned URL")
         case .archiveTabs: english = uiText("Archive Tab")
         case .closeTabs: english = uiText("Close Tabs")
         case .clearToday: english = uiText("Clear Today")

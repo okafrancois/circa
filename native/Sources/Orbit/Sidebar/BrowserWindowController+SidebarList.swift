@@ -20,20 +20,21 @@ extension BrowserWindowController {
         }
         sidebar.liveActivity = { [weak self] item in
             guard let self else { return .init() }
+            let customIcon = SpaceIconImages.tabImage(item.customIcon)
             guard let occurrenceID = item.occurrenceID else {
-                return SidebarTabActivity(favicon: session.organization.flatMap {
+                return SidebarTabActivity(favicon: customIcon ?? session.organization.flatMap {
                     sidebarIcons.memoryCache.image(profile: $0.profileID, home: item.pinnedURL ?? item.url)
                 })
             }
             guard let surface = session.surface(for: occurrenceID), owns(surface) else {
-                return SidebarTabActivity(favicon: tabSuspension.icon(for: occurrenceID)
+                return SidebarTabActivity(favicon: customIcon ?? tabSuspension.icon(for: occurrenceID)
                     ?? session.organization.flatMap { sidebarIcons.memoryCache.image(profile: $0.profileID, home: item.pinnedURL ?? item.url) }
                     ?? sidebarIcons.image(for: item, surface: nil, isOwned: { _ in false }))
             }
             let media = siteControls.mediaStates[ObjectIdentifier(surface)]
             let preservingSleep = tabSuspension.preservesSleepingPresentation(for: occurrenceID)
             let sleepingIcon = preservingSleep ? tabSuspension.icon(for: occurrenceID) : nil
-            let icon = sleepingIcon ?? sidebarIcons.image(for: item, surface: surface, isOwned: { [weak self] in self?.owns($0) == true })
+            let icon = customIcon ?? sleepingIcon ?? sidebarIcons.image(for: item, surface: surface, isOwned: { [weak self] in self?.owns($0) == true })
             return SidebarTabActivity(favicon: icon, isLoading: surface.navigationState.isLoading && !preservingSleep,
                                       isAudible: media?.isAudible ?? media?.isAudioPlaying, isAudioMuted: media?.isAudioMuted)
         }
@@ -286,11 +287,10 @@ extension BrowserWindowController {
         if let mute = built.menu.items.first(where: { $0.identifier?.rawValue == BrowserCommandID.sidebarMuteTab.rawValue }) {
             if let surface = sidebarMuteSurface {
                 let muted = siteControls.mediaStates[ObjectIdentifier(surface)]?.isAudioMuted == true
-                mute.title = uiText(muted ? "Unmute Tab" : "Mute Tab")
-            } else { built.menu.removeItem(mute) }
+                mute.title = uiText(muted ? "Unmute" : "Mute")
+            } else { mute.isEnabled = false }
         }
-        for item in built.menu.items where [BrowserCommandID.sidebarArchiveTabsAbove.rawValue, BrowserCommandID.sidebarArchiveTabsBelow.rawValue,
-                                            BrowserCommandID.sidebarArchiveOtherTabs.rawValue].contains(item.identifier?.rawValue ?? "") {
+        for item in built.menu.items where [BrowserCommandID.sidebarArchiveTabsAbove.rawValue, BrowserCommandID.sidebarArchiveOtherTabs.rawValue].contains(item.identifier?.rawValue ?? "") {
             if let validator = item.target as? NSMenuItemValidation, !validator.validateMenuItem(item) { built.menu.removeItem(item) }
         }
         for item in built.menu.items.reversed() where item.isSeparatorItem {
@@ -299,10 +299,20 @@ extension BrowserWindowController {
         }
         let move = SidebarMoveMenu(owner: self, nodes: nodes)
         if let move {
-            let index = built.menu.items.firstIndex { $0.identifier?.rawValue == BrowserCommandID.renameCurrentItem.rawValue } ?? 0
+            let index = nodes.count == 1 && nodes[0].tabID != nil
+                ? (built.menu.items.firstIndex { $0.identifier?.rawValue == BrowserCommandID.sidebarDuplicate.rawValue }.map { $0 + 1 } ?? 0)
+                : (built.menu.items.firstIndex { $0.identifier?.rawValue == BrowserCommandID.renameCurrentItem.rawValue } ?? 0)
             built.menu.insertItem(move.item, at: index)
         }
-        return (built.menu, SidebarContextMenuOwner(commands: built.owner, move: move))
+        var editOwner: AnyObject?
+        if let parent = built.menu.items.first(where: { $0.identifier?.rawValue == BrowserCommandID.sidebarEditPinnedURL.rawValue }),
+           let submenu = SidebarCommandHub.contextMenu(for: self, commands: [[.sidebarEditPinnedURL]]) {
+            submenu.menu.items.last?.title = uiText("Edit…")
+            parent.action = nil
+            parent.submenu = submenu.menu
+            editOwner = submenu.owner
+        }
+        return (built.menu, SidebarObjectMenuOwner(commands: built.owner, move: move, editing: editOwner))
     }
 
     func showSidebarContextMenu(for nodes: [BrowserOrganizationNode], event: NSEvent, in view: NSView) {
@@ -531,5 +541,15 @@ extension BrowserOrganizationSnapshot {
     func isCollapsed(_ folder: FolderID) -> Bool {
         if case let .folder(item)? = item(for: .folder(folder)) { return item.isCollapsed }
         return false
+    }
+}
+
+/// Retains the captured registry targets through AppKit's deferred action delivery.
+private final class SidebarObjectMenuOwner {
+    let commands: AnyObject
+    let move: AnyObject?
+    let editing: AnyObject?
+    init(commands: AnyObject, move: AnyObject?, editing: AnyObject?) {
+        self.commands = commands; self.move = move; self.editing = editing
     }
 }

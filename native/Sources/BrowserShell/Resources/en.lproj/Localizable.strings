@@ -1589,3 +1589,24 @@
 "To continue, please type the name of this Space:" = "To continue, please type the name of this Space:";
 
 "Version %@ (%@)" = "Version %@ (%@)";
+
+"Change Icon…" = "Change Icon…";
+
+"Edit Pinned Page" = "Edit Pinned Page";
+
+
+"Change Tab Icon" = "Change Tab Icon";
+
+"Edit Pinned URL" = "Edit Pinned URL";
+
+"Pinned URL" = "Pinned URL";
+
+"This is what opens first when you click this tab or its favicon." = "This is what opens first when you click this tab or its favicon.";
+
+"Reset Icon" = "Reset Icon";
+
+"Remove Pin" = "Remove Pin";
+
+"Mute" = "Mute";
+
+"Unmute" = "Unmute";
