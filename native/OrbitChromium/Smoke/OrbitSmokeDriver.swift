@@ -400,7 +400,9 @@ final class OrbitSmokeDriver: OrbitLaunchHooks {
             return
         }
         if let daily = arguments.first(where: { $0.hasPrefix("--orbit-smoke-daily-qa=") }) {
-            if daily.hasSuffix("=regressions") {
+            if daily.hasSuffix("=seams") {
+                await dailyQA8(application, environment, first)
+            } else if daily.hasSuffix("=regressions") {
                 await dailyQA7(application, environment, first)
             } else if daily.hasSuffix("=archive") {
                 await OrbitRelaunchScenarios.session(application: application, environment: environment,
