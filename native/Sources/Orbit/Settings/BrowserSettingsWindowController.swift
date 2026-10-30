@@ -292,7 +292,7 @@ enum BrowserSettingsSection: String, CaseIterable, Identifiable {
     var symbol: String {
         switch self {
         case .appearance: "paintpalette"
-        case .about: "app.dashed"
+        case .about: "info.circle"
         case .general: "gearshape"
         case .profiles: "person"
         case .spaces: "square.grid.2x2"

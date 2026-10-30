@@ -10,7 +10,7 @@ struct SettingsPresentationTests {
         #expect(!BrowserSettingsSection.allCases.contains(.spaces))
         #expect(!BrowserSettingsSection.allCases.contains(.privacy))
         #expect(BrowserSettingsSection(rawValue: "icon") == nil)
-        #expect(BrowserSettingsSection.about.symbol == "app.dashed")
+        #expect(BrowserSettingsSection.about.symbol == "info.circle")
     }
 
     @MainActor
