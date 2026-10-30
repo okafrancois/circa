@@ -624,16 +624,7 @@ struct BrowserSettingsView<Engine: BrowserEngine>: View {
         Text(text("permissionLimits", "Only permissions supported by the current engine are editable. Some changes require reloading the website."))
             .font(Font(BrandFonts.ui(12))).foregroundStyle(.secondary)
         SettingsCard {
-            HStack(spacing: 12) {
-                OrbitIcon.view(sfName: "checkmark", pointSize: 20).font(.system(size: 20)).frame(width: 20, height: 20)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(text("safeBrowsing", "Safe Browsing")).fontWeight(.medium)
-                    Text(model.safeBrowsingAvailable
-                        ? text("safeBrowsingOn", "Warnings for dangerous sites and downloads are on.")
-                        : text("safeBrowsingUnavailable", "Unavailable in this build. Circa does not warn about dangerous sites or downloads."))
-                        .font(Font(BrandFonts.ui(12))).foregroundStyle(.secondary)
-                }
-            }.padding(.horizontal, 14).padding(.vertical, 8).frame(minHeight: 50)
+            BrowserSafeBrowsingSettingsRow(model: model).padding(14)
         }
     }
 

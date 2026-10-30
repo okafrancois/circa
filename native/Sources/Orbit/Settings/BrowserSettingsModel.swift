@@ -79,13 +79,13 @@ final class BrowserSettingsModel<Engine: BrowserEngine>: ObservableObject {
         self.defaultBrowser = defaultBrowser
     }
 
+    let safeBrowsing = BrowserSafeBrowsing.shared
+
     var supportedPermissions: Set<BrowserSitePermission> {
         (environment.engine as? any BrowserSitePermissionAvailability)?.supportedSitePermissions ?? []
     }
     var supportsSiteData: Bool { environment.engine is any BrowserSiteDataAccess }
     var supportsProfileRemoval: Bool { environment.engine.capabilities.contains(.profileRemoval) && !runtime.isUnavailable }
-    /// A working Safe Browsing service protects this build (CHROMIUM-APP-R3).
-    var safeBrowsingAvailable: Bool { environment.engine.capabilities.contains(.safeBrowsing) }
     var permissionsUnavailable: Bool { environment.permissionsUnavailable }
     var canRequestDefaultBrowser: Bool { environment.engine.kind == .chromium && defaultBrowser.canRequest() }
 
@@ -161,6 +161,11 @@ final class BrowserSettingsModel<Engine: BrowserEngine>: ObservableObject {
 
     /// Accepted actions settle before the final session snapshot; a timeout cancels quitting,
     /// without cancelling a disk write or an outstanding system confirmation.
+    func setSafeBrowsingEnabled(_ enabled: Bool) async throws {
+        try await runtime.store.setSafeBrowsingEnabled(enabled)
+        await runtime.refresh()
+    }
+
     func setMemorySaver(_ setting: BrowserMemorySaverSetting) async throws {
         try await environment.settings.store.setMemorySaver(setting)
         await environment.settings.refresh()
@@ -181,6 +186,7 @@ final class BrowserSettingsModel<Engine: BrowserEngine>: ObservableObject {
     func resumeAfterCancelledTermination() { acceptsActions = true }
 
     func reload() async {
+        try? safeBrowsing.refreshKeyState()
         let generation = selectionGeneration
         let updated = await environment.store.catalogSnapshot()
         pendingProfileRemovalCount = await environment.settingsProfileRemovals.pending().count

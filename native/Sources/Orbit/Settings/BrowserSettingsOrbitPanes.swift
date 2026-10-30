@@ -438,9 +438,10 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
                         .accessibilityIdentifier("settings-site-data")
                 }
             }
-            Text(model.safeBrowsingAvailable ? uiText("Warnings for dangerous sites and downloads are on.")
-                 : uiText("Safe Browsing is unavailable in this build."))
-                .font(Font(BrandFonts.ui(12))).foregroundStyle(.secondary)
+            panel {
+                BrowserSafeBrowsingSettingsRow(model: model)
+                    .padding(14)
+            }
         }
     }
 

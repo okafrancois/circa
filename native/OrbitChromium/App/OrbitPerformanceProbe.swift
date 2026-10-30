@@ -4,6 +4,7 @@ import BrowserShell
 import BrowserEngine
 import ChromiumEngine
 import Darwin
+import SwiftUI
 import QuartzCore
 import OSLog
 import ObjectiveC.runtime
@@ -19,9 +20,9 @@ enum OrbitPerformanceProbe {
     }
     static func start(application: OrbitApplication, configuration: OrbitProductConfiguration) {
         guard configuration.syntheticGuard != nil, CommandLine.arguments.contains("--perf-probe") else { return }
-        if ["lab.orbit.orbit.engine-r11", "lab.orbit.orbit.engine-r12", "lab.orbit.orbit.engine-r13", "lab.orbit.orbit.sec-permissions", "lab.orbit.orbit.sec-pill"].contains(Bundle.main.bundleIdentifier ?? "") { application.confirmQuit = { .quit } }
-        if ["lab.orbit.orbit.engine-r13", "lab.orbit.orbit.sec-permissions", "lab.orbit.orbit.sec-pill"].contains(Bundle.main.bundleIdentifier ?? ""),
-           CommandLine.arguments.contains("--orbit-security-fixture") || CommandLine.arguments.contains("--orbit-permissions-fixture") {
+        if ["lab.orbit.orbit.engine-r11", "lab.orbit.orbit.engine-r12", "lab.orbit.orbit.engine-r13", "lab.orbit.orbit.sec-permissions", "lab.orbit.orbit.sec-pill", "lab.orbit.orbit.sec-safebrowsing"].contains(Bundle.main.bundleIdentifier ?? "") { application.confirmQuit = { .quit } }
+        if ["lab.orbit.orbit.engine-r13", "lab.orbit.orbit.sec-permissions", "lab.orbit.orbit.sec-pill", "lab.orbit.orbit.sec-safebrowsing"].contains(Bundle.main.bundleIdentifier ?? ""),
+           CommandLine.arguments.contains("--orbit-security-fixture") || CommandLine.arguments.contains("--orbit-permissions-fixture") || CommandLine.arguments.contains("--orbit-safe-browsing-fixture") {
             application.windowPresenter = { controller, _ in
                 controller.window?.setFrame(NSRect(x: -2000, y: -1200, width: 1280, height: 900), display: false)
                 controller.window?.orderBack(nil)
@@ -464,6 +465,8 @@ enum OrbitPerformanceProbe {
                     result["nativePerformance"] = await OrbitEnginePerformanceProbe.run(owner, command: command, root: root)
                 } else if name == "download-audio" {
                     result["downloadAudio"] = await OrbitDownloadAudioProbe.run(owner, command: command, root: root)
+                } else if name == "safe-browsing", ownsWindow(owner, bundleID: "lab.orbit.orbit.sec-safebrowsing") {
+                    result["safeBrowsing"] = await safeBrowsingProbe(environment, owner: owner, root: root, command: command)
                 } else if name == "settings" {
                     application.showSettings(section: .advanced)
                     result["settingsWindowNumber"] = application.settingsWindow?.window?.windowNumber
@@ -2278,5 +2281,67 @@ extension OrbitPerformanceProbe {
         }
         owner.palette.dismiss(returnFocus: false)
         return ["pid": getpid(), "offscreen": true, "localCount": localCount, "remoteCount": remoteCount, "deleted": deleted]
+    }
+}
+
+
+extension OrbitPerformanceProbe {
+    private static func safeBrowsingProbe(_ environment: OrbitEnvironment, owner: OrbitWindowController,
+                                          root: URL, command: [String: String]) async -> [String: Any] {
+        guard ownsWindow(owner, bundleID: "lab.orbit.orbit.sec-safebrowsing"),
+              let confinement = activeSyntheticDataGuard(), (try? confinement.checkInside(root)) != nil else { return ["refused": true] }
+        let browsing = BrowserSafeBrowsing.shared
+        let model = BrowserSettingsModel(environment: environment, profileID: nil, shortcuts: [])
+        do {
+            if let state = command["state"] {
+                guard ownsWindow(owner, bundleID: "lab.orbit.orbit.sec-safebrowsing") else { return ["refused": true] }
+                try await model.setSafeBrowsingEnabled(state != "off")
+                if state == "on-key" { try browsing.saveKey("synthetic-invalid-safe-browsing-key") }
+                else { try browsing.removeKey() }
+            }
+            try browsing.refreshKeyState()
+            var result: [String: Any] = ["launchEnabled": browsing.enabledAtLaunch,
+                "settingEnabled": environment.settings.document.safeBrowsingEnabled, "hasKey": browsing.hasKey,
+                "globalPreference": environment.engine.safeBrowsingPreference(for: nil) as Any,
+                "profilePreference": environment.engine.safeBrowsingPreference(for: owner.session.activeProfileID) as Any]
+            if command["navigation"] == "test", let surface = owner.session.selectedSurface {
+                guard ownsWindow(owner, bundleID: "lab.orbit.orbit.sec-safebrowsing") else { return ["refused": true] }
+                surface.navigate(to: URL(string: "https://testsafebrowsing.appspot.com/s/phishing.html")!)
+                try? await Task.sleep(for: .milliseconds(500))
+                for _ in 0..<160 {
+                    if !surface.navigationState.isLoading { break }
+                    try? await Task.sleep(for: .milliseconds(50))
+                }
+                result["testPageCommitted"] = surface.nativePageServices?.committedURL()?.host == "testsafebrowsing.appspot.com"
+                result["testPageInterstitial"] = surface.nativePageServices?.securityState()?.interstitial ?? false
+            }
+            if let appearance = command["appearance"] {
+                let name: NSAppearance.Name = appearance == "dark" ? .darkAqua : .aqua
+                let host = NSHostingView(rootView: BrowserSafeBrowsingSettingsRow(model: model)
+                    .padding(14).background(OrbitSettingsStyle.panel).foregroundStyle(OrbitSettingsStyle.foreground)
+                    .font(Font(BrandFonts.ui(13))).buttonStyle(.bordered).controlSize(.small)
+                    .frame(width: 640, height: 220, alignment: .topLeading))
+                host.sizingOptions = []
+                host.frame = NSRect(x: 0, y: 0, width: 640, height: 220)
+                let window = NSWindow(contentRect: host.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+                window.isReleasedWhenClosed = false
+                window.appearance = NSAppearance(named: name)
+                window.contentView = host
+                window.setFrameOrigin(NSPoint(x: -5000, y: -5000))
+                defer { window.close() }
+                try? await Task.sleep(for: .milliseconds(250))
+                host.layoutSubtreeIfNeeded()
+                host.display()
+                guard let bitmap = host.bitmapImageRepForCachingDisplay(in: host.bounds) else { return ["captureFailed": true] }
+                host.cacheDisplay(in: host.bounds, to: bitmap)
+                let directory = root.appendingPathComponent("captures")
+                try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+                let state = environment.settings.document.safeBrowsingEnabled ? (browsing.hasKey ? "on-key" : "on-no-key") : "off"
+                let file = directory.appendingPathComponent(state + "-" + appearance + ".png")
+                try bitmap.representation(using: .png, properties: [:])?.write(to: file)
+                result["capture"] = file.lastPathComponent
+            }
+            return result
+        } catch { return ["failed": true] }
     }
 }

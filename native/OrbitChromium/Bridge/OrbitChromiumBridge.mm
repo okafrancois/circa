@@ -201,6 +201,7 @@ struct State {
   std::string root;
   std::vector<std::string> switches;
   int32_t secure_storage = ACR_SECURE_STORAGE_MOCK;
+  bool safe_browsing_enabled = false;
   int32_t network_policy = ACR_NETWORK_HERMETIC;
   // CHROMIUM-APP-R3: the engine root, opened once (descriptor-anchored profile operations), and
   // the allow-listed browser arguments actually given to Chromium.
@@ -514,16 +515,13 @@ void StopAuthenticationOperations(bool before_shutdown = false, bool after_shutd
   }
 }
 
-// CHROMIUM-APP-R3 (review MEDIUM 8): Safe Browsing cannot work without a Google API key (none is
-// compiled in; the placeholder key is refused), yet Chromium keeps safebrowsing.enabled true. The
-// preference is turned off in every profile, so that nothing claims a protection that does not
-// exist; the shell shows Safe Browsing as unavailable. Pending the user's decision on a key.
-void DisableSafeBrowsing(CefRefPtr<CefRequestContext> context) {
+// The launch snapshot governs all contexts for the process lifetime, including private ones.
+void ConfigureSafeBrowsing(CefRefPtr<CefRequestContext> context) {
   if (!context) return;
   for (const char* name : {"safebrowsing.enabled", "safebrowsing.enhanced"}) {
     if (!context->HasPreference(name) || !context->CanSetPreference(name)) continue;
     CefRefPtr<CefValue> value = CefValue::Create();
-    value->SetBool(false);
+    value->SetBool(g_state && g_state->safe_browsing_enabled && std::string(name) == "safebrowsing.enabled");
     CefString error;
     context->SetPreference(name, value, error);
   }
@@ -536,7 +534,7 @@ class ProfileHandler final : public CefRequestContextHandler {
     CEF_REQUIRE_UI_THREAD();
     if (!g_state) return;
     g_state->ready_profiles.insert(token_);
-    DisableSafeBrowsing(context);
+    ConfigureSafeBrowsing(context);
     // Admitted persistent Orbit profiles may generate locally; Sync stays disabled.
     if (!context->GetCachePath().empty() && context->HasPreference("password_manager.local_generation_enabled")) {
       auto value = CefValue::Create(); value->SetBool(true);
@@ -1916,6 +1914,15 @@ class App final : public CefApp, public CefBrowserProcessHandler {
       command->AppendSwitchWithValue("host-resolver-rules",
           "MAP mixed.example.invalid 127.0.0.1, MAP xn--pple-43d.com 127.0.0.1, MAP * ~NOTFOUND, EXCLUDE 127.0.0.1");
     }
+    // A confined fixture exercises the product's background service with mock credentials.
+    if (g_state && g_state->secure_storage == ACR_SECURE_STORAGE_MOCK &&
+        [[NSBundle mainBundle].bundleIdentifier isEqualToString:@"lab.orbit.orbit.sec-safebrowsing"] &&
+        [[NSBundle mainBundle].infoDictionary[@"OrbitSyntheticBundle"] boolValue] &&
+        [[NSProcessInfo processInfo].arguments containsObject:@"--orbit-safe-browsing-fixture"]) {
+      command->RemoveSwitch("disable-background-networking");
+      command->AppendSwitch("safebrowsing-fast-initial-lists-update");
+      command->AppendSwitchWithValue("log-net-log", g_state->root + "/safe-browsing-netlog.json");
+    }
     // Fixed fake devices only in the confined permission fixture; no real TCC services.
     if (g_state && g_state->secure_storage == ACR_SECURE_STORAGE_MOCK &&
         [[NSBundle mainBundle].bundleIdentifier isEqualToString:@"lab.orbit.orbit.sec-permissions"] &&
@@ -1977,7 +1984,7 @@ class App final : public CefApp, public CefBrowserProcessHandler {
       ++g_state->unowned_handler_generation;
       if (g_state->set_unowned_tab_handler(&AdoptUnownedTab, nullptr) != 1) g_state->set_unowned_tab_handler = nullptr;
     }
-    DisableSafeBrowsing(CefRequestContext::GetGlobalContext());
+    ConfigureSafeBrowsing(CefRequestContext::GetGlobalContext());
     g_state->Simple(ACR_EVENT_READY, 0);
   }
 
@@ -2123,6 +2130,8 @@ extern "C" int32_t ACRRun(int argc, char* argv[], const ACRRunOptions* options,
     // ABI 8: an ACRNetworkPolicy value.
     if (options->network_policy != ACR_NETWORK_HERMETIC && options->network_policy != ACR_NETWORK_PRODUCT) return 64;
     state.network_policy = options->network_policy;
+    const char* api_key = getenv("GOOGLE_API_KEY");
+    state.safe_browsing_enabled = options->safe_browsing_enabled == 1 && api_key && *api_key;
     if (state.secure_storage == ACR_SECURE_STORAGE_KEYCHAIN) {
       if (!options->keychain_service_name || !*options->keychain_service_name
           || !options->keychain_account_name || !*options->keychain_account_name) return 64;

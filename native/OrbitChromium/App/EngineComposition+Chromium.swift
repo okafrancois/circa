@@ -238,8 +238,29 @@ enum OrbitLauncher {
         ColdLaunchOpenQueue.shared.install()
         let hooks = orbitLaunchHooks()
         hooks?.willStartRuntime(configuration)
-        let options = productRuntimeOptions(configuration, extraSwitches: hooks?.runtimeSwitches ?? [],
+        // Resolve device-local credentials before loading Chromium or creating any profile.
+        let storage: any BrowserSafeBrowsingKeyStorage = configuration.usesMockKeychain
+            ? BrowserSafeBrowsingMockKeychain() : BrowserSafeBrowsingKeychain()
+        let browsing = BrowserSafeBrowsing(storage: storage)
+        BrowserSafeBrowsing.shared = browsing
+        if configuration.usesMockKeychain, Bundle.main.bundleIdentifier == "lab.orbit.orbit.sec-safebrowsing",
+           Bundle.main.infoDictionary?["OrbitSyntheticBundle"] as? Bool == true,
+           CommandLine.arguments.contains("--orbit-safe-browsing-fixture-key") {
+            try? storage.write("synthetic-invalid-safe-browsing-key")
+        }
+        let launch: BrowserSafeBrowsingLaunch
+        do {
+            let destination = configuration.sessionFile.appendingPathExtension("settings.json")
+            let enabled = try BrowserSettingsStore.safeBrowsingEnabledAtLaunch(destination: destination)
+            launch = try browsing.prepare(enabled: enabled)
+        } catch {
+            // Settings/keychain damage cannot enable a service or disclose an underlying error.
+            launch = try! BrowserSafeBrowsingLaunch(enabled: false, storage: storage)
+        }
+        launch.applyEnvironment()
+        var options = productRuntimeOptions(configuration, extraSwitches: hooks?.runtimeSwitches ?? [],
                                             hiddenApplication: hooks?.hiddenApplication ?? false)
+        options.safeBrowsingEnabled = launch.enabled
         BrowserPerformance.mark(.runtime)
         if BrowserPerformance.enabled {
             ACRSetStartupTimingCallback { phase in
