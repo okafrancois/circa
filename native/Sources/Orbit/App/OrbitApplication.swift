@@ -202,6 +202,7 @@ final class OrbitApplication: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        OrbitAppIconController.reapplyForCurrentApplication()
         BrowserPerformance.mark(.applicationLaunched)
         BrowserPerformance.mark(.menusBegin)
         installMenus()
