@@ -1,6 +1,7 @@
 import BrowserCore
 import Foundation
 import Testing
+import OrbitImportSynthetic
 @testable import Orbit
 
 /// The first-run onboarding replaces the Arc import offer, and its import step runs Arc in place.
@@ -47,5 +48,29 @@ extension OnboardingArcOfferTests {
         flow.importChoice = BrowserOnboardingRecord.ImportChoice.none
         #expect(flow.skippedSteps.isEmpty)
         #expect(flow.advance() && flow.step == .favourites)
+    }
+}
+
+@MainActor
+struct ArcSunsetOnboardingTests {
+    struct MissingKey: ArcSiteSessionKeyProviding {
+        func sourcePassword() throws -> Data { throw ArcAuthenticationError.sourceKeyUnavailable }
+        func targetPassword() throws -> Data { Issue.record("No target key should be read"); return Data() }
+    }
+    @Test("Onboarding retains structural success and explains unavailable connections")
+    func missingKeyContinues() async throws {
+        let root = try ArcSyntheticData.temporaryDirectory("sunset-onboarding")
+        defer { try? FileManager.default.removeItem(at: root) }
+        var explained = false
+        try await OrbitOnboardingImportPreparation.importConnections(.init(sourceRoot: root.appendingPathComponent("source"), profiles: []),
+            dataRoot: root.appendingPathComponent("target"), keys: MissingKey()) { explained = true }
+        #expect(explained)
+        #expect(!FileManager.default.fileExists(atPath: root.appendingPathComponent("target/SessionImport/Backups").path))
+    }
+    @Test("The timeless import hint describes supported structural data")
+    func hint() {
+        #expect(ArcImportText.localFilesHint.contains("even after Arc stops working"))
+        #expect(!ArcImportText.localFilesHint.contains("passwords"))
+        #expect(ArcImportText.confirmation(.init()).contains(ArcImportText.localFilesHint))
     }
 }

@@ -210,6 +210,58 @@ public enum ArcSyntheticData {
         return root
     }
 
+    /// Large, invented schema-shaped source. Long saved titles exercise the source document
+    /// budget and the normal title sanitizer without inflating the target beyond its read limit.
+    /// Split children remain tabs; Little Arc archive entries carry an explicit profile.
+    public static func writeSunsetScaleDirectory(at root: URL) throws {
+        var items: [[String: Any]] = [], spaces: [[String: Any]] = [], favorites: [Any] = []
+        for index in 0..<30 {
+            let id = "scale-\(index)"
+            spaces.append(space(id, directories[index % 3]))
+            let pins = (0..<35).map { "\(id)-pin-\($0)" }
+            let today = (0..<35).map { "\(id)-today-\($0)" }
+            items.append(container(id + "-pins", [id + "-folder-0", id + "-split"] + Array(pins.dropFirst(3))))
+            items.append(container(id + "-today", today))
+            for depth in 0..<5 {
+                items.append(folder("\(id)-folder-\(depth)", depth == 0 ? id + "-pins" : "\(id)-folder-\(depth - 1)",
+                                    depth == 4 ? [pins[0]] : ["\(id)-folder-\(depth + 1)"]))
+            }
+            items.append(["id": id + "-split", "parentID": id + "-pins", "childrenIds": [pins[1], pins[2]],
+                          "data": ["splitView": [String: Any]()]])
+            for (offset, key) in (pins + today).enumerated() {
+                let parent = offset == 0 ? id + "-folder-4" : offset < 3 ? id + "-split" : offset < 35 ? id + "-pins" : id + "-today"
+                var record = tab(key, parent)
+                record["data"] = ["tab": ["savedURL": url(key), "savedTitle": String(repeating: "Synthetic title ", count: 700),
+                                          "timeLastActiveAt": lastActiveAt]]
+                items.append(record)
+            }
+        }
+        for (index, directory) in directories.enumerated() {
+            let id = "favorite-\(index)"
+            items += [container(id + "-root", [id]), tab(id, id + "-root")]
+            favorites += [profile(directory), id + "-root"]
+        }
+        let sidebar: [String: Any] = ["version": 1, "sidebar": ["containers": [["global": [String: Any]()],
+            ["spaces": pairs(spaces), "items": pairs(items), "topAppsContainerIDs": favorites]]]]
+        try writeDataDirectory(at: root, historyRows: [HistoryRow](), sidebar: sidebar, historyProfiles: 0)
+        var archived: [Any] = []
+        for index in 0..<1_002 {
+            let origin: [String: Any] = index < 1_000 ? ["space": ["_0": "scale-\(index % 30)"]]
+                : ["littleArc": ["profile": profile(directories[index % 3])]]
+            archived += ["archive-\(index)", ["archivedAt": 300.0, "source": origin, "reason": "manual", "sidebarItem": tab("closed-\(index)", nil)]]
+        }
+        try JSONSerialization.data(withJSONObject: ["version": 1, "items": archived]).write(to: root.appendingPathComponent("StorableArchiveItems.json"))
+        for directory in directories {
+            let folder = root.appendingPathComponent("User Data/" + directory)
+            try writeHistory(lazyHistoryRows(count: 17_000, base: Date(), distinctPages: 2_000), to: folder.appendingPathComponent("History"))
+            // Structural fixtures must not masquerade as valid encrypted stores.
+            for name in ["Cookies", "Login Data"] {
+                let file = folder.appendingPathComponent(name)
+                if FileManager.default.fileExists(atPath: file.path) { try FileManager.default.removeItem(at: file) }
+            }
+        }
+    }
+
     public static func temporaryDirectory(_ name: String = "orbit-import-synthetic") throws -> URL {
         // The session file store refuses symbolic links in a path (`/var` → `/private/var`).
         let canonical = URL(fileURLWithPath: String(cString: realpath(FileManager.default.temporaryDirectory.path, nil)!))

@@ -55,6 +55,22 @@ struct OrbitSiteSessionImportTests {
         #expect(try fixture.storageValue(at: fixture.target) == "target-storage")
     }
 
+    @Test("Network cookie layout imports encrypted rows and retains the same undo point")
+    func networkCookieLayout() throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let keys = Keys()
+        try fixture.database(at: fixture.source.appendingPathComponent("Network"), password: keys.source,
+                             rows: [("shared", "source", false)])
+        try fixture.database(at: fixture.target, password: keys.target, rows: [("shared", "target", false)])
+        let before = try Data(contentsOf: fixture.target.appendingPathComponent("Cookies"))
+        let result = try fixture.importer.run(fixture.request, keys: keys)
+        #expect(result.cookies == 1 && result.failedProfiles == 0)
+        #expect(try fixture.values(at: fixture.target, password: keys.target) == ["shared": "source"])
+        _ = try fixture.importer.restoreLatest()
+        #expect(try Data(contentsOf: fixture.target.appendingPathComponent("Cookies")) == before)
+    }
+
     @Test("A fresh profile imports while a corrupt second profile rolls back independently")
     func perProfileFailure() throws {
         let fixture = try Fixture()
@@ -157,7 +173,7 @@ struct OrbitSiteSessionImportTests {
         #expect(try fixture.storageValue(at: fixture.target) == "first-import")
     }
 
-    private struct Fixture {
+    struct Fixture {
         let root: URL
         let profile = ArcSiteSessionProfile(sourceDirectory: "Default", targetID: ProfileID(UUID()))
         var source: URL { root.appendingPathComponent("source/Default") }

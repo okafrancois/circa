@@ -62,12 +62,16 @@ final class ArcImportAlertPresenter: ArcImportPresenting {
     }
 
     func confirm(_ report: ArcImportReport) async -> Bool {
+        Self.confirmationAlert(report).runModal() == .alertFirstButtonReturn
+    }
+
+    static func confirmationAlert(_ report: ArcImportReport) -> NSAlert {
         let alert = OrbitFloatingMaterial.alert()
         alert.messageText = ArcImportText.confirmTitle
         alert.informativeText = ArcImportText.confirmation(report)
         alert.addButton(withTitle: ArcImportText.importButton)
         alert.addButton(withTitle: ArcImportText.cancel)
-        return alert.runModal() == .alertFirstButtonReturn
+        return alert
     }
 
     func showCompletion(_ outcome: ArcImportOutcome) {
