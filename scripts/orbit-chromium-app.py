@@ -708,7 +708,7 @@ def main():
                         help="Fresh real-shell MV3 and normal quit gate, without unrelated scenarios")
     runner.add_argument("--private-domain-only", action="store_true",
                         help="Hidden mock-only private domain coexistence/release probe on approved EssentialsR2")
-    runner.add_argument("--daily-qa", choices=("overlays", "downloads", "archive"), help="Synthetic daily ownership, download quit and archive undo probes")
+    runner.add_argument("--daily-qa", choices=("overlays", "downloads", "archive", "regressions"), help="Synthetic daily ownership, download quit and archive undo probes")
     runner.add_argument("--relaunch-only", action="store_true", help="Regular windows and Little across normal quit and relaunch")
     runner.add_argument("--profiles-only", action="store_true",
                         help="Two persistent product profiles across normal and crash relaunches, without extensions")

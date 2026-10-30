@@ -55,7 +55,7 @@ extension BrowserStore {
             patch.collapsedSpaceSections[space.id] = .init(before: organization.collapsedPinnedSections.contains(space.id), after: false)
         }
         patch.activeSpace = .init(before: context.spaceID, after: destination ?? space.id)
-        try next.validate(profiles: Set(profiles.keys), spaces: catalogApplying(patch).mapValues(\.profileID))
+        try validateOrganization(next, applying: patch)
         next.stampPlacements(&patch)
         let effects = windows[context.windowID].map { windowEffects(of: patch, in: $0) }
         next.changes = .init()
@@ -72,6 +72,20 @@ extension BrowserStore {
         var result = spaces
         for (id, change) in patch.spaceRecords { result[id] = change.after }
         return result
+    }
+
+    /// Validate the post-commit homes without changing live windows before the transaction succeeds.
+    /// Local windows are rehomed by applyCatalog after their source Space is retired.
+    func validateOrganization(_ state: BrowserOrganizationState, applying patch: BrowserOrganizationPatch) throws {
+        let catalog = catalogApplying(patch)
+        var candidate = state
+        for (window, home) in state.standaloneHomes where catalog[home] == nil {
+            guard let profile = windows[window]?.standaloneProfileID,
+                  let destination = spaceOrder.first(where: { catalog[$0]?.profileID == profile })
+                    ?? patch.activeSpace?.after else { throw BrowserSessionError.spaceMissing }
+            candidate.standaloneHomes[window] = destination
+        }
+        try candidate.validate(profiles: Set(profiles.keys), spaces: catalog.mapValues(\.profileID))
     }
 
     func canApplyCatalog(_ patch: BrowserOrganizationPatch) -> Bool {
@@ -102,6 +116,10 @@ extension BrowserStore {
             spaces[id] = change.after
             if !spaceOrder.contains(id) { spaceOrder.insert(id, at: min(patch.spaceIndices[id] ?? spaceOrder.count, spaceOrder.count)) }
         }
+        let retiredSelections = windows.compactMapValues { window -> TabOccurrenceID? in
+            guard let change = patch.spaceRecords[window.activeSpaceID], change.after == nil else { return nil }
+            return window.selectedOccurrenceBySpace[window.activeSpaceID]
+        }
         reconcileOccurrences()
         for (id, change) in patch.collapsedSpaceSections {
             if change.after { organization.collapsedPinnedSections.insert(id) } else { organization.collapsedPinnedSections.remove(id) }
@@ -117,6 +135,9 @@ extension BrowserStore {
                 windows[key]?.selectedOccurrenceBySpace[id] = nil
                 if windows[key]?.activeSpaceID == id {
                     windows[key]?.activeSpaceID = fallback
+                    if let selected = retiredSelections[key], tabs[selected]?.spaceID == fallback {
+                        windows[key]?.selectedOccurrenceBySpace[fallback] = selected
+                    }
                     windows[key]?.revision &+= 1
                 }
             }

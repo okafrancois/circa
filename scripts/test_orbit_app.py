@@ -5,14 +5,50 @@ import sys
 import plistlib
 import tempfile
 import shutil
+import subprocess
 import unittest
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).parent))
-from orbit_bundle_policy import HELPERS, set_helper_bundle_identifiers, validate_bundle_contents
+from orbit_bundle_policy import BRAND_FONT_FILES, HELPERS, set_helper_bundle_identifiers, validate_bundle_contents
 spec = importlib.util.spec_from_file_location('orbit_app', Path(__file__).with_name('orbit-app.py'))
 app = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(app)
+
+
+class ResourceAssemblyTests(unittest.TestCase):
+    def test_font_allowlist_matches_the_shipped_resources(self):
+        directory = Path(__file__).resolve().parents[1] / 'native/Sources/BrowserShell/Resources/BrandFonts'
+        self.assertEqual(BRAND_FONT_FILES, frozenset(path.name for path in directory.iterdir() if path.is_file()))
+
+    def test_incremental_assembly_removes_deleted_fonts_icons_and_locales(self):
+        script = Path(__file__).resolve().parents[1] / 'native/OrbitChromium/PackageLocalization.cmake'
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / 'source'
+            english = source / 'en.lproj'
+            english.mkdir(parents=True)
+            (english / 'Localizable.strings').write_text('"test" = "Test";')
+            fonts = source / 'BrandFonts'
+            fonts.mkdir()
+            removed = fonts / 'removed.ttf'
+            removed.write_bytes(b'synthetic removed font')
+            bundle = root / 'Shell.bundle'
+            def assemble():
+                subprocess.run(['cmake', '-DSOURCE=' + str(source), '-DDESTINATION=' + str(bundle),
+                                '-P', str(script)], check=True, capture_output=True)
+            assemble()
+            resources = bundle / 'Contents/Resources'
+            (resources / 'Icons').mkdir()
+            (resources / 'Icons/removed.pdf').write_bytes(b'synthetic removed icon')
+            (resources / 'removed.lproj').mkdir()
+            (resources / 'removed.lproj/Localizable.strings').write_text('stale')
+            removed.unlink()
+            (fonts / 'current.ttf').write_bytes(b'synthetic current font')
+            assemble()
+            def inventory(directory):
+                return {path.relative_to(directory): path.read_bytes() for path in directory.rglob('*') if path.is_file()}
+            self.assertEqual(inventory(resources), inventory(source))
 
 
 class SyntheticDefaultTests(unittest.TestCase):

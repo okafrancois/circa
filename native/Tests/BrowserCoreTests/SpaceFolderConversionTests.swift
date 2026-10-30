@@ -129,3 +129,87 @@ struct SpaceFolderConversionTests {
         try await f.validate()
     }
 }
+
+
+extension SpaceFolderConversionTests {
+    @Test("Export rehomes a standalone window without losing its local tabs, selection or persistence")
+    func exportWithStandaloneWindow() async throws {
+        let f = try await OrganizationFixture.make()
+        let local = try await f.store.createStandaloneWindow(profileID: f.personal, homeSpaceID: f.home)
+        let tab = try await f.open("local", in: local)
+        let occurrence = try #require(await f.occurrences(of: tab, in: local).first?.occurrenceID)
+        _ = try await f.open("shared")
+        _ = try await f.store.exportSpace(f.home, to: f.leisure, from: f.context())
+        let state = try await f.store.captureWindowState(in: local)
+        #expect(state.snapshot.activeSpaceID == f.leisure)
+        #expect(state.organization.selectedTab?.id == tab)
+        #expect(state.organization.selectedTab?.occurrenceID == occurrence)
+        try await f.validate()
+        try await roundTrip(f)
+        _ = try await f.store.undoOrganization(from: f.context())
+        _ = try await f.store.redoOrganization(from: f.context())
+        #expect(try await f.organization(local).selectedTab?.id == tab)
+        try await f.validate()
+    }
+
+    @Test("Undoing a promoted Space rehomes a newly opened standalone window and remains redoable")
+    func undoPromotionWithStandaloneWindow() async throws {
+        let f = try await OrganizationFixture.make()
+        let (folder, _) = try await f.store.createFolder(title: "Project", at: .init(.pinned(f.home)), from: f.context())
+        let promoted = try await f.store.convertFolderToSpace(folder, from: f.context())
+        let local = try await f.store.createStandaloneWindow(profileID: f.personal, homeSpaceID: promoted.organization.spaceID)
+        let tab = try await f.open("local", in: local)
+        _ = try await f.store.undoOrganization(from: f.context())
+        #expect(try await f.organization().spaceID == f.home)
+        #expect(try await f.organization(local).selectedTab?.id == tab)
+        try await f.validate()
+        _ = try await f.store.redoOrganization(from: f.context())
+        try await f.validate()
+        try await roundTrip(f)
+    }
+}
+
+
+extension SpaceFolderConversionTests {
+    @Test("Export keeps the selected live tab in every window viewing the retired Space")
+    func exportOtherWindowSelection() async throws {
+        let f = try await OrganizationFixture.make()
+        let tab = try await f.open("other-selected", in: f.other)
+        let selected = try #require(await f.organization(f.other).selectedTab?.occurrenceID)
+        _ = try await f.store.exportSpace(f.home, to: f.leisure, from: f.context())
+        let other = try await f.organization(f.other)
+        #expect(other.spaceID == f.leisure)
+        #expect(other.selectedTab?.id == tab)
+        #expect(other.selectedTab?.occurrenceID == selected)
+        try await f.validate()
+    }
+}
+
+
+extension SpaceFolderConversionTests {
+    @Test("Promoting and exporting a customized split preserves its layout through replay, persistence and sync")
+    func customizedSplitConversions() async throws {
+        let f = try await OrganizationFixture.make()
+        let a = try await f.open("a"), b = try await f.open("b")
+        let (split, _) = try await f.store.createSplit([a, b], orientation: .vertical, from: f.context())
+        _ = try await f.store.resizeSplit(split, ratios: [0.3, 0.7], from: f.context())
+        _ = try await f.store.changeTabIcon(a, to: .grapheme("★"), from: f.context())
+        let (folder, _) = try await f.store.createFolder(title: "Split project", at: .init(.pinned(f.home)), containing: [.split(split)], from: f.context())
+        _ = try await f.store.editPinnedURL(a, to: organizationURL("replacement"), from: f.context())
+        let promoted = try await f.store.convertFolderToSpace(folder, from: f.context())
+        let space = promoted.organization.spaceID
+        try await roundTrip(f)
+        _ = try await f.store.undoOrganization(from: f.context())
+        _ = try await f.store.redoOrganization(from: f.context())
+        _ = try await f.store.exportSpace(space, to: f.leisure, from: f.context())
+        try await roundTrip(f)
+        _ = try await f.store.undoOrganization(from: f.context())
+        _ = try await f.store.redoOrganization(from: f.context())
+        let document = await f.store.sessionDocument()
+        let group = try #require(document.organization.splits.first { $0.id == split })
+        #expect(group.tabIDs == [a, b] && group.orientation == .vertical && group.ratios == [0.3, 0.7])
+        #expect(document.organization.tabs.first { $0.id == a }?.customIcon == .grapheme("★"))
+        #expect(document.organization.tabs.first { $0.id == a }?.pinnedURL == organizationURL("replacement"))
+        try await f.validate()
+    }
+}

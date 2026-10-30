@@ -34,7 +34,7 @@ struct BrandFontsTests {
     @Test("Repeated role lookups reuse one process registration")
     func once() {
         let attempts = BrandFonts.registrationAttempts
-        #expect(attempts == 2)
+        #expect(attempts == 1)
         for _ in 0..<20 {
             for style in BrandTextStyle.allCases { _ = style.font(size: 14) }
         }
@@ -50,14 +50,14 @@ struct BrandFontsTests {
         }
     }
 
-    @Test("Only onboarding copy and branded titles need bundled fonts")
+    @Test("Only branded titles need bundled fonts")
     func registration() {
-        #expect(BrandFonts.filenames == ["intertight.ttf", "gloock.ttf"])
+        #expect(BrandFonts.filenames == ["gloock.ttf"])
         #expect(BrandFonts.registered)
-        #expect(BrandFonts.onboardingBody(15).familyName == "Inter Tight")
+        #expect(BrandFonts.onboardingBody(15) == NSFont.systemFont(ofSize: 15))
         #expect(BrandTextStyle.title.font(size: 40).familyName == "Gloock")
         #expect(BrandFonts.mark != nil)
-        for name in ["intertight-OFL", "gloock-OFL"] {
+        for name in ["gloock-OFL"] {
             #expect(BrowserText.resourceBundle?.url(forResource: name, withExtension: "txt", subdirectory: "BrandFonts")
                 ?? BrowserText.resourceBundle?.url(forResource: name, withExtension: "txt") != nil)
         }
@@ -80,5 +80,17 @@ extension BrandFontsTests {
             #expect(decoded.colors.count == 2)
         }
         #expect(BrowserSpaceThemePresets.families.count == 4)
+    }
+}
+
+
+extension BrandFontsTests {
+    @Test("Onboarding copy and controls use the system face at all shipped sizes and weights")
+    func onboardingSystemCopy() {
+        for size: CGFloat in [11, 12, 13, 14, 15, 18] {
+            for weight: NSFont.Weight in [.regular, .medium, .semibold, .bold] {
+                #expect(BrandFonts.onboardingBody(size, weight: weight) == NSFont.systemFont(ofSize: size, weight: weight))
+            }
+        }
     }
 }
