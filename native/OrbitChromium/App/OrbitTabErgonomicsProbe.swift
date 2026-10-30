@@ -8,7 +8,7 @@ enum OrbitTabErgonomicsProbe {
     static let bundleID = "lab.orbit.orbit.tab-ergonomics"
 
     private static func owns(_ owner: OrbitWindowController) -> Bool {
-        guard Bundle.main.bundleIdentifier == bundleID,
+        guard [bundleID, OrbitDailyQA9Probe.bundleID].contains(Bundle.main.bundleIdentifier ?? ""),
               let configuration = activeSiteSessionConfiguration(), configuration.syntheticGuard != nil,
               configuration.usesMockKeychain, let window = owner.window,
               let rows = CGWindowListCopyWindowInfo(.optionIncludingWindow, CGWindowID(window.windowNumber)) as? [[String: Any]] else { return false }
@@ -65,10 +65,19 @@ enum OrbitTabErgonomicsProbe {
             let copied = duplicate.nativePageServices?.navigationHistory()
             checks["duplicateHistory"] = history != nil && copied?.entries.map(\.url) == history?.entries.map(\.url)
                 && copied?.currentIndex == history?.currentIndex
-            duplicate.goForward()
+            let tab = owner.session.organization?.selectedTab
+            checks["duplicateModelURL"] = tab?.url == duplicate.currentURL
+                && owner.session.snapshot?.tabs.first { $0.occurrenceID == owner.session.snapshot?.selectedOccurrenceID }?.url == duplicate.currentURL
+            checks["duplicatePill"] = owner.addressField.stringValue == BrowserAddressPresentation(surface: duplicate).value
+            checks["duplicateSidebar"] = tab.flatMap { owner.sidebar.page.list.row(for: .tab($0.id)) }?.titleLabel.stringValue == "Synthetic second"
+            checks["duplicateDocument"] = await OrbitPerformanceProbe.evaluate(duplicate, "({path:location.pathname})")?["path"] as? String == "/second"
+            guard owns(owner) else { return ["ownershipLost": true] }
+            checks["forwardAccepted"] = registry.dispatch(.goForward, origin: .menu)
+            await settle(owner)
             await load(duplicate)
             checks["forwardPath"] = duplicate.currentURL?.path ?? ""
             checks["duplicateForward"] = duplicate.currentURL?.path == "/third"
+            checks["forwardDocument"] = await OrbitPerformanceProbe.evaluate(duplicate, "({path:location.pathname})")?["path"] as? String == "/third"
             checks["duplicateIndependent"] = original.currentURL?.path == "/second"
         }
         stage("history-checked")

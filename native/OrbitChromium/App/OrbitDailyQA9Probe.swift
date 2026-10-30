@@ -229,13 +229,55 @@ enum OrbitDailyQA9Probe {
             await drain(owner)
             if let surface = owner.session.selectedSurface, await load(surface) {
                 guard owns(owner) else { return ["ownershipLost": true] }
-                _ = await OrbitPerformanceProbe.evaluate(surface, "document.querySelector('textarea').focus();document.querySelector('textarea').select();({ready:true})")
-                _ = surface.focusDocument()
-                checks["webUppercaseAccepted"] = registry.dispatch(.makeUpperCase, origin: .menu)
-                await drain(owner)
-                try? await Task.sleep(for: .milliseconds(500))
-                checks["webValue"] = await OrbitPerformanceProbe.evaluate(surface, "({value:document.querySelector('textarea').value})")?["value"] as? String ?? ""
-                checks["webUppercaseEffect"] = await OrbitPerformanceProbe.evaluate(surface, "({changed:document.querySelector('textarea').value==='HELLO WORLD'})")?["changed"] as? Bool == true
+                func menuItem(_ id: BrowserCommandID, in menu: NSMenu?) -> NSMenuItem? {
+                    for item in menu?.items ?? [] {
+                        if item.identifier?.rawValue == id.rawValue { return item }
+                        if let found = menuItem(id, in: item.submenu) { return found }
+                    }
+                    return nil
+                }
+                for (id, expected): (BrowserCommandID, String) in [(.makeUpperCase, "HELLO WORLD"), (.makeLowerCase, "hello world"), (.capitalize, "Hello World")] {
+                    guard owns(owner) else { return ["ownershipLost": true] }
+                    _ = surface.focusDocument()
+                    _ = await OrbitPerformanceProbe.evaluate(surface, "document.querySelector('textarea').value='hello WORLD';document.querySelector('textarea').focus();({ready:true})")
+                    guard owns(owner) else { return ["ownershipLost": true] }
+                    checks[id.rawValue + "SelectAll"] = NSApp.sendAction(#selector(NSText.selectAll(_:)), to: nil, from: nil)
+                    let deadline = ContinuousClock.now + .seconds(2)
+                    func selectionReady() -> Bool {
+                        guard let client = window.firstResponder as? NSTextInputClient else { return false }
+                        let range = client.selectedRange()
+                        return range == NSRange(location: 0, length: 11)
+                            && client.attributedSubstring(forProposedRange: range, actualRange: nil)?.string == "hello WORLD"
+                    }
+                    while !selectionReady(), ContinuousClock.now < deadline {
+                        try? await Task.sleep(for: .milliseconds(20))
+                    }
+                    checks[id.rawValue + "SelectionReady"] = selectionReady()
+                    if let client = window.firstResponder as? NSTextInputClient {
+                        let range = client.selectedRange()
+                        checks[id.rawValue + "NativeRange"] = [range.location, range.length]
+                        checks[id.rawValue + "NativeText"] = client.attributedSubstring(forProposedRange: range, actualRange: nil)?.string ?? ""
+                    }
+                    var delivered = false
+                    guard owns(owner) else { return ["ownershipLost": true] }
+                    checks[id.rawValue + "RegistryAccepted"] = registry.dispatch(id, origin: .menu, onDelivered: { delivered = true })
+                    await drain(owner)
+                    try? await Task.sleep(for: .milliseconds(150))
+                    checks[id.rawValue + "RegistryDelivered"] = delivered
+                    checks[id.rawValue + "RegistryEffect"] = await OrbitPerformanceProbe.evaluate(surface, "({value:document.querySelector('textarea').value})")?["value"] as? String == expected
+                    // Reselect the fixture, then exercise the actual nil-target Edit menu too.
+                    _ = await OrbitPerformanceProbe.evaluate(surface, "document.querySelector('textarea').value='hello WORLD';document.querySelector('textarea').focus();({ready:true})")
+                    guard owns(owner) else { return ["ownershipLost": true] }
+                    checks[id.rawValue + "MenuSelectAll"] = NSApp.sendAction(#selector(NSText.selectAll(_:)), to: nil, from: nil)
+                    let menuDeadline = ContinuousClock.now + .seconds(2)
+                    while !selectionReady(), ContinuousClock.now < menuDeadline {
+                        try? await Task.sleep(for: .milliseconds(20))
+                    }
+                    guard owns(owner), let item = menuItem(id, in: NSApp.mainMenu), let action = item.action else { return ["missingMenuItem": true] }
+                    checks[id.rawValue + "MenuAccepted"] = NSApp.sendAction(action, to: item.target, from: item)
+                    try? await Task.sleep(for: .milliseconds(150))
+                    checks[id.rawValue + "MenuEffect"] = await OrbitPerformanceProbe.evaluate(surface, "({value:document.querySelector('textarea').value})")?["value"] as? String == expected
+                }
                 guard owns(owner) else { return ["ownershipLost": true] }
                 checks["webSmartQuotesAccepted"] = registry.dispatch(.smartQuotes, origin: .menu)
                 checks["networkInspectorAccepted"] = registry.dispatch(.networkInspector, origin: .menu)

@@ -48,6 +48,25 @@ struct EngineTabAdoptionTests {
         #expect(controller.session.selectedSurface === foreground, "a background engine tab never takes the selection")
     }
 
+    @Test("An engine tab offered without an address adopts its later committed URL")
+    func adoptsLateAddress() async throws {
+        NSApplication.shared.setActivationPolicy(.prohibited)
+        let (_, controller, engine, source) = try await window()
+        defer { controller.session.close(); controller.window?.close() }
+        let id = try #require(controller.session.snapshot?.id)
+        let clone = try #require(engine.createEngineTab(in: id, url: nil, profileID: source.profileID, foreground: true))
+        await controller.session.waitForPendingCommands()
+        #expect(controller.session.occurrenceID(for: clone) != nil)
+        #expect(clone.currentURL == nil)
+        let restored = URL(string: "https://example.test/second")!
+        clone.navigate(to: restored)
+        for _ in 0..<20 { await controller.session.waitForPendingCommands(); await Task.yield() }
+        #expect(controller.session.selectedSurface === clone)
+        #expect(controller.session.organization?.selectedTab?.url == restored)
+        #expect(controller.session.snapshot?.tabs.first { $0.occurrenceID == controller.session.snapshot?.selectedOccurrenceID }?.url == restored)
+        #expect(controller.addressField.stringValue.contains("example.test"))
+    }
+
     @Test("A native close removes Today tabs and unloads pinned and favorite entries")
     func nativeClosePreservesSavedEntries() async throws {
         NSApplication.shared.setActivationPolicy(.prohibited)

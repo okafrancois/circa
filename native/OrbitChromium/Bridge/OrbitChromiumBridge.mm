@@ -1223,6 +1223,19 @@ class Client final : public CefClient, public CefLifeSpanHandler, public CefDisp
       g_state->orbit->page_lifecycle(browser->GetIdentifier(), &state);
     }
     g_state->Send(created);
+    if (adopted_lifetime_) {
+      // A cloned WebContents already owns its restored navigation entries, but has not
+      // loaded the current entry. Our child view has no BrowserView to start that load.
+      // Wait until insertion/creation unwinds, then load the restored entry in place:
+      // LoadURL/Reload would lose history or bypass Chromium's POST recovery policy.
+      PostUI([token = token_, lifetime = adopted_lifetime_] {
+        if (!g_state || g_state->quitting || g_state->extension_lifetime != lifetime) return;
+        auto* host = g_state->Find(token);
+        if (!host || host->closing_by_shell || !g_state->orbit || g_state->orbit->version < 6 ||
+            !g_state->orbit->restore_discarded_tab) return;
+        g_state->orbit->restore_discarded_tab(host->browser->GetIdentifier());
+      });
+    }
     if (g_state->orbit && g_state->orbit->version >= 5) {
       g_state->orbit->browser_state_observe(browser->GetIdentifier(), &RuntimeChanged, reinterpret_cast<void*>(static_cast<uintptr_t>(token_)));
       orbit_browser_state_t state{};
