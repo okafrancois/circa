@@ -1,4 +1,5 @@
 import AppKit
+import BrowserShell
 import BrowserCore
 
 private typealias Metrics = OrbitTokens.Metrics.Sidebar
@@ -177,8 +178,9 @@ class SidebarListRow: NSView, NSTextFieldDelegate {
             OrbitThemeForeground.rowOverlay(stateFill, theme: $0, foreground: accent.foreground)
         } ?? stateFill
         if background.fillColor != fill { background.fillColor = fill }
-        effectiveAccent = OrbitSpaceThemes.accent(accent, over: background.fillColor.map { [$0] } ?? [],
-                                                iconHover: OrbitTokens.Color.State.rowCloseButtonHover)
+        let frosted = isSelected && self is SidebarTabRow
+        background.applyFrost(frosted ? accent : .defaultSpace, selected: true)
+        effectiveAccent = frosted ? OrbitFloatingMaterial.sidebarInk(accent) : accent
         accentDidChange()
     }
 
@@ -191,7 +193,7 @@ class SidebarListRow: NSView, NSTextFieldDelegate {
     private func refreshFieldEditor() {
         guard let editor = renameField?.currentEditor() as? NSTextView else { return }
         editor.textColor = effectiveAccent.sidebarText
-        editor.insertionPointColor = effectiveAccent.sidebarText
+        editor.insertionPointColor = .controlAccentColor
     }
 
     func controlTextDidBeginEditing(_ notification: Notification) { refreshFieldEditor() }
@@ -370,10 +372,10 @@ class SidebarTabRow: SidebarListRow {
         slash.tint = effectiveAccent.icon
         audioButton.tint = effectiveAccent.icon
         loadingIndicator.tint = effectiveAccent.icon
-        favicon.contentTintColor = displayedFavicon == nil ? effectiveAccent.icon : nil
+        favicon.contentTintColor = displayedFavicon == nil || displayedFavicon?.isTemplate == true ? effectiveAccent.icon : nil
     }
     var isResetButtonVisible: Bool { !resetButton.isHidden }
-    private var displayedFavicon: NSImage? { item.favicon ?? item.activity.favicon }
+    private var displayedFavicon: NSImage? { SpaceIconImages.tabImage(item.customIcon) ?? item.favicon ?? item.activity.favicon }
     var showsAudio: Bool { item.activity.isAudible == true || item.activity.isAudioMuted == true }
 
     func update(_ item: SidebarTabItem, depth: Int, node: BrowserOrganizationNode? = nil) {
@@ -384,7 +386,7 @@ class SidebarTabRow: SidebarListRow {
         if titleLabel.textColor != titleColor { titleLabel.textColor = titleColor }
         let image = displayedFavicon ?? faviconPlaceholder
         if favicon.image !== image { favicon.image = image }
-        let tint = displayedFavicon == nil ? effectiveAccent.icon : nil
+        let tint = displayedFavicon == nil || displayedFavicon?.isTemplate == true ? effectiveAccent.icon : nil
         if favicon.contentTintColor != tint { favicon.contentTintColor = tint }
         loadingIndicator.isLoading = item.activity.isLoading
         let muted = item.activity.isAudioMuted == true
@@ -771,6 +773,7 @@ final class SidebarNewTabRow: NSButton {
         label.font = OrbitTokens.Typography.sidebarNewTab
         // : hint typography (13 regular, label colour).
         shortcut.font = OrbitTokens.Typography.menuShortcut
+        shortcut.attributedStringValue = BrandTextStyle.mono.attributedString(shortcut.stringValue, size: 13)
         refreshAccent()
         shortcut.alignment = .right
         shortcut.isHidden = true

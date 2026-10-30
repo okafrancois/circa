@@ -1,4 +1,5 @@
 import AppKit
+import BrowserShell
 import QuartzCore
 
 /// Compact input geometry and 0.083 s linear entry samples.
@@ -75,7 +76,7 @@ final class BrowserQuickWindowSearchPanel: NSObject, NSWindowDelegate, NSTextFie
         input.isBordered = false; input.isBezeled = false; input.drawsBackground = false
         input.focusRingType = .none
         input.cell?.usesSingleLineMode = true; input.cell?.isScrollable = true
-        input.font = kind == .address ? OrbitTokens.Typography.commandBarInput : .systemFont(ofSize: 14, weight: .medium)
+        input.font = kind == .address ? OrbitTokens.Typography.commandBarInput : BrandTextStyle.ui.font(size: 14, weight: .medium)
         input.placeholderString = kind == .address ? uiText("Search or Enter URL…") : uiText("Search Spaces…")
         input.setAccessibilityLabel(kind == .address ? uiText("Search or Enter URL") : uiText("Search Spaces"))
         input.setAccessibilityIdentifier(kind == .address ? "little-orbit-search" : "little-orbit-space-search")
@@ -87,13 +88,13 @@ final class BrowserQuickWindowSearchPanel: NSObject, NSWindowDelegate, NSTextFie
         placeholder.font = input.font
         placeholder.setAccessibilityElement(false)
         root.addSubview(placeholder)
-        searchIcon.image = NSImage(systemSymbolName: "magnifyingglass", accessibilityDescription: nil)
+        searchIcon.image = OrbitIcon.image(sfName: "magnifyingglass", pointSize: 16, accessibilityDescription: nil)
         searchIcon.setAccessibilityElement(false)
         closeButton.isBordered = false
         closeButton.alwaysHighlighted = kind == .address
         closeButton.wantsLayer = true
         closeButton.layer?.cornerRadius = 8
-        closeButton.image = NSImage(systemSymbolName: kind == .address ? "xmark" : "chevron.up", accessibilityDescription: nil)
+        closeButton.image = OrbitIcon.image(sfName: kind == .address ? "xmark" : "chevron.up", pointSize: 16, accessibilityDescription: nil)
         closeButton.setAccessibilityLabel(kind == .address ? uiText("Close Little Orbit") : uiText("Close"))
         closeButton.target = self; closeButton.action = #selector(cancel)
         divider.wantsLayer = true
@@ -114,25 +115,24 @@ final class BrowserQuickWindowSearchPanel: NSObject, NSWindowDelegate, NSTextFie
     private func applyAppearance() {
         root.effectiveAppearance.performAsCurrentDrawingAppearance {
             let dark = root.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-            root.layer?.backgroundColor = (dark ? (kind == .address ? (editingDocument ? NSColor(white: 23/255, alpha: 1) : NSColor(srgbRed: 20/255, green: 18/255, blue: 22/255, alpha: 1))
-                : NSColor(srgbRed: 4/255, green: 3/255, blue: 29/255, alpha: 1)) : OrbitTokens.Color.Surface.commandBar).cgColor
-            root.layer?.borderColor = (dark ? NSColor.white.withAlphaComponent(0.22) : OrbitTokens.Color.Line.commandBarHairline).cgColor
+            root.layer?.backgroundColor = NSColor.clear.cgColor
+            OrbitFloatingMaterial.install(in: root, blending: .behindWindow, radius: BrowserQuickWindowMetrics.inputRadius)
             divider.layer?.backgroundColor = NSColor.labelColor.withAlphaComponent(0.12).cgColor
             closeButton.layer?.backgroundColor = (kind == .address ? (dark ? NSColor.labelColor.withAlphaComponent(0.07) : OrbitTokens.Color.State.commandBarAccessory) : NSColor.clear).cgColor
         }
-        input.textColor = .labelColor
+        input.textColor = OrbitFloatingMaterial.body
         searchIcon.contentTintColor = kind == .address ? .labelColor : .secondaryLabelColor
         closeButton.contentTintColor = .secondaryLabelColor
         input.placeholderAttributedString = NSAttributedString(string: input.placeholderString ?? "", attributes: [
             .font: input.font!, .foregroundColor: placeholder.textColor ?? NSColor.secondaryLabelColor])
         let dark = root.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-        placeholder.textColor = dark ? NSColor.white.withAlphaComponent(0.5) : .secondaryLabelColor
+        placeholder.textColor = OrbitFloatingMaterial.secondary
         for view in rowViews.values { view.needsDisplay = true }
     }
 
     func setEditingDocument(_ editing: Bool) {
         editingDocument = editing
-        searchIcon.image = NSImage(systemSymbolName: editing ? "globe" : "magnifyingglass", accessibilityDescription: nil)
+        searchIcon.image = OrbitIcon.image(sfName: editing ? "globe" : "magnifyingglass", pointSize: 16, accessibilityDescription: nil)
         closeButton.setAccessibilityLabel(editing ? uiText("Close") : uiText("Close Little Orbit"))
     }
 
@@ -281,11 +281,7 @@ private final class QuickWindowSearchRowButton: NSButton {
         guard let row else { return }
         let isAddress = kind == .address
         if selected {
-            let dark = effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
-            let selection = isAddress
-                ? (dark ? (editingDocument ? NSColor(srgbRed: 56/255, green: 61/255, blue: 212/255, alpha: 1)
-                    : NSColor(srgbRed: 58/255, green: 53/255, blue: 202/255, alpha: 1)) : OrbitTokens.ThemeAccent.defaultPurple.selection)
-                : OrbitTokens.Color.State.commandBarRowHover
+            let selection = NSColor.controlAccentColor.withAlphaComponent(0.12)
             selection.setFill()
             NSBezierPath(roundedRect: bounds, xRadius: isAddress ? 8 : 0, yRadius: isAddress ? 8 : 0).fill()
         }
@@ -295,11 +291,10 @@ private final class QuickWindowSearchRowButton: NSButton {
         }
         let iconSize: CGFloat = isAddress ? 20 : 16
         let textX: CGFloat = isAddress ? 42 : 46
-        let color: NSColor = selected && isAddress ? .white : .labelColor
-        let image = row.image.flatMap { image in image.isTemplate ? image.withSymbolConfiguration(.init(paletteColors: [color])) : image }
-        image?.draw(in: NSRect(x: isAddress ? 12 : 15, y: (bounds.height - iconSize) / 2, width: iconSize, height: iconSize), from: .zero,
-                        operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
-        let font = NSFont.systemFont(ofSize: 13, weight: .medium)
+        let color = OrbitFloatingMaterial.body
+        OrbitIcon.draw(row.image, in: NSRect(x: isAddress ? 12 : 15, y: (bounds.height - iconSize) / 2,
+                                             width: iconSize, height: iconSize), tint: color)
+        let font = BrandTextStyle.ui.font(size: 13, weight: .medium)
         let title = NSAttributedString(string: row.title, attributes: [.font: font, .foregroundColor: color])
         let titleWidth = min(title.size().width, max(0, bounds.width - 66))
         let paragraph = NSMutableParagraphStyle(); paragraph.lineBreakMode = .byTruncatingTail
@@ -307,7 +302,7 @@ private final class QuickWindowSearchRowButton: NSButton {
                                     withAttributes: [.font: font, .foregroundColor: color, .paragraphStyle: paragraph])
         (row.detail as NSString).draw(in: NSRect(x: 50 + titleWidth, y: (bounds.height - 16) / 2,
                                                width: max(0, bounds.width - titleWidth - 60), height: 16),
-                                     withAttributes: [.font: NSFont.systemFont(ofSize: 12), .foregroundColor: color.withAlphaComponent(0.42), .paragraphStyle: paragraph])
+                                     withAttributes: [.font: BrandTextStyle.ui.font(size: 12), .foregroundColor: OrbitFloatingMaterial.secondary, .paragraphStyle: paragraph])
     }
 }
 

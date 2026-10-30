@@ -119,7 +119,7 @@ struct ThemeR2TokenTests {
         #expect(OrbitTokens.Shadow.floatingSidebar.blur == 8 && OrbitTokens.Shadow.floatingSidebar.offsetY == 0)
         #expect(M.Sidebar.widthMin == 164 && M.Sidebar.widthMax == 500 && M.Sidebar.collapsePointerX == 82)
         #expect(M.Sidebar.closeCenterFromRowRight == 18 && M.Sidebar.floatingInset == 5)
-        #expect(OrbitTokens.Typography.sidebarClear == NSFont.systemFont(ofSize: 11, weight: .semibold))
+        #expect(OrbitTokens.Typography.sidebarClear == BrandTextStyle.ui.font(size: 11, weight: .semibold))
     }
 
     @Test("A row's × hovers with a 24 × 24 square of the measured 7 % fill")

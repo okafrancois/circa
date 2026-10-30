@@ -1167,7 +1167,7 @@ enum SidebarDragImage {
             font = OrbitTokens.Typography.sidebarTabTitle
             let iconSize = Metrics.faviconSize
             let iconRect = NSRect(x: iconX, y: (rect.height - iconSize) / 2, width: iconSize, height: iconSize)
-            if let favicon = item.favicon ?? item.activity.favicon {
+            if let favicon = SpaceIconImages.tabImage(item.customIcon) ?? item.favicon ?? item.activity.favicon {
                 favicon.draw(in: iconRect, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
             } else if let placeholder = OrbitGlyph.faviconPlaceholder {
                 OrbitGlyph.drawTemplate(placeholder, centeredIn: iconRect, tint: accent.icon)

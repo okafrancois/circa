@@ -32,6 +32,7 @@ struct SidebarTabItem: Equatable {
     var isLoadedInThisWindow = false
     var activity = SidebarTabActivity()
     var splitPanes: [SidebarSplitPaneItem] = []
+    var customIcon: BrowserSpaceIcon? = nil
 }
 
 struct SidebarSplitPaneItem: Equatable {
@@ -118,10 +119,10 @@ struct SidebarListContent: Equatable {
             selected: tab.isSelected, isMultiSelected: multi.contains(.tab(tab.id)), isPinned: section == .pinned,
             isAwayFromPinnedURL: section == .pinned && tab.isAwayFromPinnedURL,
             isOpenInAnotherWindow: tab.isOpenInAnotherWindow && !tab.isLoadedInThisWindow,
-            isLoadedInThisWindow: tab.isLoadedInThisWindow, activity: activity)
+            isLoadedInThisWindow: tab.isLoadedInThisWindow, activity: activity, customIcon: tab.customIcon)
     }
 
-    private static let splitIcon = NSImage(systemSymbolName: "rectangle.split.2x1", accessibilityDescription: uiText("Split View"))
+    private static let splitIcon = OrbitIcon.image(sfName: "rectangle.split.2x1", pointSize: 16, accessibilityDescription: uiText("Split View"))
 
     static func splitItem(_ split: BrowserOrganizationSplitItem, multi: Set<BrowserOrganizationNode>,
                           section: SidebarListSection,

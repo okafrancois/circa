@@ -1,2 +1,3 @@
 # Preserve generated vector PDF resources as binary artifacts.
 Sources/BrowserShell/Resources/Orbit/*.pdf binary
+Sources/BrowserShell/Icons/**/*.pdf binary

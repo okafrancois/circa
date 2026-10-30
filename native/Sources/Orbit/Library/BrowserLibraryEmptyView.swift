@@ -1,4 +1,5 @@
 import AppKit
+import BrowserShell
 
 /// Home's empty result: a low-contrast 48-point glyph above a centered message.
 @MainActor
@@ -11,7 +12,7 @@ final class BrowserLibraryEmptyView: NSView {
     override init(frame: NSRect) {
         super.init(frame: frame)
         icon.imageScaling = .scaleProportionallyUpOrDown
-        message.font = .systemFont(ofSize: 14)
+        message.font = BrandTextStyle.title.font(size: 14)
         message.alignment = .center
         for view in [icon, message] { view.translatesAutoresizingMaskIntoConstraints = false; addSubview(view) }
         iconWidth = icon.widthAnchor.constraint(equalToConstant: 48)

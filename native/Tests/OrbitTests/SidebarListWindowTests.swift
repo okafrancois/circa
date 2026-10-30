@@ -483,26 +483,25 @@ struct SidebarListWindowTests {
         #expect(nodes == [.tab(t)] && (c.list.row(for: .tab(t)) as? SidebarTabRow)?.isContextTarget == true)
         let built = try #require(c.makeSidebarContextMenu(for: nodes))
         let titles = built.menu.items.map { $0.isSeparatorItem ? "—" : $0.title }
-        #expect(titles == ["Copy URL", "Copy Link as Markdown", "—", "Move to", "Rename", "Duplicate", "—", "Pin Tab", "New Folder with Selection", "—", "Mute Tab", "—", "Archive Tab", "—", "Archive Other Tabs", "Archive Tabs Below"])
-        #expect(built.menu.items.compactMap(\.identifier?.rawValue).contains(BrowserCommandID.pinUnpinTab.rawValue))
-        let enabled = built.menu.items.filter { !$0.isSeparatorItem }.map(\.isEnabled)
-        #expect(enabled.filter { !$0 }.count <= 1) // No other Today tab may be available.
-        built.menu.performActionForItem(at: built.menu.indexOfItem(withTitle: "Pin Tab"))
-        await harness.settle()
+        #expect(titles == ["Copy Link", "—", "Change Icon…", "Rename…", "Mute", "—", "Open in Split View", "Duplicate", "Move to", "—", "Archive Tab", "Archive Tabs Below"])
+        #expect(!built.menu.items.contains { $0.title == "New Folder with Selection" })
         c.sidebar.endContextMenu()
-        #expect(section(c.organization.tab(t)) == "pinned")
-        #expect((c.list.row(for: .tab(t)) as? SidebarTabRow)?.isContextTarget == false)
-        // "New folder with the selection" from the menu groups the row and starts renaming it.
+        c.session.pinTabs([t])
+        await harness.settle()
         let again = c.sidebar.prepareContextMenu(for: .tab(t))
         let menu = try #require(c.makeSidebarContextMenu(for: again))
-        #expect(menu.menu.items.contains { $0.title == "Unpin Tab" })
-        menu.menu.performActionForItem(at: menu.menu.indexOfItem(withTitle: "New Folder with Selection"))
+        #expect(menu.menu.items.map { $0.isSeparatorItem ? "—" : $0.title } == [
+            "Copy Link", "—", "Change Icon…", "Rename…", "Mute", "Edit Pinned Page", "—",
+            "Add Split View", "Duplicate", "Move to", "—", "Remove Pin"])
+        let submenu = try #require(menu.menu.items.first { $0.title == "Edit Pinned Page" }?.submenu)
+        #expect(submenu.items.map(\.title) == ["Edit…"])
+        menu.menu.performActionForItem(at: menu.menu.indexOfItem(withTitle: "Remove Pin"))
         await harness.settle()
         c.sidebar.endContextMenu()
-        let folder = try #require(c.organization.pinned.compactMap { $0.node.folderID }.first)
-        #expect(c.organization.location(of: .tab(t))?.1 == [folder])
-        #expect(c.list.renamingNode == .folder(folder))
-        c.list.cancelRename()
+        #expect(section(c.organization.tab(t)) == "today")
+        let creation = c.session.createFolder(title: "Group", at: .init(.pinned(harness.spaceID)), containing: [.tab(t)])
+        let folder = try #require(await creation.value)
+        await harness.settle()
         // Folder menu entries.
         let folderMenu = try #require(c.makeSidebarContextMenu(for: c.sidebar.prepareContextMenu(for: .folder(folder))))
         #expect(folderMenu.menu.items.map { $0.isSeparatorItem ? "—" : $0.title } == [
@@ -555,14 +554,14 @@ struct SidebarListWindowTests {
         _ = await harness.openTab("https://menus.test/other", activate: true)
         let selected = try #require(c.session.selectedSurface)
         let menu = try #require(c.makeSidebarContextMenu(for: c.sidebar.prepareContextMenu(for: .tab(first))))
-        #expect(menu.menu.items.contains { $0.title == "Mute Tab" })
-        menu.menu.performActionForItem(at: menu.menu.indexOfItem(withTitle: "Mute Tab"))
+        #expect(menu.menu.items.contains { $0.title == "Mute" })
+        menu.menu.performActionForItem(at: menu.menu.indexOfItem(withTitle: "Mute"))
         await harness.settle()
         for _ in 0..<20 { await Task.yield() }
         #expect(surface.media.isAudioMuted == true && selected.media.isAudioMuted == false)
         c.sidebar.endContextMenu()
         let next = try #require(c.makeSidebarContextMenu(for: c.sidebar.prepareContextMenu(for: .tab(first))))
-        #expect(next.menu.items.contains { $0.title == "Unmute Tab" })
+        #expect(next.menu.items.contains { $0.title == "Unmute" })
         c.sidebar.endContextMenu()
     }
 
@@ -573,7 +572,7 @@ struct SidebarListWindowTests {
         let first = try #require(await harness.openTab("https://copy-menu.test/first"))
         let second = try #require(await harness.openTab("https://copy-menu.test/second", activate: true))
         let built = try #require(c.makeSidebarContextMenu(for: c.sidebar.prepareContextMenu(for: .tab(first))))
-        built.menu.performActionForItem(at: built.menu.indexOfItem(withTitle: "Copy URL"))
+        built.menu.performActionForItem(at: built.menu.indexOfItem(withTitle: "Copy Link"))
         await harness.settle()
         #expect(NSPasteboard.general.string(forType: .string) == "https://copy-menu.test/first")
         #expect(c.organization.selectedTab?.id == second)
