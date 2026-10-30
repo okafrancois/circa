@@ -159,6 +159,11 @@ struct SidebarTearOffLiveTests {
         for _ in 0..<200 where toggles != (fullScreen ? 1 : 0) {
             try await Task.sleep(for: .milliseconds(10))
         }
+        // The source's removal is a queued session command; under load it can still be pending here.
+        await source.session.waitForPendingCommands()
+        for _ in 0..<200 where source.session.organization?.allTabs.isEmpty != true {
+            try await Task.sleep(for: .milliseconds(10))
+        }
         #expect(destination.session.selectedSurface === surface)
         #expect(destination.window?.frame.size == frame.size)
         #expect(toggles == (fullScreen ? 1 : 0))
