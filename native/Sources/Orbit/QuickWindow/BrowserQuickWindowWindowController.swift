@@ -27,8 +27,7 @@ final class BrowserQuickWindowWindowController<Engine: BrowserEngine>: NSWindowC
     let findBar = BrowserFindBarView(frame: .zero)
     let findSession = BrowserFindSession<Surface>()
     var copyURLWriter: (URL) -> Void = { url in
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(url.absoluteString, forType: .string)
+        BrowserLinkPasteboard.write(url)
     }
     let copiedToast = BrowserCopiedToast()
     var sharingPicker: NSSharingServicePicker?
@@ -411,6 +410,8 @@ final class BrowserQuickWindowWindowController<Engine: BrowserEngine>: NSWindowC
         }
         littleWindow.contentView = root
         let bar = toolbar
+        bar.addressField = addressField
+        addressField.cursorControls = [sourceSpaceBadge, extensionsButton, copyAddressButton, openGroup]
         for view in [bar, page] { view.translatesAutoresizingMaskIntoConstraints = false; root.addSubview(view) }
         NSLayoutConstraint.activate([
             bar.leadingAnchor.constraint(equalTo: root.leadingAnchor), bar.trailingAnchor.constraint(equalTo: root.trailingAnchor),
@@ -556,7 +557,7 @@ final class BrowserQuickWindowWindowController<Engine: BrowserEngine>: NSWindowC
         surface.focusDocument()
     }
     @objc private func copyAddress(_ sender: Any?) {
-        if let url = surface?.currentURL { copyURLWriter(url) }
+        copyCurrentURL()
     }
     func showSpaceChooser(_ rows: [BrowserQuickWindowSearchRow]) {
         guard acceptsCommands, let window else { return }
