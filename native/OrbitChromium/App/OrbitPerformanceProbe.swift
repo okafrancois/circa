@@ -86,7 +86,10 @@ enum OrbitPerformanceProbe {
                 try? FileManager.default.removeItem(at: commandFile)
                 let name = command["command"] ?? ""
                 result["commandNonce"] = command["nonce"] ?? ""
-                if name == "theme-fixture", ownsWindow(owner, bundleID: "lab.orbit.orbit.theme-fixture") {
+                if name == "folder-hover", ownsWindow(owner, bundleID: "lab.orbit.orbit.folder-hover") {
+                    result["folderHoverActionUptime"] = ProcessInfo.processInfo.systemUptime
+                    result["folderHover"] = await folderHoverFixture(owner, store: environment.store, command: command)
+                } else if name == "theme-fixture", ownsWindow(owner, bundleID: "lab.orbit.orbit.theme-fixture") {
                     result["themeFixture"] = await themeFixture(owner, store: environment.store, command: command)
                 } else if name == "resource-coordinator", ownsWindow(owner, bundleID: "lab.orbit.orbit.perf-coord-0") {
                     application.confirmQuit = { .quit }
@@ -2101,5 +2104,32 @@ extension OrbitGlyphButton {
                                                       "clips": clipsToBounds, "dirty": [rect.minX, rect.minY, rect.width, rect.height]])
         }
         compositingProbeDraw(rect)
+    }
+}
+
+
+extension OrbitPerformanceProbe {
+    /// Confined fixture for real-engine sidebar interaction and motion checks.
+    private static func folderHoverFixture(_ owner: OrbitWindowController, store: BrowserStore,
+                                           command: [String: String]) async -> Bool {
+        guard ownsWindow(owner, bundleID: "lab.orbit.orbit.folder-hover") else { return false }
+        switch command["action"] {
+        case "seed":
+            guard owner.session.snapshot?.activeSpaceID != nil else { return false }
+            for title in ["Alpha", "Beta", "Gamma"] {
+                guard ownsWindow(owner, bundleID: "lab.orbit.orbit.folder-hover") else { return false }
+                owner.session.openTab(url: URL(string: "http://127.0.0.1:18743/" + title.lowercased())!)
+                await owner.session.waitForPendingCommands()
+                guard let tab = owner.session.organization?.selectedTab?.id else { return false }
+                owner.session.renameTab(tab, to: title)
+                if title == "Alpha" { owner.session.pinTabs([tab]) }
+                await owner.session.waitForPendingCommands()
+            }
+        case "create": owner.createSidebarFolder()
+        case "show": owner.window?.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true)
+        default: return false
+        }
+        await owner.session.waitForPendingCommands()
+        return true
     }
 }

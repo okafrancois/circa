@@ -503,7 +503,7 @@ final class BrowserSidebarView: NSView, SidebarListHost {
     }
 
     /// Starts renaming `node` (deferred until its row exists).
-    func beginRename(_ node: BrowserOrganizationNode) { page.list.beginRename(node) }
+    func beginRename(_ node: BrowserOrganizationNode, after delay: TimeInterval = 0) { page.list.beginRename(node, after: delay) }
 
     func reveal(_ node: BrowserOrganizationNode) { page.list.reveal(node) }
 
