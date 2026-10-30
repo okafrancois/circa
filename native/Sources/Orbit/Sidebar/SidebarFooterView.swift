@@ -11,6 +11,8 @@ final class SidebarFooterView: NSView {
     private(set) var spaceButtons: [SidebarSpaceButton] = []
     private var spaces: [BrowserSpace] = []
     private let creationDot = NSView()
+    let background = OrbitSurfaceBackgroundView(cornerRadius: 10)
+    private let backgroundContainer = SidebarFlippedView()
     var creationProgress: CGFloat = 0 { didSet { needsLayout = true } }
     private var activeSpaceID: SpaceID?
     private var commandsEnabled = true
@@ -34,6 +36,8 @@ final class SidebarFooterView: NSView {
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
+        addSubview(backgroundContainer)
+        backgroundContainer.addSubview(background)
         for button in [libraryButton, plusButton] { addSubview(button) }
         creationDot.wantsLayer = true
         creationDot.layer?.cornerRadius = 4
@@ -87,7 +91,7 @@ final class SidebarFooterView: NSView {
     }
 
     private var foregroundAccent: OrbitTokens.ThemeAccent {
-        OrbitSpaceThemes.accent(accent, over: [], iconHover: OrbitTokens.Color.State.standaloneButton)
+        OrbitFloatingMaterial.sidebarInk(accent)
     }
 
     private func configureContrast(of button: OrbitGlyphButton) {
@@ -97,18 +101,21 @@ final class SidebarFooterView: NSView {
         if let space = button as? SidebarSpaceButton {
             space.inactiveOpacity = { appearance in
                 OrbitSpaceThemes.inactiveSpaceIconOpacity(for: foreground, appearance: appearance,
-                    minimum: Metrics.footerInactiveSpaceOpacity)
+                    minimum: (foreground.contrastTheme?.frostAmount ?? 0) > 0 ? 1 : Metrics.footerInactiveSpaceOpacity)
             }
         }
     }
 
     private func refreshAccent() {
+        background.applyFrost(accent)
         // Disabled controls keep their separate tint; enabled inactive dots dim only while legible.
         for button in [libraryButton, plusButton] + spaceButtons { configureContrast(of: button) }
     }
 
     /// Lays the footer out from the sidebar geometry (centres in footer coordinates).
     func apply(_ geometry: OrbitSidebarGeometry) {
+        backgroundContainer.frame = NSRect(x: 8, y: geometry.footerCenterY - 20, width: max(0, bounds.width - 16), height: 40)
+        background.frame = backgroundContainer.bounds
         let size = Metrics.footerButtonSize
         let y = geometry.footerCenterY - size / 2
         libraryButton.frame = NSRect(x: geometry.libraryCenterX - size / 2, y: y, width: size, height: size)

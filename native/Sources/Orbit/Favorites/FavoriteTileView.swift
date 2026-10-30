@@ -34,6 +34,7 @@ final class FavoriteTileView: NSView {
     private var tracking: NSTrackingArea?
     private var pressPoint: NSPoint?
     private var selectionTint: NSColor?
+    var accent = OrbitTokens.ThemeAccent.defaultSpace { didSet { refreshFill() } }
     private(set) var isHovering = false
     private(set) var isPressed = false
     var commandsEnabled = true { didSet { if !commandsEnabled { cancelPress() } } }
@@ -155,6 +156,17 @@ final class FavoriteTileView: NSView {
     func cancelPress() { pressPoint = nil; isPressed = false; refreshFill() }
 
     private func refreshFill() {
+        background.applyFrost(accent, selected: item.tab.isSelected)
+        let ink = OrbitFloatingMaterial.sidebarInk(accent).foreground
+        if (accent.contrastTheme?.frostAmount ?? 0) > 0 {
+            letter.textColor = ink
+            letter.layer?.backgroundColor = NSColor.clear.cgColor
+            if favicon.image?.isTemplate == true { favicon.contentTintColor = ink }
+        } else {
+            letter.textColor = OrbitTokens.Color.Text.primary
+            letter.layer?.backgroundColor = OrbitTokens.Color.Text.secondary.withAlphaComponent(0.18).resolvedCGColor(for: effectiveAppearance)
+            if favicon.image?.isTemplate == true { favicon.contentTintColor = OrbitTokens.Color.Text.primary }
+        }
         let state = OrbitTokens.Color.State.self
         background.fillColor = isPressed ? state.tabPressed : item.tab.isSelected ? state.tabCurrent
             : isHovering ? state.sidebarItemHovered : state.sidebarItem
