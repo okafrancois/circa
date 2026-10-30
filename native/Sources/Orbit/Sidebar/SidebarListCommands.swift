@@ -54,7 +54,7 @@ enum SidebarListCommands {
         window(.sidebarDuplicate, validate: { $0.sidebarTabTargets.count == 1 }) { controller in
             guard let id = controller.sidebarTabTargets.first, let tab = controller.session.organization?.tab(id) else { return }
             controller.hideLibrary()
-            controller.session.openTab(url: tab.url)
+            controller.duplicateSidebarTab(tab.id)
         }
         window(.sidebarArchiveOtherTabs, validate: { !$0.sidebarOtherTodayTabs.isEmpty }) { controller in
             controller.closeSidebarTabs(controller.sidebarOtherTodayTabs)

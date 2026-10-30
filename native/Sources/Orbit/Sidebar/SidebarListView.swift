@@ -923,7 +923,7 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
     }
 
     func draggingSession(_ session: NSDraggingSession, sourceOperationMaskFor context: NSDraggingContext) -> NSDragOperation {
-        context == .withinApplication ? .move : []
+        context == .withinApplication ? [.move, .copy] : []
     }
 
     func draggingSession(_ session: NSDraggingSession, movedTo screenPoint: NSPoint) {
@@ -982,7 +982,7 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
         if let dragCancelMonitor { NSEvent.removeMonitor(dragCancelMonitor) }
         dragCancelMonitor = nil
         let tornOff: Bool
-        if let payload = localDrag, let window,
+        if !NSEvent.modifierFlags.contains(.option), let payload = localDrag, let window,
            SidebarTearOffRelease.accepts(operation: operation, cancelled: dragCancelled,
                mouseIsDown: NSEvent.pressedMouseButtons & 1 != 0,
                sourceFrame: window.frame,

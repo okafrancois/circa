@@ -210,6 +210,7 @@ enum OrbitMenuTree {
             .item(.init(command: .pinUnpinTab, title: "Pin/Unpin Tab", key: "d", modifierMask: 1048576)),
             .item(.init(command: .openQuickWindowOrPeekIn, title: "Open Little Circa or Peek in…", key: "o", modifierMask: 1048576, allowsKeyEquivalentWhenHidden: true)),
             .item(.init(command: .newFolder, title: "New Folder…", key: "N", modifierMask: 1048576)),
+            .item(.init(command: .pasteAsNewTab, title: "Paste as New Tab", key: "v", modifierMask: 1572864, isHidden: true, allowsKeyEquivalentWhenHidden: true)),
             .item(.init(command: .duplicate, title: "Duplicate", isHidden: true, allowsKeyEquivalentWhenHidden: true)),
             .item(.init(command: .renameCurrentItem, title: "Rename Current Item", isHidden: true, allowsKeyEquivalentWhenHidden: true)),
             .item(.init(command: .collapseAllFolders, title: "Collapse All Folders", isHidden: true, allowsKeyEquivalentWhenHidden: true)),

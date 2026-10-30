@@ -7,6 +7,7 @@
 #include "OrbitCefApi.h"
 #include "OrbitExtensionPolicy.h"
 #include "OrbitUnownedTabsApi.h"
+#include "OrbitNativeCommandScope.h"
 #include "OrbitClientWrap.h"
 #include "OrbitNetworkQoS.h"
 #include "OrbitFaviconPolicy.h"
@@ -503,6 +504,7 @@ struct State {
 };
 
 State* g_state = nullptr;  // Main/UI thread only.
+orbit_bridge::NativeCommandScope g_native_command_scope;
 
 void StopAuthenticationOperations(bool before_shutdown = false, bool after_shutdown = false) {
   if (!g_state) return;
@@ -3049,13 +3051,18 @@ extern "C" int32_t ACRActivateSurface(uint64_t token) {
   if (!host->window || !g_state->orbit) return 0;
   const auto window = host->window;
   auto browser = host->browser;
-  const auto result = g_state->orbit->activate_tab(browser->GetIdentifier());
-  if (result == 1 && g_state) {
-    auto* live = g_state->Find(token);
-    if (live && live->window == window && live->browser == browser && !live->closing_by_shell)
-      g_state->ExtensionSelectionChanged(window, live);
-  }
-  return result;
+  return g_native_command_scope.ActivateOrDefer([token, window, browser] {
+    if (!g_state || !g_state->orbit) return int32_t{0};
+    auto* current = g_state->Find(token);
+    if (!current || current->window != window || current->browser != browser || current->closing_by_shell) return int32_t{0};
+    const auto result = g_state->orbit->activate_tab(browser->GetIdentifier());
+    if (result == 1 && g_state) {
+      auto* live = g_state->Find(token);
+      if (live && live->window == window && live->browser == browser && !live->closing_by_shell)
+        g_state->ExtensionSelectionChanged(window, live);
+    }
+    return result;
+  }, PostUI);
 }
 
 extern "C" int32_t ACRGetTabInfo(uint64_t token, ACRTabInfo* info) {
@@ -3286,6 +3293,14 @@ extern "C" int32_t ACRExecuteChromeCommand(uint64_t token, const char* name) {
   if (!browser_host->CanExecuteChromeCommand(id)) return 0;
   browser_host->ExecuteChromeCommand(id, CEF_WOD_CURRENT_TAB);
   return 1;
+}
+
+extern "C" int32_t ACRDuplicateTab(uint64_t token) {
+  ACR_HOST(token);
+  // A native clone needs the synchronous adoption callback to own its client and view.
+  if (!g_state->set_unowned_tab_handler || !g_state->callbacks.adopt_engine_tab) return 0;
+  orbit_bridge::NativeCommandScope::Command duplicate(g_native_command_scope);
+  return ACRExecuteChromeCommand(token, "IDC_DUPLICATE_TAB");
 }
 
 extern "C" int32_t ACRPrint(uint64_t token) {

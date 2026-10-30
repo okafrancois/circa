@@ -73,6 +73,18 @@ public extension BrowserWindowSession {
         enqueue { session in try await session.refreshOrganizationState() }
     }
 
+    /// Creates and positions a new tab in one session command; existing rows remain untouched.
+    func openTab(url: URL, at destination: BrowserOrganizationDestination) {
+        enqueue { session in
+            guard let initial = try await session.validatedContext() else { return }
+            var created: BrowserTab?
+            try await session.createTab(url: url, activate: true, from: initial, onCreate: { created = $0 })
+            guard let created, let context = try await session.validatedContext() else { return }
+            let state = try await session.store.moveItems([.tab(created.id)], to: destination, from: context)
+            session.install(state)
+        }
+    }
+
     // MARK: Selection
 
     /// Clicking a sidebar tab: selects, moves (a Favorite from another Space) or loads it here.

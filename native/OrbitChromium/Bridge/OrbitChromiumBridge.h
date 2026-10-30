@@ -583,6 +583,7 @@ int32_t ACRCloseDevTools(uint64_t surface_token);
 int32_t ACRHasDevTools(uint64_t surface_token);
 /* Executes a Chrome command by name (cef_command_ids.h) on the surface's tab, made active first,
  * when Chrome reports it enabled (CanExecuteChromeCommand). Hosted tabs only. */
+int32_t ACRDuplicateTab(uint64_t surface_token);
 int32_t ACRExecuteChromeCommand(uint64_t surface_token, const char *name);
 /* Prints the current document: with --disable-print-preview (always set), the system print
  * panel (app-modal NSPrintPanel). */

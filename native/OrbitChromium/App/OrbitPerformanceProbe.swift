@@ -29,7 +29,7 @@ enum OrbitPerformanceProbe {
                 controller.window?.makeKey()
             }
         }
-        if [OrbitNavigationHistoryProbe.bundleID, "lab.orbit.orbit.pinned-tabs", "lab.orbit.orbit.search-suggestions", "lab.orbit.orbit.circa-rename", "lab.orbit.orbit.local-files-pdf"].contains(Bundle.main.bundleIdentifier ?? "") {
+        if [OrbitNavigationHistoryProbe.bundleID, OrbitTabErgonomicsProbe.bundleID, "lab.orbit.orbit.pinned-tabs", "lab.orbit.orbit.search-suggestions", "lab.orbit.orbit.circa-rename", "lab.orbit.orbit.local-files-pdf"].contains(Bundle.main.bundleIdentifier ?? "") {
             application.confirmQuit = { .quit }
             application.windowPresenter = { controller, _ in
                 controller.window?.setFrame(NSRect(x: -2000, y: -1200, width: 1280, height: 900), display: false)
@@ -106,6 +106,8 @@ enum OrbitPerformanceProbe {
                 result["commandNonce"] = command["nonce"] ?? ""
                 if name == "local-files" {
                     result["localFiles"] = await OrbitLocalFilesProbe.run(application, owner: owner, root: root, command: command)
+                } else if name == "tab-ergonomics" {
+                    result["tabErgonomics"] = await OrbitTabErgonomicsProbe.run(owner, root: root, command: command)
                 } else if name == "search-suggestions" {
                     result["searchSuggestions"] = await searchSuggestions(owner, root: root, command: command)
                 } else if name == "branding-capture" {

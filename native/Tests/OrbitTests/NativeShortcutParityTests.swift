@@ -60,11 +60,15 @@ struct NativeShortcutParityTests {
         #expect(controller.session.snapshot?.tabs.count == count + 1)
         #expect(controller.session.selectedSurface !== original)
         #expect(controller.session.selectedSurface?.navigationState.url?.path == "/pasted")
+        clipboard = "synthetic clipboard search"
+        registry.dispatch(.pasteAsNewTab, origin: .keyboard)
+        await controller.session.waitForPendingCommands()
+        #expect(controller.session.selectedSurface?.currentURL == controller.addressResolver.searchEngine.searchURL(for: clipboard!))
         for invalid in [nil, "", "javascript:alert(1)", "https://user:secret@example.invalid/"] {
             clipboard = invalid
             registry.dispatch(.pasteAsNewTab, origin: .keyboard)
             await controller.session.waitForPendingCommands()
-            #expect(controller.session.snapshot?.tabs.count == count + 1)
+            #expect(controller.session.snapshot?.tabs.count == count + 2)
         }
     }
 
