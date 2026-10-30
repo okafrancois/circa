@@ -224,7 +224,7 @@ final class BrowserPageCrashedView: NSView {
         super.init(frame: .zero)
         wantsLayer = true
         layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
-        let icon = NSImageView(image: NSImage(systemSymbolName: "exclamationmark.triangle",
+        let icon = NSImageView(image: OrbitIcon.image(sfName: "exclamationmark.triangle", pointSize: 40,
                                               accessibilityDescription: nil) ?? NSImage())
         icon.symbolConfiguration = .init(pointSize: 40, weight: .regular)
         icon.contentTintColor = .secondaryLabelColor

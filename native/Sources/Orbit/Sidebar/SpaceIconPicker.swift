@@ -78,7 +78,7 @@ final class SpaceIconPicker: NSViewController, NSSearchFieldDelegate {
         for (index, category) in categories.enumerated() {
             let button = NSButton(frame: NSRect(x: inset + CGFloat(index) * pitch, y: 232, width: pitch, height: 26))
             button.isBordered = false
-            button.image = NSImage(systemSymbolName: Self.categorySymbol(category), accessibilityDescription: category.title)
+            button.image = OrbitIcon.image(sfName: Self.categorySymbol(category), pointSize: 16, accessibilityDescription: category.title)
             button.contentTintColor = OrbitTokens.Color.Text.secondary
             button.toolTip = category.title
             button.tag = category.rawValue

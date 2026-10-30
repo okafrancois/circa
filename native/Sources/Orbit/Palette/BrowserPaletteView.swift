@@ -97,10 +97,10 @@ final class BrowserPaletteView: NSView, NSTextFieldDelegate, NSTableViewDataSour
         panel.setAccessibilityRole(.group)
         panel.setAccessibilityLabel(uiText("Command Bar"))
         panel.addSubview(input)
-        searchIcon.image = NSImage(systemSymbolName: "magnifyingglass", accessibilityDescription: nil)
+        searchIcon.image = OrbitIcon.image(sfName: "magnifyingglass", pointSize: 16, accessibilityDescription: nil)
         searchIcon.setAccessibilityElement(false)
         panel.addSubview(searchIcon)
-        infoButton.image = NSImage(systemSymbolName: "info.circle", accessibilityDescription: uiText("About suggestions"))
+        infoButton.image = OrbitIcon.image(sfName: "info.circle", pointSize: 16, accessibilityDescription: uiText("About suggestions"))
         infoButton.isBordered = false
         infoButton.bezelStyle = .circular
         infoButton.target = self
@@ -248,7 +248,7 @@ final class BrowserPaletteView: NSView, NSTextFieldDelegate, NSTableViewDataSour
         announcedResultCount = results.count
         let symbol = selectedResult?.inputSymbol ?? "magnifyingglass"
         inputSymbol = symbol
-        if symbolImages[symbol] == nil { symbolImages[symbol] = NSImage(systemSymbolName: symbol, accessibilityDescription: nil) }
+        if symbolImages[symbol] == nil { symbolImages[symbol] = OrbitIcon.image(sfName: symbol, pointSize: 16, accessibilityDescription: nil) }
         let image = selectedResult.flatMap { result in
             result.section == .tabs || result.section == .pinned ? favicons[result.id] : nil
         }
@@ -379,7 +379,7 @@ final class BrowserPaletteView: NSView, NSTextFieldDelegate, NSTableViewDataSour
         if image == nil {
             image = symbolImages[result.symbol]
             if image == nil {
-                image = NSImage(systemSymbolName: result.symbol, accessibilityDescription: nil)
+                image = OrbitIcon.image(sfName: result.symbol, pointSize: 16, accessibilityDescription: nil)
                 symbolImages[result.symbol] = image
             }
         }
@@ -634,7 +634,7 @@ final class PaletteResultCell: NSTableCellView {
         detailLabel.font = OrbitTokens.Typography.commandBarAccessory
         actionLabel.font = OrbitTokens.Typography.commandBarAccessory
         shortcutLabel.font = OrbitTokens.Typography.commandBarAccessory
-        actionIcon.image = NSImage(systemSymbolName: "arrow.right", accessibilityDescription: nil)
+        actionIcon.image = OrbitIcon.image(sfName: "arrow.right", pointSize: 16, accessibilityDescription: nil)
         titleLabel.lineBreakMode = .byTruncatingTail
         detailLabel.lineBreakMode = .byTruncatingMiddle
         detailLabel.alignment = .left

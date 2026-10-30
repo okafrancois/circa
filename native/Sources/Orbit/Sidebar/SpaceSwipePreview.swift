@@ -32,7 +32,7 @@ enum SpaceSwipePreview {
                                             childCount: folder.children.count))
                 case let .split(id):
                     guard let split = splits[id], var row = split.tabIDs.first.flatMap({ tab($0, pinned: section == .pinned) }) else { continue }
-                    row.favicon = NSImage(systemSymbolName: "rectangle.split.2x1", accessibilityDescription: nil)
+                    row.favicon = OrbitIcon.image(sfName: "rectangle.split.2x1", pointSize: 16, accessibilityDescription: nil)
                     let title = split.tabIDs.compactMap { tab($0, pinned: section == .pinned)?.title }.joined(separator: " | ")
                     row = SidebarTabItem(id: row.id, title: title, selected: false, favicon: row.favicon, isPinned: section == .pinned)
                     row = SidebarTabItem(id: row.id, title: row.title, selected: split.tabIDs.contains { $0 == selectedTab },

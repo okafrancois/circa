@@ -26,9 +26,9 @@ final class BrowserDownloadsPane: NSView, NSSearchFieldDelegate {
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         railWidth = rail.widthAnchor.constraint(equalToConstant: 64)
-        let category = NSImageView(image: NSImage(systemSymbolName: "arrow.down.circle.fill", accessibilityDescription: uiText("Downloads"))!)
+        let category = NSImageView(image: OrbitIcon.image(sfName: "arrow.down.circle.fill", pointSize: 20, accessibilityDescription: uiText("Downloads"))!)
         category.contentTintColor = .labelColor
-        let back = NSButton(image: NSImage(systemSymbolName: "arrow.left", accessibilityDescription: uiText("Back to Tabs"))!, target: self, action: #selector(goBack(_:)))
+        let back = NSButton(image: OrbitIcon.image(sfName: "arrow.left", pointSize: 20, accessibilityDescription: uiText("Back to Tabs"))!, target: self, action: #selector(goBack(_:)))
         back.isBordered = false
         back.toolTip = uiText("Back to Tabs")
         for control in [category, back] { control.translatesAutoresizingMaskIntoConstraints = false; rail.addSubview(control) }

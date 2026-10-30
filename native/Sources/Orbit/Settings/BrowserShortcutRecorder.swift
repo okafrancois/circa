@@ -115,7 +115,7 @@ struct BrowserShortcutSettingsPane: View {
                             Divider()
                             Button(uiText("Remove Shortcut")) { change { try preferences.setShortcut(nil, for: command.id, definitions: conflictDefinitions) } }
                             Button(uiText("Reset to Default")) { change { try preferences.reset(command.id) } }
-                        } label: { Image(systemName: "ellipsis.circle") }
+                        } label: { OrbitIcon.view(sfName: "ellipsis.circle", pointSize: 13) }
                         .menuStyle(.borderlessButton).frame(width: 22)
                         .accessibilityLabel(command.localizedTitle + " " + uiText("Shortcut options"))
                     }.padding(.horizontal, 10).padding(.vertical, 7)

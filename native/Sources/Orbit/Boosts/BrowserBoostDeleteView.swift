@@ -13,7 +13,7 @@ final class BrowserBoostDeleteView: NSView {
         card.wantsLayer = true; card.layer?.cornerRadius = 18
         OrbitFloatingMaterial.install(in: card, radius: 18)
         addSubview(card)
-        let icon = NSImageView(image: NSImage(systemSymbolName: "puzzlepiece.extension", accessibilityDescription: nil)!)
+        let icon = NSImageView(image: OrbitIcon.image(sfName: "puzzlepiece.extension", pointSize: 38, accessibilityDescription: nil)!)
         icon.symbolConfiguration = .init(pointSize: 38, weight: .regular)
         icon.imageScaling = .scaleProportionallyUpOrDown
         icon.contentTintColor = OrbitFloatingMaterial.body

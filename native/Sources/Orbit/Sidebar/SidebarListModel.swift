@@ -121,7 +121,7 @@ struct SidebarListContent: Equatable {
             isLoadedInThisWindow: tab.isLoadedInThisWindow, activity: activity)
     }
 
-    private static let splitIcon = NSImage(systemSymbolName: "rectangle.split.2x1", accessibilityDescription: uiText("Split View"))
+    private static let splitIcon = OrbitIcon.image(sfName: "rectangle.split.2x1", pointSize: 16, accessibilityDescription: uiText("Split View"))
 
     static func splitItem(_ split: BrowserOrganizationSplitItem, multi: Set<BrowserOrganizationNode>,
                           section: SidebarListSection,

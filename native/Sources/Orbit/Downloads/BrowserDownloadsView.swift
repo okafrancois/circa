@@ -461,10 +461,9 @@ final class BrowserDownloadRowView: NSView, NSDraggingSource {
         builtActions = shownActions
         for action in shownActions {
             let pair = Self.symbol(action)
-            let button = NSButton(image: NSImage(systemSymbolName: pair.name, accessibilityDescription: pair.label)!,
+            let button = NSButton(image: OrbitIcon.image(sfName: pair.name, pointSize: 11, accessibilityDescription: pair.label)!,
                                   target: self, action: #selector(performRowAction(_:)))
             button.isBordered = false
-            button.image = button.image?.withSymbolConfiguration(.init(pointSize: 11, weight: .regular))
             button.widthAnchor.constraint(equalToConstant: 16).isActive = true
             button.heightAnchor.constraint(equalToConstant: 24).isActive = true
             button.toolTip = pair.label

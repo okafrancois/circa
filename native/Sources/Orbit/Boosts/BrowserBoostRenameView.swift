@@ -32,7 +32,7 @@ final class BrowserBoostRenameView: NSView, NSTextFieldDelegate {
         tile.wantsLayer = true; tile.layer?.cornerRadius = 13
         tile.layer?.backgroundColor = NSColor(srgbRed: 0.90, green: 0.90, blue: 0.935, alpha: 1).cgColor
         card.addSubview(tile)
-        let icon = NSImageView(image: NSImage(systemSymbolName: "text.bubble.fill", accessibilityDescription: nil)!)
+        let icon = NSImageView(image: OrbitIcon.image(sfName: "text.bubble.fill", pointSize: 30, accessibilityDescription: nil)!)
         icon.symbolConfiguration = .init(pointSize: 30, weight: .medium)
         icon.contentTintColor = NSColor(srgbRed: 0.10, green: 0.11, blue: 0.13, alpha: 1)
         icon.frame = NSRect(x: 13, y: 13, width: 36, height: 36); tile.addSubview(icon)

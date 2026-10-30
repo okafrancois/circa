@@ -45,8 +45,7 @@ final class BrowserPasswordPromptView: NSView {
         icon.layer?.backgroundColor = Self.color(49, 54, 80).cgColor
         icon.layer?.cornerRadius = 13
         let key = NSImageView(frame: NSRect(x: 16, y: 13, width: 30, height: 36))
-        key.image = NSImage(systemSymbolName: "key.fill", accessibilityDescription: nil)?
-            .withSymbolConfiguration(.init(pointSize: 30, weight: .regular))
+        key.image = OrbitIcon.image(sfName: "key.fill", pointSize: 30, accessibilityDescription: nil)
         key.contentTintColor = .white
         key.imageScaling = .scaleProportionallyDown
         // The key is vertical, with its teeth pointing down.

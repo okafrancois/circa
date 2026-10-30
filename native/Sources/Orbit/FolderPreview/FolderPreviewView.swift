@@ -196,7 +196,7 @@ final class FolderPreviewView: NSView, NSSearchFieldDelegate {
         if button.image != nil, button.imageTab == result.tab.id, image === button.imageSource { return }
         button.imageTab = result.tab.id
         button.imageSource = image
-        let icon = image ?? NSImage(systemSymbolName: result.split == nil ? "globe" : "rectangle.split.2x1", accessibilityDescription: nil)
+        let icon = image ?? OrbitIcon.image(sfName: result.split == nil ? "globe" : "rectangle.split.2x1", pointSize: 16, accessibilityDescription: nil)
         button.image = icon?.copy() as? NSImage
         button.image?.size = NSSize(width: FolderPreviewMetrics.faviconSize, height: FolderPreviewMetrics.faviconSize)
         button.needsDisplay = true
