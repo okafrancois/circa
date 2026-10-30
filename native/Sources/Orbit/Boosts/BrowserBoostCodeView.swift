@@ -49,7 +49,7 @@ final class BrowserBoostCodeView: NSView, NSTextViewDelegate {
         textView.isContinuousSpellCheckingEnabled = false
         textView.isGrammarCheckingEnabled = false
         textView.isAutomaticLinkDetectionEnabled = false
-        textView.font = BrandTextStyle.mono.font(size: 14, weight: .regular)
+        textView.font = NSFont.monospacedSystemFont(ofSize: 14, weight: .regular)
         textView.textColor = NSColor(srgbRed: 0.4, green: 0.4, blue: 0.53, alpha: 1)
         textView.backgroundColor = NSColor(calibratedWhite: 0.99, alpha: 1)
         textView.textContainerInset = NSSize(width: 20, height: 12)
@@ -122,11 +122,11 @@ private final class BrowserBoostLineNumbers: NSRulerView {
             let number = source.substring(to: index).filter { $0 == "\n" }.count + 1
             let point = convert(NSPoint(x: 0, y: line.minY + textView.textContainerInset.height), from: textView)
             (String(number) as NSString).draw(at: NSPoint(x: 33 - CGFloat(String(number).count - 1) * 8, y: point.y),
-                withAttributes: [.font: BrandTextStyle.mono.font(size: 14, weight: .regular), .foregroundColor: NSColor.systemIndigo])
+                withAttributes: [.font: NSFont.monospacedSystemFont(ofSize: 14, weight: .regular), .foregroundColor: NSColor.systemIndigo])
         }
         if source.length == 0 {
             let point = convert(NSPoint(x: 0, y: textView.textContainerInset.height), from: textView)
-            ("1" as NSString).draw(at: NSPoint(x: 33, y: point.y), withAttributes: [.font: BrandTextStyle.mono.font(size: 14, weight: .regular), .foregroundColor: NSColor.systemIndigo])
+            ("1" as NSString).draw(at: NSPoint(x: 33, y: point.y), withAttributes: [.font: NSFont.monospacedSystemFont(ofSize: 14, weight: .regular), .foregroundColor: NSColor.systemIndigo])
         }
     }
 }

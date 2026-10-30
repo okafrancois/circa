@@ -2,6 +2,7 @@ import AppKit
 import BrowserCore
 import BrowserShell
 import Testing
+import BrowserEngineConformance
 @testable import Orbit
 
 /// Opt-in, offscreen snapshots of the same native views used by the product.
@@ -44,6 +45,19 @@ struct BrandTypeRenderTests {
             try capture(content, to: directory.appendingPathComponent("frost-dialog-\(name).png"))
             let editor = OrbitThemeEditorView(state: .init(theme: BrandPalette.spaceGradients[0].theme()))
             try capture(editor, to: directory.appendingPathComponent("theme-editor-\(name).png"))
+            let model = BrowserSettingsModel(environment: environment, profileID: nil, shortcuts: [],
+                defaultBrowser: .init(status: { .init(http: "synthetic", https: "synthetic", html: "synthetic") },
+                    canRequest: { false }, request: {}))
+            let settings = BrowserSettingsWindowController(model: model)
+            let settingsRoot = try #require(settings.window?.contentView)
+            settingsRoot.layoutSubtreeIfNeeded()
+            try capture(settingsRoot, to: directory.appendingPathComponent("settings-general-\(name).png"))
+            settings.window?.close()
+            let welcome = OnboardingRenderTests.makeController()
+            let image = try OnboardingRenderTests.image(welcome)
+            try #require(image.representation(using: .png, properties: [:]))
+                .write(to: directory.appendingPathComponent("onboarding-welcome-\(name).png"))
+            welcome.window?.close()
         }
         NSApp.appearance = nil
     }

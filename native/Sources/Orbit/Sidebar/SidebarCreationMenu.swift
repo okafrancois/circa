@@ -165,7 +165,7 @@ final class CreationMenuRow: NSView {
         let m = OrbitTokens.Metrics.Sidebar.self
         icon.frame = NSRect(x: 12, y: 11, width: m.plusMenuIconSize, height: m.plusMenuIconSize)
         let x = m.plusMenuTextOriginX - m.plusMenuHighlightInset
-        let shortcutWidth = ceil(shortcut.attributedStringValue.size().width) + 6
+        let shortcutWidth = shortcut.intrinsicContentSize.width
         shortcut.frame = NSRect(x: bounds.width - shortcutWidth - 10, y: 11, width: shortcutWidth, height: 18)
         title.frame = NSRect(x: x, y: 11, width: max(0, bounds.width - x - shortcutWidth - 16), height: 18)
     }

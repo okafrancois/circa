@@ -121,11 +121,11 @@ final class OrbitThemeEditorView: NSView {
         addSubview(grainDial)
 
         themeName.frame = NSRect(x: 20, y: 490, width: 148, height: 26)
-        themeName.font = BrandTextStyle.title.font(size: 18)
+        themeName.font = BrandTextStyle.ui.font(size: 18, weight: .semibold)
         themeName.lineBreakMode = .byTruncatingTail
         addSubview(themeName)
         surfaceScope.frame = NSRect(x: 178, y: 497, width: 158, height: 18)
-        surfaceScope.font = BrandTextStyle.mono.font(size: 10, weight: .medium)
+        surfaceScope.font = BrandTextStyle.ui.font(size: 11, weight: .semibold)
         surfaceScope.alignment = .right
         surfaceScope.lineBreakMode = .byTruncatingTail
         surfaceScope.toolTip = surfaceScope.stringValue

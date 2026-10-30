@@ -8,10 +8,7 @@ final class BrowserShortcutRecorderView: NSButton {
     var onRecord: ((BrowserShortcut?) -> Void)?
     var shortcutTitle = "—" { didSet { if !isRecording { applyTitle() } } }
     private func applyTitle() {
-        let value = NSMutableAttributedString(string: shortcutTitle, attributes: [.font: BrandFonts.mono(12), .foregroundColor: NSColor.labelColor])
-        for (index, character) in shortcutTitle.enumerated() where "⌘⇧⌥⌃⇥←→↑↓↩⎋⌫".contains(character) {
-            value.addAttribute(.font, value: NSFont.systemFont(ofSize: 12), range: NSRange(location: index, length: 1))
-        }
+        let value = NSAttributedString(string: shortcutTitle, attributes: [.font: NSFont.monospacedSystemFont(ofSize: 12, weight: .medium), .foregroundColor: NSColor.labelColor])
         attributedTitle = value
     }
     private(set) var isRecording = false
@@ -52,7 +49,7 @@ struct BrowserShortcutRecorder: NSViewRepresentable {
     func makeNSView(context: Context) -> BrowserShortcutRecorderView {
         let view = BrowserShortcutRecorderView(title: title, target: nil, action: nil)
         view.bezelStyle = .rounded
-        view.font = BrandFonts.mono(12)
+        view.font = NSFont.monospacedSystemFont(ofSize: 12, weight: .medium)
         return view
     }
     func updateNSView(_ view: BrowserShortcutRecorderView, context: Context) {

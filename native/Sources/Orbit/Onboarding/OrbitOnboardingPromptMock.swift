@@ -35,7 +35,7 @@ final class OrbitOnboardingPromptMock: NSView {
         top.frame = CGRect(x: 12, y: bounds.height - 1.5, width: bounds.width - 24, height: 1.5)
         tintView.layer?.addSublayer(top)
         let title = NSTextField(wrappingLabelWithString: uiText("Make Orbit your default browser?"))
-        title.font = BrandTextStyle.title.font(size: 15); title.alignment = .center
+        title.font = BrandTextStyle.ui.font(size: 15, weight: .semibold); title.alignment = .center
         title.frame = NSRect(x: 20, y: 76, width: 260, height: 42)
         addSubview(title)
         let mark = OrbitOnboardingMarkView(frame: NSRect(x: 124, y: 22, width: 52, height: 39))

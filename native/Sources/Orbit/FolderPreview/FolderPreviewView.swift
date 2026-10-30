@@ -45,7 +45,7 @@ final class FolderPreviewView: NSView, NSSearchFieldDelegate {
         search.delegate = self
         search.sendsSearchStringImmediately = true
         search.sendsWholeSearchString = false
-        empty.font = OrbitTokens.Typography.emptyStateTitle
+        empty.font = BrandTextStyle.ui.font(size: NSFont.systemFontSize)
         search.font = BrandTextStyle.ui.font(size: 13)
         search.controlSize = .small
         search.focusRingType = .none

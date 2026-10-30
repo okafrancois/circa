@@ -635,7 +635,7 @@ final class PaletteResultCell: NSTableCellView {
         titleLabel.font = OrbitTokens.Typography.commandBarRowTitle
         detailLabel.font = OrbitTokens.Typography.commandBarAccessory
         actionLabel.font = OrbitTokens.Typography.commandBarAccessory
-        shortcutLabel.font = BrandTextStyle.mono.font(size: 13)
+        shortcutLabel.font = OrbitTokens.Typography.commandBarAccessory
         actionIcon.image = OrbitIcon.image(sfName: "arrow.right", pointSize: 16, accessibilityDescription: nil)
         titleLabel.lineBreakMode = .byTruncatingTail
         detailLabel.lineBreakMode = .byTruncatingMiddle
@@ -684,7 +684,7 @@ final class PaletteResultCell: NSTableCellView {
             needsLayout = true
         }
         if shortcutLabel.stringValue != result.shortcut {
-            shortcutLabel.attributedStringValue = BrandTextStyle.mono.attributedString(result.shortcut, size: 13)
+            shortcutLabel.attributedStringValue = BrandTextStyle.mono.attributedString(result.shortcut, size: 13, weight: .medium)
             needsLayout = true
         }
         if icon.image !== image { icon.image = image }

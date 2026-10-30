@@ -47,7 +47,7 @@ final class BrowserBoostZapView: NSView {
         let cancel = BoostButton(title: uiText("Cancel")); cancel.fill = .gray; cancel.contentTintColor = .white
         cancel.frame = NSRect(x: 354, y: 42, width: 65, height: 38)
         cancel.actionBlock = { [weak self] in self?.clear() }
-        selectorLabel.font = BrandTextStyle.mono.font(size: 10, weight: .regular); selectorLabel.textColor = .secondaryLabelColor
+        selectorLabel.font = NSFont.monospacedSystemFont(ofSize: 10, weight: .regular); selectorLabel.textColor = .secondaryLabelColor
         selectorLabel.frame = NSRect(x: 15, y: 10, width: 395, height: 18)
         for view in [zap, related, cancel, selectorLabel] { confirmation.addSubview(view) }
         addSubview(confirmation); confirmation.isHidden = true

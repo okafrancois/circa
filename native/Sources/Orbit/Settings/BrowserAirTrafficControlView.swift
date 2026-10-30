@@ -19,7 +19,7 @@ struct BrowserAirTrafficControlView<Engine: BrowserEngine>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             HStack {
-                Text(uiText("Air Traffic Control")).font(Font(BrandTextStyle.title.font(size: 22)))
+                Text(uiText("Air Traffic Control")).font(Font(BrandTextStyle.ui.font(size: 21, weight: .semibold)))
                 Spacer()
 
             }

@@ -24,7 +24,7 @@ struct SidebarBrandFixTests {
         #expect(!card.clipsToBounds)
         #expect(card.sticker.frameRotation == 8)
         #expect(card.subviews.allSatisfy { !($0 is OrbitFrostView) })
-        #expect(card.title.font?.fontName == BrandTextStyle.title.font(size: 17).fontName)
+        #expect(card.title.font?.fontName == NSFont.systemFont(ofSize: 13, weight: .semibold).fontName)
         #expect(card.restart.frame.maxY <= card.bounds.maxY)
     }
 
