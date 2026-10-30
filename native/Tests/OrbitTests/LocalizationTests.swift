@@ -53,6 +53,13 @@ struct LocalizationTests {
             #expect(uiText(key, count: 2) == plural)
         }
         #expect(uiText("%ld passwords", count: 0) == "0 passwords")
+        for count in [1, 2] {
+            let word = count == 1 ? "password" : "passwords"
+            #expect(uiFormat("%d passwords not replaced (%@'s version kept)", count, ProductIdentity.displayName)
+                == "\(count) \(word) not replaced (Circa's version kept)")
+            #expect(uiFormat("%d passwords already in %@", count, ProductIdentity.displayName)
+                == "\(count) \(word) already in Circa")
+        }
     }
 
     @Test("Key UI files do not introduce literal labels, tooltips, alerts or accessibility text")

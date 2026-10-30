@@ -42,6 +42,8 @@ func activeEngineRootHadDataAtLaunch() -> Bool { false }
 enum OrbitLauncher {
     static var siteSessionResult: ArcSiteSessionResult?
     static var siteSessionFailed = false
+    static var passwordImportResult: ArcPasswordImportJournal.Counts?
+    static var passwordImportRestored = false
     static func run() {
         let application = NSApplication.shared
         let delegate = OrbitApplication()
@@ -85,3 +87,5 @@ extension WebKitBrowserEngine: BrowserNavigationMetadataSource {
 }
 
 func activeSiteSessionConfiguration() -> OrbitProductConfiguration? { nil }
+
+func activePasswordImportAvailable() -> Bool { false }

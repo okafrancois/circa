@@ -67,10 +67,11 @@ struct ArcSunsetOnboardingTests {
         #expect(explained)
         #expect(!FileManager.default.fileExists(atPath: root.appendingPathComponent("target/SessionImport/Backups").path))
     }
-    @Test("The timeless import hint describes supported structural data")
+    @Test("The timeless import hint describes structural data and passwords")
     func hint() {
-        #expect(ArcImportText.localFilesHint == "Coming from Arc? Your Spaces and tabs come with you, even after Arc stops working.")
-        #expect(!ArcImportText.localFilesHint.contains("passwords"))
+        #expect(ArcImportText.localFilesHint.contains("even after Arc stops working"))
+        #expect(!ArcImportText.localFilesHint(passwordsAvailable: false).contains("passwords"))
+        #expect(ArcImportText.localFilesHint(passwordsAvailable: true) == "Coming from Arc? Your Spaces, tabs and passwords come with you, even after Arc stops working.")
         #expect(ArcImportText.confirmation(.init()).contains(ArcImportText.localFilesHint))
     }
 }

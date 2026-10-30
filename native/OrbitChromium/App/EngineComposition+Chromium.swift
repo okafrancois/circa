@@ -187,6 +187,15 @@ enum OrbitLauncher {
         let importer = ArcSiteSessionImport(dataRoot: configuration.dataRoot)
         do {
             if let data = try? Data(contentsOf: importer.pendingFile),
+               let request = try? JSONDecoder().decode(ArcSiteSessionRequest.self, from: data), let id = request.passwordJobID {
+                // Recover a crash between scheduling the connection request and activating its
+                // password job. Unreadable jobs still reach the in-app recovery decision.
+                try ArcPasswordImportJournal.requestStartup(root: configuration.dataRoot, id: id)
+                if request.action == .restore {
+                    try ArcPasswordImportPreparation.open(id, configuration: configuration).prepareUndo()
+                }
+            }
+            if let data = try? Data(contentsOf: importer.pendingFile),
                let request = try? JSONDecoder().decode(ArcSiteSessionRequest.self, from: data),
                request.action == .importSessions,
                request.sourceRoot.standardizedFileURL == ArcSourceSnapshot.defaultSourceRoot.appendingPathComponent("User Data").standardizedFileURL,
@@ -206,7 +215,14 @@ enum OrbitLauncher {
             case .keychain(let service, let account):
                 keys = ArcSiteSessionKeychain(targetService: service, targetAccount: account)
             }
-            siteSessionResult = try importer.consumePending(keys: keys)
+            if let data = try? Data(contentsOf: importer.pendingFile),
+               let request = try? JSONDecoder().decode(ArcSiteSessionRequest.self, from: data), request.action == .importSessions {
+                guard let id = request.passwordJobID else { throw BrowserAuthenticationImportError.invalidState }
+                let journal = try ArcPasswordImportPreparation.open(id, configuration: configuration)
+                if [.staged, .pending].contains(journal.phase) { try journal.activate() }
+                siteSessionResult = try importer.consumePending(keys: journal.connectionKeys())
+                try journal.clearConnectionKeys()
+            } else { siteSessionResult = try importer.consumePending(keys: keys) }
         } catch {
             // Recovery must succeed before CEF opens the profile, even after an import error.
             do { try importer.recoverInterruptedImport(); try importer.cancelPending() }
@@ -236,6 +252,34 @@ enum OrbitLauncher {
                 hooks.runtimeDidBecomeReady(configuration)
                 return
             }
+            Task { @MainActor in
+                await BrowserPasswordStartupGate.run(root: configuration.dataRoot,
+                    open: { try ArcPasswordImportPreparation.open($0, configuration: configuration) },
+                    apply: { journal in
+                        let engine = makeActiveEngine()
+                        do {
+                            guard let store = engine.passwordStore else { throw BrowserPasswordStoreError.unavailable }
+                            try await ArcPasswordImportRunner.run(journal, store: store)
+                            await engine.shutdown()
+                        } catch { await engine.shutdown(); throw error }
+                    }, completed: { journal in
+                        if journal.phase == .restored {
+                            try ArcSiteSessionImport(dataRoot: configuration.dataRoot).markPasswordsRestored(jobID: journal.id)
+                        }
+                        passwordImportResult = journal.counts
+                        passwordImportRestored = journal.phase == .restored
+                    }, choose: { ImportRecoveryAlert.choose() },
+                    startApplication: { startAfterPasswordImport(configuration) })
+            }
+        }
+        if let launchObserver { NotificationCenter.default.removeObserver(launchObserver) }
+        return withExtendedLifetime(hooks) { status }
+    }
+
+    static var passwordImportResult: ArcPasswordImportJournal.Counts?
+    static var passwordImportRestored = false
+
+    private static func startAfterPasswordImport(_ configuration: OrbitProductConfiguration) {
             if let run = authenticationRun, run.status.phase == .passwordsApplying {
                 Task { @MainActor in
                     let engine = makeActiveEngine()
@@ -260,9 +304,6 @@ enum OrbitLauncher {
                     startApplication(configuration)
                 }
             } else { startApplication(configuration) }
-        }
-        if let launchObserver { NotificationCenter.default.removeObserver(launchObserver) }
-        return withExtendedLifetime(hooks) { status }
     }
 
     /// The startup gate has returned, releasing its shared directory lock. CEF and the live
@@ -356,3 +397,5 @@ enum OrbitLauncher {
         }
     }
 }
+
+func activePasswordImportAvailable() -> Bool { ACRPasswordStoreAvailable() == 1 }

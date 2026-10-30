@@ -12,10 +12,10 @@ enum ArcImportText {
         NumberFormatter.localizedString(from: NSNumber(value: value), number: .decimal)
     }
 
-    static func confirmation(_ report: ArcImportReport) -> String {
+    static func confirmation(_ report: ArcImportReport, passwordsAvailable: Bool = activePasswordImportAvailable()) -> String {
         let source = report.source, target = report.target
         var lines = [
-            localFilesHint,
+            localFilesHint(passwordsAvailable: passwordsAvailable),
             "",
             uiFormat("Profiles: %@ (%@ new)", number(source.profiles), number(target.profilesAdded)),
             uiFormat("Spaces: %@ (%@ new)", number(source.spaces), number(target.spacesAdded)),
@@ -25,6 +25,9 @@ enum ArcImportText {
             uiFormat("Archived tabs: %@", number(target.archivedTabsAdded)),
             uiFormat("History visits: %@", number(report.history.importable)),
         ]
+        for profile in (passwordsAvailable ? report.passwordProfiles ?? [] : []) where profile.count > 0 {
+            lines.append(uiFormat("%@: %@", profile.name, uiText("%d passwords found", count: profile.count)))
+        }
         if target.itemsPresent > 0 {
             lines.append(uiFormat("Already imported and kept as they are: %@", number(target.itemsPresent)))
         }
@@ -35,7 +38,9 @@ enum ArcImportText {
             lines.append(uiText("A previous import was interrupted; importing again completes it."))
         }
         lines.append("")
-        lines.append(uiText("Not imported: passwords, sign-ins (cookies), extensions, site data and settings."))
+        lines.append(passwordsAvailable
+            ? uiFormat("Passwords and connections are imported in the next step, after restarting %@. Extensions and settings are not imported.", ProductIdentity.displayName)
+            : uiText("Not imported: passwords, sign-ins (cookies), extensions, site data and settings."))
         lines.append(uiText("Circa keeps a backup of its current session and history. Nothing opens automatically."))
         return lines.joined(separator: "\n")
     }
@@ -65,8 +70,11 @@ enum ArcImportText {
                  bytes(Int64(report.sessionBudget.projectedBytes)), bytes(Int64(report.sessionBudget.limitBytes)), Self.parts(parts))
     }
 
-    static var localFilesHint: String {
-        uiText("Coming from Arc? Your Spaces and tabs come with you, even after Arc stops working.")
+    static var localFilesHint: String { localFilesHint(passwordsAvailable: activePasswordImportAvailable()) }
+    static func localFilesHint(passwordsAvailable: Bool) -> String {
+        passwordsAvailable
+            ? uiText("Coming from Arc? Your Spaces, tabs and passwords come with you, even after Arc stops working.")
+            : uiText("Coming from Arc? Your Spaces and tabs come with you, even after Arc stops working.")
     }
 
     static func localFilesHint(source: URL, fileExists: (String) -> Bool = FileManager.default.fileExists(atPath:)) -> String? {

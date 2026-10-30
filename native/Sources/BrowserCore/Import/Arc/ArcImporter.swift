@@ -37,11 +37,28 @@ public struct ArcImportProgress: Sendable, Equatable {
     public var fraction: Double? { total > 0 ? min(1, Double(completed) / Double(total)) : nil }
 }
 
-/// Dry-run report. Counts only: safe to show, log and paste into a report.
+/// Dry-run report. Encoded reports contain counts only; profile labels are presentation-only.
 public struct ArcImportReport: Codable, Equatable, Sendable {
-    /// Categories this importer never reads (decryption of cookies/passwords is out of scope).
-    public static let notImported = ["cookies", "passwords", "extensions", "siteData", "settings", "downloads"]
+    /// Categories outside the structural and subsequent authentication steps.
+    public static let notImported = ["cookies", "extensions", "siteData", "settings", "downloads"]
 
+    public struct PasswordProfile: Codable, Equatable, Sendable {
+        public let name: String
+        public let count: Int
+        public init(name: String, directory: String, count: Int) {
+            self.name = name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? directory : name
+            self.count = count
+        }
+        public init(from decoder: Decoder) throws {
+            name = ""
+            count = try decoder.singleValueContainer().decode(Int.self)
+        }
+        public func encode(to encoder: Encoder) throws {
+            var container = encoder.singleValueContainer()
+            try container.encode(count)
+        }
+    }
+    public var passwordProfiles: [PasswordProfile]?
     public var capabilities: [String: BrowserImportCapability]?
     public var sourceCounts: [String: Int]?
     public var formatVersion: Int?
@@ -288,6 +305,14 @@ public struct BrowserImportOrchestrator: Sendable {
         report.capabilities = prepared.capabilities
         report.sourceCounts = prepared.sourceCounts
         report.notImported = prepared.notImported ?? report.notImported
+        if adapter == nil || adapter is ArcBrowserImportAdapter {
+            report.passwordProfiles = plan.profiles.compactMap { profile in
+                profile.sourceDirectory.map { directory in
+                    ArcImportReport.PasswordProfile(name: profile.name, directory: directory,
+                        count: (snapshot.passwordDatabases[directory] ?? []).reduce(0) { $0 + ((try? ArcPasswordImportSource.count(snapshotFile: $1)) ?? 0) })
+                }
+            }
+        }
         report.source = plan.counts
         report.skipped = plan.skipped
         logger.log(.parsed(spaces: report.source.spaces, favorites: report.source.favorites, pinned: report.source.pinnedTabs,

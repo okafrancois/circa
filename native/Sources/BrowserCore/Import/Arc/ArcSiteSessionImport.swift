@@ -20,10 +20,12 @@ public struct ArcSiteSessionProfile: Codable, Sendable, Equatable {
 
 public struct ArcSiteSessionRequest: Codable, Sendable {
     public enum Action: String, Codable, Sendable { case importSessions, restore }
+    public var passwordJobID: UUID?
     public var action: Action
     public var sourceRoot: URL
     public var profiles: [ArcSiteSessionProfile]
-    public init(action: Action = .importSessions, sourceRoot: URL, profiles: [ArcSiteSessionProfile]) {
+    public init(action: Action = .importSessions, sourceRoot: URL, profiles: [ArcSiteSessionProfile], passwordJobID: UUID? = nil) {
+        self.passwordJobID = passwordJobID
         self.action = action; self.sourceRoot = sourceRoot; self.profiles = profiles
     }
 }
@@ -54,7 +56,9 @@ public struct ArcSiteSessionImport {
         var state: State
         enum State: String, Codable { case prepared, committed, restored }
     }
-    private struct Backup: Codable { var profiles: [SavedProfile] = [] }
+    private struct Backup: Codable { var profiles: [SavedProfile] = []; var passwordJobID: UUID?; var passwordsRestored: Bool? }
+
+    public var latestPasswordJobID: UUID? { get throws { try readBackup(latestBackup()).passwordJobID } }
 
     public func schedule(_ request: ArcSiteSessionRequest) throws {
         try validate(request)
@@ -103,7 +107,8 @@ public struct ArcSiteSessionImport {
         let stamp = String(Int(now.timeIntervalSince1970 * 1000)) + "-" + UUID().uuidString
         let backupURL = backups.appendingPathComponent(stamp, isDirectory: true)
         _ = try ArcImportFiles.ensurePrivateDirectory(backupURL)
-        var backup = Backup()
+        var backup = Backup(passwordJobID: request.passwordJobID)
+        try writeBackup(backup, at: backupURL)
         var result = ArcSiteSessionResult()
         for profile in request.profiles {
             let source = request.sourceRoot.appendingPathComponent(profile.sourceDirectory, isDirectory: true)
@@ -162,7 +167,29 @@ public struct ArcSiteSessionImport {
             try writeBackup(backup, at: url)
             result.profiles += 1
         }
+        try writeBackup(backup, at: url)
         return result
+    }
+
+    /// The live-store undo must finish before this backup ceases to be restorable.
+    public func markPasswordsRestored(jobID: UUID) throws {
+        for url in try backupDirectories() {
+            var backup = try readBackup(url)
+            if backup.passwordJobID == jobID {
+                backup.passwordsRestored = true
+                try writeBackup(backup, at: url)
+            }
+        }
+    }
+
+    /// Discarding the undo point also erases its encrypted password ownership record.
+    /// The caller must not discard a backup while its startup job is pending.
+    public func discardLatestBackup() throws {
+        let url = try latestBackup()
+        if let id = try readBackup(url).passwordJobID {
+            try ArcPasswordImportJournal.discard(root: dataRoot, id: id)
+        }
+        try manager.removeItem(at: url)
     }
 
     private func targetURL(_ profile: ArcSiteSessionProfile) -> URL {
@@ -212,7 +239,8 @@ public struct ArcSiteSessionImport {
     }
     private func latestBackup() throws -> URL {
         for url in try backupDirectories().reversed() {
-            if try readBackup(url).profiles.contains(where: { $0.state != .restored }) { return url }
+            let backup = try readBackup(url)
+            if backup.profiles.contains(where: { $0.state != .restored }) || (backup.passwordJobID != nil && backup.passwordsRestored != true) { return url }
         }
         throw Failure.backupUnavailable
     }

@@ -185,6 +185,9 @@ enum OrbitPerformanceProbe {
                     result["importUI"] = check
                 } else if name == "import-recovery-fixture" {
                     result["importRecovery"] = ["started": true, "profiles": await environment.store.catalogSnapshot().profiles.count]
+                } else if name == "password-import", ownsWindow(owner, bundleID: ArcPasswordProductProbe.bundleID) {
+                    application.confirmQuit = { .quit }
+                    result["passwordImport"] = await ArcPasswordProductProbe.run(application: application, action: command["action"] ?? "check", appearance: command["appearance"] ?? "light")
                 } else if name == "sunset-import", ownsWindow(owner, bundleID: SunsetImportProbe.bundleID) {
                     application.confirmQuit = { .quit }
                     result["sunsetImport"] = await SunsetImportProbe.run(environment: environment, root: root, action: command["action"] ?? "import")
