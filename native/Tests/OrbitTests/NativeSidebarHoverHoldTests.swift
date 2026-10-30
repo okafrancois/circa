@@ -15,8 +15,10 @@ struct NativeSidebarHoverHoldTests {
         window.isReleasedWhenClosed = false
         let root = OrbitWindowRootView(frame: CGRect(x: 0, y: 0, width: 800, height: 600))
         window.contentView = root
-        let shell = OrbitWindowShell()
+        // The owner may be using the Mac during the suite: never read the physical mouse.
+        let shell = OrbitWindowShell(isMouseButtonPressed: { false })
         shell.prepare(window: window, root: root)
+        shell.hoverReveal.isPointerInside = { false }
         shell.setDocked(false, animated: false)
         return (window, shell)
     }
