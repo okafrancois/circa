@@ -6,6 +6,7 @@ import Foundation
 public protocol BrowserSurface: AnyObject {
     var currentURL: URL? { get }
     func dispose()
+    func setSidebarInputTabID(_ id: TabID)
     /// Keeps the engine's session controller while releasing its renderer. A refusal must
     /// never fall back to URL replay, which would destroy opaque history and POST state.
     func suspendInPlace() -> BrowserSurfaceSuspensionResult
@@ -14,6 +15,7 @@ public protocol BrowserSurface: AnyObject {
 public enum BrowserSurfaceSuspensionResult { case unsupported, refused, suspended }
 
 public extension BrowserSurface {
+    func setSidebarInputTabID(_ id: TabID) {}
     func suspendInPlace() -> BrowserSurfaceSuspensionResult { .unsupported }
 }
 
@@ -258,6 +260,9 @@ public final class BrowserWindowSession<Surface: BrowserSurface> {
     var modelOccurrenceAuthorities: [TabOccurrenceID: BrowserOccurrenceAuthority] = [:]
     var occurrenceTabIDs: [TabOccurrenceID: TabID] = [:]
     var pending: Task<Void, Never>?
+    var activeCommandDiagnostic: BrowserSessionCommandDiagnostic?
+    var commandWatchdogDelay: Duration = .seconds(10)
+    var onCommandStall: ((BrowserSessionCommandDiagnostic.Report) -> Void)?
     /// Placeholders of live surfaces released through `releaseSurface` and still in flight, or
     /// recorded elsewhere and awaiting release; never recreated by the factory.
     var transits: [TabOccurrenceID: SurfaceTransit<Surface>] = [:]
@@ -410,6 +415,7 @@ public final class BrowserWindowSession<Surface: BrowserSurface> {
                     guard let space = state.catalog.spaces.first(where: { $0.id == id }) else { throw BrowserStoreError.spaceMissing }
                     _ = try await session.store.setSpaceTheme(theme, for: id, profileID: space.profileID)
                     try await settings?.updateSpace(id) { $0.iconSelection = icon }
+                    session.activeCommandDiagnostic?.step = "space-before-publication"
                     await beforePublication()
                     session.install(try await session.store.captureWindowState(in: context.windowID))
                 }
@@ -477,6 +483,35 @@ public final class BrowserWindowSession<Surface: BrowserSurface> {
         }
     }
 
+    /// This entry point is reserved for accepted native file input, never engine/model URLs.
+    public func openLocalDocument(_ url: URL, at destination: BrowserOrganizationDestination? = nil) {
+        enqueue { session in
+            guard let context = try await session.validatedContext(),
+                  let document = BrowserLocalDocument(userOpened: url, profileID: context.profileID) else { return }
+            var tab: BrowserTab?
+            try await session.createTab(url: url, activate: true, from: context, onCreate: { tab = $0 }, localDocument: document)
+            if let destination, let tab, let current = session.activeContext {
+                let state = try await session.store.moveItems([.tab(tab.id)], to: destination, from: current)
+                session.install(state)
+            }
+        }
+    }
+
+    public func localDocument(for surface: Surface) -> BrowserLocalDocument? {
+        guard let occurrence = occurrenceID(for: surface), let id = tabID(for: occurrence) else { return nil }
+        return organization?.tab(id)?.localDocument
+    }
+
+    public func recordUserOpenedLocalDocument(_ url: URL, for surface: Surface) {
+        guard let occurrence = occurrenceID(for: surface), let authority = authorities[occurrence],
+              let document = BrowserLocalDocument(userOpened: url, profileID: authority.profileID) else { return }
+        enqueue { session in
+            guard session.authorities[occurrence] == authority, session.surface(for: occurrence) === surface else { return }
+            try await session.store.recordLocalDocument(document, from: authority)
+            try await session.refreshOrganizationState()
+        }
+    }
+
     /// History gestures retain their source authority and insert a background Today tab beside it.
     public func openNavigationTab(url: URL, nextTo occurrence: TabOccurrenceID) {
         guard let context = activeContext else { return }
@@ -499,10 +534,14 @@ public final class BrowserWindowSession<Surface: BrowserSurface> {
     /// An expected profile is checked before mutation or engine surface creation.
     public func openTabForDelivery(url: URL, expectedProfileID: ProfileID? = nil, expectedSpaceID: SpaceID? = nil) -> Task<BrowserTab?, Never> {
         pendingCommandCount += 1
+        let diagnostic = trackCommand(kind: #function)
         let previous = pending
         let delivery = Task<BrowserTab?, Never> { [self] in
             defer { pendingCommandCount -= 1 }
+            defer { diagnostic.finish() }
             await previous?.value
+            activeCommandDiagnostic = diagnostic
+            diagnostic.step = "model-or-surface-publication"
             guard !isClosed else { return nil }
             var created: BrowserTab?
             do {
@@ -536,13 +575,17 @@ public final class BrowserWindowSession<Surface: BrowserSurface> {
         let sourceID = occurrenceID(for: sourceSurface)
         let sourceAuthority = sourceID.flatMap { authorities[$0] }
         pendingCommandCount += 1
+        let diagnostic = trackCommand(kind: #function)
         let previous = pending
         let adoption = Task<TabOccurrenceID?, Never> { [self] in
             defer {
                 if reservation != nil, occurrencesBySurface[ObjectIdentifier(surface)] == nil { disposeSurface(surface) }
                 pendingCommandCount -= 1
             }
+            defer { diagnostic.finish() }
             await previous?.value
+            activeCommandDiagnostic = diagnostic
+            diagnostic.step = "model-or-surface-publication"
             // Protected offers are still command boundaries. Their nil result must follow earlier
             // work, while disposal remains exclusively the responsibility of the existing owner.
             guard !isClosed, let reservation, let sourceID, let sourceAuthority,
@@ -604,10 +647,14 @@ public final class BrowserWindowSession<Surface: BrowserSurface> {
     ) -> Task<Bool, Never> {
         guard !isClosed else { return Task { false } }
         pendingCommandCount += 1
+        let diagnostic = trackCommand(kind: #function)
         let previous = pending
         let selection = Task<Bool, Never> { [self] in
             defer { pendingCommandCount -= 1 }
+            defer { diagnostic.finish() }
             await previous?.value
+            activeCommandDiagnostic = diagnostic
+            diagnostic.step = "model-or-surface-publication"
             guard !isClosed, !intent.isRevoked, activeContext == expectedContext,
                   let surface = surfaces[occurrenceID], let authority = authorities[occurrenceID],
                   let ownership = BrowserSurfaceProvenance.ownedRecord(for: surface, owner: self),
@@ -651,10 +698,14 @@ public final class BrowserWindowSession<Surface: BrowserSurface> {
         let authority = occurrenceID.flatMap { authorities[$0] }
         let ownership = BrowserSurfaceProvenance.ownedRecord(for: surface, owner: self)
         pendingCommandCount += 1
+        let diagnostic = trackCommand(kind: #function)
         let previous = pending
         let closure = Task<Bool, Never> { [self] in
             defer { pendingCommandCount -= 1 }
+            defer { diagnostic.finish() }
             await previous?.value
+            activeCommandDiagnostic = diagnostic
+            diagnostic.step = "model-or-surface-publication"
             guard !isClosed, let occurrenceID, let authority, let ownership,
                   surfaces[occurrenceID] === surface, authorities[occurrenceID] == authority,
                   BrowserSurfaceProvenance.ownedRecord(for: surface, owner: self) === ownership else { return false }
@@ -679,7 +730,8 @@ public final class BrowserWindowSession<Surface: BrowserSurface> {
                   let occurrenceID = context.selectedOccurrenceID,
                   let url = session.surfaces[occurrenceID]?.currentURL
                     ?? session.snapshot?.tabs.first(where: { $0.occurrenceID == occurrenceID })?.url else { return }
-            try await session.createTab(url: url, activate: true, from: context)
+            let document = session.occurrenceTabIDs[occurrenceID].flatMap { session.organization?.tab($0)?.localDocument }
+            try await session.createTab(url: url, activate: true, from: context, localDocument: document)
         }
     }
 
@@ -774,11 +826,15 @@ public final class BrowserWindowSession<Surface: BrowserSurface> {
         transits.removeAll()
         for surface in retired { BrowserSurfaceProvenance.revoke(surface, ownedBy: self) }
         for surface in retired { disposeSurface(surface) }
+        let diagnostic = trackCommand(kind: #function)
         let previous = pending
         pendingCommandCount += 1
         pending = Task { [self] in
             defer { pendingCommandCount -= 1 }
+            defer { diagnostic.finish() }
             await previous?.value
+            activeCommandDiagnostic = diagnostic
+            diagnostic.step = "model-or-surface-publication"
             if removeModelWindow, let windowID { try? await store.closeWindow(windowID) }
         }
     }
@@ -804,10 +860,14 @@ public final class BrowserWindowSession<Surface: BrowserSurface> {
     public func captureContextInCommandOrder() -> Task<BrowserContext?, Never> {
         guard !isClosed else { return Task { nil } }
         pendingCommandCount += 1
+        let diagnostic = trackCommand(kind: #function)
         let previous = pending
         let boundary = Task<BrowserContext?, Never> { [self] in
             defer { pendingCommandCount -= 1 }
+            defer { diagnostic.finish() }
             await previous?.value
+            activeCommandDiagnostic = diagnostic
+            diagnostic.step = "model-or-surface-publication"
             guard !isClosed else { return nil }
             do { return try await validatedContext() }
             catch {
@@ -909,6 +969,7 @@ public final class BrowserWindowSession<Surface: BrowserSurface> {
             organizationRuntime.metadataIndex = BrowserOrganizationMetadataIndex(state.organization)
             organizationRuntime.occurrenceIndices = Dictionary(uniqueKeysWithValues: state.snapshot.tabs.enumerated().map { ($0.element.occurrenceID, $0.offset) })
         }
+        for tab in state.snapshot.tabs { surfaces[tab.occurrenceID]?.setSidebarInputTabID(tab.id) }
         // Loads start only after ownership, membership and the new state are visible, so events
         // delivered synchronously by the engine see a consistent owner.
         if let startSurface {
@@ -998,7 +1059,7 @@ public final class BrowserWindowSession<Surface: BrowserSurface> {
 
     func createTab(url: URL, activate: Bool, from capturedContext: BrowserContext? = nil,
                    expectedProfileID: ProfileID? = nil, onCreate: ((BrowserTab) -> Void)? = nil,
-                   nextTo: TabID? = nil) async throws {
+                   nextTo: TabID? = nil, localDocument: BrowserLocalDocument? = nil) async throws {
         let context: BrowserContext
         if let capturedContext {
             try validateContext(capturedContext)
@@ -1010,7 +1071,7 @@ public final class BrowserWindowSession<Surface: BrowserSurface> {
             try await withAdoptedContext { current in
                 guard expectedProfileID == nil || current.profileID == expectedProfileID else { return }
                 let perfStart = BrowserPerformance.begin()
-                let tab = try await store.openTabAndCaptureDelivery(url: url, from: current, activate: activate)
+                let tab = try await store.openTabAndCaptureDelivery(url: url, from: current, activate: activate, localDocument: localDocument)
                 BrowserPerformance.end(.storeOpenAwait, since: perfStart)
                 onCreate?(tab)
                 created = (current, tab)
@@ -1023,7 +1084,7 @@ public final class BrowserWindowSession<Surface: BrowserSurface> {
             }
             return
         }
-        let tab = try await store.openTabAndCaptureDelivery(url: url, from: context, activate: activate, nextTo: nextTo)
+        let tab = try await store.openTabAndCaptureDelivery(url: url, from: context, activate: activate, nextTo: nextTo, localDocument: localDocument)
         requestedSurfaceIDs.insert(tab.occurrenceID)
         onCreate?(tab)
         if let state = try await stateAfterMutation(context,
@@ -1085,6 +1146,7 @@ public final class BrowserWindowSession<Surface: BrowserSurface> {
     func validatedContext(adoptingOrganizationChanges: Bool = false) async throws -> BrowserContext? {
         guard !isClosed, let windowID else { return nil }
         let perfStart = BrowserPerformance.begin()
+        activeCommandDiagnostic?.step = "store-context"
         let context = try await store.captureContext(in: windowID)
         BrowserPerformance.end(.storeContextAwait, since: perfStart)
         guard !isClosed else { return nil }
@@ -1104,14 +1166,18 @@ public final class BrowserWindowSession<Surface: BrowserSurface> {
         return context
     }
 
-    func enqueue(_ action: @escaping @MainActor (BrowserWindowSession) async throws -> Void) {
+    func enqueue(kind: String = #function, _ action: @escaping @MainActor (BrowserWindowSession) async throws -> Void) {
         guard !isClosed else { return }
         let queued = BrowserPerformance.begin()
         pendingCommandCount += 1
+        let diagnostic = trackCommand(kind: kind)
         let previous = pending
         pending = Task { [self] in
             defer { pendingCommandCount -= 1 }
+            defer { diagnostic.finish() }
             await previous?.value
+            activeCommandDiagnostic = diagnostic
+            diagnostic.step = "model-or-surface-publication"
             BrowserPerformance.end(.commandQueue, since: queued)
             guard !isClosed else { return }
             do { try await action(self) }

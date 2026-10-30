@@ -133,8 +133,9 @@ final class BrowserSiteControls<Engine: BrowserEngine> {
             lastSelectedSurface = surface
             surface?.updateAutomaticPictureInPicture(isSelected: true, allowed: true)
         }
-        if !owner.allowsAutomaticPictureInPicture {
-            for background in owner.siteControlSurfaces where background !== surface {
+        for background in owner.siteControlSurfaces where background !== surface {
+            let settings = preferences.preferences(url: background.navigationState.committedURL, profileID: background.profileID)
+            if !owner.allowsAutomaticPictureInPicture || !settings.automaticPictureInPicture {
                 background.updateAutomaticPictureInPicture(isSelected: false, allowed: false)
             }
         }

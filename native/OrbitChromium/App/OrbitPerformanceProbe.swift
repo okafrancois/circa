@@ -1,4 +1,5 @@
 import AppKit
+import Carbon
 import BrowserCore
 import BrowserShell
 import BrowserEngine
@@ -19,9 +20,12 @@ enum OrbitPerformanceProbe {
         raise(SIGSTOP)
     }
     static func start(application: OrbitApplication, configuration: OrbitProductConfiguration) {
-        guard configuration.syntheticGuard != nil, CommandLine.arguments.contains("--perf-probe") else { return }
-        if ["lab.orbit.orbit.engine-r11", "lab.orbit.orbit.engine-r12", "lab.orbit.orbit.engine-r13", "lab.orbit.orbit.sec-permissions", "lab.orbit.orbit.sec-pill", "lab.orbit.orbit.sec-safebrowsing"].contains(Bundle.main.bundleIdentifier ?? "") { application.confirmQuit = { .quit } }
-        if ["lab.orbit.orbit.engine-r13", "lab.orbit.orbit.sec-permissions", "lab.orbit.orbit.sec-pill", "lab.orbit.orbit.sec-safebrowsing"].contains(Bundle.main.bundleIdentifier ?? ""),
+        guard configuration.syntheticGuard != nil,
+              CommandLine.arguments.contains("--perf-probe") ||
+                (Bundle.main.bundleIdentifier == "io.github.okatech.orbit.test.update" &&
+                 Bundle.main.object(forInfoDictionaryKey: "OrbitUpdaterLocalTest") as? Bool == true) else { return }
+        if ["lab.orbit.orbit.engine-r11", "lab.orbit.orbit.engine-r12", "lab.orbit.orbit.engine-r13", "lab.orbit.orbit.engine-r14", "lab.orbit.orbit.sec-permissions", "lab.orbit.orbit.sec-pill", "lab.orbit.orbit.sec-safebrowsing"].contains(Bundle.main.bundleIdentifier ?? "") { application.confirmQuit = { .quit } }
+        if ["lab.orbit.orbit.engine-r13", "lab.orbit.orbit.engine-r14", "lab.orbit.orbit.sec-permissions", "lab.orbit.orbit.sec-pill", "lab.orbit.orbit.sec-safebrowsing"].contains(Bundle.main.bundleIdentifier ?? ""),
            CommandLine.arguments.contains("--orbit-security-fixture") || CommandLine.arguments.contains("--orbit-permissions-fixture") || CommandLine.arguments.contains("--orbit-safe-browsing-fixture") {
             application.windowPresenter = { controller, _ in
                 controller.window?.setFrame(NSRect(x: -2000, y: -1200, width: 1280, height: 900), display: false)
@@ -29,14 +33,25 @@ enum OrbitPerformanceProbe {
                 controller.window?.makeKey()
             }
         }
-        if [OrbitNavigationHistoryProbe.bundleID, "lab.orbit.orbit.pinned-tabs", "lab.orbit.orbit.search-suggestions", "lab.orbit.orbit.circa-rename", "lab.orbit.orbit.local-files-pdf"].contains(Bundle.main.bundleIdentifier ?? "") {
+        if [OrbitCommandGapsProbe.bundleID, OrbitNavigationHistoryProbe.bundleID, OrbitTabErgonomicsProbe.bundleID, "lab.orbit.orbit.pinned-tabs", "lab.orbit.orbit.search-suggestions", "lab.orbit.orbit.circa-rename", "lab.orbit.orbit.local-files-pdf", "lab.orbit.orbit.local-files-restore", "lab.orbit.orbit.p2-split", "lab.orbit.orbit.p2-extensions", "lab.orbit.orbit.site-search", "lab.orbit.orbit.updater-input", "io.github.okatech.orbit.test.update"].contains(Bundle.main.bundleIdentifier ?? "") {
             application.confirmQuit = { .quit }
             application.windowPresenter = { controller, _ in
-                controller.window?.setFrame(NSRect(x: -2000, y: -1200, width: 1280, height: 900), display: false)
+                let origin = Bundle.main.bundleIdentifier == OrbitCommandGapsProbe.bundleID
+                    ? NSPoint(x: -4000, y: 100) : NSPoint(x: -2000, y: -1200)
+                controller.window?.setFrame(NSRect(origin: origin, size: NSSize(width: 1280, height: 900)), display: false)
                 controller.window?.orderBack(nil)
                 controller.window?.makeKey()
             }
         }
+        if Bundle.main.bundleIdentifier == "lab.orbit.orbit.window-freeze" {
+            application.confirmQuit = { .quit }
+            application.windowPresenter = { controller, _ in
+                controller.window?.setFrame(NSRect(x: -2200, y: -1200, width: 1100, height: 800), display: false)
+                controller.window?.orderBack(nil)
+                controller.window?.makeKey()
+            }
+        }
+        OrbitDailyQA9Probe.configure(application)
         installDrawCounter()
         let log = configuration.dataRoot.appendingPathComponent("download-events.jsonl")
         ChromiumRuntime.shared.trace = { name, fields in
@@ -74,6 +89,17 @@ enum OrbitPerformanceProbe {
         var firstPaint = false
         while !Task.isCancelled {
             try? await Task.sleep(for: .milliseconds(firstPaint && result["interactiveUptime"] != nil ? 250 : 20))
+            // A synthetic close probe can retire its final window. Quit must remain reachable
+            // without a live session, and must not wait for another page-paint query.
+            let pendingFile = root.appendingPathComponent("perf-command.json")
+            if let data = try? Data(contentsOf: pendingFile),
+               let pending = try? JSONSerialization.jsonObject(with: data) as? [String: String],
+               pending["command"] == "quit" {
+                try? FileManager.default.removeItem(at: pendingFile)
+                write(result, to: output)
+                NSApp.terminate(nil)
+                return
+            }
             guard let environment = application.environment,
                   let owner = environment.liveControllers.first,
                   let snapshot = owner.session.snapshot else { continue }
@@ -87,6 +113,7 @@ enum OrbitPerformanceProbe {
             }
             if !firstPaint, let id = snapshot.selectedOccurrenceID, let surface = owner.session.surface(for: id),
                surface.isReady, !surface.navigationState.isLoading,
+               ["http", "https"].contains(surface.navigationState.committedURL?.scheme ?? ""),
                let paint = await evaluate(surface, "(() => { const p=performance.getEntriesByType('paint').find(p=>p.name==='first-contentful-paint'); return p ? {age:(Date.now()-performance.timeOrigin-p.startTime)/1000} : {}; })()"),
                let age = paint["age"] as? Double {
                 result["firstPaintUptime"] = ProcessInfo.processInfo.systemUptime - age
@@ -98,6 +125,18 @@ enum OrbitPerformanceProbe {
             result["windowNumber"] = owner.window?.windowNumber
             result["syncEnabled"] = environment.sync.enabled
             result["syncTaskScheduled"] = environment.sync.hasScheduledCycle
+            if Bundle.main.bundleIdentifier == "io.github.okatech.orbit.test.update" {
+                result["update"] = [
+                    "ready": application.updater.readyVersion ?? "",
+                    "pending": application.updater.pendingVersion ?? "",
+                    "automatic": application.updater.automaticallyUpdates,
+                    "card": owner.sidebar.updateReady,
+                    "version": Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "",
+                    "tabs": snapshot.tabs.map { $0.url.absoluteString },
+                    "windows": environment.liveControllers.count,
+                    "windowClasses": NSApp.windows.filter { $0.isVisible }.map { String(describing: type(of: $0)) }
+                ] as [String: Any]
+            }
             let commandFile = root.appendingPathComponent("perf-command.json")
             if let data = try? Data(contentsOf: commandFile),
                let command = try? JSONSerialization.jsonObject(with: data) as? [String: String] {
@@ -106,14 +145,46 @@ enum OrbitPerformanceProbe {
                 result["commandNonce"] = command["nonce"] ?? ""
                 if name == "scripting-self" {
                     result["scripting"] = await OrbitScriptingProbe.run(application, owner: owner, root: root, command: command)
+                } else if name == "update-test", ownsWindow(owner, bundleID: "io.github.okatech.orbit.test.update") {
+                    switch command["action"] {
+                    case "click":
+                        if owner.sidebar.updateReady { owner.sidebar.updateCard.restart.performClick(nil) }
+                    case "check": application.updater.checkForUpdates()
+                    case "off": application.updater.setAutomaticallyUpdates(false)
+                    case "on": application.updater.setAutomaticallyUpdates(true)
+                    case "seed":
+                        owner.session.openTab(url: URL(string: "about:blank#update-session")!)
+                        await owner.session.waitForPendingCommands()
+                    default: break
+                    }
+                } else if name == "daily-qa9" {
+                    result["dailyQA9"] = await OrbitDailyQA9Probe.run(application, owner: owner, command: command)
+                } else if name == "command-gaps" {
+                    result["commandGaps"] = await OrbitCommandGapsProbe.run(owner)
                 } else if name == "local-files" {
                     result["localFiles"] = await OrbitLocalFilesProbe.run(application, owner: owner, root: root, command: command)
+                } else if name == "tab-ergonomics" {
+                    result["tabErgonomics"] = await OrbitTabErgonomicsProbe.run(owner, root: root, command: command)
+                } else if name == "extension-controls" {
+                    result["extensionControls"] = await extensionControls(application, environment: environment,
+                        owner: owner, root: root, command: command)
+                } else if name == "site-search" {
+                    result["siteSearch"] = await OrbitSiteSearchProbe.run(environment: environment, owner: owner, root: root, command: command)
                 } else if name == "search-suggestions" {
                     result["searchSuggestions"] = await searchSuggestions(owner, root: root, command: command)
+                } else if name == "updater-input-guard" {
+                    result["updaterInputGuard"] = await updaterInputGuard(application, owner: owner, command: command)
+                } else if name == "updater-developer" {
+                    result["updaterDeveloper"] = await updaterDeveloper(application, owner: owner, command: command)
+                } else if name == "updater-about" {
+                    result["branding"] = await OrbitBrandingProbe.run(application, environment: environment, owner: owner,
+                        root: root, appearance: command["appearance"] ?? "light", aboutOnly: true)
                 } else if name == "branding-capture" {
                     result["branding"] = await OrbitBrandingProbe.run(application, environment: environment, owner: owner, root: root, appearance: command["appearance"] ?? "light")
                 } else if name == "pinned-tabs" {
                     result["pinnedTabs"] = await OrbitPinnedTabProbe.run(owner, store: environment.store, root: root, command: command)
+                } else if name == "p2-split" {
+                    result["splitParity"] = await splitParity(application, owner: owner, root: root, command: command)
                 } else if name == "split-divider" {
                     result["splitDivider"] = await splitDividerFixture(owner, command: command)
                 } else if name == "folder-hover", ownsWindow(owner, bundleID: "lab.orbit.orbit.folder-hover") {
@@ -124,6 +195,10 @@ enum OrbitPerformanceProbe {
                 } else if name == "resource-coordinator", ownsWindow(owner, bundleID: "lab.orbit.orbit.perf-coord-0") {
                     application.confirmQuit = { .quit }
                     result["resourceCoordinator"] = await OrbitResourcePerformanceProbe.run(owner, store: environment.store, command: command)
+                } else if name == "window-freeze-2", ownsWindow(owner, bundleID: "lab.orbit.orbit.window-freeze") {
+                    result["windowFreeze2"] = await windowFreeze2(application, environment: environment, owner: owner, command: command)
+                } else if name == "window-freeze", ownsWindow(owner, bundleID: "lab.orbit.orbit.window-freeze") {
+                    result["windowFreeze"] = await windowFreeze(owner, store: environment.store, command: command)
                 } else if name == "tab-open", Bundle.main.bundleIdentifier == OrbitTabOpenProbe.bundleID {
                     application.confirmQuit = { .quit }
                     result["tabOpen"] = await OrbitTabOpenProbe.run(owner, store: environment.store, command: command)
@@ -461,6 +536,10 @@ enum OrbitPerformanceProbe {
                     result["navigationHistory"] = await OrbitNavigationHistoryProbe.run(owner, command: command, root: root)
                 } else if name == "security-pill" {
                     result["securityPill"] = await OrbitSecurityPillProbe.run(owner, command: command, root: root)
+                } else if name == "r14-shell" {
+                    result["r14Shell"] = await OrbitR14ShellProbe.run(owner, application: application)
+                } else if name == "native-weekly" {
+                    result["nativeWeekly"] = await OrbitEngineSecurityProbe.weekly(owner, root: root)
                 } else if name == "native-security" {
                     result["nativeSecurity"] = await OrbitEngineSecurityProbe.run(owner, command: command)
                 } else if name == "native-performance" {
@@ -652,6 +731,111 @@ extension OrbitPerformanceProbe {
         }
         return ["firstMS": first, "finalMS": final, "arrowMS": arrows,
                 "results": owner.palette.results.count, "window": owner.window?.windowNumber ?? 0]
+    }
+
+    /// Real responder input and the application's admission provider; the installer is fake.
+    private static func updaterInputGuard(_ application: OrbitApplication, owner: OrbitWindowController,
+                                          command: [String: String]) async -> [String: Any] {
+        let bundleID = "lab.orbit.orbit.updater-input"
+        guard ownsWindow(owner, bundleID: bundleID), let text = command["url"],
+              let url = URL(string: text), url.scheme == "http", url.host == "127.0.0.1" else { return ["refused": true] }
+        owner.submitAddress(text)
+        await owner.session.waitForQueuedCommands()
+        guard let surface = owner.session.selectedSurface else { return ["missingSurface": true] }
+        for _ in 0..<200 where surface.navigationState.committedURL != url || surface.navigationState.isLoading {
+            try? await Task.sleep(for: .milliseconds(25))
+        }
+        guard ownsWindow(owner, bundleID: bundleID) else { return ["ownershipLost": true] }
+        _ = await evaluate(surface, "document.querySelector('textarea').focus();({ready:true})")
+        guard ownsWindow(owner, bundleID: bundleID), surface.focusDocument(),
+              let client = owner.window?.firstResponder as? (NSView & NSTextInputClient) else { return ["missingInputClient": true] }
+        // Character-only text input exercises the same commit entry point as a system IME.
+        guard ownsWindow(owner, bundleID: bundleID) else { return ["ownershipLost": true] }
+        client.insertText("Synthetic draft", replacementRange: NSRange(location: NSNotFound, length: 0))
+        try? await Task.sleep(for: .milliseconds(200))
+        let typed = await evaluate(surface, "({typed:document.querySelector('textarea').value==='Synthetic draft'})")?["typed"] as? Bool == true
+        let updater = application.updater
+        guard let provider = updater.idleSignals else { return ["missingProvider": true] }
+        updater.idleSignals = {
+            var signals = provider()
+            signals.idleSeconds = 600
+            signals.mediaPlaying = false
+            return signals
+        }
+        updater.mediaPreventsAutomaticInstallation = { false }
+        updater.fetchLatestVersion = { "27" }
+        var installs = 0
+        updater.installPendingUpdate = { installs += 1 }
+        updater.setAutomaticallyUpdates(true)
+        updater.prepared(version: "27")
+        let dirty = updater.idleSignals?().unsavedInput == true
+        await updater.attemptAutomaticInstallation()
+        let deferred = installs == 0
+        let next = url.appendingPathComponent("next")
+        guard ownsWindow(owner, bundleID: bundleID) else { return ["ownershipLost": true] }
+        surface.navigate(to: next)
+        for _ in 0..<200 where surface.navigationState.committedURL != next || surface.navigationState.isLoading {
+            try? await Task.sleep(for: .milliseconds(25))
+        }
+        let cleared = updater.idleSignals?().unsavedInput == false
+        updater.setAutomaticallyUpdates(false)
+        await updater.attemptAutomaticInstallation()
+        let settingBlocked = installs == 0
+        updater.setAutomaticallyUpdates(true)
+        await updater.attemptAutomaticInstallation()
+        let installed = installs == 1
+        // No relaunch or real update: restore normal quit behavior after observing the fake call.
+        updater.cancelAutomaticRelaunch()
+        updater.installPendingUpdate = nil
+        return ["typed": typed, "dirty": dirty, "idleDeferred": deferred, "navigated": surface.navigationState.committedURL == next,
+                "cleared": cleared, "settingBlocked": settingBlocked, "idleInstalledFake": installed,
+                "nativeLifecycle": surface.pagePerformance?.lifecycle() != nil]
+    }
+
+    private static func updaterDeveloper(_ application: OrbitApplication, owner: OrbitWindowController,
+                                         command: [String: String]) async -> [String: Any] {
+        guard ownsWindow(owner, bundleID: "lab.orbit.orbit.circa-rename"),
+              let text = command["url"], let url = URL(string: text),
+              url.scheme == "http", url.host == "localhost" else { return ["refused": true] }
+        owner.openTab(url: url)
+        await owner.session.waitForQueuedCommands()
+        guard let surface = owner.session.selectedSurface else { return ["missingSurface": true] }
+        for _ in 0..<200 where surface.navigationState.committedURL != url || surface.navigationState.isLoading {
+            try? await Task.sleep(for: .milliseconds(25))
+        }
+        guard ownsWindow(owner, bundleID: "lab.orbit.orbit.circa-rename") else { return ["ownershipLost": true] }
+        let preferences = owner.siteControls.preferences
+        let automatic = preferences.preferences(url: url, profileID: surface.profileID).developerMode
+        let target = application.commands.registry.captureTarget(windowID: owner.id)
+        let toggled = application.commands.registry.dispatch(.toggleDeveloperMode, origin: .keyboard, target: target)
+        await owner.session.waitForQueuedCommands()
+        let disabled = !preferences.preferences(url: url, profileID: surface.profileID).developerMode
+        guard ownsWindow(owner, bundleID: "lab.orbit.orbit.circa-rename") else { return ["ownershipLost": true] }
+        _ = application.commands.registry.dispatch(.toggleDeveloperMode, origin: .keyboard,
+            target: application.commands.registry.captureTarget(windowID: owner.id))
+        await owner.session.waitForQueuedCommands()
+        let updater = OrbitUpdater()
+        var installs = 0
+        var signals = OrbitIdleUpdateSignals(idleSeconds: 0, mediaPlaying: false)
+        updater.idleSignals = { signals }
+        updater.mediaPreventsAutomaticInstallation = { false }
+        updater.fetchLatestVersion = { "27" }
+        updater.installPendingUpdate = { installs += 1 }
+        updater.prepared(version: "27")
+        await updater.attemptAutomaticInstallation()
+        let activeDeferred = installs == 0
+        signals.idleSeconds = 600; signals.mediaPlaying = true
+        await updater.attemptAutomaticInstallation()
+        let mediaDeferred = installs == 0
+        signals.mediaPlaying = false
+        await updater.attemptAutomaticInstallation()
+        let systemSignals = OrbitIdleUpdateSignalsSource().sample(mediaPlaying: false)
+        return ["localhostAutomatic": automatic, "toggleOff": toggled && disabled,
+                "toggleOn": preferences.preferences(url: url, profileID: surface.profileID).developerMode,
+                "activeDeferred": activeDeferred, "mediaDeferred": mediaDeferred, "idleInstalledFake": installs == 1,
+                "systemIdleSignal": systemSignals.idleSeconds.isFinite,
+                "version": BrowserSettingsAbout.versionDescription(info: Bundle.main.infoDictionary ?? [:]),
+                "nativeLifecycle": surface.pagePerformance?.lifecycle() != nil]
     }
 
     private static func ownsWindow(_ owner: OrbitWindowController, bundleID: String = "lab.orbit.orbit.perf-core-3") -> Bool {
@@ -2345,5 +2529,575 @@ extension OrbitPerformanceProbe {
             }
             return result
         } catch { return ["failed": true] }
+    }
+
+    /// Opt-in, confined real-engine exercise of split entry points and their native menus.
+    private static func splitParity(_ application: OrbitApplication, owner: OrbitWindowController,
+                                    root: URL, command: [String: String]) async -> [String: Any] {
+        func owns() -> Bool { ownsWindow(owner, bundleID: "lab.orbit.orbit.p2-split") }
+        guard owns(), let confinement = activeSyntheticDataGuard(), (try? confinement.checkInside(root)) != nil,
+              let base = command["base"].flatMap(URL.init(string:)), base.scheme == "http", base.host == "127.0.0.1" else { return ["refused": true] }
+        let appearance = command["appearance"] == "dark" ? "dark" : "light"
+        NSApp.appearance = NSAppearance(named: appearance == "dark" ? .darkAqua : .aqua)
+        var checks: [String: Bool] = [:]
+        func settle() async {
+            await owner.session.waitForPendingCommands()
+            for surface in owner.session.ownedSurfaces { await waitForLoad(surface) }
+            owner.window?.contentView?.layoutSubtreeIfNeeded()
+        }
+        func capture(_ name: String) {
+            guard owns(), let view = owner.window?.contentView,
+                  let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return }
+            view.cacheDisplay(in: view.bounds, to: bitmap)
+            try? bitmap.representation(using: .png, properties: [:])?.write(to: root.appendingPathComponent(name + "-" + appearance + ".png"))
+        }
+        guard owns() else { return ["refused": true] }
+        owner.session.openTab(url: base.appendingPathComponent("alpha"))
+        await settle()
+        guard owns(), let first = owner.session.selectedSurface else { return ["refused": true] }
+        let isolation = await evaluate(first, "({isolated:typeof globalThis.__orbitOptionLink==='undefined'})")
+        checks["isolatedBinding"] = isolation?["isolated"] as? Bool == true
+        // Trusted Chromium input exercises the native modified-link route, rather than a DOM click.
+        for type in ["mousePressed", "mouseReleased"] {
+            guard owns() else { return ["refused": true] }
+            _ = await first.devToolsCall("Input.dispatchMouseEvent", params: "{\"type\":\"" + type + "\",\"x\":80,\"y\":40,\"button\":\"left\",\"clickCount\":1,\"modifiers\":1}")
+        }
+        try? await Task.sleep(for: .milliseconds(500))
+        await settle()
+        checks["optionLink"] = owner.session.activeSplit?.tabs.count == 2 && first.currentURL?.path == "/alpha"
+        // Keep exercising other commands if the native link path refused this fixture.
+        if owner.session.activeSplit == nil { owner.session.addSplitPane(url: base.appendingPathComponent("beta")); await settle() }
+        guard owns(), let group = owner.session.activeSplit else { return ["refused": true] }
+        let contextNodes: [BrowserOrganizationNode] = [.split(group.group.id)]
+        _ = owner.sidebar.prepareContextMenu(for: contextNodes[0])
+        let menu = owner.makeSidebarContextMenu(for: contextNodes)?.menu
+        checks["muteSubmenus"] = group.tabs.allSatisfy { tab in
+            menu?.items.contains { $0.title == (tab.title ?? tab.url.absoluteString) && $0.submenu?.items.first?.title == uiText("Mute") } == true
+        }
+        checks["duplicateMenu"] = menu?.items.contains { $0.title == uiText("Duplicate") } == true
+        if owns(), let menu {
+            let capture = SplitParityMenuCapture(menu: menu, file: root.appendingPathComponent("split-menu-" + appearance + ".png"))
+            let timer = Timer(timeInterval: 0.25, target: capture, selector: #selector(SplitParityMenuCapture.capture), userInfo: nil, repeats: false)
+            RunLoop.main.add(timer, forMode: .common)
+            menu.popUp(positioning: nil, at: NSPoint(x: 8, y: (NSScreen.main?.frame.maxY ?? 900) - 8), in: nil)
+        }
+        owner.sidebar.endContextMenu()
+        guard owns() else { return ["refused": true] }
+        owner.session.duplicateSplit(group.group.id)
+        await settle()
+        checks["duplicate"] = owner.session.activeSplit?.group.id != group.group.id && owner.session.activeSplit?.tabs.count == 2
+        if let id = owner.session.activeSplit?.group.id {
+            guard owns() else { return ["refused": true] }
+            owner.session.orientSplit(id, to: .vertical)
+            await settle()
+            checks["vertical"] = owner.session.activeSplit?.group.orientation == .vertical
+        }
+        for _ in 0..<2 {
+            guard owns() else { return ["refused": true] }
+            owner.session.addSplitPane(url: base.appendingPathComponent("extra")); await settle()
+        }
+        checks["fourPaneLimit"] = !owner.canAddSplitPane && owner.session.activeSplit?.tabs.count == 4
+        capture("four-panes")
+        guard owns(), let full = owner.session.activeSplit else { return ["refused": true] }
+        owner.session.unsplit(full.group.id); await settle()
+        checks["separate"] = owner.session.activeSplit == nil
+        guard owns() else { return ["refused": true] }
+        owner.palette.present(.newTab)
+        owner.palette.query("Add Split")
+        await owner.palette.waitForResults()
+        capture("command-bar")
+        checks["directionalCommands"] = [BrowserCommandID.addRightSplit, .addLeftSplit, .addTopSplit, .addBottomSplit].allSatisfy { id in
+            owner.palette.results.contains { $0.action == .command(id) }
+        }
+        owner.palette.dismiss(returnFocus: false)
+        return ["pid": getpid(), "checks": checks, "passed": checks.values.allSatisfy { $0 }, "offscreen": true]
+    }
+}
+
+
+@MainActor
+private final class SplitParityMenuCapture: NSObject {
+    let menu: NSMenu
+    let file: URL
+    init(menu: NSMenu, file: URL) { self.menu = menu; self.file = file }
+    @objc func capture() {
+        defer { menu.cancelTracking() }
+        guard Bundle.main.bundleIdentifier == "lab.orbit.orbit.p2-split",
+              let confinement = activeSyntheticDataGuard(), (try? confinement.checkInside(file)) != nil else { return }
+        let rows = CGWindowListCopyWindowInfo(.optionOnScreenOnly, kCGNullWindowID) as? [[String: Any]] ?? []
+        guard let row = rows.first(where: { ($0[kCGWindowOwnerPID as String] as? Int32) == getpid()
+            && ($0[kCGWindowLayer as String] as? Int ?? 0) > 0 }), let number = row[kCGWindowNumber as String] as? Int else { return }
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
+        process.arguments = ["-x", "-o", "-l", String(number), file.path]
+        try? process.run(); process.waitUntilExit()
+    }
+}
+
+extension OrbitPerformanceProbe {
+    /// Real actions and existing button appearance in an owned, confined test window.
+    private static func extensionControls(_ application: OrbitApplication, environment: BrowserEnvironment<ChromiumBrowserEngine>,
+        owner: OrbitWindowController, root: URL, command: [String: String]) async -> [String: Any] {
+        let bundleID = "lab.orbit.orbit.p2-extensions"
+        guard ownsWindow(owner, bundleID: bundleID), let window = owner.window,
+              let host = owner.engine.extensions else { return ["refused": true] }
+        if owner.session.selectedSurface == nil, let base = command["base"].flatMap(URL.init(string:)),
+           base.scheme == "http", base.host == "127.0.0.1", base.user == nil, base.password == nil {
+            guard ownsWindow(owner, bundleID: bundleID) else { return ["refused": true] }
+            owner.submitAddress(base.absoluteString)
+            await owner.session.waitForPendingCommands()
+        }
+        guard let surface = owner.session.selectedSurface else { return ["missingSurface": true] }
+        for _ in 0..<60 where !surface.isReady { try? await Task.sleep(for: .milliseconds(50)) }
+        window.appearance = NSAppearance(named: command["appearance"] == "dark" ? .darkAqua : .aqua)
+        var result: [String: Any] = [:]
+        do {
+            let items = try host.installedExtensions(on: surface)
+            result["installed"] = items.count
+            if command["action"] == "prepare" {
+                for item in items where item.hasAction {
+                    try host.setPinned(true, extensionID: item.id, in: surface.profileID)
+                }
+                try application.commands.registry.shortcutPreferences.setPriority(.browser, for: .cycleExtensions)
+            }
+            owner.extensionControls.render()
+            if command["action"] == "cycle" {
+                guard ownsWindow(owner, bundleID: bundleID) else { return ["refused": true] }
+                result["accepted"] = application.commands.registry.dispatch(.cycleExtensions, origin: .keyboard)
+            } else if command["action"] == "release" {
+                guard ownsWindow(owner, bundleID: bundleID), let event = NSEvent.keyEvent(with: .flagsChanged,
+                    location: .zero, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                    windowNumber: window.windowNumber, context: nil, characters: "", charactersIgnoringModifiers: "",
+                    isARepeat: false, keyCode: 55) else { return ["refused": true] }
+                _ = application.commands.registry.handleInputEvent(event)
+                try? await Task.sleep(for: .milliseconds(600))
+            } else if command["action"] == "little" {
+                guard ownsWindow(owner, bundleID: bundleID) else { return ["refused": true] }
+                application.quickWindowPresenter = { controller in
+                    controller.window?.setFrameOrigin(NSPoint(x: -2000, y: -1200))
+                    controller.window?.orderBack(nil)
+                    controller.window?.makeKey()
+                }
+                application.openQuickWindow(url: surface.navigationState.url, source: owner)
+                await application.waitForQuickWindowCommands()
+                if let little = environment.quickWindows.values.first {
+                    for _ in 0..<60 where little.surface?.isReady != true {
+                        try? await Task.sleep(for: .milliseconds(50))
+                    }
+                    if let menu = little.extensionMenu() {
+                        result["littleActions"] = menu.items.filter { $0.action != nil }.count
+                        if let littleWindow = little.window,
+                           let windows = CGWindowListCopyWindowInfo(.optionIncludingWindow,
+                               CGWindowID(littleWindow.windowNumber)) as? [[String: Any]],
+                           windows.contains(where: { ($0[kCGWindowOwnerPID as String] as? Int32) == getpid() }) {
+                            menu.performActionForItem(at: 0)
+                            try? await Task.sleep(for: .milliseconds(600))
+                            result["littleWindows"] = NSApp.windows.filter(\.isVisible).map { NSStringFromRect($0.frame) }
+                        }
+                    }
+                    little.close()
+                    window.makeKey()
+                }
+            }
+            owner.sidebar.addressContainer.holdsAccessoriesVisible = true
+            window.contentView?.layoutSubtreeIfNeeded()
+            window.displayIfNeeded()
+            let strip = owner.sidebar.extensionsContainer
+            result["cycling"] = owner.extensionControls.isCycling
+            result["highlighted"] = strip.subviews.compactMap { $0 as? NSButton }.filter(\.isHighlighted).count
+            result["pinCount"] = strip.visiblePinCount
+            result["anchor"] = NSStringFromRect(window.convertToScreen(strip.convert(strip.bounds, to: nil)))
+            if let bitmap = owner.sidebar.bitmapImageRepForCachingDisplay(in: owner.sidebar.bounds) {
+                owner.sidebar.cacheDisplay(in: owner.sidebar.bounds, to: bitmap)
+                try bitmap.representation(using: .png, properties: [:])?.write(to: root.appendingPathComponent("extensions-" + (command["appearance"] ?? "light") + ".png"))
+            }
+            result["windows"] = NSApp.windows.filter(\.isVisible).map { NSStringFromRect($0.frame) }
+        } catch { result["failed"] = String(describing: type(of: error)) }
+        return result
+    }
+}
+
+
+extension OrbitPerformanceProbe {
+    /// Confined lifecycle and missing-frame qualification on real hosted tabs.
+    private static func windowFreeze(_ owner: OrbitWindowController, store: BrowserStore,
+                                     command: [String: String]) async -> [String: Any] {
+        let bundleID = "lab.orbit.orbit.window-freeze"
+        guard ownsWindow(owner, bundleID: bundleID),
+              let configuration = activeSiteSessionConfiguration(), configuration.syntheticGuard != nil,
+              configuration.usesMockKeychain, let window = owner.window,
+              let base = command["base"].flatMap(URL.init(string:)),
+              base.scheme == "http", base.host == "127.0.0.1", base.user == nil, base.password == nil
+        else { return ["refused": true] }
+        func stage(_ value: String) {
+            try? value.write(to: configuration.dataRoot.appendingPathComponent("freeze-stage.txt"), atomically: true, encoding: .utf8)
+        }
+        func drain(_ seconds: Double = 3) async -> Bool {
+            let end = ProcessInfo.processInfo.systemUptime + seconds
+            while owner.session.hasPendingCommands, ProcessInfo.processInfo.systemUptime < end {
+                try? await Task.sleep(for: .milliseconds(5))
+            }
+            return !owner.session.hasPendingCommands
+        }
+        func click(_ view: NSView) async -> Bool {
+            let point = view.convert(NSPoint(x: view.bounds.midX, y: view.bounds.midY), to: nil)
+            for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
+                guard ownsWindow(owner, bundleID: bundleID), view.window === window,
+                      let event = NSEvent.mouseEvent(with: type, location: point, modifierFlags: [],
+                        timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
+                        context: nil, eventNumber: 0, clickCount: 1, pressure: type == .leftMouseDown ? 1 : 0) else { return false }
+                NSApp.postEvent(event, atStart: false)
+            }
+            try? await Task.sleep(for: .milliseconds(100))
+            return true
+        }
+        stage("seed")
+        owner.palette.dismiss()
+        let firstSpace = owner.session.snapshot!.activeSpaceID
+        let profile = await store.createProfile(name: "Synthetic Profile 2")
+        guard let secondSpace = try? await store.createSpace(name: "Synthetic secondary", profileID: profile) else { return ["seedFailed": true] }
+        owner.session.activateSpace(secondSpace)
+        guard await drain() else { return ["activationStalled": true] }
+        var tabs: [TabOccurrenceID] = []
+        for i in 0..<8 {
+            owner.session.openTab(url: base.appendingPathComponent("page-\(i)"))
+            guard await drain(), let id = owner.session.snapshot?.selectedOccurrenceID else { return ["openStalled": true] }
+            tabs.append(id)
+            let end = ProcessInfo.processInfo.systemUptime + 2
+            while owner.session.selectedSurface?.navigationState.isLoading == true, ProcessInfo.processInfo.systemUptime < end {
+                try? await Task.sleep(for: .milliseconds(10))
+            }
+        }
+        if let tab = owner.session.tabID(for: tabs[0]) { owner.session.addToFavorites([tab]) }
+        guard await drain() else { return ["favoriteStalled": true] }
+        owner.resources.coordinator.budget = .init(limit: 2, minimumBackgroundAge: 0)
+        let discarded = await owner.tabSuspension.sweep(now: owner.tabSuspension.clock() + 3601)
+        var checks: [String: Any] = ["profiles": owner.engine.profileCount, "tabs": tabs.count,
+                                   "discards": discarded, "budget": 2]
+        stage("lifecycle")
+        let neighbor = NSWindow(contentRect: NSRect(x: -2200, y: -1200, width: 300, height: 200),
+                                styleMask: [.titled, .closable], backing: .buffered, defer: false)
+        neighbor.isReleasedWhenClosed = false
+        for cycle in 0..<6 {
+            guard ownsWindow(owner, bundleID: bundleID) else { return ["ownershipLost": true] }
+            neighbor.makeKeyAndOrderFront(nil)
+            if cycle % 2 == 0 {
+                NSApp.hide(nil)
+                try? await Task.sleep(for: .milliseconds(100))
+                NSApp.unhide(nil)
+                NSApp.activate(ignoringOtherApps: true)
+                try? await Task.sleep(for: .milliseconds(100))
+            }
+            NotificationCenter.default.post(name: NSWorkspace.willSleepNotification, object: nil)
+            NotificationCenter.default.post(name: NSWorkspace.didWakeNotification, object: nil)
+            NotificationCenter.default.post(name: NSWindow.didChangeOcclusionStateNotification, object: window)
+            NSApp.appearance = NSAppearance(named: cycle % 2 == 0 ? .darkAqua : .aqua)
+            window.makeKeyAndOrderFront(nil)
+            try? await Task.sleep(for: .milliseconds(100))
+            guard ownsWindow(owner, bundleID: bundleID) else { return ["ownershipLost": true] }
+            let tab = owner.session.tabID(for: tabs[(cycle + 1) % tabs.count])
+            if let tab, let row = owner.sidebar.page.list.row(for: .tab(tab)) {
+                guard await click(row) else { return ["clickRefused": true] }
+            }
+            guard await drain() else { return ["lifecycleStalled": cycle] }
+            checks["tabSelected\(cycle)"] = owner.session.snapshot?.selectedOccurrenceID == tabs[(cycle + 1) % tabs.count]
+            if let tile = owner.sidebar.favoritesContainer.subviews.compactMap({ $0 as? FavoritesGridView }).first?.tiles.first {
+                guard await click(tile) else { return ["clickRefused": true] }
+            }
+            guard await drain() else { return ["favoriteStalled": cycle] }
+            checks["favoriteSelected\(cycle)"] = owner.session.snapshot?.selectedOccurrenceID == tabs[0]
+        }
+        neighbor.close()
+        checks["lifecycleCycles"] = 6
+        checks["secondaryProfileSelected"] = owner.session.activeProfileID == profile
+        stage("missing-frames")
+        // Inject a stopped display link; use the same production Space-click admission path.
+        owner.sidebar.spaceSwipe.automaticallyAdvances = false
+        owner.sidebar.spaceSwipe.settlementWaitLimit = .milliseconds(100)
+        owner.sidebar.spaceSwipe.validate(catalog: owner.session.catalog, active: secondSpace)
+        try? await Task.sleep(for: .milliseconds(100))
+        guard ownsWindow(owner, bundleID: bundleID) else { return ["ownershipLost": true] }
+        checks["swipeStarted"] = owner.sidebar.spaceSwipe.switchToSpace(firstSpace)
+        checks["missingFramesSettled"] = await drain()
+        checks["destinationSelected"] = owner.session.snapshot?.activeSpaceID == firstSpace
+        stage("library-hover")
+        // Replay only AppKit notifications; never put the user's display in fullscreen.
+        NotificationCenter.default.post(name: NSWindow.willEnterFullScreenNotification, object: window)
+        owner.setSidebarVisible(false, animated: false)
+        owner.windowShell.hoverReveal.pointerEnteredEdge()
+        try? await Task.sleep(for: .milliseconds(200))
+        checks["hoverBeforeLibrary"] = owner.windowShell.hoverReveal.isRevealed
+        owner.library.swipe.beginOpening?()
+        owner.library.swipe.finish?(true, 0)
+        let libraryEnd = ProcessInfo.processInfo.systemUptime + 3
+        while owner.windowShell.hoverReveal.phase != .idle, ProcessInfo.processInfo.systemUptime < libraryEnd {
+            try? await Task.sleep(for: .milliseconds(10))
+        }
+        checks["libraryHoverRetired"] = owner.windowShell.hoverReveal.phase == .idle && !owner.windowShell.isFloatingRevealed
+        checks["libraryBackdropRetired"] = owner.windowShell.floatingBackdrop.alphaValue == 0
+        owner.hideLibrary()
+        NotificationCenter.default.post(name: NSWindow.willExitFullScreenNotification, object: window)
+        NotificationCenter.default.post(name: NSWindow.didExitFullScreenNotification, object: window)
+        owner.session.activateSpace(secondSpace)
+        _ = await drain()
+        stage("close-stalled")
+        var release: CheckedContinuation<Void, Never>?
+        owner.session.activateSpaceFromSwipe(secondSpace, catalog: owner.session.catalog!,
+            waitForPresentation: { await withCheckedContinuation { release = $0 } },
+            isCurrent: { true }, completion: { _ in })
+        while release == nil { await Task.yield() }
+        guard ownsWindow(owner, bundleID: bundleID) else { release?.resume(); return ["ownershipLost": true] }
+        checks["closeAccepted"] = owner.palette.registry?.dispatch(.closeWindow, origin: .menu)
+        checks["closedWhileStalled"] = owner.session.isClosed
+        release?.resume()
+        _ = await drain()
+        stage("done")
+        return checks
+    }
+}
+
+extension OrbitPerformanceProbe {
+    private static func windowFreeze2(_ application: OrbitApplication, environment: OrbitEnvironment,
+                                     owner: OrbitWindowController, command: [String: String]) async -> [String: Any] {
+        let bundle = "lab.orbit.orbit.window-freeze"
+        guard ownsWindow(owner, bundleID: bundle), let base = command["base"].flatMap(URL.init(string:)),
+              base.scheme == "http", base.host == "127.0.0.1",
+              activeSiteSessionConfiguration()?.syntheticGuard != nil else { return ["refused": true] }
+        if command["step"] == "editing" {
+            return await windowFreezeEditing(application, environment: environment, owner: owner, base: base)
+        }
+        var checks: [String: Any] = [:]
+        func settle(_ c: OrbitWindowController) async {
+            await application.windows.waitForPendingCommands()
+            await c.session.waitForPendingCommands()
+            c.window?.contentView?.layoutSubtreeIfNeeded()
+        }
+        func click(_ c: OrbitWindowController, _ tab: TabID, count: Int = 1) async -> Bool {
+            BrowserSidebarInputDiagnostics.record("probe-click", tab: tab, reason: "target")
+            NSApp.activate(ignoringOtherApps: true)
+            c.window?.makeKeyAndOrderFront(nil)
+            let deadline = ProcessInfo.processInfo.systemUptime + 0.5
+            while !NSApp.isActive, ProcessInfo.processInfo.systemUptime < deadline { try? await Task.sleep(for: .milliseconds(5)) }
+            c.window?.contentView?.layoutSubtreeIfNeeded()
+            guard let row = c.sidebar.page.list.row(for: .tab(tab)), let w = c.window else {
+                BrowserSidebarInputDiagnostics.record("probe-click", tab: tab, reason: "missing-row")
+                return false
+            }
+            let p = row.convert(NSPoint(x: 65, y: row.bounds.midY), to: nil)
+            for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
+                guard ownsWindow(c, bundleID: bundle), row.window === w,
+                      let event = NSEvent.mouseEvent(with: type, location: p, modifierFlags: [],
+                        timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: w.windowNumber,
+                        context: nil, eventNumber: 1, clickCount: count, pressure: 1) else { return false }
+                if count == 2 {
+                    // AppKit binds a double-click to the preceding view. Inject the reused-row
+                    // event at its row receiver; ordinary clicks retain native hit testing.
+                    if type == .leftMouseDown { row.mouseDown(with: event) } else { row.mouseUp(with: event) }
+                } else { NSApp.sendEvent(event) }
+            }
+            await settle(c)
+            return c.session.organization?.selectedTab?.id == tab && c.session.selectedSurface != nil
+        }
+        do {
+            owner.palette.dismiss()
+            let other = try await environment.makeWindow(spaceID: owner.session.snapshot?.activeSpaceID)
+            guard let w = other.window else { return ["missingWindow": true] }
+            w.setFrame(NSRect(x: -3500, y: -1200, width: 1100, height: 800), display: false)
+            w.orderBack(nil)
+            defer { other.window?.close() }
+            for n in 0..<8 {
+                owner.session.openTab(url: base.appendingPathComponent("page-\(n)")); await settle(owner)
+                let end = ProcessInfo.processInfo.systemUptime + 2
+                while owner.session.selectedSurface?.navigationState.isLoading == true, ProcessInfo.processInfo.systemUptime < end {
+                    try? await Task.sleep(for: .milliseconds(10))
+                }
+            }
+            let tabs = owner.session.snapshot!.tabs
+            owner.resources.coordinator.budget = .init(limit: 2, minimumBackgroundAge: 0)
+            checks["discards"] = await owner.tabSuspension.sweep(now: owner.tabSuspension.clock() + 3601)
+            checks["discardedRow"] = await click(owner, tabs[1].id)
+            owner.activateSidebarTab(tabs[2].id); owner.activateSidebarTab(tabs[1].id)
+            await settle(owner)
+            checks["rapidReturn"] = owner.session.organization?.selectedTab?.id == tabs[1].id
+            checks["doubleCountOtherRow"] = await click(owner, tabs[3].id, count: 2)
+            for n in 0..<4 {
+                guard ownsWindow(owner, bundleID: bundle), ownsWindow(other, bundleID: bundle) else { return ["ownershipLost": true] }
+                NSApp.hide(nil)
+                try? await Task.sleep(for: .milliseconds(100))
+                NSApp.unhide(nil); NSApp.activate(ignoringOtherApps: true)
+                try? await Task.sleep(for: .milliseconds(100))
+                w.makeKeyAndOrderFront(nil); owner.window?.makeKeyAndOrderFront(nil)
+                checks["reactivation\(n)"] = await click(owner, tabs[n + 1].id)
+            }
+            let context = try await environment.store.captureContext(in: owner.session.snapshot!.id)
+            let imported = try await environment.store.importBookmarks(.init(entries: [.link(title: "Synthetic pin", url: base.appendingPathComponent("imported"))]),
+                folderTitle: "Synthetic import", from: context)
+            owner.session.synchronizeOrganization(); await settle(owner)
+            if case let .folder(folder)? = owner.session.organization?.item(for: .folder(imported.0)), let tab = folder.children.first?.node.tabID {
+                checks["importedPinned"] = await click(owner, tab)
+            }
+            owner.session.selectTab(tabs[4].id); await settle(owner)
+            if let live = owner.session.selectedSurface, let move = owner.moveSurface(live, to: other, activate: true, replacingExisting: true) {
+                checks["surfaceMoved"] = await move.value != nil
+                await settle(other); await settle(owner)
+                checks["movedRowSource"] = await click(owner, tabs[4].id)
+                checks["movedRowDestination"] = await click(other, tabs[4].id)
+                checks["quickAfterMove"] = await click(owner, tabs[5].id)
+            }
+            owner.window?.makeKey()
+            if owner.openPeek(base.appendingPathComponent("peek")) != nil {
+                let promoted = await owner.promotePeekToTab()?.value
+                checks["peekPromotion"] = promoted != nil
+                await settle(owner)
+                if let tab = owner.session.organization?.selectedTab?.id {
+                    checks["peekPromotedRow"] = await click(owner, tabs[5].id)
+                    checks["peekPromotedSelected"] = await click(owner, tab)
+                }
+            }
+            let little = try await environment.makeQuickWindow(spaceID: owner.session.snapshot?.activeSpaceID, url: base.appendingPathComponent("little"))
+            if let promotion = little.promote(to: owner) {
+                checks["littlePromotion"] = await promotion.value != nil
+                await settle(owner)
+                if let tab = owner.session.organization?.selectedTab?.id {
+                    _ = await click(owner, tabs[6].id)
+                    checks["littlePromotedRow"] = await click(owner, tab)
+                }
+            }
+            little.window?.close()
+            owner.session.selectTab(tabs[5].id); await settle(owner)
+            let beforeTearOff = Set(application.windows.windows.keys)
+            let payload = SidebarDragPayload(sourceWindow: owner.id, spaceID: owner.session.snapshot!.activeSpaceID,
+                profileID: owner.session.activeProfileID!, nodes: [.tab(tabs[5].id)], rowCount: 1, grabOffsetX: 0)
+            guard ownsWindow(owner, bundleID: bundle) else { return ["ownershipLost": true] }
+            application.tearOff(payload, from: owner, at: NSPoint(x: -4000, y: -1200))
+            checks["quickAfterTearOff"] = await click(owner, tabs[6].id)
+            for _ in 0..<150 where Set(application.windows.windows.keys) == beforeTearOff {
+                try? await Task.sleep(for: .milliseconds(10))
+            }
+            await application.windows.waitForPendingCommands()
+            if let torn = application.windows.windows.first(where: { !beforeTearOff.contains($0.key) })?.value {
+                await settle(torn)
+                checks["tearOffRow"] = await click(torn, tabs[5].id)
+                torn.window?.close()
+            } else { checks["tearOffRow"] = false }
+            let closing = owner.session.organization!.selectedTab!.id
+            owner.performSidebarRowAction([closing]); await settle(owner)
+            checks["quickAfterClose"] = await click(owner, tabs[2].id)
+            owner.window?.makeFirstResponder(owner.sidebar.page.list)
+            owner.sidebar.undoRouter.undo(nil); await owner.sidebar.undoRouter.waitForPendingCommands()
+            checks["undoTab"] = owner.session.organization?.tab(closing) != nil
+            if owner.openPeek(base.appendingPathComponent("undo-peek")) != nil {
+                owner.dismissPeek(); owner.sidebar.undoRouter.undo(nil)
+                await owner.sidebar.undoRouter.waitForPendingCommands()
+                checks["undoPeek"] = owner.isPeekPresented
+                owner.dismissPeek()
+            }
+            let before = other.session.snapshot!
+            other.window?.close(); await settle(other)
+            // Exercise the same environment restoration called by the undo router.
+            let callback = environment.onReopenClosedWindow
+            environment.onReopenClosedWindow = nil
+            let restored = try await environment.reopenClosedWindow()
+            environment.onReopenClosedWindow = callback
+            if let restored {
+                checks["undoWindow"] = restored.session.snapshot?.activeSpaceID == before.activeSpaceID
+                    && restored.session.snapshot?.selectedOccurrenceID == before.selectedOccurrenceID
+                restored.window?.close()
+            }
+        } catch { checks["error"] = String(describing: type(of: error)) }
+        return checks
+    }
+
+}
+
+extension OrbitPerformanceProbe {
+    private static func windowFreezeEditing(_ application: OrbitApplication, environment: OrbitEnvironment,
+                                            owner: OrbitWindowController, base: URL) async -> [String: Any] {
+        let bundle = "lab.orbit.orbit.window-freeze"
+        var checks: [String: Any] = [:]
+        guard ownsWindow(owner, bundleID: bundle), let window = owner.window else { return ["refused": true] }
+        owner.palette.dismiss()
+        NSApp.activate(ignoringOtherApps: true)
+        window.makeKeyAndOrderFront(nil)
+        try? await Task.sleep(for: .milliseconds(100))
+        owner.session.openTab(url: base.appendingPathComponent("editing"))
+        await owner.session.waitForPendingCommands()
+        guard let surface = owner.session.selectedSurface else { return ["surfaceMissing": true] }
+        let deadline = ProcessInfo.processInfo.systemUptime + 5
+        while surface.navigationState.isLoading, ProcessInfo.processInfo.systemUptime < deadline {
+            try? await Task.sleep(for: .milliseconds(10))
+        }
+        owner.session.openTab(url: base.appendingPathComponent("closed-before-edit"), activate: false)
+        await owner.session.waitForPendingCommands()
+        guard let tab = owner.session.snapshot?.tabs.last?.id else { return ["tabMissing": true] }
+        owner.performSidebarRowAction([tab]); await owner.session.waitForPendingCommands()
+        checks["webEditReady"] = await evaluate(surface, "(() => {const t=document.querySelector('textarea');t.value='';t.focus();document.execCommand('insertText',false,'synthetic edit');return {ready:t.value==='synthetic edit'}})()")?["ready"] as? Bool
+        func undoKey() async -> Bool {
+            guard ownsWindow(owner, bundleID: bundle), surface.hostView.window === window else { return false }
+            NSApp.activate(ignoringOtherApps: true)
+            window.makeKeyAndOrderFront(nil)
+            let deadline = ProcessInfo.processInfo.systemUptime + 0.5
+            while (!NSApp.isActive || !window.isKeyWindow), ProcessInfo.processInfo.systemUptime < deadline {
+                try? await Task.sleep(for: .milliseconds(5))
+            }
+            owner.focusSelectedDocument()
+            guard ownsWindow(owner, bundleID: bundle), window.isKeyWindow, let code = characterKeyCode("z"),
+                  let event = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: .command,
+                    timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber, context: nil,
+                    characters: "z", charactersIgnoringModifiers: "z", isARepeat: false, keyCode: code) else { return false }
+            NSApp.postEvent(event, atStart: false)
+            try? await Task.sleep(for: .milliseconds(400))
+            await owner.session.waitForPendingCommands()
+            return true
+        }
+        checks["editingKeySent"] = await undoKey()
+        checks["webTextUndo"] = await evaluate(surface, "({undone:document.querySelector('textarea').value===''})")?["undone"] as? Bool
+        checks["webUndoDidNotReopenTab"] = owner.session.organization?.tab(tab) == nil
+        _ = await evaluate(surface, "(() => {document.querySelector('textarea').blur();document.body.tabIndex=-1;document.body.focus();return {ready:true}})()")
+        checks["bodyKeySent"] = await undoKey()
+        checks["bodyUndoReopenedTab"] = owner.session.organization?.tab(tab) != nil
+        if owner.openPeek(base.appendingPathComponent("closed-peek")) != nil {
+            owner.dismissPeek()
+            owner.window?.makeFirstResponder(owner.sidebar.page.list)
+            owner.sidebar.undoRouter.undo(nil); await owner.sidebar.undoRouter.waitForPendingCommands()
+            checks["peekUndo"] = owner.isPeekPresented
+            owner.dismissPeek()
+            checks["shiftTUnchanged"] = application.commands.registry.dispatch(.restoreLastClosedTab, origin: .keyboard)
+            await owner.session.waitForPendingCommands()
+            checks["shiftTReopenedPeek"] = owner.isPeekPresented
+            owner.dismissPeek()
+        }
+        let saved = owner.session.snapshot!
+        guard ownsWindow(owner, bundleID: bundle) else { return ["ownershipLost": true] }
+        owner.window?.close(); await owner.session.waitForPendingCommands()
+        for _ in 0..<100 where environment.lastClosedWindowDate == nil { await Task.yield() }
+        checks["missingWindowUndoAccepted"] = application.commands.registry.dispatch(.undo, origin: .keyboard)
+        for _ in 0..<200 where application.windows.windows.isEmpty { try? await Task.sleep(for: .milliseconds(5)) }
+        await application.windows.waitForPendingCommands()
+        checks["missingWindowRestored"] = application.windows.windows.values.contains {
+            $0.session.snapshot?.id == saved.id && $0.session.snapshot?.activeSpaceID == saved.activeSpaceID
+                && $0.session.snapshot?.selectedOccurrenceID == saved.selectedOccurrenceID
+        }
+        return checks
+    }
+}
+
+
+extension OrbitPerformanceProbe {
+    /// Resolve the requested character using the active layout; never assume US physical keys.
+    private static func characterKeyCode(_ character: String) -> UInt16? {
+        let source = TISCopyCurrentKeyboardLayoutInputSource().takeRetainedValue()
+        guard let property = TISGetInputSourceProperty(source, kTISPropertyUnicodeKeyLayoutData) else { return nil }
+        let data = Unmanaged<CFData>.fromOpaque(property).takeUnretainedValue()
+        guard let bytes = CFDataGetBytePtr(data) else { return nil }
+        let layout = UnsafeRawPointer(bytes).assumingMemoryBound(to: UCKeyboardLayout.self)
+        for code in UInt16(0)..<128 {
+            var state: UInt32 = 0, length = 0
+            var output = [UniChar](repeating: 0, count: 4)
+            let status = UCKeyTranslate(layout, code, UInt16(kUCKeyActionDown), 0, UInt32(LMGetKbdType()),
+                UInt32(kUCKeyTranslateNoDeadKeysBit), &state, output.count, &length, &output)
+            if status == noErr, String(utf16CodeUnits: output, count: length) == character { return code }
+        }
+        return nil
     }
 }

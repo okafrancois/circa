@@ -68,6 +68,27 @@ extension NativeWebKitTests {
 @Suite(.serialized)
 @MainActor
 struct NativePeekTests {
+    @Test("Copy commands and the address button use the Peek document and clean trackers")
+    func copyPeekURLAndMarkdown() async throws {
+        let (environment, c, tab) = try await makePeekWindow()
+        defer { c.window?.close() }
+        let (registry, router) = try await makeRegistry(environment, c)
+        defer { router.shutdown() }
+        let url = URL(string: "https://peek.test/thread?utm_source=mail&id=42")!
+        _ = try #require(tab.openNewTarget(url, modifiers: [.shift]))
+        await c.session.waitForPendingCommands()
+        #expect(c.isPeekPresented)
+        #expect(registry.dispatch(.copyURL, origin: .keyboard))
+        await c.session.waitForPendingCommands()
+        #expect(NSPasteboard.general.string(forType: .string) == "https://peek.test/thread?id=42")
+        #expect(registry.dispatch(.copyURLAsMarkdown, origin: .menu))
+        await c.session.waitForPendingCommands()
+        #expect(NSPasteboard.general.string(forType: .string)?.hasSuffix("](https://peek.test/thread?id=42)") == true)
+        c.peek.pageFocus = .tab
+        c.copyAddressFromPill(nil)
+        #expect(NSPasteboard.general.string(forType: .string) == "https://peek.test/thread?id=42")
+    }
+
     // MARK: Routing
 
     @Test("Shift-click on a new target opens the engine-created surface in Peek, never as a tab")

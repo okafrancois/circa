@@ -44,6 +44,8 @@ class ReleaseTests(unittest.TestCase):
         self.assertEqual(info['CFBundleVersion'], '123')
         self.assertEqual(info['CFBundleShortVersionString'], '0.1.0')
         self.assertEqual(info['SUScheduledCheckInterval'], 3600)
+        self.assertTrue(info['SUAllowsAutomaticUpdates'])
+        self.assertTrue(info['SUVerifyUpdateBeforeExtraction'])
         self.assertTrue(info['SUAutomaticallyUpdate'])
 
     def test_release_enables_quarantine_even_for_older_source_bundles(self):

@@ -19,10 +19,14 @@ extension BrowserWindowSession {
         _ mutation: @escaping @Sendable (BrowserStore) async throws -> Value
     ) async throws -> Value {
         pendingCommandCount += 1
+        let diagnostic = trackCommand(kind: #function)
         let previous = pending
         let task = Task<Value, Error> { [self] in
             defer { pendingCommandCount -= 1 }
+            defer { diagnostic.finish() }
             await previous?.value
+            activeCommandDiagnostic = diagnostic
+            diagnostic.step = "model-or-surface-publication"
             return try await mutation(store)
         }
         pending = Task { _ = try? await task.value }

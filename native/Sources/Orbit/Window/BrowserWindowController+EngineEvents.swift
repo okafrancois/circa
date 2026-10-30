@@ -10,6 +10,7 @@ extension BrowserWindowController: BrowserEngineSurfaceDelegate {
     }
 
     func surfaceDidCommitNavigation(_ surface: Surface) {
+        OrbitUnsavedInputGuard.clear(surface)
         if owns(surface), let url = surface.navigationState.committedURL {
             session.recordPinnedNavigation(for: surface, to: url, committed: true)
         }
@@ -117,6 +118,17 @@ extension BrowserWindowController: BrowserEngineSurfaceDelegate {
         return NSApp.mainMenu?.performKeyEquivalent(with: event) ?? false
     }
 
+    func surface(_ surface: Surface, performNonEditingUndo event: NSEvent, receipt: BrowserKeyReceipt) -> Bool {
+        let responder = window?.firstResponder as? NSView
+        guard acceptsCommands, owns(surface),
+              BrowserPageKeyContext.accepts(receipt, windowID: id, current: commandState.context,
+                  isKeyWindow: window?.isKeyWindow == true, isSelected: session.selectedSurface === surface,
+                  focusInsideDocument: responder?.isDescendant(of: surface.hostView) == true),
+              sidebar.undoRouter.nextSource(redo: false) != nil else { return false }
+        sidebar.undoRouter.undo(nil)
+        return true
+    }
+
     // MARK: Policy
 
     func surface(_ surface: Surface, decidePolicyFor action: BrowserNavigationAction,
@@ -130,6 +142,9 @@ extension BrowserWindowController: BrowserEngineSurfaceDelegate {
 
     func navigationActionPolicy(for action: BrowserNavigationAction, in surface: Surface) -> BrowserNavigationActionPolicy {
         guard holdsForNavigation(surface) else { return .cancel }
+        if action.isMainFrame != false, [.typed, .reload, .backForward].contains(action.kind), let url = action.url {
+            restoreLocalDocumentGrant(for: surface, target: url)
+        }
         if !isPreparingForTermination, handleExternalApplicationLink(action, from: surface) { return .cancel }
         return BrowserNavigationPolicy.action(action, surface: surface, held: true,
             routesEnabled: !isPreparingForTermination && owns(surface), hooks: engineEventHooks,

@@ -47,7 +47,8 @@ def bundle_info(version, bundle_id=BUNDLE_ID, principal='ACRApplication'):
     return {
         'SUFeedURL': 'https://github.com/' + release_config['repository'] + '/releases/latest/download/appcast.xml',
         'SUPublicEDKey': release_config['public_ed_key'],
-        'SUEnableAutomaticChecks': True, 'SUAutomaticallyUpdate': True,
+        'SUEnableAutomaticChecks': True, 'SUAllowsAutomaticUpdates': True,
+        'SUVerifyUpdateBeforeExtraction': True, 'SUAutomaticallyUpdate': True,
         'SUScheduledCheckInterval': 3600,
         'CFBundleIdentifier': bundle_id,
         'CFBundleName': DISPLAY_NAME,
@@ -561,7 +562,7 @@ def main():
         output = output.with_name(output.name + '.staged')
     output.parent.mkdir(parents=True, exist_ok=True)
     if args.source_app is None and args.executable is None:
-        args.source_app = ROOT / "native/OrbitChromium/build/app-orbit-engine-extensions-r13/product/Orbit.app"
+        args.source_app = ROOT / "native/OrbitChromium/build/app-orbit-engine-extensions-r14/product/Orbit.app"
     signatures = assemble(args.source_app, args.executable, args.framework, args.helpers_dir,
                           output, args.bundle_id, version, args.synthetic, args.synthetic_root)
     report = {'bundle': str(output), 'version': version, 'signatures': signatures,

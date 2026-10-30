@@ -5,6 +5,30 @@ import Testing
 @Suite("Site preferences")
 @MainActor
 struct BrowserSitePreferenceTests {
+    @Test("Localhost defaults to Developer Mode with durable host-scoped opt-out")
+    func localhostDefaults() throws {
+        let root = URL(fileURLWithPath: "/private/tmp/site-localhost-" + UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let file = root.appendingPathComponent("preferences.json")
+        let profile = ProfileID(), other = ProfileID()
+        let store = try BrowserSitePreferenceStore(destination: file)
+        for text in ["http://localhost", "https://localhost:8080/path", "http://app.localhost:3000", "http://deep.app.localhost"] {
+            let url = URL(string: text)!
+            #expect(store.preferences(url: url, profileID: profile).developerMode)
+            var settings = store.preferences(url: url, profileID: profile)
+            settings.developerMode = false
+            try store.set(settings, url: url, profileID: profile)
+            #expect(try !BrowserSitePreferenceStore(destination: file).preferences(url: url, profileID: profile).developerMode)
+            #expect(store.preferences(url: url, profileID: other).developerMode)
+            settings.developerMode = true
+            try store.set(settings, url: url, profileID: profile)
+        }
+        for text in ["http://127.0.0.1:8080", "http://[::1]:3000", "https://localhost.example.test", "https://notlocalhost", "file:///localhost"] {
+            #expect(!store.preferences(url: URL(string: text), profileID: profile).developerMode)
+        }
+    }
+
     @Test("Host preferences survive restart and remain independent across profiles")
     func persistenceAndScope() throws {
         let root = URL(fileURLWithPath: "/private/tmp/orbit-site-preferences-" + UUID().uuidString, isDirectory: true)

@@ -28,7 +28,6 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
     let backButton = BrowserNavigationGlyphButton(glyph: nil, label: OrbitShellText.back)
     let forwardButton = BrowserNavigationGlyphButton(glyph: nil, label: OrbitShellText.forward)
     let reloadButton = OrbitGlyphButton(glyph: nil, label: OrbitShellText.reload)
-    var openedLocalDocuments: Set<URL> = []
     var addressResolver = AddressResolver()
     let translationPages: BrowserTranslationPages
     lazy var translation = BrowserTranslationController(owner: self)
@@ -212,7 +211,7 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
         self.library.history.recorder = history
         self.historyObserver = BrowserHistoryEngineObserver(recorder: history, resolveProfile: engine.profile(for:))
         findSession = BrowserFindSession<Surface>()
-        let window = NSWindow(
+        let window = OrbitBrowserWindow(
             contentRect: NSRect(x: 0, y: 0, width: 1020, height: 720),
             styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
             backing: .buffered,
@@ -249,9 +248,7 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
         // Ownership and placement are recorded before the first load starts.
         let startSurface: (Surface, URL) -> Void = { [weak self] surface, url in
             if url.absoluteString != "about:blank" {
-                if self?.openedLocalDocuments.contains(url) == true {
-                    BrowserNavigationPolicy.authorizeLocalDocument(url, for: surface)
-                }
+                self?.restoreLocalDocumentGrant(for: surface, target: url)
                 if engine.kind == .chromium, BrowserNavigationPolicy.isChromiumSettingsURL(url) {
                     BrowserNavigationPolicy.authorizeChromiumSettings(for: surface)
                 }
@@ -456,12 +453,14 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
     /// Makes this window the receiver of a surface's engine events and observations, in the same
     /// turn as the surface's creation for, or acceptance into, this window.
     func bindSurface(_ surface: Surface) {
+        OrbitUnsavedInputGuard.register(surface)
         let key = ObjectIdentifier(surface)
         surface.delegate = self
         surface.onChange = { [weak self, weak surface] in
             if let surface { self?.surfaceDidChange(surface) }
         }
         surface.onDispose = { [weak self, weak surface] in
+            if let surface { OrbitUnsavedInputGuard.clear(surface) }
             self?.nativeCreations.removeValue(forKey: key)
             self?.pendingNativeClosures.remove(key)
             if let surface {
@@ -477,6 +476,7 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
     var sidebarMetadataSurfaces: [ObjectIdentifier: (Surface, UInt64)] = [:]
 
     func surfaceDidChange(_ surface: Surface) {
+        if surface.isSuspended { OrbitUnsavedInputGuard.clear(surface) }
         guard !isPreparingForTermination, owns(surface) else { return }
         if let url = surface.currentURL { session.updateDestination(for: surface, to: url) }
         if session.selectedSurface === surface {
@@ -590,8 +590,8 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
     @objc func navigateToEnteredAddress(_ sender: Any?) { submitEnteredAddress() }
     @objc func resetPageZoom(_ sender: Any?) { resetPageZoomFromControl() }
     @objc func copyAddressFromPill(_ sender: Any?) {
-        guard acceptsCommands, let url = session.selectedSurface?.currentURL else { return }
-        guard BrowserLinkPasteboard.write(url) else { return }
+        guard acceptsCommands, let url = (presentedPeekSurface ?? session.selectedSurface)?.currentURL else { return }
+        guard BrowserLinkPasteboard.write(BrowserCopyURLCleaner.clean(url)) else { return }
         (sender as? PillCopyLinkButton)?.confirmCopied()
     }
 

@@ -689,9 +689,9 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest="command", required=True)
     builder = sub.add_parser("build")
-    builder.add_argument("--flavor", choices=x2.FLAVORS, default="orbit-engine-extensions-r13")
+    builder.add_argument("--flavor", choices=x2.FLAVORS, default="orbit-engine-extensions-r14")
     runner = sub.add_parser("smoke")
-    runner.add_argument("--flavor", choices=x2.FLAVORS, default="orbit-engine-extensions-r13")
+    runner.add_argument("--flavor", choices=x2.FLAVORS, default="orbit-engine-extensions-r14")
     runner.add_argument("--evidence-root", type=Path, default=EVIDENCE)
     runner.add_argument("--timeout", type=int, default=180)
     runner.add_argument("--quit-timeout", type=int, default=30)
@@ -708,7 +708,7 @@ def main():
                         help="Fresh real-shell MV3 and normal quit gate, without unrelated scenarios")
     runner.add_argument("--private-domain-only", action="store_true",
                         help="Hidden mock-only private domain coexistence/release probe on approved EssentialsR2")
-    runner.add_argument("--daily-qa", choices=("overlays", "downloads", "archive", "regressions"), help="Synthetic daily ownership, download quit and archive undo probes")
+    runner.add_argument("--daily-qa", choices=("overlays", "downloads", "archive", "regressions", "seams"), help="Synthetic daily ownership, download quit and archive undo probes")
     runner.add_argument("--relaunch-only", action="store_true", help="Regular windows and Little across normal quit and relaunch")
     runner.add_argument("--profiles-only", action="store_true",
                         help="Two persistent product profiles across normal and crash relaunches, without extensions")
@@ -759,7 +759,7 @@ def main():
         args.no_extension = True
     if args.command == "smoke" and args.private_domain_only:
         if args.flavor not in ("orbit-essentials-r2", "orbit-engine-extensions", "orbit-engine-extensions-r2",
-                               "orbit-engine-extensions-r3", "orbit-engine-extensions-r4", "orbit-engine-extensions-r5", "orbit-engine-extensions-r6", "orbit-engine-extensions-r7", "orbit-engine-extensions-r8", "orbit-engine-extensions-r9", "orbit-engine-extensions-r10", "orbit-engine-extensions-r11", "orbit-engine-extensions-r12", "orbit-engine-extensions-r13") or args.extension_only:
+                               "orbit-engine-extensions-r3", "orbit-engine-extensions-r4", "orbit-engine-extensions-r5", "orbit-engine-extensions-r6", "orbit-engine-extensions-r7", "orbit-engine-extensions-r8", "orbit-engine-extensions-r9", "orbit-engine-extensions-r10", "orbit-engine-extensions-r11", "orbit-engine-extensions-r12", "orbit-engine-extensions-r13", "orbit-engine-extensions-r14") or args.extension_only:
             parser.error("--private-domain-only requires a product engine and excludes --extension-only")
         args.no_extension = True
         args.fresh_only = True

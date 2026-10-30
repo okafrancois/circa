@@ -73,15 +73,55 @@ public extension BrowserWindowSession {
         enqueue { session in try await session.refreshOrganizationState() }
     }
 
+    /// Creates and positions a new tab in one session command; existing rows remain untouched.
+    func openTab(url: URL, at destination: BrowserOrganizationDestination) {
+        enqueue { session in
+            guard let initial = try await session.validatedContext() else { return }
+            var created: BrowserTab?
+            try await session.createTab(url: url, activate: true, from: initial, onCreate: { created = $0 })
+            guard let created, let context = try await session.validatedContext() else { return }
+            let state = try await session.store.moveItems([.tab(created.id)], to: destination, from: context)
+            session.install(state)
+        }
+    }
+
     // MARK: Selection
 
     /// Clicking a sidebar tab: selects, moves (a Favorite from another Space) or loads it here.
     func selectTab(_ id: TabID, expecting expected: BrowserOrganizationSnapshot? = nil,
                    admission: BrowserSidebarSelectionAdmission? = nil,
                    isCurrent: @escaping @MainActor () -> Bool = { true }) {
-        enqueueOrganization { session, context in
-            guard isCurrent() else { return try await session.store.captureWindowState(in: context.windowID) }
-            return try await session.selectTabState(id, from: context, expecting: expected, admission: admission)
+        BrowserSidebarInputDiagnostics.record("session-select", tab: id, window: windowID, reason: isClosed ? "closed" : "queued")
+        enqueue { session in
+            do {
+                guard let state = try await session.runOrganizationCommand({ session, context in
+                    guard isCurrent() else {
+                        BrowserSidebarInputDiagnostics.record("selection", tab: id, window: context.windowID, reason: "superseded")
+                        return try await session.store.captureWindowState(in: context.windowID)
+                    }
+                    return try await session.selectTabState(id, from: context, expecting: expected, admission: admission)
+                }), !session.isClosed else {
+                    BrowserSidebarInputDiagnostics.record("selection", tab: id, window: session.windowID, reason: "context-unavailable")
+                    return
+                }
+                session.install(state)
+                let selected = session.snapshot?.selectedOccurrenceID
+                let matches = selected != nil && session.tabID(for: selected!) == id
+                BrowserSidebarInputDiagnostics.record("selection", tab: id, window: session.windowID,
+                    reason: admission?.isValid == false ? "admission-revoked" : !matches ? "refused"
+                        : session.selectedSurface == nil ? "surface-unavailable" : "selected")
+            } catch {
+                let reason: String
+                switch error {
+                case BrowserStoreError.staleContext: reason = "stale-context"
+                case BrowserStoreError.occurrenceOwnedByAnotherWindow: reason = "foreign-occurrence"
+                case BrowserOrganizationError.itemMissing: reason = "missing-tab"
+                case BrowserOrganizationError.notVisibleInContext: reason = "not-visible"
+                default: reason = "selection-error"
+                }
+                BrowserSidebarInputDiagnostics.record("selection", tab: id, window: session.windowID, reason: reason)
+                if !session.isClosed { session.onError?(error) }
+            }
         }
     }
 
@@ -132,6 +172,13 @@ public extension BrowserWindowSession {
     ) -> Task<FolderID?, Never> {
         enqueueOrganizationValue { session, context in
             try await session.store.createFolder(title: title, at: destination, containing: nodes, from: context)
+        }
+    }
+
+    @discardableResult
+    func duplicateFolder(_ id: FolderID) -> Task<FolderID?, Never> {
+        enqueueOrganizationValue { session, context in
+            try await session.store.duplicateFolder(id, from: context)
         }
     }
 
@@ -295,10 +342,14 @@ public extension BrowserWindowSession {
         completion: @escaping @MainActor (UInt64?) -> Void = { _ in }
     ) -> Task<UInt64?, Never> {
         guard !isClosed else { completion(nil); return Task { nil } }
+        let diagnostic = trackCommand(kind: #function)
         let previous = pending
         pendingCommandCount += 1
         let replay = Task<UInt64?, Never> { [self] in
+            defer { diagnostic.finish() }
             await previous?.value
+            activeCommandDiagnostic = diagnostic
+            diagnostic.step = "model-or-surface-publication"
             var replayedID: UInt64?
             defer {
                 pendingCommandCount -= 1
@@ -340,10 +391,10 @@ public extension BrowserWindowSession {
 }
 
 extension BrowserWindowSession {
-    func enqueueOrganization(
+    func enqueueOrganization(kind: String = #function,
         _ command: @escaping @MainActor (BrowserWindowSession, BrowserContext) async throws -> BrowserWindowState
     ) {
-        enqueue { session in
+        enqueue(kind: kind) { session in
             guard let state = try await session.runOrganizationCommand(command) else { return }
             guard !session.isClosed else { return }
             session.install(state)
@@ -356,10 +407,14 @@ extension BrowserWindowSession {
     ) -> Task<Value?, Never> {
         guard !isClosed else { return Task { nil } }
         pendingCommandCount += 1
+        let diagnostic = trackCommand(kind: #function)
         let previous = pending
         let task = Task<Value?, Never> { [self] in
             defer { pendingCommandCount -= 1 }
+            defer { diagnostic.finish() }
             await previous?.value
+            activeCommandDiagnostic = diagnostic
+            diagnostic.step = "model-or-surface-publication"
             guard !isClosed, var context = activeContext else { return nil }
             do {
                 for attempt in 0..<maximumOrganizationAdoptions {
@@ -386,10 +441,14 @@ extension BrowserWindowSession {
     ) -> Task<Value?, Never> {
         guard !isClosed else { return Task { nil } }
         pendingCommandCount += 1
+        let diagnostic = trackCommand(kind: #function)
         let previous = pending
         let task = Task<Value?, Never> { [self] in
             defer { pendingCommandCount -= 1 }
+            defer { diagnostic.finish() }
             await previous?.value
+            activeCommandDiagnostic = diagnostic
+            diagnostic.step = "model-or-surface-publication"
             guard !isClosed else { return nil }
             do {
                 guard let (value, state) = try await runOrganizationCommand(command) else { return nil }

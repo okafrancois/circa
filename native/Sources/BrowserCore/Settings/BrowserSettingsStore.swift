@@ -146,6 +146,7 @@ public struct BrowserSettingsDocument: Codable, Equatable, Sendable {
     public var reducedMotion: BrowserReducedMotionSetting = .system
     public var interaction = BrowserInteractionPreferences()
     public var downloads = BrowserDownloadPreferences()
+    public var siteSearches: [BrowserSiteSearch] = BrowserSiteSearch.builtIns
     public var memorySaver: BrowserMemorySaverSetting = .oneHour
     public var safeBrowsingEnabled = false
     public var allowJavaScriptFromAppleEvents = false
@@ -172,7 +173,7 @@ public struct BrowserSettingsDocument: Codable, Equatable, Sendable {
     public var spaces: [SpaceID: BrowserSpaceSettings] = [:]
     public init() {}
     private enum CodingKeys: String, CodingKey {
-        case allowJavaScriptFromAppleEvents, safeBrowsingEnabled, quickWindowArchiveThreshold, quickWindowProfilesByDomain, downloads, automaticPictureInPicture, hasSeenBoostsIntroduction, enablesBoostsOnWebsites, interaction, memorySaver, linkRouting, version, reducedMotion, profiles, spaces, opensExternalLinksInQuickWindow, lastActiveWindowID, lastActiveSpaceID
+        case allowJavaScriptFromAppleEvents, siteSearches, safeBrowsingEnabled, quickWindowArchiveThreshold, quickWindowProfilesByDomain, downloads, automaticPictureInPicture, hasSeenBoostsIntroduction, enablesBoostsOnWebsites, interaction, memorySaver, linkRouting, version, reducedMotion, profiles, spaces, opensExternalLinksInQuickWindow, lastActiveWindowID, lastActiveSpaceID
     }
     public init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
@@ -180,6 +181,7 @@ public struct BrowserSettingsDocument: Codable, Equatable, Sendable {
         version = try values.decode(Int.self, forKey: .version)
         reducedMotion = try values.decode(BrowserReducedMotionSetting.self, forKey: .reducedMotion)
         interaction = try values.decodeIfPresent(BrowserInteractionPreferences.self, forKey: .interaction) ?? .init()
+        siteSearches = try values.decodeIfPresent([BrowserSiteSearch].self, forKey: .siteSearches) ?? BrowserSiteSearch.builtIns
         downloads = try values.decodeIfPresent(BrowserDownloadPreferences.self, forKey: .downloads) ?? .init()
         memorySaver = (try? values.decode(BrowserMemorySaverSetting.self, forKey: .memorySaver)) ?? .oneHour
         // Version one did not record whether four hours was explicitly chosen.
@@ -279,6 +281,31 @@ public actor BrowserSettingsStore {
     public func updateDownloads(_ edit: @Sendable (inout BrowserDownloadPreferences) -> Void) throws {
         var next = document
         edit(&next.downloads)
+        try publish(next)
+    }
+
+    public func saveSiteSearch(_ entry: BrowserSiteSearch) throws {
+        try entry.validate(in: document.siteSearches)
+        var next = document
+        if let index = next.siteSearches.firstIndex(where: { $0.id == entry.id }) { next.siteSearches[index] = entry }
+        else {
+            guard !entry.id.hasPrefix("builtin.") else { throw BrowserSiteSearchError.missingEntry }
+            next.siteSearches.append(entry)
+        }
+        try publish(next)
+    }
+
+    public func setSiteSearchEnabled(_ id: String, _ enabled: Bool) throws {
+        guard var entry = document.siteSearches.first(where: { $0.id == id }) else { throw BrowserSiteSearchError.missingEntry }
+        entry.isEnabled = enabled
+        try saveSiteSearch(entry)
+    }
+
+    public func removeSiteSearch(_ id: String) throws {
+        guard let entry = document.siteSearches.first(where: { $0.id == id }) else { throw BrowserSiteSearchError.missingEntry }
+        guard !entry.isBuiltIn else { throw BrowserSiteSearchError.builtInRemoval }
+        var next = document
+        next.siteSearches.removeAll { $0.id == id }
         try publish(next)
     }
 
@@ -428,6 +455,11 @@ public actor BrowserSettingsStore {
               Set(document.linkRouting.rules.map(\.id)).count == document.linkRouting.rules.count else {
             throw BrowserLinkRoutingError.invalidRule
         }
+        guard Set(document.siteSearches.map(\.id)).count == document.siteSearches.count,
+              BrowserSiteSearch.builtIns.allSatisfy({ builtin in document.siteSearches.contains { $0.id == builtin.id } }) else {
+            throw BrowserSiteSearchError.builtInRemoval
+        }
+        for entry in document.siteSearches { try entry.validate(in: document.siteSearches) }
         for settings in document.spaces.values {
             guard BrowserSpaceSettings.isValidIcon(settings.icon), settings.iconSelection.isValid else {
                 throw BrowserSettingsError.invalidIcon

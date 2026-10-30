@@ -523,3 +523,82 @@ extension BrowserSplitTests {
         #expect(await f.store.sessionDocument() == before)
     }
 }
+
+
+extension BrowserSplitTests {
+    @Test("Joining two tabs chooses order and keeps either pinned participant pinned", arguments: [false, true], [false, true])
+    func joinPinnedOrder(pinSource: Bool, leading: Bool) async throws {
+        let f = try await OrganizationFixture.make()
+        let target = try await f.open("target"), source = try await f.open("source")
+        _ = try await f.store.pinTabs([pinSource ? source : target], from: f.context())
+        _ = try await f.store.selectTab(target, from: f.context())
+        let before = await f.store.sessionDocument()
+        let state = try await f.store.openTabInSplit(source, orientation: .vertical, leading: leading, from: f.context())
+        let group = try #require(state.organization.split(containing: source))
+        #expect(group.group.tabIDs == (leading ? [source, target] : [target, source]))
+        #expect(group.group.orientation == .vertical)
+        #expect(state.organization.pinned.map(\.node) == [.split(group.group.id)])
+        #expect(state.organization.today.isEmpty)
+        #expect(group.tabs.allSatisfy { $0.pinnedURL != nil })
+        _ = try await f.store.undoOrganization(from: f.context())
+        #expect(await f.store.sessionDocument().organization == before.organization)
+        try await f.validate()
+    }
+
+    @Test("A pinned tab promotes an existing Today group without losing ratios on undo")
+    func promoteExistingGroup() async throws {
+        let f = try await OrganizationFixture.make()
+        let a = try await f.open("a"), b = try await f.open("b"), source = try await f.open("pinned")
+        _ = try await f.store.pinTabs([source], from: f.context())
+        let (id, _) = try await f.store.createSplit([a,b], from: f.context())
+        _ = try await f.store.resizeSplit(id, ratios: [0.2,0.8], from: f.context())
+        _ = try await f.store.openTabInSplit(source, leading: true, from: f.context())
+        #expect(try await f.organization().pinned.map(\.node) == [.split(id)])
+        #expect(try await f.organization().split(containing: source)?.group.tabIDs == [source,a,b])
+        _ = try await f.store.undoOrganization(from: f.context())
+        #expect(try await f.organization().split(containing: a)?.group.ratios == [0.2,0.8])
+        try await f.validate()
+    }
+
+    @Test("Every model entry refuses a fifth pane without creating an orphan")
+    func allEntryLimits() async throws {
+        let f = try await OrganizationFixture.make()
+        var ids: [TabID] = []
+        for name in ["a","b","c","d","e"] { ids.append(try await f.open(name)) }
+        let (group, _) = try await f.store.createSplit(Array(ids.prefix(4)), from: f.context())
+        let before = await f.store.sessionDocument()
+        await #expect(throws: BrowserSplitError.invalidPaneCount) { try await f.store.createSplit(ids, from: f.context()) }
+        await #expect(throws: BrowserSplitError.invalidPaneCount) { try await f.store.addPane(ids[4], to: group, from: f.context()) }
+        await #expect(throws: BrowserSplitError.invalidPaneCount) { try await f.store.openTabInSplit(ids[4], from: f.context()) }
+        let selected = try #require(try await f.organization().selectedTab?.id)
+        await #expect(throws: BrowserSplitError.invalidPaneCount) { try await f.store.openTabInSplit(selected, from: f.context()) }
+        for orientation in [BrowserSplitOrientation.horizontal, .vertical] {
+            await #expect(throws: BrowserSplitError.invalidPaneCount) {
+                try await f.store.splitWithNewTab(url: organizationURL("refused"), orientation: orientation, from: f.context())
+            }
+        }
+        #expect(await f.store.sessionDocument() == before)
+        try await f.validate()
+    }
+
+    @Test("Duplicating a full split preserves orientation, ratios, metadata and section with fresh identities",
+          arguments: [false, true])
+    func duplicateFullSplit(pinned: Bool) async throws {
+        let f = try await OrganizationFixture.make()
+        var ids: [TabID] = []
+        for name in ["a","b","c","d"] { ids.append(try await f.open(name)) }
+        if pinned { _ = try await f.store.pinTabs(ids, from: f.context()) }
+        let (id, _) = try await f.store.createSplit(ids, orientation: .vertical, from: f.context())
+        _ = try await f.store.resizeSplit(id, ratios: [0.1,0.2,0.3,0.4], from: f.context())
+        let before = await f.store.sessionDocument()
+        let state = try await f.store.duplicateSplit(id, from: f.context())
+        let copy = try #require(state.organization.selectedTab.flatMap { state.organization.split(containing: $0.id) })
+        #expect(copy.group.id != id && Set(copy.group.tabIDs).isDisjoint(with: ids))
+        #expect(copy.group.orientation == .vertical && copy.group.ratios == [0.1,0.2,0.3,0.4])
+        #expect(copy.tabs.map(\.url) == ids.map { tab in before.organization.tabs.first { $0.id == tab }!.url })
+        #expect(copy.tabs.allSatisfy { ($0.pinnedURL != nil) == pinned })
+        _ = try await f.store.undoOrganization(from: f.context())
+        #expect(await f.store.sessionDocument().organization == before.organization)
+        try await f.validate()
+    }
+}

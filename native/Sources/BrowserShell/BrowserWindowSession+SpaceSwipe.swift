@@ -23,6 +23,7 @@ public extension BrowserWindowSession {
                                 completion: @escaping @MainActor (Bool) -> Void) {
         guard let expected = activeContext else { completion(false); return }
         enqueue { session in
+            session.activeCommandDiagnostic?.step = "space-swipe-presentation"
             await waitForPresentation()
             guard isCurrent(), !session.isClosed, session.activeContext == expected else {
                 completion(false); return

@@ -36,7 +36,7 @@ struct NativeCommandTests {
     func catalogCoverage() throws {
         #expect(OrbitCommandCatalog.declarations.count == 179)
         #expect(OrbitCommandCatalog.structuralIDs.count == 14)
-        #expect(OrbitCommandCatalog.actionDefinitions.count == 254) // Includes local page sharing.
+        #expect(OrbitCommandCatalog.actionDefinitions.count == 261) // Includes local page sharing.
         #expect(OrbitCommandCatalog.declarations.allSatisfy { $0.localizesKey })
         #expect(OrbitCommandCatalog.declarations.filter { !$0.key.isEmpty }.count == 85)
         #expect(OrbitCommandCatalog.declarations.filter { !$0.key.isEmpty && $0.modifierMask == nil }.map(\.source) == ["menu.declaration.25", "menu.declaration.117"])
@@ -298,8 +298,9 @@ struct NativeCommandTests {
         // + site-session/bookmark import and export (4), and private-window routing (1).
         // + local Share and page-context Share (2), sidebar tab navigation (4), Select Space 1–9 (9).
         let implemented = system.registry.definitions.filter { system.registry.isImplemented($0.id) }.map(\.id.rawValue)
-        // Boost creation, the Library destination and folder promotion add executable bindings.
-        #expect(implemented.count == 190, "\(implemented.count): \(implemented.sorted())")
+        // Includes 24 additional native responder actions, Network Inspector, Exit, Media and two support actions.
+        #expect(implemented.count == 231, "\(implemented.count): \(implemented.sorted())")
+        #expect(system.registry.isImplemented(.cycleExtensions))
         #expect(system.registry.isImplemented(.checkForUpdates))
         #expect(system.registry.isImplemented(.toggleDeveloperMode))
         #expect(system.registry.isImplemented(.newIncognitoWindow))
@@ -321,8 +322,8 @@ struct NativeCommandTests {
         #expect(system.registry.isImplemented(.newQuickWindowWindow))
         #expect(!system.registry.isImplemented(.newChatGPTMessage))
         // Unsupported declarations retain no handler until their behavior is specified.
-        for id: BrowserCommandID in [.blankWindow, .showHideToolbar, .joinMeeting, .cycleExtensions,
-                                     .peekEmail, .copyURLAsQuote, .exit] {
+        for id: BrowserCommandID in [.blankWindow, .showHideToolbar, .joinMeeting,
+                                     .peekEmail, .copyURLAsQuote] {
             #expect(!system.registry.isImplemented(id))
         }
     }
@@ -350,7 +351,7 @@ struct NativeCommandTests {
         }.map { $0.id.rawValue }.sorted()
         print("SHORTCUTS unimplemented: " + unbound.joined(separator: ", "))
         print("MENUS-WORK omitted: " + omitted.map { $0.id.rawValue }.sorted().joined(separator: ", "))
-        for id in [BrowserCommandID.findAndReplace, .useSelectionToFind, .jumpToSelection, .copyURLAsQuote, .captureInPortraitMode] {
+        for id in [BrowserCommandID.copyURLAsQuote, .captureInPortraitMode] {
             #expect(!registry.isImplemented(id))
         }
         for id in OrbitCommandCatalog.hiddenCommands {
@@ -444,7 +445,6 @@ struct NativeCommandTests {
           About Circa [aboutOrbit]
           ---
           Preferences… [preferences] ⌘,
-          Share Circa [shareOrbit]
           Set as Default Browser [setAsDefaultBrowser]
           ---
           Import from Another Browser… [importFromAnotherBrowser]
@@ -457,8 +457,6 @@ struct NativeCommandTests {
           Hide Circa [hideOrbit] ⌘H
           Hide Other Windows [hideOtherWindows] ⌥⌘H
           Show All [showAll]
-          ---
-          Sign Out [signOut]
           ---
           Quit Circa [quitOrbit] ⌘Q
         File
@@ -476,17 +474,12 @@ struct NativeCommandTests {
           New Boost [newBoost] (hidden)
           Edit Boost [editBoost] (hidden)
           New Legacy Boost (Advanced) [newLegacyBoostAdvanced] (hidden)
-          Boost Gallery [boostGallery] (hidden)
           New Profile [newProfile]
-          New Note [newNote] ⌃⇧N
-          New Note (in Split) [newNoteInSplit] ⌃⌥N (hidden) (key when hidden)
-          New Easel [newEasel] ⌃⇧E
           ---
           Close Window [closeWindow] ⇧⌘W
           Archive Tab [archiveTab] ⌘W (key when hidden)
           ---
           Share… [share]
-          Send to Dia [sendToDia]
           Capture… [capture] ⇧⌘2
           Capture Full Page [captureFullPage]
           Capture in Portrait Mode [captureInPortraitMode] (key when hidden)
@@ -503,7 +496,6 @@ struct NativeCommandTests {
           Copy [copy] ⌘C <copy:>
           Copy URL [copyURL] ⇧⌘C
           Copy URL as Markdown [copyURLAsMarkdown] ⌥⇧⌘C
-          Copy URL as Quote [copyURLAsQuote] ⌃⇧⌘C
           Paste [paste] ⌘V <paste:>
           Paste and Match Style [pasteAndMatchStyle] ⇧⌘V <pasteAsPlainText:>
           Delete [delete] <delete:>
@@ -555,7 +547,6 @@ struct NativeCommandTests {
           {View}
           Appearance
             {}
-            Websites, Easels, and Notes will use: [websitesEaselsAndNotesWillUse]
             Automatic [automatic] (on)
             Light [light]
             Dark [dark]
@@ -612,12 +603,12 @@ struct NativeCommandTests {
         Tabs
           {Tabs}
           New Tab… [newTab] ⌘T
-          New ChatGPT Message… [newChatGPTMessage] ⌥⌘G (hidden) (key when hidden)
           Join Meeting [joinMeeting] ⌃⌘J (hidden) (key when hidden)
           Peek Email… [peekEmail] ⇧⌘E (hidden) (key when hidden)
           Pin/Unpin Tab [pinUnpinTab] ⌘D
           Open Little Circa or Peek in… [openQuickWindowOrPeekIn] ⌘O (key when hidden)
           New Folder… [newFolder]
+          Paste as New Tab [pasteAsNewTab] ⌥⌘V (hidden) (key when hidden)
           Duplicate [duplicate] (key when hidden)
           Rename Current Item [renameCurrentItem] (hidden) (key when hidden)
           Collapse All Folders [collapseAllFolders] (hidden) (key when hidden)
@@ -655,7 +646,6 @@ struct NativeCommandTests {
           ---
           View Library [viewLibrary] ⇧⌘L
           View Downloads [viewDownloads] ⇧⌘J
-          View Easels & Notes [viewEaselsNotes]
           View Media [viewMedia]
           View Boosts [viewBoosts] (hidden)
           ---
@@ -668,7 +658,6 @@ struct NativeCommandTests {
           Contact the Team [contactTheTeam]
           Circa Help [visitHelpCenter]
           Restore Data [restoreData]
-          Export Circa Notes [exportOrbitNotes]
           ---
           Troubleshooting
             {Troubleshooting}

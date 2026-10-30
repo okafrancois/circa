@@ -8,6 +8,33 @@ extension NativeWebKitTests {
 @Suite(.serialized)
 @MainActor
 struct QuickWindowLifecycleTests {
+    @Test("Update checkpoints reopen Little documents once in their original profiles")
+    func updateRelaunch() async throws {
+        NSApplication.shared.setActivationPolicy(.prohibited)
+        let root = URL(fileURLWithPath: "/private/tmp/little-update-" + UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let file = root.appendingPathComponent("session.json")
+        let environment = try await BrowserEnvironment.open(engine: PeekSyntheticEngine(), sessionFile: file)
+        let (_, profile) = try await environment.initialContext.value
+        let url = URL(string: "https://synthetic.test/update-document")!
+        _ = try await environment.makeQuickWindow(url: url)
+        _ = try await environment.makeQuickWindow()
+        try environment.checkpointQuickWindowsForUpdate()
+        try await environment.finalize()
+        environment.retireQuickWindows()
+        let restored = try await BrowserEnvironment.open(engine: PeekSyntheticEngine(), sessionFile: file)
+        defer { restored.retireQuickWindows() }
+        var presentations = 0
+        try await restored.restoreQuickWindowsAfterUpdate { _ in presentations += 1 }
+        #expect(presentations == 2 && restored.quickWindows.count == 2)
+        #expect(restored.quickWindows.values.allSatisfy { $0.profileID == profile })
+        #expect(restored.quickWindows.values.contains { $0.surface?.currentURL == url })
+        try await restored.restoreQuickWindowsAfterUpdate { _ in presentations += 1 }
+        #expect(presentations == 2)
+        try await restored.finalize()
+    }
+
     @Test("Two external URLs own separate windows and a normalized repeat resurfaces the original document")
     func externalReuse() async throws {
         NSApplication.shared.setActivationPolicy(.prohibited)

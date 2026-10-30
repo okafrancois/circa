@@ -20,11 +20,19 @@ public extension BrowserWindowSession {
     func createSplit(_ ids: [TabID], orientation: BrowserSplitOrientation = .horizontal) {
         enqueueOrganization { session, context in try await session.store.createSplit(ids, orientation: orientation, from: context).1 }
     }
-    func addSplitPane(url: URL = URL(string: "about:blank")!, at index: Int? = nil) {
-        enqueueOrganization { session, context in try await session.store.splitWithNewTab(url: url, at: index, from: context) }
+    func addSplitPane(url: URL = URL(string: "about:blank")!, orientation: BrowserSplitOrientation? = nil, at index: Int? = nil) {
+        enqueueOrganization { session, context in try await session.store.splitWithNewTab(url: url, orientation: orientation, at: index, from: context) }
     }
     func addSplitPane(_ id: TabID, to split: SplitGroupID, at index: Int? = nil, orientation: BrowserSplitOrientation? = nil) {
         enqueueOrganization { session, context in try await session.store.addPane(id, to: split, at: index, orientation: orientation, from: context) }
+    }
+    func openTabInSplit(_ id: TabID, orientation: BrowserSplitOrientation? = nil, leading: Bool = false) {
+        enqueueOrganization { session, context in
+            try await session.store.openTabInSplit(id, orientation: orientation, leading: leading, from: context)
+        }
+    }
+    func duplicateSplit(_ id: SplitGroupID) {
+        enqueueOrganization { session, context in try await session.store.duplicateSplit(id, from: context) }
     }
     func selectSplit(_ id: SplitGroupID) {
         enqueueOrganization { session, context in
@@ -72,13 +80,17 @@ public extension BrowserWindowSession {
         let surface = transfer.surface
         bind(surface)
         pendingCommandCount += 1
+        let diagnostic = trackCommand(kind: #function)
         let previous = pending
         let adoption = Task<TabOccurrenceID?, Never> { [self] in
             defer {
                 if occurrencesBySurface[ObjectIdentifier(surface)] == nil { transfer.didFail(at: self) }
                 pendingCommandCount -= 1
             }
+            defer { diagnostic.finish() }
             await previous?.value
+            activeCommandDiagnostic = diagnostic
+            diagnostic.step = "model-or-surface-publication"
             guard !isClosed, BrowserSurfaceProvenance.isReserved(reservation, surface: surface, for: self) else { return nil }
             do {
                 let url = surface.currentURL ?? transfer.url
@@ -177,10 +189,15 @@ public extension BrowserWindowSession {
         // counted before receiver ACKs and before any membership observer can initiate quit.
         splitReleaseReservationCount += 1
         pendingCommandCount += 1
+        let diagnostic = trackCommand(kind: #function)
         let previous = pending
         pending = Task { [self] in
             defer { splitReleaseReservationCount -= 1; pendingCommandCount -= 1 }
+            defer { diagnostic.finish() }
             await previous?.value
+            activeCommandDiagnostic = diagnostic
+            diagnostic.step = "model-or-surface-publication"
+            diagnostic.step = "split-transfer-decision"
             guard await decision.wait(), !isClosed, let windowID else { return }
             let leases = captured.map { transits[$0.1]?.authority ?? $0.2 }
             do {
@@ -247,6 +264,7 @@ public extension BrowserWindowSession {
             }
         }
         pendingCommandCount += 1
+        let diagnostic = trackCommand(kind: #function)
         let previous = pending
         let adoption = Task<[TabOccurrenceID]?, Never> { [self] in
             var committed = false
@@ -254,7 +272,10 @@ public extension BrowserWindowSession {
                 if !committed { transfers.forEach { $0.didFail(at: self) } }
                 pendingCommandCount -= 1
             }
+            defer { diagnostic.finish() }
             await previous?.value
+            activeCommandDiagnostic = diagnostic
+            diagnostic.step = "model-or-surface-publication"
             guard !isClosed, zip(transfers, reservations).allSatisfy({
                 BrowserSurfaceProvenance.isReserved($0.1, surface: $0.0.surface, for: self)
             }) else { return nil }

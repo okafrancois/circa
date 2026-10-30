@@ -36,6 +36,12 @@ if(NOT ORBIT_WRAPPER_HASH STREQUAL CEF_WRAPPER_SHA256)
   message(FATAL_ERROR "Pinned wrapper hash mismatch")
 endif()
 include("${CMAKE_CURRENT_SOURCE_DIR}/ValidateCEFSource.cmake")
+file(READ "${CEF_ROOT}/include/cef_version.h" ORBIT_CEF_VERSION_HEADER)
+foreach(PART MAJOR MINOR BUILD PATCH)
+  string(REGEX MATCH "#define CHROME_VERSION_${PART} ([0-9]+)" MATCH "${ORBIT_CEF_VERSION_HEADER}")
+  set(ORBIT_CHROME_${PART} "${CMAKE_MATCH_1}")
+endforeach()
+set(ORBIT_CHROMIUM_VERSION "${ORBIT_CHROME_MAJOR}.${ORBIT_CHROME_MINOR}.${ORBIT_CHROME_BUILD}.${ORBIT_CHROME_PATCH}")
 
 set(PROJECT_ARCH arm64 CACHE STRING "Pinned architecture" FORCE)
 set(USE_SANDBOX ON CACHE BOOL "All helpers require the CEF sandbox" FORCE)
@@ -168,8 +174,10 @@ list(APPEND ORBIT_APP_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/App/EngineComposition
   "${CMAKE_CURRENT_SOURCE_DIR}/App/OrbitBrandingProbe.swift"
   "${CMAKE_CURRENT_SOURCE_DIR}/App/OrbitLocalFilesProbe.swift"
   "${CMAKE_CURRENT_SOURCE_DIR}/App/OrbitScriptingProbe.swift"
+  "${CMAKE_CURRENT_SOURCE_DIR}/App/OrbitSiteSearchProbe.swift"
   "${CMAKE_CURRENT_SOURCE_DIR}/App/OrbitEnginePerformanceProbe.swift"
   "${CMAKE_CURRENT_SOURCE_DIR}/App/OrbitEngineSecurityProbe.swift"
+  "${CMAKE_CURRENT_SOURCE_DIR}/App/OrbitR14ShellProbe.swift"
   "${CMAKE_CURRENT_SOURCE_DIR}/App/OrbitPermissionsProbe.swift"
   "${CMAKE_CURRENT_SOURCE_DIR}/App/OrbitNavigationHistoryProbe.swift"
   "${CMAKE_CURRENT_SOURCE_DIR}/App/OrbitSecurityPillProbe.swift"
@@ -180,7 +188,10 @@ list(APPEND ORBIT_APP_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/App/EngineComposition
   "${CMAKE_CURRENT_SOURCE_DIR}/App/OrbitSelectionPerformanceProbe.swift"
   "${CMAKE_CURRENT_SOURCE_DIR}/App/OrbitDownloadAudioProbe.swift"
   "${CMAKE_CURRENT_SOURCE_DIR}/App/OrbitScrollWheelProbe.swift"
-  "${CMAKE_CURRENT_SOURCE_DIR}/App/OrbitPinnedTabProbe.swift")
+  "${CMAKE_CURRENT_SOURCE_DIR}/App/OrbitPinnedTabProbe.swift"
+  "${CMAKE_CURRENT_SOURCE_DIR}/App/OrbitTabErgonomicsProbe.swift"
+  "${CMAKE_CURRENT_SOURCE_DIR}/App/OrbitCommandGapsProbe.swift"
+  "${CMAKE_CURRENT_SOURCE_DIR}/App/OrbitDailyQA9Probe.swift")
 # CHROMIUM-APP-R3: the stable signing certificate's SHA-1 required for product mode (empty: none).
 set(ORBIT_STABLE_SIGNING_ROOT "" CACHE STRING "SHA-1 of the stable local signing certificate (product admission)")
 string(LENGTH "${ORBIT_STABLE_SIGNING_ROOT}" ORBIT_STABLE_SIGNING_ROOT_LENGTH)

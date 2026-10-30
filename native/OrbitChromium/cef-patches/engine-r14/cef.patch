@@ -1,0 +1,220 @@
+diff --git a/CHROMIUM_BUILD_COMPATIBILITY.txt b/CHROMIUM_BUILD_COMPATIBILITY.txt
+index 88c8ad2..ff660e9 100644
+--- a/CHROMIUM_BUILD_COMPATIBILITY.txt
++++ b/CHROMIUM_BUILD_COMPATIBILITY.txt
+@@ -7,5 +7,5 @@
+ # https://chromiumembedded.github.io/cef/branches_and_building
+ 
+ {
+-  'chromium_checkout': 'refs/tags/156.0.8078.80'
++  'chromium_checkout': 'refs/tags/156.0.8078.84'
+ }
+diff --git a/libcef/browser/orbit/orbit_cef_api.h b/libcef/browser/orbit/orbit_cef_api.h
+index b1a1022..9ffeeff 100644
+--- a/libcef/browser/orbit/orbit_cef_api.h
++++ b/libcef/browser/orbit/orbit_cef_api.h
+@@ -26,13 +26,17 @@ extern "C" {
+ // Version 3 (CHROMIUM-APP-R3): additive, hold_window/release_window. Earlier
+ // versions keep their layout as the prefix of the table.
+ // Version 4 (EXTENSIONS-PRODUCT-R1): additive, native per-profile extension services.
+-#define ORBIT_CEF_API_VERSION 15u
++#define ORBIT_CEF_API_VERSION 16u
+ 
+ // Version 8. Callback once after live renderer CSS installation (1), or failure (0).
+ typedef void (*orbit_boost_ack_t)(void*, uint64_t revision, int32_t installed);
+ 
+ // Version 10. Metadata only, never request body bytes. Unknown outside the
+ // synchronous popup decision; all strings are borrowed for that call.
++// v16: callback once on UI after an accepted operation. Path bytes are borrowed;
++// begin reports an empty path. A refused call returns 0 and never calls back.
++typedef void (*orbit_trace_callback_t)(void*, int32_t success, const char* path);
++
+ typedef struct {
+   uint32_t struct_size;
+   uint32_t transition_type;
+@@ -338,6 +342,16 @@ typedef struct {
+   int32_t (*media_observe)(int32_t, orbit_json_changed_t, void*);
+   // action: 0 play, 1 pause, 2 seek (seconds), 3 next, 4 previous.
+   int32_t (*media_action)(int32_t, int32_t action, double seconds);
++
++  // v16. Bitmask: 1 task manager, 2 tracing, 4 extension options, 8 incognito prefs.
++  uint32_t (*diagnostic_capabilities)(void);
++  int32_t (*task_manager)(int32_t browser_id);
++  // Tracing is process-wide; one persistent profile owns a session through completion.
++  // Destination must be a new file in an existing directory under that profile.
++  int32_t (*trace_begin)(const char* profile_path, const char* categories, orbit_trace_callback_t, void*);
++  int32_t (*trace_end)(const char* profile_path, const char* file, orbit_trace_callback_t, void*);
++  int32_t (*extension_options_open)(int32_t browser_id, const char* extension_id);
++  int32_t (*extension_incognito_set)(const char* profile_path, const char* extension_id, int32_t allowed);
+ } orbit_cef_api_t;
+ 
+ // Returns the API table for `version`, or NULL when unsupported.
+diff --git a/libcef/browser/orbit/orbit_cef_api.mm b/libcef/browser/orbit/orbit_cef_api.mm
+index 6735614..78e9024 100644
+--- a/libcef/browser/orbit/orbit_cef_api.mm
++++ b/libcef/browser/orbit/orbit_cef_api.mm
+@@ -9,6 +9,9 @@
+ #import <AppKit/AppKit.h>
+ 
+ #include "cef/include/internal/cef_export.h"
++#include "cef/include/cef_trace.h"
++#include "base/files/file_util.h"
++#include "chrome/app/chrome_command_ids.h"
+ #include "cef/libcef/browser/orbit/orbit_hosted.h"
+ #include "cef/libcef/browser/orbit/orbit_hosted_mac.h"
+ #include "cef/libcef/browser/orbit/browser_platform_delegate_chrome_hosted.h"
+@@ -50,6 +53,92 @@ bool OnValidUIThread() {
+   return CONTEXT_STATE_VALID() && CEF_CURRENTLY_ON_UIT();
+ }
+ 
++uint32_t DiagnosticCapabilities() { return OnValidUIThread() ? 15u : 0u; }
++
++int32_t TaskManager(int32_t browser_id) {
++  if (!OnValidUIThread()) return 0;
++  auto host = GetChromeHost(browser_id);
++  if (!host || !host->CanExecuteChromeCommand(IDC_TASK_MANAGER)) return 0;
++  host->ExecuteChromeCommand(IDC_TASK_MANAGER, CEF_WOD_CURRENT_TAB);
++  return 1;
++}
++
++std::string& TraceProfile() {
++  static base::NoDestructor<std::string> profile;
++  return *profile;
++}
++enum class TracePhase { idle, starting, recording, stopping };
++TracePhase trace_phase = TracePhase::idle;
++class TraceStarted final : public CefCompletionCallback {
++ public:
++  TraceStarted(orbit_trace_callback_t cb, void* ctx) : cb_(cb), ctx_(ctx) {}
++  void OnComplete() override {
++    trace_phase = TracePhase::recording;
++    cb_(ctx_, 1, "");
++  }
++ private:
++  orbit_trace_callback_t cb_; void* ctx_;
++  IMPLEMENT_REFCOUNTING(TraceStarted);
++};
++class TraceEnded final : public CefEndTracingCallback {
++ public:
++  TraceEnded(std::string expected, orbit_trace_callback_t cb, void* ctx)
++      : expected_(std::move(expected)), cb_(cb), ctx_(ctx) {}
++  void OnEndTracingComplete(const CefString& file) override {
++    trace_phase = TracePhase::idle;
++    TraceProfile().clear();
++    const std::string path = file.ToString();
++    const bool ok = path == expected_ && base::PathExists(base::FilePath(path));
++    cb_(ctx_, ok ? 1 : 0, path.c_str());
++  }
++ private:
++  std::string expected_; orbit_trace_callback_t cb_; void* ctx_;
++  IMPLEMENT_REFCOUNTING(TraceEnded);
++};
++int32_t TraceBegin(const char* profile, const char* categories, orbit_trace_callback_t cb, void* ctx) {
++  if (!ExtensionProfile(profile) || !categories || !cb || trace_phase != TracePhase::idle) return 0;
++  TraceProfile() = profile;
++  trace_phase = TracePhase::starting;
++  if (CefBeginTracing(categories, new TraceStarted(cb, ctx))) return 1;
++  TraceProfile().clear(); trace_phase = TracePhase::idle;
++  return 0;
++}
++int32_t TraceEnd(const char* profile, const char* file, orbit_trace_callback_t cb, void* ctx) {
++  if (!OnValidUIThread() || !profile || TraceProfile() != profile || !file || !cb ||
++      trace_phase != TracePhase::recording) return 0;
++  const base::FilePath target(file);
++  // Resolve the parent and profile to reject traversal and symlink escapes. Do not
++  // overwrite an existing destination, including a dangling symbolic link.
++  const auto root = base::MakeAbsoluteFilePath(base::FilePath(profile));
++  const auto parent = base::MakeAbsoluteFilePath(target.DirName());
++  if (!target.IsAbsolute() || target.ReferencesParent() || root.empty() || parent.empty() ||
++      (root != parent && !root.IsParent(parent)) || base::PathExists(target) || base::IsLink(target)) return 0;
++  trace_phase = TracePhase::stopping;
++  if (CefEndTracing(file, new TraceEnded(file, cb, ctx))) return 1;
++  trace_phase = TracePhase::recording;
++  return 0;
++}
++int32_t ExtensionOptionsOpen(int32_t browser_id, const char* id) {
++  if (!OnValidUIThread() || !id) return 0;
++  auto host = GetChromeHost(browser_id);
++  auto* profile = host && host->browser() ? host->browser()->GetProfile() : nullptr;
++  auto* registry = profile && !profile->IsOffTheRecord() ? extensions::ExtensionRegistry::Get(profile) : nullptr;
++  const auto* extension = registry ? registry->enabled_extensions().GetByID(id) : nullptr;
++  if (!extension || extensions::Manifest::IsComponentLocation(extension->location()) ||
++      !extensions::OptionsPageInfo::HasOptionsPage(extension)) return 0;
++  return extensions::ExtensionTabUtil::OpenOptionsPage(extension, host->browser()) ? 1 : 0;
++}
++int32_t ExtensionIncognitoSet(const char* path, const char* id, int32_t allowed) {
++  auto* profile = ExtensionProfile(path);
++  if (!profile || !id || (allowed != 0 && allowed != 1)) return 0;
++  auto* registry = extensions::ExtensionRegistry::Get(profile);
++  const auto* extension = registry ? registry->GetInstalledExtension(id) : nullptr;
++  if (!extension || extensions::Manifest::IsComponentLocation(extension->location()) ||
++      !extensions::util::CanBeIncognitoEnabled(extension)) return 0;
++  extensions::util::SetIsIncognitoEnabled(id, profile, allowed != 0);
++  return extensions::util::IsIncognitoEnabled(id, profile) == (allowed != 0) ? 1 : 0;
++}
++
+ int32_t PopupNavigationMetadata(int32_t browser_id, const char* frame_id,
+                                 orbit_navigation_metadata_t* metadata) {
+   if (!OnValidUIThread() || !frame_id || !metadata ||
+@@ -457,13 +546,25 @@ int32_t ReleaseWindow(uint64_t window_token) {
+ }();
+ const orbit_cef_api_t kApiV15 = [] {
+   auto api = kApiV14;
+-  api.struct_size = sizeof(orbit_cef_api_t);
++  api.struct_size = offsetof(orbit_cef_api_t, diagnostic_capabilities);
+   api.version = 15u;
+   api.media_snapshot = &MediaSnapshot;
+   api.media_observe = &MediaObserve;
+   api.media_action = &MediaAction;
+   return api;
+ }();
++const orbit_cef_api_t kApiV16 = [] {
++  auto api = kApiV15;
++  api.struct_size = sizeof(orbit_cef_api_t);
++  api.version = 16u;
++  api.diagnostic_capabilities = &DiagnosticCapabilities;
++  api.task_manager = &TaskManager;
++  api.trace_begin = &TraceBegin;
++  api.trace_end = &TraceEnd;
++  api.extension_options_open = &ExtensionOptionsOpen;
++  api.extension_incognito_set = &ExtensionIncognitoSet;
++  return api;
++}();
+ }  // namespace
+ 
+ extern "C" CEF_EXPORT const orbit_cef_api_t* orbit_cef_get_api(uint32_t version);
+@@ -510,6 +611,8 @@ int32_t ReleaseWindow(uint64_t window_token) {
+       return &kApiV14;
+     case 15u:
+       return &kApiV15;
++    case 16u:
++      return &kApiV16;
+     default:
+       return nullptr;
+   }
+diff --git a/libcef/browser/orbit/orbit_extensions.inc b/libcef/browser/orbit/orbit_extensions.inc
+index 426ac98..5a77853 100644
+--- a/libcef/browser/orbit/orbit_extensions.inc
++++ b/libcef/browser/orbit/orbit_extensions.inc
+@@ -1,6 +1,9 @@
+ // Copyright 2026 Orbit. BSD-style license; see LICENSE.
+ // Included inside orbit_cef_api.mm before its anonymous namespace.
+ #include <cstring>
++#include "chrome/browser/extensions/extension_util.h"
++#include "extensions/browser/extension_util.h"
++#include "extensions/common/manifest_handlers/options_page_info.h"
+ #include "base/base64.h"
+ #include "chrome/browser/ui/toolbar/toolbar_actions_model.h"
+ #include "extensions/browser/extension_action.h"
+@@ -59,6 +62,11 @@ int32_t ExtensionSnapshot(Profile* profile, int tab_id, bool per_tab, char* outp
+     row.Set("isEnabled", registry->enabled_extensions().Contains(extension->id()));
+     auto* action = actions->GetExtensionAction(*extension);
+     row.Set("hasAction", action != nullptr);
++    row.Set("hasOptionsPage", extensions::OptionsPageInfo::HasOptionsPage(extension.get()));
++    if (extensions::OptionsPageInfo::HasOptionsPage(extension.get()))
++      row.Set("optionsURL", extensions::OptionsPageInfo::GetOptionsPage(extension.get()).spec());
++    row.Set("canAllowIncognito", extensions::util::CanBeIncognitoEnabled(extension.get()));
++    row.Set("isAllowedInIncognito", extensions::util::IsIncognitoEnabled(extension->id(), profile));
+     auto* toolbar = ToolbarActionsModel::Get(profile);
+     row.Set("isPinned", toolbar && toolbar->IsActionPinned(extension->id()));
+     if (action) {

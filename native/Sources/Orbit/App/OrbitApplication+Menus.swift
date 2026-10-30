@@ -76,10 +76,17 @@ extension OrbitApplication {
             NSApp.activate(ignoringOtherApps: true)
             openQuickWindow()
         }
+        BrowserDataCommands.install(in: registry, dataRoot: { [weak self] in
+            self?.environment?.sessionFile?.deletingLastPathComponent()
+        })
         installSettingsCommands(in: registry)
         BrowserWindowCommands.install(in: registry, commandKeyWindow: keyWindow)
         BrowserPeekCommands.install(in: registry)
         installQuickWindowCommands(in: registry)
+        try! registry.registerWhenWindowMissing(.undo, withOrigin: { [weak self] _ in self?.undo(nil) })
+        registry.registerPrerequisite(.undo) { [weak self] controller, _ in
+            controller != nil || self?.environment?.lastClosedWindowDate != nil
+        }
         application(.openFile) { [weak self] in self?.presentOpenFile() }
         application(.newWindow) { [weak self] in self?.createCommandWindow() }
         application(.newIncognitoWindow) { [weak self] in self?.createPrivateCommandWindow() }

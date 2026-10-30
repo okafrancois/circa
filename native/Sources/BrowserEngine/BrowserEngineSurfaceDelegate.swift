@@ -387,6 +387,8 @@ public protocol BrowserEngineSurfaceDelegate<Surface>: AnyObject {
     /// Page-first keyboard, asked by engines that expose the step (CEF `OnPreKeyEvent`) for key
     /// downs with Command, Control or Option, Escape, Tab and function keys. Default: the page,
     /// without a receipt.
+    /// Unhandled undo outside an editable page field may use the sidebar/window close history.
+    func surface(_ surface: Surface, performNonEditingUndo event: NSEvent, receipt: BrowserKeyReceipt) -> Bool
     func surface(_ surface: Surface, willSendKeyToPage event: NSEvent) -> BrowserKeyRouting
     /// The page declined a key sent with `receipt` (CEF `OnKeyEvent`). Return true when the owner
     /// handled it. False lets the key end there: the engine performs no other dispatch. Default:
@@ -440,6 +442,8 @@ public extension BrowserEngineSurfaceDelegate {
         .engineDefault
     }
 
+    /// Unhandled undo outside an editable page field may use the sidebar/window close history.
+    func surface(_ surface: Surface, performNonEditingUndo event: NSEvent, receipt: BrowserKeyReceipt) -> Bool { false }
     func surface(_ surface: Surface, willSendKeyToPage event: NSEvent) -> BrowserKeyRouting {
         .page(receipt: nil)
     }

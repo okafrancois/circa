@@ -43,7 +43,10 @@ public final class BrowserSitePreferenceStore {
 
     public func preferences(url: URL?, profileID: ProfileID) -> BrowserSitePreferences {
         guard let host = Self.host(url) else { return .init() }
-        return document.entries.first { $0.profileID == profileID && $0.host == host }?.preferences ?? .init()
+        if let saved = document.entries.first(where: { $0.profileID == profileID && $0.host == host }) { return saved.preferences }
+        var defaults = BrowserSitePreferences()
+        defaults.developerMode = host == "localhost" || host.hasSuffix(".localhost")
+        return defaults
     }
 
     public func set(_ preferences: BrowserSitePreferences, url: URL?, profileID: ProfileID) throws {

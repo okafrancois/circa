@@ -7,6 +7,23 @@ import Synchronization
 
 @Suite("Automatic session persistence", .timeLimit(.minutes(1)))
 struct BrowserSessionPersistenceTests {
+    @Test("A late activity veto resumes autosaves after the final document was written")
+    func cancelledFinalizationResumesSaving() async throws {
+        let directory = try PersistenceTestDirectory()
+        let fixture = try await persistenceFixture()
+        let persistence = BrowserSessionPersistence(destination: directory.file)
+        _ = try await persistence.load()
+        _ = try await persistence.finalize(from: fixture.store)
+        await persistence.resumeAfterCancelledFinalization()
+        try await appendPersistenceTab(to: fixture)
+        guard case .saved = try await persistence.saveCurrentState(from: fixture.store) else {
+            Issue.record("Cancelled termination must allow subsequent autosaves")
+            return
+        }
+        let expected = await fixture.store.sessionDocument()
+        #expect(try BrowserSessionFileStore().load(from: directory.file) == expected)
+    }
+
     @Test("Every accepted save encodes once and writes the same canonical bytes")
     func singleEncoding() async throws {
         let directory = try PersistenceTestDirectory()

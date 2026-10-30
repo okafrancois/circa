@@ -34,6 +34,7 @@ final class OrbitApplication: NSObject, NSApplicationDelegate {
         afterWindowCommit { [weak self] in
             guard let self else { return }
             onUpdaterStart?()
+            configureIdleUpdates()
             updater.start(synthetic: activeSyntheticDataGuard() != nil)
             BrowserPerformance.mark(.updaterStarted)
         }
@@ -53,7 +54,7 @@ final class OrbitApplication: NSObject, NSApplicationDelegate {
     func waitForScriptingStartup() async { await startupTask?.value }
 
     private var startupTask: Task<Void, Never>?
-    private var isStartingUp = false
+    private(set) var isStartingUp = false
     private var externalURLStartupComplete = false
     private var pendingExternalURLs: [URL] = []
     private(set) var isPreparingToQuit = false
@@ -255,7 +256,10 @@ final class OrbitApplication: NSObject, NSApplicationDelegate {
                 environment = OrbitEnvironment(engine: makeActiveEngine())
             }
             BrowserPerformance.mark(.environmentReady)
-            if let environment { commands.registry.useShortcutPreferences(environment.shortcutPreferences) }
+            if let environment {
+                commands.registry.useShortcutPreferences(environment.shortcutPreferences)
+                environment.onReopenClosedWindow = { [weak self] id in self?.windows.newWindow(id: id.rawValue) }
+            }
             environment?.onPersistenceError = { [weak self] error in self?.presentSaveError(error) }
             environment?.onRescueNeedsWindow = { [weak self] profileID in self?.openRescueWindow(for: profileID) }
             environment?.onRescueSplitNeedsWindow = { [weak self] profileID, spaceID in
@@ -269,6 +273,8 @@ final class OrbitApplication: NSObject, NSApplicationDelegate {
             } else if pendingExternalURLs.isEmpty || environment?.settings.document.opensExternalLinksInQuickWindow != true {
                 windows.newWindow()
             }
+            do { try await environment?.restoreQuickWindowsAfterUpdate(present: quickWindowPresenter) }
+            catch { presentSaveError(error) }
             finishExternalURLStartup()
             presentSiteSessionImportOutcome()
             presentBrowserImportResult()
@@ -304,7 +310,8 @@ final class OrbitApplication: NSObject, NSApplicationDelegate {
         guard !urls.isEmpty else { return }
         selectNormalWindowForExternalRequest()
         let routing = environment.settings.document.linkRouting
-        if !routing.rules.isEmpty || { if case .space = routing.defaultDestination { return true }; return false }() {
+        if !routing.rules.isEmpty || urls.contains(where: BrowserMeetingLink.matches)
+            || { if case .space = routing.defaultDestination { return true }; return false }() {
             routeConfiguredExternalURLs(urls, routing: routing)
             return
         }
@@ -358,7 +365,11 @@ final class OrbitApplication: NSObject, NSApplicationDelegate {
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         guard !isPreparingToQuit else { return .terminateLater }
-        defer { if !isPreparingToQuit { discardStagedPasswordImport(); pendingSiteSessionRequest = nil; pendingBrowserImport = nil } }
+        defer { if !isPreparingToQuit { updater.cancelAutomaticRelaunch(); discardStagedPasswordImport(); pendingSiteSessionRequest = nil; pendingBrowserImport = nil } }
+        guard updater.permitsAutomaticTermination else {
+            updater.cancelAutomaticRelaunch()
+            return .terminateCancel
+        }
         guard settingsWindow?.model.isRequestingDefaultBrowser != true else { return .terminateCancel }
         guard updater.isRestartingForUpdate || confirmQuitIfNeeded() else { return .terminateCancel }
         if environment?.downloads.hasActiveTransfers == true {
@@ -371,7 +382,10 @@ final class OrbitApplication: NSObject, NSApplicationDelegate {
                 await updater.prepareForQuit()
                 try await completeTermination()
             } catch {
-                presentSaveError(error)
+                if updater.automaticRelaunchRequested {
+                    updater.cancelAutomaticRelaunch()
+                    if !(error is CancellationError) { presentSaveError(error) }
+                } else { presentSaveError(error) }
                 sender.reply(toApplicationShouldTerminate: false)
                 return
             }
@@ -425,11 +439,13 @@ final class OrbitApplication: NSObject, NSApplicationDelegate {
                 throw BrowserTerminationPreparationError.commandsDidNotSettle
             }
             try await environment?.prepareToSaveForTermination(timeout: remaining())
-            try await environment?.finalize()
+            if updater.isRestartingForUpdate { try environment?.checkpointQuickWindowsForUpdate() }
+            try await environment?.finalize(permitsTermination: { [self] in updater.permitsAutomaticTermination })
             try persistPendingSiteSessionImport()
         } catch {
             // Include partially created windows registered before publication by the router;
             // their accepted work remains queued and must be usable after cancellation too.
+            if updater.isRestartingForUpdate { try? environment?.clearUpdateWindowCheckpoint() }
             let controllers = environment?.liveControllers ?? Array(windows.windows.values)
             for controller in controllers { controller.cancelTerminationPreparation() }
             isPreparingToQuit = false
@@ -475,7 +491,7 @@ final class OrbitApplication: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func presentSaveError(_ error: any Error) {
+    func presentSaveError(_ error: any Error) {
         guard !didPresentSaveError else { return }
         didPresentSaveError = true
         let alert = OrbitFloatingMaterial.alert()

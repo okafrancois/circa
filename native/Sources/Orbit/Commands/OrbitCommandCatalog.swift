@@ -217,6 +217,8 @@ enum BrowserCommandID: String, CaseIterable, Sendable {
     case sidebarConvertFolderToSpace
     case sidebarDeleteFolder
     case sidebarDeleteFolderAndTabs
+    case addRightSplit, addLeftSplit, addTopSplit, addBottomSplit, newVerticalSplitView
+    case convertToVerticalSplitView, convertToHorizontalSplitView
     case toggleSplitOrientation, swapSplitPanes, unsplitAllPanes
     case focusNextSplitPane, focusPreviousSplitPane
     case importFromArc
@@ -260,11 +262,16 @@ enum OrbitCommandCatalog {
         .item1, .item2, .item3
     ]
     /// Hidden on every command surface even if an internal workflow retains a handler.
-    static let hiddenCommands: Set<BrowserCommandID> = [.importArcConnections, .restoreArcConnections, .importBookmarks, .exportBookmarks]
+    static let hiddenCommands: Set<BrowserCommandID> = [
+        .importArcConnections, .restoreArcConnections, .importBookmarks, .exportBookmarks,
+        .newNote, .newNoteInSplit, .exportOrbitNotes, .newEasel, .viewEaselsNotes,
+        .newChatGPTMessage, .signOut, .shareOrbit, .sendToDia, .boostGallery, .copyURLAsQuote,
+        .websitesEaselsAndNotesWillUse
+    ]
 
     static func isCommandBarAction(_ definition: BrowserCommandDefinition) -> Bool {
         definition.scope == .browser && !hiddenCommands.contains(definition.id) && !structuralIDs.contains(definition.id)
-            && !["Sidebar", "FavoritesContext", "Page Context"].contains(definition.menu)
+            && (definition.id == .sidebarCopyLinks || !["Sidebar", "FavoritesContext", "Page Context"].contains(definition.menu))
     }
 
     static var actionDefinitions: [BrowserCommandDefinition] { definitions.filter { !structuralIDs.contains($0.id) } }
@@ -502,19 +509,21 @@ enum OrbitCommandCatalog {
                                     owner: row.owner, sources: [row.source]))
             }
         }
+        if let index = result.firstIndex(where: { $0.id == .tabSwitcherBackward }) {
+            result[index].shortcuts.append(.init(key: "`", modifiers: .control))
+        }
         return result + supplemental + featureDefinitions + BrowserQuickWindowCommands.definitions
     }()
 
     private static func scope(for id: BrowserCommandID) -> BrowserCommandScope {
-        switch id {
-        case .copy, .cut, .paste, .pasteAndMatchStyle, .redo, .selectAll, .undo: return .responder
-        default: return .browser
-        }
+        if BrowserStandardActions.commandIDs.contains(id) { return .responder }
+        return .browser
     }
 
     private static func requirement(for id: BrowserCommandID) -> BrowserCommandRequirement {
+        if BrowserStandardActions.commandIDs.contains(id) { return .responder }
         switch id {
-        case .checkForUpdates, .aboutOrbit, .openCommandBar, .showAll, .hideOrbit, .newWindow, .newIncognitoWindow, .hideOtherWindows, .newTab, .quitOrbit: return .application
+        case .copyOrbitInfo, .revealOrbitData, .checkForUpdates, .aboutOrbit, .openCommandBar, .showAll, .hideOrbit, .newWindow, .newIncognitoWindow, .hideOtherWindows, .newTab, .quitOrbit: return .application
         case .zoomOut, .findPrevious, .duplicate, .zoomToActualSize, .find, .zoomIn, .findNext, .capture, .captureFullPage, .savePageAs: return .surface
         case .refreshThePage, .copyURL, .copyURLAsMarkdown, .share: return .url
         case .goBack: return .back

@@ -100,6 +100,7 @@ final class BrowserCommandMenus<Window: AnyObject>: NSObject, NSMenuItemValidati
             applyOrbitKeyEquivalentAdaptation(item)
             return item
         case .header(let command, let title):
+            guard !OrbitCommandCatalog.hiddenCommands.contains(command) else { return nil }
             let item = NSMenuItem(title: localizedTitle(command, fallback: title), action: nil, keyEquivalent: "")
             item.identifier = NSUserInterfaceItemIdentifier(command.rawValue)
             item.isEnabled = false

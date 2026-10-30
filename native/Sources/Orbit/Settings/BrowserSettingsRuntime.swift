@@ -125,6 +125,7 @@ final class BrowserWindowSettings {
     }
 
     func apply<Engine: BrowserEngine>(to owner: BrowserWindowController<Engine>) {
+        owner.palette.siteSearches = runtime.document.siteSearches
         owner.sidebar.onReorderSnap = { [weak runtime] in runtime?.feedback.reorderSnapped() }
         guard let profileID = owner.session.activeProfileID else { return }
         let settings = runtime.document.profile(profileID)

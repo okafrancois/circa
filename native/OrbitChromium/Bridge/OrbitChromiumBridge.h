@@ -481,6 +481,8 @@ int32_t ACRCreateTabSurface(uint64_t surface_token, uint64_t profile_token, uint
 int32_t ACRAttachSurfaceView(uint64_t surface_token, void *nsview);
 /* Makes the tab surface the active tab of its logical Browser (tabs.onActivated). */
 int32_t ACRActivateSurface(uint64_t surface_token);
+/* Diagnostic identity accepts only a UUID; no page metadata crosses this seam. */
+int32_t ACRActivateSidebarSurface(uint64_t surface_token, const char* tab_uuid);
 /* (ABI 8, side API v2: ACRPatchLevel() >= 2) Moves a tab surface to index (-1 or past the end
  * appends) of the logical Browser of (window_token, its profile), keeping its WebContents,
  * browser, extension tabId, history and form state (tabs.onDetached/onAttached), or reorders it
@@ -583,6 +585,7 @@ int32_t ACRCloseDevTools(uint64_t surface_token);
 int32_t ACRHasDevTools(uint64_t surface_token);
 /* Executes a Chrome command by name (cef_command_ids.h) on the surface's tab, made active first,
  * when Chrome reports it enabled (CanExecuteChromeCommand). Hosted tabs only. */
+int32_t ACRDuplicateTab(uint64_t surface_token);
 int32_t ACRExecuteChromeCommand(uint64_t surface_token, const char *name);
 /* Prints the current document: with --disable-print-preview (always set), the system print
  * panel (app-modal NSPrintPanel). */
@@ -660,6 +663,16 @@ int32_t ACRNavigationGoIndex(uint64_t token, int32_t index);
 int32_t ACRMediaObserve(uint64_t token, orbit_json_changed_t, void*);
 int32_t ACRMediaAction(uint64_t token, int32_t action, double seconds);
 void ACRNativePageServicesClosing(uint64_t token);
+
+/* v16. Capabilities: 1 task manager, 2 process-wide tracing, 4 options, 8 incognito prefs.
+ * Trace end requires a new path below the originating persistent profile's cache path.
+ * Completion on UI exactly once for accepted calls; refused calls never call back. */
+uint32_t ACREngineDiagnosticCapabilities(void);
+int32_t ACRTaskManager(uint64_t token);
+int32_t ACRTraceBegin(uint64_t token, const char* categories, orbit_trace_callback_t, void*);
+int32_t ACRTraceEnd(uint64_t token, const char* file, orbit_trace_callback_t, void*);
+int32_t ACRExtensionOptionsOpen(uint64_t token, const char* extension_id);
+int32_t ACRExtensionIncognitoSet(uint64_t profile, const char* extension_id, int32_t allowed);
 
 #ifdef __cplusplus
 }

@@ -198,7 +198,7 @@ final class BrowserCommandKeyboard {
 
     func install() {
         guard monitor == nil else { return }
-        monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .flagsChanged, .leftMouseDown]) { [weak self] event in
+        monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .flagsChanged, .leftMouseDown, .otherMouseDown]) { [weak self] event in
             // `handle` derives composition from the routed key window's first responder.
             let consumed = MainActor.assumeIsolated { self?.handle(event) == true }
             return consumed ? nil : event

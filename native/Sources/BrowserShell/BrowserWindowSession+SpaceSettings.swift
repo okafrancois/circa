@@ -13,6 +13,7 @@ public extension BrowserWindowSession {
     func updateSpaceIcon(_ icon: BrowserSpaceIcon, authority: BrowserSpaceSettingsAuthority,
                          settings: BrowserSettingsStore, sourceProfile: ProfileID) async throws {
         guard !isClosed, icon.isValid else { throw BrowserStoreError.staleContext }
+        let diagnostic = trackCommand(kind: #function)
         let previous = pending
         pendingCommandCount += 1
         spaceSettingsActions[authority.id] = authority
@@ -21,7 +22,10 @@ public extension BrowserWindowSession {
                 pendingCommandCount -= 1
                 spaceSettingsActions.removeValue(forKey: authority.id)
             }
+            defer { diagnostic.finish() }
             await previous?.value
+            activeCommandDiagnostic = diagnostic
+            diagnostic.step = "model-or-surface-publication"
             guard !isClosed, activeProfileID == sourceProfile else { throw BrowserStoreError.staleContext }
             try await settings.updateSpace(authority.spaceID, authority: authority) { $0.iconSelection = icon }
         }

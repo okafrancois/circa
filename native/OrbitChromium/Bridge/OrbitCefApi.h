@@ -26,13 +26,17 @@ extern "C" {
 // Version 3 (CHROMIUM-APP-R3): additive, hold_window/release_window. Earlier
 // versions keep their layout as the prefix of the table.
 // Version 4 (EXTENSIONS-PRODUCT-R1): additive, native per-profile extension services.
-#define ORBIT_CEF_API_VERSION 15u
+#define ORBIT_CEF_API_VERSION 16u
 
 // Version 8. Callback once after live renderer CSS installation (1), or failure (0).
 typedef void (*orbit_boost_ack_t)(void*, uint64_t revision, int32_t installed);
 
 // Version 10. Metadata only, never request body bytes. Unknown outside the
 // synchronous popup decision; all strings are borrowed for that call.
+// v16: callback once on UI after an accepted operation. Path bytes are borrowed;
+// begin reports an empty path. A refused call returns 0 and never calls back.
+typedef void (*orbit_trace_callback_t)(void*, int32_t success, const char* path);
+
 typedef struct {
   uint32_t struct_size;
   uint32_t transition_type;
@@ -338,6 +342,16 @@ typedef struct {
   int32_t (*media_observe)(int32_t, orbit_json_changed_t, void*);
   // action: 0 play, 1 pause, 2 seek (seconds), 3 next, 4 previous.
   int32_t (*media_action)(int32_t, int32_t action, double seconds);
+
+  // v16. Bitmask: 1 task manager, 2 tracing, 4 extension options, 8 incognito prefs.
+  uint32_t (*diagnostic_capabilities)(void);
+  int32_t (*task_manager)(int32_t browser_id);
+  // Tracing is process-wide; one persistent profile owns a session through completion.
+  // Destination must be a new file in an existing directory under that profile.
+  int32_t (*trace_begin)(const char* profile_path, const char* categories, orbit_trace_callback_t, void*);
+  int32_t (*trace_end)(const char* profile_path, const char* file, orbit_trace_callback_t, void*);
+  int32_t (*extension_options_open)(int32_t browser_id, const char* extension_id);
+  int32_t (*extension_incognito_set)(const char* profile_path, const char* extension_id, int32_t allowed);
 } orbit_cef_api_t;
 
 // Returns the API table for `version`, or NULL when unsupported.

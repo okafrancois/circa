@@ -46,6 +46,7 @@ public struct BrowserLinkRouting: Codable, Equatable, Sendable {
         if let route = rules.first(where: { availableSpaces.contains($0.spaceID) && $0.matches(url) }) {
             return .space(route.spaceID)
         }
+        if BrowserMeetingLink.matches(url) { return .mostRecentSpace }
         if case .space(let id) = defaultDestination, !availableSpaces.contains(id) { return .mostRecentSpace }
         return defaultDestination
     }

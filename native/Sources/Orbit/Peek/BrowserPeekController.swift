@@ -116,14 +116,17 @@ final class BrowserPeekController<Surface: BrowserEngineSurface>: BrowserEngineS
 
     /// Makes Peek the receiver of the surface's events, in the turn it became the owner.
     func bind(_ surface: Surface) {
+        OrbitUnsavedInputGuard.register(surface)
         surface.delegate = self
         surface.placement = BrowserSurfacePlacement(container: .peek, windowID: windowID())
         surface.onChange = { [weak self, weak surface] in
             guard let self, let surface, presentation?.surface === surface else { return }
+            if surface.isSuspended { OrbitUnsavedInputGuard.clear(surface) }
             onStateChange?()
             onEngineEvent?(surface, .stateChanged)
         }
         surface.onDispose = { [weak self, weak surface] in
+            if let surface { OrbitUnsavedInputGuard.clear(surface) }
             guard let self, let surface else { return }
             onSurfaceDispose?(surface)
         }
@@ -212,6 +215,7 @@ final class BrowserPeekController<Surface: BrowserEngineSurface>: BrowserEngineS
 
     func surfaceDidStartNavigation(_ surface: Surface) { notifyIfPresented(surface, .navigationStarted) }
     func surfaceDidCommitNavigation(_ surface: Surface) {
+        OrbitUnsavedInputGuard.clear(surface)
         if isPresented(surface) { presentation?.hasRendered = true }
         notifyIfPresented(surface, .navigationCommitted)
     }

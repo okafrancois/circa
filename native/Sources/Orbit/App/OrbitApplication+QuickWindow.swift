@@ -149,8 +149,17 @@ extension OrbitApplication {
         refreshQuickWindowDestinations()
         little.onPromote = { [weak self, weak little] in if let little { self?.promoteQuickWindow(little) } }
         little.onChooseSpace = { [weak self, weak little] in if let little { self?.showQuickWindowSpaces(little) } }
-        little.onNewTarget = { [weak self, weak little] _, _, make in
+        little.onMeetingLink = { [weak self] url in
+            guard let self, !isPreparingToQuit else { return }
+            application(NSApp, open: [url])
+        }
+        little.onNewTarget = { [weak self, weak little] _, request, make in
             guard let self, let little, let environment, !isPreparingToQuit, !little.isClosed else { return nil }
+            if let url = request.url, BrowserMeetingLink.matches(url),
+               request.httpMethod == "GET", request.hasBody == false {
+                little.onMeetingLink?(url)
+                return nil
+            }
             let child = environment.registerQuickWindow(spaceID: little.sourceSpaceID, profileID: little.profileID,
                                                       spaceName: little.sourceSpaceName)
             configureQuickWindow(child)

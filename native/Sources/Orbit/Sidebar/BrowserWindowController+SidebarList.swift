@@ -9,6 +9,20 @@ import BrowserShell
 extension BrowserWindowController {
     func installSidebarList() {
         sidebar.windowIdentifier = id
+        sidebar.onTextDrop = { [weak self] text, destination in
+            self?.submitInput { owner in
+                // URL/text drops do not authorize local documents, including previously opened ones.
+                guard let url = try? owner.addressResolver.resolve(text).url, !url.isFileURL else { return }
+                owner.session.openTab(url: url, at: destination)
+            }
+        }
+        sidebar.onCopyDrop = { [weak self] payload, destination in
+            guard let self, payload.profileID == session.activeProfileID,
+                  let tab = payload.nodes.first?.tabID,
+                  let source = SidebarWindowDirectory.window(payload.sourceWindow) as? BrowserWindowController,
+                  source.session.organization?.tab(tab) != nil else { return }
+            submitInput { receiver in source.duplicateSidebarTab(tab, into: receiver, at: destination) }
+        }
         installFolderPreview()
         SidebarWindowDirectory.register(self, id: id, activeSpace: { [weak self] in self?.session.snapshot?.activeSpaceID },
                                         organization: { [weak self] in self?.session.organization })
@@ -62,8 +76,18 @@ extension BrowserWindowController {
                 controller.siteControls.refreshMedia(surface)
             }
         }
+        sidebar.onOptionSelectNode = { [weak self] node in
+            self?.submitInput { controller in
+                if let group = node.splitID { controller.session.unsplit(group) }
+                else if let tab = node.tabID { controller.session.openTabInSplit(tab) }
+            }
+        }
         sidebar.onSelectSplit = { [weak self] id in self?.submitInput { $0.session.selectSplit(id) } }
-        sidebar.onSelectTab = { [weak self] id in self?.submitInput { $0.activateSidebarTab(id) } }
+        sidebar.onSelectTab = { [weak self] id in
+            BrowserSidebarInputDiagnostics.record("select-input", tab: id,
+                reason: self?.acceptsCommands == true ? "submitted" : "controller-disabled")
+            self?.submitInput { $0.activateSidebarTab(id) }
+        }
         sidebar.onCloseTabs = { [weak self] ids in self?.submitInput { $0.performSidebarRowAction(ids) } }
         sidebar.onSetPinnedSectionCollapsed = { [weak self] id, collapsed in
             self?.submitInput { controller in
@@ -121,9 +145,15 @@ extension BrowserWindowController {
     func activateSidebarTab(_ id: TabID, expecting expected: BrowserOrganizationSnapshot? = nil,
                             admission: BrowserSidebarSelectionAdmission? = nil,
                             isCurrent: @escaping @MainActor () -> Bool = { true }) {
-        guard acceptsCommands, admission?.isValid != false, isCurrent(), expected == nil || expected == session.organization else { return }
+        let reason = !acceptsCommands ? "controller-disabled" : admission?.isValid == false ? "admission-revoked"
+            : !isCurrent() ? "superseded" : expected != nil && expected != session.organization ? "stale-projection" : "accepted"
+        BrowserSidebarInputDiagnostics.record("controller-select", tab: id, window: session.snapshot?.id, reason: reason)
+        guard reason == "accepted" else { return }
         hideLibrary()
-        if let item = session.organization?.tab(id), item.isSelected, session.selectedSurface != nil {
+        if !session.hasPendingCommands, let item = session.organization?.tab(id),
+           let occurrence = item.occurrenceID, occurrence == session.snapshot?.selectedOccurrenceID,
+           session.selectedSurface != nil {
+            BrowserSidebarInputDiagnostics.record("selection", tab: id, window: session.snapshot?.id, reason: "already-selected")
             focusSelectedDocument()
             return
         }
@@ -201,6 +231,44 @@ extension BrowserWindowController {
         }
     }
 
+
+    /// All user duplication entry points use the engine's native clone when available.
+    func duplicateSidebarTab(_ requestedID: TabID? = nil, into receiver: BrowserWindowController? = nil,
+                             at destination: BrowserOrganizationDestination? = nil) {
+        session.performWindowAction { [weak self, weak receiver] in
+            guard let self, acceptsCommands, let organization = session.organization,
+                  let id = requestedID ?? organization.selectedTab?.id, let tab = organization.tab(id) else { return }
+            let receiver = receiver ?? self
+            let sourceSpace = session.snapshot?.activeSpaceID
+            let receiverSpace = receiver.session.snapshot?.activeSpaceID
+            let inputToken = explicitInputToken
+            guard receiver.acceptsCommands, receiver.session.activeProfileID == session.activeProfileID else { return }
+            let live = liveSidebarSurface(of: tab.id)
+            let existing = Set(nativeCreations.keys)
+            if let live, live.duplicateWithHistory() {
+                guard let creation = nativeCreations.first(where: { !existing.contains($0.key) })?.value else { return }
+                Task { [weak self, weak receiver] in
+                    guard let occurrence = await creation.adoption.value, let self, let receiver,
+                          acceptsCommands, receiver.acceptsCommands else { return }
+                    await session.waitForPendingCommands()
+                    guard session.snapshot?.activeSpaceID == sourceSpace,
+                          receiver.session.snapshot?.activeSpaceID == receiverSpace,
+                          let clone = session.surface(for: occurrence),
+                          let id = session.snapshot?.tabs.first(where: { $0.occurrenceID == occurrence })?.id else { return }
+                    if receiver !== self {
+                        _ = moveSurface(clone, to: receiver, movingTo: destination)
+                    } else {
+                        if let destination { session.moveItems([.tab(id)], to: destination) }
+                        if explicitInputToken == inputToken { session.selectTab(id) }
+                    }
+                }
+                return
+            }
+            let url = live?.currentURL ?? tab.url
+            if let destination { receiver.session.openTab(url: url, at: destination) }
+            else { receiver.session.openTab(url: url) }
+        }
+    }
 
     func performSidebarDrop(_ payload: SidebarDragPayload, to destination: BrowserOrganizationDestination,
                             changesOrganization: Bool) {
@@ -290,9 +358,9 @@ extension BrowserWindowController {
 
     /// Builds the row menu with the registry and a captured target; nil when no registry owns the
     /// window or its session is busy (callers retry after publication).
-    func makeSidebarContextMenu(for nodes: [BrowserOrganizationNode]) -> (menu: NSMenu, owner: AnyObject)? {
+    func makeSidebarContextMenu(for nodes: [BrowserOrganizationNode], modifiers: NSEvent.ModifierFlags = []) -> (menu: NSMenu, owner: AnyObject)? {
         let organization = session.organization
-        let groups = SidebarListCommands.contextCommands(for: nodes, in: organization)
+        let groups = SidebarListCommands.contextCommands(for: nodes, in: organization, option: modifiers.contains(.option))
         guard !groups.isEmpty, let built = SidebarCommandHub.contextMenu(for: self, commands: groups) else { return nil }
         for item in built.menu.items {
             guard let value = item.identifier?.rawValue, let id = BrowserCommandID(rawValue: value),
@@ -313,6 +381,24 @@ extension BrowserWindowController {
             guard let index = built.menu.items.firstIndex(of: item) else { continue }
             if index == 0 || index == built.menu.items.count - 1 || built.menu.items[index - 1].isSeparatorItem { built.menu.removeItem(item) }
         }
+        if nodes.count == 1, let groupID = nodes.first?.splitID,
+           case let .split(group)? = organization?.item(for: .split(groupID)) {
+            for tab in group.tabs.reversed() {
+                let parent = NSMenuItem(title: tab.title ?? tab.url.absoluteString, action: nil, keyEquivalent: "")
+                let submenu = NSMenu()
+                let surface = liveSidebarSurface(of: tab.id)
+                let muted = surface.flatMap { siteControls.mediaStates[ObjectIdentifier($0)]?.isAudioMuted } == true
+                let mute = BrowserSplitMenuItem(title: muted ? uiText("Unmute") : uiText("Mute")) { [weak self, weak surface] in
+                    guard let self, let surface, self.session.organization?.split(containing: tab.id)?.group == group.group,
+                          self.owns(surface) else { return }
+                    self.toggleSplitPaneMute(surface)
+                }
+                mute.isEnabled = engine.capabilities.contains(.audioMuting) && surface != nil
+                submenu.addItem(mute)
+                parent.submenu = submenu
+                built.menu.insertItem(parent, at: 0)
+            }
+        }
         let move = SidebarMoveMenu(owner: self, nodes: nodes)
         if let move {
             let index = nodes.count == 1 && nodes[0].tabID != nil
@@ -332,7 +418,7 @@ extension BrowserWindowController {
     }
 
     func showSidebarContextMenu(for nodes: [BrowserOrganizationNode], event: NSEvent, in view: NSView) {
-        if let built = makeSidebarContextMenu(for: nodes) {
+        if let built = makeSidebarContextMenu(for: nodes, modifiers: event.modifierFlags) {
             NSMenu.popUpContextMenu(built.menu, with: event, for: view)
             endSidebarContextMenu(retaining: built.owner)
             return
@@ -346,7 +432,7 @@ extension BrowserWindowController {
         Task { [weak self, weak view] in
             guard let self else { return }
             await session.waitForQueuedCommands()
-            guard let view, view.window != nil, let built = makeSidebarContextMenu(for: nodes) else {
+            guard let view, view.window != nil, let built = makeSidebarContextMenu(for: nodes, modifiers: event.modifierFlags) else {
                 sidebar.endContextMenu()
                 return
             }
@@ -411,11 +497,10 @@ extension BrowserWindowController {
 
     func copySidebarLinks(markdown: Bool) {
         let links = sidebarLinkTargets.map { tab in
-            markdown ? BrowserMarkdownLink.format(title: tab.title, url: tab.url) : tab.url.absoluteString
+            markdown ? BrowserMarkdownLink.format(title: tab.title, url: BrowserCopyURLCleaner.clean(tab.url)) : BrowserCopyURLCleaner.clean(tab.url).absoluteString
         }
         guard !links.isEmpty else { return }
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(links.joined(separator: "\n"), forType: .string)
+        sharing.copyText(links.joined(separator: "\n"))
     }
 
     var sidebarFolderTarget: FolderID? {

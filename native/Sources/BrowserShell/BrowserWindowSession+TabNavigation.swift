@@ -8,10 +8,14 @@ public extension BrowserWindowSession {
         if surfaces[occurrenceID] != nil { return selectOccurrence(occurrenceID, ifContextMatches: expected) }
         guard !isClosed else { return Task { false } }
         pendingCommandCount += 1
+        let diagnostic = trackCommand(kind: #function)
         let previous = pending
         let selection = Task<Bool, Never> { [self] in
             defer { pendingCommandCount -= 1 }
+            defer { diagnostic.finish() }
             await previous?.value
+            activeCommandDiagnostic = diagnostic
+            diagnostic.step = "model-or-surface-publication"
             guard !isClosed, activeContext == expected else { return false }
             do {
                 let state = try await store.selectOccurrenceUpdating(occurrenceID, from: expected,

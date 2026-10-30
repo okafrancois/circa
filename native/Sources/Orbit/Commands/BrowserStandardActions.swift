@@ -29,6 +29,22 @@ enum BrowserStandardActions {
     /// Bold/Italic are font-manager trait toggles (NIB target NSFontManager, tags 2 and 1).
     private static let fontTraits: [BrowserCommandID: NSFontTraitMask] = [.bold: .boldFontMask, .italic: .italicFontMask]
 
+    /// Actions implemented by the native responder chain, including their required sender tags.
+    static let commandIDs = Set(responderSelectors.keys).union(fontTraits.keys)
+
+    @MainActor
+    static func sender(for id: BrowserCommandID) -> NSMenuItem? {
+        guard let action = selector(for: id) else { return nil }
+        let item = NSMenuItem(title: "", action: action, keyEquivalent: "")
+        item.tag = tag(for: id)
+        return item
+    }
+
+    /// Font traits are applied by the font manager to a validated changeFont: responder.
+    static func validationSelector(for id: BrowserCommandID) -> Selector? {
+        fontTraits[id] == nil ? selector(for: id) : #selector(NSTextView.changeFont(_:))
+    }
+
     /// Window-level actions for a key window that is not a browser window (Settings, panels):
     /// they act on that window rather than on a background browser window's tab.
     private static let keyWindowSelectors: [BrowserCommandID: Selector] = [

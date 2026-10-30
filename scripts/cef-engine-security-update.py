@@ -31,6 +31,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--version', required=True)
     parser.add_argument('--logs', type=Path, required=True, help='Fresh directory for source backups and update log')
+    parser.add_argument('--dependency-baseline', help='Original source revision when resuming interrupted dependency rolls')
     args = parser.parse_args()
     if not re.fullmatch(r'156\.0\.8078\.[0-9]+', args.version):
         parser.error('Only the maintained 156.0.8078 security branch is supported')
@@ -54,13 +55,18 @@ def main():
                 raise SystemExit('Release tag/version mismatch')
             old = output(x2.SRC, 'git', 'rev-parse', 'HEAD')
             deps = []
-            for line in output(x2.SRC, 'git', 'diff', '--raw', old, revision).splitlines():
+            for line in output(x2.SRC, 'git', 'diff', '--raw', args.dependency_baseline or old, revision).splitlines():
                 if line.startswith(':160000 160000'):
                     _, name = line.split('\t')
                     deps.append((name, output(x2.SRC, 'git', 'rev-parse', revision + ':' + name)))
             ledger = []
             for name, target in [('.', revision)] + deps:
                 root = x2.SRC / name
+                # Disabled conditional DEPS can leave an empty directory. Git
+                # otherwise walks upward and silently operates on Chromium itself.
+                if name != '.' and not (root / '.git').exists():
+                    print('Skipping unpopulated conditional dependency:', name, flush=True)
+                    continue
                 if output(root, 'git', 'diff', '--name-only', '--diff-filter=U'):
                     raise SystemExit('Resolve existing source conflicts before updating')
                 patch = args.logs.resolve() / (('src' if name == '.' else name.replace('/', '_')) + '-before.patch')

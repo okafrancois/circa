@@ -586,7 +586,7 @@ private struct OrganizationModel {
     }
 
     /// A new pane joins the selected tab's group, or forms a pair in place of the selected row.
-    func splitWithNewTab(selected: TabID?, url: URL, orientation: BrowserSplitOrientation, tab: TabID,
+    func splitWithNewTab(selected: TabID?, url: URL, orientation: BrowserSplitOrientation?, tab: TabID,
                          group: SplitGroupID, in state: ModelState, space: SpaceID)
         -> (ModelState, BrowserOrganizationAction)? {
         guard let selected, let section = splitSection(.tab(selected), in: state, space: space) else { return nil }
@@ -596,7 +596,7 @@ private struct OrganizationModel {
         if let existing = state.group(of: selected, parents) {
             guard state.members(existing).count < BrowserSplitGroup.maximumPanes else { return nil }
             next.lists[.split(existing)]!.append(.tab(tab))
-            next.layouts[existing] = .equal(next.members(existing).count, state.layouts[existing]!.orientation)
+            next.layouts[existing] = .equal(next.members(existing).count, orientation ?? state.layouts[existing]!.orientation)
             return (next, .addSplitPane)
         }
         let container = parents[.tab(selected)]!
@@ -604,7 +604,7 @@ private struct OrganizationModel {
         next.remove([.tab(selected)])
         next.insert([.split(group)], into: container, at: index)
         next.lists[.split(group)] = [.tab(selected), .tab(tab)]
-        next.layouts[group] = .equal(2, orientation)
+        next.layouts[group] = .equal(2, orientation ?? .horizontal)
         next.normalize()
         return (next, .createSplit)
     }

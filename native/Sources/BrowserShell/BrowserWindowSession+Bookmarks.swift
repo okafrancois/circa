@@ -43,10 +43,14 @@ public extension BrowserWindowSession {
     func exportBookmarks(from expected: BrowserContext, labels: BrowserBookmarkLabels = .init()) -> Task<BrowserBookmarkDocument?, Never> {
         guard !isClosed else { return Task { nil } }
         pendingCommandCount += 1
+        let diagnostic = trackCommand(kind: #function)
         let previous = pending
         let task = Task<BrowserBookmarkDocument?, Never> { [self] in
             defer { pendingCommandCount -= 1 }
+            defer { diagnostic.finish() }
             await previous?.value
+            activeCommandDiagnostic = diagnostic
+            diagnostic.step = "model-or-surface-publication"
             guard !isClosed else { return nil }
             do {
                 guard try await organizationContext() == expected else { throw BrowserStoreError.staleContext }
@@ -70,6 +74,7 @@ public extension BrowserWindowSession {
         let requestID = UUID()
         bookmarkAdmissions[requestID] = admission
         pendingCommandCount += 1
+        let diagnostic = trackCommand(kind: #function)
         let previous = pending
         let task = Task<FolderID?, Never> { [self] in
             defer {
@@ -77,7 +82,10 @@ public extension BrowserWindowSession {
                 bookmarkAdmissions[requestID] = nil
                 admission.revoke()
             }
+            defer { diagnostic.finish() }
             await previous?.value
+            activeCommandDiagnostic = diagnostic
+            diagnostic.step = "model-or-surface-publication"
             guard !isClosed, admission.state == .pending else { return nil }
             do {
                 guard try await organizationContext() == expected else { throw BrowserStoreError.staleContext }

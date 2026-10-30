@@ -3,7 +3,7 @@ import BrowserCore
 
 @MainActor
 final class SidebarUndoRouter: NSResponder, NSUserInterfaceValidations {
-    enum Source: Equatable { case organization, window }
+    enum Source: Equatable { case organization, window, closedItem }
     enum SupersessionReason: Equatable {
         case newerNativeEdit
         case externalNativeReplay
@@ -14,6 +14,10 @@ final class SidebarUndoRouter: NSResponder, NSUserInterfaceValidations {
     var onSuperseded: (SupersessionReason) -> Void = { _ in NSSound.beep() }
     private(set) var supersededRequestCount = 0
 
+    var closedItemDate: () -> Date? = { nil }
+    var reopenClosedItem: () -> Void = {}
+    private var organizationDates: [UInt64: Date] = [:]
+    private var nativeEditDates: [Date] = []
     var canUndoOrganization: () -> Bool = { false }
     var canRedoOrganization: () -> Bool = { false }
     /// Completion follows the session publication and identifies the record actually replayed.
@@ -99,7 +103,12 @@ final class SidebarUndoRouter: NSResponder, NSUserInterfaceValidations {
         }
         guard count > previous else { return }
         let first = max(previous + 1, count - min(count, UInt64(Self.depth)) + 1)
-        for id in first...count { push(.organization(id)) }
+        let date = Date()
+        for id in first...count { organizationDates[id] = date; push(.organization(id)) }
+        if organizationDates.count > Self.depth {
+            let oldest = organizationDates.keys.sorted().dropLast(Self.depth)
+            for id in oldest { organizationDates[id] = nil }
+        }
         // A new command clears only this journal's redo side.
         redoEntries.removeAll { $0.source == .organization }
     }
@@ -109,6 +118,8 @@ final class SidebarUndoRouter: NSResponder, NSUserInterfaceValidations {
     @objc private func windowGroupDidClose(_ notification: Notification) {
         guard let manager = notification.object as? UndoManager, !isForwarding, !manager.isUndoing, !manager.isRedoing,
               manager.groupingLevel == 0, manager.canUndo else { return }
+        nativeEditDates.append(Date())
+        if nativeEditDates.count > Self.depth { nativeEditDates.removeFirst() }
         nativeEditGeneration &+= 1
         push(.window)
         redoEntries.removeAll { $0 == .window }
@@ -117,12 +128,14 @@ final class SidebarUndoRouter: NSResponder, NSUserInterfaceValidations {
     @objc private func windowDidUndo(_ notification: Notification) {
         guard !isForwarding else { return }
         nativeReplayGeneration &+= 1
+        _ = nativeEditDates.popLast()
         move(.window, from: &undoEntries, to: &redoEntries)
     }
 
     @objc private func windowDidRedo(_ notification: Notification) {
         guard !isForwarding else { return }
         nativeReplayGeneration &+= 1
+        nativeEditDates.append(Date())
         move(.window, from: &redoEntries, to: &undoEntries)
     }
 
@@ -150,6 +163,11 @@ final class SidebarUndoRouter: NSResponder, NSUserInterfaceValidations {
         let organization = redo ? canRedoOrganization() : canUndoOrganization()
         let windowEdit = (redo ? window?.undoManager?.canRedo : window?.undoManager?.canUndo) == true
         if textFocused { return windowEdit ? .window : nil }
+        if !redo, let date = closedItemDate() {
+            let organizationDate = organization ? undoRecordID.flatMap { organizationDates[$0] } ?? .distantPast : .distantPast
+            let nativeDate = windowEdit ? nativeEditDates.last ?? .distantPast : .distantPast
+            if date > max(organizationDate, nativeDate) { return .closedItem }
+        }
         if organization && (preferringOrganization || !windowEdit) { return .organization }
         if !organization { return windowEdit ? .window : nil }
         let entries = redo ? redoEntries : undoEntries
@@ -188,6 +206,7 @@ final class SidebarUndoRouter: NSResponder, NSUserInterfaceValidations {
                 return false
             }
             switch source {
+            case .closedItem?: reopenClosedItem()
             case .organization?: return true
             case .window?: performWindowReplay(redo: request.redo)
             case nil: NSSound.beep()
@@ -226,9 +245,11 @@ final class SidebarUndoRouter: NSResponder, NSUserInterfaceValidations {
         defer { isForwarding = false }
         if redo {
             manager.redo()
+            nativeEditDates.append(Date())
             move(.window, from: &redoEntries, to: &undoEntries)
         } else {
             manager.undo()
+            _ = nativeEditDates.popLast()
             move(.window, from: &undoEntries, to: &redoEntries)
         }
     }
@@ -254,6 +275,9 @@ final class SidebarUndoRouter: NSResponder, NSUserInterfaceValidations {
         // Keep accepting input; its source will be resolved against the completed publication.
         if pendingRequestCount > 0 { return true }
         switch nextSource(redo: redo, preferringOrganization: preferringOrganization) {
+        case .closedItem?:
+            (item as? NSMenuItem)?.title = SidebarUndoStrings.undo
+            return true
         case .organization?:
             if let menuItem = item as? NSMenuItem {
                 let name = (redo ? redoOrganizationName() : undoOrganizationName()) ?? ""
@@ -283,6 +307,7 @@ enum SidebarUndoStrings {
         case .removeFromFavorites: english = uiText("Remove from Favorites")
         case .exportSpace: english = uiText("Export Space into Folder")
         case .convertFolderToSpace: english = uiText("Turn Folder into Space")
+        case .duplicateFolder: english = uiText("Duplicate")
         case .createFolder: english = uiText("New Folder")
         case .importBookmarks: english = uiText("Import Bookmarks")
         case .renameFolder: english = uiText("Rename Folder")

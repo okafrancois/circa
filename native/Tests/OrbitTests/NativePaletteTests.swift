@@ -679,6 +679,35 @@ struct NativePaletteTests {
         try await h.close()
     }
 
+    @Test("A persisted user entry uses the built-in Tab handoff and cannot be entered after disabling or deletion")
+    func userSiteSearchHandoff() async throws {
+        let h = try await PaletteHarness()
+        let settings = try BrowserSettingsStore()
+        let custom = BrowserSiteSearch(name: "Synthetic Search", shortcut: "lab", template: "https://search.example.test/?q=%s")
+        try await settings.saveSiteSearch(custom)
+        h.window.palette.siteSearches = await settings.snapshot().siteSearches
+        await h.show()
+        let palette = try #require(h.window.palette)
+        palette.query("lab")
+        #expect(palette.view.siteSearchHint == custom)
+        #expect(palette.view.control(palette.view.input, textView: NSTextView(), doCommandBy: #selector(NSResponder.insertTab(_:))))
+        #expect(palette.siteSearch == custom && palette.draft.isEmpty)
+        palette.query("café 猫 & #")
+        palette.accept()
+        await h.settle()
+        #expect(h.window.session.selectedSurface?.currentURL == custom.url(for: "café 猫 & #"))
+        try await settings.setSiteSearchEnabled(custom.id, false)
+        palette.siteSearches = await settings.snapshot().siteSearches
+        await h.show()
+        palette.query("lab")
+        #expect(palette.view.siteSearchHint == nil && !palette.enterSiteSearch())
+        try await settings.removeSiteSearch(custom.id)
+        palette.siteSearches = await settings.snapshot().siteSearches
+        palette.query("lab")
+        #expect(!palette.enterSiteSearch())
+        try await h.close()
+    }
+
     @Test("First results stay synchronous while 100k history is searched off the main actor")
     func latency100k() async throws {
         let h = try await PaletteHarness()
@@ -808,6 +837,67 @@ extension NativeWebKitTests.NativePaletteTests {
         #expect(!h.window.palette.results.contains { $0.remoteSuggestion == "orbit news" })
         h.window.palette.showsSearchSuggestions = false
         #expect(!h.window.palette.results.contains { $0.remoteSuggestion != nil })
+        try await h.close()
+    }
+}
+
+extension NativeWebKitTests.NativePaletteTests {
+    @Test("Directional Command Bar actions insert beside the selected pane and disable at four",
+          arguments: [BrowserCommandID.addRightSplit, .addLeftSplit, .addTopSplit, .addBottomSplit, .newVerticalSplitView])
+    func directionalSplits(_ command: BrowserCommandID) async throws {
+        let h = try await PaletteHarness()
+        h.window.submitAddress("https://split.test/selected")
+        await h.window.session.waitForPendingCommands()
+        let original = try #require(h.window.session.organization?.selectedTab?.id)
+        #expect(h.registry.dispatch(command, origin: .palette))
+        await h.router.waitForPendingCommands()
+        await h.window.session.waitForPendingCommands()
+        let split = try #require(h.window.session.activeSplit)
+        let leading = command == .addLeftSplit || command == .addTopSplit
+        #expect(split.group.tabIDs[leading ? 1 : 0] == original)
+        #expect(split.group.orientation == ([.addTopSplit, .addBottomSplit, .newVerticalSplitView].contains(command) ? .vertical : .horizontal))
+        #expect(h.window.palette.isPresented)
+        h.window.palette.dismiss(returnFocus: false)
+        for _ in 0..<2 { h.window.session.addSplitPane(); await h.window.session.waitForPendingCommands() }
+        #expect(!h.registry.dispatch(command, origin: .palette))
+        #expect(!h.registry.dispatch(.addSplitView, origin: .palette))
+        #expect(h.window.session.activeSplit?.tabs.count == 4)
+        try await h.close()
+    }
+
+    @Test("Orientation commands and split sidebar menus preserve the group and duplicate it")
+    func splitContextCommands() async throws {
+        let h = try await PaletteHarness()
+        h.window.submitAddress("https://split.test/selected")
+        await h.window.session.waitForPendingCommands()
+        h.window.session.addSplitPane(url: URL(string: "https://split.test/second")!)
+        await h.window.session.waitForPendingCommands()
+        let group = try #require(h.window.session.activeSplit)
+        for command in [BrowserCommandID.convertToVerticalSplitView, .convertToHorizontalSplitView] {
+            #expect(h.registry.dispatch(command, origin: .palette))
+            await h.router.waitForPendingCommands()
+            await h.window.session.waitForPendingCommands()
+        }
+        #expect(h.window.session.activeSplit?.group.id == group.group.id)
+        let nodes: [BrowserOrganizationNode] = [.split(group.group.id)]
+        _ = h.window.sidebar.prepareContextMenu(for: nodes[0])
+        let menu = try #require(h.window.makeSidebarContextMenu(for: nodes)?.menu)
+        let names = group.tabs.map { $0.title ?? $0.url.absoluteString }
+        for name in names { #expect(menu.items.first { $0.title == name }?.submenu?.items.first?.title == uiText("Mute")) }
+        let paneSurface = try #require(h.window.session.surface(for: group.tabs[0].occurrenceID!))
+        let paneName = group.tabs[0].title ?? group.tabs[0].url.absoluteString
+        let mute = try #require(menu.items.first { $0.title == paneName }?.submenu?.items.first)
+        _ = (mute.target as? NSObject)?.perform(mute.action, with: mute)
+        for _ in 0..<10 { await Task.yield() }
+        #expect(paneSurface.media.isAudioMuted == true)
+        #expect(menu.items.contains { $0.title == uiText("Duplicate") })
+        #expect(menu.items.contains { $0.title == uiText("Convert to Vertical Split View") })
+        #expect(h.registry.dispatch(.sidebarDuplicate, origin: .contextMenu))
+        await h.router.waitForPendingCommands()
+        await h.window.session.waitForPendingCommands()
+        #expect(h.window.session.organization?.allTabs.count == 4)
+        #expect(h.window.session.activeSplit?.group.id != group.group.id)
+        h.window.sidebar.endContextMenu()
         try await h.close()
     }
 }

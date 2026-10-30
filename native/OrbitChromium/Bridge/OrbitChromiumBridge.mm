@@ -1,5 +1,6 @@
 #import <AppKit/AppKit.h>
 #import <objc/runtime.h>
+#import <os/log.h>
 #include "OrbitChromiumBridge.h"
 #import "OrbitApplicationLifecycle.h"
 #include "OrbitBridgeFiles.h"
@@ -7,6 +8,7 @@
 #include "OrbitCefApi.h"
 #include "OrbitExtensionPolicy.h"
 #include "OrbitUnownedTabsApi.h"
+#include "OrbitNativeCommandScope.h"
 #include "OrbitClientWrap.h"
 #include "OrbitNetworkQoS.h"
 #include "OrbitFaviconPolicy.h"
@@ -508,6 +510,7 @@ struct State {
 };
 
 State* g_state = nullptr;  // Main/UI thread only.
+orbit_bridge::NativeCommandScope g_native_command_scope;
 
 void StopAuthenticationOperations(bool before_shutdown = false, bool after_shutdown = false) {
   if (!g_state) return;
@@ -600,7 +603,8 @@ class DevToolsObserver final : public CefDevToolsMessageObserver {
     if (!g_state || (name != "WebAudio.contextCreated" && name != "WebAudio.contextChanged"
                      && name != "WebAudio.contextWillBeDestroyed" && name != "Media.playerEventsAdded"
                      && name != "Media.playerPropertiesChanged" && name != "Media.playersCreated"
-                     && name != "Page.frameNavigated" && name != "Page.lifecycleEvent")) return;
+                     && name != "Page.frameNavigated" && name != "Page.lifecycleEvent"
+                     && name != "Runtime.bindingCalled")) return;
     auto event = g_state->Event(ACR_EVENT_MEDIA_ACTIVITY, token_);
     event.detail = name.c_str();
     event.payload = params;
@@ -1790,7 +1794,8 @@ const orbit_cef_api_t* ResolveOrbitApi() {
   // v1. Each version's layout is the prefix of the next; a function beyond the resolved version
   // is never called.
   const orbit_cef_api_t* api = nullptr;
-  const std::pair<uint32_t, size_t> versions[] = {{15u, sizeof(orbit_cef_api_t)},
+  const std::pair<uint32_t, size_t> versions[] = {{16u, sizeof(orbit_cef_api_t)},
+                                                   {15u, offsetof(orbit_cef_api_t, diagnostic_capabilities)},
                                                    {14u, offsetof(orbit_cef_api_t, media_snapshot)},
                                                    {13u, offsetof(orbit_cef_api_t, permission_accept_once)},
                                                    {12u, offsetof(orbit_cef_api_t, memory_dump)},
@@ -1901,6 +1906,7 @@ class App final : public CefApp, public CefBrowserProcessHandler {
     // Confined mixed-content fixture: fixed loopback mapping, never product argv.
     if (g_state && g_state->secure_storage == ACR_SECURE_STORAGE_MOCK &&
         ([[NSBundle mainBundle].bundleIdentifier isEqualToString:@"lab.orbit.orbit.engine-r13"] ||
+         [[NSBundle mainBundle].bundleIdentifier isEqualToString:@"lab.orbit.orbit.engine-r14"] ||
          [[NSBundle mainBundle].bundleIdentifier isEqualToString:@"lab.orbit.orbit.sec-pill"]) &&
         [[NSBundle mainBundle].infoDictionary[@"OrbitSyntheticBundle"] boolValue] &&
         [[NSProcessInfo processInfo].arguments containsObject:@"--orbit-security-fixture"]) {
@@ -2248,6 +2254,7 @@ extern "C" int32_t ACRRun(int argc, char* argv[], const ACRRunOptions* options,
     // Chromium's MacShutdownWatchdog (in the stock framework) exits with 2 (RESULT_CODE_HUNG)
     // if this takes longer than 10 s; observed only under heavy machine load. After a forced
     // quit, CefShutdown also destroys the browsers that never confirmed their close.
+    g_native_command_scope.Cancel();
     const CFAbsoluteTime shutdown_started = CFAbsoluteTimeGetCurrent();
     orbit_bridge::BeginBrowserShutdownQoS();
     CefShutdown();
@@ -2271,6 +2278,7 @@ extern "C" int32_t ACRRequestQuit() {
   if (g_state->quitting) return 1;
   orbit_bridge::BeginBrowserShutdownQoS();
   g_state->quitting = true;
+  g_native_command_scope.Cancel();
   // No Chrome-created tab is offered to a quitting shell.
   ++g_state->unowned_handler_generation;
   if (g_state->set_unowned_tab_handler) g_state->set_unowned_tab_handler(nullptr, nullptr);
@@ -3049,18 +3057,39 @@ extern "C" int32_t ACRSafeBrowsingEnabled(uint64_t profile) {
   return value->GetBool() ? 1 : 0;
 }
 
-extern "C" int32_t ACRActivateSurface(uint64_t token) {
-  ACR_HOST(token);
-  if (!host->window || !g_state->orbit) return 0;
+static int32_t ActivateSurface(uint64_t token, std::string tab) {
+  static os_log_t input_log = os_log_create("local.orbit", "sidebar-input");
+  const auto trace = [token, tab](uint64_t ticket, const char* outcome) {
+    os_log_with_type(input_log, OS_LOG_TYPE_INFO,
+        "stage=activation-ticket tab=%{public}s surface=%{public}llu ticket=%{public}llu result=%{public}s",
+        tab.c_str(), (unsigned long long)token, (unsigned long long)ticket, outcome);
+  };
+  if (!NSThread.isMainThread || !g_state) { trace(0, "runtime-unavailable"); return 0; }
+  auto* host = g_state->Find(token);
+  if (!host || !host->window || !g_state->orbit) { trace(0, "host-unavailable"); return 0; }
   const auto window = host->window;
   auto browser = host->browser;
-  const auto result = g_state->orbit->activate_tab(browser->GetIdentifier());
-  if (result == 1 && g_state) {
-    auto* live = g_state->Find(token);
-    if (live && live->window == window && live->browser == browser && !live->closing_by_shell)
-      g_state->ExtensionSelectionChanged(window, live);
-  }
-  return result;
+  return g_native_command_scope.ActivateOrDefer([token, window, browser, trace] {
+    if (!g_state || !g_state->orbit) { trace(0, "runtime-retired"); return int32_t{0}; }
+    auto* current = g_state->Find(token);
+    if (!current) { trace(0, "host-retired"); return int32_t{0}; }
+    if (current->window != window || current->browser != browser) { trace(0, "host-moved"); return int32_t{0}; }
+    if (current->closing_by_shell) { trace(0, "host-closing"); return int32_t{0}; }
+    const auto result = g_state->orbit->activate_tab(browser->GetIdentifier());
+    if (result == 1 && g_state) {
+      auto* live = g_state->Find(token);
+      if (live && live->window == window && live->browser == browser && !live->closing_by_shell)
+        g_state->ExtensionSelectionChanged(window, live);
+    }
+    return result;
+  }, PostUI, window, trace);
+}
+
+extern "C" int32_t ACRActivateSurface(uint64_t token) { return ActivateSurface(token, "none"); }
+
+extern "C" int32_t ACRActivateSidebarSurface(uint64_t token, const char* identifier) {
+  NSUUID* uuid = identifier ? [[NSUUID alloc] initWithUUIDString:[NSString stringWithUTF8String:identifier]] : nil;
+  return ActivateSurface(token, uuid ? uuid.UUIDString.UTF8String : "none");
 }
 
 extern "C" int32_t ACRGetTabInfo(uint64_t token, ACRTabInfo* info) {
@@ -3291,6 +3320,14 @@ extern "C" int32_t ACRExecuteChromeCommand(uint64_t token, const char* name) {
   if (!browser_host->CanExecuteChromeCommand(id)) return 0;
   browser_host->ExecuteChromeCommand(id, CEF_WOD_CURRENT_TAB);
   return 1;
+}
+
+extern "C" int32_t ACRDuplicateTab(uint64_t token) {
+  ACR_HOST(token);
+  // A native clone needs the synchronous adoption callback to own its client and view.
+  if (!g_state->set_unowned_tab_handler || !g_state->callbacks.adopt_engine_tab) return 0;
+  orbit_bridge::NativeCommandScope::Command duplicate(g_native_command_scope);
+  return ACRExecuteChromeCommand(token, "IDC_DUPLICATE_TAB");
 }
 
 extern "C" int32_t ACRPrint(uint64_t token) {
@@ -3754,4 +3791,42 @@ extern "C" void ACRNativePageServicesClosing(uint64_t token) {
   g_state->orbit->security_observe(id, nullptr, nullptr);
   g_state->orbit->fullscreen_observe(id, nullptr, nullptr);
   if (g_state->orbit->version >= 15) g_state->orbit->media_observe(id, nullptr, nullptr);
+}
+
+extern "C" uint32_t ACREngineDiagnosticCapabilities(void) {
+  if (!NSThread.isMainThread || !g_state || !g_state->initialized || g_state->quitting ||
+      !g_state->orbit || g_state->orbit->version < 16) return 0;
+  const auto* api = g_state->orbit;
+  if (!api->diagnostic_capabilities || !api->task_manager || !api->trace_begin || !api->trace_end ||
+      !api->extension_options_open || !api->extension_incognito_set) return 0;
+  return api->diagnostic_capabilities();
+}
+extern "C" int32_t ACRTaskManager(uint64_t token) {
+  const auto id = NativePageBrowser(token);
+  return id < 0 || !(ACREngineDiagnosticCapabilities() & 1) ? 0 : g_state->orbit->task_manager(id);
+}
+namespace {
+const char* DiagnosticProfilePath(uint64_t token) {
+  if (!(ACREngineDiagnosticCapabilities() & 2)) return nullptr;
+  auto* host = g_state->Find(token);
+  return host && host->browser && !host->closing_by_shell ? ExtensionProfilePath(host->profile) : nullptr;
+}
+}
+extern "C" int32_t ACRTraceBegin(uint64_t token, const char* categories, orbit_trace_callback_t cb, void* ctx) {
+  const char* path = DiagnosticProfilePath(token);
+  return path ? g_state->orbit->trace_begin(path, categories, cb, ctx) : 0;
+}
+extern "C" int32_t ACRTraceEnd(uint64_t token, const char* file, orbit_trace_callback_t cb, void* ctx) {
+  const char* path = DiagnosticProfilePath(token);
+  return path ? g_state->orbit->trace_end(path, file, cb, ctx) : 0;
+}
+extern "C" int32_t ACRExtensionOptionsOpen(uint64_t token, const char* id) {
+  const auto browser = NativePageBrowser(token);
+  return browser < 0 || !(ACREngineDiagnosticCapabilities() & 4) || !orbit_bridge::ValidExtensionID(id)
+      ? 0 : g_state->orbit->extension_options_open(browser, id);
+}
+extern "C" int32_t ACRExtensionIncognitoSet(uint64_t profile, const char* id, int32_t allowed) {
+  const char* path = ExtensionProfilePath(profile);
+  return !path || !(ACREngineDiagnosticCapabilities() & 8) || !orbit_bridge::ValidExtensionID(id)
+      ? 0 : g_state->orbit->extension_incognito_set(path, id, allowed);
 }

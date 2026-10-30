@@ -52,7 +52,10 @@
   <key>SUFeedURL</key><string>https://github.com/@ORBIT_RELEASE_REPOSITORY@/releases/latest/download/appcast.xml</string>
   <key>SUPublicEDKey</key><string>@SPARKLE_PUBLIC_ED_KEY@</string>
   <key>SUEnableAutomaticChecks</key><true/>
+  <key>SUVerifyUpdateBeforeExtraction</key><true/>
+  <key>SUAllowsAutomaticUpdates</key><true/>
   <key>SUAutomaticallyUpdate</key><true/>
   <key>SUScheduledCheckInterval</key><integer>3600</integer>
+  <key>OrbitChromiumVersion</key><string>@ORBIT_CHROMIUM_VERSION@</string>
   <key>OrbitEngine</key><string>chromium</string>
 </dict></plist>

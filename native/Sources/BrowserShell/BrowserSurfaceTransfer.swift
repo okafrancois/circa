@@ -540,6 +540,7 @@ public extension BrowserWindowSession {
         let surface = transfer.surface
         bind(surface)
         pendingCommandCount += 1
+        let diagnostic = trackCommand(kind: #function)
         let previous = pending
         let adoption = Task<TabOccurrenceID?, Never> { [self] in
             defer {
@@ -547,7 +548,10 @@ public extension BrowserWindowSession {
                 if occurrencesBySurface[ObjectIdentifier(surface)] == nil { transfer.didFail(at: self) }
                 pendingCommandCount -= 1
             }
+            defer { diagnostic.finish() }
             await previous?.value
+            activeCommandDiagnostic = diagnostic
+            diagnostic.step = "model-or-surface-publication"
             guard !isClosed, BrowserSurfaceProvenance.isReserved(reservation, surface: surface, for: self) else { return nil }
             do {
                 guard let context = try await validatedContext(), context.profileID == transfer.profileID,

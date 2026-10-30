@@ -66,10 +66,17 @@ final class BrowserSidebarView: NSView, SidebarListHost {
     var onRenameDidEnd: (() -> Void)?
     var onClearToday: (() -> Void)?
     var onTearOff: ((SidebarDragPayload, NSPoint) -> Void)?
+    var onFileDrop: (([URL], BrowserOrganizationDestination) -> Void)?
+    var onCopyDrop: ((SidebarDragPayload, BrowserOrganizationDestination) -> Void)?
+    var onTextDrop: ((String, BrowserOrganizationDestination) -> Void)?
+    private enum ExternalDropContent {
+        case files([URL])
+        case text(String)
+    }
+    private var externalDrop: (content: ExternalDropContent, proposal: SidebarDropProposal)?
+
     /// A validated drop: payload, destination, and whether the organization changes (false for
     /// rows dropped back in place, which still move live documents between windows).
-    var onFileDrop: (([URL], BrowserOrganizationDestination) -> Void)?
-    private var fileDropProposal: SidebarDropProposal?
     var onDrop: ((SidebarDragPayload, BrowserOrganizationDestination, Bool) -> Void)?
     /// Context menu for these nodes (the clicked row, or the multi-selection containing it).
     var onContextMenu: (([BrowserOrganizationNode], NSEvent, NSView) -> Void)?
@@ -178,6 +185,7 @@ final class BrowserSidebarView: NSView, SidebarListHost {
 
     // Organization projection (SB-LIST).
     private(set) var organization: BrowserOrganizationSnapshot?
+    var onOptionSelectNode: ((BrowserOrganizationNode) -> Void)?
     var onSelectSplit: ((SplitGroupID) -> Void)?
     private(set) var selection = BrowserOrganizationSelection()
     private var lastSelectedTabID: TabID?
@@ -236,7 +244,7 @@ final class BrowserSidebarView: NSView, SidebarListHost {
             self?.spaceHoverDidChange(nil, dismissalDuration: SidebarSpaceTooltip.clickDismissalDuration)
         }
         footer.onHoverSpace = { [weak self] button in self?.spaceHoverDidChange(button, allowsHandoff: true) }
-        registerForDraggedTypes([SidebarDragPayload.pasteboardType, FavoritesDragPayload.pasteboardType, .fileURL])
+        registerForDraggedTypes([SidebarDragPayload.pasteboardType, FavoritesDragPayload.pasteboardType, .fileURL, .URL, .string])
     }
 
     required init?(coder: NSCoder) { nil }
@@ -532,7 +540,14 @@ final class BrowserSidebarView: NSView, SidebarListHost {
     // MARK: SidebarListHost
 
     func list(_ list: SidebarListView, activate node: BrowserOrganizationNode, modifiers: NSEvent.ModifierFlags) {
+        let reason = !commandsEnabled ? "disabled" : organization == nil ? "missing-organization"
+            : list !== page.list ? "stale-list" : "received"
+        BrowserSidebarInputDiagnostics.record("sidebar-event", tab: node.tabID, reason: reason)
         guard commandsEnabled, let organization, list === page.list else { return }
+        if modifiers == [.option], node.tabID != nil || node.splitID != nil {
+            onOptionSelectNode?(node)
+            return
+        }
         if modifiers.contains(.command) {
             if selection.isEmpty, let selected = organization.selectedTab, organization.rowNode(for: selected.id) != node {
                 selection.select(organization.rowNode(for: selected.id), in: organization)
@@ -652,11 +667,13 @@ final class BrowserSidebarView: NSView, SidebarListHost {
     override func draggingEntered(_ sender: any NSDraggingInfo) -> NSDragOperation { draggingUpdated(sender) }
 
     override func draggingUpdated(_ sender: any NSDraggingInfo) -> NSDragOperation {
-        if dragPayload(from: sender) == nil {
-            let urls = Self.droppedFiles(sender.draggingPasteboard)
-            return updateFileDrop(urls, at: convert(sender.draggingLocation, from: nil)) != nil ? .copy : []
+        guard commandsEnabled else { dropCoordinator.clear(); clearExternalDrop(); return [] }
+        guard let payload = dragPayload(from: sender) else {
+            dropCoordinator.clear()
+            guard let content = Self.externalDropContent(sender.draggingPasteboard) else { clearExternalDrop(); return [] }
+            return updateExternalDrop(content, at: convert(sender.draggingLocation, from: nil)) != nil ? .copy : []
         }
-        guard commandsEnabled, let payload = dragPayload(from: sender) else { return [] }
+        clearExternalDrop()
         let point = convert(sender.draggingLocation, from: nil)
         page.autoscrollDuringDrag(at: convert(point, to: page))
         let verdict = dropCoordinator.update(payload: payload, at: point, in: self, targets: dropTargets,
@@ -664,14 +681,14 @@ final class BrowserSidebarView: NSView, SidebarListHost {
         if verdict?.isValid == true, payload.sourceWindow != windowIdentifier {
             SidebarWindowDirectory.keepSourceKey(payload.sourceWindow)
         }
-        return verdict?.isValid == true ? .move : []
+        return verdict?.isValid == true ? (isCopyDrag(payload) ? .copy : .move) : []
     }
 
-    override func draggingExited(_ sender: (any NSDraggingInfo)?) { clearFileDrop(); dropCoordinator.clear() }
+    override func draggingExited(_ sender: (any NSDraggingInfo)?) { dropCoordinator.clear(); clearExternalDrop() }
 
     /// Any end of the session (cancelled over the sidebar included) drops leftover feedback; a
     /// committed drop already handed its feedback to the target.
-    override func draggingEnded(_ sender: any NSDraggingInfo) { clearFileDrop(); dropCoordinator.clear() }
+    override func draggingEnded(_ sender: any NSDraggingInfo) { dropCoordinator.clear(); clearExternalDrop() }
 
     /// Rows dragged inside this process only: the list's payload, or a Favorites tile whose source
     /// still vouches for its pasteboard payload (FAVORITES' local check). Other applications'
@@ -686,12 +703,24 @@ final class BrowserSidebarView: NSView, SidebarListHost {
     }
 
     override func prepareForDragOperation(_ sender: any NSDraggingInfo) -> Bool {
-        commandsEnabled && (fileDropProposal != nil || dropCoordinator.acceptedDrop() != nil)
+        commandsEnabled && (externalDrop != nil || dropCoordinator.acceptedDrop() != nil)
     }
 
     override func performDragOperation(_ sender: any NSDraggingInfo) -> Bool {
+        guard commandsEnabled else { dropCoordinator.clear(); clearExternalDrop(); return false }
+        // Re-read the completed pasteboard: hover feedback never authorizes a document.
         if dragPayload(from: sender) == nil {
-            return commitFileDrop(Self.droppedFiles(sender.draggingPasteboard), at: convert(sender.draggingLocation, from: nil))
+            dropCoordinator.clear()
+            guard let content = Self.externalDropContent(sender.draggingPasteboard),
+                  updateExternalDrop(content, at: convert(sender.draggingLocation, from: nil)) != nil
+            else { clearExternalDrop(); return false }
+            return commitExternalDrop()
+        }
+        clearExternalDrop()
+        if let accepted = dropCoordinator.acceptedDrop(), isCopyDrag(accepted.payload) {
+            dropCoordinator.clear()
+            onCopyDrop?(accepted.payload, accepted.proposal.destination)
+            return true
         }
         guard commandsEnabled, let accepted = dropCoordinator.acceptedDrop() else {
             dropCoordinator.clear()
@@ -721,36 +750,87 @@ final class BrowserSidebarView: NSView, SidebarListHost {
         return true
     }
 
+    /// Read only the explicit file representation. AppKit URL coercion can also read URL/text
+    /// representations, which are not native file delivery and must never acquire file grants.
     static func droppedFiles(_ pasteboard: NSPasteboard) -> [URL] {
-        (pasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL] ?? [])
-            .compactMap(LocalFileOpen.validURL)
+        (pasteboard.pasteboardItems ?? []).compactMap { item in
+            guard item.types.contains(.fileURL), let value = item.string(forType: .fileURL),
+                  let url = URL(string: value) else { return nil }
+            return LocalFileOpen.validURL(url)
+        }
+    }
+
+    private static func externalDropContent(_ pasteboard: NSPasteboard) -> ExternalDropContent? {
+        let types = pasteboard.types ?? []
+        // A refused or forged internal payload cannot fall through to an external representation.
+        guard !types.contains(SidebarDragPayload.pasteboardType),
+              !types.contains(FavoritesDragPayload.pasteboardType) else { return nil }
+        let files = droppedFiles(pasteboard)
+        if !files.isEmpty { return .files(files) }
+        if let text = pasteboard.string(forType: .URL) ?? pasteboard.string(forType: .string) { return .text(text) }
+        return nil
     }
 
     @discardableResult
     func updateFileDrop(_ urls: [URL], at point: NSPoint) -> SidebarDropProposal? {
-        guard commandsEnabled, onFileDrop != nil, !urls.compactMap(LocalFileOpen.validURL).isEmpty,
-              let organization, page.list.acceptsDrag(at: point, in: self) else { clearFileDrop(); return nil }
-        page.autoscrollDuringDrag(at: convert(point, to: page))
-        let proposal = page.list.localFileDropProposal(at: page.list.convert(point, from: self),
-            in: organization, count: urls.count)
-        fileDropProposal = proposal
-        page.list.showLocalFileDropFeedback(proposal)
-        return proposal
+        updateExternalDrop(.files(urls.compactMap(LocalFileOpen.validURL)), at: point)
     }
 
     @discardableResult
     func commitFileDrop(_ urls: [URL], at point: NSPoint) -> Bool {
-        let files = urls.compactMap(LocalFileOpen.validURL)
-        guard let proposal = updateFileDrop(files, at: point) else { return false }
-        clearFileDrop()
-        onFileDrop?(files, proposal.destination)
+        guard updateFileDrop(urls, at: point) != nil else { return false }
+        return commitExternalDrop()
+    }
+
+    func isCopyDrag(_ payload: SidebarDragPayload, modifiers: NSEvent.ModifierFlags = NSEvent.modifierFlags) -> Bool {
+        modifiers.contains(.option) && payload.nodes.count == 1 && payload.nodes[0].tabID != nil
+    }
+
+    @discardableResult
+    func updateExternalDrop(_ text: String, at point: NSPoint) -> Bool {
+        updateExternalDrop(.text(text), at: point) != nil
+    }
+
+    private func updateExternalDrop(_ content: ExternalDropContent, at point: NSPoint) -> SidebarDropProposal? {
+        guard commandsEnabled, let organization, page.list.acceptsDrag(at: point, in: self)
+        else { clearExternalDrop(); return nil }
+        let proposal: SidebarDropProposal
+        switch content {
+        case .files(let files):
+            guard onFileDrop != nil, !files.isEmpty else { clearExternalDrop(); return nil }
+            page.autoscrollDuringDrag(at: convert(point, to: page))
+            proposal = page.list.localFileDropProposal(at: page.list.convert(point, from: self),
+                in: organization, count: files.count)
+            page.list.showLocalFileDropFeedback(proposal)
+        case .text(let text):
+            guard let destination = try? AddressResolver().resolve(text), !destination.url.isFileURL,
+                  let windowIdentifier else { clearExternalDrop(); return nil }
+            let payload = SidebarDragPayload(sourceWindow: windowIdentifier, spaceID: organization.spaceID,
+                profileID: organization.profileID, nodes: [], rowCount: 1, grabOffsetX: 0)
+            page.autoscrollDuringDrag(at: convert(point, to: page))
+            guard let resolved = page.list.dropProposal(for: payload, at: page.list.convert(point, from: self), in: organization)
+            else { clearExternalDrop(); return nil }
+            proposal = resolved
+            page.list.showDropFeedback(proposal, isValid: true, payload: payload)
+        }
+        externalDrop = (content, proposal)
+        return proposal
+    }
+
+    @discardableResult
+    func commitExternalDrop() -> Bool {
+        defer { clearExternalDrop() }
+        guard commandsEnabled, let drop = externalDrop else { return false }
+        switch drop.content {
+        case .files(let files): onFileDrop?(files, drop.proposal.destination)
+        case .text(let text): onTextDrop?(text, drop.proposal.destination)
+        }
         return true
     }
 
-    private func clearFileDrop() {
-        guard fileDropProposal != nil else { return }
-        fileDropProposal = nil
-        page.list.showLocalFileDropFeedback(nil)
+    func clearExternalDrop() {
+        if externalDrop != nil { page.list.showDropFeedback(nil, isValid: false, payload: nil) }
+        externalDrop = nil
     }
 
     /// Commits a validated drop (also the entry point of the hidden-window tests).

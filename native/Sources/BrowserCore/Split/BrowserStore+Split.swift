@@ -35,7 +35,7 @@ extension BrowserStore {
     }
 
     /// Adds a new blank pane, in one undoable graph transaction; no orphan tab on refusal.
-    public func splitWithNewTab(url: URL, orientation: BrowserSplitOrientation = .horizontal, at index: Int? = nil,
+    public func splitWithNewTab(url: URL, title: String? = nil, orientation: BrowserSplitOrientation? = nil, at index: Int? = nil,
                                 from context: BrowserContext) throws -> BrowserWindowState {
         _ = try organizationWindow(context)
         try BrowserSessionDocument.validateDestination(url)
@@ -50,24 +50,101 @@ extension BrowserStore {
         }
         guard let location = organization.placement(of: .tab(selected)) else { throw BrowserSplitError.paneMissing }
         let id = TabID(), groupID = existing ?? SplitGroupID(), date = clock()
-        let entry = BrowserOrganizedTab(id: id, url: url, pinnedURL: section.keepsPinnedURL ? url : nil,
+        let entry = BrowserOrganizedTab(id: id, url: url, pageTitle: title, pinnedURL: section.keepsPinnedURL ? url : nil,
                                         createdAt: date, lastActiveAt: date)
         try commitOrganization(existing == nil ? .createSplit : .addSplitPane, in: context) { next in
             if existing == nil {
                 next.detach(.tab(selected))
-                next.splits[groupID] = BrowserSplitGroup(id: groupID, tabIDs: [], orientation: orientation)
+                next.splits[groupID] = BrowserSplitGroup(id: groupID, tabIDs: [], orientation: orientation ?? .horizontal)
                 next.insert(.split(groupID), into: location.container, at: location.index)
                 next.insert(.tab(selected), into: .split(groupID), at: 0)
             }
             let count = next.children(of: .split(groupID)).count
             next.addTab(entry, into: .split(groupID), at: min(count, max(0, index ?? count)))
-            next.updateSplit(groupID) { $0.ratios = Array(repeating: 1 / Double($0.tabIDs.count), count: $0.tabIDs.count) }
+            next.updateSplit(groupID) {
+                $0.ratios = Array(repeating: 1 / Double($0.tabIDs.count), count: $0.tabIDs.count)
+                if let orientation { $0.orientation = orientation }
+            }
         }
         ensureSplitOccurrences(groupID, in: context)
         if let occurrence = occurrences(in: windows[context.windowID]!).first(where: { $0.id == id }) {
             try selectOccurrence(occurrence.occurrenceID, in: context.windowID)
         }
         return try captureWindowState(in: context.windowID)
+    }
+
+    /// Joins a standalone sidebar tab to the selection. Selecting the same tab copies it.
+    /// A pinned participant keeps the whole result pinned, in one undoable transaction.
+    public func openTabInSplit(_ tabID: TabID, orientation: BrowserSplitOrientation? = nil, leading: Bool = false,
+                               from context: BrowserContext) throws -> BrowserWindowState {
+        _ = try organizationWindow(context)
+        guard let selected = context.selectedOccurrenceID.flatMap({ tabs[$0]?.id }),
+              let source = organization.tabs[tabID] else { throw BrowserSplitError.paneMissing }
+        if selected == tabID {
+            return try splitWithNewTab(url: source.url, title: source.resolvedTitle, orientation: orientation, from: context)
+        }
+        try requireOrdinaryTabs([selected, tabID])
+        let selectedSection = try splitSection(of: .tab(selected), in: context)
+        let sourceSection = try splitSection(of: .tab(tabID), in: context)
+        guard organization.container(of: .tab(tabID))?.owningNode?.splitID == nil else { throw BrowserSplitError.nestedSplit }
+        let existing = organization.container(of: .tab(selected))?.owningNode?.splitID.flatMap { organization.splits[$0] }
+        guard (existing?.tabIDs.count ?? 1) < BrowserSplitGroup.maximumPanes else { throw BrowserSplitError.invalidPaneCount }
+        let selectedNode: BrowserOrganizationNode = existing.map { .split($0.id) } ?? .tab(selected)
+        guard let selectedLocation = organization.placement(of: selectedNode),
+              let sourceLocation = organization.placement(of: .tab(tabID)) else { throw BrowserSplitError.paneMissing }
+        let promote = sourceSection.keepsPinnedURL && !selectedSection.keepsPinnedURL
+        let location = promote ? sourceLocation : selectedLocation
+        let anchor = promote ? BrowserOrganizationNode.tab(tabID) : selectedNode
+        let moving: Set<BrowserOrganizationNode> = [.tab(tabID), selectedNode]
+        let insertion = try organization.insertionIndex(in: location.container, position: .before(anchor), moving: moving)
+        let pinned = sourceSection.keepsPinnedURL || selectedSection.keepsPinnedURL
+        let groupID = existing?.id ?? SplitGroupID()
+        try commitOrganization(existing == nil ? .createSplit : .addSplitPane, in: context) { next in
+            next.detach(.tab(tabID))
+            if existing == nil {
+                next.detach(.tab(selected))
+                next.splits[groupID] = BrowserSplitGroup(id: groupID, tabIDs: [], orientation: orientation ?? .horizontal)
+                next.insert(.split(groupID), into: location.container, at: insertion)
+                next.insert(.tab(selected), into: .split(groupID), at: 0)
+            } else if promote {
+                next.detach(selectedNode)
+                next.insert(selectedNode, into: location.container, at: insertion)
+            }
+            let count = next.children(of: .split(groupID)).count
+            next.insert(.tab(tabID), into: .split(groupID), at: leading ? 0 : count)
+            next.updateSplit(groupID) {
+                $0.ratios = Array(repeating: 1 / Double($0.tabIDs.count), count: $0.tabIDs.count)
+                if let orientation { $0.orientation = orientation }
+            }
+            if pinned {
+                for id in next.splits[groupID]!.tabIDs { next.updateTab(id) { $0.pinnedURL = $0.pinnedURL ?? $0.url } }
+            }
+        }
+        ensureSplitOccurrences(groupID, in: context)
+        return try selectTab(tabID, from: captureContext(in: context.windowID))
+    }
+
+    public func duplicateSplit(_ id: SplitGroupID, from context: BrowserContext) throws -> BrowserWindowState {
+        _ = try organizationWindow(context)
+        let section = try splitSection(of: .split(id), in: context)
+        guard let original = organization.splits[id], original.isValid,
+              let location = organization.placement(of: .split(id)) else { throw BrowserSplitError.paneMissing }
+        try requireOrdinaryTabs(original.tabIDs)
+        let date = clock()
+        let copies = original.tabIDs.map { id -> BrowserOrganizedTab in
+            let tab = organization.tabs[id]!
+            return BrowserOrganizedTab(id: TabID(), url: tab.url, pageTitle: tab.pageTitle, customTitle: tab.customTitle,
+                pinnedURL: section.keepsPinnedURL ? tab.pinnedURL : nil, createdAt: date, lastActiveAt: date, customIcon: tab.customIcon)
+        }
+        let group = BrowserSplitGroup(tabIDs: copies.map(\.id), orientation: original.orientation, ratios: original.ratios)
+        try commitOrganization(.createSplit, in: context) { next in
+            next.splits[group.id] = BrowserSplitGroup(id: group.id, tabIDs: [], orientation: group.orientation)
+            next.insert(.split(group.id), into: location.container, at: location.index + 1)
+            for (index, tab) in copies.enumerated() { next.addTab(tab, into: .split(group.id), at: index) }
+            next.updateSplit(group.id) { $0.ratios = group.ratios }
+        }
+        ensureSplitOccurrences(group.id, in: context)
+        return try selectSplit(group.id, from: captureContext(in: context.windowID))
     }
 
     public func addPane(_ tabID: TabID, to groupID: SplitGroupID, at index: Int? = nil, orientation: BrowserSplitOrientation? = nil,

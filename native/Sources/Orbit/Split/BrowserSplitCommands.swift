@@ -7,6 +7,11 @@ enum BrowserSplitCommands {
     // Catalog titles stay English lookup keys. BrowserCommandDefinition.localizedTitle routes
     // them through BrowserText at presentation time, like the other feature catalogs.
     private static let rows: [(BrowserCommandID, String, String)] = [
+        (.addRightSplit, "Add Right Split", layoutSource), (.addLeftSplit, "Add Left Split", layoutSource),
+        (.addTopSplit, "Add Top Split", layoutSource), (.addBottomSplit, "Add Bottom Split", layoutSource),
+        (.newVerticalSplitView, "New Vertical Split View", layoutSource),
+        (.convertToVerticalSplitView, "Convert to Vertical Split View", layoutSource),
+        (.convertToHorizontalSplitView, "Convert to Horizontal Split View", layoutSource),
         (.toggleSplitOrientation, "Change Split Orientation", layoutSource), (.swapSplitPanes, "Swap Split Panes", layoutSource),
         (.unsplitAllPanes, "Separate All Split Pages", layoutSource),
         (.focusNextSplitPane, "Focus Next Split Pane", cycleSource),
@@ -52,6 +57,24 @@ enum BrowserSplitCommands {
                 controller.session.selectTab(id)
                 controller.session.performWindowAction { [weak controller] in controller?.addSplitFromSelection() }
             } else { controller.addSplitFromSelection() }
+        }
+        for (id, orientation, leading) in [
+            (BrowserCommandID.addRightSplit, BrowserSplitOrientation.horizontal, false),
+            (.addLeftSplit, .horizontal, true), (.addTopSplit, .vertical, true),
+            (.addBottomSplit, .vertical, false), (.newVerticalSplitView, .vertical, false)
+        ] {
+            try! registry.register(id, validate: { $0.canAddSplitPane && !$0.isPeekPresented }) { [weak registry] controller, _ in
+                controller.palette.registry = registry
+                let split = controller.session.activeSplit
+                let index = split.flatMap { group in group.activeTab.flatMap { group.group.tabIDs.firstIndex(of: $0.id) } } ?? 0
+                controller.addSplitFromSelection(at: leading ? index : index + 1, orientation: orientation)
+            }
+        }
+        for (id, orientation) in [(BrowserCommandID.convertToVerticalSplitView, BrowserSplitOrientation.vertical),
+                                  (.convertToHorizontalSplitView, .horizontal)] {
+            try! registry.register(id, validate: { target($0).map { $0.group.orientation != orientation } == true && !$0.isPeekPresented }) { controller, _ in
+                if let split = target(controller) { controller.session.orientSplit(split.group.id, to: orientation) }
+            }
         }
         group(.closeThisSplitPane) { controller, split in
             if let active = split.activeTab ?? split.tabs.first { controller.session.closeSplitPane(active.id) }

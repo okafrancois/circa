@@ -2182,3 +2182,50 @@ extension NativeWebKitTests.SpaceSwipeRoutingTests {
         #expect(sidebar.swipePreviewCount == 0)
     }
 }
+
+extension NativeWebKitTests.SpaceSwipeRoutingTests {
+    @Test("A lost display callback releases settlement without revoking the destination")
+    func spaceSwipeLostFramesCannotStallCommands() async throws {
+        let (window, sidebar, _, _) = try await fixture(crossProfile: true)
+        defer { sidebar.spaceSwipe.detach(); window.close() }
+        sidebar.spaceSwipe.settlementWaitLimit = .milliseconds(30)
+        var captured: SpaceSwipeAdmission?
+        sidebar.spaceSwipe.commit = { _, _, admission, _, _ in captured = admission }
+        _ = sidebar.spaceSwipe.handleScroll(try scroll(.began), inside: true)
+        _ = sidebar.spaceSwipe.handleScroll(try scroll(.changed, x: -100), inside: true)
+        for _ in 0..<10 { await Task.yield() }
+        _ = sidebar.spaceSwipe.handleScroll(try scroll(.ended), inside: true)
+        var released = false
+        let waiter = Task { await sidebar.spaceSwipe.waitForSettlement(); released = true }
+        let deadline = ContinuousClock.now + .seconds(1)
+        while !released, ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(5)) }
+        #expect(released)
+        #expect(captured?.state == .pending)
+        sidebar.spaceSwipe.cancel()
+        await waiter.value
+    }
+}
+
+extension NativeWebKitTests.SpaceSwipeRoutingTests {
+    @Test("Settlement deadline preserves the normal sidebar spring at every frame")
+    func deadlinePreservesVisibleSpring() async throws {
+        let (window, sidebar, document, first) = try await fixture()
+        defer { sidebar.spaceSwipe.detach(); window.close() }
+        sidebar.spaceSwipe.commit = { _, _, _, _, _ in }
+        sidebar.spaceSwipe.validate(catalog: BrowserCatalogSnapshot(profiles: document.profiles, spaces: document.spaces), active: first)
+        for _ in 0..<20 { await Task.yield() }
+        #expect(sidebar.spaceSwipe.switchToSpace(try #require(document.spaces.last?.id)))
+        let initial = sidebar.spaceSwipe.offset
+        let expected = SidebarSlotMotion(from: initial, to: -sidebar.swipeWidth, at: 10,
+            spring: OrbitTokens.Motion.spaceSwitchSidebar)
+        for elapsed in [0.0, 0.05, 0.1, 0.2, 0.4, 0.8] {
+            _ = sidebar.spaceSwipe.advance(to: 10 + elapsed)
+            #expect(abs(sidebar.spaceSwipe.offset - expected.value(at: 10 + elapsed)) < 0.001)
+        }
+        var released = false
+        let waiter = Task { await sidebar.spaceSwipe.waitForSettlement(); released = true }
+        for _ in 0..<10 { await Task.yield() }
+        #expect(released)
+        await waiter.value
+    }
+}

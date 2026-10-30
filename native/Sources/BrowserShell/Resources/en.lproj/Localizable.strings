@@ -1710,3 +1710,20 @@
 "The URL is invalid." = "The URL is invalid.";
 "This scripting operation is not supported." = "This scripting operation is not supported.";
 "The scripting operation could not be completed." = "The scripting operation could not be completed.";
+
+"Copy URLs" = "Copy URLs";
+
+"Add Top Split" = "Add Top Split";
+"Add Bottom Split" = "Add Bottom Split";
+"New Vertical Split View" = "New Vertical Split View";
+
+// Site search settings
+"Site Search" = "Site Search";
+"Shortcut" = "Shortcut";
+"URL" = "URL";
+"Add" = "Add";
+"Enabled" = "Enabled";
+"Perplexity" = "Perplexity";
+
+"Copy Version" = "Copy Version";
+"Chromium %@" = "Chromium %@";

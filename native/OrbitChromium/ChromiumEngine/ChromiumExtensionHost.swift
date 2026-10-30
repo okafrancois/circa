@@ -11,6 +11,21 @@ final class ChromiumExtensionHost: BrowserExtensionHost {
     var onExtensionsChange: ((ProfileID) -> Void)?
     let supportsActions = true
     var supportsPinning: Bool { ACRExtensionPinningAvailable() == 1 }
+    var supportsOptionsPages: Bool { ACREngineDiagnosticCapabilities() & 4 != 0 }
+    var supportsIncognitoPreference: Bool { ACREngineDiagnosticCapabilities() & 8 != 0 }
+    func openOptions(extensionID: String, on surface: any BrowserEngineSurface) throws {
+        guard supportsOptionsPages, let engine, let surface = surface as? ChromiumSurface,
+              surface.engine === engine, !surface.isDisposed, surface.isReady,
+              surface.hostedWindowToken != 0 else { throw BrowserEngineError.unsupportedOperation }
+        _ = try profileToken(surface.profileID)
+        guard ACRExtensionOptionsOpen(surface.token, extensionID) == 1 else { throw BrowserEngineError.unsupportedOperation }
+    }
+    func setAllowedInIncognito(_ allowed: Bool, extensionID: String, in profileID: ProfileID) throws {
+        guard supportsIncognitoPreference,
+              ACRExtensionIncognitoSet(try profileToken(profileID), extensionID, allowed ? 1 : 0) == 1 else {
+            throw BrowserEngineError.unsupportedOperation
+        }
+    }
     private let changeHub = BrowserExtensionChangeHub()
     private var observed: [ProfileID: UInt64] = [:]
 

@@ -228,7 +228,11 @@ class SidebarListRow: NSView, NSTextFieldDelegate {
 
     // MARK: Pointer
 
-    override func mouseDown(with event: NSEvent) { if commandsEnabled { events?.rowMouseDown(self, with: event) } }
+    override func mouseDown(with event: NSEvent) {
+        BrowserSidebarInputDiagnostics.record("mouse-down", tab: node.tabID,
+            reason: !commandsEnabled ? "disabled" : events == nil ? "missing-handler" : "received")
+        if commandsEnabled { events?.rowMouseDown(self, with: event) }
+    }
     override func mouseDragged(with event: NSEvent) { if commandsEnabled { events?.rowMouseDragged(self, with: event) } }
     override func mouseUp(with event: NSEvent) { events?.rowMouseUp(self, with: event) }
     override func rightMouseDown(with event: NSEvent) {

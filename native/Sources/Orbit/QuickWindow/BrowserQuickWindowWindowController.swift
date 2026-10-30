@@ -46,6 +46,7 @@ final class BrowserQuickWindowWindowController<Engine: BrowserEngine>: NSWindowC
     var onClose: (() -> Void)?
     var onPromote: (() -> Void)?
     var onChooseSpace: (() -> Void)?
+    var onMeetingLink: ((URL) -> Void)?
     var onNewTarget: ((Surface, BrowserNewSurfaceRequest, () -> Surface) -> Surface?)?
     var onDownload: ((Surface, any BrowserEngineDownload) -> Void)?
     let addressField = BrowserQuickWindowAddressField()
@@ -134,16 +135,19 @@ final class BrowserQuickWindowWindowController<Engine: BrowserEngine>: NSWindowC
 
     func bind(_ document: Surface) {
         guard container.owns(document), !isClosed else { return }
+        OrbitUnsavedInputGuard.register(document)
         bindingRevision &+= 1
         document.delegate = self
         document.placement = .init(container: .quickWindow, windowID: id)
         document.onChange = { [weak self, weak document] in
             guard let self, let document, container.owns(document) else { return }
+            if document.isSuspended { OrbitUnsavedInputGuard.clear(document) }
             render()
             engineEventHooks.emit(.stateChanged, for: document)
         }
         document.onDispose = { [weak self, weak document] in
             if let document {
+                OrbitUnsavedInputGuard.clear(document)
                 let key = ObjectIdentifier(document)
                 self?.unresponsivePageRequests.removeValue(forKey: key)
                 BrowserPageDialogCenter.shared.forget(key)
@@ -587,15 +591,20 @@ final class BrowserQuickWindowWindowController<Engine: BrowserEngine>: NSWindowC
 
     @objc private func showQuickWindowSiteControls(_ sender: Any?) { siteControls.show() }
     @objc private func showQuickWindowExtensions(_ sender: NSButton) {
-        guard acceptsCommands, surface != nil, let host = engine.extensions else { return }
+        guard let menu = extensionMenu() else { return }
+        menu.popUp(positioning: nil, at: NSPoint(x: 0, y: sender.bounds.height), in: sender)
+    }
+
+    func extensionMenu() -> NSMenu? {
+        guard acceptsCommands, let surface, let host = engine.extensions else { return nil }
         let menu = NSMenu()
-        for item in (try? host.installedExtensions(in: profileID)) ?? [] where item.isEnabled && item.hasAction {
+        for item in (try? host.installedExtensions(on: surface)) ?? [] where item.isEnabled && item.hasAction {
             let entry = NSMenuItem(title: item.name, action: #selector(performQuickWindowExtension(_:)), keyEquivalent: "")
             entry.target = self; entry.representedObject = item.id
             menu.addItem(entry)
         }
         if menu.items.isEmpty { menu.addItem(withTitle: uiText("No extensions in this profile."), action: nil, keyEquivalent: "") }
-        menu.popUp(positioning: nil, at: NSPoint(x: 0, y: sender.bounds.height), in: sender)
+        return menu
     }
     @objc private func performQuickWindowExtension(_ sender: NSMenuItem) {
         guard acceptsCommands, let surface, let id = sender.representedObject as? String else { return }
@@ -630,6 +639,7 @@ final class BrowserQuickWindowWindowController<Engine: BrowserEngine>: NSWindowC
     }
     func surfaceDidStartNavigation(_ surface: Surface) { emit(.navigationStarted, surface: surface) }
     func surfaceDidCommitNavigation(_ surface: Surface) {
+        OrbitUnsavedInputGuard.clear(surface)
         if owns(surface) {
             findSession.documentDidChange(on: surface)
             let key = ObjectIdentifier(surface)
@@ -648,6 +658,14 @@ final class BrowserQuickWindowWindowController<Engine: BrowserEngine>: NSWindowC
     func surface(_ surface: Surface, decidePolicyFor action: BrowserNavigationAction,
                  decision: BrowserPolicyDecision<BrowserNavigationActionPolicy>) {
         let held = !isClosed && !isPreparingForTermination && container.owns(surface)
+        if held, acceptsCommands, action.isMainFrame == true, action.kind == .linkActivation,
+           action.isUserGesture != false, action.httpMethod == "GET", action.hasBody == false,
+           !action.shouldPerformDownload, let url = action.url, BrowserMeetingLink.matches(url),
+           let onMeetingLink {
+            onMeetingLink(url)
+            decision.decide(.cancel)
+            return
+        }
         if held, BrowserExternalProtocolGate.shared.handle(action, hostView: surface.hostView,
             surface: ObjectIdentifier(surface), pageURL: surface.navigationState.committedURL) {
             decision.decide(.cancel)
@@ -671,6 +689,7 @@ final class BrowserQuickWindowWindowController<Engine: BrowserEngine>: NSWindowC
 
     func surface(_ surface: Surface, runJavaScriptDialog dialog: BrowserJavaScriptDialog) async -> BrowserJavaScriptDialogResponse {
         guard showsPage(surface) else { return .suppressed }
+        if case .beforeUnload = dialog.kind { OrbitUnsavedInputGuard.observedBeforeUnload(surface) }
         return await BrowserPageDialogCenter.shared.runJavaScriptDialog(
             dialog, on: surface.hostView, surface: ObjectIdentifier(surface), generation: surface.documentGeneration)
     }
@@ -755,6 +774,7 @@ final class BrowserQuickWindowWindowController<Engine: BrowserEngine>: NSWindowC
     /// True when a page command went to the engine (it then releases its native menu itself).
     private func performPageMenuCommand(_ id: BrowserCommandID, request: BrowserContextMenuRequest, on surface: Surface) -> Bool {
         if let command = BrowserPageContextCommands.engineCommand(for: id, request: request) {
+            if id == .pagePaste || id == .pagePasteAndMatchStyle { OrbitUnsavedInputGuard.paste(into: surface) }
             do { try surface.performContextMenuCommand(command, for: request) } catch { NSSound.beep() }
             return true
         }

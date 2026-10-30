@@ -11,9 +11,11 @@ enum BrowserWindowCommands {
                                                pasteboardString: @escaping () -> String? = { NSPasteboard.general.string(forType: .string) }) {
         BrowserSiteCommands.install(in: registry)
         BrowserDailyCommands.install(in: registry)
+        BrowserDiagnosticCommands.install(in: registry)
         BrowserBookmarkCommands.install(in: registry)
         OrbitShellCommands.install(in: registry)
         BrowserSwitcherCommands.install(in: registry)
+        BrowserTabErgonomics.install(in: registry)
         BrowserArchiveCommands.install(in: registry)
         BrowserLibraryCommands.install(in: registry)
         BrowserBoostCommands.install(in: registry)
@@ -39,7 +41,7 @@ enum BrowserWindowCommands {
         BrowserPaletteCommands.install(in: registry)
         // SB-LIST: a sidebar multi-selection closes together, else the visible tab.
         window(.archiveTab) { $0.archiveSelectedTabs() }
-        window(.duplicate) { $0.hideLibrary(); $0.session.duplicateSelectedTab() }
+        window(.duplicate) { $0.hideLibrary(); $0.duplicateSidebarTab() }
         window(.goBack) { $0.navigateBack() }
         window(.goForward) { $0.navigateForward() }
         window(.refreshThePage) { $0.reload() }
@@ -78,7 +80,8 @@ enum BrowserWindowCommands {
         window(.copyURLAsMarkdown) { $0.sharing.copyMarkdownLink() }
         window(.share) { $0.sharing.sharePage() }
         window(.closeWindow) { controller in
-            controller.session.performWindowAction { [weak controller] in controller?.window?.performClose(nil) }
+            // Closing revokes session authority synchronously, even while its FIFO is stalled.
+            controller.window?.performClose(nil)
         }
         window(.enterExitFullScreen) { controller in
             controller.session.performWindowAction { [weak controller] in controller?.window?.toggleFullScreen(nil) }
@@ -90,30 +93,37 @@ enum BrowserWindowCommands {
             controller.session.performWindowAction { [weak controller] in controller?.window?.performZoom(nil) }
         }
         window(.bringAllToFront) { controller in controller.session.performWindowAction { NSApp.arrangeInFront(nil) } }
-        let responders: [(BrowserCommandID, Selector)] = [
-            (.cut, #selector(NSText.cut(_:))), (.copy, #selector(NSText.copy(_:))),
-            (.paste, #selector(NSText.paste(_:))), (.selectAll, #selector(NSText.selectAll(_:))),
-            (.undo, Selector(("undo:"))), (.redo, Selector(("redo:"))),
-            (.pasteAndMatchStyle, #selector(NSTextView.pasteAsPlainText(_:)))
-        ]
-        for (id, selector) in responders {
+        try! registry.register(.networkInspector, validate: { $0.canPerformPageCommand(.showDevTools) }) { controller, _ in
+            controller.performDocumentCommand { try $0.showDeveloperPanel(.network) }
+        }
+        try! registry.register(.exit, validate: { $0.canExitCurrentContext }) { controller, _ in
+            controller.exitCurrentContext()
+        }
+        for id in BrowserStandardActions.commandIDs {
+            let selector = BrowserStandardActions.validationSelector(for: id)!
+            let tag = BrowserStandardActions.tag(for: id)
             var pendingPermission: ((BrowserWindowController<Engine>) -> Bool)?
             if id == .undo || id == .redo {
                 pendingPermission = { controller in
                     guard !(controller.window?.firstResponder is NSText) else { return false }
-                    guard let responder = controller.commandResponder(for: selector, keyWindow: commandKeyWindow()) else { return false }
+                    guard let responder = controller.commandResponder(for: selector, keyWindow: commandKeyWindow(), tag: tag) else { return false }
                     // Only these responders submit their accepted intents to the session FIFO.
                     // Field editors keep native validation and never inherit this permission.
                     return isSerializedSidebarResponder(responder, in: controller)
                 }
             }
             try! registry.register(id, allowsPendingResponder: pendingPermission,
-                                   validate: { $0.commandResponder(for: selector, keyWindow: commandKeyWindow()) != nil }) { controller, _ in
-                guard let responder = controller.commandResponder(for: selector, keyWindow: commandKeyWindow()) else { return }
+                                   validate: { $0.commandResponder(for: selector, keyWindow: commandKeyWindow(), tag: tag) != nil }) { controller, _ in
+                guard let responder = controller.commandResponder(for: selector, keyWindow: commandKeyWindow(), tag: tag) else { return }
                 if (id == .undo || id == .redo), controller.session.hasPendingCommands {
                     guard !(controller.window?.firstResponder is NSText), isSerializedSidebarResponder(responder, in: controller) else { return }
                 }
-                responder.tryToPerform(selector, with: nil)
+                guard let sender = BrowserStandardActions.sender(for: id) else { return }
+                if let manager = BrowserStandardActions.target(for: id) as? NSFontManager {
+                    manager.addFontTrait(sender)
+                } else {
+                    responder.tryToPerform(sender.action!, with: sender)
+                }
             }
         }
     }

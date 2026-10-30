@@ -1,4 +1,5 @@
 import Foundation
+import Darwin
 
 
 public struct FolderID: Hashable, Codable, Sendable {
@@ -136,6 +137,49 @@ public struct BrowserPinnedLandingAlias: Codable, Equatable, Sendable {
     public let url: URL
 }
 
+/// Native user consent for one canonical document in one local profile. Session data only.
+public struct BrowserLocalDocument: Codable, Equatable, Sendable {
+    public let profileID: ProfileID
+    public let canonicalPath: String
+
+    public init?(userOpened url: URL, profileID: ProfileID) {
+        guard Self.isLocal(url),
+              (try? url.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile) == true else { return nil }
+        self.profileID = profileID
+        canonicalPath = Self.canonicalPath(for: url)
+    }
+
+    /// Do not require existence: an absent document must reach the engine's file-not-found page.
+    /// Compare against the stored path without resolving it again, so a symlink swap cannot
+    /// change the document originally authorized by the user.
+    public func matches(_ url: URL, profileID: ProfileID) -> Bool {
+        self.profileID == profileID && Self.isLocal(url)
+            && Self.canonicalPath(for: url) == canonicalPath
+    }
+
+    /// Resolve existing ancestors even after deletion. Foundation may shorten system aliases
+    /// differently for existing and absent files; realpath keeps their identity stable.
+    public static func canonicalPath(for url: URL) -> String {
+        var path = url.resolvingSymlinksInPath().standardizedFileURL.path
+        var suffix: [String] = []
+        while true {
+            if let canonical = realpath(path, nil) {
+                defer { free(canonical) }
+                let root = String(cString: canonical)
+                return root + (root == "/" || suffix.isEmpty ? "" : "/") + suffix.reversed().joined(separator: "/")
+            }
+            guard path != "/", !path.isEmpty else { return url.standardizedFileURL.path }
+            suffix.append((path as NSString).lastPathComponent)
+            path = (path as NSString).deletingLastPathComponent
+        }
+    }
+
+    private static func isLocal(_ url: URL) -> Bool {
+        url.isFileURL && (url.host == nil || url.host == "" || url.host?.lowercased() == "localhost")
+            && url.user == nil && url.password == nil && url.port == nil
+    }
+}
+
 public struct BrowserOrganizedTab: Codable, Equatable, Sendable {
     public let id: TabID
     /// Last committed destination reported by any occurrence, or the URL to load when none is live.
@@ -152,6 +196,8 @@ public struct BrowserOrganizedTab: Codable, Equatable, Sendable {
     }
     /// Provider ownership and cached revision; machine-local and excluded from sync.
     public internal(set) var liveFolderChild: BrowserLiveFolderChild?
+    /// Exact native user provenance, persisted locally and never admitted from sync/import.
+    public internal(set) var localDocument: BrowserLocalDocument?
     public let createdAt: Date
     /// Last time the tab was the visible selection of a window. Basis of auto-archiving.
     public internal(set) var lastActiveAt: Date
@@ -159,7 +205,7 @@ public struct BrowserOrganizedTab: Codable, Equatable, Sendable {
     public init(id: TabID, url: URL, pageTitle: String? = nil, customTitle: String? = nil,
                 pinnedURL: URL? = nil, createdAt: Date, lastActiveAt: Date,
                 liveFolderChild: BrowserLiveFolderChild? = nil, customIcon: BrowserSpaceIcon? = nil,
-                pinnedLandingAlias: BrowserPinnedLandingAlias? = nil) {
+                pinnedLandingAlias: BrowserPinnedLandingAlias? = nil, localDocument: BrowserLocalDocument? = nil) {
         self.id = id
         self.url = url
         self.pageTitle = pageTitle
@@ -170,6 +216,7 @@ public struct BrowserOrganizedTab: Codable, Equatable, Sendable {
         self.createdAt = createdAt
         self.lastActiveAt = lastActiveAt
         self.liveFolderChild = liveFolderChild
+        self.localDocument = localDocument
     }
 
     /// The custom title wins over the web title; callers localize their own fallback.
@@ -346,7 +393,7 @@ extension BrowserArchivePolicy: Codable {
 public enum BrowserOrganizationAction: String, Sendable, Equatable {
     case moveItems, pinTabs, unpinTabs, addToFavorites, removeFromFavorites
     case exportSpace, convertFolderToSpace
-    case createFolder, renameFolder, deleteFolder, renameTab, importBookmarks
+    case createFolder, duplicateFolder, renameFolder, deleteFolder, renameTab, importBookmarks
     case changeTabIcon, editPinnedURL
     case archiveTabs, closeTabs, clearToday, restoreArchivedTab, deleteArchivedTabs
     case createSplit, addSplitPane, closeSplitPane, unsplit, swapSplitPanes, orientSplit, resizeSplit

@@ -1,4 +1,5 @@
 import AppKit
+import BrowserCore
 import BrowserEngine
 import BrowserShell
 
@@ -63,7 +64,7 @@ extension BrowserQuickWindowWindowController {
     func copyCurrentURL() -> Bool {
         guard acceptsCommands, let surface, !surface.isDisposed, owns(surface),
               let url = surface.currentURL else { return false }
-        copyURLWriter(url)
+        copyURLWriter(BrowserCopyURLCleaner.clean(url))
         return true
     }
 
