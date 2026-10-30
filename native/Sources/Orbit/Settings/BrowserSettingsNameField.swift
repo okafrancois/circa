@@ -8,11 +8,13 @@ import BrowserShell
 struct BrowserSettingsNameField: NSViewRepresentable {
     @ObservedObject var draft: BrowserSettingsNameDraft
     let onSubmit: () -> Void
+    var savesOnEndEditing = false
 
     func makeNSView(context: Context) -> BrowserSettingsNameTextField {
         let field = BrowserSettingsNameTextField()
         field.draft = draft
         field.onSubmit = onSubmit
+        field.savesOnEndEditing = savesOnEndEditing
         field.setAccessibilityLabel(settingsText("name", "Name"))
         return field
     }
@@ -20,6 +22,7 @@ struct BrowserSettingsNameField: NSViewRepresentable {
     func updateNSView(_ field: BrowserSettingsNameTextField, context: Context) {
         field.draft = draft
         field.onSubmit = onSubmit
+        field.savesOnEndEditing = savesOnEndEditing
         field.isEnabled = context.environment.isEnabled
         field.applyDraft()
     }
@@ -29,6 +32,7 @@ struct BrowserSettingsNameField: NSViewRepresentable {
 final class BrowserSettingsNameTextField: NSTextField, NSTextFieldDelegate {
     var draft: BrowserSettingsNameDraft?
     var onSubmit: (() -> Void)?
+    var savesOnEndEditing = false
     private var isApplyingDraft = false
 
     init() {
@@ -66,6 +70,7 @@ final class BrowserSettingsNameTextField: NSTextField, NSTextFieldDelegate {
     func controlTextDidEndEditing(_ notification: Notification) {
         guard !isApplyingDraft else { return }
         draft?.finishComposition(text: stringValue)
+        if savesOnEndEditing { onSubmit?() }
     }
 
     func control(_ control: NSControl, textView: NSTextView, doCommandBy selector: Selector) -> Bool {
@@ -100,5 +105,36 @@ private final class BrowserSettingsNameFieldEditor: NSTextView {
     override func insertText(_ string: Any, replacementRange: NSRange) {
         super.insertText(string, replacementRange: replacementRange)
         owner?.editorDidChange(self)
+    }
+}
+
+
+@MainActor
+struct BrowserSettingsRenameForm: View {
+    @StateObject private var draft: BrowserSettingsNameDraft
+    let error: String?
+    let save: (String) -> Void
+    let cancel: () -> Void
+
+    init(name: String, error: String?, save: @escaping (String) -> Void, cancel: @escaping () -> Void) {
+        _draft = StateObject(wrappedValue: BrowserSettingsNameDraft(name: name))
+        self.error = error; self.save = save; self.cancel = cancel
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text(uiText("Rename")).font(Font(BrandTextStyle.title.font(size: 22)))
+            BrowserSettingsNameField(draft: draft) { draft.submit(save) }
+                .padding(.horizontal, 9).frame(height: 26)
+                .background(OrbitSettingsStyle.panel, in: RoundedRectangle(cornerRadius: 7))
+                .overlay(RoundedRectangle(cornerRadius: 7).strokeBorder(OrbitSettingsStyle.border))
+            if let error { Text(error).foregroundStyle(.red).font(Font(BrandFonts.ui(12))) }
+            HStack {
+                Spacer()
+                Button(uiText("Cancel"), action: cancel).keyboardShortcut(.cancelAction)
+                Button(uiText("Rename")) { draft.submit(save) }
+                    .keyboardShortcut(.defaultAction).disabled(!draft.canSubmit)
+            }
+        }.padding(22).frame(width: 396).font(Font(BrandFonts.ui(13))).settingsFrost()
     }
 }

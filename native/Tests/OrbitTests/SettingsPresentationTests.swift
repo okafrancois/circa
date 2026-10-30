@@ -56,3 +56,70 @@ struct SettingsPresentationTests {
         #expect(first == [0.19, 1] && second == [0.22, 1])
     }
 }
+
+extension SettingsPresentationTests {
+    @Test("Version text includes the localized prefix and preserves synthetic build metadata")
+    func versionFormat() {
+        #expect(BrowserSettingsAbout.versionDescription(info: ["CFBundleShortVersionString": "1.4.2", "CFBundleVersion": "142"]) == "Version 1.4.2 (142)")
+        #expect(BrowserSettingsAbout.versionDescription(info: ["CFBundleShortVersionString": "1.4.2", "CFBundleVersion": "fixture.20261030"]) == "Version 1.4.2 (fixture.20261030)")
+        #expect(BrowserSettingsAbout.versionDescription(info: [:]) == "Version Development build (Development build)")
+    }
+
+    @MainActor
+    @Test("New Space rows create distinct identities and keep edits scoped to the selected Space")
+    func spaceRowBindings() async throws {
+        let environment = BrowserEnvironment(engine: SyntheticEngine())
+        defer { environment.autoArchive.scheduler.stop() }
+        let model = BrowserSettingsModel(environment: environment, profileID: nil, shortcuts: [])
+        try await model.createProfile(name: "List Fixture")
+        let profile = try #require(model.selectedProfileID)
+        let first = try await model.createSpace(name: "New Space", profile: profile)
+        let second = try await model.createSpace(name: "New Space", profile: profile)
+        #expect(first != second)
+        try await model.renameSpace(second, name: "Renamed")
+        await model.reload()
+        #expect(model.catalog.spaces.first { $0.id == first }?.name == "New Space")
+        #expect(model.catalog.spaces.first { $0.id == second }?.name == "Renamed")
+        model.queueSpaceIconEdit(spaceID: second, profileID: profile, icon: .grapheme("🌿"))
+        try await model.waitForPendingActions()
+        #expect(environment.settings.document.space(second).iconSelection == .grapheme("🌿"))
+        #expect(environment.settings.document.space(first).iconSelection == .none)
+        var selected = first
+        let space = try #require(model.catalog.spaces.first { $0.id == second })
+        let row = BrowserSettingsSpaceRow(space: space, theme: space.theme, icon: .grapheme("🌿"), isSelected: false) { selected = second }
+        row.select()
+        #expect(selected == second)
+        #expect(row.space.name == "Renamed" && row.icon == .grapheme("🌿"))
+    }
+
+    @MainActor
+    @Test("Compact name fields save on focus departure and never submit marked text")
+    func compactNameCommit() {
+        let draft = BrowserSettingsNameDraft(name: "Original")
+        let field = BrowserSettingsNameTextField()
+        var saved: [String] = []
+        field.draft = draft
+        field.savesOnEndEditing = true
+        field.onSubmit = { draft.submit { saved.append($0) } }
+        draft.text = "Edited"
+        draft.beginComposition()
+        draft.submit { saved.append($0) }
+        #expect(saved.isEmpty)
+        field.stringValue = "Committed"
+        field.controlTextDidEndEditing(Notification(name: NSControl.textDidEndEditingNotification))
+        #expect(saved == ["Committed"])
+        draft.receivePersisted("Committed")
+        field.controlTextDidEndEditing(Notification(name: NSControl.textDidEndEditingNotification))
+        #expect(saved == ["Committed"])
+    }
+
+    @MainActor
+    @Test("Destructive settings actions use system red independently of the control accent")
+    func destructiveInk() throws {
+        for name in [NSAppearance.Name.aqua, .darkAqua] {
+            let appearance = try #require(NSAppearance(named: name))
+            let ink = try #require(OrbitSettingsStyle.destructiveColor.resolved(for: appearance).usingColorSpace(.sRGB))
+            #expect(ink.redComponent > 0.8 && ink.greenComponent < 0.5 && ink.blueComponent < 0.5)
+        }
+    }
+}
