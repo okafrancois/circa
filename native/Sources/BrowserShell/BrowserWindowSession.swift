@@ -816,6 +816,8 @@ public final class BrowserWindowSession<Surface: BrowserSurface> {
     }
 
     func install(_ state: BrowserWindowState) {
+        let perfStart = BrowserPerformance.begin()
+        defer { BrowserPerformance.end(.sessionInstall, since: perfStart) }
         guard !isClosed else { return }
         // A placeholder follows its model occurrence, including to another Space of its profile;
         // one that left the model or its profile loses its return path (a failed move then goes
@@ -978,7 +980,9 @@ public final class BrowserWindowSession<Surface: BrowserSurface> {
             var created: (BrowserContext, BrowserTab)?
             try await withAdoptedContext { current in
                 guard expectedProfileID == nil || current.profileID == expectedProfileID else { return }
+                let perfStart = BrowserPerformance.begin()
                 let tab = try await store.openTabAndCaptureDelivery(url: url, from: current, activate: activate)
+                BrowserPerformance.end(.storeOpenAwait, since: perfStart)
                 onCreate?(tab)
                 created = (current, tab)
             }
@@ -1005,7 +1009,9 @@ public final class BrowserWindowSession<Surface: BrowserSurface> {
         adoptingOrganizationChanges: Bool = false
     ) async throws -> BrowserWindowState? {
         guard !isClosed else { return nil }
+        let perfStart = BrowserPerformance.begin()
         let state = try await store.captureWindowState(in: context.windowID)
+        BrowserPerformance.end(.storeCaptureAwait, since: perfStart)
         guard !isClosed else { return nil }
         guard state.context.spaceID == context.spaceID, state.context.profileID == context.profileID else {
             throw BrowserWindowSessionError.contextChangeRequiresNewSession
@@ -1049,7 +1055,9 @@ public final class BrowserWindowSession<Surface: BrowserSurface> {
     /// selected tab, page zoom) stay strict: the tab the user meant may be gone.
     func validatedContext(adoptingOrganizationChanges: Bool = false) async throws -> BrowserContext? {
         guard !isClosed, let windowID else { return nil }
+        let perfStart = BrowserPerformance.begin()
         let context = try await store.captureContext(in: windowID)
+        BrowserPerformance.end(.storeContextAwait, since: perfStart)
         guard !isClosed else { return nil }
         do {
             try validateContext(context)
@@ -1069,11 +1077,13 @@ public final class BrowserWindowSession<Surface: BrowserSurface> {
 
     func enqueue(_ action: @escaping @MainActor (BrowserWindowSession) async throws -> Void) {
         guard !isClosed else { return }
+        let queued = BrowserPerformance.begin()
         pendingCommandCount += 1
         let previous = pending
         pending = Task { [self] in
             defer { pendingCommandCount -= 1 }
             await previous?.value
+            BrowserPerformance.end(.commandQueue, since: queued)
             guard !isClosed else { return }
             do { try await action(self) }
             catch {

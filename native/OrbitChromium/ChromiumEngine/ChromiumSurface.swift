@@ -317,6 +317,8 @@ public final class ChromiumSurface: BrowserEngineSurface {
         hostedWindowToken = window
         isCreationPending = true
         engine?.nativeCreationStarted(token)
+        let perfStart = BrowserPerformance.begin()
+        defer { BrowserPerformance.end(.nativeBrowser, since: perfStart) }
         BrowserPerformance.mark(.nativeBrowserBegin)
         defer { BrowserPerformance.mark(.nativeBrowserReady) }
         let result = ACRCreateTabSurface(token, profileToken, window, index,

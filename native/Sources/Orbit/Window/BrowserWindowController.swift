@@ -270,6 +270,8 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
             self?.surfaceMembershipDidChange(surface, membership)
         }
         session.onChange = { [weak self] in
+            let perfStart = BrowserPerformance.begin()
+            defer { BrowserPerformance.end(.windowRender, since: perfStart) }
             self?.bookmarkTransfer?.contextDidChange()
             self?.renderSession(selection: self?.session.selectionChangeTabIDs)
             self?.onStateChange()

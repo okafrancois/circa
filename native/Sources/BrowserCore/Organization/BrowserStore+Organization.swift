@@ -70,6 +70,8 @@ extension BrowserStore {
     }
 
     func publishOrganizationChange(metadata: Set<TabID>? = nil) {
+        let perfStart = BrowserPerformance.begin()
+        defer { BrowserPerformance.end(.organizationPublish, since: perfStart) }
         if metadata == nil { organization.normalizeArchivedSpaces() }
         BrowserPerformance.count(.organizationPublications)
         organizationRevision &+= 1
@@ -111,6 +113,8 @@ extension BrowserStore {
     public func archivePolicy() -> BrowserArchivePolicy { organization.policy }
 
     func organizationSnapshot(for windowID: WindowID) throws -> BrowserOrganizationSnapshot {
+        let perfStart = BrowserPerformance.begin()
+        defer { BrowserPerformance.end(.sidebarProjection, since: perfStart) }
         BrowserPerformance.count(.sidebarProjections)
         guard let window = windows[windowID] else { throw BrowserStoreError.windowMissing }
         guard let space = spaces[window.activeSpaceID] else { throw BrowserStoreError.spaceMissing }
