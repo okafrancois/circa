@@ -51,7 +51,8 @@ final class OrbitUpdater: NSObject, ObservableObject {
     private var freshnessTimer: Timer?
     private var isQuitting = false
     private(set) var isRestartingForUpdate = false
-    private var refreshTask: Task<Bool, Never>?
+    private var pendingRevision: UInt64 = 0
+    private var refreshTask: (revision: UInt64, task: Task<Bool, Never>)?
     // Injected seams exercise the same freshness gate without starting Sparkle.
     var fetchLatestVersion: (() async throws -> String)?
     var discardPendingUpdate: (() async -> Void)?
@@ -59,6 +60,8 @@ final class OrbitUpdater: NSObject, ObservableObject {
     var installPendingUpdate: (() -> Void)?
 
     func prepared(version: String) {
+        // Each installer owns its validation, even when callbacks repeat a version.
+        pendingRevision &+= 1
         pendingVersion = version
         readyVersion = nil
         Task { _ = await validatePendingUpdate() }
@@ -66,18 +69,20 @@ final class OrbitUpdater: NSObject, ObservableObject {
 
     @discardableResult
     func validatePendingUpdate(forQuit: Bool = false) async -> Bool {
-        if let refreshTask { return await refreshTask.value }
         guard let pending = pendingVersion else { return true }
+        let revision = pendingRevision
+        if let refreshTask, refreshTask.revision == revision { return await refreshTask.task.value }
         let task = Task { [weak self] () -> Bool in
             guard let self else { return false }
             do {
                 guard let fetchLatestVersion else { return false }
                 let latest = try await fetchLatestVersion()
+                guard pendingRevision == revision, pendingVersion == pending else { return false }
                 newestVersion = latest
-                guard pendingVersion == pending else { return false }
                 if latest.compare(pending, options: .numeric) == .orderedDescending {
                     readyVersion = nil
                     await discardPendingUpdate?()
+                    guard pendingRevision == revision, pendingVersion == pending else { return false }
                     pendingVersion = nil
                     record("stale-replaced")
                     record(forQuit || isQuitting ? "deferred-for-quit" : "replacement-requested")
@@ -89,19 +94,21 @@ final class OrbitUpdater: NSObject, ObservableObject {
                 record("ready-verified")
                 return true
             } catch {
+                guard pendingRevision == revision, pendingVersion == pending else { return false }
                 readyVersion = nil
                 // Never silently install an unverifiable cached update on quit.
                 if forQuit {
                     await discardPendingUpdate?()
+                    guard pendingRevision == revision, pendingVersion == pending else { return false }
                     pendingVersion = nil
                 }
                 record("freshness-unavailable")
                 return false
             }
         }
-        refreshTask = task
+        refreshTask = (revision, task)
         let result = await task.value
-        refreshTask = nil
+        if refreshTask?.revision == revision { refreshTask = nil }
         return result
     }
 

@@ -65,6 +65,48 @@ struct UpdateParityTests {
         #expect(updater.readyVersion == "27")
     }
 
+    @Test("A newly prepared build is validated while an older feed request is still pending", arguments: [false, true])
+    func supersededValidation(offline: Bool) async throws {
+        let updater = OrbitUpdater()
+        var firstReply: CheckedContinuation<String, any Error>?
+        var requests = 0
+        updater.fetchLatestVersion = {
+            requests += 1
+            if requests == 1 {
+                return try await withCheckedThrowingContinuation { firstReply = $0 }
+            }
+            return "27"
+        }
+        updater.prepared(version: "25")
+        for _ in 0..<100 where firstReply == nil { await Task.yield() }
+        let reply = try #require(firstReply)
+        updater.prepared(version: "27")
+        for _ in 0..<30 { await Task.yield() }
+        if offline { reply.resume(throwing: URLError(.notConnectedToInternet)) }
+        else { reply.resume(returning: "25") }
+        for _ in 0..<30 { await Task.yield() }
+        #expect(requests == 2)
+        #expect(updater.pendingVersion == "27")
+        #expect(updater.readyVersion == "27")
+    }
+
+    @Test("Completing an old cancellation cannot erase a newly prepared build")
+    func supersededCancellation() async throws {
+        let updater = OrbitUpdater()
+        var cancellation: CheckedContinuation<Void, Never>?
+        updater.fetchLatestVersion = { "27" }
+        updater.discardPendingUpdate = { await withCheckedContinuation { cancellation = $0 } }
+        updater.prepared(version: "25")
+        for _ in 0..<100 where cancellation == nil { await Task.yield() }
+        let reply = try #require(cancellation)
+        updater.prepared(version: "27")
+        for _ in 0..<30 { await Task.yield() }
+        reply.resume()
+        for _ in 0..<30 { await Task.yield() }
+        #expect(updater.pendingVersion == "27")
+        #expect(updater.readyVersion == "27")
+    }
+
     @Test("Restart revalidates; a newer publication replaces the card instead of installing its stale build")
     func staleRestart() async {
         let updater = OrbitUpdater()
