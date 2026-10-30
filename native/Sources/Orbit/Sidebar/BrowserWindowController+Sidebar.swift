@@ -148,6 +148,7 @@ extension BrowserWindowController {
             guard let self, let window,
                   let space = session.catalog?.spaces.first(where: { $0.id == id }) else { return }
             let alert = OrbitFloatingMaterial.alert()
+            alert.icon = SpaceIconImages.removalIcon(settingsPreferences?.runtime.document.space(id).iconSelection ?? .none, appearance: window.effectiveAppearance)
             alert.messageText = uiFormat("Delete your “%@” Space?", space.name)
             alert.informativeText = uiText("This will archive all the tabs and folders inside it.")
             alert.addButton(withTitle: uiText("Delete"))

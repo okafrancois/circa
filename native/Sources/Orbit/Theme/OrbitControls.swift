@@ -232,6 +232,7 @@ final class OrbitSurfaceBackgroundView: NSView {
             frost = OrbitFloatingMaterial.install(in: self, radius: cornerRadius)
         }
         if let frost {
+            frost.sidebarTheme = accent.contrastTheme
             frost.sidebarForeground = accent.foreground
             frost.selectedSidebarSurface = selected
             frost.isHidden = amount == 0
