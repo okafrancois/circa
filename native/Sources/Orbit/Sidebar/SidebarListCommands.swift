@@ -122,9 +122,16 @@ enum SidebarListCommands {
         if nodes.count == 1, let id = nodes[0].tabID, let tab = organization.tab(id) {
             var editing: [BrowserCommandID] = [.sidebarChangeTabIcon, .renameCurrentItem, .sidebarMuteTab]
             if tab.pinnedURL != nil { editing.append(.sidebarEditPinnedURL) }
-            var groups: [[BrowserCommandID]] = [[.sidebarCopyLinks], editing, [.addSplitView, .sidebarDuplicate]]
-            if tab.pinnedURL != nil { groups.append([.pinUnpinTab]) }
-            else { groups.append([.sidebarCloseItems, .sidebarArchiveTabsBelow]) }
+            // The observed order leads; commands that already existed stay available after it.
+            var groups: [[BrowserCommandID]] = [[.sidebarCopyLinks, .sidebarCopyMarkdownLinks], editing,
+                                                [.addSplitView, .sidebarDuplicate, .newFolder]]
+            if tab.isAwayFromPinnedURL { groups.append([.resetTabToOriginalURL]) }
+            groups.append([.pinUnpinTab])
+            if case .today = tab.section {
+                groups.append([.sidebarCloseItems, .sidebarArchiveOtherTabs, .sidebarArchiveTabsAbove, .sidebarArchiveTabsBelow])
+            } else {
+                groups.append([.sidebarCloseItems])
+            }
             return groups
         }
         var groups: [[BrowserCommandID]] = []
