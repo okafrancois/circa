@@ -221,6 +221,9 @@ public protocol BrowserEngineSurface: BrowserFindSurface {
     /// Starts a history navigation and returns its destination, or nil when there is none.
     @discardableResult func goBack() -> URL?
     @discardableResult func goForward() -> URL?
+    /// Duplicates through the native tab-adoption callback, preserving the navigation controller.
+    /// Returns false when unsupported; true means creation was accepted and must not be replayed.
+    func duplicateWithHistory() -> Bool
     func reload()
     func reloadIgnoringCache() throws
     func stopLoading()
@@ -298,6 +301,7 @@ public extension BrowserEngineSurface {
     func activationPaintBarrier() -> Task<Bool, Never>? { nil }
     var passwordPrompts: (any BrowserPasswordPromptSource)? { nil }
     func setPageTintObservationEnabled(_ enabled: Bool) {}
+    func duplicateWithHistory() -> Bool { false }
     func reloadIgnoringCache() throws { throw BrowserEngineError.unsupportedOperation }
     var supportsPageTranslation: Bool { false }
     func translationSample() async throws -> BrowserTranslationSample { throw BrowserEngineError.unsupportedOperation }

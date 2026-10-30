@@ -499,6 +499,9 @@ enum OrbitCommandCatalog {
                                     owner: row.owner, sources: [row.source]))
             }
         }
+        if let index = result.firstIndex(where: { $0.id == .tabSwitcherBackward }) {
+            result[index].shortcuts.append(.init(key: "`", modifiers: .control))
+        }
         return result + supplemental + featureDefinitions + BrowserQuickWindowCommands.definitions
     }()
 

@@ -118,9 +118,12 @@ final class PeekSyntheticSurface: BrowserEngineSurface, BrowserLinkGeometrySourc
 
     var currentURL: URL? { history.indices.contains(index) ? history[index] : nil }
 
+    var simulatedLoading = false
+    var stopCount = 0
+
     var navigationState: BrowserNavigationState {
         BrowserNavigationState(url: currentURL, committedURL: currentURL, title: currentURL?.path,
-                               canGoBack: index > 0, canGoForward: index + 1 < history.count)
+                               isLoading: simulatedLoading, canGoBack: index > 0, canGoForward: index + 1 < history.count)
     }
 
     /// A programmatic load (address bar, `navigate(to:)`).
@@ -202,7 +205,16 @@ final class PeekSyntheticSurface: BrowserEngineSurface, BrowserLinkGeometrySourc
         commit()
     }
 
-    func stopLoading() {}
+    var supportsNativeDuplication = false
+    func duplicateWithHistory() -> Bool {
+        guard supportsNativeDuplication, let url = currentURL, let clone = openNewTarget(url, userGesture: false) else { return false }
+        clone.history = history
+        clone.index = index
+        clone.commit()
+        return true
+    }
+
+    func stopLoading() { stopCount += 1; simulatedLoading = false }
     func cancelStoppedNavigationTracking() {}
 
     func focusDocument() -> Bool {

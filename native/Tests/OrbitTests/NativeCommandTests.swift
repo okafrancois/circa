@@ -617,6 +617,7 @@ struct NativeCommandTests {
           Pin/Unpin Tab [pinUnpinTab] ⌘D
           Open Little Circa or Peek in… [openQuickWindowOrPeekIn] ⌘O (key when hidden)
           New Folder… [newFolder]
+          Paste as New Tab [pasteAsNewTab] ⌥⌘V (hidden) (key when hidden)
           Duplicate [duplicate] (key when hidden)
           Rename Current Item [renameCurrentItem] (hidden) (key when hidden)
           Collapse All Folders [collapseAllFolders] (hidden) (key when hidden)

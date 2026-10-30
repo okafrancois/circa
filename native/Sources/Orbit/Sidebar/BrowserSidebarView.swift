@@ -68,6 +68,10 @@ final class BrowserSidebarView: NSView, SidebarListHost {
     var onTearOff: ((SidebarDragPayload, NSPoint) -> Void)?
     /// A validated drop: payload, destination, and whether the organization changes (false for
     /// rows dropped back in place, which still move live documents between windows).
+    var onCopyDrop: ((SidebarDragPayload, BrowserOrganizationDestination) -> Void)?
+    var onTextDrop: ((String, BrowserOrganizationDestination) -> Void)?
+    private var externalDrop: (text: String, proposal: SidebarDropProposal)?
+
     var onDrop: ((SidebarDragPayload, BrowserOrganizationDestination, Bool) -> Void)?
     /// Context menu for these nodes (the clicked row, or the multi-selection containing it).
     var onContextMenu: (([BrowserOrganizationNode], NSEvent, NSView) -> Void)?
@@ -234,7 +238,7 @@ final class BrowserSidebarView: NSView, SidebarListHost {
             self?.spaceHoverDidChange(nil, dismissalDuration: SidebarSpaceTooltip.clickDismissalDuration)
         }
         footer.onHoverSpace = { [weak self] button in self?.spaceHoverDidChange(button, allowsHandoff: true) }
-        registerForDraggedTypes([SidebarDragPayload.pasteboardType, FavoritesDragPayload.pasteboardType])
+        registerForDraggedTypes([SidebarDragPayload.pasteboardType, FavoritesDragPayload.pasteboardType, .URL, .string])
     }
 
     required init?(coder: NSCoder) { nil }
@@ -645,7 +649,15 @@ final class BrowserSidebarView: NSView, SidebarListHost {
     override func draggingEntered(_ sender: any NSDraggingInfo) -> NSDragOperation { draggingUpdated(sender) }
 
     override func draggingUpdated(_ sender: any NSDraggingInfo) -> NSDragOperation {
-        guard commandsEnabled, let payload = dragPayload(from: sender) else { return [] }
+        guard commandsEnabled else { return [] }
+        guard let payload = dragPayload(from: sender) else {
+            guard !(sender.draggingPasteboard.types ?? []).contains(SidebarDragPayload.pasteboardType),
+                  !(sender.draggingPasteboard.types ?? []).contains(FavoritesDragPayload.pasteboardType),
+                  let text = sender.draggingPasteboard.string(forType: .URL)
+                    ?? sender.draggingPasteboard.string(forType: .string) else { clearExternalDrop(); return [] }
+            return updateExternalDrop(text, at: convert(sender.draggingLocation, from: nil)) ? .copy : []
+        }
+        clearExternalDrop()
         let point = convert(sender.draggingLocation, from: nil)
         page.autoscrollDuringDrag(at: convert(point, to: page))
         let verdict = dropCoordinator.update(payload: payload, at: point, in: self, targets: dropTargets,
@@ -653,14 +665,14 @@ final class BrowserSidebarView: NSView, SidebarListHost {
         if verdict?.isValid == true, payload.sourceWindow != windowIdentifier {
             SidebarWindowDirectory.keepSourceKey(payload.sourceWindow)
         }
-        return verdict?.isValid == true ? .move : []
+        return verdict?.isValid == true ? (isCopyDrag(payload) ? .copy : .move) : []
     }
 
-    override func draggingExited(_ sender: (any NSDraggingInfo)?) { dropCoordinator.clear() }
+    override func draggingExited(_ sender: (any NSDraggingInfo)?) { dropCoordinator.clear(); clearExternalDrop() }
 
     /// Any end of the session (cancelled over the sidebar included) drops leftover feedback; a
     /// committed drop already handed its feedback to the target.
-    override func draggingEnded(_ sender: any NSDraggingInfo) { dropCoordinator.clear() }
+    override func draggingEnded(_ sender: any NSDraggingInfo) { dropCoordinator.clear(); clearExternalDrop() }
 
     /// Rows dragged inside this process only: the list's payload, or a Favorites tile whose source
     /// still vouches for its pasteboard payload (FAVORITES' local check). Other applications'
@@ -675,10 +687,16 @@ final class BrowserSidebarView: NSView, SidebarListHost {
     }
 
     override func prepareForDragOperation(_ sender: any NSDraggingInfo) -> Bool {
-        commandsEnabled && dropCoordinator.acceptedDrop() != nil
+        commandsEnabled && (externalDrop != nil || dropCoordinator.acceptedDrop() != nil)
     }
 
     override func performDragOperation(_ sender: any NSDraggingInfo) -> Bool {
+        if externalDrop != nil { return commitExternalDrop() }
+        if let accepted = dropCoordinator.acceptedDrop(), isCopyDrag(accepted.payload) {
+            dropCoordinator.clear()
+            onCopyDrop?(accepted.payload, accepted.proposal.destination)
+            return true
+        }
         guard commandsEnabled, let accepted = dropCoordinator.acceptedDrop() else {
             dropCoordinator.clear()
             return false
@@ -705,6 +723,38 @@ final class BrowserSidebarView: NSView, SidebarListHost {
             commitDrop(accepted.payload, proposal: accepted.proposal, target: accepted.target)
         }
         return true
+    }
+
+    func isCopyDrag(_ payload: SidebarDragPayload, modifiers: NSEvent.ModifierFlags = NSEvent.modifierFlags) -> Bool {
+        modifiers.contains(.option) && payload.nodes.count == 1 && payload.nodes[0].tabID != nil
+    }
+
+    @discardableResult
+    func updateExternalDrop(_ text: String, at point: NSPoint) -> Bool {
+        guard commandsEnabled, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              (try? AddressResolver().resolve(text)) != nil, let organization, let windowIdentifier,
+              page.list.acceptsDrag(at: point, in: self) else { clearExternalDrop(); return false }
+        let payload = SidebarDragPayload(sourceWindow: windowIdentifier, spaceID: organization.spaceID,
+            profileID: organization.profileID, nodes: [], rowCount: 1, grabOffsetX: 0)
+        page.autoscrollDuringDrag(at: convert(point, to: page))
+        guard let proposal = page.list.dropProposal(for: payload, at: page.list.convert(point, from: self), in: organization)
+        else { return externalDrop != nil }
+        externalDrop = (text, proposal)
+        page.list.showDropFeedback(proposal, isValid: true, payload: payload)
+        return true
+    }
+
+    @discardableResult
+    func commitExternalDrop() -> Bool {
+        defer { clearExternalDrop() }
+        guard commandsEnabled, let drop = externalDrop else { return false }
+        onTextDrop?(drop.text, drop.proposal.destination)
+        return true
+    }
+
+    func clearExternalDrop() {
+        if externalDrop != nil { page.list.showDropFeedback(nil, isValid: false, payload: nil) }
+        externalDrop = nil
     }
 
     /// Commits a validated drop (also the entry point of the hidden-window tests).

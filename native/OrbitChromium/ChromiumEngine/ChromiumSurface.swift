@@ -389,6 +389,10 @@ public final class ChromiumSurface: BrowserEngineSurface {
         guard ACRReloadIgnoringCache(token) == 1 else { throw BrowserEngineError.unsupportedOperation }
     }
 
+    public func duplicateWithHistory() -> Bool {
+        !isDisposed && isReady && ACRDuplicateTab(token) == 1
+    }
+
     public func stopLoading() {
         guard !isDisposed else { return }
         guard isBrowserCreated else { pendingCommands.append(.stop); return }

@@ -14,6 +14,7 @@ enum BrowserWindowCommands {
         BrowserBookmarkCommands.install(in: registry)
         OrbitShellCommands.install(in: registry)
         BrowserSwitcherCommands.install(in: registry)
+        BrowserTabErgonomics.install(in: registry)
         BrowserArchiveCommands.install(in: registry)
         BrowserLibraryCommands.install(in: registry)
         BrowserBoostCommands.install(in: registry)
@@ -39,7 +40,7 @@ enum BrowserWindowCommands {
         BrowserPaletteCommands.install(in: registry)
         // SB-LIST: a sidebar multi-selection closes together, else the visible tab.
         window(.archiveTab) { $0.archiveSelectedTabs() }
-        window(.duplicate) { $0.hideLibrary(); $0.session.duplicateSelectedTab() }
+        window(.duplicate) { $0.hideLibrary(); $0.duplicateSidebarTab() }
         window(.goBack) { $0.navigateBack() }
         window(.goForward) { $0.navigateForward() }
         window(.refreshThePage) { $0.reload() }

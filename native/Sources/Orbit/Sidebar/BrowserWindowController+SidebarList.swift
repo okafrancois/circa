@@ -9,6 +9,19 @@ import BrowserShell
 extension BrowserWindowController {
     func installSidebarList() {
         sidebar.windowIdentifier = id
+        sidebar.onTextDrop = { [weak self] text, destination in
+            self?.submitInput { owner in
+                guard let url = try? owner.addressResolver.resolve(text).url else { return }
+                owner.session.openTab(url: url, at: destination)
+            }
+        }
+        sidebar.onCopyDrop = { [weak self] payload, destination in
+            guard let self, payload.profileID == session.activeProfileID,
+                  let tab = payload.nodes.first?.tabID,
+                  let source = SidebarWindowDirectory.window(payload.sourceWindow) as? BrowserWindowController,
+                  source.session.organization?.tab(tab) != nil else { return }
+            submitInput { receiver in source.duplicateSidebarTab(tab, into: receiver, at: destination) }
+        }
         installFolderPreview()
         SidebarWindowDirectory.register(self, id: id, activeSpace: { [weak self] in self?.session.snapshot?.activeSpaceID },
                                         organization: { [weak self] in self?.session.organization })
@@ -199,6 +212,44 @@ extension BrowserWindowController {
         }
     }
 
+
+    /// All user duplication entry points use the engine's native clone when available.
+    func duplicateSidebarTab(_ requestedID: TabID? = nil, into receiver: BrowserWindowController? = nil,
+                             at destination: BrowserOrganizationDestination? = nil) {
+        session.performWindowAction { [weak self, weak receiver] in
+            guard let self, acceptsCommands, let organization = session.organization,
+                  let id = requestedID ?? organization.selectedTab?.id, let tab = organization.tab(id) else { return }
+            let receiver = receiver ?? self
+            let sourceSpace = session.snapshot?.activeSpaceID
+            let receiverSpace = receiver.session.snapshot?.activeSpaceID
+            let inputToken = explicitInputToken
+            guard receiver.acceptsCommands, receiver.session.activeProfileID == session.activeProfileID else { return }
+            let live = liveSidebarSurface(of: tab.id)
+            let existing = Set(nativeCreations.keys)
+            if let live, live.duplicateWithHistory() {
+                guard let creation = nativeCreations.first(where: { !existing.contains($0.key) })?.value else { return }
+                Task { [weak self, weak receiver] in
+                    guard let occurrence = await creation.adoption.value, let self, let receiver,
+                          acceptsCommands, receiver.acceptsCommands else { return }
+                    await session.waitForPendingCommands()
+                    guard session.snapshot?.activeSpaceID == sourceSpace,
+                          receiver.session.snapshot?.activeSpaceID == receiverSpace,
+                          let clone = session.surface(for: occurrence),
+                          let id = session.snapshot?.tabs.first(where: { $0.occurrenceID == occurrence })?.id else { return }
+                    if receiver !== self {
+                        _ = moveSurface(clone, to: receiver, movingTo: destination)
+                    } else {
+                        if let destination { session.moveItems([.tab(id)], to: destination) }
+                        if explicitInputToken == inputToken { session.selectTab(id) }
+                    }
+                }
+                return
+            }
+            let url = live?.currentURL ?? tab.url
+            if let destination { receiver.session.openTab(url: url, at: destination) }
+            else { receiver.session.openTab(url: url) }
+        }
+    }
 
     func performSidebarDrop(_ payload: SidebarDragPayload, to destination: BrowserOrganizationDestination,
                             changesOrganization: Bool) {
