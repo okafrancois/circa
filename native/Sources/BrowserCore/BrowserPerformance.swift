@@ -13,6 +13,7 @@ public enum BrowserPerformance {
         case resourceTabs, resourceLive, resourceFrozen, resourceDiscarded, resourceSuspended, resourceUnknown
         case resourceNativeDiscards, resourcePolicyDiscards, resourceRendererProcesses, resourceFootprintBytes
         case resourceLifecycleEvents, resourceMemorySamples, resourcePressureEvents, resourceSweeps, resourceSweepNanoseconds
+        case resourceBudgetDiscards
         case organizationPublications, organizationDeliveries, organizationRefreshes
         case windowProjections, sidebarProjections, sidebarContentPasses, listProjections, sidebarRebuilds, rowsConfigured, glyphDraws, savesScheduled
     }

@@ -4,10 +4,61 @@ import Darwin
 import Foundation
 import OSLog
 
-/// Observes resources only. It never admits a discard, freezes a page or changes engine policy.
+/// Optional live-tab budget, off unless the hidden `OrbitLiveTabBudget` default (or the
+/// `-OrbitLiveTabBudget N` launch argument) is positive. Memory Saver "Never" also disables it.
+struct BrowserLiveTabBudget: Equatable, Sendable {
+    enum Scope: String, Sendable { case global, profile }
+    /// Live background tabs kept per group; protected tabs count but are never discarded.
+    var limit: Int
+    var scope: Scope = .global
+    /// Tabs shown more recently than this stay live under normal pressure.
+    var minimumBackgroundAge: TimeInterval = 300
+
+    static let limitKey = "OrbitLiveTabBudget", scopeKey = "OrbitLiveTabBudgetScope"
+    static func configured(_ defaults: UserDefaults = .standard) -> Self? {
+        let limit = defaults.integer(forKey: limitKey)
+        guard limit > 0 else { return nil }
+        return .init(limit: limit, scope: Scope(rawValue: defaults.string(forKey: scopeKey) ?? "") ?? .global)
+    }
+    /// Warning pressure halves the limit and waives the age; critical keeps no unprotected background tab.
+    func effective(pressure: String) -> (limit: Int, minimumAge: TimeInterval) {
+        switch pressure {
+        case "critical": return (0, 0)
+        case "warning": return (limit / 2, 0)
+        default: return (limit, minimumBackgroundAge)
+        }
+    }
+}
+
+/// One sweep's budget admissions. Candidates are least recently shown first. A refused candidate
+/// admits the next one in its group; candidates owned by another window keep their rank.
+struct BrowserLiveTabBudgetPlan {
+    struct Entry { let group: ProfileID?; let rank: Int; let position: Int }
+    var entries: [ObjectIdentifier: Entry] = [:]
+    var excess: [ProfileID?: Int] = [:]
+    private var refusals: [ProfileID?: Int] = [:]
+
+    func admits(_ identity: ObjectIdentifier) -> Bool {
+        guard let entry = entries[identity] else { return false }
+        return entry.rank < excess[entry.group, default: 0] + refusals[entry.group, default: 0]
+    }
+    mutating func refused(_ identity: ObjectIdentifier) {
+        guard admits(identity), let entry = entries[identity] else { return }
+        refusals[entry.group, default: 0] += 1
+    }
+    /// Budget candidates first, oldest first; other surfaces keep their order for the time policy.
+    func ordered<Surface: AnyObject>(_ surfaces: [Surface]) -> [Surface] {
+        surfaces.filter { entries[ObjectIdentifier($0)] != nil }
+            .sorted { entries[ObjectIdentifier($0)]!.position < entries[ObjectIdentifier($1)]!.position }
+            + surfaces.filter { entries[ObjectIdentifier($0)] == nil }
+    }
+}
+
+/// Observes resources. With a configured live-tab budget it also plans discards, which the
+/// window's existing suspension sweep admits through its unchanged safety checks.
 @MainActor
 final class BrowserResourceCoordinator {
-    static let shared = BrowserResourceCoordinator()
+    static let shared = BrowserResourceCoordinator(budget: .configured())
     struct Tab {
         let identity: ObjectIdentifier
         var window: UUID
@@ -20,6 +71,8 @@ final class BrowserResourceCoordinator {
         /// Cheap engine admission includes residual shell protections, but is not the async form-value check.
         var engineAllowsSuspension: Bool? = nil
         var backgroundSince: TimeInterval
+        /// Last time the tab was selected or in Split in its window; the budget's LRU key.
+        var lastShown: TimeInterval
         var lastDiscard: BrowserPageLifecycleChange.Initiator = .none
         var nativeDiscards = 0
         var policyDiscards = 0
@@ -50,6 +103,10 @@ final class BrowserResourceCoordinator {
     private(set) var pressureEvents = 0
     private(set) var nativeDiscards = 0
     private(set) var policyDiscards = 0
+    private(set) var budgetDiscards = 0
+    var budget: BrowserLiveTabBudget?
+    /// Injectable monotonic clock, shared with synthetic sessions that advance policy time.
+    var clock: () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }
     private var pressure: DispatchSourceMemoryPressure?
     private let memoryReader: (Int32) -> UInt64?
     private let signposter = OSSignposter(subsystem: "local.orbit", category: "resources")
@@ -58,8 +115,9 @@ final class BrowserResourceCoordinator {
     // Synthetic A/B measurement gate; production always observes.
     var enabled = true
 
-    init(observePressure: Bool = true, memoryReader: @escaping (Int32) -> UInt64? = BrowserResourceCoordinator.footprint) {
-        self.memoryReader = memoryReader
+    init(observePressure: Bool = true, budget: BrowserLiveTabBudget? = nil,
+         memoryReader: @escaping (Int32) -> UInt64? = BrowserResourceCoordinator.footprint) {
+        self.memoryReader = memoryReader; self.budget = budget
         if observePressure {
             let source = DispatchSource.makeMemoryPressureSource(eventMask: [.normal, .warning, .critical], queue: .main)
             source.setEventHandler { [weak self, weak source] in
@@ -84,11 +142,14 @@ final class BrowserResourceCoordinator {
 
     func update(identity: ObjectIdentifier, window: UUID, occurrence: TabOccurrenceID, profile: ProfileID,
                 lifecycle: BrowserPageLifecycle?, suspended: Bool, visible: Bool, selected: Bool? = nil, engineAllowsSuspension: Bool? = nil,
-                now: TimeInterval = ProcessInfo.processInfo.systemUptime) {
+                now: TimeInterval? = nil) {
         guard enabled else { return }
+        let now = now ?? clock()
         var tab = tabs[identity] ?? Tab(identity: identity, window: window, occurrence: occurrence, profile: profile,
-            lifecycle: lifecycle, suspended: suspended, visible: visible, selected: selected ?? visible, backgroundSince: now)
+            lifecycle: lifecycle, suspended: suspended, visible: visible, selected: selected ?? visible,
+            backgroundSince: now, lastShown: now)
         if visible || tab.visible { tab.backgroundSince = now }
+        if selected ?? visible || tab.selected { tab.lastShown = now }
         let wasSleeping = tab.sleeping
         tab.window = window; tab.occurrence = occurrence; tab.profile = profile
         tab.lifecycle = lifecycle; tab.suspended = suspended; tab.visible = visible; tab.selected = selected ?? visible
@@ -122,6 +183,30 @@ final class BrowserResourceCoordinator {
         tabs[identity] = tab
         if wasSleeping && change.state?.state == .running { beginWake(identity) }
         publishCounters()
+    }
+
+    /// Nil when no budget is configured: the sweep then applies only the time policy.
+    func budgetPlan(now: TimeInterval) -> BrowserLiveTabBudgetPlan? {
+        guard enabled, let budget else { return nil }
+        let (limit, minimumAge) = budget.effective(pressure: pressureLevel)
+        func group(_ tab: Tab) -> ProfileID? { budget.scope == .profile ? tab.profile : nil }
+        let background = tabs.values.filter { !$0.selected && !$0.sleeping }
+        var plan = BrowserLiveTabBudgetPlan()
+        for tab in background { plan.excess[group(tab), default: -limit] += 1 }
+        let candidates = background.filter { !$0.protected && now - $0.lastShown >= minimumAge }.sorted {
+            ($0.lastShown, $0.occurrence.rawValue.uuidString) < ($1.lastShown, $1.occurrence.rawValue.uuidString)
+        }
+        var ranks: [ProfileID?: Int] = [:]
+        for (position, tab) in candidates.enumerated() {
+            let key = group(tab)
+            plan.entries[tab.identity] = .init(group: key, rank: ranks[key, default: 0], position: position)
+            ranks[key, default: 0] += 1
+        }
+        return plan
+    }
+    func budgetDiscarded() {
+        budgetDiscards += 1
+        BrowserPerformance.count(.resourceBudgetDiscards)
     }
 
     func beginWake(_ identity: ObjectIdentifier) {

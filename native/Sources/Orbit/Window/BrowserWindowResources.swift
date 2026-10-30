@@ -28,7 +28,7 @@ final class BrowserWindowResources<Engine: BrowserEngine> {
         subscriptions.removeAll()
         if let owner { coordinator.retain(window: owner.id, identities: []) }
     }
-    func reconcile(now: TimeInterval = ProcessInfo.processInfo.systemUptime) {
+    func reconcile(now: TimeInterval? = nil) {
         guard let owner else { return }
         guard coordinator.enabled else {
             for subscription in subscriptions.values { subscription.cancel() }
@@ -59,7 +59,7 @@ final class BrowserWindowResources<Engine: BrowserEngine> {
         }
         coordinator.publishCounters()
     }
-    private func update(_ surface: Engine.Surface, now: TimeInterval = ProcessInfo.processInfo.systemUptime) {
+    private func update(_ surface: Engine.Surface, now: TimeInterval? = nil) {
         guard coordinator.enabled, let owner, let occurrence = owner.session.occurrenceID(for: surface) else { return }
         coordinator.update(identity: ObjectIdentifier(surface), window: owner.id, occurrence: occurrence,
             profile: surface.profileID, lifecycle: surface.pagePerformance?.lifecycle(),

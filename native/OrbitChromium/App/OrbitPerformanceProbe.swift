@@ -97,6 +97,9 @@ enum OrbitPerformanceProbe {
                 } else if name == "resource-coordinator", ownsWindow(owner, bundleID: "lab.orbit.orbit.perf-coord-0") {
                     application.confirmQuit = { .quit }
                     result["resourceCoordinator"] = await OrbitResourcePerformanceProbe.run(owner, store: environment.store, command: command)
+                } else if name == "resource-budget", Bundle.main.bundleIdentifier == OrbitResourceBudgetProbe.bundleID {
+                    application.confirmQuit = { .quit }
+                    result["resourceBudget"] = await OrbitResourceBudgetProbe.run(owner, store: environment.store, root: root, command: command)
                 } else if name == "import-auth-check", ownsWindow(owner, bundleID: "lab.orbit.orbit.import-auth") {
                     do {
                         guard let configuration = activeSiteSessionConfiguration() else { throw BrowserAuthenticationImportError.invalidState }
