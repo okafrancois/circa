@@ -1,5 +1,6 @@
 import AppKit
 import BrowserCore
+import BrowserShell
 import Foundation
 import QuartzCore
 import Testing
@@ -252,4 +253,32 @@ struct OnboardingTests {
         _ = await environment.shutDown()
     }
 }
+}
+
+extension NativeWebKitTests.OnboardingTests {
+    @Test("Default-browser preview refreshes its existing tint when its appearance changes")
+    @MainActor
+    func promptAppearanceChanges() throws {
+        NSApplication.shared.setActivationPolicy(.prohibited)
+        let original = NSApp.appearance
+        NSApp.appearance = NSAppearance(named: .aqua)
+        defer { NSApp.appearance = original }
+        let host = NSView()
+        host.appearance = NSAppearance(named: .aqua)
+        let preview = OrbitOnboardingPromptMock(frame: NSRect(x: 0, y: 0, width: 300, height: 230))
+        host.addSubview(preview)
+        let material = try #require(preview.subviews.first as? NSVisualEffectView)
+        let tint = try #require(preview.subviews.dropFirst().first?.layer?.sublayers?.first)
+        NSApp.appearance = NSAppearance(named: .darkAqua)
+        preview.viewDidChangeEffectiveAppearance()
+        let color = try #require(tint.backgroundColor.flatMap(NSColor.init(cgColor:))?.usingColorSpace(.sRGB))
+        #expect(color.redComponent == 0 && color.greenComponent == 0 && color.blueComponent == 0)
+        #expect(color.alphaComponent == BrandPalette.Frost.tint)
+        preview.refreshMaterial(reduceTransparency: true)
+        #expect(material.isHidden)
+        #expect(tint.backgroundColor?.alpha == 1)
+        preview.refreshMaterial(reduceTransparency: false)
+        #expect(!material.isHidden)
+        #expect(tint.backgroundColor?.alpha == BrandPalette.Frost.tint)
+    }
 }

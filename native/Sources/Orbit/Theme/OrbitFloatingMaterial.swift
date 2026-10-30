@@ -251,7 +251,7 @@ final class OrbitFrostAlert: NSAlert {
         panel.hasShadow = true
         panel.level = .modalPanel
         panel.animationBehavior = source.animationBehavior
-        panel.appearance = parent?.effectiveAppearance ?? source.effectiveAppearance
+        panel.followAppearance(of: parent, fallback: source.appearance)
         content.frame = NSRect(origin: .zero, size: size)
         panel.contentView = content
         panel.initialFirstResponder = source.initialFirstResponder
@@ -301,5 +301,14 @@ final class OrbitFrostAlert: NSAlert {
 
 @MainActor
 private final class OrbitFloatingAlertPanel: NSPanel {
+    private var appearanceObservation: NSKeyValueObservation?
+
+    func followAppearance(of parent: NSWindow?, fallback: NSAppearance?) {
+        appearance = parent?.appearance ?? fallback
+        appearanceObservation = parent?.observe(\.effectiveAppearance, options: [.new]) { [weak self] parent, _ in
+            MainActor.assumeIsolated { self?.appearance = parent.appearance }
+        }
+    }
+
     override var canBecomeKey: Bool { true }
 }

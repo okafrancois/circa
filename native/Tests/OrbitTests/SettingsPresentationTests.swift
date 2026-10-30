@@ -1,4 +1,6 @@
 import AppKit
+import BrowserCore
+import BrowserShell
 import Testing
 import BrowserEngineConformance
 @testable import Orbit
@@ -120,6 +122,37 @@ extension SettingsPresentationTests {
             let appearance = try #require(NSAppearance(named: name))
             let ink = try #require(OrbitSettingsStyle.destructiveColor.resolved(for: appearance).usingColorSpace(.sRGB))
             #expect(ink.redComponent > 0.8 && ink.greenComponent < 0.5 && ink.blueComponent < 0.5)
+        }
+    }
+}
+
+
+extension SettingsPresentationTests {
+    @MainActor
+    @Test("Settings gradient selection preserves the Space's Frost, grain and appearance mode")
+    func gradientPreservesControls() async throws {
+        let environment = BrowserEnvironment(engine: SyntheticEngine())
+        defer { environment.autoArchive.scheduler.stop() }
+        let model = BrowserSettingsModel(environment: environment, profileID: nil, shortcuts: [])
+        try await model.createProfile(name: "Theme Fixture")
+        let profile = try #require(model.selectedProfileID)
+        let id = try await model.createSpace(name: "Frost Fixture", profile: profile)
+        var original = BrandPalette.spaceGradients[0].theme(mode: .dark)
+        original.frost = true
+        original.noise = 0.27
+        try await environment.store.setSpaceTheme(original, for: id, profileID: profile)
+        await model.reload()
+        let space = try #require(model.catalog.spaces.first { $0.id == id })
+        let picker = BrowserSettingsGradientPicker(model: model, space: space)
+        for preset in BrandPalette.spaceGradients {
+            picker.select(preset)
+            try await model.waitForPendingActions()
+            let saved = try #require(model.catalog.spaces.first { $0.id == id }?.theme)
+            #expect(saved.light == preset.theme().light)
+            #expect(saved.dark == preset.theme().dark)
+            #expect(saved.mode == .dark)
+            #expect(saved.frost)
+            #expect(saved.noise == 0.27)
         }
     }
 }
