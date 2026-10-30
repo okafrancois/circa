@@ -162,6 +162,16 @@ struct SidebarListWindowTests {
             occurrenceID: nil, isLoadedInThisWindow: false, isSelected: false, isOpenInAnotherWindow: false)
         #expect(controller.sidebar.liveActivity(tab).favicon === icon)
         #expect(controller.folderPreview.favicon(tab) === icon)
+        let id = try #require(await harness.openTab(home.absoluteString))
+        controller.session.pinTabs([id])
+        await harness.settle()
+        controller.session.closeTabs([id])
+        await harness.settle()
+        let row = try #require(controller.list.row(for: .tab(id)) as? SidebarTabRow)
+        #expect(row.item.activity.favicon === icon && row.favicon.image === icon)
+        controller.sidebarIcons.onTabChange?(id)
+        await harness.settle()
+        #expect(row.item.activity.favicon === icon && row.favicon.image === icon)
     }
 
     @Test("Rows come from the organization, keyed by TabID, and keep their views across selection and moves")
@@ -193,7 +203,7 @@ struct SidebarListWindowTests {
         #expect(geometry.todayRowCenters.contains { abs(geometry.pageFrame.minY + $0 - rowAFrame.midY) < 0.5 })
     }
 
-    @Test("Folders indent their children by 16, toggle on click with closed/open glyphs, and collapse hides children")
+    @Test("Folders align their child columns, toggle on click with closed/open glyphs, and collapse hides children")
     func foldersIndentAndToggle() async throws {
         let harness = try await SidebarListHarness()
         defer { harness.shutdown() }
@@ -207,8 +217,8 @@ struct SidebarListWindowTests {
         let folderRow = try #require(c.list.row(for: .folder(folder)) as? SidebarFolderRow)
         let child = try #require(c.list.row(for: .tab(a)) as? SidebarTabRow)
         #expect(folderRow.glyph.isOpen && folderRow.depth == 0 && child.depth == 1)
-        #expect(child.iconX == folderRow.iconX + OrbitTokens.Metrics.Sidebar.folderChildIndent)
-        #expect(child.titleLabel.frame.minX == folderRow.titleLabel.frame.minX + 16)
+        #expect(child.iconX == folderRow.iconX + OrbitTokens.Metrics.Sidebar.folderChildIndent + OrbitTokens.Metrics.Sidebar.folderIconOutset)
+        #expect(child.titleLabel.frame.minX == folderRow.titleLabel.frame.minX + OrbitTokens.Metrics.Sidebar.folderChildIndent + OrbitTokens.Metrics.Sidebar.folderTitleOutset - OrbitTokens.Metrics.Sidebar.titleCellInset)
         #expect(child.frame.midY - folderRow.frame.midY == OrbitTokens.Metrics.Sidebar.rowPitch)
         #expect(folderRow.titleLabel.font == OrbitTokens.Typography.sidebarFolderTitle)
         #expect(folderRow.accessibilityPerformPress())

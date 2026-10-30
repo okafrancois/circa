@@ -88,10 +88,15 @@ public struct BrowserOrganizationTabItem: Equatable, Sendable {
     /// Local activation timestamp; absent values are never inferred from creation/import dates.
     public var lastActiveAt: Date? = nil
     public var customIcon: BrowserSpaceIcon? = nil
+    /// Redirect destination for this occurrence, falling back to a proven saved alias.
+    public var pinnedLandingURL: URL? = nil
+    public var isResolvingPinnedLanding = false
 
     public var title: String? { customTitle ?? pageTitle }
     public var isAwayFromPinnedURL: Bool {
-        isLoadedInThisWindow && pinnedURL.map { !BrowserPinnedPageIdentity.matches($0, url) } == true
+        isLoadedInThisWindow && !isResolvingPinnedLanding
+            && pinnedURL.map { !BrowserPinnedPageIdentity.matches($0, url) } == true
+            && pinnedLandingURL.map { !BrowserPinnedPageIdentity.matches($0, url) } != false
     }
 }
 

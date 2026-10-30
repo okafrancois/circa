@@ -35,7 +35,7 @@ struct SidebarMetadataTests {
             let incremental = sidebar.page.list.content
             sidebar.render(catalog: fixture.catalog, activeSpaceID: fixture.spaceID, organization: current)
             #expect(sidebar.page.list.content == incremental)
-            #expect(sidebar.page.list.content == SidebarListContent(snapshot: current, liveActivity: { live ? activities[$0.id] ?? .init() : .init() }))
+            #expect(sidebar.page.list.content == SidebarListContent(snapshot: current, liveActivity: { live ? activities[$0.id] ?? .init() : .init(favicon: activities[$0.id]?.favicon) }))
             #expect(ids.map { sidebar.page.list.displayedCenterY(of: .node(.tab($0))) } == centers)
             for (node, row) in initialRows { #expect(sidebar.page.list.row(for: node) === row) }
         }

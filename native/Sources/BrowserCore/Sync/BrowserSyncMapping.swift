@@ -84,7 +84,7 @@ public enum BrowserSyncMapping {
                     if let tab = tabs[tabID] {
                         // A pinned tab's home destination syncs; transient away navigation does not.
                         var shared = tab; shared.url = tab.pinnedURL ?? tab.url
-                        result.entries[key] = try fields(shared, excluding: ["lastActiveAt", "liveFolderChild"])
+                        result.entries[key] = try fields(shared, excluding: ["lastActiveAt", "liveFolderChild", "pinnedLandingAlias"])
                     }
                 case .folder(let folderID):
                     if let folder = folders[folderID] {
@@ -187,10 +187,14 @@ public enum BrowserSyncMapping {
             case .tab(let tabID):
                 var values = data
                 values.removeValue(forKey: "liveFolderChild")
+                values.removeValue(forKey: "pinnedLandingAlias")
                 let existing = localTabs[tabID]
                 values["lastActiveAt"] = try BrowserSyncReplica.encodeValue(existing?.lastActiveAt ?? Date())
                 var tab = try decode(BrowserOrganizedTab.self, values)
-                if let existing, existing.pinnedURL == tab.pinnedURL { tab.url = existing.url }
+                if let existing, existing.pinnedURL == tab.pinnedURL {
+                    tab.url = existing.url
+                    tab.pinnedLandingAlias = existing.pinnedLandingAlias
+                }
                 sharedTabs.append(tab)
                 return [node]
             case .folder(let folderID):

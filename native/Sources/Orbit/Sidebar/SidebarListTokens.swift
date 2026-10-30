@@ -2,6 +2,11 @@ import AppKit
 
 
 extension OrbitTokens.Metrics.Sidebar {
+    static let pinnedTitleOffsetY: CGFloat = -0.5
+    static let titleCellInset: CGFloat = 2
+    static let pinnedTrailingOutset: CGFloat = 1
+    static let folderIconOutset: CGFloat = 2.5
+    static let folderTitleOutset: CGFloat = 5
     static let audioControlPitch: CGFloat = 26
     static let audioGlyphSize: CGFloat = 12
     static let loadingRingInset: CGFloat = 2

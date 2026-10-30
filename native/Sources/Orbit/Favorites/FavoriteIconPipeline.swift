@@ -44,7 +44,7 @@ final class FavoriteIconPipeline<Surface: BrowserEngineSurface> {
     }
     private var entries: [TabID: Entry] = [:]
 
-    func image(for tab: BrowserOrganizationTabItem, surface: Surface?,
+    func image(for tab: BrowserOrganizationTabItem, surface: Surface?, profileID: ProfileID? = nil,
                isOwned: @escaping @MainActor (Surface) -> Bool) -> NSImage? {
         if let image = SpaceIconImages.tabImage(tab.customIcon) { return image }
         if case .favorites(let profile) = tab.section {
@@ -54,10 +54,11 @@ final class FavoriteIconPipeline<Surface: BrowserEngineSurface> {
             if let surface, surface.profileID != profile { return nil }
         }
         let home = tab.pinnedURL ?? tab.url
-        restoreIcon(for: tab, home: home)
+        let landing = tab.pinnedLandingURL ?? home
+        restoreIcon(for: tab, home: home, profile: profileID ?? surface?.profileID)
         let profile: ProfileID?
         if case .favorites(let id) = tab.section { profile = id }
-        else { profile = surface?.profileID }
+        else { profile = profileID ?? surface?.profileID }
         let cachedImage = cachedIcons[tab.id]?.image
             ?? profile.flatMap { memoryCache.image(profile: $0, home: home) }
         if let cached = entries[tab.id], cached.request.home != home ||
@@ -66,7 +67,7 @@ final class FavoriteIconPipeline<Surface: BrowserEngineSurface> {
         }
         guard let surface, isOwned(surface), !surface.isDisposed,
               let committed = surface.navigationState.committedURL,
-              BrowserSiteOrigin(url: committed) == BrowserSiteOrigin(url: home),
+              BrowserSiteOrigin(url: committed) == BrowserSiteOrigin(url: landing),
               BrowserSiteOrigin(url: home) != nil else { return entries[tab.id]?.image ?? cachedImage }
         let state = surface.navigationState
         guard !state.isLoading, state.faviconMetadataIsSettled else { return entries[tab.id]?.image ?? cachedImage }
@@ -98,7 +99,7 @@ final class FavoriteIconPipeline<Surface: BrowserEngineSurface> {
             guard !Task.isCancelled, let self, self.entries[tab.id]?.token == token,
                   isOwned(surface), !surface.isDisposed, surface.documentGeneration == request.generation,
                   !surface.navigationState.isLoading, surface.navigationState.faviconMetadataIsSettled,
-                  BrowserSiteOrigin(url: surface.navigationState.committedURL ?? url) == BrowserSiteOrigin(url: home),
+                  BrowserSiteOrigin(url: surface.navigationState.committedURL ?? url) == BrowserSiteOrigin(url: landing),
                   surface.navigationState.faviconRevision == request.revision,
                   surface.navigationState.faviconURL == url,
                   surface.navigationState.faviconImage == request.image else { return }
@@ -119,15 +120,21 @@ final class FavoriteIconPipeline<Surface: BrowserEngineSurface> {
         return previous?.image ?? cachedImage
     }
 
-    private func restoreIcon(for tab: BrowserOrganizationTabItem, home: URL) {
-        guard let store, case .favorites(let profile) = tab.section else { return }
+    private func restoreIcon(for tab: BrowserOrganizationTabItem, home: URL, profile fallback: ProfileID?) {
+        let profile: ProfileID
+        let discovers: Bool
+        if case .favorites(let id) = tab.section { profile = id; discovers = true }
+        else if tab.pinnedURL != nil, let fallback { profile = fallback; discovers = false }
+        else { return }
+        guard let store else { return }
         if let cached = cachedIcons[tab.id], cached.profile == profile, cached.home == home { return }
         cachedIcons.removeValue(forKey: tab.id)?.task?.cancel()
         let entry = CachedIcon(profile: profile, home: home, image: memoryCache.image(profile: profile, home: home))
         cachedIcons[tab.id] = entry
         if entry.image != nil { return }
         cachedIcons[tab.id]?.task = Task { [weak self] in
-            let pixels = await store.image(profile: profile, home: home)
+            let pixels = discovers ? await store.image(profile: profile, home: home)
+                : await store.cachedImage(profile: profile, home: home)
             let image = await pixels?.nativeImage()
             guard !Task.isCancelled, let self, self.cachedIcons[tab.id]?.token == entry.token else { return }
             self.cachedIcons[tab.id]?.image = image

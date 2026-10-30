@@ -138,7 +138,11 @@ extension BrowserStore {
                         pageTitle: entry.pageTitle, customTitle: entry.customTitle, occurrenceID: occurrenceID,
                         isLoadedInThisWindow: live != nil,
                         isSelected: occurrenceID != nil && occurrenceID == selected,
-                        isOpenInAnotherWindow: remote.contains(id), lastActiveAt: entry.lastActiveAt, customIcon: entry.customIcon))
+                        isOpenInAnotherWindow: remote.contains(id), lastActiveAt: entry.lastActiveAt, customIcon: entry.customIcon,
+                        pinnedLandingURL: live.flatMap { pinnedLandings[$0.occurrenceID]?.pinnedURL == entry.pinnedURL
+                            ? pinnedLandings[$0.occurrenceID]?.url : nil } ?? entry.pinnedLandingURL,
+                        isResolvingPinnedLanding: live.map { pinnedLandings[$0.occurrenceID]?.pinnedURL == entry.pinnedURL
+                            && pinnedLandings[$0.occurrenceID]?.isResolving == true } == true))
                 case let .split(id):
                     guard let split = organization.splits[id] else { return nil }
                     let panes = items(split.tabIDs.map(BrowserOrganizationNode.tab), section: section).compactMap { item -> BrowserOrganizationTabItem? in
@@ -286,6 +290,7 @@ extension BrowserStore {
         markViewed(window)
         detachOccurrence(occurrenceID, from: tab.spaceID, in: &window)
         tabs.removeValue(forKey: occurrenceID)
+        pinnedLandings.removeValue(forKey: occurrenceID)
         windows[windowID] = window
         markViewed(window)
     }

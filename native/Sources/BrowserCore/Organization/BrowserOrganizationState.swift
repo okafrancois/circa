@@ -298,6 +298,7 @@ struct BrowserOrganizationState: Sendable {
             changes.tabFields.insert(id)
         }
         if tab.url != before.url || tab.pageTitle != before.pageTitle { changes.tabMetadata.insert(id) }
+        if tab.pinnedLandingAlias != before.pinnedLandingAlias { changes.metadata = true }
     }
 
     /// Not tracked: viewing time is neither visible in snapshots nor undoable.
@@ -687,6 +688,10 @@ struct BrowserOrganizationState: Sendable {
     private static func validateTab(_ tab: BrowserOrganizedTab) throws {
         try BrowserSessionDocument.validateDestination(tab.url)
         if let pinnedURL = tab.pinnedURL { try BrowserSessionDocument.validateDestination(pinnedURL) }
+        if let alias = tab.pinnedLandingAlias {
+            try BrowserSessionDocument.validateDestination(alias.pinnedURL)
+            try BrowserSessionDocument.validateDestination(alias.url)
+        }
         if let icon = tab.customIcon, !icon.isValid || icon == .none {
             throw BrowserOrganizationError.invalidIcon
         }

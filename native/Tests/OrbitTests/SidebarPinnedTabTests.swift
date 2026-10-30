@@ -78,20 +78,48 @@ struct SidebarPinnedTabTests {
         #expect(!button.isPillPresented)
     }
 
-    @Test("Loaded pinned cards retain their fill when selection moves; dormant pins have no resting fill")
+    @Test("Loaded and dormant pins are unfilled at rest, and only the hovered row receives a fill")
     func pinnedCards() {
         let id = TabID()
         let row = SidebarTabRow(item: .init(id: id, title: "Cached title", selected: true,
                                             isPinned: true, isLoadedInThisWindow: true))
         row.update(.init(id: id, title: "Cached title", selected: false, isPinned: true, isLoadedInThisWindow: true), depth: 1)
-        #expect(row.background.fillColor == OrbitTokens.Color.State.pinnedOpen)
+        #expect(row.background.fillColor == nil && row.background.outerShadow?.blur == nil)
+        row.mouseEntered(with: NSEvent())
+        #expect(row.background.fillColor == OrbitTokens.Color.State.pinnedHover)
+        row.mouseExited(with: NSEvent())
+        #expect(row.background.fillColor == nil)
         #expect(row.background.cornerRadius == 11)
         row.frame = NSRect(x: 0, y: 0, width: 300, height: 36)
         row.layoutSubtreeIfNeeded()
-        #expect(row.background.frame == NSRect(x: 16, y: 0, width: 284, height: 36))
+        #expect(row.background.frame == NSRect(x: 13, y: 0, width: 288, height: 36))
         row.update(.init(id: id, title: "Cached title", selected: false, isPinned: true), depth: 1)
         #expect(row.background.fillColor == nil)
         #expect(row.titleLabel.stringValue == "Cached title" && !row.favicon.isHidden)
     }
 }
+}
+
+extension NativeWebKitTests.SidebarPinnedTabTests {
+    @Test("Selected pin card geometry and ink are independent of appearance")
+    func selectedPinGeometry() {
+        let row = SidebarTabRow(item: .init(id: TabID(), title: "Illustrated Atlas — Field Notes", selected: true,
+            isPinned: true, isLoadedInThisWindow: true), depth: 1)
+        row.wantsLayer = true
+        row.frame = NSRect(x: 8, y: 0, width: 480, height: 36)
+        row.layoutSubtreeIfNeeded()
+        #expect(row.background.frame == NSRect(x: 13, y: 0, width: 468, height: 36))
+        #expect(row.background.layer?.frame.minX == row.background.frame.minX)
+        #expect(row.favicon.frame == NSRect(x: 23, y: 10, width: 16, height: 16))
+        #expect(row.titleLabel.frame.minX == 47 && row.titleLabel.frame.minY == 9.5)
+        #expect(row.closeButton.frame.midX == 463)
+        #expect(row.background.cornerRadius == 11)
+        #expect(row.background.outerShadow?.blur == 2 && row.background.outerShadow?.offsetY == 1)
+        for name in [NSAppearance.Name.aqua, .darkAqua] {
+            row.appearance = NSAppearance(named: name)
+            row.refreshFill()
+            #expect(row.background.fillColor == OrbitTokens.Color.State.pinnedSelected)
+            #expect(row.titleLabel.textColor == OrbitTokens.Color.State.pinnedSelectedText)
+        }
+    }
 }

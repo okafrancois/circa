@@ -97,3 +97,39 @@ private final class FaviconTestDelegate: BrowserEngineSurfaceDelegate {
                  make: () -> SiteSyntheticSurface) -> SiteSyntheticSurface? { nil }
     func surface(_ surface: SiteSyntheticSurface, didStartDownload download: any BrowserEngineDownload) { download.cancel() }
 }
+
+extension NativeWebKitTests.NativeFaviconReceiptTests {
+    @Test("A proven cross-origin pin landing supplies and retains its live favicon")
+    func redirectedPinIcon() async throws {
+        let profile = ProfileID()
+        let home = URL(string: "http://saved.example.test/start")!
+        let landing = URL(string: "https://landing.example.test/en/start?added=true")!
+        let icon = URL(string: "https://landing.example.test/favicon.png")!
+        let surface = SiteSyntheticSurface(profileID: profile, engine: nil, siteData: .init())
+        let delegate = FaviconTestDelegate()
+        surface.delegate = delegate
+        surface.navigate(to: landing)
+        surface.faviconURL = icon
+        surface.faviconImage = BrowserFaviconImage(sourceURL: icon, png: Self.png())
+        var tab = BrowserOrganizationTabItem(id: TabID(), section: .pinned(SpaceID()), url: landing,
+            pinnedURL: home, pageTitle: nil, customTitle: nil, occurrenceID: TabOccurrenceID(),
+            isLoadedInThisWindow: true, isSelected: true, isOpenInAnotherWindow: false)
+        let pipeline = FavoriteIconPipeline<SiteSyntheticSurface>()
+        #expect(pipeline.image(for: tab, surface: surface, isOwned: { _ in true }) == nil)
+        tab.pinnedLandingURL = landing
+        var ready = false
+        pipeline.onChange = { ready = true }
+        _ = pipeline.image(for: tab, surface: surface, isOwned: { _ in true })
+        for _ in 0..<100 where !ready { try await Task.sleep(for: .milliseconds(2)) }
+        let resolved = pipeline.image(for: tab, surface: surface, isOwned: { _ in true })
+        let image = try #require(resolved)
+        let row = SidebarTabRow(item: .init(id: tab.id, title: "Illustrated Atlas — Field Notes", selected: true,
+            isPinned: true, isLoadedInThisWindow: true, activity: .init(favicon: image, isLoading: true)), depth: 1)
+        #expect(row.favicon.image === image && !row.favicon.isHidden)
+        #expect(row.item.trailingAction == .closePage)
+        surface.navigate(to: landing.appendingPathComponent("chapter"))
+        #expect(pipeline.image(for: tab, surface: surface, isOwned: { _ in true }) === image)
+        pipeline.clear()
+        surface.dispose()
+    }
+}

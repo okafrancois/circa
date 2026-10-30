@@ -73,6 +73,7 @@ class SidebarListRow: NSView, NSTextFieldDelegate {
     init(node: BrowserOrganizationNode) {
         self.node = node
         super.init(frame: .zero)
+        clipsToBounds = false
         titleLabel.textColor = accent.sidebarText
         titleLabel.lineBreakMode = .byTruncatingTail
         titleLabel.maximumNumberOfLines = 1
@@ -126,14 +127,16 @@ class SidebarListRow: NSView, NSTextFieldDelegate {
     var isSelected: Bool { false }
     var isMultiSelected: Bool { false }
     var isRenaming: Bool { renameField != nil }
-    var restingFill: NSColor? { nil }
+    var hoverFill: NSColor { OrbitTokens.Color.State.sidebarItem }
     var backgroundLeadingInset: CGFloat { 0 }
+    var backgroundTrailingOutset: CGFloat { 0 }
+    var titleOffsetY: CGFloat { 0 }
 
     override func layout() {
         super.layout()
-        background.frame = NSRect(x: backgroundLeadingInset, y: 0, width: max(0, bounds.width - backgroundLeadingInset), height: bounds.height)
+        background.frame = NSRect(x: backgroundLeadingInset, y: 0, width: max(0, bounds.width - backgroundLeadingInset + backgroundTrailingOutset), height: bounds.height)
         let height = ceil(titleLabel.intrinsicContentSize.height)
-        let frame = NSRect(x: titleX, y: ((bounds.height - height) / 2).rounded(), width: max(0, titleEnd - titleX), height: height)
+        let frame = NSRect(x: titleX, y: ((bounds.height - height) / 2).rounded() + titleOffsetY, width: max(0, titleEnd - titleX), height: height)
         titleLabel.frame = frame
         if let renameField {
             let fieldHeight = ceil(renameField.intrinsicContentSize.height)
@@ -175,6 +178,15 @@ class SidebarListRow: NSView, NSTextFieldDelegate {
     }
 
     private func refreshForeground() {
+        if let row = self as? SidebarTabRow, row.item.isPinned && isSelected {
+            background.fillColor = OrbitTokens.Color.State.pinnedSelected
+            background.applyFrost(.defaultSpace)
+            effectiveAccent = accent
+            effectiveAccent.sidebarText = OrbitTokens.Color.State.pinnedSelectedText
+            effectiveAccent.icon = OrbitTokens.Color.State.pinnedSelectedIcon
+            accentDidChange()
+            return
+        }
         let fill = accent.contrastTheme.flatMap {
             OrbitThemeForeground.rowOverlay(stateFill, theme: $0, foreground: accent.foreground)
         } ?? stateFill
@@ -224,15 +236,16 @@ class SidebarListRow: NSView, NSTextFieldDelegate {
         let state = OrbitTokens.Color.State.self
         if isSelected || isRenaming {
             stateFill = isRenaming ? state.renamingRow : state.tabCurrent
-            background.outerShadow = OrbitTokens.Shadow.tabSelected
+            background.outerShadow = (self as? SidebarTabRow)?.item.isPinned == true
+                ? OrbitTokens.Shadow.pinnedSelected : OrbitTokens.Shadow.tabSelected
             return
         }
         background.outerShadow = nil
         if isDropTarget { stateFill = state.dragFolderTarget }
         else if isPressed || isContextTarget { stateFill = state.tabPressed }
         else if isMultiSelected { stateFill = state.tabMultiselected }
-        else if isHovering { stateFill = state.sidebarItem }
-        else { stateFill = restingFill }
+        else if isHovering { stateFill = hoverFill }
+        else { stateFill = nil }
     }
 
 
@@ -351,13 +364,14 @@ class SidebarTabRow: SidebarListRow {
     required init?(coder: NSCoder) { nil }
 
     override var isSelected: Bool { item.selected }
+    override var titleX: CGFloat { super.titleX - (item.isPinned ? Metrics.titleCellInset : 0) }
+    override var titleOffsetY: CGFloat { item.isPinned ? Metrics.pinnedTitleOffsetY : 0 }
     override var isMultiSelected: Bool { item.isMultiSelected }
     override var backgroundLeadingInset: CGFloat {
         item.isPinned ? OrbitSidebarGeometry.contentIndent(depth: depth) : 0
     }
-    override var restingFill: NSColor? {
-        item.isPinned && item.isLoadedInThisWindow ? OrbitTokens.Color.State.pinnedOpen : nil
-    }
+    override var backgroundTrailingOutset: CGFloat { item.isPinned ? Metrics.pinnedTrailingOutset : 0 }
+    override var hoverFill: NSColor { item.isPinned ? OrbitTokens.Color.State.pinnedHover : super.hoverFill }
     var isCloseButtonVisible: Bool { closeButton.alphaValue > 0 }
 
     override func viewDidMoveToWindow() {
@@ -444,7 +458,7 @@ class SidebarTabRow: SidebarListRow {
         slash.frame = NSRect(x: slashCenter - Metrics.pinnedSlashHeight / 2, y: (bounds.height - Metrics.pinnedSlashHeight) / 2,
                              width: Metrics.pinnedSlashHeight, height: Metrics.pinnedSlashHeight)
         let closeSize = Metrics.closeButtonSize
-        let closeCenter = bounds.width - Metrics.closeCenterFromRowRight
+        let closeCenter = bounds.width - Metrics.closeCenterFromRowRight + backgroundTrailingOutset
         closeButton.frame = NSRect(x: closeCenter - closeSize / 2, y: (bounds.height - closeSize) / 2, width: closeSize, height: closeSize)
         audioButton.frame = closeButton.frame.offsetBy(dx: isHovering ? -Metrics.audioControlPitch : 0, dy: 0)
         let mark = Metrics.otherWindowGlyphSize + 4
@@ -493,8 +507,9 @@ class SidebarTabRow: SidebarListRow {
     private func refreshControls() {
         let away = item.isAwayFromPinnedURL
         slash.isHidden = !away
-        favicon.isHidden = item.activity.isLoading
-        loadingIndicator.isHidden = !item.activity.isLoading
+        let showsLoading = item.activity.isLoading && displayedFavicon == nil
+        favicon.isHidden = showsLoading
+        loadingIndicator.isHidden = !showsLoading
         audioButton.isHidden = !showsAudio || isRenaming
         otherWindowMark.isHidden = !item.isOpenInAnotherWindow || isHovering
         if !isHovering || isRenaming { closeButton.alphaValue = 0 }
@@ -621,7 +636,7 @@ final class SidebarSplitPaneCell: NSView {
     }
 }
 
-/// A folder row: an 18 pt folder glyph tinted with the Space accent, a 14 pt semibold title and no
+/// A folder row: a 22 pt folder glyph tinted with the Space accent, a 14 pt semibold title and no
 /// chevron; the glyph switches between closed and open. Clicking toggles it.
 @MainActor
 final class SidebarFolderRow: SidebarListRow {
@@ -640,6 +655,9 @@ final class SidebarFolderRow: SidebarListRow {
     required init?(coder: NSCoder) { nil }
 
     override var isMultiSelected: Bool { item.isMultiSelected }
+    override var iconX: CGFloat { super.iconX - Metrics.folderIconOutset }
+    override var titleX: CGFloat { super.titleX - Metrics.folderTitleOutset }
+    override var titleOffsetY: CGFloat { Metrics.pinnedTitleOffsetY }
 
     override func accentDidChange() {
         super.accentDidChange()

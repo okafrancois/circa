@@ -6,6 +6,7 @@ import ChromiumEngine
 @MainActor
 enum OrbitPinnedTabProbe {
     private static var ids: [TabID] = []
+    private static var lightTheme: BrowserSpaceTheme?
 
     private static func owns(_ owner: OrbitWindowController) -> Bool {
         guard Bundle.main.bundleIdentifier == "lab.orbit.orbit.pinned-tabs",
@@ -17,12 +18,12 @@ enum OrbitPinnedTabProbe {
             && ($0[kCGWindowNumber as String] as? Int) == window.windowNumber }
     }
 
-    static func run(_ owner: OrbitWindowController, root: URL, command: [String: String]) async -> [String: Any] {
+    static func run(_ owner: OrbitWindowController, store: BrowserStore, root: URL, command: [String: String]) async -> [String: Any] {
         guard Bundle.main.bundleIdentifier == "lab.orbit.orbit.pinned-tabs",
               let configuration = activeSiteSessionConfiguration(), configuration.syntheticGuard != nil,
               configuration.usesMockKeychain, let window = owner.window else { return ["refused": true] }
         window.setFrame(NSRect(x: -2000, y: -1200, width: 1280, height: 900), display: false)
-        owner.windowShell.setSidebarWidth(484)
+        owner.windowShell.setSidebarWidth(496)
         window.appearance = NSAppearance(named: .aqua)
         window.orderBack(nil)
         window.makeKey()
@@ -46,6 +47,91 @@ enum OrbitPinnedTabProbe {
             await owner.session.waitForPendingCommands()
             owner.session.selectTab(ids[1])
             await owner.session.waitForPendingCommands()
+        }
+        if command["action"] == "import" {
+            do {
+                let data = try Data(contentsOf: root.appendingPathComponent("pinned-import.json"))
+                guard let space = try await BrowserPinnedImportFixture.install(data, in: store,
+                    profile: owner.session.organization?.profileID) else { return ["missingSpace": true] }
+                owner.session.activateSpace(space.id)
+                await owner.session.waitForPendingCommands()
+                let theme = space.theme
+                lightTheme = theme
+                _ = try await owner.session.setSpaceTheme(theme, for: space.id, profileID: space.profileID)
+                owner.session.activateSpace(space.id)
+                await owner.session.waitForPendingCommands()
+                ids = owner.session.organization?.allTabs.map(\.id) ?? []
+            } catch { return ["importFailed": true] }
+        }
+        if ["import", "inspect"].contains(command["action"] ?? "") {
+            if let index = Int(command["index"] ?? ""), ids.indices.contains(index) {
+                owner.session.selectTab(ids[index])
+                await owner.session.waitForPendingCommands()
+                if let surface = owner.session.selectedSurface {
+                    if let saved = owner.session.organization?.selectedTab?.pinnedURL,
+                       saved.host == "127.0.0.1", saved.path == "/scheme" {
+                        let deadline = ProcessInfo.processInfo.systemUptime + 2
+                        while !surface.isReady && ProcessInfo.processInfo.systemUptime < deadline {
+                            try? await Task.sleep(for: .milliseconds(20))
+                        }
+                        // Trust only this disposable target's loopback TLS fixture.
+                        _ = await surface.devToolsCall("Security.setIgnoreCertificateErrors", params: #"{"ignore":true}"#)
+                        surface.navigate(to: saved)
+                    }
+                    await waitForLoad(surface)
+                }
+                await owner.session.waitForPendingCommands()
+                try? await Task.sleep(for: .milliseconds(500))
+            }
+            if ["dark", "light"].contains(command["theme"] ?? ""), let space = owner.session.snapshot?.activeSpaceID,
+               let profile = owner.session.organization?.profileID {
+                let theme = command["theme"] == "dark"
+                    ? BrowserSpaceTheme.composed(colors: [BrowserThemeColor(hex: 0x3A2E40)], intensity: 1, mode: .dark) : lightTheme
+                _ = try? await owner.session.setSpaceTheme(theme, for: space, profileID: profile)
+                owner.session.activateSpace(space)
+                await owner.session.waitForPendingCommands()
+            }
+            if command["unload"] == "true", let tab = owner.session.organization?.selectedTab {
+                owner.session.closeTabs([tab.id])
+                await owner.session.waitForPendingCommands()
+            }
+            if command["link"] == "true", let surface = owner.session.selectedSurface, owns(owner) {
+                _ = await OrbitPerformanceProbe.evaluate(surface, "document.querySelector('a').click(); ({clicked:true})")
+                await waitForLoad(surface)
+                await owner.session.waitForPendingCommands()
+            }
+            if command["reset"] == "true", let tab = owner.session.organization?.selectedTab {
+                owner.session.resetTabToPinnedURL(tab.id, navigate: { $0.navigate(to: $1) })
+                await owner.session.waitForPendingCommands()
+                if let surface = owner.session.selectedSurface { await waitForLoad(surface) }
+                await owner.session.waitForPendingCommands()
+            }
+            try? await Task.sleep(for: .milliseconds(300))
+            window.contentView?.layoutSubtreeIfNeeded()
+            let name = command["capture"] ?? "import"
+            for id in ids {
+                if let row = owner.sidebar.page.list.row(for: .tab(id)) as? SidebarTabRow, owns(owner) {
+                    row.closeButton.mouseExited(with: NSEvent())
+                    guard owns(owner) else { return ["refused": true] }
+                    row.mouseExited(with: NSEvent())
+                }
+            }
+            let hoveredID = command["hoverIndex"].flatMap(Int.init).flatMap { ids.indices.contains($0) ? ids[$0] : nil }
+                ?? (command["hover"] == "false" ? nil : owner.session.organization?.selectedTab?.id)
+            if let id = hoveredID,
+               let row = owner.sidebar.page.list.row(for: .tab(id)) as? SidebarTabRow, owns(owner) {
+                row.mouseEntered(with: NSEvent())
+                try? await Task.sleep(for: .milliseconds(150))
+            }
+            captureSidebar(owner, to: folder.appendingPathComponent(name + ".png"))
+            return ["pid": getpid(), "tabs": ids.map { id -> [String: Any] in
+                guard let tab = owner.session.organization?.tab(id) else { return [:] }
+                let row = owner.sidebar.page.list.row(for: .tab(id)) as? SidebarTabRow
+                return ["loaded": tab.isLoadedInThisWindow, "selected": tab.isSelected,
+                        "away": tab.isAwayFromPinnedURL, "landing": tab.pinnedLandingURL?.absoluteString ?? "",
+                        "url": tab.url.absoluteString, "minus": row?.item.trailingAction == .closePage,
+                        "favicon": row?.item.activity.favicon != nil]
+            }]
         }
         guard ids.count == 3, owns(owner) else { return ["missingFixture": true] }
         window.contentView?.layoutSubtreeIfNeeded()

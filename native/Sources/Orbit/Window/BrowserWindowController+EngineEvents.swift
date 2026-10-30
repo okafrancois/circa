@@ -10,6 +10,9 @@ extension BrowserWindowController: BrowserEngineSurfaceDelegate {
     }
 
     func surfaceDidCommitNavigation(_ surface: Surface) {
+        if owns(surface), let url = surface.navigationState.committedURL {
+            session.recordPinnedNavigation(for: surface, to: url, committed: true)
+        }
         pageSurfaceDidCommit(surface)
         if owns(surface) {
             findSession.documentDidChange(on: surface)
@@ -118,7 +121,11 @@ extension BrowserWindowController: BrowserEngineSurfaceDelegate {
 
     func surface(_ surface: Surface, decidePolicyFor action: BrowserNavigationAction,
                  decision: BrowserPolicyDecision<BrowserNavigationActionPolicy>) {
-        decision.decide(navigationActionPolicy(for: action, in: surface))
+        let policy = navigationActionPolicy(for: action, in: surface)
+        if policy == .allow, action.isMainFrame == true, owns(surface), let url = action.url {
+            session.recordPinnedNavigation(for: surface, to: url, isRedirect: action.kind == .redirect)
+        }
+        decision.decide(policy)
     }
 
     func navigationActionPolicy(for action: BrowserNavigationAction, in surface: Surface) -> BrowserNavigationActionPolicy {
