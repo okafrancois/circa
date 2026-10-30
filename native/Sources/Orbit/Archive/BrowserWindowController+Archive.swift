@@ -109,7 +109,7 @@ extension BrowserWindowController {
     func confirmClearArchive() {
         session.performWindowAction { [weak self] in
             guard let self, let window, let profile = session.activeProfileID else { return }
-            let alert = NSAlert()
+            let alert = OrbitFloatingMaterial.alert()
             alert.messageText = archiveText("clearConfirmation", "Clear Archive for This Profile?")
             alert.informativeText = archiveText("clearExplanation", "Archived tabs from other profiles will be kept.")
             alert.addButton(withTitle: archiveText("delete", "Delete")); alert.addButton(withTitle: archiveText("cancel", "Cancel"))

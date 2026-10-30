@@ -159,6 +159,14 @@ public extension BrowserWindowSession {
         enqueueOrganization { session, context in try await session.store.renameTab(id, to: title, from: context) }
     }
 
+    func changeTabIcon(_ id: TabID, to icon: BrowserSpaceIcon?) {
+        enqueueOrganization { session, context in try await session.store.changeTabIcon(id, to: icon, from: context) }
+    }
+
+    func editPinnedURL(_ id: TabID, to url: URL) {
+        enqueueOrganization { session, context in try await session.store.editPinnedURL(id, to: url, from: context) }
+    }
+
     /// Records the engine's title for this exact live occurrence; unchanged titles cost no command.
     /// Late callbacks for a surface this session no longer owns are ignored: its tab may have been
     /// archived by another window.

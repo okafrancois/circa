@@ -8,6 +8,25 @@ enum SpaceIconImages {
     private static let tinted = NSCache<NSString, NSImage>()
     private static let graphemes = NSCache<NSString, NSImage>()
 
+    static func tabImage(_ choice: BrowserSpaceIcon?) -> NSImage? {
+        guard let choice, choice != .none else { return nil }
+        if case .systemSymbol(let name) = choice {
+            return OrbitIcon.image(sfName: name, pointSize: 16, accessibilityDescription: nil)
+        }
+        guard case .grapheme(let value) = choice else { return nil }
+        let key = "tab:" + value as NSString
+        if let image = graphemes.object(forKey: key) { return image }
+        let image = NSImage(size: NSSize(width: 18, height: 18), flipped: false) { rect in
+            let text = NSAttributedString(string: value, attributes: [.font: NSFont.systemFont(ofSize: 16)])
+            let size = text.size()
+            text.draw(at: NSPoint(x: (rect.width - size.width) / 2, y: (rect.height - size.height) / 2))
+            return true
+        }
+        graphemes.countLimit = 128
+        graphemes.setObject(image, forKey: key)
+        return image
+    }
+
     static func template(_ identifier: String, pointSize: CGFloat) -> NSImage? {
         guard BrowserSpaceIcon.isValidSymbolIdentifier(identifier) else { return nil }
         let key = "\(identifier):\(pointSize)" as NSString

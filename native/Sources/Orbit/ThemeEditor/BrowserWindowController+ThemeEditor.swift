@@ -61,6 +61,7 @@ extension BrowserWindowController {
         let editor = OrbitThemeEditorController(
             spaceID: spaceID, profileID: profileID, stored: space.theme, initial: editableSpaceTheme(for: space),
             scopeDescription: space.name + " · " + (session.catalog?.profiles.first(where: { $0.id == profileID })?.name ?? uiText("Profile")),
+            spaceName: space.name,
             commit: { theme in _ = try await session.setSpaceTheme(theme, for: spaceID, profileID: profileID) },
             replay: { change in try await session.applySpaceThemeChange(change) })
         editor.onPreview = { [weak self] _ in self?.renderChrome() }

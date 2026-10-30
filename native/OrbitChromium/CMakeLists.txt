@@ -84,6 +84,8 @@ add_custom_target(orbit_localization_resources ALL
     "-DSOURCE=${ORBIT_SOURCES}/BrowserShell/Resources"
     "-DDESTINATION=${CMAKE_CURRENT_BINARY_DIR}/OrbitLabNative_BrowserShell.bundle"
     -P "${CMAKE_CURRENT_SOURCE_DIR}/PackageLocalization.cmake"
+  COMMAND "${CMAKE_COMMAND}" -E copy_directory "${ORBIT_SOURCES}/BrowserShell/Icons"
+    "${CMAKE_CURRENT_BINARY_DIR}/OrbitLabNative_BrowserShell.bundle/Contents/Resources/Icons"
   VERBATIM)
 orbit_swift_module(BrowserEngine "${ORBIT_SOURCES}/BrowserEngine" BrowserCore BrowserShell)
 orbit_swift_module(BrowserEngineConformance "${ORBIT_SOURCES}/BrowserEngineConformance" BrowserCore BrowserShell BrowserEngine)
