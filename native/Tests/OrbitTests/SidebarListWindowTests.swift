@@ -633,6 +633,36 @@ struct SidebarListWindowTests {
         #expect(c.organization.favorites.map(\.node) == [.tab(first)])
     }
 
+    @Test("The row minus unloads a pin, the dormant cross archives it, and keyboard close keeps it pinned")
+    func pinnedRowActions() async throws {
+        let harness = try await SidebarListHarness()
+        defer { harness.shutdown() }
+        let c = harness.window
+        let id = try #require(await harness.openTab("https://pin.test/start", activate: true))
+        c.session.pinTabs([id])
+        await harness.settle()
+        let surface = try #require(c.session.selectedSurface)
+        surface.navigate(to: URL(string: "https://pin.test/start/child")!)
+        await harness.settle()
+        let row = try #require(c.list.row(for: .tab(id)) as? SidebarTabRow)
+        #expect(row.item.trailingAction == .closePage && row.isAwayIndicatorVisible)
+        row.mouseEntered(with: NSEvent())
+        #expect(!row.favicon.isHidden)
+        c.list.rowClose(row)
+        await harness.settle()
+        #expect(c.organization.tab(id)?.isLoadedInThisWindow == false)
+        #expect(c.organization.tab(id)?.isAwayFromPinnedURL == false)
+        let dormant = try #require(c.list.row(for: .tab(id)) as? SidebarTabRow)
+        #expect(dormant.item.trailingAction == .archivePin && !dormant.isAwayIndicatorVisible)
+        c.closeSidebarTabs([id])
+        await harness.settle()
+        #expect(c.organization.tab(id) != nil)
+        c.list.rowClose(dormant)
+        await harness.settle()
+        #expect(c.organization.tab(id) == nil)
+        #expect(await c.session.archivedTabs().value.contains { $0.id == id && $0.reason == .removed })
+    }
+
     @Test("A Pinned tab away from its URL shows the slash and resets in place; Clear goes through the archive hook")
     func pinnedResetAndClear() async throws {
         let harness = try await SidebarListHarness()
@@ -646,7 +676,7 @@ struct SidebarListWindowTests {
         surface.navigate(to: URL(string: "https://home.test/elsewhere")!)
         await harness.settle()
         let row = try #require(c.list.row(for: .tab(p)) as? SidebarTabRow)
-        #expect(row.item.isAwayFromPinnedURL && !row.isResetButtonVisible)
+        #expect(row.item.isAwayFromPinnedURL && row.isAwayIndicatorVisible)
         #expect(harness.registry.isEnabled(.resetTabToOriginalURL))
         c.list.rowResetToPinnedURL(row)
         await harness.settle()

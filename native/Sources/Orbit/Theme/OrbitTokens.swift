@@ -98,6 +98,7 @@ extension OrbitTokens {
             public static let tabCurrent = NSColor.orbitDynamic("State.tabCurrent", light: .orbitSRGB(0xF6F6F6, 0.88), dark: .orbitP3(0xFAFBFF, 0.20))
             ///  — visible split member.
             public static let tabContentVisible = NSColor.orbitDynamic("State.tabContentVisible", light: .orbitSRGB(0xFFFFFF, 0.70), dark: .orbitP3(0xFAFBFF, 0.15))
+            public static let pinnedOpen = NSColor.orbitDynamic("State.pinnedOpen", light: .orbitSRGB(0x000000, 0.05), dark: .orbitSRGB(0xFFFFFF, 0.08))
             public static let tabPrevious = NSColor.orbitDynamic("State.tabPrevious", light: .orbitSRGB(0xFFFFFF, 0.32), dark: .orbitP3(0xFAFBFF, 0.08))
             public static let tabPreviousHovered = NSColor.orbitDynamic("State.tabPreviousHovered", light: .orbitSRGB(0xFFFFFF, 0.50), dark: .orbitP3(0xFAFBFF, 0.12))
             public static let tabPressed = NSColor.orbitDynamic("State.tabPressed", light: .orbitSRGB(0x000000, 0.10), dark: .orbitSRGB(0xFFFFFF, 0.10))

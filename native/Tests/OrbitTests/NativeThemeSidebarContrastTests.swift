@@ -128,7 +128,6 @@ struct NativeThemeSidebarContrastTests {
         row.accent = accent
         #expect(same(row.titleLabel.textColor, accent.sidebarSecondaryText, appearance: appearance))
         #expect(same(row.closeButton.tint, accent.icon, appearance: appearance))
-        #expect(same(row.resetButton.tint, accent.icon, appearance: appearance))
         let imageViews = descendants(row, of: NSImageView.self)
         #expect(imageViews.count == 2)
         for image in imageViews { #expect(same(image.contentTintColor, accent.icon, appearance: appearance)) }
@@ -157,7 +156,7 @@ struct NativeThemeSidebarContrastTests {
         #expect(same(row.titleLabel.textColor, nextAccent.sidebarText, appearance: appearance))
         let disabledTint = row.closeButton.disabledTint
         row.commandsEnabled = false
-        #expect(!row.closeButton.isEnabled && !row.resetButton.isEnabled)
+        #expect(!row.closeButton.isEnabled)
         #expect(row.closeButton.disabledTint == disabledTint, "Disabled controls retain their explicit disabled role")
         #expect(row.window == nil)
     }
@@ -200,7 +199,7 @@ struct NativeThemeSidebarContrastTests {
         let primaryColors = [primary.titleLabel.textColor]
         let secondaryColors = [secondary.titleLabel.textColor,
                                sidebar.page.list.clearButton.attributedLabel.attribute(.foregroundColor, at: 0, effectiveRange: nil) as? NSColor,
-                               primary.closeButton.tint, primary.resetButton.tint,
+                               primary.closeButton.tint,
                                sidebar.footer.libraryButton.tint, sidebar.footer.plusButton.tint]
             + descendants(primary, of: NSImageView.self).map(\.contentTintColor)
         let stops = try OrbitThemeGradient.normalizedStops(theme.stops, appearance: appearance).map {

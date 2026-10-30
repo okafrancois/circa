@@ -1,5 +1,6 @@
 import AppKit
 import BrowserCore
+import BrowserShell
 
 private typealias Metrics = OrbitTokens.Metrics.Sidebar
 
@@ -33,6 +34,21 @@ struct SidebarTabItem: Equatable {
     var activity = SidebarTabActivity()
     var splitPanes: [SidebarSplitPaneItem] = []
     var customIcon: BrowserSpaceIcon? = nil
+
+    var trailingAction: SidebarTabTrailingAction {
+        isPinned && !isLoadedInThisWindow ? .archivePin : .closePage
+    }
+}
+
+enum SidebarTabTrailingAction {
+    case closePage, archivePin
+
+    var pillText: String {
+        switch self {
+        case .closePage: uiText("Close and Keep Pinned")
+        case .archivePin: uiText("Archive this tab")
+        }
+    }
 }
 
 struct SidebarSplitPaneItem: Equatable {

@@ -65,7 +65,7 @@ extension BrowserWindowController {
         }
         sidebar.onSelectSplit = { [weak self] id in self?.submitInput { $0.session.selectSplit(id) } }
         sidebar.onSelectTab = { [weak self] id in self?.submitInput { $0.activateSidebarTab(id) } }
-        sidebar.onCloseTabs = { [weak self] ids in self?.submitInput { $0.closeSidebarTabs(ids) } }
+        sidebar.onCloseTabs = { [weak self] ids in self?.submitInput { $0.performSidebarRowAction(ids) } }
         sidebar.onSetPinnedSectionCollapsed = { [weak self] id, collapsed in
             self?.submitInput { controller in
                 guard controller.session.snapshot?.activeSpaceID == id else { return }
@@ -126,6 +126,20 @@ extension BrowserWindowController {
             return
         }
         session.selectTab(id, expecting: expected, admission: admission, isCurrent: isCurrent)
+    }
+
+    /// The row button unloads live pins and archives dormant pins. Keyboard close stays separate.
+    func performSidebarRowAction(_ ids: [TabID]) {
+        guard acceptsCommands, !ids.isEmpty else { return }
+        let tabs = ids.compactMap { session.organization?.tab($0) }
+        if tabs.count == ids.count, tabs.allSatisfy({
+            if case .pinned = $0.section { return !$0.isLoadedInThisWindow }
+            return false
+        }) {
+            session.archiveTabs(ids)
+        } else {
+            closeSidebarTabs(ids)
+        }
     }
 
     /// × and "Close/Archive": one Today tab goes to the archive (`archiveTabs`, ARCHIVE-UI's API);

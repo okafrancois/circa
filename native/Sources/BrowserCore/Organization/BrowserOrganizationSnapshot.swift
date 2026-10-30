@@ -90,7 +90,9 @@ public struct BrowserOrganizationTabItem: Equatable, Sendable {
     public var customIcon: BrowserSpaceIcon? = nil
 
     public var title: String? { customTitle ?? pageTitle }
-    public var isAwayFromPinnedURL: Bool { pinnedURL.map { $0 != url } ?? false }
+    public var isAwayFromPinnedURL: Bool {
+        isLoadedInThisWindow && pinnedURL.map { !BrowserPinnedPageIdentity.matches($0, url) } == true
+    }
 }
 
 public struct BrowserOrganizationFolderItem: Equatable, Sendable {

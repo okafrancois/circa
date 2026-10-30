@@ -768,7 +768,7 @@ extension BrowserStore {
         for root in organization.pinned[context.spaceID] ?? [] {
             for id in organization.tabIDs(in: root) {
                 guard let entry = organization.tabs[id], let pinnedURL = entry.pinnedURL,
-                      (local[id]?.url ?? entry.url) != pinnedURL,
+                      !BrowserPinnedPageIdentity.matches(local[id]?.url ?? entry.url, pinnedURL),
                       let reset = resetToPinnedURL(id, in: window) else { continue }
                 resets.append(reset)
             }

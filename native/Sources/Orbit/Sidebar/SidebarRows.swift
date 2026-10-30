@@ -5,7 +5,6 @@ import BrowserCore
 private typealias Metrics = OrbitTokens.Metrics.Sidebar
 
 extension OrbitGlyph {
-    static var resetPinned: NSImage? { symbol("arrow.uturn.backward", pointSize: 10, weight: .semibold) }
     ///  — trailing mark of a tab open in another window.
     static var otherWindow: NSImage? { symbol("macwindow.on.rectangle", pointSize: OrbitTokens.Metrics.Sidebar.otherWindowGlyphSize, weight: .regular) }
 
@@ -127,10 +126,12 @@ class SidebarListRow: NSView, NSTextFieldDelegate {
     var isSelected: Bool { false }
     var isMultiSelected: Bool { false }
     var isRenaming: Bool { renameField != nil }
+    var restingFill: NSColor? { nil }
+    var backgroundLeadingInset: CGFloat { 0 }
 
     override func layout() {
         super.layout()
-        background.frame = bounds
+        background.frame = NSRect(x: backgroundLeadingInset, y: 0, width: max(0, bounds.width - backgroundLeadingInset), height: bounds.height)
         let height = ceil(titleLabel.intrinsicContentSize.height)
         let frame = NSRect(x: titleX, y: ((bounds.height - height) / 2).rounded(), width: max(0, titleEnd - titleX), height: height)
         titleLabel.frame = frame
@@ -231,7 +232,7 @@ class SidebarListRow: NSView, NSTextFieldDelegate {
         else if isPressed || isContextTarget { stateFill = state.tabPressed }
         else if isMultiSelected { stateFill = state.tabMultiselected }
         else if isHovering { stateFill = state.sidebarItem }
-        else { stateFill = nil }
+        else { stateFill = restingFill }
     }
 
 
@@ -317,8 +318,7 @@ class SidebarTabRow: SidebarListRow {
     private(set) var item: SidebarTabItem
     let favicon = NSImageView()
     private let slash = SidebarPinnedSlashView()
-    let closeButton = OrbitGlyphButton(glyph: OrbitGlyph.close, label: "")
-    let resetButton = OrbitGlyphButton(glyph: OrbitGlyph.resetPinned, label: "")
+    let closeButton = SidebarTabActionButton(glyph: OrbitGlyph.close, label: "")
     private let otherWindowMark = NSImageView()
     let audioButton = OrbitGlyphButton(glyph: nil, label: "")
     private let loadingIndicator = SidebarTabLoadingView()
@@ -340,16 +340,11 @@ class SidebarTabRow: SidebarListRow {
         audioButton.target = self
         audioButton.action = #selector(toggleAudio(_:))
         audioButton.isHidden = true
-        resetButton.tint = effectiveAccent.icon
-        resetButton.hoverFill = .rowClose
-        resetButton.target = self
-        resetButton.action = #selector(resetTab(_:))
-        resetButton.isHidden = true
         otherWindowMark.image = OrbitGlyph.otherWindow
         otherWindowMark.contentTintColor = effectiveAccent.icon
         slash.tint = effectiveAccent.icon
         otherWindowMark.setAccessibilityElement(false)
-        for view in [favicon, loadingIndicator, slash, otherWindowMark, resetButton, audioButton, closeButton] { addSubview(view) }
+        for view in [favicon, loadingIndicator, slash, otherWindowMark, audioButton, closeButton] { addSubview(view) }
         update(item, depth: depth)
     }
 
@@ -357,16 +352,23 @@ class SidebarTabRow: SidebarListRow {
 
     override var isSelected: Bool { item.selected }
     override var isMultiSelected: Bool { item.isMultiSelected }
+    override var backgroundLeadingInset: CGFloat {
+        item.isPinned ? OrbitSidebarGeometry.contentIndent(depth: depth) : 0
+    }
+    override var restingFill: NSColor? {
+        item.isPinned && item.isLoadedInThisWindow ? OrbitTokens.Color.State.pinnedOpen : nil
+    }
     var isCloseButtonVisible: Bool { closeButton.alphaValue > 0 }
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
-        if window == nil { SidebarTabHoverCard.shared.invalidate(self) }
+        if window == nil { SidebarTabHoverCard.shared.invalidate(self); closeButton.dismissPill() }
     }
 
     override func viewDidHide() {
         super.viewDidHide()
         SidebarTabHoverCard.shared.invalidate(self)
+        closeButton.dismissPill()
     }
 
     private var titleColor: NSColor {
@@ -378,14 +380,13 @@ class SidebarTabRow: SidebarListRow {
         super.accentDidChange()
         titleLabel.textColor = titleColor
         closeButton.tint = effectiveAccent.icon
-        resetButton.tint = effectiveAccent.icon
         otherWindowMark.contentTintColor = effectiveAccent.icon
         slash.tint = effectiveAccent.icon
         audioButton.tint = effectiveAccent.icon
         loadingIndicator.tint = effectiveAccent.icon
         favicon.contentTintColor = displayedFavicon == nil || displayedFavicon?.isTemplate == true ? effectiveAccent.icon : nil
     }
-    var isResetButtonVisible: Bool { !resetButton.isHidden }
+    var isAwayIndicatorVisible: Bool { !slash.isHidden }
     private var displayedFavicon: NSImage? { SpaceIconImages.tabImage(item.customIcon) ?? item.favicon ?? item.activity.favicon }
     var showsAudio: Bool { item.activity.isAudible == true || item.activity.isAudioMuted == true }
 
@@ -410,9 +411,8 @@ class SidebarTabRow: SidebarListRow {
         audioButton.setAccessibilityLabel(audioLabel)
         audioButton.toolTip = audioLabel
         audioButton.isEnabled = commandsEnabled && item.activity.isAudioMuted != nil
-        closeButton.setAccessibilityLabel(SidebarListStrings.close(item.title))
-        resetButton.setAccessibilityLabel(SidebarListStrings.reset(item.title))
-        resetButton.toolTip = SidebarListStrings.resetPinned
+        closeButton.setAccessibilityLabel(item.isPinned ? item.trailingAction.pillText : SidebarListStrings.close(item.title))
+        closeButton.configure(pinned: item.isPinned, action: item.trailingAction)
         setAccessibilityLabel(item.title)
         var value: [String] = []
         if item.selected { value.append(SidebarListStrings.selected) }
@@ -424,6 +424,7 @@ class SidebarTabRow: SidebarListRow {
         setAccessibilitySelected(item.selected || item.isMultiSelected)
         refreshControls()
         SidebarTabHoverCard.shared.refresh(self)
+        closeButton.refreshPill()
         refreshFill()
         if changed { needsLayout = true }
     }
@@ -439,7 +440,6 @@ class SidebarTabRow: SidebarListRow {
         let size = Metrics.faviconSize
         favicon.frame = NSRect(x: iconX, y: (bounds.height - size) / 2, width: size, height: size)
         loadingIndicator.frame = favicon.frame
-        resetButton.frame = favicon.frame.insetBy(dx: (size - Metrics.closeButtonSize) / 2, dy: (size - Metrics.closeButtonSize) / 2)
         let slashCenter = favicon.frame.maxX + Metrics.pinnedSlashCenterFromFaviconRight
         slash.frame = NSRect(x: slashCenter - Metrics.pinnedSlashHeight / 2, y: (bounds.height - Metrics.pinnedSlashHeight) / 2,
                              width: Metrics.pinnedSlashHeight, height: Metrics.pinnedSlashHeight)
@@ -450,6 +450,7 @@ class SidebarTabRow: SidebarListRow {
         let mark = Metrics.otherWindowGlyphSize + 4
         otherWindowMark.frame = NSRect(x: closeCenter - mark / 2, y: (bounds.height - mark) / 2, width: mark, height: mark)
         super.layout()
+        closeButton.refreshPill()
     }
 
     override func hitTest(_ point: NSPoint) -> NSView? {
@@ -457,13 +458,13 @@ class SidebarTabRow: SidebarListRow {
         if let renameField, renameField.frame.contains(local) { return renameField.hitTest(local) ?? renameField }
         if isCloseButtonVisible, closeButton.frame.contains(local) { return closeButton }
         if showsAudio, audioButton.frame.contains(local) { return audioButton }
-        if isResetButtonVisible, resetButton.frame.contains(local) { return resetButton }
         return self
     }
 
     override func hoverDidChange() {
         super.hoverDidChange()
-        SidebarTabHoverCard.shared.hover(self, inside: isHovering)
+        if !closeButton.isHovering { SidebarTabHoverCard.shared.hover(self, inside: isHovering) }
+        if !isHovering { closeButton.dismissPill(animated: true) }
         refreshControls()
         titleLabel.textColor = titleColor
         // : the close button fades in over 0.12 s.
@@ -478,24 +479,22 @@ class SidebarTabRow: SidebarListRow {
         super.commandsDidChange()
         SidebarTabHoverCard.shared.refresh(self)
         closeButton.isEnabled = commandsEnabled
-        resetButton.isEnabled = commandsEnabled
         audioButton.isEnabled = commandsEnabled && item.activity.isAudioMuted != nil
     }
 
     override func resetForReuse() {
         SidebarTabHoverCard.shared.invalidate(self)
+        closeButton.dismissPill()
         super.resetForReuse()
         closeButton.setAccessibilityLabel(nil)
-        resetButton.setAccessibilityLabel(nil)
         closeButton.alphaValue = 0
     }
 
     private func refreshControls() {
         let away = item.isAwayFromPinnedURL
         slash.isHidden = !away
-        resetButton.isHidden = !(away && isHovering && !isRenaming)
-        favicon.isHidden = !resetButton.isHidden || item.activity.isLoading
-        loadingIndicator.isHidden = !item.activity.isLoading || !resetButton.isHidden
+        favicon.isHidden = item.activity.isLoading
+        loadingIndicator.isHidden = !item.activity.isLoading
         audioButton.isHidden = !showsAudio || isRenaming
         otherWindowMark.isHidden = !item.isOpenInAnotherWindow || isHovering
         if !isHovering || isRenaming { closeButton.alphaValue = 0 }
@@ -504,11 +503,6 @@ class SidebarTabRow: SidebarListRow {
     @objc private func closeTab(_ sender: Any?) {
         guard commandsEnabled else { return }
         events?.rowClose(self)
-    }
-
-    @objc private func resetTab(_ sender: Any?) {
-        guard commandsEnabled else { return }
-        events?.rowResetToPinnedURL(self)
     }
 
     @objc private func toggleAudio(_ sender: Any?) {
