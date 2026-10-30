@@ -4,6 +4,7 @@ from pathlib import Path
 import sys
 import plistlib
 import tempfile
+import shutil
 import unittest
 from unittest.mock import patch
 
@@ -67,6 +68,62 @@ class SyntheticDefaultTests(unittest.TestCase):
                 plural.symlink_to(target.name)
                 with self.assertRaisesRegex(RuntimeError, 'Invalid shared localization resource type'):
                     validate_bundle_contents(bundle)
+
+    def test_interface_icons_are_complete_and_bounded_in_both_resource_layouts(self):
+        source = Path(__file__).resolve().parents[1] / 'native/Sources/BrowserShell/Icons'
+        for nested in (True, False):
+            with self.subTest(nested=nested), tempfile.TemporaryDirectory() as temporary:
+                bundle = Path(temporary) / 'Orbit.app'
+                resources = bundle / 'Contents/Resources/OrbitLabNative_BrowserShell.bundle'
+                if nested:
+                    resources /= 'Contents/Resources'
+                icons = resources / 'Icons'
+                shutil.copytree(source, icons)
+                validate_bundle_contents(bundle)
+                unknown = icons / 'template/16/unlisted.pdf'
+                unknown.write_bytes(b'unknown')
+                with self.assertRaisesRegex(RuntimeError, 'Unexpected bundle content'):
+                    validate_bundle_contents(bundle)
+                unknown.unlink()
+                required = icons / 'template/20/gearshape.pdf'
+                saved = required.read_bytes()
+                required.unlink()
+                with self.assertRaisesRegex(RuntimeError, 'Missing or invalid required interface icon'):
+                    validate_bundle_contents(bundle)
+                required.symlink_to('../16/gearshape.pdf')
+                with self.assertRaisesRegex(RuntimeError, 'Invalid interface icon resource type'):
+                    validate_bundle_contents(bundle)
+                required.unlink()
+                required.write_bytes(saved)
+                validate_bundle_contents(bundle)
+
+    def test_app_icon_choices_are_complete_bounded_and_not_symlinks(self):
+        source = Path(__file__).resolve().parents[1] / 'native/Sources/BrowserShell/AppIcons'
+        for nested in (True, False):
+            with self.subTest(nested=nested), tempfile.TemporaryDirectory() as temporary:
+                bundle = Path(temporary) / 'Orbit.app'
+                resources = bundle / 'Contents/Resources/OrbitLabNative_BrowserShell.bundle'
+                if nested:
+                    resources /= 'Contents/Resources'
+                icons = resources / 'AppIcons'
+                shutil.copytree(source, icons)
+                validate_bundle_contents(bundle)
+                unknown = icons / 'unlisted.png'
+                unknown.write_bytes(b'unknown')
+                with self.assertRaisesRegex(RuntimeError, 'Unexpected bundle content'):
+                    validate_bundle_contents(bundle)
+                unknown.unlink()
+                required = icons / 'stage.icns'
+                saved = required.read_bytes()
+                required.unlink()
+                with self.assertRaisesRegex(RuntimeError, 'Missing or invalid required app icon'):
+                    validate_bundle_contents(bundle)
+                required.symlink_to('paper.icns')
+                with self.assertRaisesRegex(RuntimeError, 'Invalid app icon resource type'):
+                    validate_bundle_contents(bundle)
+                required.unlink()
+                required.write_bytes(saved)
+                validate_bundle_contents(bundle)
 
     def test_default_synthetic_identifier_passes_assembly_admission(self):
         class Admitted(Exception):

@@ -1,4 +1,5 @@
 import AppKit
+import BrowserShell
 
 /// A centered destructive confirmation. Presentation reuses the editor's plain native behavior.
 @MainActor
@@ -11,34 +12,34 @@ final class BrowserBoostDeleteView: NSView {
         super.init(frame: .zero)
         wantsLayer = true; layer?.backgroundColor = NSColor.black.withAlphaComponent(0.6).cgColor
         card.wantsLayer = true; card.layer?.cornerRadius = 18
-        card.layer?.backgroundColor = NSColor(srgbRed: 0.082, green: 0.11, blue: 0.18, alpha: 1).cgColor
+        OrbitFloatingMaterial.install(in: card, radius: 18)
         addSubview(card)
-        let icon = NSImageView(image: NSImage(systemSymbolName: "puzzlepiece.extension", accessibilityDescription: nil)!)
+        let icon = NSImageView(image: OrbitIcon.image(sfName: "puzzlepiece.extension", pointSize: 38, accessibilityDescription: nil)!)
         icon.symbolConfiguration = .init(pointSize: 38, weight: .regular)
         icon.imageScaling = .scaleProportionallyUpOrDown
-        icon.contentTintColor = NSColor(calibratedWhite: 0.9, alpha: 1)
+        icon.contentTintColor = OrbitFloatingMaterial.body
         icon.frame = NSRect(x: 40, y: 48, width: 50, height: 38); card.addSubview(icon)
         let title = NSTextField(labelWithString: uiText("Delete this Boost?"))
-        title.font = .systemFont(ofSize: 18, weight: .semibold); title.textColor = .white
-        title.frame = NSRect(x: 38, y: 116, width: 374, height: 28); card.addSubview(title)
+        title.font = BrandTextStyle.title.font(size: 22); title.textColor = OrbitFloatingMaterial.body
+        title.frame = NSRect(x: 38, y: 116, width: 374, height: 30); card.addSubview(title)
         let message = NSTextField(labelWithString: uiText("This can’t be undone."))
-        message.font = .systemFont(ofSize: 14); message.textColor = NSColor(calibratedWhite: 0.72, alpha: 1)
+        message.font = BrandTextStyle.ui.font(size: 14); message.textColor = OrbitFloatingMaterial.secondary
         message.frame = NSRect(x: 38, y: 156, width: 374, height: 24); card.addSubview(message)
         let cancel = BoostButton(title: uiText("Cancel"))
         cancel.setAccessibilityLabel(uiText("Cancel")); cancel.keyEquivalent = "\u{1b}"
         cancel.shortcutBadge = uiText("ESC")
-        cancel.fill = NSColor(srgbRed: 0.19, green: 0.18, blue: 0.38, alpha: 1)
-        cancel.contentTintColor = .white; cancel.cornerRadius = 6
+        cancel.fill = .clear
+        cancel.contentTintColor = OrbitFloatingMaterial.body; cancel.cornerRadius = 6
         cancel.wantsLayer = true; cancel.layer?.borderWidth = 1
-        cancel.layer?.borderColor = NSColor(srgbRed: 0.4, green: 0.38, blue: 0.65, alpha: 1).cgColor
+        cancel.layer?.borderColor = NSColor.controlAccentColor.cgColor
         cancel.layer?.cornerRadius = 6
         cancel.frame = NSRect(x: 206, y: 208, width: 109, height: 36)
         cancel.actionBlock = { [weak self] in self?.finish(false) }; card.addSubview(cancel)
         let delete = BoostButton(title: uiText("Delete"))
         delete.setAccessibilityLabel(uiText("Delete")); delete.keyEquivalent = "\r"
         delete.shortcutBadge = "↩"; delete.outlinesShortcutBadge = true
-        delete.fill = NSColor(srgbRed: 1, green: 0.23, blue: 0.06, alpha: 1)
-        delete.contentTintColor = .white; delete.cornerRadius = 6
+        delete.fill = .controlAccentColor
+        delete.contentTintColor = OrbitFloatingMaterial.accentText; delete.cornerRadius = 6
         delete.frame = NSRect(x: 323, y: 208, width: 99, height: 36)
         delete.actionBlock = { [weak self] in self?.finish(true) }; card.addSubview(delete)
         setAccessibilityElement(false)

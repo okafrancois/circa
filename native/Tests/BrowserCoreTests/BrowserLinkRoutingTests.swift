@@ -32,6 +32,28 @@ struct BrowserLinkRoutingTests {
         #expect(routing.destination(for: URL(string: "https://other.org/")!, availableSpaces: [b]) == .mostRecentSpace)
     }
 
+    @Test("Overlapping host and path routes retain list precedence and skip unavailable destinations")
+    func overlappingHostAndPath() {
+        let hostSpace = SpaceID(), pathSpace = SpaceID(), fallback = SpaceID()
+        let host = BrowserLinkRoute(match: .host, value: "example.org", spaceID: hostSpace)
+        let path = BrowserLinkRoute(value: "/docs", spaceID: pathSpace)
+        var routing = BrowserLinkRouting()
+        routing.rules = [host, path]
+        let url = URL(string: "https://example.org/docs/start")!
+        #expect(routing.destination(for: url, availableSpaces: [hostSpace, pathSpace]) == .space(hostSpace))
+        routing.rules = [path, host]
+        #expect(routing.destination(for: url, availableSpaces: [hostSpace, pathSpace]) == .space(pathSpace))
+        #expect(routing.destination(for: url, availableSpaces: [hostSpace]) == .space(hostSpace))
+        #expect(routing.destination(for: url, availableSpaces: []) == .quickWindow)
+        routing.defaultDestination = .space(fallback)
+        #expect(routing.destination(for: url, availableSpaces: [fallback]) == .space(fallback))
+        let unmatched = URL(string: "https://other.org/news")!
+        #expect(routing.destination(for: unmatched, availableSpaces: [fallback]) == .space(fallback))
+        #expect(routing.destination(for: unmatched, availableSpaces: []) == .mostRecentSpace)
+        routing.defaultDestination = .mostRecentSpace
+        #expect(routing.destination(for: unmatched, availableSpaces: [hostSpace]) == .mostRecentSpace)
+    }
+
     @Test("Routes, edits, order, defaults and deletion survive reopening the actual settings file")
     func persistence() async throws {
         let canonical = try #require(realpath(NSTemporaryDirectory(), nil))
@@ -61,6 +83,32 @@ struct BrowserLinkRoutingTests {
         #expect(await reopened.snapshot().linkRouting.defaultDestination == .quickWindow)
         try await reopened.removeLinkRoute(first.id)
         #expect(await reopened.snapshot().linkRouting.rules.isEmpty)
+        #expect(try await BrowserSettingsStore(destination: file).snapshot().linkRouting.rules.isEmpty)
+    }
+
+    @Test("Invalid edits leave the saved rule intact and nonadjacent moves survive disk reload")
+    func invalidEditsAndMoves() async throws {
+        let canonical = try #require(realpath(NSTemporaryDirectory(), nil))
+        defer { free(canonical) }
+        let root = URL(fileURLWithPath: String(cString: canonical)).appendingPathComponent("Orbit-Routes-" + UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let file = root.appendingPathComponent("settings.json")
+        let store = try BrowserSettingsStore(destination: file)
+        let space = SpaceID()
+        let rules = ["example.org", "/docs", "/news"].map { BrowserLinkRoute(value: $0, spaceID: space) }
+        for rule in rules { try await store.saveLinkRoute(rule) }
+        for value in ["", "   ", "example.org\n"] {
+            var invalid = rules[0]
+            invalid.value = value
+            await #expect(throws: BrowserLinkRoutingError.self) { try await store.saveLinkRoute(invalid) }
+        }
+        try await store.moveLinkRoute(rules[2].id, offset: -2)
+        try await store.moveLinkRoute(rules[0].id, offset: 10)
+        try await store.moveLinkRoute(UUID(), offset: 1)
+        #expect(try await BrowserSettingsStore(destination: file).snapshot().linkRouting.rules == [rules[2], rules[1], rules[0]])
+        try await store.removeLinkRoute(rules[1].id)
+        try await store.removeLinkRoute(rules[1].id)
+        #expect(try await BrowserSettingsStore(destination: file).snapshot().linkRouting.rules == [rules[2], rules[0]])
     }
 
     @Test("Existing settings without routing retain their chosen Little Orbit behavior")

@@ -1,4 +1,5 @@
 import AppKit
+import BrowserShell
 import BrowserEngine
 import BrowserCore
 import SwiftUI
@@ -236,7 +237,7 @@ final class BrowserTranslationController<Engine: BrowserEngine> {
         get { owner?.translationPages.pages ?? [:] }
         set { owner?.translationPages.pages = newValue }
     }
-    let popover = NSPopover()
+    let popover = OrbitFrostPopover()
     var preferences = try! BrowserSitePreferenceStore()
     var onPreferenceError: ((any Error) -> Void)?
     private(set) var optionsMenu: BrowserTranslationOptionsMenu?
@@ -383,14 +384,14 @@ final class BrowserTranslationPopover: NSView {
         badgeLabel.frame = NSRect(x: 0, y: 6, width: 32, height: 20)
         badge.addSubview(badgeLabel)
         badgeLabel.textColor = .secondaryLabelColor
-        badgeLabel.alignment = .center; badgeLabel.font = .systemFont(ofSize: 14, weight: .semibold)
+        badgeLabel.alignment = .center; badgeLabel.font = BrandTextStyle.ui.font(size: 14, weight: .semibold)
         badge.wantsLayer = true; badge.layer?.cornerRadius = 16
         badge.layer?.backgroundColor = NSColor.labelColor.withAlphaComponent(0.06).cgColor
         let locale = Locale.current
         let language = locale.localizedString(forLanguageCode: translated ? state.source : state.target) ?? (translated ? state.source : state.target)
         let message = translated ? uiFormat("Translated from %@.", language) : uiFormat("Translate this page\nto %@?", language)
         let label = NSTextField(wrappingLabelWithString: message)
-        label.font = .systemFont(ofSize: 14); label.textColor = .secondaryLabelColor
+        label.font = BrandTextStyle.ui.font(size: 14); label.textColor = .secondaryLabelColor
         badge.frame = NSRect(x: 10, y: bounds.height - 42, width: 32, height: 32)
         label.preferredMaxLayoutWidth = 178
         let labelHeight = label.fittingSize.height
@@ -398,7 +399,7 @@ final class BrowserTranslationPopover: NSView {
         primary.frame = NSRect(x: 122, y: 10, width: 104, height: 32)
         options.frame = NSRect(x: 10, y: 10, width: 104, height: 32)
         for button in [primary, options] {
-            button.bezelStyle = .rounded; button.font = .systemFont(ofSize: 14, weight: .semibold)
+            button.bezelStyle = .rounded; button.font = BrandTextStyle.ui.font(size: 14, weight: .semibold)
         }
         primary.isEnabled = [.available, .original, .failed, .translated].contains(state.phase)
         for view in [badge, label, options, primary] { addSubview(view) }
@@ -446,7 +447,7 @@ private final class TranslationActionButton: NSButton {
         style.alignment = .center
         style.lineBreakMode = .byTruncatingTail
         let attributes: [NSAttributedString.Key: Any] = [
-            .font: font ?? NSFont.systemFont(ofSize: 14, weight: .semibold),
+            .font: font ?? BrandTextStyle.ui.font(size: 14, weight: .semibold),
             .foregroundColor: dark ? NSColor(srgbRed: 202/255, green: 201/255, blue: 224/255, alpha: 1) : NSColor.secondaryLabelColor,
             .paragraphStyle: style
         ]

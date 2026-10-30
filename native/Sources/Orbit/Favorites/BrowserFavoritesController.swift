@@ -142,6 +142,7 @@ final class BrowserFavoritesController<Engine: BrowserEngine> {
         grid.commandsEnabled = !owner.isPreparingForTermination && !session.isClosed
         grid.minimumTileWidth = owner.sidebar.favoriteMinimumTileWidth
         owner.sidebar.favoriteCount = items.count
+        grid.accent = owner.sidebar.currentThemeAccent
         grid.render(items, profileID: snapshot?.profileID)
     }
 
@@ -246,7 +247,7 @@ final class BrowserFavoritesController<Engine: BrowserEngine> {
     }
     private func presentRename(_ captured: MenuSelection) {
         guard let owner, let window = owner.window, window.isVisible else { return }
-        let alert = NSAlert()
+        let alert = OrbitFloatingMaterial.alert()
         alert.messageText = uiText("Rename Favorite")
         alert.addButton(withTitle: uiText("Save"))
         alert.addButton(withTitle: uiText("Cancel"))

@@ -197,7 +197,9 @@ enum ArcImportFirstRunOffer {
         guard let location, restoredWindowCount == 0, bundleIdentifier == productBundleIdentifier,
               !arguments.contains("--session-file"), !arguments.contains("--ephemeral"),
               !arguments.contains("--no-orbit-import-offer") else { return false }
-        return !fileExists(location.offerFile.path) && !fileExists(location.journalFile.path)
+        // The first-run onboarding replaces this offer: any onboarding record ends it for good.
+        let onboarding = BrowserOnboardingFiles.recordFile(dataDirectory: location.dataDirectory)
+        return !fileExists(location.offerFile.path) && !fileExists(location.journalFile.path) && !fileExists(onboarding.path)
             && fileExists(orbitSource.appendingPathComponent("StorableSidebar.json").path)
     }
 

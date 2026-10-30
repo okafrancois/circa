@@ -35,6 +35,8 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
     lazy var pageSaver = BrowserPageSaveController(owner: self)
     var settingsPreferences: BrowserWindowSettings?
     /// The open theme editor of this window, previewing its draft on the window.
+    var tabIconPicker: SpaceIconPicker?
+    var pinnedURLEditor: PinnedURLEditor?
     var themeEditor: OrbitThemeEditorController?
     let themeUndoManager = OrbitThemeUndoManager()
     var themeEditors: OrbitThemeEditorRegistry? {
@@ -332,6 +334,8 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
     func windowDidResignKey(_ notification: Notification) { passwordPrompt.close() }
 
     func windowWillClose(_ notification: Notification) {
+        tabIconPicker?.cancel()
+        pinnedURLEditor?.complete(save: false)
         translation.close()
         passwordPrompt.close()
         developerTintSurface?.setPageTintObservationEnabled(false)

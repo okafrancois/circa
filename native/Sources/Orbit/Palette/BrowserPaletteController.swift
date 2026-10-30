@@ -116,7 +116,6 @@ final class BrowserPaletteController<Engine: BrowserEngine> {
                     ? uiText("Extensions require an updated Chromium build.") : BrowserDailyCommands.detail($0.id), section: .commands, action: .command($0.id),
                   searchAliases: BrowserDailyCommands.aliases($0.id), shortcut: $0.shortcuts.first?.displayLabel ?? "")
         }
-        view.accent = OrbitSpaceThemes.accent(for: owner.resolvedSpaceTheme(for: context?.spaceID)).selection
         view.input.stringValue = mode == .currentTab && !emptyAddress ? owner.session.selectedSurface?.navigationState.url?.absoluteString ?? "" : ""
         view.isHidden = false
         view.superview?.addSubview(view, positioned: .above, relativeTo: nil)

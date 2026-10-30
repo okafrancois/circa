@@ -3,15 +3,16 @@ import AppKit
 /// Native anchored presentation shared by the Space icon entry points.
 @MainActor
 final class SpacePickerPopover: NSObject, NSPopoverDelegate {
-    let popover = NSPopover()
+    let popover = OrbitFrostPopover()
     weak var contentViewController: NSViewController?
     var onClose: (() -> Void)?
     var window: NSWindow? { popover.isShown ? popover.contentViewController?.view.window : nil }
     private weak var source: NSWindow?
     private var observers: [NSObjectProtocol] = []
 
-    override init() {
+    init(usesFrost: Bool = true) {
         super.init()
+        popover.usesFrost = usesFrost
         popover.behavior = .transient
         popover.delegate = self
     }

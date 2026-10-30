@@ -369,7 +369,13 @@ final class OrbitSmokeDriver: OrbitLaunchHooks {
             return
         }
         if arguments.contains(where: { $0.hasPrefix("--orbit-smoke-daily3") }) {
-            if arguments.contains("--orbit-smoke-daily3-qa5") {
+            if arguments.contains("--orbit-smoke-daily3-space-conversion") {
+                await spaceConversion(environment, first)
+            } else if arguments.contains("--orbit-smoke-daily3-object-editing") {
+                await objectEditing(environment, first)
+            } else if arguments.contains("--orbit-smoke-daily3-qa6") {
+                await dailyQA6(environment, first, engine)
+            } else if arguments.contains("--orbit-smoke-daily3-qa5") {
                 await dailyQA5(application, environment, first, engine)
             } else if arguments.contains("--orbit-smoke-daily3-qa4") {
                 await dailyQA4(environment, first, engine)

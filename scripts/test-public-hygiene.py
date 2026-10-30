@@ -4,6 +4,7 @@ import importlib.util
 import json
 from pathlib import Path
 import subprocess
+import struct
 import tempfile
 import unittest
 
@@ -85,6 +86,34 @@ class PublicHygieneTests(unittest.TestCase):
             (root / "image.dat").write_bytes(b"\x89\xff" + b"0x" + b"123456789" + b"\x00")
             self.assertTrue(any(row[2] == "binary address pattern" for row in policy.check_repository(root)))
             self.assertTrue(policy.check_path("nested/lab/note.md"))
+
+    def test_font_names_are_checked_without_scanning_glyph_instructions(self):
+        def font(name):
+            encoded = name.encode("utf-16-be")
+            names = struct.pack(">HHH", 0, 1, 18) + struct.pack(">HHHHHH", 3, 1, 0, 1, len(encoded), 0) + encoded
+            instructions = (policy.SOURCE_NAME.lower() + "PJo?F~T").encode()
+            header = bytes([0, 1, 0, 0]) + struct.pack(">HHHH", 2, 0, 0, 0)
+            tables = struct.pack(">4sIII", b"name", 0, 44, len(names))
+            tables += struct.pack(">4sIII", b"glyf", 0, 44 + len(names), len(instructions))
+            return header + tables + names + instructions
+        safe = font("Example Typeface")
+        self.assertEqual(policy.font_metadata(safe), "Example Typeface")
+        self.assertFalse(policy.check_text("example.ttf", policy.font_metadata(safe)))
+        self.assertTrue(policy.check_text("example.ttf", policy.font_metadata(font(policy.SOURCE_NAME))))
+        self.assertTrue(policy.check_text("example.ttf", policy.font_metadata(font("0x" + "123456789"))))
+        for invalid in (b"not a font", safe[:20], safe[:-12]):
+            with self.assertRaises(ValueError):
+                policy.font_metadata(invalid)
+        with tempfile.TemporaryDirectory(prefix="orbit-font-hygiene-") as temporary:
+            root = Path(temporary)
+            subprocess.run(["git", "init", "--quiet", str(root)], check=True)
+            (root / "example.ttf").write_bytes(safe)
+            subprocess.run(["git", "-C", str(root), "add", "example.ttf"], check=True)
+            self.assertEqual(policy.check_repository(root), [])
+            (root / "example.ttf").write_bytes(font(policy.SOURCE_NAME))
+            self.assertTrue(policy.check_repository(root))
+            (root / "example.ttf").write_bytes(b"not a font")
+            self.assertEqual(policy.check_repository(root)[0][2], "invalid OpenType metadata")
 
 
 if __name__ == "__main__":

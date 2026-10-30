@@ -1,4 +1,5 @@
 import AppKit
+import BrowserShell
 
 /// A centered, source-attached rename sheet. Its field remains a draft until Done.
 @MainActor
@@ -19,34 +20,34 @@ final class BrowserBoostRenameView: NSView, NSTextFieldDelegate {
         self.completion = completion
         super.init(frame: .zero)
         wantsLayer = true
-        appearance = NSAppearance(named: .aqua)
         dim.wantsLayer = true
-        dim.layer?.backgroundColor = NSColor(srgbRed: 0.82, green: 0.82, blue: 0.86, alpha: 0.4).cgColor
+        refreshScrim()
         addSubview(dim)
         addSubview(shadowView)
         card.wantsLayer = true; card.layer?.cornerRadius = 16
         card.clipsToBounds = false; card.layer?.masksToBounds = false
-        card.layer?.backgroundColor = NSColor(srgbRed: 0.985, green: 0.985, blue: 1, alpha: 1).cgColor
+        OrbitFloatingMaterial.install(in: card, radius: 16)
         addSubview(card)
         let tile = NSView(frame: NSRect(x: 38, y: 38, width: 62, height: 62))
         tile.wantsLayer = true; tile.layer?.cornerRadius = 13
         tile.layer?.backgroundColor = NSColor(srgbRed: 0.90, green: 0.90, blue: 0.935, alpha: 1).cgColor
         card.addSubview(tile)
-        let icon = NSImageView(image: NSImage(systemSymbolName: "text.bubble.fill", accessibilityDescription: nil)!)
+        let icon = NSImageView(image: OrbitIcon.image(sfName: "text.bubble.fill", pointSize: 30, accessibilityDescription: nil, weight: .medium)!)
         icon.symbolConfiguration = .init(pointSize: 30, weight: .medium)
         icon.contentTintColor = NSColor(srgbRed: 0.10, green: 0.11, blue: 0.13, alpha: 1)
         icon.frame = NSRect(x: 13, y: 13, width: 36, height: 36); tile.addSubview(icon)
         let title = NSTextField(labelWithString: uiText("Rename Boost?"))
-        title.font = .systemFont(ofSize: 18, weight: .semibold)
-        title.textColor = NSColor(srgbRed: 0.10, green: 0.11, blue: 0.13, alpha: 1)
-        title.frame = NSRect(x: 38, y: 116, width: 374, height: 26); card.addSubview(title)
+        title.font = BrandTextStyle.title.font(size: 22)
+        title.textColor = OrbitFloatingMaterial.body
+        title.frame = NSRect(x: 38, y: 116, width: 374, height: 30); card.addSubview(title)
         let fieldBorder = NSView(frame: NSRect(x: 38, y: 162, width: 374, height: 37))
         fieldBorder.wantsLayer = true; fieldBorder.layer?.cornerRadius = 5
         fieldBorder.layer?.backgroundColor = NSColor.white.cgColor
         fieldBorder.layer?.borderWidth = 1
         fieldBorder.layer?.borderColor = NSColor(calibratedWhite: 0.9, alpha: 1).cgColor
         card.addSubview(fieldBorder)
-        nameField.stringValue = name; nameField.font = .systemFont(ofSize: 14)
+        nameField.stringValue = name; nameField.font = BrandTextStyle.ui.font(size: 14)
+        nameField.textColor = .black
         nameField.isBordered = false; nameField.drawsBackground = false; nameField.focusRingType = .none
         nameField.cell?.usesSingleLineMode = true; nameField.cell?.isScrollable = true
         nameField.delegate = self
@@ -54,7 +55,7 @@ final class BrowserBoostRenameView: NSView, NSTextFieldDelegate {
         nameField.setAccessibilityIdentifier("boost-rename-name")
         nameField.frame = NSRect(x: 6, y: 9, width: 362, height: 19); fieldBorder.addSubview(nameField)
         cancel.keyEquivalent = "\u{1b}"; cancel.shortcutBadge = uiText("ESC")
-        cancel.fill = .white; cancel.contentTintColor = .black; cancel.cornerRadius = 6
+        cancel.fill = .clear; cancel.contentTintColor = OrbitFloatingMaterial.body; cancel.cornerRadius = 6
         cancel.shortcutBadgeColor = NSColor(calibratedWhite: 0.9, alpha: 1)
         cancel.shortcutBadgeTextColor = NSColor(calibratedWhite: 0.45, alpha: 1)
         cancel.wantsLayer = true; cancel.layer?.borderWidth = 1
@@ -63,7 +64,7 @@ final class BrowserBoostRenameView: NSView, NSTextFieldDelegate {
         cancel.frame = NSRect(x: 214, y: 220, width: 109, height: 36)
         cancel.actionBlock = { [weak self] in self?.finish(false) }; card.addSubview(cancel)
         done.keyEquivalent = "\r"; done.shortcutBadge = "↩"; done.outlinesShortcutBadge = true
-        done.contentTintColor = .white; done.cornerRadius = 6
+        done.contentTintColor = OrbitFloatingMaterial.accentText; done.cornerRadius = 6
         done.frame = NSRect(x: 331, y: 220, width: 91, height: 36)
         done.actionBlock = { [weak self] in self?.finish(true) }; card.addSubview(done)
         nameField.nextKeyView = cancel; cancel.nextKeyView = done; done.nextKeyView = nameField
@@ -80,6 +81,16 @@ final class BrowserBoostRenameView: NSView, NSTextFieldDelegate {
         card.frame = NSRect(x: (bounds.width - 450) / 2, y: (bounds.height - 284) / 2 + offset, width: 450, height: 284)
         shadowView.frame = card.frame.insetBy(dx: -64, dy: -64)
     }
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        refreshScrim()
+    }
+    private func refreshScrim() {
+        let color = OrbitAppearance.isDark(effectiveAppearance)
+            ? NSColor.black.withAlphaComponent(0.4)
+            : NSColor(srgbRed: 0.82, green: 0.82, blue: 0.86, alpha: 0.4)
+        dim.layer?.backgroundColor = color.cgColor
+    }
     func present() {
         layoutSubtreeIfNeeded()
         window?.makeFirstResponder(nameField)
@@ -90,7 +101,7 @@ final class BrowserBoostRenameView: NSView, NSTextFieldDelegate {
     func controlTextDidChange(_ obj: Notification) { updateValidity() }
     private func updateValidity() {
         done.isEnabled = BrowserBoostEditorSession.canRename(to: nameField.stringValue)
-        done.fill = NSColor(srgbRed: 0.25, green: 0.20, blue: 0.99, alpha: done.isEnabled ? 1 : 0.35)
+        done.fill = NSColor.controlAccentColor.withAlphaComponent(done.isEnabled ? 1 : 0.35)
     }
     func control(_ control: NSControl, textView: NSTextView, doCommandBy selector: Selector) -> Bool {
         guard !textView.hasMarkedText() else { return false }

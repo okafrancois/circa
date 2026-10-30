@@ -404,8 +404,8 @@ private final class BrowserLibraryMediaEmptyView: NSView {
         super.init(frame: frame)
         icon.image = NSImage(systemSymbolName: "photo.on.rectangle", accessibilityDescription: nil)?.withSymbolConfiguration(.init(pointSize: 48, weight: .regular))
         icon.imageScaling = .scaleProportionallyUpOrDown
-        title.font = .systemFont(ofSize: 16, weight: .bold)
-        detail.font = .systemFont(ofSize: 14, weight: .medium)
+        title.font = OrbitTokens.Typography.emptyStateTitle
+        detail.font = BrandTextStyle.ui.font(size: 14, weight: .medium)
         for label in [title, detail] { label.alignment = .center }
         for view in [icon, title, detail] { addSubview(view) }
         updateColors()
@@ -415,11 +415,12 @@ private final class BrowserLibraryMediaEmptyView: NSView {
     func configure(query: String) {
         title.stringValue = query.isEmpty ? uiText("Nothing here yet!") : uiFormat("No results found for\n“%@”", query)
         detail.isHidden = !query.isEmpty
+        needsLayout = true
     }
     override func layout() {
         super.layout()
         icon.frame = NSRect(x: bounds.midX - 28, y: 0, width: 56, height: 48)
-        title.frame = NSRect(x: 0, y: 64, width: bounds.width, height: 40)
+        title.frame = NSRect(x: 0, y: 64, width: bounds.width, height: detail.isHidden ? 76 : 40)
         detail.frame = NSRect(x: 0, y: 94, width: bounds.width, height: 76)
     }
     override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); updateColors() }

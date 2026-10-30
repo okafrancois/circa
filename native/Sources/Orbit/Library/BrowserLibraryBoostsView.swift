@@ -1,4 +1,5 @@
 import AppKit
+import BrowserShell
 import BrowserCore
 
 @MainActor
@@ -17,7 +18,6 @@ final class BrowserLibraryBoostsView: NSView, NSSearchFieldDelegate {
         super.init(frame: frame)
         searchField.placeholderString = uiText("Search Boosts…")
         searchField.delegate = self; searchField.setAccessibilityIdentifier("library-boosts-search")
-        empty.message.font = .systemFont(ofSize: 16, weight: .semibold)
         BrowserLibraryStyle.configure(scroll); scroll.documentView = list
         for view in [searchField, scroll, empty] { addSubview(view) }
     }
@@ -31,7 +31,7 @@ final class BrowserLibraryBoostsView: NSView, NSSearchFieldDelegate {
         for (index, boost) in displayed.enumerated() {
             rows[boost.id]?.frame = NSRect(x: 12, y: 8 + CGFloat(index) * 66, width: max(0, list.bounds.width - 24), height: 58)
         }
-        empty.frame = NSRect(x: 16, y: bounds.height / 2 - 32, width: max(0, bounds.width - 32), height: 104)
+        empty.frame = NSRect(x: 16, y: bounds.height / 2 - 32, width: max(0, bounds.width - 32), height: 164)
     }
     func selectProfile(_ profile: ProfileID) {
         guard self.profile != profile else { return }
@@ -89,7 +89,7 @@ private final class BrowserLibraryBoostRow: NSButton {
         NSColor.white.setFill(); NSBezierPath(roundedRect: NSRect(x: 0, y: 5, width: 44, height: 44), xRadius: 10, yRadius: 10).fill()
         NSColor(calibratedWhite: 0.92, alpha: 1).setFill()
         NSBezierPath(roundedRect: NSRect(x: 3, y: 8, width: 38, height: 38), xRadius: 8, yRadius: 8).fill()
-        (boost.title as NSString).draw(at: NSPoint(x: 52, y: 27), withAttributes: [.font: NSFont.systemFont(ofSize: 14), .foregroundColor: BrowserLibraryStyle.foreground.withAlphaComponent(0.85)])
-        (boost.hostPattern.host as NSString).draw(at: NSPoint(x: 52, y: 10), withAttributes: [.font: NSFont.systemFont(ofSize: 12), .foregroundColor: BrowserLibraryStyle.foreground.withAlphaComponent(0.55)])
+        (boost.title as NSString).draw(at: NSPoint(x: 52, y: 27), withAttributes: [.font: BrandTextStyle.ui.font(size: 14), .foregroundColor: BrowserLibraryStyle.foreground.withAlphaComponent(0.85)])
+        (boost.hostPattern.host as NSString).draw(at: NSPoint(x: 52, y: 10), withAttributes: [.font: BrandTextStyle.ui.font(size: 12), .foregroundColor: BrowserLibraryStyle.foreground.withAlphaComponent(0.55)])
     }
 }

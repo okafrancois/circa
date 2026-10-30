@@ -45,8 +45,7 @@ enum OrbitGlyph {
     }
 
     static func symbol(_ name: String, pointSize: CGFloat, weight: NSFont.Weight = .medium) -> NSImage? {
-        let image = NSImage(systemSymbolName: name, accessibilityDescription: nil)?
-            .withSymbolConfiguration(.init(pointSize: pointSize, weight: weight))
+        let image = OrbitIcon.image(sfName: name, pointSize: pointSize, weight: weight)
         if let image { identities.setObject(SymbolIdentity(name, pointSize, weight), forKey: image) }
         return image
     }
@@ -76,24 +75,7 @@ enum OrbitGlyph {
     static var faviconPlaceholder: NSImage? { symbol("globe", pointSize: 12, weight: .regular) }
 
     static var siteControlCenter: NSImage {
-        let image = NSImage(size: NSSize(width: 18, height: 18), flipped: false) { _ in
-            NSColor.black.setStroke()
-            let frame = NSBezierPath(roundedRect: NSRect(x: 1.5, y: 1.5, width: 15, height: 15), xRadius: 4, yRadius: 4)
-            frame.lineWidth = 1.5
-            frame.stroke()
-            for (y, knobX) in [(11.5, 11.0), (6.5, 7.0)] {
-                let track = NSBezierPath()
-                track.lineWidth = 1.5
-                track.lineCapStyle = .round
-                track.move(to: NSPoint(x: 5, y: y)); track.line(to: NSPoint(x: knobX - 1.6, y: y))
-                track.move(to: NSPoint(x: knobX + 1.6, y: y)); track.line(to: NSPoint(x: 13, y: y)); track.stroke()
-                let knob = NSBezierPath(ovalIn: NSRect(x: knobX - 1.6, y: y - 1.6, width: 3.2, height: 3.2))
-                knob.lineWidth = 1.2; knob.stroke()
-            }
-            return true
-        }
-        image.isTemplate = true
-        return image
+        symbol("slider.horizontal.3", pointSize: 18) ?? NSImage()
     }
 
     /// Draws a template glyph centred in `rect`, tinted with a (dynamic) colour.
@@ -237,11 +219,29 @@ final class OrbitSurfaceBackgroundView: NSView {
     private let fill = CALayer()
     private let shadowCaster = CALayer()
     private let shadowMask = CAShapeLayer()
+    private(set) var frost: OrbitFrostView?
     var fillColor: NSColor? { didSet { refresh() } }
     var cornerRadius: CGFloat { didSet { needsLayout = true } }
     var outerShadow: OrbitTokens.ShadowSpec? { didSet { refresh(); needsLayout = true } }
     var borderColor: NSColor? { didSet { refresh() } }
     var borderWidth: CGFloat = 0 { didSet { refresh() } }
+
+    func applyFrost(_ accent: OrbitTokens.ThemeAccent, selected: Bool = false) {
+        let amount = accent.contrastTheme?.frostAmount ?? 0
+        if amount > 0, frost == nil {
+            frost = OrbitFloatingMaterial.install(in: self, radius: cornerRadius)
+        }
+        if let frost {
+            frost.sidebarForeground = accent.foreground
+            frost.selectedSidebarSurface = selected
+            frost.isHidden = amount == 0
+            frost.alphaValue = amount
+        }
+        // Retain the old overlay below the material during a progress-driven transition.
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        fill.opacity = Float(1 - amount)
+        CATransaction.commit()
+    }
 
     init(cornerRadius: CGFloat) {
         self.cornerRadius = cornerRadius

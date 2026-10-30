@@ -1,4 +1,5 @@
 import AppKit
+import BrowserShell
 
 /// What a tab-modal page dialog shows (CH-ESSENTIALS). Kind identifies the request for tests and
 /// the smoke; text is already localized.
@@ -58,6 +59,12 @@ final class BrowserPageDialogView: NSView {
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError("init(coder:) is unavailable") }
 
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        card.layer?.backgroundColor = NSColor.windowBackgroundColor.resolvedCGColor(for: effectiveAppearance)
+        card.layer?.borderColor = NSColor.separatorColor.resolvedCGColor(for: effectiveAppearance)
+    }
+
     // The page under the scrim receives no pointer events while the dialog is up.
     override func hitTest(_ point: NSPoint) -> NSView? {
         guard !isHidden, frame.contains(point) else { return nil }
@@ -115,12 +122,13 @@ final class BrowserPageDialogView: NSView {
         card.addSubview(stack)
 
         let title = NSTextField(wrappingLabelWithString: spec.title)
-        title.font = .systemFont(ofSize: 13, weight: .semibold)
+        title.font = BrandTextStyle.title.font(size: 22)
         title.isSelectable = false
         stack.addArrangedSubview(title)
+        title.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
         if let message = spec.message, !message.isEmpty {
             let label = NSTextField(wrappingLabelWithString: Self.displayed(message))
-            label.font = .systemFont(ofSize: 13)
+            label.font = BrandTextStyle.ui.font(size: 13)
             label.isSelectable = true
             label.maximumNumberOfLines = 24
             stack.addArrangedSubview(label)
@@ -128,12 +136,13 @@ final class BrowserPageDialogView: NSView {
         }
         if let note = spec.note {
             let label = NSTextField(wrappingLabelWithString: note)
-            label.font = .systemFont(ofSize: 11)
+            label.font = BrandTextStyle.ui.font(size: 11)
             label.textColor = .secondaryLabelColor
             stack.addArrangedSubview(label)
         }
         for field in spec.fields {
             let input: NSTextField = field.isSecure ? NSSecureTextField() : NSTextField()
+            input.font = BrandTextStyle.body.font(size: 13)
             input.placeholderString = field.label
             input.stringValue = field.initialValue
             input.setAccessibilityLabel(field.label)
@@ -145,6 +154,7 @@ final class BrowserPageDialogView: NSView {
         }
         if let text = spec.checkbox {
             let box = NSButton(checkboxWithTitle: text, target: nil, action: nil)
+            box.font = BrandTextStyle.ui.font(size: 13)
             checkbox = box
             stack.addArrangedSubview(box)
         }
@@ -157,11 +167,13 @@ final class BrowserPageDialogView: NSView {
         buttons.addArrangedSubview(spacer)
         if let secondary = spec.secondary {
             let button = NSButton(title: secondary, target: self, action: #selector(cancelAction(_:)))
+            button.font = BrandTextStyle.ui.font(size: 13)
             button.bezelStyle = .rounded
             if !spec.escapeChoosesPrimary { button.keyEquivalent = "\u{1b}" }
             buttons.addArrangedSubview(button)
         }
         let primary = NSButton(title: spec.primary, target: self, action: #selector(acceptAction(_:)))
+        primary.font = BrandTextStyle.ui.font(size: 13)
         primary.bezelStyle = .rounded
         primary.keyEquivalent = "\r"
         buttons.addArrangedSubview(primary)
@@ -224,17 +236,19 @@ final class BrowserPageCrashedView: NSView {
         super.init(frame: .zero)
         wantsLayer = true
         layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
-        let icon = NSImageView(image: NSImage(systemSymbolName: "exclamationmark.triangle",
+        let icon = NSImageView(image: OrbitIcon.image(sfName: "exclamationmark.triangle", pointSize: 40,
                                               accessibilityDescription: nil) ?? NSImage())
         icon.symbolConfiguration = .init(pointSize: 40, weight: .regular)
         icon.contentTintColor = .secondaryLabelColor
         let title = NSTextField(labelWithString: uiText("Aw, Snap!"))
-        title.font = .systemFont(ofSize: 20, weight: .semibold)
+        title.font = BrandTextStyle.title.font(size: 20)
         let message = NSTextField(wrappingLabelWithString: uiText("Something went wrong while displaying this webpage."))
+        message.font = BrandTextStyle.body.font(size: 13)
         message.alignment = .center
         message.textColor = .secondaryLabelColor
         let button = NSButton(title: uiText("Reload"), target: nil, action: nil)
-        button.bezelStyle = .rounded
+        button.font = BrandTextStyle.ui.font(size: 13)
+            button.bezelStyle = .rounded
         button.keyEquivalent = "\r"
         button.target = self
         button.action = #selector(reloadAction(_:))

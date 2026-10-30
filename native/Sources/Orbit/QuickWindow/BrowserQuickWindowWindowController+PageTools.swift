@@ -4,6 +4,10 @@ import BrowserShell
 
 extension BrowserQuickWindowWindowController {
     func installPageTools(in root: NSView) {
+        copiedToast.onShare = { [weak self] in
+            guard let self, let url = surface?.currentURL else { return }
+            shareURL(url)
+        }
         findBar.translatesAutoresizingMaskIntoConstraints = false
         findBar.isHidden = true
         root.addSubview(findBar)

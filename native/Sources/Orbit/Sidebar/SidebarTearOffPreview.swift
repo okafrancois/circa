@@ -1,4 +1,5 @@
 import AppKit
+import BrowserShell
 import QuartzCore
 
 /// Finite folding geometry for the desktop drag image. The pointer stays twelve points from
@@ -21,7 +22,7 @@ enum SidebarTearOffPreview {
             paragraph.alignment = .center
             paragraph.lineBreakMode = .byWordWrapping
             (title as NSString).draw(in: NSRect(x: 4, y: 120, width: 58, height: 78),
-                withAttributes: [.font: NSFont.systemFont(ofSize: 13, weight: .semibold),
+                withAttributes: [.font: BrandTextStyle.ui.font(size: 13, weight: .semibold),
                                  .foregroundColor: NSColor.black, .paragraphStyle: paragraph])
             return true
         }
