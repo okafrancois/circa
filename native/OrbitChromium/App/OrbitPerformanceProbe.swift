@@ -2352,6 +2352,8 @@ extension OrbitPerformanceProbe {
             }
             return result
         } catch { return ["failed": true] }
+    }
+
     /// Opt-in, confined real-engine exercise of split entry points and their native menus.
     private static func splitParity(_ application: OrbitApplication, owner: OrbitWindowController,
                                     root: URL, command: [String: String]) async -> [String: Any] {
@@ -2452,6 +2454,10 @@ private final class SplitParityMenuCapture: NSObject {
         process.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
         process.arguments = ["-x", "-o", "-l", String(number), file.path]
         try? process.run(); process.waitUntilExit()
+    }
+}
+
+extension OrbitPerformanceProbe {
     /// Real actions and existing button appearance in an owned, confined test window.
     private static func extensionControls(_ application: OrbitApplication, environment: BrowserEnvironment<ChromiumBrowserEngine>,
         owner: OrbitWindowController, root: URL, command: [String: String]) async -> [String: Any] {
