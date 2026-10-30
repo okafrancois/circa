@@ -137,6 +137,77 @@ struct UpdateParityTests {
         }
     }
 
+    @Test("Turning automatic updates off cancels an already staged installer on normal quit")
+    func disabledQuit() async throws {
+        let domain = "orbit.test.disabled-quit.\(UUID())"
+        let defaults = try #require(UserDefaults(suiteName: domain))
+        defer { defaults.removePersistentDomain(forName: domain) }
+        let updater = OrbitUpdater(defaults: defaults)
+        var cancelled = false, installs = 0
+        updater.fetchLatestVersion = { "27" }
+        updater.discardPendingUpdate = { cancelled = true }
+        updater.installPendingUpdate = { installs += 1 }
+        updater.prepared(version: "27")
+        #expect(await updater.validatePendingUpdate())
+        updater.setAutomaticallyUpdates(false)
+        await updater.prepareForQuit()
+        updater.restartToUpdate()
+        for _ in 0..<20 { await Task.yield() }
+        #expect(cancelled && installs == 0)
+        #expect(updater.pendingVersion == nil && updater.readyVersion == nil)
+    }
+
+    @Test("Disabling automatic updates during extraction waits for the cancellable installer before quitting")
+    func disabledWhileStaging() async throws {
+        let domain = "orbit.test.staging-quit.\(UUID())"
+        let defaults = try #require(UserDefaults(suiteName: domain))
+        defer { defaults.removePersistentDomain(forName: domain) }
+        let updater = OrbitUpdater(defaults: defaults)
+        updater.setAutomaticallyUpdates(false)
+        updater.beganStaging()
+        var finished = false, cancelled = false
+        let quit = Task { await updater.prepareForQuit(); finished = true }
+        for _ in 0..<20 { await Task.yield() }
+        #expect(!finished)
+        updater.fetchLatestVersion = { "27" }
+        updater.discardPendingUpdate = { cancelled = true }
+        updater.prepared(version: "27")
+        updater.finishedStaging()
+        await quit.value
+        #expect(finished && cancelled && updater.pendingVersion == nil)
+    }
+
+    @Test("Quitting with automatic updates off cancels a download without waiting for extraction")
+    func disabledDownload() async throws {
+        let domain = "orbit.test.download-quit.\(UUID())"
+        let defaults = try #require(UserDefaults(suiteName: domain))
+        defer { defaults.removePersistentDomain(forName: domain) }
+        let updater = OrbitUpdater(defaults: defaults)
+        updater.setAutomaticallyUpdates(false)
+        var cancelled = false
+        updater.beganStaging { cancelled = true; updater.finishedStaging() }
+        await updater.prepareForQuit()
+        #expect(cancelled && updater.readyVersion == nil)
+    }
+
+    @Test("An explicit restart remains consent when automatic installation and idle admission are off")
+    func explicitConsent() async throws {
+        let domain = "orbit.test.explicit-update.\(UUID())"
+        let defaults = try #require(UserDefaults(suiteName: domain))
+        defer { defaults.removePersistentDomain(forName: domain) }
+        let updater = OrbitUpdater(defaults: defaults)
+        updater.setAutomaticallyUpdates(false)
+        updater.idleSignals = { .init() }
+        updater.fetchLatestVersion = { "27" }
+        var installs = 0
+        updater.installPendingUpdate = { installs += 1 }
+        updater.prepared(version: "27")
+        #expect(await updater.validatePendingUpdate())
+        updater.restartToUpdate()
+        for _ in 0..<30 { await Task.yield() }
+        #expect(installs == 1 && !updater.automaticRelaunchRequested)
+    }
+
     @Test("Card admission excludes synthetic, private and standalone windows; local smoke may force it")
     func visibility() {
         for ready in [String?.none, "27"] {
