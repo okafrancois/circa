@@ -49,10 +49,7 @@ private final class BrowserLibrarySearchCell: NSSearchFieldCell {
         BrowserLibraryStyle.foreground.withAlphaComponent(0.08).setFill()
         NSBezierPath(roundedRect: rect, xRadius: 12, yRadius: 12).fill()
         let color = BrowserLibraryStyle.foreground.withAlphaComponent(0.5)
-        NSImage(systemSymbolName: "magnifyingglass", accessibilityDescription: nil)?
-            .withSymbolConfiguration(.init(pointSize: 15, weight: .semibold))?
-            .withSymbolConfiguration(.init(paletteColors: [color]))?
-            .draw(in: searchButtonRect(forBounds: rect))
+        OrbitIcon.draw(OrbitIcon.image(sfName: "magnifyingglass", pointSize: 16), in: searchButtonRect(forBounds: rect), tint: color)
         if stringValue.isEmpty, let placeholderString {
             // While editing, the field editor draws the placeholder itself; drawing it here too
             // superimposes two slightly offset copies.

@@ -285,7 +285,7 @@ final class BrowserArchiveCell: NSTableCellView {
     func configure(_ record: BrowserArchivedTab, icon image: NSImage?) {
         titleLabel.stringValue = record.tab.resolvedTitle ?? record.tab.url.host ?? uiText("Tab")
         detailLabel.stringValue = record.tab.url.absoluteString
-        icon.image = image ?? NSImage(systemSymbolName: "globe", accessibilityDescription: nil)
+        icon.image = image ?? OrbitIcon.image(sfName: "globe", pointSize: 16, accessibilityDescription: nil)
         icon.contentTintColor = image == nil ? BrowserLibraryStyle.foreground.withAlphaComponent(0.5) : nil
         setAccessibilityLabel(titleLabel.stringValue)
         setAccessibilityHelp(detailLabel.stringValue)

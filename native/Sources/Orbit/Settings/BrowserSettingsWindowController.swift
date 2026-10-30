@@ -51,6 +51,9 @@ final class BrowserSettingsWindowController<Engine: BrowserEngine>: NSWindowCont
         window.contentMinSize = Self.minimumContentSize
         window.toolbarStyle = .preference
         window.titlebarSeparatorStyle = .line
+        window.titlebarAppearsTransparent = true
+        window.backgroundColor = .windowBackgroundColor
+        window.isOpaque = true
         window.isMovableByWindowBackground = false
         window.contentViewController = NSHostingController(rootView: BrowserSettingsView(model: model, runtime: model.runtime))
         super.init(window: window)
@@ -78,6 +81,11 @@ final class BrowserSettingsWindowController<Engine: BrowserEngine>: NSWindowCont
     }
 
     private func applySection(_ section: BrowserSettingsSection) {
+        for item in window?.toolbar?.items ?? [] {
+            guard let tab = BrowserSettingsSection.allCases.first(where: { $0.toolbarIdentifier == item.itemIdentifier }) else { continue }
+            item.image = OrbitIcon.image(sfName: tab.symbol, pointSize: 24, variant: tab == section ? .template : .color,
+                                         accessibilityDescription: tab.title)
+        }
         guard let window else { return }
         let identifier = section.toolbarIdentifier
         window.toolbar?.selectedItemIdentifier = BrowserSettingsSection.allCases.contains(section) ? identifier : nil
@@ -117,7 +125,7 @@ final class BrowserSettingsWindowController<Engine: BrowserEngine>: NSWindowCont
         item.label = section.title
         item.paletteLabel = section.title
         item.toolTip = section.title
-        item.image = NSImage(systemSymbolName: section.symbol, accessibilityDescription: section.title)
+        item.image = OrbitIcon.image(sfName: section.symbol, pointSize: 24, variant: section == (model.settingsSection ?? .general) ? .template : .color, accessibilityDescription: section.title)
         item.target = self
         item.action = #selector(selectToolbarItem(_:))
         // Standard toolbar items derive their accessible name from the label and image;

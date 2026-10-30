@@ -44,7 +44,7 @@ final class BrowserBoostEditorView: NSView {
         titleButton.actionBlock = { [weak self] in self?.showHeaderMenu() }
         titleButton.textTrailingInset = 20
         place(titleButton, 40, 6, 100, 28)
-        let chevron = NSImageView(image: NSImage(systemSymbolName: "chevron.down", accessibilityDescription: nil)!)
+        let chevron = NSImageView(image: OrbitIcon.image(sfName: "chevron.down", pointSize: 16, accessibilityDescription: nil)!)
         chevron.contentTintColor = .gray
         titleButton.addSubview(chevron); chevron.frame = NSRect(x: 84, y: 9, width: 12, height: 10)
         let reset = BoostButton(symbol: "arrow.counterclockwise", label: uiText("Reset to original colors"))
@@ -67,7 +67,7 @@ final class BrowserBoostEditorView: NSView {
         let controls = BoostButton(symbol: "slider.horizontal.3", label: uiText("Advanced color controls"))
         controls.actionBlock = { [weak self, weak controls] in
             guard let self, let controls else { return }
-            let popover = NSPopover(); popover.behavior = .transient; popover.animates = false
+            let popover = OrbitFrostPopover(); popover.behavior = .transient; popover.animates = false
             let controller = NSViewController(); controller.view = BrowserBoostColorControls(session: session)
             popover.contentViewController = controller; advanced = popover
             popover.show(relativeTo: controls.bounds, of: controls, preferredEdge: .maxY)
@@ -115,7 +115,7 @@ final class BrowserBoostEditorView: NSView {
         zap.alignment = .left; code.alignment = .left
         place(zap, 18, 461, 147, 38); place(code, 18, 514, 147, 38)
         zapGlyph.frame = NSRect(x: 137, y: 471, width: 18, height: 18)
-        zapGlyph.image = NSImage(systemSymbolName: "bolt.fill", accessibilityDescription: nil); zapGlyph.contentTintColor = .darkGray; addSubview(zapGlyph)
+        zapGlyph.image = OrbitIcon.image(sfName: "bolt.fill", pointSize: 16, accessibilityDescription: nil); zapGlyph.contentTintColor = .darkGray; addSubview(zapGlyph)
         zapCount.font = .systemFont(ofSize: 13, weight: .medium); zapCount.alignment = .right
         place(zapCount, 131, 470, 26, 20)
         let codeGlyph = NSTextField(labelWithString: uiText("{}"))
@@ -205,7 +205,7 @@ final class BoostButton: NSButton {
     convenience init(title: String) { self.init(frame: .zero); self.title = title }
     convenience init(symbol: String, label: String) {
         self.init(frame: .zero)
-        image = NSImage(systemSymbolName: symbol, accessibilityDescription: label)
+        image = OrbitIcon.image(sfName: symbol, pointSize: 16, accessibilityDescription: label)
         imagePosition = .imageOnly; setAccessibilityLabel(label); toolTip = label
     }
     override init(frame: NSRect) {

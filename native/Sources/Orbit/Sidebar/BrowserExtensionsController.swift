@@ -240,7 +240,7 @@ final class BrowserExtensionsController<Engine: BrowserEngine> {
             }
             if let image = icon(for: item) { action.image = image }
             else if action.image == nil {
-                action.image = NSImage(systemSymbolName: "puzzlepiece.extension", accessibilityDescription: item.name)
+                action.image = OrbitIcon.image(sfName: "puzzlepiece.extension", pointSize: 16, accessibilityDescription: item.name)
             }
             // Pending selection blocks actions without washing out already decoded pixels.
             (action.cell as? NSButtonCell)?.imageDimsWhenDisabled = false
@@ -314,7 +314,7 @@ final class BrowserExtensionsController<Engine: BrowserEngine> {
         menu.addItem(.separator())
         menu.addAction(uiText("Remove from Orbit")) { [weak owner, weak surface] in
             guard valid(), let owner, let surface, let window = owner.window else { return }
-            let alert = NSAlert()
+            let alert = OrbitFloatingMaterial.alert()
             alert.messageText = String(format: uiText("Remove %@?"), item.name)
             alert.addButton(withTitle: uiText("Remove")); alert.addButton(withTitle: uiText("Cancel"))
             alert.beginSheetModal(for: window) { response in

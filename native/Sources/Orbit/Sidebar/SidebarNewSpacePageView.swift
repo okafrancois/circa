@@ -82,7 +82,7 @@ final class SidebarNewSpacePageView: NSView, NSTextFieldDelegate {
             face.lineWidth = 1.7; face.lineCapStyle = .round; face.stroke(); return true
         }
         profileGlyph.contentTintColor = .secondaryLabelColor
-        profileInfo.image = NSImage(systemSymbolName: "info.circle", accessibilityDescription: nil)
+        profileInfo.image = OrbitIcon.image(sfName: "info.circle", pointSize: 14, accessibilityDescription: nil)
         profileInfo.contentTintColor = .secondaryLabelColor
         for row in [nameRow, profileRow] { row.wantsLayer = true; row.layer?.cornerRadius = 6 }
         for view in [illustration, title, detail, nameRow, profileRow, themeButton, profileName, createButton, backButton] { addSubview(view) }
@@ -163,7 +163,7 @@ final class SidebarNewSpacePageView: NSView, NSTextFieldDelegate {
         closePickers()
         let editor = OrbitThemeEditorView(state: OrbitThemeEditorState(theme: theme))
         editor.surfaceScope.stringValue = uiText("New Space")
-        let presentation = SpacePickerPopover()
+        let presentation = SpacePickerPopover(usesFrost: false)
         let popup = presentation.popover
         popup.contentSize = OrbitThemeEditorMetrics.pickerSize
         popup.appearance = effectiveAppearance
@@ -261,8 +261,8 @@ final class SpaceCreationButton: NSButton {
         let text = NSAttributedString(string: title, attributes: [.font: font ?? NSFont.systemFont(ofSize: 13, weight: .semibold), .foregroundColor: color])
         let size = text.size(), x = symbol == nil ? (bounds.width - size.width) / 2 : 32
         text.draw(at: NSPoint(x: x, y: (bounds.height - size.height) / 2))
-        if let symbol, let image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil) {
-            image.withSymbolConfiguration(.init(paletteColors: [.secondaryLabelColor]))?.draw(in: NSRect(x: 10, y: 11, width: 12, height: 14))
+        if let symbol, let image = OrbitIcon.image(sfName: symbol, pointSize: 14, accessibilityDescription: nil) {
+            OrbitIcon.draw(image, in: NSRect(x: 10, y: 11, width: 12, height: 14), tint: .secondaryLabelColor)
         }
     }
 }
@@ -274,6 +274,7 @@ private final class SpaceCreationProfileCell: NSPopUpButtonCell {
         NSBezierPath(roundedRect: cellFrame, xRadius: 11, yRadius: 11).fill()
         let text = NSAttributedString(string: title, attributes: [.font: NSFont.systemFont(ofSize: 12, weight: .semibold), .foregroundColor: NSColor.labelColor])
         text.draw(at: NSPoint(x: cellFrame.minX + 9, y: cellFrame.midY - text.size().height / 2))
-        NSImage(systemSymbolName: "chevron.down", accessibilityDescription: nil)?.withSymbolConfiguration(.init(paletteColors: [.labelColor]))?.draw(in: NSRect(x: cellFrame.maxX - 18, y: cellFrame.midY - 5, width: 10, height: 10))
+        OrbitIcon.draw(OrbitIcon.image(sfName: "chevron.down", pointSize: 10, accessibilityDescription: nil),
+                       in: NSRect(x: cellFrame.maxX - 18, y: cellFrame.midY - 5, width: 10, height: 10), tint: .labelColor)
     }
 }

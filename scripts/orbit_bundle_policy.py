@@ -1,5 +1,6 @@
 """Strict product bundle layout checks, shared by unsigned CMake staging and signing."""
 import argparse
+import json
 from pathlib import Path
 import plistlib
 import shutil
@@ -10,6 +11,13 @@ ORBIT_RESOURCE_FILES = frozenset({
     'README.md', 'sign-color.pdf', 'sign-color.svg',
     'vector-provenance.json', 'wordmark.pdf', 'wordmark.svg',
 })
+ICON_CATALOG = json.loads((Path(__file__).resolve().parents[1] /
+    'native/Sources/BrowserShell/Icons/catalog.json').read_text())
+ICON_RESOURCE_FILES = frozenset({'catalog.json'} | {
+    f'template/{size}/{name}.pdf' for size in (16, 20, 24) for name in ICON_CATALOG['template']
+} | {f'color/24/{name}.svg' for name in ICON_CATALOG['color']})
+ICON_RESOURCE_DIRECTORIES = frozenset(str(parent) for name in ICON_RESOURCE_FILES
+    for parent in Path(name).parents if str(parent) != '.') | {'', 'template', 'color'}
 BUILD_SUFFIXES = {'.d', '.o', '.a', '.swiftmodule', '.swiftdoc', '.swiftsourceinfo', '.dia', '.dsym'}
 
 
@@ -52,6 +60,7 @@ def validate_bundle_contents(bundle):
     bundle = Path(bundle)
     reject_build_artifacts(bundle)
     orbit_directories = set()
+    icon_directories = set()
     for entry in bundle.rglob('*'):
         relative = entry.relative_to(bundle)
         parts = relative.parts
@@ -80,6 +89,15 @@ def validate_bundle_contents(bundle):
                 localized_file = (len(resource) == 2 and resource[0].endswith('.lproj') and
                                   resource[1] in {'Localizable.strings', 'Localizable.stringsdict'})
                 allowed = allowed or (len(resource) == 1 and resource[0].endswith('.lproj')) or localized_file
+                if resource[:1] == ('Icons',):
+                    icon = '/'.join(resource[1:])
+                    icon_file = icon in ICON_RESOURCE_FILES
+                    icon_directory = icon in ICON_RESOURCE_DIRECTORIES
+                    allowed = icon_file or icon_directory
+                    if entry.is_symlink() or (icon_file and not entry.is_file()) or (icon_directory and not entry.is_dir()):
+                        raise RuntimeError('Invalid interface icon resource type refused: ' + str(relative))
+                    if allowed:
+                        icon_directories.add(entry.parents[len(resource) - 2] if len(resource) > 1 else entry)
                 if localized_file and (entry.is_symlink() or not entry.is_file()):
                     raise RuntimeError('Invalid shared localization resource type refused: ' + str(relative))
                 # CMake retains Orbit/; SwiftPM flattens processed resource filenames.
@@ -129,6 +147,14 @@ def validate_bundle_contents(bundle):
             raise RuntimeError('Unexpected bundle content: ' + str(relative))
         if entry.is_symlink() and (not entry.exists() or not entry.resolve().is_relative_to(bundle.resolve())):
             raise RuntimeError('External or broken bundle symlink refused: ' + str(relative))
+
+    if len(icon_directories) > 1:
+        raise RuntimeError('Ambiguous interface icon resource layouts refused')
+    for directory in icon_directories:
+        for name in sorted(ICON_RESOURCE_FILES):
+            resource = directory / name
+            if resource.is_symlink() or not resource.is_file():
+                raise RuntimeError('Missing or invalid required interface icon resource: ' + str(resource.relative_to(bundle)))
 
     # Legacy bundles without Orbit remain valid. Once present, all six resources are required
     # together in one layout; partial, split and duplicate groups cannot silently ship.

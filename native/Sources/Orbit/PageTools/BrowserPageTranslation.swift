@@ -236,7 +236,7 @@ final class BrowserTranslationController<Engine: BrowserEngine> {
         get { owner?.translationPages.pages ?? [:] }
         set { owner?.translationPages.pages = newValue }
     }
-    let popover = NSPopover()
+    let popover = OrbitFrostPopover()
     var preferences = try! BrowserSitePreferenceStore()
     var onPreferenceError: ((any Error) -> Void)?
     private(set) var optionsMenu: BrowserTranslationOptionsMenu?

@@ -6,7 +6,7 @@ import BrowserEngine
 @MainActor
 final class BrowserSpaceIconEditor: NSObject, NSTextFieldDelegate {
     let field = NSTextField()
-    let alert = NSAlert()
+    let alert = OrbitFloatingMaterial.alert()
     private let initialChoice: BrowserSpaceIcon
     private let draft: BrowserSettingsIconDraft
     private let save: (String) async -> Void
