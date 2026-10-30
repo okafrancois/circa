@@ -148,8 +148,14 @@ final class OrbitOnboardingImportPreparation {
                             probe: BrowserImportRunningProbe(running: { running }))
                     }.value
                     request.passwordJobID = journal.id
-                    try await Self.importConnections(request, dataRoot: configuration.dataRoot, keys: journal.connectionKeys()) {
-                        ArcSiteSessionAlerts.show(nil, failed: true)
+                    do {
+                        try await Self.importConnections(request, dataRoot: configuration.dataRoot, keys: journal.connectionKeys()) {
+                            ArcSiteSessionAlerts.show(nil, failed: true)
+                        }
+                    } catch {
+                        // A failed connection copy never leaves a staged job holding cached source keys.
+                        try? journal.discard()
+                        throw error
                     }
                     try journal.clearConnectionKeys()
                     try journal.activate()
