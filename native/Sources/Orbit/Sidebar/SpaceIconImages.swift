@@ -8,6 +8,26 @@ enum SpaceIconImages {
     private static let tinted = NSCache<NSString, NSImage>()
     private static let graphemes = NSCache<NSString, NSImage>()
 
+    /// Explicit artwork prevents NSAlert from substituting the application's default icon.
+    static func removalIcon(_ choice: BrowserSpaceIcon, appearance: NSAppearance = .current) -> NSImage {
+        let size = NSSize(width: 64, height: 64)
+        switch choice {
+        case .grapheme, .systemSymbol:
+            let source: NSImage?
+            if case .systemSymbol(let identifier) = choice {
+                source = symbol(identifier, pointSize: 48, tint: OrbitFloatingMaterial.body,
+                                active: true, appearance: appearance)
+            } else { source = (view(choice, pointSize: 48) as? NSImageView)?.image }
+            return NSImage(size: size, flipped: false) { rect in
+                source?.draw(in: rect.insetBy(dx: 8, dy: 8))
+                return true
+            }
+        case .none:
+            // An empty image deliberately suppresses the system/application fallback.
+            return NSImage(size: size)
+        }
+    }
+
     static func tabImage(_ choice: BrowserSpaceIcon?) -> NSImage? {
         guard let choice, choice != .none else { return nil }
         if case .systemSymbol(let name) = choice {

@@ -19,6 +19,7 @@ extension BrowserSettingsWindowController {
         let editor = OrbitThemeEditorController(
             spaceID: spaceID, profileID: profileID, stored: space.theme, initial: initial,
             scopeDescription: space.name + " · " + (model.catalog.profiles.first(where: { $0.id == profileID })?.name ?? uiText("Profile")),
+            spaceName: space.name,
             commit: { theme in
                 try await environment.store.setSpaceTheme(theme, for: spaceID, profileID: profileID)
                 environment.scheduleSave()
