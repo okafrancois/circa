@@ -28,7 +28,7 @@ public struct BrowserArchivedSpace: Codable, Equatable, Sendable, Identifiable {
                     guard let folder = folders[id] else { return [] }
                     let children = nodes(folder.children)
                     keptFolders.append(.init(id: id, title: folder.title, isCollapsed: folder.isCollapsed,
-                                             children: children, createdAt: folder.createdAt))
+                                             children: children, createdAt: folder.createdAt, liveFolder: folder.liveFolder))
                     return [node]
                 case .split(let id):
                     guard let split = splits[id] else { return [] }

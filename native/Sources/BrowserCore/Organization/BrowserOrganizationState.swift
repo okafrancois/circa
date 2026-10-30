@@ -588,6 +588,12 @@ struct BrowserOrganizationState: Sendable {
                 case let .tab(id):
                     guard let tab = tabs[id] else { throw BrowserSessionError.organizationItemMissing }
                     try Self.validateTab(tab)
+                    if let owner = tab.liveFolderChild {
+                        guard container(of: node) == .folder(owner.folderID),
+                              folders[owner.folderID]?.liveFolder?.provider == owner.identity.provider else {
+                            throw BrowserOrganizationError.providerOwnedItem
+                        }
+                    }
                     guard (tab.pinnedURL != nil) == section.keepsPinnedURL else {
                         throw BrowserSessionError.organizationInvalidPinnedURL
                     }
@@ -603,6 +609,13 @@ struct BrowserOrganizationState: Sendable {
                     guard let folder = folders[id] else { throw BrowserSessionError.organizationItemMissing }
                     guard (try? Self.validatedTitle(folder.title)) == folder.title else {
                         throw BrowserSessionError.organizationInvalidTitle
+                    }
+                    if let config = folder.liveFolder {
+                        guard folder.children.allSatisfy({ child in
+                            child.tabID.flatMap { tabs[$0]?.liveFolderChild }.map {
+                                $0.folderID == id && $0.identity.provider == config.provider
+                            } == true
+                        }) else { throw BrowserOrganizationError.providerOwnedItem }
                     }
                     stack.append(contentsOf: folder.children.reversed())
                 }
@@ -1212,6 +1225,9 @@ extension BrowserOrganizationState {
         in container: BrowserOrganizationContainer, position: BrowserOrganizationPosition,
         moving: Set<BrowserOrganizationNode> = []
     ) throws -> Int {
+        if case let .folder(id) = container, folders[id]?.liveFolder != nil {
+            throw BrowserOrganizationError.providerOwnedItem
+        }
         let list = children(of: container)
         let index: Int
         switch position {
@@ -1245,6 +1261,9 @@ extension BrowserOrganizationState {
         _ nodes: [BrowserOrganizationNode], to destination: BrowserOrganizationDestination,
         destinationSection: BrowserOrganizationSection
     ) throws {
+        guard nodes.allSatisfy({ $0.tabID.flatMap { tabs[$0]?.liveFolderChild } == nil }) else {
+            throw BrowserOrganizationError.providerOwnedItem
+        }
         let roots = movableRoots(nodes)
         guard !roots.isEmpty else { throw BrowserOrganizationError.emptySelection }
         guard roots.allSatisfy(contains) else { throw BrowserOrganizationError.itemMissing }

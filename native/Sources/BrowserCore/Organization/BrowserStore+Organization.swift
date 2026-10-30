@@ -213,6 +213,7 @@ extension BrowserStore {
             guard let entry = organization.tabs[id] else { throw BrowserOrganizationError.itemMissing }
             openOccurrence(of: id, url: entry.url, in: context.windowID, spaceID: context.spaceID, activate: true)
         }
+        acknowledgeLiveFolderTab(id, profileID: context.profileID)
         if case let .split(id)? = organization.container(of: .tab(id)) { ensureSplitOccurrences(id, in: context) }
     }
 
@@ -513,6 +514,7 @@ extension BrowserStore {
     /// undo record of the profile, so the document stays valid (`profileThresholds`, Favorites and
     /// archive records may only name existing profiles). Not undoable.
     func organizationWillRemoveProfile(_ profileID: ProfileID) {
+        liveFolderLocalStores[profileID] = nil
         let spaceIDs = Set(spaces.values.filter { $0.profileID == profileID }.map(\.id))
         _ = try? commitOrganization(validating: false) { $0.removeProfile(profileID, spaces: spaceIDs) }
         for (windowID, journal) in organizationJournals {
@@ -539,7 +541,10 @@ extension BrowserStore {
     }
 
     public func pinTabs(_ ids: [TabID], from context: BrowserContext) throws -> BrowserWindowState {
-        try performMove(organization.groupedNodes(for: ids), to: .init(.pinned(context.spaceID), position: .end),
+        if ids.contains(where: { organization.tabs[$0]?.liveFolderChild != nil }) {
+            return try pinLiveFolderCopies(ids, from: context)
+        }
+        return try performMove(organization.groupedNodes(for: ids), to: .init(.pinned(context.spaceID), position: .end),
                         action: .pinTabs, from: context)
     }
 
@@ -657,6 +662,11 @@ extension BrowserStore {
     ) throws -> BrowserWindowState {
         _ = try organizationWindow(context)
         _ = try visibleSection(of: .folder(id), in: context)
+        if organization.folders[id]?.liveFolder != nil {
+            return try deleteLiveFolder(id, contents: disposition, from: context)
+        }
+        let disabled = disposition == .archiveContents
+            ? organization.folderIDs(in: .folder(id)).compactMap { organization.folders[$0]?.liveFolder?.provider } : []
         let now = clock()
         try commitOrganization(.deleteFolder, in: context) { state in
             switch disposition {
@@ -667,12 +677,14 @@ extension BrowserStore {
                 state.insert(children, into: placement.container, at: placement.index + 1)
                 state.removeEmptyFolder(id)
             case .archiveContents:
+                for tab in state.tabIDs(in: .folder(id)) { state.tabs[tab]?.liveFolderChild = nil }
                 state.archiveTabs(state.tabIDs(in: .folder(id)).map {
                     .init(id: $0, reason: .removed, origin: .pinned, profileID: context.profileID, spaceID: context.spaceID)
                 }, at: now)
                 for folderID in state.folderIDs(in: .folder(id)).reversed() { state.removeEmptyFolder(folderID) }
             }
         }
+        for provider in disabled { disableLiveFolderRecreation(provider, profileID: context.profileID) }
         return try captureWindowState(in: context.windowID)
     }
 
@@ -681,6 +693,7 @@ extension BrowserStore {
     public func renameTab(_ id: TabID, to title: String?, from context: BrowserContext) throws -> BrowserWindowState {
         _ = try organizationWindow(context)
         _ = try visibleSection(of: .tab(id), in: context)
+        try requireOrdinaryTabs([id])
         let trimmed = title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let customTitle = trimmed.isEmpty ? nil : try BrowserOrganizationState.validatedTitle(trimmed)
         try commitOrganization(.renameTab, in: context) { state in
@@ -757,6 +770,7 @@ extension BrowserStore {
     public func archiveTabs(_ ids: [TabID], from context: BrowserContext) throws -> BrowserWindowState {
         _ = try organizationWindow(context)
         let targets = try uniqueVisibleTabs(ids, in: context)
+        try requireOrdinaryTabs(ids)
         let now = clock()
         try commitOrganization(.archiveTabs, in: context) { state in
             state.archiveTabs(targets.map { id, section in
@@ -820,6 +834,7 @@ extension BrowserStore {
         guard record.profileID == context.profileID else { throw BrowserOrganizationError.notVisibleInContext }
         let target = window.standaloneProfileID == nil && spaces[record.spaceID]?.profileID == record.profileID ? record.spaceID : context.spaceID
         var tab = record.tab
+        tab.liveFolderChild = nil
         tab.pinnedURL = nil
         tab.lastActiveAt = clock()
         try commitOrganization(.restoreArchivedTab, in: context) { state in
@@ -1200,7 +1215,7 @@ extension BrowserStore {
         }
     }
 
-    private func uniqueVisibleTabs(
+    func uniqueVisibleTabs(
         _ ids: [TabID], in context: BrowserContext
     ) throws -> [(TabID, BrowserOrganizationSection)] {
         guard !ids.isEmpty else { throw BrowserOrganizationError.emptySelection }

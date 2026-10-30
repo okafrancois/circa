@@ -184,6 +184,7 @@ public actor BrowserStore {
             }
         }
     }
+    var liveFolderLocalStores: [ProfileID: BrowserLiveFolderLocalStore] = [:]
     var organizationJournals: [WindowID: BrowserOrganizationJournal] = [:]
     var organizationObservers: [UUID: AsyncStream<UInt64>.Continuation] = [:]
     var organizationRevision: UInt64 = 0
@@ -511,6 +512,7 @@ public actor BrowserStore {
         guard tab.windowID == windowID, tab.spaceID == window.activeSpaceID else {
             throw BrowserStoreError.occurrenceOwnedByAnotherWindow
         }
+        acknowledgeLiveFolderTab(tab.id, profileID: window.standaloneProfileID ?? spaces[window.activeSpaceID]!.profileID)
         let visibleTabs: Set<TabID>
         if case let .split(id)? = organization.container(of: .tab(tab.id)), let group = organization.splits[id] {
             visibleTabs = Set(group.tabIDs)
