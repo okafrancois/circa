@@ -1614,3 +1614,8 @@
 "Double-click to rename" = "Double-click to rename";
 
 "Copied Current URL" = "Copied Current URL";
+
+"Export “%@” into Folder" = "Export “%@” into Folder";
+"Turn “%@” into Space" = "Turn “%@” into Space";
+"Export Space into Folder" = "Export Space into Folder";
+"Turn Folder into Space" = "Turn Folder into Space";

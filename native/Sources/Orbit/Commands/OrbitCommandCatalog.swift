@@ -213,6 +213,7 @@ enum BrowserCommandID: String, CaseIterable, Sendable {
     case sidebarArchiveOtherTabs, sidebarArchiveTabsAbove, sidebarArchiveTabsBelow, sidebarMuteTab
     case sidebarAddToFavorites
     case sidebarCloseItems
+    case sidebarConvertFolderToSpace
     case sidebarDeleteFolder
     case sidebarDeleteFolderAndTabs
     case toggleSplitOrientation, swapSplitPanes, unsplitAllPanes

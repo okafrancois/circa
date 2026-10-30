@@ -330,6 +330,7 @@ extension BrowserArchivePolicy: Codable {
 /// Undoable organization commands; UI lots derive localized menu labels ("Undo Pin Tab") from them.
 public enum BrowserOrganizationAction: String, Sendable, Equatable {
     case moveItems, pinTabs, unpinTabs, addToFavorites, removeFromFavorites
+    case exportSpace, convertFolderToSpace
     case createFolder, renameFolder, deleteFolder, renameTab, importBookmarks
     case changeTabIcon, editPinnedURL
     case archiveTabs, closeTabs, clearToday, restoreArchivedTab, deleteArchivedTabs

@@ -120,6 +120,35 @@ extension NativeWebKitTests {
 @Suite(.serialized)
 @MainActor
 struct SidebarListWindowTests {
+    @Test("Conversion menu targets preserve destination order and reject stale catalog delivery")
+    func conversionMenus() async throws {
+        let harness = try await SidebarListHarness()
+        defer { harness.shutdown() }
+        let c = harness.window
+        let second = try await harness.store.createSpace(name: "Second", profileID: harness.profileID)
+        let third = try await harness.store.createSpace(name: "Third", profileID: harness.profileID)
+        let foreign = await harness.store.createProfile(name: "Other")
+        _ = try await harness.store.createSpace(name: "Foreign", profileID: foreign)
+        c.session.refreshCatalog()
+        await harness.settle()
+        let export = try #require(SidebarSpaceExportMenu.make(owner: c, source: harness.spaceID))
+        #expect(export.title == "Export “List” into Folder")
+        let destinations = try #require(export.submenu)
+        #expect(destinations.items.map(\.title) == ["Second", "Third"])
+        let authority = try #require(destinations.items[0].target as? NSMenuItemValidation)
+        #expect(authority.validateMenuItem(destinations.items[0]))
+        try await harness.store.renameSpace(second, name: "Changed")
+        c.session.refreshCatalog()
+        await harness.settle()
+        #expect(!authority.validateMenuItem(destinations.items[0]))
+        destinations.performActionForItem(at: 0)
+        await harness.settle()
+        #expect(c.session.catalog?.spaces.contains { $0.id == harness.spaceID } == true)
+        #expect(c.session.catalog?.spaces.contains { $0.id == third } == true)
+        #expect(SidebarUndoStrings.name(of: .convertFolderToSpace) == uiText("Turn Folder into Space"))
+        #expect(SidebarUndoStrings.name(of: .exportSpace) == uiText("Export Space into Folder"))
+    }
+
     @Test("Folder preview and sidebar resolve a dormant tab's shared icon before an occurrence exists")
     func folderPreviewDormantCachedFavicon() async throws {
         let harness = try await SidebarListHarness()
@@ -505,7 +534,7 @@ struct SidebarListWindowTests {
         // Folder menu entries.
         let folderMenu = try #require(c.makeSidebarContextMenu(for: c.sidebar.prepareContextMenu(for: .folder(folder))))
         #expect(folderMenu.menu.items.map { $0.isSeparatorItem ? "—" : $0.title } == [
-            "New Nested Folder…", "—", "Move to", "Rename", "—", "Copy All Links", "Copy All Links as Markdown", "—",
+            "New Nested Folder…", "Turn “Group” into Space", "—", "Move to", "Rename", "—", "Copy All Links", "Copy All Links as Markdown", "—",
             "Delete", "Archive Folder"])
         folderMenu.menu.performActionForItem(at: folderMenu.menu.indexOfItem(withTitle: "Delete"))
         await harness.settle()

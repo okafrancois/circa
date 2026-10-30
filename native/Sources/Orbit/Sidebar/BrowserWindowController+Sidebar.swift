@@ -61,6 +61,8 @@ extension BrowserWindowController {
         }
         sidebar.onNewTab = { [weak self] in self?.submitInput { $0.openTab() } }
         sidebar.onNewSpace = { [weak self] in self?.submitInput { $0.presentNewSpace() } }
+        sidebar.makeSpaceExportMenu = { [weak self] id in self.flatMap { SidebarSpaceExportMenu.make(owner: $0, source: id) } }
+        sidebar.footer.makeExportMenu = sidebar.makeSpaceExportMenu
         sidebar.onDeleteSpace = { [weak self] id in self?.submitInput { $0.presentDeleteSpace(id) } }
         sidebar.onRenameSpace = { [weak self] id in self?.submitInput { $0.presentRenameSpace(id) } }
         sidebar.onEditSpaceTheme = { [weak self] id in self?.submitInput { $0.presentThemeEditor(for: id) } }

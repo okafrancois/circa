@@ -800,6 +800,11 @@ struct BrowserArchiveChange: Sendable {
 /// edit made since by another window turns the patch into a conflict instead of being overwritten.
 /// Keys the command did not touch are never written: concurrent changes to them survive.
 struct BrowserOrganizationPatch: Sendable {
+    var spaceRecords: [SpaceID: BrowserValueChange<BrowserSpace?>] = [:]
+    var spaceSelection: TabID?
+    var collapsedSpaceSections: [SpaceID: BrowserValueChange<Bool>] = [:]
+    var spaceIndices: [SpaceID: Int] = [:]
+    var activeSpace: BrowserValueChange<SpaceID>?
     var placements: [BrowserOrganizationNode: BrowserPlacementChange] = [:]
     /// Existence changes only; surviving tabs keep their live destination and web title.
     var tabRecords: [TabID: BrowserValueChange<BrowserOrganizedTab?>] = [:]
@@ -873,12 +878,17 @@ struct BrowserOrganizationPatch: Sendable {
     }
 
     var isEmpty: Bool {
-        placements.isEmpty && tabRecords.isEmpty && tabFields.isEmpty
+        spaceRecords.isEmpty && placements.isEmpty && tabRecords.isEmpty && tabFields.isEmpty
             && folderRecords.isEmpty && folderTitles.isEmpty && splitRecords.isEmpty && archive.isEmpty
     }
 
     var reversed: BrowserOrganizationPatch {
         var result = BrowserOrganizationPatch()
+        result.spaceRecords = spaceRecords.mapValues(\.reversed)
+        result.spaceSelection = spaceSelection
+        result.collapsedSpaceSections = collapsedSpaceSections.mapValues(\.reversed)
+        result.spaceIndices = spaceIndices
+        result.activeSpace = activeSpace?.reversed
         result.placements = placements.mapValues(\.reversed)
         result.tabRecords = tabRecords.mapValues(\.reversed)
         result.tabFields = tabFields.mapValues(\.reversed)

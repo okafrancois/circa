@@ -94,6 +94,14 @@ public extension BrowserWindowSession {
         }
     }
 
+    func convertFolderToSpace(_ id: FolderID) {
+        enqueueOrganization { session, context in try await session.store.convertFolderToSpace(id, from: context) }
+    }
+
+    func exportSpace(_ id: SpaceID, to destination: SpaceID) {
+        enqueueOrganization { session, context in try await session.store.exportSpace(id, to: destination, from: context) }
+    }
+
     func pinTabs(_ ids: [TabID]) {
         enqueueOrganization { session, context in try await session.store.pinTabs(ids, from: context) }
     }

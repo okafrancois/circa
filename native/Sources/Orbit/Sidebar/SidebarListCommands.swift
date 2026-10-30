@@ -26,6 +26,8 @@ enum SidebarListCommands {
               requirement: .window, owner: "SB-LIST", sources: ["Browser command"]),
         .init(id: .sidebarCloseItems, title: "Close Tabs", menu: "Sidebar", shortcuts: [], scope: .browser,
               requirement: .window, owner: "SB-LIST", sources: ["Browser command"]),
+        .init(id: .sidebarConvertFolderToSpace, title: "Turn Folder into Space", menu: "Sidebar", shortcuts: [], scope: .browser,
+              requirement: .window, owner: "SPACE-FOLDER-CONVERSION", sources: ["Browser command"]),
         .init(id: .sidebarDeleteFolder, title: "Delete Folder", menu: "Sidebar", shortcuts: [], scope: .browser,
               requirement: .window, owner: "SB-LIST", sources: ["Browser command"]),
         .init(id: .sidebarDeleteFolderAndTabs, title: "Delete Folder and Archive Its Tabs", menu: "Sidebar", shortcuts: [],
@@ -90,6 +92,9 @@ enum SidebarListCommands {
         window(.sidebarCloseItems, validate: { !$0.sidebarTabTargets.isEmpty }) { controller in
             controller.closeSidebarTabs(controller.sidebarTabTargets)
         }
+        window(.sidebarConvertFolderToSpace, validate: { $0.sidebarFolderTarget != nil }) { controller in
+            if let id = controller.sidebarFolderTarget { controller.session.convertFolderToSpace(id) }
+        }
         window(.sidebarDeleteFolder, validate: { $0.sidebarFolderTarget != nil }) { controller in
             if let id = controller.sidebarFolderTarget { controller.session.deleteFolder(id, contents: .keepContents) }
         }
@@ -111,7 +116,7 @@ enum SidebarListCommands {
             return []
         }
         if nodes.count == 1, nodes[0].folderID != nil {
-            return [[.newFolder], [.renameCurrentItem], [.sidebarCopyLinks, .sidebarCopyMarkdownLinks],
+            return [[.newFolder, .sidebarConvertFolderToSpace], [.renameCurrentItem], [.sidebarCopyLinks, .sidebarCopyMarkdownLinks],
                     [.sidebarDeleteFolder, .sidebarDeleteFolderAndTabs]]
         }
         if nodes.count == 1, let id = nodes[0].tabID, let tab = organization.tab(id) {
@@ -170,6 +175,9 @@ enum SidebarListCommands {
             return plural ? text("closeTabs", "Close Tabs") : text("closeTab", "Close Tab")
         case .collapseAllFolders: return text("collapseAllFolders", "Collapse All Folders")
         case .expandAllFolders: return text("expandAllFolders", "Expand All Folders")
+        case .sidebarConvertFolderToSpace:
+            guard let id = nodes.first?.folderID, case let .folder(folder)? = organization?.item(for: .folder(id)) else { return nil }
+            return uiFormat("Turn “%@” into Space", folder.title)
         case .sidebarDeleteFolder: return text("deleteFolder", "Delete")
         case .sidebarDeleteFolderAndTabs: return text("deleteFolderAndTabs", "Archive Folder")
         default: return nil
