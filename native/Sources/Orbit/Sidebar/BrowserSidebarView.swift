@@ -540,6 +540,9 @@ final class BrowserSidebarView: NSView, SidebarListHost {
     // MARK: SidebarListHost
 
     func list(_ list: SidebarListView, activate node: BrowserOrganizationNode, modifiers: NSEvent.ModifierFlags) {
+        let reason = !commandsEnabled ? "disabled" : organization == nil ? "missing-organization"
+            : list !== page.list ? "stale-list" : "received"
+        BrowserSidebarInputDiagnostics.record("sidebar-event", tab: node.tabID, reason: reason)
         guard commandsEnabled, let organization, list === page.list else { return }
         if modifiers == [.option], node.tabID != nil || node.splitID != nil {
             onOptionSelectNode?(node)

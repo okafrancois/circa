@@ -2,6 +2,7 @@ import AppKit
 import OrbitChromiumBridge
 import BrowserCore
 import BrowserEngine
+import BrowserShell
 import Foundation
 import OSLog
 
@@ -668,7 +669,9 @@ extension ChromiumBrowserEngine {
         if surface.hostView.window != nil, !surface.hostView.isHiddenOrHasHiddenAncestor {
             // Publishing native shell selection must precede the activation cache:
             // Chrome already reports a newly inserted tab active, even in a new profile.
-            if surface.activateTab() { activeHostedTabs[window] = WeakSurface(surface) }
+            let accepted = surface.activateTab()
+        Logger(subsystem: "local.orbit", category: "sidebar-input").info("stage=native-activation surface=\(surface.token, privacy: .public) window=\(window, privacy: .public) accepted=\(accepted, privacy: .public)")
+        if accepted { activeHostedTabs[window] = WeakSurface(surface) }
         } else if let active = activeHostedTabs[window]?.surface, active !== surface, !active.isDisposed,
                   active.profileID == surface.profileID {
             _ = active.activateTab()
@@ -679,8 +682,13 @@ extension ChromiumBrowserEngine {
     func activateHostedTab(_ surface: ChromiumSurface) {
         let window = surface.hostedWindowToken
         guard window != 0 else { return }
-        if activeHostedTabs[window]?.surface === surface, surface.tabIdentity?.isActive == true { return }
-        if surface.activateTab() { activeHostedTabs[window] = WeakSurface(surface) }
+        if activeHostedTabs[window]?.surface === surface, surface.tabIdentity?.isActive == true {
+            BrowserSidebarInputDiagnostics.record("native-activation", tab: surface.sidebarInputTabID, reason: "already-active")
+            return
+        }
+        let accepted = surface.activateTab()
+        Logger(subsystem: "local.orbit", category: "sidebar-input").info("stage=native-activation surface=\(surface.token, privacy: .public) window=\(window, privacy: .public) accepted=\(accepted, privacy: .public)")
+        if accepted { activeHostedTabs[window] = WeakSurface(surface) }
     }
 
     private func holdingEngineWindow() -> ChromiumEngineWindow? {

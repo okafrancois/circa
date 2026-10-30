@@ -2,6 +2,7 @@ import AppKit
 import OrbitChromiumBridge
 import BrowserCore
 import BrowserEngine
+import BrowserShell
 import Foundation
 
 
@@ -133,7 +134,14 @@ public extension ChromiumSurface {
     /// Makes this tab surface the active tab of its logical Browser (`tabs.onActivated`).
     @discardableResult
     func activateTab() -> Bool {
-        guard isBrowserCreated, !isDisposed else { return false }
+        guard isBrowserCreated, !isDisposed else {
+            BrowserSidebarInputDiagnostics.record("native-activation", tab: sidebarInputTabID,
+                reason: isDisposed ? "surface-disposed" : "browser-missing")
+            return false
+        }
+        if let id = sidebarInputTabID {
+            return id.rawValue.uuidString.withCString { ACRActivateSidebarSurface(token, $0) == 1 }
+        }
         return ACRActivateSurface(token) == 1
     }
 

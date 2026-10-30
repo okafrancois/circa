@@ -2,6 +2,8 @@
 #include <cassert>
 #include <deque>
 #include <iostream>
+#include <string>
+#include <vector>
 
 bool SelectionOrdering() {
   for (bool nested_pump : {false, true}) {
@@ -39,7 +41,24 @@ bool SelectionOrdering() {
   return true;
 }
 
+bool TicketDiagnostics() {
+  orbit_bridge::NativeCommandScope scope;
+  std::deque<std::function<void()>> loop;
+  std::vector<std::pair<uint64_t, std::string>> outcomes;
+  auto trace = [&](uint64_t ticket, const char* outcome) { outcomes.emplace_back(ticket, outcome); };
+  auto post = [&](std::function<void()> task) { loop.push_back(std::move(task)); return true; };
+  auto run = [] { return int32_t{1}; };
+  {
+    orbit_bridge::NativeCommandScope::Command command(scope);
+    scope.ActivateOrDefer(run, post, 42, trace);
+  }
+  scope.ActivateOrDefer(run, post, 42, trace);
+  while (!loop.empty()) { auto task = std::move(loop.front()); loop.pop_front(); task(); }
+  return outcomes == std::vector<std::pair<uint64_t, std::string>>{{1, "deferred"}, {2, "applied"}, {1, "superseded"}};
+}
+
 int main() {
+  assert(TicketDiagnostics());
   if (!SelectionOrdering()) return 1;
   orbit_bridge::NativeCommandScope scope;
   std::deque<std::function<void()>> loop;
@@ -99,5 +118,5 @@ int main() {
   }
   assert(loop.empty() && activations == 4);
   assert(scope.ActivateOrDefer(activate, post) == 0);
-  std::cout << "Native command activation regression: 10 scenarios passed\n";
+  std::cout << "Native command activation regression: 11 scenarios passed\n";
 }

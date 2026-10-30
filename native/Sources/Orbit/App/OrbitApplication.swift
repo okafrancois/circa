@@ -243,7 +243,10 @@ final class OrbitApplication: NSObject, NSApplicationDelegate {
                 environment = OrbitEnvironment(engine: makeActiveEngine())
             }
             BrowserPerformance.mark(.environmentReady)
-            if let environment { commands.registry.useShortcutPreferences(environment.shortcutPreferences) }
+            if let environment {
+                commands.registry.useShortcutPreferences(environment.shortcutPreferences)
+                environment.onReopenClosedWindow = { [weak self] id in self?.windows.newWindow(id: id.rawValue) }
+            }
             environment?.onPersistenceError = { [weak self] error in self?.presentSaveError(error) }
             environment?.onRescueNeedsWindow = { [weak self] profileID in self?.openRescueWindow(for: profileID) }
             environment?.onRescueSplitNeedsWindow = { [weak self] profileID, spaceID in
@@ -475,7 +478,7 @@ final class OrbitApplication: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func presentSaveError(_ error: any Error) {
+    func presentSaveError(_ error: any Error) {
         guard !didPresentSaveError else { return }
         didPresentSaveError = true
         let alert = OrbitFloatingMaterial.alert()

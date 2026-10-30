@@ -118,6 +118,17 @@ extension BrowserWindowController: BrowserEngineSurfaceDelegate {
         return NSApp.mainMenu?.performKeyEquivalent(with: event) ?? false
     }
 
+    func surface(_ surface: Surface, performNonEditingUndo event: NSEvent, receipt: BrowserKeyReceipt) -> Bool {
+        let responder = window?.firstResponder as? NSView
+        guard acceptsCommands, owns(surface),
+              BrowserPageKeyContext.accepts(receipt, windowID: id, current: commandState.context,
+                  isKeyWindow: window?.isKeyWindow == true, isSelected: session.selectedSurface === surface,
+                  focusInsideDocument: responder?.isDescendant(of: surface.hostView) == true),
+              sidebar.undoRouter.nextSource(redo: false) != nil else { return false }
+        sidebar.undoRouter.undo(nil)
+        return true
+    }
+
     // MARK: Policy
 
     func surface(_ surface: Surface, decidePolicyFor action: BrowserNavigationAction,

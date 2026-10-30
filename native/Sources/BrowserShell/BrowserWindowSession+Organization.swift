@@ -91,9 +91,37 @@ public extension BrowserWindowSession {
     func selectTab(_ id: TabID, expecting expected: BrowserOrganizationSnapshot? = nil,
                    admission: BrowserSidebarSelectionAdmission? = nil,
                    isCurrent: @escaping @MainActor () -> Bool = { true }) {
-        enqueueOrganization { session, context in
-            guard isCurrent() else { return try await session.store.captureWindowState(in: context.windowID) }
-            return try await session.selectTabState(id, from: context, expecting: expected, admission: admission)
+        BrowserSidebarInputDiagnostics.record("session-select", tab: id, window: windowID, reason: isClosed ? "closed" : "queued")
+        enqueue { session in
+            do {
+                guard let state = try await session.runOrganizationCommand({ session, context in
+                    guard isCurrent() else {
+                        BrowserSidebarInputDiagnostics.record("selection", tab: id, window: context.windowID, reason: "superseded")
+                        return try await session.store.captureWindowState(in: context.windowID)
+                    }
+                    return try await session.selectTabState(id, from: context, expecting: expected, admission: admission)
+                }), !session.isClosed else {
+                    BrowserSidebarInputDiagnostics.record("selection", tab: id, window: session.windowID, reason: "context-unavailable")
+                    return
+                }
+                session.install(state)
+                let selected = session.snapshot?.selectedOccurrenceID
+                let matches = selected != nil && session.tabID(for: selected!) == id
+                BrowserSidebarInputDiagnostics.record("selection", tab: id, window: session.windowID,
+                    reason: admission?.isValid == false ? "admission-revoked" : !matches ? "refused"
+                        : session.selectedSurface == nil ? "surface-unavailable" : "selected")
+            } catch {
+                let reason: String
+                switch error {
+                case BrowserStoreError.staleContext: reason = "stale-context"
+                case BrowserStoreError.occurrenceOwnedByAnotherWindow: reason = "foreign-occurrence"
+                case BrowserOrganizationError.itemMissing: reason = "missing-tab"
+                case BrowserOrganizationError.notVisibleInContext: reason = "not-visible"
+                default: reason = "selection-error"
+                }
+                BrowserSidebarInputDiagnostics.record("selection", tab: id, window: session.windowID, reason: reason)
+                if !session.isClosed { session.onError?(error) }
+            }
         }
     }
 
