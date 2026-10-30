@@ -2,6 +2,7 @@ import AppKit
 
 /// Semantic IDs shared by menus, keyboard input, context menus and the command palette.
 enum BrowserCommandID: String, CaseIterable, Sendable {
+    case openFile
     case boostGallery
     case showHideSidebar
     case newChatGPTMessage
@@ -451,6 +452,8 @@ enum OrbitCommandCatalog {
     ]
 
     static let supplemental: [BrowserCommandDefinition] = [
+        .init(id: .openFile, title: "Open File…", menu: "File", shortcuts: [],
+              scope: .browser, requirement: .application, owner: "FILES", sources: ["Browser command"]),
         .init(id: .openPasswordManager, title: "Manage Passwords", menu: "Command Bar", shortcuts: [],
               scope: .browser, requirement: .window, owner: "PASSWORDS", sources: ["Browser command"]),
         .init(id: .selectTab1, title: "Select Tab 1", menu: "Tabs", shortcuts: [.init(key: "1", modifiers: .init(rawValue: 1048576))], scope: .browser, requirement: .window, owner: "ORG", sources: ["Browser command"]),

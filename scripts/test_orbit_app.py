@@ -52,6 +52,13 @@ class ResourceAssemblyTests(unittest.TestCase):
 
 
 class SyntheticDefaultTests(unittest.TestCase):
+    def test_packaged_document_types_are_alternate_viewers(self):
+        info = app.bundle_info('0.1.0')
+        for uti in ('com.adobe.pdf', 'public.html', 'public.xhtml'):
+            claim = next(item for item in info['CFBundleDocumentTypes'] if uti in item['LSItemContentTypes'])
+            self.assertEqual(claim['CFBundleTypeRole'], 'Viewer')
+            self.assertEqual(claim['LSHandlerRank'], 'Alternate')
+
     def test_download_quarantine_is_enabled_in_templates_and_packaged_metadata(self):
         root = Path(__file__).resolve().parents[1]
         for variant in ('', 'App', 'Smoke'):

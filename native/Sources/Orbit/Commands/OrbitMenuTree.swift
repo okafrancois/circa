@@ -63,6 +63,7 @@ enum OrbitMenuTree {
             .item(.init(command: .newQuickWindowWindow, title: "New Little Circa Window", key: "n", modifierMask: 1572864)),
             .item(.init(command: .restoreLastClosedTab, title: "Restore Last Closed Tab", key: "T", modifierMask: 1048576)),
             .separator,
+            .item(.init(command: .openFile, title: "Open File…")),
             .item(.init(command: .openCommandBar, title: "Open Command Bar", key: "l", modifierMask: 1048576)),
             .separator,
             .item(.init(command: .newBoost, title: "New Boost", isHidden: true)),

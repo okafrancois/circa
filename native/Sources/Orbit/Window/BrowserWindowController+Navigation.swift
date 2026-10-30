@@ -50,6 +50,7 @@ extension BrowserWindowController {
         }
         hideLibrary()
         session.performOnSelectedSurface(createIfMissing: true) { [weak self] surface in
+            self?.authorizeEnteredFile(destination.url, for: surface)
             surface.navigate(to: destination.url)
             self?.session.updateDestination(for: surface, to: destination.url)
             surface.focusDocument()

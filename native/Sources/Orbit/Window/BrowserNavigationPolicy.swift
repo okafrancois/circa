@@ -2,14 +2,14 @@ import BrowserCore
 import BrowserEngine
 import Foundation
 
-/// Common scheme/download boundary. Local HTML needs an explicit shell grant, carried by the
+/// Common scheme/download boundary. Local documents need an explicit shell grant, carried by the
 /// live surface across transfers; a remote document cannot grant itself filesystem access.
 @MainActor
 enum BrowserNavigationPolicy {
     private final class FileGrant {
         weak var surface: AnyObject?
-        let url: URL
-        init(surface: AnyObject, url: URL) { self.surface = surface; self.url = url }
+        var urls: Set<URL>
+        init(surface: AnyObject, url: URL) { self.surface = surface; self.urls = [url] }
     }
     private final class SettingsGrant {
         weak var surface: AnyObject?
@@ -65,19 +65,33 @@ enum BrowserNavigationPolicy {
 
     static func authorizeLocalDocument(_ url: URL, for surface: AnyObject) {
         files = files.filter { $0.value.surface != nil }
-        guard url.isFileURL, url.host == nil || url.host == "", ["html", "htm", "xhtml"].contains(url.pathExtension.lowercased()) else { return }
-        files[ObjectIdentifier(surface)] = FileGrant(surface: surface, url: url.resolvingSymlinksInPath().standardizedFileURL)
+        guard url.isFileURL, url.host == nil || url.host == "" else { return }
+        let canonical = url.resolvingSymlinksInPath().standardizedFileURL
+        let key = ObjectIdentifier(surface)
+        if let grant = files[key], grant.surface === surface { grant.urls.insert(canonical) }
+        else { files[key] = FileGrant(surface: surface, url: canonical) }
     }
 
     private static func allowsFile<Surface: BrowserEngineSurface>(_ url: URL, surface: Surface,
                                                                  kind: BrowserNavigationKind? = nil) -> Bool {
-        guard url.isFileURL, let grant = files[ObjectIdentifier(surface)], grant.surface === surface else { return false }
+        guard url.isFileURL, url.host == nil || url.host == "", url.user == nil, url.password == nil, url.port == nil,
+              let grant = files[ObjectIdentifier(surface)], grant.surface === surface else { return false }
         let candidate = url.resolvingSymlinksInPath().standardizedFileURL
-        let scope = grant.url.deletingLastPathComponent().path + "/"
-        guard candidate.path.hasPrefix(scope), ["html", "htm", "xhtml"].contains(candidate.pathExtension.lowercased()) else { return false }
-        return kind == .typed && candidate == grant.url || kind == .backForward
-            || surface.navigationState.committedURL?.isFileURL == true
-            || kind == nil && candidate == grant.url
+        guard grant.urls.contains(where: { $0.path == candidate.path }) else { return false }
+        return kind == nil || kind == .typed || kind == .reload || kind == .backForward
+    }
+
+    /// The built-in PDF component embeds the exact granted document in a nested frame.
+    /// This is engine metadata, not a URL or origin claimed by the requesting web page.
+    private static func allowsPDFContent<Surface: BrowserEngineSurface>(_ action: BrowserNavigationAction, surface: Surface) -> Bool {
+        guard action.isMainFrame == false, action.kind != .redirect,
+              let url = action.url, url.pathExtension.lowercased() == "pdf",
+              let parent = action.parentFrameURL, parent.scheme == "chrome-extension",
+              parent.host == "mhjfbmdgcfjbbpaeojofohoefgiehjai",
+              parent.user == nil, parent.password == nil, parent.port == nil,
+              let committed = surface.navigationState.committedURL, committed.isFileURL,
+              committed.resolvingSymlinksInPath().standardizedFileURL.path == url.resolvingSymlinksInPath().standardizedFileURL.path else { return false }
+        return allowsFile(url, surface: surface)
     }
 
     /// Source documents may wrap one absolute HTTP(S) URL only. A file grant never authorizes
@@ -111,8 +125,9 @@ enum BrowserNavigationPolicy {
         if isPasswordManagerURL(url), action.isMainFrame == false { return .cancel }
         if action.shouldPerformDownload { return ["http", "https", "blob", "data"].contains(scheme) ? .download : .cancel }
         if extensionDocuments, isExtensionDocument(url) { return .allow }
+        if extensionDocuments, allowsPDFContent(action, surface: surface) { return .allow }
         guard ["http", "https", "about", "blob", "data"].contains(scheme)
-                || allowsViewSource(url) || allowsChromiumSettings(url, surface: surface) || allowsPasswordManager(url, surface: surface) || allowsFile(url, surface: surface, kind: action.kind) else { return .cancel }
+                || allowsViewSource(url) || allowsChromiumSettings(url, surface: surface) || allowsPasswordManager(url, surface: surface) || action.isMainFrame != false && allowsFile(url, surface: surface, kind: action.kind) else { return .cancel }
         if routesEnabled, case .handled(let policy) = hooks.routeNavigation(from: surface, action: action) { return policy }
         return .allow
     }
@@ -120,7 +135,7 @@ enum BrowserNavigationPolicy {
     static func response<Surface: BrowserEngineSurface>(_ response: BrowserNavigationResponse, surface: Surface,
                                                         held: Bool, extensionDocuments: Bool = false) -> BrowserNavigationResponsePolicy {
         guard held, let url = response.response.url, let scheme = url.scheme?.lowercased() else { return .cancel }
-        return ["http", "https", "about", "blob", "data"].contains(scheme) || allowsViewSource(url) || allowsChromiumSettings(url, surface: surface) || allowsPasswordManager(url, surface: surface) || allowsFile(url, surface: surface)
+        return ["http", "https", "about", "blob", "data"].contains(scheme) || allowsViewSource(url) || allowsChromiumSettings(url, surface: surface) || allowsPasswordManager(url, surface: surface) || response.isForMainFrame && allowsFile(url, surface: surface)
             || extensionDocuments && isExtensionDocument(url) ? .allow : .cancel
     }
 }

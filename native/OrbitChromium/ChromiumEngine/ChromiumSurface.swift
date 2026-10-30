@@ -86,6 +86,7 @@ final class ChromiumHostView: NSView {
             }
         })
         fit(subview)
+        ChromiumFileDrop.install(in: subview)
     }
 
     override func willRemoveSubview(_ subview: NSView) {
@@ -94,7 +95,7 @@ final class ChromiumHostView: NSView {
     }
 
     private func fitContent() {
-        for subview in subviews { fit(subview) }
+        for subview in subviews { fit(subview); ChromiumFileDrop.install(in: subview) }
     }
 
     private func fit(_ subview: NSView) {
@@ -274,6 +275,7 @@ public final class ChromiumSurface: BrowserEngineSurface {
         view.autoresizesSubviews = true
         hostView = view
         view.surface = self
+
     }
 
     public var currentURL: URL? { requestedDestination ?? state.url }
@@ -995,10 +997,10 @@ public final class ChromiumSurface: BrowserEngineSurface {
         if request.isMainFrame, kind == .backForward || kind == .reload { pendingKind = nil }
         let action = BrowserNavigationAction(url: destination, isMainFrame: request.isMainFrame, kind: kind,
                                              httpMethod: request.method, hasBody: request.hasBody,
-                                             isUserGesture: request.userGesture)
+                                             isUserGesture: request.userGesture, parentFrameURL: request.parentURL.flatMap(URL.init(string:)))
         onEngineEvent?("before-browse", ["url": request.url ?? "", "main": String(request.isMainFrame),
                                          "gesture": String(request.userGesture), "redirect": String(request.isRedirect),
-                                         "kind": kind.rawValue, "method": request.method ?? ""])
+                                         "kind": kind.rawValue, "method": request.method ?? "", "parent": request.parentURL ?? ""])
         // OnBeforeBrowse returns synchronously on the UI thread: no suspension on the stock SDK.
         let decision = BrowserPolicyDecision<BrowserNavigationActionPolicy>(canSuspend: false, fallback: .cancel) { _ in }
         delegate?.surface(self, decidePolicyFor: action, decision: decision)

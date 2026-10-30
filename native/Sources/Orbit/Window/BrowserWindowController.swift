@@ -28,6 +28,7 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
     let backButton = BrowserNavigationGlyphButton(glyph: nil, label: OrbitShellText.back)
     let forwardButton = BrowserNavigationGlyphButton(glyph: nil, label: OrbitShellText.forward)
     let reloadButton = OrbitGlyphButton(glyph: nil, label: OrbitShellText.reload)
+    var openedLocalDocuments: Set<URL> = []
     var addressResolver = AddressResolver()
     let translationPages: BrowserTranslationPages
     lazy var translation = BrowserTranslationController(owner: self)
@@ -246,9 +247,11 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
             return surface
         }
         // Ownership and placement are recorded before the first load starts.
-        let startSurface: (Surface, URL) -> Void = { surface, url in
+        let startSurface: (Surface, URL) -> Void = { [weak self] surface, url in
             if url.absoluteString != "about:blank" {
-                BrowserNavigationPolicy.authorizeLocalDocument(url, for: surface)
+                if self?.openedLocalDocuments.contains(url) == true {
+                    BrowserNavigationPolicy.authorizeLocalDocument(url, for: surface)
+                }
                 if engine.kind == .chromium, BrowserNavigationPolicy.isChromiumSettingsURL(url) {
                     BrowserNavigationPolicy.authorizeChromiumSettings(for: surface)
                 }

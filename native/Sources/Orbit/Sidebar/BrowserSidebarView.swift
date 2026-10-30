@@ -68,6 +68,8 @@ final class BrowserSidebarView: NSView, SidebarListHost {
     var onTearOff: ((SidebarDragPayload, NSPoint) -> Void)?
     /// A validated drop: payload, destination, and whether the organization changes (false for
     /// rows dropped back in place, which still move live documents between windows).
+    var onFileDrop: (([URL], BrowserOrganizationDestination) -> Void)?
+    private var fileDropProposal: SidebarDropProposal?
     var onDrop: ((SidebarDragPayload, BrowserOrganizationDestination, Bool) -> Void)?
     /// Context menu for these nodes (the clicked row, or the multi-selection containing it).
     var onContextMenu: (([BrowserOrganizationNode], NSEvent, NSView) -> Void)?
@@ -234,7 +236,7 @@ final class BrowserSidebarView: NSView, SidebarListHost {
             self?.spaceHoverDidChange(nil, dismissalDuration: SidebarSpaceTooltip.clickDismissalDuration)
         }
         footer.onHoverSpace = { [weak self] button in self?.spaceHoverDidChange(button, allowsHandoff: true) }
-        registerForDraggedTypes([SidebarDragPayload.pasteboardType, FavoritesDragPayload.pasteboardType])
+        registerForDraggedTypes([SidebarDragPayload.pasteboardType, FavoritesDragPayload.pasteboardType, .fileURL])
     }
 
     required init?(coder: NSCoder) { nil }
@@ -650,6 +652,10 @@ final class BrowserSidebarView: NSView, SidebarListHost {
     override func draggingEntered(_ sender: any NSDraggingInfo) -> NSDragOperation { draggingUpdated(sender) }
 
     override func draggingUpdated(_ sender: any NSDraggingInfo) -> NSDragOperation {
+        if dragPayload(from: sender) == nil {
+            let urls = Self.droppedFiles(sender.draggingPasteboard)
+            return updateFileDrop(urls, at: convert(sender.draggingLocation, from: nil)) != nil ? .copy : []
+        }
         guard commandsEnabled, let payload = dragPayload(from: sender) else { return [] }
         let point = convert(sender.draggingLocation, from: nil)
         page.autoscrollDuringDrag(at: convert(point, to: page))
@@ -661,11 +667,11 @@ final class BrowserSidebarView: NSView, SidebarListHost {
         return verdict?.isValid == true ? .move : []
     }
 
-    override func draggingExited(_ sender: (any NSDraggingInfo)?) { dropCoordinator.clear() }
+    override func draggingExited(_ sender: (any NSDraggingInfo)?) { clearFileDrop(); dropCoordinator.clear() }
 
     /// Any end of the session (cancelled over the sidebar included) drops leftover feedback; a
     /// committed drop already handed its feedback to the target.
-    override func draggingEnded(_ sender: any NSDraggingInfo) { dropCoordinator.clear() }
+    override func draggingEnded(_ sender: any NSDraggingInfo) { clearFileDrop(); dropCoordinator.clear() }
 
     /// Rows dragged inside this process only: the list's payload, or a Favorites tile whose source
     /// still vouches for its pasteboard payload (FAVORITES' local check). Other applications'
@@ -680,10 +686,13 @@ final class BrowserSidebarView: NSView, SidebarListHost {
     }
 
     override func prepareForDragOperation(_ sender: any NSDraggingInfo) -> Bool {
-        commandsEnabled && dropCoordinator.acceptedDrop() != nil
+        commandsEnabled && (fileDropProposal != nil || dropCoordinator.acceptedDrop() != nil)
     }
 
     override func performDragOperation(_ sender: any NSDraggingInfo) -> Bool {
+        if dragPayload(from: sender) == nil {
+            return commitFileDrop(Self.droppedFiles(sender.draggingPasteboard), at: convert(sender.draggingLocation, from: nil))
+        }
         guard commandsEnabled, let accepted = dropCoordinator.acceptedDrop() else {
             dropCoordinator.clear()
             return false
@@ -710,6 +719,38 @@ final class BrowserSidebarView: NSView, SidebarListHost {
             commitDrop(accepted.payload, proposal: accepted.proposal, target: accepted.target)
         }
         return true
+    }
+
+    static func droppedFiles(_ pasteboard: NSPasteboard) -> [URL] {
+        (pasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL] ?? [])
+            .compactMap(LocalFileOpen.validURL)
+    }
+
+    @discardableResult
+    func updateFileDrop(_ urls: [URL], at point: NSPoint) -> SidebarDropProposal? {
+        guard commandsEnabled, onFileDrop != nil, !urls.compactMap(LocalFileOpen.validURL).isEmpty,
+              let organization, page.list.acceptsDrag(at: point, in: self) else { clearFileDrop(); return nil }
+        page.autoscrollDuringDrag(at: convert(point, to: page))
+        let proposal = page.list.localFileDropProposal(at: page.list.convert(point, from: self),
+            in: organization, count: urls.count)
+        fileDropProposal = proposal
+        page.list.showLocalFileDropFeedback(proposal)
+        return proposal
+    }
+
+    @discardableResult
+    func commitFileDrop(_ urls: [URL], at point: NSPoint) -> Bool {
+        let files = urls.compactMap(LocalFileOpen.validURL)
+        guard let proposal = updateFileDrop(files, at: point) else { return false }
+        clearFileDrop()
+        onFileDrop?(files, proposal.destination)
+        return true
+    }
+
+    private func clearFileDrop() {
+        guard fileDropProposal != nil else { return }
+        fileDropProposal = nil
+        page.list.showLocalFileDropFeedback(nil)
     }
 
     /// Commits a validated drop (also the entry point of the hidden-window tests).

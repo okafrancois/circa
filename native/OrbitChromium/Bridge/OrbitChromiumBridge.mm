@@ -1412,6 +1412,7 @@ class Client final : public CefClient, public CefLifeSpanHandler, public CefDisp
       if (host && host->extension_manager_route.Allow(url, frame->GetURL().ToString(),
                                                      is_redirect, method)) return false;
     }
+    const std::string parent_url = frame && frame->GetParent() ? frame->GetParent()->GetURL().ToString() : std::string();
     ACRNavigationInfo info {};
     info.struct_size = sizeof(info);
     info.url = url.c_str();
@@ -1421,6 +1422,7 @@ class Client final : public CefClient, public CefLifeSpanHandler, public CefDisp
     info.transition_type = static_cast<uint32_t>(request->GetTransitionType());
     info.method = method.empty() ? nullptr : method.c_str();
     info.has_body = request->GetPostData() ? 1 : 0;
+    info.parent_url = parent_url.empty() ? nullptr : parent_url.c_str();
     const int32_t policy = g_state->callbacks.decide_navigation(g_state->context, token_, &info);
     if (policy == ACR_POLICY_DOWNLOAD) {
       // Replay as a download: a new GET, POST bodies and the navigation are lost.

@@ -119,7 +119,6 @@ final class BrowserQuickWindowWindowController<Engine: BrowserEngine>: NSWindowC
         opensWithDocument = url != nil
         bind(created)
         if let url {
-            BrowserNavigationPolicy.authorizeLocalDocument(url, for: created)
             created.navigate(to: url)
         }
     }
