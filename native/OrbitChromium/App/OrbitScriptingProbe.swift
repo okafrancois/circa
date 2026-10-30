@@ -49,6 +49,12 @@ enum OrbitScriptingProbe {
             guard let settings = app.environment?.settings else { throw ProbeFailure(message: "Missing settings") }
             try await settings.setAllowJavaScriptFromAppleEvents(false)
             _ = try await script("inventory", """
+                set windowIDs to id of windows
+                set windowNames to name of windows
+                if (count windowIDs) is not (count windowNames) then error "Window inventory mismatch"
+                set spaceIDs to id of spaces of window 1
+                set spaceNames to title of spaces of window 1
+                if (count spaceIDs) is not (count spaceNames) then error "Space inventory mismatch"
                 set listedTitles to title of tabs of window 1
                 set listedURLs to URL of tabs of window 1
                 if (count listedTitles) is not (count listedURLs) then error "Inventory mismatch"
@@ -59,7 +65,9 @@ enum OrbitScriptingProbe {
                 set createdTab to make new tab at end of tabs of window 1 with properties {URL:"about:blank#created"}
                 set createdID to id of createdTab
                 if (count tabs of window 1) is not initialCount + 1 then error "Create failed"
+                delay 0.3
                 set URL of createdTab to "about:blank#changed"
+                delay 0.3
                 set readBack to {id, title, URL} of createdTab
                 if item 1 of readBack is not createdID then error "Identity changed"
                 if item 3 of readBack is not "about:blank#changed" then error "URL did not change"
@@ -69,9 +77,15 @@ enum OrbitScriptingProbe {
             _ = try await script("select-reload-back", """
                 set t to last tab of window 1
                 select t
+                if id of active tab of window 1 is not id of t then error "Selection failed"
                 reload t
+                delay 0.2
                 go back t
+                delay 0.2
+                if URL of t is not "about:blank#created" then error "Back destination mismatch"
                 go forward t
+                delay 0.2
+                if URL of t is not "about:blank#changed" then error "Forward destination mismatch"
                 stop t
                 return id of t
                 """)
@@ -98,11 +112,23 @@ enum OrbitScriptingProbe {
                 throw error
             }
             try await settings.setAllowJavaScriptFromAppleEvents(false)
+            _ = try await script("javascript-disabled-again", """
+                try
+                    execute (last tab of window 1) javascript "'synthetic-text'"
+                    error "JavaScript unexpectedly allowed" number 999
+                on error messageText number errorNumber
+                    if errorNumber is not -1743 then error messageText number errorNumber
+                end try
+                return "refused"
+                """)
             _ = try await script("close-spaces-focus", """
+                set beforeClose to count tabs of window 1
                 close (last tab of window 1)
+                if (count tabs of window 1) is not beforeClose - 1 then error "Close failed"
                 set spaceNames to title of spaces of window 1
                 if (count spaceNames) < 1 then error "No Spaces"
                 focus (space 1 of window 1)
+                if id of active space of window 1 is not id of space 1 of window 1 then error "Space focus failed"
                 return count spaceNames
                 """)
             _ = try await script("make-private", """
