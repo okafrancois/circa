@@ -9,6 +9,10 @@ public enum BrowserPerformance {
         synthetic && arguments.contains("--perf-probe")
     }
     public enum Counter: String, Sendable, CaseIterable {
+        case resourceProtected, resourceVisible, resourceFootprintEstimateKB
+        case resourceTabs, resourceLive, resourceFrozen, resourceDiscarded, resourceSuspended, resourceUnknown
+        case resourceNativeDiscards, resourcePolicyDiscards, resourceRendererProcesses, resourceFootprintBytes
+        case resourceLifecycleEvents, resourceMemorySamples, resourcePressureEvents, resourceSweeps, resourceSweepNanoseconds
         case organizationPublications, organizationDeliveries, organizationRefreshes
         case windowProjections, sidebarProjections, sidebarContentPasses, listProjections, sidebarRebuilds, rowsConfigured, glyphDraws, savesScheduled
     }
@@ -23,9 +27,13 @@ public enum BrowserPerformance {
         case windowBegin, windowBuilt, windowReady, windowPresented, windowCommitted, windowInteractive
     }
     static let recorder = Recorder()
-    public static func count(_ counter: Counter, window: UUID? = nil) {
+    public static func count(_ counter: Counter, window: UUID? = nil, amount: Int = 1) {
         guard enabled else { return }
-        recorder.count(counter, window: window)
+        recorder.count(counter, window: window, amount: amount)
+    }
+    public static func set(_ counter: Counter, _ value: Int) {
+        guard enabled else { return }
+        recorder.set(counter, value)
     }
     public static func mark(_ phase: Phase) {
         guard enabled else { return }
@@ -40,10 +48,13 @@ public enum BrowserPerformance {
         private var counts: [String: Int] = [:]
         private var windows: Set<UUID> = []
         private var timestamps: [String: Double] = [:]
-        func count(_ counter: Counter, window: UUID? = nil) {
+        func count(_ counter: Counter, window: UUID? = nil, amount: Int = 1) {
             lock.lock(); defer { lock.unlock() }
-            counts[counter.rawValue, default: 0] += 1
+            counts[counter.rawValue, default: 0] += amount
             if let window { windows.insert(window) }
+        }
+        func set(_ counter: Counter, _ value: Int) {
+            lock.lock(); defer { lock.unlock() }; counts[counter.rawValue] = value
         }
         func mark(_ phase: Phase) {
             lock.lock(); defer { lock.unlock() }

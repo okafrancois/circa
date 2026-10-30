@@ -88,6 +88,9 @@ enum OrbitPerformanceProbe {
                 result["commandNonce"] = command["nonce"] ?? ""
                 if name == "theme-fixture", ownsWindow(owner, bundleID: "lab.orbit.orbit.theme-fixture") {
                     result["themeFixture"] = await themeFixture(owner, store: environment.store, command: command)
+                } else if name == "resource-coordinator", ownsWindow(owner, bundleID: "lab.orbit.orbit.perf-coord-0") {
+                    application.confirmQuit = { .quit }
+                    result["resourceCoordinator"] = await OrbitResourcePerformanceProbe.run(owner, store: environment.store, command: command)
                 } else if name == "import-auth-check", ownsWindow(owner, bundleID: "lab.orbit.orbit.import-auth") {
                     do {
                         guard let configuration = activeSiteSessionConfiguration() else { throw BrowserAuthenticationImportError.invalidState }

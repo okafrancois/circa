@@ -162,6 +162,7 @@ list(APPEND ORBIT_APP_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/App/EngineComposition
   "${CMAKE_CURRENT_SOURCE_DIR}/App/ProductRuntimeOptions.swift"
   "${CMAKE_CURRENT_SOURCE_DIR}/App/OrbitPerformanceProbe.swift"
   "${CMAKE_CURRENT_SOURCE_DIR}/App/OrbitEnginePerformanceProbe.swift"
+  "${CMAKE_CURRENT_SOURCE_DIR}/App/OrbitResourcePerformanceProbe.swift"
   "${CMAKE_CURRENT_SOURCE_DIR}/App/OrbitThumbnailPerformanceProbe.swift"
   "${CMAKE_CURRENT_SOURCE_DIR}/App/OrbitSelectionPerformanceProbe.swift"
   "${CMAKE_CURRENT_SOURCE_DIR}/App/OrbitDownloadAudioProbe.swift"
