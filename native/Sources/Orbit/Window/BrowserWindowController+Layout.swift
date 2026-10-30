@@ -17,6 +17,8 @@ extension BrowserWindowController {
         configureButton(backButton, glyph: OrbitGlyph.back, action: #selector(goBack(_:)), label: OrbitShellText.back)
         configureButton(forwardButton, glyph: OrbitGlyph.forward, action: #selector(goForward(_:)), label: OrbitShellText.forward)
         configureButton(reloadButton, glyph: OrbitGlyph.reload, action: #selector(reloadPage(_:)), label: OrbitShellText.reload)
+        configureHistoryInteraction(backButton.navigation, direction: .back)
+        configureHistoryInteraction(forwardButton.navigation, direction: .forward)
         sidebar.navigationContainer.install([toggle, backButton, forwardButton, reloadButton])
         // Compact toolbar (W < 224, ): the hidden toggle and reload move into
         // the "•••" menu (: Orbit's menu content was not captured).

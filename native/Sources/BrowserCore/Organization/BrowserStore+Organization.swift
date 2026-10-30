@@ -477,11 +477,25 @@ extension BrowserStore {
     // MARK: Hooks from the base store
 
     /// A freshly opened tab is a new logical tab in Today of its Space.
-    func organizationDidOpen(_ tab: BrowserTab) {
+    func organizationDidOpen(_ tab: BrowserTab, nextTo: TabID? = nil) {
         let now = clock()
         let entry = BrowserOrganizedTab(id: tab.id, url: tab.url, createdAt: now, lastActiveAt: now)
         _ = try? commitOrganization { state in
-            state.addTab(entry, into: windows[tab.windowID]?.standaloneProfileID != nil ? .standalone(tab.windowID) : .today(tab.spaceID), at: Self.insertsNewTodayTabsAtTop ? 0 : .max)
+            let root: BrowserOrganizationContainer = windows[tab.windowID]?.standaloneProfileID != nil
+                ? .standalone(tab.windowID) : .today(tab.spaceID)
+            var container = root
+            var index = Self.insertsNewTodayTabsAtTop ? 0 : Int.max
+            if let nextTo {
+                var anchor = BrowserOrganizationNode.tab(nextTo)
+                if case let .split(id)? = state.container(of: anchor) { anchor = .split(id) }
+                if let parent = state.container(of: anchor),
+                   parent == root || state.section(of: anchor) == .today(tab.spaceID),
+                   let position = state.children(of: parent).firstIndex(of: anchor) {
+                    container = parent
+                    index = position + 1
+                }
+            }
+            state.addTab(entry, into: container, at: index)
         }
     }
 

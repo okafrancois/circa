@@ -28,7 +28,7 @@ enum OrbitPerformanceProbe {
                 controller.window?.makeKey()
             }
         }
-        if ["lab.orbit.orbit.pinned-tabs", "lab.orbit.orbit.search-suggestions", "lab.orbit.orbit.circa-rename"].contains(Bundle.main.bundleIdentifier ?? "") {
+        if [OrbitNavigationHistoryProbe.bundleID, "lab.orbit.orbit.pinned-tabs", "lab.orbit.orbit.search-suggestions", "lab.orbit.orbit.circa-rename"].contains(Bundle.main.bundleIdentifier ?? "") {
             application.confirmQuit = { .quit }
             application.windowPresenter = { controller, _ in
                 controller.window?.setFrame(NSRect(x: -2000, y: -1200, width: 1280, height: 900), display: false)
@@ -450,6 +450,8 @@ enum OrbitPerformanceProbe {
                     result["scrollWheel"] = await OrbitScrollWheelProbe.run(owner, command: command)
                 } else if name == "thumbnail-performance", ownsWindow(owner, bundleID: "lab.orbit.orbit.perf-r11-thumbs") {
                     result["thumbnailPerformance"] = await OrbitThumbnailPerformanceProbe.run(owner, command: command, root: root)
+                } else if name == "navigation-history" {
+                    result["navigationHistory"] = await OrbitNavigationHistoryProbe.run(owner, command: command, root: root)
                 } else if name == "native-security" {
                     result["nativeSecurity"] = await OrbitEngineSecurityProbe.run(owner, command: command)
                 } else if name == "native-performance" {

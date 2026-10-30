@@ -111,3 +111,57 @@ extension BrowserWindowController {
         if reloadButton.isEnabled != (state.url != nil) { reloadButton.isEnabled = state.url != nil }
     }
 }
+
+extension BrowserWindowController {
+    func configureHistoryInteraction(_ interaction: BrowserNavigationButtonInteraction,
+                                     direction: BrowserNavigationHistoryMenu.Direction, tabID: TabID? = nil) {
+        interaction.makeMenu = { [weak self] in
+            guard let self, acceptsCommands,
+                  let surface = historySurface(tabID: tabID),
+                  let history = surface.nativePageServices?.navigationHistory() else { return nil }
+            let generation = surface.documentGeneration
+            return BrowserNavigationHistoryMenu(history: history, direction: direction, favicon: { [weak self] url in
+                self?.sidebarIcons.memoryCache.image(profile: surface.profileID, home: url)
+            }, select: { [weak self, weak surface] entry, adjacent in
+                self?.submitInput { controller in
+                    guard let surface, controller.owns(surface), !surface.isDisposed,
+                          surface.documentGeneration == generation else { return }
+                    controller.routeHistoryEntry(entry, on: surface, adjacent: adjacent)
+                }
+            })
+        }
+        interaction.openAdjacent = { [weak self] in
+            self?.submitInput { controller in
+                guard let surface = controller.historySurface(tabID: tabID),
+                      let history = surface.nativePageServices?.navigationHistory(),
+                      let entry = history.entries.filter({ direction == .back
+                          ? $0.index < history.currentIndex : $0.index > history.currentIndex })
+                        .min(by: { abs($0.index - history.currentIndex) < abs($1.index - history.currentIndex) }) else { return }
+                controller.routeHistoryEntry(entry, on: surface, adjacent: true)
+            }
+        }
+    }
+
+    private func historySurface(tabID: TabID?) -> Surface? {
+        guard acceptsCommands else { return nil }
+        let surface: Surface?
+        if let tabID, let occurrence = session.organization?.tab(tabID)?.occurrenceID {
+            surface = session.surface(for: occurrence)
+        } else if tabID == nil { surface = session.selectedSurface }
+        else { surface = nil }
+        guard let surface, owns(surface), !surface.isDisposed else { return nil }
+        return surface
+    }
+
+    func routeHistoryEntry(_ entry: BrowserNavigationEntry, on surface: Surface, adjacent: Bool) {
+        guard acceptsCommands, owns(surface), !surface.isDisposed,
+              let api = surface.nativePageServices,
+              api.navigationHistory()?.entries.contains(entry) == true else { return }
+        if adjacent {
+            guard let occurrence = session.occurrenceID(for: surface) else { return }
+            session.openNavigationTab(url: entry.url, nextTo: occurrence)
+        } else if api.goToEntry(index: entry.index) {
+            session.updateDestination(for: surface, to: entry.url)
+        }
+    }
+}

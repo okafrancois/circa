@@ -25,8 +25,8 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
 
     // MARK: Address and navigation controls
     let addressField = OrbitLocationField()
-    let backButton = OrbitGlyphButton(glyph: nil, label: OrbitShellText.back)
-    let forwardButton = OrbitGlyphButton(glyph: nil, label: OrbitShellText.forward)
+    let backButton = BrowserNavigationGlyphButton(glyph: nil, label: OrbitShellText.back)
+    let forwardButton = BrowserNavigationGlyphButton(glyph: nil, label: OrbitShellText.forward)
     let reloadButton = OrbitGlyphButton(glyph: nil, label: OrbitShellText.reload)
     var addressResolver = AddressResolver()
     let translationPages: BrowserTranslationPages
