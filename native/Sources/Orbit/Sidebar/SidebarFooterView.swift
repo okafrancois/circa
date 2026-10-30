@@ -27,6 +27,7 @@ final class SidebarFooterView: NSView {
         didSet { refreshAccent() }
     }
     var onSelectSpace: ((SpaceID) -> Void)?
+    var makeExportMenu: ((SpaceID) -> NSMenuItem?)?
     var onDeleteSpace: ((SpaceID) -> Void)?
     var onRenameSpace: ((SpaceID) -> Void)?
     var onEditSpaceIcon: ((SpaceID) -> Void)?
@@ -222,6 +223,7 @@ final class SidebarFooterView: NSView {
                   beforeID: index > 0 ? spaces[index - 1].id : nil),
             .init(kind: .moveRight, title: OrbitShellText.moveSpaceRight, symbol: "arrow.right", enabled: commandsEnabled && index + 1 < spaces.count,
                   beforeID: index + 2 < spaces.count ? spaces[index + 2].id : nil),
+            .init(kind: .exportFolder, title: uiFormat("Export “%@” into Folder", spaces[index].name), symbol: "folder", enabled: commandsEnabled && spaces.contains { $0.id != id && $0.profileID == spaces[index].profileID }, beforeID: nil),
             .init(kind: .delete, title: uiText("Delete Space…"), symbol: "trash", enabled: commandsEnabled && spaces.count > 1, beforeID: nil)
         ]
     }
@@ -237,6 +239,7 @@ final class SidebarFooterView: NSView {
         let capturedAuthority = authority
         let space = button.space
         let menu = SidebarSpaceMenu(actions: actions(for: space.id), accent: accent)
+        menu.exportMenu = makeExportMenu?(space.id)?.submenu
         contextMenu = menu
         menu.onClose = { [weak self, weak menu] in
             guard let self, contextMenu === menu else { return }
@@ -252,6 +255,7 @@ final class SidebarFooterView: NSView {
             case .icon: onEditSpaceIcon?(space.id)
             case .theme: onEditSpaceTheme?(space.id)
             case .moveLeft, .moveRight: onMoveSpace?(space.id, action.beforeID)
+            case .exportFolder: break
             case .delete: onDeleteSpace?(space.id)
             }
         }

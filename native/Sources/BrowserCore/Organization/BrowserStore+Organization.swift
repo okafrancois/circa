@@ -1018,7 +1018,7 @@ extension BrowserStore {
             do {
                 try next.apply(patch, preconditionsChecked: true)
                 next.normalizeArchivedSpaces()
-                try validateOrganization(next)
+                try next.validate(profiles: Set(profiles.keys), spaces: catalogApplying(patch).mapValues(\.profileID))
             } catch {
                 discarded = true
                 break
@@ -1030,6 +1030,7 @@ extension BrowserStore {
             organization = next
             if undoing { journal.redo.append(replayed) } else { journal.undo.append(replayed) }
             organizationJournals[context.windowID] = journal
+            applyCatalog(patch, in: context.windowID)
             reconcileOccurrences()
             if undoing { restoreWindowEffects(of: record, in: context.windowID) }
             recoverSelections(anchors)
@@ -1057,7 +1058,7 @@ extension BrowserStore {
 
     /// Replays only keys still holding this command’s values and preserves other windows’ live tabs.
     func canReplay(_ patch: BrowserOrganizationPatch, issuedIn windowID: WindowID) -> Bool {
-        guard organization.canApply(patch) else { return false }
+        guard organization.canApply(patch), canApplyCatalog(patch) else { return false }
         let removed = Set(patch.removedTabIDs)
         for (otherID, window) in windows where otherID != windowID {
             let claimed = Set(occurrences(in: window).filter {
