@@ -6,6 +6,7 @@
 #include <deque>
 #include <functional>
 #include <utility>
+#include <unordered_map>
 
 namespace orbit_bridge {
 
@@ -29,13 +30,27 @@ class NativeCommandScope {
   // Runtime shutdown must release parked native browser references before CEF ends.
   void Cancel() { cancelled_ = true; parked_.clear(); }
 
-  int32_t ActivateOrDefer(Action action, const Post& post) {
+  int32_t ActivateOrDefer(Action action, const Post& post, uint64_t window = 0) {
     if (cancelled_) return 0;
+    // A delayed activation must not overwrite a newer accepted selection in the same window.
+    // Other windows retain their own intent, and a refused post does not revoke older work.
+    const auto previous = window ? latest_[window] : 0;
+    const auto ticket = window ? ++next_ticket_ : 0;
+    if (window) {
+      latest_[window] = ticket;
+      action = [this, window, ticket, run = std::move(action)] {
+        return latest_[window] == ticket ? run() : int32_t{0};
+      };
+    }
+    const auto finish = [&](int32_t result) {
+      if (!result && window && latest_[window] == ticket) latest_[window] = previous;
+      return result;
+    };
     if (depth_ == 0) {
       Flush();
-      return action();
+      return finish(action());
     }
-    return PostActivation(std::move(action), post) ? 1 : 0;
+    return finish(PostActivation(std::move(action), post) ? 1 : 0);
   }
 
  private:
@@ -71,6 +86,8 @@ class NativeCommandScope {
   bool cancelled_ = false;
   int depth_ = 0;
   std::deque<Deferred> parked_;
+  uint64_t next_ticket_ = 0;
+  std::unordered_map<uint64_t, uint64_t> latest_;
 };
 
 }  // namespace orbit_bridge

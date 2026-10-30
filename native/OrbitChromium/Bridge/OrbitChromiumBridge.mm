@@ -3065,7 +3065,7 @@ extern "C" int32_t ACRActivateSurface(uint64_t token) {
         g_state->ExtensionSelectionChanged(window, live);
     }
     return result;
-  }, PostUI);
+  }, PostUI, window);
 }
 
 extern "C" int32_t ACRGetTabInfo(uint64_t token, ACRTabInfo* info) {
