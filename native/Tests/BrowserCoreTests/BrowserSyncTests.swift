@@ -43,6 +43,25 @@ struct BrowserSyncTests {
         try replica.merge(await transport.exchange(Array(replica.records.values)))
     }
 
+    @Test("Per-profile archive timing including Never syncs through the memory transport")
+    func archiveTimingSync() async throws {
+        let source = try BrowserStore(restoring: document())
+        let other = await source.createProfile(name: "Synthetic Other")
+        try await source.setAutoArchiveThreshold(.never, forProfile: profile)
+        try await source.setAutoArchiveThreshold(.sevenDays, forProfile: other)
+        let initial = await source.sessionDocument()
+        let cloud = BrowserSyncMemoryCloud()
+        var a = BrowserSyncReplica(device: "a"), b = BrowserSyncReplica(device: "b")
+        try a.capture(project(initial), now: date)
+        try await exchange(&a, BrowserSyncMemoryTransport(cloud: cloud, account: "synthetic"))
+        try await exchange(&b, BrowserSyncMemoryTransport(cloud: cloud, account: "synthetic"))
+        let received = try materialize(b, local: document())
+        #expect(received.organization.archivePolicy.threshold(for: profile) == .never)
+        #expect(received.organization.archivePolicy.threshold(for: other) == .sevenDays)
+        let restored = try BrowserStore(restoring: BrowserSessionDocument.decode(received.encoded()))
+        #expect(await restored.archivePolicy() == received.organization.archivePolicy)
+    }
+
     @Test("Boost title changes propagate through sync and persist on the receiving Mac")
     func boostRenameSync() async throws {
         let root = URL(fileURLWithPath: "/private/tmp/boost-rename-sync-" + UUID().uuidString)

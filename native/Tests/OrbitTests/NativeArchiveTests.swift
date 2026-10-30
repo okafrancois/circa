@@ -171,6 +171,90 @@ struct NativeArchiveTests {
         #expect(controller.window?.isVisible == false)
     }
 
+    @Test("Archive icon Clear Archive uses the confirmation; Cancel keeps records and Confirm clears them")
+    func clearConfirmation() async throws {
+        NSApplication.shared.setActivationPolicy(.prohibited)
+        let environment = BrowserEnvironment(engine: SiteSyntheticEngine())
+        let controller = try await environment.makeWindow()
+        defer { environment.autoArchive.scheduler.stop(); controller.session.close(); controller.window?.close() }
+        controller.session.openTab(url: URL(string: "https://archive.test/clear")!)
+        await controller.session.waitForPendingCommands()
+        controller.session.closeSelectedTab()
+        await controller.session.waitForPendingCommands()
+        controller.showArchive()
+        await controller.session.waitForPendingCommands()
+        await controller.archive.task?.value
+        // The menu gates input while the existing Library transition is in flight.
+        controller.library.view.acceptsLibraryInput = true
+        let menu = try #require(controller.library.view.archiveContextMenu())
+        #expect(menu.items.map(\.title) == ["Clear Archive"])
+        var count = 0
+        controller.archive.confirmation = { alert in
+            count += 1
+            #expect(alert.messageText == "Are you sure you'd like to Clear Archive?")
+            #expect(alert.informativeText == "This action is permanent.")
+            #expect(alert.buttons.map(\.title) == ["Clear Archive", "Cancel"])
+            return .alertSecondButtonReturn
+        }
+        let item = try #require(menu.items.first)
+        #expect(NSApp.sendAction(try #require(item.action), to: item.target, from: item))
+        await controller.session.waitForPendingCommands()
+        await controller.archive.confirmationTask?.value
+        await controller.session.waitForPendingCommands()
+        #expect(count == 1 && controller.session.organization?.archivedTabCount == 1)
+        controller.archive.confirmation = { _ in .alertFirstButtonReturn }
+        controller.confirmClearArchive()
+        await controller.session.waitForPendingCommands()
+        await controller.archive.confirmationTask?.value
+        await controller.session.waitForPendingCommands()
+        #expect(controller.session.organization?.archivedTabCount == 0)
+        #expect(controller.window?.isVisible == false)
+    }
+
+    @Test("Library and palette restore commands consult the live configured ATC rules")
+    func configuredRestoreRouting() async throws {
+        NSApplication.shared.setActivationPolicy(.prohibited)
+        let environment = BrowserEnvironment(engine: SiteSyntheticEngine())
+        let controller = try await environment.makeWindow()
+        defer { environment.autoArchive.scheduler.stop(); controller.session.close(); controller.window?.close() }
+        let profile = try #require(controller.session.activeProfileID)
+        let origin = try #require(controller.session.snapshot?.activeSpaceID)
+        let target = try await environment.store.createSpace(name: "Synthetic Route", profileID: profile)
+        let routeID = UUID()
+        controller.session.openTab(url: URL(string: "https://archive.test/route")!)
+        await controller.session.waitForPendingCommands()
+        let id = try #require(controller.session.organization?.selectedTab?.id)
+        controller.session.closeSelectedTab()
+        await controller.session.waitForPendingCommands()
+        try await environment.settings.store.saveLinkRoute(.init(id: routeID, match: .host, value: "archive.test", spaceID: target))
+        await environment.settings.refresh()
+        controller.showArchive()
+        await controller.session.waitForPendingCommands()
+        await controller.archive.task?.value
+        controller.archive.view.onRestore?(id)
+        #expect(controller.library.isPresented)
+        await controller.session.waitForPendingCommands()
+        #expect(!controller.library.isPresented)
+        #expect(controller.session.snapshot?.activeSpaceID == target)
+        #expect(controller.session.organization?.selectedTab?.id == id)
+        controller.session.closeSelectedTab()
+        await controller.session.waitForPendingCommands()
+        try await environment.settings.store.saveLinkRoute(.init(id: routeID, match: .host, value: "archive.test", spaceID: origin))
+        await environment.settings.refresh()
+        let expected = try #require(controller.session.paletteContext)
+        #expect(await controller.session.restoreFromPalette(id, from: expected).value)
+        #expect(controller.session.organization?.selectedTab?.id == id)
+        #expect(controller.session.snapshot?.activeSpaceID == origin)
+        controller.session.closeSelectedTab()
+        await controller.session.waitForPendingCommands()
+        try await environment.settings.store.saveLinkRoute(.init(id: routeID, match: .host, value: "archive.test", spaceID: target))
+        await environment.settings.refresh()
+        controller.session.restoreMostRecentArchivedTab()
+        await controller.session.waitForPendingCommands()
+        #expect(controller.session.snapshot?.activeSpaceID == target)
+        #expect(controller.session.organization?.selectedTab?.id == id)
+    }
+
     @Test("Archive day groups are newest first and rows preserve record identity")
     func groupsByDay() {
         let profile = ProfileID(), space = SpaceID()

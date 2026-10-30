@@ -9,6 +9,23 @@ struct BrowserArchiveSettingsChange: Identifiable {
     let profileName: String
     let threshold: BrowserAutoArchiveThreshold
 
+    static func options(current: BrowserAutoArchiveThreshold?) -> [BrowserAutoArchiveThreshold] {
+        var options: [BrowserAutoArchiveThreshold] = [.twelveHours, .oneDay, .sevenDays, .thirtyDays, .never]
+        if let current, !options.contains(current) { options.append(current) }
+        return options
+    }
+
+    static func label(_ threshold: BrowserAutoArchiveThreshold) -> String {
+        switch threshold {
+        case .twelveHours: return uiText("12 hours")
+        case .oneDay: return uiText("24 hours")
+        case .sevenDays: return uiText("7 days")
+        case .thirtyDays: return uiText("30 days")
+        case .never: return uiText("Never")
+        default: return uiText("Custom Delay")
+        }
+    }
+
     var title: String {
         guard let interval = threshold.interval else { return uiText("Circa will never auto-archive your tabs.") }
         let label: String

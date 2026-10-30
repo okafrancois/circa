@@ -35,6 +35,25 @@ struct NativeArchiveAutoSettingsTests {
         environment.autoArchive.scheduler.stop()
     }
 
+    @Test("Never is always selectable; a custom delay is offered only while already configured")
+    func selectableOptions() async throws {
+        #expect(BrowserArchiveSettingsChange.options(current: .twelveHours) == [.twelveHours, .oneDay, .sevenDays, .thirtyDays, .never])
+        let custom = try BrowserAutoArchiveThreshold.after(1234)
+        #expect(BrowserArchiveSettingsChange.options(current: custom).last == custom)
+        #expect(BrowserArchiveSettingsChange.options(current: .never).filter { $0 == .never }.count == 1)
+        let environment = BrowserEnvironment(engine: SiteSyntheticEngine())
+        defer { environment.autoArchive.scheduler.stop() }
+        let (_, profile) = try await environment.initialContext.value
+        let other = await environment.store.createProfile(name: "Synthetic Other")
+        let model = BrowserSettingsModel(environment: environment, profileID: profile, shortcuts: [])
+        try await model.setArchiveThreshold(.never, profile: profile)
+        await model.reload()
+        #expect(model.archiveThreshold == .never)
+        #expect(await environment.store.archivePolicy().threshold(for: other) == .twelveHours)
+        let restored = try BrowserStore(restoring: BrowserSessionDocument.decode(await environment.store.sessionDocument().encoded()))
+        #expect(await restored.archivePolicy().threshold(for: profile) == .never)
+    }
+
     @Test("A deleted captured profile cannot apply a delayed change to every other profile")
     func deletedCapture() async throws {
         let environment = BrowserEnvironment(engine: SiteSyntheticEngine())

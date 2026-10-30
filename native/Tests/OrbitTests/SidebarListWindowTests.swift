@@ -575,6 +575,29 @@ struct SidebarListWindowTests {
         #expect(c.isSidebarVisible)
     }
 
+    @Test("Archive Tabs Below is available on a Split View row and retains both panes")
+    func archiveBelowSplit() async throws {
+        let harness = try await SidebarListHarness()
+        defer { harness.shutdown() }
+        let c = harness.window
+        let a = try #require(await harness.openTab("https://menus.test/split-a"))
+        let b = try #require(await harness.openTab("https://menus.test/split-b"))
+        let below = try #require(await harness.openTab("https://menus.test/below"))
+        let (split, _) = try await harness.store.createSplit([a, b], from: harness.store.captureContext(in: c.session.snapshot!.id))
+        c.session.synchronizeOrganization()
+        c.session.moveItems([.tab(below)], to: .init(.today(harness.spaceID), position: .end))
+        await harness.settle()
+        let nodes = c.sidebar.prepareContextMenu(for: .split(split))
+        let menu = try #require(c.makeSidebarContextMenu(for: nodes))
+        let index = menu.menu.indexOfItem(withTitle: "Archive Tabs Below")
+        #expect(index >= 0 && menu.menu.items[index].isEnabled)
+        menu.menu.performActionForItem(at: index)
+        await harness.settle()
+        c.sidebar.endContextMenu()
+        #expect(c.organization.tab(a) != nil && c.organization.tab(b) != nil)
+        #expect(c.organization.tab(below) == nil)
+    }
+
     @Test("Mute acts on the clicked live tab and its next menu offers Unmute")
     func muteClickedTab() async throws {
         let harness = try await SidebarListHarness()

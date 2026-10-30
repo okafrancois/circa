@@ -234,6 +234,8 @@ public final class BrowserWindowSession<Surface: BrowserSurface> {
     /// Valid only while the existing onChange publication is being delivered.
     public private(set) var selectionChangeTabIDs: Set<TabID>?
     public var onMetadataChange: ((Set<TabID>) -> Void)?
+    /// Read at command admission so archive restores use the current configured routes.
+    public var archiveLinkRouting: () -> BrowserLinkRouting = { .init() }
     public var onError: ((any Error) -> Void)?
 
     let store: BrowserStore

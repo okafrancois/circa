@@ -239,7 +239,7 @@ public extension BrowserWindowSession {
 
     func restoreArchivedTab(_ id: TabID, activate: Bool = true) {
         enqueueOrganization { session, context in
-            try await session.store.restoreArchivedTab(id, activate: activate, from: context)
+            try await session.store.restoreArchivedTab(id, activate: activate, from: context, routing: session.archiveLinkRouting())
         }
     }
 
@@ -251,7 +251,7 @@ public extension BrowserWindowSession {
             guard !preferAlternative(newest?.archivedAt), newest != nil else {
                 return try await session.store.captureWindowState(from: context)
             }
-            return try await session.store.restoreMostRecentArchivedTab(from: context)
+            return try await session.store.restoreMostRecentArchivedTab(from: context, routing: session.archiveLinkRouting())
         }
     }
 

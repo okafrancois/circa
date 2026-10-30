@@ -37,7 +37,7 @@ public extension BrowserWindowSession {
     func restoreFromPalette(_ id: TabID, from expected: BrowserContext) -> Task<Bool, Never> {
         paletteOperation { session, context in
             guard context.windowID == expected.windowID, context.profileID == expected.profileID else { return false }
-            let state = try await session.store.restoreArchivedTab(id, activate: true, from: context)
+            let state = try await session.store.restoreArchivedTab(id, activate: true, from: context, routing: session.archiveLinkRouting())
             session.install(state)
             return !session.isClosed
         }
