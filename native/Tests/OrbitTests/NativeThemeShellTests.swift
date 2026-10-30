@@ -432,7 +432,7 @@ struct ShellGeometryTests {
         let top = geometry.pageFrame.minY + geometry.spaceTitleCenterY + 36 - 18
         #expect((0..<4).map { top + geometry.pinnedRowFrame(index: $0).midY } == [200.5, 241.5, 282.5, 323.5])
         #expect(geometry.pinnedRowFrame(index: 0).minX == 8 && geometry.pinnedRowFrame(index: 0).width == 212)
-        #expect(OrbitSidebarGeometry.contentIndent(depth: 1) == 16 && OrbitSidebarGeometry.contentIndent(depth: 0) == 0)
+        #expect(OrbitSidebarGeometry.contentIndent(depth: 1) == 13 && OrbitSidebarGeometry.contentIndent(depth: 0) == 0)
         let three = OrbitSidebarGeometry.resolve(.init(height: 640, favoriteCount: 5))
         #expect(three.favoriteColumns == 3 && three.favoriteTileFrame(index: 4).minY == 55)
     }

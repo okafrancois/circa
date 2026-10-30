@@ -217,7 +217,7 @@ class OrbitGlyphButton: NSButton {
 final class OrbitSurfaceBackgroundView: NSView {
     private let host = CALayer()
     private let fill = CALayer()
-    private let shadowCaster = CALayer()
+    private let shadowCaster = CAShapeLayer()
     private let shadowMask = CAShapeLayer()
     private(set) var frost: OrbitFrostView?
     var fillColor: NSColor? { didSet { refresh() } }
@@ -250,10 +250,13 @@ final class OrbitSurfaceBackgroundView: NSView {
         host.masksToBounds = false
         shadowMask.fillRule = .evenOdd
         shadowCaster.mask = shadowMask
+        shadowCaster.fillColor = NSColor.black.cgColor
         host.addSublayer(shadowCaster)
         host.addSublayer(fill)
         layer = host
         wantsLayer = true
+        clipsToBounds = false
+        host.masksToBounds = false
         refresh()
     }
 
@@ -274,13 +277,14 @@ final class OrbitSurfaceBackgroundView: NSView {
     private func layoutLayers() {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        host.frame = bounds
+        // AppKit owns the backing layer frame; resetting it moves inset surfaces to x=0.
         fill.frame = bounds
         fill.cornerRadius = cornerRadius
         let margin = (outerShadow.map { $0.blur + abs($0.offsetY) } ?? 0) + 2
         shadowCaster.frame = bounds.insetBy(dx: -margin, dy: -margin)
         let shape = CGRect(x: margin, y: margin, width: bounds.width, height: bounds.height)
         shadowCaster.shadowPath = CGPath(roundedRect: shape, cornerWidth: cornerRadius, cornerHeight: cornerRadius, transform: nil)
+        shadowCaster.path = shadowCaster.shadowPath
         let mask = CGMutablePath()
         mask.addRect(shadowCaster.bounds)
         mask.addPath(CGPath(roundedRect: shape, cornerWidth: cornerRadius, cornerHeight: cornerRadius, transform: nil))

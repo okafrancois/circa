@@ -22,9 +22,8 @@ extension BrowserWindowController {
             guard let self else { return .init() }
             let customIcon = SpaceIconImages.tabImage(item.customIcon)
             guard let occurrenceID = item.occurrenceID else {
-                return SidebarTabActivity(favicon: customIcon ?? session.organization.flatMap {
-                    sidebarIcons.memoryCache.image(profile: $0.profileID, home: item.pinnedURL ?? item.url)
-                })
+                return SidebarTabActivity(favicon: customIcon ?? sidebarIcons.image(for: item, surface: nil,
+                    profileID: session.organization?.profileID, isOwned: { _ in false }))
             }
             guard let surface = session.surface(for: occurrenceID), owns(surface) else {
                 return SidebarTabActivity(favicon: customIcon ?? tabSuspension.icon(for: occurrenceID)

@@ -2,13 +2,18 @@ import Foundation
 
 public enum ArcSpaceThemeImport {
     public static func theme(for appearance: ArcSpaceAppearance) -> BrowserSpaceTheme? {
+        theme(for: appearance, decodeSingleColor: true)
+    }
+
+    static func theme(for appearance: ArcSpaceAppearance, decodeSingleColor: Bool) -> BrowserSpaceTheme? {
         let root = appearance.theme.flatMap { try? ArcJSON.parse(Data($0.utf8)) }
         var colors: [BrowserThemeColor] = []
         var intensity: Double?
         var noise: Double?
         var mode: BrowserSpaceTheme.Mode = .automatic
         if let root {
-            let style = (root["background"]?.unwrapped["single"]?.unwrapped["style"] ?? root["style"])?.unwrapped
+            let single = root["background"]?.unwrapped["single"]?.unwrapped
+            let style = (single?["style"] ?? root["style"])?.unwrapped
             let colorStyle = style?["color"]?.unwrapped ?? style
             let gradient = (colorStyle?["blendedGradient"] ?? root["blendedGradient"])?.unwrapped
             for item in gradient?["baseColors"]?.array ?? root["baseColors"]?.array ?? [] {
@@ -18,9 +23,14 @@ public enum ArcSpaceThemeImport {
                let color = Self.color(basic) {
                 colors = [color]
             }
-            intensity = (gradient?["intensityFactor"] ?? root["intensityFactor"] ?? gradient?["modifiers"]?["intensityFactor"])?.number
-            noise = (gradient?["noiseFactor"] ?? root["noiseFactor"] ?? gradient?["modifiers"]?["noiseFactor"])?.number
-            mode = Self.mode(root["windowAppearance"] ?? root["colorScheme"] ?? root["appearance"])
+            let blended = decodeSingleColor ? colorStyle?["blendedSingleColor"]?.unwrapped : nil
+            if colors.isEmpty, let blended, let color = Self.color(blended) { colors = [color] }
+            let modifiers = blended?["modifiers"]?.unwrapped
+            intensity = (modifiers?["intensityFactor"] ?? gradient?["intensityFactor"] ?? root["intensityFactor"] ?? gradient?["modifiers"]?["intensityFactor"])?.number
+            noise = (modifiers?["noiseFactor"] ?? gradient?["noiseFactor"] ?? root["noiseFactor"] ?? gradient?["modifiers"]?["noiseFactor"])?.number
+            let explicitMode = root["windowAppearance"] ?? root["colorScheme"] ?? root["appearance"]
+            mode = Self.mode(explicitMode ?? (decodeSingleColor
+                ? blended?["translucencyStyle"] ?? single?["contentOverBackgroundAppearance"] : nil))
         }
         if colors.isEmpty, let hex = appearance.colorHex, let color = BrowserThemeColor(hexString: hex) {
             colors = [color]

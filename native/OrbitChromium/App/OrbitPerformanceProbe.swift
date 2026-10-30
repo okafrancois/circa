@@ -108,7 +108,7 @@ enum OrbitPerformanceProbe {
                 } else if name == "branding-capture" {
                     result["branding"] = await OrbitBrandingProbe.run(application, environment: environment, owner: owner, root: root, appearance: command["appearance"] ?? "light")
                 } else if name == "pinned-tabs" {
-                    result["pinnedTabs"] = await OrbitPinnedTabProbe.run(owner, root: root, command: command)
+                    result["pinnedTabs"] = await OrbitPinnedTabProbe.run(owner, store: environment.store, root: root, command: command)
                 } else if name == "split-divider" {
                     result["splitDivider"] = await splitDividerFixture(owner, command: command)
                 } else if name == "folder-hover", ownsWindow(owner, bundleID: "lab.orbit.orbit.folder-hover") {

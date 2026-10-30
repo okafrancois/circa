@@ -385,14 +385,19 @@ final class BrowserSidebarView: NSView, SidebarListHost {
 
     /// Surface updates (loading progress, titles) re-render often: the content is rebuilt only
     /// when the snapshot, the selection or a live title changed.
+    private func activity(for tab: BrowserOrganizationTabItem) -> SidebarTabActivity {
+        let value = liveActivity(tab)
+        return tab.occurrenceID == nil ? SidebarTabActivity(favicon: value.favicon) : value
+    }
+
     private func makeContent() -> SidebarListContent {
         BrowserPerformance.count(.sidebarContentPasses)
         var titles: [TabID: String] = [:]
         var activities: [TabID: SidebarTabActivity] = [:]
         if let organization {
-            for tab in organization.allTabs where tab.occurrenceID != nil {
-                if let title = liveTitle(tab) { titles[tab.id] = title }
-                activities[tab.id] = liveActivity(tab)
+            for tab in organization.allTabs {
+                if tab.occurrenceID != nil, let title = liveTitle(tab) { titles[tab.id] = title }
+                activities[tab.id] = activity(for: tab)
             }
         }
         let inputs = ContentInputs(organization: organization, selection: selection, liveTitles: titles, liveActivities: activities)
@@ -423,7 +428,7 @@ final class BrowserSidebarView: NSView, SidebarListHost {
             for id in ids {
                 guard let tab = metadataIndex?.tab(id, in: next) else { continue }
                 titles[id] = tab.occurrenceID == nil ? nil : liveTitle(tab)
-                activities[id] = tab.occurrenceID == nil ? nil : liveActivity(tab)
+                activities[id] = activity(for: tab)
             }
             contentInputs = ContentInputs(organization: next, selection: selection,
                 liveTitles: titles, liveActivities: activities)
@@ -435,7 +440,7 @@ final class BrowserSidebarView: NSView, SidebarListHost {
             let old = cachedContent.entries[index]
             let row = SidebarListContent.tabItem(tab, multi: multi, section: old.section,
                 liveTitle: tab.occurrenceID == nil ? nil : liveTitle(tab),
-                activity: tab.occurrenceID == nil ? .init() : liveActivity(tab))
+                activity: activity(for: tab))
             let entry = SidebarListEntry(node: old.node, section: old.section, ancestors: old.ancestors, content: .tab(row))
             if entry != old { cachedContent.entries[index] = entry; updates.append(entry) }
         }
@@ -467,10 +472,10 @@ final class BrowserSidebarView: NSView, SidebarListHost {
             if let id = node.tabID, let tab = metadataIndex?.tab(id, in: next) {
                 content = .tab(SidebarListContent.tabItem(tab, multi: multi, section: old.section,
                     liveTitle: tab.occurrenceID == nil ? nil : liveTitle(tab),
-                    activity: tab.occurrenceID == nil ? .init() : liveActivity(tab)))
+                    activity: activity(for: tab)))
             } else if case let .split(split)? = next.item(for: node),
                       let row = SidebarListContent.splitItem(split, multi: multi, section: old.section,
-                          liveTitle: liveTitle, liveActivity: liveActivity) {
+                          liveTitle: liveTitle, liveActivity: { self.activity(for: $0) }) {
                 content = .split(row, split.group.tabIDs)
             } else { continue }
             let entry = SidebarListEntry(node: node, section: old.section, ancestors: old.ancestors, content: content)

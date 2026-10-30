@@ -172,6 +172,7 @@ public actor BrowserStore {
         willSet { spaceSettingsOwnership.synchronize(spaces: spaces, profiles: Set(profiles.keys), excluding: deletingProfiles, windows: newValue) }
     }
     var tabs: [TabOccurrenceID: BrowserTab] = [:]
+    var pinnedLandings: [TabOccurrenceID: BrowserPinnedLanding] = [:]
     // Sidebar organization shared by windows; commands live in Organization/BrowserStore+Organization.swift.
     var organization = BrowserOrganizationState() {
         didSet {
@@ -365,7 +366,10 @@ public actor BrowserStore {
             throw BrowserStoreError.windowMissing
         }
         for occurrenceIDs in window.occurrenceIDsBySpace.values {
-            for occurrenceID in occurrenceIDs { tabs.removeValue(forKey: occurrenceID) }
+            for occurrenceID in occurrenceIDs {
+                tabs.removeValue(forKey: occurrenceID)
+                pinnedLandings.removeValue(forKey: occurrenceID)
+            }
         }
         if window.standaloneProfileID != nil {
             for node in organization.standalone[windowID] ?? [] {
@@ -659,6 +663,7 @@ public actor BrowserStore {
             && window.selectedOccurrenceBySpace[spaceID] == occurrenceID
         detachOccurrence(occurrenceID, from: spaceID, in: &window)
         let closed = tabs.removeValue(forKey: occurrenceID)
+        pinnedLandings.removeValue(forKey: occurrenceID)
         windows[window.id] = window
         markViewed(window)
         if let closed {

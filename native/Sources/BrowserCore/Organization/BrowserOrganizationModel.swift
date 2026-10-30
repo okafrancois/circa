@@ -130,6 +130,12 @@ public struct BrowserOrganizationDestination: Hashable, Sendable {
 }
 
 /// The persistent part of a logical tab. Live engine state (history, DOM, forms) is never stored.
+/// A machine-local destination learned from a committed pinned navigation chain.
+public struct BrowserPinnedLandingAlias: Codable, Equatable, Sendable {
+    public let pinnedURL: URL
+    public let url: URL
+}
+
 public struct BrowserOrganizedTab: Codable, Equatable, Sendable {
     public let id: TabID
     /// Last committed destination reported by any occurrence, or the URL to load when none is live.
@@ -140,6 +146,10 @@ public struct BrowserOrganizedTab: Codable, Equatable, Sendable {
     public internal(set) var customIcon: BrowserSpaceIcon?
     /// Reference URL of a Favorite or Pinned tab. Always nil in Today.
     public internal(set) var pinnedURL: URL?
+    public internal(set) var pinnedLandingAlias: BrowserPinnedLandingAlias?
+    public var pinnedLandingURL: URL? {
+        pinnedLandingAlias.flatMap { $0.pinnedURL == pinnedURL ? $0.url : nil }
+    }
     /// Provider ownership and cached revision; machine-local and excluded from sync.
     public internal(set) var liveFolderChild: BrowserLiveFolderChild?
     public let createdAt: Date
@@ -148,13 +158,15 @@ public struct BrowserOrganizedTab: Codable, Equatable, Sendable {
 
     public init(id: TabID, url: URL, pageTitle: String? = nil, customTitle: String? = nil,
                 pinnedURL: URL? = nil, createdAt: Date, lastActiveAt: Date,
-                liveFolderChild: BrowserLiveFolderChild? = nil, customIcon: BrowserSpaceIcon? = nil) {
+                liveFolderChild: BrowserLiveFolderChild? = nil, customIcon: BrowserSpaceIcon? = nil,
+                pinnedLandingAlias: BrowserPinnedLandingAlias? = nil) {
         self.id = id
         self.url = url
         self.pageTitle = pageTitle
         self.customTitle = customTitle
         self.customIcon = customIcon
         self.pinnedURL = pinnedURL
+        self.pinnedLandingAlias = pinnedLandingAlias
         self.createdAt = createdAt
         self.lastActiveAt = lastActiveAt
         self.liveFolderChild = liveFolderChild

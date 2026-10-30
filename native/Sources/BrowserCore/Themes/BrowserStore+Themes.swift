@@ -68,10 +68,15 @@ public extension BrowserStore {
         var themed: [SpaceID] = []
         var recorded = false
         for entry in document.entries {
-            guard let space = spaces[entry.spaceID], !deletingProfiles.contains(space.profileID),
-                  themeImports.insert(entry.spaceID).inserted else { continue }
+            guard let space = spaces[entry.spaceID], !deletingProfiles.contains(space.profileID) else { continue }
+            let firstImport = themeImports.insert(entry.spaceID).inserted
+            recorded = recorded || firstImport
+            guard let theme = ArcSpaceThemeImport.theme(for: entry.appearance) else { continue }
+            // Repair the previous decoder's exact output. A user edit or reset stays authoritative.
+            let legacy = ArcSpaceThemeImport.theme(for: entry.appearance, decodeSingleColor: false)
+            let repairsLegacy = !firstImport && legacy != theme && space.theme != nil && space.theme == legacy
+            guard (firstImport && space.theme == nil) || repairsLegacy else { continue }
             recorded = true
-            guard space.theme == nil, let theme = ArcSpaceThemeImport.theme(for: entry.appearance) else { continue }
             spaces[entry.spaceID]?.theme = theme
             themed.append(entry.spaceID)
         }

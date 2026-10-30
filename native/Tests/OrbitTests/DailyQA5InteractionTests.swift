@@ -42,7 +42,11 @@ struct DailyQA5InteractionTests {
             #expect(!sidebar.updateCard.isHidden)
             #expect(sidebar.updateCard.frame.maxY <= sidebar.footer.frame.minY)
             #expect(sidebar.updateCard.frame.maxX <= sidebar.bounds.maxX)
-            #expect(sidebar.page.list.tabRows.allSatisfy { $0.titleLabel.textColor == sidebar.page.accent.foreground })
+            #expect(sidebar.page.list.tabRows.allSatisfy { row in
+                let ink = row.item.isPinned && row.item.selected
+                    ? OrbitTokens.Color.State.pinnedSelectedText : sidebar.page.accent.foreground
+                return row.titleLabel.textColor == ink
+            })
         }
         let first = try #require(owner.session.snapshot?.activeSpaceID)
         let profile = try #require(owner.session.activeProfileID)

@@ -98,7 +98,10 @@ extension OrbitTokens {
             public static let tabCurrent = NSColor.orbitDynamic("State.tabCurrent", light: .orbitSRGB(0xF6F6F6, 0.88), dark: .orbitP3(0xFAFBFF, 0.20))
             ///  — visible split member.
             public static let tabContentVisible = NSColor.orbitDynamic("State.tabContentVisible", light: .orbitSRGB(0xFFFFFF, 0.70), dark: .orbitP3(0xFAFBFF, 0.15))
-            public static let pinnedOpen = NSColor.orbitDynamic("State.pinnedOpen", light: .orbitSRGB(0x000000, 0.05), dark: .orbitSRGB(0xFFFFFF, 0.08))
+            public static let pinnedSelectedText = NSColor.orbitSRGB(0x1F1920)
+            public static let pinnedSelectedIcon = NSColor.orbitSRGB(0x666666)
+            public static let pinnedSelected = NSColor.orbitSRGB(0xEEEDEE)
+            public static let pinnedHover = NSColor.orbitDynamic("State.pinnedHover", light: .orbitSRGB(0x000000, 0.05), dark: .orbitP3(0xFAFBFF, 0.10))
             public static let tabPrevious = NSColor.orbitDynamic("State.tabPrevious", light: .orbitSRGB(0xFFFFFF, 0.32), dark: .orbitP3(0xFAFBFF, 0.08))
             public static let tabPreviousHovered = NSColor.orbitDynamic("State.tabPreviousHovered", light: .orbitSRGB(0xFFFFFF, 0.50), dark: .orbitP3(0xFAFBFF, 0.12))
             public static let tabPressed = NSColor.orbitDynamic("State.tabPressed", light: .orbitSRGB(0x000000, 0.10), dark: .orbitSRGB(0xFFFFFF, 0.10))
@@ -479,8 +482,8 @@ extension OrbitTokens {
             public static let faviconCenterX: CGFloat = 26            // , window coords
             public static let titleOriginX: CGFloat = 44              // , window coords
             public static let iconTitleGap: CGFloat = 10
-            public static let folderIconSize: CGFloat = 18
-            public static let folderChildIndent: CGFloat = 16         // ; no chevrons
+            public static let folderIconSize: CGFloat = 22
+            public static let folderChildIndent: CGFloat = 13         // ; no chevrons
             public static let closeGlyphSize: CGFloat = 10.5
             public static let closeCenterFromRowRight: CGFloat = 18
             public static let closeButtonSize: CGFloat = 24
@@ -668,6 +671,7 @@ extension OrbitTokens {
     }
 
     public enum Shadow {
+        public static let pinnedSelected = ShadowSpec(color: .orbitSRGB(0x000000, 0.20), offsetY: 1, blur: 2)
         ///  black 20 %, y 1, σ 1; none in dark.
         public static let tabSelected = ShadowSpec(color: Color.ShadowColor.tabSelected, offsetY: 1, blur: 2)
         ///  black 24 %; pair with Color.Line.floatingScrimBorder hairline.

@@ -708,6 +708,17 @@ public final class BrowserWindowSession<Surface: BrowserSurface> {
         }
     }
 
+    /// Preserve navigation-chain identity independently of volatile address/title metadata.
+    public func recordPinnedNavigation(for surface: Surface, to url: URL, isRedirect: Bool = false,
+                                       committed: Bool = false) {
+        enqueue { session in
+            guard let id = session.occurrenceID(for: surface), let authority = session.authorities[id] else { return }
+            let changed = try await session.store.recordPinnedNavigation(to: url, isRedirect: isRedirect,
+                                                                         committed: committed, from: authority)
+            if changed { try await session.refreshOrganizationState() }
+        }
+    }
+
     /// Revokes UI authority synchronously; model cleanup follows already issued actor mutations.
     public func close() { retire(removeModelWindow: true) }
 
