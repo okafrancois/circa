@@ -148,6 +148,9 @@ public struct BrowserSettingsDocument: Codable, Equatable, Sendable {
     public var downloads = BrowserDownloadPreferences()
     public var memorySaver: BrowserMemorySaverSetting = .oneHour
     public var automaticPictureInPicture = true
+    public var quickWindowArchiveThreshold: BrowserAutoArchiveThreshold = .sixHours
+    /// Device-local domain/account choices, excluded from the sync projection.
+    public var quickWindowProfilesByDomain: [String: ProfileID] = [:]
     public var enablesBoostsOnWebsites = true
     public var hasSeenBoostsIntroduction = false
     public var opensExternalLinksInQuickWindow = true {
@@ -167,7 +170,7 @@ public struct BrowserSettingsDocument: Codable, Equatable, Sendable {
     public var spaces: [SpaceID: BrowserSpaceSettings] = [:]
     public init() {}
     private enum CodingKeys: String, CodingKey {
-        case downloads, automaticPictureInPicture, hasSeenBoostsIntroduction, enablesBoostsOnWebsites, interaction, memorySaver, linkRouting, version, reducedMotion, profiles, spaces, opensExternalLinksInQuickWindow, lastActiveWindowID, lastActiveSpaceID
+        case quickWindowArchiveThreshold, quickWindowProfilesByDomain, downloads, automaticPictureInPicture, hasSeenBoostsIntroduction, enablesBoostsOnWebsites, interaction, memorySaver, linkRouting, version, reducedMotion, profiles, spaces, opensExternalLinksInQuickWindow, lastActiveWindowID, lastActiveSpaceID
     }
     public init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
@@ -183,6 +186,8 @@ public struct BrowserSettingsDocument: Codable, Equatable, Sendable {
             if memorySaver == .fourHours { memorySaver = .oneHour }
             version = Self.currentVersion
         }
+        quickWindowArchiveThreshold = try values.decodeIfPresent(BrowserAutoArchiveThreshold.self, forKey: .quickWindowArchiveThreshold) ?? .sixHours
+        quickWindowProfilesByDomain = try values.decodeIfPresent([String: ProfileID].self, forKey: .quickWindowProfilesByDomain) ?? [:]
         automaticPictureInPicture = try values.decodeIfPresent(Bool.self, forKey: .automaticPictureInPicture) ?? true
         hasSeenBoostsIntroduction = try values.decodeIfPresent(Bool.self, forKey: .hasSeenBoostsIntroduction) ?? false
         enablesBoostsOnWebsites = try values.decodeIfPresent(Bool.self, forKey: .enablesBoostsOnWebsites) ?? true
@@ -211,7 +216,7 @@ public enum BrowserSettingsError: Error, Equatable {
 public actor BrowserSettingsStore {
     public nonisolated let isUnavailable: Bool
     private let destination: URL?
-    private var document: BrowserSettingsDocument
+    var document: BrowserSettingsDocument
 
     public static func unavailable() -> BrowserSettingsStore { BrowserSettingsStore(unavailable: ()) }
 
@@ -365,13 +370,14 @@ public actor BrowserSettingsStore {
     public func removeProfile(_ id: ProfileID, spaces: Set<SpaceID>) throws {
         var next = document
         next.profiles[id] = nil
+        next.quickWindowProfilesByDomain = next.quickWindowProfilesByDomain.filter { $0.value != id }
         next.spaces = next.spaces.filter { !spaces.contains($0.key) }
         next.linkRouting.removeSpaces(spaces)
         next.opensExternalLinksInQuickWindow = next.linkRouting.defaultDestination == .quickWindow
         try publish(next)
     }
 
-    private func publish(_ next: BrowserSettingsDocument) throws {
+    func publish(_ next: BrowserSettingsDocument) throws {
         guard !isUnavailable else { throw BrowserSettingsError.unavailable }
         try Self.validate(next)
         if let destination {
@@ -388,6 +394,7 @@ public actor BrowserSettingsStore {
 
     private static func validate(_ document: BrowserSettingsDocument) throws {
         guard document.version == BrowserSettingsDocument.currentVersion else { throw BrowserSettingsError.unsupportedVersion }
+        guard document.quickWindowArchiveThreshold.isValid else { throw BrowserOrganizationError.invalidThreshold }
         guard document.linkRouting.rules.allSatisfy(\.isValid),
               Set(document.linkRouting.rules.map(\.id)).count == document.linkRouting.rules.count else {
             throw BrowserLinkRoutingError.invalidRule

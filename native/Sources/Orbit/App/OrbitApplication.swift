@@ -83,6 +83,7 @@ final class OrbitApplication: NSObject, NSApplicationDelegate {
     var quickWindowDestinationSpaces: [UUID: SpaceID] = [:]
     var quickWindowPresenter: (BrowserQuickWindowWindowController<ActiveEngine>) -> Void = { controller in
         guard NSApp.activationPolicy() != .prohibited else { return }
+        controller.window?.deminiaturize(nil)
         controller.showWindow(nil)
         controller.focusInitialContent()
         NSApp.activate()
@@ -293,7 +294,7 @@ final class OrbitApplication: NSObject, NSApplicationDelegate {
             ?? windows.selectedWindowID.flatMap { inheritedWindowProfiles[$0] }
         let requests = urls.map {
             BrowserQuickWindowOpenRequest(url: $0, profileID: profileID,
-                opensInQuickWindow: environment.settings.document.opensExternalLinksInQuickWindow)
+                opensInQuickWindow: environment.settings.document.opensExternalLinksInQuickWindow, isExternalOpen: true)
         }
         quickWindowOpenRequests.append(contentsOf: requests)
         if environment.settings.document.opensExternalLinksInQuickWindow, windows.selectedWindowID == nil {

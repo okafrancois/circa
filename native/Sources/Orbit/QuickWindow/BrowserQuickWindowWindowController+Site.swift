@@ -22,7 +22,7 @@ extension BrowserQuickWindowWindowController: BrowserSiteControlsHost {
     var siteControlSurface: Surface? { surface.flatMap { container.owns($0) ? $0 : nil } }
     var siteControlSurfaces: [Surface] { container.surfaces }
     var siteControlsClosed: Bool { isClosed }
-    var acceptsCommands: Bool { !isClosed && !isPreparingForTermination && !isPromotionInProgress }
+    var acceptsCommands: Bool { !isClosed && !isPreparingForTermination && !isPromotionInProgress && !isAutoArchiving }
     func owns(_ surface: Surface) -> Bool { container.owns(surface) }
     func isSitePermissionTarget(_ surface: Surface) -> Bool { !isClosed && !isPromotionInProgress && !surface.isDisposed && container.owns(surface) }
     func installSiteControlsButton(_ button: NSView) {

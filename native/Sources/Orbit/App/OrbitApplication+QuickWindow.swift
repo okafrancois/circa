@@ -52,8 +52,13 @@ extension OrbitApplication {
                     await openQuickWindowFallback(request)
                     return
                 }
-                let little = try await environment.makeQuickWindow(spaceID: request.spaceID,
-                    url: request.url, preferredProfileID: request.profileID)
+                let little: BrowserQuickWindowWindowController<ActiveEngine>
+                if request.isExternalOpen, let url = request.url {
+                    little = try await environment.makeExternalQuickWindow(url: url, spaceID: request.spaceID, profileID: request.profileID)
+                } else {
+                    little = try await environment.makeQuickWindow(spaceID: request.spaceID,
+                        url: request.url, preferredProfileID: request.profileID)
+                }
                 request.profileID = little.profileID
                 request.spaceID = little.sourceSpaceID
                 configureQuickWindow(little)
@@ -181,7 +186,10 @@ extension OrbitApplication {
            spaceID == nil || target.session.snapshot?.activeSpaceID == spaceID {
             if let adoption = little.promote(to: target) {
                 enqueueQuickWindowCommand { [weak self, weak target] in
-                    if await adoption.value != nil, let target { self?.presentQuickWindowDestination(target) }
+                    if await adoption.value != nil, let self, let target {
+                        await rememberQuickWindowProfile(url: sourceURL, profileID: little.profileID, selectedSpace: spaceID)
+                        presentQuickWindowDestination(target)
+                    }
                 }
             } else if !environment.engine.capabilities.contains(.liveSurfaceTransfer) {
                 presentQuickWindowDestination(target)
@@ -210,6 +218,7 @@ extension OrbitApplication {
                       target.session.snapshot?.activeSpaceID == spaceID,
                       target.session.activeProfileID == little.profileID else { return }
                 if let adoption = little.promote(to: target), await adoption.value != nil {
+                    await rememberQuickWindowProfile(url: sourceURL, profileID: little.profileID, selectedSpace: spaceID)
                     presentQuickWindowDestination(target)
                 }
             }
@@ -245,6 +254,7 @@ extension OrbitApplication {
             let occurrence = await adoption?.value
             await target.session.waitForPendingCommands()
             if occurrence != nil {
+                await rememberQuickWindowProfile(url: sourceURL, profileID: little.profileID, selectedSpace: spaceID)
                 provisionalQuickWindowWindows.remove(id)
                 presentQuickWindowDestination(target)
             } else if target.session.snapshot?.tabs.isEmpty == true {
@@ -268,10 +278,19 @@ extension OrbitApplication {
               url.host?.isEmpty == false, url.user == nil, url.password == nil else { return false }
         let delivery = target.session.openTabForDelivery(url: url, expectedProfileID: profileID, expectedSpaceID: spaceID)
         guard await delivery.value != nil else { return false }
+        await rememberQuickWindowProfile(url: url, profileID: profileID, selectedSpace: spaceID)
         little.retire()
         little.window?.close()
         target.hideLibrary()
         return true
+    }
+
+    private func rememberQuickWindowProfile(url: URL?, profileID: ProfileID, selectedSpace: SpaceID?) async {
+        guard selectedSpace != nil, let url, let environment, !environment.isPrivate else { return }
+        do {
+            try await environment.settings.store.rememberQuickWindowProfile(for: url, profileID: profileID)
+            await environment.settings.refresh()
+        } catch { environment.onPersistenceError?(error) }
     }
 
     private func presentQuickWindowDestination(_ target: OrbitWindowController) {

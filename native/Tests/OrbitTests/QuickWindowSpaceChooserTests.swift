@@ -47,6 +47,9 @@ struct QuickWindowSpaceChooserTests {
         #expect(target.session.activeProfileID == foreign)
         #expect(original.isDisposed && little.isClosed && environment.quickWindows.isEmpty)
         #expect(presented == [target.id])
+        #expect(environment.settings.document.quickWindowProfilesByDomain["synthetic.invalid"] == foreign)
+        let next = try await environment.makeExternalQuickWindow(url: URL(string: "https://synthetic.invalid/later")!, spaceID: nil, profileID: nil)
+        #expect(next.profileID == foreign)
     }
 
     @Test("Non-reloadable cross-profile pages keep their Little document and create no destination tab",

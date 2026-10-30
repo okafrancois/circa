@@ -3,15 +3,50 @@ import BrowserEngine
 import Foundation
 
 extension BrowserEnvironment {
-    func captureQuickWindowForReopening(_ controller: BrowserQuickWindowWindowController<Engine>, surface: Engine.Surface) {
+    func captureQuickWindowForReopening(_ controller: BrowserQuickWindowWindowController<Engine>, surface: Engine.Surface,
+                                        reason: BrowserArchivedTab.Reason = .closed) {
         // The engine's ephemeral profile policy is the same privacy boundary as HISTORY.
         guard engine.profile(for: controller.profileID).persistence == .persistent,
               let url = surface.currentURL, url.absoluteString != "about:blank" else { return }
-        let date = Date()
+        let date = quickWindowClock()
         let tab = BrowserOrganizedTab(id: controller.archiveID, url: url, pageTitle: surface.navigationState.title,
-                                      createdAt: date, lastActiveAt: date)
+                                      createdAt: controller.archiveOpenedAt, lastActiveAt: date)
         pendingQuickWindowArchives[controller.archiveID] = .init(tab: tab, profileID: controller.profileID,
-            spaceID: controller.sourceSpaceID, origin: .today, reason: .closed, archivedAt: date)
+            spaceID: controller.sourceSpaceID, origin: .quickWindow, reason: reason, archivedAt: date)
+    }
+
+    func startQuickWindowArchiveTimer() {
+        guard quickWindowArchiveTimer == nil, !quickWindows.isEmpty, !isFinalizing else { return }
+        quickWindowArchiveTimer = Task { [weak self] in
+            while !Task.isCancelled {
+                do { try await Task.sleep(for: .seconds(60)) } catch { return }
+                guard let self else { return }
+                await sweepQuickWindowArchives()
+            }
+        }
+    }
+
+    /// One environment sweep; tests inject wall time and invoke it without waiting.
+    func sweepQuickWindowArchives() async {
+        guard !isFinalizing, !settingsRemovalIsRunning, !quickWindowArchiveSweepInProgress,
+              let interval = settings.document.quickWindowArchiveThreshold.interval else { return }
+        quickWindowArchiveSweepInProgress = true
+        defer { quickWindowArchiveSweepInProgress = false }
+        let now = quickWindowClock()
+        for controller in Array(quickWindows.values) {
+            guard now.timeIntervalSince(controller.archiveOpenedAt) >= interval,
+                  controller.beginAutoArchive() else { continue }
+            defer { controller.endAutoArchive() }
+            guard let surface = controller.surface else { continue }
+            captureQuickWindowForReopening(controller, surface: surface, reason: .automatic)
+            do {
+                try await flushQuickWindowArchives()
+                try await persistSettingsRemovalSession()
+                guard !controller.isClosed, !isFinalizing, !controller.isPreparingForTermination else { continue }
+                controller.retire()
+                controller.window?.close()
+            } catch { onPersistenceError?(error) }
+        }
     }
 
     func scheduleQuickWindowArchiveSave() {

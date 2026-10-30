@@ -7,12 +7,14 @@ final class BrowserQuickWindowOpenRequest {
     let id = UUID()
     let url: URL?
     let opensInQuickWindow: Bool
+    let isExternalOpen: Bool
     var spaceID: SpaceID?
     var profileID: ProfileID?
     var isRouting = true
     var hasRoutingDestination = false
 
-    init(url: URL?, spaceID: SpaceID? = nil, profileID: ProfileID? = nil, opensInQuickWindow: Bool = true) {
+    init(url: URL?, spaceID: SpaceID? = nil, profileID: ProfileID? = nil, opensInQuickWindow: Bool = true, isExternalOpen: Bool = false) {
+        self.isExternalOpen = isExternalOpen
         self.url = url
         self.spaceID = spaceID
         self.profileID = profileID

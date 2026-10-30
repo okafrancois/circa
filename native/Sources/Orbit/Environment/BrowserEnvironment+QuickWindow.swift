@@ -68,7 +68,9 @@ extension BrowserEnvironment {
             _ = controller.window?.cascadeTopLeft(from: NSPoint(x: previous.frame.minX + OrbitTokens.Metrics.QuickWindow.cascadeOffset,
                                                               y: previous.frame.maxY - OrbitTokens.Metrics.QuickWindow.cascadeOffset))
         }
+        controller.archiveOpenedAt = quickWindowClock()
         quickWindows[controller.id] = controller
+        startQuickWindowArchiveTimer()
         controller.onArchive = { [weak self, weak controller] surface in
             guard let self, let controller else { return }
             captureQuickWindowForReopening(controller, surface: surface)
@@ -78,6 +80,10 @@ extension BrowserEnvironment {
             guard let controller else { return }
             self?.downloads.sourceWindowClosed(controller.id)
             self?.quickWindows[controller.id] = nil
+            if self?.quickWindows.isEmpty == true {
+                self?.quickWindowArchiveTimer?.cancel()
+                self?.quickWindowArchiveTimer = nil
+            }
         }
         controller.onDownload = { [weak self, weak controller] surface, download in
             guard let self, let controller else { download.cancel(); return }

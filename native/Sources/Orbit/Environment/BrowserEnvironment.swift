@@ -27,6 +27,9 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
     private(set) var restoredWindowIDs: [WindowID]
     var pendingQuickWindowArchives: [TabID: BrowserArchivedTab] = [:]
     var quickWindowArchiveSave: Task<Void, Never>?
+    var quickWindowArchiveTimer: Task<Void, Never>?
+    var quickWindowClock: () -> Date = Date.init
+    var quickWindowArchiveSweepInProgress = false
     var lastRecordedWindowActivity: (WindowID, SpaceID)?
     var windowActivitySave: Task<Void, Never>?
     var onPersistenceError: ((any Error) -> Void)?
@@ -686,6 +689,8 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
     func finalize() async throws {
         guard !settingsRemovalIsRunning else { throw BrowserTerminationPreparationError.commandsDidNotSettle }
         autoArchive.scheduler.stop()
+        quickWindowArchiveTimer?.cancel()
+        quickWindowArchiveTimer = nil
         isFinalizing = true
         await sync.prepareForTermination()
         saveTask?.cancel()
@@ -702,6 +707,7 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
             if let persistence { try await persistence.finalize(from: store) }
         } catch {
             autoArchive.scheduler.start()
+            startQuickWindowArchiveTimer()
             themeEditors.thaw()
             isFinalizing = false
             sync.resumeAfterCancelledTermination()

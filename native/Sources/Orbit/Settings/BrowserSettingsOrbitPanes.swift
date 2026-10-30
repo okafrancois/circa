@@ -128,6 +128,20 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
             }
 
             panel {
+                settingRow(uiText("Archive Little Circas after:"), icon: "archivebox") {
+                    Picker(uiText("Archive Little Circas after:"), selection: Binding(
+                        get: { runtime.document.quickWindowArchiveThreshold },
+                        set: { value in model.perform { try await runtime.setQuickWindowArchiveThreshold(value) } }
+                    )) {
+                        ForEach(BrowserQuickWindowArchiveSettings.choices, id: \.self) { choice in
+                            Text(BrowserQuickWindowArchiveSettings.title(choice)).tag(choice)
+                        }
+                    }.labelsHidden().pickerStyle(.menu).frame(width: 140)
+                        .accessibilityIdentifier("settings-little-archive")
+                }
+            }
+
+            panel {
                 settingRow("Save downloads to", icon: "folder") {
                     Button { model.chooseDownloadFolder?() } label: {
                         Text(runtime.document.downloads.folderURL.path.replacingOccurrences(

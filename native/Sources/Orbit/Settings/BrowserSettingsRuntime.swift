@@ -43,6 +43,12 @@ final class BrowserSettingsRuntime: ObservableObject {
         await refresh()
     }
 
+    func setQuickWindowArchiveThreshold(_ threshold: BrowserAutoArchiveThreshold) async throws {
+        do { try await store.setQuickWindowArchiveThreshold(threshold) }
+        catch { await refresh(); throw error }
+        await refresh()
+    }
+
     static var enablesBoostsTitle: String { uiText("Enable Boosts on websites you visit") }
 
     func markBoostsIntroductionSeen() async throws {
