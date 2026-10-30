@@ -42,12 +42,9 @@ struct SpaceSwipeThemeBlend {
                 appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? dark : light
             }
         }
-        result.foregroundOverride = NSColor(name: nil) { appearance in
-            MainActor.assumeIsolated {
-                blend(OrbitSpaceThemes.accent(for: source).foreground.resolvedCGColor(for: appearance),
-                      OrbitSpaceThemes.accent(for: destination).foreground.resolvedCGColor(for: appearance))
-            }
-        }
+        // Decide polarity from this frame's fill. Fading opposing foregrounds through grey
+        // makes both endpoints unreadable around the middle of a transition.
+        result.foregroundOverride = nil
         if source.meshCorners != nil || destination.meshCorners != nil {
             let points = [CGPoint(x: 0, y: 0), CGPoint(x: 1, y: 0), CGPoint(x: 0, y: 1), CGPoint(x: 1, y: 1)]
             result.meshCorners = points.map { point in

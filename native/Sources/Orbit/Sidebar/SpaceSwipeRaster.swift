@@ -9,9 +9,11 @@ final class SpaceSwipeRaster {
     private weak var view: NSView?
     private let layer = CALayer()
     private let children: [(NSView, Bool)]
+    private let foreground: NSColor?
+    private let overlays: [NSColor]
     var size: CGSize { layer.bounds.size }
 
-    init?(view: NSView, scale: CGFloat) {
+    init?(view: NSView, scale: CGFloat, foreground: NSColor? = nil, overlays: [NSColor] = []) {
         guard view.bounds.width > 0, view.bounds.height > 0,
               let bitmap = NSBitmapImageRep(bitmapDataPlanes: nil,
                 pixelsWide: Int(ceil(view.bounds.width * scale)),
@@ -21,6 +23,8 @@ final class SpaceSwipeRaster {
         bitmap.size = view.bounds.size
         view.cacheDisplay(in: view.bounds, to: bitmap)
         guard let image = bitmap.cgImage else { return nil }
+        self.overlays = overlays.map { $0.resolved(for: view.effectiveAppearance) }
+        self.foreground = foreground?.resolved(for: view.effectiveAppearance)
         self.view = view
         children = view.subviews.map { ($0, $0.isHidden) }
         CATransaction.begin(); CATransaction.setDisableActions(true)
@@ -35,6 +39,14 @@ final class SpaceSwipeRaster {
         // on attachment. Retain the native subtree off-window until the page is adopted.
         for (child, _) in children { child.removeFromSuperview() }
         CATransaction.commit()
+    }
+
+    /// Cached state overlays must preserve contrast as the underlying fill changes too.
+    func matchesPaint(foreground color: NSColor, background: NSColor?, appearance: NSAppearance) -> Bool {
+        let ink = color.resolved(for: appearance)
+        guard foreground == ink else { return false }
+        guard let background else { return true }
+        return overlays.allSatisfy { OrbitThemeForeground.contrastRatio(ink, on: OrbitThemeForeground.composite($0, on: background)) >= 3 }
     }
 
     func restore() {

@@ -226,6 +226,48 @@ enum OrbitThemeForeground {
                 green: isLight(on: color) ? 244.0 / 255 : 32.0 / 255,
                 blue: isLight(on: color) ? 244.0 / 255 : 32.0 / 255, alpha: 1)
     }
+
+    static func contrastRatio(_ foreground: NSColor, on background: NSColor) -> CGFloat {
+        func luminance(_ color: NSColor) -> CGFloat {
+            let c = color.usingColorSpace(.sRGB)!
+            func linear(_ v: CGFloat) -> CGFloat { v <= 0.04045 ? v / 12.92 : pow((v + 0.055) / 1.055, 2.4) }
+            return 0.2126 * linear(c.redComponent) + 0.7152 * linear(c.greenComponent) + 0.0722 * linear(c.blueComponent)
+        }
+        let a = luminance(foreground), b = luminance(background)
+        return (max(a, b) + 0.05) / (min(a, b) + 0.05)
+    }
+
+    static func composite(_ overlay: NSColor, on background: NSColor) -> NSColor {
+        let a = overlay.usingColorSpace(.sRGB)!, b = background.usingColorSpace(.sRGB)!, p = a.alphaComponent
+        return NSColor(srgbRed: a.redComponent * p + b.redComponent * (1 - p),
+                       green: a.greenComponent * p + b.greenComponent * (1 - p),
+                       blue: a.blueComponent * p + b.blueComponent * (1 - p), alpha: 1)
+    }
+
+    /// Keep the shared ink decision legible on state overlays too. Use the existing overlay
+    /// variant for that ink polarity, reducing opacity only when the composited contrast needs it.
+    @MainActor
+    static func rowOverlay(_ overlay: NSColor?, theme: OrbitTokens.SpaceTheme, foreground: NSColor) -> NSColor? {
+        guard let overlay else { return nil }
+        return NSColor(name: nil) { appearance in
+            MainActor.assumeIsolated {
+                let ink = foreground.resolved(for: appearance)
+                let mode = NSAppearance(named: isLight(on: ink) ? .aqua : .darkAqua)!
+                let tint = overlay.resolved(for: mode)
+                let fill = OrbitThemeGradient.representativeColor(theme, appearance: appearance)
+                if contrastRatio(ink, on: composite(tint, on: fill)) >= 3 { return tint }
+                var lower: CGFloat = 0, upper = tint.alphaComponent
+                for _ in 0..<16 {
+                    let alpha = (lower + upper) / 2
+                    if contrastRatio(ink, on: composite(tint.withAlphaComponent(alpha), on: fill)) >= 3 {
+                        lower = alpha
+                    } else { upper = alpha }
+                }
+                return tint.withAlphaComponent(lower)
+            }
+        }
+    }
+
 }
 
 /// Bilinear two-axis fill. Coefficients are expressed in top-left unit window coordinates.

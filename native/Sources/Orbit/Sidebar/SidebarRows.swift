@@ -60,6 +60,7 @@ class SidebarListRow: NSView, NSTextFieldDelegate {
     var isDropTarget = false { didSet { if isDropTarget != oldValue { refreshFill() } } }
     private(set) var isHovering = false { didSet { if isHovering != oldValue { hoverDidChange() } } }
     private var hoverArea: NSTrackingArea?
+    private var stateFill: NSColor?
     /// The Space accent family; its foreground roles are corrected for the row's painted overlay.
     var accent = OrbitTokens.ThemeAccent.defaultSpace { didSet { if accent != oldValue { refreshForeground() } } }
     private(set) var effectiveAccent = OrbitTokens.ThemeAccent.defaultSpace
@@ -172,6 +173,10 @@ class SidebarListRow: NSView, NSTextFieldDelegate {
     }
 
     private func refreshForeground() {
+        let fill = accent.contrastTheme.flatMap {
+            OrbitThemeForeground.rowOverlay(stateFill, theme: $0, foreground: accent.foreground)
+        } ?? stateFill
+        if background.fillColor != fill { background.fillColor = fill }
         effectiveAccent = OrbitSpaceThemes.accent(accent, over: background.fillColor.map { [$0] } ?? [],
                                                 iconHover: OrbitTokens.Color.State.rowCloseButtonHover)
         accentDidChange()
@@ -215,16 +220,16 @@ class SidebarListRow: NSView, NSTextFieldDelegate {
         defer { refreshForeground() }
         let state = OrbitTokens.Color.State.self
         if isSelected || isRenaming {
-            background.fillColor = isRenaming ? state.renamingRow : state.tabCurrent
+            stateFill = isRenaming ? state.renamingRow : state.tabCurrent
             background.outerShadow = OrbitTokens.Shadow.tabSelected
             return
         }
         background.outerShadow = nil
-        if isDropTarget { background.fillColor = state.dragFolderTarget }
-        else if isPressed || isContextTarget { background.fillColor = state.tabPressed }
-        else if isMultiSelected { background.fillColor = state.tabMultiselected }
-        else if isHovering { background.fillColor = state.sidebarItem }
-        else { background.fillColor = nil }
+        if isDropTarget { stateFill = state.dragFolderTarget }
+        else if isPressed || isContextTarget { stateFill = state.tabPressed }
+        else if isMultiSelected { stateFill = state.tabMultiselected }
+        else if isHovering { stateFill = state.sidebarItem }
+        else { stateFill = nil }
     }
 
 
