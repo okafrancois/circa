@@ -91,30 +91,37 @@ enum BrowserWindowCommands {
             controller.session.performWindowAction { [weak controller] in controller?.window?.performZoom(nil) }
         }
         window(.bringAllToFront) { controller in controller.session.performWindowAction { NSApp.arrangeInFront(nil) } }
-        let responders: [(BrowserCommandID, Selector)] = [
-            (.cut, #selector(NSText.cut(_:))), (.copy, #selector(NSText.copy(_:))),
-            (.paste, #selector(NSText.paste(_:))), (.selectAll, #selector(NSText.selectAll(_:))),
-            (.undo, Selector(("undo:"))), (.redo, Selector(("redo:"))),
-            (.pasteAndMatchStyle, #selector(NSTextView.pasteAsPlainText(_:)))
-        ]
-        for (id, selector) in responders {
+        try! registry.register(.networkInspector, validate: { $0.canPerformPageCommand(.showDevTools) }) { controller, _ in
+            controller.performDocumentCommand { try $0.showDeveloperPanel(.network) }
+        }
+        try! registry.register(.exit, validate: { $0.canExitCurrentContext }) { controller, _ in
+            controller.exitCurrentContext()
+        }
+        for id in BrowserStandardActions.commandIDs {
+            let selector = BrowserStandardActions.validationSelector(for: id)!
+            let tag = BrowserStandardActions.tag(for: id)
             var pendingPermission: ((BrowserWindowController<Engine>) -> Bool)?
             if id == .undo || id == .redo {
                 pendingPermission = { controller in
                     guard !(controller.window?.firstResponder is NSText) else { return false }
-                    guard let responder = controller.commandResponder(for: selector, keyWindow: commandKeyWindow()) else { return false }
+                    guard let responder = controller.commandResponder(for: selector, keyWindow: commandKeyWindow(), tag: tag) else { return false }
                     // Only these responders submit their accepted intents to the session FIFO.
                     // Field editors keep native validation and never inherit this permission.
                     return isSerializedSidebarResponder(responder, in: controller)
                 }
             }
             try! registry.register(id, allowsPendingResponder: pendingPermission,
-                                   validate: { $0.commandResponder(for: selector, keyWindow: commandKeyWindow()) != nil }) { controller, _ in
-                guard let responder = controller.commandResponder(for: selector, keyWindow: commandKeyWindow()) else { return }
+                                   validate: { $0.commandResponder(for: selector, keyWindow: commandKeyWindow(), tag: tag) != nil }) { controller, _ in
+                guard let responder = controller.commandResponder(for: selector, keyWindow: commandKeyWindow(), tag: tag) else { return }
                 if (id == .undo || id == .redo), controller.session.hasPendingCommands {
                     guard !(controller.window?.firstResponder is NSText), isSerializedSidebarResponder(responder, in: controller) else { return }
                 }
-                responder.tryToPerform(selector, with: nil)
+                guard let sender = BrowserStandardActions.sender(for: id) else { return }
+                if let manager = BrowserStandardActions.target(for: id) as? NSFontManager {
+                    manager.addFontTrait(sender)
+                } else {
+                    responder.tryToPerform(sender.action!, with: sender)
+                }
             }
         }
     }

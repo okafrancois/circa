@@ -181,7 +181,8 @@ list(APPEND ORBIT_APP_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/App/EngineComposition
   "${CMAKE_CURRENT_SOURCE_DIR}/App/OrbitDownloadAudioProbe.swift"
   "${CMAKE_CURRENT_SOURCE_DIR}/App/OrbitScrollWheelProbe.swift"
   "${CMAKE_CURRENT_SOURCE_DIR}/App/OrbitPinnedTabProbe.swift"
-  "${CMAKE_CURRENT_SOURCE_DIR}/App/OrbitTabErgonomicsProbe.swift")
+  "${CMAKE_CURRENT_SOURCE_DIR}/App/OrbitTabErgonomicsProbe.swift"
+  "${CMAKE_CURRENT_SOURCE_DIR}/App/OrbitCommandGapsProbe.swift")
 # CHROMIUM-APP-R3: the stable signing certificate's SHA-1 required for product mode (empty: none).
 set(ORBIT_STABLE_SIGNING_ROOT "" CACHE STRING "SHA-1 of the stable local signing certificate (product admission)")
 string(LENGTH "${ORBIT_STABLE_SIGNING_ROOT}" ORBIT_STABLE_SIGNING_ROOT_LENGTH)

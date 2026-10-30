@@ -262,7 +262,12 @@ enum OrbitCommandCatalog {
         .item1, .item2, .item3
     ]
     /// Hidden on every command surface even if an internal workflow retains a handler.
-    static let hiddenCommands: Set<BrowserCommandID> = [.importArcConnections, .restoreArcConnections, .importBookmarks, .exportBookmarks]
+    static let hiddenCommands: Set<BrowserCommandID> = [
+        .importArcConnections, .restoreArcConnections, .importBookmarks, .exportBookmarks,
+        .newNote, .newNoteInSplit, .exportOrbitNotes, .newEasel, .viewEaselsNotes,
+        .newChatGPTMessage, .signOut, .shareOrbit, .sendToDia, .boostGallery, .copyURLAsQuote,
+        .websitesEaselsAndNotesWillUse
+    ]
 
     static func isCommandBarAction(_ definition: BrowserCommandDefinition) -> Bool {
         definition.scope == .browser && !hiddenCommands.contains(definition.id) && !structuralIDs.contains(definition.id)
@@ -511,15 +516,14 @@ enum OrbitCommandCatalog {
     }()
 
     private static func scope(for id: BrowserCommandID) -> BrowserCommandScope {
-        switch id {
-        case .copy, .cut, .paste, .pasteAndMatchStyle, .redo, .selectAll, .undo: return .responder
-        default: return .browser
-        }
+        if BrowserStandardActions.commandIDs.contains(id) { return .responder }
+        return .browser
     }
 
     private static func requirement(for id: BrowserCommandID) -> BrowserCommandRequirement {
+        if BrowserStandardActions.commandIDs.contains(id) { return .responder }
         switch id {
-        case .checkForUpdates, .aboutOrbit, .openCommandBar, .showAll, .hideOrbit, .newWindow, .newIncognitoWindow, .hideOtherWindows, .newTab, .quitOrbit: return .application
+        case .copyOrbitInfo, .revealOrbitData, .checkForUpdates, .aboutOrbit, .openCommandBar, .showAll, .hideOrbit, .newWindow, .newIncognitoWindow, .hideOtherWindows, .newTab, .quitOrbit: return .application
         case .zoomOut, .findPrevious, .duplicate, .zoomToActualSize, .find, .zoomIn, .findNext, .capture, .captureFullPage, .savePageAs: return .surface
         case .refreshThePage, .copyURL, .copyURLAsMarkdown, .share: return .url
         case .goBack: return .back
