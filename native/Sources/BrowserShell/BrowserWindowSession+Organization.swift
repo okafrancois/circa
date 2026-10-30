@@ -433,7 +433,7 @@ extension BrowserWindowSession {
         if currentContext == activeContext { return currentContext }
         let state = try await store.captureWindowState(in: windowID)
         guard state.context.storeGeneration == activeContext.storeGeneration else { throw BrowserStoreError.staleContext }
-        guard state.context.spaceID == activeContext.spaceID, state.context.profileID == activeContext.profileID else {
+        guard canAdoptOrganizationContext(state, from: activeContext) else {
             throw BrowserWindowSessionError.contextChangeRequiresNewSession
         }
         if publish, state.context != activeContext { install(state) }
@@ -463,13 +463,19 @@ extension BrowserWindowSession {
         }
         let state = try await store.captureWindowState(in: windowID)
         guard !isClosed, let activeContext else { return }
-        guard state.context.storeGeneration == activeContext.storeGeneration,
-              state.context.spaceID == activeContext.spaceID,
-              state.context.profileID == activeContext.profileID else { return }
+        guard canAdoptOrganizationContext(state, from: activeContext) else { return }
         let hasRevokedSurface = surfaceOrder.contains { authorities[$0] != state.occurrenceAuthorities[$0] }
         guard state.context != activeContext || state.snapshot != snapshot || state.catalog != catalog
                 || state.organization != organizationRuntime.snapshot || hasRevokedSurface else { return }
         install(state)
+    }
+
+    /// A retired Space can rehome this window within its profile. An external switch between
+    /// surviving Spaces still requires explicit adoption and cannot redirect queued input.
+    private func canAdoptOrganizationContext(_ state: BrowserWindowState, from previous: BrowserContext) -> Bool {
+        state.context.storeGeneration == previous.storeGeneration
+            && state.context.profileID == previous.profileID
+            && (state.context.spaceID == previous.spaceID || !state.catalog.spaces.contains { $0.id == previous.spaceID })
     }
 
     func navigate(_ resets: [BrowserOrganizationReset], with navigate: @MainActor (Surface, URL) -> Void) {

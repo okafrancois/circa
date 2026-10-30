@@ -685,3 +685,42 @@ func folderPreviewQueuedSelection() async throws {
     session.close()
     await session.waitForPendingCommands()
 }
+
+extension BrowserOrganizationSessionTests {
+    @Test("Export and replay adopt retired Spaces in peer sessions while retaining live documents")
+    func exportAcrossSessions() async throws {
+        let f = try await SessionFixture.make()
+        let recorder = OrganizationRecorder()
+        let owner = recorder.session(f.store, window: f.window)
+        let peer = recorder.session(f.store, window: f.other)
+        let localID = try await f.store.createStandaloneWindow(profileID: f.personal, homeSpaceID: f.home)
+        let local = recorder.session(f.store, window: localID)
+        defer { owner.close(); peer.close(); local.close() }
+        for session in [owner, peer, local] {
+            session.observeOrganizationChanges()
+            await session.waitForPendingCommands()
+        }
+        peer.openTab(url: url("shared")); local.openTab(url: url("local"))
+        await peer.waitForPendingCommands(); await local.waitForPendingCommands()
+        let peerSurface = try #require(peer.selectedSurface)
+        let localSurface = try #require(local.selectedSurface)
+        owner.exportSpace(f.home, to: f.leisure)
+        await owner.waitForPendingCommands()
+        for session in [peer, local] {
+            session.synchronizeOrganization()
+            await session.waitForPendingCommands()
+            #expect(session.snapshot?.activeSpaceID == f.leisure)
+        }
+        #expect(peer.selectedSurface === peerSurface && local.selectedSurface === localSurface)
+        // Moving a peer's selected shared tab away remains a conflict until that peer closes.
+        #expect(owner.organization?.undoAction != .exportSpace)
+        peer.close()
+        owner.undoOrganization(); await owner.waitForPendingCommands()
+        #expect(owner.snapshot?.activeSpaceID == f.home)
+        #expect(owner.catalog?.spaces.contains { $0.id == f.home } == true)
+        owner.redoOrganization(); await owner.waitForPendingCommands()
+        #expect(owner.snapshot?.activeSpaceID == f.leisure)
+        #expect(recorder.errors.isEmpty)
+        #expect(peerSurface.disposalCount == 1 && localSurface.disposalCount == 0)
+    }
+}

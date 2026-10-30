@@ -3,8 +3,7 @@ import CoreText
 
 /// Shared brand font registration, with a system fallback for resource or registration failures.
 public enum BrandFonts {
-    private static let weightAxis = "wght".utf8.reduce(UInt32(0)) { ($0 << 8) | UInt32($1) }
-    public static let filenames = ["intertight.ttf", "gloock.ttf"]
+    public static let filenames = ["gloock.ttf"]
     private static let registration: (succeeded: Bool, attempts: Int) = {
         var success = true
         var attempts = 0
@@ -22,17 +21,9 @@ public enum BrandFonts {
     public static func ui(_ size: CGFloat, weight: NSFont.Weight = .regular) -> NSFont {
         BrandTextStyle.ui.font(size: size, weight: weight)
     }
-    /// Onboarding copy retains its dedicated face; browser chrome uses the system roles.
+    /// Onboarding copy and controls share the system face used by browser chrome.
     public static func onboardingBody(_ size: CGFloat, weight: NSFont.Weight = .regular) -> NSFont {
-        guard registered, let face = NSFont(name: "InterTight-Regular", size: size) ?? NSFont(name: "Inter Tight", size: size) else { return .systemFont(ofSize: size, weight: weight) }
-        return withWeight(weight, font: face)
-    }
-    static func withWeight(_ weight: NSFont.Weight, font: NSFont) -> NSFont {
-        let value: Double = weight >= .bold ? 700 : weight >= .semibold ? 600 : weight >= .medium ? 500 : 400
-        let descriptor = font.fontDescriptor.addingAttributes([
-            NSFontDescriptor.AttributeName(rawValue: kCTFontVariationAttribute as String): [NSNumber(value: weightAxis): NSNumber(value: value)]
-        ])
-        return NSFont(descriptor: descriptor, size: font.pointSize) ?? font
+        .systemFont(ofSize: size, weight: weight)
     }
     public static func mono(_ size: CGFloat) -> NSFont {
         BrandTextStyle.mono.font(size: size)

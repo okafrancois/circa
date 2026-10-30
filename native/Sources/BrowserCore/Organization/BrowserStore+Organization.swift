@@ -1018,7 +1018,7 @@ extension BrowserStore {
             do {
                 try next.apply(patch, preconditionsChecked: true)
                 next.normalizeArchivedSpaces()
-                try next.validate(profiles: Set(profiles.keys), spaces: catalogApplying(patch).mapValues(\.profileID))
+                try validateOrganization(next, applying: patch)
             } catch {
                 discarded = true
                 break
