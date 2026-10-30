@@ -90,6 +90,18 @@ struct BrowserSettingsGradientPicker<Engine: BrowserEngine>: View {
     @ObservedObject var model: BrowserSettingsModel<Engine>
     let space: BrowserSpace
     @State private var isPresented = false
+
+    func select(_ gradient: BrandPalette.SpaceGradient) {
+        model.perform {
+            var theme = gradient.theme(mode: space.theme?.mode ?? .automatic)
+            theme.noise = space.theme?.noise ?? 0
+            theme.frost = space.theme?.frost ?? false
+            try await model.environment.store.setSpaceTheme(theme, for: space.id, profileID: space.profileID)
+            model.environment.scheduleSave()
+            await model.reload()
+        }
+    }
+
     var body: some View {
         Button { isPresented.toggle() } label: {
             HStack(spacing: 6) {
@@ -101,11 +113,7 @@ struct BrowserSettingsGradientPicker<Engine: BrowserEngine>: View {
                 HStack(spacing: 8) {
                     ForEach(BrandPalette.spaceGradients, id: \.id) { gradient in
                         Button {
-                            model.perform {
-                                try await model.environment.store.setSpaceTheme(gradient.theme(mode: space.theme?.mode ?? .automatic), for: space.id, profileID: space.profileID)
-                                model.environment.scheduleSave()
-                                await model.reload()
-                            }
+                            select(gradient)
                         } label: {
                             Circle().fill(LinearGradient(stops: zip(gradient.stops, gradient.locations).map {
                                 .init(color: Color(nsColor: OrbitSpaceThemes.color($0.0)), location: $0.1)

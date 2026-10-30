@@ -167,3 +167,40 @@ struct FloatingAlertMaterialTests {
     }
 }
 }
+
+
+extension NativeWebKitTests.FloatingAlertMaterialTests {
+    @Test("Floating dialogs follow automatic appearance and a live parent appearance change")
+    func dialogAppearanceFollowsOwner() throws {
+        NSApplication.shared.setActivationPolicy(.prohibited)
+        let original = NSApp.appearance
+        defer { NSApp.appearance = original }
+        NSApp.appearance = NSAppearance(named: .aqua)
+        let modal = OrbitFrostAlert()
+        modal.messageText = "Appearance fixture"
+        modal.addButton(withTitle: "OK")
+        let modalWindow = modal.preparedWindow()
+        defer { modalWindow.close() }
+        #expect(modalWindow.appearance == nil)
+        NSApp.appearance = NSAppearance(named: .darkAqua)
+        #expect(OrbitAppearance.isDark(modalWindow.effectiveAppearance))
+
+        let parent = NSWindow(contentRect: .zero, styleMask: [.titled], backing: .buffered, defer: true)
+        parent.isReleasedWhenClosed = false
+        defer { parent.close() }
+        parent.appearance = NSAppearance(named: .aqua)
+        let sheet = OrbitFrostAlert()
+        sheet.messageText = "Sheet appearance fixture"
+        sheet.addButton(withTitle: "OK")
+        let panel = sheet.preparedWindow(for: parent)
+        defer { panel.close() }
+        let frost = try #require(panel.contentView?.subviews.first as? OrbitFrostView)
+        #expect(!OrbitAppearance.isDark(panel.effectiveAppearance))
+        parent.appearance = NSAppearance(named: .darkAqua)
+        #expect(OrbitAppearance.isDark(panel.effectiveAppearance))
+        frost.refresh(reduceTransparency: false)
+        #expect(frost.style.variant == .dark)
+        parent.appearance = nil
+        #expect(panel.appearance == nil)
+    }
+}
