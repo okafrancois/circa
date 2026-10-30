@@ -99,6 +99,8 @@ public final class ChromiumRuntime {
     /// The bounded quit ended the loop before every browser confirmed its close (status 77).
     public private(set) var quitForced = false
 
+    private var secureInput: ChromiumSecureInput?
+
     private init() {}
 
     func makeToken() -> UInt64 {
@@ -240,6 +242,8 @@ public final class ChromiumRuntime {
 
     /// Closes every browser, then leaves the message loop.
     public func requestQuit() {
+        secureInput?.stop()
+        secureInput = nil
         isQuitting = true
         _ = ACRRequestQuit()
     }
@@ -273,6 +277,7 @@ public final class ChromiumRuntime {
         switch event.kind {
         case ACR_EVENT_READY:
             isReady = true
+            secureInput = ChromiumSecureInput(runtime: self)
             trace?("ready", [:])
             let ready = onReady
             onReady = nil

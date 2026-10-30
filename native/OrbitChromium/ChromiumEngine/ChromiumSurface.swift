@@ -151,6 +151,8 @@ public final class ChromiumSurface: BrowserEngineSurface {
     /// Laboratory observation hook for raw engine events.
     public var onEngineEvent: ((String, [String: String]) -> Void)?
 
+    var secureInputReconciliation = BrowserSecureInputFocusReconciliation()
+    var secureInputHostHidden = false
     public private(set) var isDisposed = false
     private var paintActivationID: UInt64 = 0
     private lazy var nativePerformance = ChromiumPagePerformance(token: token)
@@ -432,12 +434,14 @@ public final class ChromiumSurface: BrowserEngineSurface {
     /// The shell showed `hostView` in a window, or the user clicked into it.
     func hostViewDidBecomeVisible() {
         guard !isDisposed, isBrowserCreated, hostedWindowToken != 0 else { return }
+        secureInputHostHidden = false
         resumeDiscardedTab()
         engine?.activateHostedTab(self)
     }
 
     /// Call after the shell moved `hostView` to another window or changed its visibility.
     public func hostDidChange(hidden: Bool) {
+        secureInputHostHidden = hidden
         if hidden {
             cancelExtensionAction()
             if engine?.activeHostedTabs[hostedWindowToken]?.surface === self {
@@ -447,6 +451,7 @@ public final class ChromiumSurface: BrowserEngineSurface {
         guard !isDisposed else { return }
         guard isBrowserCreated else { pendingCommands.append(.hostChanged(hidden: hidden)); return }
         if !hidden { resumeDiscardedTab() }
+        if hidden { releaseSecureInputFocus() }
         _ = ACRNotifyHostChanged(token, hidden ? 1 : 0)
     }
 
@@ -764,6 +769,7 @@ public final class ChromiumSurface: BrowserEngineSurface {
         automaticPiPTask = nil
         cancelExtensionAction()
         guard !isDisposed else { return }
+        if isBrowserCreated { releaseSecureInputFocus() }
         isDisposed = true
         state.faviconURL = nil
         state.faviconImage = nil

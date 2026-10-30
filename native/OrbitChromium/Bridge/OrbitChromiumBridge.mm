@@ -1875,6 +1875,10 @@ class App final : public CefApp, public CefBrowserProcessHandler {
     // Disabled features of the allow-listed arguments, the extra switches and the policy, as one
     // value (the filtered argv carries none itself).
     std::vector<std::string> disabled = {command->GetSwitchValue("disable-features").ToString()};
+    // Until SetActive(false) releases password_input_enabler_ unconditionally, the
+    // non-key HasFocus gate skips its reset after OnWindowIsKeyChanged(false).
+    // Preserve first-responder focus here; the shell separately reconciles actual eligibility.
+    disabled.push_back("RWHVMacHasFocusReturnsFalseForNonKeyWindow");
     if (g_state) disabled.insert(disabled.end(), g_state->disabled_features.begin(), g_state->disabled_features.end());
     if (g_state) {
       for (const auto& value : g_state->switches) {
