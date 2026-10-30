@@ -147,6 +147,7 @@ public struct BrowserSettingsDocument: Codable, Equatable, Sendable {
     public var interaction = BrowserInteractionPreferences()
     public var downloads = BrowserDownloadPreferences()
     public var memorySaver: BrowserMemorySaverSetting = .oneHour
+    public var safeBrowsingEnabled = false
     public var automaticPictureInPicture = true
     public var enablesBoostsOnWebsites = true
     public var hasSeenBoostsIntroduction = false
@@ -167,7 +168,7 @@ public struct BrowserSettingsDocument: Codable, Equatable, Sendable {
     public var spaces: [SpaceID: BrowserSpaceSettings] = [:]
     public init() {}
     private enum CodingKeys: String, CodingKey {
-        case downloads, automaticPictureInPicture, hasSeenBoostsIntroduction, enablesBoostsOnWebsites, interaction, memorySaver, linkRouting, version, reducedMotion, profiles, spaces, opensExternalLinksInQuickWindow, lastActiveWindowID, lastActiveSpaceID
+        case safeBrowsingEnabled, downloads, automaticPictureInPicture, hasSeenBoostsIntroduction, enablesBoostsOnWebsites, interaction, memorySaver, linkRouting, version, reducedMotion, profiles, spaces, opensExternalLinksInQuickWindow, lastActiveWindowID, lastActiveSpaceID
     }
     public init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
@@ -183,6 +184,7 @@ public struct BrowserSettingsDocument: Codable, Equatable, Sendable {
             if memorySaver == .fourHours { memorySaver = .oneHour }
             version = Self.currentVersion
         }
+        safeBrowsingEnabled = try values.decodeIfPresent(Bool.self, forKey: .safeBrowsingEnabled) ?? false
         automaticPictureInPicture = try values.decodeIfPresent(Bool.self, forKey: .automaticPictureInPicture) ?? true
         hasSeenBoostsIntroduction = try values.decodeIfPresent(Bool.self, forKey: .hasSeenBoostsIntroduction) ?? false
         enablesBoostsOnWebsites = try values.decodeIfPresent(Bool.self, forKey: .enablesBoostsOnWebsites) ?? true
@@ -212,6 +214,19 @@ public actor BrowserSettingsStore {
     public nonisolated let isUnavailable: Bool
     private let destination: URL?
     private var document: BrowserSettingsDocument
+
+    /// Read-only startup snapshot, before an engine or the settings actor's executor exists.
+    public static func safeBrowsingEnabledAtLaunch(destination: URL) throws -> Bool {
+        guard let data = try BrowserPermissionFile.load(destination) else { return false }
+        let header = try JSONDecoder().decode(Header.self, from: data)
+        if header.version == 0 { return false }
+        guard [1, BrowserSettingsDocument.currentVersion].contains(header.version) else {
+            throw BrowserSettingsError.unsupportedVersion
+        }
+        let loaded = try JSONDecoder().decode(BrowserSettingsDocument.self, from: data)
+        try validate(loaded)
+        return loaded.safeBrowsingEnabled
+    }
 
     public static func unavailable() -> BrowserSettingsStore { BrowserSettingsStore(unavailable: ()) }
 
@@ -332,6 +347,12 @@ public actor BrowserSettingsStore {
     public func setMemorySaver(_ setting: BrowserMemorySaverSetting) throws {
         var next = document
         next.memorySaver = setting
+        try publish(next)
+    }
+
+    public func setSafeBrowsingEnabled(_ enabled: Bool) throws {
+        var next = document
+        next.safeBrowsingEnabled = enabled
         try publish(next)
     }
 

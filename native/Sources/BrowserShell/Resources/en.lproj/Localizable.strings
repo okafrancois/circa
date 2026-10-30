@@ -1681,3 +1681,29 @@
 "%d passwords found" = "%d passwords found";
 
 "Coming from Arc? Your Spaces, tabs and passwords come with you, even after Arc stops working." = "Coming from Arc? Your Spaces, tabs and passwords come with you, even after Arc stops working.";
+
+"Requires your own Google API key. Google receives Safe Browsing requests. Stored in Keychain on this Mac. Applies to all profiles. Restart Circa to apply changes." = "Requires your own Google API key. Google receives Safe Browsing requests. Stored in Keychain on this Mac. Applies to all profiles. Restart Circa to apply changes.";
+
+"Off. Circa does not warn about dangerous sites or downloads." = "Off. Circa does not warn about dangerous sites or downloads.";
+
+"Key saved. Restart Circa to apply. Protection requires a valid key with Safe Browsing access." = "Key saved. Restart Circa to apply. Protection requires a valid key with Safe Browsing access.";
+
+"No API key set. Protection stays off until you save a key and restart Circa." = "No API key set. Protection stays off until you save a key and restart Circa.";
+
+"Saved key: ••••••••" = "Saved key: ••••••••";
+
+"Paste your Google API key" = "Paste your Google API key";
+
+"Google API key" = "Google API key";
+
+"Save Key" = "Save Key";
+
+"Could not save the API key. Check the key and Keychain access." = "Could not save the API key. Check the key and Keychain access.";
+
+"Remove Key" = "Remove Key";
+
+"Could not remove the API key from Keychain." = "Could not remove the API key from Keychain.";
+
+"Restart Circa to turn Safe Browsing off. It is still configured for this session." = "Restart Circa to turn Safe Browsing off. It is still configured for this session.";
+
+"No API key set. Restart Circa to turn Safe Browsing off for the next session." = "No API key set. Restart Circa to turn Safe Browsing off for the next session.";

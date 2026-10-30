@@ -40,6 +40,7 @@ public final class ChromiumRuntime {
         public var hiddenApplication: Bool
         /// Laboratory measurement of `OnBeforeResourceLoad` holds; see the bridge header.
         public var asyncNavigationHold: Bool
+        public var safeBrowsingEnabled = false
         public var networkPolicy: NetworkPolicy
 
         public init(rootCachePath: String, keychainServiceName: String, keychainAccountName: String,
@@ -233,6 +234,7 @@ public final class ChromiumRuntime {
                 runOptions.async_navigation_hold = options.asyncNavigationHold ? 1 : 0
                 runOptions.secure_storage = Int32(keychain == nil ? ACR_SECURE_STORAGE_MOCK.rawValue
                                                                   : ACR_SECURE_STORAGE_KEYCHAIN.rawValue)
+                runOptions.safe_browsing_enabled = options.safeBrowsingEnabled ? 1 : 0
                 runOptions.network_policy = Int32(options.networkPolicy == .product ? ACR_NETWORK_PRODUCT.rawValue
                                                                                     : ACR_NETWORK_HERMETIC.rawValue)
                 return ACRRun(CommandLine.argc, CommandLine.unsafeArgv, &runOptions, &callbacks, context)

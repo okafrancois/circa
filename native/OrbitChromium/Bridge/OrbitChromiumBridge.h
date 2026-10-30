@@ -302,6 +302,8 @@ typedef struct {
   int32_t secure_storage;
   /* ABI 8: an ACRNetworkPolicy value (other values refuse the run). */
   int32_t network_policy;
+  /* Explicit process-wide opt-in, resolved before initialization; requires GOOGLE_API_KEY. */
+  int32_t safe_browsing_enabled;
 } ACRRunOptions;
 
 /* (ABI 8) Chrome's initial profile, which backs CEF's global request context, is pinned to
