@@ -6,6 +6,34 @@ import BrowserEngine
 enum BrowserDailyCommands {
     static func install<Engine: BrowserEngine>(in registry: BrowserCommandRegistry<BrowserWindowController<Engine>>) {
         BrowserPasswordCommands.install(in: registry)
+        weak var cyclingOwner: BrowserWindowController<Engine>?
+        registry.registerInputHandler("extensions") { [weak registry] controller, event in
+            guard let active = cyclingOwner, active.extensionControls.isCycling else { return false }
+            guard controller === active, event.window == nil || event.window === active.window else {
+                active.extensionControls.cancelCycle()
+                return false
+            }
+            if event.type == .flagsChanged, !event.modifierFlags.contains(.command) {
+                active.extensionControls.finishCycle()
+                return false
+            }
+            if event.type == .leftMouseDown { active.extensionControls.cancelCycle(); return false }
+            guard event.type == .keyDown else { return false }
+            if event.keyCode == 53 { active.extensionControls.cancelCycle(); return true }
+            if registry?.resolve(event) == .cycleExtensions {
+                if !event.isARepeat { active.extensionControls.cycle(holding: event.modifierFlags) }
+                return true
+            }
+            active.extensionControls.cancelCycle()
+            return false
+        }
+        try! registry.register(.cycleExtensions, validate: { $0.extensionControls.canCycle }) { controller, origin in
+            cyclingOwner = controller
+            let event = NSApp.currentEvent
+            let holding: NSEvent.ModifierFlags? = origin == .keyboard
+                ? (event?.type == .keyDown ? event?.modifierFlags : .command) : nil
+            controller.extensionControls.cycle(holding: holding)
+        }
         try! registry.register(.manageExtensions, validate: {
             $0.engine.extensionManagement != nil && $0.session.selectedSurface != nil
         }) { controller, _ in

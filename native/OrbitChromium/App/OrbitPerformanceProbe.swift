@@ -28,7 +28,7 @@ enum OrbitPerformanceProbe {
                 controller.window?.makeKey()
             }
         }
-        if ["lab.orbit.orbit.pinned-tabs", "lab.orbit.orbit.search-suggestions", "lab.orbit.orbit.circa-rename"].contains(Bundle.main.bundleIdentifier ?? "") {
+        if ["lab.orbit.orbit.pinned-tabs", "lab.orbit.orbit.search-suggestions", "lab.orbit.orbit.circa-rename", "lab.orbit.orbit.p2-extensions"].contains(Bundle.main.bundleIdentifier ?? "") {
             application.confirmQuit = { .quit }
             application.windowPresenter = { controller, _ in
                 controller.window?.setFrame(NSRect(x: -2000, y: -1200, width: 1280, height: 900), display: false)
@@ -103,7 +103,10 @@ enum OrbitPerformanceProbe {
                 try? FileManager.default.removeItem(at: commandFile)
                 let name = command["command"] ?? ""
                 result["commandNonce"] = command["nonce"] ?? ""
-                if name == "search-suggestions" {
+                if name == "extension-controls" {
+                    result["extensionControls"] = await extensionControls(application, environment: environment,
+                        owner: owner, root: root, command: command)
+                } else if name == "search-suggestions" {
                     result["searchSuggestions"] = await searchSuggestions(owner, root: root, command: command)
                 } else if name == "branding-capture" {
                     result["branding"] = await OrbitBrandingProbe.run(application, environment: environment, owner: owner, root: root, appearance: command["appearance"] ?? "light")
@@ -2272,5 +2275,89 @@ extension OrbitPerformanceProbe {
         }
         owner.palette.dismiss(returnFocus: false)
         return ["pid": getpid(), "offscreen": true, "localCount": localCount, "remoteCount": remoteCount, "deleted": deleted]
+    }
+}
+
+
+extension OrbitPerformanceProbe {
+    /// Real actions and existing button appearance in an owned, confined test window.
+    private static func extensionControls(_ application: OrbitApplication, environment: BrowserEnvironment<ChromiumBrowserEngine>,
+        owner: OrbitWindowController, root: URL, command: [String: String]) async -> [String: Any] {
+        let bundleID = "lab.orbit.orbit.p2-extensions"
+        guard ownsWindow(owner, bundleID: bundleID), let window = owner.window,
+              let host = owner.engine.extensions else { return ["refused": true] }
+        if owner.session.selectedSurface == nil, let base = command["base"].flatMap(URL.init(string:)),
+           base.scheme == "http", base.host == "127.0.0.1", base.user == nil, base.password == nil {
+            guard ownsWindow(owner, bundleID: bundleID) else { return ["refused": true] }
+            owner.submitAddress(base.absoluteString)
+            await owner.session.waitForPendingCommands()
+        }
+        guard let surface = owner.session.selectedSurface else { return ["missingSurface": true] }
+        for _ in 0..<60 where !surface.isReady { try? await Task.sleep(for: .milliseconds(50)) }
+        window.appearance = NSAppearance(named: command["appearance"] == "dark" ? .darkAqua : .aqua)
+        var result: [String: Any] = [:]
+        do {
+            let items = try host.installedExtensions(on: surface)
+            result["installed"] = items.count
+            if command["action"] == "prepare" {
+                for item in items where item.hasAction {
+                    try host.setPinned(true, extensionID: item.id, in: surface.profileID)
+                }
+                try application.commands.registry.shortcutPreferences.setPriority(.browser, for: .cycleExtensions)
+            }
+            owner.extensionControls.render()
+            if command["action"] == "cycle" {
+                guard ownsWindow(owner, bundleID: bundleID) else { return ["refused": true] }
+                result["accepted"] = application.commands.registry.dispatch(.cycleExtensions, origin: .keyboard)
+            } else if command["action"] == "release" {
+                guard ownsWindow(owner, bundleID: bundleID), let event = NSEvent.keyEvent(with: .flagsChanged,
+                    location: .zero, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                    windowNumber: window.windowNumber, context: nil, characters: "", charactersIgnoringModifiers: "",
+                    isARepeat: false, keyCode: 55) else { return ["refused": true] }
+                _ = application.commands.registry.handleInputEvent(event)
+                try? await Task.sleep(for: .milliseconds(600))
+            } else if command["action"] == "little" {
+                guard ownsWindow(owner, bundleID: bundleID) else { return ["refused": true] }
+                application.quickWindowPresenter = { controller in
+                    controller.window?.setFrameOrigin(NSPoint(x: -2000, y: -1200))
+                    controller.window?.orderBack(nil)
+                    controller.window?.makeKey()
+                }
+                application.openQuickWindow(url: surface.navigationState.url, source: owner)
+                await application.waitForQuickWindowCommands()
+                if let little = environment.quickWindows.values.first {
+                    for _ in 0..<60 where little.surface?.isReady != true {
+                        try? await Task.sleep(for: .milliseconds(50))
+                    }
+                    if let menu = little.extensionMenu() {
+                        result["littleActions"] = menu.items.filter { $0.action != nil }.count
+                        if let littleWindow = little.window,
+                           let windows = CGWindowListCopyWindowInfo(.optionIncludingWindow,
+                               CGWindowID(littleWindow.windowNumber)) as? [[String: Any]],
+                           windows.contains(where: { ($0[kCGWindowOwnerPID as String] as? Int32) == getpid() }) {
+                            menu.performActionForItem(at: 0)
+                            try? await Task.sleep(for: .milliseconds(600))
+                            result["littleWindows"] = NSApp.windows.filter(\.isVisible).map { NSStringFromRect($0.frame) }
+                        }
+                    }
+                    little.close()
+                    window.makeKey()
+                }
+            }
+            owner.sidebar.addressContainer.holdsAccessoriesVisible = true
+            window.contentView?.layoutSubtreeIfNeeded()
+            window.displayIfNeeded()
+            let strip = owner.sidebar.extensionsContainer
+            result["cycling"] = owner.extensionControls.isCycling
+            result["highlighted"] = strip.subviews.compactMap { $0 as? NSButton }.filter(\.isHighlighted).count
+            result["pinCount"] = strip.visiblePinCount
+            result["anchor"] = NSStringFromRect(window.convertToScreen(strip.convert(strip.bounds, to: nil)))
+            if let bitmap = owner.sidebar.bitmapImageRepForCachingDisplay(in: owner.sidebar.bounds) {
+                owner.sidebar.cacheDisplay(in: owner.sidebar.bounds, to: bitmap)
+                try bitmap.representation(using: .png, properties: [:])?.write(to: root.appendingPathComponent("extensions-" + (command["appearance"] ?? "light") + ".png"))
+            }
+            result["windows"] = NSApp.windows.filter(\.isVisible).map { NSStringFromRect($0.frame) }
+        } catch { result["failed"] = String(describing: type(of: error)) }
+        return result
     }
 }

@@ -33,6 +33,10 @@ final class BrowserExtensionsController<Engine: BrowserEngine> {
     private weak var selectedSurface: Engine.Surface?
     private var iconImages = BrowserCostCache<String, NSImage>(budget: 1024 * 1024)
 
+    private var cyclingID: String?
+    private var cyclingEpoch: UInt64?
+    private var windowObservation: NSObjectProtocol?
+
     private var generation: UInt64?
     private var selectionEpoch: UInt64 = 0
 
@@ -43,6 +47,10 @@ final class BrowserExtensionsController<Engine: BrowserEngine> {
 
     func install() {
         guard let owner else { return }
+        windowObservation = NotificationCenter.default.addObserver(forName: NSWindow.didResignKeyNotification,
+            object: owner.window, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated { self?.cancelCycle() }
+            }
         owner.siteControls.extensionContextMenu = { [weak self] item, surface in
             self?.contextMenu(for: item, surface: surface)
         }
@@ -65,6 +73,7 @@ final class BrowserExtensionsController<Engine: BrowserEngine> {
         let liveProfiles = Set(owner.session.catalog?.profiles.map(\.id) ?? [])
         buttonsByProfile = buttonsByProfile.filter { liveProfiles.contains($0.key) }
         if selectedSurface !== surface || generation != surface?.documentGeneration || !owner.acceptsCommands {
+            cancelCycle()
             selectionEpoch &+= 1
             selectedSurface = surface
             generation = surface?.documentGeneration
@@ -96,6 +105,7 @@ final class BrowserExtensionsController<Engine: BrowserEngine> {
     /// Metadata is synchronous and profile scoped; prepare the destination's known icons before
     /// deferred CEF activation. A source registry callback cannot overwrite this presentation.
     func preview(in profile: ProfileID) {
+        cancelCycle()
         previewProfile = profile
         renderPinnedIcons()
     }
@@ -213,6 +223,7 @@ final class BrowserExtensionsController<Engine: BrowserEngine> {
         }
         let identifiers = Set(pinned.map { "pinned-extension-" + $0.id })
         for view in pinnedButtons where !identifiers.contains(view.accessibilityIdentifier() ?? "") {
+            view.isHighlighted = false
             view.removeFromSuperview()
         }
         pinnedButtons = pinned.map { item in
@@ -268,9 +279,55 @@ final class BrowserExtensionsController<Engine: BrowserEngine> {
             view.isEnabled = surface?.profileID == profile && surface != nil && previewProfile == nil
                 && owner.acceptsCommands && item.actionState?.isEnabled != false
         }
+        if let cyclingID, !pinnedButtons.contains(where: {
+            $0.accessibilityIdentifier() == cyclingID && $0.isEnabled
+        }) { cancelCycle() }
         owner.sidebar.extensionsContainer.setPinnedButtons(pinnedButtons)
         owner.sidebar.addressContainer.needsLayout = true
         if let surface { owner.engine.extensions?.setActionAnchor(owner.siteControls.actionAnchor, on: surface) }
+    }
+
+    var isCycling: Bool { cyclingID != nil }
+
+    var canCycle: Bool {
+        guard let owner, owner.acceptsCommands, !owner.isPrivateWindow,
+              owner.engine.extensions?.supportsActions == true,
+              owner.session.selectedSurface != nil else { return false }
+        return pinnedButtons.contains { $0.isEnabled }
+    }
+
+    /// Use the existing pressed appearance; keep the action pending until Command is released.
+    func cycle(holding modifiers: NSEvent.ModifierFlags? = nil) {
+        render()
+        guard canCycle else { cancelCycle(); return }
+        let buttons = pinnedButtons.filter { $0.isEnabled }
+        let current = buttons.firstIndex { $0.accessibilityIdentifier() == cyclingID }
+        let selected = buttons[current.map { ($0 + 1) % buttons.count } ?? 0]
+        for button in pinnedButtons { button.isHighlighted = button === selected }
+        cyclingID = selected.accessibilityIdentifier()
+        cyclingEpoch = selectionEpoch
+        if modifiers?.contains(.command) != true { finishCycle() }
+    }
+
+    func cancelCycle() {
+        for button in pinnedButtons { button.isHighlighted = false }
+        cyclingID = nil
+        cyclingEpoch = nil
+    }
+
+    func finishCycle() {
+        guard let owner, let id = cyclingID, cyclingEpoch == selectionEpoch,
+              owner.session.selectedSurface === selectedSurface,
+              selectedSurface?.documentGeneration == generation, canCycle,
+              let button = pinnedButtons.first(where: { $0.accessibilityIdentifier() == id && $0.isEnabled }),
+              let surface = owner.session.selectedSurface else { cancelCycle(); return }
+        cancelCycle()
+        let extensionID = String(id.dropFirst("pinned-extension-".count))
+        // Overflow buttons are detached from visible geometry; use the persistent toolbar anchor.
+        let anchor = button.isHiddenOrHasHiddenAncestor || button.visibleRect.isEmpty
+            ? owner.siteControls.actionAnchor : button
+        do { try owner.engine.extensions?.performAction(extensionID: extensionID, on: surface, anchor: anchor) }
+        catch { owner.session.onError?(error) }
     }
 
     func releaseMemory() {
@@ -287,6 +344,9 @@ final class BrowserExtensionsController<Engine: BrowserEngine> {
     }
 
     func close() {
+        cancelCycle()
+        if let windowObservation { NotificationCenter.default.removeObserver(windowObservation) }
+        windowObservation = nil
         iconImages.removeAll()
         registryRetry?.cancel()
         registryRetry = nil
