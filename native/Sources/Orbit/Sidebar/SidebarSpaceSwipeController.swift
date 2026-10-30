@@ -81,6 +81,8 @@ final class SidebarSpaceSwipeController {
     private var admission: SpaceSwipeAdmission?
     private var commitDispatched = false
     private var selectionPublished = false
+    var settlementWaitLimit: Duration = .seconds(2)
+    private var settlementDeadline: Task<Void, Never>?
     private var settlementWaiters: [CheckedContinuation<Void, Never>] = []
     private var nextGestureEvents: [(event: NSEvent, inside: Bool)] = []
     private var nextGestureTask: Task<Void, Never>?
@@ -534,6 +536,18 @@ final class SidebarSpaceSwipeController {
             })
         }
         guard isSettling else { return }
+        let settlementToken = token
+        settlementDeadline?.cancel()
+        settlementDeadline = Task { [weak self] in
+            guard let self else { return }
+            do { try await Task.sleep(for: settlementWaitLimit) } catch { return }
+            guard token == settlementToken, let motion else { return }
+            // A display link can stop delivering while the display sleeps or changes mode.
+            // Finish the admitted destination; normal frames still use the original spring.
+            offset = motion.target
+            show(offset: offset)
+            completeSettlement()
+        }
         if OrbitMotionPreferences.prefersReducedMotion || sidebar.window?.isVisible != true {
             trackingCreationEdge = false
             offset = end
@@ -594,6 +608,7 @@ final class SidebarSpaceSwipeController {
     }
 
     private func completeSettlement() {
+        settlementDeadline?.cancel(); settlementDeadline = nil
         link?.stop(); link = nil; motion = nil; motionTime = nil; creationSettlement = nil
         releaseSettlementWaiters()
         if createsSpaceOnSettlement {
@@ -665,6 +680,7 @@ final class SidebarSpaceSwipeController {
     }
 
     func cancel(preservePresentation: Bool = false, preserveScrollInput: Bool = false, preserveQueuedReplay: Bool = false) {
+        settlementDeadline?.cancel(); settlementDeadline = nil
         let internalRetirement = preserveScrollInput || preserveQueuedReplay
         if !internalRetirement { inputEpoch = UUID(); recognitionAuthority = nil }
         if !preserveScrollInput { scrollInput.invalidate(preserveRecognition: preserveQueuedReplay) }

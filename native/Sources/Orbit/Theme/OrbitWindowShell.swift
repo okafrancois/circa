@@ -51,6 +51,14 @@ final class OrbitWindowShell {
     func setLibraryProgress(_ value: CGFloat) {
         guard libraryProgress != value else { return }
         libraryProgress = value
+        if value >= 1, !isDocked {
+            // Library has finished taking over the whole sidebar presentation. Retire the
+            // hover owner even if the pointer, editing or a feature had held it open.
+            setFloating(false, animated: false)
+            hoverReveal.setEnabled(false)
+            hoverReveal.setEnabled(true)
+        }
+        updateHoverRegions()
         applyGeometry()
     }
 
@@ -212,7 +220,7 @@ final class OrbitWindowShell {
     /// Orbit animates the floating container's frame once with a native CASpringAnimation.
     func setFloating(_ revealed: Bool, animated: Bool = true) {
         guard !isDocked else { return }
-        if revealed, !allowsHoverReveal() {
+        if revealed, libraryProgress > 0 || !allowsHoverReveal() {
             hoverReveal.dismiss()
             return
         }
@@ -362,7 +370,7 @@ final class OrbitWindowShell {
         let chrome = resolved.floatingChrome
         floatingBackdrop.isHidden = chrome <= 0 && !usesFloatingFrame
         if chrome > 0 || usesFloatingFrame {
-            floatingBackdrop.alphaValue = usesFloatingFrame ? 1 : chrome
+            floatingBackdrop.alphaValue = (usesFloatingFrame ? 1 : chrome) * LibraryMotion.sidebarOpacity(at: Double(libraryProgress))
             floatingBackdrop.cornerRadius = resolved.floatingRadius
             floatingBackdrop.frame = rootRect(resolved.sidebarFrame, in: size)
             floatingBackdrop.fill.windowFillSize = size
@@ -390,18 +398,20 @@ final class OrbitWindowShell {
         let progress = Double(libraryProgress)
         (sidebar as? BrowserSidebarView)?.isLibraryInputSuppressed = progress > 0
         sidebar.alphaValue = LibraryMotion.sidebarOpacity(at: progress)
-        guard let layer = sidebar.layer else { return }
-        // AppKit owns the backing layer's anchor and position. Compose around its bounds centre
-        // to reproduce Orbit's (0.5, 0.5) anchor without changing Auto Layout's layer geometry.
-        let centre = CGPoint(x: sidebar.bounds.midX, y: sidebar.bounds.midY)
-        var transform = CATransform3DMakeTranslation(centre.x, centre.y, 0)
-        let scale = LibraryMotion.sidebarScale(at: progress)
-        transform = CATransform3DScale(transform, scale, scale, 1)
-        transform = CATransform3DTranslate(transform, -centre.x + LibraryMotion.sidebarTranslation(at: progress), -centre.y, 0)
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
-        layer.transform = transform
-        CATransaction.commit()
+        // The floating material is a sibling of the sidebar, so it needs the same
+        // outgoing motion. Fading only the rows leaves an empty frosted panel behind.
+        for view in [sidebar, floatingBackdrop] {
+            guard let layer = view.layer else { continue }
+            let centre = CGPoint(x: view.bounds.midX, y: view.bounds.midY)
+            var transform = CATransform3DMakeTranslation(centre.x, centre.y, 0)
+            let scale = LibraryMotion.sidebarScale(at: progress)
+            transform = CATransform3DScale(transform, scale, scale, 1)
+            transform = CATransform3DTranslate(transform, -centre.x + LibraryMotion.sidebarTranslation(at: progress), -centre.y, 0)
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            layer.transform = transform
+            CATransaction.commit()
+        }
     }
 
     private func set(_ constraint: NSLayoutConstraint?, _ value: CGFloat) {
@@ -421,7 +431,7 @@ final class OrbitWindowShell {
         let height = root.bounds.height
         let edge: CGRect?
         let keep: CGRect?
-        if isDocked || hoverReveal.phase == .disabled {
+        if libraryProgress > 0 || isDocked || hoverReveal.phase == .disabled {
             edge = nil
             keep = nil
         } else if hoverReveal.isRevealed {

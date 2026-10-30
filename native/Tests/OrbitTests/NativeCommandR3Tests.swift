@@ -379,3 +379,27 @@ struct NativeCommandR3Tests {
     }
 }
 }
+
+extension NativeWebKitTests.NativeCommandR3Tests {
+    @Test("Close Window bypasses a session waiting for presentation")
+    func closeWindowBypassesStalledSession() async throws {
+        let (controller, registry, router) = try await productionFixture()
+        defer { router.shutdown() }
+        let window = try #require(controller.window)
+        // The supplied presentation never completes until explicitly released below.
+        let space = try #require(controller.session.snapshot?.activeSpaceID)
+        let catalog = try #require(controller.session.catalog)
+        var release: CheckedContinuation<Void, Never>?
+        controller.session.activateSpaceFromSwipe(space, catalog: catalog,
+            waitForPresentation: { await withCheckedContinuation { release = $0 } },
+            isCurrent: { true }, completion: { _ in })
+        while release == nil { await Task.yield() }
+        #expect(controller.session.hasPendingCommands)
+        #expect(registry.dispatch(.closeWindow, origin: .menu))
+        // willClose is delivered even for a never-shown native window.
+        #expect(controller.session.isClosed)
+        #expect(!window.isVisible)
+        release?.resume()
+        await controller.session.waitForPendingCommands()
+    }
+}

@@ -2246,6 +2246,7 @@ extern "C" int32_t ACRRun(int argc, char* argv[], const ACRRunOptions* options,
     // Chromium's MacShutdownWatchdog (in the stock framework) exits with 2 (RESULT_CODE_HUNG)
     // if this takes longer than 10 s; observed only under heavy machine load. After a forced
     // quit, CefShutdown also destroys the browsers that never confirmed their close.
+    g_native_command_scope.Cancel();
     const CFAbsoluteTime shutdown_started = CFAbsoluteTimeGetCurrent();
     orbit_bridge::BeginBrowserShutdownQoS();
     CefShutdown();
@@ -2269,6 +2270,7 @@ extern "C" int32_t ACRRequestQuit() {
   if (g_state->quitting) return 1;
   orbit_bridge::BeginBrowserShutdownQoS();
   g_state->quitting = true;
+  g_native_command_scope.Cancel();
   // No Chrome-created tab is offered to a quitting shell.
   ++g_state->unowned_handler_generation;
   if (g_state->set_unowned_tab_handler) g_state->set_unowned_tab_handler(nullptr, nullptr);

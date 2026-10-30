@@ -840,3 +840,88 @@ struct NativeThemeShellTests {
 }
 
 }
+
+extension NativeWebKitTests.NativeThemeShellTests {
+    @Test("Library takeover retires a fullscreen hover panel and prevents rearming", arguments: [false, true])
+    func libraryRetiresFloatingSidebar(held: Bool) async throws {
+        NSApplication.shared.setActivationPolicy(.prohibited)
+        let controller = try await PreviewEnvironment().makeWindow()
+        defer { controller.window?.close() }
+        let window = try #require(controller.window)
+        let root = try #require(window.contentView)
+        NotificationCenter.default.post(name: NSWindow.willEnterFullScreenNotification, object: window)
+        controller.setSidebarVisible(false, animated: false)
+        let shell = controller.windowShell
+        let clock = ManualClock()
+        shell.hoverReveal.schedule = { clock.schedule($0, $1) }
+        shell.isHoverHeld = { held }
+        shell.hoverReveal.isPointerInside = { true }
+        shell.hoverReveal.pointerEnteredEdge()
+        clock.advance(by: 0.2)
+        #expect(shell.hoverReveal.isRevealed && shell.isFloatingRevealed)
+        shell.setLibraryProgress(0.5)
+        root.layoutSubtreeIfNeeded()
+        #expect(abs(shell.floatingBackdrop.alphaValue - controller.sidebar.alphaValue) < 0.001)
+        shell.setLibraryProgress(1)
+        #expect(shell.hoverReveal.phase == .idle)
+        #expect(!shell.isFloatingRevealed)
+        #expect(shell.hoverTracker.edgeRect == nil && shell.hoverTracker.keepRect == nil)
+        #expect(shell.floatingBackdrop.alphaValue == 0)
+        shell.hoverReveal.holdDidChange()
+        shell.hoverReveal.pointerEnteredEdge()
+        clock.advance(by: 0.2)
+        #expect(shell.hoverReveal.phase == .idle && !shell.isFloatingRevealed)
+        // Closing the Library restores hidden-sidebar eligibility, without a stale hold.
+        shell.setLibraryProgress(0)
+        #expect(shell.hoverTracker.edgeRect != nil)
+        shell.hoverReveal.pointerEnteredEdge()
+        clock.advance(by: 0.2)
+        #expect(shell.hoverReveal.isRevealed && shell.isFloatingRevealed)
+    }
+
+    @Test("Cancelling a Library swipe restores its floating backdrop with the sidebar")
+    func libraryCancelledSwipeRestoresFloatingSidebar() async throws {
+        NSApplication.shared.setActivationPolicy(.prohibited)
+        let controller = try await PreviewEnvironment().makeWindow()
+        defer { controller.window?.close() }
+        controller.setSidebarVisible(false, animated: false)
+        let shell = controller.windowShell
+        shell.setFloating(true, animated: false)
+        shell.setLibraryProgress(0.4)
+        #expect(abs(shell.floatingBackdrop.alphaValue - controller.sidebar.alphaValue) < 0.001)
+        shell.setLibraryProgress(0)
+        #expect(shell.isFloatingRevealed)
+        #expect(shell.floatingBackdrop.alphaValue == 1 && controller.sidebar.alphaValue == 1)
+    }
+}
+
+extension NativeWebKitTests.NativeThemeShellTests {
+    @Test("The production Library swipe completion releases hover state and session input")
+    func librarySwipeCompletionReleasesHoverOwner() async throws {
+        NSApplication.shared.setActivationPolicy(.prohibited)
+        let controller = try await PreviewEnvironment().makeWindow()
+        defer { controller.window?.close() }
+        let window = try #require(controller.window)
+        NotificationCenter.default.post(name: NSWindow.willEnterFullScreenNotification, object: window)
+        controller.setSidebarVisible(false, animated: false)
+        let shell = controller.windowShell
+        let clock = ManualClock()
+        shell.hoverReveal.schedule = { clock.schedule($0, $1) }
+        shell.hoverReveal.isPointerInside = { true }
+        shell.hoverReveal.pointerEnteredEdge()
+        clock.advance(by: 0.2)
+        #expect(shell.hoverReveal.isRevealed)
+        controller.library.swipe.beginOpening?()
+        controller.library.swipe.finish?(true, 0)
+        #expect(controller.library.isPresented)
+        #expect(shell.hoverReveal.phase == .idle && !shell.isFloatingRevealed)
+        #expect(shell.floatingBackdrop.alphaValue == 0)
+        #expect(shell.floatingBackdrop.hitTest(.zero) == nil)
+        controller.hideLibrary()
+        controller.openTab(url: URL(string: "https://library-swipe.test/responsive")!)
+        await controller.session.waitForPendingCommands()
+        #expect(controller.session.selectedSurface?.currentURL?.host == "library-swipe.test")
+        window.performClose(nil)
+        #expect(controller.session.isClosed)
+    }
+}
