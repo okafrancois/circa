@@ -1788,7 +1788,8 @@ const orbit_cef_api_t* ResolveOrbitApi() {
   // v1. Each version's layout is the prefix of the next; a function beyond the resolved version
   // is never called.
   const orbit_cef_api_t* api = nullptr;
-  const std::pair<uint32_t, size_t> versions[] = {{15u, sizeof(orbit_cef_api_t)},
+  const std::pair<uint32_t, size_t> versions[] = {{16u, sizeof(orbit_cef_api_t)},
+                                                   {15u, offsetof(orbit_cef_api_t, diagnostic_capabilities)},
                                                    {14u, offsetof(orbit_cef_api_t, media_snapshot)},
                                                    {13u, offsetof(orbit_cef_api_t, permission_accept_once)},
                                                    {12u, offsetof(orbit_cef_api_t, memory_dump)},
@@ -1899,6 +1900,7 @@ class App final : public CefApp, public CefBrowserProcessHandler {
     // Confined mixed-content fixture: fixed loopback mapping, never product argv.
     if (g_state && g_state->secure_storage == ACR_SECURE_STORAGE_MOCK &&
         ([[NSBundle mainBundle].bundleIdentifier isEqualToString:@"lab.orbit.orbit.engine-r13"] ||
+         [[NSBundle mainBundle].bundleIdentifier isEqualToString:@"lab.orbit.orbit.engine-r14"] ||
          [[NSBundle mainBundle].bundleIdentifier isEqualToString:@"lab.orbit.orbit.sec-pill"]) &&
         [[NSBundle mainBundle].infoDictionary[@"OrbitSyntheticBundle"] boolValue] &&
         [[NSProcessInfo processInfo].arguments containsObject:@"--orbit-security-fixture"]) {
@@ -3765,4 +3767,42 @@ extern "C" void ACRNativePageServicesClosing(uint64_t token) {
   g_state->orbit->security_observe(id, nullptr, nullptr);
   g_state->orbit->fullscreen_observe(id, nullptr, nullptr);
   if (g_state->orbit->version >= 15) g_state->orbit->media_observe(id, nullptr, nullptr);
+}
+
+extern "C" uint32_t ACREngineDiagnosticCapabilities(void) {
+  if (!NSThread.isMainThread || !g_state || !g_state->initialized || g_state->quitting ||
+      !g_state->orbit || g_state->orbit->version < 16) return 0;
+  const auto* api = g_state->orbit;
+  if (!api->diagnostic_capabilities || !api->task_manager || !api->trace_begin || !api->trace_end ||
+      !api->extension_options_open || !api->extension_incognito_set) return 0;
+  return api->diagnostic_capabilities();
+}
+extern "C" int32_t ACRTaskManager(uint64_t token) {
+  const auto id = NativePageBrowser(token);
+  return id < 0 || !(ACREngineDiagnosticCapabilities() & 1) ? 0 : g_state->orbit->task_manager(id);
+}
+namespace {
+const char* DiagnosticProfilePath(uint64_t token) {
+  if (!(ACREngineDiagnosticCapabilities() & 2)) return nullptr;
+  auto* host = g_state->Find(token);
+  return host && host->browser && !host->closing_by_shell ? ExtensionProfilePath(host->profile) : nullptr;
+}
+}
+extern "C" int32_t ACRTraceBegin(uint64_t token, const char* categories, orbit_trace_callback_t cb, void* ctx) {
+  const char* path = DiagnosticProfilePath(token);
+  return path ? g_state->orbit->trace_begin(path, categories, cb, ctx) : 0;
+}
+extern "C" int32_t ACRTraceEnd(uint64_t token, const char* file, orbit_trace_callback_t cb, void* ctx) {
+  const char* path = DiagnosticProfilePath(token);
+  return path ? g_state->orbit->trace_end(path, file, cb, ctx) : 0;
+}
+extern "C" int32_t ACRExtensionOptionsOpen(uint64_t token, const char* id) {
+  const auto browser = NativePageBrowser(token);
+  return browser < 0 || !(ACREngineDiagnosticCapabilities() & 4) || !orbit_bridge::ValidExtensionID(id)
+      ? 0 : g_state->orbit->extension_options_open(browser, id);
+}
+extern "C" int32_t ACRExtensionIncognitoSet(uint64_t profile, const char* id, int32_t allowed) {
+  const char* path = ExtensionProfilePath(profile);
+  return !path || !(ACREngineDiagnosticCapabilities() & 8) || !orbit_bridge::ValidExtensionID(id)
+      ? 0 : g_state->orbit->extension_incognito_set(path, id, allowed);
 }

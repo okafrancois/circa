@@ -21,5 +21,17 @@ struct BrowserExtensionActionStateTests {
         let summary = try JSONDecoder().decode(BrowserExtensionSummary.self, from: Data(json.utf8))
         #expect(summary.actionState == nil)
         #expect(summary.defaultActionState == nil)
+        #expect(summary.hasOptionsPage == nil && summary.optionsURL == nil)
+        #expect(summary.canAllowIncognito == nil && summary.isAllowedInIncognito == nil)
     }
+    @Test("Options identity and persistent incognito preference are independent of actions")
+    func optionsAndIncognito() throws {
+        let json = #"{"id":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","name":"Fixture","version":"1","isEnabled":true,"hasAction":false,"hasOptionsPage":true,"optionsURL":"chrome-extension://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/options.html","canAllowIncognito":true,"isAllowedInIncognito":false}"#
+        let summary = try JSONDecoder().decode(BrowserExtensionSummary.self, from: Data(json.utf8))
+        #expect(summary.hasOptionsPage == true && !summary.hasAction)
+        #expect(summary.optionsURL?.host == summary.id)
+        #expect(summary.optionsURL?.path == "/options.html")
+        #expect(summary.canAllowIncognito == true && summary.isAllowedInIncognito == false)
+    }
+
 }

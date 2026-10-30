@@ -12,7 +12,7 @@ enum OrbitEnginePerformanceProbe {
     private static var hiddenAt: TimeInterval = 0
 
     private static func owns(_ owner: OrbitWindowController) -> Bool {
-        guard ["lab.orbit.orbit.engine-r11", "lab.orbit.orbit.engine-r12", "lab.orbit.orbit.engine-r13"].contains(Bundle.main.bundleIdentifier ?? ""),
+        guard ["lab.orbit.orbit.engine-r11", "lab.orbit.orbit.engine-r12", "lab.orbit.orbit.engine-r13", "lab.orbit.orbit.engine-r14"].contains(Bundle.main.bundleIdentifier ?? ""),
               Bundle.main.infoDictionary?["OrbitSyntheticBundle"] as? Bool == true,
               let window = owner.window, NSApp.windows.contains(where: { $0 === window }) else { return false }
         // Hidden qualification performs no OS input; the exact window object remains process-owned.
@@ -95,7 +95,7 @@ enum OrbitEnginePerformanceProbe {
             owner.window?.orderOut(nil)
             return ["prepared": true, "hiddenAt": hiddenAt, "pid": getpid()]
         }
-        if ["lab.orbit.orbit.engine-r12", "lab.orbit.orbit.engine-r13"].contains(Bundle.main.bundleIdentifier ?? "") {
+        if ["lab.orbit.orbit.engine-r12", "lab.orbit.orbit.engine-r13", "lab.orbit.orbit.engine-r14"].contains(Bundle.main.bundleIdentifier ?? "") {
             let dump = await api.memoryDump()
             checks["memoryDumpStatus"] = dump.status.rawValue
             checks["memoryDumpOutcome"] = dump.outcome ?? -1

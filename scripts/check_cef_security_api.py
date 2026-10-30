@@ -18,7 +18,7 @@ def main():
     boundaries = ['move_tab', 'hold_window', 'extensions_snapshot', 'extension_action_snapshot',
                   'discard_tab', 'password_prompt_observe', 'boosts_replace', 'set_automatic_pip',
                   'popup_navigation_metadata', 'password_store_open', 'page_lifecycle', 'memory_dump',
-                  'permission_accept_once', 'media_snapshot']
+                  'permission_accept_once', 'media_snapshot', 'diagnostic_capabilities']
     header = REPO / 'native/OrbitChromium/Bridge/OrbitCefApi.h'
     with tempfile.TemporaryDirectory(prefix='orbit-security-abi-') as directory:
         root = Path(directory)
@@ -33,8 +33,8 @@ def main():
     framework = ctypes.CDLL(str(args.framework.resolve()))
     get = framework.orbit_cef_get_api
     get.argtypes = [ctypes.c_uint32]; get.restype = ctypes.POINTER(Prefix)
-    assert not get(0) and not get(16), 'Unsupported side API accepted'
-    latest = get(15)
+    assert not get(0) and not get(17), 'Unsupported side API accepted'
+    latest = get(16)
     assert latest and latest.contents.struct_size == sizes[-1]
     report = []
     for version, size in enumerate(sizes, 1):
@@ -42,8 +42,8 @@ def main():
         assert table and table.contents.version == version and table.contents.struct_size >= size, (version, size)
         assert ctypes.string_at(table, size)[8:] == ctypes.string_at(latest, size)[8:], version
         report.append({'version': version, 'size': table.contents.struct_size, 'requiredPrefix': size})
-    args.output.write_text(json.dumps({'accepted': report, 'refused': [0, 16]}, indent=2) + '\n')
-    print('ABI passed: v1-v15 accepted with preserved callable prefixes; v0/v16 refused')
+    args.output.write_text(json.dumps({'accepted': report, 'refused': [0, 17]}, indent=2) + '\n')
+    print('ABI passed: v1-v16 accepted with preserved callable prefixes; v0/v17 refused')
 
 
 if __name__ == '__main__':

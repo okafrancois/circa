@@ -662,6 +662,16 @@ int32_t ACRMediaObserve(uint64_t token, orbit_json_changed_t, void*);
 int32_t ACRMediaAction(uint64_t token, int32_t action, double seconds);
 void ACRNativePageServicesClosing(uint64_t token);
 
+/* v16. Capabilities: 1 task manager, 2 process-wide tracing, 4 options, 8 incognito prefs.
+ * Trace end requires a new path below the originating persistent profile's cache path.
+ * Completion on UI exactly once for accepted calls; refused calls never call back. */
+uint32_t ACREngineDiagnosticCapabilities(void);
+int32_t ACRTaskManager(uint64_t token);
+int32_t ACRTraceBegin(uint64_t token, const char* categories, orbit_trace_callback_t, void*);
+int32_t ACRTraceEnd(uint64_t token, const char* file, orbit_trace_callback_t, void*);
+int32_t ACRExtensionOptionsOpen(uint64_t token, const char* extension_id);
+int32_t ACRExtensionIncognitoSet(uint64_t profile, const char* extension_id, int32_t allowed);
+
 #ifdef __cplusplus
 }
 #endif
