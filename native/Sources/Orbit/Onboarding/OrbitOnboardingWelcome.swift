@@ -34,7 +34,7 @@ final class OrbitOnboardingWelcomeView: NSView {
     required init?(coder: NSCoder) { nil }
     override var isFlipped: Bool { true }
     func play() {
-        mark.land()
+        mark.land(drawBands: false)
         headline.play(delay: 0.5, stagger: 0.08)
         OrbitOnboardingMotion.entrance(body, delay: 0.9)
         OrbitOnboardingMotion.entrance(button, delay: 1)

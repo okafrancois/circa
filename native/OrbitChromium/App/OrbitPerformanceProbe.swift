@@ -1,5 +1,6 @@
 import AppKit
 import BrowserCore
+import BrowserShell
 import BrowserEngine
 import ChromiumEngine
 import Darwin
@@ -671,9 +672,12 @@ extension OrbitPerformanceProbe {
             case "set":
                 guard let space = owner.session.snapshot?.activeSpaceID, let profile = owner.session.activeProfileID else { return false }
                 let colors = (command["colors"] ?? "").split(separator: ",").compactMap { BrowserThemeColor(hexString: String($0)) }
-                guard !colors.isEmpty else { return false }
+                let preset = BrandPalette.spaceGradients.first { $0.id == command["preset"] }
+                guard preset != nil || !colors.isEmpty else { return false }
                 var model: BrowserSpaceTheme
-                if command["baked"] == "true" {
+                if let preset {
+                    model = preset.theme()
+                } else if command["baked"] == "true" {
                     model = BrowserSpaceTheme(mode: .automatic, colors: [], intensity: 0.78, noise: 0,
                                               light: .init(stops: colors), dark: .init(stops: colors))
                 } else {

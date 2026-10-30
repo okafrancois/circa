@@ -12,7 +12,8 @@ enum OrbitFloatingMaterial {
         let variant: Variant
         let reducesTransparency: Bool
         var selectedSidebarSurface = false
-        var tintOpacity: CGFloat { reducesTransparency ? 1 : (variant == .light ? (selectedSidebarSurface ? 0.72 : 0.64) : 0.76) }
+        var sidebarTintOpacity: CGFloat?
+        var tintOpacity: CGFloat { reducesTransparency ? 1 : (sidebarTintOpacity ?? (variant == .light ? (selectedSidebarSurface ? 0.72 : 0.64) : 0.76)) }
         var tint: NSColor { variant == .light ? .white : NSColor(srgbRed: 14/255, green: 14/255, blue: 17/255, alpha: 1) }
         var body: NSColor { variant == .light ? NSColor(srgbRed: 20/255, green: 19/255, blue: 23/255, alpha: 1) : NSColor(white: 0.97, alpha: 1) }
         var secondary: NSColor { variant == .light ? NSColor(srgbRed: 55/255, green: 52/255, blue: 62/255, alpha: 1) : NSColor(srgbRed: 208/255, green: 205/255, blue: 214/255, alpha: 1) }
@@ -113,6 +114,7 @@ final class OrbitFrostView: NSView {
     private let tint = NSView()
     private let highlight = CAGradientLayer()
     private let observers = OrbitWorkspaceObservers()
+    var sidebarTheme: OrbitTokens.SpaceTheme? { didSet { if sidebarTheme != oldValue { refresh() } } }
     var sidebarForeground: NSColor? { didSet { refresh() } }
     var selectedSidebarSurface = false { didSet { refresh() } }
     var fixedVariant: OrbitFloatingMaterial.Variant? { didSet { refresh() } }
@@ -164,8 +166,14 @@ final class OrbitFrostView: NSView {
             style = .init(variant: OrbitThemeForeground.isLight(on: sidebarForeground.resolved(for: appearance)) ? .light : .dark,
                           reducesTransparency: reduceTransparency, selectedSidebarSurface: selectedSidebarSurface)
         }
+        if let sidebarTheme {
+            style.sidebarTintOpacity = OrbitSidebarFrost.opacity(theme: sidebarTheme, appearance: appearance, style: style)
+        }
         CATransaction.begin(); CATransaction.setDisableActions(true)
-        effect.appearance = appearance
+        // A Space can choose light ink in a light window (or the reverse). The blur must
+        // reinforce that ink polarity before the minimal per-gradient tint is applied.
+        effect.appearance = sidebarTheme == nil ? appearance
+            : NSAppearance(named: style.variant == .dark ? .darkAqua : .aqua)
         effect.state = reduceTransparency ? .inactive : .active
         effect.isHidden = reduceTransparency
         tint.layer?.backgroundColor = style.tint.withAlphaComponent(style.tintOpacity).cgColor

@@ -135,9 +135,10 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
                              ? uiFormat("%@ is your default web browser.", applicationName) : uiFormat("%@ is not your default web browser.", applicationName))
                     }
                     Spacer(minLength: 0)
-                    Button(uiText("Make Default")) { model.perform { try await model.requestDefaultBrowser() } }
-                        .disabled(!model.canRequestDefaultBrowser || model.isRequestingDefaultBrowser)
-                        .accessibilityIdentifier("settings-default-browser")
+                    BrowserDefaultBrowserAction(isDefault: model.defaultStatus?.isOrbit == true,
+                        canRequest: model.canRequestDefaultBrowser && !model.isRequestingDefaultBrowser) {
+                            model.perform { try await model.requestDefaultBrowser() }
+                        }
                 }.padding(8)
             }
         }
