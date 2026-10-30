@@ -47,7 +47,8 @@ def bundle_info(version, bundle_id=BUNDLE_ID, principal='ACRApplication'):
     return {
         'SUFeedURL': 'https://github.com/' + release_config['repository'] + '/releases/latest/download/appcast.xml',
         'SUPublicEDKey': release_config['public_ed_key'],
-        'SUEnableAutomaticChecks': True, 'SUAutomaticallyUpdate': True,
+        'SUEnableAutomaticChecks': True, 'SUAllowsAutomaticUpdates': True,
+        'SUVerifyUpdateBeforeExtraction': True, 'SUAutomaticallyUpdate': True,
         'SUScheduledCheckInterval': 3600,
         'CFBundleIdentifier': bundle_id,
         'CFBundleName': DISPLAY_NAME,

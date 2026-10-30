@@ -1,5 +1,6 @@
 import AppKit
 import Combine
+import OSLog
 #if canImport(Sparkle)
 import Sparkle
 #endif
@@ -154,16 +155,51 @@ final class OrbitUpdater: NSObject, ObservableObject {
     }
 
     func restartToUpdate() {
+        guard pendingVersion != nil else { return }
+        let revision = pendingRevision
         Task {
-            guard await validatePendingUpdate() else { return }
+            guard await validatePendingUpdate(), pendingRevision == revision, pendingVersion != nil else { return }
             installPendingUpdate?()
         }
+    }
+
+    private var stagingInProgress = false
+    private var cancelStagingDownload: (() -> Void)?
+    private var stagingWaiters: [CheckedContinuation<Void, Never>] = []
+
+    func beganStaging(cancellation: (() -> Void)? = nil) {
+        stagingInProgress = true
+        cancelStagingDownload = cancellation
+    }
+
+    func finishedStaging() {
+        stagingInProgress = false
+        cancelStagingDownload = nil
+        let waiters = stagingWaiters
+        stagingWaiters.removeAll()
+        for waiter in waiters { waiter.resume() }
     }
 
     func prepareForQuit() async {
         // The restart action just passed the freshness gate before invoking Sparkle.
         guard !isRestartingForUpdate else { return }
         isQuitting = true
+        // A staged Sparkle installer also watches normal termination. Explicit consent
+        // is required when automatic installation is off, even if staging began earlier.
+        if !automaticallyUpdates {
+            // If the switch changed during download/extraction, do not let termination
+            // race the installer. Downloads with a public cancellation reply stop now;
+            // extraction must reach its public ready reply before it can be cancelled.
+            while stagingInProgress {
+                cancelStagingDownload?()
+                cancelStagingDownload = nil
+                if stagingInProgress { await withCheckedContinuation { stagingWaiters.append($0) } }
+            }
+            if pendingVersion != nil { await discardPendingUpdate?() }
+            pendingVersion = nil
+            readyVersion = nil
+            return
+        }
         _ = await validatePendingUpdate(forQuit: true)
         // A concurrent card refresh might have failed without cancelling the installer.
         if pendingVersion != nil && readyVersion == nil {
@@ -220,6 +256,7 @@ final class OrbitUpdater: NSObject, ObservableObject {
     private var extractingVersion: String?
     private var replacing = false
     private var replacementRetries = 0
+    private var resumePreparedUpdate = false
     private var discardCompletion: CheckedContinuation<Void, Never>?
     #endif
     private var isLocalTest = false
@@ -241,7 +278,7 @@ final class OrbitUpdater: NSObject, ObservableObject {
             if CommandLine.arguments.contains("--update-test-light") { NSApp.appearance = NSAppearance(named: .aqua) }
             if CommandLine.arguments.contains("--update-test-dark") { NSApp.appearance = NSAppearance(named: .darkAqua) }
         }
-        let driver = OrbitUpdateUserDriver(hostBundle: .main, delegate: nil)
+        let driver = OrbitUpdateUserDriver()
         driver.owner = self
         userDriver = driver
         let updater = SPUUpdater(hostBundle: .main, applicationBundle: .main, userDriver: driver, delegate: self)
@@ -255,15 +292,6 @@ final class OrbitUpdater: NSObject, ObservableObject {
             guard (response as? HTTPURLResponse)?.statusCode == 200 else { throw URLError(.badServerResponse) }
             return try OrbitUpdateFeed.latestVersion(data: data)
         }
-        discardPendingUpdate = { [weak self] in
-            guard let self else { return }
-            await withCheckedContinuation { continuation in
-                discardCompletion = continuation
-                discarding = true
-                markPendingCancellation()
-                updater.checkForUpdates()
-            }
-        }
         downloadLatestUpdate = { [weak self] in
             self?.replacing = true
             self?.replacementRetries = 0
@@ -275,13 +303,11 @@ final class OrbitUpdater: NSObject, ObservableObject {
                 updater.checkForUpdates()
             }
         }
-        installPendingUpdate = { [weak self] in
-            self?.installing = true
-            updater.checkForUpdates()
-        }
         do {
             Self.applyAutomaticallyUpdates(automaticallyUpdates, to: updater)
             try updater.start()
+            // The packaged feed is authoritative; old persisted feed overrides can strand checks.
+            updater.clearFeedURLFromUserDefaults()
             if requiresFreshCheck {
                 // A previous internal cancellation must not become a permanent user skip.
                 // Sparkle clears its skip markers on this public, fresh-check path.
@@ -306,7 +332,8 @@ final class OrbitUpdater: NSObject, ObservableObject {
         #endif
     }
 
-    private func record(_ event: String) {
+    fileprivate func record(_ event: String) {
+        Logger(subsystem: "io.github.okatech.orbit", category: "updater").info("event=\(event, privacy: .public)")
         guard isLocalTest else { return }
         // Fixed events only: no feed URLs, navigation, paths or error descriptions.
         print("orbit-updater event=\(event) time=\(Date().timeIntervalSince1970)")
@@ -318,26 +345,33 @@ final class OrbitUpdater: NSObject, ObservableObject {
 extension OrbitUpdater: SPUUpdaterDelegate {
     func updater(_ updater: SPUUpdater, willInstallUpdateOnQuit item: SUAppcastItem,
                  immediateInstallationBlock immediateInstallHandler: @escaping () -> Void) -> Bool {
-        record("ready-on-quit")
-        prepared(version: item.versionString)
-        installPendingUpdate = { [weak self] in
-            self?.installing = true
-            immediateInstallHandler()
-        }
-        scheduleIdleInstallation()
-        return true
+        record("prepared-in-background")
+        // Release the automatic driver, then resume its prepared installer through
+        // our user driver. Holding this cycle blocks checks and public cancellation.
+        resumePreparedUpdate = true
+        return false
     }
 
     func updater(_ updater: SPUUpdater, didAbortWithError error: Error) {
+        finishedStaging()
         if !discarding {
+            pendingRevision &+= 1
             readyVersion = nil; pendingVersion = nil
+            installPendingUpdate = nil; discardPendingUpdate = nil
             replacing = false; installing = false; cancelAutomaticRelaunch()
         }
-        record("aborted")
+        // Never log localized descriptions or userInfo (they can contain URLs/paths).
+        record("aborted-code-\((error as NSError).code)")
     }
 
     func updater(_ updater: SPUUpdater, didFinishUpdateCycleFor updateCheck: SPUUpdateCheck, error: Error?) {
         record("cycle-finished")
+        if resumePreparedUpdate {
+            resumePreparedUpdate = false
+            // Start synchronously, before Sparkle reserves a session to calculate its
+            // next scheduled check. Dispatching this later races that reservation.
+            if !isQuitting || !automaticallyUpdates { updater.checkForUpdatesInBackground() }
+        }
         if discarding {
             discarding = false
             let completion = discardCompletion
@@ -357,40 +391,40 @@ extension OrbitUpdater: SPUUpdaterDelegate {
     }
 
     fileprivate func found(_ item: SUAppcastItem, state: SPUUserUpdateState,
-                           reply: @escaping (SPUUserUpdateChoice) -> Void) -> Bool {
+                           reply: @escaping (SPUUserUpdateChoice) -> Void) {
         record(state.stage == .installing ? "found-installing" : "found-update")
-        if discarding { reply(.skip); return true }
+        if discarding { reply(.skip); return }
         if replacing && state.stage == .installing && item.versionString != newestVersion {
             discarding = true
             markPendingCancellation()
             reply(.skip)
-            return true
+            return
         }
-        if installing && state.stage == .installing {
-            installing = false
-            reply(.install)
-            return true
+        guard !item.isInformationOnlyUpdate, item.signingValidationStatus != .failed else {
+            reply(.dismiss)
+            return
         }
+        beganStaging()
+        extractingVersion = item.versionString
         if state.stage == .installing {
-            extractingVersion = item.versionString
             ready(reply: reply)
-            return true
+            return
         }
         if state.stage == .notDownloaded { defaults.removeObject(forKey: "OrbitUpdateNeedsFreshCheck") }
-        if replacing && !item.isInformationOnlyUpdate {
-            reply(.install)
-            return true
-        }
-        return false
+        // This reply starts download/extraction only. It is never installation consent.
+        // Both scheduled and manual checks use the same silent staging path.
+        reply(.install)
     }
 
-    fileprivate var suppressesProgress: Bool { replacing || discarding || installing }
     fileprivate func ready(reply: @escaping (SPUUserUpdateChoice) -> Void) {
         record("ready-to-install")
         replacing = false
-        if installing { installing = false; reply(.install); return }
         // Keep Sparkle's installer cancellable through the public user-driver reply.
-        installPendingUpdate = { [weak self] in self?.installing = true; reply(.install) }
+        installPendingUpdate = { [weak self] in
+            guard let self, !installing else { return }
+            installing = true
+            reply(.install)
+        }
         discardPendingUpdate = { [weak self] in
             guard let self else { return }
             await withCheckedContinuation { continuation in
@@ -401,6 +435,7 @@ extension OrbitUpdater: SPUUpdaterDelegate {
             }
         }
         if let extractingVersion { prepared(version: extractingVersion) }
+        finishedStaging()
         scheduleIdleInstallation()
     }
 
@@ -408,27 +443,50 @@ extension OrbitUpdater: SPUUpdaterDelegate {
         isRestartingForUpdate = true
     }
 
+    func updater(_ updater: SPUUpdater, willDownloadUpdate item: SUAppcastItem, with request: NSMutableURLRequest) {
+        beganStaging()
+    }
+
     func updater(_ updater: SPUUpdater, willExtractUpdate item: SUAppcastItem) {
+        beganStaging()
+        record("extracting")
         extractingVersion = item.versionString
     }
 }
 
+/// Own every user-driver callback: no standard Sparkle windows are constructed.
 @MainActor
-private final class OrbitUpdateUserDriver: SPUStandardUserDriver {
+final class OrbitUpdateUserDriver: NSObject, SPUUserDriver {
     weak var owner: OrbitUpdater?
-    override func showUpdateFound(with appcastItem: SUAppcastItem, state: SPUUserUpdateState,
-                                  reply: @escaping (SPUUserUpdateChoice) -> Void) {
-        if owner?.found(appcastItem, state: state, reply: reply) == true { return }
-        super.showUpdateFound(with: appcastItem, state: state, reply: reply)
+    func show(_ request: SPUUpdatePermissionRequest,
+              reply: @escaping (SUUpdatePermissionResponse) -> Void) {
+        reply(SUUpdatePermissionResponse(automaticUpdateChecks: true, sendSystemProfile: false))
     }
-    override func showReady(toInstallAndRelaunch reply: @escaping (SPUUserUpdateChoice) -> Void) {
-        owner?.ready(reply: reply)
+    func showUserInitiatedUpdateCheck(cancellation: @escaping () -> Void) {}
+    func showUpdateFound(with appcastItem: SUAppcastItem, state: SPUUserUpdateState,
+                         reply: @escaping (SPUUserUpdateChoice) -> Void) {
+        guard let owner else { reply(.dismiss); return }
+        owner.found(appcastItem, state: state, reply: reply)
     }
-    override func showUserInitiatedUpdateCheck(cancellation: @escaping () -> Void) {
-        if owner?.suppressesProgress != true { super.showUserInitiatedUpdateCheck(cancellation: cancellation) }
+    func showUpdateReleaseNotes(with downloadData: SPUDownloadData) {}
+    func showUpdateReleaseNotesFailedToDownloadWithError(_ error: Error) {}
+    func showUpdateNotFoundWithError(_ error: Error, acknowledgement: @escaping () -> Void) { acknowledgement() }
+    func showUpdaterError(_ error: Error, acknowledgement: @escaping () -> Void) { acknowledgement() }
+    func showDownloadInitiated(cancellation: @escaping () -> Void) {
+        owner?.beganStaging(cancellation: cancellation)
+        owner?.record("downloading")
     }
-    override func showDownloadInitiated(cancellation: @escaping () -> Void) {
-        if owner?.suppressesProgress != true { super.showDownloadInitiated(cancellation: cancellation) }
+    func showDownloadDidReceiveExpectedContentLength(_ expectedContentLength: UInt64) {}
+    func showDownloadDidReceiveData(ofLength length: UInt64) {}
+    func showDownloadDidStartExtractingUpdate() {}
+    func showExtractionReceivedProgress(_ progress: Double) {}
+    func showReady(toInstallAndRelaunch reply: @escaping (SPUUserUpdateChoice) -> Void) {
+        guard let owner else { reply(.skip); return }
+        owner.ready(reply: reply)
     }
+    func showInstallingUpdate(withApplicationTerminated applicationTerminated: Bool, retryTerminatingApplication: @escaping () -> Void) {}
+    func showUpdateInstalledAndRelaunched(_ relaunched: Bool, acknowledgement: @escaping () -> Void) { acknowledgement() }
+    func dismissUpdateInstallation() {}
+    func showUpdateInFocus() {}
 }
 #endif

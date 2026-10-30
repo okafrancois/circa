@@ -19,7 +19,10 @@ enum OrbitPerformanceProbe {
         raise(SIGSTOP)
     }
     static func start(application: OrbitApplication, configuration: OrbitProductConfiguration) {
-        guard configuration.syntheticGuard != nil, CommandLine.arguments.contains("--perf-probe") else { return }
+        guard configuration.syntheticGuard != nil,
+              CommandLine.arguments.contains("--perf-probe") ||
+                (Bundle.main.bundleIdentifier == "io.github.okatech.orbit.test.update" &&
+                 Bundle.main.object(forInfoDictionaryKey: "OrbitUpdaterLocalTest") as? Bool == true) else { return }
         if ["lab.orbit.orbit.engine-r11", "lab.orbit.orbit.engine-r12", "lab.orbit.orbit.engine-r13", "lab.orbit.orbit.sec-permissions", "lab.orbit.orbit.sec-pill", "lab.orbit.orbit.sec-safebrowsing"].contains(Bundle.main.bundleIdentifier ?? "") { application.confirmQuit = { .quit } }
         if ["lab.orbit.orbit.engine-r13", "lab.orbit.orbit.sec-permissions", "lab.orbit.orbit.sec-pill", "lab.orbit.orbit.sec-safebrowsing"].contains(Bundle.main.bundleIdentifier ?? ""),
            CommandLine.arguments.contains("--orbit-security-fixture") || CommandLine.arguments.contains("--orbit-permissions-fixture") || CommandLine.arguments.contains("--orbit-safe-browsing-fixture") {
@@ -29,7 +32,7 @@ enum OrbitPerformanceProbe {
                 controller.window?.makeKey()
             }
         }
-        if [OrbitCommandGapsProbe.bundleID, OrbitNavigationHistoryProbe.bundleID, OrbitTabErgonomicsProbe.bundleID, "lab.orbit.orbit.pinned-tabs", "lab.orbit.orbit.search-suggestions", "lab.orbit.orbit.circa-rename", "lab.orbit.orbit.local-files-pdf", "lab.orbit.orbit.local-files-restore", "lab.orbit.orbit.p2-split", "lab.orbit.orbit.p2-extensions", "lab.orbit.orbit.site-search", "lab.orbit.orbit.updater-input"].contains(Bundle.main.bundleIdentifier ?? "") {
+        if [OrbitCommandGapsProbe.bundleID, OrbitNavigationHistoryProbe.bundleID, OrbitTabErgonomicsProbe.bundleID, "lab.orbit.orbit.pinned-tabs", "lab.orbit.orbit.search-suggestions", "lab.orbit.orbit.circa-rename", "lab.orbit.orbit.local-files-pdf", "lab.orbit.orbit.local-files-restore", "lab.orbit.orbit.p2-split", "lab.orbit.orbit.p2-extensions", "lab.orbit.orbit.site-search", "lab.orbit.orbit.updater-input", "io.github.okatech.orbit.test.update"].contains(Bundle.main.bundleIdentifier ?? "") {
             application.confirmQuit = { .quit }
             application.windowPresenter = { controller, _ in
                 let origin = Bundle.main.bundleIdentifier == OrbitCommandGapsProbe.bundleID
@@ -108,13 +111,37 @@ enum OrbitPerformanceProbe {
             result["windowNumber"] = owner.window?.windowNumber
             result["syncEnabled"] = environment.sync.enabled
             result["syncTaskScheduled"] = environment.sync.hasScheduledCycle
+            if Bundle.main.bundleIdentifier == "io.github.okatech.orbit.test.update" {
+                result["update"] = [
+                    "ready": application.updater.readyVersion ?? "",
+                    "pending": application.updater.pendingVersion ?? "",
+                    "automatic": application.updater.automaticallyUpdates,
+                    "card": owner.sidebar.updateReady,
+                    "version": Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "",
+                    "tabs": snapshot.tabs.map { $0.url.absoluteString },
+                    "windows": environment.liveControllers.count,
+                    "windowClasses": NSApp.windows.filter { $0.isVisible }.map { String(describing: type(of: $0)) }
+                ] as [String: Any]
+            }
             let commandFile = root.appendingPathComponent("perf-command.json")
             if let data = try? Data(contentsOf: commandFile),
                let command = try? JSONSerialization.jsonObject(with: data) as? [String: String] {
                 try? FileManager.default.removeItem(at: commandFile)
                 let name = command["command"] ?? ""
                 result["commandNonce"] = command["nonce"] ?? ""
-                if name == "command-gaps" {
+                if name == "update-test", ownsWindow(owner, bundleID: "io.github.okatech.orbit.test.update") {
+                    switch command["action"] {
+                    case "click":
+                        if owner.sidebar.updateReady { owner.sidebar.updateCard.restart.performClick(nil) }
+                    case "check": application.updater.checkForUpdates()
+                    case "off": application.updater.setAutomaticallyUpdates(false)
+                    case "on": application.updater.setAutomaticallyUpdates(true)
+                    case "seed":
+                        owner.session.openTab(url: URL(string: "about:blank#update-session")!)
+                        await owner.session.waitForPendingCommands()
+                    default: break
+                    }
+                } else if name == "command-gaps" {
                     result["commandGaps"] = await OrbitCommandGapsProbe.run(owner)
                 } else if name == "local-files" {
                     result["localFiles"] = await OrbitLocalFilesProbe.run(application, owner: owner, root: root, command: command)
