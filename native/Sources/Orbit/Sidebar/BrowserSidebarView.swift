@@ -729,7 +729,7 @@ final class BrowserSidebarView: NSView, SidebarListHost {
         let proposal = page.list.localFileDropProposal(at: page.list.convert(point, from: self),
             in: organization, count: urls.count)
         fileDropProposal = proposal
-        page.list.showDropFeedback(proposal, isValid: true, payload: nil)
+        page.list.showLocalFileDropFeedback(proposal)
         return proposal
     }
 
@@ -745,7 +745,7 @@ final class BrowserSidebarView: NSView, SidebarListHost {
     private func clearFileDrop() {
         guard fileDropProposal != nil else { return }
         fileDropProposal = nil
-        page.list.showDropFeedback(nil, isValid: false, payload: nil)
+        page.list.showLocalFileDropFeedback(nil)
     }
 
     /// Commits a validated drop (also the entry point of the hidden-window tests).

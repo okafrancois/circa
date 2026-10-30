@@ -1056,11 +1056,19 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
     }
 
     func showDropFeedback(_ proposal: SidebarDropProposal?, isValid: Bool, payload: SidebarDragPayload?) {
+        applyDropFeedback(proposal, isValid: isValid, payload: payload, externalFile: false)
+    }
+
+    func showLocalFileDropFeedback(_ proposal: SidebarDropProposal?) {
+        applyDropFeedback(proposal, isValid: proposal != nil, payload: nil, externalFile: proposal != nil)
+    }
+
+    private func applyDropFeedback(_ proposal: SidebarDropProposal?, isValid: Bool, payload: SidebarDragPayload?, externalFile: Bool) {
         if payload == nil, localDrag == nil, pendingCommit == nil, !hoverHidden.isEmpty {
             liftedNodes.subtract(hoverHidden)
             hoverHidden = []
         }
-        if payload == nil { isCrossWindowHover = false }
+        if payload == nil { isCrossWindowHover = externalFile }
         let nextGap = isValid ? proposal?.gap : nil
         let nextFolder = isValid ? proposal?.folderTarget : nil
         guard nextGap != gap || nextFolder != folderTarget || payload == nil else { return }

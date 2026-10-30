@@ -35,17 +35,6 @@ enum OrbitLocalFilesProbe {
             captureView(window.contentView, to: captures.appendingPathComponent("sidebar-drop-" + appearance + ".png"))
             _ = owner.sidebar.commitFileDrop([file], at: point)
             await owner.session.waitForPendingCommands()
-        } else if operation == "menu", let menu = NSApp.mainMenu?.items.compactMap(\.submenu).first(where: { $0.items.contains { $0.identifier?.rawValue == BrowserCommandID.openFile.rawValue } }) {
-            let copy = menu.copy() as! NSMenu
-            let target = LocalFileMenuCapture(menu: copy, file: captures.appendingPathComponent("file-menu-" + appearance + ".png"))
-            let timer = Timer(timeInterval: 0.25, target: target, selector: #selector(LocalFileMenuCapture.capture), userInfo: nil, repeats: false)
-            RunLoop.main.add(timer, forMode: .eventTracking)
-            RunLoop.main.add(timer, forMode: .common)
-            if let view = window.contentView, let event = NSEvent.mouseEvent(with: .rightMouseDown,
-                location: NSPoint(x: 80, y: 400), modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
-                windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1) {
-                NSMenu.popUpContextMenu(copy, with: event, for: view)
-            }
         }
         if operation == "panel-choose", let panel = window.attachedSheet as? NSOpenPanel {
             panel.directoryURL = root
@@ -61,13 +50,22 @@ enum OrbitLocalFilesProbe {
             let location = host.convert(NSPoint(x: host.bounds.midX, y: host.bounds.midY), to: nil)
             let pasteboard = NSPasteboard.withUniqueName()
             defer { pasteboard.releaseGlobally() }
-            pasteboard.writeObjects([file as NSURL])
+            let dropped = root.appendingPathComponent("synthetic-drop.pdf")
+            if !FileManager.default.fileExists(atPath: dropped.path) { try? FileManager.default.copyItem(at: file, to: dropped) }
+            pasteboard.writeObjects([dropped as NSURL])
             let drop = LocalFileDraggingInfo(window: window, pasteboard: pasteboard, location: location)
             var target = window.contentView?.hitTest(location)
             while let current = target, current.registeredDraggedTypes.isEmpty { target = current.superview }
-            let accepted = target?.performDragOperation(drop) ?? false
+            let before = owner.navigationActionPolicy(for: .init(url: dropped, isMainFrame: true, kind: .typed), in: surface)
+            let entered = target?.draggingEntered(drop) ?? []
+            let afterHover = owner.navigationActionPolicy(for: .init(url: dropped, isMainFrame: true, kind: .typed), in: surface)
+            let prepared = target?.prepareForDragOperation(drop) ?? false
+            let accepted = !entered.isEmpty && prepared && (target?.performDragOperation(drop) ?? false)
+            target?.draggingExited(drop)
             await owner.session.waitForPendingCommands()
-            return ["nativeDestination": target.map { NSStringFromClass(type(of: $0)) } ?? "missing", "accepted": accepted]
+            return ["nativeDestination": target.map { NSStringFromClass(type(of: $0)) } ?? "missing", "accepted": accepted,
+                "entered": entered.rawValue, "prepared": prepared, "ungrantedBeforeDrop": before == .cancel,
+                "ungrantedAfterHover": afterHover == .cancel]
         }
         if let sheet = window.attachedSheet {
             captureView(sheet.contentView, to: captures.appendingPathComponent("open-panel-" + appearance + ".png"))
@@ -126,31 +124,6 @@ enum OrbitLocalFilesProbe {
         guard let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return }
         view.cacheDisplay(in: view.bounds, to: bitmap)
         try? bitmap.representation(using: .png, properties: [:])?.write(to: file)
-    }
-}
-
-@MainActor
-private final class LocalFileMenuCapture: NSObject {
-    let menu: NSMenu
-    let file: URL
-    init(menu: NSMenu, file: URL) { self.menu = menu; self.file = file }
-    @objc func capture() {
-        let rows = CGWindowListCopyWindowInfo(.optionAll, kCGNullWindowID) as? [[String: Any]] ?? []
-        if let row = rows.first(where: { ($0[kCGWindowOwnerPID as String] as? Int) == Int(getpid())
-            && ($0[kCGWindowLayer as String] as? Int ?? 0) > 0 }),
-           let number = row[kCGWindowNumber as String] as? Int {
-            let process = Process(); process.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
-            process.arguments = ["-x", "-o", "-l", String(number), file.path]
-            try? process.run(); process.waitUntilExit()
-        }
-        if !FileManager.default.fileExists(atPath: file.path),
-           let view = NSApp.windows.first(where: { $0.level.rawValue > NSWindow.Level.normal.rawValue })?.contentView,
-           let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds) {
-            // Native objects in this application cannot refer to another process's view tree.
-            view.cacheDisplay(in: view.bounds, to: bitmap)
-            try? bitmap.representation(using: .png, properties: [:])?.write(to: file)
-        }
-        menu.cancelTracking()
     }
 }
 
