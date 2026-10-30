@@ -79,6 +79,7 @@ struct PeekRoutingTests {
     @Test("Meeting links, sign-in flows, credentials and non-web schemes never open Peek")
     func exclusions() {
         for destination in ["https://meet.google.com/abc-defg-hij", "https://us02web.zoom.us/j/123", "https://teams.microsoft.com/l/meetup-join/x",
+                            "https://around.co/r/synthetic", "https://app.around.co/rooms/synthetic",
                             "https://accounts.google.com/o/oauth2/v2/auth?client_id=1&redirect_uri=x",
                             "https://login.microsoftonline.com/common", "https://id.other.org/oauth/authorize",
                             "https://user:secret@other.org/", "mailto:someone@other.org", "file:///etc/hosts", "about:blank"] {

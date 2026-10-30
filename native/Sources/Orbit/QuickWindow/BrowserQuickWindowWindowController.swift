@@ -46,6 +46,7 @@ final class BrowserQuickWindowWindowController<Engine: BrowserEngine>: NSWindowC
     var onClose: (() -> Void)?
     var onPromote: (() -> Void)?
     var onChooseSpace: (() -> Void)?
+    var onMeetingLink: ((URL) -> Void)?
     var onNewTarget: ((Surface, BrowserNewSurfaceRequest, () -> Surface) -> Surface?)?
     var onDownload: ((Surface, any BrowserEngineDownload) -> Void)?
     let addressField = BrowserQuickWindowAddressField()
@@ -657,6 +658,14 @@ final class BrowserQuickWindowWindowController<Engine: BrowserEngine>: NSWindowC
     func surface(_ surface: Surface, decidePolicyFor action: BrowserNavigationAction,
                  decision: BrowserPolicyDecision<BrowserNavigationActionPolicy>) {
         let held = !isClosed && !isPreparingForTermination && container.owns(surface)
+        if held, acceptsCommands, action.isMainFrame == true, action.kind == .linkActivation,
+           action.isUserGesture != false, action.httpMethod == "GET", action.hasBody == false,
+           !action.shouldPerformDownload, let url = action.url, BrowserMeetingLink.matches(url),
+           let onMeetingLink {
+            onMeetingLink(url)
+            decision.decide(.cancel)
+            return
+        }
         if held, BrowserExternalProtocolGate.shared.handle(action, hostView: surface.hostView,
             surface: ObjectIdentifier(surface), pageURL: surface.navigationState.committedURL) {
             decision.decide(.cancel)

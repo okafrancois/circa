@@ -102,13 +102,7 @@ enum BrowserPeekRouting {
     }
 
     static func isMeetingLink(_ url: URL) -> Bool {
-        guard let host = url.host?.lowercased() else { return false }
-        let path = url.path.lowercased()
-        if host == "meet.google.com" { return true }
-        if host == "zoom.us" || host.hasSuffix(".zoom.us") {
-            return ["/j/", "/my/", "/wc/", "/s/"].contains { path.hasPrefix($0) }
-        }
-        return host == "teams.microsoft.com" || host == "teams.live.com"
+        BrowserMeetingLink.matches(url)
     }
 
     static func isAuthenticationFlow(_ url: URL) -> Bool {

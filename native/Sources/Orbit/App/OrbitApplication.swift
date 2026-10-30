@@ -294,7 +294,8 @@ final class OrbitApplication: NSObject, NSApplicationDelegate {
         guard !urls.isEmpty else { return }
         selectNormalWindowForExternalRequest()
         let routing = environment.settings.document.linkRouting
-        if !routing.rules.isEmpty || { if case .space = routing.defaultDestination { return true }; return false }() {
+        if !routing.rules.isEmpty || urls.contains(where: BrowserMeetingLink.matches)
+            || { if case .space = routing.defaultDestination { return true }; return false }() {
             routeConfiguredExternalURLs(urls, routing: routing)
             return
         }
