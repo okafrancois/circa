@@ -10,8 +10,8 @@ int main(int argc, char** argv) {
   assert(handle);
   auto get = reinterpret_cast<orbit_cef_get_api_t>(dlsym(handle, "orbit_cef_get_api"));
   assert(get);
-  const auto* api = get(12);
-  assert(api && api->version == 12 && api->struct_size >= sizeof(orbit_cef_api_t));
+  const auto* api = get(13);
+  assert(api && api->version == 13 && api->struct_size >= sizeof(orbit_cef_api_t));
   assert(api->window_created && api->move_tab && api->hold_window && api->extension_selection_changed);
   for (const char* name : {"orbit_cef_essentials_level", "orbit_cef_set_unowned_tab_handler",
                            "orbit_cef_extension_set_pinned", "orbit_cef_extension_shortcut"})
@@ -38,6 +38,8 @@ int main(int argc, char** argv) {
   assert(api->password_store_list && api->password_store_write && api->password_store_observe);
   assert(get(11)->version == 11 && get(11)->struct_size == offsetof(orbit_cef_api_t, page_lifecycle));
   assert(api->page_lifecycle && api->page_lifecycle_observe && api->capture_view && api->activation_frame);
-  assert(!get(0) && !get(13));
+  assert(get(12)->version == 12 && get(12)->struct_size == offsetof(orbit_cef_api_t, memory_dump));
+  assert(api->memory_dump);
+  assert(!get(0) && !get(14));
   dlclose(handle);
 }

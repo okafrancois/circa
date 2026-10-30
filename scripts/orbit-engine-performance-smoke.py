@@ -75,6 +75,8 @@ def phase(args):
     required = {'lifecycle', 'trustedEdits', 'formInteraction', 'webLock', 'editsResetOnNavigation',
                 'captureSizeAndMemory', 'stripSizeAndMemory', 'hiddenCapture', 'discardAccepted',
                 'embedderDiscard', 'activationVisible', 'submitted', 'documentChanged', 'hidden', 'timedOut', 'superseded', 'closed'}
+    if plistlib.loads((args.app / 'Contents/Info.plist').read_bytes())['CFBundleIdentifier'].endswith('engine-r12'):
+        required |= {'memoryDump', 'memoryAllocators'}
     assert all(checks.get(name) is True for name in required), checks
     (root / 'verification.json').write_text(json.dumps(checks, indent=2) + '\n')
     print(f'Native performance smoke: {len(required)} checks passed; clean normal shutdown')
@@ -91,7 +93,7 @@ def main():
     root = args.output.resolve()
     validation.validate_bundle(args.app.resolve(), root)
     with (args.app / 'Contents/Info.plist').open('rb') as stream:
-        assert plistlib.load(stream)['CFBundleIdentifier'] == 'lab.orbit.orbit.engine-r11'
+        assert plistlib.load(stream)['CFBundleIdentifier'] in ('lab.orbit.orbit.engine-r11', 'lab.orbit.orbit.engine-r12')
     if args.phase:
         phase(args)
         return

@@ -12,7 +12,7 @@ enum OrbitEnginePerformanceProbe {
     private static var hiddenAt: TimeInterval = 0
 
     private static func owns(_ owner: OrbitWindowController) -> Bool {
-        guard Bundle.main.bundleIdentifier == "lab.orbit.orbit.engine-r11",
+        guard ["lab.orbit.orbit.engine-r11", "lab.orbit.orbit.engine-r12"].contains(Bundle.main.bundleIdentifier ?? ""),
               Bundle.main.infoDictionary?["OrbitSyntheticBundle"] as? Bool == true,
               let window = owner.window, NSApp.windows.contains(where: { $0 === window }) else { return false }
         // Hidden qualification performs no OS input; the exact window object remains process-owned.
@@ -95,6 +95,18 @@ enum OrbitEnginePerformanceProbe {
             owner.window?.orderOut(nil)
             return ["prepared": true, "hiddenAt": hiddenAt, "pid": getpid()]
         }
+        if Bundle.main.bundleIdentifier == "lab.orbit.orbit.engine-r12" {
+            let dump = await api.memoryDump()
+            checks["memoryDumpStatus"] = dump.status.rawValue
+            checks["memoryDumpOutcome"] = dump.outcome ?? -1
+            checks["memoryDump"] = dump.status == .complete && dump.processes.contains { $0.pid == getpid() && $0.kind == .browser }
+                && dump.processes.contains { $0.kind == .renderer && $0.pid > 0 }
+            checks["memoryAllocators"] = dump.processes.contains { $0.allocators["malloc"] != nil }
+                && dump.processes.contains { $0.allocators["v8"] != nil }
+                && dump.processes.allSatisfy { $0.privateFootprintKB != nil }
+            checks["memoryDumpPayload"] = (try? JSONEncoder().encode(dump.processes)).map { String(decoding: $0, as: UTF8.self) } ?? ""
+
+        }
         checks["lifecycle"] = api.lifecycle().map { $0.rendererPID > 0 && $0.documentID > 0 && $0.state == .running } ?? false
         let changing = Task { await api.activationFrame(activationID: 8) }
         await Task.yield()
@@ -116,6 +128,10 @@ enum OrbitEnginePerformanceProbe {
         try? await Task.sleep(for: .milliseconds(200))
         checks["formInteraction"] = api.lifecycle()?.hadFormInteraction == true
         checks["webLock"] = api.lifecycle()?.webLock == true
+        // Release the fixture lock before navigating: cached documents may retain it,
+        // and the shell correctly protects tabs with an outstanding lock.
+        _ = await OrbitPerformanceProbe.evaluate(tab, "(()=>{releaseLock();return {released:true}})()")
+        try? await Task.sleep(for: .milliseconds(200))
         flagsObserver.cancel()
         tab.navigate(to: url.appendingPathComponent("fresh-document"))
         await loaded(tab)
@@ -140,7 +156,17 @@ enum OrbitEnginePerformanceProbe {
         var discarded = false
         let observer = Task { for await event in changes { if event.event == .discarded && event.initiator == .embedder { discarded = true } } }
         // The surface API keeps the existing conservative shell admission; the native API is proved separately.
+        let oldEngineEvent = tab.onEngineEvent
+        tab.onEngineEvent = { name, fields in
+            oldEngineEvent?(name, fields)
+            if name == "suspension-refused" { checks["discardRefusal"] = fields["reason"] ?? "unknown" }
+        }
+        if let state = api.lifecycle() {
+            checks["discardNativeState"] = ["mask": state.cannotDiscardMask, "webLock": state.webLock,
+                                            "userEdits": state.hadUserEdits, "form": state.hadFormInteraction] as [String: Any]
+        }
         let suspended = await tab.captureStateForSuspension()
+        tab.onEngineEvent = oldEngineEvent
         if suspended != nil { checks["discardAccepted"] = owner.session.suspendSurface(tab) }
         try? await Task.sleep(for: .milliseconds(300))
         checks["embedderDiscard"] = discarded && api.lifecycle()?.state == .discarded

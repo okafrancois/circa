@@ -31,6 +31,7 @@ struct PagePerformanceContractTests {
         let mock = MockPagePerformance()
         let engine: any BrowserPagePerformance = mock
         #expect(engine.lifecycle() == nil)
+        #expect(await engine.memoryDump().status == .unavailable)
         let stream = engine.changes(); var iterator = stream.makeAsyncIterator()
         var state = BrowserPageLifecycle(); state.documentID = 19
         state.hadUserEdits = true; state.cannotDiscardMask = 1 << 27

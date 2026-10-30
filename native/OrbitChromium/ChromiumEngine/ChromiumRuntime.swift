@@ -268,6 +268,19 @@ public final class ChromiumRuntime {
         return await withCheckedContinuation { cookieWaiters[request] = $0 }
     }
 
+    /// Confined qualification isolates Chromium's owner from the shell safety net.
+    public func withSyntheticSecureInputOwnerProbe(_ probe: () async -> Void) async -> Bool {
+        guard Bundle.main.infoDictionary?["OrbitSyntheticBundle"] as? Bool == true,
+              ProcessInfo.processInfo.arguments.contains("--use-mock-keychain"),
+              ProcessInfo.processInfo.arguments.contains("--orbit-smoke-secure-input"),
+              isReady, !isQuitting else { return false }
+        secureInput?.stop()
+        secureInput = nil
+        defer { if !isQuitting { secureInput = ChromiumSecureInput(runtime: self) } }
+        await probe()
+        return true
+    }
+
     private func receive(_ event: ChromiumEvent) {
         if event.kind == ACR_EVENT_DOWNLOAD {
             trace?("download", ["id": String(event.downloadID), "request": String(event.requestID),

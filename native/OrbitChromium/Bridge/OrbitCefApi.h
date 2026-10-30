@@ -155,6 +155,10 @@ typedef void (*orbit_activation_callback_t)(void*,
                                             int32_t status,
                                             int64_t submitted_ticks_us);
 
+// JSON is borrowed until return. Status: 1 complete, 2 partial, -1 unavailable.
+// Allocator nodes contain native numeric metrics; absent metrics are unknown.
+typedef void (*orbit_memory_callback_t)(void*, int32_t status, const char* json, uint32_t length);
+
 typedef struct {
   uint32_t struct_size;
   uint32_t version;
@@ -310,6 +314,9 @@ typedef struct {
                               uint64_t activation_id,
                               orbit_activation_callback_t,
                               void*);
+  // Version 13. Read-only background global dump, no tracing or forced GC.
+  // UI only; returns 0 without callback if refused, 1 with exactly one callback.
+  int32_t (*memory_dump)(orbit_memory_callback_t, void*);
 } orbit_cef_api_t;
 
 // Returns the API table for `version`, or NULL when unsupported.

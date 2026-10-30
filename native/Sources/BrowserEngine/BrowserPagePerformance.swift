@@ -78,9 +78,49 @@ public struct BrowserActivationFrame: Sendable, Equatable {
 
 @MainActor
 public protocol BrowserPagePerformance: AnyObject {
+    /// Global diagnostic; unavailable outside a synthetic performance probe or before v13.
+    func memoryDump() async -> BrowserMemoryDump
     func lifecycle() -> BrowserPageLifecycle?
     func changes() -> AsyncStream<BrowserPageLifecycleChange>
     func capture(_ request: BrowserNativeCaptureRequest) async -> BrowserNativeCapture
     /// Call after host attachment, activation and final geometry. Supersedes an older request.
     func activationFrame(activationID: UInt64) async -> BrowserActivationFrame
+}
+
+public extension BrowserPagePerformance {
+    func memoryDump() async -> BrowserMemoryDump { .init(status: .unavailable) }
+}
+
+/// Background native memory attribution. Parent/child allocators overlap; do not sum them.
+/// Metrics retain Chromium names (size/effective_size are bytes; counts are counts).
+public struct BrowserMemoryDump: Sendable, Equatable {
+    public enum Status: Int32, Sendable { case complete = 1, partial = 2, unavailable = -1 }
+    public struct Allocator: Codable, Sendable, Equatable {
+        public let metrics: [String: UInt64]
+        public let children: [String: Allocator]
+    }
+    public struct Process: Codable, Sendable, Equatable {
+        public enum Kind: Int, Sendable { case other, browser, renderer, gpu, utility, plugin, androidRuntime }
+        public let pid: Int32
+        public let processType: Int
+        public var kind: Kind { Kind(rawValue: processType) ?? .other }
+        public let privateFootprintKB: UInt64?
+        /// Missing nodes/metrics mean unknown, rather than a measured zero.
+        public let allocators: [String: Allocator]
+    }
+    public let status: Status
+    /// Native RequestOutcome; zero is success. Partial results preserve their outcome.
+    public let outcome: Int?
+    public let processes: [Process]
+    public init(status: Status, outcome: Int? = nil, processes: [Process] = []) {
+        self.status = status; self.outcome = outcome; self.processes = processes
+    }
+    public static func decode(_ data: Data, status: Int32) -> Self {
+        struct Payload: Decodable { let outcome: Int; let processes: [Process] }
+        guard let status = Status(rawValue: status), status != .unavailable,
+              let payload = try? JSONDecoder().decode(Payload.self, from: data),
+              payload.processes.allSatisfy({ $0.pid > 0 }),
+              status != .complete || payload.outcome == 0 else { return .init(status: .unavailable) }
+        return .init(status: status, outcome: payload.outcome, processes: payload.processes)
+    }
 }

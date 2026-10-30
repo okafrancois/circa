@@ -619,6 +619,7 @@ void ACRPagePerformanceClosing(uint64_t token);
 /* Native qualification tracing; borrowed callbacks complete on UI. Refused calls do not call back. */
 int32_t ACRBoostCacheTraceBegin(void (*)(void*, int32_t), void*);
 int32_t ACRBoostCacheTraceEnd(const char* path, void (*)(void*, int32_t), void*);
+int32_t ACRMemoryDump(orbit_memory_callback_t, void*);
 int32_t ACRPageLifecycle(uint64_t token, orbit_page_lifecycle_t*);
 int32_t ACRPageLifecycleObserve(uint64_t token, orbit_lifecycle_callback_t, void*);
 int32_t ACRCaptureView(uint64_t token, orbit_capture_rect_t, int32_t, int32_t, int32_t, orbit_capture_callback_t, void*);
