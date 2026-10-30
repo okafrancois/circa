@@ -51,9 +51,16 @@ extension BrowserQuickWindowWindowController {
     }
 
     func copyURL() {
-        guard let surface, owns(surface), let url = surface.navigationState.url else { return }
-        copyURLWriter(url)
+        guard copyCurrentURL() else { return }
         if let view = window?.contentView { copiedToast.show(in: view) }
+    }
+
+    @discardableResult
+    func copyCurrentURL() -> Bool {
+        guard acceptsCommands, let surface, !surface.isDisposed, owns(surface),
+              let url = surface.currentURL else { return false }
+        copyURLWriter(url)
+        return true
     }
 
     func shareURL(_ url: URL) {

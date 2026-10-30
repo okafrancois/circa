@@ -23,6 +23,26 @@ final class BrowserQuickWindowPanel: NSPanel {
 @MainActor
 final class BrowserQuickWindowAddressField: NSTextField {
     var onActivate: (() -> Void)?
+    var cursorControls: [NSView] = []
+
+    /// Sibling controls overlap the pill's background, but never its text cursor region.
+    var textCursorRects: [NSRect] {
+        var regions = [visibleRect]
+        for control in cursorControls where !control.isHiddenOrHasHiddenAncestor {
+            let exclusion = convert(control.bounds, from: control)
+            regions = regions.flatMap { rect -> [NSRect] in
+                guard rect.intersects(exclusion) else { return [rect] }
+                return [NSRect(x: rect.minX, y: rect.minY, width: max(0, exclusion.minX - rect.minX), height: rect.height),
+                        NSRect(x: max(rect.minX, exclusion.maxX), y: rect.minY,
+                               width: max(0, rect.maxX - exclusion.maxX), height: rect.height)].filter { !$0.isEmpty }
+            }
+        }
+        return regions.filter { !$0.isEmpty }
+    }
+
+    override func resetCursorRects() {
+        for rect in textCursorRects { addCursorRect(rect, cursor: .iBeam) }
+    }
     override func mouseDown(with event: NSEvent) {
         if let onActivate { onActivate() } else { super.mouseDown(with: event) }
     }
@@ -57,15 +77,18 @@ extension OrbitTokens.Metrics.QuickWindow {
 @MainActor
 final class BrowserQuickWindowToolbarView: NSView {
     let fill = OrbitThemeFillView(frame: .zero)
+    weak var addressField: BrowserQuickWindowAddressField?
     override init(frame: NSRect) {
         super.init(frame: frame)
         addSubview(fill)
     }
     required init?(coder: NSCoder) { nil }
+    override func resetCursorRects() { addCursorRect(bounds, cursor: .arrow) }
     override func layout() {
         super.layout()
         fill.windowFillSize = window?.contentView?.bounds.size
         fill.frame = bounds
+        if let addressField { window?.invalidateCursorRects(for: addressField) }
     }
 }
 

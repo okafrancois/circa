@@ -5,6 +5,15 @@ import BrowserCore
 /// share a clipped presentation group; selection replaces known text without a blank frame.
 @MainActor
 final class OrbitLocationField: NSTextField {
+    /// AppKit's optical frame outsets can extend into adjacent address accessories.
+    var textCursorRect: NSRect {
+        guard let superview else { return visibleRect }
+        return visibleRect.intersection(convert(alignmentRect(forFrame: frame), from: superview))
+    }
+
+    override func resetCursorRects() {
+        if !textCursorRect.isEmpty { addCursorRect(textCursorRect, cursor: .iBeam) }
+    }
     let textMask = AddressPresentationView()
     let textGroup = AddressPresentationView()
     let displayLabel = AddressHostLabel(labelWithString: String())
