@@ -15,6 +15,8 @@ enum ArcImportText {
     static func confirmation(_ report: ArcImportReport) -> String {
         let source = report.source, target = report.target
         var lines = [
+            localFilesHint,
+            "",
             uiFormat("Profiles: %@ (%@ new)", number(source.profiles), number(target.profilesAdded)),
             uiFormat("Spaces: %@ (%@ new)", number(source.spaces), number(target.spacesAdded)),
             uiFormat("Favorites: %@", number(target.favoritesAdded)),
@@ -61,6 +63,10 @@ enum ArcImportText {
     static func reducedMessage(_ report: ArcImportReport, _ parts: ArcImportExclusions) -> String {
         uiFormat("Importing everything would make Orbit’s session too large to open (%@ of %@ allowed). Orbit can import everything except: %@.",
                  bytes(Int64(report.sessionBudget.projectedBytes)), bytes(Int64(report.sessionBudget.limitBytes)), Self.parts(parts))
+    }
+
+    static var localFilesHint: String {
+        uiText("Coming from Arc? Orbit imports your Spaces, tabs and folders from the files Arc keeps on this Mac, even after Arc stops working.")
     }
 
     static var importRest: String { uiText("Import the Rest") }

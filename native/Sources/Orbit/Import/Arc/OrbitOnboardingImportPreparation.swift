@@ -28,6 +28,18 @@ final class OrbitOnboardingImportPreparation {
         return .init(spaces: spaces.count, pinnedTabs: pinned, passwords: passwords)
     }
 
+    /// A refused source key does not invalidate the structural import already committed above.
+    /// Filesystem/rollback failures still propagate so runtime cannot open a partial profile.
+    static func importConnections(_ request: ArcSiteSessionRequest, dataRoot: URL,
+                                  keys: sending any ArcSiteSessionKeyProviding,
+                                  unavailable: @MainActor () -> Void) async throws {
+        do {
+            _ = try await Task.detached { try ArcSiteSessionImport(dataRoot: dataRoot).run(request, keys: keys) }.value
+        } catch ArcAuthenticationError.sourceKeyUnavailable {
+            unavailable()
+        }
+    }
+
     private var selectedExport: BrowserImportChoice?
     private var installationID = UUID()
     private var externalProfiles: [String: URL] = [:]
@@ -128,7 +140,9 @@ final class OrbitOnboardingImportPreparation {
             if !pairs.isEmpty {
                 let keys: any ArcSiteSessionKeyProviding = configuration.usesMockKeychain ? ArcSiteSessionFixtureKeys(dataRoot: configuration.dataRoot) : ArcSiteSessionKeychain(targetService: OrbitProductConfiguration.keychainService, targetAccount: OrbitProductConfiguration.keychainAccount)
                 let request = ArcSiteSessionRequest(sourceRoot: sourceRoot.appendingPathComponent("User Data"), profiles: pairs)
-                _ = try await Task.detached { try ArcSiteSessionImport(dataRoot: configuration.dataRoot).run(request, keys: keys) }.value
+                try await Self.importConnections(request, dataRoot: configuration.dataRoot, keys: keys) {
+                    ArcSiteSessionAlerts.show(nil, failed: true)
+                }
             }
         } else {
             let choices = try await choices(flow, configuration: configuration)

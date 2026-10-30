@@ -13,7 +13,7 @@ let usage = """
       orbit-import restore --session-file <file> --backup <ID>
       orbit-import recover-restore --session-file <file>
       orbit-import status  --session-file <file>
-      orbit-import synthetic-fixture <new empty folder> [--history-visits <count per profile>] [--history-profiles 1|2]
+      orbit-import synthetic-fixture <new empty folder> [--history-visits <count per profile>] [--history-profiles 1|2] [--sunset-scale]
     options: --no-today --no-archive --no-history --unattributed-archives-to-default
              --separate-default-profile (Arc's Default becomes a new profile instead of merging into the first)
     """
@@ -88,7 +88,10 @@ case "synthetic-fixture":
        !((try? FileManager.default.contentsOfDirectory(atPath: folder.path))?.isEmpty ?? false) {
         fail("synthetic-fixture: the folder must not exist or be empty", .usage)
     }
-    do { try ArcSyntheticData.writeDataDirectory(at: folder, historyVisits: visits, historyProfiles: profiles) } catch { fail("synthetic-fixture: failed", .failure) }
+    do {
+        if arguments.contains("--sunset-scale") { try ArcSyntheticData.writeSunsetScaleDirectory(at: folder) }
+        else { try ArcSyntheticData.writeDataDirectory(at: folder, historyVisits: visits, historyProfiles: profiles) }
+    } catch { fail("synthetic-fixture: failed", .failure) }
     print("synthetic Arc data written (invented values only)")
 
 case "status":

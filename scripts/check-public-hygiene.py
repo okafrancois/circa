@@ -97,7 +97,9 @@ ALLOWED_TEXT = {path: tuple(expand(value) for value in values) for path, values 
  'native/Tests/OrbitTests/NativePrivateDomainTests.swift': ['{source}ImportLiveTarget'],
  'scripts/orbit-extension-update-smoke.py': ['/tmp/{lower}y-gui-slot.lock']}.items()}
 
-LOCALIZED_IMPORT_KEYS = frozenset(expand(key) for key in ['{source} is open. Quit {source}, then try again.',
+LOCALIZED_IMPORT_KEYS = frozenset(expand(key) for key in [
+ 'Coming from {source}? Orbit imports your Spaces, tabs and folders from the files {source} keeps on this Mac, even after {source} stops working.',
+ '{source} is open. Quit {source}, then try again.',
  'Orbit can copy your Spaces, profiles, Favorites, pinned tabs and folders, Today tabs and history from '
  '{source}. {source} must be closed during the copy; Orbit never quits it.',
  'Orbit reads a consistent copy of your {source} data, which requires {source} to be closed. Quit '

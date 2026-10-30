@@ -572,7 +572,9 @@ struct BrowserOrganizationState: Sendable {
             CharacterSet.controlCharacters.contains($0) ? " " : Character($0)
         }).trimmingCharacters(in: .whitespacesAndNewlines)
         guard !cleaned.isEmpty else { return nil }
-        return String(cleaned.prefix(maximumTitleLength))
+        // Truncation can expose trailing whitespace; keep this normalization idempotent
+        // because persisted titles are validated by applying it again.
+        return String(cleaned.prefix(maximumTitleLength)).trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     /// Structural invariants: every node lives in exactly one container, sections hold the node

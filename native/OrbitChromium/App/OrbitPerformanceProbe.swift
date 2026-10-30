@@ -173,6 +173,9 @@ enum OrbitPerformanceProbe {
                     result["importUI"] = check
                 } else if name == "import-recovery-fixture" {
                     result["importRecovery"] = ["started": true, "profiles": await environment.store.catalogSnapshot().profiles.count]
+                } else if name == "sunset-import", ownsWindow(owner, bundleID: SunsetImportProbe.bundleID) {
+                    application.confirmQuit = { .quit }
+                    result["sunsetImport"] = await SunsetImportProbe.run(environment: environment, root: root, action: command["action"] ?? "import")
                 } else if name == "chromium-import-fixture" {
                     result["importFixture"] = await ChromiumImportProbe.run(root: root)
                 } else if name == "safari-import-fixture" {

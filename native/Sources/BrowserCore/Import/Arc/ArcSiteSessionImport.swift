@@ -239,7 +239,8 @@ public struct ArcSiteSessionImport {
     }
 
     private func importCookies(from source: URL, to target: URL, sourceKey: Data, targetKey: Data, now: Date) throws -> Int {
-        let sourceFile = source.appendingPathComponent("Cookies")
+        let networkFile = source.appendingPathComponent("Network/Cookies")
+        let sourceFile = manager.fileExists(atPath: networkFile.path) ? networkFile : source.appendingPathComponent("Cookies")
         guard manager.fileExists(atPath: sourceFile.path) else { return 0 }
         // SQLite's backup API includes committed WAL pages; read from the resulting copy only.
         let copy = directory.appendingPathComponent("cookies-" + UUID().uuidString + ".sqlite")
