@@ -1,6 +1,7 @@
 // Shared appearance and motion tokens. Units: points and seconds.
 
 import AppKit
+import BrowserShell
 import BrowserCore
 import QuartzCore
 
@@ -163,14 +164,14 @@ extension OrbitTokens {
 
         // MARK: Accents
         public enum Accent {
-            public static let focusRing = NSColor.orbitP3(0x458AFF)
+            public static var focusRing: NSColor { .controlAccentColor }
             /// . : draws no glow
             /// around the card — loading is the capsule of `State.loadingTrack/loadingFill`.
             public static let loadingBorder = NSColor.orbitDynamic("Accent.loadingBorder", light: .orbitSRGB(0x0C50FF), dark: .orbitSRGB(0x2AB6F6))
             public static let brandBlue = NSColor.orbitP3(0x3139FB)
-            public static let primaryButton = NSColor.orbitSRGB(0x3139FB)
-            public static let primaryButtonHovered = NSColor.orbitSRGB(0x2C33E2)
-            public static let primaryButtonPressed = NSColor.orbitSRGB(0x2A30D5)
+            public static var primaryButton: NSColor { .controlAccentColor }
+            public static var primaryButtonHovered: NSColor { .controlAccentColor }
+            public static var primaryButtonPressed: NSColor { .controlAccentColor }
             public static let destructive = NSColor.orbitSRGB(0xF53714)
             public static let error = NSColor.orbitP3(0xC93333)
             public static let lockInsecure = NSColor.orbitDynamic("Accent.lockInsecure", light: .orbitSRGB(0xF53714), dark: .orbitSRGB(0xF25E6B))
@@ -234,6 +235,7 @@ extension OrbitTokens {
             public func degrees(isDark: Bool) -> CGFloat { isDark ? dark : light }
         }
 
+        var frostAmount: CGFloat = 0
         var foregroundOverride: NSColor? = nil
         var meshCorners: [NSColor]? = nil
         public var stops: [NSColor]
@@ -305,9 +307,9 @@ extension OrbitTokens {
         public var foreground: NSColor { sidebarText }
         public var sidebarSecondaryText: NSColor { icon }
 
-        /// Light panes retain the Space accent; dark panes use a blue focus outline.
+        /// Focus follows the macOS control accent independently of the Space surface.
         public var splitFocusBorder: NSColor {
-            .orbitDynamic("Accent.splitFocusBorder", light: strong, dark: .orbitSRGB(0x2932FE))
+            .controlAccentColor
         }
 
         public static let defaultPurple = ThemeAccent(
@@ -380,31 +382,31 @@ extension OrbitTokens {
     @MainActor
     public enum Typography {
         ///  14 regular
-        public static let sidebarTabTitle = NSFont.systemFont(ofSize: 14, weight: .regular)
+        public static let sidebarTabTitle = BrandTextStyle.ui.font(size: 14, weight: .regular)
         ///  14 semibold
-        public static let sidebarFolderTitle = NSFont.systemFont(ofSize: 14, weight: .semibold)
+        public static let sidebarFolderTitle = BrandTextStyle.ui.font(size: 14, weight: .semibold)
         ///  13 semibold
-        public static let sidebarSpaceTitle = NSFont.systemFont(ofSize: 13, weight: .semibold)
+        public static let sidebarSpaceTitle = BrandTextStyle.ui.font(size: 13, weight: .semibold)
         ///  14 regular
-        public static let sidebarNewTab = NSFont.systemFont(ofSize: 14, weight: .regular)
+        public static let sidebarNewTab = BrandTextStyle.ui.font(size: 14, weight: .regular)
         ///  13 regular
-        public static let addressField = NSFont.systemFont(ofSize: 13, weight: .regular)
-        public static let sidebarClear = NSFont.systemFont(ofSize: 11, weight: .semibold)
-        public static let commandBarInput = NSFont.systemFont(ofSize: 18, weight: .medium)
+        public static let addressField = BrandTextStyle.ui.font(size: 13, weight: .regular)
+        public static let sidebarClear = BrandTextStyle.ui.font(size: 11, weight: .semibold)
+        public static let commandBarInput = BrandTextStyle.ui.font(size: 18, weight: .medium)
         ///  13 medium
-        public static let commandBarRowTitle = NSFont.systemFont(ofSize: 13, weight: .medium)
+        public static let commandBarRowTitle = BrandTextStyle.ui.font(size: 13, weight: .medium)
         ///  13 medium
-        public static let commandBarAccessory = NSFont.systemFont(ofSize: 13, weight: .medium)
+        public static let commandBarAccessory = BrandTextStyle.ui.font(size: 13, weight: .medium)
         ///  13 medium — sidebar "+" menu
-        public static let menuItem = NSFont.systemFont(ofSize: 13, weight: .medium)
-        public static let menuShortcut = NSFont.systemFont(ofSize: 13, weight: .regular)
+        public static let menuItem = BrandTextStyle.ui.font(size: 13, weight: .medium)
+        public static let menuShortcut = BrandTextStyle.mono.font(size: 13, weight: .regular)
         ///  — Space tooltip "Work ⌃2"
-        public static let tooltip = NSFont.systemFont(ofSize: 11, weight: .medium)
-        public static let quickWindowDomain = NSFont.systemFont(ofSize: 12, weight: .medium)
-        public static let emptyStateTitle = NSFont.systemFont(ofSize: 13, weight: .semibold)
-        public static let emptyStateDetail = NSFont.systemFont(ofSize: 13, weight: .regular)
+        public static let tooltip = BrandTextStyle.ui.font(size: 11, weight: .medium)
+        public static let quickWindowDomain = BrandTextStyle.ui.font(size: 12, weight: .medium)
+        public static let emptyStateTitle = BrandTextStyle.title.font(size: 13)
+        public static let emptyStateDetail = BrandTextStyle.ui.font(size: 13, weight: .regular)
         ///  — page-zoom percentage shown inside the address field.
-        public static let addressAccessory = NSFont.systemFont(ofSize: 11, weight: .medium)
+        public static let addressAccessory = BrandTextStyle.mono.font(size: 11, weight: .medium)
     }
 }
 

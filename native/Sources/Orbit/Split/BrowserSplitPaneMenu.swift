@@ -14,7 +14,7 @@ extension BrowserWindowController {
                       session.activeSplit?.group == group else { return }
                 action()
             }
-            entry.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)
+            entry.image = OrbitIcon.image(sfName: symbol, pointSize: 16, accessibilityDescription: nil)
             if #available(macOS 27.0, *) { entry.preferredImageVisibility = .visible }
             entry.isEnabled = enabled
             menu.addItem(entry)

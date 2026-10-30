@@ -94,6 +94,14 @@ public extension BrowserWindowSession {
         }
     }
 
+    func convertFolderToSpace(_ id: FolderID) {
+        enqueueOrganization { session, context in try await session.store.convertFolderToSpace(id, from: context) }
+    }
+
+    func exportSpace(_ id: SpaceID, to destination: SpaceID) {
+        enqueueOrganization { session, context in try await session.store.exportSpace(id, to: destination, from: context) }
+    }
+
     func pinTabs(_ ids: [TabID]) {
         enqueueOrganization { session, context in try await session.store.pinTabs(ids, from: context) }
     }
@@ -157,6 +165,14 @@ public extension BrowserWindowSession {
     /// A nil or blank title restores the web title.
     func renameTab(_ id: TabID, to title: String?) {
         enqueueOrganization { session, context in try await session.store.renameTab(id, to: title, from: context) }
+    }
+
+    func changeTabIcon(_ id: TabID, to icon: BrowserSpaceIcon?) {
+        enqueueOrganization { session, context in try await session.store.changeTabIcon(id, to: icon, from: context) }
+    }
+
+    func editPinnedURL(_ id: TabID, to url: URL) {
+        enqueueOrganization { session, context in try await session.store.editPinnedURL(id, to: url, from: context) }
     }
 
     /// Records the engine's title for this exact live occurrence; unchanged titles cost no command.

@@ -41,11 +41,12 @@ struct BrowserSplitTests {
         #expect(throws: BrowserSessionError.unsupportedVersion) { try BrowserSessionDocument.decode(future) }
     }
 
-    @Test("Group layout and focused occurrence survive a session round trip")
-    func restoration() async throws {
+    @Test("Group layout and focused occurrence survive a session round trip",
+          arguments: [BrowserSplitOrientation.horizontal, .vertical])
+    func restoration(_ orientation: BrowserSplitOrientation) async throws {
         let f = try await OrganizationFixture.make()
         let a = try await f.open("a"), b = try await f.open("b")
-        let (id, _) = try await f.store.createSplit([a,b], orientation: .vertical, from: f.context())
+        let (id, _) = try await f.store.createSplit([a,b], orientation: orientation, from: f.context())
         _ = try await f.store.resizeSplit(id, ratios: [0.3,0.7], from: f.context())
         let saved = await f.store.sessionDocument()
         let decoded = try BrowserSessionDocument.decode(saved.encoded())

@@ -2,7 +2,7 @@ import AppKit
 import BrowserCore
 
 struct SidebarSpaceAction {
-    enum Kind: String { case rename, icon, theme, moveLeft, moveRight, delete }
+    enum Kind: String { case rename, icon, theme, moveLeft, moveRight, exportFolder, delete }
     let kind: Kind
     let title: String
     let symbol: String
@@ -16,6 +16,7 @@ struct SidebarSpaceAction {
 final class SidebarSpaceMenu: NSViewController {
     let actions: [SidebarSpaceAction]
     let popup = SidebarCreationPopup()
+    var exportMenu: NSMenu?
     var onClose: (() -> Void)?
     var onAction: ((SidebarSpaceAction) -> Void)?
     private let accent: OrbitTokens.ThemeAccent
@@ -56,7 +57,7 @@ final class SidebarSpaceMenu: NSViewController {
                 content.addSubview(separator)
                 y += 12
             }
-            let row = CreationMenuRow(title: action.title, symbol: action.symbol, enabled: action.enabled,
+            let row = CreationMenuRow(title: action.title, symbol: action.symbol, shortcut: action.kind == .exportFolder ? "›" : "", enabled: action.enabled,
                                       identifier: "space-menu-" + action.kind.rawValue, accent: accent,
                                       destructive: action.destructive)
             row.frame = NSRect(x: 6, y: y, width: Self.width - 12, height: OrbitTokens.Metrics.Sidebar.plusMenuItemPitch)
@@ -89,6 +90,11 @@ final class SidebarSpaceMenu: NSViewController {
     func activate(_ index: Int) {
         guard !cancelled, actions.indices.contains(index), actions[index].enabled else { return }
         let action = actions[index]
+        if action.kind == .exportFolder, let exportMenu {
+            exportMenu.popUp(positioning: nil, at: NSPoint(x: rows[index].bounds.maxX, y: 0), in: rows[index])
+            cancel()
+            return
+        }
         cancelled = true
         popup.performClose(nil)
         onAction?(action)

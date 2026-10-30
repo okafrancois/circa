@@ -1,4 +1,5 @@
 import AppKit
+import BrowserShell
 import BrowserCore
 import QuartzCore
 
@@ -267,12 +268,24 @@ final class BrowserSplitView: NSView {
         let delta = horizontal ? point.x - origin.x : point.y - origin.y
         draftRatios = BrowserSplitGeometry.resized(ratios, divider: index, delta: delta, available: availableExtent(ratios.count),
                                                    minimum: BrowserSplitTokens.minimumPaneExtent)
+        // Commit the complete pane tree in this event, with no implicit layer animation.
+        // Engine hosts retain their parents and resize with their existing compositor surfaces.
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
         needsLayout = true
+        layoutSubtreeIfNeeded()
+        CATransaction.commit()
         updateDividerValues()
         if ended {
             let result = draftRatios
             dragOrigin = nil; originalRatios = nil; draftRatios = nil
-            if let result, result != ratios { onResize?(result) }
+            if let result, result != ratios {
+                // Keep the displayed geometry until the model publishes this one undoable edit.
+                // That publication must not replay the command-driven layout animation.
+                self.group = BrowserSplitGroup(id: group.id, tabIDs: group.tabIDs,
+                                               orientation: group.orientation, ratios: result)
+                onResize?(result)
+            }
         }
     }
 
@@ -399,10 +412,10 @@ final class BrowserSplitPaneView: NSView {
         clip.layer?.backgroundColor = OrbitTokens.Color.Surface.splitToolbar.resolvedCGColor(for: effectiveAppearance)
         addSubview(clip)
         clip.addSubview(page)
-        address.font = NSFont.systemFont(ofSize: 14, weight: .semibold)
+        address.font = BrandTextStyle.ui.font(size: 14, weight: .semibold)
         address.contentTintColor = OrbitTokens.Color.Text.baseSecondary
         address.isBordered = false
-        address.image = NSImage(systemSymbolName: "link", accessibilityDescription: nil)
+        address.image = OrbitIcon.image(sfName: "link", pointSize: 16, accessibilityDescription: nil)
         address.imagePosition = .imageLeading
         address.imageHugsTitle = true
         address.target = self
@@ -412,7 +425,7 @@ final class BrowserSplitPaneView: NSView {
             (forward, "arrow.right", uiText("Forward"), #selector(goForward)),
             (reload, "arrow.clockwise", uiText("Reload"), #selector(reloadPage))
         ] {
-            button.image = NSImage(systemSymbolName: symbol, accessibilityDescription: label)
+            button.image = OrbitIcon.image(sfName: symbol, pointSize: 16, accessibilityDescription: label)
             button.isBordered = false
             button.contentTintColor = OrbitTokens.Color.Text.baseSecondary
             button.target = self
@@ -421,8 +434,7 @@ final class BrowserSplitPaneView: NSView {
             clip.addSubview(button)
         }
         close.contentTintColor = OrbitTokens.Color.Text.baseSecondary
-        let siteImage = OrbitGlyph.siteControlCenter
-        siteImage.size = NSSize(width: 17, height: 17)
+        let siteImage = OrbitGlyph.symbol("slider.horizontal.3", pointSize: 17) ?? NSImage()
         for (button, image, label, action) in [
             (siteControls, Optional(siteImage), uiText("Site Controls"), #selector(showSiteControls)),
             (splitToggle, OrbitGlyph.symbol("square.split.2x1", pointSize: 15, weight: .medium),
@@ -441,7 +453,7 @@ final class BrowserSplitPaneView: NSView {
         }
         address.lineBreakMode = .byTruncatingTail
         clip.addSubview(address)
-        close.image = NSImage(systemSymbolName: "xmark", accessibilityDescription: BrowserSplitStrings.closePane)
+        close.image = OrbitIcon.image(sfName: "xmark", pointSize: 16, accessibilityDescription: BrowserSplitStrings.closePane)
         close.isBordered = false
         close.target = self; close.action = #selector(closePane)
         clip.addSubview(close)
@@ -602,7 +614,7 @@ final class BrowserSplitPlaceholderView: NSView {
 
     override init(frame: NSRect) {
         super.init(frame: frame)
-        label.font = NSFont.systemFont(ofSize: 12) // estimate
+        label.font = BrandTextStyle.ui.font(size: 12) // estimate
         label.textColor = OrbitTokens.Color.Text.secondary
         label.alignment = .center
         label.lineBreakMode = .byTruncatingTail
@@ -636,12 +648,13 @@ final class BrowserSplitDividerView: NSView {
     var onAdjust: ((Adjustment) -> Bool)?
     var onCommit: (() -> Void)?
     var onReset: (() -> Void)?
-    private var hovered = false
+    private let hoverMotion = OrbitTimedAnimator(value: 0)
     override var mouseDownCanMoveWindow: Bool { false }
 
     init(index: Int) {
         self.index = index
         super.init(frame: .zero)
+        hoverMotion.onChange = { [weak self] _ in self?.needsDisplay = true }
         setAccessibilityElement(true)
         setAccessibilityRole(.splitter)
         setAccessibilityOrientation(.vertical)
@@ -693,7 +706,7 @@ final class BrowserSplitDividerView: NSView {
         return changed
     }
 
-    private var handleRect: CGRect {
+    var handleRect: CGRect {
         let horizontal = orientation == .horizontal
         return CGRect(x: bounds.midX - (horizontal ? 1 : 12), y: bounds.midY - (horizontal ? 12 : 1),
                       width: horizontal ? 2 : 24, height: horizontal ? 24 : 2)
@@ -703,11 +716,17 @@ final class BrowserSplitDividerView: NSView {
         for area in trackingAreas { removeTrackingArea(area) }
         addTrackingArea(NSTrackingArea(rect: bounds, options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect], owner: self))
     }
-    override func mouseEntered(with event: NSEvent) { hovered = true; needsDisplay = true }
-    override func mouseExited(with event: NSEvent) { hovered = false; needsDisplay = true }
-    override func resetCursorRects() { addCursorRect(bounds, cursor: orientation == .horizontal ? .resizeLeftRight : .resizeUpDown) }
+    override func mouseEntered(with event: NSEvent) {
+        if OrbitMotionPreferences.prefersReducedMotion { hoverMotion.set(1) }
+        else { hoverMotion.animate(to: 1, timing: BrowserSplitTokens.dividerHoverTiming, in: self) }
+    }
+    override func mouseExited(with event: NSEvent) { hoverMotion.set(0) }
+    var interactionRect: CGRect { bounds }
+    var resizeCursor: NSCursor { orientation == .horizontal ? .resizeLeftRight : .resizeUpDown }
+    override func resetCursorRects() { addCursorRect(interactionRect, cursor: resizeCursor) }
     override func draw(_ dirtyRect: NSRect) {
-        (hovered ? OrbitTokens.Color.State.splitDividerHandleHovered : OrbitTokens.Color.State.splitDividerHandle).setFill()
+        let rest = OrbitTokens.Color.State.splitDividerHandle
+        (rest.blended(withFraction: hoverMotion.value, of: OrbitTokens.Color.State.splitDividerHandleHovered) ?? rest).setFill()
         NSBezierPath(roundedRect: handleRect, xRadius: 1, yRadius: 1).fill()
     }
     override func mouseDown(with event: NSEvent) {
@@ -715,12 +734,19 @@ final class BrowserSplitDividerView: NSView {
             if let onReset { onReset() } else { _ = onAdjust?(.center); onCommit?() }
             return
         }
-        guard let window else { return }
+        guard window != nil else { return }
+        isDragging = true
         onDrag?(event.locationInWindow, false)
-        while let next = window.nextEvent(matching: [.leftMouseDragged, .leftMouseUp]) {
-            onDrag?(next.locationInWindow, next.type == .leftMouseUp)
-            if next.type == .leftMouseUp { break }
-        }
+    }
+    private var isDragging = false
+    override func mouseDragged(with event: NSEvent) {
+        guard isDragging else { return }
+        onDrag?(event.locationInWindow, false)
+    }
+    override func mouseUp(with event: NSEvent) {
+        guard isDragging else { return }
+        isDragging = false
+        onDrag?(event.locationInWindow, true)
     }
 }
 

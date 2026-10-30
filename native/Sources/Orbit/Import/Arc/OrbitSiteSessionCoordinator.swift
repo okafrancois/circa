@@ -4,7 +4,7 @@ import BrowserCore
 @MainActor
 enum ArcSiteSessionAlerts {
     static func confirm(orbitRunning: Bool, restoring: Bool) -> Bool {
-        let alert = NSAlert()
+        let alert = OrbitFloatingMaterial.alert()
         if restoring {
             alert.messageText = uiText("Restore Connections Before the Last Import?")
             alert.informativeText = uiText("Orbit will save your tabs and restart. Cookies and site storage will return to their state before the last import.")
@@ -21,7 +21,7 @@ enum ArcSiteSessionAlerts {
     }
 
     static func show(_ result: ArcSiteSessionResult?, failed: Bool = false) {
-        let alert = NSAlert()
+        let alert = OrbitFloatingMaterial.alert()
         if failed {
             alert.messageText = uiText("Connections Could Not Be Imported")
             alert.informativeText = uiText("Your existing connections were kept. Check that Arc is closed and allow Keychain access, then try again.")
@@ -114,7 +114,7 @@ extension OrbitApplication {
     }
 
     private func showSiteSessionMessage(_ title: String, _ text: String) {
-        let alert = NSAlert()
+        let alert = OrbitFloatingMaterial.alert()
         alert.messageText = uiText(title)
         alert.informativeText = uiText(text)
         alert.addButton(withTitle: uiText("OK"))
