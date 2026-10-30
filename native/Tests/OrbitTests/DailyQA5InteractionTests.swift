@@ -43,7 +43,8 @@ struct DailyQA5InteractionTests {
             #expect(sidebar.updateCard.frame.maxY <= sidebar.footer.frame.minY)
             #expect(sidebar.updateCard.frame.maxX <= sidebar.bounds.maxX)
             #expect(sidebar.page.list.tabRows.allSatisfy { row in
-                let ink = row.item.isPinned && row.item.selected
+                // The opaque pinned card (and its fixed ink) applies to light Spaces only.
+                let ink = row.item.isPinned && row.item.selected && !OrbitAppearance.isDark(row.effectiveAppearance)
                     ? OrbitTokens.Color.State.pinnedSelectedText : sidebar.page.accent.foreground
                 return row.titleLabel.textColor == ink
             })
