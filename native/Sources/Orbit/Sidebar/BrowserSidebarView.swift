@@ -1,4 +1,5 @@
 import AppKit
+import BrowserShell
 import BrowserCore
 
 private typealias Metrics = OrbitTokens.Metrics.Sidebar
@@ -24,7 +25,7 @@ final class BrowserSidebarView: NSView, SidebarListHost {
     }
     private let privateIndicator: NSTextField = {
         let label = NSTextField(labelWithString: uiText("Private"))
-        label.font = .systemFont(ofSize: 12, weight: .semibold)
+        label.font = BrandTextStyle.ui.font(size: 12, weight: .semibold)
         label.textColor = .secondaryLabelColor
         label.alignment = .center
         label.setAccessibilityIdentifier("private-window-indicator")
@@ -52,7 +53,7 @@ final class BrowserSidebarView: NSView, SidebarListHost {
     var windowIdentifier: UUID?
     var standaloneProfileName: String?
     private let standaloneProfilePill = NSTextField(labelWithString: "")
-    private let standaloneProfileIcon = NSImageView(image: NSImage(systemSymbolName: "face.smiling.fill", accessibilityDescription: nil) ?? NSImage())
+    private let standaloneProfileIcon = NSImageView(image: OrbitIcon.image(sfName: "face.smiling.fill", pointSize: 12, accessibilityDescription: nil) ?? NSImage())
     var onFolderHover: ((SidebarListRow, Bool) -> Void)?
     var onPreviewInvalidated: ((SidebarListRow) -> Void)?
     var onSelectTab: ((TabID) -> Void)?
@@ -168,6 +169,7 @@ final class BrowserSidebarView: NSView, SidebarListHost {
     private var renderedCatalog: BrowserCatalogSnapshot?
     private var activeSpaceID: SpaceID?
     private var commandsEnabled = true
+    var currentThemeAccent: OrbitTokens.ThemeAccent { accent }
     private var accent = OrbitTokens.ThemeAccent.defaultSpace
     private(set) var geometry = OrbitSidebarGeometry.resolve(.init(height: 640))
 
@@ -268,7 +270,7 @@ final class BrowserSidebarView: NSView, SidebarListHost {
         addressContainer.frame = geometry.addressFrame
         if let name = standaloneProfileName {
             if standaloneProfilePill.superview == nil {
-                standaloneProfilePill.font = .systemFont(ofSize: 11)
+                standaloneProfilePill.font = BrandTextStyle.ui.font(size: 11)
                 standaloneProfilePill.maximumNumberOfLines = 1
                 standaloneProfilePill.textColor = .secondaryLabelColor
                 standaloneProfilePill.wantsLayer = true
@@ -281,7 +283,7 @@ final class BrowserSidebarView: NSView, SidebarListHost {
                 let paragraph = NSMutableParagraphStyle()
                 paragraph.firstLineHeadIndent = 16
                 standaloneProfilePill.attributedStringValue = NSAttributedString(string: name,
-                    attributes: [.paragraphStyle: paragraph, .font: NSFont.systemFont(ofSize: 11), .foregroundColor: NSColor.secondaryLabelColor])
+                    attributes: [.paragraphStyle: paragraph, .font: BrandTextStyle.ui.font(size: 11), .foregroundColor: NSColor.secondaryLabelColor])
             }
             standaloneProfileIcon.frame = NSRect(x: 4, y: 5, width: 10, height: 10)
             standaloneProfilePill.frame = NSRect(x: 8, y: geometry.addressFrame.maxY + 10, width: standaloneProfilePill.fittingSize.width + 28, height: 20)
@@ -828,6 +830,10 @@ final class BrowserSidebarView: NSView, SidebarListHost {
     }
 
     func applyAccent(_ accent: OrbitTokens.ThemeAccent) {
+        if (accent.contrastTheme?.frostAmount ?? 0) > 0 {
+            swipePreviewRaster?.restore(); swipePreviewRaster = nil
+            swipeFavoritesRaster?.restore(); swipeFavoritesRaster = nil
+        }
         if let raster = swipePreviewRaster,
            !previewRasterMatches(raster, accent: accent) {
             raster.restore()
@@ -836,6 +842,8 @@ final class BrowserSidebarView: NSView, SidebarListHost {
         self.accent = accent
         if addressContainer.accent != accent { addressContainer.accent = accent }
         if navigationContainer.accent != accent { navigationContainer.accent = accent }
+        liveFavoritesGrid?.accent = accent
+        for grid in [swipePreviewFavorites, swipeOutgoingFavorites, ordinaryOutgoingFavorites] { grid?.accent = accent }
         footer.accent = accent
         updateCard.accent = accent
         page.accent = accent
@@ -1278,7 +1286,7 @@ final class SidebarAddressField: SidebarFlippedView {
     private weak var field: NSTextField?
     var accent = OrbitTokens.ThemeAccent.defaultSpace { didSet { if accent != oldValue { refreshAccent() } } }
     var effectiveAccent: OrbitTokens.ThemeAccent {
-        OrbitSpaceThemes.accent(accent, over: background.fillColor.map { [$0] } ?? [])
+        OrbitFloatingMaterial.sidebarInk(accent)
     }
     var isEditing = false { didSet { if isEditing != oldValue { refresh() } } }
     private var isHovering = false { didSet { if isHovering != oldValue { refresh() } } }
@@ -1358,7 +1366,11 @@ final class SidebarAddressField: SidebarFlippedView {
     func installAccessory(_ view: NSView, onHover: Bool = false, order: Int = 0) {
         if let button = view as? NSButton, button.image != nil {
             if view.accessibilityIdentifier() != "site-controls" {
-                button.image = button.image?.withSymbolConfiguration(.init(pointSize: 14, weight: .regular))
+                if button.image?.representations.contains(where: { $0 is NSPDFImageRep }) == true {
+                    button.image?.size = NSSize(width: 14, height: 14)
+                } else {
+                    button.image = button.image?.withSymbolConfiguration(.init(pointSize: 14, weight: .regular))
+                }
             }
             (button as? SiteControlButton)?.usesURLPillStyle = true
             button.isBordered = false
@@ -1383,6 +1395,7 @@ final class SidebarAddressField: SidebarFlippedView {
     }
 
     private func refreshAccent() {
+        background.applyFrost(accent, selected: isEditing)
         for accessory in accessories { applyAccessoryAccent(accessory) }
         // Explicit manually supplied accents preserve an installed editor's independent styling.
         guard accent.contrastTheme != nil, let field else { return }
@@ -1390,7 +1403,7 @@ final class SidebarAddressField: SidebarFlippedView {
         if field.textColor != effective.sidebarText { field.textColor = effective.sidebarText }
         if let editor = field.currentEditor() as? NSTextView {
             if editor.textColor != effective.sidebarText { editor.textColor = effective.sidebarText }
-            if editor.insertionPointColor != effective.sidebarText { editor.insertionPointColor = effective.sidebarText }
+            if editor.insertionPointColor != .controlAccentColor { editor.insertionPointColor = .controlAccentColor }
         }
         if let placeholder = field.placeholderAttributedString?.string ?? field.placeholderString,
            field.placeholderAttributedString?.attribute(.foregroundColor, at: 0, effectiveRange: nil) as? NSColor
@@ -1485,6 +1498,7 @@ extension BrowserSidebarView {
     }
     private func frozenFavorites(_ items: [FavoriteTileItem], profile: ProfileID?, attach: Bool = true) -> FavoritesGridView {
         let grid = FavoritesGridView()
+        grid.accent = accent
         grid.commandsEnabled = false
         grid.animatesChanges = false
         grid.minimumTileWidth = favoriteMinimumTileWidth
@@ -1533,6 +1547,7 @@ extension BrowserSidebarView {
             incoming.layoutSubtreeIfNeeded()
             let grid = frozenFavorites(favorites?.items ?? [], profile: favorites?.profileID, attach: false)
             grid.appearance = effectiveAppearance
+            grid.accent = key.accent
             grid.frame = contentFrame(layout.favoritesFrame)
             grid.layoutSubtreeIfNeeded()
             let scale = window?.backingScaleFactor ?? 2

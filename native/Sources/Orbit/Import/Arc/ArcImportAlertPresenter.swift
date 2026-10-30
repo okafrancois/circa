@@ -24,7 +24,7 @@ final class ArcImportAlertPresenter: ArcImportPresenting {
     }
 
     func askToQuitArc() async -> Bool {
-        let alert = NSAlert()
+        let alert = OrbitFloatingMaterial.alert()
         alert.messageText = ArcImportText.quitTitle
         alert.informativeText = ArcImportText.quitMessage
         alert.addButton(withTitle: ArcImportText.checkAgain)
@@ -53,7 +53,7 @@ final class ArcImportAlertPresenter: ArcImportPresenting {
     }
 
     func confirmReducedImport(_ report: ArcImportReport, excluding parts: ArcImportExclusions) async -> Bool {
-        let alert = NSAlert()
+        let alert = OrbitFloatingMaterial.alert()
         alert.messageText = ArcImportText.reducedTitle(parts)
         alert.informativeText = ArcImportText.reducedMessage(report, parts)
         alert.addButton(withTitle: ArcImportText.importRest)
@@ -62,7 +62,7 @@ final class ArcImportAlertPresenter: ArcImportPresenting {
     }
 
     func confirm(_ report: ArcImportReport) async -> Bool {
-        let alert = NSAlert()
+        let alert = OrbitFloatingMaterial.alert()
         alert.messageText = ArcImportText.confirmTitle
         alert.informativeText = ArcImportText.confirmation(report)
         alert.addButton(withTitle: ArcImportText.importButton)
@@ -71,7 +71,7 @@ final class ArcImportAlertPresenter: ArcImportPresenting {
     }
 
     func showCompletion(_ outcome: ArcImportOutcome) {
-        let alert = NSAlert()
+        let alert = OrbitFloatingMaterial.alert()
         alert.messageText = ArcImportText.doneTitle
         alert.informativeText = ArcImportText.completion(outcome)
         alert.addButton(withTitle: ArcImportText.ok)
@@ -79,7 +79,7 @@ final class ArcImportAlertPresenter: ArcImportPresenting {
     }
 
     func showFailure(_ error: ArcImportError?) {
-        let alert = NSAlert()
+        let alert = OrbitFloatingMaterial.alert()
         alert.alertStyle = .warning
         alert.messageText = ArcImportText.failureTitle
         alert.informativeText = ArcImportText.failure(error)
@@ -89,7 +89,7 @@ final class ArcImportAlertPresenter: ArcImportPresenting {
 
     /// Offer of the daily build's first launch.
     func offerFirstRunImport() -> Bool {
-        let alert = NSAlert()
+        let alert = OrbitFloatingMaterial.alert()
         alert.messageText = ArcImportText.offerTitle
         alert.informativeText = ArcImportText.offerMessage
         alert.addButton(withTitle: ArcImportText.offerAccept)
@@ -118,6 +118,7 @@ final class ArcImportAlertPresenter: ArcImportPresenting {
         stack.edgeInsets = NSEdgeInsets(top: 16, left: 20, bottom: 16, right: 20)
         stack.translatesAutoresizingMaskIntoConstraints = false
         panel.contentView = stack
+        OrbitFloatingMaterial.install(in: stack, blending: .behindWindow, radius: 0)
         indicator.widthAnchor.constraint(equalToConstant: 320).isActive = true
         panel.center()
         self.panel = panel

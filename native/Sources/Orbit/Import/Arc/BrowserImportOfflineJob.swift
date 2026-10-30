@@ -17,17 +17,23 @@ final class BrowserImportOfflineJob: @unchecked Sendable {
     let adapter: (any BrowserImportSourceAdapter)?
     private var authentication: Authentication
     private var passwordCSV: Data?
+    private var batch: [BrowserAuthenticationRun.Input]?
+    private let elapsedBeforeApply: Double
     private let restoring: Bool
     var canCancel: Bool { !restoring }
     init(configuration: OrbitProductConfiguration, importer: BrowserImportOrchestrator? = nil,
          preparation: BrowserImportPreparation? = nil, adapter: (any BrowserImportSourceAdapter)? = nil,
-         authentication: Authentication = .init(), passwordCSV: Data? = nil, restoring: Bool = false) {
+         authentication: Authentication = .init(), passwordCSV: Data? = nil, restoring: Bool = false,
+         batch: [BrowserAuthenticationRun.Input]? = nil, elapsedBeforeApply: Double = 0) {
         self.configuration = configuration; self.importer = importer; self.preparation = preparation
         self.adapter = adapter; self.authentication = authentication; self.passwordCSV = passwordCSV; self.restoring = restoring
+        self.batch = batch; self.elapsedBeforeApply = elapsedBeforeApply
     }
     deinit { discard() }
     func discard() {
         preparation?.discard(); authentication.snapshot?.discard()
+        for index in (batch ?? []).indices { batch?[index].discard() }
+        batch = nil
         authentication.sourcePassword.resetBytes(in: 0..<authentication.sourcePassword.count)
         authentication.targetPassword.resetBytes(in: 0..<authentication.targetPassword.count)
         let csvCount = passwordCSV?.count ?? 0
@@ -113,7 +119,10 @@ final class BrowserImportOfflineJob: @unchecked Sendable {
             let checkpoint: (String) throws -> Void = { point in
                 try BrowserImportUISynthetic.checkpoint(point, configuration: self.configuration)
             }
-            if let safari = adapter as? SafariBrowserImportAdapter {
+            if let batch {
+                _ = try await BrowserAuthenticationRun.applyBatch(batch, importer: importer, target: target,
+                    recoveryKey: key, elapsedBeforeApply: elapsedBeforeApply, checkpoint: checkpoint)
+            } else if let safari = adapter as? SafariBrowserImportAdapter {
                 _ = try await BrowserAuthenticationRun.applySafariExport(preparation: refreshed, importer: importer,
                     target: target, adapter: safari, consent: true, recoveryKey: key, checkpoint: checkpoint)
             } else if let firefox = adapter as? FirefoxBrowserImportAdapter {
@@ -155,7 +164,7 @@ extension OrbitApplication {
         Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(800))
             guard !isPreparingToQuit else { return }
-            let alert = NSAlert()
+            let alert = OrbitFloatingMaterial.alert()
             if result.cancelled == true {
                 alert.messageText = uiText("Import Cancelled")
                 alert.informativeText = uiText("Nothing was kept from this import. Your previous session is ready.")

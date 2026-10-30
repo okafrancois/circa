@@ -81,7 +81,7 @@ final class BrowserBookmarkPanels: BrowserBookmarkPanelPresenting {
 
     func confirmImport(preview: BrowserBookmarkTransferPreview, on window: NSWindow) async -> Bool {
         guard window.isVisible, window.attachedSheet == nil else { return false }
-        let alert = NSAlert()
+        let alert = OrbitFloatingMaterial.alert()
         alert.messageText = uiText("Import Bookmarks?")
         alert.informativeText = uiFormat("Add %ld HTTP(S) links and %ld folders to a new folder in Space “%@” of profile “%@”. Existing links stay unchanged. No pages will open. %ld unsupported links were skipped. Titles are trimmed and limited to 1,024 characters.", preview.links, preview.folders, preview.space, preview.profile, preview.skipped)
         alert.addButton(withTitle: uiText("Import"))
@@ -101,7 +101,7 @@ final class BrowserBookmarkPanels: BrowserBookmarkPanelPresenting {
 
     func failed(on window: NSWindow) async {
         guard window.isVisible, window.attachedSheet == nil else { return }
-        let alert = NSAlert()
+        let alert = OrbitFloatingMaterial.alert()
         alert.messageText = uiText("Bookmarks Could Not Be Transferred")
         alert.informativeText = uiText("Choose a UTF-8 bookmark HTML file and an available destination. The browser’s existing saved links have not been replaced.")
         alert.addButton(withTitle: uiText("OK"))

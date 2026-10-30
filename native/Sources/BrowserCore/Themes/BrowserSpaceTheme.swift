@@ -117,6 +117,8 @@ public struct BrowserSpaceTheme: Codable, Hashable, Sendable {
     public struct Gradient: Codable, Hashable, Sendable {
         /// One to three stops, first at `start` and last at `end` along the axis.
         public var stops: [BrowserThemeColor]
+        /// Optional stop positions; old records retain their uniformly spaced stops.
+        public var locations: [Double]? = nil
         /// Axis angle in degrees from +x toward +y, top-left origin, in points.
         public var angleDegrees: Double
         /// Positions of the first and last stop as fractions of the window's projection on the axis.
@@ -124,8 +126,9 @@ public struct BrowserSpaceTheme: Codable, Hashable, Sendable {
         public var end: Double
 
         public init(stops: [BrowserThemeColor], angleDegrees: Double = BrowserSpaceTheme.defaultAngleDegrees,
-                    start: Double = 0, end: Double = 1) {
+                    start: Double = 0, end: Double = 1, locations: [Double]? = nil) {
             self.stops = stops
+            self.locations = locations
             self.angleDegrees = angleDegrees
             self.start = start
             self.end = end
@@ -133,12 +136,18 @@ public struct BrowserSpaceTheme: Codable, Hashable, Sendable {
 
         public var isValid: Bool {
             (1...BrowserSpaceTheme.maximumColors).contains(stops.count) && stops.allSatisfy(\.isValid)
+                && (locations.map { values in
+                    values.count == stops.count && values.first == 0 && values.last == 1
+                        && values.allSatisfy { $0.isFinite && (0...1).contains($0) }
+                        && zip(values, values.dropFirst()).allSatisfy { $0 < $1 }
+                } ?? true)
                 && angleDegrees.isFinite && (0..<360).contains(angleDegrees)
                 && start.isFinite && end.isFinite && 0 <= start && start < end && end <= 1
         }
     }
 
     // Codable ignores retired surface/material fields in older themes.
+    public var frost: Bool = false
     public var paletteVersion: Int? = nil
     public var presetID: String?
     public var mode: Mode
@@ -149,7 +158,8 @@ public struct BrowserSpaceTheme: Codable, Hashable, Sendable {
     public var dark: Gradient
 
     public init(presetID: String? = nil, mode: Mode, colors: [BrowserThemeColor], intensity: Double, noise: Double,
-                light: Gradient, dark: Gradient) {
+                light: Gradient, dark: Gradient, frost: Bool = false) {
+        self.frost = frost
         self.presetID = presetID
         self.mode = mode
         self.colors = colors
@@ -157,6 +167,23 @@ public struct BrowserSpaceTheme: Codable, Hashable, Sendable {
         self.noise = noise
         self.light = light
         self.dark = dark
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case paletteVersion, presetID, mode, colors, intensity, noise, light, dark, frost
+    }
+
+    public init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        paletteVersion = try values.decodeIfPresent(Int.self, forKey: .paletteVersion)
+        presetID = try values.decodeIfPresent(String.self, forKey: .presetID)
+        mode = try values.decode(Mode.self, forKey: .mode)
+        colors = try values.decode([BrowserThemeColor].self, forKey: .colors)
+        intensity = try values.decode(Double.self, forKey: .intensity)
+        noise = try values.decode(Double.self, forKey: .noise)
+        light = try values.decode(Gradient.self, forKey: .light)
+        dark = try values.decode(Gradient.self, forKey: .dark)
+        frost = try values.decodeIfPresent(Bool.self, forKey: .frost) ?? false
     }
 
     public var isValid: Bool {
@@ -229,6 +256,7 @@ extension BrowserSpaceTheme {
         if colors.isEmpty {
             var theme = self.colors.isEmpty ? self : BrowserSpaceThemePresets.default
             theme.mode = mode
+            theme.frost = frost
             return theme
         }
         if colors == self.colors, intensity == nil, paletteVersion != 2 || mode == self.mode {
@@ -238,11 +266,14 @@ extension BrowserSpaceTheme {
             return result
         }
         if paletteVersion == 2 {
-            return Self.radial(colors: colors, intensity: intensity ?? self.intensity, noise: noise ?? self.noise,
+            var result = Self.radial(colors: colors, intensity: intensity ?? self.intensity, noise: noise ?? self.noise,
                                mode: mode, presetID: colors == self.colors ? presetID : nil)
+            result.frost = frost
+            return result
         }
-        let result = Self.composed(colors: colors, intensity: intensity ?? self.intensity, noise: noise ?? self.noise,
+        var result = Self.composed(colors: colors, intensity: intensity ?? self.intensity, noise: noise ?? self.noise,
                                    mode: mode, presetID: colors == self.colors ? presetID : nil)
+        result.frost = frost
         return result
     }
 }

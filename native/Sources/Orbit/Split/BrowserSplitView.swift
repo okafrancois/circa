@@ -1,4 +1,5 @@
 import AppKit
+import BrowserShell
 import BrowserCore
 import QuartzCore
 
@@ -399,10 +400,10 @@ final class BrowserSplitPaneView: NSView {
         clip.layer?.backgroundColor = OrbitTokens.Color.Surface.splitToolbar.resolvedCGColor(for: effectiveAppearance)
         addSubview(clip)
         clip.addSubview(page)
-        address.font = NSFont.systemFont(ofSize: 14, weight: .semibold)
+        address.font = BrandTextStyle.ui.font(size: 14, weight: .semibold)
         address.contentTintColor = OrbitTokens.Color.Text.baseSecondary
         address.isBordered = false
-        address.image = NSImage(systemSymbolName: "link", accessibilityDescription: nil)
+        address.image = OrbitIcon.image(sfName: "link", pointSize: 16, accessibilityDescription: nil)
         address.imagePosition = .imageLeading
         address.imageHugsTitle = true
         address.target = self
@@ -412,7 +413,7 @@ final class BrowserSplitPaneView: NSView {
             (forward, "arrow.right", uiText("Forward"), #selector(goForward)),
             (reload, "arrow.clockwise", uiText("Reload"), #selector(reloadPage))
         ] {
-            button.image = NSImage(systemSymbolName: symbol, accessibilityDescription: label)
+            button.image = OrbitIcon.image(sfName: symbol, pointSize: 16, accessibilityDescription: label)
             button.isBordered = false
             button.contentTintColor = OrbitTokens.Color.Text.baseSecondary
             button.target = self
@@ -421,8 +422,7 @@ final class BrowserSplitPaneView: NSView {
             clip.addSubview(button)
         }
         close.contentTintColor = OrbitTokens.Color.Text.baseSecondary
-        let siteImage = OrbitGlyph.siteControlCenter
-        siteImage.size = NSSize(width: 17, height: 17)
+        let siteImage = OrbitGlyph.symbol("slider.horizontal.3", pointSize: 17) ?? NSImage()
         for (button, image, label, action) in [
             (siteControls, Optional(siteImage), uiText("Site Controls"), #selector(showSiteControls)),
             (splitToggle, OrbitGlyph.symbol("square.split.2x1", pointSize: 15, weight: .medium),
@@ -441,7 +441,7 @@ final class BrowserSplitPaneView: NSView {
         }
         address.lineBreakMode = .byTruncatingTail
         clip.addSubview(address)
-        close.image = NSImage(systemSymbolName: "xmark", accessibilityDescription: BrowserSplitStrings.closePane)
+        close.image = OrbitIcon.image(sfName: "xmark", pointSize: 16, accessibilityDescription: BrowserSplitStrings.closePane)
         close.isBordered = false
         close.target = self; close.action = #selector(closePane)
         clip.addSubview(close)
@@ -602,7 +602,7 @@ final class BrowserSplitPlaceholderView: NSView {
 
     override init(frame: NSRect) {
         super.init(frame: frame)
-        label.font = NSFont.systemFont(ofSize: 12) // estimate
+        label.font = BrandTextStyle.ui.font(size: 12) // estimate
         label.textColor = OrbitTokens.Color.Text.secondary
         label.alignment = .center
         label.lineBreakMode = .byTruncatingTail

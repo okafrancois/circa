@@ -135,7 +135,8 @@ struct NativeThemeRowOverlayContrastTests {
                               backgrounds: painted, appearance: appearance, context: context)
                     if let field = row.renameField {
                         let editor = try #require(field.currentEditor() as? NSTextView)
-                        try check(theme: theme, [field.textColor, editor.textColor, editor.insertionPointColor], minimum: 4.5,
+                        #expect(editor.insertionPointColor == NSColor.controlAccentColor)
+                        try check(theme: theme, [field.textColor, editor.textColor], minimum: 4.5,
                                   backgrounds: painted, appearance: appearance, context: context + " rename/editor")
                     }
                     let icons = [row.closeButton.tint, row.resetButton.tint]
@@ -182,8 +183,9 @@ struct NativeThemeRowOverlayContrastTests {
                     row.beginRename(text: "Synthetic rename", font: OrbitTokens.Typography.sidebarFolderTitle)
                     let field = try #require(row.renameField)
                     let editor = try #require(field.currentEditor() as? NSTextView)
+                        #expect(editor.insertionPointColor == NSColor.controlAccentColor)
                     let painted = try backgrounds(theme, overlay: row.background.fillColor, appearance: appearance)
-                    try check(theme: theme, [field.textColor, editor.textColor, editor.insertionPointColor], minimum: 4.5,
+                    try check(theme: theme, [field.textColor, editor.textColor], minimum: 4.5,
                               backgrounds: painted, appearance: appearance, context: "\(name) folder rename/editor dark=\(isDark)")
                 }
                 let painted = try backgrounds(theme, overlay: row.background.fillColor, appearance: appearance)

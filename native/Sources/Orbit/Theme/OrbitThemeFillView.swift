@@ -63,6 +63,9 @@ final class OrbitThemeFillView: NSView {
     private func applyEndpoints() {
         let size = windowFillSize ?? bounds.size
         let isDark = OrbitAppearance.isDark(effectiveAppearance)
+        if let positions = theme.model?.gradient(isDark: isDark).locations, positions.count == 3 {
+            gradient.locations = positions.map { NSNumber(value: $0) }
+        } else { gradient.locations = [0, 0.5, 1] }
         let points = OrbitThemeGradient.endpoints(size: size, range: theme.stopRange.range(isDark: isDark),
                                                 angleDegrees: theme.angle.degrees(isDark: isDark))
         if gradient.startPoint != points.start { gradient.startPoint = points.start }
