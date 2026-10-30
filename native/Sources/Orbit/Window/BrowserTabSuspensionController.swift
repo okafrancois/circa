@@ -31,6 +31,8 @@ final class BrowserTabSuspensionController<Engine: BrowserEngine> {
     private var inputMonitor: Any?
     private var isSweeping = false
     private var presentationRevision: UInt64 = 0
+    /// Injectable monotonic clock, shared with synthetic sessions that advance policy time.
+    var clock: () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }
 
     init(owner: BrowserWindowController<Engine>, store: BrowserStore) {
         self.owner = owner
@@ -182,8 +184,9 @@ final class BrowserTabSuspensionController<Engine: BrowserEngine> {
         }
     }
 
-    func selectionDidChange(now: TimeInterval = ProcessInfo.processInfo.systemUptime) {
+    func selectionDidChange(now: TimeInterval? = nil) {
         guard let owner else { return }
+        let now = now ?? clock()
         presentationRevision &+= 1
         let owned = Set(owner.session.ownedSurfaces.map(ObjectIdentifier.init))
         backgroundSince = backgroundSince.filter { owned.contains($0.key) }
@@ -205,8 +208,10 @@ final class BrowserTabSuspensionController<Engine: BrowserEngine> {
 
     /// `now` is injectable for targeted tests; production uses the monotonic uptime. Safety is
     /// always obtained from the actual engine, then selection/document/ownership are rechecked.
+    /// An optional live-tab budget only adds candidates; every admission takes the same path.
     @discardableResult
-    func sweep(now: TimeInterval = ProcessInfo.processInfo.systemUptime) async -> Int {
+    func sweep(now: TimeInterval? = nil) async -> Int {
+        let now = now ?? clock()
         owner?.resources?.sweep()
         guard !isSweeping, let owner, !owner.session.isClosed, !owner.isPreparingForTermination,
               let interval = (owner.settingsPreferences?.runtime.document.memorySaver ?? .oneHour).interval else { return 0 }
@@ -223,12 +228,19 @@ final class BrowserTabSuspensionController<Engine: BrowserEngine> {
         restoring.formIntersection(retained)
         sleepingIcons = sleepingIcons.filter { retained.contains($0.key) }
         var count = 0
-        for surface in owner.session.ownedSurfaces {
+        var budget = owner.resources?.coordinator.budgetPlan(now: now)
+        let surfaces = budget?.ordered(owner.session.ownedSurfaces) ?? owner.session.ownedSurfaces
+        for surface in surfaces {
             let identity = ObjectIdentifier(surface)
             guard let id = owner.session.occurrenceID(for: surface), let tab = tabs[id],
                   logical.contains(tab.id),
                   !owner.session.visibleOccurrenceIDs.contains(id),
-                  let since = backgroundSince[identity], now - since >= interval else { continue }
+                  let since = backgroundSince[identity] else { continue }
+            let budgeted = now - since < interval
+            guard !budgeted || budget?.admits(identity) == true else { continue }
+            var discarded = false
+            // A refused admitted candidate lets the next least recently shown tab in its group through.
+            defer { if !discarded { budget?.refused(identity) } }
             let icon = await surface.navigationState.faviconImage?.nativeImage()
             guard let candidate = await surface.captureStateForSuspension() else { continue }
             var cover: BrowserSuspensionCover?
@@ -258,8 +270,10 @@ final class BrowserTabSuspensionController<Engine: BrowserEngine> {
             suspended[id] = state
             if let cover { covers.insert(cover, for: id) }
             if let icon { sleepingIcons[id] = (surface.profileID, state.url, icon) }
-            if owner.session.suspendSurface(surface) { count += 1 }
-            else { suspended[id] = nil; sleepingIcons[id] = nil; covers.remove(id) }
+            if owner.session.suspendSurface(surface) {
+                count += 1; discarded = true
+                if budgeted { owner.resources?.coordinator.budgetDiscarded() }
+            } else { suspended[id] = nil; sleepingIcons[id] = nil; covers.remove(id) }
             expectedRevision = presentationRevision
         }
         return count
