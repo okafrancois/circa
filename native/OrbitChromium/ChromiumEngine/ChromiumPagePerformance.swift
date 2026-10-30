@@ -10,6 +10,22 @@ final class ChromiumPagePerformance: BrowserPagePerformance {
     private var listeners: [UUID: AsyncStream<BrowserPageLifecycleChange>.Continuation] = [:]
     init(token: UInt64) { self.token = token }
 
+    func memoryDump() async -> BrowserMemoryDump {
+        guard !closed else { return .init(status: .unavailable) }
+        return await withCheckedContinuation { continuation in
+            let context = Unmanaged.passRetained(PerformanceReply(continuation)).toOpaque()
+            if ACRMemoryDump({ ctx, status, json, length in
+                guard let ctx else { return }
+                MainActor.assumeIsolated {
+                    let reply = Unmanaged<PerformanceReply<BrowserMemoryDump>>.fromOpaque(ctx).takeRetainedValue()
+                    let bytes = json.map { Data(bytes: $0, count: Int(length)) } ?? Data()
+                    reply.continuation.resume(returning: BrowserMemoryDump.decode(bytes, status: status))
+                }
+            }, context) != 1 {
+                Unmanaged<PerformanceReply<BrowserMemoryDump>>.fromOpaque(context).takeRetainedValue().continuation.resume(returning: .init(status: .unavailable))
+            }
+        }
+    }
     func lifecycle() -> BrowserPageLifecycle? {
         guard !closed else { return nil }
         var state = orbit_page_lifecycle_t()

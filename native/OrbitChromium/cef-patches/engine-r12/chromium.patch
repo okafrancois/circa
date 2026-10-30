@@ -1,0 +1,39 @@
+diff --git a/content/browser/renderer_host/render_widget_host_view_mac.mm b/content/browser/renderer_host/render_widget_host_view_mac.mm
+--- a/content/browser/renderer_host/render_widget_host_view_mac.mm
++++ b/content/browser/renderer_host/render_widget_host_view_mac.mm
+@@ -937,6 +937,7 @@
+ }
+ 
+ void RenderWidgetHostViewMac::ShutdownAndDisconnect() {
++  SetTextInputActive(false);
+   if (disconnected_) {
+     return;
+   }
+@@ -1825,7 +1826,8 @@
+       host()->LostFocus();
+     }
+   }
+-  if (HasFocus())
++  // Deactivation must release the scope even after the key-window bit clears.
++  if (!active || HasFocus())
+     SetTextInputActive(active);
+   if (!active)
+     UnlockPointer();
+@@ -1999,6 +2001,9 @@
+ }
+ 
+ void RenderWidgetHostViewMac::OnFirstResponderChanged(bool is_first_responder) {
++  // View removal also reports false; release before duplicate/destroy gates.
++  if (!is_first_responder)
++    SetTextInputActive(false);
+   if (destroy_pending()) {
+     return;
+   }
+@@ -2037,7 +2042,6 @@
+         host()->delegate()->GetRenderWidgetHostWithPageFocus() &&
+         host()->delegate()->GetRenderWidgetHostWithPageFocus()->is_focused();
+     if (IsHeadless() || has_focused_widget) {
+-      SetTextInputActive(false);
+       host()->LostFocus();
+     }
+   }

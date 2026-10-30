@@ -18,7 +18,7 @@ enum OrbitPerformanceProbe {
     }
     static func start(application: OrbitApplication, configuration: OrbitProductConfiguration) {
         guard configuration.syntheticGuard != nil, CommandLine.arguments.contains("--perf-probe") else { return }
-        if Bundle.main.bundleIdentifier == "lab.orbit.orbit.engine-r11" { application.confirmQuit = { .quit } }
+        if ["lab.orbit.orbit.engine-r11", "lab.orbit.orbit.engine-r12"].contains(Bundle.main.bundleIdentifier ?? "") { application.confirmQuit = { .quit } }
         installDrawCounter()
         let log = configuration.dataRoot.appendingPathComponent("download-events.jsonl")
         ChromiumRuntime.shared.trace = { name, fields in

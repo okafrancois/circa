@@ -1783,7 +1783,8 @@ const orbit_cef_api_t* ResolveOrbitApi() {
   // v1. Each version's layout is the prefix of the next; a function beyond the resolved version
   // is never called.
   const orbit_cef_api_t* api = nullptr;
-  const std::pair<uint32_t, size_t> versions[] = {{12u, sizeof(orbit_cef_api_t)},
+  const std::pair<uint32_t, size_t> versions[] = {{13u, sizeof(orbit_cef_api_t)},
+                                                   {12u, offsetof(orbit_cef_api_t, memory_dump)},
                                                    {11u, offsetof(orbit_cef_api_t, page_lifecycle)},
                                                    {10u, offsetof(orbit_cef_api_t, password_store_open)},
                                                    {9u, offsetof(orbit_cef_api_t, popup_navigation_metadata)},
@@ -1875,10 +1876,6 @@ class App final : public CefApp, public CefBrowserProcessHandler {
     // Disabled features of the allow-listed arguments, the extra switches and the policy, as one
     // value (the filtered argv carries none itself).
     std::vector<std::string> disabled = {command->GetSwitchValue("disable-features").ToString()};
-    // Until SetActive(false) releases password_input_enabler_ unconditionally, the
-    // non-key HasFocus gate skips its reset after OnWindowIsKeyChanged(false).
-    // Preserve first-responder focus here; the shell separately reconciles actual eligibility.
-    disabled.push_back("RWHVMacHasFocusReturnsFalseForNonKeyWindow");
     if (g_state) disabled.insert(disabled.end(), g_state->disabled_features.begin(), g_state->disabled_features.end());
     if (g_state) {
       for (const auto& value : g_state->switches) {
@@ -3559,6 +3556,14 @@ int32_t PerformanceBrowser(uint64_t token) {
   if (!host || !host->browser || !host->browser->IsValid() || host->closing_by_shell) return -1;
   return host->browser->GetIdentifier();
 }
+}
+extern "C" int32_t ACRMemoryDump(orbit_memory_callback_t cb, void* ctx) {
+  // Diagnostic only: no production polling or implicit global dumps.
+  if (!NSThread.isMainThread || !g_state || !g_state->orbit || g_state->orbit->version < 13 ||
+      ![[NSBundle mainBundle].infoDictionary[@"OrbitSyntheticBundle"] boolValue] ||
+      ![[NSProcessInfo processInfo].arguments containsObject:@"--perf-probe"])
+    return 0;
+  return g_state->orbit->memory_dump(cb, ctx);
 }
 extern "C" int32_t ACRPageLifecycle(uint64_t token, orbit_page_lifecycle_t* state) {
   int32_t id = PerformanceBrowser(token); return id < 0 ? 0 : g_state->orbit->page_lifecycle(id, state);

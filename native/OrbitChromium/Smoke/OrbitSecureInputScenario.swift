@@ -41,10 +41,7 @@ enum OrbitSecureInputScenario {
             await pause()
         }
         func deactivate() async {
-            guard let finder = NSWorkspace.shared.runningApplications.first(where: { $0.bundleIdentifier == "com.apple.finder" }) else {
-                record("secure-input.deactivation-target", "failed", [:]); return
-            }
-            finder.activate(options: [.activateIgnoringOtherApps])
+            NSApp.hide(nil)
             _ = await OrbitRelaunchScenarios.until { !NSApp.isActive }
             await pause()
         }
@@ -61,6 +58,23 @@ enum OrbitSecureInputScenario {
         await activate(native)
         await check("initial", false)
         guard let first = await page() else { return }
+        let isolated = await ChromiumRuntime.shared.withSyntheticSecureInputOwnerProbe {
+            let other = NSWindow(contentRect: NSRect(x: 50, y: 50, width: 260, height: 160),
+                                 styleMask: [.titled], backing: .buffered, defer: false)
+            other.isReleasedWhenClosed = false
+            other.makeKeyAndOrderFront(nil)
+            await check("engine-only-other-window", false)
+            await activate(native)
+            await focus(first)
+            await check("engine-only-refocused", true)
+            NSApp.hide(nil)
+            await check("engine-only-hidden-app", false)
+            await activate(native)
+            await focus(first)
+            await check("engine-only-unhidden-refocused", true)
+            other.close()
+        }
+        record("secure-input.engine-owner-isolated", isolated ? "proven" : "failed", [:])
         let firstTabID = window.session.snapshot?.tabs.first { $0.occurrenceID == window.session.snapshot?.selectedOccurrenceID }?.id
         let hooks = [("windowDidResignKey:", #selector(NSObject.orbitSecureInputResign(_:))),
                      ("applicationDidResignActive:", #selector(NSObject.orbitSecureInputDeactivate(_:)))]
