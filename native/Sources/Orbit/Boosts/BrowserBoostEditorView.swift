@@ -67,7 +67,7 @@ final class BrowserBoostEditorView: NSView {
         let controls = BoostButton(symbol: "slider.horizontal.3", label: uiText("Advanced color controls"))
         controls.actionBlock = { [weak self, weak controls] in
             guard let self, let controls else { return }
-            let popover = NSPopover(); popover.behavior = .transient; popover.animates = false
+            let popover = OrbitFrostPopover(); popover.behavior = .transient; popover.animates = false
             let controller = NSViewController(); controller.view = BrowserBoostColorControls(session: session)
             popover.contentViewController = controller; advanced = popover
             popover.show(relativeTo: controls.bounds, of: controls, preferredEdge: .maxY)

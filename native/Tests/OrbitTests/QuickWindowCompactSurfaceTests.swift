@@ -29,7 +29,7 @@ struct QuickWindowCompactSurfaceTests {
         #expect(OrbitAppearance.isDark(input.window.effectiveAppearance))
         #expect(OrbitAppearance.isDark(input.input.effectiveAppearance))
         #expect(input.input.textColor?.resolved(for: input.input.effectiveAppearance)
-            == NSColor.labelColor.resolved(for: NSAppearance(named: .darkAqua)!))
+            == OrbitFloatingMaterial.body.resolved(for: NSAppearance(named: .darkAqua)!))
         little.showSpaceChooser([])
         #expect(little.spaceChooser != nil)
         #expect(OrbitAppearance.isDark(try #require(little.spaceChooser?.window.effectiveAppearance)))

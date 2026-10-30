@@ -163,7 +163,7 @@ final class SidebarNewSpacePageView: NSView, NSTextFieldDelegate {
         closePickers()
         let editor = OrbitThemeEditorView(state: OrbitThemeEditorState(theme: theme))
         editor.surfaceScope.stringValue = uiText("New Space")
-        let presentation = SpacePickerPopover()
+        let presentation = SpacePickerPopover(usesFrost: false)
         let popup = presentation.popover
         popup.contentSize = OrbitThemeEditorMetrics.pickerSize
         popup.appearance = effectiveAppearance

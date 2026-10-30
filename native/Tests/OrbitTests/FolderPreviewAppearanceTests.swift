@@ -84,7 +84,8 @@ struct FolderPreviewAppearanceTests {
         #expect(view.scroll.scrollerStyle == .overlay)
         #expect(view.scroll.autohidesScrollers)
         #expect(!view.scroll.drawsBackground)
-        #expect(view.material == .popover && view.blendingMode == .withinWindow)
+        #expect((view.subviews.first as? OrbitFrostView)?.effect.material == .hudWindow)
+        #expect((view.subviews.first as? OrbitFrostView)?.effect.blendingMode == .withinWindow)
     }
 }
 }

@@ -246,7 +246,7 @@ final class BrowserFavoritesController<Engine: BrowserEngine> {
     }
     private func presentRename(_ captured: MenuSelection) {
         guard let owner, let window = owner.window, window.isVisible else { return }
-        let alert = NSAlert()
+        let alert = OrbitFloatingMaterial.alert()
         alert.messageText = uiText("Rename Favorite")
         alert.addButton(withTitle: uiText("Save"))
         alert.addButton(withTitle: uiText("Cancel"))

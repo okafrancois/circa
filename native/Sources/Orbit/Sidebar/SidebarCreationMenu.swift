@@ -25,7 +25,7 @@ final class SidebarCreationMenu: NSViewController {
         self.accent = accent
         super.init(nibName: nil, bundle: nil)
         popover.contentViewController = self
-        popover.surfaceColor = accent.menuSurface
+        popover.surfaceColor = .clear
         popover.onClose = { [weak self] in self?.didClose() }
     }
     required init?(coder: NSCoder) { nil }
@@ -41,7 +41,7 @@ final class SidebarCreationMenu: NSViewController {
         content.frame = NSRect(x: 0, y: 0, width: m.plusMenuWidth, height: height)
         content.wantsLayer = true
         content.layer?.cornerRadius = OrbitTokens.Radius.plusMenu
-        content.layer?.backgroundColor = accent.menuSurface.resolvedCGColor(for: content.effectiveAppearance)
+        content.layer?.backgroundColor = NSColor.clear.cgColor
         for (index, action) in actions.enumerated() {
             let row = CreationMenuRow(action: action, accent: accent)
             row.frame = NSRect(x: m.plusMenuHighlightInset,
@@ -56,7 +56,7 @@ final class SidebarCreationMenu: NSViewController {
             let line = NSView(frame: NSRect(x: 18, y: 8 + 2 * m.plusMenuItemPitch + 8,
                                            width: m.plusMenuWidth - 36, height: 1))
             line.wantsLayer = true
-            line.layer?.backgroundColor = accent.soft.resolvedCGColor(for: content.effectiveAppearance)
+            line.layer?.backgroundColor = OrbitFloatingMaterial.body.withAlphaComponent(0.1).resolvedCGColor(for: content.effectiveAppearance)
             content.addSubview(line)
         }
         view = content
@@ -140,14 +140,12 @@ final class CreationMenuRow: NSView {
         wantsLayer = true
         layer?.cornerRadius = OrbitTokens.Radius.plusMenuRow
         icon.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)
-        icon.contentTintColor = destructive ? .systemRed : OrbitTokens.Color.Text.commandBarPrimary
         title.stringValue = text
         title.font = OrbitTokens.Typography.menuItem
         title.lineBreakMode = .byTruncatingTail
-        title.textColor = destructive ? .systemRed : OrbitTokens.Color.Text.commandBarPrimary
         shortcut.stringValue = keys
         shortcut.font = OrbitTokens.Typography.menuShortcut
-        shortcut.textColor = accent.menuShortcut
+        applyInk(selected: false)
         shortcut.alignment = .right
         for child in [icon, title, shortcut] { child.setAccessibilityElement(false); addSubview(child) }
         alphaValue = enabled ? 1 : 0.4
@@ -174,8 +172,16 @@ final class CreationMenuRow: NSView {
         addTrackingArea(NSTrackingArea(rect: bounds, options: [.mouseEnteredAndExited, .activeInKeyWindow], owner: self))
     }
     func setSelected(_ selected: Bool) {
-        layer?.backgroundColor = (selected ? accent.soft : .clear).resolvedCGColor(for: effectiveAppearance)
+        // Selected rows fill with the system accent, like native menus.
+        layer?.backgroundColor = (selected ? NSColor.controlAccentColor : .clear).resolvedCGColor(for: effectiveAppearance)
+        applyInk(selected: selected)
         setAccessibilitySelected(selected)
+    }
+    private func applyInk(selected: Bool) {
+        let ink = selected ? OrbitFloatingMaterial.accentText : destructive ? NSColor.systemRed : OrbitFloatingMaterial.body
+        icon.contentTintColor = ink
+        title.textColor = ink
+        shortcut.textColor = selected ? ink.withAlphaComponent(0.7) : OrbitFloatingMaterial.secondary
     }
     override func mouseEntered(with event: NSEvent) { onHover?() }
     override func hitTest(_ point: NSPoint) -> NSView? {
@@ -196,7 +202,7 @@ final class CreationMenuRow: NSView {
 @MainActor
 final class SidebarCreationPopup: NSObject, NSWindowDelegate {
     weak var contentViewController: NSViewController?
-    var usesGlass = false
+    var usesGlass = true
     var surfaceColor = OrbitTokens.Color.Surface.popover
     var onClose: (() -> Void)?
     private(set) var window: NSPanel?
@@ -231,15 +237,7 @@ final class SidebarCreationPopup: NSObject, NSWindowDelegate {
         let background = CreationPopupBackground(frame: NSRect(origin: .zero, size: frame.size))
         background.color = usesGlass ? .clear : surfaceColor
         if usesGlass {
-            let glass = NSVisualEffectView(frame: background.bounds)
-            glass.material = .popover
-            glass.blendingMode = .behindWindow
-            glass.state = .active
-            glass.wantsLayer = true
-            glass.layer?.cornerRadius = OrbitTokens.Radius.plusMenu
-            glass.layer?.masksToBounds = true
-            glass.autoresizingMask = [.width, .height]
-            background.addSubview(glass)
+            OrbitFloatingMaterial.install(in: background, blending: .behindWindow, radius: OrbitTokens.Radius.plusMenu)
         }
         content.frame.origin = .zero
         background.addSubview(content)

@@ -493,8 +493,7 @@ final class SidebarSpaceTooltip: NSView {
             }
         }
     }
-    private let material = NSVisualEffectView()
-    private let tint = NSView()
+    private let material = OrbitFrostView(radius: 14)
     private let label = NSTextField(labelWithString: "")
     private var keycaps: [NSTextField] = []
     private(set) var name = ""
@@ -507,21 +506,12 @@ final class SidebarSpaceTooltip: NSView {
         layer?.shadowOpacity = 0.22
         layer?.shadowRadius = 8
         layer?.shadowOffset = NSSize(width: 0, height: -2)
-        material.material = .popover
-        material.blendingMode = .withinWindow
-        material.state = .active
-        material.appearance = NSAppearance(named: .darkAqua)
-        material.wantsLayer = true
-        material.layer?.cornerRadius = 14
-        material.layer?.masksToBounds = true
-        tint.wantsLayer = true
-        tint.layer?.backgroundColor = NSColor(srgbRed: 0.10, green: 0.09, blue: 0.11, alpha: 0.84).cgColor
-        tint.layer?.cornerRadius = 14
+        material.fixedVariant = .dark
         label.font = .systemFont(ofSize: 12, weight: .semibold)
         label.textColor = NSColor(white: 0.96, alpha: 1)
         label.maximumNumberOfLines = 1
         label.lineBreakMode = .byTruncatingTail
-        for view in [material, tint, label] { addSubview(view) }
+        for view in [material, label] { addSubview(view) }
         setAccessibilityIdentifier("space-hover-capsule")
         setAccessibilityElement(true)
         setAccessibilityRole(.group)
@@ -565,7 +555,6 @@ final class SidebarSpaceTooltip: NSView {
         }
         let size = NSSize(width: label.frame.maxX + gap + keysWidth + 10, height: 28)
         material.frame = NSRect(origin: .zero, size: size)
-        tint.frame = material.frame
         setAccessibilityLabel(name)
         setAccessibilityValue(shortcut ?? "")
         return size

@@ -155,7 +155,7 @@ extension OrbitApplication {
         Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(800))
             guard !isPreparingToQuit else { return }
-            let alert = NSAlert()
+            let alert = OrbitFloatingMaterial.alert()
             if result.cancelled == true {
                 alert.messageText = uiText("Import Cancelled")
                 alert.informativeText = uiText("Nothing was kept from this import. Your previous session is ready.")

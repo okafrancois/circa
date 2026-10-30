@@ -51,6 +51,9 @@ final class BrowserSettingsWindowController<Engine: BrowserEngine>: NSWindowCont
         window.contentMinSize = Self.minimumContentSize
         window.toolbarStyle = .preference
         window.titlebarSeparatorStyle = .line
+        window.titlebarAppearsTransparent = true
+        window.backgroundColor = .windowBackgroundColor
+        window.isOpaque = true
         window.isMovableByWindowBackground = false
         window.contentViewController = NSHostingController(rootView: BrowserSettingsView(model: model, runtime: model.runtime))
         super.init(window: window)

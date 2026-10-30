@@ -36,7 +36,7 @@ final class OrbitApplication: NSObject, NSApplicationDelegate {
     var quitPreferenceSave: Task<Void, Error>?
     var confirmQuit: @MainActor () -> OrbitQuitDecision = OrbitQuitConfirmation.present
     var confirmDownloadQuit: @MainActor () -> Bool = {
-        let alert = NSAlert()
+        let alert = OrbitFloatingMaterial.alert()
         alert.messageText = uiText("Downloads Are Still in Progress")
         alert.informativeText = uiText("Quitting will cancel your downloads.")
         alert.addButton(withTitle: uiText("Continue Downloads"))
@@ -216,7 +216,7 @@ final class OrbitApplication: NSObject, NSApplicationDelegate {
                 let configuration = try PreviewLaunchConfiguration(arguments: ProcessInfo.processInfo.arguments)
                 environment = try await OrbitEnvironment.open(engine: makeActiveEngine(), sessionFile: configuration.sessionFile)
             } catch {
-                let alert = NSAlert()
+                let alert = OrbitFloatingMaterial.alert()
                 alert.messageText = uiText("Could Not Restore the Local Session")
                 if (error as? ArcImportError) == .restoreJournalUnreadable {
                     alert.informativeText = uiText("A restore of this session was interrupted and its journal cannot be read. Orbit did not open the session and kept every file. Run “orbit-import recover-restore”, or open a temporary session meanwhile.")
@@ -448,7 +448,7 @@ final class OrbitApplication: NSObject, NSApplicationDelegate {
     private func presentSaveError(_ error: any Error) {
         guard !didPresentSaveError else { return }
         didPresentSaveError = true
-        let alert = NSAlert()
+        let alert = OrbitFloatingMaterial.alert()
         alert.messageText = uiText("Could Not Save the Session")
         if case BrowserTerminationPreparationError.commandsDidNotSettle = error {
             alert.informativeText = uiText("A browser operation is still in progress. Your windows and session are kept. Try quitting again when it finishes.")

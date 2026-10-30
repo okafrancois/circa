@@ -467,14 +467,14 @@ final class SpaceIconGridView: NSView {
     override func draw(_ dirtyRect: NSRect) {
         let font = NSFont.systemFont(ofSize: 20)
         let headerAttributes: [NSAttributedString.Key: Any] = [
-            .font: NSFont.systemFont(ofSize: 11, weight: .semibold), .foregroundColor: OrbitTokens.Color.Text.secondary
+            .font: NSFont.systemFont(ofSize: 11, weight: .semibold), .foregroundColor: OrbitFloatingMaterial.secondary
         ]
         for header in headers where header.frame.intersects(dirtyRect) {
             NSAttributedString(string: header.title, attributes: headerAttributes).draw(in: header.frame)
         }
         for (index, frame) in cellFrames.enumerated() where frame.intersects(dirtyRect) {
             if (index == selectedIndex && showsKeyboardSelection) || index == hoveredIndex {
-                (index == selectedIndex ? accent.soft : OrbitTokens.Color.State.sidebarItemHovered).setFill()
+                (index == selectedIndex ? NSColor.controlAccentColor.withAlphaComponent(0.12) : OrbitTokens.Color.State.sidebarItemHovered).setFill()
                 NSBezierPath(roundedRect: frame.insetBy(dx: 2, dy: 2), xRadius: 6, yRadius: 6).fill()
             }
             switch items[index].choice {
@@ -483,7 +483,7 @@ final class SpaceIconGridView: NSView {
                 let size = text.size()
                 text.draw(at: NSPoint(x: frame.midX - size.width / 2, y: frame.midY - size.height / 2))
             case .systemSymbol(let name):
-                if let image = SpaceIconImages.symbol(name, pointSize: 20, tint: accent.icon, active: true, appearance: effectiveAppearance) {
+                if let image = SpaceIconImages.symbol(name, pointSize: 20, tint: OrbitFloatingMaterial.body, active: true, appearance: effectiveAppearance) {
                     image.draw(in: NSRect(x: frame.midX - image.size.width / 2, y: frame.midY - image.size.height / 2,
                                           width: image.size.width, height: image.size.height))
                 }
