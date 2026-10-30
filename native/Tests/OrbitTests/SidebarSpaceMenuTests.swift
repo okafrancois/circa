@@ -116,7 +116,7 @@ struct SidebarSpaceMenuTests {
         #expect(footer.contextMenu == nil)
     }
 
-    @Test("Shared rows preserve the creation menu geometry, identifiers and default opaque surface")
+    @Test("Shared rows preserve the creation menu geometry, identifiers and default floating material")
     func creationMenuRegression() {
         let actions = [SidebarCreationAction(command: .newSpace, title: "New Space", symbol: "square", shortcut: "", enabled: true, perform: {})]
         let menu = SidebarCreationMenu(actions: actions, accent: .defaultSpace)
@@ -124,7 +124,7 @@ struct SidebarSpaceMenuTests {
         #expect(menu.view.frame.width == OrbitTokens.Metrics.Sidebar.plusMenuWidth)
         #expect(rows.count == 1 && rows[0].frame.height == 40)
         #expect(rows[0].accessibilityIdentifier() == "creation-newSpace")
-        #expect(!rows[0].destructive && !menu.popover.usesGlass)
+        #expect(!rows[0].destructive && menu.popover.usesGlass)
     }
 
     @Test("Keyboard skips disabled ordering, Escape cancels and cancelled actions stay inert")

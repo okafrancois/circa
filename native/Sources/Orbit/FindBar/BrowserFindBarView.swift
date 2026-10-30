@@ -118,7 +118,7 @@ final class BrowserFindBarView: NSView, NSSearchFieldDelegate {
     }
 
     private func configure(_ button: NSButton, symbol: String, label: String, action: Selector) {
-        button.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)
+        button.image = OrbitIcon.image(sfName: symbol, pointSize: 14, accessibilityDescription: nil)
         button.isBordered = false
         button.target = self
         button.action = action

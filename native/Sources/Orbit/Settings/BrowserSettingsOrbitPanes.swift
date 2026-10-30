@@ -81,7 +81,7 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
             }
             panel {
                 HStack(spacing: 14) {
-                    Image(systemName: "person.crop.circle").font(.system(size: 28, weight: .light)).foregroundStyle(.secondary)
+                    OrbitIcon.view(sfName: "person.crop.circle", pointSize: 28).font(.system(size: 28, weight: .light)).foregroundStyle(.secondary)
                     VStack(alignment: .leading, spacing: 8) {
                         Text(uiText("Manage your default search engine, Auto-Archive, and downloads in Profile Settings."))
                             .fixedSize(horizontal: false, vertical: true)
@@ -115,7 +115,7 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
                 ForEach(model.catalog.profiles, id: \.id) { profile in
                     Button { model.selectProfile(profile.id) } label: {
                         HStack(spacing: 8) {
-                            Image(systemName: "person.crop.circle")
+                            OrbitIcon.view(sfName: "person.crop.circle", pointSize: 13)
                             Text(profile.name).lineLimit(2)
                             Spacer(minLength: 0)
                         }
@@ -229,7 +229,7 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
     private var links: some View {
         Group {
             HStack(spacing: 15) {
-                Image(systemName: "macwindow.on.rectangle").font(.system(size: 38, weight: .ultraLight)).foregroundStyle(.blue)
+                OrbitIcon.view(sfName: "macwindow.on.rectangle", pointSize: 38).font(.system(size: 38, weight: .ultraLight)).foregroundStyle(.blue)
                 VStack(alignment: .leading, spacing: 5) {
                     Text("Little Orbit").font(.system(size: 20, weight: .semibold))
                     Text(uiText("A smaller, simpler window for quick lookups and links from other apps."))

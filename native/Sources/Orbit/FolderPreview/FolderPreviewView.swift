@@ -14,7 +14,7 @@ enum FolderPreviewMetrics {
 /// Native search and buttons keep AppKit text editing/IME and accessibility semantics.
 /// Only rows near the viewport have buttons, keyed by tab identity and recycled while scrolling.
 @MainActor
-final class FolderPreviewView: NSVisualEffectView, NSSearchFieldDelegate {
+final class FolderPreviewView: NSView, NSSearchFieldDelegate {
     private static let overscanRows = 6
     let title = NSTextField(labelWithString: "")
     let search = NSSearchField()
@@ -37,12 +37,7 @@ final class FolderPreviewView: NSVisualEffectView, NSSearchFieldDelegate {
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
-        material = .popover
-        blendingMode = .withinWindow
-        state = .active
-        wantsLayer = true
-        layer?.cornerRadius = FolderPreviewMetrics.cornerRadius
-        layer?.masksToBounds = true
+        OrbitFloatingMaterial.install(in: self, radius: FolderPreviewMetrics.cornerRadius)
         title.font = .systemFont(ofSize: 14, weight: .semibold)
         search.placeholderString = uiText("Search folder")
         search.setAccessibilityLabel(uiText("Search folder"))
@@ -62,7 +57,7 @@ final class FolderPreviewView: NSVisualEffectView, NSSearchFieldDelegate {
         NotificationCenter.default.addObserver(self, selector: #selector(clipBoundsDidChange(_:)),
                                                name: NSView.boundsDidChangeNotification, object: scroll.contentView)
         empty.frame = NSRect(x: 10, y: 12, width: 260, height: 24)
-        empty.textColor = .secondaryLabelColor
+        empty.textColor = OrbitFloatingMaterial.secondary
         empty.isHidden = true
         document.addSubview(empty)
         for child in [title, search, scroll] { addSubview(child) }
@@ -173,10 +168,10 @@ final class FolderPreviewView: NSVisualEffectView, NSSearchFieldDelegate {
         let recency = result.tab.lastActiveAt == nil ? [] : [Self.recency(result.tab.lastActiveAt)]
         let detail = (result.path + (result.split == nil ? [] : [uiText("Split View")]) + recency).joined(separator: " · ")
         let text = NSMutableAttributedString(string: result.title, attributes: [
-            .font: NSFont.systemFont(ofSize: 13), .foregroundColor: NSColor.labelColor])
+            .font: NSFont.systemFont(ofSize: 13), .foregroundColor: OrbitFloatingMaterial.body])
         if !detail.isEmpty {
             text.append(NSAttributedString(string: "\n" + detail, attributes: [
-                .font: NSFont.systemFont(ofSize: 11), .foregroundColor: NSColor.secondaryLabelColor]))
+                .font: NSFont.systemFont(ofSize: 11), .foregroundColor: OrbitFloatingMaterial.secondary]))
         }
         let paragraph = NSMutableParagraphStyle()
         paragraph.lineBreakMode = .byTruncatingTail
@@ -201,7 +196,7 @@ final class FolderPreviewView: NSVisualEffectView, NSSearchFieldDelegate {
         if button.image != nil, button.imageTab == result.tab.id, image === button.imageSource { return }
         button.imageTab = result.tab.id
         button.imageSource = image
-        let icon = image ?? NSImage(systemSymbolName: result.split == nil ? "globe" : "rectangle.split.2x1", accessibilityDescription: nil)
+        let icon = image ?? OrbitIcon.image(sfName: result.split == nil ? "globe" : "rectangle.split.2x1", pointSize: 16, accessibilityDescription: nil)
         button.image = icon?.copy() as? NSImage
         button.image?.size = NSSize(width: FolderPreviewMetrics.faviconSize, height: FolderPreviewMetrics.faviconSize)
         button.needsDisplay = true

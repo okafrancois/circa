@@ -77,7 +77,7 @@ final class OrbitLocationField: NSTextField {
             statusLabel.trailingAnchor.constraint(equalTo: textGroup.trailingAnchor, constant: -2), statusPosition
         ])
         statusLabel.alphaValue = 0
-        searchIcon.image = NSImage(systemSymbolName: "magnifyingglass", accessibilityDescription: nil)
+        searchIcon.image = OrbitIcon.image(sfName: "magnifyingglass", pointSize: 14, accessibilityDescription: nil)
         refreshDisplayLabel()
     }
 
@@ -221,8 +221,7 @@ final class OrbitLocationField: NSTextField {
         securityIcon.isHidden = symbol == nil
         if let symbol, securitySymbol != symbol {
             securitySymbol = symbol
-            securityIcon.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)?
-                .withSymbolConfiguration(.init(pointSize: labelFont.pointSize, weight: .regular))
+            securityIcon.image = OrbitIcon.image(sfName: symbol, pointSize: labelFont.pointSize, accessibilityDescription: nil)
         }
         if symbol == nil { securitySymbol = nil }
         securityIcon.toolTip = security == .https ? uiText("Secure connection") : security == .insecure ? uiText("Connection is not secure") : nil

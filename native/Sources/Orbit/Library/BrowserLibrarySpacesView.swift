@@ -202,14 +202,12 @@ final class BrowserLibrarySpaceTile: NSButton {
         text(item.space.name, NSRect(x: 44, y: 17, width: 82, height: 20), size: 13, bold: true, opacity: 0.55)
         let badge = NSRect(x: 119, y: 14, width: 74, height: 22)
         color.withAlphaComponent(0.12).setFill(); NSBezierPath(roundedRect: badge, xRadius: 11, yRadius: 11).fill()
-        NSImage(systemSymbolName: "face.smiling", accessibilityDescription: nil)?
-            .withSymbolConfiguration(.init(paletteColors: [color.withAlphaComponent(0.4)]))?
-            .draw(in: NSRect(x: 125, y: 18, width: 12, height: 12), from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
+        OrbitIcon.draw(OrbitIcon.image(sfName: "face.smiling", pointSize: 12),
+                       in: NSRect(x: 125, y: 18, width: 12, height: 12), tint: color.withAlphaComponent(0.4))
         text(item.profileName, NSRect(x: 142, y: 17, width: 45, height: 16), size: 11, bold: true, opacity: 0.4)
         func glyph(_ name: String, x: CGFloat, y: CGFloat, size: CGFloat) {
-            NSImage(systemSymbolName: name, accessibilityDescription: nil)?
-                .withSymbolConfiguration(.init(paletteColors: [color.withAlphaComponent(0.45)]))?
-                .draw(in: NSRect(x: x, y: y, width: size, height: size), from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
+            OrbitIcon.draw(OrbitIcon.image(sfName: name, pointSize: size),
+                           in: NSRect(x: x, y: y, width: size, height: size), tint: color.withAlphaComponent(0.45))
         }
         glyph("paintbrush.fill", x: 207, y: 20, size: 14)
         glyph("arrow.up.and.down.and.arrow.left.and.right", x: 15, y: bounds.height - 29, size: 15)
@@ -228,7 +226,8 @@ final class BrowserLibrarySpaceTile: NSButton {
             let x = 18 + CGFloat(entry.depth) * 16
             if let favicon = entry.tab?.favicon { favicon.draw(in: NSRect(x: x, y: y + 4, width: 16, height: 16), from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil) }
             else if entry.folder != nil {
-                NSImage(systemSymbolName: "folder", accessibilityDescription: nil)?.withSymbolConfiguration(.init(paletteColors: [color.withAlphaComponent(0.65)]))?.draw(in: NSRect(x: x - 2, y: y + 2, width: 22, height: 20), from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
+                OrbitIcon.draw(OrbitIcon.image(sfName: "folder", pointSize: 22),
+                               in: NSRect(x: x - 2, y: y + 2, width: 22, height: 20), tint: color.withAlphaComponent(0.65))
             } else {
                 color.withAlphaComponent(0.15).setFill(); NSBezierPath(roundedRect: NSRect(x: x + 1, y: y + 5, width: 14, height: 14), xRadius: 3, yRadius: 3).fill()
             }

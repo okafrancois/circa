@@ -177,8 +177,9 @@ class SidebarListRow: NSView, NSTextFieldDelegate {
             OrbitThemeForeground.rowOverlay(stateFill, theme: $0, foreground: accent.foreground)
         } ?? stateFill
         if background.fillColor != fill { background.fillColor = fill }
-        effectiveAccent = OrbitSpaceThemes.accent(accent, over: background.fillColor.map { [$0] } ?? [],
-                                                iconHover: OrbitTokens.Color.State.rowCloseButtonHover)
+        let frosted = isSelected && self is SidebarTabRow
+        background.applyFrost(frosted ? accent : .defaultSpace, selected: true)
+        effectiveAccent = frosted ? OrbitFloatingMaterial.sidebarInk(accent) : accent
         accentDidChange()
     }
 

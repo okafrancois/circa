@@ -67,7 +67,7 @@ private final class SitePermissionPicker: NSPopUpButton {
 
 @MainActor
 final class BrowserSitePopover: NSObject, NSPopoverDelegate {
-    let popover = NSPopover()
+    let popover = OrbitFrostPopover()
     var usesOrbitStyle = false
     var onVisibilityChange: (() -> Void)?
     var onClose: (() -> Void)?

@@ -4,15 +4,8 @@ import AppKit
 /// Permission prompts use native popover material.
 @MainActor
 enum SiteControlTokens {
-    // , confidence high.
-    static let primary = NSColor(name: "SiteControls.primary") { appearance in
-        appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-            ? NSColor.white.withAlphaComponent(0.80)
-            : NSColor(displayP3Red: 0x0E / 255, green: 0x0F / 255, blue: 0x10 / 255, alpha: 0.90)
-    }
-    static let secondary = NSColor(name: "SiteControls.secondary") { appearance in
-        (appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? NSColor.white : NSColor.black).withAlphaComponent(0.50)
-    }
+    static let primary = OrbitFloatingMaterial.body
+    static let secondary = OrbitFloatingMaterial.secondary
     // Aliases: addressField 13 regular; tooltip 11 medium; sidebarSpaceTitle 13 semibold.
     static let body = NSFont.systemFont(ofSize: 13)
     static let caption = NSFont.systemFont(ofSize: 11, weight: .medium)
