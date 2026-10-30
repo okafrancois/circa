@@ -48,10 +48,12 @@ struct SettingsLiveTests {
         final class Target: OrbitAutomaticUpdateTarget {
             var automaticallyChecksForUpdates = false
             var automaticallyDownloadsUpdates = true
+            var updateCheckInterval: TimeInterval = 86400
         }
         let target = Target()
         OrbitUpdater.applyAutomaticallyUpdates(false, to: target)
         #expect(target.automaticallyChecksForUpdates && !target.automaticallyDownloadsUpdates)
+        #expect(target.updateCheckInterval == 3600)
         OrbitUpdater.applyAutomaticallyUpdates(true, to: target)
         #expect(target.automaticallyChecksForUpdates && target.automaticallyDownloadsUpdates)
     }

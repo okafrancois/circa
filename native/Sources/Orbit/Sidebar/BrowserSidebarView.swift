@@ -44,6 +44,9 @@ final class BrowserSidebarView: NSView, SidebarListHost {
     /// Pinned rows laid out above the separator, gap pitches included (0 when collapsed).
     var pinnedRowCount: Int { page.list.displayedLayout.pinnedSlotCount }
     let footer = SidebarFooterView()
+    let updateCard = SidebarUpdateCard()
+    var updateReady = false { didSet { needsLayout = true } }
+    private var showsUpdateCard: Bool { updateReady && !isPrivate && standaloneProfileName == nil }
 
     // Window identity for drag payloads (`BrowserWindowController.id`).
     var windowIdentifier: UUID?
@@ -196,7 +199,7 @@ final class BrowserSidebarView: NSView, SidebarListHost {
         pageContainer.wantsLayer = true
         pageContainer.layer?.masksToBounds = true
         tooltip.isHidden = true
-        for view in [navigationContainer, addressContainer, pageContainer, footer, tooltip, privateIndicator] {
+        for view in [navigationContainer, addressContainer, pageContainer, footer, updateCard, tooltip, privateIndicator] {
             addSubview(view)
         }
         privateIndicator.translatesAutoresizingMaskIntoConstraints = false
@@ -254,7 +257,7 @@ final class BrowserSidebarView: NSView, SidebarListHost {
         spaceSwipe.layoutChanged()
         let layout = page.list.displayedLayout
         geometry = OrbitSidebarGeometry.resolve(.init(
-            width: bounds.width, height: bounds.height,
+            width: bounds.width, height: bounds.height - (showsUpdateCard ? SidebarUpdateCard.height + 8 : 0),
             favoriteCount: max(favoriteCount, favoritePreviewCount ?? 0, showsEmptyFavoritesDropZone ? 1 : 0),
             favoriteMinimumTileWidth: favoriteMinimumTileWidth,
             pinnedRowCount: layout.pinnedSlotCount, todayRowCount: layout.todaySlotCount,
@@ -298,7 +301,10 @@ final class BrowserSidebarView: NSView, SidebarListHost {
         pageContainer.scrollReceiver = page.pageScrollView
         layoutSpaceSwipePages()
         layoutOrdinarySpacePages()
-        footer.frame = geometry.footerFrame
+        updateCard.isHidden = !showsUpdateCard
+        updateCard.frame = NSRect(x: Metrics.paddingX, y: geometry.footerFrame.minY,
+            width: max(0, bounds.width - 2 * Metrics.paddingX), height: SidebarUpdateCard.height)
+        footer.frame = geometry.footerFrame.offsetBy(dx: 0, dy: showsUpdateCard ? SidebarUpdateCard.height + 8 : 0)
         footer.apply(geometry)
         if isPrivate {
             footer.isHidden = true
@@ -831,6 +837,7 @@ final class BrowserSidebarView: NSView, SidebarListHost {
         if addressContainer.accent != accent { addressContainer.accent = accent }
         if navigationContainer.accent != accent { navigationContainer.accent = accent }
         footer.accent = accent
+        updateCard.accent = accent
         page.accent = accent
         leavingPage?.accent = accent
         swipePreview?.accent = accent

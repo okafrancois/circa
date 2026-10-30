@@ -2,6 +2,7 @@ import BrowserCore
 import BrowserEngine
 import BrowserShell
 import Foundation
+import Combine
 
 enum BrowserTerminationPreparationError: Error, Equatable { case commandsDidNotSettle, systemConfirmationPending, themeCommitFailed }
 
@@ -308,6 +309,13 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
         controller.onDeleteSpace = { [weak self] id, profile in try await self?.removeSpaceFromSettings(id, expectedProfileID: profile) }
         controller.themeEditors = themeEditors
         controller.settingsPreferences = BrowserWindowSettings(runtime: settings)
+        controller.updateObservation = settings.updater.$readyVersion.sink { [weak controller] version in
+            controller?.sidebar.updateReady = OrbitUpdater.showsCard(ready: version,
+                synthetic: activeSyntheticDataGuard() != nil,
+                forced: Bundle.main.object(forInfoDictionaryKey: "OrbitUpdaterLocalTest") as? Bool == true,
+                standalone: false, isPrivate: false)
+        }
+        controller.sidebar.updateCard.onRestart = { [weak settings] in settings?.updater.restartToUpdate() }
         controller.boostsRuntime = boosts
         controller.sidebar.resolveSpaceIcon = { [weak settings] id in
             settings?.document.space(id).iconSelection ?? .none

@@ -1456,3 +1456,7 @@
 "not supported for Safari exports" = "not supported for Safari exports";
 "not supported" = "not supported";
 "Some history could not be read and was not imported." = "Some history could not be read and was not imported.";
+
+"An update is ready!" = "An update is ready!";
+"Click to restart" = "Click to restart";
+"Restart and Update" = "Restart and Update";

@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import BrowserCore
 import BrowserEngine
 import BrowserShell
@@ -46,6 +47,7 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
 
     // MARK: Sidebar
     let sidebar = BrowserSidebarView()
+    var updateObservation: AnyCancellable?
     lazy var extensionControls = BrowserExtensionsController(owner: self)
     lazy var passwordPrompt = BrowserPasswordPromptPresenter(owner: self)
     let sidebarIcons = FavoriteIconPipeline<Surface>()
