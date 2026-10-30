@@ -14,6 +14,7 @@ final class PeekSyntheticEngine: BrowserEngine, BrowserNavigationMetadataSource 
     let kind = BrowserEngineKind.synthetic
     var capabilities: BrowserEngineCapabilities = [.liveSurfaceTransfer]
     var extensions: (any BrowserExtensionHost)? { nil }
+    var programmaticNavigationKind: BrowserNavigationKind = .other
     private(set) var surfaces: [PeekSyntheticSurface] = []
     /// Profiles whose site data (and therefore history) persists; every other profile is private.
     var persistentProfiles: Set<ProfileID> = []
@@ -130,7 +131,7 @@ final class PeekSyntheticSurface: BrowserEngineSurface, BrowserLinkGeometrySourc
     }
 
     /// A programmatic load (address bar, `navigate(to:)`).
-    func navigate(to url: URL) { load(url, modifiers: [], metadata: .init(kind: .other, httpMethod: "GET", hasBody: false)) }
+    func navigate(to url: URL) { load(url, modifiers: [], metadata: .init(kind: .other, httpMethod: "GET", hasBody: false), navigationKind: engine?.programmaticNavigationKind ?? .other) }
 
     /// A link the user clicked in the document, with the gesture's modifiers.
     func clickLink(to url: URL, modifiers: BrowserModifierKeys = []) {
@@ -147,12 +148,12 @@ final class PeekSyntheticSurface: BrowserEngineSurface, BrowserLinkGeometrySourc
         load(url, modifiers: modifiers, metadata: .init(kind: .other, httpMethod: "GET", hasBody: false))
     }
 
-    private func load(_ url: URL, modifiers: BrowserModifierKeys, metadata: BrowserNavigationMetadata) {
+    private func load(_ url: URL, modifiers: BrowserModifierKeys, metadata: BrowserNavigationMetadata, navigationKind: BrowserNavigationKind = .other) {
         guard !isDisposed else { return }
         var policy = BrowserNavigationActionPolicy.cancel
         let decision = BrowserPolicyDecision<BrowserNavigationActionPolicy>(canSuspend: false, fallback: .cancel) { policy = $0 }
         pendingMetadata = metadata
-        delegate?.surface(self, decidePolicyFor: BrowserNavigationAction(url: url, isMainFrame: true, modifiers: modifiers),
+        delegate?.surface(self, decidePolicyFor: BrowserNavigationAction(url: url, isMainFrame: true, modifiers: modifiers, kind: navigationKind),
                           decision: decision)
         pendingMetadata = nil
         decision.endSynchronousTurn()

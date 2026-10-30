@@ -510,10 +510,26 @@ public actor BrowserStore {
     }
 
     /// Captures the successful mutation before another actor turn can close its window.
-    public func openTabAndCaptureDelivery(url: URL, from context: BrowserContext, activate: Bool, nextTo: TabID? = nil) throws -> BrowserTab {
+    public func openTabAndCaptureDelivery(url: URL, from context: BrowserContext, activate: Bool, nextTo: TabID? = nil,
+                                          localDocument: BrowserLocalDocument? = nil) throws -> BrowserTab {
         let occurrenceID = try openTab(url: url, from: context, activate: activate, nextTo: nextTo)
         guard let tab = tabs[occurrenceID] else { throw BrowserStoreError.tabMissing }
+        if let localDocument, localDocument.matches(url, profileID: context.profileID) {
+            try commitOrganization { state in state.updateTab(tab.id) { $0.localDocument = localDocument } }
+        }
         return tab
+    }
+
+    /// Records consent only for an existing, owned occurrence in the consent's profile.
+    public func recordLocalDocument(_ document: BrowserLocalDocument, from authority: BrowserOccurrenceAuthority) throws {
+        guard authority.storeGeneration == storeGeneration,
+              let window = windows[authority.windowID],
+              (window.standaloneProfileID ?? spaces[authority.spaceID]?.profileID) == authority.profileID,
+              document.profileID == authority.profileID,
+              let tab = tabs[authority.occurrenceID], tab.windowID == authority.windowID, tab.spaceID == authority.spaceID,
+              window.occurrenceIDsBySpace[authority.spaceID, default: []].contains(authority.occurrenceID)
+        else { throw BrowserStoreError.staleContext }
+        try commitOrganization { state in state.updateTab(tab.id) { $0.localDocument = document } }
     }
 
     public func selectOccurrence(_ occurrenceID: TabOccurrenceID, in windowID: WindowID) throws {

@@ -90,6 +90,7 @@ public struct BrowserOrganizationTabItem: Equatable, Sendable {
     public var customIcon: BrowserSpaceIcon? = nil
     /// Redirect destination for this occurrence, falling back to a proven saved alias.
     public var pinnedLandingURL: URL? = nil
+    public var localDocument: BrowserLocalDocument? = nil
     public var isResolvingPinnedLanding = false
 
     public var title: String? { customTitle ?? pageTitle }

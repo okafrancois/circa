@@ -141,6 +141,7 @@ extension BrowserStore {
                         isOpenInAnotherWindow: remote.contains(id), lastActiveAt: entry.lastActiveAt, customIcon: entry.customIcon,
                         pinnedLandingURL: live.flatMap { pinnedLandings[$0.occurrenceID]?.pinnedURL == entry.pinnedURL
                             ? pinnedLandings[$0.occurrenceID]?.url : nil } ?? entry.pinnedLandingURL,
+                        localDocument: entry.localDocument,
                         isResolvingPinnedLanding: live.map { pinnedLandings[$0.occurrenceID]?.pinnedURL == entry.pinnedURL
                             && pinnedLandings[$0.occurrenceID]?.isResolving == true } == true))
                 case let .split(id):
