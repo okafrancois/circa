@@ -1,4 +1,5 @@
 import AppKit
+import BrowserShell
 import BrowserCore
 import CoreImage
 
@@ -368,7 +369,7 @@ final class SidebarSpaceButton: OrbitGlyphButton {
             }
             if let button = button as? SidebarSpaceButton, !button.settingsIcon.isEmpty, button.presentation == .icons {
                 if button.emojiImage == nil {
-                    let text = NSAttributedString(string: button.settingsIcon, attributes: [.font: NSFont.systemFont(ofSize: 12)])
+                    let text = NSAttributedString(string: button.settingsIcon, attributes: [.font: BrandTextStyle.ui.font(size: 12)])
                     let image = NSImage(size: text.size(), flipped: false) { _ in text.draw(at: .zero); return true }
                     button.emojiImage = image
                     button.inactiveEmojiImage = Self.grayscale(image)
@@ -514,7 +515,7 @@ final class SidebarSpaceTooltip: NSView {
         layer?.shadowRadius = 8
         layer?.shadowOffset = NSSize(width: 0, height: -2)
         material.fixedVariant = .dark
-        label.font = .systemFont(ofSize: 12, weight: .semibold)
+        label.font = BrandTextStyle.ui.font(size: 12, weight: .semibold)
         label.textColor = NSColor(white: 0.96, alpha: 1)
         label.maximumNumberOfLines = 1
         label.lineBreakMode = .byTruncatingTail
@@ -536,7 +537,7 @@ final class SidebarSpaceTooltip: NSView {
         keycaps.forEach { $0.removeFromSuperview() }
         keycaps = (shortcut ?? "").map { character in
             let key = NSTextField(labelWithString: String(character))
-            key.font = .systemFont(ofSize: 11, weight: .semibold)
+            key.attributedStringValue = BrandTextStyle.mono.attributedString(String(character), size: 11, weight: .semibold)
             key.textColor = NSColor(white: 0.27, alpha: 1)
             key.alignment = .center
             key.wantsLayer = true

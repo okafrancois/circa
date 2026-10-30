@@ -1,4 +1,5 @@
 import AppKit
+import BrowserShell
 
 /// Site Controls typography and fallback geometry. The system popover supplies its material:
 /// Permission prompts use native popover material.
@@ -7,9 +8,9 @@ enum SiteControlTokens {
     static let primary = OrbitFloatingMaterial.body
     static let secondary = OrbitFloatingMaterial.secondary
     // Aliases: addressField 13 regular; tooltip 11 medium; sidebarSpaceTitle 13 semibold.
-    static let body = NSFont.systemFont(ofSize: 13)
-    static let caption = NSFont.systemFont(ofSize: 11, weight: .medium)
-    static let title = NSFont.systemFont(ofSize: 13, weight: .semibold)
+    static let body = BrandTextStyle.ui.font(size: 13)
+    static let caption = BrandTextStyle.ui.font(size: 11, weight: .medium)
+    static let title = BrandTextStyle.ui.font(size: 13, weight: .semibold)
     static let width: CGFloat = 360
     static let maximumHeight: CGFloat = 580
     static let inset: CGFloat = 16

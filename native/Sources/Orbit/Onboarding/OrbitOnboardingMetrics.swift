@@ -114,9 +114,9 @@ enum OrbitOnboardingColors {
 
 @MainActor
 enum OrbitOnboardingFonts {
-    static func ui(_ size: CGFloat, weight: NSFont.Weight = .regular) -> NSFont { BrandFonts.ui(size, weight: weight) }
+    static func ui(_ size: CGFloat, weight: NSFont.Weight = .regular) -> NSFont { BrandTextStyle.ui.font(size: size, weight: weight) }
     static func title(_ size: CGFloat) -> NSFont { BrandTextStyle.title.font(size: size) }
-    static func mono(_ size: CGFloat) -> NSFont { BrandFonts.mono(size) }
+    static func mono(_ size: CGFloat) -> NSFont { BrandTextStyle.mono.font(size: size) }
     static var title: NSFont { title(40) }
     static var welcome: NSFont { title(84) }
     static var body: NSFont { ui(15) }

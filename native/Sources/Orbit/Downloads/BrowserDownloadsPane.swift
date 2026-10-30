@@ -1,4 +1,5 @@
 import AppKit
+import BrowserShell
 
 /// Embeddable Downloads category; the Library owns navigation when embedded.
 @MainActor
@@ -34,7 +35,7 @@ final class BrowserDownloadsPane: NSView, NSSearchFieldDelegate {
         for control in [category, back] { control.translatesAutoresizingMaskIntoConstraints = false; rail.addSubview(control) }
         let results = NSView()
         titleLabel.font = OrbitTokens.Typography.commandBarInput
-        profileLabel.font = OrbitTokens.Typography.menuShortcut
+        profileLabel.font = BrandTextStyle.caption.font(size: 13)
         profileLabel.textColor = OrbitTokens.Color.Text.secondary
         searchField.placeholderString = uiText("Search Downloads…")
         searchField.maximumRecents = 0

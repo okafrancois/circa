@@ -1,4 +1,5 @@
 import AppKit
+import BrowserShell
 import BrowserCore
 import QuartzCore
 
@@ -399,7 +400,7 @@ final class BrowserSplitPaneView: NSView {
         clip.layer?.backgroundColor = OrbitTokens.Color.Surface.splitToolbar.resolvedCGColor(for: effectiveAppearance)
         addSubview(clip)
         clip.addSubview(page)
-        address.font = NSFont.systemFont(ofSize: 14, weight: .semibold)
+        address.font = BrandTextStyle.ui.font(size: 14, weight: .semibold)
         address.contentTintColor = OrbitTokens.Color.Text.baseSecondary
         address.isBordered = false
         address.image = OrbitIcon.image(sfName: "link", pointSize: 16, accessibilityDescription: nil)
@@ -601,7 +602,7 @@ final class BrowserSplitPlaceholderView: NSView {
 
     override init(frame: NSRect) {
         super.init(frame: frame)
-        label.font = NSFont.systemFont(ofSize: 12) // estimate
+        label.font = BrandTextStyle.ui.font(size: 12) // estimate
         label.textColor = OrbitTokens.Color.Text.secondary
         label.alignment = .center
         label.lineBreakMode = .byTruncatingTail

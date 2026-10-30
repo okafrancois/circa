@@ -642,6 +642,14 @@ extension OrbitPerformanceProbe {
                 await owner.session.waitForQueuedCommands()
             case "open": owner.presentActiveSpaceThemeEditor()
             case "close": owner.themeEditor?.close(animated: false)
+            case "preset":
+                guard let editor = owner.themeEditor, let index = Int(command["index"] ?? ""),
+                      editor.view.swatches.indices.contains(index), !editor.view.swatches[index].isHidden,
+                      let target = editor.view.window,
+                      let windows = CGWindowListCopyWindowInfo([.optionIncludingWindow], CGWindowID(target.windowNumber)) as? [[String: Any]],
+                      windows.contains(where: { ($0[kCGWindowOwnerPID as String] as? Int32) == getpid()
+                          && ($0[kCGWindowNumber as String] as? Int) == target.windowNumber }) else { return false }
+                editor.view.swatches[index].performClick(nil)
             case "frost":
                 guard let editor = owner.themeEditor,
                       ownsWindow(owner, bundleID: "lab.orbit.orbit.theme-fixture") else { return false }

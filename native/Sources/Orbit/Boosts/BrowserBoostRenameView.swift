@@ -1,4 +1,5 @@
 import AppKit
+import BrowserShell
 
 /// A centered, source-attached rename sheet. Its field remains a draft until Done.
 @MainActor
@@ -37,7 +38,7 @@ final class BrowserBoostRenameView: NSView, NSTextFieldDelegate {
         icon.contentTintColor = NSColor(srgbRed: 0.10, green: 0.11, blue: 0.13, alpha: 1)
         icon.frame = NSRect(x: 13, y: 13, width: 36, height: 36); tile.addSubview(icon)
         let title = NSTextField(labelWithString: uiText("Rename Boost?"))
-        title.font = .systemFont(ofSize: 18, weight: .semibold)
+        title.font = BrandTextStyle.title.font(size: 18)
         title.textColor = OrbitFloatingMaterial.body
         title.frame = NSRect(x: 38, y: 116, width: 374, height: 26); card.addSubview(title)
         let fieldBorder = NSView(frame: NSRect(x: 38, y: 162, width: 374, height: 37))
@@ -46,7 +47,7 @@ final class BrowserBoostRenameView: NSView, NSTextFieldDelegate {
         fieldBorder.layer?.borderWidth = 1
         fieldBorder.layer?.borderColor = NSColor(calibratedWhite: 0.9, alpha: 1).cgColor
         card.addSubview(fieldBorder)
-        nameField.stringValue = name; nameField.font = .systemFont(ofSize: 14)
+        nameField.stringValue = name; nameField.font = BrandTextStyle.ui.font(size: 14)
         nameField.textColor = .black
         nameField.isBordered = false; nameField.drawsBackground = false; nameField.focusRingType = .none
         nameField.cell?.usesSingleLineMode = true; nameField.cell?.isScrollable = true

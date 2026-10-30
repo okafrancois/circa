@@ -1,4 +1,5 @@
 import AppKit
+import BrowserShell
 import QuartzCore
 
 /// The Peek overlay above the whole browser window: a dimming scrim and a floating card made of a
@@ -532,6 +533,7 @@ final class BrowserPeekToolbarView: NSView {
     init() {
         super.init(frame: .zero)
         wantsLayer = true
+        addressLabel.font = BrandTextStyle.ui.font(size: 13)
         addressLabel.setAccessibilityIdentifier("peek-address")
         addressLabel.isHidden = true
         addSubview(addressLabel)

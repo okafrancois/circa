@@ -1,4 +1,5 @@
 import AppKit
+import BrowserShell
 
 /// Transparent hit shield: outside clicks dismiss without reaching the underlying document.
 @MainActor
@@ -481,6 +482,7 @@ final class BrowserPaletteView: NSView, NSTextFieldDelegate, NSTableViewDataSour
     @objc private func showSuggestionInfo(_ sender: NSButton) {
         let controller = NSViewController()
         let label = NSTextField(wrappingLabelWithString: uiText("Suggestions come from your open tabs, bookmarks, and history. Web searches use your selected search engine."))
+        label.font = BrandTextStyle.body.font(size: 13)
         label.frame = NSRect(x: 16, y: 16, width: 280, height: 72)
         controller.view = NSView(frame: NSRect(x: 0, y: 0, width: 312, height: 104))
         controller.view.addSubview(label)
@@ -633,7 +635,7 @@ final class PaletteResultCell: NSTableCellView {
         titleLabel.font = OrbitTokens.Typography.commandBarRowTitle
         detailLabel.font = OrbitTokens.Typography.commandBarAccessory
         actionLabel.font = OrbitTokens.Typography.commandBarAccessory
-        shortcutLabel.font = OrbitTokens.Typography.commandBarAccessory
+        shortcutLabel.font = BrandTextStyle.mono.font(size: 13)
         actionIcon.image = OrbitIcon.image(sfName: "arrow.right", pointSize: 16, accessibilityDescription: nil)
         titleLabel.lineBreakMode = .byTruncatingTail
         detailLabel.lineBreakMode = .byTruncatingMiddle
@@ -682,7 +684,7 @@ final class PaletteResultCell: NSTableCellView {
             needsLayout = true
         }
         if shortcutLabel.stringValue != result.shortcut {
-            shortcutLabel.stringValue = result.shortcut
+            shortcutLabel.attributedStringValue = BrandTextStyle.mono.attributedString(result.shortcut, size: 13)
             needsLayout = true
         }
         if icon.image !== image { icon.image = image }
@@ -741,7 +743,7 @@ final class PaletteResultCell: NSTableCellView {
             let font = label.font ?? OrbitTokens.Typography.commandBarAccessory
             let key = ObjectIdentifier(label)
             if let (cachedText, cachedFont, width) = textWidths[key], cachedText == text, cachedFont == font { return width }
-            let width = text.isEmpty ? 0 : ceil((text as NSString).size(withAttributes: [.font: font]).width) + 4
+            let width = text.isEmpty ? 0 : ceil(label.attributedStringValue.size().width) + 4
             textWidths[key] = (text, font, width)
             return width
         }

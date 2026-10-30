@@ -420,7 +420,7 @@ final class BrowserQuickWindowWindowController<Engine: BrowserEngine>: NSWindowC
             page.trailingAnchor.constraint(equalTo: root.trailingAnchor), page.bottomAnchor.constraint(equalTo: root.bottomAnchor)
         ])
         addressField.placeholderString = uiText("Search or Enter URL")
-        addressField.font = .systemFont(ofSize: 13, weight: .medium)
+        addressField.font = BrandTextStyle.ui.font(size: 13, weight: .medium)
         addressField.alignment = .center
         OrbitAddressFieldStyle.applySingleLine(to: addressField)
         addressField.focusRingType = .none
@@ -433,7 +433,7 @@ final class BrowserQuickWindowWindowController<Engine: BrowserEngine>: NSWindowC
         addressField.target = self
         addressField.action = #selector(submitAddress(_:))
         openButton.isBordered = false
-        openButton.font = .systemFont(ofSize: 13, weight: .medium)
+        openButton.font = BrandTextStyle.ui.font(size: 13, weight: .medium)
         openButton.lineBreakMode = .byTruncatingTail
         openGroup.wantsLayer = true
         openButton.target = self
@@ -451,7 +451,7 @@ final class BrowserQuickWindowWindowController<Engine: BrowserEngine>: NSWindowC
         copyAddressButton.action = #selector(copyAddress(_:))
         copyAddressButton.setAccessibilityLabel(uiText("Copy URL"))
         sourceSpaceBadge.isBordered = false
-        sourceSpaceBadge.font = .systemFont(ofSize: 12, weight: .semibold)
+        sourceSpaceBadge.font = BrandTextStyle.ui.font(size: 12, weight: .semibold)
         sourceSpaceBadge.imagePosition = .imageLeading
         sourceSpaceBadge.target = self
         sourceSpaceBadge.action = #selector(showQuickWindowSiteControls(_:))
@@ -509,7 +509,7 @@ final class BrowserQuickWindowWindowController<Engine: BrowserEngine>: NSWindowC
         resolver.searchEngine = searchEngine
         window?.appearance = NSAppearance(named: .darkAqua)
         toolbar.fill.apply(theme)
-        let font = NSFont.systemFont(ofSize: 13, weight: .medium)
+        let font = BrandTextStyle.ui.font(size: 13, weight: .medium)
         addressField.font = font
         openButton.font = font
         let accent = OrbitSpaceThemes.accent(for: theme)

@@ -1,4 +1,5 @@
 import AppKit
+import BrowserShell
 import BrowserCore
 
 enum FavoritesPresentationTokens {
@@ -47,7 +48,7 @@ final class FavoriteTileView: NSView {
         super.init(frame: .zero)
         wantsLayer = true
         favicon.imageScaling = .scaleProportionallyDown
-        letter.font = .systemFont(ofSize: FavoritesPresentationTokens.placeholderFontSize, weight: .semibold)
+        letter.font = BrandTextStyle.ui.font(size: FavoritesPresentationTokens.placeholderFontSize, weight: .semibold)
         letter.alignment = .center
         letter.textColor = OrbitTokens.Color.Text.primary
         letter.wantsLayer = true

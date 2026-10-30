@@ -1,4 +1,5 @@
 import AppKit
+import BrowserShell
 
 /// Orbit Home's plain search input inside a 36-point rounded surface.
 @MainActor
@@ -10,7 +11,7 @@ final class BrowserLibrarySearchField: NSSearchField {
         isSelectable = true
         cell?.usesSingleLineMode = true
         cell?.isScrollable = true
-        font = .systemFont(ofSize: 14, weight: .medium)
+        font = BrandTextStyle.ui.font(size: 14, weight: .medium)
         textColor = BrowserLibraryStyle.foreground.withAlphaComponent(0.65)
         focusRingType = .none
         isBezeled = false
@@ -54,12 +55,12 @@ private final class BrowserLibrarySearchCell: NSSearchFieldCell {
             // While editing, the field editor draws the placeholder itself; drawing it here too
             // superimposes two slightly offset copies.
             if (view as? NSTextField)?.currentEditor() == nil {
-                NSAttributedString(string: placeholderString, attributes: [.font: font ?? .systemFont(ofSize: 14, weight: .medium),
+                NSAttributedString(string: placeholderString, attributes: [.font: font ?? BrandTextStyle.ui.font(size: 14, weight: .medium),
                     .foregroundColor: color]).draw(in: searchTextRect(forBounds: rect))
             }
         } else {
             if (view as? NSTextField)?.currentEditor() == nil {
-                NSAttributedString(string: stringValue, attributes: [.font: font ?? .systemFont(ofSize: 14, weight: .medium),
+                NSAttributedString(string: stringValue, attributes: [.font: font ?? BrandTextStyle.ui.font(size: 14, weight: .medium),
                     .foregroundColor: color]).draw(in: searchTextRect(forBounds: rect))
             }
             cancelButtonCell?.draw(withFrame: cancelButtonRect(forBounds: rect), in: view)

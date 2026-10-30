@@ -315,7 +315,7 @@ final class BrowserDownloadsView: NSView {
 
     private func makeHeading() -> NSTextField {
         let heading = NSTextField(labelWithString: "")
-        heading.font = .systemFont(ofSize: 13, weight: .bold)
+        heading.font = BrandTextStyle.ui.font(size: 13, weight: .bold)
         heading.textColor = BrowserLibraryStyle.foreground.withAlphaComponent(0.65)
         heading.setAccessibilityRole(NSAccessibility.Role(rawValue: "AXHeading"))
         document.addSubview(heading)
@@ -369,9 +369,9 @@ final class BrowserDownloadRowView: NSView, NSDraggingSource {
         translatesAutoresizingMaskIntoConstraints = false
         wantsLayer = true
         layer?.cornerRadius = 8
-        titleLabel.font = .systemFont(ofSize: 14, weight: .medium)
+        titleLabel.font = BrandTextStyle.ui.font(size: 14, weight: .medium)
         titleLabel.lineBreakMode = .byTruncatingMiddle
-        detailLabel.font = .systemFont(ofSize: 12, weight: .medium)
+        detailLabel.font = BrandTextStyle.mono.font(size: 12, weight: .medium)
         detailLabel.lineBreakMode = .byTruncatingMiddle
         progress.style = .bar
         progress.controlSize = .small

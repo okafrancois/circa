@@ -1,4 +1,5 @@
 import AppKit
+import BrowserShell
 import BrowserCore
 
 /// Native editing/AX keep the full URL. The resting text, security glyph and optional status
@@ -211,7 +212,7 @@ final class OrbitLocationField: NSTextField {
         if displayLabel.stringValue != label { displayLabel.stringValue = label }
         let labelFont = font ?? OrbitTokens.Typography.addressField
         if displayLabel.font != labelFont { displayLabel.font = labelFont }
-        let statusFont = NSFont.systemFont(ofSize: labelFont.pointSize - 1)
+        let statusFont = BrandTextStyle.ui.font(size: labelFont.pointSize - 1)
         if statusLabel.font != statusFont { statusLabel.font = statusFont }
         let color = textColor ?? OrbitTokens.Color.Text.baseSecondary
         if displayLabel.textColor != color { displayLabel.textColor = color }

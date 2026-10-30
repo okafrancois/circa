@@ -1,4 +1,5 @@
 import AppKit
+import BrowserShell
 import BrowserCore
 
 /// Catalog tiles use stored organization metadata and cached icons, without creating surfaces.
@@ -197,7 +198,7 @@ final class BrowserLibrarySpaceTile: NSButton {
         let color = ink.resolved(for: effectiveAppearance)
         func text(_ value: String, _ rect: NSRect, size: CGFloat = 14, bold: Bool = false, opacity: CGFloat = 1) {
             let style = NSMutableParagraphStyle(); style.lineBreakMode = .byTruncatingTail
-            (value as NSString).draw(in: rect, withAttributes: [.font: NSFont.systemFont(ofSize: size, weight: bold ? .semibold : .regular), .foregroundColor: color.withAlphaComponent(opacity), .paragraphStyle: style])
+            (value as NSString).draw(in: rect, withAttributes: [.font: BrandTextStyle.ui.font(size: size, weight: bold ? .semibold : .regular), .foregroundColor: color.withAlphaComponent(opacity), .paragraphStyle: style])
         }
         text(item.space.name, NSRect(x: 44, y: 17, width: 82, height: 20), size: 13, bold: true, opacity: 0.55)
         let badge = NSRect(x: 119, y: 14, width: 74, height: 22)

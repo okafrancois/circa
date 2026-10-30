@@ -1,4 +1,5 @@
 import AppKit
+import BrowserShell
 import BrowserCore
 
 @MainActor
@@ -21,7 +22,7 @@ enum OrbitThemeEditorMetrics {
     static let modeGlyphPointSize: CGFloat = 15
 
     static let placeholderCenterY: CGFloat = 178
-    static let placeholderFont = NSFont.systemFont(ofSize: 13, weight: .semibold)
+    static let placeholderFont = BrandTextStyle.ui.font(size: 13, weight: .semibold)
 
     static let stepperCenterY: CGFloat = 316
     static let stepperCenterXs: [CGFloat] = [158, 198]

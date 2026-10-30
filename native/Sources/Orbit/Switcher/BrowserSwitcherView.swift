@@ -1,4 +1,5 @@
 import AppKit
+import BrowserShell
 import BrowserCore
 
 extension OrbitTokens {
@@ -126,7 +127,7 @@ private final class SwitcherCard: NSButton {
         layer?.cornerRadius = OrbitTokens.Switcher.radius
         layer?.borderWidth = OrbitTokens.Switcher.border
         preview.imageScaling = .scaleProportionallyUpOrDown
-        label.font = .systemFont(ofSize: OrbitTokens.Switcher.titleSize, weight: .medium)
+        label.font = BrandTextStyle.ui.font(size: OrbitTokens.Switcher.titleSize, weight: .medium)
         label.lineBreakMode = .byTruncatingTail
         label.textColor = OrbitTokens.Color.Text.primary
         for view in [preview, label, icon] { view.setAccessibilityElement(false); addSubview(view) }

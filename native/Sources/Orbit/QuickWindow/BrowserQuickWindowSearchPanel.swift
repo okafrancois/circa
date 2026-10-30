@@ -1,4 +1,5 @@
 import AppKit
+import BrowserShell
 import QuartzCore
 
 /// Compact input geometry and 0.083 s linear entry samples.
@@ -75,7 +76,7 @@ final class BrowserQuickWindowSearchPanel: NSObject, NSWindowDelegate, NSTextFie
         input.isBordered = false; input.isBezeled = false; input.drawsBackground = false
         input.focusRingType = .none
         input.cell?.usesSingleLineMode = true; input.cell?.isScrollable = true
-        input.font = kind == .address ? OrbitTokens.Typography.commandBarInput : .systemFont(ofSize: 14, weight: .medium)
+        input.font = kind == .address ? OrbitTokens.Typography.commandBarInput : BrandTextStyle.ui.font(size: 14, weight: .medium)
         input.placeholderString = kind == .address ? uiText("Search or Enter URL…") : uiText("Search Spaces…")
         input.setAccessibilityLabel(kind == .address ? uiText("Search or Enter URL") : uiText("Search Spaces"))
         input.setAccessibilityIdentifier(kind == .address ? "little-orbit-search" : "little-orbit-space-search")
@@ -293,7 +294,7 @@ private final class QuickWindowSearchRowButton: NSButton {
         let color = OrbitFloatingMaterial.body
         OrbitIcon.draw(row.image, in: NSRect(x: isAddress ? 12 : 15, y: (bounds.height - iconSize) / 2,
                                              width: iconSize, height: iconSize), tint: color)
-        let font = NSFont.systemFont(ofSize: 13, weight: .medium)
+        let font = BrandTextStyle.ui.font(size: 13, weight: .medium)
         let title = NSAttributedString(string: row.title, attributes: [.font: font, .foregroundColor: color])
         let titleWidth = min(title.size().width, max(0, bounds.width - 66))
         let paragraph = NSMutableParagraphStyle(); paragraph.lineBreakMode = .byTruncatingTail
@@ -301,7 +302,7 @@ private final class QuickWindowSearchRowButton: NSButton {
                                     withAttributes: [.font: font, .foregroundColor: color, .paragraphStyle: paragraph])
         (row.detail as NSString).draw(in: NSRect(x: 50 + titleWidth, y: (bounds.height - 16) / 2,
                                                width: max(0, bounds.width - titleWidth - 60), height: 16),
-                                     withAttributes: [.font: NSFont.systemFont(ofSize: 12), .foregroundColor: OrbitFloatingMaterial.secondary, .paragraphStyle: paragraph])
+                                     withAttributes: [.font: BrandTextStyle.ui.font(size: 12), .foregroundColor: OrbitFloatingMaterial.secondary, .paragraphStyle: paragraph])
     }
 }
 

@@ -1,4 +1,5 @@
 import AppKit
+import BrowserShell
 import BrowserCore
 
 func archiveText(_ key: String, _ fallback: String) -> String {
@@ -50,7 +51,7 @@ final class BrowserArchiveView: NSView, NSTableViewDataSource, NSTableViewDelega
         let title = NSTextField(labelWithString: archiveText("title", "Archived Tabs"))
         title.font = OrbitTokens.Typography.commandBarInput
         title.textColor = OrbitTokens.Color.Text.primary
-        profileLabel.font = OrbitTokens.Typography.menuShortcut
+        profileLabel.font = BrandTextStyle.caption.font(size: 13)
         profileLabel.textColor = OrbitTokens.Color.Text.secondary
         searchField.placeholderString = archiveText("search", "Search Archive…")
         searchField.maximumRecents = 0
@@ -59,6 +60,7 @@ final class BrowserArchiveView: NSView, NSTableViewDataSource, NSTableViewDelega
         searchField.setAccessibilityIdentifier("archive-search")
         let back = NSButton(title: archiveText("back", "Back"), target: self, action: #selector(goBack))
         let clear = NSButton(title: archiveText("clear", "Clear Archive…"), target: self, action: #selector(clearAll))
+        for control in [back, clear, settings] { control.font = BrandTextStyle.ui.font(size: 13) }
         settings.addItems(withTitles: [archiveText("inheritTemporary", "Temporary setting · Use Default Timing"), archiveText("12hours", "12 hours"), archiveText("24hours", "24 hours"), archiveText("7days", "7 days"), archiveText("30days", "30 days")])
         settings.target = self; settings.action = #selector(changeSettings)
         settings.setAccessibilityLabel(archiveText("settingsAccessibility", "Auto Archive — Temporary Profile Setting"))
@@ -171,7 +173,7 @@ final class BrowserArchiveView: NSView, NSTableViewDataSource, NSTableViewDelega
             }
             label.stringValue = Calendar.current.isDateInToday(day) ? uiText("Today")
                 : Calendar.current.isDateInYesterday(day) ? uiText("Yesterday") : dateFormatter.string(from: day)
-            label.font = .systemFont(ofSize: 13, weight: .bold)
+            label.font = BrandTextStyle.ui.font(size: 13, weight: .bold)
             label.textColor = BrowserLibraryStyle.foreground.withAlphaComponent(0.65)
             return cell
         }
@@ -261,8 +263,8 @@ final class BrowserArchiveCell: NSTableCellView {
     private let icon = NSImageView()
     override init(frame: NSRect) {
         super.init(frame: frame)
-        titleLabel.font = .systemFont(ofSize: 14, weight: .medium)
-        detailLabel.font = .systemFont(ofSize: 12, weight: .medium)
+        titleLabel.font = BrandTextStyle.ui.font(size: 14, weight: .medium)
+        detailLabel.font = BrandTextStyle.mono.font(size: 12, weight: .medium)
         titleLabel.lineBreakMode = .byTruncatingTail
         detailLabel.lineBreakMode = .byTruncatingTail
         icon.imageScaling = .scaleProportionallyUpOrDown

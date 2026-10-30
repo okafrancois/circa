@@ -1,4 +1,5 @@
 import AppKit
+import BrowserShell
 
 struct SidebarCreationAction {
     let command: BrowserCommandID
@@ -143,8 +144,10 @@ final class CreationMenuRow: NSView {
         title.stringValue = text
         title.font = OrbitTokens.Typography.menuItem
         title.lineBreakMode = .byTruncatingTail
-        shortcut.stringValue = keys
         shortcut.font = OrbitTokens.Typography.menuShortcut
+        shortcut.attributedStringValue = BrandTextStyle.mono.attributedString(keys, size: 13)
+        shortcut.usesSingleLineMode = true
+        shortcut.lineBreakMode = .byClipping
         applyInk(selected: false)
         shortcut.alignment = .right
         for child in [icon, title, shortcut] { child.setAccessibilityElement(false); addSubview(child) }
@@ -162,7 +165,7 @@ final class CreationMenuRow: NSView {
         let m = OrbitTokens.Metrics.Sidebar.self
         icon.frame = NSRect(x: 12, y: 11, width: m.plusMenuIconSize, height: m.plusMenuIconSize)
         let x = m.plusMenuTextOriginX - m.plusMenuHighlightInset
-        let shortcutWidth = shortcut.intrinsicContentSize.width
+        let shortcutWidth = ceil(shortcut.attributedStringValue.size().width) + 6
         shortcut.frame = NSRect(x: bounds.width - shortcutWidth - 10, y: 11, width: shortcutWidth, height: 18)
         title.frame = NSRect(x: x, y: 11, width: max(0, bounds.width - x - shortcutWidth - 16), height: 18)
     }

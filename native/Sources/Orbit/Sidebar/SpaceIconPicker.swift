@@ -1,4 +1,5 @@
 import AppKit
+import BrowserShell
 import BrowserCore
 
 @MainActor
@@ -467,7 +468,7 @@ final class SpaceIconGridView: NSView {
     override func draw(_ dirtyRect: NSRect) {
         let font = NSFont.systemFont(ofSize: 20)
         let headerAttributes: [NSAttributedString.Key: Any] = [
-            .font: NSFont.systemFont(ofSize: 11, weight: .semibold), .foregroundColor: OrbitFloatingMaterial.secondary
+            .font: BrandTextStyle.caption.font(size: 11, weight: .semibold), .foregroundColor: OrbitFloatingMaterial.secondary
         ]
         for header in headers where header.frame.intersects(dirtyRect) {
             NSAttributedString(string: header.title, attributes: headerAttributes).draw(in: header.frame)

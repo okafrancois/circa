@@ -1,4 +1,5 @@
 import AppKit
+import BrowserShell
 import BrowserEngine
 import QuartzCore
 
@@ -103,7 +104,7 @@ final class BrowserCopiedToast: NSView {
         let icon = NSImageView(image: OrbitIcon.image(sfName: "checkmark", pointSize: 16, accessibilityDescription: nil)!)
         icon.contentTintColor = .white
         let label = NSTextField(labelWithString: uiText("Copied"))
-        label.font = .systemFont(ofSize: 13, weight: .medium)
+        label.font = BrandTextStyle.ui.font(size: 13, weight: .medium)
         label.textColor = .white
         let row = NSStackView(views: [icon, label])
         row.spacing = 7

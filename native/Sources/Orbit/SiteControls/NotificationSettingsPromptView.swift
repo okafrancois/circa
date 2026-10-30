@@ -1,4 +1,5 @@
 import AppKit
+import BrowserShell
 import QuartzCore
 import CoreText
 
@@ -38,12 +39,12 @@ final class NotificationSettingsPromptView: NSView {
         icon.image = NSApp.applicationIconImage
         card.addSubview(icon)
         let title = NSTextField(labelWithString: uiText("Orbit Needs Notifications Permission"))
-        title.font = .systemFont(ofSize: 18, weight: .semibold)
+        title.font = BrandTextStyle.title.font(size: 18)
         title.textColor = .white
         title.frame = NSRect(x: 38, y: 118, width: 380, height: 26)
         card.addSubview(title)
         let message = NSTextField(wrappingLabelWithString: uiText("You need to open System Preferences to give Orbit permission to show you Notifications."))
-        message.font = .systemFont(ofSize: 14)
+        message.font = BrandTextStyle.ui.font(size: 14)
         message.textColor = NSColor(srgbRed: 181/255, green: 186/255, blue: 202/255, alpha: 1)
         message.frame = NSRect(x: 38, y: 156, width: 366, height: 42)
         card.addSubview(message)
@@ -117,7 +118,7 @@ final class NotificationSettingsButton: NSButton {
     required init?(coder: NSCoder) { nil }
     private var hintLine: CTLine {
         CTLineCreateWithAttributedString(NSAttributedString(string: hint, attributes: [
-            .font: NSFont.systemFont(ofSize: 12, weight: .semibold),
+            .font: hint == "↩" ? NSFont.systemFont(ofSize: 12, weight: .semibold) : BrandTextStyle.mono.font(size: 12, weight: .semibold),
             .foregroundColor: NSColor.white.withAlphaComponent(0.7)
         ]))
     }
@@ -130,12 +131,12 @@ final class NotificationSettingsButton: NSButton {
                             width: size.width, height: size.height))
     }
     override func draw(_ dirtyRect: NSRect) {
-        let fill = primary ? NSColor(srgbRed: 58/255, green: 45/255, blue: 1, alpha: 1) : NSColor(srgbRed: 49/255, green: 44/255, blue: 91/255, alpha: 1)
+        let fill = primary ? NSColor.controlAccentColor : NSColor.white.withAlphaComponent(0.1)
         fill.withAlphaComponent(isHighlighted ? 0.8 : 1).setFill()
         let path = NSBezierPath(roundedRect: bounds.insetBy(dx: 0.5, dy: 0.5), xRadius: 6, yRadius: 6)
         path.fill()
         NSColor.white.withAlphaComponent(0.25).setStroke(); path.lineWidth = 1; path.stroke()
-        let text = NSAttributedString(string: title, attributes: [.font: NSFont.systemFont(ofSize: 13, weight: .medium), .foregroundColor: NSColor.white])
+        let text = NSAttributedString(string: title, attributes: [.font: BrandTextStyle.ui.font(size: 13, weight: .medium), .foregroundColor: NSColor.white])
         text.draw(at: NSPoint(x: 11, y: (bounds.height - text.size().height) / 2))
         let (badge, glyph) = keycapLayout
         NSColor.white.withAlphaComponent(0.15).setFill()
