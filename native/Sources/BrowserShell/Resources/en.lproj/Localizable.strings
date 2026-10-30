@@ -22,15 +22,15 @@
 "7 days" = "7 days";
 "A Split View is named after its pages. Rename a page instead." = "A Split View is named after its pages. Rename a page instead.";
 "A browser operation is still in progress. Your windows and session are kept. Try quitting again when it finishes." = "A browser operation is still in progress. Your windows and session are kept. Try quitting again when it finishes.";
-"A file of Orbit’s session or history has several links. Nothing was imported." = "A file of Orbit’s session or history has several links. Nothing was imported.";
+"A file of Circa’s session or history has several links. Nothing was imported." = "A file of Circa’s session or history has several links. Nothing was imported.";
 "A folder used by the import is a symbolic link. Nothing was imported." = "A folder used by the import is a symbolic link. Nothing was imported.";
 "A previous import was interrupted; importing again completes it." = "A previous import was interrupted; importing again completes it.";
 "A profile must keep at least one Space." = "A profile must keep at least one Space.";
 "A removed profile still needs local cleanup." = "A removed profile still needs local cleanup.";
-"A restore of this session was interrupted and its journal cannot be read. Orbit did not open the session and kept every file. Run “orbit-import recover-restore”, or open a temporary session meanwhile." = "A restore of this session was interrupted and its journal cannot be read. Orbit did not open the session and kept every file. Run “orbit-import recover-restore”, or open a temporary session meanwhile.";
+"A restore of this session was interrupted and its journal cannot be read. Circa did not open the session and kept every file. Run “orbit-import recover-restore”, or open a temporary session meanwhile." = "A restore of this session was interrupted and its journal cannot be read. Circa did not open the session and kept every file. Run “orbit-import recover-restore”, or open a temporary session meanwhile.";
 "A restore of this session was interrupted and its journal cannot be read. Nothing was changed; run “orbit-import recover-restore”." = "A restore of this session was interrupted and its journal cannot be read. Nothing was changed; run “orbit-import recover-restore”.";
 "Aa" = "Aa";
-"About Orbit" = "About Orbit";
+"About Circa" = "About Circa";
 "Active pane" = "Active pane";
 "Actual Size" = "Actual Size";
 "Add Color" = "Add Color";
@@ -54,16 +54,16 @@
 "Already imported and kept as they are: %@" = "Already imported and kept as they are: %@";
 "Always Allow" = "Always Allow";
 "Amber & Coral" = "Amber & Coral";
-"An Orbit import or restore is using this session. Open Orbit again when it finishes; meanwhile you can open a temporary session." = "An Orbit import or restore is using this session. Open Orbit again when it finishes; meanwhile you can open a temporary session.";
+"An Circa import or restore is using this session. Open Circa again when it finishes; meanwhile you can open a temporary session." = "An Circa import or restore is using this session. Open Circa again when it finishes; meanwhile you can open a temporary session.";
 "An import is already in progress." = "An import is already in progress.";
 "An import record of this session cannot be read. Nothing was changed." = "An import record of this session cannot be read. Nothing was changed.";
 "Animations" = "Animations";
 "Appearance" = "Appearance";
 "Applies to browser interface animations immediately." = "Applies to browser interface animations immediately.";
 "Apply" = "Apply";
-"Orbit" = "Orbit";
-"Orbit action" = "Orbit action";
-"Orbit actions" = "Orbit actions";
+"Circa" = "Circa";
+"Circa action" = "Circa action";
+"Circa actions" = "Circa actions";
 "Arc is open. Quit Arc, then try again." = "Arc is open. Quit Arc, then try again.";
 "Archive" = "Archive";
 "Archive Tab" = "Archive Tab";
@@ -73,14 +73,14 @@
 "Archived Tabs, grouped by day" = "Archived Tabs, grouped by day";
 "Archived tabs from other profiles will be kept." = "Archived tabs from other profiles will be kept.";
 "Archived tabs: %@" = "Archived tabs: %@";
-"Orbit can copy your Spaces, profiles, Favorites, pinned tabs and folders, Today tabs and history from Arc. Arc must be closed during the copy; Orbit never quits it." = "Orbit can copy your Spaces, profiles, Favorites, pinned tabs and folders, Today tabs and history from Arc. Arc must be closed during the copy; Orbit never quits it.";
-"Orbit is not your default browser" = "Orbit is not your default browser";
-"Orbit is your default browser" = "Orbit is your default browser";
-"Orbit keeps a backup of its current session and history. Nothing opens automatically." = "Orbit keeps a backup of its current session and history. Nothing opens automatically.";
-"Orbit reads a consistent copy of your Arc data, which requires Arc to be closed. Quit Arc (⌘Q), then choose Check Again. Orbit never quits Arc for you." = "Orbit reads a consistent copy of your Arc data, which requires Arc to be closed. Quit Arc (⌘Q), then choose Check Again. Orbit never quits Arc for you.";
-"Arc’s Spaces and tabs would make Orbit’s session too large to open (%@ of %@ allowed). Nothing was imported." = "Arc’s Spaces and tabs would make Orbit’s session too large to open (%@ of %@ allowed). Nothing was imported.";
-"Arc’s data changed while Orbit was reading it. Quit Arc, then try again." = "Arc’s data changed while Orbit was reading it. Quit Arc, then try again.";
-"Arc’s data folder and Orbit’s data folder overlap. Choose a separate copy of Arc’s data." = "Arc’s data folder and Orbit’s data folder overlap. Choose a separate copy of Arc’s data.";
+"Circa can copy your Spaces, profiles, Favorites, pinned tabs and folders, Today tabs and history from Arc. Arc must be closed during the copy; Circa never quits it." = "Circa can copy your Spaces, profiles, Favorites, pinned tabs and folders, Today tabs and history from Arc. Arc must be closed during the copy; Circa never quits it.";
+"Circa is not your default browser" = "Circa is not your default browser";
+"Circa is your default browser" = "Circa is your default browser";
+"Circa keeps a backup of its current session and history. Nothing opens automatically." = "Circa keeps a backup of its current session and history. Nothing opens automatically.";
+"Circa reads a consistent copy of your Arc data, which requires Arc to be closed. Quit Arc (⌘Q), then choose Check Again. Circa never quits Arc for you." = "Circa reads a consistent copy of your Arc data, which requires Arc to be closed. Quit Arc (⌘Q), then choose Check Again. Circa never quits Arc for you.";
+"Arc’s Spaces and tabs would make Circa’s session too large to open (%@ of %@ allowed). Nothing was imported." = "Arc’s Spaces and tabs would make Circa’s session too large to open (%@ of %@ allowed). Nothing was imported.";
+"Arc’s data changed while Circa was reading it. Quit Arc, then try again." = "Arc’s data changed while Circa was reading it. Quit Arc, then try again.";
+"Arc’s data folder and Circa’s data folder overlap. Choose a separate copy of Arc’s data." = "Arc’s data folder and Circa’s data folder overlap. Choose a separate copy of Arc’s data.";
 "Ask" = "Ask";
 "Auto Archive — Temporary Profile Setting" = "Auto Archive — Temporary Profile Setting";
 "Automatic" = "Automatic";
@@ -88,10 +88,10 @@
 "Automatic Downloads" = "Automatic Downloads";
 "Automatically archive inactive tabs after" = "Automatically archive inactive tabs after";
 "Autoplay" = "Autoplay";
-"Available in the signed Chromium Orbit product. macOS may ask you to confirm the change." = "Available in the signed Chromium Orbit product. macOS may ask you to confirm the change.";
+"Available in the signed Chromium Circa product. macOS may ask you to confirm the change." = "Available in the signed Chromium Circa product. macOS may ask you to confirm the change.";
 "Back" = "Back";
 "Back to Tabs" = "Back to Tabs";
-"Backing up Orbit…" = "Backing up Orbit…";
+"Backing up Circa…" = "Backing up Circa…";
 "Bing" = "Bing";
 "Blank Window" = "Blank Window";
 "Block" = "Block";
@@ -102,7 +102,7 @@
 "Boost Gallery" = "Boost Gallery";
 "Brand" = "Brand";
 "Bring All to Front" = "Bring All to Front";
-"Bring Your Arc Spaces to Orbit?" = "Bring Your Arc Spaces to Orbit?";
+"Bring Your Arc Spaces to Circa?" = "Bring Your Arc Spaces to Circa?";
 "Browsing Profile" = "Browsing Profile";
 "Camera" = "Camera";
 "Camera in use" = "Camera in use";
@@ -150,7 +150,7 @@
 "Clearing covers every origin and subdomain of these domains, in this profile only. Connections to these sites may close. Permissions are kept." = "Clearing covers every origin and subdomain of these domains, in this profile only. Connections to these sites may close. Permissions are kept.";
 "Close %@" = "Close %@";
 "Close Find" = "Close Find";
-"Close Little Orbit" = "Close Little Orbit";
+"Close Little Circa" = "Close Little Circa";
 "Close Pane" = "Close Pane";
 "Close Peek" = "Close Peek";
 "Close Peek (Escape)" = "Close Peek (Escape)";
@@ -179,7 +179,7 @@
 "Control" = "Control";
 "Cookies and Site Data…" = "Cookies and Site Data…";
 "Copy" = "Copy";
-"Copy Orbit Info" = "Copy Orbit Info";
+"Copy Circa Info" = "Copy Circa Info";
 "Copy Link" = "Copy Link";
 "Copy URL" = "Copy URL";
 "Copy URL as Markdown" = "Copy URL as Markdown";
@@ -255,7 +255,7 @@
 "Expand Current Split" = "Expand Current Split";
 "Expand Pinned Section" = "Expand Pinned Section";
 "Expanded" = "Expanded";
-"Export Orbit Notes" = "Export Orbit Notes";
+"Export Circa Notes" = "Export Circa Notes";
 "Extensions" = "Extensions";
 "Favorite" = "Favorite";
 "Favorite Name" = "Favorite Name";
@@ -292,7 +292,7 @@
 "Grain" = "Grain";
 "Greyscale" = "Greyscale";
 "Help" = "Help";
-"Hide Orbit" = "Hide Orbit";
+"Hide Circa" = "Hide Circa";
 "Hide Other Windows" = "Hide Other Windows";
 "History" = "History";
 "History is unavailable. Try Refresh." = "History is unavailable. Try Refresh.";
@@ -311,7 +311,7 @@
 "Import from Arc…" = "Import from Arc…";
 "Import the Rest" = "Import the Rest";
 "Imported Profile" = "Imported Profile";
-"Importing everything would make Orbit’s session too large to open (%@ of %@ allowed). Orbit can import everything except: %@." = "Importing everything would make Orbit’s session too large to open (%@ of %@ allowed). Orbit can import everything except: %@.";
+"Importing everything would make Circa’s session too large to open (%@ of %@ allowed). Circa can import everything except: %@." = "Importing everything would make Circa’s session too large to open (%@ of %@ allowed). Circa can import everything except: %@.";
 "Importing history…" = "Importing history…";
 "Inspect Elements" = "Inspect Elements";
 "Intensity" = "Intensity";
@@ -336,7 +336,7 @@
 "Light" = "Light";
 "Light Appearance" = "Light Appearance";
 "Lime & Citrus" = "Lime & Citrus";
-"Little Orbit" = "Little Orbit";
+"Little Circa" = "Little Circa";
 "Load More" = "Load More";
 "Loading" = "Loading";
 "Loading…" = "Loading…";
@@ -371,7 +371,7 @@
 "New Folder…" = "New Folder…";
 "New Incognito Window" = "New Incognito Window";
 "New Legacy Boost (Advanced)" = "New Legacy Boost (Advanced)";
-"New Little Orbit Window" = "New Little Orbit Window";
+"New Little Circa Window" = "New Little Circa Window";
 "New Note" = "New Note";
 "New Note (in Split)" = "New Note (in Split)";
 "New Profile" = "New Profile";
@@ -406,24 +406,24 @@
 "Open Command Bar" = "Open Command Bar";
 "Open File" = "Open File";
 "Open Links" = "Open Links";
-"Open Little Orbit in Last Space" = "Open Little Orbit in Last Space";
-"Open Little Orbit in Space…" = "Open Little Orbit in Space…";
-"Open Little Orbit or Peek in…" = "Open Little Orbit or Peek in…";
+"Open Little Circa in Last Space" = "Open Little Circa in Last Space";
+"Open Little Circa in Space…" = "Open Little Circa in Space…";
+"Open Little Circa or Peek in…" = "Open Little Circa or Peek in…";
 "Open Task Manager" = "Open Task Manager";
-"Open a Copy in Orbit" = "Open a Copy in Orbit";
+"Open a Copy in Circa" = "Open a Copy in Circa";
 "Open a tab to get started." = "Open a tab to get started.";
 "Open in %@" = "Open in %@";
 "Open in %@  %@" = "Open in %@  %@";
 "Open in %@  ⌘O" = "Open in %@  ⌘O";
 "Open in %@ (%@)" = "Open in %@ (%@)";
 "Open in Another Window" = "Open in Another Window";
-"Open in Orbit" = "Open in Orbit";
-"Open in Orbit (⌘O)" = "Open in Orbit (⌘O)";
+"Open in Circa" = "Open in Circa";
+"Open in Circa (⌘O)" = "Open in Circa (⌘O)";
 "Open in Split View" = "Open in Split View";
 "Open in Tab" = "Open in Tab";
 "Open in another window" = "Open in another window";
 "Open links from Pinned tabs and Favorites in Peek" = "Open links from Pinned tabs and Favorites in Peek";
-"Open links from other apps in Little Orbit" = "Open links from other apps in Little Orbit";
+"Open links from other apps in Little Circa" = "Open links from other apps in Little Circa";
 "Open links in Peek with Shift-click" = "Open links in Peek with Shift-click";
 "Option" = "Option";
 "Other Space" = "Other Space";
@@ -466,7 +466,7 @@
 "Quit" = "Quit";
 "Quit Arc" = "Quit Arc";
 "Quit Arc to Import" = "Quit Arc to Import";
-"Quit Orbit" = "Quit Orbit";
+"Quit Circa" = "Quit Circa";
 "Quit and Cancel Downloads" = "Quit and Cancel Downloads";
 "Quitting will cancel your downloads." = "Quitting will cancel your downloads.";
 "Read Clipboard" = "Read Clipboard";
@@ -479,7 +479,7 @@
 "Refresh the Page" = "Refresh the Page";
 "Release Notes" = "Release Notes";
 "Reload" = "Reload";
-"Reload Little Orbit" = "Reload Little Orbit";
+"Reload Little Circa" = "Reload Little Circa";
 "Remove Color" = "Remove Color";
 "Remove Suggestion" = "Remove Suggestion";
 "Remove from Favorites" = "Remove from Favorites";
@@ -508,7 +508,7 @@
 "Resume" = "Resume";
 "Retry Cleanup" = "Retry Cleanup";
 "Return" = "Return";
-"Reveal Orbit Data" = "Reveal Orbit Data";
+"Reveal Circa Data" = "Reveal Circa Data";
 "Reveal Current Tab" = "Reveal Current Tab";
 "Reveal Tab in Sidebar" = "Reveal Tab in Sidebar";
 "Revoked for this session, but the setting could not be saved. The previous setting may return after relaunch." = "Revoked for this session, but the setting could not be saved. The previous setting may return after relaunch.";
@@ -561,7 +561,7 @@
 "Set as Default" = "Set as Default";
 "Set as Default Browser" = "Set as Default Browser";
 "Settings" = "Settings";
-"Share Orbit" = "Share Orbit";
+"Share Circa" = "Share Circa";
 "Share…" = "Share…";
 "Shift" = "Shift";
 "Shortcuts" = "Shortcuts";
@@ -620,7 +620,7 @@
 "The current engine does not support deleting profiles." = "The current engine does not support deleting profiles.";
 "The engine could not confirm removal of all requested website data. Review the site data and retry." = "The engine could not confirm removal of all requested website data. Review the site data and retry.";
 "The final session save is still in progress." = "The final session save is still in progress.";
-"The import could not be completed. Orbit’s session was kept; import again to retry." = "The import could not be completed. Orbit’s session was kept; import again to retry.";
+"The import could not be completed. Circa’s session was kept; import again to retry." = "The import could not be completed. Circa’s session was kept; import again to retry.";
 "The import was stopped. Import again to complete it." = "The import was stopped. Import again to complete it.";
 "The last Space cannot be deleted." = "The last Space cannot be deleted.";
 "The last complete session file was kept. Keep your windows open and check the available disk space and folder permissions before trying again." = "The last complete session file was kept. Keep your windows open and check the available disk space and folder permissions before trying again.";
@@ -633,7 +633,7 @@
 "Theme Color" = "Theme Color";
 "Theme Colors" = "Theme Colors";
 "This Space" = "This Space";
-"This action requires the Orbit product with its stable local signature." = "This action requires the Orbit product with its stable local signature.";
+"This action requires the Circa product with its stable local signature." = "This action requires the Circa product with its stable local signature.";
 "This cannot be undone. Other profiles, downloads, cookies and archived tabs are kept." = "This cannot be undone. Other profiles, downloads, cookies and archived tabs are kept.";
 "This profile has no Spaces. Create a Space to start browsing with it." = "This profile has no Spaces. Create a Space to start browsing with it.";
 "This profile is being removed. Finish its pending cleanup before trying again." = "This profile is being removed. Finish its pending cleanup before trying again.";
@@ -669,7 +669,7 @@
 "View Media" = "View Media";
 "View Source" = "View Source";
 "Visible pane" = "Visible pane";
-"Visit Help Center" = "Visit Help Center";
+"Circa Help" = "Circa Help";
 "Website Data" = "Website Data";
 "Website data belongs to this profile. Clearing it does not remove your browsing history or saved permission choices." = "Website data belongs to this profile. Clearing it does not remove your browsing history or saved permission choices.";
 "Websites, Easels, and Notes will use:" = "Websites, Easels, and Notes will use:";
@@ -743,17 +743,17 @@
 /* Space themes: theme editor */
 "Safe Browsing" = "Safe Browsing";
 "Warnings for dangerous sites and downloads are on." = "Warnings for dangerous sites and downloads are on.";
-"Unavailable in this build. Orbit does not warn about dangerous sites or downloads." = "Unavailable in this build. Orbit does not warn about dangerous sites or downloads.";
+"Unavailable in this build. Circa does not warn about dangerous sites or downloads." = "Unavailable in this build. Circa does not warn about dangerous sites or downloads.";
 
 /* Orbit secondary-screen identity and isolated appearance draft. */
-"A little clarity in your browsing." = "A little clarity in your browsing.";
+"Everything revolves around you." = "Everything revolves around you.";
 "Appearance draft" = "Appearance draft";
 "Built for macOS. Your profiles and browsing data stay on this Mac." = "Built for macOS. Your profiles and browsing data stay on this Mac.";
 "Development build" = "Development build";
-"Orbit Settings" = "Orbit Settings";
+"Circa Settings" = "Circa Settings";
 "Saved for these settings only. The browser window and Space themes are unchanged." = "Saved for these settings only. The browser window and Space themes are unchanged.";
 
-"Orbit Live" = "Orbit Live";
+"Circa Live" = "Circa Live";
 "About %@" = "About %@";
 "Hide %@" = "Hide %@";
 "Quit %@" = "Quit %@";
@@ -1007,12 +1007,12 @@
 "Air Traffic Control" = "Air Traffic Control";
 "Air Traffic Control…" = "Air Traffic Control…";
 "App Icon" = "App Icon";
-"Arc must be closed to copy its connections. Orbit will then save your tabs and restart. Allow access to Arc Safe Storage when macOS asks. Existing Orbit connections are backed up before importing." = "Arc must be closed to copy its connections. Orbit will then save your tabs and restart. Allow access to Arc Safe Storage when macOS asks. Existing Orbit connections are backed up before importing.";
+"Arc must be closed to copy its connections. Circa will then save your tabs and restart. Allow access to Arc Safe Storage when macOS asks. Existing Circa connections are backed up before importing." = "Arc must be closed to copy its connections. Circa will then save your tabs and restart. Allow access to Arc Safe Storage when macOS asks. Existing Circa connections are backed up before importing.";
 "Archive Folder" = "Archive Folder";
 "Archive Other Tabs" = "Archive Other Tabs";
 "Archive tabs after" = "Archive tabs after";
-"Orbit will save your tabs and restart. Allow access to Arc Safe Storage when macOS asks. Arc connections replace matching cookies and site storage in the corresponding profiles. A backup lets you undo the import." = "Orbit will save your tabs and restart. Allow access to Arc Safe Storage when macOS asks. Arc connections replace matching cookies and site storage in the corresponding profiles. A backup lets you undo the import.";
-"Orbit will save your tabs and restart. Cookies and site storage will return to their state before the last import." = "Orbit will save your tabs and restart. Cookies and site storage will return to their state before the last import.";
+"Circa will save your tabs and restart. Allow access to Arc Safe Storage when macOS asks. Arc connections replace matching cookies and site storage in the corresponding profiles. A backup lets you undo the import." = "Circa will save your tabs and restart. Allow access to Arc Safe Storage when macOS asks. Arc connections replace matching cookies and site storage in the corresponding profiles. A backup lets you undo the import.";
+"Circa will save your tabs and restart. Cookies and site storage will return to their state before the last import." = "Circa will save your tabs and restart. Cookies and site storage will return to their state before the last import.";
 "Automatically update my %@" = "Automatically update my %@";
 "Change Space Icon…" = "Change Space Icon…";
 "Choose an Icon…" = "Choose an Icon…";
@@ -1036,7 +1036,7 @@
 "Import Connections from Arc…" = "Import Connections from Arc…";
 "Keyboard Shortcuts…" = "Keyboard Shortcuts…";
 "Links" = "Links";
-"Links from other apps open in Little Orbit" = "Links from other apps open in Little Orbit";
+"Links from other apps open in Little Circa" = "Links from other apps open in Little Circa";
 "Make Default" = "Make Default";
 "Manage your default search engine, Auto-Archive, and downloads in Profile Settings." = "Manage your default search engine, Auto-Archive, and downloads in Profile Settings.";
 "Manage…" = "Manage…";
@@ -1089,7 +1089,7 @@
 "Use a modifier key with a character, or a function key." = "Use a modifier key with a character, or a function key.";
 "Shortcut already used by" = "Shortcut already used by";
 "Saved shortcuts are unavailable. The existing file has been kept." = "Saved shortcuts are unavailable. The existing file has been kept.";
-"Prefer Orbit" = "Prefer Orbit";
+"Prefer Circa" = "Prefer Circa";
 "Prefer Websites" = "Prefer Websites";
 "Use Both" = "Use Both";
 "Type shortcut…" = "Type shortcut…";
@@ -1099,8 +1099,8 @@
 "Click a shortcut and press new keys. Escape cancels; Delete removes it." = "Click a shortcut and press new keys. Escape cancels; Delete removes it.";
 "Include Favorites in Ordering" = "Include Favorites in Ordering";
 "⌘9 selects the last tab" = "⌘9 selects the last tab";
-"Open Little Orbit from other apps" = "Open Little Orbit from other apps";
-"Uses the New Little Orbit Window shortcut, even when Orbit is in the background." = "Uses the New Little Orbit Window shortcut, even when Orbit is in the background.";
+"Open Little Circa from other apps" = "Open Little Circa from other apps";
+"Uses the New Little Circa Window shortcut, even when Circa is in the background." = "Uses the New Little Circa Window shortcut, even when Circa is in the background.";
 "Remove Shortcut" = "Remove Shortcut";
 "Reset to Default" = "Reset to Default";
 "Shortcut options" = "Shortcut options";
@@ -1140,7 +1140,7 @@
 "Manage" = "Manage";
 "Manage Extension" = "Manage Extension";
 "Not Secure" = "Not Secure";
-"Remove from Orbit" = "Remove from Orbit";
+"Remove from Circa" = "Remove from Circa";
 "Secure" = "Secure";
 "Share" = "Share";
 "Site Settings…" = "Site Settings…";
@@ -1177,7 +1177,7 @@
 "Automatically update" = "Automatically update";
 "Warn before quitting" = "Warn before quitting";
 "Haptic feedback when reordering tabs" = "Haptic feedback when reordering tabs";
-"Quit Orbit?" = "Quit Orbit?";
+"Quit Circa?" = "Quit Circa?";
 "Your tabs will be here when you return." = "Your tabs will be here when you return.";
 "Quit, and don’t ask again" = "Quit, and don’t ask again";
 "Drag to capture a portion of this page. Press Escape to cancel." = "Drag to capture a portion of this page. Press Escape to cancel.";
@@ -1206,8 +1206,8 @@
 "Would you like to apply this change to all of your Profiles, or only your %@ Profile?" = "Would you like to apply this change to all of your Profiles, or only your %@ Profile?";
 "All Profiles" = "All Profiles";
 "Only this Profile" = "Only this Profile";
-"Orbit will never auto-archive your tabs." = "Orbit will never auto-archive your tabs.";
-"Orbit will now archive your tabs after %@" = "Orbit will now archive your tabs after %@";
+"Circa will never auto-archive your tabs." = "Circa will never auto-archive your tabs.";
+"Circa will now archive your tabs after %@" = "Circa will now archive your tabs after %@";
 
 "Nothing here yet!" = "Nothing here yet!";
 
@@ -1287,9 +1287,9 @@
 "← Click to unzap" = "← Click to unzap";
 
 "{}" = "{}";
-"Orbit Needs Notifications Permission" = "Orbit Needs Notifications Permission";
+"Circa Needs Notifications Permission" = "Circa Needs Notifications Permission";
 
-"You need to open System Preferences to give Orbit permission to show you Notifications." = "You need to open System Preferences to give Orbit permission to show you Notifications.";
+"You need to open System Preferences to give Circa permission to show you Notifications." = "You need to open System Preferences to give Circa permission to show you Notifications.";
 
 "Never Mind" = "Never Mind";
 
@@ -1373,14 +1373,14 @@
 
 "Your previous data is ready" = "Your previous data is ready";
 
-"The import could not be restored normally. Orbit recovered your previous data and moved the incomplete import aside for safekeeping." = "The import could not be restored normally. Orbit recovered your previous data and moved the incomplete import aside for safekeeping.";
+"The import could not be restored normally. Circa recovered your previous data and moved the incomplete import aside for safekeeping." = "The import could not be restored normally. Circa recovered your previous data and moved the incomplete import aside for safekeeping.";
 
 // Native browser import
 "Import Restored" = "Import Restored";
 "Your session from before the import is ready. The imported profile was removed." = "Your session from before the import is ready. The imported profile was removed.";
 "Restore…" = "Restore…";
 "Restore Before This Import?" = "Restore Before This Import?";
-"Orbit will save and restart. This replaces all session edits made after the import and removes the imported profile, including its passwords, cookies and history. Other profiles’ website data is kept." = "Orbit will save and restart. This replaces all session edits made after the import and removes the imported profile, including its passwords, cookies and history. Other profiles’ website data is kept.";
+"Circa will save and restart. This replaces all session edits made after the import and removes the imported profile, including its passwords, cookies and history. Other profiles’ website data is kept." = "Circa will save and restart. This replaces all session edits made after the import and removes the imported profile, including its passwords, cookies and history. Other profiles’ website data is kept.";
 "Restore and Restart" = "Restore and Restart";
 "Bookmarks" = "Bookmarks";
 "Open tabs" = "Open tabs";
@@ -1394,7 +1394,7 @@
 "Not supported; not imported" = "Not supported; not imported";
 "%@: %@" = "%@: %@";
 "Some history could not be read and will not be imported." = "Some history could not be read and will not be imported.";
-"Orbit will save your current session and restart to import. Nothing opens automatically. Restore can undo this import, replacing later session edits and removing the imported profile." = "Orbit will save your current session and restart to import. Nothing opens automatically. Restore can undo this import, replacing later session edits and removing the imported profile.";
+"Circa will save your current session and restart to import. Nothing opens automatically. Restore can undo this import, replacing later session edits and removing the imported profile." = "Circa will save your current session and restart to import. Nothing opens automatically. Restore can undo this import, replacing later session edits and removing the imported profile.";
 "Copying selected browser data…" = "Copying selected browser data…";
 "Reading bookmarks and tabs…" = "Reading bookmarks and tabs…";
 "Keychain access was denied. Nothing was imported. Try again and allow the source browser’s normal Safe Storage prompt." = "Keychain access was denied. Nothing was imported. Try again and allow the source browser’s normal Safe Storage prompt.";
@@ -1402,10 +1402,10 @@
 "The source browser’s Safe Storage key could not be read. Nothing was imported. Try again or use a browser export." = "The source browser’s Safe Storage key could not be read. Nothing was imported. Try again or use a browser export.";
 "This encrypted data format is not supported. Nothing was imported. Use the source browser’s export instead." = "This encrypted data format is not supported. Nothing was imported. Use the source browser’s export instead.";
 "The password CSV could not be read. Nothing was imported. Choose a fresh logins export from the source browser." = "The password CSV could not be read. Nothing was imported. Choose a fresh logins export from the source browser.";
-"The source browser is open. Quit it, then try again. Orbit never quits it for you." = "The source browser is open. Quit it, then try again. Orbit never quits it for you.";
+"The source browser is open. Quit it, then try again. Circa never quits it for you." = "The source browser is open. Quit it, then try again. Circa never quits it for you.";
 "The selected profile could not be found or read. Nothing was imported. Check the source browser’s profile and file access, then try again." = "The selected profile could not be found or read. Nothing was imported. Check the source browser’s profile and file access, then try again.";
-"The source data changed while Orbit was reading it. Quit the source browser, then try again." = "The source data changed while Orbit was reading it. Quit the source browser, then try again.";
-"The import could not be completed. Your previous data is kept in the import recovery record if changes began. Relaunch Orbit to restore it, then try a fresh source export." = "The import could not be completed. Your previous data is kept in the import recovery record if changes began. Relaunch Orbit to restore it, then try a fresh source export.";
+"The source data changed while Circa was reading it. Quit the source browser, then try again." = "The source data changed while Circa was reading it. Quit the source browser, then try again.";
+"The import could not be completed. Your previous data is kept in the import recovery record if changes began. Relaunch Circa to restore it, then try a fresh source export." = "The import could not be completed. Your previous data is kept in the import recovery record if changes began. Relaunch Circa to restore it, then try a fresh source export.";
 "Import from %@?" = "Import from %@?";
 "Import and Restart" = "Import and Restart";
 "%@ — Export ZIP" = "%@ — Export ZIP";
@@ -1413,19 +1413,19 @@
 "Profile unavailable" = "Profile unavailable";
 "Import from Another Browser" = "Import from Another Browser";
 "No supported browsers were detected. Install a supported browser, then try again." = "No supported browsers were detected. Install a supported browser, then try again.";
-"Choose a browser and profile. Orbit reads profile names here; no passwords or browsing data are read until you continue." = "Choose a browser and profile. Orbit reads profile names here; no passwords or browsing data are read until you continue.";
+"Choose a browser and profile. Circa reads profile names here; no passwords or browsing data are read until you continue." = "Choose a browser and profile. Circa reads profile names here; no passwords or browsing data are read until you continue.";
 "Browser and profile" = "Browser and profile";
-"Choose the source profile to import into a new Orbit profile." = "Choose the source profile to import into a new Orbit profile.";
-"In Safari, choose File > Export Browsing Data and export a ZIP. Orbit can import bookmarks, the latest history visit for each URL, and passwords into one new profile. Cookies, open tabs, payment cards, extensions, settings, passkeys, password notes and verification codes are not transferred. The ZIP contains unencrypted passwords; keep it safe." = "In Safari, choose File > Export Browsing Data and export a ZIP. Orbit can import bookmarks, the latest history visit for each URL, and passwords into one new profile. Cookies, open tabs, payment cards, extensions, settings, passkeys, password notes and verification codes are not transferred. The ZIP contains unencrypted passwords; keep it safe.";
-"Quit the source browser before continuing. Orbit imports available bookmarks, history, open tabs and supported cookies into a new profile. To include passwords, export logins as a CSV in the source browser and select it in the next step, or continue without passwords. Containers, partitioned cookies, site storage, extensions, form history, autofill, payment cards, permissions and search settings are not transferred." = "Quit the source browser before continuing. Orbit imports available bookmarks, history, open tabs and supported cookies into a new profile. To include passwords, export logins as a CSV in the source browser and select it in the next step, or continue without passwords. Containers, partitioned cookies, site storage, extensions, form history, autofill, payment cards, permissions and search settings are not transferred.";
-"Quit the source browser before continuing. Orbit imports available bookmarks, history, open tabs, passwords, cookies and compatible site storage into a new profile. After you choose Import, macOS may ask for access to the source browser’s Safe Storage. Encrypted bookmarks or tabs require an export and are not decoded here. Autofill, payment cards, browser account sign-in, extensions, settings, passkeys, password notes and verification codes are not transferred. Some websites may require you to sign in again." = "Quit the source browser before continuing. Orbit imports available bookmarks, history, open tabs, passwords, cookies and compatible site storage into a new profile. After you choose Import, macOS may ask for access to the source browser’s Safe Storage. Encrypted bookmarks or tabs require an export and are not decoded here. Autofill, payment cards, browser account sign-in, extensions, settings, passkeys, password notes and verification codes are not transferred. Some websites may require you to sign in again.";
+"Choose the source profile to import into a new Circa profile." = "Choose the source profile to import into a new Circa profile.";
+"In Safari, choose File > Export Browsing Data and export a ZIP. Circa can import bookmarks, the latest history visit for each URL, and passwords into one new profile. Cookies, open tabs, payment cards, extensions, settings, passkeys, password notes and verification codes are not transferred. The ZIP contains unencrypted passwords; keep it safe." = "In Safari, choose File > Export Browsing Data and export a ZIP. Circa can import bookmarks, the latest history visit for each URL, and passwords into one new profile. Cookies, open tabs, payment cards, extensions, settings, passkeys, password notes and verification codes are not transferred. The ZIP contains unencrypted passwords; keep it safe.";
+"Quit the source browser before continuing. Circa imports available bookmarks, history, open tabs and supported cookies into a new profile. To include passwords, export logins as a CSV in the source browser and select it in the next step, or continue without passwords. Containers, partitioned cookies, site storage, extensions, form history, autofill, payment cards, permissions and search settings are not transferred." = "Quit the source browser before continuing. Circa imports available bookmarks, history, open tabs and supported cookies into a new profile. To include passwords, export logins as a CSV in the source browser and select it in the next step, or continue without passwords. Containers, partitioned cookies, site storage, extensions, form history, autofill, payment cards, permissions and search settings are not transferred.";
+"Quit the source browser before continuing. Circa imports available bookmarks, history, open tabs, passwords, cookies and compatible site storage into a new profile. After you choose Import, macOS may ask for access to the source browser’s Safe Storage. Encrypted bookmarks or tabs require an export and are not decoded here. Autofill, payment cards, browser account sign-in, extensions, settings, passkeys, password notes and verification codes are not transferred. Some websites may require you to sign in again." = "Quit the source browser before continuing. Circa imports available bookmarks, history, open tabs, passwords, cookies and compatible site storage into a new profile. After you choose Import, macOS may ask for access to the source browser’s Safe Storage. Encrypted bookmarks or tabs require an export and are not decoded here. Autofill, payment cards, browser account sign-in, extensions, settings, passkeys, password notes and verification codes are not transferred. Some websites may require you to sign in again.";
 "Import from %@" = "Import from %@";
 "Choose Export ZIP…" = "Choose Export ZIP…";
 "Read Selected Data" = "Read Selected Data";
 "Choose the ZIP exported by Safari." = "Choose the ZIP exported by Safari.";
 "Choose the password CSV exported by your browser. The CSV contains unencrypted passwords; keep it safe." = "Choose the password CSV exported by your browser. The CSV contains unencrypted passwords; keep it safe.";
 "Include Exported Passwords?" = "Include Exported Passwords?";
-"Orbit cannot read Firefox or Zen passwords directly. Select an exported logins CSV, or continue with the other available data." = "Orbit cannot read Firefox or Zen passwords directly. Select an exported logins CSV, or continue with the other available data.";
+"Circa cannot read Firefox or Zen passwords directly. Select an exported logins CSV, or continue with the other available data." = "Circa cannot read Firefox or Zen passwords directly. Select an exported logins CSV, or continue with the other available data.";
 "Choose Password CSV…" = "Choose Password CSV…";
 "Continue Without Passwords" = "Continue Without Passwords";
 "Browser Import Could Not Be Completed" = "Browser Import Could Not Be Completed";
@@ -1433,7 +1433,7 @@
 "Choose the folder for %@. This profile is stored outside the browser’s standard profile folder." = "Choose the folder for %@. This profile is stored outside the browser’s standard profile folder.";
 "Import Cancelled" = "Import Cancelled";
 "Nothing was kept from this import. Your previous session is ready." = "Nothing was kept from this import. Your previous session is ready.";
-"Choose a profile from the selected export. Any shared bookmarks and passwords will be added to its new Orbit profile." = "Choose a profile from the selected export. Any shared bookmarks and passwords will be added to its new Orbit profile.";
+"Choose a profile from the selected export. Any shared bookmarks and passwords will be added to its new Circa profile." = "Choose a profile from the selected export. Any shared bookmarks and passwords will be added to its new Circa profile.";
 
 /* Browser import summaries and plural fallbacks. */
 "%ld Spaces" = "%ld Spaces";
@@ -1445,9 +1445,9 @@
 "%ld existing passwords were kept." = "%ld existing passwords were kept.";
 "%ld additional history visits have no dates in the export and will not be added." = "%ld additional history visits have no dates in the export and will not be added.";
 "%ld additional history visits had no dates in the export and were not added." = "%ld additional history visits had no dates in the export and were not added.";
-"A new Orbit profile will be created." = "A new Orbit profile will be created.";
-"A new Orbit profile will receive %@." = "A new Orbit profile will receive %@.";
-"Added a new Orbit profile." = "Added a new Orbit profile.";
+"A new Circa profile will be created." = "A new Circa profile will be created.";
+"A new Circa profile will receive %@." = "A new Circa profile will receive %@.";
+"Added a new Circa profile." = "Added a new Circa profile.";
 "Added a new profile with %@." = "Added a new profile with %@.";
 "from selected CSV" = "from selected CSV";
 "no data found" = "no data found";
@@ -1465,39 +1465,39 @@
 "Frost" = "Frost";
 
 /* First-run onboarding. */
-"Welcome to Orbit" = "Welcome to Orbit";
-"Welcome to Orbit." = "Welcome to Orbit.";
+"Welcome to Circa" = "Welcome to Circa";
+"Welcome to Circa." = "Welcome to Circa.";
 "Get Started" = "Get Started";
 "Next" = "Next";
 "Skip for now" = "Skip for now";
 "Bring your browser along." = "Bring your browser along.";
-"Move your tabs, bookmarks, history and passwords into Orbit, so everything is where you left it." = "Move your tabs, bookmarks, history and passwords into Orbit, so everything is where you left it.";
+"Move your tabs, bookmarks, history and passwords into Circa, so everything is where you left it." = "Move your tabs, bookmarks, history and passwords into Circa, so everything is where you left it.";
 "macOS may ask to unlock the other browser’s passwords when the import starts." = "macOS may ask to unlock the other browser’s passwords when the import starts.";
 "No thanks, I’ll start fresh." = "No thanks, I’ll start fresh.";
 "No other browser was found. Start fresh." = "No other browser was found. Start fresh.";
 "Browsers to import from" = "Browsers to import from";
 "Profile to import" = "Profile to import";
 "Take your Spaces everywhere." = "Take your Spaces everywhere.";
-"Orbit can keep your Spaces, tabs and settings in sync through your private iCloud account. No Orbit account needed." = "Orbit can keep your Spaces, tabs and settings in sync through your private iCloud account. No Orbit account needed.";
-"iCloud sync isn’t available in this copy of Orbit. You can keep everything on this Mac." = "iCloud sync isn’t available in this copy of Orbit. You can keep everything on this Mac.";
-"Sign in to iCloud in System Settings to sync. You can turn sync on later in Orbit Settings." = "Sign in to iCloud in System Settings to sync. You can turn sync on later in Orbit Settings.";
+"Circa can keep your Spaces, tabs and settings in sync through your private iCloud account. No Circa account needed." = "Circa can keep your Spaces, tabs and settings in sync through your private iCloud account. No Circa account needed.";
+"iCloud sync isn’t available in this copy of Circa. You can keep everything on this Mac." = "iCloud sync isn’t available in this copy of Circa. You can keep everything on this Mac.";
+"Sign in to iCloud in System Settings to sync. You can turn sync on later in Circa Settings." = "Sign in to iCloud in System Settings to sync. You can turn sync on later in Circa Settings.";
 "YES," = "YES,";
 "sync with iCloud." = "sync with iCloud.";
 "NO," = "NO,";
 "keep it on this Mac." = "keep it on this Mac.";
 "Make it feel like yours." = "Make it feel like yours.";
 "Pick a color for your first Space. You can change it anytime from the sidebar." = "Pick a color for your first Space. You can change it anytime from the sidebar.";
-"Open your links in Orbit?" = "Open your links in Orbit?";
-"Make Orbit your default browser so links from other apps open here. You can change it anytime in System Settings." = "Make Orbit your default browser so links from other apps open here. You can change it anytime in System Settings.";
-"open my links in Orbit." = "open my links in Orbit.";
+"Open your links in Circa?" = "Open your links in Circa?";
+"Make Circa your default browser so links from other apps open here. You can change it anytime in System Settings." = "Make Circa your default browser so links from other apps open here. You can change it anytime in System Settings.";
+"open my links in Circa." = "open my links in Circa.";
 "not right now." = "not right now.";
 "You’re all set." = "You’re all set.";
-"Your first Space is ready. Orbit is yours to explore." = "Your first Space is ready. Orbit is yours to explore.";
-"Your first Space is ready. Orbit brings in your browser data as soon as you start." = "Your first Space is ready. Orbit brings in your browser data as soon as you start.";
+"Your first Space is ready. Circa is yours to explore." = "Your first Space is ready. Circa is yours to explore.";
+"Your first Space is ready. Circa brings in your browser data as soon as you start." = "Your first Space is ready. Circa brings in your browser data as soon as you start.";
 
 "Welcome home." = "Welcome home.";
 
-"Open Orbit" = "Open Orbit";
+"Open Circa" = "Open Circa";
 
 "Start" = "Start";
 
@@ -1525,7 +1525,7 @@
 
 "Bring your browser over." = "Bring your browser over.";
 
-"Tabs, Spaces, bookmarks, history and passwords move into Orbit. Nothing is uploaded, and the other browser stays exactly as it is." = "Tabs, Spaces, bookmarks, history and passwords move into Orbit. Nothing is uploaded, and the other browser stays exactly as it is.";
+"Tabs, Spaces, bookmarks, history and passwords move into Circa. Nothing is uploaded, and the other browser stays exactly as it is." = "Tabs, Spaces, bookmarks, history and passwords move into Circa. Nothing is uploaded, and the other browser stays exactly as it is.";
 
 "Pick a colour for your first Space, or drag the two dots to mix your own. You can change it any time from the sidebar." = "Pick a colour for your first Space, or drag the two dots to mix your own. You can change it any time from the sidebar.";
 
@@ -1543,9 +1543,9 @@
 
 "%d visits" = "%d visits";
 
-"Make Orbit your default browser?" = "Make Orbit your default browser?";
+"Make Circa your default browser?" = "Make Circa your default browser?";
 
-"Use Orbit" = "Use Orbit";
+"Use Circa" = "Use Circa";
 
 "Preview of the macOS default browser confirmation" = "Preview of the macOS default browser confirmation";
 
@@ -1635,7 +1635,7 @@
 "Two inks printed slightly off register." = "Two inks printed slightly off register.";
 "One colour, paper on ink." = "One colour, paper on ink.";
 "Current icon" = "Current icon";
-"Choose how Orbit looks in the Dock and the Finder." = "Choose how Orbit looks in the Dock and the Finder.";
+"Choose how Circa looks in the Dock and the Finder." = "Choose how Circa looks in the Dock and the Finder.";
 "App Icon…" = "App Icon…";
 "Restore Default" = "Restore Default";
 "Use Icon" = "Use Icon";
@@ -1652,6 +1652,6 @@
 
 "Save downloads to" = "Save downloads to";
 "Ask where to save each file" = "Ask where to save each file";
-"Orbit can’t save to the download folder. It may be missing or not writable. Choose another location." = "Orbit can’t save to the download folder. It may be missing or not writable. Choose another location.";
+"Circa can’t save to the download folder. It may be missing or not writable. Choose another location." = "Circa can’t save to the download folder. It may be missing or not writable. Choose another location.";
 "Manage your default search engine and Auto-Archive in Profile Settings." = "Manage your default search engine and Auto-Archive in Profile Settings.";
 "Languages and site settings" = "Languages and site settings";

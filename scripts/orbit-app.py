@@ -20,7 +20,7 @@ import tempfile
 import time
 
 from orbit_bundle_policy import helper_bundle_identifier, reject_build_artifacts, set_helper_bundle_identifiers, validate_bundle_contents
-from product_identity import BUNDLE_ID, PRODUCT_NAME
+from product_identity import BUNDLE_ID, DISPLAY_NAME, PRODUCT_NAME
 from local_signing import SIGNING_DIRECTORY, unlocked_identity, sign_chromium_bundle
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -50,8 +50,9 @@ def bundle_info(version, bundle_id=BUNDLE_ID, principal='ACRApplication'):
         'SUEnableAutomaticChecks': True, 'SUAutomaticallyUpdate': True,
         'SUScheduledCheckInterval': 3600,
         'CFBundleIdentifier': bundle_id,
-        'CFBundleName': 'Orbit Live' if bundle_id == LIVE_BUNDLE_ID else PRODUCT_NAME,
-        'CFBundleDisplayName': 'Orbit Live' if bundle_id == LIVE_BUNDLE_ID else PRODUCT_NAME,
+        'CFBundleName': DISPLAY_NAME,
+        'CFBundleDisplayName': PRODUCT_NAME,
+        'LSHasLocalizedDisplayName': True,
         'CFBundleIconFile': 'Orbit.icns',
         'CFBundleDevelopmentRegion': 'en', 'CFBundleLocalizations': ['en', 'fr'],
         'CFBundleExecutable': PRODUCT_NAME, 'CFBundlePackageType': 'APPL',
@@ -61,12 +62,12 @@ def bundle_info(version, bundle_id=BUNDLE_ID, principal='ACRApplication'):
         'LSFileQuarantineEnabled': True,
         'NSPrincipalClass': principal, 'NSHighResolutionCapable': True,
         'NSSupportsAutomaticTermination': False, 'NSSupportsSuddenTermination': False,
-        'NSCameraUsageDescription': 'Orbit utilise la caméra uniquement pour les sites que vous autorisez.',
-        'NSMicrophoneUsageDescription': 'Orbit utilise le microphone uniquement pour les sites que vous autorisez.',
-        'NSLocationUsageDescription': 'Orbit partage votre localisation uniquement avec les sites que vous autorisez.',
-        'NSLocationWhenInUseUsageDescription': 'Orbit partage votre localisation uniquement avec les sites que vous autorisez.',
-        'NSBluetoothAlwaysUsageDescription': 'Orbit utilise le Bluetooth uniquement pour les sites et les appareils que vous autorisez.',
-        'NSBluetoothPeripheralUsageDescription': 'Orbit utilise le Bluetooth uniquement pour les sites et les appareils que vous autorisez.',
+        'NSCameraUsageDescription': 'Circa uses the camera only for websites you allow.',
+        'NSMicrophoneUsageDescription': 'Circa uses the microphone only for websites you allow.',
+        'NSLocationUsageDescription': 'Circa shares your location only with websites you allow.',
+        'NSLocationWhenInUseUsageDescription': 'Circa shares your location only with websites you allow.',
+        'NSBluetoothAlwaysUsageDescription': 'Circa uses Bluetooth only for websites and devices you allow.',
+        'NSBluetoothPeripheralUsageDescription': 'Circa uses Bluetooth only for websites and devices you allow.',
         'CFBundleURLTypes': [{'CFBundleURLName': 'Web URLs', 'CFBundleTypeRole': 'Viewer',
                               'CFBundleURLSchemes': ['http', 'https']}],
         'CFBundleDocumentTypes': [{'CFBundleTypeName': 'Web document', 'CFBundleTypeRole': 'Viewer',
@@ -283,14 +284,15 @@ def assemble(source_app, executable, framework, helpers_dir, output, bundle_id, 
             private_copy(resource, output / 'Contents/Resources' / resource.name)
         (output / 'Contents/MacOS' / PRODUCT_NAME).chmod(0o755)
         metadata = bundle_info(version, bundle_id)
-    # Keep raw and localized names aligned with the Orbit bundle and executable.
+    # Display metadata is independent of the stable bundle filename and executable.
     # Secure storage is explicit and independent of Finder localization.
     branding = ROOT / 'native/OrbitChromium/App/Branding'
     resources = output / 'Contents/Resources'
     resources.mkdir(parents=True, exist_ok=True)
     shutil.copy2(branding / 'Orbit.icns', resources / 'Orbit.icns')
     (resources / 'Orbit.icns').chmod(0o644)
-    displayed_name = 'Orbit Live' if bundle_id == LIVE_BUNDLE_ID else PRODUCT_NAME
+    displayed_name = DISPLAY_NAME
+    metadata.update(CFBundleName=displayed_name, CFBundleDisplayName=PRODUCT_NAME, LSHasLocalizedDisplayName=True)
     for language in ('en', 'fr'):
         localized = resources / (language + '.lproj')
         localized.mkdir(exist_ok=True)

@@ -5,10 +5,10 @@ import Testing
 @testable import Orbit
 
 extension NativeWebKitTests {
-@Suite("Little Orbit compact surfaces", .serialized)
+@Suite("Little Circa compact surfaces", .serialized)
 @MainActor
 struct QuickWindowCompactSurfaceTests {
-    @Test("Little Orbit keeps dark chrome and input over light and automatic source Spaces",
+    @Test("Little Circa keeps dark chrome and input over light and automatic source Spaces",
           arguments: [OrbitTokens.SpaceTheme.Mode.light, .automatic, .dark])
     func fixedDarkAppearance(mode: OrbitTokens.SpaceTheme.Mode) async throws {
         NSApplication.shared.setActivationPolicy(.prohibited)

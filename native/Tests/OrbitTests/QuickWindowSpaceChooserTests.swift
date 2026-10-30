@@ -4,7 +4,7 @@ import Testing
 @testable import Orbit
 
 extension NativeWebKitTests {
-@Suite("Little Orbit Space destinations", .serialized)
+@Suite("Little Circa Space destinations", .serialized)
 @MainActor
 struct QuickWindowSpaceChooserTests {
     @Test("A cross-profile choice opens the current URL in the destination account and focuses it once",

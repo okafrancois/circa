@@ -31,7 +31,7 @@ enum ImportRecoveryAlert {
     static func showQuarantineNotice() {
         let alert = OrbitFloatingMaterial.alert()
         alert.messageText = uiText("Your previous data is ready")
-        alert.informativeText = uiText("The import could not be restored normally. Orbit recovered your previous data and moved the incomplete import aside for safekeeping.")
+        alert.informativeText = uiText("The import could not be restored normally. Circa recovered your previous data and moved the incomplete import aside for safekeeping.")
         alert.addButton(withTitle: uiText("OK"))
         alert.runModal()
     }

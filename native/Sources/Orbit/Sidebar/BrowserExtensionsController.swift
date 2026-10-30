@@ -312,7 +312,7 @@ final class BrowserExtensionsController<Engine: BrowserEngine> {
         let menu = SiteActionMenu()
         menu.addAction(item.name, enabled: false) {}
         menu.addItem(.separator())
-        menu.addAction(uiText("Remove from Orbit")) { [weak owner, weak surface] in
+        menu.addAction(uiText("Remove from Circa")) { [weak owner, weak surface] in
             guard valid(), let owner, let surface, let window = owner.window else { return }
             let alert = OrbitFloatingMaterial.alert()
             alert.messageText = String(format: uiText("Remove %@?"), item.name)

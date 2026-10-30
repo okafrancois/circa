@@ -72,7 +72,7 @@ extension OrbitApplication {
         quickWindowOpenRequests.removeAll { $0 === request }
     }
 
-    /// A failed Little Orbit becomes a tab in its captured profile. If that account is unavailable,
+    /// A failed Little Circa becomes a tab in its captured profile. If that account is unavailable,
     /// keep the complete request for retry; another account must never receive its URL.
     func openQuickWindowFallback(_ request: BrowserQuickWindowOpenRequest) async {
         guard let environment else { retainQuickWindowRequest(request); return }
@@ -175,7 +175,7 @@ extension OrbitApplication {
         // Capture the chosen address before asynchronous window creation or navigation changes it.
         let sourceURL = little.surface?.currentURL
         // A selected main window of the same profile receives the document in its current Space.
-        // Without an explicit choice, use a window of the Little Orbit's captured profile.
+        // Without an explicit choice, use a window of the Little Circa's captured profile.
         if let target = windows.selectedWindow, target.engine === environment.engine,
            target.isPrivateWindow == environment.isPrivate, target.session.activeProfileID == little.profileID,
            spaceID == nil || target.session.snapshot?.activeSpaceID == spaceID {

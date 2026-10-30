@@ -6,7 +6,7 @@ enum OrbitQuitDecision { case cancel, quit, quitWithoutWarning }
 enum OrbitQuitConfirmation {
     static func present() -> OrbitQuitDecision {
         let alert = OrbitFloatingMaterial.alert()
-        alert.messageText = uiText("Quit Orbit?")
+        alert.messageText = uiText("Quit Circa?")
         alert.informativeText = uiText("Your tabs will be here when you return.")
         alert.addButton(withTitle: uiText("Quit"))
         alert.addButton(withTitle: uiText("Cancel"))

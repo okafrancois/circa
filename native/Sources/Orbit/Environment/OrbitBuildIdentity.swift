@@ -119,7 +119,7 @@ final class OrbitDataRootLock {
         var description: String {
             switch self {
             case .unavailable(let path): "cannot open the data root lock \(path)"
-            case .alreadyInUse(let path): "another Orbit instance already uses the data root of \(path)"
+            case .alreadyInUse(let path): "another Circa instance already uses the data root of \(path)"
             }
         }
     }

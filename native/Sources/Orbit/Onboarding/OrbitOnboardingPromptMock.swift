@@ -4,7 +4,7 @@ import BrowserShell
 /// A noninteractive explanation; only the service can invoke the system request.
 @MainActor
 final class OrbitOnboardingPromptMock: NSView {
-    private let yes = NSTextField(labelWithString: uiText("Use Orbit"))
+    private let yes = NSTextField(labelWithString: uiText("Use Circa"))
     private let material = NSVisualEffectView()
     private let tint = CALayer()
     private let highlight = CAGradientLayer()
@@ -34,7 +34,7 @@ final class OrbitOnboardingPromptMock: NSView {
         tintView.layer?.addSublayer(highlight)
         top.frame = CGRect(x: 12, y: bounds.height - 1.5, width: bounds.width - 24, height: 1.5)
         tintView.layer?.addSublayer(top)
-        let title = NSTextField(wrappingLabelWithString: uiText("Make Orbit your default browser?"))
+        let title = NSTextField(wrappingLabelWithString: uiText("Make Circa your default browser?"))
         title.font = BrandTextStyle.ui.font(size: 15, weight: .semibold); title.alignment = .center
         title.frame = NSRect(x: 20, y: 76, width: 260, height: 42)
         addSubview(title)

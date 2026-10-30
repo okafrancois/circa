@@ -55,18 +55,21 @@ private final class BrowserImportSourcePopup: NSPopUpButton, NSMenuDelegate {
 
 @MainActor
 final class BrowserImportPicker {
-    func choose(_ choices: [BrowserImportChoice], exportProfile: Bool = false) -> BrowserImportChoice? {
+    func choose(_ choices: [BrowserImportChoice], exportProfile: Bool = false, localFilesHint: String? = nil) -> BrowserImportChoice? {
         let alert = OrbitFloatingMaterial.alert()
         alert.messageText = uiText("Import from Another Browser")
+
         if choices.isEmpty {
             alert.informativeText = uiText("No supported browsers were detected. Install a supported browser, then try again.")
+            if let localFilesHint { alert.informativeText += "\n\n" + localFilesHint }
             alert.addButton(withTitle: uiText("OK"))
             alert.runModal()
             return nil
         }
         alert.informativeText = exportProfile
-            ? uiText("Choose a profile from the selected export. Any shared bookmarks and passwords will be added to its new Orbit profile.")
-            : uiText("Choose a browser and profile. Orbit reads profile names here; no passwords or browsing data are read until you continue.")
+            ? uiText("Choose a profile from the selected export. Any shared bookmarks and passwords will be added to its new Circa profile.")
+            : uiText("Choose a browser and profile. Circa reads profile names here; no passwords or browsing data are read until you continue.")
+        if let localFilesHint { alert.informativeText += "\n\n" + localFilesHint }
         let popup = BrowserImportSourcePopup(frame: NSRect(x: 0, y: 0, width: 360, height: 28), pullsDown: false)
         let menu = NSMenu()
         for choice in choices { menu.addItem(withTitle: choice.title, action: nil, keyEquivalent: "") }
@@ -75,7 +78,7 @@ final class BrowserImportPicker {
         popup.selectItem(at: 0)
         popup.refusesFirstResponder = false
         popup.setAccessibilityLabel(uiText("Browser and profile"))
-        popup.setAccessibilityHelp(uiText("Choose the source profile to import into a new Orbit profile."))
+        popup.setAccessibilityHelp(uiText("Choose the source profile to import into a new Circa profile."))
         alert.accessoryView = popup
         alert.addButton(withTitle: uiText("Continue"))
         alert.addButton(withTitle: uiText("Cancel"))
@@ -111,11 +114,11 @@ final class BrowserImportPicker {
     func explain(_ choice: BrowserImportChoice) -> Bool {
         let message: String
         if choice.isSafari {
-            message = uiText("In Safari, choose File > Export Browsing Data and export a ZIP. Orbit can import bookmarks, the latest history visit for each URL, and passwords into one new profile. Cookies, open tabs, payment cards, extensions, settings, passkeys, password notes and verification codes are not transferred. The ZIP contains unencrypted passwords; keep it safe.")
+            message = uiText("In Safari, choose File > Export Browsing Data and export a ZIP. Circa can import bookmarks, the latest history visit for each URL, and passwords into one new profile. Cookies, open tabs, payment cards, extensions, settings, passkeys, password notes and verification codes are not transferred. The ZIP contains unencrypted passwords; keep it safe.")
         } else if choice.isFirefox {
-            message = uiText("Quit the source browser before continuing. Orbit imports available bookmarks, history, open tabs and supported cookies into a new profile. To include passwords, export logins as a CSV in the source browser and select it in the next step, or continue without passwords. Containers, partitioned cookies, site storage, extensions, form history, autofill, payment cards, permissions and search settings are not transferred.")
+            message = uiText("Quit the source browser before continuing. Circa imports available bookmarks, history, open tabs and supported cookies into a new profile. To include passwords, export logins as a CSV in the source browser and select it in the next step, or continue without passwords. Containers, partitioned cookies, site storage, extensions, form history, autofill, payment cards, permissions and search settings are not transferred.")
         } else {
-            message = uiText("Quit the source browser before continuing. Orbit imports available bookmarks, history, open tabs, passwords, cookies and compatible site storage into a new profile. After you choose Import, macOS may ask for access to the source browser’s Safe Storage. Encrypted bookmarks or tabs require an export and are not decoded here. Autofill, payment cards, browser account sign-in, extensions, settings, passkeys, password notes and verification codes are not transferred. Some websites may require you to sign in again.")
+            message = uiText("Quit the source browser before continuing. Circa imports available bookmarks, history, open tabs, passwords, cookies and compatible site storage into a new profile. After you choose Import, macOS may ask for access to the source browser’s Safe Storage. Encrypted bookmarks or tabs require an export and are not decoded here. Autofill, payment cards, browser account sign-in, extensions, settings, passkeys, password notes and verification codes are not transferred. Some websites may require you to sign in again.")
         }
         return confirm(title: uiFormat("Import from %@", choice.descriptor.name), message: message,
                        button: choice.isSafari ? uiText("Choose Export ZIP…") : uiText("Read Selected Data"))
@@ -161,7 +164,7 @@ final class BrowserImportPicker {
     func passwordCSVChoice() -> Int {
         let alert = OrbitFloatingMaterial.alert()
         alert.messageText = uiText("Include Exported Passwords?")
-        alert.informativeText = uiText("Orbit cannot read Firefox or Zen passwords directly. Select an exported logins CSV, or continue with the other available data.")
+        alert.informativeText = uiText("Circa cannot read Firefox or Zen passwords directly. Select an exported logins CSV, or continue with the other available data.")
         alert.addButton(withTitle: uiText("Choose Password CSV…"))
         alert.addButton(withTitle: uiText("Continue Without Passwords"))
         alert.addButton(withTitle: uiText("Cancel"))

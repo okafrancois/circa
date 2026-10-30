@@ -159,7 +159,7 @@ struct ExtensionStoreNewTabTests {
         try await harness.close()
     }
 
-    @Test("Little Orbit opens a separate same-profile target and never replaces its document")
+    @Test("Little Circa opens a separate same-profile target and never replaces its document")
     func quickWindowTarget() async throws {
         let harness = try await StoreHarness()
         let little = try await harness.environment.makeQuickWindow()

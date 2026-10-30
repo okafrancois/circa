@@ -5,7 +5,7 @@ import BrowserEngine
 /// Chromium's rules, HTTP sign-in, external application links, folder upload confirmation, the
 /// unresponsive page and the crashed page. One dialog is shown per surface at a time, over that
 /// surface's own document (`BrowserPageDialogView`); later ones wait their turn.
-/// Owners (window tabs and Split panes, Peek, Little Orbit) call it after their ownership checks.
+/// Owners (window tabs and Split panes, Peek, Little Circa) call it after their ownership checks.
 /// Tests and the hidden smoke observe and answer through `presentedDialog(for:)` and `respond`.
 @MainActor
 final class BrowserPageDialogCenter {

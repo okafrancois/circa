@@ -439,12 +439,12 @@ struct NativeCommandTests {
             menu.items.flatMap { [$0] + ($0.submenu.map(allItems) ?? []) }
         }
         let expected = """
-        Orbit
-          {Orbit}
-          About Orbit [aboutOrbit]
+        Circa
+          {Circa}
+          About Circa [aboutOrbit]
           ---
           Preferences… [preferences] ⌘,
-          Share Orbit [shareOrbit]
+          Share Circa [shareOrbit]
           Set as Default Browser [setAsDefaultBrowser]
           ---
           Import from Another Browser… [importFromAnotherBrowser]
@@ -454,20 +454,20 @@ struct NativeCommandTests {
             {Services}
           Privacy Policy [privacyPolicy]
           ---
-          Hide Orbit [hideOrbit] ⌘H
+          Hide Circa [hideOrbit] ⌘H
           Hide Other Windows [hideOtherWindows] ⌥⌘H
           Show All [showAll]
           ---
           Sign Out [signOut]
           ---
-          Quit Orbit [quitOrbit] ⌘Q
+          Quit Circa [quitOrbit] ⌘Q
         File
           {File}
           New Tab… [newTab] ⌘T
           New Window [newWindow] ⌘N
           Blank Window [blankWindow] ⌃⌘N
           New Incognito Window [newIncognitoWindow] ⇧⌘N
-          New Little Orbit Window [newQuickWindowWindow] ⌥⌘N
+          New Little Circa Window [newQuickWindowWindow] ⌥⌘N
           Restore Last Closed Tab [restoreLastClosedTab] ⇧⌘T
           ---
           Open Command Bar [openCommandBar] ⌘L
@@ -615,7 +615,7 @@ struct NativeCommandTests {
           Join Meeting [joinMeeting] ⌃⌘J (hidden) (key when hidden)
           Peek Email… [peekEmail] ⇧⌘E (hidden) (key when hidden)
           Pin/Unpin Tab [pinUnpinTab] ⌘D
-          Open Little Orbit or Peek in… [openQuickWindowOrPeekIn] ⌘O (key when hidden)
+          Open Little Circa or Peek in… [openQuickWindowOrPeekIn] ⌘O (key when hidden)
           New Folder… [newFolder]
           Duplicate [duplicate] (key when hidden)
           Rename Current Item [renameCurrentItem] (hidden) (key when hidden)
@@ -665,9 +665,9 @@ struct NativeCommandTests {
           Essential Keyboard Shortcuts [essentialKeyboardShortcuts]
           Release Notes [releaseNotes]
           Contact the Team [contactTheTeam]
-          Visit Help Center [visitHelpCenter]
+          Circa Help [visitHelpCenter]
           Restore Data [restoreData]
-          Export Orbit Notes [exportOrbitNotes]
+          Export Circa Notes [exportOrbitNotes]
           ---
           Troubleshooting
             {Troubleshooting}
@@ -675,12 +675,12 @@ struct NativeCommandTests {
             Cancel Trace [cancelTrace] (hidden)
             Open Task Manager [openTaskManager]
             ---
-            Reveal Orbit Data [revealOrbitData]
-            Copy Orbit Info [copyOrbitInfo]
+            Reveal Circa Data [revealOrbitData]
+            Copy Circa Info [copyOrbitInfo]
         """
         let actual = snapshot(bar).joined(separator: "\n")
         #expect(actual == expected)
-        #expect(bar.items.map(\.title) == ["Orbit", "File", "Edit", "View", "Spaces", "Tabs", "Archive", "Extensions", "Window", "Help"])
+        #expect(bar.items.map(\.title) == ["Circa", "File", "Edit", "View", "Spaces", "Tabs", "Archive", "Extensions", "Window", "Help"])
         let items = allItems(bar)
         #expect(items.allSatisfy { $0.allowsAutomaticKeyEquivalentLocalization && $0.allowsAutomaticKeyEquivalentMirroring })
         #expect(!items.contains { ["Item 1", "Item 2", "Item 3"].contains($0.title) })

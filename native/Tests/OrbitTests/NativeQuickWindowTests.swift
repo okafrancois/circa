@@ -41,7 +41,7 @@ struct NativeQuickWindowTests {
         return (environment, try await environment.makeWindow())
     }
 
-    @Test("An empty Little Orbit owns an unloaded surface and leaves the v3 session unchanged")
+    @Test("An empty Little Circa owns an unloaded surface and leaves the v3 session unchanged")
     func emptyWindow() async throws {
         let (environment, main) = try await setup()
         defer { environment.retireQuickWindows(); main.window?.close() }
@@ -82,7 +82,7 @@ struct NativeQuickWindowTests {
         #expect(empty.window?.isVisible == false && loaded.window?.isVisible == false && !NSApp.isActive)
     }
 
-    @Test("Promotion keeps the same document and history and closes only the Little Orbit owner")
+    @Test("Promotion keeps the same document and history and closes only the Little Circa owner")
     func livePromotion() async throws {
         let (environment, main) = try await setup()
         defer { environment.retireQuickWindows(); main.window?.close() }
@@ -170,7 +170,7 @@ struct NativeQuickWindowTests {
         #expect(!surface.isDisposed && surface.requestedURLs.count == 1)
     }
 
-    @Test("Promotion out of Little Orbit leaves an existing split intact and selects a standalone tab")
+    @Test("Promotion out of Little Circa leaves an existing split intact and selects a standalone tab")
     func splitInteraction() async throws {
         let (environment, main) = try await setup()
         defer { environment.retireQuickWindows(); main.window?.close() }
@@ -203,7 +203,7 @@ struct NativeQuickWindowTests {
         #expect(!main.isPeekPresented && peek.isDisposed)
     }
 
-    @Test("Little Orbit scope shadows browser shortcuts without targeting an unrelated background window")
+    @Test("Little Circa scope shadows browser shortcuts without targeting an unrelated background window")
     func commandScope() async throws {
         let (environment, main) = try await setup()
         defer { environment.retireQuickWindows(); main.window?.close() }
@@ -239,7 +239,7 @@ struct NativeQuickWindowTests {
         let little = try await environment.makeQuickWindow(url: url)
         let original = try #require(little.surface)
         original.documentState = "unsaved"
-        #expect(little.openButton.title == "Open a Copy in Orbit")
+        #expect(little.openButton.title == "Open a Copy in Circa")
         #expect(little.promote(to: main) == nil)
         await main.session.waitForPendingCommands()
         let copy = try #require(main.session.selectedSurface)
@@ -248,7 +248,7 @@ struct NativeQuickWindowTests {
         #expect(!little.isClosed && !original.isDisposed)
     }
 
-    @Test("The last activated Space supplies Little Orbit's profile even after its main window closes")
+    @Test("The last activated Space supplies Little Circa's profile even after its main window closes")
     func remembersLastSpace() async throws {
         let (environment, main) = try await setup()
         defer { environment.retireQuickWindows(); main.window?.close() }
@@ -263,7 +263,7 @@ struct NativeQuickWindowTests {
         #expect(little.window?.isVisible == false && !NSApp.isActive)
     }
 
-    @Test("The hosted-window identity is announced once and a live Little Orbit blocks profile removal")
+    @Test("The hosted-window identity is announced once and a live Little Circa blocks profile removal")
     func windowIdentityAndProfileRemoval() async throws {
         NSApplication.shared.setActivationPolicy(.prohibited)
         let engine = SyntheticEngine()

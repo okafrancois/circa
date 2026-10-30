@@ -77,7 +77,7 @@ struct NativeThemeMenuTests {
         await editor.waitUntilFinished()
     }
 
-    @Test("Settings and Little Orbit key windows never borrow a background browser Space")
+    @Test("Settings and Little Circa key windows never borrow a background browser Space")
     func auxiliaryWindowsRefuseThemeCommand() async throws {
         let fixture = try await Fixture()
         defer { fixture.close() }

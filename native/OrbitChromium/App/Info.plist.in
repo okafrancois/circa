@@ -6,7 +6,8 @@
 <plist version="1.0"><dict>
   <key>CFBundleIdentifier</key><string>io.github.okatech.orbit.test.orbit.unpackaged</string>
   <key>CFBundleExecutable</key><string>@ORBIT_PRODUCT_NAME@</string>
-  <key>CFBundleName</key><string>Orbit</string>
+  <key>CFBundleName</key><string>Circa</string>
+  <key>LSHasLocalizedDisplayName</key><true/>
   <key>CFBundleDisplayName</key><string>Orbit</string>
   <key>CFBundleIconFile</key><string>Orbit.icns</string>
   <key>CFBundleDevelopmentRegion</key><string>en</string>
@@ -17,12 +18,12 @@
   <key>CFBundleShortVersionString</key><string>0.1</string>
   <key>LSMinimumSystemVersion</key><string>15.0</string>
   <key>LSFileQuarantineEnabled</key><true/>
-  <key>NSCameraUsageDescription</key><string>Orbit utilise la caméra uniquement pour les sites que vous autorisez.</string>
-  <key>NSMicrophoneUsageDescription</key><string>Orbit utilise le microphone uniquement pour les sites que vous autorisez.</string>
-  <key>NSLocationUsageDescription</key><string>Orbit partage votre localisation uniquement avec les sites que vous autorisez.</string>
-  <key>NSLocationWhenInUseUsageDescription</key><string>Orbit partage votre localisation uniquement avec les sites que vous autorisez.</string>
-  <key>NSBluetoothAlwaysUsageDescription</key><string>Orbit utilise le Bluetooth uniquement pour les sites et les appareils que vous autorisez.</string>
-  <key>NSBluetoothPeripheralUsageDescription</key><string>Orbit utilise le Bluetooth uniquement pour les sites et les appareils que vous autorisez.</string>
+  <key>NSCameraUsageDescription</key><string>Circa uses the camera only for websites you allow.</string>
+  <key>NSMicrophoneUsageDescription</key><string>Circa uses the microphone only for websites you allow.</string>
+  <key>NSLocationUsageDescription</key><string>Circa shares your location only with websites you allow.</string>
+  <key>NSLocationWhenInUseUsageDescription</key><string>Circa shares your location only with websites you allow.</string>
+  <key>NSBluetoothAlwaysUsageDescription</key><string>Circa uses Bluetooth only for websites and devices you allow.</string>
+  <key>NSBluetoothPeripheralUsageDescription</key><string>Circa uses Bluetooth only for websites and devices you allow.</string>
   <key>CFBundleURLTypes</key><array><dict>
     <key>CFBundleURLName</key><string>Web URLs</string>
     <key>CFBundleTypeRole</key><string>Viewer</string>

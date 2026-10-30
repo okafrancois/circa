@@ -8,7 +8,7 @@ import Testing
 /// EXT-OUTCOME-R1: Chrome extension documents (`chrome-extension://<id>/…`) are rendered and
 /// access-checked by the engine's extension system (installed and enabled extension,
 /// web-accessible resources for frames a site embeds, profile). On an engine that claims
-/// `extensionDocuments`, the shell stops cancelling them in tabs, Peek and Little Orbit — main
+/// `extensionDocuments`, the shell stops cancelling them in tabs, Peek and Little Circa — main
 /// frames (options, onboarding and sign-in pages, `tabs.update`) and subframes (password-manager
 /// and other extension UI injected into sites). It grants nothing else. Synthetic IDs only.
 extension NativeWebKitTests {
@@ -38,7 +38,7 @@ struct ExtensionDocumentPolicyTests {
         return BrowserEnvironment(engine: engine)
     }
 
-    @Test("Extension documents pass in tabs, Peek and Little Orbit, main frames and subframes, only when the engine renders them")
+    @Test("Extension documents pass in tabs, Peek and Little Circa, main frames and subframes, only when the engine renders them")
     func extensionDocumentsFollowEngineCapability() async throws {
         NSApplication.shared.setActivationPolicy(.prohibited)
         for capable in [true, false] {

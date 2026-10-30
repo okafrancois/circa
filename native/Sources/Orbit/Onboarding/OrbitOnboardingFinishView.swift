@@ -15,6 +15,7 @@ final class OrbitOnboardingFinishView: NSView {
         super.init(frame: frame)
         wantsLayer = true
         title.font = OrbitOnboardingFonts.title(72); title.textColor = OrbitOnboardingColors.welcomeTitle
+        title.attributedStringValue = BrandTextStyle.title.attributedString(title.stringValue, size: 72, attributes: [.foregroundColor: OrbitOnboardingColors.welcomeTitle])
         title.alignment = .center; title.frame = NSRect(x: 70, y: 201, width: 1060, height: 90)
         body.font = OrbitOnboardingFonts.ui(15); body.textColor = BrandPalette.stageMuted
         body.alignment = .center; body.frame = NSRect(x: 200, y: 309, width: 800, height: 32)

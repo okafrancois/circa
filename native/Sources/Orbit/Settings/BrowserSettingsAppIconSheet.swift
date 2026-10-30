@@ -75,7 +75,7 @@ final class BrowserSettingsAppIconSheet: NSWindowController {
         let title = NSTextField(labelWithString: uiText("App Icon"))
         title.font = BrandTextStyle.ui.font(size: 22, weight: .semibold)
         title.frame = NSRect(x: 22, y: 451, width: 516, height: 30)
-        let subtitle = NSTextField(labelWithString: uiText("Choose how Orbit looks in the Dock and the Finder."))
+        let subtitle = NSTextField(labelWithString: uiText("Choose how Circa looks in the Dock and the Finder."))
         subtitle.font = BrandFonts.ui(13); subtitle.textColor = .secondaryLabelColor
         subtitle.frame = NSRect(x: 22, y: 428, width: 516, height: 20)
         root.addSubview(title); root.addSubview(subtitle)

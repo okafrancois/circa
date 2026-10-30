@@ -10,14 +10,14 @@ struct OrbitMacOSBrandingTests {
     func productIdentities() throws {
         let support = URL(fileURLWithPath: "/Users/synthetic/Library/Application Support")
         for (identifier, technicalName, displayedName, root) in [
-            ("io.github.okatech.orbit", "Orbit", "Orbit", "Orbit"),
-            ("io.github.okatech.orbit.test.orbit.live", "Orbit Live", "Orbit Live", "Orbit Live Chromium")
+            ("io.github.okatech.orbit", "Orbit", "Circa", "Orbit"),
+            ("io.github.okatech.orbit.test.orbit.live", "Orbit Live", "Circa", "Orbit Live Chromium")
         ] {
             let identity = OrbitBuildIdentity(bundleIdentifier: identifier, signature: OrbitCodeSignature(
                 identifier: identifier, isAdHoc: false, isValid: true,
                 anchorCommonName: "Orbit Lab Local Development", satisfiesStableRequirement: true))
-            let info: [String: Any] = ["CFBundleIdentifier": identifier, "CFBundleName": technicalName,
-                                     "CFBundleDisplayName": displayedName, "CFBundleIconFile": "Orbit.icns"]
+            let info: [String: Any] = ["CFBundleIdentifier": identifier, "CFBundleName": displayedName,
+                                     "CFBundleDisplayName": "Orbit", "CFBundleIconFile": "Orbit.icns"]
             let configuration = try OrbitProductConfiguration(arguments: ["Orbit"], infoDictionary: info,
                                                              applicationSupport: support, build: identity)
             #expect(configuration.secureStorage == .keychain(service: technicalName + " Safe Storage", account: technicalName))
@@ -34,7 +34,7 @@ struct OrbitMacOSBrandingTests {
     func syntheticAdmission() {
         let identity = OrbitBuildIdentity(bundleIdentifier: "io.github.okatech.orbit.test.orbit.orbit-test", signature: nil)
         #expect(identity.productRefusal != nil)
-        #expect(BrowserCommandMenus<NSObject>.applicationDisplayName(bundleIdentifier: identity.bundleIdentifier) == "Orbit")
+        #expect(BrowserCommandMenus<NSObject>.applicationDisplayName(bundleIdentifier: identity.bundleIdentifier) == "Circa")
     }
 }
 }

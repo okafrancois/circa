@@ -142,7 +142,7 @@ struct NativeKeyboardRoutingTests {
         #expect(calls.last == .newWindow)
     }
 
-    @Test("Scope providers route Peek, Little Orbit, switcher and palette keys before browser bindings")
+    @Test("Scope providers route Peek, Little Circa, switcher and palette keys before browser bindings")
     func featureScopes() async throws {
         let router = router()
         defer { router.shutdown() }

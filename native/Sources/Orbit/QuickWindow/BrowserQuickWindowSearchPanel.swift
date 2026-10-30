@@ -95,7 +95,7 @@ final class BrowserQuickWindowSearchPanel: NSObject, NSWindowDelegate, NSTextFie
         closeButton.wantsLayer = true
         closeButton.layer?.cornerRadius = 8
         closeButton.image = OrbitIcon.image(sfName: kind == .address ? "xmark" : "chevron.up", pointSize: 16, accessibilityDescription: nil)
-        closeButton.setAccessibilityLabel(kind == .address ? uiText("Close Little Orbit") : uiText("Close"))
+        closeButton.setAccessibilityLabel(kind == .address ? uiText("Close Little Circa") : uiText("Close"))
         closeButton.target = self; closeButton.action = #selector(cancel)
         divider.wantsLayer = true
         scroll.drawsBackground = false; scroll.borderType = .noBorder
@@ -133,7 +133,7 @@ final class BrowserQuickWindowSearchPanel: NSObject, NSWindowDelegate, NSTextFie
     func setEditingDocument(_ editing: Bool) {
         editingDocument = editing
         searchIcon.image = OrbitIcon.image(sfName: editing ? "globe" : "magnifyingglass", pointSize: 16, accessibilityDescription: nil)
-        closeButton.setAccessibilityLabel(editing ? uiText("Close") : uiText("Close Little Orbit"))
+        closeButton.setAccessibilityLabel(editing ? uiText("Close") : uiText("Close Little Circa"))
     }
 
     func showCentered(over parent: NSWindow) {

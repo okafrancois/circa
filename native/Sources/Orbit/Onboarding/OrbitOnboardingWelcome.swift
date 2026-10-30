@@ -14,6 +14,7 @@ final class OrbitOnboardingWelcomeView: NSView {
         wantsLayer = true
         headline.font = OrbitOnboardingFonts.welcome
         headline.textColor = OrbitOnboardingColors.welcomeTitle
+        headline.attributedStringValue = BrandTextStyle.title.attributedString(headline.stringValue, size: 84, attributes: [.foregroundColor: OrbitOnboardingColors.welcomeTitle])
         headline.alignment = .center
         headline.frame = NSRect(x: 170, y: 307, width: 860, height: 100)
         body.font = OrbitOnboardingFonts.ui(15)

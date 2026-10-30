@@ -31,7 +31,7 @@ struct NativeArchiveAutoSettingsTests {
         await model.reload()
         #expect(model.archiveThreshold == .oneDay)
         #expect(await environment.store.archivePolicy().threshold(for: profile) == .oneDay)
-        #expect(change.title == "Orbit will now archive your tabs after 7 days")
+        #expect(change.title == "Circa will now archive your tabs after 7 days")
         environment.autoArchive.scheduler.stop()
     }
 

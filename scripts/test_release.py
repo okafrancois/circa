@@ -15,7 +15,7 @@ import local_signing
 
 
 class ReleaseTests(unittest.TestCase):
-    config = {'name': 'Orbit', 'bundle_id': 'io.github.okatech.orbit',
+    config = {'name': 'Circa', 'bundle_id': 'io.github.okatech.orbit',
               'repository': 'okafrancois/orbit-browser', 'public_ed_key': ''}
 
     def test_local_signing_preserves_the_existing_directory_and_keychain(self):
@@ -75,6 +75,10 @@ class ReleaseTests(unittest.TestCase):
                                     'OrbitUseMockKeychain': True, 'OrbitUpdaterLocalTest': True},
                                    self.config, '0.1.0', 123)
         self.assertFalse(any(key in info for key in ['OrbitDataRoot', 'OrbitSyntheticBundle', 'OrbitUseMockKeychain', 'OrbitUpdaterLocalTest']))
+        self.assertEqual(info['CFBundleName'], 'Circa')
+        self.assertEqual(info['CFBundleDisplayName'], 'Orbit')
+        self.assertTrue(info['LSHasLocalizedDisplayName'])
+        self.assertEqual(info['CFBundleIdentifier'], self.config['bundle_id'])
 
     def test_unicode_identity_uses_its_exact_fingerprint(self):
         name = 'Developer ID Application: Berny François Itoutou (5Y39TTNCM7)'

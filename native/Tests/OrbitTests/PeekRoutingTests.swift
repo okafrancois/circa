@@ -33,7 +33,7 @@ struct PeekRoutingTests {
         #expect(BrowserPeekRouting.decide(request(role: .unpinned, modifiers: [.shift]), settings: off) == .decline)
     }
 
-    @Test("Other modifiers and buttons keep their meaning: background tab, Little Orbit, foreground tab")
+    @Test("Other modifiers and buttons keep their meaning: background tab, Little Circa, foreground tab")
     func otherModifiers() {
         for modifiers: BrowserModifierKeys in [[.command], [.command, .option], [.command, .shift], [.control], [.option], [.shift, .option]] {
             #expect(BrowserPeekRouting.decide(request(modifiers: modifiers), settings: defaults) == .decline, "\(modifiers)")

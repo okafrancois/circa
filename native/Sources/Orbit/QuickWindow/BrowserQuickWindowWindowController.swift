@@ -86,11 +86,11 @@ final class BrowserQuickWindowWindowController<Engine: BrowserEngine>: NSWindowC
                               styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
                               backing: .buffered, defer: true)
         window.isReleasedWhenClosed = false
-        // Little Orbit keeps its dark chrome independently of the source Space's appearance.
+        // Little Circa keeps its dark chrome independently of the source Space's appearance.
         window.appearance = NSAppearance(named: .darkAqua)
         window.titleVisibility = .hidden
         window.titlebarAppearsTransparent = true
-        window.title = uiText("Little Orbit")
+        window.title = uiText("Little Circa")
         window.identifier = NSUserInterfaceItemIdentifier("orbit-little-orbit")
         window.minSize = OrbitTokens.Metrics.QuickWindow.minimumSize
         window.level = .normal
@@ -172,7 +172,7 @@ final class BrowserQuickWindowWindowController<Engine: BrowserEngine>: NSWindowC
               let surface, !surface.isDisposed, container.owns(surface) else { return nil }
         guard engine.capabilities.contains(.liveSurfaceTransfer) else {
             // Explicit degraded mode, only when the engine cannot transfer live documents.
-            // Keep Little Orbit intact: reloading must never silently discard form or POST state.
+            // Keep Little Circa intact: reloading must never silently discard form or POST state.
             guard let url = surface.currentURL, url.absoluteString != "about:blank" else { return nil }
             destination.openTab(url: url)
             return nil
@@ -439,8 +439,8 @@ final class BrowserQuickWindowWindowController<Engine: BrowserEngine>: NSWindowC
         openGroup.wantsLayer = true
         openButton.target = self
         openButton.action = #selector(openInOrbit(_:))
-        openButton.toolTip = uiText("Open in Orbit")
-        openButton.setAccessibilityLabel(uiText("Open in Orbit"))
+        openButton.toolTip = uiText("Open in Circa")
+        openButton.setAccessibilityLabel(uiText("Open in Circa"))
         spaceButton.image = OrbitIcon.image(sfName: "chevron.down", pointSize: 16, accessibilityDescription: uiText("Choose Space"))
         spaceButton.isBordered = false
         spaceButton.target = self
@@ -534,19 +534,19 @@ final class BrowserQuickWindowWindowController<Engine: BrowserEngine>: NSWindowC
         if addressField.currentEditor() == nil {
             addressField.stringValue = surface?.navigationState.url?.absoluteString ?? ""
         }
-        window?.title = surface?.navigationState.title ?? uiText("Little Orbit")
+        window?.title = surface?.navigationState.title ?? uiText("Little Circa")
         sourceSpaceBadge.title = sourceSpaceName
         sourceSpaceBadge.isHidden = addressField.currentEditor() != nil
         extensionsButton.isEnabled = acceptsCommands && engine.extensions != nil
         let shortcut = promotionShortcut?() ?? ""
         openButton.shortcut = shortcut
         openButton.title = engine.capabilities.contains(.liveSurfaceTransfer)
-            ? uiFormat("Open in %@", destinationName) : uiText("Open a Copy in Orbit")
+            ? uiFormat("Open in %@", destinationName) : uiText("Open a Copy in Circa")
         let labelWidth = (openButton.title as NSString).size(withAttributes: [.font: openButton.font!]).width
         openGroupWidth?.constant = ceil(labelWidth) + 76
         openButton.isEnabled = acceptsCommands && surface?.isDisposed == false
         openButton.setAccessibilityLabel(engine.capabilities.contains(.liveSurfaceTransfer)
-            ? uiFormat("Open in %@", destinationName) : uiText("Open a Copy in Orbit"))
+            ? uiFormat("Open in %@", destinationName) : uiText("Open a Copy in Circa"))
         openButton.toolTip = shortcut.isEmpty ? uiFormat("Open in %@", destinationName) : uiFormat("Open in %@ (%@)", destinationName, shortcut)
     }
 
@@ -654,7 +654,7 @@ final class BrowserQuickWindowWindowController<Engine: BrowserEngine>: NSWindowC
             extensionDocuments: engine.capabilities.contains(.extensionDocuments)))
     }
 
-    // MARK: Page surfaces (CH-ESSENTIALS): shown over the Little Orbit document.
+    // MARK: Page surfaces (CH-ESSENTIALS): shown over the Little Circa document.
 
     private func showsPage(_ surface: Surface) -> Bool { !isClosed && container.owns(surface) }
 

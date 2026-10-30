@@ -155,7 +155,7 @@ struct ExtensionStoreIndependentReviewTests {
         try await f.finish()
     }
 
-    @Test("Little Orbit factory is single-use and refuses source, existing, foreign and nil returns with cleanup")
+    @Test("Little Circa factory is single-use and refuses source, existing, foreign and nil returns with cleanup")
     func littleRefusedTargets() async throws {
         let f = try await StoreReviewFixture()
         let little = try await f.environment.makeQuickWindow(url: URL(string: "https://review.invalid/little")!)
@@ -183,7 +183,7 @@ struct ExtensionStoreIndependentReviewTests {
         try await f.finish()
     }
 
-    @Test("Little Orbit uses exact adopted child and preserves source form, placement and delegate")
+    @Test("Little Circa uses exact adopted child and preserves source form, placement and delegate")
     func littleAdoptionAndRevocation() async throws {
         let f = try await StoreReviewFixture()
         let little = try await f.environment.makeQuickWindow(url: URL(string: "https://review.invalid/little")!)

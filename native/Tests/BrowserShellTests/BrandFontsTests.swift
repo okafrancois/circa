@@ -12,8 +12,6 @@ struct BrandFontsTests {
                 for weight: NSFont.Weight in [.regular, .medium, .semibold, .bold] {
                     let expected = NSFont.systemFont(ofSize: size, weight: weight)
                     #expect(style.font(size: size, weight: weight) == expected)
-                    #expect(style.resolvedFont(size: size, weight: weight, registrationAvailable: true,
-                        lookup: { _, _ in Issue.record("System roles must not look up bundled faces"); return nil }) == expected)
                 }
             }
         }
@@ -21,24 +19,15 @@ struct BrandFontsTests {
         #expect(BrandFonts.mono(12) == NSFont.systemFont(ofSize: 12))
     }
 
-    @Test("Missing display resources fall back without changing point size or weight")
-    func fallback() {
-        for style in BrandTextStyle.allCases {
-            #expect(style.resolvedFont(size: 14, weight: .semibold, registrationAvailable: false)
-                == NSFont.systemFont(ofSize: 14, weight: .semibold))
+    @Test("Display titles always use bold system type and minus two percent tracking")
+    func displayTitles() {
+        for size: CGFloat in [28, 36, 40, 72, 84] {
+            #expect(BrandTextStyle.title.font(size: size) == NSFont.systemFont(ofSize: size, weight: .bold))
+            #expect(BrandTextStyle.title.font(size: size, weight: .regular) == NSFont.systemFont(ofSize: size, weight: .bold))
+            let title = BrandTextStyle.title.attributedString("Circa", size: size)
+            #expect(title.attribute(.font, at: 0, effectiveRange: nil) as? NSFont == NSFont.systemFont(ofSize: size, weight: .bold))
+            #expect(title.attribute(.kern, at: 0, effectiveRange: nil) as? CGFloat == -0.02 * size)
         }
-        #expect(BrandTextStyle.title.resolvedFont(size: 13, registrationAvailable: true, lookup: { _, _ in nil })
-            == NSFont.systemFont(ofSize: 13))
-    }
-
-    @Test("Repeated role lookups reuse one process registration")
-    func once() {
-        let attempts = BrandFonts.registrationAttempts
-        #expect(attempts == 1)
-        for _ in 0..<20 {
-            for style in BrandTextStyle.allCases { _ = style.font(size: 14) }
-        }
-        #expect(BrandFonts.registrationAttempts == attempts)
     }
 
     @Test("Shortcut digits and modifier glyphs retain one system font")
@@ -50,19 +39,15 @@ struct BrandFontsTests {
         }
     }
 
-    @Test("Only branded titles need bundled fonts")
-    func registration() {
-        #expect(BrandFonts.filenames == ["gloock.ttf"])
-        #expect(BrandFonts.registered)
+    @Test("The mark is preserved and no custom font is bundled")
+    func resources() throws {
         #expect(BrandFonts.onboardingBody(15) == NSFont.systemFont(ofSize: 15))
-        #expect(BrandTextStyle.title.font(size: 40).familyName == "Gloock")
         #expect(BrandFonts.mark != nil)
-        for name in ["gloock-OFL"] {
-            #expect(BrowserText.resourceBundle?.url(forResource: name, withExtension: "txt", subdirectory: "BrandFonts")
-                ?? BrowserText.resourceBundle?.url(forResource: name, withExtension: "txt") != nil)
-        }
-        #expect(BrowserText.resourceBundle?.url(forResource: "geistmono", withExtension: "ttf") == nil)
+        let source = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+            .deletingLastPathComponent().appendingPathComponent("Sources/BrowserShell/Resources/BrandFonts")
+        #expect(try FileManager.default.contentsOfDirectory(atPath: source.path) == ["mark.pdf"])
     }
+
 }
 
 extension BrandFontsTests {

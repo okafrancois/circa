@@ -18,14 +18,14 @@ struct CommandBarTests {
     func commandRanking() {
         let cases: [(String, BrowserCommandID)] = [
             ("nouvelle fenêtre", .newWindow), ("new wndw", .newWindow), ("nouv fen", .newWindow),
-            ("private window", .newIncognitoWindow), ("nouveau little orbit", .newQuickWindowWindow),
+            ("private window", .newIncognitoWindow), ("nouveau little circa", .newQuickWindowWindow),
             ("nouvel espace", .newSpace), ("vue scindee", .addSplitView),
             ("extensions", .manageExtensions), ("ajouter une extension", .addExtension),
             ("reglages", .preferences), ("settings", .preferences), ("historique", .viewHistory),
             ("telechargements", .viewDownloads), ("bibliotheque", .viewLibrary),
             ("copier le lien", .copyURL), ("reload", .refreshThePage), ("fermer l'onglet", .archiveTab),
             ("desepingler", .pinUnpinTab), ("masquer la barre laterale", .showHideSidebar),
-            ("importer depuis orbit", .importFromArc)
+            ("importer depuis circa", .importFromArc)
         ]
         let actions = Array(Set(cases.map(\.1))).sorted { $0.rawValue < $1.rawValue }.map(command)
         for (query, id) in cases {

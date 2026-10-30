@@ -20,7 +20,7 @@ final class BrowserQuickWindowPanel: NSPanel {
     override var canBecomeMain: Bool { true }
 }
 
-/// Uses dynamic tokens when the appearance changes while a Little Orbit is open.
+/// Uses dynamic tokens when the appearance changes while a Little Circa is open.
 @MainActor
 final class BrowserQuickWindowAddressField: NSTextField {
     var onActivate: (() -> Void)?

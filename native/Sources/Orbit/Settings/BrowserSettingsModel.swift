@@ -403,7 +403,7 @@ final class BrowserSettingsModel<Engine: BrowserEngine>: ObservableObject {
         case BrowserSettingsServiceError.siteDataUnavailable: settingsText("siteDataUnavailable", "The current engine does not expose website data management.")
         case BrowserSettingsServiceError.permissionUnavailable: settingsText("permissionUnavailable", "The current engine does not support changing this permission.")
         case BrowserDefaultBrowserError.unavailableProduct, BrowserDefaultBrowserError.invalidSignature:
-            settingsText("defaultUnavailable", "This action requires the Orbit product with its stable local signature.")
+            settingsText("defaultUnavailable", "This action requires the Circa product with its stable local signature.")
         default: settingsText("failed", "The change could not be completed. Some cleanup or browser associations may have changed. Check the current values before retrying.")
         }
     }

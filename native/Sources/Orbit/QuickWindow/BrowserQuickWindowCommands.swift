@@ -6,9 +6,9 @@ import BrowserShell
 @MainActor
 enum BrowserQuickWindowCommands {
     nonisolated static let definitions: [BrowserCommandDefinition] = [
-        .init(id: .closeQuickWindow, title: BrowserText.string("Close Little Orbit"), menu: "File", shortcuts: [.init(key: "w", modifiers: .command)], scope: .quickWindow, requirement: .window, owner: "LITTLE", sources: ["Browser command"]),
+        .init(id: .closeQuickWindow, title: BrowserText.string("Close Little Circa"), menu: "File", shortcuts: [.init(key: "w", modifiers: .command)], scope: .quickWindow, requirement: .window, owner: "LITTLE", sources: ["Browser command"]),
         .init(id: .focusQuickWindowAddress, title: BrowserText.string("Search or Enter URL"), menu: "File", shortcuts: [.init(key: "l", modifiers: .command)], scope: .quickWindow, requirement: .window, owner: "LITTLE", sources: ["Browser command"]),
-        .init(id: .reloadQuickWindow, title: BrowserText.string("Reload Little Orbit"), menu: "View", shortcuts: [.init(key: "r", modifiers: .command)], scope: .quickWindow, requirement: .window, owner: "LITTLE", sources: ["Browser command"])
+        .init(id: .reloadQuickWindow, title: BrowserText.string("Reload Little Circa"), menu: "View", shortcuts: [.init(key: "r", modifiers: .command)], scope: .quickWindow, requirement: .window, owner: "LITTLE", sources: ["Browser command"])
     ]
 
     static func install<Engine: BrowserEngine>(in registry: BrowserCommandRegistry<BrowserWindowController<Engine>>,

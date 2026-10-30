@@ -93,7 +93,7 @@ final class BrowserDownloadsController {
         if !preferences.asksWhereToSave, let destination { return destination }
         let request = SaveRequest(filename: BrowserDownloadPaths.suggestedFilename(filename), directory: folder,
             explanation: destination != nil ? nil :
-                uiText("Orbit can’t save to the download folder. It may be missing or not writable. Choose another location."))
+                uiText("Circa can’t save to the download folder. It may be missing or not writable. Choose another location."))
         if let saveSheetProvider { return await saveSheetProvider(request) }
         guard let sourceWindow, sourceWindow.isVisible, !coordinator.isClosed else { return nil }
         let picker = DownloadDestinationPicker()

@@ -42,7 +42,7 @@ enum BrowserDailyCommands {
         case .newIncognitoWindow: "⇧⌘N"
         case .manageExtensions: uiText("Current profile")
         case .addExtension: uiText("Chrome Web Store")
-        default: uiText("Orbit action")
+        default: uiText("Circa action")
         }
     }
 
@@ -52,7 +52,7 @@ enum BrowserDailyCommands {
         case .viewBoosts: "View Boosts"
         case .newWindow: "New Window|Nouvelle fenêtre|Ouvrir une nouvelle fenêtre"
         case .newIncognitoWindow: "New Incognito Window|New Private Window|Nouvelle fenêtre privée|Navigation privée"
-        case .newQuickWindowWindow: "New Little Orbit|New Little Orbit Window|Nouveau Little Orbit|Nouvelle fenêtre Little Orbit"
+        case .newQuickWindowWindow: "New Little Circa|New Little Circa Window|Nouveau Little Circa|Nouvelle fenêtre Little Circa"
         case .newSpace: "New Space|Nouvel Espace|Créer un Espace"
         case .addSplitView: "New Split View|Add Split View|Nouvelle vue scindée|Écran partagé|Split screen"
         case .manageExtensions: "Extensions|Manage Extensions|Gérer les extensions|Gestion des extensions"
@@ -66,7 +66,7 @@ enum BrowserDailyCommands {
         case .archiveTab: "Close Tab|Archive Tab|Fermer l'onglet|Fermer l’onglet|Archiver l’onglet"
         case .pinUnpinTab: "Pin Tab|Unpin Tab|Épingler l'onglet|Désépingler l'onglet|Épingler|Désépingler"
         case .showHideSidebar: "Show Sidebar|Hide Sidebar|Toggle Sidebar|Afficher la barre latérale|Masquer la barre latérale"
-        case .importFromArc: "Import from Arc|Importer depuis Orbit|Import Orbit"
+        case .importFromArc: "Import from Arc|Importer depuis Circa|Import Circa"
         default: ""
         }
     }

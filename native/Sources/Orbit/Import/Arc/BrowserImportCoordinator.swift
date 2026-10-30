@@ -9,6 +9,15 @@ final class BrowserImportCoordinator {
     private let progress = ArcImportAlertPresenter(browserImport: true)
     private var cancelCurrent: (() -> Void)?
 
+    static func localFilesHint(_ configuration: OrbitProductConfiguration) -> String? {
+        let arguments = ProcessInfo.processInfo.arguments
+        guard !configuration.usesMockKeychain || arguments.contains("--arc-import-source") else { return nil }
+        let source = OrbitImportLaunchOptions.source(arguments)
+        if configuration.usesMockKeychain,
+           (try? BrowserImportUISynthetic.checkDirectory(source, configuration: configuration)) == nil { return nil }
+        return ArcImportText.localFilesHint(source: source)
+    }
+
     /// `preselected` (first-run onboarding) replaces the picker when that source and profile are
     /// still detected; explanations, file choosers, review and Import and Restart are unchanged.
     func start(application: OrbitApplication, preselected: BrowserImportPreselection? = nil) {
@@ -22,7 +31,7 @@ final class BrowserImportCoordinator {
             defer { isRunning = false; progress.hideProgress(); cancelCurrent = nil }
             do {
                 let choices = try await Self.inventory(configuration)
-                let chosen = preselected.flatMap { $0.match(in: choices) } ?? picker.choose(choices)
+                let chosen = preselected.flatMap { $0.match(in: choices) } ?? picker.choose(choices, localFilesHint: Self.localFilesHint(configuration))
                 guard var choice = chosen, picker.explain(choice) else { return }
                 var csv: Data?
                 if choice.isFirefox {

@@ -11,7 +11,7 @@ enum BrowserPaletteAction: Equatable, Sendable {
 
 enum BrowserPaletteSection: String, CaseIterable, Sendable {
     case address = "Go to", tabs = "Switch to Tab", pinned = "Pinned & Favorites"
-    case history = "History", commands = "Orbit actions", archive = "Archived Tabs", search = "Search"
+    case history = "History", commands = "Circa actions", archive = "Archived Tabs", search = "Search"
 
     var localizedTitle: String { uiText(rawValue) }
 }

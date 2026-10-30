@@ -34,7 +34,7 @@ enum OrbitOnboardingStartup {
         NSApplication.shared.finishLaunching()
         let menu = NSMenu()
         let applicationMenu = NSMenu()
-        applicationMenu.addItem(withTitle: uiText("Quit Orbit"), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        applicationMenu.addItem(withTitle: uiText("Quit Circa"), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         let applicationItem = NSMenuItem()
         applicationItem.submenu = applicationMenu
         menu.addItem(applicationItem)

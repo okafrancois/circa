@@ -4,7 +4,7 @@ import AppKit
 @MainActor
 final class BrowserCommandMenus<Window: AnyObject>: NSObject, NSMenuItemValidation {
     static func applicationDisplayName(bundleIdentifier: String?) -> String {
-        bundleIdentifier == "io.github.okatech.orbit.test.orbit.live" ? uiText("Orbit Live") : uiText("Orbit")
+        uiText("Circa")
     }
 
     static var applicationDisplayName: String { applicationDisplayName(bundleIdentifier: Bundle.main.bundleIdentifier) }

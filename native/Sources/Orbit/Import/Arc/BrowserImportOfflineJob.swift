@@ -195,7 +195,7 @@ extension OrbitApplication {
             let restore = alert.runModal() == .alertSecondButtonReturn
             try? BrowserImportMetadata.removeResult(root: configuration.dataRoot)
             if restore, BrowserImportPicker().confirm(title: uiText("Restore Before This Import?"),
-                message: uiText("Orbit will save and restart. This replaces all session edits made after the import and removes the imported profile, including its passwords, cookies and history. Other profiles’ website data is kept."),
+                message: uiText("Circa will save and restart. This replaces all session edits made after the import and removes the imported profile, including its passwords, cookies and history. Other profiles’ website data is kept."),
                 button: uiText("Restore and Restart")) {
                 pendingBrowserImport = BrowserImportOfflineJob(configuration: configuration, restoring: true)
                 NSApp.terminate(nil)

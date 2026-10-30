@@ -113,8 +113,8 @@ struct BrowserShortcutSettingsPane: View {
                     get: { preferences.document.globalQuickWindowEnabled },
                     set: { value in change { try preferences.setGlobalQuickWindowEnabled(value) } })) {
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(uiText("Open Little Orbit from other apps"))
-                            Text(uiText("Uses the New Little Orbit Window shortcut, even when Orbit is in the background."))
+                            Text(uiText("Open Little Circa from other apps"))
+                            Text(uiText("Uses the New Little Circa Window shortcut, even when Circa is in the background."))
                                 .font(Font(BrandFonts.ui(12))).foregroundStyle(.secondary)
                         }
                     }.padding(.horizontal, 14).padding(.vertical, 8)

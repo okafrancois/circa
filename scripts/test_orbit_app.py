@@ -69,7 +69,7 @@ class SyntheticDefaultTests(unittest.TestCase):
             resources.mkdir(parents=True)
             (resources / 'Orbit.icns').write_bytes(b'synthetic icon')
             (bundle / 'Contents/Info.plist').write_bytes(plistlib.dumps({
-                'CFBundleIdentifier': 'lab.orbit.orbit.notifications', 'CFBundleName': 'Orbit',
+                'CFBundleIdentifier': 'lab.orbit.orbit.notifications', 'CFBundleName': 'Circa',
                 'CFBundleDisplayName': 'Orbit', 'OrbitSyntheticBundle': True}))
             for name in HELPERS:
                 contents = bundle / 'Contents/Frameworks' / name / 'Contents'
@@ -79,7 +79,7 @@ class SyntheticDefaultTests(unittest.TestCase):
             alert = bundle / 'Contents/Frameworks/Orbit Helper (Alerts).app/Contents'
             info = plistlib.loads((alert / 'Info.plist').read_bytes())
             self.assertEqual(info['CFBundleIdentifier'], 'lab.orbit.orbit.notifications.helper.alerts')
-            self.assertEqual(info['CFBundleDisplayName'], 'Orbit')
+            self.assertEqual(info['CFBundleDisplayName'], 'Circa')
             self.assertEqual(info['NSUserNotificationAlertStyle'], 'alert')
             self.assertEqual((alert / 'Resources' / info['CFBundleIconFile']).read_bytes(), b'synthetic icon')
             validate_bundle_contents(bundle)

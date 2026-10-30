@@ -111,7 +111,7 @@ struct BrowserLinkRoutingTests {
         #expect(try await BrowserSettingsStore(destination: file).snapshot().linkRouting.rules == [rules[2], rules[0]])
     }
 
-    @Test("Existing settings without routing retain their chosen Little Orbit behavior")
+    @Test("Existing settings without routing retain their chosen Little Circa behavior")
     func migration() throws {
         for quickWindow in [true, false] {
             var document = BrowserSettingsDocument()

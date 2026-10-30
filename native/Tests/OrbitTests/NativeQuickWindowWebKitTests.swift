@@ -23,7 +23,7 @@ extension NativeWebKitTests {
 @Suite(.serialized)
 @MainActor
 struct NativeQuickWindowWebKitTests {
-    @Test("A real Little Orbit promotes with DOM, JS, history and request counts intact")
+    @Test("A real Little Circa promotes with DOM, JS, history and request counts intact")
     func webKitLivePromotion() async throws {
         NSApplication.shared.setActivationPolicy(.prohibited)
         let server = try LocalFixtureServer()
@@ -58,7 +58,7 @@ struct NativeQuickWindowWebKitTests {
         try await waitForQuickWindowWebKit { surface.webView.title == "First" && !surface.webView.isLoading }
     }
 
-    @Test("Cold external delivery can create only Little Orbits, without a main browser window")
+    @Test("Cold external delivery can create only Little Circas, without a main browser window")
     func externalWithoutMainWindow() async throws {
         NSApplication.shared.setActivationPolicy(.prohibited)
         let environment = PreviewEnvironment()
@@ -173,7 +173,7 @@ struct NativeQuickWindowWebKitTests {
         #expect(main.session.snapshot?.activeSpaceID == destinationSpace)
     }
 
-    @Test("The New Little Orbit command opens an unloaded document in the last selected Space")
+    @Test("The New Little Circa command opens an unloaded document in the last selected Space")
     func newQuickWindowCommand() async throws {
         NSApplication.shared.setActivationPolicy(.prohibited)
         let environment = PreviewEnvironment()

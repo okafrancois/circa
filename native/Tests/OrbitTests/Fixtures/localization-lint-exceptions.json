@@ -144,6 +144,7 @@
     "\"orbit: engine shutdown timed out; quitting with the saved session\\n\""
   ],
   "Import/Arc/ArcImportText.swift": [
+    "\"StorableSidebar.json\"",
     "\"\"",
     "\"\\n\""
   ],

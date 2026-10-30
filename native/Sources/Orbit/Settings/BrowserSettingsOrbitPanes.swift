@@ -47,7 +47,7 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 10) {
                 if model.settingsSection != .profiles && model.settingsSection != .links && model.settingsSection != .about {
-                    Text((model.settingsSection ?? .general).title).font(Font(BrandTextStyle.title.font(size: 28))).padding(.bottom, 6)
+                    Text((model.settingsSection ?? .general).title).font(Font(BrandTextStyle.title.font(size: 28))).kerning(BrandTextStyle.title.tracking(size: 28)).padding(.bottom, 6)
                 }
                 switch model.settingsSection ?? .general {
                 case .general: general
@@ -218,7 +218,7 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
                    let entry = model.catalog.profiles.first(where: { $0.id == profile }) {
                     HStack(spacing: 10) {
                         BrowserSettingsThemeSwatch(theme: profileTheme(profile)).scaleEffect(1.65).frame(width: 30, height: 30)
-                        Text(entry.name).font(Font(BrandTextStyle.title.font(size: 28)))
+                        Text(entry.name).font(Font(BrandTextStyle.title.font(size: 28))).kerning(BrandTextStyle.title.tracking(size: 28))
                         Spacer()
                         Button(uiText("Rename")) { renamingProfile = entry }.accessibilityIdentifier("settings-rename-profile")
                     }
@@ -316,13 +316,13 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
             HStack(spacing: 15) {
                 OrbitIcon.view(sfName: "macwindow.on.rectangle", pointSize: 38, weight: .ultraLight).font(.system(size: 38, weight: .ultraLight)).foregroundStyle(OrbitSettingsStyle.foreground)
                 VStack(alignment: .leading, spacing: 5) {
-                    Text(uiText("Little Orbit")).font(Font(BrandTextStyle.title.font(size: 28)))
+                    Text(uiText("Little Circa")).font(Font(BrandTextStyle.title.font(size: 28))).kerning(BrandTextStyle.title.tracking(size: 28))
                     Text(uiText("A smaller, simpler window for quick lookups and links from other apps."))
                         .foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 }
             }.padding(.vertical, 8)
             panel {
-                Toggle(uiText("Links from other apps open in Little Orbit"), isOn: Binding(get: { runtime.document.opensExternalLinksInQuickWindow }, set: { value in
+                Toggle(uiText("Links from other apps open in Little Circa"), isOn: Binding(get: { runtime.document.opensExternalLinksInQuickWindow }, set: { value in
                     model.perform { try await runtime.setOpensExternalLinksInQuickWindow(value) }
                 })).toggleStyle(SettingsSwitchStyle()).padding(12).accessibilityIdentifier("settings-external-little-orbit")
             }
