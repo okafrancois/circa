@@ -1,4 +1,5 @@
 import AppKit
+import BrowserShell
 import BrowserCore
 
 private typealias Metrics = OrbitTokens.Metrics.Sidebar
@@ -177,8 +178,9 @@ class SidebarListRow: NSView, NSTextFieldDelegate {
             OrbitThemeForeground.rowOverlay(stateFill, theme: $0, foreground: accent.foreground)
         } ?? stateFill
         if background.fillColor != fill { background.fillColor = fill }
-        effectiveAccent = OrbitSpaceThemes.accent(accent, over: background.fillColor.map { [$0] } ?? [],
-                                                iconHover: OrbitTokens.Color.State.rowCloseButtonHover)
+        let frosted = isSelected && self is SidebarTabRow
+        background.applyFrost(frosted ? accent : .defaultSpace, selected: true)
+        effectiveAccent = frosted ? OrbitFloatingMaterial.sidebarInk(accent) : accent
         accentDidChange()
     }
 
@@ -191,7 +193,7 @@ class SidebarListRow: NSView, NSTextFieldDelegate {
     private func refreshFieldEditor() {
         guard let editor = renameField?.currentEditor() as? NSTextView else { return }
         editor.textColor = effectiveAccent.sidebarText
-        editor.insertionPointColor = effectiveAccent.sidebarText
+        editor.insertionPointColor = .controlAccentColor
     }
 
     func controlTextDidBeginEditing(_ notification: Notification) { refreshFieldEditor() }
@@ -771,6 +773,7 @@ final class SidebarNewTabRow: NSButton {
         label.font = OrbitTokens.Typography.sidebarNewTab
         // : hint typography (13 regular, label colour).
         shortcut.font = OrbitTokens.Typography.menuShortcut
+        shortcut.attributedStringValue = BrandTextStyle.mono.attributedString(shortcut.stringValue, size: 13)
         refreshAccent()
         shortcut.alignment = .right
         shortcut.isHidden = true

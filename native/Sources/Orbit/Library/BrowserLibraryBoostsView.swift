@@ -1,4 +1,5 @@
 import AppKit
+import BrowserShell
 import BrowserCore
 
 @MainActor
@@ -17,7 +18,7 @@ final class BrowserLibraryBoostsView: NSView, NSSearchFieldDelegate {
         super.init(frame: frame)
         searchField.placeholderString = uiText("Search Boosts…")
         searchField.delegate = self; searchField.setAccessibilityIdentifier("library-boosts-search")
-        empty.message.font = .systemFont(ofSize: 16, weight: .semibold)
+        empty.message.font = BrandTextStyle.title.font(size: 16)
         BrowserLibraryStyle.configure(scroll); scroll.documentView = list
         for view in [searchField, scroll, empty] { addSubview(view) }
     }
@@ -89,7 +90,7 @@ private final class BrowserLibraryBoostRow: NSButton {
         NSColor.white.setFill(); NSBezierPath(roundedRect: NSRect(x: 0, y: 5, width: 44, height: 44), xRadius: 10, yRadius: 10).fill()
         NSColor(calibratedWhite: 0.92, alpha: 1).setFill()
         NSBezierPath(roundedRect: NSRect(x: 3, y: 8, width: 38, height: 38), xRadius: 8, yRadius: 8).fill()
-        (boost.title as NSString).draw(at: NSPoint(x: 52, y: 27), withAttributes: [.font: NSFont.systemFont(ofSize: 14), .foregroundColor: BrowserLibraryStyle.foreground.withAlphaComponent(0.85)])
-        (boost.hostPattern.host as NSString).draw(at: NSPoint(x: 52, y: 10), withAttributes: [.font: NSFont.systemFont(ofSize: 12), .foregroundColor: BrowserLibraryStyle.foreground.withAlphaComponent(0.55)])
+        (boost.title as NSString).draw(at: NSPoint(x: 52, y: 27), withAttributes: [.font: BrandTextStyle.ui.font(size: 14), .foregroundColor: BrowserLibraryStyle.foreground.withAlphaComponent(0.85)])
+        (boost.hostPattern.host as NSString).draw(at: NSPoint(x: 52, y: 10), withAttributes: [.font: BrandTextStyle.ui.font(size: 12), .foregroundColor: BrowserLibraryStyle.foreground.withAlphaComponent(0.55)])
     }
 }

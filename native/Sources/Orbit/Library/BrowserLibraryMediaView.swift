@@ -404,8 +404,8 @@ private final class BrowserLibraryMediaEmptyView: NSView {
         super.init(frame: frame)
         icon.image = NSImage(systemSymbolName: "photo.on.rectangle", accessibilityDescription: nil)?.withSymbolConfiguration(.init(pointSize: 48, weight: .regular))
         icon.imageScaling = .scaleProportionallyUpOrDown
-        title.font = .systemFont(ofSize: 16, weight: .bold)
-        detail.font = .systemFont(ofSize: 14, weight: .medium)
+        title.font = BrandTextStyle.title.font(size: 16)
+        detail.font = BrandTextStyle.ui.font(size: 14, weight: .medium)
         for label in [title, detail] { label.alignment = .center }
         for view in [icon, title, detail] { addSubview(view) }
         updateColors()

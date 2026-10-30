@@ -30,11 +30,7 @@ struct NativeUIFixTests {
             let appearance = pane.effectiveAppearance
             #expect(pane.clip.layer?.backgroundColor == OrbitTokens.Color.Surface.splitToolbar.resolvedCGColor(for: appearance))
             #expect(pane.focusBorder.borderColor == accent.splitFocusBorder.resolvedCGColor(for: appearance))
-            if mode == .aqua {
-                #expect(pane.focusBorder.borderColor == accent.strong.resolvedCGColor(for: appearance))
-            } else {
-                #expect(pane.focusBorder.borderColor == NSColor(srgbRed: 41/255, green: 50/255, blue: 254/255, alpha: 1).cgColor)
-            }
+            #expect(pane.focusBorder.borderColor == NSColor.controlAccentColor.resolvedCGColor(for: appearance))
             #expect(pane.line.layer?.backgroundColor == OrbitTokens.Color.Line.floatingScrimBorder.resolvedCGColor(for: appearance))
             #expect(pane.focusBorder.borderWidth == OrbitTokens.Metrics.Content.splitFocusBorderWidth)
             for key in [false, true, false] {

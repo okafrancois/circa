@@ -119,7 +119,7 @@ final class BrowserLibraryCategoryButton: NSButton {
         title = category.title
         imagePosition = .imageAbove
         imageScaling = .scaleProportionallyDown
-        font = .systemFont(ofSize: 11, weight: .bold)
+        font = BrandTextStyle.ui.font(size: 11, weight: .bold)
         isBordered = false
         setButtonType(.toggle)
         focusRingType = .none
@@ -152,7 +152,7 @@ final class BrowserLibraryCategoryButton: NSButton {
         let paragraph = NSMutableParagraphStyle()
         paragraph.alignment = .center
         paragraph.lineBreakMode = .byWordWrapping
-        let text = NSAttributedString(string: title, attributes: [.font: NSFont.systemFont(ofSize: 11, weight: .bold),
+        let text = NSAttributedString(string: title, attributes: [.font: BrandTextStyle.ui.font(size: 11, weight: .bold),
             .foregroundColor: foreground, .paragraphStyle: paragraph])
         text.draw(with: NSRect(x: 0, y: isFlipped ? groupTop + 32 : bounds.height - groupTop - 45, width: bounds.width, height: 13),
                   options: [.usesLineFragmentOrigin, .usesFontLeading])

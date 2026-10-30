@@ -1,4 +1,5 @@
 import AppKit
+import BrowserShell
 import BrowserCore
 
 struct BrowserBoostPickedElement: Decodable, Equatable {
@@ -34,23 +35,23 @@ final class BrowserBoostZapView: NSView {
     override init(frame: NSRect) {
         super.init(frame: frame)
         wantsLayer = true; layer?.borderWidth = 3; layer?.cornerRadius = 3
-        layer?.borderColor = NSColor(srgbRed: 0.26, green: 0.21, blue: 1, alpha: 1).cgColor
+        layer?.borderColor = NSColor.controlAccentColor.cgColor
         confirmation.wantsLayer = true; confirmation.layer?.backgroundColor = NSColor.white.cgColor
         confirmation.layer?.cornerRadius = 18; confirmation.layer?.shadowOpacity = 0.18; confirmation.layer?.shadowRadius = 12
         let zap = BoostButton(title: uiText("Zap this")); zap.fill = .systemRed; zap.contentTintColor = .white
         zap.frame = NSRect(x: 10, y: 42, width: 74, height: 38)
         zap.actionBlock = { [weak self] in self?.confirm(related: false) }
-        let related = BoostButton(title: uiText("Zap all related elements")); related.fill = .systemOrange; related.contentTintColor = .white
+        let related = BoostButton(title: uiText("Zap all related elements")); related.fill = .controlAccentColor; related.contentTintColor = .white
         related.frame = NSRect(x: 94, y: 42, width: 250, height: 38)
         related.actionBlock = { [weak self] in self?.confirm(related: true) }
         let cancel = BoostButton(title: uiText("Cancel")); cancel.fill = .gray; cancel.contentTintColor = .white
         cancel.frame = NSRect(x: 354, y: 42, width: 65, height: 38)
         cancel.actionBlock = { [weak self] in self?.clear() }
-        selectorLabel.font = .monospacedSystemFont(ofSize: 10, weight: .regular); selectorLabel.textColor = .secondaryLabelColor
+        selectorLabel.font = BrandTextStyle.mono.font(size: 10, weight: .regular); selectorLabel.textColor = .secondaryLabelColor
         selectorLabel.frame = NSRect(x: 15, y: 10, width: 395, height: 18)
         for view in [zap, related, cancel, selectorLabel] { confirmation.addSubview(view) }
         addSubview(confirmation); confirmation.isHidden = true
-        caption.font = .systemFont(ofSize: 13); caption.alignment = .center
+        caption.font = BrandTextStyle.ui.font(size: 13); caption.alignment = .center
         caption.textColor = NSColor(srgbRed: 0.84, green: 0.84, blue: 1, alpha: 1)
         addSubview(caption)
         done.fill = NSColor(srgbRed: 0.94, green: 0.93, blue: 1, alpha: 1)

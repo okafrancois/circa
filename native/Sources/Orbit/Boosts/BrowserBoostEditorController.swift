@@ -48,7 +48,7 @@ final class BrowserBoostEditorController: NSWindowController {
         let code = BrowserBoostCodeView(session: session)
         code.requestJavaScriptConsent = { [weak self] completion in
             guard let self, let window = self.window, !session.isClosed else { completion(false); return }
-            let alert = NSAlert()
+            let alert = OrbitFloatingMaterial.alert()
             alert.messageText = uiText("Enable JavaScript for this Boost?")
             alert.informativeText = uiText("Only enable code you trust. JavaScript can read and change this site's pages. Changes run after reloading the page; disabling or deleting a Boost cannot undo code that already ran.")
             alert.addButton(withTitle: uiText("Enable JavaScript"))

@@ -1,4 +1,5 @@
 import AppKit
+import BrowserShell
 import BrowserCore
 import BrowserEngine
 
@@ -41,7 +42,7 @@ final class BrowserDeveloperToolbar: NSView {
         lock.setAccessibilityLabel(uiText("Site Settings"))
         lock.toolTip = uiText("Site Settings")
         lock.onPress = { [weak self] in self?.onSiteControls?() }
-        address.font = .monospacedSystemFont(ofSize: 9.5, weight: .regular)
+        address.font = BrandTextStyle.mono.font(size: 9.5, weight: .regular)
         address.isBordered = false; address.isBezeled = false; address.drawsBackground = false
         address.focusRingType = .none
         address.lineBreakMode = .byTruncatingMiddle
@@ -202,7 +203,7 @@ final class BrowserDeveloperToolbar: NSView {
         address.textColor = foreground
         if let editor = address.currentEditor() as? NSTextView {
             editor.textColor = foreground
-            editor.insertionPointColor = foreground
+            editor.insertionPointColor = .controlAccentColor
         }
         lock.contentTintColor = foreground
         for case let button as NSButton in actions.arrangedSubviews { button.contentTintColor = foreground }
@@ -264,9 +265,9 @@ final class BrowserDeveloperToolbar: NSView {
 final class BrowserExtensionBadgeView: NSView {
     var text: String? { didSet { isHidden = text?.isEmpty != false; invalidateIntrinsicContentSize(); needsDisplay = true } }
     var backgroundARGB: UInt32? { didSet { needsDisplay = true } }
-    static let font = NSFont.systemFont(ofSize: 5, weight: .bold)
+    static let font = BrandTextStyle.ui.font(size: 5, weight: .bold)
     private var badgeFont: NSFont {
-        (text?.count ?? 0) > 4 ? .systemFont(ofSize: 6, weight: .bold) : Self.font
+        (text?.count ?? 0) > 4 ? BrandTextStyle.ui.font(size: 6, weight: .bold) : Self.font
     }
     override var intrinsicContentSize: NSSize {
         let width = ((text ?? "") as NSString).size(withAttributes: [.font: badgeFont]).width

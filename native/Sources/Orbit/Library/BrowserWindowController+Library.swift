@@ -356,7 +356,7 @@ extension BrowserWindowController {
     private func confirmLibraryHistoryDeletion(_ deletion: BrowserHistoryDeletion?) {
         guard acceptsCommands, let window, let profile = library.history.profileID,
               session.activeProfileID == profile else { return }
-        let alert = NSAlert()
+        let alert = OrbitFloatingMaterial.alert()
         let name = session.catalog?.profiles.first { $0.id == profile }?.name ?? libraryText("profile", "Profile")
         alert.messageText = String.localizedStringWithFormat(libraryText("deleteProfile", "Delete History — %@"), name)
         let target = libraryHistoryDeletionDescription(deletion)
