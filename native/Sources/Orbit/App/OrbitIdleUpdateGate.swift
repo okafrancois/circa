@@ -6,9 +6,10 @@ struct OrbitIdleUpdateSignals: Equatable {
     var screensaver = false
     var locked = false
     var mediaPlaying = true
+    var unsavedInput = false
 
     var permitsInstallation: Bool {
-        idleSeconds.isFinite && idleSeconds >= 5 && !mediaPlaying
+        idleSeconds.isFinite && idleSeconds >= 5 && !mediaPlaying && !unsavedInput
             && (idleSeconds >= 300 || screensaver || locked)
     }
 }
@@ -36,12 +37,12 @@ final class OrbitIdleUpdateSignalsSource {
         }
     }
 
-    func sample(mediaPlaying: Bool) -> OrbitIdleUpdateSignals {
+    func sample(mediaPlaying: Bool, unsavedInput: Bool = false) -> OrbitIdleUpdateSignals {
         let session = CGSessionCopyCurrentDictionary() as? [String: Any]
         let sessionLocked = session?["CGSSessionScreenIsLocked"] as? Bool ?? locked
         return .init(idleSeconds: CGEventSource.secondsSinceLastEventType(.combinedSessionState,
             eventType: CGEventType(rawValue: UInt32.max)!), screensaver: screensaver,
-            locked: sessionLocked, mediaPlaying: mediaPlaying)
+            locked: sessionLocked, mediaPlaying: mediaPlaying, unsavedInput: unsavedInput)
     }
 
     isolated deinit {

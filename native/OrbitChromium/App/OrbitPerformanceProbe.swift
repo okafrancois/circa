@@ -29,7 +29,7 @@ enum OrbitPerformanceProbe {
                 controller.window?.makeKey()
             }
         }
-        if [OrbitNavigationHistoryProbe.bundleID, "lab.orbit.orbit.pinned-tabs", "lab.orbit.orbit.search-suggestions", "lab.orbit.orbit.circa-rename", "lab.orbit.orbit.local-files-pdf"].contains(Bundle.main.bundleIdentifier ?? "") {
+        if [OrbitNavigationHistoryProbe.bundleID, "lab.orbit.orbit.pinned-tabs", "lab.orbit.orbit.search-suggestions", "lab.orbit.orbit.circa-rename", "lab.orbit.orbit.updater-input", "lab.orbit.orbit.local-files-pdf"].contains(Bundle.main.bundleIdentifier ?? "") {
             application.confirmQuit = { .quit }
             application.windowPresenter = { controller, _ in
                 controller.window?.setFrame(NSRect(x: -2000, y: -1200, width: 1280, height: 900), display: false)
@@ -108,6 +108,8 @@ enum OrbitPerformanceProbe {
                     result["localFiles"] = await OrbitLocalFilesProbe.run(application, owner: owner, root: root, command: command)
                 } else if name == "search-suggestions" {
                     result["searchSuggestions"] = await searchSuggestions(owner, root: root, command: command)
+                } else if name == "updater-input-guard" {
+                    result["updaterInputGuard"] = await updaterInputGuard(application, owner: owner, command: command)
                 } else if name == "updater-developer" {
                     result["updaterDeveloper"] = await updaterDeveloper(application, owner: owner, command: command)
                 } else if name == "updater-about" {
@@ -655,6 +657,65 @@ extension OrbitPerformanceProbe {
         }
         return ["firstMS": first, "finalMS": final, "arrowMS": arrows,
                 "results": owner.palette.results.count, "window": owner.window?.windowNumber ?? 0]
+    }
+
+    /// Real responder input and the application's admission provider; the installer is fake.
+    private static func updaterInputGuard(_ application: OrbitApplication, owner: OrbitWindowController,
+                                          command: [String: String]) async -> [String: Any] {
+        let bundleID = "lab.orbit.orbit.updater-input"
+        guard ownsWindow(owner, bundleID: bundleID), let text = command["url"],
+              let url = URL(string: text), url.scheme == "http", url.host == "127.0.0.1" else { return ["refused": true] }
+        owner.submitAddress(text)
+        await owner.session.waitForQueuedCommands()
+        guard let surface = owner.session.selectedSurface else { return ["missingSurface": true] }
+        for _ in 0..<200 where surface.navigationState.committedURL != url || surface.navigationState.isLoading {
+            try? await Task.sleep(for: .milliseconds(25))
+        }
+        guard ownsWindow(owner, bundleID: bundleID) else { return ["ownershipLost": true] }
+        _ = await evaluate(surface, "document.querySelector('textarea').focus();({ready:true})")
+        guard ownsWindow(owner, bundleID: bundleID), surface.focusDocument(),
+              let client = owner.window?.firstResponder as? (NSView & NSTextInputClient) else { return ["missingInputClient": true] }
+        // Character-only text input exercises the same commit entry point as a system IME.
+        guard ownsWindow(owner, bundleID: bundleID) else { return ["ownershipLost": true] }
+        client.insertText("Synthetic draft", replacementRange: NSRange(location: NSNotFound, length: 0))
+        try? await Task.sleep(for: .milliseconds(200))
+        let typed = await evaluate(surface, "({typed:document.querySelector('textarea').value==='Synthetic draft'})")?["typed"] as? Bool == true
+        let updater = application.updater
+        guard let provider = updater.idleSignals else { return ["missingProvider": true] }
+        updater.idleSignals = {
+            var signals = provider()
+            signals.idleSeconds = 600
+            signals.mediaPlaying = false
+            return signals
+        }
+        updater.mediaPreventsAutomaticInstallation = { false }
+        updater.fetchLatestVersion = { "27" }
+        var installs = 0
+        updater.installPendingUpdate = { installs += 1 }
+        updater.setAutomaticallyUpdates(true)
+        updater.prepared(version: "27")
+        let dirty = updater.idleSignals?().unsavedInput == true
+        await updater.attemptAutomaticInstallation()
+        let deferred = installs == 0
+        let next = url.appendingPathComponent("next")
+        guard ownsWindow(owner, bundleID: bundleID) else { return ["ownershipLost": true] }
+        surface.navigate(to: next)
+        for _ in 0..<200 where surface.navigationState.committedURL != next || surface.navigationState.isLoading {
+            try? await Task.sleep(for: .milliseconds(25))
+        }
+        let cleared = updater.idleSignals?().unsavedInput == false
+        updater.setAutomaticallyUpdates(false)
+        await updater.attemptAutomaticInstallation()
+        let settingBlocked = installs == 0
+        updater.setAutomaticallyUpdates(true)
+        await updater.attemptAutomaticInstallation()
+        let installed = installs == 1
+        // No relaunch or real update: restore normal quit behavior after observing the fake call.
+        updater.cancelAutomaticRelaunch()
+        updater.installPendingUpdate = nil
+        return ["typed": typed, "dirty": dirty, "idleDeferred": deferred, "navigated": surface.navigationState.committedURL == next,
+                "cleared": cleared, "settingBlocked": settingBlocked, "idleInstalledFake": installed,
+                "nativeLifecycle": surface.pagePerformance?.lifecycle() != nil]
     }
 
     private static func updaterDeveloper(_ application: OrbitApplication, owner: OrbitWindowController,

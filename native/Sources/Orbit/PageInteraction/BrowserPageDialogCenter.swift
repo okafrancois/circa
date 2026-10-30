@@ -26,6 +26,10 @@ final class BrowserPageDialogCenter {
     /// Smoke and test observation of every presentation.
     var onPresent: ((ObjectIdentifier, BrowserPageDialogSpec) -> Void)?
 
+    var hasBeforeUnloadConfirmation: Bool {
+        queues.values.contains { $0.contains { $0.spec.kind == .beforeUnload } }
+    }
+
     // MARK: Observation and answers (tests, hidden smoke)
 
     func presentedDialog(for surface: ObjectIdentifier) -> BrowserPageDialogSpec? { queues[surface]?.first?.spec }

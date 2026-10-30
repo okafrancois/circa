@@ -10,6 +10,7 @@ extension BrowserWindowController: BrowserEngineSurfaceDelegate {
     }
 
     func surfaceDidCommitNavigation(_ surface: Surface) {
+        OrbitUnsavedInputGuard.clear(surface)
         if owns(surface), let url = surface.navigationState.committedURL {
             session.recordPinnedNavigation(for: surface, to: url, committed: true)
         }

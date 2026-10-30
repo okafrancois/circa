@@ -16,6 +16,17 @@ extension OrbitTokens.Metrics.QuickWindow {
 /// no additional content-layer zoom or alpha animation on this path.
 @MainActor
 final class BrowserQuickWindowPanel: NSPanel {
+    override func sendEvent(_ event: NSEvent) {
+        OrbitUnsavedInputGuard.keyDown(in: self, event: event)
+        super.sendEvent(event)
+    }
+
+    override func makeFirstResponder(_ responder: NSResponder?) -> Bool {
+        let accepted = super.makeFirstResponder(responder)
+        if accepted { OrbitUnsavedInputGuard.prepare(firstResponder) }
+        return accepted
+    }
+
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { true }
 }

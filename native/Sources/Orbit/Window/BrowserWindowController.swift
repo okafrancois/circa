@@ -212,7 +212,7 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
         self.library.history.recorder = history
         self.historyObserver = BrowserHistoryEngineObserver(recorder: history, resolveProfile: engine.profile(for:))
         findSession = BrowserFindSession<Surface>()
-        let window = NSWindow(
+        let window = OrbitBrowserWindow(
             contentRect: NSRect(x: 0, y: 0, width: 1020, height: 720),
             styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
             backing: .buffered,
@@ -456,12 +456,14 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
     /// Makes this window the receiver of a surface's engine events and observations, in the same
     /// turn as the surface's creation for, or acceptance into, this window.
     func bindSurface(_ surface: Surface) {
+        OrbitUnsavedInputGuard.register(surface)
         let key = ObjectIdentifier(surface)
         surface.delegate = self
         surface.onChange = { [weak self, weak surface] in
             if let surface { self?.surfaceDidChange(surface) }
         }
         surface.onDispose = { [weak self, weak surface] in
+            if let surface { OrbitUnsavedInputGuard.clear(surface) }
             self?.nativeCreations.removeValue(forKey: key)
             self?.pendingNativeClosures.remove(key)
             if let surface {
@@ -477,6 +479,7 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
     var sidebarMetadataSurfaces: [ObjectIdentifier: (Surface, UInt64)] = [:]
 
     func surfaceDidChange(_ surface: Surface) {
+        if surface.isSuspended { OrbitUnsavedInputGuard.clear(surface) }
         guard !isPreparingForTermination, owns(surface) else { return }
         if let url = surface.currentURL { session.updateDestination(for: surface, to: url) }
         if session.selectedSurface === surface {

@@ -92,6 +92,31 @@ struct IdleUpdateTests {
         #expect(installs == 0)
     }
 
+    @Test("Automatically update off vetoes idle, locked and screensaving installs and termination", arguments: ["idle", "locked", "screensaver"])
+    func preferenceAuthority(mode: String) async throws {
+        let updater = try updater()
+        var installs = 0
+        updater.idleSignals = { .init(idleSeconds: mode == "idle" ? 600 : 10,
+            screensaver: mode == "screensaver", locked: mode == "locked", mediaPlaying: false) }
+        updater.mediaPreventsAutomaticInstallation = { false }
+        updater.fetchLatestVersion = { "27" }
+        updater.installPendingUpdate = { installs += 1 }
+        updater.prepared(version: "27")
+        updater.setAutomaticallyUpdates(false)
+        await updater.attemptAutomaticInstallation()
+        #expect(installs == 0)
+        updater.setAutomaticallyUpdates(true)
+        updater.mediaPreventsAutomaticInstallation = { updater.setAutomaticallyUpdates(false); return false }
+        await updater.attemptAutomaticInstallation()
+        #expect(installs == 0, "a setting change during validation remains authoritative")
+        updater.mediaPreventsAutomaticInstallation = { false }
+        updater.setAutomaticallyUpdates(true)
+        await updater.attemptAutomaticInstallation()
+        #expect(installs == 1 && updater.permitsAutomaticTermination)
+        updater.setAutomaticallyUpdates(false)
+        #expect(!updater.permitsAutomaticTermination)
+    }
+
     @Test("Locked and screensaving sessions use the same fake installer", arguments: [true, false])
     func unattended(locked: Bool) async throws {
         let updater = try updater()
