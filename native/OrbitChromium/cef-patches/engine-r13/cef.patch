@@ -1,0 +1,537 @@
+diff --git a/CHROMIUM_BUILD_COMPATIBILITY.txt b/CHROMIUM_BUILD_COMPATIBILITY.txt
+index caae11c..88c8ad2 100644
+--- a/CHROMIUM_BUILD_COMPATIBILITY.txt
++++ b/CHROMIUM_BUILD_COMPATIBILITY.txt
+@@ -7,5 +7,5 @@
+ # https://chromiumembedded.github.io/cef/branches_and_building
+ 
+ {
+-  'chromium_checkout': 'refs/tags/156.0.8078.48'
++  'chromium_checkout': 'refs/tags/156.0.8078.80'
+ }
+diff --git a/libcef/browser/orbit/orbit_cef_api.h b/libcef/browser/orbit/orbit_cef_api.h
+index 0e02acd..b1a1022 100644
+--- a/libcef/browser/orbit/orbit_cef_api.h
++++ b/libcef/browser/orbit/orbit_cef_api.h
+@@ -26,7 +26,7 @@ extern "C" {
+ // Version 3 (CHROMIUM-APP-R3): additive, hold_window/release_window. Earlier
+ // versions keep their layout as the prefix of the table.
+ // Version 4 (EXTENSIONS-PRODUCT-R1): additive, native per-profile extension services.
+-#define ORBIT_CEF_API_VERSION 12u
++#define ORBIT_CEF_API_VERSION 15u
+ 
+ // Version 8. Callback once after live renderer CSS installation (1), or failure (0).
+ typedef void (*orbit_boost_ack_t)(void*, uint64_t revision, int32_t installed);
+@@ -68,6 +68,10 @@ typedef struct {
+ 
+ // Version 7. Dedicated password metadata, borrowed for the callback/query only.
+ // Password bytes are never exposed. Generations are unique for the runtime.
++// JSON and origin strings are borrowed for the callback only. UI thread.
++typedef void (*orbit_json_changed_t)(void*, const char*, uint32_t);
++typedef void (*orbit_fullscreen_changed_t)(void*, int32_t entered, const char* origin);
++
+ typedef struct {
+   uint32_t struct_size;
+   uint32_t version;
+@@ -317,6 +321,23 @@ typedef struct {
+   // Version 13. Read-only background global dump, no tracing or forced GC.
+   // UI only; returns 0 without callback if refused, 1 with exactly one callback.
+   int32_t (*memory_dump)(orbit_memory_callback_t, void*);
++  // Version 14. Match an outstanding native prompt by browser and prompt ID.
++  // Unsupported one-time permission kinds fail closed (return 0, no grant).
++  int32_t (*permission_accept_once)(int32_t browser_id, uint64_t prompt_id);
++  // JSON reads return required bytes, -1 unavailable. Write only if capacity > bytes.
++  int32_t (*security_state)(int32_t browser_id, char*, uint32_t);
++  int32_t (*security_observe)(int32_t, orbit_json_changed_t, void*);
++  // scheme: 0 show, 1 omit HTTP/HTTPS, 2 omit cryptographic. Invalid input fails.
++  int32_t (*security_display)(const char* url, int32_t scheme, char*, uint32_t);
++  int32_t (*committed_url)(int32_t, char*, uint32_t);
++  int32_t (*fullscreen_observe)(int32_t, orbit_fullscreen_changed_t, void*);
++  int32_t (*navigation_entries)(int32_t, char*, uint32_t);
++  int32_t (*navigation_go_index)(int32_t, int32_t index);
++  // Version 15. Per-browser native MediaSession. Artwork contains URLs, not pixels.
++  int32_t (*media_snapshot)(int32_t, char*, uint32_t);
++  int32_t (*media_observe)(int32_t, orbit_json_changed_t, void*);
++  // action: 0 play, 1 pause, 2 seek (seconds), 3 next, 4 previous.
++  int32_t (*media_action)(int32_t, int32_t action, double seconds);
+ } orbit_cef_api_t;
+ 
+ // Returns the API table for `version`, or NULL when unsupported.
+diff --git a/libcef/browser/orbit/orbit_cef_api.mm b/libcef/browser/orbit/orbit_cef_api.mm
+index 43d8a09..6735614 100644
+--- a/libcef/browser/orbit/orbit_cef_api.mm
++++ b/libcef/browser/orbit/orbit_cef_api.mm
+@@ -40,6 +40,8 @@
+ #include "cef/libcef/browser/orbit/orbit_capture.inc"
+ #include "cef/libcef/browser/orbit/orbit_activation.inc"
+ #include "cef/libcef/browser/orbit/orbit_memory.inc"
++#include "cef/libcef/browser/orbit/orbit_security.inc"
++#include "cef/libcef/browser/orbit/orbit_media.inc"
+ // clang-format on
+ 
+ namespace {
+@@ -434,11 +436,34 @@ int32_t ReleaseWindow(uint64_t window_token) {
+ }();
+ const orbit_cef_api_t kApiV13 = [] {
+   auto api = kApiV12;
+-  api.struct_size = sizeof(orbit_cef_api_t);
++  api.struct_size = offsetof(orbit_cef_api_t, permission_accept_once);
+   api.version = 13u;
+   api.memory_dump = &MemoryDump;
+   return api;
+ }();
++const orbit_cef_api_t kApiV14 = [] {
++  auto api = kApiV13;
++  api.struct_size = offsetof(orbit_cef_api_t, media_snapshot);
++  api.version = 14u;
++  api.permission_accept_once = &PermissionAcceptOnce;
++  api.security_state = &SecurityState;
++  api.security_observe = &SecurityObserve;
++  api.security_display = &SecurityDisplay;
++  api.committed_url = &CommittedURL;
++  api.fullscreen_observe = &FullscreenObserve;
++  api.navigation_entries = &NavigationEntries;
++  api.navigation_go_index = &NavigationGoIndex;
++  return api;
++}();
++const orbit_cef_api_t kApiV15 = [] {
++  auto api = kApiV14;
++  api.struct_size = sizeof(orbit_cef_api_t);
++  api.version = 15u;
++  api.media_snapshot = &MediaSnapshot;
++  api.media_observe = &MediaObserve;
++  api.media_action = &MediaAction;
++  return api;
++}();
+ }  // namespace
+ 
+ extern "C" CEF_EXPORT const orbit_cef_api_t* orbit_cef_get_api(uint32_t version);
+@@ -481,6 +506,10 @@ int32_t ReleaseWindow(uint64_t window_token) {
+       return &kApiV12;
+     case 13u:
+       return &kApiV13;
++    case 14u:
++      return &kApiV14;
++    case 15u:
++      return &kApiV15;
+     default:
+       return nullptr;
+   }
+diff --git a/libcef/browser/orbit/orbit_media.inc b/libcef/browser/orbit/orbit_media.inc
+new file mode 100644
+index 0000000..7c2cf3d
+--- /dev/null
++++ b/libcef/browser/orbit/orbit_media.inc
+@@ -0,0 +1,115 @@
++// Copyright 2026 Orbit. BSD-style license; see LICENSE.
++#include <cmath>
++#include "content/public/browser/media_session.h"
++#include "mojo/public/cpp/bindings/receiver.h"
++#include "services/media_session/public/cpp/media_image.h"
++#include "services/media_session/public/cpp/media_metadata.h"
++#include "services/media_session/public/cpp/media_position.h"
++
++namespace {
++class MediaObservation;
++using MediaMap = std::map<int32_t, std::shared_ptr<MediaObservation>>;
++MediaMap& MediaObservers() { static base::NoDestructor<MediaMap> map; return *map; }
++class MediaObservation final : public content::WebContentsObserver,
++    public media_session::mojom::MediaSessionObserver,
++    public std::enable_shared_from_this<MediaObservation> {
++ public:
++  MediaObservation(int32_t id, content::WebContents* contents)
++      : content::WebContentsObserver(contents), id_(id) {
++    content::MediaSession::Get(contents)->AddObserver(receiver_.BindNewPipeAndPassRemote());
++  }
++  orbit_json_changed_t callback = nullptr;
++  void* context = nullptr;
++  std::string Snapshot() {
++    auto* session = content::MediaSession::GetIfExists(web_contents());
++    if (!session) return "{}";
++    auto info = session->GetMediaSessionInfoSync();
++    const auto& metadata = session->GetMediaSessionMetadata();
++    base::DictValue value;
++    value.Set("title", base::UTF16ToUTF8(metadata.title));
++    value.Set("artist", base::UTF16ToUTF8(metadata.artist));
++    value.Set("album", base::UTF16ToUTF8(metadata.album));
++    value.Set("playbackState", static_cast<int>(info->playback_state));
++    value.Set("sessionState", static_cast<int>(info->state));
++    value.Set("artwork", artwork_.Clone());
++    base::ListValue actions;
++    for (auto action : session->GetMediaSessionActionsSync()) actions.Append(static_cast<int>(action));
++    value.Set("actions", std::move(actions));
++    if (const auto position = session->GetMediaSessionPosition()) {
++      const double current = position->GetPosition().InSecondsF();
++      const double duration = position->duration().InSecondsF();
++      const double rate = position->playback_rate();
++      if (std::isfinite(current)) value.Set("position", current);
++      if (std::isfinite(duration)) value.Set("duration", duration);
++      if (std::isfinite(rate)) value.Set("playbackRate", rate);
++    }
++    return base::WriteJson(value).value_or("{}");
++  }
++  void MediaSessionInfoChanged(media_session::mojom::MediaSessionInfoPtr) override { Notify(); }
++  void MediaSessionMetadataChanged(const std::optional<media_session::MediaMetadata>&) override { Notify(); }
++  void MediaSessionActionsChanged(const std::vector<media_session::mojom::MediaSessionAction>&) override { Notify(); }
++  void MediaSessionImagesChanged(const base::flat_map<media_session::mojom::MediaSessionImageType,
++      std::vector<media_session::MediaImage>>& images) override {
++    artwork_.clear();
++    auto it = images.find(media_session::mojom::MediaSessionImageType::kArtwork);
++    if (it != images.end()) for (const auto& image : it->second) artwork_.Append(image.src.spec());
++    Notify();
++  }
++  void MediaSessionPositionChanged(const std::optional<media_session::MediaPosition>&) override { Notify(); }
++  void WebContentsDestroyed() override {
++    auto alive = shared_from_this();
++    callback = nullptr;
++    receiver_.reset();
++    Observe(nullptr);
++    MediaObservers().erase(id_);
++  }
++ private:
++  void Notify() {
++    auto alive = shared_from_this();
++    if (callback && web_contents()) {
++      auto text = Snapshot();
++      callback(context, text.c_str(), static_cast<uint32_t>(text.size()));
++    }
++  }
++  int32_t id_;
++  base::ListValue artwork_;
++  mojo::Receiver<media_session::mojom::MediaSessionObserver> receiver_{this};
++};
++std::shared_ptr<MediaObservation> MediaObserver(int32_t id) {
++  auto* contents = SideContents(id);
++  if (!contents) return nullptr;
++  auto& item = MediaObservers()[id];
++  if (!item) item = std::make_shared<MediaObservation>(id, contents);
++  return item;
++}
++int32_t MediaSnapshot(int32_t id, char* out, uint32_t capacity) {
++  auto item = MediaObserver(id);
++  return item ? CopySideText(item->Snapshot(), out, capacity) : -1;
++}
++int32_t MediaObserve(int32_t id, orbit_json_changed_t cb, void* context) {
++  if (!OnValidUIThread()) return 0;
++  if (!cb) { MediaObservers().erase(id); return 1; }
++  auto item = MediaObserver(id);
++  if (!item) return 0;
++  item->callback = cb; item->context = context;
++  return 1;
++}
++int32_t MediaAction(int32_t id, int32_t action, double seconds) {
++  auto* contents = SideContents(id);
++  auto* session = contents ? content::MediaSession::GetIfExists(contents) : nullptr;
++  if (!session) return 0;
++  using Action = media_session::mojom::MediaSessionAction;
++  const auto actions = session->GetMediaSessionActionsSync();
++  const Action types[] = {Action::kPlay, Action::kPause, Action::kSeekTo, Action::kNextTrack, Action::kPreviousTrack};
++  if (action < 0 || action > 4 || !std::ranges::contains(actions, types[action])) return 0;
++  if (action == 2) {
++    const auto position = session->GetMediaSessionPosition();
++    if (!position || !std::isfinite(seconds) || seconds < 0 || seconds > position->duration().InSecondsF()) return 0;
++    session->SeekTo(base::Seconds(seconds));
++  } else if (action == 3) session->NextTrack();
++  else if (action == 4) session->PreviousTrack();
++  else if (action == 0) session->Resume(content::MediaSession::SuspendType::kUI);
++  else session->Suspend(content::MediaSession::SuspendType::kUI);
++  return 1;
++}
++}  // namespace
+diff --git a/libcef/browser/orbit/orbit_security.inc b/libcef/browser/orbit/orbit_security.inc
+new file mode 100644
+index 0000000..42888c7
+--- /dev/null
++++ b/libcef/browser/orbit/orbit_security.inc
+@@ -0,0 +1,147 @@
++// Copyright 2026 Orbit. BSD-style license; see LICENSE.
++#include "base/json/json_writer.h"
++#include "base/strings/utf_string_conversions.h"
++#include "cef/libcef/browser/permission_prompt.h"
++#include "chrome/browser/ssl/chrome_security_state_util.h"
++#include "components/security_interstitials/content/security_interstitial_tab_helper.h"
++#include "components/url_formatter/elide_url.h"
++#include "content/public/browser/navigation_entry.h"
++#include "content/public/browser/render_frame_host.h"
++
++namespace {
++int32_t CopySideText(const std::string& text, char* out, uint32_t capacity) {
++  if (text.size() > INT32_MAX) return -1;
++  if (out && capacity > text.size()) memcpy(out, text.c_str(), text.size() + 1);
++  return static_cast<int32_t>(text.size());
++}
++content::WebContents* SideContents(int32_t id) {
++  if (!OnValidUIThread()) return nullptr;
++  auto host = CefBrowserHostBase::GetBrowserForBrowserId(id);
++  return host ? host->GetWebContents() : nullptr;
++}
++int32_t PermissionAcceptOnce(int32_t browser_id, uint64_t prompt_id) {
++  if (!OnValidUIThread()) return 0;
++  return permission_prompt::AcceptOnce(browser_id, prompt_id);
++}
++std::string SecurityJSON(content::WebContents* contents) {
++  auto native = chrome_security_state::GetVisibleSecurityState(contents);
++  auto* interstitial = security_interstitials::SecurityInterstitialTabHelper::FromWebContents(contents);
++  base::DictValue value;
++  value.Set("level", static_cast<int>(chrome_security_state::GetSecurityLevel(contents)));
++  value.Set("certificateStatus", static_cast<double>(native->cert_status));
++  value.Set("certificateError", net::IsCertStatusError(native->cert_status));
++  value.Set("displayedMixedContent", native->displayed_mixed_content);
++  value.Set("ranMixedContent", native->ran_mixed_content);
++  value.Set("displayedCertificateErrorContent", native->displayed_content_with_cert_errors);
++  value.Set("ranCertificateErrorContent", native->ran_content_with_cert_errors);
++  value.Set("interstitial", interstitial && interstitial->IsDisplayingInterstitial());
++  return base::WriteJson(value).value_or("{}");
++}
++int32_t SecurityState(int32_t id, char* out, uint32_t capacity) {
++  auto* contents = SideContents(id);
++  return contents ? CopySideText(SecurityJSON(contents), out, capacity) : -1;
++}
++int32_t SecurityDisplay(const char* text, int32_t scheme, char* out, uint32_t capacity) {
++  if (!OnValidUIThread() || !text || scheme < 0 || scheme > 2) return -1;
++  GURL url(text);
++  if (!url.is_valid()) return -1;
++  return CopySideText(base::UTF16ToUTF8(url_formatter::FormatUrlForSecurityDisplay(
++      url, static_cast<url_formatter::SchemeDisplay>(scheme))), out, capacity);
++}
++int32_t CommittedURL(int32_t id, char* out, uint32_t capacity) {
++  auto* contents = SideContents(id);
++  return contents ? CopySideText(contents->GetLastCommittedURL().spec(), out, capacity) : -1;
++}
++class SecurityObservation;
++using SecurityMap = std::map<int32_t, std::shared_ptr<SecurityObservation>>;
++SecurityMap& SecurityObservers() {
++  static base::NoDestructor<SecurityMap> map;
++  return *map;
++}
++class SecurityObservation final : public content::WebContentsObserver,
++                                  public std::enable_shared_from_this<SecurityObservation> {
++ public:
++  SecurityObservation(int32_t id, content::WebContents* contents)
++      : content::WebContentsObserver(contents), id_(id) {}
++  orbit_json_changed_t security = nullptr;
++  void* security_context = nullptr;
++  orbit_fullscreen_changed_t fullscreen = nullptr;
++  void* fullscreen_context = nullptr;
++  void DidChangeVisibleSecurityState() override {
++    auto alive = shared_from_this();
++    if (security && web_contents()) {
++      const auto json = SecurityJSON(web_contents());
++      security(security_context, json.c_str(), static_cast<uint32_t>(json.size()));
++    }
++  }
++  void DidAcquireFullscreen(content::RenderFrameHost* frame) override {
++    auto alive = shared_from_this();
++    const auto origin = frame->GetLastCommittedOrigin().Serialize();
++    if (origin == origin_) return;
++    origin_ = origin;
++    if (fullscreen) fullscreen(fullscreen_context, 1, origin.c_str());
++  }
++  void DidToggleFullscreenModeForTab(bool entered, bool) override {
++    auto alive = shared_from_this();
++    if (!entered && !origin_.empty()) {
++      const auto origin = std::exchange(origin_, std::string());
++      if (fullscreen) fullscreen(fullscreen_context, 0, origin.c_str());
++    }
++  }
++  void WebContentsDestroyed() override {
++    auto alive = shared_from_this();
++    Observe(nullptr);
++    SecurityObservers().erase(id_);
++  }
++ private:
++  int32_t id_;
++  std::string origin_;
++};
++std::shared_ptr<SecurityObservation> SecurityObserver(int32_t id) {
++  auto* contents = SideContents(id);
++  if (!contents) return nullptr;
++  auto& item = SecurityObservers()[id];
++  if (!item) item = std::make_shared<SecurityObservation>(id, contents);
++  return item;
++}
++int32_t SecurityObserve(int32_t id, orbit_json_changed_t cb, void* context) {
++  if (!OnValidUIThread()) return 0;
++  auto item = cb ? SecurityObserver(id) : (SecurityObservers().contains(id) ? SecurityObservers()[id] : nullptr);
++  if (!item) return cb ? 0 : 1;
++  item->security = cb; item->security_context = context;
++  if (!item->security && !item->fullscreen) SecurityObservers().erase(id);
++  return 1;
++}
++int32_t FullscreenObserve(int32_t id, orbit_fullscreen_changed_t cb, void* context) {
++  if (!OnValidUIThread()) return 0;
++  auto item = cb ? SecurityObserver(id) : (SecurityObservers().contains(id) ? SecurityObservers()[id] : nullptr);
++  if (!item) return cb ? 0 : 1;
++  item->fullscreen = cb; item->fullscreen_context = context;
++  if (!item->security && !item->fullscreen) SecurityObservers().erase(id);
++  return 1;
++}
++int32_t NavigationEntries(int32_t id, char* out, uint32_t capacity) {
++  auto* contents = SideContents(id);
++  if (!contents) return -1;
++  auto& controller = contents->GetController();
++  base::DictValue value;
++  value.Set("currentIndex", controller.GetLastCommittedEntryIndex());
++  base::ListValue entries;
++  for (int i = 0; i < controller.GetEntryCount(); ++i) {
++    auto* entry = controller.GetEntryAtIndex(i);
++    base::DictValue row;
++    row.Set("index", i);
++    row.Set("url", entry->GetURL().spec());
++    row.Set("title", base::UTF16ToUTF8(entry->GetTitle()));
++    entries.Append(std::move(row));
++  }
++  value.Set("entries", std::move(entries));
++  return CopySideText(base::WriteJson(value).value_or("{}"), out, capacity);
++}
++int32_t NavigationGoIndex(int32_t id, int32_t index) {
++  auto* contents = SideContents(id);
++  if (!contents || index < 0 || index >= contents->GetController().GetEntryCount()) return 0;
++  contents->GetController().GoToIndex(index);
++  return 1;
++}
++}  // namespace
+diff --git a/libcef/browser/permission_prompt.cc b/libcef/browser/permission_prompt.cc
+index d829857..b341947 100644
+--- a/libcef/browser/permission_prompt.cc
++++ b/libcef/browser/permission_prompt.cc
+@@ -4,7 +4,10 @@
+ 
+ #include "cef/libcef/browser/permission_prompt.h"
+ 
++#include <map>
++#include "base/no_destructor.h"
+ #include "base/logging.h"
++#include "components/content_settings/core/browser/content_settings_utils.h"
+ #include "base/memory/weak_ptr.h"
+ #include "base/notreached.h"
+ #include "cef/libcef/browser/browser_host_base.h"
+@@ -61,21 +64,40 @@ class CefPermissionPromptCallbackImpl : public CefPermissionPromptCallback {
+   bool IsDisconnected() const { return callback_.is_null(); }
+ 
+   void MarkSafeToRunSync() { safe_to_run_sync_ = true; }
++  void SetOneTimeSupported(bool supported) { one_time_supported_ = supported; }
++  bool IsOneTime() const { return one_time_; }
++  bool AcceptOnce() {
++    CEF_REQUIRE_UIT_RETURN(false);
++    if (!one_time_supported_ || callback_.is_null()) return false;
++    one_time_ = true;
++    Continue(CEF_PERMISSION_RESULT_ACCEPT);
++    return true;
++  }
+ 
+  private:
+   // Callback execution from inside CreatePermissionPromptImpl must be async,
+   // otherwise PermissionRequestManager state will be incorrect.
+   bool safe_to_run_sync_ = false;
++  bool one_time_supported_ = false;
++  bool one_time_ = false;
+ 
+   CallbackType callback_;
+ 
+   IMPLEMENT_REFCOUNTING(CefPermissionPromptCallbackImpl);
+ };
+ 
++using PromptKey = std::pair<int32_t, uint64_t>;
++using PromptCallbacks = std::map<PromptKey, CefPermissionPromptCallbackImpl*>;
++PromptCallbacks& Callbacks() {
++  static base::NoDestructor<PromptCallbacks> callbacks;
++  return *callbacks;
++}
++
+ // Implementation based on PermissionPromptAndroid.
+ class CefPermissionPrompt : public permissions::PermissionPrompt {
+  public:
+-  explicit CefPermissionPrompt(Delegate* delegate) : delegate_(delegate) {
++  CefPermissionPrompt(Delegate* delegate, int32_t browser_id, uint64_t prompt_id)
++      : delegate_(delegate), key_(browser_id, prompt_id) {
+     DCHECK(delegate_);
+   }
+ 
+@@ -90,6 +112,7 @@ class CefPermissionPrompt : public permissions::PermissionPrompt {
+   // 3. A higher priority request comes in.
+   ~CefPermissionPrompt() override {
+     CEF_REQUIRE_UIT();
++    Callbacks().erase(key_);
+     if (callback_) {
+       // If the callback is non-null at this point then we still need to execute
+       // it in order to notify the client.
+@@ -139,10 +162,12 @@ class CefPermissionPrompt : public permissions::PermissionPrompt {
+   bool IsAskPrompt() const override { return true; }
+ 
+  private:
+-  // We don't expose AcceptThisTime() because it's a special case for
+-  // Geolocation (see DCHECK in PrefProvider::SetWebsiteSetting).
+   void NotifyDelegate(cef_permission_request_result_t result) {
+     const PromptOptions prompt_options(std::monostate{});
++    if (result == CEF_PERMISSION_RESULT_ACCEPT && callback_ && callback_->IsOneTime()) {
++      delegate_->AcceptThisTime(prompt_options);
++      return;
++    }
+     switch (result) {
+       case CEF_PERMISSION_RESULT_ACCEPT:
+         delegate_->Accept(prompt_options);
+@@ -164,6 +189,7 @@ class CefPermissionPrompt : public permissions::PermissionPrompt {
+ 
+   // |delegate_| is the PermissionRequestManager, which owns this object.
+   const raw_ptr<Delegate> delegate_;
++  const PromptKey key_;
+ 
+   CefRefPtr<CefPermissionPromptCallbackImpl> callback_;
+ 
+@@ -283,16 +309,23 @@ std::unique_ptr<permissions::PermissionPrompt> CreatePermissionPromptImpl(
+ 
+     if (auto client = browser->GetClient()) {
+       if (auto handler = client->GetPermissionHandler()) {
+-        auto permission_prompt =
+-            std::make_unique<CefPermissionPrompt>(delegate);
+-
+         const auto prompt_id = ++g_next_prompt_id;
++        const auto browser_id = browser->GetIdentifier();
++        auto permission_prompt =
++            std::make_unique<CefPermissionPrompt>(delegate, browser_id, prompt_id);
+         auto callback =
+             base::BindOnce(&ExecuteResult, browser, prompt_id,
+                            permission_prompt->MakeDelegateCallback());
+ 
+         CefRefPtr<CefPermissionPromptCallbackImpl> callbackImpl(
+             new CefPermissionPromptCallbackImpl(std::move(callback)));
++        bool supports_once = true;
++        const auto& supported = content_settings::GetTypesWithTemporaryGrantsInHcsm();
++        for (const auto& request : delegate->Requests()) {
++          supports_once &= std::ranges::contains(supported, request->GetContentSettingsType());
++        }
++        callbackImpl->SetOneTimeSupported(supports_once);
++        Callbacks()[{browser_id, prompt_id}] = callbackImpl.get();
+         bool handled = handler->OnShowPermissionPrompt(
+             browser, prompt_id, delegate->GetRequestingOrigin().spec(),
+             GetRequestedPermissions(delegate), callbackImpl.get());
+@@ -332,6 +365,12 @@ std::unique_ptr<permissions::PermissionPrompt> CreatePermissionPromptImpl(
+ 
+ }  // namespace
+ 
++bool AcceptOnce(int32_t browser_id, uint64_t prompt_id) {
++  CEF_REQUIRE_UIT_RETURN(false);
++  auto found = Callbacks().find({browser_id, prompt_id});
++  return found != Callbacks().end() && found->second->AcceptOnce();
++}
++
+ void RegisterCreateCallback() {
+   SetCreatePermissionPromptFunction(&CreatePermissionPromptImpl);
+ }
+diff --git a/libcef/browser/permission_prompt.h b/libcef/browser/permission_prompt.h
+index 224eb04..62911dd 100644
+--- a/libcef/browser/permission_prompt.h
++++ b/libcef/browser/permission_prompt.h
+@@ -6,7 +6,11 @@
+ #define CEF_LIBCEF_BROWSER_PERMISSION_PROMPT_H_
+ #pragma once
+ 
++#include <stdint.h>
++
+ namespace permission_prompt {
++// Match the native prompt without crossing CEF C/C++ callback wrappers.
++bool AcceptOnce(int32_t browser_id, uint64_t prompt_id);
+ 
+ void RegisterCreateCallback();
+ 

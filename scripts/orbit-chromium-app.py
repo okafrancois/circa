@@ -689,9 +689,9 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest="command", required=True)
     builder = sub.add_parser("build")
-    builder.add_argument("--flavor", choices=x2.FLAVORS, default="orbit-engine-extensions-r12")
+    builder.add_argument("--flavor", choices=x2.FLAVORS, default="orbit-engine-extensions-r13")
     runner = sub.add_parser("smoke")
-    runner.add_argument("--flavor", choices=x2.FLAVORS, default="orbit-engine-extensions-r12")
+    runner.add_argument("--flavor", choices=x2.FLAVORS, default="orbit-engine-extensions-r13")
     runner.add_argument("--evidence-root", type=Path, default=EVIDENCE)
     runner.add_argument("--timeout", type=int, default=180)
     runner.add_argument("--quit-timeout", type=int, default=30)
@@ -759,7 +759,7 @@ def main():
         args.no_extension = True
     if args.command == "smoke" and args.private_domain_only:
         if args.flavor not in ("orbit-essentials-r2", "orbit-engine-extensions", "orbit-engine-extensions-r2",
-                               "orbit-engine-extensions-r3", "orbit-engine-extensions-r4", "orbit-engine-extensions-r5", "orbit-engine-extensions-r6", "orbit-engine-extensions-r7", "orbit-engine-extensions-r8", "orbit-engine-extensions-r9", "orbit-engine-extensions-r10", "orbit-engine-extensions-r11", "orbit-engine-extensions-r12") or args.extension_only:
+                               "orbit-engine-extensions-r3", "orbit-engine-extensions-r4", "orbit-engine-extensions-r5", "orbit-engine-extensions-r6", "orbit-engine-extensions-r7", "orbit-engine-extensions-r8", "orbit-engine-extensions-r9", "orbit-engine-extensions-r10", "orbit-engine-extensions-r11", "orbit-engine-extensions-r12", "orbit-engine-extensions-r13") or args.extension_only:
             parser.error("--private-domain-only requires a product engine and excludes --extension-only")
         args.no_extension = True
         args.fresh_only = True

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Check secure keyboard entry focus transitions in a synthetic Chromium bundle.
 
-Every GUI session uses the shared slot for at most 55 seconds. Credentials, server and profile
+Every GUI session uses the shared slot for at most 45 seconds. Credentials, server and profile
 are invented. No personal Keychain access.
 """
 import argparse
@@ -58,12 +58,12 @@ def phase(args):
         with (directory / 'stdout.log').open('w') as out, (directory / 'stderr.log').open('w') as err:
             process = owner.launch(command, stdout=out, stderr=err, stdin=subprocess.DEVNULL)
             try:
-                process.wait(timeout=45)
+                process.wait(timeout=35)
             except subprocess.TimeoutExpired:
                 pass
     elapsed = time.monotonic() - started
     (directory / 'duration.json').write_text(json.dumps({'guiSeconds': elapsed}))
-    assert elapsed < 60
+    assert elapsed <= 45
     results = json.loads((directory / 'results.json').read_text())
     assert process.returncode == 0 and not owner.remaining and not owner.forced_signals
     (root / 'verification.json').write_text(json.dumps(results, indent=2) + '\n')

@@ -26,7 +26,7 @@ extern "C" {
 // Version 3 (CHROMIUM-APP-R3): additive, hold_window/release_window. Earlier
 // versions keep their layout as the prefix of the table.
 // Version 4 (EXTENSIONS-PRODUCT-R1): additive, native per-profile extension services.
-#define ORBIT_CEF_API_VERSION 12u
+#define ORBIT_CEF_API_VERSION 15u
 
 // Version 8. Callback once after live renderer CSS installation (1), or failure (0).
 typedef void (*orbit_boost_ack_t)(void*, uint64_t revision, int32_t installed);
@@ -68,6 +68,10 @@ typedef struct {
 
 // Version 7. Dedicated password metadata, borrowed for the callback/query only.
 // Password bytes are never exposed. Generations are unique for the runtime.
+// JSON and origin strings are borrowed for the callback only. UI thread.
+typedef void (*orbit_json_changed_t)(void*, const char*, uint32_t);
+typedef void (*orbit_fullscreen_changed_t)(void*, int32_t entered, const char* origin);
+
 typedef struct {
   uint32_t struct_size;
   uint32_t version;
@@ -317,6 +321,23 @@ typedef struct {
   // Version 13. Read-only background global dump, no tracing or forced GC.
   // UI only; returns 0 without callback if refused, 1 with exactly one callback.
   int32_t (*memory_dump)(orbit_memory_callback_t, void*);
+  // Version 14. Match an outstanding native prompt by browser and prompt ID.
+  // Unsupported one-time permission kinds fail closed (return 0, no grant).
+  int32_t (*permission_accept_once)(int32_t browser_id, uint64_t prompt_id);
+  // JSON reads return required bytes, -1 unavailable. Write only if capacity > bytes.
+  int32_t (*security_state)(int32_t browser_id, char*, uint32_t);
+  int32_t (*security_observe)(int32_t, orbit_json_changed_t, void*);
+  // scheme: 0 show, 1 omit HTTP/HTTPS, 2 omit cryptographic. Invalid input fails.
+  int32_t (*security_display)(const char* url, int32_t scheme, char*, uint32_t);
+  int32_t (*committed_url)(int32_t, char*, uint32_t);
+  int32_t (*fullscreen_observe)(int32_t, orbit_fullscreen_changed_t, void*);
+  int32_t (*navigation_entries)(int32_t, char*, uint32_t);
+  int32_t (*navigation_go_index)(int32_t, int32_t index);
+  // Version 15. Per-browser native MediaSession. Artwork contains URLs, not pixels.
+  int32_t (*media_snapshot)(int32_t, char*, uint32_t);
+  int32_t (*media_observe)(int32_t, orbit_json_changed_t, void*);
+  // action: 0 play, 1 pause, 2 seek (seconds), 3 next, 4 previous.
+  int32_t (*media_action)(int32_t, int32_t action, double seconds);
 } orbit_cef_api_t;
 
 // Returns the API table for `version`, or NULL when unsupported.

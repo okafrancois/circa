@@ -176,6 +176,7 @@ public struct BrowserMediaState: Sendable, Equatable {
 @MainActor
 public protocol BrowserEngineSurface: BrowserFindSurface {
     var pagePerformance: (any BrowserPagePerformance)? { get }
+    var nativePageServices: (any BrowserNativePageServices)? { get }
     var profileID: ProfileID { get }
     /// Dedicated opt-in metadata channel, absent on engines without a native manager.
     var passwordPrompts: (any BrowserPasswordPromptSource)? { get }
@@ -293,6 +294,7 @@ public protocol BrowserEngineSurface: BrowserFindSurface {
 
 public extension BrowserEngineSurface {
     var pagePerformance: (any BrowserPagePerformance)? { nil }
+    var nativePageServices: (any BrowserNativePageServices)? { nil }
     func activationPaintBarrier() -> Task<Bool, Never>? { nil }
     var passwordPrompts: (any BrowserPasswordPromptSource)? { nil }
     func setPageTintObservationEnabled(_ enabled: Bool) {}

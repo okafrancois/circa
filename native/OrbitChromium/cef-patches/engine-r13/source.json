@@ -1,0 +1,21 @@
+{
+  "chromium_tag": "156.0.8078.80",
+  "chromium_commit": "fb096c0011f9d50f0a264a9376420cdea9c421e3",
+  "cef_base": "4fa4ab516dacf6c49fc7e6e70d2b7ebce29fa35f",
+  "previous_flavor": "orbit-engine-extensions-r12",
+  "flavor": "orbit-engine-extensions-r13",
+  "side_api_version": 15,
+  "patch_composition": "Preserve the existing CEF and Orbit patch union through r12; apply cef.patch after updating Chromium and every changed DEPS revision.",
+  "dependencies": {
+    "third_party/angle": "127e783de33425c27a70a3f48da9d9202d6a0745",
+    "third_party/dawn": "8114a24a35eed1db88d1d897e8bd193a8c334712",
+    "third_party/devtools-frontend/src": "8c62f844ad8e0664ff41a633bfc17c472f1c5fd6",
+    "third_party/icu": "2a51536dfb3b448bdf3dae70c782ea2879c90904",
+    "third_party/libaom/source/libaom": "016144ea8b8b84b9cfa1c3fba56227b2d3471229",
+    "third_party/libvpx/source/libvpx": "de61454cf81594d5927899da122fc53dcc4a846e",
+    "third_party/pdfium": "c97f02a3519c99d5969514970fd8186318cdb2b0",
+    "third_party/skia": "aa789d9bd566b9865add4070dc6777b3266c64e9",
+    "third_party/webrtc": "19576e37870bfe5a0a910a32f98ff411f722f43a",
+    "v8": "c9b3cfcab30ace06c21f9b48a0f0a34805e81e9d"
+  }
+}

@@ -4,6 +4,7 @@ import argparse
 import importlib.util
 import json
 import plistlib
+import signal
 from pathlib import Path
 import subprocess
 import sys
@@ -39,6 +40,10 @@ def phase(args):
     state = data / 'perf-state.json'
     control = data / 'perf-command.json'
     nonce = str(time.monotonic_ns())
+    def expired(*_):
+        raise TimeoutError('Bounded GUI lease')
+    signal.signal(signal.SIGALRM, expired)
+    signal.alarm(35)
     with lab.OwnedProcessRun() as owner:
         with (root / 'stdout.log').open('w') as out, (root / 'stderr.log').open('w') as err:
             process = owner.launch([str(lab.APP / 'Contents/MacOS/Orbit'), '--use-mock-keychain',
@@ -70,12 +75,13 @@ def phase(args):
                     raise TimeoutError('Native performance probe')
             finally:
                 control.write_text('{"command":"quit"}')
-                process.wait(timeout=8)
+                process.wait(timeout=3)
+    signal.alarm(0)
     assert process.returncode == 0 and not owner.remaining and not owner.forced_signals
     required = {'lifecycle', 'trustedEdits', 'formInteraction', 'webLock', 'editsResetOnNavigation',
                 'captureSizeAndMemory', 'stripSizeAndMemory', 'hiddenCapture', 'discardAccepted',
                 'embedderDiscard', 'activationVisible', 'submitted', 'documentChanged', 'hidden', 'timedOut', 'superseded', 'closed'}
-    if plistlib.loads((args.app / 'Contents/Info.plist').read_bytes())['CFBundleIdentifier'].endswith('engine-r12'):
+    if plistlib.loads((args.app / 'Contents/Info.plist').read_bytes())['CFBundleIdentifier'].endswith(('engine-r12', 'engine-r13')):
         required |= {'memoryDump', 'memoryAllocators'}
     assert all(checks.get(name) is True for name in required), checks
     (root / 'verification.json').write_text(json.dumps(checks, indent=2) + '\n')
@@ -93,7 +99,7 @@ def main():
     root = args.output.resolve()
     validation.validate_bundle(args.app.resolve(), root)
     with (args.app / 'Contents/Info.plist').open('rb') as stream:
-        assert plistlib.load(stream)['CFBundleIdentifier'] in ('lab.orbit.orbit.engine-r11', 'lab.orbit.orbit.engine-r12')
+        assert plistlib.load(stream)['CFBundleIdentifier'] in ('lab.orbit.orbit.engine-r11', 'lab.orbit.orbit.engine-r12', 'lab.orbit.orbit.engine-r13')
     if args.phase:
         phase(args)
         return
@@ -104,7 +110,7 @@ def main():
     try:
         subprocess.run(['/usr/bin/lockf', '-k', '/tmp/orbit-gui-slot.lock', sys.executable, __file__,
                         '--app', str(args.app.resolve()), '--output', str(root), '--phase',
-                        '--port', str(server.server_port)], check=True, timeout=60)
+                        '--port', str(server.server_port)], check=True)
     finally:
         server.shutdown()
         server.server_close()
