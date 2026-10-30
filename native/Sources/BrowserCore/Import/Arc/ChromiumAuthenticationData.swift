@@ -139,6 +139,11 @@ public enum ChromiumPasswordReader {
                 result.unsupported += 1; step = sqlite3_step(row); continue
             }
             let blocked = sqlite3_column_int(row, 10) != 0
+            // Chromium requires blocklist rows to have no username or password.
+            // Reject malformed source rows before they can reach its CHECK invariant.
+            if blocked, try !AuthenticationSQLite.text(row, 4).isEmpty {
+                result.unsupported += 1; step = sqlite3_step(row); continue
+            }
             var clear = blocked ? Data() : try ArcChromiumCookieCipher.decrypt(AuthenticationSQLite.bytes(row, 6), key: sourceKey)
             defer { clear.resetBytes(in: 0..<clear.count) }
             guard let password = String(data: clear, encoding: .utf8) else { throw BrowserAuthenticationImportError.invalidRecord }

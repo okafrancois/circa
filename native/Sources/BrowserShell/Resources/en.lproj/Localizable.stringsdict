@@ -162,5 +162,117 @@
 			<string>%ld additional history visits had no dates in the export and were not added.</string>
 		</dict>
 	</dict>
+	<key>%d passwords found</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@count@</string>
+		<key>count</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>%d password found</string>
+			<key>other</key>
+			<string>%d passwords found</string>
+		</dict>
+	</dict>
+	<key>%d passwords added</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@count@</string>
+		<key>count</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>%d password added</string>
+			<key>other</key>
+			<string>%d passwords added</string>
+		</dict>
+	</dict>
+	<key>%d passwords already in Orbit</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@count@</string>
+		<key>count</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>%d password already in Orbit</string>
+			<key>other</key>
+			<string>%d passwords already in Orbit</string>
+		</dict>
+	</dict>
+	<key>%d passwords kept Orbit’s version</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@count@</string>
+		<key>count</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>%d password kept Orbit’s version</string>
+			<key>other</key>
+			<string>%d passwords kept Orbit’s version</string>
+		</dict>
+	</dict>
+	<key>%d passwords skipped</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@count@</string>
+		<key>count</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>%d password skipped</string>
+			<key>other</key>
+			<string>%d passwords skipped</string>
+		</dict>
+	</dict>
+	<key>%d imported passwords removed</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@count@</string>
+		<key>count</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>%d imported password removed</string>
+			<key>other</key>
+			<string>%d imported passwords removed</string>
+		</dict>
+	</dict>
+	<key>%d edited passwords kept</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@count@</string>
+		<key>count</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>%d edited password kept</string>
+			<key>other</key>
+			<string>%d edited passwords kept</string>
+		</dict>
+	</dict>
 </dict>
 </plist>

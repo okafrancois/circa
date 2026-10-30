@@ -26,7 +26,7 @@ struct OrbitImportFlowTests {
         #expect(stat(snapshot.path, &info) == 0 && info.st_mode & 0o777 == 0o700)
         #expect(stat(preparation.snapshot.sidebar.path, &info) == 0 && info.st_mode & 0o777 == 0o600)
         let copied = FileManager.default.enumerator(atPath: snapshot.path)?.compactMap { $0 as? String } ?? []
-        #expect(!copied.contains { $0.contains("Cookies") || $0.contains("Login Data") || $0.contains("Preferences") })
+        #expect(!copied.contains { $0.contains("Cookies") || $0.contains("Preferences") })
         #expect(try Data(contentsOf: fixture.sessionFile) == before, "a dry run writes nothing")
 
         let report = preparation.report
@@ -36,7 +36,7 @@ struct OrbitImportFlowTests {
         #expect(report.history.importable == 60 && report.historyProfiles == 3 && report.historyProfilesWithoutDatabase == 1)
         #expect(report.skipped.unattributedArchives == 1)
         #expect(!report.interruptedImport)
-        #expect(report.notImported.contains("cookies") && report.notImported.contains("passwords"))
+        #expect(!report.notImported.contains("passwords") && report.notImported.contains("extensions"))
 
         let outcome = try await fixture.importer().apply(preparation, to: target)
         await target.close()

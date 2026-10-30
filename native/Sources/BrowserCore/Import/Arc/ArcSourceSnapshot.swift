@@ -2,8 +2,8 @@ import Darwin
 import Foundation
 
 /// Copy-on-read of the few Arc files the importer needs, in a private directory (mode 0700, files
-/// 0600) that is deleted when the import ends. Cookies, passwords, extensions and site storage are
-/// never copied. Every source file is fingerprinted before and after the copy; a change, or Arc
+/// 0600) that is deleted when the import ends. Encrypted login databases are copied for counts; cookies, extensions and site storage are
+/// handled by the separate explicit authentication step. Every source file is fingerprinted before and after the copy; a change, or Arc
 /// running before or after, discards the copy. Arc is never quit by the importer.
 public final class ArcSourceSnapshot: @unchecked Sendable {
     public static let directoryPrefix = "orbit-arc-import-"
@@ -18,6 +18,7 @@ public final class ArcSourceSnapshot: @unchecked Sendable {
     public let localState: URL?
     /// Arc profile directory name → private copy of its `History` database.
     public internal(set) var historyDatabases: [String: URL]
+    public var passwordDatabases: [String: [URL]] = [:]
     private let lock = NSLock()
     private var removed = false
 
@@ -75,6 +76,7 @@ public final class ArcSourceSnapshot: @unchecked Sendable {
             ("User Data/Local State", maximumLocalStateBytes, false),
         ]
         var historyDirectories: [String] = []
+        var passwordDirectories: [String] = []
         switch source.kind("User Data") {
         case nil, S_IFDIR?: break
         default: throw ArcImportError.symbolicLinkInPath
@@ -89,9 +91,25 @@ public final class ArcSourceSnapshot: @unchecked Sendable {
             }
         }
 
-        return try captureManifest(source: root, plan: plan, historyDirectories: historyDirectories,
+        if let userData = try? source.directory("User Data", create: false) {
+            for name in userData.entries().sorted() where ArcSidebarParser.isProfileDirectory(name) && userData.kind(name) == S_IFDIR {
+                passwordDirectories.append(name)
+                for database in ["Login Data", "Login Data For Account"] {
+                    for suffix in [""] + historySidecars {
+                        plan.append(("User Data/" + name + "/" + database + suffix, 512 * 1024 * 1024, false))
+                    }
+                }
+            }
+        }
+        let snapshot = try captureManifest(source: root, plan: plan, historyDirectories: historyDirectories,
                                    historyPrefix: "User Data/", parent: parent, probe: probe,
                                    diskSpace: diskSpace, afterCopy: afterCopy)
+        for name in passwordDirectories {
+            snapshot.passwordDatabases[name] = ["Login Data", "Login Data For Account"].map {
+                snapshot.directory.appendingPathComponent("User Data/" + name + "/" + $0)
+            }.filter { FileManager.default.fileExists(atPath: $0.path) }
+        }
+        return snapshot
     }
 
     /// Shared descriptor-only copy engine. Manifests are adapter-owned, bounded and non-recursive.

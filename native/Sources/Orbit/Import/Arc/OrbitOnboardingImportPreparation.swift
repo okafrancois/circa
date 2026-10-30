@@ -138,11 +138,22 @@ final class OrbitOnboardingImportPreparation {
                 return .init(sourceDirectory: directory, targetID: id)
             }
             if !pairs.isEmpty {
-                let keys: any ArcSiteSessionKeyProviding = configuration.usesMockKeychain ? ArcSiteSessionFixtureKeys(dataRoot: configuration.dataRoot) : ArcSiteSessionKeychain(targetService: OrbitProductConfiguration.keychainService, targetAccount: OrbitProductConfiguration.keychainAccount)
-                let request = ArcSiteSessionRequest(sourceRoot: sourceRoot.appendingPathComponent("User Data"), profiles: pairs)
-                try await Self.importConnections(request, dataRoot: configuration.dataRoot, keys: keys) {
-                    ArcSiteSessionAlerts.show(nil, failed: true)
-                }
+                let keys = ArcPasswordImportPreparation.keys(configuration)
+                var request = ArcSiteSessionRequest(sourceRoot: sourceRoot.appendingPathComponent("User Data"), profiles: pairs)
+                do {
+                    let running = !configuration.usesMockKeychain && !NSRunningApplication.runningApplications(withBundleIdentifier: source.bundleIdentifier ?? "").isEmpty
+                    let preparedRequest = request
+                    let journal = try await Task.detached {
+                        try ArcPasswordImportPreparation.prepare(preparedRequest, configuration: configuration, keys: keys,
+                            probe: BrowserImportRunningProbe(running: { running }))
+                    }.value
+                    request.passwordJobID = journal.id
+                    try await Self.importConnections(request, dataRoot: configuration.dataRoot, keys: journal.connectionKeys()) {
+                        ArcSiteSessionAlerts.show(nil, failed: true)
+                    }
+                    try journal.clearConnectionKeys()
+                    try journal.activate()
+                } catch ArcAuthenticationError.sourceKeyUnavailable { ArcSiteSessionAlerts.show(nil, failed: true) }
             }
         } else {
             let choices = try await choices(flow, configuration: configuration)

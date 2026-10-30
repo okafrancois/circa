@@ -39,9 +39,10 @@ public struct ArcImportProgress: Sendable, Equatable {
 
 /// Dry-run report. Counts only: safe to show, log and paste into a report.
 public struct ArcImportReport: Codable, Equatable, Sendable {
-    /// Categories this importer never reads (decryption of cookies/passwords is out of scope).
-    public static let notImported = ["cookies", "passwords", "extensions", "siteData", "settings", "downloads"]
+    /// Categories outside the structural and subsequent authentication steps.
+    public static let notImported = ["cookies", "extensions", "siteData", "settings", "downloads"]
 
+    public var passwordProfileCounts: [Int]?
     public var capabilities: [String: BrowserImportCapability]?
     public var sourceCounts: [String: Int]?
     public var formatVersion: Int?
@@ -288,6 +289,13 @@ public struct BrowserImportOrchestrator: Sendable {
         report.capabilities = prepared.capabilities
         report.sourceCounts = prepared.sourceCounts
         report.notImported = prepared.notImported ?? report.notImported
+        if adapter == nil || adapter is ArcBrowserImportAdapter {
+            report.passwordProfileCounts = plan.profiles.compactMap { profile in
+                profile.sourceDirectory.map { directory in
+                    (snapshot.passwordDatabases[directory] ?? []).reduce(0) { $0 + ((try? ArcPasswordImportSource.count(snapshotFile: $1)) ?? 0) }
+                }
+            }
+        }
         report.source = plan.counts
         report.skipped = plan.skipped
         logger.log(.parsed(spaces: report.source.spaces, favorites: report.source.favorites, pinned: report.source.pinnedTabs,

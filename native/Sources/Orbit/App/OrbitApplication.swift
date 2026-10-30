@@ -339,7 +339,7 @@ final class OrbitApplication: NSObject, NSApplicationDelegate {
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         guard !isPreparingToQuit else { return .terminateLater }
-        defer { if !isPreparingToQuit { pendingSiteSessionRequest = nil; pendingBrowserImport = nil } }
+        defer { if !isPreparingToQuit { discardStagedPasswordImport(); pendingSiteSessionRequest = nil; pendingBrowserImport = nil } }
         guard settingsWindow?.model.isRequestingDefaultBrowser != true else { return .terminateCancel }
         guard updater.isRestartingForUpdate || confirmQuitIfNeeded() else { return .terminateCancel }
         if environment?.downloads.hasActiveTransfers == true {
@@ -414,6 +414,7 @@ final class OrbitApplication: NSObject, NSApplicationDelegate {
             let controllers = environment?.liveControllers ?? Array(windows.windows.values)
             for controller in controllers { controller.cancelTerminationPreparation() }
             isPreparingToQuit = false
+            discardStagedPasswordImport()
             pendingSiteSessionRequest = nil
             pendingBrowserImport = nil
             wantsSiteSessionRelaunch = false

@@ -6,6 +6,7 @@ import Security
 struct ArcSiteSessionKeychain: ArcSiteSessionKeyProviding {
     let targetService: String
     let targetAccount: String
+    var boundary: any OrbitRecoverySecItemBoundary = OrbitSystemRecoverySecItems()
 
     func sourcePassword() throws -> Data { try password(service: "Arc Safe Storage", account: "Arc", create: false) }
     func targetPassword() throws -> Data { try password(service: targetService, account: targetAccount, create: true) }
@@ -16,8 +17,7 @@ struct ArcSiteSessionKeychain: ArcSiteSessionKeyProviding {
         var query = identity
         query[kSecReturnData as String] = true
         query[kSecMatchLimit as String] = kSecMatchLimitOne
-        var result: CFTypeRef?
-        let status = SecItemCopyMatching(query as CFDictionary, &result)
+        let (status, result) = boundary.copyMatching(query)
         if status == errSecSuccess, let data = result as? Data, !data.isEmpty { return data }
         guard status == errSecItemNotFound, create else { throw ArcAuthenticationError.sourceKeyUnavailable }
         // Matches Chromium's KeychainPassword: 128 random bits encoded as base64.
@@ -29,7 +29,7 @@ struct ArcSiteSessionKeychain: ArcSiteSessionKeyProviding {
         let password = random.base64EncodedData()
         var item = identity
         item[kSecValueData as String] = password
-        let added = SecItemAdd(item as CFDictionary, nil)
+        let (added, _) = boundary.add(item)
         if added == errSecDuplicateItem { return try self.password(service: service, account: account, create: false) }
         guard added == errSecSuccess else { throw ArcAuthenticationError.sourceKeyUnavailable }
         return password
@@ -41,7 +41,10 @@ struct ArcSiteSessionKeychain: ArcSiteSessionKeyProviding {
 struct ArcSiteSessionFixtureKeys: ArcSiteSessionKeyProviding {
     let dataRoot: URL
     func sourcePassword() throws -> Data {
-        try Data(contentsOf: dataRoot.appendingPathComponent("arc-session-source-password"))
+        guard let data = try? Data(contentsOf: dataRoot.appendingPathComponent("arc-session-source-password")), !data.isEmpty else {
+            throw ArcAuthenticationError.sourceKeyUnavailable
+        }
+        return data
     }
     func targetPassword() throws -> Data { Data("mock_password".utf8) }
 }
