@@ -170,10 +170,14 @@ extension OrbitApplication {
     }
 
     func promoteQuickWindow(_ little: BrowserQuickWindowWindowController<ActiveEngine>, to spaceID: SpaceID? = nil) {
-        guard let environment, !isPreparingToQuit, !little.isClosed, !little.isPromotionInProgress else { return }
+        guard let environment, environment.quickWindows[little.id] === little,
+              !isPreparingToQuit, !little.isClosed, !little.isPromotionInProgress else { return }
+        // Capture the chosen address before asynchronous window creation or navigation changes it.
+        let sourceURL = little.surface?.currentURL
         // A selected main window of the same profile receives the document in its current Space.
-        // A foreign profile is never reused: ask for a window of the Little Orbit's captured Space.
-        if let target = windows.selectedWindow, target.session.activeProfileID == little.profileID,
+        // Without an explicit choice, use a window of the Little Orbit's captured profile.
+        if let target = windows.selectedWindow, target.engine === environment.engine,
+           target.isPrivateWindow == environment.isPrivate, target.session.activeProfileID == little.profileID,
            spaceID == nil || target.session.snapshot?.activeSpaceID == spaceID {
             if let adoption = little.promote(to: target) {
                 enqueueQuickWindowCommand { [weak self, weak target] in
@@ -185,16 +189,21 @@ extension OrbitApplication {
             return
         }
         // Land in the selected Space of the existing main window.
-        // Preserve the captured profile boundary while the Space activation is queued.
-        if let spaceID, let target = windows.selectedWindow, target.session.activeProfileID == little.profileID {
+        if let spaceID, let target = windows.selectedWindow, target.engine === environment.engine,
+           target.isPrivateWindow == environment.isPrivate {
             guard little.beginPromotionPreparation() else { return }
             enqueueQuickWindowCommand { [weak self, weak little, weak target] in
                 guard let self, let little, let target else { return }
                 defer { little.endPromotionPreparation() }
                 let catalog = await environment.store.catalogSnapshot()
                 guard !isPreparingToQuit, !little.isClosed, target.acceptsCommands,
-                      target.session.activeProfileID == little.profileID,
-                      catalog.spaces.contains(where: { $0.id == spaceID && $0.profileID == little.profileID }) else { return }
+                      let space = catalog.spaces.first(where: { $0.id == spaceID }) else { return }
+                if space.profileID != little.profileID {
+                    if await copyQuickWindow(little, url: sourceURL, to: target, spaceID: space.id, profileID: space.profileID) {
+                        presentQuickWindowDestination(target)
+                    }
+                    return
+                }
                 target.session.activateSpace(spaceID)
                 await target.session.waitForPendingCommands()
                 guard !little.isClosed, !isPreparingToQuit, target.acceptsCommands,
@@ -214,9 +223,7 @@ extension OrbitApplication {
             defer { little.endPromotionPreparation() }
             let catalog = await environment.store.catalogSnapshot()
             guard !little.isClosed, !isPreparingToQuit,
-                  let space = catalog.spaces.first(where: {
-                      $0.id == destinationSpaceID && $0.profileID == little.profileID
-                  }) else { return }
+                  let space = catalog.spaces.first(where: { $0.id == destinationSpaceID }) else { return }
             let id = UUID()
             quickWindowDestinationSpaces[id] = space.id
             provisionalQuickWindowWindows.insert(id)
@@ -225,6 +232,15 @@ extension OrbitApplication {
             await windows.waitForPendingCommands()
             guard let target = windows.windows[id] else { return }
             quickWindowPromotionWindowPrepared?(target)
+            if space.profileID != little.profileID {
+                let copied = await copyQuickWindow(little, url: sourceURL, to: target, spaceID: space.id, profileID: space.profileID)
+                await target.session.waitForPendingCommands()
+                if copied || target.session.snapshot?.tabs.isEmpty == false {
+                    provisionalQuickWindowWindows.remove(id)
+                    presentQuickWindowDestination(target)
+                } else { target.window?.close() }
+                return
+            }
             let adoption = little.isClosed ? nil : little.promote(to: target)
             let occurrence = await adoption?.value
             await target.session.waitForPendingCommands()
@@ -241,17 +257,35 @@ extension OrbitApplication {
         }
     }
 
+    /// A different account receives a fresh GET, never the source document or its POST body.
+    /// Session-bound and privileged URLs leave the original Little window intact.
+    private func copyQuickWindow(_ little: BrowserQuickWindowWindowController<ActiveEngine>,
+                                 url: URL?, to target: OrbitWindowController, spaceID: SpaceID, profileID: ProfileID) async -> Bool {
+        guard !isPreparingToQuit, !little.isClosed, target.acceptsCommands,
+              target.engine === little.engine, let surface = little.surface,
+              !surface.isDisposed, little.owns(surface), let url,
+              ["http", "https"].contains(url.scheme?.lowercased() ?? ""),
+              url.host?.isEmpty == false, url.user == nil, url.password == nil else { return false }
+        let delivery = target.session.openTabForDelivery(url: url, expectedProfileID: profileID, expectedSpaceID: spaceID)
+        guard await delivery.value != nil else { return false }
+        little.retire()
+        little.window?.close()
+        target.hideLibrary()
+        return true
+    }
+
     private func presentQuickWindowDestination(_ target: OrbitWindowController) {
         windowPresenter(target, true)
         if NSApp.activationPolicy() != .prohibited { NSApp.activate() }
     }
 
     func showQuickWindowSpaces(_ little: BrowserQuickWindowWindowController<ActiveEngine>) {
-        guard let environment, !little.isClosed else { return }
+        guard let environment, environment.quickWindows[little.id] === little, !little.isClosed else { return }
         Task { [weak self, weak little] in
             let catalog = await environment.store.catalogSnapshot()
-            guard let self, let little, !little.isClosed, !little.isPromotionInProgress else { return }
-            let rows = catalog.spaces.filter { $0.profileID == little.profileID }.map { space in
+            guard let self, let little, self.environment === environment,
+                  environment.quickWindows[little.id] === little, !little.isClosed, !little.isPromotionInProgress else { return }
+            let rows = catalog.spaces.map { space in
                 let icon = SpaceIconImages.view(environment.settings.document.space(space.id).iconSelection, pointSize: 20)
                 return BrowserQuickWindowSearchRow(id: space.id.rawValue.uuidString, title: space.name,
                     image: (icon as? NSImageView)?.image,
