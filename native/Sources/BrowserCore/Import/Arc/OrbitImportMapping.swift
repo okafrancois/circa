@@ -22,6 +22,7 @@ public struct ArcImportOptions: Sendable {
     }
 
     public var namespace = "arc"
+    public var selectedProfileDirectories: Set<String>? = nil
     /// Today tabs are optional (CORE-IMPORT brief); Favorites and Pinned are always imported.
     public var includeToday = true
     public var includeArchive = true
@@ -165,6 +166,16 @@ public enum ArcImportMapper {
             plan.historySources = plan.profiles.compactMap { profile in
                 profile.sourceDirectory.map { .init(profileID: profile.id, directory: $0) }
             }
+        }
+        if let directories = options.selectedProfileDirectories {
+            let selected = Set(plan.profiles.filter { $0.sourceDirectory.map(directories.contains) == true }.map(\.id))
+            plan.profiles.removeAll { !selected.contains($0.id) }
+            let spaces = Set(plan.spaces.filter { selected.contains($0.profileID) }.map(\.id))
+            plan.spaces.removeAll { !spaces.contains($0.id) }
+            plan.sections.removeAll { !spaces.contains($0.spaceID) }
+            plan.favorites.removeAll { !selected.contains($0.profileID) }
+            plan.historySources.removeAll { !selected.contains($0.profileID) }
+            plan.archive.removeAll { !selected.contains($0.profileID) }
         }
         return plan
     }

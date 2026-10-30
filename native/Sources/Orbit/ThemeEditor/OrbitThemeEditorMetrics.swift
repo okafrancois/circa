@@ -1,12 +1,12 @@
 import AppKit
+import BrowserShell
 import BrowserCore
 
 @MainActor
 enum OrbitThemeEditorMetrics {
-    /// Compact color viewport; the extended editor retains the applied-material controls.
-    // The original 508 pt color editor is retained above an applied-material section (26 Oct request).
-    static let pickerSize = NSSize(width: 356, height: 508)
-    static let size = NSSize(width: 356, height: 520)
+    /// The color controls retain their geometry; Frost extends the bottom of both presentations.
+    static let pickerSize = NSSize(width: 356, height: 566)
+    static let size = NSSize(width: 356, height: 566)
     static let cornerRadius: CGFloat = 20
     static let offsetFromCard = CGPoint(x: 13, y: 13)
 
@@ -22,7 +22,7 @@ enum OrbitThemeEditorMetrics {
     static let modeGlyphPointSize: CGFloat = 15
 
     static let placeholderCenterY: CGFloat = 178
-    static let placeholderFont = NSFont.systemFont(ofSize: 13, weight: .semibold)
+    static let placeholderFont = BrandTextStyle.ui.font(size: 13, weight: .semibold)
 
     static let stepperCenterY: CGFloat = 316
     static let stepperCenterXs: [CGFloat] = [158, 198]
@@ -78,6 +78,7 @@ enum OrbitThemeEditorText {
     static var previousColors: String { uiText("Previous Colors") }
     static var nextColors: String { uiText("Next Colors") }
     static var intensity: String { uiText("Intensity") }
+    static var frost: String { uiText("Frost") }
     static var grain: String { uiText("Grain") }
     static var undoAction: String { uiText("Change Theme") }
     static func handle(_ number: Int) -> String { uiFormat("Color %ld", number) }

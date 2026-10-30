@@ -31,6 +31,11 @@ final class BrowserSettingsModel<Engine: BrowserEngine>: ObservableObject {
     let defaultBrowser: BrowserDefaultBrowserService
     @Published var focusNewProfile = false
     @Published var settingsSection: BrowserSettingsSection? = .general
+    var selectSettingsSection: ((BrowserSettingsSection) -> Bool)?
+    func navigate(to section: BrowserSettingsSection) {
+        if let selectSettingsSection { _ = selectSettingsSection(section) }
+        else { settingsSection = section }
+    }
     @Published private(set) var catalog = BrowserCatalogSnapshot(profiles: [], spaces: [])
     @Published private(set) var selectedProfileID: ProfileID?
     @Published private(set) var appearanceSpaceID: SpaceID?

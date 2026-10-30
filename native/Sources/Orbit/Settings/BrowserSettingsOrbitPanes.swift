@@ -1,13 +1,23 @@
 import AppKit
 import BrowserCore
 import BrowserEngine
+import BrowserShell
 import SwiftUI
 
 enum OrbitSettingsStyle {
-    static let foreground = color(light: 0x3d3d3d, dark: 0xf3f3f3)
-    static let background = color(light: 0xf2f1f3, dark: 0x272629)
-    static let panel = color(light: 0xefedf0, dark: 0x2d2c2f)
-    static let border = color(light: 0xdedce0, dark: 0x424145)
+    static let foreground = color(light: 0x141317, dark: 0xF4F1EC)
+    static let background = Color(nsColor: windowColor)
+    static let panel = color(light: 0xFFFFFF, dark: 0x222128)
+    static let border = Color.primary.opacity(0.09)
+    static let windowColor = NSColor(name: nil) { appearance in
+        appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? BrandPalette.stage2 : BrandPalette.paper
+    }
+    static let toolbarColor = NSColor(name: nil) { appearance in
+        appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? BrandPalette.rgb(0x1E1E24) : .white
+    }
+    static let selectionColor = NSColor(name: nil) { appearance in
+        (appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? NSColor.white : NSColor.black).withAlphaComponent(0.07)
+    }
 
     private static func color(light: UInt32, dark: UInt32) -> Color {
         Color(nsColor: NSColor(name: nil) { appearance in
@@ -29,38 +39,64 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
     @State private var shortcutQuery = ""
     @State private var showsAirTrafficControl = false
     @State private var archiveChange: BrowserArchiveSettingsChange?
+    @State private var renamingProfile: BrowserProfile?
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
+            VStack(alignment: .leading, spacing: 10) {
+                if model.settingsSection != .profiles && model.settingsSection != .links && model.settingsSection != .about {
+                    Text((model.settingsSection ?? .general).title).font(Font(BrandTextStyle.title.font(size: 28))).padding(.bottom, 6)
+                }
                 switch model.settingsSection ?? .general {
                 case .general: general
                 case .profiles: profiles
                 case .shortcuts: shortcuts
                 case .links: links
-                case .icon: icon
+                case .about: about
                 case .advanced: advanced
                 default: EmptyView()
                 }
             }
             .frame(maxWidth: .infinity, alignment: .topLeading)
-            .padding(.horizontal, model.settingsSection == .profiles ? 24 : 64)
-            .padding(.vertical, 20)
+            .padding(.horizontal, 28)
+            .padding(.top, 22).padding(.bottom, 26)
         }
         .scrollIndicators(.automatic)
-        .font(.system(size: 13))
+        .font(Font(BrandFonts.ui(13)))
         .buttonStyle(.bordered)
         .controlSize(.small)
         .disabled(runtime.isUnavailable)
         .accessibilityIdentifier("settings-pane-" + (model.settingsSection ?? .general).rawValue)
-        .alert(item: $archiveChange) { change in
-            Alert(title: Text(change.title),
-                  message: Text(uiFormat("Would you like to apply this change to all of your Profiles, or only your %@ Profile?", change.profileName)),
-                  primaryButton: .default(Text(uiText("All Profiles"))) {
-                      model.perform { try await model.setArchiveThreshold(change.threshold, profile: change.profile, allProfiles: true) }
-                  }, secondaryButton: .default(Text(uiText("Only this Profile"))) {
-                      model.perform { try await model.setArchiveThreshold(change.threshold, profile: change.profile) }
-                  })
+        .sheet(isPresented: Binding(get: { renamingProfile != nil }, set: { if !$0 { renamingProfile = nil } })) {
+          if let profile = renamingProfile {
+            VStack(alignment: .leading, spacing: 16) {
+                Text(uiText("Rename")).font(Font(BrandTextStyle.title.font(size: 22)))
+                BrowserSettingsNameEditor(name: profile.name) { name in
+                    model.perform { try await model.renameProfile(profile.id, name: name); renamingProfile = nil }
+                }
+                if let error = model.errorMessage { Text(error).foregroundStyle(.red).font(Font(BrandFonts.ui(12))) }
+                HStack { Spacer(); Button(uiText("Cancel")) { renamingProfile = nil }.keyboardShortcut(.cancelAction) }
+            }.padding(22).frame(width: 396).settingsFrost()
+          }
+        }
+        .sheet(item: $archiveChange) { change in
+            VStack(alignment: .leading, spacing: 16) {
+                Text(change.title).font(Font(BrandTextStyle.title.font(size: 22)))
+                Text(uiFormat("Would you like to apply this change to all of your Profiles, or only your %@ Profile?", change.profileName))
+                    .foregroundStyle(.secondary)
+                HStack {
+                    Button(uiText("Cancel")) { archiveChange = nil }.keyboardShortcut(.cancelAction)
+                    Spacer()
+                    Button(uiText("Only this Profile")) {
+                        archiveChange = nil
+                        model.perform { try await model.setArchiveThreshold(change.threshold, profile: change.profile) }
+                    }
+                    Button(uiText("All Profiles")) {
+                        archiveChange = nil
+                        model.perform { try await model.setArchiveThreshold(change.threshold, profile: change.profile, allProfiles: true) }
+                    }.keyboardShortcut(.defaultAction)
+                }
+            }.padding(22).frame(width: 440).settingsFrost()
         }
     }
 
@@ -80,28 +116,31 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
                            identifier: "settings-warn-before-quitting", save: model.setWarnBeforeQuitting)
             }
             panel {
-                HStack(spacing: 14) {
-                    Image(systemName: "person.crop.circle").font(.system(size: 28, weight: .light)).foregroundStyle(.secondary)
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text(uiText("Manage your default search engine, Auto-Archive, and downloads in Profile Settings."))
-                            .fixedSize(horizontal: false, vertical: true)
-                        Button(uiText("Profile Settings")) { model.settingsSection = .profiles }
-                            .accessibilityIdentifier("settings-open-profiles")
-                    }
-                    Spacer(minLength: 0)
-                }.padding(8)
+                Button { model.navigate(to: .profiles) } label: {
+                    HStack(spacing: 12) {
+                        OrbitIcon.view(sfName: "person.crop.circle", pointSize: 20).frame(width: 20, height: 20)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(uiText("Profile Settings")).fontWeight(.medium)
+                            Text(uiText("Manage your default search engine, Auto-Archive, and downloads in Profile Settings."))
+                                .font(Font(BrandFonts.ui(12))).foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        OrbitIcon.view(sfName: "chevron.right", pointSize: 14).frame(width: 14, height: 14).foregroundStyle(.secondary)
+                    }.padding(14).contentShape(Rectangle())
+                }.buttonStyle(.plain).accessibilityIdentifier("settings-open-profiles")
             }
+
             panel {
                 HStack(spacing: 14) {
-                    appIcon.frame(width: 40, height: 40)
+                    Image(nsImage: BrandFonts.mark ?? NSImage()).resizable().scaledToFit().frame(width: 44, height: 44)
                     VStack(alignment: .leading, spacing: 6) {
                         Text(model.defaultStatus?.isOrbit == true
                              ? uiFormat("%@ is your default web browser.", applicationName) : uiFormat("%@ is not your default web browser.", applicationName))
-                        Button(uiText("Make Default")) { model.perform { try await model.requestDefaultBrowser() } }
-                            .disabled(!model.canRequestDefaultBrowser || model.isRequestingDefaultBrowser)
-                            .accessibilityIdentifier("settings-default-browser")
                     }
                     Spacer(minLength: 0)
+                    Button(uiText("Make Default")) { model.perform { try await model.requestDefaultBrowser() } }
+                        .disabled(!model.canRequestDefaultBrowser || model.isRequestingDefaultBrowser)
+                        .accessibilityIdentifier("settings-default-browser")
                 }.padding(8)
             }
         }
@@ -110,22 +149,22 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
     private var profiles: some View {
         HStack(alignment: .top, spacing: 20) {
             VStack(alignment: .leading, spacing: 4) {
-                Text(uiText("Profiles")).font(.system(size: 12, weight: .semibold)).foregroundStyle(.secondary)
+                Text(uiText("Profiles")).font(Font(BrandFonts.ui(12, weight: .semibold))).foregroundStyle(.secondary)
                     .padding(.horizontal, 8).padding(.bottom, 8)
                 ForEach(model.catalog.profiles, id: \.id) { profile in
                     Button { model.selectProfile(profile.id) } label: {
                         HStack(spacing: 8) {
-                            Image(systemName: "person.crop.circle")
+                            OrbitIcon.view(sfName: "person.crop.circle", pointSize: 13)
                             Text(profile.name).lineLimit(2)
                             Spacer(minLength: 0)
                         }
                         .padding(.horizontal, 8).padding(.vertical, 9)
-                        .background(model.selectedProfileID == profile.id ? Color.blue.opacity(0.12) : .clear,
-                                    in: RoundedRectangle(cornerRadius: 6))
+                        .background(model.selectedProfileID == profile.id ? Color.accentColor : .clear,
+                                    in: RoundedRectangle(cornerRadius: 12))
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
-                    .foregroundStyle(model.selectedProfileID == profile.id ? .blue : OrbitSettingsStyle.foreground)
+                    .foregroundStyle(model.selectedProfileID == profile.id ? .white : OrbitSettingsStyle.foreground)
                     .accessibilityAddTraits(model.selectedProfileID == profile.id ? .isSelected : [])
                     .accessibilityIdentifier("settings-profile-" + profile.id.rawValue.uuidString)
                 }
@@ -150,12 +189,12 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
             VStack(alignment: .leading, spacing: 16) {
                 if let profile = model.selectedProfileID,
                    let entry = model.catalog.profiles.first(where: { $0.id == profile }) {
-                    Text(entry.name).font(.system(size: 21, weight: .semibold)).padding(.bottom, 2)
+                    HStack {
+                        Text(entry.name).font(Font(BrandTextStyle.title.font(size: 28)))
+                        Spacer()
+                        Button(uiText("Rename")) { renamingProfile = entry }.accessibilityIdentifier("settings-rename-profile")
+                    }
                     panel {
-                        BrowserSettingsNameEditor(name: entry.name) { name in
-                            model.perform { try await model.renameProfile(profile, name: name) }
-                        }.id(profile).padding(9)
-                        rule
                         settingRow("Search engine") {
                             Picker(uiText("Search engine"), selection: Binding(get: { runtime.document.profile(profile).searchEngine }, set: { value in
                                 model.perform { try await model.updateProfile(profile) { $0.searchEngine = value } }
@@ -163,7 +202,7 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
                                 Text("Google").tag(SearchEngine.google)
                                 Text("DuckDuckGo").tag(SearchEngine.duckDuckGo)
                                 Text("Bing").tag(SearchEngine.bing)
-                            }.labelsHidden().frame(width: 135).accessibilityIdentifier("settings-search-engine")
+                            }.labelsHidden().pickerStyle(.menu).frame(width: 135).accessibilityIdentifier("settings-search-engine")
                         }
                         rule
                         settingRow("Archive tabs after") {
@@ -182,10 +221,20 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
                                 if let current = model.archiveThreshold, !standardArchiveThresholds.contains(current) {
                                     Text(current == .never ? uiText("Never") : uiText("Custom Delay")).tag(Optional(current))
                                 }
-                            }.labelsHidden().frame(width: 110).accessibilityIdentifier("settings-auto-archive")
+                            }.labelsHidden().pickerStyle(.menu).frame(width: 110).accessibilityIdentifier("settings-auto-archive")
                         }
                     }
-                    Text(uiText("Pinned tabs and Favorites are never auto-archived.")).font(.system(size: 11)).foregroundStyle(.secondary)
+                    Text(uiText("Pinned tabs and Favorites are never auto-archived.")).font(Font(BrandFonts.ui(12))).foregroundStyle(.secondary)
+                    panel {
+                        settingRow("Spaces") {
+                            VStack(alignment: .trailing, spacing: 5) {
+                                Text(model.catalog.spaces.filter { $0.profileID == profile }.map(\.name).joined(separator: ", "))
+                                    .font(Font(BrandFonts.ui(12))).foregroundStyle(.secondary)
+                                Button(uiText("Edit…")) { model.navigate(to: .spaces) }
+                                    .accessibilityIdentifier("settings-edit-spaces")
+                            }
+                        }
+                    }
                     panel {
                         settingRow("Extensions") {
                             Button(uiText("Manage…")) { open(.extensions, profile: profile) }
@@ -219,7 +268,7 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
                             .accessibilityIdentifier("settings-delete-profile")
                     }
                     if let reason = model.profileRemovalUnavailableReason {
-                        Text(reason).font(.system(size: 11)).foregroundStyle(.secondary)
+                        Text(reason).font(Font(BrandFonts.ui(12))).foregroundStyle(.secondary)
                     }
                 }
             }.frame(maxWidth: .infinity, alignment: .leading)
@@ -229,9 +278,9 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
     private var links: some View {
         Group {
             HStack(spacing: 15) {
-                Image(systemName: "macwindow.on.rectangle").font(.system(size: 38, weight: .ultraLight)).foregroundStyle(.blue)
+                OrbitIcon.view(sfName: "macwindow.on.rectangle", pointSize: 38).font(.system(size: 38, weight: .ultraLight)).foregroundStyle(Color.accentColor)
                 VStack(alignment: .leading, spacing: 5) {
-                    Text("Little Orbit").font(.system(size: 20, weight: .semibold))
+                    Text(uiText("Little Orbit")).font(Font(BrandTextStyle.title.font(size: 28)))
                     Text(uiText("A smaller, simpler window for quick lookups and links from other apps."))
                         .foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 }
@@ -239,10 +288,10 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
             panel {
                 Toggle(uiText("Links from other apps open in Little Orbit"), isOn: Binding(get: { runtime.document.opensExternalLinksInQuickWindow }, set: { value in
                     model.perform { try await runtime.setOpensExternalLinksInQuickWindow(value) }
-                })).toggleStyle(.checkbox).padding(12).accessibilityIdentifier("settings-external-little-orbit")
+                })).toggleStyle(SettingsSwitchStyle()).padding(12).accessibilityIdentifier("settings-external-little-orbit")
             }
             HStack {
-                Text("Peek").font(.system(size: 20, weight: .semibold))
+                Text(uiText("Peek")).font(Font(BrandFonts.ui(14, weight: .semibold)))
                 Spacer()
                 profilePicker
             }
@@ -252,13 +301,13 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
                         Toggle(uiText("Open a Peek window when clicking on links to other sites"), isOn: Binding(get: { runtime.document.profile(profile).opensPinnedLinksInPeek }, set: { value in
                             model.perform { try await model.updateProfile(profile) { $0.opensPinnedLinksInPeek = value } }
                         })).accessibilityIdentifier("settings-pinned-peek")
-                        Text(uiText("Note: This only affects Favorites and Pinned tabs")).font(.system(size: 11)).foregroundStyle(.secondary).padding(.leading, 19)
+                        Text(uiText("Note: This only affects Favorites and Pinned tabs")).font(Font(BrandFonts.ui(12))).foregroundStyle(.secondary)
                     }.padding(12)
                     rule
                     Toggle(uiText("Open a Peek window when clicking on links with Shift held"), isOn: Binding(get: { runtime.document.profile(profile).shiftClickOpensPeek }, set: { value in
                         model.perform { try await model.updateProfile(profile) { $0.shiftClickOpensPeek = value } }
                     })).padding(12).accessibilityIdentifier("settings-shift-peek")
-                }.toggleStyle(.checkbox)
+                }.toggleStyle(SettingsSwitchStyle())
             }
             panel {
                 settingRow(uiFormat("Choose where links open inside %@.", applicationName)) {
@@ -273,26 +322,14 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
     }
 
     private var shortcuts: some View {
-        Group {
-            HStack {
-                if let profile = model.selectedProfileID {
-                    Button(uiText("Extension Shortcuts…")) { open(.extensionShortcuts, profile: profile) }
-                        .disabled(!model.canOpenExtensionSettings(profile: profile))
-                        .accessibilityIdentifier("settings-extension-shortcuts")
-                }
-            }
-            BrowserShortcutSettingsPane(preferences: model.environment.shortcutPreferences,
-                definitions: model.settingsShortcuts, conflictDefinitions: model.shortcuts)
-
-        }
+        BrowserShortcutSettingsPane(preferences: model.environment.shortcutPreferences,
+            definitions: model.settingsShortcuts, conflictDefinitions: model.shortcuts,
+            openExtensionSettings: model.selectedProfileID.map { profile in { open(.extensionShortcuts, profile: profile) } },
+            extensionSettingsAvailable: model.selectedProfileID.map { model.canOpenExtensionSettings(profile: $0) } ?? false)
     }
 
-    private var icon: some View {
-        VStack(spacing: 20) {
-            appIcon.frame(width: 112, height: 112).padding(.top, 24)
-            Text(uiText("App Icon")).font(.system(size: 21, weight: .semibold))
-            Text(uiFormat("%@ uses its current app icon.", applicationName)).foregroundStyle(.secondary)
-        }.frame(maxWidth: .infinity)
+    private var about: some View {
+        BrowserSettingsAbout(updater: runtime.updater)
     }
 
     private var advanced: some View {
@@ -304,7 +341,7 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
                 Toggle(BrowserSettingsRuntime.enablesBoostsTitle, isOn: Binding(
                     get: { runtime.document.enablesBoostsOnWebsites },
                     set: { value in model.perform { try await runtime.setEnablesBoostsOnWebsites(value) } }
-                )).padding(12).accessibilityIdentifier("settings-enables-boosts")
+                )).toggleStyle(SettingsSwitchStyle()).padding(12).accessibilityIdentifier("settings-enables-boosts")
             }
             panel {
                 settingRow("Put inactive tabs to sleep after") {
@@ -319,12 +356,10 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
                         Text(uiText("4 hours")).tag(BrowserMemorySaverSetting.fourHours)
                         Text(uiText("6 hours")).tag(BrowserMemorySaverSetting.sixHours)
                         Text(uiText("Never")).tag(BrowserMemorySaverSetting.never)
-                    }.labelsHidden().frame(width: 140).accessibilityIdentifier("settings-memory-saver")
+                    }.labelsHidden().pickerStyle(.menu).frame(width: 140).accessibilityIdentifier("settings-memory-saver")
+                        .help(uiText("Keeps pinned tabs, edited forms and active media awake. Sleeping tabs reload when selected."))
                 }
-                Text(uiText("Keeps pinned tabs, edited forms and active media awake. Sleeping tabs reload when selected."))
-                    .font(.system(size: 11)).foregroundStyle(.secondary).padding(12)
-            }
-            panel {
+                rule
                 settingRow("Animations") {
                     Picker(uiText("Animations"), selection: Binding(get: { runtime.document.reducedMotion }, set: { value in
                         model.perform { try await model.setReducedMotion(value) }
@@ -332,10 +367,9 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
                         Text(uiText("Follow System")).tag(BrowserReducedMotionSetting.system)
                         Text(uiText("Reduce Motion")).tag(BrowserReducedMotionSetting.reduce)
                         Text(uiText("Full Motion")).tag(BrowserReducedMotionSetting.full)
-                    }.labelsHidden().frame(width: 140).accessibilityIdentifier("settings-reduced-motion")
+                    }.labelsHidden().pickerStyle(.segmented).frame(width: 300).accessibilityIdentifier("settings-reduced-motion")
                 }
-            }
-            panel {
+                rule
                 liveToggle(uiFormat("Play %@ sound effects", applicationName), value: runtime.document.interaction.playSoundEffects,
                            identifier: "settings-sound-effects", save: model.setPlaySoundEffects)
                 rule
@@ -344,13 +378,13 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
             }
             panel {
                 settingRow("Website data and permissions") {
-                    Button(uiText("Manage…")) { model.settingsSection = .privacy }
+                    Button(uiText("Manage…")) { model.navigate(to: .privacy) }
                         .accessibilityIdentifier("settings-site-data")
                 }
             }
             Text(model.safeBrowsingAvailable ? uiText("Warnings for dangerous sites and downloads are on.")
                  : uiText("Safe Browsing is unavailable in this build."))
-                .font(.system(size: 11)).foregroundStyle(.secondary)
+                .font(Font(BrandFonts.ui(12))).foregroundStyle(.secondary)
         }
     }
 
@@ -359,7 +393,7 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
             if let profile = model.selectedProfileID {
                 Picker(uiText("Profile"), selection: Binding(get: { profile }, set: { model.selectProfile($0) })) {
                     ForEach(model.catalog.profiles, id: \.id) { Text($0.name).tag($0.id) }
-                }.frame(maxWidth: 190).accessibilityIdentifier("settings-profile")
+                }.labelsHidden().pickerStyle(.menu).frame(maxWidth: 190).accessibilityIdentifier("settings-profile")
             }
         }
     }
@@ -371,25 +405,25 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
     }
     private var standardArchiveThresholds: [BrowserAutoArchiveThreshold] { [.twelveHours, .oneDay, .sevenDays, .thirtyDays] }
     private var appIcon: some View {
-        Image(nsImage: NSApp.applicationIconImage ?? NSImage()).resizable().interpolation(.high).scaledToFit().accessibilityLabel(uiText("App Icon"))
+        SettingsAppIcon()
     }
     private var rule: some View { Rectangle().fill(OrbitSettingsStyle.border).frame(height: 1).padding(.horizontal, 8) }
     private func panel<Content: View>(@ViewBuilder content: () -> Content) -> some View {
         VStack(alignment: .leading, spacing: 0, content: content)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(OrbitSettingsStyle.panel, in: RoundedRectangle(cornerRadius: 6))
-            .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(OrbitSettingsStyle.border, lineWidth: 1))
+            .background(OrbitSettingsStyle.panel, in: RoundedRectangle(cornerRadius: 12))
+            .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(OrbitSettingsStyle.border, lineWidth: 1))
     }
     private func settingRow<Control: View>(_ title: String, @ViewBuilder control: () -> Control) -> some View {
         HStack(spacing: 12) { Text(uiText(title)).fixedSize(horizontal: false, vertical: true); Spacer(minLength: 8); control() }
-            .padding(.horizontal, 12).padding(.vertical, 10)
+            .padding(.horizontal, 14).padding(.vertical, 8).frame(minHeight: 44)
     }
     private func liveToggle(_ title: String, value: Bool, identifier: String,
                             save: @escaping (Bool) async throws -> Void) -> some View {
         settingRow(title) {
             Toggle(uiText(title), isOn: Binding(get: { value }, set: { next in
                 model.perform { try await save(next) }
-            })).labelsHidden().toggleStyle(.switch).controlSize(.mini).accessibilityIdentifier(identifier)
+            })).labelsHidden().toggleStyle(.switch).controlSize(.small).accessibilityIdentifier(identifier)
         }
     }
     private func open(_ page: BrowserSettingsPage, profile: ProfileID) {
@@ -403,7 +437,7 @@ private struct BrowserAutomaticUpdateToggle: View {
     var body: some View {
         Toggle(uiText("Automatically update"), isOn: Binding(get: { updater.automaticallyUpdates },
             set: { updater.setAutomaticallyUpdates($0) }))
-            .labelsHidden().toggleStyle(.switch).controlSize(.mini)
+            .labelsHidden().toggleStyle(.switch).controlSize(.small)
             .accessibilityIdentifier("settings-automatic-updates")
     }
 }
@@ -418,15 +452,15 @@ private struct BrowserSyncSettingsRow: View {
                 Text(uiText("Sync with iCloud"))
                 Spacer()
                 Toggle(uiText("Sync with iCloud"), isOn: Binding(get: { runtime.enabled }, set: save))
-                    .labelsHidden().toggleStyle(.switch).controlSize(.mini)
+                    .labelsHidden().toggleStyle(.switch).controlSize(.small)
                     .disabled(!runtime.available).accessibilityIdentifier("settings-icloud-sync")
             }
-            Text(runtime.statusText).font(.system(size: 11)).foregroundStyle(.secondary)
+            Text(runtime.statusText).font(Font(BrandFonts.ui(12))).foregroundStyle(.secondary)
                 .accessibilityIdentifier("settings-icloud-sync-status")
         }
         .padding(12).frame(maxWidth: .infinity, alignment: .leading)
-        .background(OrbitSettingsStyle.panel, in: RoundedRectangle(cornerRadius: 6))
-        .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(OrbitSettingsStyle.border, lineWidth: 1))
+        .background(OrbitSettingsStyle.panel, in: RoundedRectangle(cornerRadius: 12))
+        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(OrbitSettingsStyle.border, lineWidth: 1))
         .alert(uiText("Use a different iCloud account?"), isPresented: $runtime.needsAccountDecision) {
             Button(uiText("Keep Sync Off"), role: .cancel) {}
             Button(uiText("Try Again")) { save(true) }

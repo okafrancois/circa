@@ -1,11 +1,19 @@
 import AppKit
 import SwiftUI
+import BrowserShell
 
 /// A real first responder owns the entire chord, including normally reserved ⌘Q/⌘W.
 @MainActor
 final class BrowserShortcutRecorderView: NSButton {
     var onRecord: ((BrowserShortcut?) -> Void)?
-    var shortcutTitle = "—" { didSet { if !isRecording { title = shortcutTitle } } }
+    var shortcutTitle = "—" { didSet { if !isRecording { applyTitle() } } }
+    private func applyTitle() {
+        let value = NSMutableAttributedString(string: shortcutTitle, attributes: [.font: BrandFonts.mono(12), .foregroundColor: NSColor.labelColor])
+        for (index, character) in shortcutTitle.enumerated() where "⌘⇧⌥⌃⇥←→↑↓↩⎋⌫".contains(character) {
+            value.addAttribute(.font, value: NSFont.systemFont(ofSize: 12), range: NSRange(location: index, length: 1))
+        }
+        attributedTitle = value
+    }
     private(set) var isRecording = false
     override var acceptsFirstResponder: Bool { true }
     override func mouseDown(with event: NSEvent) { beginRecording() }
@@ -17,7 +25,7 @@ final class BrowserShortcutRecorderView: NSButton {
         setAccessibilityValue(title)
     }
     override func resignFirstResponder() -> Bool {
-        isRecording = false; title = shortcutTitle
+        isRecording = false; applyTitle()
         return super.resignFirstResponder()
     }
     override func keyDown(with event: NSEvent) { _ = record(event) }
@@ -44,7 +52,7 @@ struct BrowserShortcutRecorder: NSViewRepresentable {
     func makeNSView(context: Context) -> BrowserShortcutRecorderView {
         let view = BrowserShortcutRecorderView(title: title, target: nil, action: nil)
         view.bezelStyle = .rounded
-        view.font = .monospacedSystemFont(ofSize: 12, weight: .medium)
+        view.font = BrandFonts.mono(12)
         return view
     }
     func updateNSView(_ view: BrowserShortcutRecorderView, context: Context) {
@@ -60,6 +68,8 @@ struct BrowserShortcutSettingsPane: View {
     @ObservedObject var preferences: BrowserShortcutPreferences
     let definitions: [BrowserCommandDefinition]
     let conflictDefinitions: [BrowserCommandDefinition]
+    var openExtensionSettings: (() -> Void)? = nil
+    var extensionSettingsAvailable = true
     @State private var query = ""
     private var filtered: [BrowserCommandDefinition] {
         definitions.filter {
@@ -76,31 +86,47 @@ struct BrowserShortcutSettingsPane: View {
     }
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            TextField(uiText("Search shortcuts"), text: $query).textFieldStyle(.roundedBorder)
-                .accessibilityIdentifier("settings-search-shortcuts")
+            HStack(spacing: 8) {
+                TextField(uiText("Search shortcuts"), text: $query).textFieldStyle(.roundedBorder)
+                    .accessibilityIdentifier("settings-search-shortcuts")
+                if let openExtensionSettings {
+                    Button(uiText("Extension Shortcuts…"), action: openExtensionSettings)
+                        .disabled(!extensionSettingsAvailable).accessibilityIdentifier("settings-extension-shortcuts")
+                }
+            }
+            SettingsCard {
+                Toggle(uiText("Include Favorites in Ordering"), isOn: Binding(
+                    get: { preferences.document.includeFavorites },
+                    set: { value in change { try preferences.setOrdering(includeFavorites: value) } }))
+                    .padding(.horizontal, 14).padding(.vertical, 8)
+                Divider()
+                Toggle(uiText("⌘9 selects the last tab"), isOn: Binding(
+                    get: { preferences.document.nineSelectsLast },
+                    set: { value in change { try preferences.setOrdering(nineSelectsLast: value) } }))
+                    .padding(.horizontal, 14).padding(.vertical, 8)
+                Divider()
+                Toggle(isOn: Binding(
+                    get: { preferences.document.globalQuickWindowEnabled },
+                    set: { value in change { try preferences.setGlobalQuickWindowEnabled(value) } })) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(uiText("Open Little Orbit from other apps"))
+                            Text(uiText("Uses the New Little Orbit Window shortcut, even when Orbit is in the background."))
+                                .font(Font(BrandFonts.ui(12))).foregroundStyle(.secondary)
+                        }
+                    }.padding(.horizontal, 14).padding(.vertical, 8)
+            }
             HStack {
-                Text(uiText("Keyboard Shortcuts")).font(.system(size: 17, weight: .semibold))
+                Text(uiText("Keyboard Shortcuts")).font(Font(BrandFonts.ui(14, weight: .semibold)))
                 Spacer()
                 Button(uiText("Reset All")) { change { try preferences.resetAll() } }
                     .accessibilityIdentifier("settings-reset-shortcuts")
-            }
-            Text(uiText("Click a shortcut and press new keys. Escape cancels; Delete removes it."))
-                .font(.system(size: 12)).foregroundStyle(.secondary)
-            Toggle(uiText("Include Favorites in Ordering"), isOn: Binding(
-                get: { preferences.document.includeFavorites },
-                set: { value in change { try preferences.setOrdering(includeFavorites: value) } }))
-            Toggle(uiText("⌘9 selects the last tab"), isOn: Binding(
-                get: { preferences.document.nineSelectsLast },
-                set: { value in change { try preferences.setOrdering(nineSelectsLast: value) } }))
-            Toggle(uiText("Open Little Orbit from other apps"), isOn: Binding(
-                get: { preferences.document.globalQuickWindowEnabled },
-                set: { value in change { try preferences.setGlobalQuickWindowEnabled(value) } }))
-                .help(uiText("Uses the New Little Orbit Window shortcut, even when Orbit is in the background."))
+            }.padding(.top, 8)
             if let error = preferences.errorMessage {
-                Text(error).foregroundStyle(.red).font(.system(size: 12))
+                Text(error).foregroundStyle(.red).font(Font(BrandFonts.ui(12)))
                     .accessibilityIdentifier("settings-shortcut-error")
             }
-            LazyVStack(spacing: 0) {
+            ScrollView {
+              LazyVStack(spacing: 0) {
                 ForEach(filtered, id: \.id) { command in
                     HStack(spacing: 8) {
                         Text(command.localizedTitle).frame(maxWidth: .infinity, alignment: .leading)
@@ -115,16 +141,22 @@ struct BrowserShortcutSettingsPane: View {
                             Divider()
                             Button(uiText("Remove Shortcut")) { change { try preferences.setShortcut(nil, for: command.id, definitions: conflictDefinitions) } }
                             Button(uiText("Reset to Default")) { change { try preferences.reset(command.id) } }
-                        } label: { Image(systemName: "ellipsis.circle") }
-                        .menuStyle(.borderlessButton).frame(width: 22)
+                        } label: { OrbitIcon.view(sfName: "ellipsis.circle", pointSize: 13) }
+                        .menuStyle(.borderlessButton).menuIndicator(.hidden).frame(width: 26)
                         .accessibilityLabel(command.localizedTitle + " " + uiText("Shortcut options"))
-                    }.padding(.horizontal, 10).padding(.vertical, 7)
+                    }.padding(.horizontal, 10).padding(.vertical, 5)
                     Divider()
                 }
             }
-            .background(OrbitSettingsStyle.panel, in: RoundedRectangle(cornerRadius: 6))
+              }
+            .frame(height: 236)
+            .background(OrbitSettingsStyle.panel, in: RoundedRectangle(cornerRadius: 12))
+            .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(OrbitSettingsStyle.border, lineWidth: 1))
             if filtered.isEmpty { Text(uiText("No matching shortcuts.")).foregroundStyle(.secondary) }
+            Text(uiText("Click a shortcut and press new keys. Escape cancels; Delete removes it."))
+                .font(Font(BrandFonts.ui(12))).foregroundStyle(.secondary)
         }
+        .toggleStyle(SettingsSwitchStyle())
         .disabled(preferences.isUnavailable)
     }
 }

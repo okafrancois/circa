@@ -9,7 +9,9 @@ final class BrowserImportCoordinator {
     private let progress = ArcImportAlertPresenter(browserImport: true)
     private var cancelCurrent: (() -> Void)?
 
-    func start(application: OrbitApplication) {
+    /// `preselected` (first-run onboarding) replaces the picker when that source and profile are
+    /// still detected; explanations, file choosers, review and Import and Restart are unchanged.
+    func start(application: OrbitApplication, preselected: BrowserImportPreselection? = nil) {
         guard !isRunning, !application.orbitImport.isRunning, !application.isImportingSiteSessions,
               !application.isPreparingToQuit, application.pendingBrowserImport == nil,
               let configuration = activeSiteSessionConfiguration(), let environment = application.environment,
@@ -19,19 +21,9 @@ final class BrowserImportCoordinator {
         Task {
             defer { isRunning = false; progress.hideProgress(); cancelCurrent = nil }
             do {
-                let choices: [BrowserImportChoice]
-                if configuration.usesMockKeychain {
-                    choices = try BrowserImportUISynthetic.choices(configuration)
-                } else {
-                    let descriptors = ChromiumImportDiscovery.installed() + ChromiumImportDiscovery.installedFirefoxFamily()
-                        + NSWorkspace.shared.urlsForApplications(withBundleIdentifier: "com.apple.Safari").prefix(1).map { _ in
-                            SafariBrowserImportAdapter(installationID: UUID(), profile: .init(directory: "Default", name: ""),
-                                placement: .init(importedSpace: "", bookmarkFolder: "", windowName: ""), includeSharedData: true).descriptor
-                        }
-                    let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-                    choices = await Task.detached { BrowserImportInventory.choices(descriptors: descriptors, support: support) }.value
-                }
-                guard var choice = picker.choose(choices), picker.explain(choice) else { return }
+                let choices = try await Self.inventory(configuration)
+                let chosen = preselected.flatMap { $0.match(in: choices) } ?? picker.choose(choices)
+                guard var choice = chosen, picker.explain(choice) else { return }
                 var csv: Data?
                 if choice.isFirefox {
                     switch picker.passwordCSVChoice() {
@@ -115,6 +107,18 @@ final class BrowserImportCoordinator {
             }
         }
     }
+    /// Detected browsers and their profiles (metadata only); synthetic runs read their fixture.
+    static func inventory(_ configuration: OrbitProductConfiguration) async throws -> [BrowserImportChoice] {
+        if configuration.usesMockKeychain { return try BrowserImportUISynthetic.choices(configuration) }
+        let descriptors = ChromiumImportDiscovery.installed() + ChromiumImportDiscovery.installedFirefoxFamily()
+            + NSWorkspace.shared.urlsForApplications(withBundleIdentifier: "com.apple.Safari").prefix(1).map { _ in
+                SafariBrowserImportAdapter(installationID: UUID(), profile: .init(directory: "Default", name: ""),
+                    placement: .init(importedSpace: "", bookmarkFolder: "", windowName: ""), includeSharedData: true).descriptor
+            }
+        let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        return await Task.detached { BrowserImportInventory.choices(descriptors: descriptors, support: support) }.value
+    }
+
     private func perform<T: Sendable>(_ operation: @escaping @Sendable (@escaping @Sendable (ArcImportProgress) -> Void) async throws -> T) async throws -> T {
         let (stream, continuation) = AsyncStream.makeStream(of: ArcImportProgress.self, bufferingPolicy: .bufferingNewest(1))
         let delay = Bundle.main.bundleIdentifier == "lab.orbit.orbit.import-ui"
@@ -130,5 +134,15 @@ final class BrowserImportCoordinator {
         for await value in stream { progress.showProgress(value) { task.cancel() } }
         cancelCurrent = nil
         return try await task.value
+    }
+}
+
+/// A source and profile chosen before the import starts (the onboarding's import step).
+struct BrowserImportPreselection: Equatable, Sendable {
+    let sourceID: String
+    let profileDirectory: String?
+
+    func match(in choices: [BrowserImportChoice]) -> BrowserImportChoice? {
+        choices.first { $0.descriptor.id == sourceID && $0.profile?.directory == profileDirectory }
     }
 }

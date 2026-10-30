@@ -13,7 +13,7 @@ struct BrowserAirTrafficControlView<Engine: BrowserEngine>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             HStack {
-                Text(uiText("Air Traffic Control")).font(.system(size: 21, weight: .semibold))
+                Text(uiText("Air Traffic Control")).font(Font(BrandTextStyle.title.font(size: 22)))
                 Spacer()
                 Button(uiText("New Route"), systemImage: "plus") {
                     if let space = model.catalog.spaces.first {
@@ -31,7 +31,7 @@ struct BrowserAirTrafficControlView<Engine: BrowserEngine>: View {
                     }
                     if drafts.isEmpty {
                         VStack(spacing: 10) {
-                            Image(systemName: "arrow.turn.down.right").font(.system(size: 28, weight: .light))
+                            OrbitIcon.view(sfName: "arrow.turn.down.right", pointSize: 28).font(.system(size: 28, weight: .light))
                             Text(uiText("Create a route to send links to a Space automatically."))
                         }.foregroundStyle(.secondary).frame(maxWidth: .infinity, minHeight: 110)
                     }
@@ -57,17 +57,17 @@ struct BrowserAirTrafficControlView<Engine: BrowserEngine>: View {
             }
             HStack {
                 Text(uiText("Routes apply to links from other apps. The first matching route wins."))
-                    .font(.system(size: 11)).foregroundStyle(.secondary)
+                    .font(Font(BrandFonts.ui(11))).foregroundStyle(.secondary)
                 Spacer()
                 Button(uiText("Done")) { dismiss() }.keyboardShortcut(.defaultAction)
                     .disabled(drafts.contains { !$0.isValid } || model.isBusy)
                     .accessibilityIdentifier("routing-done")
             }
-            if let error = model.errorMessage { Text(error).foregroundStyle(.red).font(.system(size: 12)) }
+            if let error = model.errorMessage { Text(error).foregroundStyle(.red).font(Font(BrandFonts.ui(12))) }
         }
-        .padding(24).frame(width: 650)
-        .font(.system(size: 13)).foregroundStyle(OrbitSettingsStyle.foreground)
-        .background(OrbitSettingsStyle.background)
+        .padding(22).frame(width: 560)
+        .font(Font(BrandFonts.ui(13))).foregroundStyle(OrbitSettingsStyle.foreground)
+        .settingsFrost()
         .disabled(!model.acceptsActions || runtime.isUnavailable)
         .onAppear { drafts = runtime.document.linkRouting.rules.filter { route in model.catalog.spaces.contains { $0.id == route.spaceID } } }
     }
@@ -87,7 +87,7 @@ struct BrowserAirTrafficControlView<Engine: BrowserEngine>: View {
                         .textFieldStyle(.roundedBorder).accessibilityIdentifier("routing-value-" + route.id.uuidString)
                 }
                 HStack {
-                    Image(systemName: "arrow.turn.down.right").foregroundStyle(.secondary)
+                    OrbitIcon.view(sfName: "arrow.turn.down.right", pointSize: 13).foregroundStyle(.secondary)
                     Text(uiText("Open in"))
                     Picker(uiText("Destination Space"), selection: binding.spaceID) {
                         ForEach(model.catalog.spaces, id: \.id) { space in Text(spaceLabel(space)).tag(space.id) }
@@ -96,15 +96,15 @@ struct BrowserAirTrafficControlView<Engine: BrowserEngine>: View {
                 }
             }
             VStack(spacing: 5) {
-                Button { move(route.id, offset: -1) } label: { Image(systemName: "chevron.up") }
+                Button { move(route.id, offset: -1) } label: { OrbitIcon.view(sfName: "chevron.up", pointSize: 13) }
                     .disabled(drafts.contains { !$0.isValid } || drafts.first?.id == route.id).help(uiText("Move route up"))
-                Button { move(route.id, offset: 1) } label: { Image(systemName: "chevron.down") }
+                Button { move(route.id, offset: 1) } label: { OrbitIcon.view(sfName: "chevron.down", pointSize: 13) }
                     .disabled(drafts.contains { !$0.isValid } || drafts.last?.id == route.id).help(uiText("Move route down"))
             }.buttonStyle(.plain)
             Button {
                 drafts.removeAll { $0.id == route.id }
                 model.perform { try await runtime.store.removeLinkRoute(route.id); await runtime.refresh() }
-            } label: { Image(systemName: "minus.circle.fill").foregroundStyle(.secondary) }
+            } label: { OrbitIcon.view(sfName: "minus.circle.fill", pointSize: 13).foregroundStyle(.secondary) }
                 .buttonStyle(.plain).help(uiText("Remove route"))
                 .accessibilityLabel(uiText("Remove route"))
         }

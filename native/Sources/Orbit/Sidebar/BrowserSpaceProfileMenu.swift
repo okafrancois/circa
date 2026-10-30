@@ -48,7 +48,7 @@ final class BrowserSpaceProfileMenu: NSMenu, NSMenuItemValidation {
         let profile = profiles[sender.tag]
         guard profile.id != space.profileID else { return }
         choosing = true
-        let alert = NSAlert()
+        let alert = OrbitFloatingMaterial.alert()
         alert.messageText = uiFormat("Switch to your %@ Profile?", profile.name)
         alert.informativeText = uiFormat("Each Profile has different browser data, so your %@ Space might look a little different!\n\nFor example, you might get logged out of some websites, see different Favorites up top, or need to re-install an extension.\n\nThis action cannot be undone.", space.name)
         alert.addButton(withTitle: uiText("Switch it up"))
@@ -67,7 +67,7 @@ final class BrowserSpaceProfileMenu: NSMenu, NSMenuItemValidation {
     @objc private func newProfile(_ sender: NSMenuItem) {
         guard validateMenuItem(sender) else { return }
         choosing = true
-        let alert = NSAlert()
+        let alert = OrbitFloatingMaterial.alert()
         alert.messageText = uiText("Create a new Profile")
         alert.informativeText = uiText("Profiles make your Spaces truly separate — with their own history, saved passwords, extensions, and other browsing data. No more flipping between work and personal accounts!\n\nWhat do you want to call this Profile?")
         alert.addButton(withTitle: uiText("Create Profile"))
