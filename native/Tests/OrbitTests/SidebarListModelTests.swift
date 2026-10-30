@@ -183,7 +183,7 @@ struct SidebarListModelTests {
         let org = SyntheticOrganization()
         let away = TabID(), home = TabID(), elsewhere = TabID(), here = TabID()
         let snapshot = org.snapshot(
-            pinned: [org.tab(away, pinned: true, url: "https://site.test/deep", pinnedURL: "https://site.test/"),
+            pinned: [org.tab(away, pinned: true, url: "https://site.test/deep", pinnedURL: "https://site.test/", occurrence: TabOccurrenceID()),
                      org.tab(home, pinned: true)],
             today: [org.tab(elsewhere, elsewhere: true), org.tab(here, occurrence: TabOccurrenceID(), selected: true, elsewhere: true)])
         var selection = BrowserOrganizationSelection()

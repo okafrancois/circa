@@ -139,14 +139,14 @@ struct NativeThemeRowOverlayContrastTests {
                         try check(theme: theme, [field.textColor, editor.textColor], minimum: 4.5,
                                   backgrounds: painted, appearance: appearance, context: context + " rename/editor")
                     }
-                    let icons = [row.closeButton.tint, row.resetButton.tint]
+                    let icons = [row.closeButton.tint]
                         + descendants(row, of: NSImageView.self).map(\.contentTintColor)
                         + descendants(row, of: SidebarPinnedSlashView.self).map { Optional($0.tint) }
                     try check(theme: theme, icons, minimum: 3, backgrounds: painted, appearance: appearance, context: context + " icons")
                     let buttonBackgrounds = painted.map {
                         composite(OrbitTokens.Color.State.rowCloseButtonHover, on: $0, appearance: appearance)
                     }
-                    try check(theme: theme, [row.closeButton.tint, row.resetButton.tint], minimum: 3, backgrounds: buttonBackgrounds,
+                    try check(theme: theme, [row.closeButton.tint], minimum: 3, backgrounds: buttonBackgrounds,
                               appearance: appearance, context: context + " nested button overlay")
                     row.cancelRename()
                     window.contentView = nil

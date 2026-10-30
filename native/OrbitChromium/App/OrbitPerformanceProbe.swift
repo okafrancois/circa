@@ -20,6 +20,14 @@ enum OrbitPerformanceProbe {
     static func start(application: OrbitApplication, configuration: OrbitProductConfiguration) {
         guard configuration.syntheticGuard != nil, CommandLine.arguments.contains("--perf-probe") else { return }
         if ["lab.orbit.orbit.engine-r11", "lab.orbit.orbit.engine-r12"].contains(Bundle.main.bundleIdentifier ?? "") { application.confirmQuit = { .quit } }
+        if Bundle.main.bundleIdentifier == "lab.orbit.orbit.pinned-tabs" {
+            application.confirmQuit = { .quit }
+            application.windowPresenter = { controller, _ in
+                controller.window?.setFrame(NSRect(x: -2000, y: -1200, width: 1280, height: 900), display: false)
+                controller.window?.orderBack(nil)
+                controller.window?.makeKey()
+            }
+        }
         installDrawCounter()
         let log = configuration.dataRoot.appendingPathComponent("download-events.jsonl")
         ChromiumRuntime.shared.trace = { name, fields in
@@ -87,7 +95,9 @@ enum OrbitPerformanceProbe {
                 try? FileManager.default.removeItem(at: commandFile)
                 let name = command["command"] ?? ""
                 result["commandNonce"] = command["nonce"] ?? ""
-                if name == "split-divider" {
+                if name == "pinned-tabs" {
+                    result["pinnedTabs"] = await OrbitPinnedTabProbe.run(owner, root: root, command: command)
+                } else if name == "split-divider" {
                     result["splitDivider"] = await splitDividerFixture(owner, command: command)
                 } else if name == "folder-hover", ownsWindow(owner, bundleID: "lab.orbit.orbit.folder-hover") {
                     result["folderHoverActionUptime"] = ProcessInfo.processInfo.systemUptime
