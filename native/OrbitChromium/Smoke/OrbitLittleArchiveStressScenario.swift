@@ -18,6 +18,8 @@ extension OrbitSmokeDriver {
         let range = arguments.first { $0.hasPrefix("--orbit-smoke-stress-range=") }.map { String($0.dropFirst("--orbit-smoke-stress-range=".count)) } ?? "0:12"
         let parts = range.split(separator: ":").compactMap { Int($0) }
         let start = parts.first ?? 0, count = parts.count > 1 ? parts[1] : 12
+        let pause = arguments.first { $0.hasPrefix("--orbit-smoke-stress-pause-ms=") }
+            .flatMap { Int($0.dropFirst("--orbit-smoke-stress-pause-ms=".count)) } ?? 0
         let delays = [0, 5, 15, 30, 50, 80, 120, 160, 200, 250, 300]
         func find(_ identifier: String, in parent: NSView) -> NSView? {
             if parent.accessibilityIdentifier() == identifier { return parent }
@@ -69,6 +71,7 @@ extension OrbitSmokeDriver {
                 record("archive-stress.iteration-\(index)", clean ? "proven" : "failed",
                        ["delayMs": delay, "filter": withFilter, "opened": opened,
                         "handled": handled, "peek": owner.isPeekPresented, "library": owner.library.isPresented])
+                if pause > 0 { try await Task.sleep(for: .milliseconds(pause)) }
             }
             check("session-\(start)-\(count)", failures == 0)
         } catch { check("operation", false) }
