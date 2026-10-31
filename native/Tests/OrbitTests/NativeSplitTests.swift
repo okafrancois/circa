@@ -205,8 +205,8 @@ struct NativeSplitTests {
         #expect(window.session.organization?.tab(source)?.section == .pinned(spaceID))
     }
 
-    @Test("A trailing drop puts the source second; a split target appends it last and a full split refuses with the bubble")
-    func sidebarTabDropOnSplitAppendsUntilFull() async throws {
+    @Test("A split row refuses sidebar tab drops; a full split explains a refused fifth pane")
+    func sidebarTabDropRefusesSplitTargetAndShowsLimit() async throws {
         let (_, window, _) = try await makeWindow()
         defer { window.session.close(); window.window?.close() }
         var ids = [try #require(window.session.organization?.selectedTab?.id)]
@@ -218,16 +218,16 @@ struct NativeSplitTests {
         window.dropSidebarTab(try payload(window, ids[1]), onto: ids[0], leading: false)
         await settle(window)
         #expect(window.session.organization?.split(containing: ids[0])?.group.tabIDs == [ids[0], ids[1]])
-        for source in ids[2...3] {
-            #expect(window.sidebarSplitDropVerdict(try payload(window, source), target: ids[0]) == .accepted)
-            window.dropSidebarTab(try payload(window, source), onto: ids[1], leading: true)
+        #expect(window.sidebarSplitDropVerdict(try payload(window, ids[2]), target: ids[0]) == nil)
+        for _ in 0..<2 {
+            window.session.addSplitPane(url: URL(string: "https://split.test/add")!)
             await settle(window)
         }
-        #expect(window.session.organization?.split(containing: ids[0])?.group.tabIDs == Array(ids[0...3]))
+        #expect(window.session.organization?.split(containing: ids[0])?.tabs.count == 4)
         #expect(window.sidebarSplitDropVerdict(try payload(window, ids[4]), target: ids[0]) == .full)
         // A pane of a split is not a draggable source for this gesture.
         #expect(window.sidebarSplitDropVerdict(try payload(window, ids[0]), target: ids[4]) == nil)
-        window.dropSidebarTab(try payload(window, ids[4]), onto: ids[2], leading: false)
+        window.dropSidebarTab(try payload(window, ids[4]), onto: ids[0], leading: false)
         await settle(window)
         #expect(window.session.organization?.split(containing: ids[0])?.tabs.count == 4)
         #expect(window.session.organization?.split(containing: ids[4]) == nil)

@@ -201,8 +201,11 @@ extension BrowserWindowController {
               let source = organization.tab(sourceID), let target = organization.tab(targetID),
               source.section != .favorites(organization.profileID), target.section != .favorites(organization.profileID),
               organization.split(containing: sourceID) == nil else { return nil }
-        if let group = organization.split(containing: targetID), group.tabs.count >= BrowserSplitGroup.maximumPanes {
-            return .full
+        if let group = organization.split(containing: targetID) {
+            // Sidebar row drops create a split from a standalone target. Existing split rows are
+            // not valid targets: the row's drop affordance belongs to the whole group, not a pane.
+            // Keep a distinct full result so a rejected fifth pane explains the limit.
+            return group.tabs.count >= BrowserSplitGroup.maximumPanes ? .full : nil
         }
         return .accepted
     }
