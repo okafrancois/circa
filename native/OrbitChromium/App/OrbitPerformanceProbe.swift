@@ -195,6 +195,9 @@ enum OrbitPerformanceProbe {
                 } else if name == "resource-coordinator", ownsWindow(owner, bundleID: "lab.orbit.orbit.perf-coord-0") {
                     application.confirmQuit = { .quit }
                     result["resourceCoordinator"] = await OrbitResourcePerformanceProbe.run(owner, store: environment.store, command: command)
+                } else if name == "sidebar-click-3", ownsWindow(owner, bundleID: "lab.orbit.orbit.sidebar-click-3") {
+                    application.confirmQuit = { .quit }
+                    result["sidebarClick3"] = await sidebarClick3(application, owner: owner, command: command)
                 } else if name == "window-freeze-2", ownsWindow(owner, bundleID: "lab.orbit.orbit.window-freeze") {
                     result["windowFreeze2"] = await windowFreeze2(application, environment: environment, owner: owner, command: command)
                 } else if name == "window-freeze", ownsWindow(owner, bundleID: "lab.orbit.orbit.window-freeze") {
@@ -3099,5 +3102,71 @@ extension OrbitPerformanceProbe {
             if status == noErr, String(utf16CodeUnits: output, count: length) == character { return code }
         }
         return nil
+    }
+}
+
+extension OrbitPerformanceProbe {
+    /// Closes a row whose view sits above the row sliding into its slot, lets the close fade
+    /// finish, then clicks the survivor through AppKit hit testing in the PID-checked window.
+    private static func sidebarClick3(_ application: OrbitApplication, owner: OrbitWindowController,
+                                      command: [String: String]) async -> [String: Any] {
+        let bundle = "lab.orbit.orbit.sidebar-click-3"
+        guard ownsWindow(owner, bundleID: bundle), let base = command["base"].flatMap(URL.init(string:)),
+              base.scheme == "http", base.host == "127.0.0.1",
+              activeSiteSessionConfiguration()?.syntheticGuard != nil else { return ["refused": true] }
+        var checks: [String: Any] = [:]
+        let list = owner.sidebar.page.list
+        func settle() async {
+            await application.windows.waitForPendingCommands()
+            await owner.session.waitForPendingCommands()
+            owner.window?.contentView?.layoutSubtreeIfNeeded()
+        }
+        func covered() -> Int {
+            list.tabRows.filter { row in
+                guard let frameView = owner.window?.contentView?.superview else { return true }
+                let hit = frameView.hitTest(row.convert(NSPoint(x: 65, y: row.bounds.midY), to: nil))
+                return !(hit === row || hit?.isDescendant(of: row) == true)
+            }.count
+        }
+        func click(_ tab: TabID) async -> Bool {
+            BrowserSidebarInputDiagnostics.record("probe-click", tab: tab, reason: "target")
+            NSApp.activate(ignoringOtherApps: true)
+            owner.window?.makeKeyAndOrderFront(nil)
+            let deadline = ProcessInfo.processInfo.systemUptime + 0.5
+            while !NSApp.isActive, ProcessInfo.processInfo.systemUptime < deadline { try? await Task.sleep(for: .milliseconds(5)) }
+            owner.window?.contentView?.layoutSubtreeIfNeeded()
+            guard let row = list.row(for: .tab(tab)), let window = owner.window else { return false }
+            let point = row.convert(NSPoint(x: 65, y: row.bounds.midY), to: nil)
+            for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
+                guard ownsWindow(owner, bundleID: bundle), row.window === window,
+                      let event = NSEvent.mouseEvent(with: type, location: point, modifierFlags: [],
+                        timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
+                        context: nil, eventNumber: 1, clickCount: 1, pressure: 1) else { return false }
+                NSApp.sendEvent(event)
+            }
+            await settle()
+            return owner.session.organization?.selectedTab?.id == tab && owner.session.selectedSurface != nil
+        }
+        owner.palette.dismiss()
+        for n in 0..<6 { owner.session.openTab(url: base.appendingPathComponent("row-\(n)")); await settle() }
+        for round in 0..<3 {
+            let rows = list.tabRows
+            guard let index = rows.indices.dropLast().first(where: {
+                      (list.subviews.firstIndex(of: rows[$0]) ?? 0) > (list.subviews.firstIndex(of: rows[$0 + 1]) ?? 0) }),
+                  let closed = rows[index].node.tabID, let survivor = rows[index + 1].node.tabID,
+                  let other = rows.first(where: { $0 !== rows[index] && $0 !== rows[index + 1] })?.node.tabID else {
+                checks["round\(round)Candidate"] = false
+                break
+            }
+            owner.performSidebarRowAction([closed]); await settle()
+            try? await Task.sleep(for: .milliseconds(400))  // Close fade and recycling.
+            await settle()
+            checks["round\(round)CoveredRows"] = covered()
+            owner.session.selectTab(other); await settle()
+            checks["round\(round)Survivor"] = await click(survivor)
+            checks["round\(round)SelectedAgain"] = await click(survivor)
+            owner.session.openTab(url: base.appendingPathComponent("again-\(round)")); await settle()
+        }
+        return checks
     }
 }

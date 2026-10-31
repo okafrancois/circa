@@ -65,6 +65,8 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
     private var indicesByNode: [BrowserOrganizationNode: Int] = [:]
     private var entriesByNode: [BrowserOrganizationNode: SidebarListEntry] = [:]
     private var rowViews: [BrowserOrganizationNode: SidebarListRow] = [:]
+    /// The last stale row skipped by `hitTest`, so its diagnostic is recorded once.
+    private weak var staleHitRow: SidebarListRow?
     private var leavingRows: [ObjectIdentifier: (row: SidebarListRow, node: BrowserOrganizationNode)] = [:]
     private var tabPool: [SidebarTabRow] = []
     private var folderPool: [SidebarFolderRow] = []
@@ -286,6 +288,7 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
             // A rapid reversal recovers the same native rows before the pool can rebind them.
             for (key, leaving) in leavingRows where newNodes.contains(leaving.node) {
                 rowViews[leaving.node] = leaving.row
+                leaving.row.isLeaving = false
                 leaving.row.commandsEnabled = commandsEnabled
                 leavingRows[key] = nil
             }
@@ -322,6 +325,7 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
         for row in old.rows where !newNodes.contains(row.node) {
             guard let view = rowViews.removeValue(forKey: row.node) else { continue }
             if toggledPinned, pinnedMotion != nil, row.section == .pinned {
+                view.isLeaving = true
                 view.commandsEnabled = false
                 leavingRows[ObjectIdentifier(view)] = (view, row.node)
             } else if style == .spring, !hidden.contains(row.node) {
@@ -374,6 +378,7 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
         animator.stop(slot)
         animator.move(slot, from: current, to: target, at: time)
         leavingRows[ObjectIdentifier(row)] = (row, node)
+        row.isLeaving = true
         row.commandsEnabled = false
         Self.fade(row, to: 0)
         _ = OrbitRunLoopTimer(after: OrbitTokens.Motion.rowCloseFadeDuration) { [weak self, weak row] in
@@ -597,6 +602,7 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
         row.onFolderHover = { [weak self] row, inside in self?.onFolderHover?(row, inside) }
         row.onPreviewInvalidated = { [weak self] row in self?.onPreviewInvalidated?(row) }
         row.leavingEntry = entry
+        row.isLeaving = false
         row.commandsEnabled = commandsEnabled
         row.isContextTarget = contextTargets.contains(entry.node) || dragGhostNodes.contains(entry.node)
         row.isDropTarget = entry.node.folderID != nil && entry.node.folderID == folderTarget
@@ -629,6 +635,7 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
         row.cancelRename()
         row.resetForReuse()
         row.isHidden = true
+        row.isLeaving = false
         row.alphaValue = 1
         row.isPressed = false
         row.isContextTarget = false
@@ -780,14 +787,42 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
         pointerDown = nil
         let reason: String
         if isDragging { reason = "drag-started" }
-        else if !commandsEnabled || !row.commandsEnabled { reason = "disabled" }
+        else if !commandsEnabled { reason = "disabled" }
         else if down == nil { reason = "no-pressed-state" }
-        else if down?.node != row.node || rowViews[row.node] !== row { reason = "stale-node" }
-        else if !row.bounds.contains(row.convert(event.locationInWindow, from: nil)) { reason = "outside-row" }
-        else { reason = "accepted" }
-        BrowserSidebarInputDiagnostics.record("mouse-up", tab: row.node.tabID, reason: reason)
-        guard reason == "accepted", let down else { return }
-        host?.list(self, activate: row.node, modifiers: down.modifiers)
+        else if down?.node == row.node, rowViews[row.node] === row {
+            reason = !row.commandsEnabled ? "disabled"
+                : !row.bounds.contains(row.convert(event.locationInWindow, from: nil)) ? "outside-row" : "accepted"
+        } else if let down, liveRow(for: down.node, at: convert(event.locationInWindow, from: nil)) != nil {
+            // The pressed row was rebuilt between press and release (content update, recycling):
+            // the release still lands on that tab's live row, so the press keeps its target.
+            reason = "rebound"
+        } else { reason = "stale-node" }
+        BrowserSidebarInputDiagnostics.record("mouse-up", tab: down?.node.tabID ?? row.node.tabID, reason: reason)
+        guard reason == "accepted" || reason == "rebound", let down else { return }
+        host?.list(self, activate: down.node, modifiers: down.modifiers)
+    }
+
+    /// The row the list currently shows for `node`, when it takes input at `point` (list space).
+    private func liveRow(for node: BrowserOrganizationNode, at point: NSPoint) -> SidebarListRow? {
+        guard let row = rowViews[node], row.acceptsPointerInput, row.commandsEnabled, row.frame.contains(point) else { return nil }
+        return row
+    }
+
+    /// Pointer input lands only on rows the list shows. Rows guard themselves (pooled and leaving
+    /// rows return nil); a view that still answers but no longer owns its node is skipped here,
+    /// and the live row under the pointer receives the event instead.
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        guard let hit = super.hitTest(point) else { return nil }
+        var ancestor: NSView? = hit
+        while let view = ancestor, view !== self, !(view is SidebarListRow) { ancestor = view.superview }
+        guard let row = ancestor as? SidebarListRow, rowViews[row.node] !== row else { return hit }
+        let local = convert(point, from: superview)
+        if staleHitRow !== row {
+            staleHitRow = row
+            BrowserSidebarInputDiagnostics.record("hit-test", tab: row.node.tabID, reason: "stale-row-skipped")
+        }
+        guard let live = rowViews.values.first(where: { $0.acceptsPointerInput && $0.frame.contains(local) }) else { return self }
+        return live.hitTest(local) ?? live
     }
 
     func rowRightMouseDown(_ row: SidebarListRow, with event: NSEvent) {

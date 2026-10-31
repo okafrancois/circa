@@ -675,8 +675,9 @@ extension ChromiumBrowserEngine {
             // Publishing native shell selection must precede the activation cache:
             // Chrome already reports a newly inserted tab active, even in a new profile.
             let accepted = surface.activateTab()
-        Logger(subsystem: "local.orbit", category: "sidebar-input").info("stage=native-activation surface=\(surface.token, privacy: .public) window=\(window, privacy: .public) accepted=\(accepted, privacy: .public)")
-        if accepted { activeHostedTabs[window] = WeakSurface(surface) }
+            BrowserSidebarInputDiagnostics.recordNativeActivation(surface: surface.token, window: window,
+                tab: surface.sidebarInputTabID, accepted: accepted)
+            if accepted { activeHostedTabs[window] = WeakSurface(surface) }
         } else if let active = activeHostedTabs[window]?.surface, active !== surface, !active.isDisposed,
                   active.profileID == surface.profileID {
             _ = active.activateTab()
@@ -692,7 +693,8 @@ extension ChromiumBrowserEngine {
             return
         }
         let accepted = surface.activateTab()
-        Logger(subsystem: "local.orbit", category: "sidebar-input").info("stage=native-activation surface=\(surface.token, privacy: .public) window=\(window, privacy: .public) accepted=\(accepted, privacy: .public)")
+        BrowserSidebarInputDiagnostics.recordNativeActivation(surface: surface.token, window: window,
+            tab: surface.sidebarInputTabID, accepted: accepted)
         if accepted { activeHostedTabs[window] = WeakSurface(surface) }
     }
 

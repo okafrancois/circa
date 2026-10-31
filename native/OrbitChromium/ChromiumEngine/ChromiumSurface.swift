@@ -429,6 +429,8 @@ public final class ChromiumSurface: BrowserEngineSurface {
             needBrowser()
             return true
         }
+        // A shown tab discarded natively (memory pressure) wakes on focus, as on presentation.
+        if isSuspended, !hostView.isHiddenOrHasHiddenAncestor { resumeDiscardedTab() }
         if hostedWindowToken != 0 { engine?.activateHostedTab(self) }
         let browserView = Unmanaged<NSView>.fromOpaque(view).takeUnretainedValue()
         window.makeFirstResponder(browserView)

@@ -3073,7 +3073,8 @@ extern "C" int32_t ACRSafeBrowsingEnabled(uint64_t profile) {
 static int32_t ActivateSurface(uint64_t token, std::string tab) {
   static os_log_t input_log = os_log_create("local.orbit", "sidebar-input");
   const auto trace = [token, tab](uint64_t ticket, const char* outcome) {
-    os_log_with_type(input_log, OS_LOG_TYPE_INFO,
+    // Default (notice) level: the unified log persists activation outcomes for later reports.
+    os_log_with_type(input_log, OS_LOG_TYPE_DEFAULT,
         "stage=activation-ticket tab=%{public}s surface=%{public}llu ticket=%{public}llu result=%{public}s",
         tab.c_str(), (unsigned long long)token, (unsigned long long)ticket, outcome);
   };

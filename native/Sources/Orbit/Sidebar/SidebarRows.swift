@@ -69,6 +69,12 @@ class SidebarListRow: NSView, NSTextFieldDelegate {
     private var isEndingRename = false
     /// The entry the row last showed; a removed row keeps it while it fades out.
     var leavingEntry: SidebarListEntry?
+    /// Set by the list while a removed row fades or collapses out of the layout.
+    var isLeaving = false
+    /// Pooled rows stay in the list hidden at their last frame, and leaving rows keep fading
+    /// there while another row slides into the same slot. AppKit still asks hidden subviews
+    /// with a custom `hitTest` for hits, so only rows the list currently shows take pointer input.
+    var acceptsPointerInput: Bool { !isHidden && !isLeaving }
 
     init(node: BrowserOrganizationNode) {
         self.node = node
@@ -89,6 +95,7 @@ class SidebarListRow: NSView, NSTextFieldDelegate {
 
     override var isFlipped: Bool { true }
     override var mouseDownCanMoveWindow: Bool { false }
+    override func hitTest(_ point: NSPoint) -> NSView? { acceptsPointerInput ? super.hitTest(point) : nil }
 
     func rebind(node: BrowserOrganizationNode, depth: Int) {
         if self.node != node || self.depth != depth {
@@ -482,7 +489,7 @@ class SidebarTabRow: SidebarListRow {
     }
 
     override func hitTest(_ point: NSPoint) -> NSView? {
-        guard let local = superview.map({ convert(point, from: $0) }), bounds.contains(local) else { return nil }
+        guard acceptsPointerInput, let local = superview.map({ convert(point, from: $0) }), bounds.contains(local) else { return nil }
         if let renameField, renameField.frame.contains(local) { return renameField.hitTest(local) ?? renameField }
         if isCloseButtonVisible, closeButton.frame.contains(local) { return closeButton }
         if showsAudio, audioButton.frame.contains(local) { return audioButton }
@@ -699,7 +706,7 @@ final class SidebarFolderRow: SidebarListRow {
     }
 
     override func hitTest(_ point: NSPoint) -> NSView? {
-        guard let local = superview.map({ convert(point, from: $0) }), bounds.contains(local) else { return nil }
+        guard acceptsPointerInput, let local = superview.map({ convert(point, from: $0) }), bounds.contains(local) else { return nil }
         if let renameField, renameField.frame.contains(local) { return renameField.hitTest(local) ?? renameField }
         return self
     }

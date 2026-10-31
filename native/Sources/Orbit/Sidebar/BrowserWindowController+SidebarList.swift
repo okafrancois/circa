@@ -152,8 +152,13 @@ extension BrowserWindowController {
         hideLibrary()
         if !session.hasPendingCommands, let item = session.organization?.tab(id),
            let occurrence = item.occurrenceID, occurrence == session.snapshot?.selectedOccurrenceID,
-           session.selectedSurface != nil {
-            BrowserSidebarInputDiagnostics.record("selection", tab: id, window: session.snapshot?.id, reason: "already-selected")
+           let surface = session.selectedSurface {
+            // A click on the selected row must leave its page on screen. If the projection lost
+            // the host (or never placed it), re-project before focusing instead of a silent no-op.
+            let displayed = surface.hostView.window === window && !surface.hostView.isHiddenOrHasHiddenAncestor
+            BrowserSidebarInputDiagnostics.record("selection", tab: id, window: session.snapshot?.id,
+                reason: displayed ? "already-selected" : "already-selected-repaired")
+            if !displayed { renderSession() }
             focusSelectedDocument()
             return
         }
