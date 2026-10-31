@@ -2,21 +2,21 @@
 <!DOCTYPE dictionary SYSTEM "file://localhost/System/Library/DTDs/sdef.dtd">
 <dictionary title="Circa">
   <suite name="Circa Suite" code="CrSu" description="Browser automation.">
-    <command name="get" code="coregetd">
+    <command name="get" code="coregetd" hidden="yes">
       <cocoa class="CircaGetScriptCommand"/>
-      <direct-parameter type="any"/>
+      <direct-parameter type="specifier"/>
       <result type="any"/>
     </command>
-    <command name="set" code="coresetd">
+    <command name="set" code="coresetd" hidden="yes">
       <cocoa class="CircaSetScriptCommand"/>
-      <direct-parameter type="any"/>
+      <direct-parameter type="specifier"/>
       <parameter name="to" code="data" type="any">
         <cocoa key="Value"/>
       </parameter>
     </command>
     <command name="count" code="corecnte">
       <cocoa class="CircaCountScriptCommand"/>
-      <direct-parameter type="any"/>
+      <direct-parameter type="specifier"/>
       <parameter name="each" code="kocl" type="type" optional="yes">
         <cocoa key="ObjectClass"/>
       </parameter>
@@ -37,47 +37,40 @@
     </command>
     <command name="close" code="coreclos">
       <cocoa class="CircaActionScriptCommand"/>
-      <direct-parameter type="any"/>
+      <direct-parameter type="specifier"/>
     </command>
     <command name="select" code="CrSelect">
       <cocoa class="CircaActionScriptCommand"/>
-      <direct-parameter type="any"/>
+      <direct-parameter type="specifier"/>
     </command>
     <command name="go back" code="CrSuBack">
       <cocoa class="CircaActionScriptCommand"/>
-      <direct-parameter type="any"/>
+      <direct-parameter type="specifier"/>
     </command>
     <command name="go forward" code="CrSuFwd ">
       <cocoa class="CircaActionScriptCommand"/>
-      <direct-parameter type="any"/>
+      <direct-parameter type="specifier"/>
     </command>
     <command name="reload" code="CrSuRlod">
       <cocoa class="CircaActionScriptCommand"/>
-      <direct-parameter type="any"/>
+      <direct-parameter type="specifier"/>
     </command>
     <command name="stop" code="CrSustop">
       <cocoa class="CircaActionScriptCommand"/>
-      <direct-parameter type="any"/>
+      <direct-parameter type="specifier"/>
     </command>
     <command name="focus" code="SpaFocus">
       <cocoa class="CircaActionScriptCommand"/>
-      <direct-parameter type="any"/>
+      <direct-parameter type="specifier"/>
     </command>
     <command name="execute" code="CrSuExJa">
       <cocoa class="CircaActionScriptCommand"/>
-      <direct-parameter type="any"/>
+      <direct-parameter type="specifier"/>
       <parameter name="javascript" code="JvSc" type="text">
         <cocoa key="javascript"/>
       </parameter>
       <result type="text"/>
     </command>
-    <command name="open location" code="GURLGURL">
-      <cocoa class="CircaActionScriptCommand"/>
-      <direct-parameter type="any"/>
-    </command>
-    <class name="item" code="cobj" hidden="yes">
-      <cocoa class="AbstractObject"/>
-    </class>
     <class name="application" code="capp">
       <cocoa class="NSApplication"/>
       <element type="window" access="rw">

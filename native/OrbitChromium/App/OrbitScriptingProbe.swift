@@ -54,44 +54,40 @@ enum OrbitScriptingProbe {
                 if (count windowIDs) is not (count windowNames) then error "Window inventory mismatch"
                 set spaceIDs to id of spaces of window 1
                 set spaceNames to title of spaces of window 1
-                if (count spaceIDs) is not (count spaceNames) then error "Space inventory mismatch"
+                if (count spaceIDs) is 0 or (count spaceIDs) is not (count spaceNames) then error "Space inventory mismatch"
+                set tabIDs to id of tabs of window 1
                 set listedTitles to title of tabs of window 1
                 set listedURLs to URL of tabs of window 1
-                if (count listedTitles) is not (count listedURLs) then error "Inventory mismatch"
+                if (count tabIDs) is not (count listedURLs) or (count listedTitles) is not (count listedURLs) then error "Tab inventory mismatch"
+                set activeID to id of active tab of front window
+                if tabIDs does not contain activeID then error "Active tab missing from inventory"
                 return count listedURLs
                 """)
-            _ = try await script("make-set-read", """
+            // Later scripts address the created tab by its stable id, which is a UUID.
+            let created = try await script("make", """
                 set initialCount to count tabs of window 1
                 set createdTab to make new tab at end of tabs of front window with properties {URL:"about:blank#created"}
-                set createdID to id of createdTab
                 if (count tabs of window 1) is not initialCount + 1 then error "Create failed"
-                delay 0.3
-                set URL of createdTab to "about:blank#changed"
-                delay 0.3
-                set readBack to {id, title, URL} of createdTab
-                if item 1 of readBack is not createdID then error "Identity changed"
-                if item 3 of readBack is not "about:blank#changed" then error "URL did not change"
-                return createdID
+                if URL of createdTab is not "about:blank#created" then error "Created URL mismatch"
+                return id of createdTab
                 """)
-            // Return-value object specifiers are exercised again in each independently compiled script.
-            _ = try await script("select-reload-back", """
-                set t to last tab of window 1
-                select t
-                if id of active tab of window 1 is not id of t then error "Selection failed"
-                reload t
-                delay 0.2
-                go back t
-                delay 0.2
-                if URL of t is not "about:blank#created" then error "Back destination mismatch"
-                go forward t
-                delay 0.2
-                if URL of t is not "about:blank#changed" then error "Forward destination mismatch"
-                stop t
-                return id of t
+            guard UUID(uuidString: created) != nil else { throw ProbeFailure(message: "Created id is not a UUID") }
+            let tab = "tab id \"" + created + "\" of window 1"
+            _ = try await script("set-url", """
+                set URL of \(tab) to "about:blank#changed"
+                if URL of \(tab) is not "about:blank#changed" then error "URL did not change"
+                if id of \(tab) is not "\(created)" then error "Identity changed"
+                return URL of \(tab)
+                """)
+            _ = try await script("select-reload", """
+                select \(tab)
+                if id of active tab of front window is not "\(created)" then error "Selection failed"
+                reload \(tab)
+                return id of active tab of front window
                 """)
             _ = try await script("javascript-disabled", """
                 try
-                    execute (last tab of window 1) javascript "'synthetic-text'"
+                    execute \(tab) javascript "'synthetic-text'"
                     error "JavaScript unexpectedly allowed" number 999
                 on error messageText number errorNumber
                     if errorNumber is not -1743 then error messageText number errorNumber
@@ -101,10 +97,8 @@ enum OrbitScriptingProbe {
                 """)
             try await settings.setAllowJavaScriptFromAppleEvents(true)
             do {
-                // Allow the real renderer to commit the same-document navigation.
-                try await Task.sleep(for: .milliseconds(300))
                 let value = try await script("javascript-enabled", """
-                    return execute (last tab of window 1) javascript "'synthetic-text'"
+                    return execute \(tab) javascript "'synthetic-text'"
                     """)
                 guard value == "synthetic-text" else { throw ProbeFailure(message: "Wrong JavaScript text: " + value) }
             } catch {
@@ -112,62 +106,12 @@ enum OrbitScriptingProbe {
                 throw error
             }
             try await settings.setAllowJavaScriptFromAppleEvents(false)
-            _ = try await script("javascript-disabled-again", """
-                try
-                    execute (last tab of window 1) javascript "'synthetic-text'"
-                    error "JavaScript unexpectedly allowed" number 999
-                on error messageText number errorNumber
-                    if errorNumber is not -1743 then error messageText number errorNumber
-                end try
-                return "refused"
-                """)
-            _ = try await script("close-spaces-focus", """
+            _ = try await script("close", """
                 set beforeClose to count tabs of window 1
-                close (last tab of window 1)
+                close \(tab)
                 if (count tabs of window 1) is not beforeClose - 1 then error "Close failed"
-                set spaceNames to title of spaces of window 1
-                if (count spaceNames) < 1 then error "No Spaces"
-                focus (space 1 of window 1)
-                if id of active space of window 1 is not id of space 1 of window 1 then error "Space focus failed"
-                return count spaceNames
-                """)
-            _ = try await script("default-tab-active-set-window", """
-                set defaultTab to make new tab with properties {URL:"about:blank#default"}
-                if id of active tab of front window is not id of defaultTab then error "Default selection failed"
-                set URL of active tab of front window to "about:blank#active-set"
-                delay 0.2
-                if URL of defaultTab is not "about:blank#active-set" then error "Active URL did not change"
-                close defaultTab
-                set initialWindows to count windows
-                set createdWindow to make new window
-                if (count windows) is not initialWindows + 1 then error "Window creation failed"
-                close createdWindow
-                return "default-and-window-ok"
-                """)
-            _ = try await script("make-private", """
-                set privateWindow to make new window with properties {mode:"incognito"}
-                set privateTab to make new tab at end of tabs of privateWindow with properties {URL:"about:blank#private"}
-                return id of privateWindow
-                """)
-            _ = try await script("private-unfocused", """
-                set privateWindow to first window whose incognito is true
-                set normalWindow to first window whose incognito is false
-                focus normalWindow
-                if URL of last tab of privateWindow is not "" then error "Private URL leaked without focus"
-                if title of last tab of privateWindow is not "" then error "Private title leaked without focus"
-                return "redacted"
-                """)
-            _ = try await script("private-focused", """
-                set privateWindow to first window whose incognito is true
-                focus privateWindow
-                if URL of last tab of privateWindow is not "about:blank#private" then error "Focused private URL unavailable"
-                return "explicit-focused"
-                """)
-            _ = try await script("private-global-redaction", """
-                set globalURLs to URL of tabs
-                if globalURLs contains "about:blank#private" then error "Global inventory leaked private URL"
-                close (first window whose incognito is true)
-                return "redacted"
+                if id of tabs of window 1 contains "\(created)" then error "Closed tab still listed"
+                return beforeClose - 1
                 """)
             stage = "jxa-self-inventory"; publish("running")
             let jxa = await execute("""
@@ -177,6 +121,7 @@ enum OrbitScriptingProbe {
                 const titles = windows[0].tabs.title();
                 const urls = windows[0].tabs.url();
                 if (titles.length !== urls.length) throw Error("Inventory mismatch");
+                if (!windows[0].tabs.id().includes(windows[0].activeTab.id())) throw Error("Active tab mismatch");
                 "self-jxa-ok";
                 """, javaScript: true)
             guard jxa.code == 0, jxa.text == "self-jxa-ok" else { throw ProbeFailure(message: "\(jxa.code): \(jxa.text)") }

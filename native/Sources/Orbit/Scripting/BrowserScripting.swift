@@ -17,6 +17,9 @@ final class BrowserScriptingController {
     var creation: (() async throws -> NSObject)?
     private var pending: Task<Void, Never>?
 
+    /// Receives every resumed command and its gated result; tests observe the reply contract here.
+    var resume: (NSScriptCommand, Any?) -> Void = { $0.resumeExecution(withResult: $1) }
+
     func submit(_ command: NSScriptCommand, action: @escaping @MainActor () async throws -> Any?) {
         command.suspendExecution()
         let previous = pending
@@ -28,14 +31,16 @@ final class BrowserScriptingController {
             let previousTopLevel = context.topLevelObject
             context.topLevelObject = NSApp
             defer { context.topLevelObject = previousTopLevel }
-            targetWindowID = explicitWindow(in: command.receiversSpecifier ?? Self.decodedScriptValue(command.directParameter) as? NSScriptObjectSpecifier)
-            do { command.resumeExecution(withResult: try Self.replyValue(try await action(), returnType: command.commandDescription.returnType)) }
+            targetWindowID = explicitWindow(in: command.receiversSpecifier)
+            let result: Any?
+            do { result = try Self.replyValue(try await action(), resultCode: command.commandDescription.appleEventCodeForReturnType) }
             catch {
                 command.scriptErrorNumber = (error as? BrowserScriptError)?.code ?? -10000
                 command.scriptErrorString = (error as? BrowserScriptError)?.message ?? uiText("The scripting operation could not be completed.")
-                command.resumeExecution(withResult: nil)
+                result = nil
             }
             targetWindowID = nil
+            resume(command, result)
         }
     }
 
@@ -45,64 +50,36 @@ final class BrowserScriptingController {
             ?? NSScriptSuiteRegistry.shared().classDescription(withAppleEventCode: "capp".utf8.reduce(0) { ($0 << 8) | UInt32($1) })
     }
 
-    /// Sdef "any" parameters preserve raw descriptors, unlike script-suite declarations.
-    /// Decode references before evaluating them so scalar counts and privacy scope use the model.
+    /// Sdef "any" parameters arrive as raw descriptors; decode text and references before use.
     static func decodedScriptValue(_ value: Any?) -> Any? {
-        if let descriptor = value as? NSAppleEventDescriptor {
-            switch descriptor.descriptorType {
-            case typeObjectSpecifier: return NSScriptObjectSpecifier(descriptor: descriptor)
-            case typeAEList:
-                return (0..<descriptor.numberOfItems).map { decodedScriptValue(descriptor.atIndex($0 + 1)) ?? NSNull() }
-            case typeUnicodeText, typeUTF8Text, typeChar: return descriptor.stringValue
-            case typeType: return NSNumber(value: descriptor.typeCodeValue)
-            default: return descriptor
-            }
-        }
-        if let values = value as? [Any] { return values.map { decodedScriptValue($0) ?? NSNull() } }
-        return value
-    }
-
-    /// Reply conversion accepts references, not model wrappers, for declared specifier results.
-    static func replyValue(_ value: Any?) -> Any? {
-        switch value {
-        case let window as CircaScriptWindow: return window.objectSpecifier
-        case let space as CircaScriptSpace: return space.objectSpecifier
-        case let tab as CircaScriptTab: return tab.objectSpecifier
-        case let values as [Any]: return values.map { replyValue($0) ?? NSNull() }
-        default: return value
+        guard let descriptor = value as? NSAppleEventDescriptor else { return value }
+        switch descriptor.descriptorType {
+        case typeObjectSpecifier: return NSScriptObjectSpecifier(descriptor: descriptor)
+        case typeUnicodeText, typeUTF8Text, typeChar: return descriptor.stringValue
+        default: return descriptor
         }
     }
 
-    static func replyValue(_ value: Any?, returnType: String?) throws -> Any? {
-        let result = replyValue(value)
-        // Native sdef "any" results require an already encoded descriptor. Script-suite
-        // dictionaries instead declare "id", which Cocoa converts from ordinary objects.
-        guard returnType == "any" || returnType == "NSAppleEventDescriptor" else { return result }
-        return try replyDescriptor(result)
-    }
-
-    private static func replyDescriptor(_ value: Any?) throws -> NSAppleEventDescriptor {
-        switch value {
-        case nil, is NSNull: return .null()
-        case let descriptor as NSAppleEventDescriptor: return descriptor
-        case let specifier as NSScriptObjectSpecifier:
-            guard let descriptor = specifier.descriptor else { throw BrowserScriptError.unavailable }
+    /// Cocoa converts a resumed result to the dictionary's declared result type and raises,
+    /// outside any handler, when the class differs: "any" accepts only descriptors, "specifier"
+    /// only specifiers, "text" only strings and "integer" only numbers. Anything else becomes a
+    /// script error instead of reaching that conversion.
+    static func replyValue(_ value: Any?, resultCode: FourCharCode) throws -> Any? {
+        guard let value, !(value is NSNull), resultCode != 0, resultCode != typeNull else { return nil }
+        switch resultCode {
+        case typeWildCard:
+            guard let descriptor = value as? NSAppleEventDescriptor else { throw BrowserScriptError.unsupported }
             return descriptor
-        case let string as String: return NSAppleEventDescriptor(string: string)
-        case let number as NSNumber:
-            if CFGetTypeID(number) == CFBooleanGetTypeID() { return NSAppleEventDescriptor(boolean: number.boolValue) }
-            if String(cString: number.objCType) == "d" || String(cString: number.objCType) == "f" {
-                return NSAppleEventDescriptor(double: number.doubleValue)
-            }
-            var integer = number.int64Value
-            guard let descriptor = withUnsafeBytes(of: &integer, { NSAppleEventDescriptor(descriptorType: typeSInt64, data: Data($0)) }) else {
-                throw BrowserScriptError.unsupported
-            }
-            return descriptor
-        case let values as [Any]:
-            let list = NSAppleEventDescriptor.list()
-            for (index, value) in values.enumerated() { list.insert(try replyDescriptor(value), at: index + 1) }
-            return list
+        case typeObjectSpecifier:
+            if let specifier = value as? NSScriptObjectSpecifier { return specifier }
+            guard let object = value as? NSObject, let specifier = object.objectSpecifier else { throw BrowserScriptError.unavailable }
+            return specifier
+        case cText, typeUnicodeText, typeChar:
+            guard let text = value as? String else { throw BrowserScriptError.unsupported }
+            return text as NSString
+        case typeSInt32, typeSInt64:
+            guard let number = value as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID() else { throw BrowserScriptError.unsupported }
+            return number
         default: throw BrowserScriptError.unsupported
         }
     }
