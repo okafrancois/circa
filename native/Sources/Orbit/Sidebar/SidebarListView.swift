@@ -756,6 +756,11 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
     // MARK: Row events
 
     func rowMouseDown(_ row: SidebarListRow, with event: NSEvent) {
+        // A press whose release never arrived (taken by a drag loop or a menu) releases here.
+        if let stale = pointerDown, let previous = rowViews[stale.node], previous !== row {
+            previous.isPressed = false
+            BrowserSidebarInputDiagnostics.record("mouse-down", tab: stale.node.tabID, reason: "unreleased-press-cleared")
+        }
         if renameTimer != nil { cancelRename() }
         window?.makeFirstResponder(self)
         let modifiers = event.modifierFlags.intersection([.command, .shift, .option])
