@@ -26,16 +26,26 @@ final class BrowserSettingsSelectionPill: NSView {
 
 @MainActor
 final class BrowserSettingsToolbarButton: NSButton {
+    // Reserve the native text line height as well as the icon, gap and bottom padding.
+    // A fixed 46 pt canvas clipped the category label against the selection indicator.
+    private static func contentSize(for title: String) -> NSSize {
+        let label = (title as NSString).size(withAttributes: [.font: BrandFonts.ui(11, weight: .medium)])
+        return NSSize(width: max(66, ceil(label.width) + 16), height: ceil(5 + 24 + 4 + label.height + 4))
+    }
+    override var alignmentRectInsets: NSEdgeInsets { .init() }
     let section: BrowserSettingsSection
     init(section: BrowserSettingsSection) {
         self.section = section
-        super.init(frame: NSRect(x: 0, y: 0, width: max(66, BrandFonts.ui(11).width(of: section.title) + 16), height: 46))
+        super.init(frame: NSRect(origin: .zero, size: Self.contentSize(for: section.toolbarTitle)))
         isBordered = false
         title = section.toolbarTitle
         setAccessibilityLabel(section.title)
         setAccessibilityIdentifier(section.toolbarIdentifier.rawValue)
+        // Toolbar layout otherwise compresses custom views to its default 44 pt slot.
+        translatesAutoresizingMaskIntoConstraints = false
+        heightAnchor.constraint(equalToConstant: intrinsicContentSize.height).isActive = true
     }
-    override var intrinsicContentSize: NSSize { NSSize(width: max(66, BrandFonts.ui(11).width(of: section.toolbarTitle) + 16), height: 46) }
+    override var intrinsicContentSize: NSSize { Self.contentSize(for: section.toolbarTitle) }
     required init?(coder: NSCoder) { nil }
     override func draw(_ dirtyRect: NSRect) {
         OrbitIcon.image(sfName: section.symbol, pointSize: 24, variant: .color)?.draw(

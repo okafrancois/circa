@@ -143,7 +143,27 @@ enum OrbitPerformanceProbe {
                 try? FileManager.default.removeItem(at: commandFile)
                 let name = command["command"] ?? ""
                 result["commandNonce"] = command["nonce"] ?? ""
-                if name == "scripting-self" {
+                if name == "settings-tab-spacing", ownsWindow(owner, bundleID: "lab.orbit.orbit.settings-tab-spacing") {
+                    if application.settingsWindow == nil {
+                        let model = BrowserSettingsModel(environment: environment, profileID: owner.session.activeProfileID, shortcuts: [])
+                        application.settingsWindow = BrowserSettingsWindowController(model: model, appearanceOverride: nil)
+                    }
+                    if let settings = application.settingsWindow, let window = settings.window {
+                        window.appearance = NSAppearance(named: command["appearance"] == "dark" ? .darkAqua : .aqua)
+                        window.center()
+                        window.makeKeyAndOrderFront(nil)
+                        _ = settings.selectSection(.ai)
+                        try? await Task.sleep(for: .milliseconds(800))
+                        window.contentView?.superview?.layoutSubtreeIfNeeded()
+                        let rows = CGWindowListCopyWindowInfo([.optionIncludingWindow], CGWindowID(window.windowNumber)) as? [[String: Any]]
+                        result["settingsWindowOwned"] = rows?.contains { ($0[kCGWindowOwnerPID as String] as? Int32) == getpid() } == true
+                        result["settingsWindowNumber"] = window.windowNumber
+                        result["settingsTabs"] = (window.toolbar?.items ?? []).compactMap { item -> [String: Any]? in
+                            guard let view = item.view else { return nil }
+                            return ["id": item.itemIdentifier.rawValue, "height": view.bounds.height, "width": view.bounds.width]
+                        }
+                    }
+                } else if name == "scripting-self" {
                     result["scripting"] = await OrbitScriptingProbe.run(application, owner: owner, root: root, command: command)
                 } else if name == "update-test", ownsWindow(owner, bundleID: "io.github.okatech.orbit.test.update") {
                     switch command["action"] {
