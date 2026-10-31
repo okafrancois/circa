@@ -1,0 +1,5 @@
+{"mcp_servers": {"files": {"command": "files-mcp", "enabled": true}, "old": {"command": "old-mcp", "enabled": false}},
+ "plugins": {"browser@openai-bundled": {"enabled": true}},
+ "features": {"shell_tool": true, "plugins": true, "apps": true},
+ "notify": ["/Applications/Example.app/Contents/MacOS/notify", "turn-ended"],
+ "web_search": "cached", "sandbox_mode": null, "project_doc_max_bytes": 32768}

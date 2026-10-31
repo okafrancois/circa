@@ -1,0 +1,60 @@
+#!/usr/bin/python3 -I
+"""Test double for `claude`. Replays recorded stream-json JSONL (claude-<scenario>.jsonl).
+
+Environment: FAKE_AI_FIXTURES, FAKE_AI_SCENARIO, FAKE_AI_LOG (arguments, working directory and
+the stdin message). Never contacts any service.
+"""
+import json, os, sys, time, signal
+
+def log(entry):
+    path = os.environ.get('FAKE_AI_LOG')
+    if path:
+        with open(path, 'a') as f:
+            f.write(json.dumps(entry) + '\n')
+
+args = sys.argv[1:]
+scenario = os.environ.get('FAKE_AI_SCENARIO', 'ready')
+if args == ['--version']:
+    print('2.1.316 (Claude Code)')
+    sys.exit(0)
+if args[:2] == ['auth', 'status']:
+    log({'argv': args})
+    status = {'loggedIn': scenario != 'signedout', 'authMethod': 'claude.ai', 'apiProvider': 'firstParty',
+              'email': 'person@example.invalid', 'orgId': 'org-synthetic', 'orgName': 'Synthetic Org',
+              'subscriptionType': 'max'}
+    if scenario == 'signedout':
+        status = {'loggedIn': False, 'authMethod': 'none', 'apiProvider': 'firstParty'}
+    print(json.dumps(status, indent=2))
+    sys.exit(0 if status['loggedIn'] else 1)
+if '-p' not in args:
+    sys.exit(2)
+
+message = sys.stdin.readline()
+log({'argv': args, 'cwd': os.getcwd(), 'cwdEntries': os.listdir('.'), 'stdin': json.loads(message) if message else None})
+interrupted = [False]
+def on_interrupt(signum, frame):
+    interrupted[0] = True
+signal.signal(signal.SIGINT, on_interrupt)
+
+def out(event):
+    sys.stdout.write(json.dumps(event) + '\n')
+    sys.stdout.flush()
+
+with open(os.path.join(os.environ['FAKE_AI_FIXTURES'], 'claude-%s.jsonl' % scenario)) as f:
+    for line in f:
+        line = line.strip()
+        if not line or line.startswith('//'):
+            continue
+        event = json.loads(line)
+        if 'sleep' in event:
+            time.sleep(event['sleep']); continue
+        if event.get('await') == 'interrupt':
+            while not interrupted[0]:
+                time.sleep(0.05)
+            out({'type': 'result', 'subtype': 'error_during_execution', 'is_error': True, 'num_turns': 1,
+                 'errors': ['Request was aborted.'], 'session_id': 'session-synthetic'})
+            sys.exit(130)
+        if 'exit' in event:
+            sys.exit(event['exit'])
+        out(event)
+sys.exit(0)

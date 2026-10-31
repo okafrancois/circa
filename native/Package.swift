@@ -31,7 +31,8 @@ let package = Package(
         .target(name: "OrbitImportSynthetic", dependencies: ["BrowserCore"]),
         // Offline Orbit import (dry run, apply, restore) while Orbit is closed.
         .executableTarget(name: "OrbitImportTool", dependencies: ["BrowserCore", "OrbitImportSynthetic"]),
-        .testTarget(name: "BrowserCoreTests", dependencies: ["BrowserCore", "OrbitImportSynthetic"]),
+        // AIFixtures: fake AI programs run from the source tree, never bundled.
+        .testTarget(name: "BrowserCoreTests", dependencies: ["BrowserCore", "OrbitImportSynthetic"], exclude: ["AIFixtures"]),
         .testTarget(name: "BrowserShellTests", dependencies: ["BrowserShell"]),
         .testTarget(name: "BrowserEngineTests", dependencies: ["BrowserEngine", "BrowserEngineConformance", "BrowserShell", "BrowserCore"]),
         .testTarget(name: "OrbitTests", dependencies: [

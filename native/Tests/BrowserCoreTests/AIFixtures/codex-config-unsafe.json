@@ -1,0 +1,2 @@
+{"mcp_servers": {"name with space": {"command": "x", "enabled": true}},
+ "features": {"shell_tool": true}, "web_search": "cached", "project_doc_max_bytes": 32768}

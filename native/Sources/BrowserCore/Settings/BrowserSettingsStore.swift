@@ -169,11 +169,13 @@ public struct BrowserSettingsDocument: Codable, Equatable, Sendable {
     }
     public var lastActiveWindowID: WindowID?
     public var lastActiveSpaceID: SpaceID?
+    /// Device-local, excluded from the sync projection: AI programs are installed per Mac.
+    public var ai = BrowserAIPreferences()
     public var profiles: [ProfileID: BrowserProfileSettings] = [:]
     public var spaces: [SpaceID: BrowserSpaceSettings] = [:]
     public init() {}
     private enum CodingKeys: String, CodingKey {
-        case allowJavaScriptFromAppleEvents, siteSearches, safeBrowsingEnabled, quickWindowArchiveThreshold, quickWindowProfilesByDomain, downloads, automaticPictureInPicture, hasSeenBoostsIntroduction, enablesBoostsOnWebsites, interaction, memorySaver, linkRouting, version, reducedMotion, profiles, spaces, opensExternalLinksInQuickWindow, lastActiveWindowID, lastActiveSpaceID
+        case ai, allowJavaScriptFromAppleEvents, siteSearches, safeBrowsingEnabled, quickWindowArchiveThreshold, quickWindowProfilesByDomain, downloads, automaticPictureInPicture, hasSeenBoostsIntroduction, enablesBoostsOnWebsites, interaction, memorySaver, linkRouting, version, reducedMotion, profiles, spaces, opensExternalLinksInQuickWindow, lastActiveWindowID, lastActiveSpaceID
     }
     public init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
@@ -201,6 +203,8 @@ public struct BrowserSettingsDocument: Codable, Equatable, Sendable {
         spaces = try values.decode([SpaceID: BrowserSpaceSettings].self, forKey: .spaces)
         lastActiveWindowID = try values.decodeIfPresent(WindowID.self, forKey: .lastActiveWindowID)
         lastActiveSpaceID = try values.decodeIfPresent(SpaceID.self, forKey: .lastActiveSpaceID)
+        // A malformed AI section falls back to "off" instead of quarantining every preference.
+        ai = (try? values.decodeIfPresent(BrowserAIPreferences.self, forKey: .ai)) ?? .init()
         opensExternalLinksInQuickWindow = try values.decodeIfPresent(Bool.self, forKey: .opensExternalLinksInQuickWindow) ?? true
         if let routing = try values.decodeIfPresent(BrowserLinkRouting.self, forKey: .linkRouting) {
             linkRouting = routing
@@ -399,6 +403,15 @@ public actor BrowserSettingsStore {
     public func setAutomaticPictureInPicture(_ enabled: Bool) throws {
         var next = document
         next.automaticPictureInPicture = enabled
+        try publish(next)
+    }
+
+    /// Site entries are normalized and de-duplicated before they are saved.
+    public func updateAI(_ edit: @Sendable (inout BrowserAIPreferences) -> Void) throws {
+        var next = document
+        edit(&next.ai)
+        var seen = Set<String>()
+        next.ai.disabledSites = next.ai.disabledSites.compactMap(BrowserAIPolicy.site(from:)).filter { seen.insert($0).inserted }
         try publish(next)
     }
 
