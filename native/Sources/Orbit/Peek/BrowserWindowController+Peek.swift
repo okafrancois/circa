@@ -320,6 +320,7 @@ extension BrowserWindowController {
     /// Focus held by the Peek document returns to the tab underneath; focus elsewhere (the
     /// address field that replaced the Peek) is left alone.
     func dismissPeek(animated: Bool = true) {
+        archive.previewTabID = nil
         let hadFocus = peekHoldsFocus
         guard let dismissed = peek.dismiss(animated: animated && window?.isVisible == true, remember: true) else { return }
         // A permission prompt of the closed document has no target any more.
@@ -426,7 +427,7 @@ extension BrowserWindowController {
                 if destinationImage == nil, hadFocus, session.selectedSurface === surface { surface.focusDocument() }
             }
         } else { contentCard.setPeekDimmed(false, animated: false) }
-        if presentation.isLibraryBoost { hideLibrary(focus: false) }
+        if presentation.isLibraryBoost { archive.previewTabID = nil; hideLibrary(focus: false) }
         peek.endPresentationAfterHandOff()
         renderPeekPageTools()
         // Keep the last painted frame until adoption completes. The destination and the

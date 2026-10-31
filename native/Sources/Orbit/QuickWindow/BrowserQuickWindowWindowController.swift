@@ -94,7 +94,7 @@ final class BrowserQuickWindowWindowController<Engine: BrowserEngine>: NSWindowC
         window.appearance = NSAppearance(named: .darkAqua)
         window.titleVisibility = .hidden
         window.titlebarAppearsTransparent = true
-        window.title = uiText("Little Circa")
+        window.title = Self.windowTitle(nil)
         window.identifier = NSUserInterfaceItemIdentifier("orbit-little-orbit")
         window.minSize = OrbitTokens.Metrics.QuickWindow.minimumSize
         window.level = .normal
@@ -545,11 +545,17 @@ final class BrowserQuickWindowWindowController<Engine: BrowserEngine>: NSWindowC
         render()
     }
 
+    /// The Dock and window lists show this title; the window itself hides it.
+    static func windowTitle(_ pageTitle: String?) -> String {
+        guard let pageTitle, !pageTitle.isEmpty else { return uiText("Little Circa") }
+        return uiFormat("Little Circa — %@", pageTitle)
+    }
+
     func render() {
         if addressField.currentEditor() == nil {
             addressField.stringValue = surface?.navigationState.url?.absoluteString ?? ""
         }
-        window?.title = surface?.navigationState.title ?? uiText("Little Circa")
+        window?.title = Self.windowTitle(surface?.navigationState.title)
         sourceSpaceBadge.title = sourceSpaceName
         sourceSpaceBadge.isHidden = addressField.currentEditor() != nil
         extensionsButton.isEnabled = acceptsCommands && engine.extensions != nil

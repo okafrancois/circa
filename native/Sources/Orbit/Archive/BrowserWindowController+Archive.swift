@@ -20,6 +20,7 @@ final class BrowserArchivePresentation {
     var isPresented = false
     var request: Request?
     var displayedProfile: ProfileID?
+    var previewTabID: TabID?
     var task: Task<Void, Never>?
 }
 
@@ -50,6 +51,17 @@ extension BrowserWindowController {
                 controller.session.restoreArchivedTab(id)
                 // Returning focus before restore completes can reactivate the displaced page.
                 controller.session.performWindowAction { [weak controller] in controller?.hideArchive() }
+            }
+        }
+        view.onPreview = { [weak self] record in
+            guard let self, let profile = archive.displayedProfile, record.profileID == profile else { return }
+            submitInput { controller in
+                guard controller.session.activeProfileID == profile else { return }
+                controller.archive.previewTabID = record.id
+                guard controller.openLibraryBoostPage(record.tab.url, profile: profile) != nil else {
+                    controller.archive.previewTabID = nil
+                    return
+                }
             }
         }
         view.onDelete = { [weak self] id in
