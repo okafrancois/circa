@@ -323,6 +323,26 @@ struct BrowserAICodexClientTests {
         await client.shutdown()
     }
 
+    @Test("RPC failure rechecks sign-in state")
+    func signedOutTurn() async throws {
+        let harness = try BrowserAITestHarness()
+        defer { harness.remove() }
+        let client = harness.codex("signedout")
+        #expect(await collect(client.startTurn(BrowserAITurnRequest(prompt: "x"))) == [.failed(.signedOut)])
+        #expect(harness.received("account/read").count == 1)
+        await client.shutdown()
+    }
+
+    @Test("Optional feature keys may be absent but must be disabled when present")
+    func optionalFeatures() {
+        let base: BrowserAIJSON = ["sandbox_mode": "read-only", "web_search": "disabled",
+            "project_doc_max_bytes": 0, "features": ["shell_tool": false]]
+        #expect(BrowserAICodexLaunch.lockdownViolations(in: base).isEmpty)
+        let enabled: BrowserAIJSON = ["sandbox_mode": "read-only", "web_search": "disabled",
+            "project_doc_max_bytes": 0, "features": ["shell_tool": false, "plugins": true, "apps": true]]
+        #expect(BrowserAICodexLaunch.lockdownViolations(in: enabled) == ["features.plugins", "features.apps"])
+    }
+
     @Test("Not installed: no process is started")
     func notInstalled() async throws {
         let harness = try BrowserAITestHarness(programs: [])

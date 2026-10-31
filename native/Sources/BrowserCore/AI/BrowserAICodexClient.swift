@@ -105,7 +105,10 @@ public enum BrowserAICodexLaunch {
         if config["sandbox_mode"]?.string != "read-only" { violations.append("sandbox_mode") }
         if config["web_search"]?.string != "disabled" { violations.append("web_search") }
         let features = config["features"]
-        for key in ["shell_tool", "plugins", "apps"] where features?[key]?.bool != false { violations.append("features." + key) }
+        if features?["shell_tool"]?.bool != false { violations.append("features.shell_tool") }
+        for key in ["plugins", "apps"] {
+            if let value = features?[key], value.bool != false { violations.append("features." + key) }
+        }
         if let notify = config["notify"], !(notify.isNull || notify.array?.isEmpty == true) { violations.append("notify") }
         if config["project_doc_max_bytes"]?.int != 0 { violations.append("project_doc_max_bytes") }
         let (servers, plugins) = enabledExtensions(in: config)
@@ -353,7 +356,8 @@ public actor BrowserAICodexClient: BrowserAIProviderClient {
             sink.yield(.failed(error))
             return BrowserAITurn(events: events, interrupt: {})
         } catch {
-            sink.yield(.failed(.failed))
+            let state = await status(refresh: false).state
+            sink.yield(.failed(state == .signedOut ? .signedOut : .failed))
             return BrowserAITurn(events: events, interrupt: {})
         }
         return BrowserAITurn(events: events, interrupt: { [weak self] in await self?.interrupt(threadID) })
