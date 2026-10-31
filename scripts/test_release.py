@@ -16,7 +16,7 @@ import local_signing
 
 class ReleaseTests(unittest.TestCase):
     config = {'name': 'Circa', 'bundle_id': 'io.github.okatech.orbit',
-              'repository': 'okafrancois/orbit-browser', 'public_ed_key': ''}
+              'repository': 'example/browser', 'public_ed_key': ''}
 
     def test_local_signing_preserves_the_existing_directory_and_keychain(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -47,6 +47,23 @@ class ReleaseTests(unittest.TestCase):
         self.assertTrue(info['SUAllowsAutomaticUpdates'])
         self.assertTrue(info['SUVerifyUpdateBeforeExtraction'])
         self.assertTrue(info['SUAutomaticallyUpdate'])
+        self.assertEqual(info['SUFeedURL'], release.update_feed_url(self.config['repository']))
+
+    def test_publish_commands_pin_latest_and_upload_stable_feed(self):
+        responses = [SimpleNamespace(returncode=1), SimpleNamespace(returncode=1)]
+        commands = []
+        def fake_run(*args, **kwargs):
+            commands.append(list(map(str, args)))
+        with patch.object(release.subprocess, 'run', side_effect=responses), patch.object(release, 'run', side_effect=fake_run):
+            release.publish_release(self.config, '1.2.3', Path('app.zip'), Path('app.dmg'), Path('appcast.xml'))
+        publish_edit = next(command for command in commands if command[:3] == ['gh', 'release', 'edit'])
+        feed_create = next(command for command in commands if command[:4] == ['gh', 'release', 'create', 'update-feed'])
+        feed_upload = next(command for command in commands if command[:4] == ['gh', 'release', 'upload', 'update-feed'])
+        self.assertEqual(publish_edit, ['gh', 'release', 'edit', 'v1.2.3', '--repo', self.config['repository'], '--draft=false', '--latest'])
+        self.assertEqual(commands[1], ['gh', 'release', 'upload', 'v1.2.3', '--repo', self.config['repository'], '--clobber', 'app.zip', 'app.dmg', 'appcast.xml'])
+        self.assertIn('--prerelease', feed_create)
+        self.assertIn('--latest=false', feed_create)
+        self.assertEqual(feed_upload, ['gh', 'release', 'upload', 'update-feed', '--repo', self.config['repository'], '--clobber', 'appcast.xml'])
 
     def test_release_enables_quarantine_even_for_older_source_bundles(self):
         for source in ({}, {'LSFileQuarantineEnabled': False}):

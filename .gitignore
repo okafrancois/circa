@@ -1,7 +1,7 @@
 # Local tools, dependencies and worktrees
 .tools/
 .taste-skill/
-node_modules/
+**/node_modules/
 worktrees/
 .worktrees/
 artlab-worktrees/
@@ -13,10 +13,10 @@ artlab-worktrees/
 .review-build*/
 native/**/build/
 native/**/build-*/
-build/
+**/build/
 build-*/
-dist/
-DerivedData/
+**/dist/
+**/DerivedData/
 .swiftpm/
 *.xcuserstate
 xcuserdata/
@@ -82,3 +82,7 @@ __pycache__/
 
 # Private investigation archive; never stage or publish
 /lab/
+
+# Web and mobile dependency/build output
+**/.next/
+**/Pods/

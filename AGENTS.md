@@ -46,3 +46,7 @@ Orbit is a native macOS browser: Swift/AppKit shell (`native/Sources/Orbit`) on 
 
 ## Local lab material
 - Research notes and historical references are kept outside Git in the main checkout's ignored `lab/` folder. Read them only when a brief points to them; never copy them into tracked files.
+
+## Monorepo
+- Keep `native/`, `scripts/`, `release/`, `docs/` and `.github/` at the repository root.
+- Website and mobile projects belong in `web/` and `mobile/`; use `web-vX.Y.Z` and `mobile-vX.Y.Z` tags, publish with `--latest=false`, filter workflows to their own folder, and never use the self-hosted browser runner.

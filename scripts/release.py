@@ -18,6 +18,7 @@ from sparkle_setup import ROOT, ensure_sparkle
 from orbit_bundle_policy import set_helper_bundle_identifiers, validate_bundle_contents
 from local_signing import configured_identity
 from product_identity import BUNDLE_ID, DISPLAY_NAME, PRODUCT_NAME
+from update_feed import update_feed_url
 
 
 def run(*arguments, **kwargs):
@@ -48,8 +49,8 @@ def update_info(info, config, version, build, local_test_root=None, feed_url=Non
         raise ValueError('public_ed_key must be a base64 Ed25519 public key')
     info.update(CFBundleIdentifier=config['bundle_id'], CFBundleName=config['name'],
                 CFBundleDisplayName=PRODUCT_NAME, LSHasLocalizedDisplayName=True, CFBundleShortVersionString=version,
-                CFBundleVersion=str(build), OrbitDeveloperTeamID=config.get('team_id', ''), SUFeedURL=feed_url or
-                f"https://github.com/{config['repository']}/releases/latest/download/appcast.xml",
+                CFBundleVersion=str(build), OrbitDeveloperTeamID=config.get('team_id', ''),
+                OrbitRepository=config['repository'], SUFeedURL=feed_url or update_feed_url(config['repository']),
                 SUPublicEDKey=key, SUEnableAutomaticChecks=True, SUAllowsAutomaticUpdates=True,
                 SUVerifyUpdateBeforeExtraction=True, SUAutomaticallyUpdate=True,
                 SUScheduledCheckInterval=3600, LSFileQuarantineEnabled=True)
@@ -229,6 +230,25 @@ def validate_appcast(path, build):
         raise ValueError('Latest release requires a signed full archive, independent of delta coverage')
 
 
+def publish_release(config, version, archive, dmg, appcast, deltas=()):
+    repo, tag = config['repository'], 'v' + version
+    existing = subprocess.run(['gh', 'release', 'view', tag, '--repo', repo, '--json', 'isDraft'], capture_output=True, text=True)
+    if existing.returncode:
+        run('gh', 'release', 'create', tag, '--repo', repo, '--verify-tag', '--draft', '--title', f"{config['name']} {version}", '--generate-notes')
+    elif not json.loads(existing.stdout)['isDraft']:
+        raise ValueError('Refusing to mutate an already published release')
+    run('gh', 'release', 'upload', tag, '--repo', repo, '--clobber', archive, dmg, appcast, *sorted(deltas))
+    run('gh', 'release', 'edit', tag, '--repo', repo, '--draft=false', '--latest')
+    feed = subprocess.run(['gh', 'release', 'view', 'update-feed', '--repo', repo, '--json', 'isDraft,isPrerelease'], capture_output=True, text=True)
+    if feed.returncode:
+        run('gh', 'release', 'create', 'update-feed', '--repo', repo, '--verify-tag', '--prerelease', '--latest=false', '--title', 'Circa update feed', '--notes', 'Stable Sparkle update feed.')
+    else:
+        feed_info = json.loads(feed.stdout)
+        if feed_info['isDraft'] or not feed_info['isPrerelease']:
+            run('gh', 'release', 'edit', 'update-feed', '--repo', repo, '--draft=false', '--prerelease', '--latest=false')
+    run('gh', 'release', 'upload', 'update-feed', '--repo', repo, '--clobber', appcast)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--config', type=Path, default=ROOT / 'release/config.json')
@@ -314,14 +334,7 @@ def main():
         '--delta-compression', 'lzfse', '--maximum-versions', '3', '--maximum-deltas', '5', archives)
     validate_appcast(archives / 'appcast.xml', build)
     if args.publish:
-        repo, tag = config['repository'], 'v' + version
-        existing = subprocess.run(['gh', 'release', 'view', tag, '--repo', repo, '--json', 'isDraft'], capture_output=True, text=True)
-        if existing.returncode:
-            run('gh', 'release', 'create', tag, '--repo', repo, '--verify-tag', '--draft', '--title', f"{config['name']} {version}", '--generate-notes')
-        elif not json.loads(existing.stdout)['isDraft']:
-            raise ValueError('Refusing to mutate an already published release')
-        run('gh', 'release', 'upload', tag, '--repo', repo, '--clobber', archive, dmg, archives / 'appcast.xml', *sorted(archives.glob('*.delta')))
-        run('gh', 'release', 'edit', tag, '--repo', repo, '--draft=false', '--latest')
+        publish_release(config, version, archive, dmg, archives / 'appcast.xml', archives.glob('*.delta'))
     print(json.dumps({'version': version, 'build': build, 'zip': str(archive), 'dmg': str(dmg), 'appcast': str(archives / 'appcast.xml'), 'published': args.publish}))
 
 

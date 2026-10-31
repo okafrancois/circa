@@ -138,10 +138,10 @@ struct IdleUpdateTests {
             #expect(BrowserPaletteRanking.commandScore(query, result: row) != nil)
         }
         #expect(OrbitApplication().makeCommandSystem().registry.isImplemented(.releaseNotes))
-        #expect(OrbitReleaseNotes.runningVersionURL(info: ["CFBundleShortVersionString": "1.2.3"])?.absoluteString
-            == "https://github.com/okafrancois/orbit-browser/releases/tag/v1.2.3")
+        #expect(OrbitReleaseNotes.runningVersionURL(info: ["CFBundleShortVersionString": "1.2.3", "OrbitRepository": "example/browser"])?.absoluteString
+            == "https://github.com/example/browser/releases/tag/v1.2.3")
         for version in ["", "1.2", "1.2.3/other", "fixture.20261030"] {
-            #expect(OrbitReleaseNotes.runningVersionURL(info: ["CFBundleShortVersionString": version]) == nil)
+            #expect(OrbitReleaseNotes.runningVersionURL(info: ["CFBundleShortVersionString": version, "OrbitRepository": "example/browser"]) == nil)
         }
     }
 

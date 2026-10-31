@@ -28,6 +28,10 @@ This builds the shared modules and the WebKit development executable; the Chromi
 
 See [building Orbit](docs/release/building.md) for the Chromium configuration and current packaging limitations, and [architecture](docs/native-port/orbit-architecture.md) for the module layout. Tests use synthetic data and a mock Keychain; building does not install an app or change your default browser.
 
+## Repository layout
+
+`native/`, `scripts/`, `release/`, `docs/` and `.github/` stay at the repository root because browser builds, worktrees and the self-hosted release runner depend on those paths. New website and mobile projects live in `web/` and `mobile/`. Their releases use `web-vX.Y.Z` and `mobile-vX.Y.Z` tags, always pass `--latest=false`, use workflows filtered to their own folder, and never run on the self-hosted browser runner.
+
 ## Source and licensing
 
 This repository contains the native application, tests, engine patch sources, build and release tools. Browser data and credentials are never part of it.

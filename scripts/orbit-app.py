@@ -22,6 +22,7 @@ import time
 from orbit_bundle_policy import helper_bundle_identifier, reject_build_artifacts, set_helper_bundle_identifiers, validate_bundle_contents
 from product_identity import BUNDLE_ID, DISPLAY_NAME, PRODUCT_NAME
 from local_signing import SIGNING_DIRECTORY, unlocked_identity, sign_chromium_bundle
+from update_feed import update_feed_url
 
 ROOT = Path(__file__).resolve().parents[1]
 WORK = ROOT / '.tools/orbit-app'
@@ -45,7 +46,8 @@ def bundle_info(version, bundle_id=BUNDLE_ID, principal='ACRApplication'):
         stamp = version.rsplit('.', 1)[-1]
         numeric_version = datetime.strptime(stamp, '%Y%m%dT%H%M%SZ').strftime('%Y%m%d.%H%M%S')
     return {
-        'SUFeedURL': 'https://github.com/' + release_config['repository'] + '/releases/latest/download/appcast.xml',
+        'SUFeedURL': update_feed_url(release_config['repository']),
+        'OrbitRepository': release_config['repository'],
         'SUPublicEDKey': release_config['public_ed_key'],
         'SUEnableAutomaticChecks': True, 'SUAllowsAutomaticUpdates': True,
         'SUVerifyUpdateBeforeExtraction': True, 'SUAutomaticallyUpdate': True,

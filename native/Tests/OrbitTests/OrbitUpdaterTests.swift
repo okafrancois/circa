@@ -25,7 +25,7 @@ struct OrbitUpdaterTests {
 
     private var production: [String: Any] { [
         "SUPublicEDKey": Data(repeating: 42, count: 32).base64EncodedString(),
-        "SUFeedURL": "https://github.com/okafrancois/orbit-browser/releases/latest/download/appcast.xml"
+        "SUFeedURL": "https://github.com/example/browser/releases/download/update-feed/appcast.xml"
     ] }
 
     @Test("Missing keys and ordinary synthetic bundles never start an updater")

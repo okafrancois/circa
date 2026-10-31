@@ -210,6 +210,9 @@ set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${ORBIT_RELEASE_
 file(READ "${ORBIT_RELEASE_CONFIG}" ORBIT_RELEASE_JSON)
 string(JSON SPARKLE_PUBLIC_ED_KEY GET "${ORBIT_RELEASE_JSON}" public_ed_key)
 string(JSON ORBIT_RELEASE_REPOSITORY GET "${ORBIT_RELEASE_JSON}" repository)
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/../../scripts/update_feed.py")
+execute_process(COMMAND python3 "${CMAKE_CURRENT_SOURCE_DIR}/../../scripts/update_feed.py" --repository "${ORBIT_RELEASE_REPOSITORY}"
+  OUTPUT_VARIABLE ORBIT_UPDATE_FEED_URL OUTPUT_STRIP_TRAILING_WHITESPACE COMMAND_ERROR_IS_FATAL ANY)
 function(orbit_app_executable TARGET DIRECTORY PLIST)
   # Swift emits dependency files beside the executable. Keep all compiler outputs outside
   # the bundle and stage only the executable in PackageApp.cmake.
