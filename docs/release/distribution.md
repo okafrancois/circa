@@ -13,3 +13,5 @@ The project license is MIT, Copyright (c) 2026 Okatech. Preserve all dependency 
 Website and mobile releases must never be marked latest; create them with `--latest=false`. Only browser version releases may be latest.
 
 The repository was renamed from `okafrancois/orbit-browser` to `okafrancois/circa`. GitHub redirects the old name, which older installations still use for their feed. Never create a new repository named `orbit-browser`: it would break those redirects. The Sparkle signing key keeps its `orbit-browser` Keychain account name.
+
+Each browser release also carries an unversioned `Circa.dmg`. Because only browser releases are ever marked latest, `https://github.com/okafrancois/circa/releases/latest/download/Circa.dmg` is a stable download link for the website.

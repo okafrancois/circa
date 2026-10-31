@@ -65,6 +65,16 @@ class ReleaseTests(unittest.TestCase):
         self.assertIn('--latest=false', feed_create)
         self.assertEqual(feed_upload, ['gh', 'release', 'upload', 'update-feed', '--repo', self.config['repository'], '--clobber', 'appcast.xml'])
 
+    def test_publish_uploads_unversioned_stable_dmg(self):
+        responses = [SimpleNamespace(returncode=1), SimpleNamespace(returncode=1)]
+        commands = []
+        with patch.object(release.subprocess, 'run', side_effect=responses), \
+                patch.object(release, 'run', side_effect=lambda *args, **kwargs: commands.append(list(map(str, args)))):
+            release.publish_release(self.config, '1.2.3', Path('app.zip'), Path('app.dmg'), Path('appcast.xml'),
+                                    stable_dmg=Path('Circa.dmg'))
+        self.assertEqual(commands[1], ['gh', 'release', 'upload', 'v1.2.3', '--repo', self.config['repository'], '--clobber',
+                                       'app.zip', 'app.dmg', 'Circa.dmg', 'appcast.xml'])
+
     def test_release_enables_quarantine_even_for_older_source_bundles(self):
         for source in ({}, {'LSFileQuarantineEnabled': False}):
             with self.subTest(source=source):

@@ -230,14 +230,15 @@ def validate_appcast(path, build):
         raise ValueError('Latest release requires a signed full archive, independent of delta coverage')
 
 
-def publish_release(config, version, archive, dmg, appcast, deltas=()):
+def publish_release(config, version, archive, dmg, appcast, deltas=(), stable_dmg=None):
+    # stable_dmg is an unversioned copy, so releases/latest/download/<name>.dmg stays a fixed download link.
     repo, tag = config['repository'], 'v' + version
     existing = subprocess.run(['gh', 'release', 'view', tag, '--repo', repo, '--json', 'isDraft'], capture_output=True, text=True)
     if existing.returncode:
         run('gh', 'release', 'create', tag, '--repo', repo, '--verify-tag', '--draft', '--title', f"{config['name']} {version}", '--generate-notes')
     elif not json.loads(existing.stdout)['isDraft']:
         raise ValueError('Refusing to mutate an already published release')
-    run('gh', 'release', 'upload', tag, '--repo', repo, '--clobber', archive, dmg, appcast, *sorted(deltas))
+    run('gh', 'release', 'upload', tag, '--repo', repo, '--clobber', archive, dmg, *([stable_dmg] if stable_dmg else []), appcast, *sorted(deltas))
     run('gh', 'release', 'edit', tag, '--repo', repo, '--draft=false', '--latest')
     feed = subprocess.run(['gh', 'release', 'view', 'update-feed', '--repo', repo, '--json', 'isDraft,isPrerelease'], capture_output=True, text=True)
     if feed.returncode:
@@ -334,7 +335,9 @@ def main():
         '--delta-compression', 'lzfse', '--maximum-versions', '3', '--maximum-deltas', '5', archives)
     validate_appcast(archives / 'appcast.xml', build)
     if args.publish:
-        publish_release(config, version, archive, dmg, archives / 'appcast.xml', archives.glob('*.delta'))
+        stable_dmg = Path(dmg).with_name(config['name'] + '.dmg')
+        shutil.copyfile(dmg, stable_dmg)
+        publish_release(config, version, archive, dmg, archives / 'appcast.xml', archives.glob('*.delta'), stable_dmg)
     print(json.dumps({'version': version, 'build': build, 'zip': str(archive), 'dmg': str(dmg), 'appcast': str(archives / 'appcast.xml'), 'published': args.publish}))
 
 
