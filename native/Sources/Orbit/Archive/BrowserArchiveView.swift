@@ -28,9 +28,14 @@ final class BrowserArchiveView: NSView, NSTableViewDataSource, NSTableViewDelega
     private let dates = BrowserLibraryDateObserver()
     private var renderedRecords: [BrowserArchivedTab] = []
     private var spaceNames: [SpaceID: String] = [:]
+    private var activeFilters: Set<String> = []
+    private let filterPanel = BrowserArchiveFilterPanel()
+    private let filterButton = BrowserLibraryFilterButton()
+    private var searchRow: NSStackView?
     var onDownloads: (() -> Void)?
     var onSearch: (() -> Void)?
     var onRestore: ((TabID) -> Void)?
+    var onPreview: ((BrowserArchivedTab) -> Void)?
     var onDelete: ((TabID) -> Void)?
     var onClear: (() -> Void)?
     var onBack: (() -> Void)?
@@ -77,7 +82,7 @@ final class BrowserArchiveView: NSView, NSTableViewDataSource, NSTableViewDelega
         table.intercellSpacing = .zero
         table.backgroundColor = .clear
         table.focusRingType = .exterior
-        table.target = self; table.doubleAction = #selector(restore)
+        table.target = self; table.action = #selector(preview)
         table.setAccessibilityLabel(archiveText("listAccessibility", "Archived Tabs, grouped by day"))
         table.onReturn = { [weak self] in self?.restore() }
         table.onDelete = { [weak self] in self?.deleteSelected() }
@@ -90,10 +95,23 @@ final class BrowserArchiveView: NSView, NSTableViewDataSource, NSTableViewDelega
         empty.configure(symbol: BrowserLibraryCategory.archive.symbol, title: uiText("No Archived Tabs"), largeGlyph: true)
         empty.translatesAutoresizingMaskIntoConstraints = false
         addSubview(empty)
-        let search = NSStackView(views: [searchField, BrowserLibraryFilterButton()])
+        filterButton.isEnabled = true
+        filterButton.target = self
+        filterButton.action = #selector(toggleFilters)
+        filterButton.setAccessibilityIdentifier("archive-filter")
+        let search = NSStackView(views: [searchField, filterButton])
         search.spacing = 4
-        let stack = NSStackView(views: [header, categories, profileLabel, search, settings, scroll])
+        searchRow = search
+        let stack = NSStackView(views: [header, categories, profileLabel, search, filterPanel, settings, scroll])
         contentStack = stack
+        filterPanel.isHidden = true
+        filterPanel.onChange = { [weak self] key, selected in
+            guard let self else { return }
+            if selected { activeFilters.insert(key) } else { activeFilters.remove(key) }
+            applyFilters()
+        }
+        filterPanel.onDone = { [weak self] in self?.setFiltersVisible(false) }
+        filterPanel.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
         stack.orientation = .vertical; stack.alignment = .leading; stack.spacing = 12
         stack.translatesAutoresizingMaskIntoConstraints = false
         addSubview(stack)
@@ -129,18 +147,42 @@ final class BrowserArchiveView: NSView, NSTableViewDataSource, NSTableViewDelega
         return result
     }
 
+    /// Reasons combine with OR, locations combine with OR, and the two groups combine with AND.
+    static func matches(_ record: BrowserArchivedTab, filters: Set<String>) -> Bool {
+        let reasons = filters.intersection([BrowserArchiveFilterPanel.automaticKey, BrowserArchiveFilterPanel.closedKey])
+        if !reasons.isEmpty {
+            let matchesReason = (reasons.contains(BrowserArchiveFilterPanel.automaticKey) && record.reason == .automatic)
+                || (reasons.contains(BrowserArchiveFilterPanel.closedKey) && record.reason == .closed)
+            if !matchesReason { return false }
+        }
+        let littleSelected = filters.contains(BrowserArchiveFilterPanel.littleKey)
+        let spaceKeys = filters.filter { $0.hasPrefix("space:") }
+        if littleSelected || !spaceKeys.isEmpty {
+            let matchesLocation = (littleSelected && record.isLittleWindow)
+                || spaceKeys.contains(BrowserArchiveFilterPanel.spaceKey(record.spaceID))
+            if !matchesLocation { return false }
+        }
+        return true
+    }
+
     func render(_ records: [BrowserArchivedTab], profileName: String, setting: Int, spaceNames: [SpaceID: String] = [:]) {
         renderedRecords = records
         self.spaceNames = spaceNames
+        filterPanel.configure(spaces: spaceNames, selected: activeFilters)
         profileLabel.stringValue = profileName
         settings.selectItem(at: setting)
+        applyFilters()
+    }
+
+    private func applyFilters() {
         let selected = selectedRecord?.id
-        rows = Self.grouped(records)
+        let filtered = renderedRecords.filter { Self.matches($0, filters: activeFilters) }
+        rows = Self.grouped(filtered)
         table.reloadData()
         if let selected, let index = rows.firstIndex(where: { if case let .tab(record) = $0 { return record.id == selected }; return false }) {
             table.selectRowIndexes(IndexSet(integer: index), byExtendingSelection: false)
         } else { table.deselectAll(nil) }
-        empty.isHidden = !records.isEmpty
+        empty.isHidden = !filtered.isEmpty
         empty.configure(symbol: BrowserLibraryCategory.archive.symbol, title: uiText("No Archived Tabs"), query: searchField.stringValue, largeGlyph: true)
     }
     var selectedRecord: BrowserArchivedTab? {
@@ -224,10 +266,19 @@ final class BrowserArchiveView: NSView, NSTableViewDataSource, NSTableViewDelega
         sender.selectedSegment = 0
     }
     @objc private func restore() { if let record = selectedRecord { onRestore?(record.id) } }
+    @objc private func preview() { if let record = selectedRecord { onPreview?(record) } }
     @objc private func deleteSelected() { if let record = selectedRecord { onDelete?(record.id) } }
     @objc private func clearAll() { onClear?() }
     @objc private func goBack() { onBack?() }
     @objc private func changeSettings() { onSettings?(settings.indexOfSelectedItem) }
+    @objc private func toggleFilters() { setFiltersVisible(filterPanel.isHidden) }
+    /// The panel takes the place of the search row; the selection stays applied after Done.
+    private func setFiltersVisible(_ visible: Bool) {
+        filterPanel.isHidden = !visible
+        searchRow?.isHidden = visible
+        filterPanel.configure(spaces: spaceNames, selected: activeFilters)
+        if !visible { window?.makeFirstResponder(table) }
+    }
 }
 
 @MainActor

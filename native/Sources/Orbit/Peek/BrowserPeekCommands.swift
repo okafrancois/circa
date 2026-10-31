@@ -33,7 +33,9 @@ enum BrowserPeekCommands {
             controller.promotePeekToTab()
         }
         try! registry.register(.archiveTab, replace: true) { controller, _ in
-            if controller.library.isPresented { controller.hideLibrary() }
+            // An Archive preview is a Peek above the Library: ⌘W closes the preview and keeps the Library.
+            if controller.archive.previewTabID != nil, controller.isPeekPresented { controller.dismissPeek() }
+            else if controller.library.isPresented { controller.hideLibrary() }
             else if controller.isPeekPresented { controller.dismissPeek() }
             else { controller.archiveSelectedTabs() }
         }

@@ -269,6 +269,54 @@ struct NativeArchiveTests {
         #expect(rows[1] == .tab(recent))
         #expect(rows[3] == .tab(old))
     }
+
+    @Test("Archive filter narrows to Little Circa entries and clears back to all entries")
+    func littleArchiveFilter() throws {
+        let profile = ProfileID(), space = SpaceID()
+        let date = Date(timeIntervalSince1970: 1_700_000_000)
+        func record(_ origin: BrowserArchivedTab.Origin) -> BrowserArchivedTab {
+            BrowserArchivedTab(tab: BrowserOrganizedTab(id: TabID(), url: URL(string: "https://archive.test")!, createdAt: date, lastActiveAt: date),
+                profileID: profile, spaceID: space, origin: origin, reason: .closed, archivedAt: date)
+        }
+        let little = record(.quickWindow), ordinary = record(.today)
+        let view = BrowserArchiveView(frame: NSRect(x: 0, y: 0, width: 420, height: 720))
+        view.render([little, ordinary], profileName: "Synthetic", setting: 0, spaceNames: [space: "Home"])
+        func find(_ identifier: String, in parent: NSView) -> NSView? {
+            if parent.accessibilityIdentifier() == identifier { return parent }
+            for child in parent.subviews { if let found = find(identifier, in: child) { return found } }
+            return nil
+        }
+        let filter = try #require(find("archive-filter", in: view) as? NSButton)
+        filter.performClick(nil)
+        let littleChip = try #require(find("archive-filter-little", in: view) as? NSButton)
+        littleChip.performClick(nil)
+        #expect(view.rows.contains(.tab(little)))
+        #expect(!view.rows.contains(.tab(ordinary)))
+        (try #require(find("archive-filter-little", in: view) as? NSButton)).performClick(nil)
+        #expect(view.rows.contains(.tab(little)) && view.rows.contains(.tab(ordinary)))
+        // Done returns to the search row and keeps the selection applied.
+        (try #require(find("archive-filter-little", in: view) as? NSButton)).performClick(nil)
+        (try #require(find("archive-filter-done", in: view) as? NSButton)).performClick(nil)
+        #expect(!view.rows.contains(.tab(ordinary)))
+    }
+
+    @Test("Archive filter groups combine reasons and locations")
+    func filterGroups() {
+        let profile = ProfileID(), home = SpaceID(), other = SpaceID()
+        let date = Date(timeIntervalSince1970: 1_700_000_000)
+        func record(_ origin: BrowserArchivedTab.Origin, _ reason: BrowserArchivedTab.Reason, _ space: SpaceID) -> BrowserArchivedTab {
+            BrowserArchivedTab(tab: BrowserOrganizedTab(id: TabID(), url: URL(string: "https://archive.test")!, createdAt: date, lastActiveAt: date),
+                profileID: profile, spaceID: space, origin: origin, reason: reason, archivedAt: date)
+        }
+        let littleAuto = record(.quickWindow, .automatic, home), todayClosed = record(.today, .closed, home), otherClosed = record(.today, .closed, other)
+        func matches(_ r: BrowserArchivedTab, _ filters: Set<String>) -> Bool { BrowserArchiveView.matches(r, filters: filters) }
+        #expect(matches(littleAuto, []) && matches(todayClosed, []))
+        #expect(matches(littleAuto, ["automatic"]) && !matches(todayClosed, ["automatic"]))
+        #expect(matches(todayClosed, ["closed", BrowserArchiveFilterPanel.spaceKey(home)]))
+        #expect(!matches(otherClosed, ["closed", BrowserArchiveFilterPanel.spaceKey(home)]))
+        #expect(matches(littleAuto, ["little", BrowserArchiveFilterPanel.spaceKey(other)]))
+        #expect(!matches(todayClosed, ["little"]))
+    }
 }
 
 }

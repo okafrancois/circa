@@ -3,6 +3,44 @@ import BrowserCore
 import BrowserShell
 
 extension OrbitApplication {
+    /// The Dock lists every window by title on its own (Little windows carry "Little Circa — <title>");
+    /// these items sit between that list and the system entries.
+    func applicationDockMenu(_ sender: NSApplication) -> NSMenu? {
+        let hasLittle = environment?.quickWindows.values.contains { !$0.isClosed } == true
+        let menu = NSMenu()
+        menu.autoenablesItems = false
+        func add(_ title: String, _ action: Selector, enabled: Bool = true) {
+            let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
+            item.target = self
+            item.isEnabled = enabled
+            menu.addItem(item)
+        }
+        add(uiText("New Window"), #selector(dockNewWindow))
+        add(uiText("New Incognito Window"), #selector(dockNewIncognitoWindow))
+        add(uiText("Show Little Circa Windows"), #selector(showAllDockLittleWindows), enabled: hasLittle)
+        add(uiText("Close Little Circa Windows"), #selector(closeAllDockLittleWindows), enabled: hasLittle)
+        return menu
+    }
+
+    @objc private func dockNewWindow() { commands.registry.dispatch(.newWindow, origin: .menu) }
+    @objc private func dockNewIncognitoWindow() { commands.registry.dispatch(.newIncognitoWindow, origin: .menu) }
+
+    @objc private func showAllDockLittleWindows() {
+        let live = (environment?.quickWindows.values.filter { !$0.isClosed } ?? []).sorted { $0.openedAt < $1.openedAt }
+        for little in live {
+            little.window?.deminiaturize(nil)
+            little.window?.orderFront(nil)
+        }
+        live.last?.window?.makeKeyAndOrderFront(nil)
+        if !live.isEmpty { NSApp.activate(ignoringOtherApps: true) }
+    }
+
+    @objc private func closeAllDockLittleWindows() {
+        for little in (environment?.quickWindows.values.map { $0 } ?? []) where !little.isClosed {
+            little.window?.performClose(nil)
+        }
+    }
+
     var activeQuickWindow: BrowserQuickWindowWindowController<ActiveEngine>? {
         environment?.quickWindows.values.first { !$0.isClosed && $0.ownsCommandWindow(NSApp?.keyWindow) }
     }

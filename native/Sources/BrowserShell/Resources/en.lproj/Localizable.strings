@@ -1729,3 +1729,12 @@
 "Chromium %@" = "Chromium %@";
 
 "%@, %@" = "%@, %@";
+
+"Little Circa — %@" = "Little Circa — %@";
+"Show Little Circa Windows" = "Show Little Circa Windows";
+"Close Little Circa Windows" = "Close Little Circa Windows";
+"Filter Archived Tabs" = "Filter Archived Tabs";
+"How was the tab closed?" = "How was the tab closed?";
+"Where was the tab?" = "Where was the tab?";
+"Auto-Closed" = "Auto-Closed";
+"Manually Closed" = "Manually Closed";
