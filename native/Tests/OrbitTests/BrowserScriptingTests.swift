@@ -74,6 +74,29 @@ struct BrowserScriptingTests {
         }
     }
 
+    @Test("Setting a URL waits past a late commit of the previous navigation until the new document commits")
+    func navigationCommit() async throws {
+        let requested = URL(string: "about:blank#changed")!
+        // The order a renderer reported after a new tab's first load was superseded by set URL.
+        var reports: [URL?] = [URL(string: "about:blank"), URL(string: "about:blank#created"),
+                               URL(string: "about:blank#created"), requested, requested]
+        var reads = 0
+        await BrowserScriptingController.awaitCommit(of: requested) {
+            reads += 1
+            return reports.isEmpty ? requested : reports.removeFirst()
+        }
+        #expect(reads == 4)
+        let start = ContinuousClock.now
+        await BrowserScriptingController.awaitCommit(of: requested, timeout: .milliseconds(60)) { URL(string: "about:blank#created") }
+        #expect(ContinuousClock.now - start >= .milliseconds(60))
+        for (committed, request) in [("https://example.test/", "https://EXAMPLE.test"), ("http://example.test/a", "http://example.test:80/a"),
+                                     ("https://example.test/", "https://example.test:443")] {
+            #expect(BrowserScriptingController.isSameDocument(URL(string: committed), URL(string: request)!))
+        }
+        #expect(!BrowserScriptingController.isSameDocument(URL(string: "about:blank#created"), requested))
+        #expect(!BrowserScriptingController.isSameDocument(nil, requested))
+    }
+
     @Test("JavaScript defaults off, persists only as a device setting and routes only when enabled")
     func javaScriptGate() async throws {
         let settings = try BrowserSettingsStore()

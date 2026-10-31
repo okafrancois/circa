@@ -82,6 +82,9 @@ extension BrowserScriptingController {
                         guard let self else { throw BrowserScriptError.unavailable }
                         try validateNavigation(url)
                         surface.navigate(to: url); session.updateDestination(for: surface, to: url)
+                        if url.scheme?.lowercased() != "javascript" {
+                            await Self.awaitCommit(of: url) { surface.navigationState.committedURL }
+                        }
                     case .javascript(let script):
                         guard self?.allowsJavaScript() == true else { throw BrowserScriptError.javaScriptDisabled }
                         guard window?.canReadPrivateContent == true else { throw BrowserScriptError.privateContent }
@@ -97,6 +100,34 @@ extension BrowserScriptingController {
             window.appleScriptSpaces.append(space)
         }
         return window
+    }
+}
+
+extension BrowserScriptingController {
+    /// An earlier navigation can still commit or abort after a newer request and briefly restore
+    /// its address. Return once the requested document has committed, so the next read reports
+    /// it; a failed or redirected load stops waiting after `timeout`.
+    static func awaitCommit(of url: URL, timeout: Duration = .seconds(3), committed: () -> URL?) async {
+        let deadline = ContinuousClock.now.advanced(by: timeout)
+        while !isSameDocument(committed(), url), ContinuousClock.now < deadline {
+            try? await Task.sleep(for: .milliseconds(20))
+        }
+    }
+
+    /// Engines report canonical addresses: lowercase scheme and host, a root path, no default port.
+    static func isSameDocument(_ committed: URL?, _ requested: URL) -> Bool {
+        func canonical(_ url: URL) -> String? {
+            guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return nil }
+            components.scheme = components.scheme?.lowercased()
+            components.host = components.host?.lowercased()
+            if components.host != nil, components.path.isEmpty { components.path = "/" }
+            if (components.scheme, components.port) == ("http", 80) || (components.scheme, components.port) == ("https", 443) {
+                components.port = nil
+            }
+            return components.string
+        }
+        guard let committed else { return false }
+        return committed == requested || canonical(committed) == canonical(requested)
     }
 }
 
