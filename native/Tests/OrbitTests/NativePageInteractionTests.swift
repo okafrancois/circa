@@ -485,6 +485,44 @@ struct NativePageInteractionTests {
         #expect(notices().isEmpty)
     }
 
+    @Test("Rapid fullscreen toggles leave at most one notice and cancel stale presentations")
+    func fullscreenNoticeRapidToggles() async throws {
+        let (controller, surface) = try await loadedWindow()
+        defer { controller.window?.close() }
+        let window = try #require(controller.window)
+        var toggles = 0
+        controller.toggleNativeFullScreen = { _ in toggles += 1 }
+        func notices() -> [BrowserFullscreenNotice] {
+            (window.contentView?.subviews ?? []).compactMap { $0 as? BrowserFullscreenNotice }
+        }
+
+        // Cancel several pending window-entry notices before the window reports completion.
+        for _ in 0..<8 {
+            controller.surface(surface, didChangeElementFullscreen: true)
+            controller.surface(surface, didChangeElementFullscreen: false)
+        }
+        #expect(notices().isEmpty && controller.pageInteraction.fullscreenNotice == nil)
+
+        // Schedule and cancel the delayed presentation repeatedly, then let one final entry settle.
+        for _ in 0..<8 {
+            controller.surface(surface, didChangeElementFullscreen: true)
+            NotificationCenter.default.post(name: NSWindow.didEnterFullScreenNotification, object: window)
+            controller.surface(surface, didChangeElementFullscreen: false)
+        }
+        controller.surface(surface, didChangeElementFullscreen: true)
+        NotificationCenter.default.post(name: NSWindow.didEnterFullScreenNotification, object: window)
+        try await Task.sleep(for: .milliseconds(300))
+        #expect(toggles == 17)
+        #expect(notices().count == 1 && controller.pageInteraction.fullscreenNotice === notices().first)
+
+        // A repeated enter signal is idempotent; leaving twice removes the same view safely.
+        controller.surface(surface, didChangeElementFullscreen: true)
+        #expect(notices().count == 1 && toggles == 17)
+        controller.surface(surface, didChangeElementFullscreen: false)
+        controller.surface(surface, didChangeElementFullscreen: false)
+        #expect(notices().isEmpty && controller.pageInteraction.fullscreenNotice == nil)
+    }
+
     @Test("The exit notice uses frame layout: no window or common ancestor needed, it follows the top right corner")
     func fullscreenNoticeFrameLayout() {
         // A root outside any window (the transitional hierarchy of a fullscreen change) must not trap.
