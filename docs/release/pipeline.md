@@ -6,7 +6,7 @@
 - Keep the engine distribution under the repository's `.tools/chromium-fork/distrib/`.
   Worktrees reuse the main checkout's distribution; the pipeline does not build CEF.
 - Install Xcode/CLT, Python 3, CMake, Ninja, and `gh`; authenticate `gh` for the public
-  repository `okafrancois/orbit-browser`. Nothing is published without `--publish`.
+  repository `okafrancois/circa`. Nothing is published without `--publish`.
 - Sparkle **2.10.1** is downloaded from its official GitHub release and SHA-256 checked.
   Source: https://github.com/sparkle-project/Sparkle/releases/tag/2.10.1
 

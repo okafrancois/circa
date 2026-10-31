@@ -8,7 +8,7 @@ Orbit is an independent macOS browser built with Swift and AppKit, with a mainta
 
 ## Installation and updates
 
-1. Download the latest `Orbit-x.y.z.dmg` from [GitHub Releases](https://github.com/okafrancois/orbit-browser/releases/latest).
+1. Download the latest `Orbit-x.y.z.dmg` from [GitHub Releases](https://github.com/okafrancois/circa/releases/latest).
 2. Open it and drag Orbit to Applications. Builds are signed with a Developer ID and notarized by Apple.
 3. To make Orbit your default browser, choose it in System Settings › Desktop & Dock › Default web browser.
 

@@ -1,6 +1,6 @@
 # Distribution
 
-Orbit ships through [GitHub Releases](https://github.com/okafrancois/orbit-browser/releases) in `okafrancois/orbit-browser`. Each release provides a notarized DMG for first installs, a ZIP archive, delta updates and a signed Sparkle appcast at `releases/download/update-feed/appcast.xml`. The version release also retains its own `appcast.xml` for older installations.
+Orbit ships through [GitHub Releases](https://github.com/okafrancois/circa/releases) in `okafrancois/circa`. Each release provides a notarized DMG for first installs, a ZIP archive, delta updates and a signed Sparkle appcast at `releases/download/update-feed/appcast.xml`. The version release also retains its own `appcast.xml` for older installations.
 
 - Bundle identifier: `io.github.okatech.orbit`. Data lives in `~/Library/Application Support/Orbit/`.
 - Signing: Developer ID Application (team 5Y39TTNCM7), hardened runtime, notarized and stapled. The signing identity stays stable across releases so secure storage remains accessible.
@@ -11,3 +11,5 @@ Orbit ships through [GitHub Releases](https://github.com/okafrancois/orbit-brows
 The project license is MIT, Copyright (c) 2026 Okatech. Preserve all dependency notices listed in `THIRD_PARTY_NOTICES.md`.
 
 Website and mobile releases must never be marked latest; create them with `--latest=false`. Only browser version releases may be latest.
+
+The repository was renamed from `okafrancois/orbit-browser` to `okafrancois/circa`. GitHub redirects the old name, which older installations still use for their feed. Never create a new repository named `orbit-browser`: it would break those redirects. The Sparkle signing key keeps its `orbit-browser` Keychain account name.

@@ -1,7 +1,7 @@
 {
   "name": "Circa",
   "bundle_id": "io.github.okatech.orbit",
-  "repository": "okafrancois/orbit-browser",
+  "repository": "okafrancois/circa",
   "initial_version": "0.1.0",
   "identity": "Developer ID Application: Berny François Itoutou (5Y39TTNCM7)",
   "notarytool_profile": "orbit-notary",
