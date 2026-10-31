@@ -106,6 +106,25 @@ struct SettingsAIPaneTests {
         #expect(BrowserSettingsAIMark.image(.codex) != nil && BrowserSettingsAIMark.image(.claudeCode) != nil)
     }
 
+    @Test("Program monograms contain visible ink in both appearances")
+    func monogramInk() throws {
+        for provider in [BrowserAIProviderID.codex, .claudeCode] {
+            for isDark in [false, true] {
+                let image = try #require(BrowserSettingsAIMark.image(provider, isDark: isDark))
+                let data = try #require(image.tiffRepresentation)
+                let bitmap = try #require(NSBitmapImageRep(data: data))
+                var inkPixels = 0
+                for y in 0..<bitmap.pixelsHigh {
+                    for x in 0..<bitmap.pixelsWide {
+                        guard let color = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB), color.alphaComponent > 0.5 else { continue }
+                        if isDark ? color.redComponent > 0.8 : color.redComponent < 0.2 { inkPixels += 1 }
+                    }
+                }
+                #expect(inkPixels > 5)
+            }
+        }
+    }
+
     @Test("The master switch is off by default and its change persists")
     func masterSwitch() async throws {
         let model = model()

@@ -41,27 +41,25 @@ enum BrowserSettingsAIStyle {
 /// before a public release. Replacing a file is the whole swap: marks drawn in `currentColor`
 /// follow the appearance's ink, other colours are kept.
 enum BrowserSettingsAIMark {
-    @MainActor private static var cache: [BrowserAIProviderID: NSImage] = [:]
+    @MainActor private static var cache: [String: NSImage] = [:]
 
-    @MainActor static func image(_ provider: BrowserAIProviderID) -> NSImage? {
-        if let cached = cache[provider] { return cached }
+    @MainActor static func image(_ provider: BrowserAIProviderID, isDark: Bool = false) -> NSImage? {
+        let key = provider.rawValue + (isDark ? "-dark" : "-light")
+        if let cached = cache[key] { return cached }
         guard let url = BrowserText.iconResource("ai-marks/" + provider.rawValue, extension: "svg"),
               let source = try? String(contentsOf: url, encoding: .utf8) else { return nil }
-        func variant(_ ink: String) -> NSImage? { NSImage(data: Data(source.replacingOccurrences(of: "currentColor", with: ink).utf8)) }
-        let light = variant("#000000"), dark = variant("#FFFFFF")
-        let image = NSImage(size: NSSize(width: 20, height: 20), flipped: false) { rect in
-            let isDark = NSAppearance.currentDrawing().bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-            (isDark ? dark : light)?.draw(in: rect)
-            return true
-        }
-        image.cacheMode = .never
-        cache[provider] = image
+        // Resolve ink before SwiftUI rasterizes the image outside AppKit's drawing appearance.
+        let ink = isDark ? "#FFFFFF" : "#000000"
+        guard let image = NSImage(data: Data(source.replacingOccurrences(of: "currentColor", with: ink).utf8)) else { return nil }
+        image.isTemplate = false
+        cache[key] = image
         return image
     }
 }
 
 /// The 32 pt tile in front of a program row.
 struct BrowserSettingsAIProgramTile: View {
+    @Environment(\.colorScheme) private var colorScheme
     let provider: BrowserAIProviderID
     var body: some View {
         ZStack {
@@ -71,7 +69,7 @@ struct BrowserSettingsAIProgramTile: View {
             } else {
                 RoundedRectangle(cornerRadius: 8).fill(OrbitSettingsStyle.panel)
                 RoundedRectangle(cornerRadius: 8).strokeBorder(BrowserSettingsAIStyle.tileBorder, lineWidth: 1)
-                if let mark = BrowserSettingsAIMark.image(provider) {
+                if let mark = BrowserSettingsAIMark.image(provider, isDark: colorScheme == .dark) {
                     Image(nsImage: mark).resizable().frame(width: 19, height: 19)
                 }
             }
