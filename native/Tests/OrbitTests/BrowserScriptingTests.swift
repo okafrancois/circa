@@ -56,6 +56,24 @@ struct BrowserScriptingTests {
         #expect(!after.appleScriptTabs.contains { $0.id == id })
     }
 
+    @Test("Enabled JavaScript reaches the engine's script evaluation service through the session adapter")
+    func javaScriptEngineRoute() async throws {
+        NSApplication.shared.setActivationPolicy(.prohibited)
+        let environment = BrowserEnvironment(engine: SyntheticEngine())
+        let owner = try await environment.makeWindow()
+        defer { environment.autoArchive.scheduler.stop(); owner.window?.close() }
+        let scripting = BrowserScriptingController()
+        scripting.allowsJavaScript = { true }
+        let window = await scripting.capture(owner, environment: environment)
+        let tab = try #require(window.activeTab)
+        // The engine exposes evaluation as a separate service, not through the engine object itself.
+        #expect(try await tab.action(.javascript(BrowserEngineConformance.typedKeysScript)) == "")
+        scripting.allowsJavaScript = { false }
+        await #expect(throws: BrowserScriptError.javaScriptDisabled) {
+            _ = try await tab.action(.javascript(BrowserEngineConformance.typedKeysScript))
+        }
+    }
+
     @Test("JavaScript defaults off, persists only as a device setting and routes only when enabled")
     func javaScriptGate() async throws {
         let settings = try BrowserSettingsStore()
@@ -561,13 +579,13 @@ struct BrowserScriptingTests {
         #expect(session.organization?.selectedTab?.id.rawValue.uuidString == createdTab.id)
         _ = try await fixture.result("CrSu", "Rlod", direct: created, expectsResult: false)
 
-        let script = ["JvSc": NSAppleEventDescriptor(string: "'synthetic-text'")]
+        let script = ["JvSc": NSAppleEventDescriptor(string: BrowserEngineConformance.typedKeysScript)]
         let refused = try await fixture.reply("CrSu", "ExJa", direct: created, script)
         #expect(refused.paramDescriptor(forKeyword: keyErrorNumber)?.int32Value == -1743)
         #expect(refused.paramDescriptor(forKeyword: keyErrorString)?.stringValue?.contains("Allow JavaScript") == true)
         #expect(fixture.headless.executions == 0)
         fixture.app.scripting.allowsJavaScript = { true }
-        #expect(try await fixture.result("CrSu", "ExJa", direct: created, script).stringValue == "synthetic-text")
+        #expect(try await fixture.result("CrSu", "ExJa", direct: created, script).stringValue == "")
         #expect(fixture.headless.executions == 1)
 
         let missing = try await fixture.reply("core", "getd", direct: ScriptEvent.property("URL ", of: ScriptEvent.uniqueID("tAbB", "missing", of: window1)))
@@ -899,11 +917,11 @@ private final class HeadlessScriptingSession: BrowserEngineSurfaceDelegate {
             let window = await scripting.capture(session: entry.session, windowID: entry.id, mode: entry.mode,
                 environment: entry.environment, isFocused: { self.focused == entry.id }, title: { "Synthetic window" },
                 focus: { self.focused = entry.id }, close: { entry.session.close() }, isAvailable: { !entry.session.isClosed })
-            // The synthetic renderer has no JS runtime; simulate its textual result at the engine boundary.
+            // Count scripts that pass the gates; evaluation itself goes through the engine's service.
             for tab in window.appleScriptTabs {
                 let action = tab.action
                 tab.action = { request in
-                    if case .javascript = request { self.executions += 1; return "synthetic-text" }
+                    if case .javascript = request { self.executions += 1 }
                     return try await action(request)
                 }
             }

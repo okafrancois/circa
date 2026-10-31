@@ -85,8 +85,9 @@ extension BrowserScriptingController {
                     case .javascript(let script):
                         guard self?.allowsJavaScript() == true else { throw BrowserScriptError.javaScriptDisabled }
                         guard window?.canReadPrivateContent == true else { throw BrowserScriptError.privateContent }
-                        guard let probe = environment.engine as? any BrowserEngineConformanceProbe<Engine.Surface> else { throw BrowserScriptError.unsupported }
-                        return try await probe.evaluateScript(script, in: surface)
+                        // Engines expose script evaluation as a separate service object.
+                        guard let evaluator = environment.engine.conformanceProbe else { throw BrowserScriptError.unsupported }
+                        return try await evaluator.evaluateScript(script, in: surface)
                     }
                     await session.waitForPendingCommands()
                     return nil
