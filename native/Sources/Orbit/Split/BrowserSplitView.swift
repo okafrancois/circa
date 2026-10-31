@@ -125,8 +125,9 @@ final class BrowserSplitView: NSView {
         group = nil; draftRatios = nil; hasKeyboardDraft = false; dragOrigin = nil; originalRatios = nil
         for pane in panes.values { pane.removeFromSuperview() }; panes = [:]
         for divider in dividers { divider.removeFromSuperview() }; dividers = []
-        if singleView !== host {
-            singleView?.removeFromSuperview()
+        // A host detached behind the cached reference is re-attached, never assumed present.
+        if singleView !== host || host.superview !== self {
+            if singleView !== host { singleView?.removeFromSuperview() }
             host.translatesAutoresizingMaskIntoConstraints = true
             host.frame = bounds
             addSubview(host, positioned: .below, relativeTo: dropHint)
