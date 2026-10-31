@@ -474,7 +474,9 @@ struct NativePageInteractionTests {
         #expect(notice.frame.height == BrowserFullscreenNotice.height)
         #expect(abs(root.bounds.maxX - notice.frame.maxX - BrowserFullscreenNotice.edgeInset) < 0.5)
         #expect(notice.frame.maxY <= root.bounds.maxY - BrowserFullscreenNotice.edgeInset + 0.5)
-        // Leaving fullscreen (Escape or the page) removes it at once.
+        // The notice stays while the page is fullscreen, then leaves with Escape or the page.
+        try await Task.sleep(for: .seconds(3.2))
+        #expect(notices().count == 1 && controller.elementFullscreenSurfaceKey == ObjectIdentifier(surface))
         controller.surface(surface, didChangeElementFullscreen: false)
         #expect(notices().isEmpty && controller.pageInteraction.fullscreenNotice == nil)
         // Leaving before the window finished entering never shows it.
