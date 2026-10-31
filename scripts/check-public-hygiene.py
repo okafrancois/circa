@@ -30,11 +30,14 @@ IMPORT_ROOTS = tuple(expand(path) for path in (
     "native/Sources/OrbitImportTool/Import/{source}/",
     "native/Tests/BrowserCoreTests/Import/{source}/",
     "native/Tests/OrbitTests/Import/{source}/",
+    # The website names the source browser only in its import copy (owner decision, 31 Oct 2026).
+    "web/copy/reference.json",
 ))
 
 # Mixed-purpose files allow only these exact import identifiers/strings. Shared locks keep their names
 # across worktrees until all callers migrate together.
-ALLOWED_TEXT = {path: tuple(expand(value) for value in values) for path, values in {'AGENTS.md': ['/tmp/{lower}y-gui-slot.lock', '/tmp/{lower}y-native-full-suite.lock'],
+ALLOWED_TEXT = {path: tuple(expand(value) for value in values) for path, values in {'web/vendor/gsap-3.13.0/CustomEase.min.js': ['{lower}ToSegment'],
+ 'AGENTS.md': ['/tmp/{lower}y-gui-slot.lock', '/tmp/{lower}y-native-full-suite.lock'],
  'native/OrbitChromium/App/EngineComposition+Chromium.swift': ['{source}ImportError', '{source}PasswordImportJournal', '{source}PasswordImportPreparation', '{source}PasswordImportRunner',
                                                                '{source}ImportAlertPresenter',
                                                                '{source}SiteSessionFixtureKeys',

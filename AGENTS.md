@@ -42,6 +42,7 @@ Orbit is a native macOS browser: Swift/AppKit shell (`native/Sources/Orbit`) on 
 ## Public repository hygiene
 - This repository is public. Tracked files (code, comments, tests, docs, commit messages) never name or describe the design reference product, its binary, symbols, addresses, assets or recordings. Write neutral facts instead: "0.12 s ease-out", not where the value came from.
 - The only exception is the user-facing import feature for that browser's data and the code that implements it.
+- The website may name that browser only in `web/copy/reference.json`, which holds the import copy and the trademark notice. Every other file under `web/` stays neutral.
 - Reference evidence, comparisons and lot notes stay in `lab/` or `/tmp`.
 
 ## Local lab material
@@ -50,3 +51,4 @@ Orbit is a native macOS browser: Swift/AppKit shell (`native/Sources/Orbit`) on 
 ## Monorepo
 - Keep `native/`, `scripts/`, `release/`, `docs/` and `.github/` at the repository root.
 - Website and mobile projects belong in `web/` and `mobile/`; use `web-vX.Y.Z` and `mobile-vX.Y.Z` tags, publish with `--latest=false`, filter workflows to their own folder, and never use the self-hosted browser runner.
+- The website is static (no build) and deploys on Vercel from the `web/` root directory; `web/vercel.json` skips deploys when `web/` is unchanged.
