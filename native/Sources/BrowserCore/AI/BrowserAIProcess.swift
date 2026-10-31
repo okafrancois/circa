@@ -92,6 +92,31 @@ public final class BrowserAIProcess: @unchecked Sendable {
             continuation.finish()
             throw error
         }
+        Self.register(self)
+    }
+
+    private static let registryLock = NSLock()
+    nonisolated(unsafe) private static var registry: [ObjectIdentifier: BrowserAIProcess] = [:]
+
+    private static func register(_ process: BrowserAIProcess) {
+        registryLock.lock(); registry[ObjectIdentifier(process)] = process; registryLock.unlock()
+    }
+
+    private static func unregister(_ process: BrowserAIProcess) {
+        registryLock.lock(); registry[ObjectIdentifier(process)] = nil; registryLock.unlock()
+    }
+
+    /// Programs still running, for the app's synchronous quit path.
+    public static var runningCount: Int { registryLock.lock(); defer { registryLock.unlock() }; return registry.count }
+
+    /// Quit path: close every program's input and send SIGTERM without waiting. `codex
+    /// app-server` and `claude` both exit on SIGTERM; a closed pipe also ends them.
+    public static func terminateAll() {
+        registryLock.lock(); let processes = Array(registry.values); registryLock.unlock()
+        for process in processes {
+            process.closeInput()
+            process.signal(SIGTERM)
+        }
     }
 
     deinit {
@@ -176,6 +201,7 @@ public final class BrowserAIProcess: @unchecked Sendable {
     }
 
     private func exited(_ status: Int32) {
+        Self.unregister(self)
         lock.lock()
         exitStatus = status
         let waiters = exitWaiters

@@ -287,9 +287,10 @@ final class BrowserSettingsWindowController<Engine: BrowserEngine>: NSWindowCont
 }
 
 enum BrowserSettingsSection: String, CaseIterable, Identifiable {
-    case general, profiles, spaces, shortcuts, links, privacy, advanced, appearance, about
-    // Auxiliary panes retain their deep links outside the six toolbar categories.
-    static let allCases: [Self] = [.general, .profiles, .shortcuts, .links, .advanced, .about]
+    case general, profiles, spaces, shortcuts, links, ai, privacy, advanced, appearance, about
+    // Auxiliary panes retain their deep links outside the seven toolbar categories.
+    // The order is also the ⌘1…⌘7 order: AI is ⌘5, Advanced ⌘6, About ⌘7.
+    static let allCases: [Self] = [.general, .profiles, .shortcuts, .links, .ai, .advanced, .about]
     var id: String { rawValue }
     var toolbarIdentifier: NSToolbarItem.Identifier { .init("settings-category-" + rawValue) }
     var title: String {
@@ -301,6 +302,7 @@ enum BrowserSettingsSection: String, CaseIterable, Identifiable {
         case .spaces: settingsText("spaces", "Spaces")
         case .shortcuts: settingsText("shortcuts", "Shortcuts")
         case .links: uiText("Links")
+        case .ai: uiText("AI")
         case .privacy: settingsText("privacy", "Privacy & Site Settings")
         case .advanced: settingsText("advanced", "Advanced")
         }
@@ -315,6 +317,7 @@ enum BrowserSettingsSection: String, CaseIterable, Identifiable {
         case .spaces: "square.grid.2x2"
         case .shortcuts: "keyboard"
         case .links: "macwindow.on.rectangle"
+        case .ai: "sparkles"
         case .privacy: "hand.raised"
         case .advanced: "slider.horizontal.3"
         }
@@ -325,6 +328,7 @@ enum BrowserSettingsSection: String, CaseIterable, Identifiable {
         case .profiles: 500
         case .shortcuts: 590
         case .links: 410
+        case .ai: 640
         case .about: 400
         case .advanced: 460
         default: 540

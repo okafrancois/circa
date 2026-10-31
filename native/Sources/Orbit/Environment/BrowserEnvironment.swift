@@ -80,6 +80,17 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
     var settings = BrowserSettingsRuntime(store: try! BrowserSettingsStore())
     var boosts = BrowserBoostsRuntime()
     let sync = BrowserSyncRuntime()
+    /// Created on first use (Settings › AI or an AI feature): no AI program starts at launch.
+    private(set) var aiIfStarted: OrbitAIService?
+    /// Only the application's environment (`open`) may start the user's AI programs. Environments
+    /// built directly (tests, fixtures) get providers that find nothing and start nothing.
+    var startsAIPrograms = false
+    var ai: OrbitAIService {
+        if let aiIfStarted { return aiIfStarted }
+        let service = OrbitAIService(startsPrograms: startsAIPrograms)
+        aiIfStarted = service
+        return service
+    }
     var lastBoostsEnabled = true
     private var history = BrowserHistoryRecorder()
     var favoriteIcons: FavoriteIconStore?
@@ -108,7 +119,11 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
     }
 
     static func open(engine: Engine, sessionFile: URL?) async throws -> BrowserEnvironment {
-        guard let sessionFile else { return BrowserEnvironment(engine: engine) }
+        guard let sessionFile else {
+            let environment = BrowserEnvironment(engine: engine)
+            environment.startsAIPrograms = true
+            return environment
+        }
         // Shared for the whole lifetime: an offline Orbit import or restore (exclusive) cannot write
         // this session while Orbit uses it, and Orbit does not open it during one. A restore
         // interrupted mid-swap is rolled back first.
@@ -133,6 +148,7 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
         BrowserPerformance.mark(.themesLoaded)
         let effectiveDocument = pendingRemovals.isEmpty && !migratesThemes ? document : await store.sessionDocument()
         let environment = BrowserEnvironment(engine: engine, store: store, document: effectiveDocument, persistence: persistence)
+        environment.startsAIPrograms = true
         BrowserPerformance.mark(.environmentCreated)
         do {
             let history = try BrowserDownloadHistoryStore(destination: sessionFile.appendingPathExtension("downloads.json"))

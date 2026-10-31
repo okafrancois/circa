@@ -163,7 +163,7 @@ struct IndependentSettingsSpacesReviewTests {
             defaultBrowser: .init(status: { .init(http: "synthetic", https: "synthetic", html: "synthetic") },
                 canRequest: { false }, request: { Issue.record("Unexpected system request") }))
         await model.reload()
-        // settings-window-2026-10-27.md: Links is one of the six native toolbar tabs.
+        // Links is one of the seven native toolbar tabs.
         model.settingsSection = .links
         let controller = BrowserSettingsWindowController(model: model)
         let window = try #require(controller.window)
@@ -179,7 +179,7 @@ struct IndependentSettingsSpacesReviewTests {
         #expect(controller.selectSection(.general))
         #expect(!window.isVisible)
     }
-    @Test("All six native Settings key equivalents select their own category")
+    @Test("All seven native Settings key equivalents select their own category")
     func allCategoryKeys() async throws {
         NSApplication.shared.setActivationPolicy(.prohibited)
         let environment = BrowserEnvironment(engine: SiteSyntheticEngine())
@@ -190,8 +190,8 @@ struct IndependentSettingsSpacesReviewTests {
         let controller = BrowserSettingsWindowController(model: model)
         let window = try #require(controller.window)
         defer { window.close() }
-        // settings-window-2026-10-27.md: six tabs use physical number keys on AZERTY too.
-        let numberKeyCodes: [UInt16] = [18, 19, 20, 21, 23, 22]
+        // Seven tabs use physical number keys on AZERTY too.
+        let numberKeyCodes: [UInt16] = [18, 19, 20, 21, 23, 22, 26]
         for (index, section) in BrowserSettingsSection.allCases.enumerated() {
             let key = String(index + 1)
             let event = try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: .command,

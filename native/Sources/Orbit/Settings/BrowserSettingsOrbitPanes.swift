@@ -56,6 +56,7 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
                 case .links: links
                 case .about: about
                 case .advanced: advanced
+                case .ai: BrowserSettingsAIPane(model: model, runtime: runtime, ai: model.environment.ai)
                 default: EmptyView()
                 }
             }
