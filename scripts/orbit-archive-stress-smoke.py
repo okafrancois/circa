@@ -30,6 +30,8 @@ class Fixture(BaseHTTPRequestHandler):
 
 
 def phase(args):
+    if not 0 <= args.pause_ms <= 12_000:
+        raise ValueError('Pause must be between 0 and 12000 ms')
     root, app = args.output.resolve(), args.app.resolve()
     root.mkdir(mode=0o700, parents=True, exist_ok=False)
     info = plistlib.loads((app / 'Contents/Info.plist').read_bytes())
@@ -60,6 +62,7 @@ def phase(args):
                f'--orbit-data-root={data}', f'--orbit-smoke-run={output}',
                f'--orbit-smoke-fixture=http://127.0.0.1:{server.server_port}/',
                '--orbit-smoke-phase=fresh', '--orbit-smoke-little-archive-stress', f'--orbit-smoke-stress-range={args.range}',
+               f'--orbit-smoke-stress-pause-ms={args.pause_ms}',
                '-AppleLanguages', '(en)', '-AppleLocale', 'en_US']
     try:
         with lab.OwnedProcessRun() as owner:
@@ -87,12 +90,14 @@ def main():
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--phase', action='store_true')
     parser.add_argument('--range', default='0:4')
+    parser.add_argument('--pause-ms', type=int, default=0)
     args = parser.parse_args()
     if args.phase:
         phase(args)
     else:
         subprocess.run(['/usr/bin/lockf', '-k', '/tmp/orbit-gui-slot.lock', 'python3', __file__,
-                        '--app', str(args.app.resolve()), '--output', str(args.output.resolve()), '--range', args.range, '--phase'], check=True)
+                        '--app', str(args.app.resolve()), '--output', str(args.output.resolve()), '--range', args.range,
+                        '--pause-ms', str(args.pause_ms), '--phase'], check=True)
 
 
 if __name__ == '__main__':
