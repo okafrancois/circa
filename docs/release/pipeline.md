@@ -39,7 +39,7 @@
 - Outputs: `dist/release/archives/Orbit-X.Y.Z.zip`, `appcast.xml`, deltas, plus the install DMG.
   Preserve this directory between releases for delta generation and previous appcast URLs.
 - After separately pushing the reviewed tag, run the same command with `--publish`, or use
-  the workflow. Publishing creates a draft, uploads all assets, then makes it latest.
+  the workflow. Publishing creates a draft, uploads all assets (including `appcast.xml`), then explicitly marks the browser version latest. It then creates or updates the `update-feed` prerelease and uploads the same appcast with `--clobber`; that tag does not match the browser release workflow trigger. Website and mobile releases must always use `--latest=false`.
 - The app checks at launch and hourly (including a persisted-interval override), downloads signed
   updates silently, and offers a sidebar restart card. Pending installers are revalidated against
   a fresh feed before the card, restart and normal quit; stale installers are cancelled through
@@ -48,7 +48,7 @@
   on the next launch, rather than delaying quit to download another archive.
   The automatic-install switch persists under Sparkle's `SUAutomaticallyUpdate` key; availability
   checks stay enabled under `SUEnableAutomaticChecks`. Manual checks use the application menu's "Check for Updates…" item.
-- Feed: `https://github.com/okafrancois/orbit-browser/releases/latest/download/appcast.xml`.
+- Feed: `https://github.com/<repository>/releases/download/update-feed/appcast.xml`.
   A rollback uses a newer build number; preserve user data and never downgrade the schema blindly.
 
 ## Self-hosted runner (not registered in this lot)
@@ -58,7 +58,7 @@
 - Provision CEF, signing identity and the backed-up EdDSA key on that machine first.
   Preserve `.tools/` and `dist/release/` in the runner checkout. The script was **not executed**.
 - `.github/workflows/release.yml` runs only owner-pushed `v*` tags or owner dispatches
-  in `okafrancois/orbit-browser`; job guards reject forks and other actors. No PR trigger.
+  in the configured repository; numeric repository ID, owner, actor and strict `vX.Y.Z` tag guards reject other targets. No PR trigger.
 - GitHub Settings → Actions → General: require approval for **all outside collaborators**
   on fork pull-request workflows; keep fork write-token/secret access disabled and the default
   workflow token read-only. This release job explicitly requests `contents: write`.

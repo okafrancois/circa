@@ -259,6 +259,11 @@ def check_repository(root):
     # before staging too; staged deletions disappear naturally from this list.
     paths = subprocess.check_output(["git", "-C", str(root), "ls-files", "-z", "--cached"],
                                     ).decode("utf-8").split("\0")
+    # New monorepo projects must be checked before they are staged as well.
+    for folder in ("web", "mobile"):
+        directory = root / folder
+        if directory.is_dir():
+            paths.extend(str(file.relative_to(root)) for file in directory.rglob("*") if file.is_file())
     findings = []
     for path in sorted(set(paths) - {""}):
         findings.extend(check_path(path))

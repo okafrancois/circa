@@ -17,6 +17,7 @@ INTERNAL = {
     'Orbit.Conformance.Fixture', 'Orbit.BrowserSessionPersistence',
     'OrbitLiveSessionTool', 'OrbitLiveSessionValidation',
     'Orbit Live Authentication Recovery v1',
+    'Orbit password import v1:',
 }
 TECHNICAL_TOKEN = re.compile(r'^Orbit[A-Za-z0-9_:.-]+$')
 
@@ -59,7 +60,8 @@ class CircaBrandingTests(unittest.TestCase):
             self.assertTrue(info['LSHasLocalizedDisplayName'])
             self.assertEqual(info['CFBundleIdentifier'], identifier)
             self.assertEqual(info['CFBundleExecutable'], 'Orbit')
-            self.assertEqual(info['SUFeedURL'], 'https://github.com/okafrancois/orbit-browser/releases/latest/download/appcast.xml')
+            from update_feed import update_feed_url
+            self.assertEqual(info['SUFeedURL'], update_feed_url(config['repository']))
             self.assertEqual(info['SUPublicEDKey'], config['public_ed_key'])
         template = plistlib.loads((ROOT / 'native/OrbitChromium/App/Info.plist.in').read_bytes())
         self.assertEqual(template['CFBundleName'], 'Circa')

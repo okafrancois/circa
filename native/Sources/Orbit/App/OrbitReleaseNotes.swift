@@ -5,6 +5,7 @@ enum OrbitReleaseNotes {
     static func runningVersionURL(info: [String: Any] = Bundle.main.infoDictionary ?? [:]) -> URL? {
         guard let version = info["CFBundleShortVersionString"] as? String,
               version.range(of: #"^\d+\.\d+\.\d+$"#, options: .regularExpression) != nil else { return nil }
-        return URL(string: "https://github.com/okafrancois/orbit-browser/releases/tag/v" + version)
+        guard let repository = info["OrbitRepository"] as? String, !repository.isEmpty else { return nil }
+        return URL(string: "https://github.com/\(repository)/releases/tag/v" + version)
     }
 }

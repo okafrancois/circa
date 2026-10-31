@@ -49,7 +49,8 @@
   <key>NSSupportsAutomaticGraphicsSwitching</key><true/>
   <key>NSSupportsAutomaticTermination</key><false/>
   <key>NSSupportsSuddenTermination</key><false/>
-  <key>SUFeedURL</key><string>https://github.com/@ORBIT_RELEASE_REPOSITORY@/releases/latest/download/appcast.xml</string>
+  <key>SUFeedURL</key><string>@ORBIT_UPDATE_FEED_URL@</string>
+  <key>OrbitRepository</key><string>@ORBIT_RELEASE_REPOSITORY@</string>
   <key>SUPublicEDKey</key><string>@SPARKLE_PUBLIC_ED_KEY@</string>
   <key>SUEnableAutomaticChecks</key><true/>
   <key>SUVerifyUpdateBeforeExtraction</key><true/>
