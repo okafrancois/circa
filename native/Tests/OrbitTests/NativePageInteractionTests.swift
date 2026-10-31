@@ -485,6 +485,32 @@ struct NativePageInteractionTests {
         #expect(notices().isEmpty)
     }
 
+    @Test("The exit notice uses frame layout: no window or common ancestor needed, it follows the top right corner")
+    func fullscreenNoticeFrameLayout() {
+        // A root outside any window (the transitional hierarchy of a fullscreen change) must not trap.
+        let detached = NSView(frame: NSRect(x: 0, y: 0, width: 600, height: 400))
+        let first = BrowserFullscreenNotice(in: detached)
+        let second = BrowserFullscreenNotice(in: detached)
+        #expect(detached.subviews.count == 2 && first.constraints.isEmpty && second.superview === detached)
+        first.dismiss()
+        first.dismiss()
+        #expect(first.superview == nil && detached.subviews == [second])
+        // Resizing the page area keeps the notice at the same distance from the top right corner.
+        let inset = BrowserFullscreenNotice.edgeInset
+        #expect(abs(detached.bounds.maxX - second.frame.maxX - inset) < 0.5 && abs(detached.bounds.maxY - second.frame.maxY - inset) < 0.5)
+        detached.setFrameSize(NSSize(width: 1000, height: 700))
+        #expect(abs(detached.bounds.maxX - second.frame.maxX - inset) < 0.5 && abs(detached.bounds.maxY - second.frame.maxY - inset) < 0.5)
+        // A flipped root anchors the same corner.
+        final class Flipped: NSView { override var isFlipped: Bool { true } }
+        let flipped = Flipped(frame: NSRect(x: 0, y: 0, width: 600, height: 400))
+        let third = BrowserFullscreenNotice(in: flipped)
+        #expect(abs(third.frame.minY - inset) < 0.5 && abs(flipped.bounds.maxX - third.frame.maxX - inset) < 0.5)
+        flipped.setFrameSize(NSSize(width: 900, height: 800))
+        #expect(abs(third.frame.minY - inset) < 0.5 && abs(flipped.bounds.maxX - third.frame.maxX - inset) < 0.5)
+        second.dismiss()
+        third.dismiss()
+    }
+
     @Test("A crashed page shows Aw, Snap! with Reload; a new document removes it")
     func crashedPage() async throws {
         let (controller, surface) = try await loadedWindow()

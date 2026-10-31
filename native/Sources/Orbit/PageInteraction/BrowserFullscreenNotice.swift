@@ -20,55 +20,63 @@ final class BrowserFullscreenNotice: NSView {
 
     private let label: NSTextField
 
+    /// Frame layout only (no constraints): the notice joins `root` first, then sits in its top right
+    /// corner below any safe-area inset (display notch) and follows that corner when `root` resizes.
     init(in root: NSView) {
         label = NSTextField(labelWithString: uiText("To exit full screen, press ⎋."))
         super.init(frame: .zero)
         wantsLayer = true
-        translatesAutoresizingMaskIntoConstraints = false
+        configureLayers()
         setAccessibilityRole(.staticText)
         setAccessibilityLabel(label.stringValue)
 
         label.font = .systemFont(ofSize: 14, weight: .medium)
         label.textColor = .white
         label.lineBreakMode = .byClipping
-        label.translatesAutoresizingMaskIntoConstraints = false
+        label.sizeToFit()
+        let width = label.frame.width + 2 * Self.horizontalPadding
+        let safe = root.safeAreaRect
+        let x = root.bounds.maxX - Self.edgeInset - width
+        let y = root.isFlipped ? safe.minY + Self.edgeInset : safe.maxY - Self.edgeInset - Self.height
+        frame = NSRect(x: x, y: y, width: width, height: Self.height)
+        autoresizingMask = root.isFlipped ? [.minXMargin, .maxYMargin] : [.minXMargin, .minYMargin]
+        label.frame = NSRect(x: Self.horizontalPadding, y: ((Self.height - label.frame.height) / 2).rounded(),
+                             width: label.frame.width, height: label.frame.height)
         addSubview(label)
-
+        fill.frame = bounds
+        layer?.shadowPath = CGPath(roundedRect: bounds, cornerWidth: Self.cornerRadius,
+                                   cornerHeight: Self.cornerRadius, transform: nil)
         root.addSubview(self, positioned: .above, relativeTo: nil)
-        NSLayoutConstraint.activate([
-            label.leadingAnchor.constraint(equalTo: leadingAnchor, constant: Self.horizontalPadding),
-            label.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -Self.horizontalPadding),
-            label.centerYAnchor.constraint(equalTo: centerYAnchor),
-            heightAnchor.constraint(equalToConstant: Self.height),
-            trailingAnchor.constraint(equalTo: root.safeAreaLayoutGuide.trailingAnchor, constant: -Self.edgeInset),
-            topAnchor.constraint(equalTo: root.safeAreaLayoutGuide.topAnchor, constant: Self.edgeInset)
-        ])
-        root.layoutSubtreeIfNeeded()
         playEntry()
     }
 
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
-    override func makeBackingLayer() -> CALayer {
-        let gradient = CAGradientLayer()
+    private let fill = CAGradientLayer()
+
+    private func configureLayers() {
+        guard let layer else { return }
+        // The host layer carries the shadow; the rounded, masked gradient sits inside it.
+        layer.shadowColor = NSColor.black.cgColor
+        layer.shadowOpacity = 0.3
+        layer.shadowRadius = 8
+        layer.shadowOffset = CGSize(width: 0, height: -2)
         // Top to bottom navy, measured: rgb(34, 24, 91) to rgb(26, 19, 70).
-        gradient.colors = [NSColor(srgbRed: 34 / 255, green: 24 / 255, blue: 91 / 255, alpha: 1).cgColor,
-                           NSColor(srgbRed: 26 / 255, green: 19 / 255, blue: 70 / 255, alpha: 1).cgColor]
-        gradient.startPoint = CGPoint(x: 0.5, y: 1)
-        gradient.endPoint = CGPoint(x: 0.5, y: 0)
-        gradient.cornerRadius = Self.cornerRadius
-        gradient.cornerCurve = .continuous
-        gradient.borderWidth = 0.5
-        gradient.borderColor = NSColor.black.withAlphaComponent(0.18).cgColor
-        gradient.shadowColor = NSColor.black.cgColor
-        gradient.shadowOpacity = 0.3
-        gradient.shadowRadius = 8
-        gradient.shadowOffset = CGSize(width: 0, height: -2)
-        return gradient
+        fill.colors = [NSColor(srgbRed: 34 / 255, green: 24 / 255, blue: 91 / 255, alpha: 1).cgColor,
+                       NSColor(srgbRed: 26 / 255, green: 19 / 255, blue: 70 / 255, alpha: 1).cgColor]
+        fill.startPoint = CGPoint(x: 0.5, y: 1)
+        fill.endPoint = CGPoint(x: 0.5, y: 0)
+        fill.cornerRadius = Self.cornerRadius
+        fill.cornerCurve = .continuous
+        fill.masksToBounds = true
+        fill.borderWidth = 0.5
+        fill.borderColor = NSColor.black.withAlphaComponent(0.18).cgColor
+        layer.insertSublayer(fill, at: 0)
     }
 
     override func layout() {
         super.layout()
+        fill.frame = bounds
         layer?.shadowPath = CGPath(roundedRect: bounds, cornerWidth: Self.cornerRadius,
                                    cornerHeight: Self.cornerRadius, transform: nil)
     }
