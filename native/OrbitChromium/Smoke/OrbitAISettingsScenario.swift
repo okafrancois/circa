@@ -11,9 +11,38 @@ extension OrbitSmokeDriver {
         owner.window?.setFrameOrigin(NSPoint(x: -8000, y: 0))
         let model = BrowserSettingsModel(environment: environment, profileID: profile, shortcuts: [])
         await model.reload()
-        check("default-off", !environment.settings.document.ai.isEnabled)
+        if !arguments.contains("--orbit-smoke-ai-restored") {
+            check("default-off", !environment.settings.document.ai.isEnabled)
+        }
         let settings = BrowserSettingsWindowController(model: model, appearanceOverride: nil)
         defer { settings.window?.close(); environment.ai.terminateNow() }
+        if arguments.contains("--orbit-smoke-ai-interactive") {
+            guard let window = settings.window else { check("window", false); return }
+            window.center()
+            window.makeKeyAndOrderFront(nil)
+            window.orderFrontRegardless()
+            let owns = await until(3) {
+                let rows = CGWindowListCopyWindowInfo([.optionIncludingWindow], CGWindowID(window.windowNumber)) as? [[String: Any]]
+                return rows?.contains { ($0[kCGWindowOwnerPID as String] as? Int32) == getpid() } == true
+            }
+            check("input-owner", owns)
+            guard owns, let event = BrowserGlobalQuickWindowShortcut.layoutEvent(
+                for: BrowserShortcut(key: "5", modifiers: .command)) else { check("layout-event", false); return }
+            try? Data("\(getpid()) \(window.windowNumber)".utf8).write(to: runRoot.appendingPathComponent("interactive-ready"))
+            _ = await until(5) { FileManager.default.fileExists(atPath: self.runRoot.appendingPathComponent("interactive-enter").path) }
+            check("command-5", window.performKeyEquivalent(with: event) && model.settingsSection == .ai)
+            try? Data().write(to: runRoot.appendingPathComponent("interactive-selected"))
+            try? await Task.sleep(for: .seconds(30))
+            let preferences = environment.settings.document.ai
+            let evidence: [String: Any] = ["enabled": preferences.isEnabled,
+                "readsCurrentTabOnRequest": preferences.readsCurrentTabOnRequest,
+                "quickProvider": preferences.defaultModels[.quick]?.provider.rawValue ?? "automatic",
+                "disabledSites": preferences.disabledSites]
+            if let data = try? JSONSerialization.data(withJSONObject: evidence, options: .sortedKeys) {
+                try? data.write(to: runRoot.appendingPathComponent("interactive-state.json"))
+            }
+            return
+        }
         check("section", settings.selectSection(.ai))
         guard let window = settings.window, let view = window.contentView else { check("window", false); return }
         window.setFrameOrigin(NSPoint(x: -6000, y: 0))

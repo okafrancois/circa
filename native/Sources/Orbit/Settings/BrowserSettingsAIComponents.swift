@@ -6,12 +6,6 @@ import SwiftUI
 /// Settings › AI timing and colours (board values).
 @MainActor
 enum BrowserSettingsAIStyle {
-    /// Everything below the master switch is dimmed while AI is off.
-    static let dimmedOpacity = 0.42
-    static let dimmedSaturation = 0.4
-    static var dim: Animation {
-        OrbitMotionPreferences.prefersReducedMotion ? .linear(duration: 0.15) : .easeOut(duration: 0.3)
-    }
     /// Usage bars fill from zero when shown: 'bow' 0.6 s after 0.1 s.
     static var meterFill: Animation? {
         OrbitMotionPreferences.prefersReducedMotion ? nil : .timingCurve(0.19, 1, 0.22, 1, duration: 0.6).delay(0.1)
@@ -23,6 +17,7 @@ enum BrowserSettingsAIStyle {
     static let warning = Color(nsColor: BrandPalette.rgb(0xFF9F0A))
     static let full = Color(nsColor: BrandPalette.rgb(0xFF3B30))
     static let tertiary = dynamic(light: 0x96929E, dark: 0x7D7884)
+    static let switchOff = dynamic(light: 0xDCD7DF, dark: 0x3C3A42)
     static let track = dynamic(light: 0xE5E0D8, dark: 0x37353D)
     static let meterInk = dynamic(light: 0x5E5A66, dark: 0xB4AFBA)
     static let fill = dynamic(light: 0xEFEBE4, dark: 0x2C2B32)
@@ -296,4 +291,55 @@ enum BrowserSettingsAIText {
         case nil: uiText("Checking…")
         }
     }
+}
+
+/// Compact settings switch with independent track and thumb timing.
+struct BrowserSettingsAISwitchStyle: ToggleStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        Button { configuration.isOn.toggle() } label: {
+            ZStack(alignment: .leading) {
+                Capsule().fill(configuration.isOn ? Color(nsColor: BrandPalette.rgb(0x0A7AFF)) : BrowserSettingsAIStyle.switchOff)
+                    .animation(OrbitMotionPreferences.prefersReducedMotion ? nil : .timingCurve(0.25, 0.1, 0.25, 1, duration: 0.2), value: configuration.isOn)
+                Circle().fill(.white).frame(width: 16, height: 16)
+                    .shadow(color: .black.opacity(0.25), radius: 2, y: 1)
+                    .offset(x: configuration.isOn ? 16 : 2)
+                    .animation(OrbitMotionPreferences.prefersReducedMotion ? nil : .timingCurve(0.19, 1, 0.22, 1, duration: 0.28), value: configuration.isOn)
+            }.frame(width: 34, height: 20)
+        }
+        .buttonStyle(.plain)
+        .accessibilityRepresentation {
+            Toggle(isOn: configuration.$isOn) { configuration.label }.toggleStyle(.switch)
+        }
+    }
+}
+
+/// An overlay scroller does not change the pane's width when options become scrollable.
+struct BrowserSettingsAIScrollOverlay: NSViewRepresentable {
+    final class Probe: NSView {
+        weak var scroll: NSScrollView?
+        var previousStyle: NSScroller.Style?
+        func configure() {
+            guard let enclosingScrollView else { return }
+            if scroll !== enclosingScrollView {
+                restore()
+                scroll = enclosingScrollView
+                previousStyle = enclosingScrollView.scrollerStyle
+            }
+            if enclosingScrollView.scrollerStyle != .overlay { enclosingScrollView.scrollerStyle = .overlay }
+        }
+        func restore() {
+            if let scroll, let previousStyle { scroll.scrollerStyle = previousStyle }
+            scroll = nil
+            previousStyle = nil
+        }
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            DispatchQueue.main.async { [weak self] in self?.configure() }
+        }
+        override func layout() { super.layout(); configure() }
+        override func hitTest(_ point: NSPoint) -> NSView? { nil }
+    }
+    func makeNSView(context: Context) -> Probe { Probe() }
+    func updateNSView(_ view: Probe, context: Context) { view.configure() }
+    static func dismantleNSView(_ view: Probe, coordinator: ()) { view.restore() }
 }

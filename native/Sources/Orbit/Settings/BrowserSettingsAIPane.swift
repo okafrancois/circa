@@ -23,29 +23,25 @@ struct BrowserSettingsAIPane<Engine: BrowserEngine>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text(uiFormat("Off until you turn it on. %@ uses the AI programs already signed in on this Mac and never sees your passwords.", appName))
-                .foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-                .frame(maxWidth: 520, alignment: .leading).padding(.bottom, 14)
             card { masterRow }
-            VStack(alignment: .leading, spacing: 0) {
-                header(uiText("Programs")) {
-                    Button(ai.isChecking ? uiText("Checking…") : uiText("Check Again")) { check(explicit: true) }
-                        .disabled(ai.isChecking).accessibilityIdentifier("settings-ai-check-again")
+            if enabled {
+                VStack(alignment: .leading, spacing: 0) {
+                    header(uiText("Programs")) {
+                        Button(ai.isChecking ? uiText("Checking…") : uiText("Check Again")) { check(explicit: true) }
+                            .disabled(ai.isChecking).accessibilityIdentifier("settings-ai-check-again")
+                    }
+                    card { programs }.accessibilityIdentifier("settings-ai-programs")
+                    header(uiText("Default models")) { EmptyView() }
+                    card { defaultModels }
+                    if !Self.shippedHelpers.isEmpty {
+                        header(uiText("Helpers")) { EmptyView() }
+                    }
+                    header(uiText("Privacy")) { EmptyView() }
+                    card { privacy }
                 }
-                card { programs }.accessibilityIdentifier("settings-ai-programs")
-                header(uiText("Default models")) { EmptyView() }
-                card { defaultModels }
-                if !Self.shippedHelpers.isEmpty {
-                    header(uiText("Helpers")) { EmptyView() }
-                }
-                header(uiText("Privacy")) { EmptyView() }
-                card { privacy }
             }
-            .disabled(!enabled)
-            .opacity(enabled ? 1 : BrowserSettingsAIStyle.dimmedOpacity)
-            .saturation(enabled ? 1 : BrowserSettingsAIStyle.dimmedSaturation)
-            .animation(BrowserSettingsAIStyle.dim, value: enabled)
         }
+        .background(BrowserSettingsAIScrollOverlay().accessibilityHidden(true))
         .onAppear { check(explicit: false) }
         .sheet(isPresented: $editsSites) {
             BrowserSettingsAISitesSheet(sites: preferences.disabledSites, save: { sites in
@@ -63,8 +59,6 @@ struct BrowserSettingsAIPane<Engine: BrowserEngine>: View {
             OrbitIcon.view(sfName: "sparkles", pointSize: 20).font(.system(size: 20)).frame(width: 20, height: 20)
             VStack(alignment: .leading, spacing: 2) {
                 Text(uiFormat("Use AI in %@", appName)).fontWeight(.medium)
-                Text(uiText("Ask from the Command Bar, the Assistant panel and small helpers."))
-                    .font(Font(BrandFonts.ui(12))).foregroundStyle(.secondary)
             }
             Spacer(minLength: 8)
             Toggle(uiFormat("Use AI in %@", appName), isOn: Binding(get: { enabled }, set: { value in
@@ -72,7 +66,7 @@ struct BrowserSettingsAIPane<Engine: BrowserEngine>: View {
                     try await runtime.updateAI { $0.isEnabled = value }
                     if value { ai.refresh(keepRunning: true) } else { ai.stopPrograms() }
                 }
-            })).labelsHidden().toggleStyle(.switch).controlSize(.small).accessibilityIdentifier("settings-ai-enabled")
+            })).labelsHidden().toggleStyle(BrowserSettingsAISwitchStyle()).accessibilityIdentifier("settings-ai-enabled")
         }
         .padding(.horizontal, 14).padding(.vertical, 8).frame(minHeight: 50)
     }
@@ -141,19 +135,17 @@ struct BrowserSettingsAIPane<Engine: BrowserEngine>: View {
             BrowserSettingsAIStateLine(tone: .neutral, text: uiText("Checking…"))
         case .ready(let account)?:
             if id == .onDevice {
-                BrowserSettingsAIStateLine(tone: .ready, text: uiText("Ready · free, works offline"))
-                detail(uiText("Apple Intelligence. Nothing leaves your Mac."))
+                BrowserSettingsAIStateLine(tone: .ready, text: uiText("Ready"))
             } else {
                 BrowserSettingsAIStateLine(tone: .ready, text: BrowserSettingsAIText.plan(id, account.plan)
                     .map { uiFormat("Signed in · %@", $0) } ?? uiText("Signed in"))
                 if let usage = account.usage, !usage.windows.isEmpty { BrowserSettingsAIMeters(usage: usage) }
             }
         case .signedOut?:
-            BrowserSettingsAIStateLine(tone: .warning, text: uiText("Installed, signed out"))
-            detail(uiFormat("Sign in from %@ itself, then check again. %@ never asks for your password.", name, appName))
+            BrowserSettingsAIStateLine(tone: .warning, text: uiText("Signed out"))
+            detail(uiFormat("Sign in to %@, then check again.", name))
         case .notInstalled?:
             BrowserSettingsAIStateLine(tone: .neutral, text: uiText("Not on this Mac"))
-            detail(uiText("Install it from the official page, sign in there, then check again."))
         case .unavailable(let reason)?:
             BrowserSettingsAIStateLine(tone: .neutral, text: uiText("Unavailable"))
             detail(unavailableText(reason, name: name))
@@ -162,12 +154,12 @@ struct BrowserSettingsAIPane<Engine: BrowserEngine>: View {
 
     private func unavailableText(_ reason: BrowserAIUnavailableReason, name: String) -> String {
         switch reason {
-        case .appleIntelligenceOff: uiText("Apple Intelligence is off. Turn it on to run quick tasks for free on this Mac.")
+        case .appleIntelligenceOff: uiText("Apple Intelligence is off.")
         case .deviceNotEligible: uiText("This Mac can’t run Apple Intelligence.")
-        case .modelNotReady: uiText("Apple Intelligence is still getting ready. Check again later.")
+        case .modelNotReady: uiText("Model not ready. Try again later.")
         case .systemTooOld: uiText("Needs macOS 26 or later.")
-        case .programNotResponding: uiFormat("%@ did not answer. Check that it opens in Terminal, then check again.", name)
-        case .toolsNotDisabled: uiFormat("%@ could not be started with its tools turned off, so %@ does not use it.", name, appName)
+        case .programNotResponding: uiFormat("Open %@ in Terminal, then check again.", name)
+        case .toolsNotDisabled: uiText("Unsupported configuration.")
         }
     }
 
@@ -220,19 +212,18 @@ struct BrowserSettingsAIPane<Engine: BrowserEngine>: View {
 
     private var defaultModels: some View {
         VStack(spacing: 0) {
-            modelRow(.quick, title: uiText("Quick tasks"), detail: uiText("Tab titles, downloads, link previews, writing help"))
+            modelRow(.quick, title: uiText("Quick tasks"))
             SettingsRule()
-            modelRow(.chat, title: uiText("Chat and questions"), detail: uiText("Command Bar, Assistant panel, Find"))
+            modelRow(.chat, title: uiText("Chat and questions"))
             SettingsRule()
-            modelRow(.errands, title: uiText("Errands"), detail: uiText("Tasks that act on pages for you"))
+            modelRow(.errands, title: uiText("Errands"))
         }
     }
 
-    private func modelRow(_ use: BrowserAIUse, title: String, detail text: String) -> some View {
+    private func modelRow(_ use: BrowserAIUse, title: String) -> some View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(title).fontWeight(.medium)
-                detail(text)
             }
             Spacer(minLength: 8)
             BrowserSettingsAIModelPopUp(entries: entries(for: use), selected: selection(for: use), title: title) { choice in
@@ -268,12 +259,11 @@ struct BrowserSettingsAIPane<Engine: BrowserEngine>: View {
                 OrbitIcon.view(sfName: "doc.on.clipboard", pointSize: 20).font(.system(size: 20)).frame(width: 20, height: 20)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(uiText("Read the current tab when I ask")).fontWeight(.medium)
-                    detail(uiText("Only the tabs you can see in the Assistant’s context. Never in the background."))
                 }
                 Spacer(minLength: 8)
                 Toggle(uiText("Read the current tab when I ask"), isOn: Binding(get: { preferences.readsCurrentTabOnRequest }, set: { value in
                     model.perform { try await runtime.updateAI { $0.readsCurrentTabOnRequest = value } }
-                })).labelsHidden().toggleStyle(.switch).controlSize(.small).accessibilityIdentifier("settings-ai-read-tab")
+                })).labelsHidden().toggleStyle(BrowserSettingsAISwitchStyle()).accessibilityIdentifier("settings-ai-read-tab")
             }
             .padding(.horizontal, 14).padding(.vertical, 8).frame(minHeight: 44)
             SettingsRule()
@@ -281,7 +271,6 @@ struct BrowserSettingsAIPane<Engine: BrowserEngine>: View {
                 OrbitIcon.view(sfName: "eyeglasses", pointSize: 20).font(.system(size: 20)).frame(width: 20, height: 20)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(uiText("Private windows")).fontWeight(.medium)
-                    detail(uiText("AI never reads or acts in a private window."))
                 }
                 Spacer(minLength: 8)
                 HStack(spacing: 5) {
@@ -341,8 +330,6 @@ struct BrowserSettingsAISitesSheet: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text(uiText("Sites where AI is off")).font(Font(BrandTextStyle.ui.font(size: 22, weight: .semibold))).padding(.bottom, 8)
-            Text(uiText("On these sites, AI can’t read the page or act, and helpers stay quiet."))
-                .foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true).padding(.bottom, 14)
             SettingsCard {
                 if sites.isEmpty {
                     Text(uiText("No sites yet.")).font(Font(BrandFonts.ui(12))).foregroundStyle(.secondary)

@@ -36,6 +36,7 @@ final class BrowserSettingsWindowController<Engine: BrowserEngine>: NSWindowCont
     private var displayedSection: BrowserSettingsSection?
     private let selectionPill = BrowserSettingsSelectionPill()
     private var outgoingPane: CALayer?
+    private var paneTransitionGeneration = 0
     static var minimumContentSize: NSSize { NSSize(width: 684, height: 400) }
 
     /// The theme editor opened from the Spaces section.
@@ -247,38 +248,61 @@ final class BrowserSettingsWindowController<Engine: BrowserEngine>: NSWindowCont
         outgoing.contents = bitmap.cgImage
         outgoing.frame = view.convert(view.bounds, to: root)
         root.wantsLayer = true
+        outgoing.autoresizingMask = root.layer?.isGeometryFlipped == true
+            ? [.layerWidthSizable, .layerMaxYMargin] : [.layerWidthSizable, .layerMinYMargin]
         root.layer?.addSublayer(outgoing)
         outgoingPane = outgoing
+        // Hide the live outgoing content so it cannot show through the fading snapshot.
+        view.alphaValue = 0
     }
 
     private func animatePane() {
+        paneTransitionGeneration += 1
+        let generation = paneTransitionGeneration
         if let outgoing = outgoingPane {
             outgoingPane = nil
             CATransaction.begin()
             CATransaction.setCompletionBlock { outgoing.removeFromSuperlayer() }
             let exit = CABasicAnimation(keyPath: "opacity")
             exit.fromValue = 1; exit.toValue = 0; exit.duration = BrowserSettingsMotion.exitDuration
-            exit.timingFunction = CAMediaTimingFunction(name: .easeIn)
+            exit.timingFunction = CAMediaTimingFunction(controlPoints: 1 / 3, 0, 2 / 3, 1 / 3)
             outgoing.opacity = 0
             outgoing.add(exit, forKey: "exit")
             CATransaction.commit()
         }
-        guard let view = window?.contentView, window?.isVisible == true,
-              !OrbitMotionPreferences.prefersReducedMotion else { return }
+        guard let view = window?.contentView else { return }
+        view.layer?.removeAnimation(forKey: "pane-entry")
+        guard window?.isVisible == true, !OrbitMotionPreferences.prefersReducedMotion else {
+            view.alphaValue = 1
+            return
+        }
         view.wantsLayer = true
+        view.alphaValue = 0
         let fade = CABasicAnimation(keyPath: "opacity")
         fade.fromValue = 0; fade.toValue = 1
-        fade.beginTime = CACurrentMediaTime() + BrowserSettingsMotion.enterDelay
+        fade.beginTime = BrowserSettingsMotion.enterDelay
         fade.duration = BrowserSettingsMotion.enterDuration
-        fade.fillMode = .backwards
+        fade.fillMode = .both
+        fade.isRemovedOnCompletion = false
         fade.timingFunction = BrowserSettingsMotion.timingFunction
         let rise = CABasicAnimation(keyPath: "transform.translation.y")
         rise.fromValue = view.layer?.superlayer?.isGeometryFlipped == true ? BrowserSettingsMotion.rise : -BrowserSettingsMotion.rise
         rise.toValue = 0
         rise.beginTime = fade.beginTime; rise.duration = fade.duration
         rise.fillMode = .backwards; rise.timingFunction = BrowserSettingsMotion.timingFunction
-        view.layer?.add(fade, forKey: "pane-fade")
-        view.layer?.add(rise, forKey: "pane-rise")
+        let entry = CAAnimationGroup()
+        entry.animations = [fade, rise]
+        entry.duration = BrowserSettingsMotion.enterDelay + BrowserSettingsMotion.enterDuration
+        entry.fillMode = .both
+        entry.isRemovedOnCompletion = false
+        CATransaction.begin()
+        CATransaction.setCompletionBlock { [weak self, weak view] in
+            guard self?.paneTransitionGeneration == generation else { return }
+            view?.alphaValue = 1
+            view?.layer?.removeAnimation(forKey: "pane-entry")
+        }
+        view.layer?.add(entry, forKey: "pane-entry")
+        CATransaction.commit()
     }
 
     func windowDidBecomeKey(_ notification: Notification) { updateSelectionPill(animated: false); model.perform { [model] in await model.reload() } }

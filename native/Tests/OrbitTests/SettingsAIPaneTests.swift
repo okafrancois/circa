@@ -125,12 +125,36 @@ struct SettingsAIPaneTests {
         }
     }
 
+    @Test("AI scrolling preserves control width and restores the previous scroller style")
+    func overlayScroller() {
+        let scroll = NSScrollView()
+        scroll.scrollerStyle = .legacy
+        let document = NSView()
+        scroll.documentView = document
+        let probe = BrowserSettingsAIScrollOverlay.Probe()
+        document.addSubview(probe)
+        probe.configure()
+        #expect(scroll.scrollerStyle == .overlay)
+        probe.restore()
+        #expect(scroll.scrollerStyle == .legacy)
+    }
+
     @Test("The master switch is off by default and its change persists")
     func masterSwitch() async throws {
         let model = model()
         #expect(!model.runtime.document.ai.isEnabled)
         try await model.runtime.updateAI { $0.isEnabled = true }
         #expect(model.runtime.document.ai.isEnabled)
+        try await model.runtime.updateAI {
+            $0.defaultModels[.quick] = BrowserAIModelChoice(provider: .onDevice)
+            $0.readsCurrentTabOnRequest = false
+            $0.disabledSites = ["example.test"]
+        }
+        let saved = model.runtime.document.ai
+        try await model.runtime.updateAI { $0.isEnabled = false }
+        #expect(!model.runtime.document.ai.isEnabled)
+        try await model.runtime.updateAI { $0.isEnabled = true }
+        #expect(model.runtime.document.ai == saved)
         #expect(OrbitOnDeviceAIClient.availability().state != .notInstalled)
     }
 }
