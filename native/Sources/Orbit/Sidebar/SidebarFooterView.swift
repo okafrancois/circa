@@ -8,6 +8,8 @@ private typealias Metrics = OrbitTokens.Metrics.Sidebar
 @MainActor
 final class SidebarFooterView: NSView {
     let libraryButton = OrbitGlyphButton(glyph: OrbitGlyph.library, label: OrbitShellText.library)
+    let downloadBadge = SidebarDownloadBadge()
+    var onDownloadHover: ((Bool) -> Void)?
     let plusButton = OrbitGlyphButton(glyph: OrbitGlyph.footerPlus, label: OrbitShellText.create)
     private(set) var spaceButtons: [SidebarSpaceButton] = []
     private var spaces: [BrowserSpace] = []
@@ -41,6 +43,8 @@ final class SidebarFooterView: NSView {
         addSubview(backgroundContainer)
         backgroundContainer.addSubview(background)
         for button in [libraryButton, plusButton] { addSubview(button) }
+        downloadBadge.isHidden = true
+        addSubview(downloadBadge)
         creationDot.wantsLayer = true
         creationDot.layer?.cornerRadius = 4
         creationDot.alphaValue = 0
@@ -51,6 +55,9 @@ final class SidebarFooterView: NSView {
     required init?(coder: NSCoder) { nil }
 
     override var isFlipped: Bool { true }
+
+    override func mouseEntered(with event: NSEvent) { onDownloadHover?(true) }
+    override func mouseExited(with event: NSEvent) { onDownloadHover?(false) }
 
     func setCommandsEnabled(_ enabled: Bool) {
         if !enabled { cancelContextMenu(); cancelIconPicker(); authority = UUID() }
@@ -121,6 +128,7 @@ final class SidebarFooterView: NSView {
         let size = Metrics.footerButtonSize
         let y = geometry.footerCenterY - size / 2
         libraryButton.frame = NSRect(x: geometry.libraryCenterX - size / 2, y: y, width: size, height: size)
+        downloadBadge.frame = NSRect(x: libraryButton.frame.midX - 6, y: libraryButton.frame.midY - 30, width: 32, height: 36)
         plusButton.frame = NSRect(x: geometry.plusCenterX - size / 2, y: y, width: size, height: size)
         spaceLayout = FooterSpaceLayout.resolve(count: spaceButtons.count, libraryCenterX: geometry.libraryCenterX,
                                                 plusCenterX: geometry.plusCenterX,

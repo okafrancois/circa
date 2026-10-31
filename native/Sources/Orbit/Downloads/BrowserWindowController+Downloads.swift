@@ -95,3 +95,44 @@ extension DownloadRowPresentation {
                   startedAt: item.startedAt)
     }
 }
+
+
+extension BrowserWindowController {
+    func installDownloadFeedback() {
+        sidebar.footer.onDownloadHover = { [weak self] in self?.downloadHoverChanged($0) }
+        sidebar.recentDownloads.onHover = { [weak self] in self?.downloadHoverChanged($0) }
+        sidebar.recentDownloads.onAction = { [weak self] context in
+            guard let self, acceptsCommands, context.key.profileID == session.activeProfileID,
+                  let item = downloads.coordinator.snapshot(for: context.key) else { return }
+            if item.state == .complete { downloads.perform(.open, in: context) }
+            else { showDownloads() }
+        }
+    }
+
+    func renderDownloadFeedback() {
+        let profile = downloads.coordinator.isClosed ? nil : session.activeProfileID
+        downloadFeedback.update(profile.map { downloads.snapshots(profileID: $0) } ?? [], profileID: profile)
+        sidebar.footer.downloadBadge.render(active: downloadFeedback.hasActiveDownloads, completion: downloadFeedback.completionItem)
+        sidebar.recentDownloads.render(downloadFeedback.recentItems, presented: downloadFeedback.isPresented && !library.isPresented)
+        sidebar.needsLayout = true
+    }
+
+    func downloadHoverChanged(_ inside: Bool) {
+        downloadHoverTimer?.cancel(); downloadHoverTimer = nil
+        if inside {
+            downloadFeedback.hover(true); renderDownloadFeedback()
+        } else {
+            // Bridge the small gap between the footer hit target and the final file row.
+            downloadHoverTimer = OrbitRunLoopTimer(after: 0.1) { [weak self] in
+                guard let self else { return }
+                downloadFeedback.hover(false); renderDownloadFeedback()
+            }
+        }
+    }
+
+    func stopDownloadFeedback() {
+        downloadHoverTimer?.cancel(); downloadHoverTimer = nil
+        downloadFeedback.reset()
+        sidebar.recentDownloads.render([], presented: false)
+    }
+}

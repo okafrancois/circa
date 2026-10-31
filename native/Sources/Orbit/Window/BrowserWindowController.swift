@@ -105,6 +105,8 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
     var bookmarkTransfer: BrowserBookmarkTransferController<Engine>?
 
     // MARK: Downloads
+    let downloadFeedback = SidebarDownloadFeedback()
+    var downloadHoverTimer: (any OrbitCancellable)?
     let downloads: BrowserDownloadsController
     lazy var downloadsPane = BrowserDownloadsPane()
     var downloadsProfileID: ProfileID?
@@ -235,6 +237,7 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
             contentCard.emptyStateTitle = uiText("Private")
             contentCard.emptyStateDetail = uiText("Your browsing history is not saved.")
         }
+        installDownloadFeedback()
         historyObserver.install(in: engineEventHooks)
         // The session can outlive this controller (retirement tracking, queued commands). A call
         // after the controller is gone fails explicitly (`surfaceUnavailable`) instead of relying
@@ -298,6 +301,7 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
         findSession.onChange = { [weak self] in self?.renderFind() }
         findSession.onFocusReturn = { [weak self] surface in self?.returnFocusAfterFind(on: surface) }
         downloads.observeChanges(id) { [weak self] delta in
+            self?.renderDownloadFeedback()
             self?.renderDownloads(delta: delta)
             if delta.historyChanged || delta.changed.contains(where: { $0.state == .complete }) {
                 self?.renderLibraryMedia()
@@ -367,6 +371,7 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
         downloads.sourceWindowClosed(session.snapshot?.id)
         siteControls.cancelPermission()
         downloads.stopObserving(id)
+        stopDownloadFeedback()
         findSession.shutdown()
         session.close()
         releaseEngineWindows()
@@ -385,6 +390,7 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
         library.swipe.detach()
         freezeCommandsForTermination()
         downloads.stopObserving(id)
+        stopDownloadFeedback()
         findSession.shutdown()
         session.retireForApplicationTermination()
     }
@@ -516,6 +522,7 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
         findSession.select(pageCommandSurface())
         renderFind()
         refreshPageZoom()
+        renderDownloadFeedback()
         renderDownloads()
         renderArchive()
         if let boostEditor, boostEditor.session.store.profileID != session.activeProfileID

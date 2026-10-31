@@ -45,6 +45,8 @@ final class BrowserSidebarView: NSView, SidebarListHost {
     /// Pinned rows laid out above the separator, gap pitches included (0 when collapsed).
     var pinnedRowCount: Int { page.list.displayedLayout.pinnedSlotCount }
     let footer = SidebarFooterView()
+    let recentDownloads = SidebarDownloadsView()
+    private var downloadTracking: NSTrackingArea?
     let updateCard = SidebarUpdateCard()
     var updateReady = false { didSet { needsLayout = true } }
     private var showsUpdateCard: Bool { updateReady && !isPrivate && standaloneProfileName == nil }
@@ -215,6 +217,7 @@ final class BrowserSidebarView: NSView, SidebarListHost {
         for view in [navigationContainer, addressContainer, pageContainer, footer, updateCard, tooltip, privateIndicator] {
             addSubview(view)
         }
+        addSubview(recentDownloads)
         privateIndicator.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
             privateIndicator.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
@@ -250,6 +253,17 @@ final class BrowserSidebarView: NSView, SidebarListHost {
     required init?(coder: NSCoder) { nil }
 
     override var isFlipped: Bool { true }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let downloadTracking { removeTrackingArea(downloadTracking) }
+        downloadTracking = nil
+        guard !isPrivate else { return }
+        let rect = convert(footer.libraryButton.frame.union(footer.downloadBadge.frame), from: footer)
+        let area = NSTrackingArea(rect: rect, options: [.mouseEnteredAndExited, .activeInActiveApp], owner: footer)
+        addTrackingArea(area); downloadTracking = area
+    }
+
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
@@ -319,6 +333,7 @@ final class BrowserSidebarView: NSView, SidebarListHost {
             width: max(0, bounds.width - 2 * Metrics.paddingX), height: SidebarUpdateCard.height)
         footer.frame = geometry.footerFrame.offsetBy(dx: 0, dy: showsUpdateCard ? SidebarUpdateCard.height + 8 : 0)
         footer.apply(geometry)
+        recentDownloads.frame = NSRect(x: 0, y: footer.frame.minY + footer.libraryButton.frame.midY - 14.5 - CGFloat(recentDownloads.items.count) * 56, width: bounds.width, height: CGFloat(recentDownloads.items.count) * 56)
         if isPrivate {
             footer.isHidden = true
             favoritesContainer.isHidden = true
@@ -976,6 +991,7 @@ final class BrowserSidebarView: NSView, SidebarListHost {
         liveFavoritesGrid?.accent = accent
         for grid in [swipePreviewFavorites, swipeOutgoingFavorites, ordinaryOutgoingFavorites] { grid?.accent = accent }
         footer.accent = accent
+        recentDownloads.accent = accent
         updateCard.accent = accent
         page.accent = accent
         leavingPage?.accent = accent

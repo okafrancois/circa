@@ -1,6 +1,7 @@
 import AppKit
 import BrowserCore
 import BrowserEngine
+import BrowserShell
 import ChromiumEngine
 
 /// Invoked only through the explicitly enabled, synthetic-root performance endpoint.
@@ -16,6 +17,31 @@ enum OrbitDownloadAudioProbe {
             owner.window?.makeKeyAndOrderFront(nil)
             NSApp.activate()
             return ["frame": NSStringFromRect(screen.visibleFrame)]
+        }
+        if step == "feedback-hover" {
+            owner.downloadHoverChanged(command["inside"] == "true")
+            return ["hover": owner.downloadFeedback.isHovering]
+        }
+        if step == "feedback-status" {
+            return ["reducedMotion": OrbitMotionPreferences.prefersReducedMotion, "windowVisible": owner.window?.isVisible == true, "active": owner.downloadFeedback.hasActiveDownloads,
+                    "completion": owner.downloadFeedback.completion != nil,
+                    "presented": owner.downloadFeedback.isPresented,
+                    "rows": owner.sidebar.recentDownloads.items.count,
+                    "sidebar": NSStringFromRect(owner.sidebar.frame),
+                    "footer": NSStringFromRect(owner.sidebar.footer.frame),
+                    "library": NSStringFromRect(owner.sidebar.footer.libraryButton.frame)]
+        }
+        if step == "feedback-light" {
+            OrbitMotionPreferences.overrideReducedMotion = false
+            NSApp.appearance = NSAppearance(named: .aqua)
+            owner.windowShell.setSidebarWidth(500)
+            if let space = owner.session.snapshot?.activeSpaceID, let profile = owner.session.activeProfileID,
+               let color = BrowserThemeColor(hexString: "#B6B6B8") {
+                let theme = BrowserSpaceTheme(mode: .light, colors: [], intensity: 0.78, noise: 0,
+                    light: .init(stops: [color]), dark: .init(stops: [color]))
+                _ = try? await owner.session.setSpaceTheme(theme, for: space, profileID: profile)
+            }
+            return ["light": true]
         }
         if step == "load", let url = command["url"].flatMap(URL.init(string:)) {
             owner.downloads.destinationProvider = { _, filename in root.appendingPathComponent(filename) }
