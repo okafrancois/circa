@@ -35,8 +35,11 @@ enum BrowserSettingsAIStyle {
     }
 }
 
-/// A program's mark from `Icons/ai-marks/<provider>.svg`. Marks drawn in `currentColor` follow
-/// the appearance's ink; other colours are kept. The shipped files are neutral placeholders.
+/// A program's mark from `Icons/ai-marks/<provider>.svg` (listed under `aiMarks` in the icon
+/// catalog). The shipped files are neutral placeholders: a letter monogram on a neutral disc, in
+/// the slot and size of the programs' own marks, which need their owners' written permission
+/// before a public release. Replacing a file is the whole swap: marks drawn in `currentColor`
+/// follow the appearance's ink, other colours are kept.
 enum BrowserSettingsAIMark {
     @MainActor private static var cache: [BrowserAIProviderID: NSImage] = [:]
 
