@@ -575,6 +575,10 @@ final class BrowserPeekToolbarView: NSView {
 
 @MainActor
 final class BrowserPeekToolbarButton: NSButton {
+    // Symbol images carry baseline alignment insets. These custom discs constrain their painted
+    // frame, so AppKit must not expand that frame around the symbol's alignment rectangle.
+    override var alignmentRectInsets: NSEdgeInsets { .init() }
+
     private var isHovered = false { didSet { needsDisplay = true } }
     private var trackingArea: NSTrackingArea?
 
