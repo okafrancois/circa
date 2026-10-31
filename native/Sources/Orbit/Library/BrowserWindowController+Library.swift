@@ -185,6 +185,8 @@ extension BrowserWindowController {
         library.category = category ?? library.category
         library.presentationID = UUID()
         library.isPresented = true
+        downloadFeedback.hover(false)
+        renderDownloadFeedback()
         library.displayedProfileID = session.activeProfileID
         if let root = window?.contentView {
             root.addSubview(library.view, positioned: .above, relativeTo: sidebar)
@@ -251,6 +253,8 @@ extension BrowserWindowController {
     func hideLibrary(focus: Bool = true, velocity: Double? = nil) {
         guard library.isPresented else { return }
         library.isPresented = false
+        downloadFeedback.hover(false)
+        renderDownloadFeedback()
         library.presentationID = UUID()
         library.drawer.setPresented(false, velocity: velocity)
         findSession.select(pageCommandSurface())

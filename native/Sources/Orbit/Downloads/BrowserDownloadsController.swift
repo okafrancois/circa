@@ -10,6 +10,7 @@ import Foundation
 final class BrowserDownloadsController {
     typealias DestinationProvider = @MainActor (BrowserDownloadOwner, String) async -> URL?
     let coordinator = BrowserDownloadCoordinator()
+    let systemFeedback = BrowserDownloadSystemFeedback()
     var destinationProvider: DestinationProvider?
     var preferencesProvider: @MainActor () -> BrowserDownloadPreferences = { .init() }
     struct SaveRequest {
@@ -34,6 +35,10 @@ final class BrowserDownloadsController {
             profiles = Set(history.records.map(\.profileID))
             try? coordinator.restore(history.records)
         }
+        systemFeedback.cancel = { [weak self] key in
+            guard let self, let item = coordinator.snapshot(for: key) else { return }
+            try? coordinator.perform(.cancel, in: item.context)
+        }
         coordinator.onDelta = { [weak self] in self?.publish($0) }
     }
 
@@ -42,7 +47,8 @@ final class BrowserDownloadsController {
     func stopObserving(_ id: UUID) { observers.removeValue(forKey: id); deltaObservers.removeValue(forKey: id) }
 
     private func publish(_ delta: BrowserDownloadCoordinator.Delta) {
-        for key in delta.removed { fileChecks[key] = nil }
+        for key in delta.removed { fileChecks[key] = nil; systemFeedback.retire(key) }
+        for item in delta.changed { systemFeedback.update(item) }
         for item in delta.changed where fileChecks[item.key]?.url != item.destinationURL || item.state != .complete {
             fileChecks[item.key] = nil
         }
@@ -69,6 +75,9 @@ final class BrowserDownloadsController {
             let registration = try coordinator.register(owner: owner, transfer: transfer,
                 suggestedFilename: BrowserDownloadPaths.suggestedFilename(download.suggestedFilename),
                 sourceURL: download.sourceURL, id: id)
+            if let sourceWindow, sourceWindow.isVisible, let content = sourceWindow.contentView {
+                systemFeedback.track(registration.key, origin: sourceWindow.convertToScreen(content.convert(content.bounds, to: nil)))
+            }
             transfers[id] = transfer
             transfer.onInvalidate = { [weak self] in
                 self?.pickers[id]?.cancel()
@@ -254,6 +263,7 @@ final class BrowserDownloadsController {
     }
 
     func shutdown() {
+        systemFeedback.shutdown()
         fileCheckTask?.cancel()
         fileCheckTask = nil
         fileChecks.removeAll()
