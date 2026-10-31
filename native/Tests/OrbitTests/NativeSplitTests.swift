@@ -39,6 +39,25 @@ struct SplitGeometryTests {
         #expect(BrowserSplitGeometry.resized(original, divider: 3, delta: 20, available: 1000) == original)
         #expect(BrowserSplitGeometry.resized(original, divider: 0, delta: 20, available: 0) == original)
     }
+
+    @Test("Side-by-side panes keep a 220-point minimum and overflow the trailing edge when four cannot fit") @MainActor
+    func minimumPaneWidth() {
+        let bounds = CGRect(x: 0, y: 0, width: 590, height: 400)
+        let result = BrowserSplitGeometry.layout(in: bounds, orientation: .horizontal, ratios: [0.25, 0.25, 0.25, 0.25],
+                                                 gap: 10, minimum: BrowserSplitTokens.minimumPaneWidth)
+        #expect(result.panes.map(\.width) == [220, 220, 220, 220])
+        #expect(result.panes[1].minX == 230 && result.panes[3].maxX > bounds.maxX)
+        let wide = BrowserSplitGeometry.layout(in: CGRect(x: 0, y: 0, width: 1010, height: 400), orientation: .horizontal,
+                                               ratios: [0.5, 0.5], gap: 10, minimum: BrowserSplitTokens.minimumPaneWidth)
+        #expect(wide.panes.map(\.width) == [500, 500])
+        // At four equal panes in 590 points the divider cannot move.
+        let ratios = [0.25, 0.25, 0.25, 0.25]
+        #expect(BrowserSplitGeometry.resized(ratios, divider: 1, delta: 80, available: 560,
+                                             minimum: BrowserSplitTokens.minimumPane(.horizontal)) == ratios)
+        let two = BrowserSplitGeometry.resized([0.5, 0.5], divider: 0, delta: -1000, available: 1000,
+                                               minimum: BrowserSplitTokens.minimumPane(.horizontal))
+        #expect(abs(two[0] - 0.22) < 0.000_001)
+    }
 }
 
 extension NativeWebKitTests {
@@ -151,6 +170,121 @@ struct NativeSplitTests {
         await settle(window)
         #expect(window.session.activeSplit == nil)
         #expect(window.session.selectedSurface === first)
+    }
+
+    private func payload(_ window: Window, _ id: TabID) throws -> SidebarDragPayload {
+        let organization = try #require(window.session.organization)
+        return SidebarDragPayload(sourceWindow: window.id, spaceID: organization.spaceID, profileID: organization.profileID,
+                                  nodes: [.tab(id)], rowCount: 1, grabOffsetX: 0)
+    }
+
+    @Test("A Pinned tab dropped on a Today tab's leading half splits in the target's place and section")
+    func sidebarTabDropSplitsInTargetSection() async throws {
+        let (_, window, _) = try await makeWindow()
+        defer { window.session.close(); window.window?.close() }
+        let source = try #require(window.session.organization?.selectedTab?.id)
+        window.session.openTab(url: URL(string: "https://split.test/target")!)
+        await settle(window)
+        let target = try #require(window.session.organization?.selectedTab?.id)
+        window.session.pinTabs([source])
+        await settle(window)
+        let spaceID = try #require(window.session.organization?.spaceID)
+        #expect(window.sidebarSplitDropVerdict(try payload(window, source), target: target) == .accepted)
+        #expect(window.sidebarSplitDropVerdict(try payload(window, source), target: source) == nil)
+        window.dropSidebarTab(try payload(window, source), onto: target, leading: true)
+        await settle(window)
+        let split = try #require(window.session.organization?.split(containing: target))
+        #expect(split.group.tabIDs == [source, target])
+        #expect(window.session.organization?.tab(source)?.section == .today(spaceID))
+        #expect(window.session.organization?.tab(target)?.section == .today(spaceID))
+        #expect(window.session.organization?.pinned.isEmpty == true)
+        // Separating it is undoable as one edit.
+        _ = window.session.undoOrganization()
+        await settle(window)
+        #expect(window.session.organization?.split(containing: target) == nil)
+        #expect(window.session.organization?.tab(source)?.section == .pinned(spaceID))
+    }
+
+    @Test("A trailing drop puts the source second; a split target appends it last and a full split refuses with the bubble")
+    func sidebarTabDropOnSplitAppendsUntilFull() async throws {
+        let (_, window, _) = try await makeWindow()
+        defer { window.session.close(); window.window?.close() }
+        var ids = [try #require(window.session.organization?.selectedTab?.id)]
+        for index in 1...4 {
+            window.session.openTab(url: URL(string: "https://split.test/\(index)")!)
+            await settle(window)
+            ids.append(try #require(window.session.organization?.selectedTab?.id))
+        }
+        window.dropSidebarTab(try payload(window, ids[1]), onto: ids[0], leading: false)
+        await settle(window)
+        #expect(window.session.organization?.split(containing: ids[0])?.group.tabIDs == [ids[0], ids[1]])
+        for source in ids[2...3] {
+            #expect(window.sidebarSplitDropVerdict(try payload(window, source), target: ids[0]) == .accepted)
+            window.dropSidebarTab(try payload(window, source), onto: ids[1], leading: true)
+            await settle(window)
+        }
+        #expect(window.session.organization?.split(containing: ids[0])?.group.tabIDs == Array(ids[0...3]))
+        #expect(window.sidebarSplitDropVerdict(try payload(window, ids[4]), target: ids[0]) == .full)
+        // A pane of a split is not a draggable source for this gesture.
+        #expect(window.sidebarSplitDropVerdict(try payload(window, ids[0]), target: ids[4]) == nil)
+        window.dropSidebarTab(try payload(window, ids[4]), onto: ids[2], leading: false)
+        await settle(window)
+        #expect(window.session.organization?.split(containing: ids[0])?.tabs.count == 4)
+        #expect(window.session.organization?.split(containing: ids[4]) == nil)
+        let bubble = try #require(window.window?.contentView?.subviews.first {
+            $0.accessibilityIdentifier() == BrowserSplitLimitBubble.identifier })
+        let root = try #require(window.window?.contentView)
+        #expect(abs(bubble.frame.maxX - (root.bounds.maxX - 4.5)) < 0.01)
+        #expect(bubble.frame.height == 41.5)
+        #expect(bubble.accessibilityLabel() == uiText("Cannot Add New Pane"))
+    }
+
+    @Test("The sidebar drop zone covers the hovered half, or a split row's whole pitch")
+    func sidebarDropZoneGeometry() async throws {
+        let (_, window, _) = try await makeWindow()
+        defer { window.session.close(); window.window?.close() }
+        window.session.openTab(url: URL(string: "https://split.test/zone")!)
+        await settle(window)
+        let list = window.sidebar.page.list
+        let id = try #require(window.session.organization?.selectedTab?.id)
+        let row = try #require(list.row(for: .tab(id)))
+        let center = NSPoint(x: row.frame.midX, y: row.frame.midY)
+        #expect(list.splitDropCandidate(at: NSPoint(x: center.x, y: center.y + 11)) == nil)
+        let target = try #require(list.splitDropCandidate(at: center))
+        #expect(target.tabID == id && !target.isSplit)
+        list.showSplitDropFeedback(target, leading: true)
+        let leading = try #require(list.splitDropFeedbackFrame)
+        #expect(leading.minX == row.frame.minX + 4 && leading.maxX == row.frame.midX && leading.height == row.frame.height)
+        #expect((row as? SidebarTabRow)?.splitPreviewShift == row.frame.width / 2 + 1)
+        list.showSplitDropFeedback(target, leading: false)
+        let trailing = try #require(list.splitDropFeedbackFrame)
+        #expect(trailing.minX == row.frame.midX + 5.75)
+        #expect((row as? SidebarTabRow)?.splitPreviewShift == 0)
+        list.clearSplitDropFeedback()
+        #expect(list.splitDropFeedbackFrame == nil)
+        window.session.addSplitPane(url: URL(string: "https://split.test/zone-right")!)
+        await settle(window)
+        let split = try #require(window.session.activeSplit)
+        let splitRow = try #require(list.row(for: .split(split.group.id)))
+        let band = try #require(list.splitDropCandidate(at: NSPoint(x: splitRow.frame.midX, y: splitRow.frame.midY)))
+        #expect(band.isSplit)
+        list.showSplitDropFeedback(band, leading: true)
+        let frame = try #require(list.splitDropFeedbackFrame)
+        #expect(frame.width == list.bounds.width && frame.height == 41)
+        list.clearSplitDropFeedback()
+    }
+
+    @Test("The Peek Split button keeps its fill, lifts on hover and shrinks while pressed")
+    func peekSplitButtonMotion() throws {
+        let button = BrowserPeekToolbarButton(symbol: "rectangle.split.2x1", label: "", identifier: "t", feedback: .motion)
+        #expect(button.motionState.lift == 0 && button.motionState.scale == 1)
+        let enter = try #require(NSEvent.enterExitEvent(with: .mouseEntered, location: .zero, modifierFlags: [], timestamp: 0,
+                                                        windowNumber: 0, context: nil, eventNumber: 0, trackingNumber: 0, userData: nil))
+        button.mouseEntered(with: enter)
+        #expect(button.motionState.lift == 1 && button.motionState.scale == 1)
+        let close = BrowserPeekToolbarButton(symbol: "xmark", label: "", identifier: "c")
+        close.mouseEntered(with: enter)
+        #expect(close.motionState.lift == 0)
     }
 
     @Test("The pane menu inserts on either side of its target and old menu actions expire")

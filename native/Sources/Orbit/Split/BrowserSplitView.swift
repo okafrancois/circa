@@ -225,7 +225,8 @@ final class BrowserSplitView: NSView {
         }
         guard let group else { return }
         let geometry = BrowserSplitGeometry.layout(in: bounds, orientation: group.orientation,
-                                                   ratios: draftRatios ?? group.ratios, gap: BrowserSplitTokens.gap)
+                                                   ratios: draftRatios ?? group.ratios, gap: BrowserSplitTokens.gap,
+                                                   minimum: group.orientation == .horizontal ? BrowserSplitTokens.minimumPaneWidth : 0)
         for (index, id) in group.tabIDs.enumerated() where geometry.panes.indices.contains(index) {
             let target = geometry.panes[index]
             let collapsed = group.orientation == .horizontal
@@ -240,6 +241,21 @@ final class BrowserSplitView: NSView {
                     ? CGRect(x: pane.frame.maxX, y: target.minY, width: target.width, height: target.height)
                     : CGRect(x: target.minX, y: pane.frame.maxY, width: target.width, height: target.height)
             }
+        }
+    }
+
+    /// After Peek opens its page in Split View: that page is already in place; the other panes
+    /// fade in from transparent.
+    func revealPanes(excluding host: NSView) {
+        guard !OrbitMotionPreferences.prefersReducedMotion else { return }
+        for pane in panes.values where !host.isDescendant(of: pane) {
+            pane.wantsLayer = true
+            let fade = CABasicAnimation(keyPath: "opacity")
+            fade.fromValue = 0
+            fade.toValue = 1
+            fade.duration = BrowserSplitTokens.peekRevealDuration
+            fade.timingFunction = BrowserSplitTokens.peekRevealTiming
+            pane.layer?.add(fade, forKey: "split.peek.reveal")
         }
     }
 
@@ -272,7 +288,7 @@ final class BrowserSplitView: NSView {
         let horizontal = group.orientation == .horizontal
         let delta = horizontal ? point.x - origin.x : point.y - origin.y
         draftRatios = BrowserSplitGeometry.resized(ratios, divider: index, delta: delta, available: availableExtent(ratios.count),
-                                                   minimum: BrowserSplitTokens.minimumPaneExtent)
+                                                   minimum: BrowserSplitTokens.minimumPane(group.orientation))
         // Commit the complete pane tree in this event, with no implicit layer animation.
         // Engine hosts retain their parents and resize with their existing compositor surfaces.
         CATransaction.begin()
@@ -310,7 +326,7 @@ final class BrowserSplitView: NSView {
         switch adjustment {
         case let .by(points):
             next = BrowserSplitGeometry.resized(base, divider: index, delta: points, available: availableExtent(base.count),
-                                                minimum: BrowserSplitTokens.minimumPaneExtent)
+                                                minimum: BrowserSplitTokens.minimumPane(group.orientation))
         case .center:
             var centered = base
             let sum = base[index] + base[index + 1]

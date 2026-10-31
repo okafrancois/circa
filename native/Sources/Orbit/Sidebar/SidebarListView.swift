@@ -50,6 +50,13 @@ extension SidebarListHost {
 @MainActor
 final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDraggingSource, SidebarDropTarget,
                              NSUserInterfaceValidations {
+    struct SplitDropTarget: Equatable {
+        let node: BrowserOrganizationNode
+        let tabID: TabID
+        let isSplit: Bool
+        /// The row's horizontal centre in list coordinates: the leading/trailing boundary.
+        let midX: CGFloat
+    }
     weak var host: (any SidebarListHost)?
     let separator = SidebarSeparatorView()
     let newTabRow = SidebarNewTabRow()
@@ -67,6 +74,8 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
     private var rowViews: [BrowserOrganizationNode: SidebarListRow] = [:]
     /// The last stale row skipped by `hitTest`, so its diagnostic is recorded once.
     private weak var staleHitRow: SidebarListRow?
+    private let splitDropHighlight = SidebarSplitDropHighlight()
+    private weak var splitPreviewRow: SidebarTabRow?
     private var leavingRows: [ObjectIdentifier: (row: SidebarListRow, node: BrowserOrganizationNode)] = [:]
     private var tabPool: [SidebarTabRow] = []
     private var folderPool: [SidebarFolderRow] = []
@@ -173,6 +182,7 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
         newTabRow.target = self
         newTabRow.action = #selector(newTab(_:))
         for view in [gapPlaceholder, separator, newTabRow, clearButton] as [NSView] { addSubview(view) }
+        splitDropHighlight.isHidden = true
         addSubview(insertionLine)
         insertionLine.isHidden = true
         animator.onFrame = { [weak self] time in self?.animationFrame(at: time) }
@@ -180,6 +190,77 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
     }
 
     required init?(coder: NSCoder) { nil }
+
+    /// The tab or split row whose centre band holds `point`, in the resting layout (the drag gap
+    /// closed): an armed split closes the gap, so the target settles under the pointer. The top and
+    /// bottom of each row stay reordering targets; only the band arms a tab-on-tab split.
+    func splitDropCandidate(at point: NSPoint) -> SplitDropTarget? {
+        for placement in dropLayout.rows where abs(point.y - placement.centerY) <= SidebarSplitDropMetrics.armingBand {
+            let frame = rowFrame(centerY: placement.centerY)
+            guard (frame.minX...frame.maxX).contains(point.x),
+                  let row = rowViews[placement.node] as? SidebarTabRow else { continue }
+            if let split = row as? SidebarSplitRow {
+                return SplitDropTarget(node: placement.node, tabID: split.item.id, isSplit: true, midX: frame.midX)
+            }
+            guard let id = placement.node.tabID else { continue }
+            return SplitDropTarget(node: placement.node, tabID: id, isSplit: false, midX: frame.midX)
+        }
+        return nil
+    }
+
+    /// Shows the drop zone: the hovered half of a tab row, or the whole pitch of a split row. A
+    /// leading zone previews the target on the trailing half, where the result will place it.
+    func showSplitDropFeedback(_ target: SplitDropTarget, leading: Bool) {
+        guard let centerY = dropLayout.rows.first(where: { $0.node == target.node })?.centerY else {
+            clearSplitDropFeedback()
+            return
+        }
+        let row = rowFrame(centerY: centerY)
+        let frame: NSRect
+        if target.isSplit {
+            frame = NSRect(x: bounds.minX, y: centerY - Metrics.rowPitch / 2, width: bounds.width, height: Metrics.rowPitch)
+        } else if leading {
+            frame = NSRect(x: row.minX + SidebarSplitDropMetrics.leadingInset, y: row.minY,
+                           width: row.width / 2 - SidebarSplitDropMetrics.leadingInset, height: row.height)
+        } else {
+            let minX = row.midX + SidebarSplitDropMetrics.trailingGap
+            frame = NSRect(x: minX, y: row.minY, width: min(bounds.maxX, row.maxX + SidebarSplitDropMetrics.trailingOutset) - minX,
+                           height: row.height)
+        }
+        splitDropHighlight.isBand = target.isSplit
+        splitDropHighlight.color = accent.sidebarText.withAlphaComponent(SidebarSplitDropMetrics.alpha)
+        // Inside the target row, above its background and below its content, so a selected row's
+        // card neither hides the zone nor is hidden by it.
+        if let host = rowViews[target.node] {
+            if splitDropHighlight.superview !== host { host.addSubview(splitDropHighlight, positioned: .above, relativeTo: host.background) }
+            // Relative to the row's resting frame: the zone follows the row while the gap closes.
+            // Vertically symmetric about the row, so the row's flipping does not matter.
+            splitDropHighlight.frame = frame.offsetBy(dx: -row.minX, dy: -row.minY)
+        } else {
+            if splitDropHighlight.superview !== self { addSubview(splitDropHighlight, positioned: .below, relativeTo: subviews.first) }
+            splitDropHighlight.frame = frame
+        }
+        splitDropFrame = frame
+        splitDropHighlight.isHidden = false
+        let shifted = !target.isSplit && leading ? rowViews[target.node] as? SidebarTabRow : nil
+        if splitPreviewRow !== shifted {
+            splitPreviewRow?.splitPreviewShift = 0
+            splitPreviewRow = shifted
+        }
+        shifted?.splitPreviewShift = row.width / 2 + SidebarSplitDropMetrics.previewShiftExtra
+    }
+
+    func clearSplitDropFeedback() {
+        splitDropHighlight.isHidden = true
+        splitDropHighlight.removeFromSuperview()
+        splitDropFrame = nil
+        splitPreviewRow?.splitPreviewShift = 0
+        splitPreviewRow = nil
+    }
+
+    /// The visible drop zone, in list coordinates.
+    private(set) var splitDropFrame: NSRect?
+    var splitDropFeedbackFrame: NSRect? { splitDropHighlight.isHidden ? nil : splitDropFrame }
 
     override var acceptsFirstResponder: Bool { true }
 
@@ -1201,6 +1282,35 @@ struct SidebarListStructure: Equatable {
     let node: BrowserOrganizationNode
     let section: SidebarListSection
     let ancestors: [FolderID]
+}
+
+/// Measured sidebar tab-on-tab drop geometry (points, relative to the target row frame).
+enum SidebarSplitDropMetrics {
+    /// Half-height of the row band that arms a split; the rest of the row keeps reordering.
+    static let armingBand: CGFloat = 10
+    /// The pointer must stay in the band this long before the zone appears.
+    static let armingDelay: TimeInterval = 0.2
+    static let leadingInset: CGFloat = 4
+    static let trailingGap: CGFloat = 5.75
+    static let trailingOutset: CGFloat = 2
+    static let previewShiftExtra: CGFloat = 1
+    static let radius: CGFloat = 12
+    /// The Space's sidebar text colour at this opacity.
+    static let alpha: CGFloat = 0.5
+}
+
+@MainActor
+private final class SidebarSplitDropHighlight: NSView {
+    var color: NSColor = .clear { didSet { needsDisplay = true } }
+    var isBand = false { didSet { needsDisplay = true } }
+    override var isFlipped: Bool { true }
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+    override func draw(_ dirtyRect: NSRect) {
+        color.setFill()
+        if isBand { bounds.fill() } else {
+            NSBezierPath(roundedRect: bounds, xRadius: SidebarSplitDropMetrics.radius, yRadius: SidebarSplitDropMetrics.radius).fill()
+        }
+    }
 }
 
 extension SidebarListContent {

@@ -80,6 +80,18 @@ final class BrowserSidebarView: NSView, SidebarListHost {
     /// A validated drop: payload, destination, and whether the organization changes (false for
     /// rows dropped back in place, which still move live documents between windows).
     var onDrop: ((SidebarDragPayload, BrowserOrganizationDestination, Bool) -> Void)?
+    /// Tab-on-tab split drops: nil refuses the target (the row keeps reordering).
+    var splitDropVerdict: ((SidebarDragPayload, TabID) -> SidebarSplitDropVerdict?)?
+    /// Payload, target tab, and whether the source lands on the leading half.
+    var onSplitDrop: ((SidebarDragPayload, TabID, Bool) -> Void)?
+    private struct SplitDropArming {
+        let payload: SidebarDragPayload
+        let target: SidebarListView.SplitDropTarget
+        var leading: Bool
+        var armed = false
+    }
+    private var splitArming: SplitDropArming?
+    private var splitArmingTimer: Timer?
     /// Context menu for these nodes (the clicked row, or the multi-selection containing it).
     var onContextMenu: (([BrowserOrganizationNode], NSEvent, NSView) -> Void)?
     /// ⌘Z routing between organization commands and window edits (UX-UNDO).
@@ -683,6 +695,11 @@ final class BrowserSidebarView: NSView, SidebarListHost {
 
     override func draggingUpdated(_ sender: any NSDraggingInfo) -> NSDragOperation {
         guard commandsEnabled else { dropCoordinator.clear(); clearExternalDrop(); return [] }
+        if let payload = dragPayload(from: sender), updateSplitDrop(payload, at: sender.draggingLocation) {
+            dropCoordinator.clear()
+            clearExternalDrop()
+            return .move
+        }
         guard let payload = dragPayload(from: sender) else {
             dropCoordinator.clear()
             guard let content = Self.externalDropContent(sender.draggingPasteboard) else { clearExternalDrop(); return [] }
@@ -699,11 +716,55 @@ final class BrowserSidebarView: NSView, SidebarListHost {
         return verdict?.isValid == true ? (isCopyDrag(payload) ? .copy : .move) : []
     }
 
-    override func draggingExited(_ sender: (any NSDraggingInfo)?) { dropCoordinator.clear(); clearExternalDrop() }
+    override func draggingExited(_ sender: (any NSDraggingInfo)?) { clearSplitDrop(); dropCoordinator.clear(); clearExternalDrop() }
 
     /// Any end of the session (cancelled over the sidebar included) drops leftover feedback; a
     /// committed drop already handed its feedback to the target.
-    override func draggingEnded(_ sender: any NSDraggingInfo) { dropCoordinator.clear(); clearExternalDrop() }
+    override func draggingEnded(_ sender: any NSDraggingInfo) { clearSplitDrop(); dropCoordinator.clear(); clearExternalDrop() }
+
+    /// Arms a tab-on-tab split once the pointer has stayed in a row's centre band for the arming
+    /// delay; leaving the band disarms at once. Returns whether the split zone owns this update.
+    private func updateSplitDrop(_ payload: SidebarDragPayload, at windowPoint: NSPoint) -> Bool {
+        let listPoint = page.list.convert(windowPoint, from: nil)
+        guard page.list.bounds.contains(listPoint), let candidate = page.list.splitDropCandidate(at: listPoint),
+              splitDropVerdict?(payload, candidate.tabID) != nil else {
+            clearSplitDrop()
+            return false
+        }
+        let leading = listPoint.x < candidate.midX
+        if var arming = splitArming, arming.payload == payload, arming.target == candidate {
+            arming.leading = leading
+            splitArming = arming
+            if arming.armed { page.list.showSplitDropFeedback(candidate, leading: leading) }
+            return arming.armed
+        }
+        clearSplitDrop()
+        splitArming = SplitDropArming(payload: payload, target: candidate, leading: leading)
+        let timer = Timer(timeInterval: SidebarSplitDropMetrics.armingDelay, repeats: false) { [weak self] _ in
+            MainActor.assumeIsolated { self?.armSplitDrop() }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        splitArmingTimer = timer
+        return false
+    }
+
+    private func armSplitDrop() {
+        splitArmingTimer = nil
+        guard var arming = splitArming, !arming.armed else { return }
+        arming.armed = true
+        splitArming = arming
+        dropCoordinator.clear()
+        page.list.showSplitDropFeedback(arming.target, leading: arming.leading)
+    }
+
+    private func clearSplitDrop() {
+        splitArmingTimer?.invalidate()
+        splitArmingTimer = nil
+        splitArming = nil
+        page.list.clearSplitDropFeedback()
+    }
+
+    var isSplitDropArmed: Bool { splitArming?.armed == true }
 
     /// Rows dragged inside this process only: the list's payload, or a Favorites tile whose source
     /// still vouches for its pasteboard payload (FAVORITES' local check). Other applications'
@@ -718,11 +779,17 @@ final class BrowserSidebarView: NSView, SidebarListHost {
     }
 
     override func prepareForDragOperation(_ sender: any NSDraggingInfo) -> Bool {
-        commandsEnabled && (externalDrop != nil || dropCoordinator.acceptedDrop() != nil)
+        commandsEnabled && (externalDrop != nil || dropCoordinator.acceptedDrop() != nil || isSplitDropArmed)
     }
 
     override func performDragOperation(_ sender: any NSDraggingInfo) -> Bool {
         guard commandsEnabled else { dropCoordinator.clear(); clearExternalDrop(); return false }
+        if let arming = splitArming, arming.armed, dragPayload(from: sender) == arming.payload {
+            clearSplitDrop()
+            onSplitDrop?(arming.payload, arming.target.tabID, arming.leading)
+            return true
+        }
+        clearSplitDrop()
         // Re-read the completed pasteboard: hover feedback never authorizes a document.
         if dragPayload(from: sender) == nil {
             dropCoordinator.clear()

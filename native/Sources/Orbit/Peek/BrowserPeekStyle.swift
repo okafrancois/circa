@@ -11,6 +11,11 @@ enum BrowserPeekStyle {
     static let toolbarDisabled = NSColor.white.withAlphaComponent(0.30)
     static let buttonBackground = NSColor(srgbRed: 0.04, green: 0.04, blue: 0.05, alpha: 0.96)
     static let buttonHover = NSColor(srgbRed: 0.15, green: 0.15, blue: 0.17, alpha: 1)
+    /// Split button: the fill never changes; hover lifts the disc and a press shrinks it.
+    static let splitButtonHoverLift: CGFloat = 1
+    static let splitButtonHoverDuration: CFTimeInterval = 0.05
+    static let splitButtonPressedScale: CGFloat = 0.955
+    static let splitButtonPressDuration: CFTimeInterval = 0.06
     static let cardBackground = OrbitTokens.Color.Surface.preview
     static let hairline = OrbitTokens.Color.Line.floatingScrimBorder
     static let shadowColor = OrbitTokens.Shadow.peek.color

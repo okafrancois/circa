@@ -1,5 +1,6 @@
 // English development localization. See docs/native-port/localization-2026-10-25.md.
 "Secure connection" = "Secure connection";
+"Cannot Add New Pane" = "Cannot Add New Pane";
 " or " = " or ";
 "%@\n%@\n→ %@" = "%@\n%@\n→ %@";
 "%@ %@" = "%@ %@";
