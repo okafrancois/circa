@@ -197,7 +197,7 @@ enum OrbitPerformanceProbe {
                     result["resourceCoordinator"] = await OrbitResourcePerformanceProbe.run(owner, store: environment.store, command: command)
                 } else if name == "sidebar-click-3", ownsWindow(owner, bundleID: "lab.orbit.orbit.sidebar-click-3") {
                     application.confirmQuit = { .quit }
-                    result["sidebarClick3"] = await sidebarClick3(application, owner: owner, command: command)
+                    result["sidebarClick3"] = await sidebarClick3(application, environment: environment, owner: owner, command: command)
                 } else if name == "window-freeze-2", ownsWindow(owner, bundleID: "lab.orbit.orbit.window-freeze") {
                     result["windowFreeze2"] = await windowFreeze2(application, environment: environment, owner: owner, command: command)
                 } else if name == "window-freeze", ownsWindow(owner, bundleID: "lab.orbit.orbit.window-freeze") {
@@ -3108,7 +3108,7 @@ extension OrbitPerformanceProbe {
 extension OrbitPerformanceProbe {
     /// Closes a row whose view sits above the row sliding into its slot, lets the close fade
     /// finish, then clicks the survivor through AppKit hit testing in the PID-checked window.
-    private static func sidebarClick3(_ application: OrbitApplication, owner: OrbitWindowController,
+    private static func sidebarClick3(_ application: OrbitApplication, environment: OrbitEnvironment, owner: OrbitWindowController,
                                       command: [String: String]) async -> [String: Any] {
         let bundle = "lab.orbit.orbit.sidebar-click-3"
         guard ownsWindow(owner, bundleID: bundle), let base = command["base"].flatMap(URL.init(string:)),
@@ -3167,6 +3167,48 @@ extension OrbitPerformanceProbe {
             checks["round\(round)SelectedAgain"] = await click(survivor)
             owner.session.openTab(url: base.appendingPathComponent("again-\(round)")); await settle()
         }
+        // Post-drag: the row leaves this list through a drop on another window, then a tear-off.
+        func candidate() -> (dragged: TabID, survivor: TabID, other: TabID)? {
+            let rows = list.tabRows
+            guard let index = rows.indices.dropLast().first(where: {
+                      (list.subviews.firstIndex(of: rows[$0]) ?? 0) > (list.subviews.firstIndex(of: rows[$0 + 1]) ?? 0) }),
+                  let dragged = rows[index].node.tabID, let survivor = rows[index + 1].node.tabID,
+                  let other = rows.first(where: { $0 !== rows[index] && $0 !== rows[index + 1] })?.node.tabID else { return nil }
+            return (dragged, survivor, other)
+        }
+        func clickSurvivor(_ label: String, _ pick: (dragged: TabID, survivor: TabID, other: TabID)) async {
+            try? await Task.sleep(for: .milliseconds(400))  // Leaving fade and recycling.
+            await settle()
+            checks[label + "Left"] = owner.session.organization?.tab(pick.dragged) == nil
+            checks[label + "CoveredRows"] = covered()
+            owner.session.selectTab(pick.other); await settle()
+            checks[label + "Survivor"] = await click(pick.survivor)
+        }
+        if let space = owner.session.snapshot?.activeSpaceID,
+           let receiver = try? await environment.makeWindow(spaceID: space, opensInitialTab: false, standalone: true),
+           let receiverWindow = receiver.window, let receiverID = receiver.session.snapshot?.id {
+            receiverWindow.setFrame(NSRect(x: -3500, y: -1200, width: 1100, height: 800), display: false)
+            receiverWindow.orderBack(nil)
+            if let pick = candidate(), ownsWindow(owner, bundleID: bundle),
+               let payload = owner.sidebar.list(list, dragPayloadFor: .tab(pick.dragged), grabOffsetX: 0) {
+                receiver.performSidebarDrop(payload, to: .init(.standalone(receiverID)), changesOrganization: true)
+                for _ in 0..<5 { await settle(); await receiver.session.waitForPendingCommands(); await Task.yield() }
+                await clickSurvivor("drop", pick)
+            } else { checks["dropCandidate"] = false }
+            receiver.window?.close()
+        }
+        owner.session.openTab(url: base.appendingPathComponent("tear-off")); await settle()
+        if let pick = candidate(), ownsWindow(owner, bundleID: bundle), let space = owner.session.snapshot?.activeSpaceID,
+           let profile = owner.session.activeProfileID {
+            let before = Set(application.windows.windows.keys)
+            let payload = SidebarDragPayload(sourceWindow: owner.id, spaceID: space, profileID: profile,
+                                             nodes: [.tab(pick.dragged)], rowCount: 1, grabOffsetX: 0)
+            application.tearOff(payload, from: owner, at: NSPoint(x: -4000, y: -1200))
+            for _ in 0..<150 where Set(application.windows.windows.keys) == before { try? await Task.sleep(for: .milliseconds(10)) }
+            await application.windows.waitForPendingCommands()
+            await clickSurvivor("tearOff", pick)
+            application.windows.windows.first(where: { !before.contains($0.key) })?.value.window?.close()
+        } else { checks["tearOffCandidate"] = false }
         return checks
     }
 }
