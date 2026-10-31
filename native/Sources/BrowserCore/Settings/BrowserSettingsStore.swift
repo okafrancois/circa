@@ -149,6 +149,7 @@ public struct BrowserSettingsDocument: Codable, Equatable, Sendable {
     public var siteSearches: [BrowserSiteSearch] = BrowserSiteSearch.builtIns
     public var memorySaver: BrowserMemorySaverSetting = .oneHour
     public var safeBrowsingEnabled = false
+    public var allowJavaScriptFromAppleEvents = false
     public var automaticPictureInPicture = true
     public var quickWindowArchiveThreshold: BrowserAutoArchiveThreshold = .sixHours
     /// Device-local domain/account choices, excluded from the sync projection.
@@ -172,7 +173,7 @@ public struct BrowserSettingsDocument: Codable, Equatable, Sendable {
     public var spaces: [SpaceID: BrowserSpaceSettings] = [:]
     public init() {}
     private enum CodingKeys: String, CodingKey {
-        case siteSearches, safeBrowsingEnabled, quickWindowArchiveThreshold, quickWindowProfilesByDomain, downloads, automaticPictureInPicture, hasSeenBoostsIntroduction, enablesBoostsOnWebsites, interaction, memorySaver, linkRouting, version, reducedMotion, profiles, spaces, opensExternalLinksInQuickWindow, lastActiveWindowID, lastActiveSpaceID
+        case allowJavaScriptFromAppleEvents, siteSearches, safeBrowsingEnabled, quickWindowArchiveThreshold, quickWindowProfilesByDomain, downloads, automaticPictureInPicture, hasSeenBoostsIntroduction, enablesBoostsOnWebsites, interaction, memorySaver, linkRouting, version, reducedMotion, profiles, spaces, opensExternalLinksInQuickWindow, lastActiveWindowID, lastActiveSpaceID
     }
     public init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
@@ -192,6 +193,7 @@ public struct BrowserSettingsDocument: Codable, Equatable, Sendable {
         quickWindowArchiveThreshold = try values.decodeIfPresent(BrowserAutoArchiveThreshold.self, forKey: .quickWindowArchiveThreshold) ?? .sixHours
         quickWindowProfilesByDomain = try values.decodeIfPresent([String: ProfileID].self, forKey: .quickWindowProfilesByDomain) ?? [:]
         safeBrowsingEnabled = try values.decodeIfPresent(Bool.self, forKey: .safeBrowsingEnabled) ?? false
+        allowJavaScriptFromAppleEvents = try values.decodeIfPresent(Bool.self, forKey: .allowJavaScriptFromAppleEvents) ?? false
         automaticPictureInPicture = try values.decodeIfPresent(Bool.self, forKey: .automaticPictureInPicture) ?? true
         hasSeenBoostsIntroduction = try values.decodeIfPresent(Bool.self, forKey: .hasSeenBoostsIntroduction) ?? false
         enablesBoostsOnWebsites = try values.decodeIfPresent(Bool.self, forKey: .enablesBoostsOnWebsites) ?? true
@@ -385,6 +387,12 @@ public actor BrowserSettingsStore {
     public func setSafeBrowsingEnabled(_ enabled: Bool) throws {
         var next = document
         next.safeBrowsingEnabled = enabled
+        try publish(next)
+    }
+
+    public func setAllowJavaScriptFromAppleEvents(_ enabled: Bool) throws {
+        var next = document
+        next.allowJavaScriptFromAppleEvents = enabled
         try publish(next)
     }
 

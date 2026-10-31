@@ -17,6 +17,30 @@ spec.loader.exec_module(app)
 
 
 class ResourceAssemblyTests(unittest.TestCase):
+    def test_scripting_dictionary_is_an_exact_regular_resource(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            bundle = Path(temporary) / 'Orbit.app'
+            resources = bundle / 'Contents/Resources'
+            resources.mkdir(parents=True)
+            dictionary = resources / 'Circa.sdef'
+            dictionary.write_text('<dictionary/>')
+            validate_bundle_contents(bundle)
+            unexpected = resources / 'Unexpected.sdef'
+            unexpected.write_text('<dictionary/>')
+            with self.assertRaisesRegex(RuntimeError, 'Unexpected bundle content'):
+                validate_bundle_contents(bundle)
+            unexpected.unlink()
+            dictionary.unlink()
+            dictionary.mkdir()
+            with self.assertRaisesRegex(RuntimeError, 'Invalid scripting dictionary resource'):
+                validate_bundle_contents(bundle)
+            dictionary.rmdir()
+            target = Path(temporary) / 'dictionary.sdef'
+            target.write_text('<dictionary/>')
+            dictionary.symlink_to(target)
+            with self.assertRaisesRegex(RuntimeError, 'Invalid scripting dictionary resource'):
+                validate_bundle_contents(bundle)
+
     def test_font_allowlist_matches_the_shipped_resources(self):
         directory = Path(__file__).resolve().parents[1] / 'native/Sources/BrowserShell/Resources/BrandFonts'
         self.assertEqual(BRAND_FONT_FILES, frozenset(path.name for path in directory.iterdir() if path.is_file()))

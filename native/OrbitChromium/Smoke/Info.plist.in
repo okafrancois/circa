@@ -16,6 +16,8 @@
   <key>CFBundleShortVersionString</key><string>0.1</string>
   <key>LSMinimumSystemVersion</key><string>15.0</string>
   <key>LSFileQuarantineEnabled</key><true/>
+  <key>NSAppleScriptEnabled</key><true/>
+  <key>OSAScriptingDefinition</key><string>Circa.sdef</string>
   <key>NSPrincipalClass</key><string>ACRApplication</string>
   <key>LSUIElement</key><true/>
   <key>NSHighResolutionCapable</key><true/>

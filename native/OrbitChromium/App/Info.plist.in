@@ -42,6 +42,8 @@
     <key>CFBundleTypeExtensions</key><array><string>html</string><string>htm</string><string>xhtml</string><string>webloc</string><string>url</string></array>
     <key>LSItemContentTypes</key><array><string>public.html</string><string>public.xhtml</string><string>com.apple.web-internet-location</string><string>com.microsoft.internet-shortcut</string></array>
   </dict></array>
+  <key>NSAppleScriptEnabled</key><true/>
+  <key>OSAScriptingDefinition</key><string>Circa.sdef</string>
   <key>NSPrincipalClass</key><string>ACRApplication</string>
   <key>NSHighResolutionCapable</key><true/>
   <key>NSSupportsAutomaticGraphicsSwitching</key><true/>

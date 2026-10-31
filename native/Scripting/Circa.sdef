@@ -1,0 +1,153 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE dictionary SYSTEM "file://localhost/System/Library/DTDs/sdef.dtd">
+<dictionary title="Circa">
+  <suite name="Circa Suite" code="CrSu" description="Browser automation.">
+    <command name="get" code="coregetd" hidden="yes">
+      <cocoa class="CircaGetScriptCommand"/>
+      <direct-parameter type="specifier"/>
+      <result type="any"/>
+    </command>
+    <command name="set" code="coresetd" hidden="yes">
+      <cocoa class="CircaSetScriptCommand"/>
+      <direct-parameter type="specifier"/>
+      <parameter name="to" code="data" type="any">
+        <cocoa key="Value"/>
+      </parameter>
+    </command>
+    <command name="count" code="corecnte">
+      <cocoa class="CircaCountScriptCommand"/>
+      <direct-parameter type="specifier"/>
+      <parameter name="each" code="kocl" type="type" optional="yes">
+        <cocoa key="ObjectClass"/>
+      </parameter>
+      <result type="integer"/>
+    </command>
+    <command name="make" code="corecrel">
+      <cocoa class="CircaMakeScriptCommand"/>
+      <parameter name="new" code="kocl" type="type">
+        <cocoa key="ObjectClass"/>
+      </parameter>
+      <parameter name="at" code="insh" type="location specifier" optional="yes">
+        <cocoa key="Location"/>
+      </parameter>
+      <parameter name="with properties" code="prdt" type="record" optional="yes">
+        <cocoa key="KeyDictionary"/>
+      </parameter>
+      <result type="specifier"/>
+    </command>
+    <command name="close" code="coreclos">
+      <cocoa class="CircaActionScriptCommand"/>
+      <direct-parameter type="specifier"/>
+    </command>
+    <command name="select" code="CrSelect">
+      <cocoa class="CircaActionScriptCommand"/>
+      <direct-parameter type="specifier"/>
+    </command>
+    <command name="go back" code="CrSuBack">
+      <cocoa class="CircaActionScriptCommand"/>
+      <direct-parameter type="specifier"/>
+    </command>
+    <command name="go forward" code="CrSuFwd ">
+      <cocoa class="CircaActionScriptCommand"/>
+      <direct-parameter type="specifier"/>
+    </command>
+    <command name="reload" code="CrSuRlod">
+      <cocoa class="CircaActionScriptCommand"/>
+      <direct-parameter type="specifier"/>
+    </command>
+    <command name="stop" code="CrSustop">
+      <cocoa class="CircaActionScriptCommand"/>
+      <direct-parameter type="specifier"/>
+    </command>
+    <command name="focus" code="SpaFocus">
+      <cocoa class="CircaActionScriptCommand"/>
+      <direct-parameter type="specifier"/>
+    </command>
+    <command name="execute" code="CrSuExJa">
+      <cocoa class="CircaActionScriptCommand"/>
+      <direct-parameter type="specifier"/>
+      <parameter name="javascript" code="JvSc" type="text">
+        <cocoa key="javascript"/>
+      </parameter>
+      <result type="text"/>
+    </command>
+    <class name="application" code="capp">
+      <cocoa class="NSApplication"/>
+      <element type="window" access="rw">
+        <cocoa key="appleScriptWindows"/>
+      </element>
+      <element type="space" access="r">
+        <cocoa key="appleScriptSpaces"/>
+      </element>
+      <element type="tab" access="rw">
+        <cocoa key="appleScriptTabs"/>
+      </element>
+      <property name="name" code="pnam" type="text" access="r">
+        <cocoa key="name"/>
+      </property>
+      <property name="frontmost" code="pisf" type="boolean" access="r">
+        <cocoa key="isActive"/>
+      </property>
+      <property name="version" code="vers" type="text" access="r">
+        <cocoa key="version"/>
+      </property>
+    </class>
+    <class name="window" code="WiND" plural="windows">
+      <cocoa class="CircaScriptWindow"/>
+      <property name="id" code="ID  " type="text" access="r">
+        <cocoa key="id"/>
+      </property>
+      <property name="name" code="pnam" type="text" access="r">
+        <cocoa key="title"/>
+      </property>
+      <property name="mode" code="mode" type="text" access="rw">
+        <cocoa key="mode"/>
+      </property>
+      <property name="incognito" code="inco" type="boolean" access="r">
+        <cocoa key="incognito"/>
+      </property>
+      <property name="active tab" code="acTa" type="tab" access="r">
+        <cocoa key="activeTab"/>
+      </property>
+      <property name="active space" code="acSp" type="space" access="r">
+        <cocoa key="activeSpace"/>
+      </property>
+      <element type="space" access="r">
+        <cocoa key="appleScriptSpaces"/>
+      </element>
+      <element type="tab" access="rw">
+        <cocoa key="appleScriptTabs"/>
+      </element>
+    </class>
+    <class name="space" code="sPaC" plural="spaces">
+      <cocoa class="CircaScriptSpace"/>
+      <property name="id" code="ID  " type="text" access="r">
+        <cocoa key="id"/>
+      </property>
+      <property name="title" code="pnam" type="text" access="r">
+        <cocoa key="title"/>
+      </property>
+      <element type="tab" access="rw">
+        <cocoa key="appleScriptTabs"/>
+      </element>
+    </class>
+    <class name="tab" code="tAbB" plural="tabs">
+      <cocoa class="CircaScriptTab"/>
+      <property name="id" code="ID  " type="text" access="r">
+        <cocoa key="id"/>
+      </property>
+      <property name="title" code="pnam" type="text" access="r">
+        <cocoa key="title"/>
+      </property>
+      <property name="URL" code="URL " type="text" access="rw">
+        <cocoa key="URL"/>
+      </property>
+      <property name="loading" code="ldng" type="boolean" access="r">
+        <cocoa key="loading"/>
+      </property>
+      <property name="location" code="loca" type="text" access="r">
+        <cocoa key="location"/>
+      </property>
+    </class>
+  </suite>
+</dictionary>

@@ -143,7 +143,9 @@ enum OrbitPerformanceProbe {
                 try? FileManager.default.removeItem(at: commandFile)
                 let name = command["command"] ?? ""
                 result["commandNonce"] = command["nonce"] ?? ""
-                if name == "update-test", ownsWindow(owner, bundleID: "io.github.okatech.orbit.test.update") {
+                if name == "scripting-self" {
+                    result["scripting"] = await OrbitScriptingProbe.run(application, owner: owner, root: root, command: command)
+                } else if name == "update-test", ownsWindow(owner, bundleID: "io.github.okatech.orbit.test.update") {
                     switch command["action"] {
                     case "click":
                         if owner.sidebar.updateReady { owner.sidebar.updateCard.restart.performClick(nil) }

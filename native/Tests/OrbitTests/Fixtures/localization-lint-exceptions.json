@@ -141,7 +141,8 @@
     "\"--window-diagnostics\"",
     "\"orbit-window event=present visible=\\(window.isVisible) key=\\(window.isKeyWindow) active=\\(NSApp.isActive) number=\\(window.windowNumber) width=\\(Int(window.frame.width)) height=\\(Int(window.frame.height))\"",
     "\"orbit-window event=route-error\"",
-    "\"orbit: engine shutdown timed out; quitting with the saved session\\n\""
+    "\"orbit: engine shutdown timed out; quitting with the saved session\\n\"",
+    "\"--scripting-test-offscreen\""
   ],
   "Import/Arc/ArcImportText.swift": [
     "\"StorableSidebar.json\"",

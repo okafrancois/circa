@@ -295,6 +295,8 @@ def assemble(source_app, executable, framework, helpers_dir, output, bundle_id, 
     resources.mkdir(parents=True, exist_ok=True)
     shutil.copy2(branding / 'Orbit.icns', resources / 'Orbit.icns')
     (resources / 'Orbit.icns').chmod(0o644)
+    shutil.copy2(ROOT / 'native/Scripting/Circa.sdef', resources / 'Circa.sdef')
+    metadata.update(NSAppleScriptEnabled=True, OSAScriptingDefinition='Circa.sdef')
     displayed_name = DISPLAY_NAME
     metadata.update(CFBundleName=displayed_name, CFBundleDisplayName=PRODUCT_NAME, LSHasLocalizedDisplayName=True)
     for language in ('en', 'fr'):

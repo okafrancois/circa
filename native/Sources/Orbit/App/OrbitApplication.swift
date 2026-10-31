@@ -9,6 +9,12 @@ import BrowserShell
 @main
 @MainActor
 final class OrbitApplication: NSObject, NSApplicationDelegate {
+    lazy var scripting: BrowserScriptingController = {
+        let controller = BrowserScriptingController()
+        configureScripting(controller)
+        return controller
+    }()
+
     var chooseLocalFiles: @MainActor (NSWindow?, @escaping @MainActor ([URL]) -> Void) -> Void = LocalFileOpen.choose
     private(set) var environment: OrbitEnvironment?
     private let inactiveUpdater = OrbitUpdater()
@@ -45,6 +51,8 @@ final class OrbitApplication: NSObject, NSApplicationDelegate {
         alert.addButton(withTitle: uiText("Quit and Cancel Downloads"))
         return alert.runModal() == .alertSecondButtonReturn
     }
+    func waitForScriptingStartup() async { await startupTask?.value }
+
     private var startupTask: Task<Void, Never>?
     private(set) var isStartingUp = false
     private var externalURLStartupComplete = false
@@ -91,6 +99,11 @@ final class OrbitApplication: NSObject, NSApplicationDelegate {
         NSApp.activate()
     }
     var windowPresenter: (OrbitWindowController, Bool) -> Void = { controller, activate in
+        if activeSyntheticDataGuard() != nil, ProcessInfo.processInfo.arguments.contains("--scripting-test-offscreen") {
+            controller.window?.setFrameOrigin(NSPoint(x: -8000, y: -8000))
+            controller.window?.orderBack(nil)
+            return
+        }
         if activate { controller.showWindow(nil) }
         else { controller.window?.orderFront(nil) }
         if ProcessInfo.processInfo.arguments.contains("--window-diagnostics"), let window = controller.window {
