@@ -310,6 +310,11 @@ struct BrowserAssistantAnswerText: NSViewRepresentable {
 
         override var intrinsicContentSize: NSSize { NSSize(width: NSView.noIntrinsicMetric, height: NSView.noIntrinsicMetric) }
 
+        // The transcript owns scrolling; this text view only owns selection and links.
+        override func scrollWheel(with event: NSEvent) {
+            nextResponder?.scrollWheel(with: event)
+        }
+
         private func citation(at point: NSPoint) -> String? {
             guard let manager = layoutManager, let container = textContainer, let storage = textStorage, storage.length > 0 else { return nil }
             var fraction: CGFloat = 0

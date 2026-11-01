@@ -261,6 +261,22 @@ struct BrowserAssistantRevocationTests {
 
 @MainActor @Suite("Assistant answer text")
 struct BrowserAssistantAnswerTextTests {
+    @Test("Wheel input over answer text reaches the transcript responder")
+    func transcriptScrolling() throws {
+        final class Transcript: NSResponder {
+            var received: NSEvent?
+            override func scrollWheel(with event: NSEvent) { received = event }
+        }
+        let transcript = Transcript()
+        let view = BrowserAssistantAnswerText.TextView(usingTextLayoutManager: false)
+        view.nextResponder = transcript
+        let wheel = try #require(CGEvent(scrollWheelEvent2Source: nil, units: .line, wheelCount: 1,
+                                        wheel1: 20, wheel2: 0, wheel3: 0))
+        let event = try #require(NSEvent(cgEvent: wheel))
+        view.scrollWheel(with: event)
+        #expect(transcript.received === event)
+    }
+
     private func completedAnswer(_ text: [String], page: String) async throws -> BrowserAIMessage {
         let provider = DesignProvider()
         let item = source("Guide")
