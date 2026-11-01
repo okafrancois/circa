@@ -88,20 +88,21 @@ struct OnboardingTests {
         #expect(controller.window?.styleMask.contains(.resizable) == false)
     }
 
-    @Test("Onboarding offers its six gradients while retaining the native editor controls")
+    @Test("Onboarding offers all color pages while retaining the native editor controls")
     func themePresets() async throws {
         let (controller, recorder) = controller(step: .theme)
         let editor = try #require(controller.themeEditor)
-        #expect(editor.view.scopedPresets?.count == 6)
-        #expect(editor.view.swatches.filter { !$0.isHidden }.count == 6)
+        #expect(editor.view.swatches.filter { !$0.isHidden }.count == 9)
         #expect(editor.view.handles.count == 2)
-        #expect(editor.view.previousButton.isHidden && editor.view.nextButton.isHidden)
-        editor.view.swatches[3].onPress?()
-        #expect(editor.draft.presetID == "brand.mint")
+        #expect(!editor.view.previousButton.isHidden && !editor.view.nextButton.isHidden)
+        editor.view.nextButton.performClick(nil)
+        editor.view.swatches[3].performClick(nil)
+        #expect(editor.draft.colors.last == BrowserSpaceThemePresets.pastel.swatches[3])
+        let selected = editor.draft
         controller.primaryAction()
         await settle(controller)
         #expect(controller.step == .defaultBrowser)
-        #expect(recorder.committed.last??.presetID == "brand.mint")
+        #expect(recorder.committed.last! == selected)
     }
 
     @Test("Favourites use starter choices and skip clears the selected sites")

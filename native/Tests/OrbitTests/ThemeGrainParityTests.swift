@@ -5,6 +5,24 @@ import Testing
 @Suite("Theme grain strength")
 @MainActor
 struct ThemeGrainParityTests {
+    @MainActor
+    @Test("Translucent theme tints leave the grain dial at full calibrated strength")
+    func translucentGrain() throws {
+        let fill = OrbitThemeFillView(frame: NSRect(x: 0, y: 0, width: 400, height: 400))
+        for tint: Float in [0.12, OrbitThemeFillView.sidebarTintOpacity, 1] {
+            fill.tintOpacity = tint
+            for strength: CGFloat in [0, 0.5, 1] {
+                fill.apply(.init(stops: [.gray], mode: .automatic, texture: .grain, textureIntensity: strength))
+                let grain = try #require(fill.layer?.sublayers?.compactMap { $0 as? OrbitGrainLayer }.first)
+                var opacity: Float = 1
+                var current: CALayer? = grain
+                while let layer = current { opacity *= layer.opacity; current = layer.superlayer }
+                #expect(abs(CGFloat(opacity) - strength * OrbitGrainLayer.maximumOpacity) < 0.00001)
+                #expect(grain.isHidden == (strength == 0))
+            }
+        }
+    }
+
     @Test("The strength dial scales a stable, fine RGB texture linearly")
     func strength() throws {
         let tile = try #require(OrbitGrainLayer.tile)

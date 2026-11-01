@@ -512,10 +512,6 @@ final class OrbitOnboardingWindowController: NSWindowController {
         let editor = OrbitThemeEditorController(spaceID: target.spaceID, profileID: target.profileID, stored: theme,
                                                 initial: theme ?? BrandPalette.spaceGradients[0].theme(),
                                                 commit: target.commit, replay: { _ in })
-        editor.view.scopedPresets = BrandPalette.spaceGradients.map { preset in
-            OrbitThemeEditorPreset(title: uiText(preset.name), theme: preset.theme(),
-                colors: preset.stops.map(OrbitSpaceThemes.color), locations: preset.locations.map { NSNumber(value: $0) })
-        }
         editor.view.surfaceScope.isHidden = true
         // The card supplies the surface; the editor's own material belongs to its floating panel.
         editor.view.material.isHidden = true

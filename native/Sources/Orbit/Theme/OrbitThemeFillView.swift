@@ -3,6 +3,7 @@ import QuartzCore
 
 @MainActor
 final class OrbitThemeFillView: NSView {
+    static let sidebarTintOpacity: Float = 0.76
     private let host = CALayer()
     /// Opacity of the Space tint over native window glass; standalone gradient sources stay opaque.
     var tintOpacity: Float = 1 { didSet { host.opacity = tintOpacity } }
@@ -21,9 +22,10 @@ final class OrbitThemeFillView: NSView {
         super.init(frame: frameRect)
         host.addSublayer(gradient)
         host.addSublayer(mesh)
-        host.addSublayer(grain)
         wantsLayer = true
         layer?.addSublayer(host)
+        // Grain keeps its calibrated strength independently of the translucent color tint.
+        layer?.addSublayer(grain)
         gradient.locations = [0, 0.5, 1]
         grain.isHidden = true
         refreshColors()
@@ -262,7 +264,7 @@ final class OrbitFloatingSidebarBackdrop: NSView {
         material.layer?.masksToBounds = true
         addSubview(material)
         addSubview(fill)
-        fill.tintOpacity = Float(OrbitSidebarFrost.minimum)
+        fill.tintOpacity = OrbitThemeFillView.sidebarTintOpacity
         fill.layer?.masksToBounds = true
         dim.zPosition = 2
         edge.zPosition = 3

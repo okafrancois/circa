@@ -22,15 +22,13 @@ private enum OrbitThemeEditorColors {
     static let swatchRing = OrbitTokens.Color.Text.primary
 }
 
-/// Orbit's theme editor content: a 356 × 508 flipped view laid out from geometry.
+/// The theme editor content, laid out from geometry.
 /// It renders `state` and reports every user edit through `onChange`; the controller owns the draft.
 @MainActor
 final class OrbitThemeEditorView: NSView {
     var state: OrbitThemeEditorState { didSet { if state != oldValue { render() } } }
     var onChange: ((OrbitThemeEditorState) -> Void)?
     var onDismiss: (() -> Void)?
-    /// The shared preset row is presentation-only; opening the editor never rewrites its draft.
-    var scopedPresets: [OrbitThemeEditorPreset]? = OrbitThemeEditorPreset.brand { didSet { render() } }
     var spaceName: String = uiText("This Space") { didSet { render() } }
 
     let surfaceScope = NSTextField(labelWithString: uiText("This Space · captured profile"))
@@ -190,8 +188,8 @@ final class OrbitThemeEditorView: NSView {
 
     /// Projects `state`; also called when the appearance changes (layer colours are resolved).
     func render() {
-        let presets = scopedPresets ?? []
-        themeName.stringValue = presets.first { $0.theme.presetID == state.theme.presetID }?.title ?? (state.theme.presetID == BrowserSpaceThemePresets.defaultID ? uiText("Default") : uiText("Custom"))
+        let savedPreset = BrandPalette.spaceGradients.first { $0.theme().presetID == state.theme.presetID }
+        themeName.stringValue = savedPreset.map { uiText($0.name) } ?? (state.theme.presetID == BrowserSpaceThemePresets.defaultID ? uiText("Default") : uiText("Custom"))
         themeName.toolTip = themeName.stringValue
         surfaceScope.stringValue = uiFormat("Theme · %@", spaceName).localizedUppercase
         surfaceScope.toolTip = surfaceScope.stringValue
@@ -218,40 +216,12 @@ final class OrbitThemeEditorView: NSView {
         for button in [removeButton, addButton, previousButton, nextButton] {
             button.tint = button.isEnabled ? OrbitThemeEditorColors.control : OrbitThemeEditorColors.inactive
         }
-        if let presets = scopedPresets {
-            previousButton.isHidden = true; nextButton.isHidden = true
-            let left = M.swatchCenter(0).x, right = M.swatchCenter(8).x
-            for (index, swatch) in swatches.enumerated() {
-                guard presets.indices.contains(index) else { swatch.isHidden = true; continue }
-                let preset = presets[index]
-                swatch.isHidden = false
-                swatch.frame.origin.x = left + CGFloat(index) * (right - left) / CGFloat(max(1, presets.count - 1)) - swatch.frame.width / 2
-                swatch.gradientStops = preset.colors
-                swatch.gradientLocations = preset.locations
-                swatch.gradientAngle = preset.theme.light.angleDegrees
-                swatch.selectionColor = .controlAccentColor
-                swatch.color = preset.colors.first ?? .clear
-                swatch.isSelected = state.theme.presetID == preset.theme.presetID
-                swatch.setAccessibilityLabel(preset.title)
-                swatch.onPress = { [weak self] in
-                    self?.edit { state in
-                        var theme = preset.theme
-                        theme.mode = state.theme.mode
-                        theme.noise = state.theme.noise
-                        theme.frost = state.theme.frost
-                        state = OrbitThemeEditorState(theme: theme)
-                    }
-                }
-                swatch.refresh()
-            }
-        } else {
-            let family = state.family
-            for (index, swatch) in swatches.enumerated() {
-                swatch.color = family.swatches.indices.contains(index) ? OrbitSpaceThemes.color(family.swatches[index]) : .clear
-                swatch.isSelected = state.selectedSwatch == index
-                swatch.setAccessibilityLabel(OrbitThemeEditorText.swatch(family, index + 1))
-                swatch.refresh()
-            }
+        let family = state.family
+        for (index, swatch) in swatches.enumerated() {
+            swatch.color = OrbitSpaceThemes.color(family.swatches[index])
+            swatch.isSelected = state.selectedSwatch == index
+            swatch.setAccessibilityLabel(OrbitThemeEditorText.swatch(family, index + 1))
+            swatch.refresh()
         }
         intensitySlider.isActive = state.hasColor
         intensitySlider.value = state.theme.intensity
@@ -807,19 +777,4 @@ final class OrbitThemeGrainDial: NSView {
 
     override func drawFocusRingMask() { NSBezierPath(ovalIn: bounds.insetBy(dx: 2, dy: 2)).fill() }
     override var focusRingMaskBounds: NSRect { bounds }
-}
-
-@MainActor
-struct OrbitThemeEditorPreset {
-    let title: String
-    let theme: BrowserSpaceTheme
-    let colors: [NSColor]
-    let locations: [NSNumber]
-
-    static var brand: [Self] {
-        BrandPalette.spaceGradients.map { preset in
-            .init(title: uiText(preset.name), theme: preset.theme(),
-                  colors: preset.stops.map(OrbitSpaceThemes.color), locations: preset.locations.map { NSNumber(value: $0) })
-        }
-    }
 }

@@ -299,7 +299,7 @@ struct NativeSpaceThemeWindowTests {
         #expect(view.modeButtons.map { $0.frame.midX } == [138, 178, 218] && view.modeButtons.allSatisfy { $0.frame.midY == 48 })
         #expect(view.modeHighlight.frame == view.modeButtons[0].frame, "a never-themed Space is automatic")
         let swatchCenters = view.swatches.filter { !$0.isHidden }.map { $0.frame.midX }
-        let expectedCenters = (0..<6).map { 60.0 + CGFloat($0) * 236.0 / 5.0 }
+        let expectedCenters = (0..<9).map { 60.0 + CGFloat($0) * 29.5 }
         #expect(swatchCenters == expectedCenters)
         #expect(view.swatches.filter { !$0.isHidden }.allSatisfy { $0.frame.midY == 380 && $0.discFrame.width == 24 })
         #expect([view.removeButton, view.addButton].map { $0.frame.midX } == [158, 198])
@@ -323,7 +323,7 @@ struct NativeSpaceThemeWindowTests {
         view.swatches[3].performClick(nil)
         view.modeButtons[2].performClick(nil)
         view.grainDial.onChange?(0.5)
-        #expect(editor.draft.presetID == "brand.mint" && editor.draft.mode == .dark && editor.draft.noise == 0.5)
+        #expect(editor.draft.presetID == "brand.4" && editor.draft.mode == .dark && editor.draft.noise == 0.5)
         #expect(editor.panel?.appearance?.name == .darkAqua && controller.window?.appearance?.name == .darkAqua)
         let final = editor.draft
 
@@ -424,15 +424,8 @@ struct NativeSpaceThemeWindowTests {
         view.displayIfNeeded()
         #expect(panel.isVisible == false)
         let pixel = try snapshot(view)
-        for (button, preset) in zip(view.swatches.filter { !$0.isHidden }, BrandPalette.spaceGradients) {
-            let middle = preset.locations[1]
-            let pair = middle <= 0.5 ? (1, 2) : (0, 1)
-            let t = (0.5 - preset.locations[pair.0]) / (preset.locations[pair.1] - preset.locations[pair.0])
-            let a = preset.stops[pair.0], b = preset.stops[pair.1]
-            let expected = BrowserThemeColor(red: a.red + (b.red - a.red) * t,
-                                             green: a.green + (b.green - a.green) * t,
-                                             blue: a.blue + (b.blue - a.blue) * t)
-            #expect(near(pixel(Int(button.frame.midX), Int(button.frame.midY)), components(expected), 8), "\(preset.name)")
+        for (button, color) in zip(view.swatches, BrowserSpaceThemePresets.brand.swatches) {
+            #expect(near(pixel(Int(button.frame.midX), Int(button.frame.midY)), components(color), 8))
         }
         let handle = try #require(view.handles.first)
         #expect(near(pixel(Int(handle.frame.midX), Int(handle.frame.midY)), components(mauve), 3))
@@ -442,7 +435,7 @@ struct NativeSpaceThemeWindowTests {
         #expect(view.accessibilityRole() == .popover && view.accessibilityLabel() == "Edit Theme Color")
         #expect(view.modeButtons.map { $0.accessibilityLabel() } == ["Automatic Appearance", "Light Appearance", "Dark Appearance"])
         #expect(view.modeButtons[2].toolTip == "Dark Appearance")
-        #expect(view.swatches.first?.accessibilityLabel() == "Coral" && view.swatches.filter { !$0.isHidden }.last?.accessibilityLabel() == "Lilac")
+        #expect(view.swatches.first?.accessibilityLabel() == "Brand 1" && view.swatches.last?.accessibilityLabel() == "Brand 9")
         #expect(handle.accessibilityRole() == .slider && handle.accessibilityLabel() == "Color 1")
         #expect(handle.accessibilityValue() as? String == mauve.hexString)
         #expect(view.intensitySlider.accessibilityRole() == .slider && view.intensitySlider.accessibilityLabel() == "Intensity")
