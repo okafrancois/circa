@@ -116,7 +116,10 @@ extension OrbitSmokeDriver {
                 if let panel = targetOwner.assistantHost {
                     result["panelFrame"] = [panel.frame.minX, panel.frame.minY, panel.frame.width, panel.frame.height]
                 }
-                if let settings = application?.settingsWindow?.window { result["settingsWindow"] = settings.windowNumber }
+                if let settings = application?.settingsWindow?.window {
+                    result["settingsWindow"] = settings.windowNumber
+                    result["settingsVisible"] = settings.isVisible
+                }
                 result["uptime"] = ProcessInfo.processInfo.systemUptime
                 result["frame"] = [targetWindow.frame.minX, targetWindow.frame.minY, targetWindow.frame.width, targetWindow.frame.height]
                 if let surface = targetOwner.session.selectedSurface,
@@ -262,6 +265,10 @@ extension OrbitSmokeDriver {
                     handled = true
                 }
             }
+        case "raise-window":
+            window.center()
+            window.makeKeyAndOrderFront(nil)
+            handled = window.isVisible
         case "capture", "read-probe": handled = true
         default: break
         }
