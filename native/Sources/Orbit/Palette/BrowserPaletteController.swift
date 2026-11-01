@@ -1,10 +1,17 @@
 import AppKit
 import BrowserCore
 import BrowserEngine
+import BrowserShell
+import QuartzCore
 import OSLog
+import SwiftUI
+import Observation
 
 @MainActor
 final class BrowserPaletteController<Engine: BrowserEngine> {
+    private var answerTransition: Task<Void, Never>?
+    private var isMovingAnswer = false
+    private var answerHost: NSView?
     private weak var owner: BrowserWindowController<Engine>?
     weak var registry: BrowserCommandRegistry<BrowserWindowController<Engine>>?
     let view = BrowserPaletteView(frame: .zero)
@@ -87,13 +94,25 @@ final class BrowserPaletteController<Engine: BrowserEngine> {
         view.onQuery = { [weak self] in self?.query($0) }
         view.onMove = { [weak self] in self?.move($0) }
         view.onDismiss = { [weak self] in self?.dismiss() }
-        view.onCancel = { [weak self] in self?.leaveSiteSearch() ?? false }
-        view.onTab = { [weak self] in self?.enterSiteSearch() ?? false }
+        view.onCancel = { [weak self] in
+            if let conversation = self?.owner?.aiConversation, self?.answerHost != nil, conversation.isRunning { conversation.stop(); return true }
+            return self?.leaveSiteSearch() ?? false
+        }
+        view.onTab = { [weak self] in
+            guard let self else { return false }
+            let asks = results.filter { if case .ask = $0.action { return true }; return false }
+            let index = NSApp.currentEvent?.modifierFlags.contains(.option) == true ? 1 : 0
+            if asks.indices.contains(index), case .ask(let choice) = asks[index].action {
+                showAnswer(choice); return true
+            }
+            return enterSiteSearch()
+        }
         view.onEmptyBackspace = { [weak self] in self?.leaveSiteSearch() ?? false }
         view.onAccept = { [weak self] in self?.accept(modifiers: $0) }
         view.onSelect = { [weak self] index in
             guard let self else { return }
             selection.select(index, count: results.count)
+            if case .ask(let choice) = results[index].action { showAnswer(choice); return }
             accept()
         }
         faviconCache.onChange = { [weak self] in
@@ -352,6 +371,19 @@ final class BrowserPaletteController<Engine: BrowserEngine> {
         if siteSearch == nil {
             results = BrowserPaletteRanking.merging(searchSuggestions.values, into: results, engine: owner.addressResolver.searchEngine)
         }
+        if siteSearch == nil, owner.assistantEnabled,
+           (owner.settingsPreferences?.runtime.document.ai.defaultModels[.chat] != nil || BrowserAIPolicy.automaticChoice(for: .chat, statuses: owner.aiService?.statuses ?? [:]) != nil),
+           BrowserPaletteQuestion.matches(draft, resolver: owner.addressResolver),
+           let conversation = owner.ensureAssistant() {
+            var choices = [conversation.choice]
+            if let alternate = BrowserAIPolicy.choices(for: .chat, statuses: owner.aiService?.statuses ?? [:]).first(where: {
+                $0.provider != conversation.choice.provider && owner.aiService?.statuses[$0.provider]?.state.isReady == true
+            }) { choices.append(alternate) }
+            results.insert(contentsOf: choices.enumerated().map { index, choice in
+                BrowserPaletteResult(id: "ask:" + choice.provider.rawValue, title: uiText("Ask") + " " + BrowserSettingsAIText.name(choice.provider),
+                    detail: choice.model ?? "", section: .commands, action: .ask(choice), shortcut: index == 0 ? "⇥" : "⌥⇥")
+            }, at: 0)
+        }
         if let selectedID, let index = results.firstIndex(where: { $0.id == selectedID }) { selection.select(index, count: results.count) }
         else { selection.reset() }
         renderResults()
@@ -430,7 +462,17 @@ final class BrowserPaletteController<Engine: BrowserEngine> {
     }
 
     func accept(modifiers: NSEvent.ModifierFlags = []) {
+        if modifiers.contains(.command), answerHost != nil { continueAnswer(); return }
         guard isPresented, isCurrent, acceptTask == nil, results.indices.contains(selection.index), let owner else { return }
+        if case .ask(let choice) = results[selection.index].action {
+            if modifiers.isEmpty, !selectionWasMoved, let search = results.firstIndex(where: { $0.id == "search" }) {
+                selection.select(search, count: results.count)
+            } else {
+                showAnswer(choice)
+                if modifiers.contains(.command) { continueAnswer() }
+                return
+            }
+        }
         // Alternate Return selectors are consumed by the field. Their unverified disposition
         // remains inactive, without inserting a newline or losing the current draft.
         guard !modifiers.contains(.option), !modifiers.contains(.control) else { return }
@@ -463,6 +505,7 @@ final class BrowserPaletteController<Engine: BrowserEngine> {
                 action = .navigate(url)
             } else { action = result.action }
             switch action {
+            case .ask: return
             case .navigate(let url):
                 owner.hideLibrary(focus: false)
                 let accepted = owner.session.navigateFromPalette(from: context, newTab: newTab) { [weak owner] surface in
@@ -547,6 +590,15 @@ final class BrowserPaletteController<Engine: BrowserEngine> {
     }
 
     func dismiss(returnFocus: Bool = true) {
+        answerTransition?.cancel()
+        answerTransition = nil
+        isMovingAnswer = false
+        view.alphaValue = 1
+        view.scroll.alphaValue = 1
+        answerHost?.removeFromSuperview()
+        answerHost = nil
+        view.answerView = nil
+        view.scroll.isHidden = false
         let wasPresented = isPresented
         view.isHidden = true
         siteSearch = nil
@@ -578,4 +630,111 @@ final class BrowserPaletteController<Engine: BrowserEngine> {
         previousResponder = nil
         previousOccurrence = nil
     }
+}
+
+extension BrowserPaletteController {
+    func handleAssistantKey(_ event: NSEvent) -> Bool {
+        guard isPresented, event.type == .keyDown else { return false }
+        let flags = event.modifierFlags.intersection([.command, .option, .control, .shift])
+        if flags == .option, event.charactersIgnoringModifiers == "\t" {
+            let asks = results.compactMap { result -> BrowserAIModelChoice? in
+                if case .ask(let choice) = result.action { return choice }; return nil
+            }
+            guard asks.count > 1 else { return false }
+            showAnswer(asks[1])
+            return true
+        }
+        guard answerHost != nil else { return false }
+        if flags == .option, event.charactersIgnoringModifiers == "\r" {
+            showAnswerSources(); return true
+        }
+        if flags == .command, event.charactersIgnoringModifiers == "c", let answer = owner?.aiConversation?.messages.last {
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(BrowserAICitation.displayText(answer), forType: .string)
+            return true
+        }
+        if flags == .command, event.charactersIgnoringModifiers == "\r" { continueAnswer(); return true }
+        if event.keyCode == 53, owner?.aiConversation?.isRunning == true { owner?.aiConversation?.stop(); return true }
+        return false
+    }
+    private func showAnswerSources() {
+        guard let snapshots = owner?.aiConversation?.messages.last?.context else { return }
+        let menu = NSMenu()
+        for snapshot in snapshots {
+            let target = BrowserAssistantMenuAction { [weak owner] in owner?.openAssistantSource(snapshot.source) }
+            let item = NSMenuItem(title: snapshot.source.title, action: #selector(BrowserAssistantMenuAction.invoke(_:)), keyEquivalent: "")
+            item.target = target; item.representedObject = target
+            menu.addItem(item)
+        }
+        menu.popUp(positioning: nil, at: NSPoint(x: view.panel.bounds.width - 20, y: 20), in: view.panel)
+    }
+    private func showAnswer(_ choice: BrowserAIModelChoice) {
+        guard answerHost == nil, let owner, let conversation = owner.ensureAssistant() else { return }
+        conversation.switchProvider(to: choice)
+        guard conversation.send(draft) else { return }
+        let root = BrowserAssistantAnswerView(conversation: conversation,
+            choices: BrowserAIPolicy.choices(for: .chat, statuses: owner.aiService?.statuses ?? [:]),
+            theme: owner.windowShell.theme,
+            citation: { [weak owner] in await owner?.showAssistantCitation($0) ?? false },
+            openSource: { [weak owner] in owner?.openAssistantSource($0) },
+            continueInPanel: { [weak self] in self?.continueAnswer() })
+        let host = NSHostingView(rootView: root)
+        answerHost = host
+        host.isHidden = true
+        view.panel.addSubview(host)
+        answerTransition = Task { [weak self, weak host, weak conversation] in
+            guard let self, let host, let conversation else { return }
+            let start = CACurrentMediaTime()
+            let duration = OrbitMotionPreferences.prefersReducedMotion ? 0.15 : 0.12
+            while !Task.isCancelled {
+                let fraction = min(1, (CACurrentMediaTime() - start) / duration)
+                view.scroll.alphaValue = 1 - fraction
+                if fraction >= 1 { break }
+                try? await Task.sleep(for: .milliseconds(16))
+            }
+            guard !Task.isCancelled else { return }
+            view.scroll.isHidden = true
+            view.scroll.alphaValue = 1
+            host.isHidden = false
+            view.answerView = host
+            observeAnswer(conversation)
+            view.needsLayout = true
+        }
+    }
+    private func observeAnswer(_ conversation: BrowserAIConversation) {
+        guard answerHost != nil else { return }
+        withObservationTracking {
+            view.updateAnswerHeight(text: conversation.messages.last?.text ?? "")
+        } onChange: { [weak self, weak conversation] in
+            Task { @MainActor in
+                guard let self, let conversation, self.answerHost != nil else { return }
+                self.observeAnswer(conversation)
+            }
+        }
+    }
+    private func continueAnswer() {
+        guard !isMovingAnswer, let owner else { return }
+        isMovingAnswer = true
+        answerTransition?.cancel()
+        if owner.assistantHost == nil { owner.toggleAssistant() }
+        answerTransition = Task { [weak self] in
+            guard let self else { return }
+            let start = CACurrentMediaTime()
+            let duration = OrbitMotionPreferences.prefersReducedMotion ? 0.15 : 0.2
+            while !Task.isCancelled {
+                let fraction = min(1, (CACurrentMediaTime() - start) / duration)
+                view.alphaValue = 1 - BrowserAssistantMotion.progress(fraction, opening: false)
+                if fraction >= 1 { break }
+                try? await Task.sleep(for: .milliseconds(16))
+            }
+            guard !Task.isCancelled else { return }
+            dismiss(returnFocus: false)
+        }
+    }
+}
+
+@MainActor private final class BrowserAssistantMenuAction: NSObject {
+    let action: () -> Void
+    init(_ action: @escaping () -> Void) { self.action = action }
+    @objc func invoke(_ sender: Any?) { action() }
 }

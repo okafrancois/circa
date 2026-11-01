@@ -3,6 +3,7 @@ import Foundation
 
 /// Result identities include the authority needed for activation, never just a URL.
 enum BrowserPaletteAction: Equatable, Sendable {
+    case ask(BrowserAIModelChoice)
     case navigate(URL)
     case tab(TabID, windowID: UUID?, spaceID: SpaceID?)
     case archive(TabID)
@@ -33,6 +34,7 @@ struct BrowserPaletteResult: Identifiable, Equatable, Sendable {
         if case .navigate(let url) = action { return url }; return sourceURL
     }
     var symbol: String {
+        if case .ask = action { return "sparkles" }
         if case .command(let id) = action { return BrowserDailyCommands.symbol(id) }
         switch section {
         case .address, .tabs, .pinned, .history: return "globe"
@@ -50,6 +52,7 @@ struct BrowserPaletteResult: Identifiable, Equatable, Sendable {
         case .archive: return uiText("Restore Tab")
         case .navigate: return section == .search ? uiText("Search") : uiText("Open")
         case .command: return uiText("Open")
+        case .ask: return uiText("Ask")
         }
     }
 }
@@ -387,5 +390,15 @@ extension SearchEngine {
         case .bing: uiText("Bing")
         case .perplexity: uiText("Perplexity")
         }
+    }
+}
+
+/// Questions offer an explicit AI route while URL resolution remains authoritative.
+enum BrowserPaletteQuestion {
+    static func matches(_ text: String, resolver: AddressResolver) -> Bool {
+        let value = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !value.isEmpty else { return false }
+        if case .page = try? resolver.resolve(value) { return false }
+        return value.hasSuffix("?") || value.range(of: "^(how|what|why|when|where|which|who|can|should|is|are|does|do)\\b", options: [.regularExpression, .caseInsensitive]) != nil
     }
 }

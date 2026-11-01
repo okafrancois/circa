@@ -105,6 +105,7 @@ extension BrowserWindowController {
 
     /// Theme of the active Space: window fill, appearance and accent. Space switches cross-fade.
     func renderChrome() {
+        reconcileAssistant()
         let spaceID = session.snapshot?.activeSpaceID
         sidebar.spaceSwipe.validate(catalog: session.catalog, active: spaceID)
         closeThemeEditorIfNeeded(activeSpaceID: spaceID)
@@ -116,6 +117,7 @@ extension BrowserWindowController {
             let accent = OrbitSpaceThemes.accent(for: painted)
             self?.sidebar.applyAccent(accent)
             self?.contentCard.themeForeground = accent.foreground
+            self?.paintAssistant(painted)
         }
         windowShell.apply(theme: theme, animated: switching)
         sidebar.prepareSpaceContentPublication(to: spaceID)

@@ -3,6 +3,104 @@ import QuartzCore
 
 @MainActor
 final class BrowserContentCardView: NSView {
+    private var assistant: NSView?
+    private let assistantClip = NSView()
+    private var assistantContentWidth: CGFloat = 0
+    private let assistantGrip = BrowserAssistantResizeGrip()
+    private var assistantWidth: CGFloat = 0
+    private var pageTrailing: NSLayoutConstraint?
+    private var clipTrailing: NSLayoutConstraint?
+    private var assistantAnimation: Task<Void, Never>?
+    /// The dock's sibling card: Space fill aligned to the window, opaque tint, same edge and shadow as the page.
+    private let assistantSurface = OrbitThemeFillView()
+    private let assistantTint = NSView()
+    private let assistantEdge = OrbitSurfaceBackgroundView(cornerRadius: OrbitTokens.Radius.contentCard)
+    func setAssistant(_ view: NSView?, width: CGFloat) {
+        assistantAnimation?.cancel()
+        let target = view == nil ? 0 : min(480, max(300, width))
+        if let view {
+            assistant?.removeFromSuperview()
+            assistant = view
+            assistantContentWidth = target
+            assistantClip.wantsLayer = true
+            assistantClip.layer?.masksToBounds = true
+            assistantClip.layer?.cornerRadius = 6
+            installAssistantSurface()
+            assistantClip.addSubview(view)
+            assistantGrip.removeFromSuperview()
+            addSubview(assistantGrip)
+            assistantGrip.onDrag = { [weak self] delta in
+                guard let self else { return }
+                resizeAssistant(by: delta)
+            }
+        }
+        let initial = assistantWidth
+        let reduced = OrbitMotionPreferences.prefersReducedMotion
+        let duration = reduced ? 0.15 : view == nil ? 0.24 : 0.38
+        updateAssistantLayout()
+        assistant?.layoutSubtreeIfNeeded()
+        assistantAnimation = Task { [weak self] in
+            // Initial hosting layout must finish before the first animation interval begins.
+            let start = CACurrentMediaTime()
+            while let self, !Task.isCancelled {
+                let fraction = min(1, (CACurrentMediaTime() - start) / duration)
+                if reduced {
+                    assistantWidth = view == nil ? initial : target
+                    assistant?.alphaValue = view == nil ? 1 - fraction : fraction
+                } else {
+                    assistantWidth = initial + (target - initial) * BrowserAssistantMotion.progress(fraction, opening: view != nil)
+                }
+                updateAssistantLayout()
+                if fraction >= 1 {
+                    assistantWidth = target
+                    if view == nil {
+                        assistant?.removeFromSuperview(); assistant = nil
+                        assistantClip.removeFromSuperview(); assistantGrip.removeFromSuperview()
+                        assistantEdge.removeFromSuperview()
+                    }
+                    assistant?.alphaValue = 1
+                    updateAssistantLayout()
+                    return
+                }
+                try? await Task.sleep(for: .milliseconds(16))
+            }
+        }
+    }
+    private func installAssistantSurface() {
+        guard assistantClip.superview == nil else { return }
+        assistantEdge.borderWidth = OrbitTokens.Metrics.Content.cardHairlineWidth
+        assistantEdge.outerShadow = OrbitTokens.Shadow.contentCard
+        assistantEdge.borderColor = themeForeground?.withAlphaComponent(0.12) ?? OrbitTokens.Color.Line.floatingScrimBorder
+        addSubview(assistantClip)
+        addSubview(assistantEdge)
+        assistantClip.addSubview(assistantSurface)
+        assistantTint.wantsLayer = true
+        assistantClip.addSubview(assistantTint)
+    }
+    /// Grain and glass stay in the shell and stop at both edges of the dock.
+    func setAssistantSurface(theme: OrbitTokens.SpaceTheme, tint: NSColor) {
+        // Painting can precede attaching the assistant host on its first reveal.
+        installAssistantSurface()
+        var fill = theme
+        fill.texture = .none
+        fill.textureIntensity = 0
+        assistantSurface.applyInteractiveTheme(fill)
+        assistantTint.layer?.backgroundColor = tint.cgColor
+    }
+    func resizeAssistant(by delta: CGFloat) {
+        guard assistant != nil else { return }
+        assistantAnimation?.cancel()
+        assistantWidth = min(480, max(300, assistantWidth - delta))
+        assistantContentWidth = assistantWidth
+        updateAssistantLayout()
+    }
+    private func updateAssistantLayout() {
+        clipTrailing?.constant = assistantWidth == 0 ? 0 : -(assistantWidth + 10)
+        needsLayout = true
+        layoutSubtreeIfNeeded()
+    }
+    /// The dock's palette follows the window appearance even though its own view is pinned to Space polarity.
+    var onEffectiveAppearanceChange: (() -> Void)?
     private let clip = BrowserContentCardClipView()
     private let hairline = OrbitSurfaceBackgroundView(cornerRadius: OrbitTokens.Radius.contentCard)
     private let emptyTitle = NSTextField(labelWithString: OrbitShellText.emptySpaceTitle)
@@ -16,13 +114,12 @@ final class BrowserContentCardView: NSView {
     private var paintHoldToken: UUID?
     private var returningToHeldPage = false
     private var isPresentingSplit = false
-    private var edgeConstraints: [(NSLayoutConstraint, CGFloat)] = []
     private var contentTopConstraint: NSLayoutConstraint?
     private weak var headerView: NSView?
     private var headerConstraints: [NSLayoutConstraint] = []
     var headerHeight: CGFloat { headerView == nil ? 0 : BrowserDeveloperToolbar.height }
     var pageViewportSize: NSSize {
-        NSSize(width: clip.bounds.width, height: max(0, clip.bounds.height - headerHeight))
+        NSSize(width: max(0, clip.bounds.width), height: max(0, clip.bounds.height - headerHeight))
     }
     func setHeader(_ view: NSView?) {
         guard headerView !== view else { return }
@@ -73,7 +170,12 @@ final class BrowserContentCardView: NSView {
         layer.add(opacity, forKey: "peek.background.opacity")
     }
     var frameEdgeColor: NSColor? { hairline.borderColor }
-    var themeForeground: NSColor? { didSet { hairline.borderColor = themeForeground?.withAlphaComponent(0.12) ?? OrbitTokens.Color.Line.floatingScrimBorder } }
+    var themeForeground: NSColor? {
+        didSet {
+            hairline.borderColor = themeForeground?.withAlphaComponent(0.12) ?? OrbitTokens.Color.Line.floatingScrimBorder
+            assistantEdge.borderColor = hairline.borderColor
+        }
+    }
     var splitTheme: OrbitTokens.SpaceTheme = .default {
         didSet { splitBackdrop.apply(splitTheme) }
     }
@@ -94,18 +196,19 @@ final class BrowserContentCardView: NSView {
         super.init(frame: .zero)
         wantsLayer = true
         layer?.masksToBounds = false
-        for view in [clip, hairline] {
-            view.translatesAutoresizingMaskIntoConstraints = false
-            addSubview(view)
-            let edges = [
-                view.leadingAnchor.constraint(equalTo: leadingAnchor),
-                view.trailingAnchor.constraint(equalTo: trailingAnchor),
-                view.topAnchor.constraint(equalTo: topAnchor),
-                view.bottomAnchor.constraint(equalTo: bottomAnchor)
-            ]
-            edgeConstraints += zip(edges, [CGFloat(1), -1, 1, -1]).map { ($0.0, $0.1) }
-            NSLayoutConstraint.activate(edges)
-        }
+        clip.translatesAutoresizingMaskIntoConstraints = false
+        hairline.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(clip)
+        addSubview(hairline)
+        clipTrailing = clip.trailingAnchor.constraint(equalTo: trailingAnchor)
+        NSLayoutConstraint.activate([
+            clip.leadingAnchor.constraint(equalTo: leadingAnchor), clipTrailing!,
+            clip.topAnchor.constraint(equalTo: topAnchor), clip.bottomAnchor.constraint(equalTo: bottomAnchor),
+            hairline.leadingAnchor.constraint(equalTo: clip.leadingAnchor),
+            hairline.trailingAnchor.constraint(equalTo: clip.trailingAnchor),
+            hairline.topAnchor.constraint(equalTo: clip.topAnchor),
+            hairline.bottomAnchor.constraint(equalTo: clip.bottomAnchor)
+        ])
         hairline.borderColor = OrbitTokens.Color.Line.floatingScrimBorder
         hairline.borderWidth = OrbitTokens.Metrics.Content.cardHairlineWidth
         hairline.outerShadow = OrbitTokens.Shadow.contentCard
@@ -131,6 +234,19 @@ final class BrowserContentCardView: NSView {
 
     override func layout() {
         super.layout()
+        assistantGrip.frame = NSRect(x: bounds.width - assistantWidth - 10, y: 0, width: 10, height: bounds.height)
+        assistantClip.frame = NSRect(x: bounds.width - assistantWidth, y: 0, width: assistantWidth, height: bounds.height)
+        assistantEdge.frame = assistantClip.frame
+        // The clip reveals a stationary dock: no text reflow, and its fill stays aligned with the window's.
+        let dock = NSRect(x: assistantWidth - assistantContentWidth, y: 0, width: assistantContentWidth, height: bounds.height)
+        assistant?.frame = dock
+        assistantSurface.frame = dock
+        assistantTint.frame = dock
+        if assistant != nil, let root = window?.contentView {
+            let rect = convert(NSRect(x: bounds.width - assistantContentWidth, y: 0, width: assistantContentWidth, height: bounds.height), to: root)
+            assistantSurface.windowFillSize = root.bounds.size
+            assistantSurface.offsetInWindowFill = CGPoint(x: rect.minX, y: root.isFlipped ? rect.minY : root.bounds.height - rect.maxY)
+        }
         if peekRecede != 0 { layer?.transform = peekTransform }
         clip.layer?.cornerRadius = cornerRadius
         hairline.cornerRadius = cornerRadius
@@ -152,6 +268,7 @@ final class BrowserContentCardView: NSView {
         super.viewDidChangeEffectiveAppearance()
         // The hairline view owns the shadow (THEME-R2); only the capture shield needs re-resolving.
         refreshCaptureShield()
+        onEffectiveAppearanceChange?()
     }
 
     var emptyStateTitle: String {
@@ -232,9 +349,10 @@ final class BrowserContentCardView: NSView {
         if view != nil {
             let top = presentation.topAnchor.constraint(equalTo: clip.topAnchor, constant: headerHeight)
             contentTopConstraint = top
+            pageTrailing = presentation.trailingAnchor.constraint(equalTo: clip.trailingAnchor)
             NSLayoutConstraint.activate([
                 presentation.leadingAnchor.constraint(equalTo: clip.leadingAnchor),
-                presentation.trailingAnchor.constraint(equalTo: clip.trailingAnchor),
+                pageTrailing!,
                 top,
                 presentation.bottomAnchor.constraint(equalTo: clip.bottomAnchor)
             ])
@@ -313,4 +431,18 @@ private final class BrowserContentCardClipView: NSView {
         let colour = showsEmptyPage ? OrbitTokens.Color.Surface.contentEmptyPage : OrbitTokens.Color.Surface.preview
         layer?.backgroundColor = isTransparent ? NSColor.clear.cgColor : colour.resolvedCGColor(for: effectiveAppearance)
     }
+}
+
+@MainActor
+private final class BrowserAssistantResizeGrip: NSView {
+    var onDrag: ((CGFloat) -> Void)?
+    private var previousX: CGFloat?
+    override func resetCursorRects() { addCursorRect(bounds, cursor: .resizeLeftRight) }
+    override func mouseDown(with event: NSEvent) { previousX = event.locationInWindow.x }
+    override func mouseDragged(with event: NSEvent) {
+        let x = event.locationInWindow.x
+        if let previousX { onDrag?(x - previousX) }
+        previousX = x
+    }
+    override func mouseUp(with event: NSEvent) { previousX = nil }
 }

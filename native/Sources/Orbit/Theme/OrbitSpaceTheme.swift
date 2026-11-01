@@ -96,17 +96,7 @@ enum OrbitSpaceThemes {
 
     static func accent(for theme: OrbitTokens.SpaceTheme) -> OrbitTokens.ThemeAccent {
         if let cached = accentCache.last(where: { $0.theme == theme }) { return cached.accent }
-        var accent: OrbitTokens.ThemeAccent
-        if let model = theme.model {
-            switch model.accentFamily {
-            case .defaultSpace: accent = .defaultSpace
-            case let .derived(hue, saturation, strong):
-                accent = .derived(hue: CGFloat(hue), saturation: CGFloat(saturation), strong: strong.map(color))
-            }
-        } else if theme == .default { accent = .defaultSpace }
-        else if let base = theme.stops.compactMap({ $0.usingColorSpace(.sRGB) }).max(by: { $0.saturationComponent < $1.saturationComponent }) {
-            accent = .derived(hue: base.hueComponent)
-        } else { accent = .defaultSpace }
+        var accent = baseAccent(for: theme)
         let foreground = theme.foregroundOverride ?? NSColor(name: nil) { appearance in
             MainActor.assumeIsolated {
                 let background = OrbitThemeGradient.representativeColor(theme, appearance: appearance)
@@ -122,6 +112,22 @@ enum OrbitSpaceThemes {
         if accentCache.count >= 256 { accentCache.removeAll() }
         accentCache.append((theme, accent))
         return accent
+    }
+
+    /// The Space's accent family before the sidebar ink replaces its reading pair.
+    static func baseAccent(for theme: OrbitTokens.SpaceTheme) -> OrbitTokens.ThemeAccent {
+        if let model = theme.model {
+            switch model.accentFamily {
+            case .defaultSpace: return .defaultSpace
+            case let .derived(hue, saturation, strong):
+                return .derived(hue: CGFloat(hue), saturation: CGFloat(saturation), strong: strong.map(color))
+            }
+        }
+        if theme == .default { return .defaultSpace }
+        if let base = theme.stops.compactMap({ $0.usingColorSpace(.sRGB) }).max(by: { $0.saturationComponent < $1.saturationComponent }) {
+            return .derived(hue: base.hueComponent)
+        }
+        return .defaultSpace
     }
 
     /// Overlays never make a separate foreground decision.

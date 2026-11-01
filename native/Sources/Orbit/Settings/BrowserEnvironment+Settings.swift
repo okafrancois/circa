@@ -24,6 +24,7 @@ extension BrowserEnvironment {
                 theme: spaceTheme(for: little.sourceSpaceID))
         }
         for controller in liveControllers {
+            if !settings.document.ai.isEnabled { controller.aiConversation?.stop(); controller.closeAssistant() }
             controller.settingsPreferences?.apply(to: controller)
             controller.renderChrome()
             controller.siteControls.render()

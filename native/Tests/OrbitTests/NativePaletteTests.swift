@@ -901,3 +901,94 @@ extension NativeWebKitTests.NativePaletteTests {
         try await h.close()
     }
 }
+
+private actor PaletteAIProvider: BrowserAIProviderClient {
+    nonisolated let id: BrowserAIProviderID
+    init(id: BrowserAIProviderID = .codex) { self.id = id }
+    private(set) var requests = 0
+    func status(refresh: Bool) async -> BrowserAIProviderStatus { .init(id: id, state: .ready(.init(plan: nil))) }
+    func shutdown() async {}
+    func startTurn(_ request: BrowserAITurnRequest) async -> BrowserAITurn {
+        requests += 1
+        return .init(events: AsyncStream { stream in
+            stream.yield(.text("Synthetic provider response"))
+            stream.yield(.completed)
+            stream.finish()
+        }, interrupt: {})
+    }
+}
+
+extension NativeWebKitTests.NativePaletteTests {
+    @Test("Tab asks once and Command-Return transfers the same conversation into the dock")
+    func assistantHandoffDoesNotResend() async throws {
+        let h = try await PaletteHarness()
+        let settingsStore = try BrowserSettingsStore(destination: h.root.appendingPathComponent("ai-settings.json"))
+        try await settingsStore.updateAI { preferences in
+            preferences.isEnabled = true
+            preferences.defaultModels[.chat] = .init(provider: .codex)
+        }
+        let runtime = BrowserSettingsRuntime(store: settingsStore)
+        await runtime.refresh()
+        let service = OrbitAIService(startsPrograms: false)
+        h.window.settingsPreferences = BrowserWindowSettings(runtime: runtime)
+        h.window.aiService = service
+        let provider = PaletteAIProvider()
+        let alternate = PaletteAIProvider(id: .claudeCode)
+        service.statuses[.claudeCode] = .init(id: .claudeCode, state: .ready(.init(plan: nil)))
+        let conversation = BrowserAIConversation(choice: .init(provider: .codex), clients: [provider, alternate],
+            preferences: { runtime.document.ai }, isPrivate: { false }, currentSource: { _ in nil },
+            reader: { _ in Issue.record("A question without context must not read a page"); return "" })
+        h.window.aiConversation = conversation
+        h.window.aiProfileID = h.profileID
+        await h.show()
+        let question = "How does a task work?"
+        h.window.palette.query(question)
+        await h.window.palette.waitForResults()
+        h.window.palette.accept()
+        await h.settle()
+        #expect(await provider.requests == 0)
+        #expect(h.window.session.selectedSurface?.navigationState.url == h.window.addressResolver.searchEngine.searchURL(for: question))
+        await h.show()
+        h.window.palette.query(question)
+        await h.window.palette.waitForResults()
+        guard case .ask? = h.window.palette.results.first?.action else {
+            Issue.record("The configured Ask route must lead question results")
+            try await h.close()
+            return
+        }
+        #expect(h.window.palette.view.onTab?() == true)
+        for _ in 0..<10_000 { if await provider.requests == 1 { break }; await Task.yield() }
+        #expect(await provider.requests == 1)
+        h.window.palette.accept(modifiers: .command)
+        #expect(h.window.aiConversation === conversation)
+        #expect(h.window.assistantHost != nil)
+        try? await Task.sleep(for: .milliseconds(300))
+        #expect(await provider.requests == 1)
+        #expect(!h.window.palette.isPresented)
+        h.window.closeAssistant()
+        await h.show()
+        h.window.palette.query(question)
+        await h.window.palette.waitForResults()
+        let alternateTab = try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: .option,
+            timestamp: 0, windowNumber: h.window.window?.windowNumber ?? 0, context: nil,
+            characters: "\t", charactersIgnoringModifiers: "\t", isARepeat: false, keyCode: 48))
+        #expect(h.window.palette.handleAssistantKey(alternateTab))
+        for _ in 0..<10_000 { if await alternate.requests == 1 { break }; await Task.yield() }
+        #expect(await alternate.requests == 1)
+        #expect(await provider.requests == 1)
+        #expect(conversation.choice.provider == .claudeCode)
+        h.window.palette.dismiss()
+        let original = h.window
+        _ = h.router.newWindow()
+        await h.router.waitForPendingCommands()
+        let second = h.window
+        second.settingsPreferences = BrowserWindowSettings(runtime: runtime)
+        second.aiService = service
+        let independent = try #require(second.ensureAssistant())
+        #expect(independent.id != conversation.id)
+        #expect(original.aiConversation === conversation)
+        service.workspace.removeAll()
+        try await h.close()
+        #expect(!conversation.send("A disposed owner cannot send"))
+    }
+}

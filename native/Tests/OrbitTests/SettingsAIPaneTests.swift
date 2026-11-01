@@ -8,6 +8,21 @@ import BrowserEngineConformance
 
 @MainActor
 struct SettingsAIPaneTests {
+    @Test func refreshUsesTheSameOverrideClientsAsTurns() async throws {
+        let service = OrbitAIService(startsPrograms: false)
+        defer { service.terminateNow() }
+        let codex = AssistantStatusOverrideFixture(id: .codex)
+        let claude = AssistantStatusOverrideFixture(id: .claudeCode)
+        let device = AssistantStatusOverrideFixture(id: .onDevice)
+        service.clientOverrides = [.codex: codex, .claudeCode: claude, .onDevice: device]
+        service.refresh(explicit: true, keepRunning: false)
+        try await waitForNativeState("AI provider override status refresh") { !service.isChecking }
+        #expect(service.statuses.count == 3 && service.statuses.values.allSatisfy { $0.state.isReady })
+        let checks = await codex.checks
+        let stops = await codex.stops
+        #expect(checks == 1 && stops == 1)
+    }
+
     private func model() -> BrowserSettingsModel<SyntheticEngine> {
         BrowserSettingsModel(environment: BrowserEnvironment(engine: SyntheticEngine()), profileID: nil, shortcuts: [],
             defaultBrowser: .init(status: { .init(http: "synthetic", https: "synthetic", html: "synthetic") },
@@ -106,22 +121,36 @@ struct SettingsAIPaneTests {
         #expect(BrowserSettingsAIMark.image(.codex) != nil && BrowserSettingsAIMark.image(.claudeCode) != nil)
     }
 
-    @Test("Program monograms contain visible ink in both appearances")
-    func monogramInk() throws {
-        for provider in [BrowserAIProviderID.codex, .claudeCode] {
-            for isDark in [false, true] {
-                let image = try #require(BrowserSettingsAIMark.image(provider, isDark: isDark))
-                let data = try #require(image.tiffRepresentation)
-                let bitmap = try #require(NSBitmapImageRep(data: data))
-                var inkPixels = 0
-                for y in 0..<bitmap.pixelsHigh {
-                    for x in 0..<bitmap.pixelsWide {
-                        guard let color = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB), color.alphaComponent > 0.5 else { continue }
-                        if isDark ? color.redComponent > 0.8 : color.redComponent < 0.2 { inkPixels += 1 }
-                    }
+    @Test("Provider marks are the real artwork, with visible ink on both polarities")
+    func providerMarks() throws {
+        func pixels(_ provider: BrowserAIProviderID, isDark: Bool) throws -> [NSColor] {
+            let image = try #require(BrowserSettingsAIMark.image(provider, isDark: isDark))
+            let data = try #require(image.tiffRepresentation)
+            let bitmap = try #require(NSBitmapImageRep(data: data))
+            var opaque: [NSColor] = []
+            for y in 0..<bitmap.pixelsHigh {
+                for x in 0..<bitmap.pixelsWide {
+                    if let color = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.sRGB), color.alphaComponent > 0.5 { opaque.append(color) }
                 }
-                #expect(inkPixels > 5)
             }
+            return opaque
+        }
+        for isDark in [false, true] {
+            // Monochrome OpenAI mark: black on light surfaces, white on dark ones.
+            let openAI = try pixels(.codex, isDark: isDark)
+            #expect(openAI.count > 40)
+            #expect(openAI.allSatisfy { isDark ? $0.redComponent > 0.8 && $0.blueComponent > 0.8 : $0.redComponent < 0.2 && $0.blueComponent < 0.2 })
+            // The Claude mark keeps its own colour regardless of the surface.
+            let claude = try pixels(.claudeCode, isDark: isDark)
+            #expect(claude.count > 40)
+            #expect(claude.filter { abs($0.redComponent - 0xD9 / 255) < 0.08 && abs($0.greenComponent - 0x77 / 255) < 0.08 && abs($0.blueComponent - 0x57 / 255) < 0.08 }.count > claude.count / 2)
+        }
+        for provider in [BrowserAIProviderID.codex, .claudeCode] {
+            let url = try #require(BrowserText.iconResource("ai-marks/" + provider.rawValue, extension: "svg"))
+            let source = try String(contentsOf: url, encoding: .utf8)
+            #expect(!source.contains("<circle") && !source.contains("stroke"))
+            let image = try #require(BrowserSettingsAIMark.image(provider))
+            #expect(abs(image.size.width / image.size.height - 1) < 0.02)
         }
     }
 
@@ -177,4 +206,20 @@ struct SettingsAIOnDeviceLiveTests {
         print("AI-LIVE on-device answer: \(text)")
         #expect(terminal == .completed && !text.isEmpty)
     }
+}
+
+private actor AssistantStatusOverrideFixture: BrowserAIProviderClient {
+    nonisolated let id: BrowserAIProviderID
+    var checks = 0
+    var stops = 0
+    init(id: BrowserAIProviderID) { self.id = id }
+    func status(refresh: Bool) async -> BrowserAIProviderStatus {
+        checks += 1
+        return .init(id: id, state: .ready(.init(plan: nil, usage: nil)))
+    }
+    func startTurn(_ request: BrowserAITurnRequest) async -> BrowserAITurn {
+        Issue.record("Status refresh must not start a turn")
+        return BrowserAITurn(events: AsyncStream { $0.finish() }, interrupt: {})
+    }
+    func shutdown() async { stops += 1 }
 }

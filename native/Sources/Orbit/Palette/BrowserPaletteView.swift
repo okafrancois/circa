@@ -4,6 +4,28 @@ import BrowserShell
 /// Transparent hit shield: outside clicks dismiss without reaching the underlying document.
 @MainActor
 final class BrowserPaletteView: NSView, NSTextFieldDelegate, NSTableViewDataSource, NSTableViewDelegate {
+    weak var answerView: NSView?
+    private var answerHeight: CGFloat?
+    private var answerAnimation: Task<Void, Never>?
+    func updateAnswerHeight(text: String) {
+        let width = max(100, panel.bounds.width - 86)
+        let rect = (text as NSString).boundingRect(with: NSSize(width: width, height: 10000), options: [.usesLineFragmentOrigin, .usesFontLeading], attributes: [.font: NSFont.systemFont(ofSize: 13)])
+        let target = min(min(520, bounds.height - 100), max(230, ceil(rect.height) + 170))
+        let initial = answerHeight ?? panel.frame.height
+        answerAnimation?.cancel()
+        let start = CACurrentMediaTime()
+        let reduced = OrbitMotionPreferences.prefersReducedMotion
+        answerAnimation = Task { [weak self] in
+            while let self, !Task.isCancelled {
+                let fraction = min(1, (CACurrentMediaTime() - start) / (reduced ? 0.15 : 0.34))
+                answerHeight = reduced ? target : initial + (target - initial) * BrowserAssistantMotion.progress(fraction, opening: true)
+                needsLayout = true
+                layoutSubtreeIfNeeded()
+                if fraction >= 1 { return }
+                try? await Task.sleep(for: .milliseconds(16))
+            }
+        }
+    }
     let input: NSTextField = PaletteInputField()
     let panel = NSView()
     let material = OrbitFrostView(radius: OrbitTokens.Radius.commandBar)
@@ -58,6 +80,8 @@ final class BrowserPaletteView: NSView, NSTextFieldDelegate, NSTableViewDataSour
     override var isHidden: Bool {
         didSet {
             if isHidden {
+                answerAnimation?.cancel()
+                answerHeight = nil
                 infoPopover.close()
                 panel.layer?.removeAnimation(forKey: "palette.scoped-search")
                 panelShadow.removeAnimation(forKey: "palette.scoped-search")
@@ -174,6 +198,7 @@ final class BrowserPaletteView: NSView, NSTextFieldDelegate, NSTableViewDataSour
         super.layout()
         let m = OrbitTokens.Metrics.CommandBar.self
         panel.frame = Self.panelFrame(in: bounds.size, resultCount: results.count)
+        if answerView != nil { panel.frame.size.height = answerHeight ?? 230 }
         panelShadow.frame = panel.frame
         panelShadow.shadowPath = CGPath(roundedRect: panelShadow.bounds, cornerWidth: OrbitTokens.Radius.commandBar,
                                        cornerHeight: OrbitTokens.Radius.commandBar, transform: nil)
@@ -193,6 +218,7 @@ final class BrowserPaletteView: NSView, NSTextFieldDelegate, NSTableViewDataSour
                                width: max(0, panel.bounds.width - 2 * m.rowInsetX), height: 1 / (window?.backingScaleFactor ?? 2))
         scroll.frame = NSRect(x: m.rowInsetX, y: m.bottomPadding, width: max(0, panel.bounds.width - 2 * m.rowInsetX),
                               height: max(0, panel.bounds.height - m.searchRowHeight - m.firstRowGap - m.bottomPadding))
+        answerView?.frame = scroll.frame
         resizeList()
     }
 
@@ -207,6 +233,7 @@ final class BrowserPaletteView: NSView, NSTextFieldDelegate, NSTableViewDataSour
             nextRows.append(nextEntries.count)
             nextEntries.append(.result(index))
         }
+        let previousIDs = Set(self.results.map(\.id))
         let countChanged = self.results.count != results.count
         self.results = results
         resultRows = nextRows
@@ -238,6 +265,20 @@ final class BrowserPaletteView: NSView, NSTextFieldDelegate, NSTableViewDataSour
             }
         }
         updateSelection(selected)
+        for (index, result) in results.enumerated() where !previousIDs.contains(result.id) {
+            guard case .ask = result.action, resultRows.indices.contains(index),
+                  let row = list.rowView(atRow: resultRows[index], makeIfNecessary: false), let layer = row.layer else { continue }
+            let fade = CABasicAnimation(keyPath: "opacity")
+            fade.fromValue = 0; fade.toValue = 1
+            fade.duration = OrbitMotionPreferences.prefersReducedMotion ? 0.15 : 0.18
+            fade.timingFunction = CAMediaTimingFunction(controlPoints: 0.215, 0.61, 0.355, 1)
+            layer.add(fade, forKey: "assistant.ask.fade")
+            if !OrbitMotionPreferences.prefersReducedMotion {
+                let slide = CABasicAnimation(keyPath: "transform.translation.y")
+                slide.fromValue = 4; slide.toValue = 0; slide.duration = 0.18; slide.timingFunction = fade.timingFunction
+                layer.add(slide, forKey: "assistant.ask.slide")
+            }
+        }
     }
 
     func updateSelection(_ selected: Int) {

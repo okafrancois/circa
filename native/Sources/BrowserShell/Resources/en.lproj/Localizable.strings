@@ -1796,3 +1796,59 @@
 "Ready" = "Ready";
 "Sign in to %@, then check again." = "Sign in to %@, then check again.";
 "Unsupported configuration." = "Unsupported configuration.";
+
+"Assistant" = "Assistant";
+
+"Thinking" = "Thinking";
+
+"Stopped" = "Stopped";
+
+"Unable to answer. Choose a model or try again." = "Unable to answer. Choose a model or try again.";
+
+"Continue in Panel" = "Continue in Panel";
+
+"Ask a question" = "Ask a question";
+
+"Whole Space" = "Whole Space";
+
+"This passage is no longer available." = "This passage is no longer available.";
+
+"Usage limit reached. Choose another model or wait." = "Usage limit reached. Choose another model or wait.";
+
+"Program not installed" = "Program not installed";
+
+"Model unavailable" = "Model unavailable";
+
+"Open Sources" = "Open Sources";
+
+"Ask about this tab" = "Ask about this tab";
+
+"Summarize this tab" = "Summarize this tab";
+
+"This tab" = "This tab";
+
+"Stop" = "Stop";
+
+"Search models…" = "Search models…";
+
+"Reasoning" = "Reasoning";
+
+"What matters on this page" = "What matters on this page";
+
+"Compare with another tab…" = "Compare with another tab…";
+
+"Add context" = "Add context";
+
+"Model and reasoning" = "Model and reasoning";
+
+"Scopes" = "Scopes";
+
+"No models" = "No models";
+
+"Usage limit reached" = "Usage limit reached";
+
+"Choose another model or wait." = "Choose another model or wait.";
+
+"Change model" = "Change model";
+
+"%ld sources read" = "%ld sources read";

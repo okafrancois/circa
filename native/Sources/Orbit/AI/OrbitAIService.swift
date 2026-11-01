@@ -9,6 +9,7 @@ import Foundation
 final class OrbitAIService: ObservableObject {
     @Published var statuses: [BrowserAIProviderID: BrowserAIProviderStatus] = [:]
     @Published private(set) var isChecking = false
+    var clientOverrides: [BrowserAIProviderID: any BrowserAIProviderClient] = [:]
     let discovery: BrowserAIProgramDiscovery
     let workspace: BrowserAIWorkspace
     let codex: BrowserAICodexClient
@@ -35,7 +36,8 @@ final class OrbitAIService: ObservableObject {
     }
 
     func client(_ id: BrowserAIProviderID) -> any BrowserAIProviderClient {
-        switch id {
+        if let override = clientOverrides[id] { return override }
+        return switch id {
         case .codex: codex
         case .claudeCode: claude
         case .onDevice: onDevice
@@ -47,13 +49,16 @@ final class OrbitAIService: ObservableObject {
     func refresh(explicit: Bool = false, keepRunning: Bool) {
         guard refreshTask == nil else { return }
         isChecking = true
-        refreshTask = Task { [weak self, discovery, codex, claude, onDevice] in
+        let codexClient = client(.codex)
+        let claudeClient = client(.claudeCode)
+        let deviceClient = client(.onDevice)
+        refreshTask = Task { [weak self, discovery, codexClient, claudeClient, deviceClient] in
             if explicit { await discovery.forgetShellLookup() }
-            async let codexStatus = codex.status(refresh: true)
-            async let claudeStatus = claude.status(refresh: true)
-            async let deviceStatus = onDevice.status(refresh: true)
+            async let codexStatus = codexClient.status(refresh: true)
+            async let claudeStatus = claudeClient.status(refresh: true)
+            async let deviceStatus = deviceClient.status(refresh: true)
             let results = await [codexStatus, claudeStatus, deviceStatus]
-            if !keepRunning { await codex.shutdown() }
+            if !keepRunning { await codexClient.shutdown() }
             guard let self else { return }
             statuses = Dictionary(uniqueKeysWithValues: results.map { ($0.id, $0) })
             isChecking = false
