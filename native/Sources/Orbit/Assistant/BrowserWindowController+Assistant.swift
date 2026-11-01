@@ -89,6 +89,7 @@ extension BrowserWindowController {
         dismissPeek()
         let view = assistantView(conversation)
         let host = NSHostingView(rootView: view)
+        host.sizingOptions = []
         assistantHost = host
         contentCard.setAssistant(host, width: 372)
     }

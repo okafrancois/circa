@@ -100,7 +100,8 @@ struct BrowserAssistantView: View {
                                     .background(message.role == .user ? Color.primary.opacity(0.06) : .clear, in: RoundedRectangle(cornerRadius: 14))
                             }
                             if message.state == .stopped { Text(uiText("Stopped")).foregroundStyle(.secondary) }
-                            if case .failed(let error) = message.state { Text(browserAssistantErrorText(error)).foregroundStyle(.secondary) }
+                            if case .failed(let error) = message.state { Text(browserAssistantErrorText(error)).foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true).frame(maxWidth: .infinity, alignment: .leading) }
                             ForEach(BrowserAICitation.parse(message)) { source in
                                 Button("[\(source.number)] " + source.snapshot.source.title) { Task { citationUnavailable = !(await citation(source)) } }
                             }
@@ -133,7 +134,8 @@ struct BrowserAssistantView: View {
                 }
             }.padding(10).background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 12))
                 .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(.quaternary, lineWidth: 0.5)).padding(10)
-        }.background(Color(nsColor: .windowBackgroundColor)).cornerRadius(6).task {
+        }.frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity, alignment: .topLeading)
+            .background(Color(nsColor: .windowBackgroundColor)).cornerRadius(6).task {
             await Task.yield()
             composing = true
         }
