@@ -90,6 +90,21 @@ private actor ConversationProvider: BrowserAIProviderClient {
         #expect(await provider.interruptions == 1)
     }
 
+    @Test func combiningChunksCannotExceedTheCumulativeByteBudget() async {
+        let provider = ConversationProvider(), fixture = ContextFixture()
+        let conversation = fixture.conversation(provider, budgets: .init(output: 2))
+        conversation.send("Question?")
+        await until { await provider.streams.count == 1 }
+        for chunk in ["a"] + Array(repeating: "\u{0301}", count: 8) {
+            await provider.emit(.text(chunk))
+        }
+        await provider.emit(.completed)
+        await until { !conversation.isRunning }
+        #expect((conversation.messages.last?.text.utf8.count ?? 0) <= 8)
+        #expect(conversation.messages.last?.state == .failed(.failed))
+        #expect(await provider.interruptions == 1)
+    }
+
     @Test func lifecycleAndHistory() async {
         let provider = ConversationProvider(), fixture = ContextFixture()
         let conversation = fixture.conversation(provider, budgets: .init(prompt: 4, history: 6, pages: 3))

@@ -49,7 +49,8 @@ import Foundation
             guard valid() else { await active.interrupt(); throw CancellationError() }
             switch event {
             case .text(let delta):
-                guard delta.utf8.count <= outputLimit * 4, output.count + delta.count <= outputLimit else {
+                guard delta.utf8.count <= outputLimit * 4 - output.utf8.count,
+                      output.count + delta.count <= outputLimit else {
                     await active.interrupt(); throw BrowserAIError.failed
                 }
                 output += delta

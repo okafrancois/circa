@@ -160,7 +160,8 @@ public struct BrowserAIConversationBudgets: Sendable {
                 }
                 switch event {
                 case .text(let delta):
-                    guard delta.utf8.count <= self.budgets.output * 4, self.messages[index].text.count + delta.count <= self.budgets.output else {
+                    guard delta.utf8.count <= self.budgets.output * 4 - self.messages[index].text.utf8.count,
+                          self.messages[index].text.count + delta.count <= self.budgets.output else {
                         await active.interrupt()
                         guard self.generation == token else { return }
                         self.finish(.failed(.failed), index: index); return

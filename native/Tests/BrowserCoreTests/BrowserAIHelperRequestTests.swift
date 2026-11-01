@@ -111,4 +111,21 @@ private actor HelperProvider: BrowserAIProviderClient {
             #expect(BrowserAIHelperName.download(value, original: "source.pdf") == nil)
         }
     }
+
+    @Test func combiningChunksCannotExceedTheCumulativeByteBudget() async {
+        let provider = HelperProvider(chunks: ["a"] + Array(repeating: "\u{0301}", count: 8))
+        let request = BrowserAIHelperRequest()
+        var preferences = BrowserAIPreferences(); preferences.isEnabled = true
+        var draft = ""
+        do {
+            _ = try await request.run(client: provider, choice: .init(provider: .codex), instructions: "Improve",
+                preferences: { preferences }, isCurrent: { true }, extract: { "Selected text" },
+                outputLimit: 2, onText: { draft = $0 })
+            Issue.record("Combining output exceeded the byte budget")
+        } catch let error as BrowserAIError {
+            #expect(error == .failed)
+        } catch { Issue.record("Unexpected error") }
+        #expect(draft.utf8.count <= 8)
+        #expect(await provider.requests == 1)
+    }
 }
