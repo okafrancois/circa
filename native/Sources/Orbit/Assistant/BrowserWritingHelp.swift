@@ -206,10 +206,16 @@ final class BrowserWritingHelp: ObservableObject {
     private func frame(height: CGFloat, above: Bool) -> NSRect {
         guard let context, let window else { return .zero }
         let visible = window.screen?.visibleFrame ?? window.frame
-        let width = min(420, window.frame.width - 32, visible.width - 16)
+        let preferredWidth: CGFloat = above ? toolbarWidth : 420
+        let width = min(preferredWidth, window.frame.width - 32, visible.width - 16)
         let x = min(max(context.anchor.minX, visible.minX + 8), visible.maxX - width - 8)
         let y = above ? context.anchor.maxY + 6 : context.anchor.minY - height - 8
         return NSRect(x: x, y: min(max(y, visible.minY + 8), visible.maxY - height - 8), width: width, height: height)
+    }
+
+    private var toolbarWidth: CGFloat {
+        let font = BrandTextStyle.ui.font(size: 12, weight: .medium)
+        return ceil(Action.allCases.reduce(CGFloat(8 + 8 + 18), { $0 + ($1.label as NSString).size(withAttributes: [.font: font]).width + 18 }))
     }
 
     private func showToolbar() {
@@ -269,8 +275,12 @@ private struct BrowserWritingToolbar: View {
     var body: some View {
         HStack(spacing: 2) {
             ForEach(BrowserWritingHelp.Action.allCases, id: \.self) { action in
-                Button(action.label) { model.run(action) }.buttonStyle(.plain)
-                    .padding(.horizontal, 9).frame(height: 26)
+                Button { model.run(action) } label: {
+                    HStack(spacing: 5) {
+                        if action == .improve { OrbitIcon.view(sfName: "sparkles", pointSize: 13).frame(width: 13, height: 13) }
+                        Text(action.label)
+                    }.padding(.horizontal, 9).frame(height: 26)
+                }.buttonStyle(WritingActionStyle())
                     .accessibilityIdentifier("writing-\(action)")
             }
         }.font(Font(BrandTextStyle.ui.font(size: 12, weight: .medium)))
@@ -302,5 +312,22 @@ private struct BrowserWritingResult: View {
             }.buttonStyle(.plain).foregroundStyle(palette.accentInk.swiftUI)
         }.font(Font(BrandTextStyle.ui.font(size: 13))).foregroundStyle(palette.ink.swiftUI)
             .padding(12).accessibilityIdentifier("writing-draft")
+    }
+}
+
+private struct WritingActionStyle: ButtonStyle {
+    @Environment(\.assistantPalette) private var palette
+    func makeBody(configuration: Configuration) -> some View {
+        WritingActionBody(configuration: configuration, palette: palette)
+    }
+    private struct WritingActionBody: View {
+        let configuration: ButtonStyleConfiguration
+        let palette: BrowserAssistantPalette
+        @State private var hovered = false
+        var body: some View {
+            configuration.label.background((configuration.isPressed ? palette.press : hovered ? palette.hover : .clear).swiftUI,
+                                           in: RoundedRectangle(cornerRadius: 6))
+                .onHover { hovered = $0 }
+        }
     }
 }
