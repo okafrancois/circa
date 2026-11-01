@@ -8,14 +8,21 @@ actor OrbitAssistantFixtureClient: BrowserAIProviderClient {
     private var count = 0
     init(id: BrowserAIProviderID, root: URL) { self.id = id; self.root = root }
     func status(refresh: Bool) async -> BrowserAIProviderStatus {
-        .init(id: id, state: .ready(.init(plan: nil, usage: nil)), models: [])
+        .init(id: id, state: .ready(.init(plan: nil, usage: nil)), models: [.init(provider: id, id: id == .claudeCode ? "sonnet" : "synthetic-codex", displayName: "Synthetic model")])
     }
     func startTurn(_ request: BrowserAITurnRequest) async -> BrowserAITurn {
         count += 1
         try? Data(request.prompt.utf8).write(to: root.appendingPathComponent("request-\(id.rawValue)-\(count).txt"))
+        let mode = (try? String(contentsOf: root.appendingPathComponent("fixture-mode"), encoding: .utf8))?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let passage = (try? String(contentsOf: root.appendingPathComponent("fixture-passage"), encoding: .utf8)) ?? "Actors protect mutable state."
         let pair = AsyncStream<BrowserAITurnEvent>.makeStream()
         let task = Task {
-            for text in ["Synthetic ", "streamed ", "answer. ", "[1: \"Actors protect mutable state.\"]"] {
+            if mode == "error" || mode == "quota" {
+                pair.continuation.yield(.failed(mode == "quota" ? .limitReached(resetsAt: nil) : .failed))
+                pair.continuation.finish()
+                return
+            }
+            for text in ["Synthetic ", "streamed ", "answer. ", "[1: \"\(passage)\"]"] {
                 do { try await Task.sleep(for: .milliseconds(450)) } catch { return }
                 pair.continuation.yield(.text(text))
             }
@@ -50,21 +57,48 @@ extension OrbitSmokeDriver {
         NSApp.activate(ignoringOtherApps: true)
         try? Data("\(getpid()) \(window.windowNumber)".utf8).write(to: runRoot.appendingPathComponent("assistant-ready"))
         var sequence = 0
-        _ = await until(40) {
+        let deadline = Date().addingTimeInterval(40)
+        while Date() < deadline {
+            let controllers = application.map { Array($0.windows.windows.values) } ?? environment.liveControllers
+            for controller in controllers where controller.window?.isVisible == false {
+                controller.window?.center()
+                controller.window?.makeKeyAndOrderFront(nil)
+            }
             let commandURL = self.runRoot.appendingPathComponent("input-\(sequence).json")
             if let data = try? Data(contentsOf: commandURL) {
-                var result = self.assistantOwnedInput(data, window: window, owner: owner)
-                if let conversation = owner.aiConversation {
+                let command = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+                let targetNumber = command?["window"] as? Int ?? window.windowNumber
+                let targetOwner = controllers.first { $0.window?.windowNumber == targetNumber } ?? owner
+                guard let targetWindow = targetOwner.window, targetWindow.windowNumber == targetNumber else { sequence += 1; continue }
+                var result = self.assistantOwnedInput(data, window: targetWindow, owner: targetOwner)
+                result["windows"] = controllers.compactMap { controller -> [String: Any]? in
+                    guard let window = controller.window else { return nil }
+                    return ["window": window.windowNumber, "owner": controller.id.uuidString, "private": controller.isPrivateWindow]
+                }
+                if let panel = targetOwner.assistantHost {
+                    result["panelFrame"] = [panel.frame.minX, panel.frame.minY, panel.frame.width, panel.frame.height]
+                }
+                result["uptime"] = ProcessInfo.processInfo.systemUptime
+                result["frame"] = [targetWindow.frame.minX, targetWindow.frame.minY, targetWindow.frame.width, targetWindow.frame.height]
+                if command?["kind"] as? String == "capture", let surface = targetOwner.session.selectedSurface {
+                    let (_, document) = await surface.devToolsCall("Runtime.evaluate", params: #"{"expression":"JSON.stringify({url:location.href,marks:Array.from(document.querySelectorAll('mark')).map(n=>n.textContent),scrollY:scrollY})","returnByValue":true}"#)
+                    result["document"] = String(decoding: document, as: UTF8.self)
+                }
+                if let conversation = targetOwner.aiConversation {
                     result["conversation"] = conversation.id.uuidString
                     result["messages"] = conversation.messages.map { ["id": $0.id.uuidString, "text": $0.text] }
                     result["sources"] = conversation.selectedSources.count
+                    result["sourceIDs"] = conversation.selectedSources.map { $0.id.uuidString }
+                    result["running"] = conversation.isRunning
+                    result["provider"] = conversation.choice.provider.rawValue
                 }
                 if let encoded = try? JSONSerialization.data(withJSONObject: result, options: [.sortedKeys]) {
                     try? encoded.write(to: self.runRoot.appendingPathComponent("ack-\(sequence).json"), options: .atomic)
                 }
                 sequence += 1
             }
-            return FileManager.default.fileExists(atPath: self.runRoot.appendingPathComponent("assistant-finish").path)
+            if FileManager.default.fileExists(atPath: self.runRoot.appendingPathComponent("assistant-finish").path) { break }
+            try? await Task.sleep(for: .milliseconds(30))
         }
         if let conversation = owner.aiConversation {
             let evidence: [String: Any] = ["conversation": conversation.id.uuidString,
@@ -109,7 +143,9 @@ extension OrbitSmokeDriver {
                 // The product's local monitor offers raw feature input before menu equivalents.
                 if owner.window === window, let registry = owner.palette.registry,
                    registry.capturePaletteTarget()?.windowID == owner.id {
-                    handled = registry.handleInputEvent(event)
+                    let keyboard = BrowserCommandKeyboard(registry: registry, acceptsKeyboard: { true },
+                        firstResponder: { window.firstResponder })
+                    handled = keyboard.handle(event)
                 }
                 if !handled { handled = window.performKeyEquivalent(with: event) }
                 if !handled { handled = NSApp.mainMenu?.performKeyEquivalent(with: event) ?? false }
@@ -135,7 +171,9 @@ extension OrbitSmokeDriver {
                     if let event = NSEvent.mouseEvent(with: type, location: NSPoint(x: point[0], y: point[1]),
                         modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
                         windowNumber: window.windowNumber, context: nil, eventNumber: index,
-                        clickCount: 1, pressure: type == .leftMouseUp ? 0 : 1) { events.append(event) }
+                        clickCount: 1, pressure: type == .leftMouseUp ? 0 : 1) {
+                        events.append(event)
+                    }
                 }
                 if events.count == points.count {
                     // Tracking controls consume the queued drag/up from their own nested event loop.

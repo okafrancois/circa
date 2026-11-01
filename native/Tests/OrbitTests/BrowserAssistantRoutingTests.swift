@@ -23,7 +23,7 @@ struct BrowserAssistantRoutingTests {
 }
 
 extension BrowserAssistantGeometryTests {
-    @Test func dockNarrowsExistingPageAndCloseRestoresIt() async {
+    @Test func dockNarrowsExistingPageAndCloseRestoresIt() async throws {
         let card = BrowserContentCardView()
         card.frame = NSRect(x: 0, y: 0, width: 1000, height: 700)
         let page = NSView()
@@ -37,10 +37,19 @@ extension BrowserAssistantGeometryTests {
         #expect(card.isPresenting(page))
         #expect(abs(page.frame.width - (fullWidth - 382)) < 1)
         #expect(abs(panel.frame.width - 372) < 1)
-        card.resizeAssistant(by: -200)
+        let start = NSPoint(x: panel.frame.minX - 5, y: 200)
+        let grip = try #require(card.hitTest(start))
+        func mouse(_ type: NSEvent.EventType, _ x: CGFloat) throws -> NSEvent {
+            try #require(NSEvent.mouseEvent(with: type, location: NSPoint(x: x, y: start.y),
+                modifierFlags: [], timestamp: 0, windowNumber: 0, context: nil,
+                eventNumber: 0, clickCount: 1, pressure: 1))
+        }
+        grip.mouseDown(with: try mouse(.leftMouseDown, start.x))
+        grip.mouseDragged(with: try mouse(.leftMouseDragged, start.x - 200))
         #expect(abs(panel.frame.width - 480) < 1)
         #expect(abs(page.frame.width - (fullWidth - 490)) < 1)
-        card.resizeAssistant(by: 1000)
+        grip.mouseDragged(with: try mouse(.leftMouseDragged, start.x + 800))
+        grip.mouseUp(with: try mouse(.leftMouseUp, start.x + 800))
         #expect(abs(panel.frame.width - 300) < 1)
         #expect(abs(page.frame.width - (fullWidth - 310)) < 1)
         card.setAssistant(nil, width: 0)

@@ -376,7 +376,13 @@ private final class BrowserContentCardClipView: NSView {
 @MainActor
 private final class BrowserAssistantResizeGrip: NSView {
     var onDrag: ((CGFloat) -> Void)?
+    private var previousX: CGFloat?
     override func resetCursorRects() { addCursorRect(bounds, cursor: .resizeLeftRight) }
-    override func mouseDown(with event: NSEvent) {}
-    override func mouseDragged(with event: NSEvent) { onDrag?(event.deltaX) }
+    override func mouseDown(with event: NSEvent) { previousX = event.locationInWindow.x }
+    override func mouseDragged(with event: NSEvent) {
+        let x = event.locationInWindow.x
+        if let previousX { onDrag?(x - previousX) }
+        previousX = x
+    }
+    override func mouseUp(with event: NSEvent) { previousX = nil }
 }

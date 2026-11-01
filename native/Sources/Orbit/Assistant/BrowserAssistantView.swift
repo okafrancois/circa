@@ -50,7 +50,7 @@ struct BrowserAssistantView: View {
                         }
                     }.font(.system(size: 12, weight: .medium)).padding(.horizontal, 6).frame(height: 26)
                         .background(.quaternary, in: Capsule())
-                }.menuStyle(.borderlessButton).fixedSize()
+                }.menuStyle(.borderlessButton).fixedSize().accessibilityIdentifier("assistant-provider")
                 Button(action: close) { Image(systemName: "xmark").frame(width: 26, height: 26) }.buttonStyle(.plain)
             }.padding(.leading, 14).padding(.trailing, 10).frame(height: 48)
             Divider()
@@ -62,6 +62,7 @@ struct BrowserAssistantView: View {
                             Button {
                                 withAnimation(.linear(duration: reduceMotion ? 0.15 : 0.16)) { conversation.removeSource(source.id) }
                             } label: { Image(systemName: "xmark").frame(width: 16, height: 16) }
+                            .accessibilityIdentifier("assistant-remove-" + source.id.uuidString)
                         }.font(.system(size: 12)).padding(.leading, 8).padding(.trailing, 4).frame(height: 24)
                             .background(.quaternary, in: RoundedRectangle(cornerRadius: 7))
                             .transition(.asymmetric(insertion: .scale(scale: reduceMotion ? 1 : 0.6).combined(with: .opacity), removal: .opacity))
@@ -128,7 +129,7 @@ struct BrowserAssistantView: View {
                     Button { if conversation.isRunning { conversation.stop() } else { send() } } label: {
                         Image(systemName: conversation.isRunning ? "stop.fill" : "arrow.up").frame(width: 24, height: 24)
                             .contentTransition(.opacity).animation(.linear(duration: reduceMotion ? 0.15 : 0.12), value: conversation.isRunning)
-                    }.disabled(!enabled || (!conversation.isRunning && draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty))
+                    }.accessibilityIdentifier("assistant-send-stop").disabled(!enabled || (!conversation.isRunning && draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty))
                 }
             }.padding(10).background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 12))
                 .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(.quaternary, lineWidth: 0.5)).padding(10)

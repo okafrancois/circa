@@ -40,7 +40,7 @@ final class OrbitSmokeDriver: OrbitLaunchHooks {
     private var events: FileHandle?
     private var results: [[String: Any]] = []
     private(set) var finished = false
-    private var application: OrbitApplication?
+    private(set) var application: OrbitApplication?
     private var configuration: OrbitProductConfiguration!
     private var signalSource: DispatchSourceSignal?
     private let started = ContinuousClock.now
