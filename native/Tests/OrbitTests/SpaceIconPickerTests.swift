@@ -26,19 +26,18 @@ struct SpaceIconPickerTests {
         #expect(picker.grid.menu?.items.map(\.title) == [uiText("Emoji & Symbols…"), uiText("Remove Icon")])
     }
 
-    @Test("Theme viewport retains the color controls and scope and exposes Frost")
+    @Test("Theme viewport retains color controls and scope without the retired material row")
     func compactThemeViewport() throws {
         let editor = OrbitThemeEditorView(state: OrbitThemeEditorState(theme: BrowserSpaceThemePresets.default))
         let scroll = editor.makePickerViewport()
         scroll.layoutSubtreeIfNeeded()
-        #expect(scroll.frame.size == NSSize(width: 356, height: 566))
+        #expect(scroll.frame.size == NSSize(width: 356, height: 522))
         #expect(scroll.documentView === editor)
         #expect(editor.visibleRect.minY == 0)
         #expect(editor.visibleRect.intersects(editor.surfaceScope.frame))
         #expect(!editor.material.isHidden)
         #expect(editor.material.layer?.backgroundColor?.alpha == 1)
-        #expect(editor.frame.height == 566)
-        #expect(editor.visibleRect.contains(editor.frostSwitch.frame))
+        #expect(editor.frame.height == 522)
     }
 
     @Test("The catalog lists valid single-grapheme emoji in every category, flags as pairs, no bare components")

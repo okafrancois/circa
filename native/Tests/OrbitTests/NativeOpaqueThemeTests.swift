@@ -5,10 +5,10 @@ import Testing
 @testable import Orbit
 
 extension NativeWebKitTests {
-@Suite("Opaque Space themes", .serialized)
+@Suite("Space theme fills and window glass", .serialized)
 @MainActor
 struct NativeOpaqueThemeTests {
-    @Test("Strong themes paint at full strength in the window and floating sidebar")
+    @Test("Theme gradient source retains its full-strength colors")
     func opaquePaint() throws {
         let model = BrowserSpaceTheme.composed(colors: [.init(hex: 0xee2200)], intensity: 1, mode: .light)
         let theme = OrbitSpaceThemes.rendered(model)
@@ -16,7 +16,7 @@ struct NativeOpaqueThemeTests {
         let fill = OrbitThemeFillView(frame: sidebar.bounds)
         sidebar.fill.apply(theme)
         fill.apply(theme)
-        for view in [fill, sidebar.fill] {
+        for view in [fill] {
             view.appearance = NSAppearance(named: .aqua)
             view.viewDidChangeEffectiveAppearance()
             view.layoutSubtreeIfNeeded()
@@ -53,7 +53,7 @@ struct NativeOpaqueThemeTests {
         settings.openThemeEditor(for: space, animated: false)
         let editor = try #require(settings.themeEditor)
         #expect(editor.draft == theme)
-        #expect(browser.window?.isOpaque == true)
+        #expect(browser.window?.isOpaque == false)
         #expect(browser.windowShell.themeFill.theme.model == theme)
         #expect(editor.view.subviews.compactMap { $0 as? NSPopUpButton }.isEmpty)
         #expect(editor.view.subviews.compactMap { $0 as? NSSlider }.isEmpty)

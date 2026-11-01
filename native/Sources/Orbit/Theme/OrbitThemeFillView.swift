@@ -4,6 +4,8 @@ import QuartzCore
 @MainActor
 final class OrbitThemeFillView: NSView {
     private let host = CALayer()
+    /// Opacity of the Space tint over native window glass; standalone gradient sources stay opaque.
+    var tintOpacity: Float = 1 { didSet { host.opacity = tintOpacity } }
     private let gradient = CAGradientLayer()
     private let mesh = CALayer()
     private let grain = OrbitGrainLayer()
@@ -237,6 +239,7 @@ final class OrbitGrainLayer: CALayer {
 @MainActor
 final class OrbitFloatingSidebarBackdrop: NSView {
     let fill = OrbitThemeFillView()
+    let material = NSVisualEffectView()
     private let dim = CALayer()
     private let edge = CAShapeLayer()
     private let observers = OrbitWorkspaceObservers()
@@ -250,7 +253,16 @@ final class OrbitFloatingSidebarBackdrop: NSView {
         fill.translatesAutoresizingMaskIntoConstraints = true
         fill.autoresizingMask = [.width, .height]
         fill.frame = bounds
+        material.material = .sidebar
+        material.blendingMode = .withinWindow
+        material.state = .active
+        material.frame = bounds
+        material.autoresizingMask = [.width, .height]
+        material.wantsLayer = true
+        material.layer?.masksToBounds = true
+        addSubview(material)
         addSubview(fill)
+        fill.tintOpacity = Float(OrbitSidebarFrost.minimum)
         fill.layer?.masksToBounds = true
         dim.zPosition = 2
         edge.zPosition = 3
@@ -280,6 +292,7 @@ final class OrbitFloatingSidebarBackdrop: NSView {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         fill.layer?.cornerRadius = cornerRadius
+        material.layer?.cornerRadius = cornerRadius
         layer?.shadowPath = CGPath(roundedRect: bounds, cornerWidth: cornerRadius, cornerHeight: cornerRadius, transform: nil)
         dim.frame = fill.bounds
         edge.lineWidth = edgeWidth
@@ -296,6 +309,7 @@ final class OrbitFloatingSidebarBackdrop: NSView {
 
     private func refreshColors() {
         guard let layer else { return }
+        material.appearance = NSAppearance(named: OrbitThemeForeground.isLight(on: foreground.resolved(for: effectiveAppearance)) ? .aqua : .darkAqua)
         OrbitTokens.Shadow.floatingSidebar.apply(to: layer, appearance: effectiveAppearance)
         edge.strokeColor = foreground.withAlphaComponent(0.12)
             .resolvedCGColor(for: effectiveAppearance)

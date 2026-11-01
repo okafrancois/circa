@@ -6,32 +6,15 @@ import Testing
 @Suite(.serialized)
 @MainActor
 struct ThemeFrostTests {
-    @Test("Native switch edits only Frost, publishes the draft, and retains it through color edits")
-    func toggle() {
-        let initial = BrowserSpaceTheme.radial(colors: [.init(hex: 0xFF5A5F), .init(hex: 0x7B4DFF)])
-        let view = OrbitThemeEditorView(state: .init(theme: initial))
-        var published: BrowserSpaceTheme?
-        view.onChange = { published = $0.theme }
-        #expect(view.frostSwitch.state == .off)
-        #expect(view.frostSwitch.accessibilityLabel() == uiText("Frost"))
-        #expect(view.frostSwitch.frame.minY > view.grainDial.frame.maxY)
-        view.frostSwitch.state = .on
-        _ = view.frostSwitch.sendAction(view.frostSwitch.action, to: view.frostSwitch.target)
-        var expected = initial
-        expected.frost = true
-        #expect(published == expected)
-        var state = view.state
-        state.chooseSwatch(1)
-        state.removeColor()
-        state.removeColor()
-        state.pick(at: CGPoint(x: 0.3, y: 0.5))
-        #expect(state.theme.frost)
-        view.frostSwitch.state = .off
-        _ = view.frostSwitch.sendAction(view.frostSwitch.action, to: view.frostSwitch.target)
-        #expect(published == initial)
+    @Test("Theme editor exposes color controls without the retired material option")
+    func retiredOption() {
+        let view = OrbitThemeEditorView(state: .init(theme: BrowserSpaceThemePresets.default))
+        #expect(view.subviews.compactMap { $0 as? NSSwitch }.isEmpty)
+        #expect(view.subviews.compactMap { $0 as? NSTextField }.allSatisfy { $0.stringValue != "Frost" })
+        #expect(view.bounds.height == 522)
     }
 
-    @Test("Only the address, tiles, active tab and footer consume Frost")
+    @Test("Legacy material choices do not add effects to sidebar controls")
     func surfaces() async throws {
         let store = BrowserStore()
         let profile = await store.createProfile(name: "Synthetic")
@@ -55,12 +38,38 @@ struct ThemeFrostTests {
             sidebar.applyAccent(accent)
             active.accent = accent
             inactive.accent = accent
-            #expect(active.background.frost?.isHidden == !enabled)
+            #expect(active.background.frost == nil)
             #expect(inactive.background.frost == nil)
-            #expect(grid.tiles.first?.background.frost?.isHidden == !enabled)
-            #expect(sidebar.footer.background.frost?.isHidden == !enabled)
+            #expect(grid.tiles.first?.background.frost == nil)
+            #expect(sidebar.footer.background.frost == nil)
             let background = try #require(sidebar.addressContainer.subviews.compactMap { $0 as? OrbitSurfaceBackgroundView }.first)
-            #expect(background.frost?.isHidden == !enabled)
+            #expect(background.frost == nil)
+        }
+    }
+
+    @Test("Window glass samples behind the window and remains enabled across theme edits")
+    func sidebarBackdrop() {
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 600, height: 500),
+                              styleMask: [.titled], backing: .buffered, defer: true)
+        window.isReleasedWhenClosed = false
+        defer { window.close() }
+        let root = OrbitWindowRootView(frame: NSRect(x: 0, y: 0, width: 600, height: 500))
+        window.contentView = root
+        let shell = OrbitWindowShell()
+        shell.prepare(window: window, root: root)
+        for theme in [OrbitTokens.SpaceTheme.default, .amberCoral, .lavender] {
+            shell.apply(theme: theme, animated: false)
+            #expect(!window.isOpaque)
+            #expect(shell.themeFill.tintOpacity > 0 && shell.themeFill.tintOpacity < 1)
+            #expect(window.backgroundColor == .clear)
+            #expect(shell.sidebarMaterial.blendingMode == .behindWindow)
+            #expect(shell.sidebarMaterial.material == .sidebar)
+            #expect(shell.sidebarMaterial.state == .active)
+            let ink = OrbitSpaceThemes.accent(for: theme).foreground.resolved(for: window.effectiveAppearance)
+            let expected: NSAppearance.Name = OrbitThemeForeground.isLight(on: ink) ? .aqua : .darkAqua
+            #expect(shell.sidebarMaterial.appearance?.bestMatch(from: [.aqua, .darkAqua]) == expected)
+            #expect(shell.floatingBackdrop.material.blendingMode == .withinWindow)
+            #expect(shell.floatingBackdrop.material.material == .sidebar)
         }
     }
 
@@ -129,42 +138,18 @@ struct ThemeFrostTests {
         #expect(OrbitFloatingMaterial.contrast(view.style.background(over: .black), .white) == 1)
     }
 
-    @Test("Frosted controls retain live materials instead of caching an unblurred bitmap")
-    func liveMaterial() {
-        let view = NSView(frame: NSRect(x: 0, y: 0, width: 200, height: 100))
-        view.wantsLayer = true
-        let surface = OrbitSurfaceBackgroundView(cornerRadius: 8)
-        surface.frame = view.bounds
-        view.addSubview(surface)
-        var model = BrowserSpaceThemePresets.default
-        model.frost = true
-        surface.applyFrost(OrbitSpaceThemes.accent(for: OrbitSpaceThemes.rendered(model)))
-        #expect(SpaceSwipeRaster(view: view, scale: 1) == nil)
-        #expect(surface.superview === view)
-    }
-
-    @Test("Frost follows paint progress and survives interruption without losing its material")
-    func transition() throws {
-        var on = BrowserSpaceThemePresets.default
-        on.frost = true
-        let source = OrbitSpaceThemes.rendered(on)
+    @Test("Legacy material choices stay inert throughout a Space transition")
+    func transition() {
+        var legacy = BrowserSpaceThemePresets.default
+        legacy.frost = true
+        let source = OrbitSpaceThemes.rendered(legacy)
         let target = OrbitSpaceThemes.rendered(.radial(colors: [.init(hex: 0x141317)], mode: .dark))
         let surface = OrbitSurfaceBackgroundView(cornerRadius: 8)
-        var identity: OrbitFrostView?
         for frame in 0...72 {
-            let p = CGFloat(frame) / 72
-            let painted = SpaceSwipeThemeBlend(source: source, destination: target, progress: p).theme
-            #expect(abs(painted.frostAmount - (1 - p)) < 0.000001)
+            let painted = SpaceSwipeThemeBlend(source: source, destination: target, progress: CGFloat(frame) / 72).theme
+            #expect(painted.frostAmount == 0)
             surface.applyFrost(OrbitSpaceThemes.accent(for: painted))
-            if let identity { #expect(surface.frost === identity) } else { identity = surface.frost }
-            if p < 1 {
-                #expect(surface.frost?.isHidden == false)
-                #expect(surface.frost?.effect.state == .active)
-            }
-            #expect(surface.frost?.alphaValue == painted.frostAmount)
-            let captured = SpaceSwipeThemeBlend.snapshot(painted, appearance: NSAppearance(named: .aqua)!)
-            #expect(captured.frostAmount == painted.frostAmount)
+            #expect(surface.frost == nil)
         }
-        #expect(surface.frost?.isHidden == true)
     }
 }

@@ -9,6 +9,7 @@ import OSLog
 @MainActor
 final class OrbitWindowShell {
     let themeFill = OrbitThemeFillView()
+    let sidebarMaterial = NSVisualEffectView()
     let floatingBackdrop = OrbitFloatingSidebarBackdrop()
     let resizeHandle = OrbitSidebarResizeHandle()
     let loadingIndicator = OrbitLoadingIndicatorView()
@@ -120,7 +121,15 @@ final class OrbitWindowShell {
         root.wantsLayer = true
         themeFill.frame = root.bounds
         themeFill.autoresizingMask = [.width, .height]
-        root.addSubview(themeFill, positioned: .below, relativeTo: nil)
+        sidebarMaterial.material = .sidebar
+        sidebarMaterial.blendingMode = .behindWindow
+        sidebarMaterial.state = .active
+        sidebarMaterial.frame = root.bounds
+        sidebarMaterial.autoresizingMask = [.width, .height]
+        root.addSubview(sidebarMaterial, positioned: .below, relativeTo: nil)
+        root.addSubview(themeFill, positioned: .above, relativeTo: sidebarMaterial)
+        // Keep the Space tint light enough for the native material to sample the desktop.
+        themeFill.tintOpacity = Float(OrbitSidebarFrost.minimum)
         root.onLayout = { [weak self] in self?.applyGeometry() }
         root.onTrackingAreasInvalidated = { [weak self] in self?.updateHoverRegions(force: true) }
         themeFill.onAppearanceChange = { [weak self] in self?.updateWindowBackground() }
@@ -522,11 +531,11 @@ final class OrbitWindowShell {
 
     private func updateWindowBackground() {
         guard let window else { return }
-        let stops = OrbitThemeGradient.normalizedStops((spaceSwipePaintedTheme ?? theme).stops, appearance: window.effectiveAppearance)
-        let color = stops.first.flatMap { NSColor(cgColor: $0) } ?? OrbitTokens.Color.Surface.windowDefault
-        // Reassigning an equal background still invalidates the whole window on every swipe frame.
-        if !window.isOpaque { window.isOpaque = true }
-        if window.backgroundColor != color { window.backgroundColor = color }
+        let accent = OrbitSpaceThemes.accent(for: spaceSwipePaintedTheme ?? theme)
+        let ink = accent.foreground.resolved(for: window.effectiveAppearance)
+        sidebarMaterial.appearance = NSAppearance(named: OrbitThemeForeground.isLight(on: ink) ? .aqua : .darkAqua)
+        if window.isOpaque { window.isOpaque = false }
+        if window.backgroundColor != .clear { window.backgroundColor = .clear }
     }
 
     // MARK: Window notifications
