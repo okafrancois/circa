@@ -119,6 +119,23 @@ extension OrbitSmokeDriver {
         }
         await owner.session.waitForQueuedCommands()
         check("tidy.title-restored", owner.session.organizationTab(tab.id)?.customTitle == nil)
+        let observesDismissal = arguments.contains("--orbit-smoke-tidy-no-undo")
+        if observesDismissal {
+            let point = CGPoint(x: window.frame.minX + window.frame.width * 0.7,
+                y: (NSScreen.screens.first?.frame.maxY ?? 0) - window.frame.midY)
+            let rows = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]]
+            let target = rows?.first { row in
+                guard (row[kCGWindowLayer as String] as? Int) == 0,
+                      let bounds = row[kCGWindowBounds as String] as? [String: Any],
+                      let rect = CGRect(dictionaryRepresentation: bounds as CFDictionary) else { return false }
+                return rect.contains(point)
+            }
+            guard owns(), (target?[kCGWindowOwnerPID as String] as? Int32) == getpid(),
+                  (target?[kCGWindowNumber as String] as? Int) == window.windowNumber else {
+                check("tidy.dismissal-owner", false); return
+            }
+            CGWarpMouseCursorPosition(point)
+        }
         owner.downloads.destinationProvider = { [root = runRoot!] _, name in root.appendingPathComponent(name) }
         guard owns(), let surface = owner.pageCommandSurface() else { return }
         let script = "var a=document.createElement('a');a.href='/download.pdf';a.download='INV-2026-10.pdf';document.body.append(a);a.click();true"
@@ -137,7 +154,7 @@ extension OrbitSmokeDriver {
             capture.arguments = ["-x", "-l", String(window.windowNumber), runRoot.appendingPathComponent("download.png").path]
             try? capture.run(); capture.waitUntilExit()
         }
-        if owns(), renamedFile, let panel = owner.tidyDownloadPanel {
+        if !observesDismissal, owns(), renamedFile, let panel = owner.tidyDownloadPanel {
             func ownsPanel() -> Bool {
                 let rows = CGWindowListCopyWindowInfo([.optionIncludingWindow], CGWindowID(panel.windowNumber)) as? [[String: Any]]
                 return rows?.contains { ($0[kCGWindowOwnerPID as String] as? Int32) == getpid() } == true
@@ -176,6 +193,10 @@ extension OrbitSmokeDriver {
             }
             try? await Task.sleep(for: .milliseconds(400))
             check("tidy.download-undo", FileManager.default.fileExists(atPath: runRoot.appendingPathComponent("INV-2026-10.pdf").path))
+        }
+        if observesDismissal {
+            let dismissed = await until(8) { owner.tidyDownloadPanel == nil }
+            check("tidy.download-dismissed", dismissed)
         }
         _ = await until(18) { !recording.isRunning }
         environment.ai.terminateNow()
