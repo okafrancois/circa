@@ -294,6 +294,19 @@ extension OrbitSmokeDriver {
                 window.contentView?.layoutSubtreeIfNeeded()
                 handled = true
             }
+        case "scroll":
+            if let point = command["point"] as? [Double], point.count == 2,
+               let delta = command["delta"] as? Int32, abs(Int64(delta)) <= 100,
+               let content = window.contentView {
+                let location = content.convert(NSPoint(x: point[0], y: point[1]), from: nil)
+                if content.bounds.contains(location), let target = content.hitTest(location),
+                   let wheel = CGEvent(scrollWheelEvent2Source: nil, units: .line, wheelCount: 1,
+                                       wheel1: delta, wheel2: 0, wheel3: 0),
+                   let event = NSEvent(cgEvent: wheel) {
+                    target.scrollWheel(with: event)
+                    handled = true
+                }
+            }
         case "raise-window":
             // A laboratory window can be shown without switching the owner's desktop.
             window.collectionBehavior.remove(.moveToActiveSpace)
