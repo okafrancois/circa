@@ -295,9 +295,12 @@ extension OrbitSmokeDriver {
                 handled = true
             }
         case "raise-window":
-            window.collectionBehavior.insert(.moveToActiveSpace)
+            // A laboratory window can be shown without switching the owner's desktop.
+            window.collectionBehavior.remove(.moveToActiveSpace)
+            window.collectionBehavior.insert(.canJoinAllSpaces)
             window.center()
             window.makeKeyAndOrderFront(nil)
+            window.orderFrontRegardless()
             handled = window.isVisible
         case "capture", "read-probe": handled = true
         default: break
