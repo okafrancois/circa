@@ -302,7 +302,7 @@ public final class BrowserDownloadCoordinator {
 
     public func renameLease(in context: BrowserDownloadContext) -> RenameLease? {
         guard let entry = try? resolve(context), entry.state == .complete,
-              let url = entry.destinationURL, url.isFileURL else { return nil }
+              let url = entry.destinationURL, url.isFileURL, Self.isSafeRenameBasename(url.lastPathComponent) else { return nil }
         var info = stat()
         guard lstat(url.path, &info) == 0, info.st_mode & S_IFMT == S_IFREG else { return nil }
         return RenameLease(context: context, url: url, device: info.st_dev, inode: info.st_ino,
@@ -312,10 +312,11 @@ public final class BrowserDownloadCoordinator {
     /// Main-actor compare-and-move: publication and file mutation have no suspension point.
     /// RENAME_EXCL atomically refuses existing files, including dangling symlinks.
     public func rename(_ lease: RenameLease, to name: String) -> RenameLease? {
-        guard let safe = BrowserAIHelperName.download(name, original: lease.url.lastPathComponent), safe == name,
-              safe != lease.url.lastPathComponent, renameLease(in: lease.context) == lease,
+        guard Self.isSafeRenameBasename(name),
+              (name as NSString).pathExtension == lease.url.pathExtension,
+              name != lease.url.lastPathComponent, renameLease(in: lease.context) == lease,
               let entry = try? resolve(lease.context), entry.revision < .max else { return nil }
-        let destination = lease.url.deletingLastPathComponent().appendingPathComponent(safe)
+        let destination = lease.url.deletingLastPathComponent().appendingPathComponent(name)
         guard renamex_np(lease.url.path, destination.path, UInt32(RENAME_EXCL)) == 0 else { return nil }
         entry.destinationURL = destination
         entry.revision += 1
@@ -324,6 +325,14 @@ public final class BrowserDownloadCoordinator {
         publish(entry: entry, historyChanged: true)
         drainEffects()
         return result
+    }
+
+    /// Native originals may exceed the model's shorter output limit. Undo accepts their exact
+    /// safe basename while generated names still pass BrowserAIHelperName.download at the caller.
+    private static func isSafeRenameBasename(_ name: String) -> Bool {
+        !name.isEmpty && name.utf16.count <= 255 && !name.hasPrefix(".")
+            && !name.contains("/") && !name.contains(":") && !name.contains("\\")
+            && name.unicodeScalars.allSatisfy { !CharacterSet.controlCharacters.contains($0) }
     }
 
     /// Applies a background availability batch in one publication; stale contexts are ignored.

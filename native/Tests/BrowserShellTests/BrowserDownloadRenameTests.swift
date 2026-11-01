@@ -9,6 +9,23 @@ struct BrowserDownloadRenameTests {
         func perform(_ action: BrowserDownloadAction, completion: @escaping @MainActor (Result<Void, BrowserDownloadError>) -> Void) {}
         func invalidate() {}
     }
+    @Test func longNativeOriginalCanBeRestored() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("orbit-tidy-long-\(UUID())", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let original = root.appendingPathComponent(String(repeating: "a", count: 180) + ".pdf")
+        try Data("synthetic".utf8).write(to: original)
+        let coordinator = BrowserDownloadCoordinator()
+        let registration = try coordinator.register(owner: .init(profileID: ProfileID()), transfer: Transfer())
+        _ = registration.report(.init(key: registration.key, sequence: 1, state: .complete, receivedBytes: 9, destinationURL: original))
+        let snapshot = try #require(coordinator.snapshot(for: registration.key))
+        let lease = try #require(coordinator.renameLease(in: snapshot.context))
+        let renamed = try #require(coordinator.rename(lease, to: "Notes.pdf"))
+        let restored = try #require(coordinator.rename(renamed, to: original.lastPathComponent))
+        #expect(restored.url == original)
+        #expect(try String(contentsOf: original, encoding: .utf8) == "synthetic")
+        coordinator.shutdown()
+    }
     @Test func collisionUndoAndStaleIdentity() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("orbit-tidy-\(UUID())", isDirectory: true)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
