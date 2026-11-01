@@ -131,6 +131,12 @@ extension OrbitSmokeDriver {
                     result["settingsWindow"] = settings.windowNumber
                     result["settingsVisible"] = settings.isVisible
                 }
+                result["assistantPopups"] = NSApp.windows.filter {
+                    $0.identifier?.rawValue == "assistant-popup"
+                }.map { popup in
+                    ["window": popup.windowNumber, "parent": popup.parent?.windowNumber ?? 0,
+                     "visible": popup.isVisible] as [String: Any]
+                }
                 result["uptime"] = ProcessInfo.processInfo.systemUptime
                 result["frame"] = [targetWindow.frame.minX, targetWindow.frame.minY, targetWindow.frame.width, targetWindow.frame.height]
                 if let surface = targetOwner.session.selectedSurface,

@@ -24,6 +24,11 @@ struct BrowserAssistantView: View {
     @FocusState private var composing: Bool
     @State private var draft = ""
     @State private var contextPickerPresented = false
+    private var hasContextChoices: Bool { !sources.isEmpty || !scopes.isEmpty }
+    private var contextRemoval: Animation {
+        reduceMotion ? .linear(duration: 0.15)
+            : .timingCurve(1.0 / 3, 2.0 / 3, 2.0 / 3, 1, duration: 0.16)
+    }
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 8) {
@@ -36,12 +41,13 @@ struct BrowserAssistantView: View {
                         HStack(spacing: 6) {
                             Text(source.id == currentTabID ? uiText("This tab") : source.title).lineLimit(1)
                             Button {
-                                withAnimation(.linear(duration: reduceMotion ? 0.15 : 0.16)) { conversation.removeSource(source.id) }
+                                withAnimation(contextRemoval) { conversation.removeSource(source.id) }
                             } label: { Image(systemName: "xmark").frame(width: 16, height: 16) }
                             .accessibilityIdentifier("assistant-remove-" + source.id.uuidString)
                         }.font(.system(size: 12)).padding(.leading, 8).padding(.trailing, 4).frame(height: 24)
                             .background(.quaternary, in: RoundedRectangle(cornerRadius: 7))
-                            .transition(.asymmetric(insertion: .scale(scale: reduceMotion ? 1 : 0.6).combined(with: .opacity), removal: .opacity))
+                            .transition(.asymmetric(insertion: .scale(scale: reduceMotion ? 1 : 0.6).combined(with: .opacity),
+                                removal: .scale(scale: reduceMotion ? 1 : 0.8).combined(with: .opacity)))
                     }
 
                 }.buttonStyle(.plain)
@@ -83,21 +89,13 @@ struct BrowserAssistantView: View {
                 TextField(uiText("Ask a question"), text: $draft, axis: .vertical).textFieldStyle(.plain).accessibilityIdentifier("assistant-composer")
                     .font(.system(size: 13)).lineLimit(3...7).focused($composing).onSubmit(send)
                     .onChange(of: draft) { old, new in
-                        if new.count > old.count && new.hasSuffix("@") { contextPickerPresented = true }
+                        if hasContextChoices && new.count > old.count && new.hasSuffix("@") { contextPickerPresented = true }
                     }
                 HStack(spacing: 8) {
                     Button { contextPickerPresented.toggle() } label: {
                         Image(systemName: "at").frame(width: 24, height: 24)
-                    }.buttonStyle(.plain).popover(isPresented: $contextPickerPresented, arrowEdge: .bottom) {
-                        VStack(alignment: .leading, spacing: 4) {
-                            ForEach(sources) { source in
-                                Button(source.title) { chooseContext([source]) }
-                            }
-                            ForEach(scopes.keys.sorted(), id: \.self) { name in
-                                Button(name) { chooseContext(scopes[name] ?? []) }
-                            }
-                        }.buttonStyle(.plain).padding(12).frame(minWidth: 220, alignment: .leading)
-                    }
+                    }.buttonStyle(.plain).disabled(!hasContextChoices)
+                        .assistantPopover(isPresented: $contextPickerPresented) { contextPicker }
                     Spacer(minLength: 0)
                     BrowserAssistantModelControl(conversation: conversation, choices: choices, statuses: statuses)
                         .help(currentUsage?.windows.map { BrowserSettingsAIText.meter($0, limitReached: currentUsage?.limitReached == true) }.joined(separator: " · ") ?? "")
@@ -114,6 +112,27 @@ struct BrowserAssistantView: View {
             await Task.yield()
             composing = true
         }
+        .onChange(of: hasContextChoices) { _, available in
+            if !available { contextPickerPresented = false }
+        }
+    }
+    private var contextPicker: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                ForEach(sources) { source in
+                    Button { chooseContext([source]) } label: {
+                        Text(source.title).lineLimit(1).frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 8).frame(height: 28)
+                    }.help(source.title)
+                }
+                ForEach(scopes.keys.sorted(), id: \.self) { name in
+                    Button { chooseContext(scopes[name] ?? []) } label: {
+                        Text(name).lineLimit(1).frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 8).frame(height: 28)
+                    }
+                }
+            }.buttonStyle(.plain)
+        }.frame(width: 240, height: min(336, CGFloat(sources.count + scopes.count) * 28)).padding(5)
     }
     private func chooseContext(_ sources: [BrowserAIContextSource]) {
         select(sources)

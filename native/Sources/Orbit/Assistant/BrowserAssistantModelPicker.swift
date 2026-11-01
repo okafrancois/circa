@@ -67,7 +67,7 @@ struct BrowserAssistantModelControl: View {
                 .background(.quaternary, in: RoundedRectangle(cornerRadius: 9))
         }.buttonStyle(.plain).accessibilityIdentifier("assistant-provider")
             .background(AssistantWindowWidth(width: $windowWidth).frame(width: 0, height: 0))
-            .popover(isPresented: $presented, arrowEdge: .bottom) {
+            .assistantPopover(isPresented: $presented, trailing: true) {
                 BrowserAssistantModelPicker(conversation: conversation, choices: choices, statuses: statuses,
                     width: BrowserAssistantModels.pickerWidth(windowWidth: windowWidth))
             }
@@ -81,6 +81,7 @@ private struct BrowserAssistantModelPicker: View {
     let width: CGFloat
     @State private var provider: BrowserAIProviderID?
     @State private var search = ""
+    @FocusState private var searching: Bool
     private var selectedProvider: BrowserAIProviderID { provider ?? conversation.choice.provider }
     private var providers: [BrowserAIProviderID] { BrowserAIProviderID.allCases.filter { id in choices.contains { $0.provider == id } } }
     private var models: [BrowserAIModel] { BrowserAssistantModels.models(selectedProvider, choices: choices, statuses: statuses) }
@@ -112,6 +113,7 @@ private struct BrowserAssistantModelPicker: View {
             }
         }.frame(width: width).fixedSize(horizontal: false, vertical: true)
             .font(.system(size: 13))
+            .task { searching = true }
     }
 
     private var modelList: some View {
@@ -119,6 +121,7 @@ private struct BrowserAssistantModelPicker: View {
             HStack(spacing: 6) {
                 Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
                 TextField(uiText("Search models…"), text: $search).textFieldStyle(.plain)
+                    .focused($searching)
                     .accessibilityIdentifier("assistant-model-search")
             }.padding(.horizontal, 8).frame(height: 32)
             if let reason = BrowserSettingsAIText.reason(statuses[selectedProvider]?.state) {
