@@ -9,7 +9,7 @@ actor OrbitAssistantFixtureClient: BrowserAIProviderClient {
     private var count = 0
     init(id: BrowserAIProviderID, root: URL) { self.id = id; self.root = root }
     func status(refresh: Bool) async -> BrowserAIProviderStatus {
-        .init(id: id, state: .ready(.init(plan: nil, usage: nil)), models: [.init(provider: id, id: id == .claudeCode ? "sonnet" : "synthetic-codex", displayName: "Synthetic model")])
+        .init(id: id, state: .ready(.init(plan: nil, usage: nil)), models: [.init(provider: id, id: id == .claudeCode ? "sonnet" : "synthetic-codex", displayName: id == .claudeCode ? "Sonnet" : "Synthetic model", efforts: ["low", "medium", "high", "xhigh"], defaultEffort: "low")])
     }
     func startTurn(_ request: BrowserAITurnRequest) async -> BrowserAITurn {
         count += 1
@@ -128,6 +128,8 @@ extension OrbitSmokeDriver {
                     result["sourceIDs"] = conversation.selectedSources.map { $0.id.uuidString }
                     result["running"] = conversation.isRunning
                     result["provider"] = conversation.choice.provider.rawValue
+                    result["model"] = conversation.choice.model
+                    result["effort"] = conversation.choice.effort
                 }
                 if let encoded = try? JSONSerialization.data(withJSONObject: result, options: [.sortedKeys]) {
                     try? encoded.write(to: self.runRoot.appendingPathComponent("ack-\(sequence).json"), options: .atomic)
