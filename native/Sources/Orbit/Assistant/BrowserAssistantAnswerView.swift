@@ -108,6 +108,7 @@ struct BrowserAssistantAnswerView: View {
 }
 
 struct BrowserAssistantThinkingView: View {
+    @State private var animationOrigin: Date?
     @Environment(\.accessibilityReduceMotion) private var systemReduced
     @Environment(\.assistantPalette) private var palette
     private var reduced: Bool { systemReduced || OrbitMotionPreferences.prefersReducedMotion }
@@ -121,7 +122,7 @@ struct BrowserAssistantThinkingView: View {
                 Text(uiText("Thinking")).foregroundStyle(palette.secondary.swiftUI)
             } else {
                 TimelineView(.animation) { context in
-                    let time = context.date.timeIntervalSinceReferenceDate
+                    let time = max(0, context.date.timeIntervalSince(animationOrigin ?? context.date))
                     let pulse = time.truncatingRemainder(dividingBy: 2.4) / 2.4
                     let shimmer = time.truncatingRemainder(dividingBy: 1.6) / 1.6
                     HStack(spacing: 8) {
@@ -135,6 +136,7 @@ struct BrowserAssistantThinkingView: View {
                 }
             }
         }.font(.system(size: 14))
+            .onAppear { animationOrigin = Date() }
     }
 }
 
