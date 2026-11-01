@@ -90,6 +90,7 @@ extension BrowserStore {
     }
 
     private func retireSettingsProfile(_ id: ProfileID, recoveringSavedWindows: Bool) {
+        liveFolderLocalStores[id] = nil
         let ids = Set(spaces.values.filter { $0.profileID == id }.map(\.id))
         organizationWillRemoveProfile(id)
         let fallback = spaceOrder.first { !ids.contains($0) && spaces[$0].map { !deletingProfiles.contains($0.profileID) } == true }

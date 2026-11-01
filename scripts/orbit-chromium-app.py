@@ -38,7 +38,7 @@ from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from local_signing import SIGNING_DIRECTORY
-from urllib.parse import urlsplit
+from urllib.parse import parse_qs, urlsplit
 
 REPO = Path(__file__).resolve().parent.parent
 LAB_DIR = REPO / "native/OrbitChromium"
@@ -117,6 +117,18 @@ def essentials_handler(run_root, counters):
 
         def do_GET(self):
             path = urlsplit(self.path).path
+            if path == "/pulls":
+                signed_in = "orbit-live-folder=fixture" in self.headers.get("Cookie", "")
+                if not signed_in:
+                    return self.reply(200, b'<html><head><meta name="user-login" content=""></head><body>Sign in</body></html>')
+                payload = {"payload": {"pullsDashboardSurfaceContentRoute": {"currentPage": 1, "totalPages": 1, "totalCount": 1,
+                    "results": [{"globalId": "PR_fixture", "title": "Synthetic change", "updatedAt": "2026-10-01T00:00:00Z",
+                                 "state": "REPO_PULL_REQUEST_STATE_OPEN", "permalink": "https://github.com/example/fixture/pull/1"}]}}}
+                if "-repo:example/fixture" in parse_qs(urlsplit(self.path).query).get("q", [""])[0]:
+                    payload["payload"]["pullsDashboardSurfaceContentRoute"].update(results=[], totalCount=0)
+                body = ('<html><head><meta name="user-login" content="fixture"><meta name="octolytics-actor-id" content="123"></head>'
+                        '<body><script type="application/json" data-target="react-app.embeddedData">' + json.dumps(payload) + '</script></body></html>')
+                return self.reply(200, body.encode())
             if path.startswith("/boosts/"):
                 counters[path] = counters.get(path, 0) + 1
                 port = self.server.server_port
@@ -484,6 +496,8 @@ def run_phase(phase, run, data, origin, args, tls_origin=None):
         command.append("--orbit-smoke-extension-only")
     if getattr(args, "private_domain_only", False):
         command.append("--orbit-smoke-private-domain")
+    if getattr(args, "live_folders_only", False):
+        command.append("--orbit-smoke-live-folders")
     if getattr(args, "profiles_only", False):
         command.append("--orbit-smoke-profiles")
     if getattr(args, "daily_qa", None):
@@ -699,6 +713,7 @@ def main():
     runner.add_argument("--fresh-only", action="store_true")
     runner.add_argument("--keep-going", action="store_true")
     runner.add_argument("--boosts-only", action="store_true", help="Hermetic document registration probes")
+    runner.add_argument("--live-folders-only", action="store_true", help="Profile-scoped live-folder web transport")
     runner.add_argument("--passwords-only", action="store_true", help="Hermetic native password controller probes")
     runner.add_argument("--engine-r5-only", action="store_true", help="Hermetic native discard/history/POST scenarios")
     runner.add_argument("--resource-tabs", type=int, choices=(0, 20, 50, 100), default=0)

@@ -73,6 +73,14 @@ extension BrowserStore {
         try advanceLiveFolderGeneration(for: configuration.provider, profileID: context.profileID)
     }
 
+    /// Capture configuration authority and generation in one actor turn before starting I/O.
+    public func liveFolderRefreshGeneration(_ id: FolderID, profileID: ProfileID,
+                                            configuration: BrowserLiveFolderConfiguration) -> UInt64? {
+        guard configuration.isEnabled, organization.folders[id]?.liveFolder == configuration,
+              case let .pinned(space)? = organization.section(of: .folder(id)), spaces[space]?.profileID == profileID else { return nil }
+        return liveFolderLocalStore(for: profileID).generation(for: configuration.provider)
+    }
+
     /// Atomically reconciles provider-owned rows and live occurrences. Safe for data-layer calls
     /// without a UI context; profile/folder authority is checked before any mutation.
     @discardableResult
@@ -97,6 +105,35 @@ extension BrowserStore {
             state.changes.metadata = true
         }
         return true
+    }
+
+    /// Revoke private generated memberships before accepting another web account. Open pages
+    /// are detached to Today by the reconciler; independent user-pinned copies are unaffected.
+    public func resetLiveFolderConnection(for provider: BrowserLiveFolderProvider, profileID: ProfileID) throws {
+        guard profiles[profileID] != nil else { throw BrowserStoreError.profileMissing }
+        var local = liveFolderLocalStore(for: profileID)
+        local.resetConnection(for: provider)
+        liveFolderLocalStores[profileID] = local
+        let ids = organization.folders.values.filter { folder in
+            guard folder.liveFolder?.provider == provider,
+                  case let .pinned(space)? = organization.section(of: .folder(folder.id)) else { return false }
+            return spaces[space]?.profileID == profileID
+        }.map(\.id)
+        let open = Set(tabs.values.map(\.id))
+        try commitOrganization { state in
+            for id in ids {
+                guard let folder = state.folders[id], case let .pinned(space)? = state.section(of: .folder(id)) else { continue }
+                for node in folder.children {
+                    guard let tabID = node.tabID, var tab = state.tabs[tabID] else { continue }
+                    state.detach(node); state.tabs[tabID] = nil
+                    if open.contains(tabID) {
+                        tab.liveFolderChild = nil; tab.pinnedURL = nil
+                        state.addTab(tab, into: .today(space), at: .max)
+                    }
+                }
+            }
+            state.changes.metadata = true
+        }
     }
 
     func acknowledgeLiveFolderTab(_ id: TabID, profileID: ProfileID) {
