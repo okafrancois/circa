@@ -576,6 +576,9 @@ final class BrowserPeekToolbarView: NSView {
 
 @MainActor
 final class BrowserPeekToolbarButton: NSButton {
+    // Custom discs constrain their painted frame, independent of symbol baseline alignment.
+    override var alignmentRectInsets: NSEdgeInsets { .init() }
+
     /// How the button answers the pointer: a lighter fill, or (Split) a lift on hover and a
     /// smaller disc while pressed, with an unchanged fill.
     enum Feedback { case fill, motion }

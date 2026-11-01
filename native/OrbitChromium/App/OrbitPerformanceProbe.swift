@@ -163,6 +163,17 @@ enum OrbitPerformanceProbe {
                             return ["id": item.itemIdentifier.rawValue, "height": view.bounds.height, "width": view.bounds.width]
                         }
                     }
+                } else if name == "peek-control-geometry", ownsWindow(owner, bundleID: "lab.orbit.orbit.peek-control-geometry") {
+                    NSApp.appearance = NSAppearance(named: command["appearance"] == "dark" ? .darkAqua : .aqua)
+                    if !owner.isPeekPresented { _ = owner.openPeek(URL(string: "http://127.0.0.1:8769/peek-controls")!) }
+                    try? await Task.sleep(for: .milliseconds(800))
+                    owner.peekOverlay.layoutSubtreeIfNeeded()
+                    result["peekPresented"] = owner.isPeekPresented
+                    let toolbar = owner.peekOverlay.toolbar
+                    result["peekControls"] = [toolbar.closeButton, toolbar.openInTabButton, toolbar.splitButton].map {
+                        ["width": $0.frame.width, "height": $0.frame.height, "x": $0.frame.minX, "y": $0.frame.minY]
+                    }
+
                 } else if name == "scripting-self" {
                     result["scripting"] = await OrbitScriptingProbe.run(application, owner: owner, root: root, command: command)
                 } else if name == "update-test", ownsWindow(owner, bundleID: "io.github.okatech.orbit.test.update") {
