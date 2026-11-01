@@ -3,6 +3,57 @@ import QuartzCore
 
 @MainActor
 final class BrowserContentCardView: NSView {
+    private var assistant: NSView?
+    private let assistantGrip = BrowserAssistantResizeGrip()
+    private var assistantWidth: CGFloat = 0
+    private var pageTrailing: NSLayoutConstraint?
+    private var assistantAnimation: Task<Void, Never>?
+    func setAssistant(_ view: NSView?, width: CGFloat) {
+        assistantAnimation?.cancel()
+        let target = view == nil ? 0 : min(480, max(300, width))
+        if let view {
+            assistant?.removeFromSuperview()
+            assistant = view
+            addSubview(view)
+            assistantGrip.removeFromSuperview()
+            addSubview(assistantGrip)
+            assistantGrip.onDrag = { [weak self] delta in
+                guard let self else { return }
+                assistantAnimation?.cancel()
+                assistantWidth = min(480, max(300, assistantWidth - delta))
+                updateAssistantLayout()
+            }
+        }
+        let initial = assistantWidth
+        let reduced = OrbitMotionPreferences.prefersReducedMotion
+        let duration = reduced ? 0.15 : view == nil ? 0.24 : 0.38
+        let start = CACurrentMediaTime()
+        assistantAnimation = Task { [weak self] in
+            while let self, !Task.isCancelled {
+                let fraction = min(1, (CACurrentMediaTime() - start) / duration)
+                if reduced {
+                    assistantWidth = view == nil ? initial : target
+                    assistant?.alphaValue = view == nil ? 1 - fraction : fraction
+                } else {
+                    assistantWidth = initial + (target - initial) * BrowserAssistantMotion.progress(fraction, opening: view != nil)
+                }
+                updateAssistantLayout()
+                if fraction >= 1 {
+                    assistantWidth = target
+                    if view == nil { assistant?.removeFromSuperview(); assistant = nil; assistantGrip.removeFromSuperview() }
+                    assistant?.alphaValue = 1
+                    updateAssistantLayout()
+                    return
+                }
+                try? await Task.sleep(for: .milliseconds(16))
+            }
+        }
+    }
+    private func updateAssistantLayout() {
+        pageTrailing?.constant = assistantWidth == 0 ? 0 : -(assistantWidth + 10)
+        needsLayout = true
+        layoutSubtreeIfNeeded()
+    }
     private let clip = BrowserContentCardClipView()
     private let hairline = OrbitSurfaceBackgroundView(cornerRadius: OrbitTokens.Radius.contentCard)
     private let emptyTitle = NSTextField(labelWithString: OrbitShellText.emptySpaceTitle)
@@ -131,6 +182,8 @@ final class BrowserContentCardView: NSView {
 
     override func layout() {
         super.layout()
+        assistantGrip.frame = NSRect(x: bounds.width - assistantWidth - 10, y: 0, width: 10, height: bounds.height)
+        assistant?.frame = NSRect(x: bounds.width - assistantWidth, y: 0, width: assistantWidth, height: bounds.height)
         if peekRecede != 0 { layer?.transform = peekTransform }
         clip.layer?.cornerRadius = cornerRadius
         hairline.cornerRadius = cornerRadius
@@ -232,9 +285,10 @@ final class BrowserContentCardView: NSView {
         if view != nil {
             let top = presentation.topAnchor.constraint(equalTo: clip.topAnchor, constant: headerHeight)
             contentTopConstraint = top
+            pageTrailing = presentation.trailingAnchor.constraint(equalTo: clip.trailingAnchor, constant: assistant == nil ? 0 : -(assistantWidth + 10))
             NSLayoutConstraint.activate([
                 presentation.leadingAnchor.constraint(equalTo: clip.leadingAnchor),
-                presentation.trailingAnchor.constraint(equalTo: clip.trailingAnchor),
+                pageTrailing!,
                 top,
                 presentation.bottomAnchor.constraint(equalTo: clip.bottomAnchor)
             ])
@@ -313,4 +367,12 @@ private final class BrowserContentCardClipView: NSView {
         let colour = showsEmptyPage ? OrbitTokens.Color.Surface.contentEmptyPage : OrbitTokens.Color.Surface.preview
         layer?.backgroundColor = isTransparent ? NSColor.clear.cgColor : colour.resolvedCGColor(for: effectiveAppearance)
     }
+}
+
+@MainActor
+private final class BrowserAssistantResizeGrip: NSView {
+    var onDrag: ((CGFloat) -> Void)?
+    override func resetCursorRects() { addCursorRect(bounds, cursor: .resizeLeftRight) }
+    override func mouseDown(with event: NSEvent) {}
+    override func mouseDragged(with event: NSEvent) { onDrag?(event.deltaX) }
 }

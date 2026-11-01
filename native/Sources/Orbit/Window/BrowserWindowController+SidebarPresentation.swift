@@ -105,6 +105,7 @@ extension BrowserWindowController {
 
     /// Theme of the active Space: window fill, appearance and accent. Space switches cross-fade.
     func renderChrome() {
+        reconcileAssistant()
         let spaceID = session.snapshot?.activeSpaceID
         sidebar.spaceSwipe.validate(catalog: session.catalog, active: spaceID)
         closeThemeEditorIfNeeded(activeSpaceID: spaceID)

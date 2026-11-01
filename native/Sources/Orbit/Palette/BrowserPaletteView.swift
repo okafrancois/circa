@@ -4,6 +4,7 @@ import BrowserShell
 /// Transparent hit shield: outside clicks dismiss without reaching the underlying document.
 @MainActor
 final class BrowserPaletteView: NSView, NSTextFieldDelegate, NSTableViewDataSource, NSTableViewDelegate {
+    weak var answerView: NSView?
     let input: NSTextField = PaletteInputField()
     let panel = NSView()
     let material = OrbitFrostView(radius: OrbitTokens.Radius.commandBar)
@@ -174,6 +175,7 @@ final class BrowserPaletteView: NSView, NSTextFieldDelegate, NSTableViewDataSour
         super.layout()
         let m = OrbitTokens.Metrics.CommandBar.self
         panel.frame = Self.panelFrame(in: bounds.size, resultCount: results.count)
+        if answerView != nil { panel.frame.size.height = min(520, bounds.height - 100) }
         panelShadow.frame = panel.frame
         panelShadow.shadowPath = CGPath(roundedRect: panelShadow.bounds, cornerWidth: OrbitTokens.Radius.commandBar,
                                        cornerHeight: OrbitTokens.Radius.commandBar, transform: nil)
@@ -193,6 +195,7 @@ final class BrowserPaletteView: NSView, NSTextFieldDelegate, NSTableViewDataSour
                                width: max(0, panel.bounds.width - 2 * m.rowInsetX), height: 1 / (window?.backingScaleFactor ?? 2))
         scroll.frame = NSRect(x: m.rowInsetX, y: m.bottomPadding, width: max(0, panel.bounds.width - 2 * m.rowInsetX),
                               height: max(0, panel.bounds.height - m.searchRowHeight - m.firstRowGap - m.bottomPadding))
+        answerView?.frame = scroll.frame
         resizeList()
     }
 

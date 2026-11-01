@@ -356,6 +356,8 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
         controller.onDeleteSpace = { [weak self] id, profile in try await self?.removeSpaceFromSettings(id, expectedProfileID: profile) }
         controller.themeEditors = themeEditors
         controller.settingsPreferences = BrowserWindowSettings(runtime: settings)
+        controller.aiService = ai
+        if settings.document.ai.isEnabled { ai.refresh(keepRunning: true) }
         controller.updateObservation = settings.updater.$readyVersion.sink { [weak controller] version in
             controller?.sidebar.updateReady = OrbitUpdater.showsCard(ready: version,
                 synthetic: activeSyntheticDataGuard() != nil,

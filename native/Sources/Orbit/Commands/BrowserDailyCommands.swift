@@ -5,6 +5,13 @@ import BrowserEngine
 @MainActor
 enum BrowserDailyCommands {
     static func install<Engine: BrowserEngine>(in registry: BrowserCommandRegistry<BrowserWindowController<Engine>>) {
+        registry.registerInputHandler("assistant") { controller, event in
+            if controller?.palette.handleAssistantKey(event) == true { return true }
+            guard let controller, event.type == .keyDown, event.modifierFlags.intersection([.command, .option, .control, .shift]) == .command,
+                  event.charactersIgnoringModifiers == "e", controller.assistantEnabled else { return false }
+            controller.toggleAssistant()
+            return true
+        }
         BrowserPasswordCommands.install(in: registry)
         weak var cyclingOwner: BrowserWindowController<Engine>?
         registry.registerInputHandler("extensions") { [weak registry] controller, event in

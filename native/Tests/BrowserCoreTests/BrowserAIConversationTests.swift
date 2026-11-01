@@ -169,3 +169,33 @@ private actor ConversationProvider: BrowserAIProviderClient {
         }
     }
 }
+
+extension BrowserAIConversationTests {
+    @Test func policyRevocationStopsStreamAndKeepsPartialText() async {
+        let provider = ConversationProvider(), fixture = ContextFixture()
+        let conversation = fixture.conversation(provider)
+        conversation.select(fixture.source)
+        conversation.send("Question")
+        await until { await provider.requests.count == 1 }
+        await provider.emit(.text("Partial"))
+        await until { conversation.messages.last?.text == "Partial" }
+        fixture.preferences.isEnabled = false
+        await provider.emit(.text(" must not appear"))
+        await until { !conversation.isRunning }
+        #expect(conversation.messages.last?.text == "Partial")
+        #expect(conversation.messages.last?.state == .stopped)
+    }
+
+    @Test func sourceNavigationStopsStreamBeforeNewText() async {
+        let provider = ConversationProvider(), fixture = ContextFixture()
+        let conversation = fixture.conversation(provider)
+        conversation.select(fixture.source)
+        conversation.send("Question")
+        await until { await provider.requests.count == 1 }
+        fixture.source = .init(id: fixture.source.id, revision: 2, url: fixture.source.url, title: fixture.source.title)
+        await provider.emit(.text("Stale answer"))
+        await until { !conversation.isRunning }
+        #expect(conversation.messages.last?.text.isEmpty == true)
+        #expect(conversation.messages.last?.state == .stopped)
+    }
+}

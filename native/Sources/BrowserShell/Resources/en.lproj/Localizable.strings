@@ -1796,3 +1796,25 @@
 "Ready" = "Ready";
 "Sign in to %@, then check again." = "Sign in to %@, then check again.";
 "Unsupported configuration." = "Unsupported configuration.";
+
+"Assistant" = "Assistant";
+
+"Thinking" = "Thinking";
+
+"Stopped" = "Stopped";
+
+"Unable to answer. Choose a model or try again." = "Unable to answer. Choose a model or try again.";
+
+"Continue in Panel" = "Continue in Panel";
+
+"Ask a question" = "Ask a question";
+
+"Whole Space" = "Whole Space";
+
+"This passage is no longer available." = "This passage is no longer available.";
+
+"Usage limit reached. Choose another model or wait." = "Usage limit reached. Choose another model or wait.";
+
+"Program not installed" = "Program not installed";
+
+"Model unavailable" = "Model unavailable";

@@ -14,6 +14,11 @@ import BrowserShell
 final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, NSWindowDelegate, NSTextFieldDelegate {
     typealias Surface = Engine.Surface
 
+    weak var aiService: OrbitAIService?
+    var aiProfileID: ProfileID?
+    var aiConversation: BrowserAIConversation?
+    var assistantHost: NSView?
+
     let id: UUID
     let engine: Engine
     let historyObserver: BrowserHistoryEngineObserver<Surface>
@@ -341,6 +346,7 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
     func windowDidResignKey(_ notification: Notification) { passwordPrompt.close() }
 
     func windowWillClose(_ notification: Notification) {
+        aiConversation?.close()
         tabIconPicker?.cancel()
         pinnedURLEditor?.complete(save: false)
         translation.close()
