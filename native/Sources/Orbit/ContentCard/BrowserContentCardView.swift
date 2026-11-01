@@ -37,9 +37,11 @@ final class BrowserContentCardView: NSView {
         let initial = assistantWidth
         let reduced = OrbitMotionPreferences.prefersReducedMotion
         let duration = reduced ? 0.15 : view == nil ? 0.24 : 0.38
-        let start = CACurrentMediaTime()
         updateAssistantLayout()
+        assistant?.layoutSubtreeIfNeeded()
         assistantAnimation = Task { [weak self] in
+            // Initial hosting layout must finish before the first animation interval begins.
+            let start = CACurrentMediaTime()
             while let self, !Task.isCancelled {
                 let fraction = min(1, (CACurrentMediaTime() - start) / duration)
                 if reduced {
