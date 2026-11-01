@@ -7,6 +7,7 @@ final class BrowserContentCardView: NSView {
     private let assistantGrip = BrowserAssistantResizeGrip()
     private var assistantWidth: CGFloat = 0
     private var pageTrailing: NSLayoutConstraint?
+    private var clipTrailing: NSLayoutConstraint?
     private var assistantAnimation: Task<Void, Never>?
     func setAssistant(_ view: NSView?, width: CGFloat) {
         assistantAnimation?.cancel()
@@ -54,7 +55,7 @@ final class BrowserContentCardView: NSView {
         updateAssistantLayout()
     }
     private func updateAssistantLayout() {
-        pageTrailing?.constant = assistantWidth == 0 ? 0 : -(assistantWidth + 10)
+        clipTrailing?.constant = assistantWidth == 0 ? 0 : -(assistantWidth + 10)
         needsLayout = true
         layoutSubtreeIfNeeded()
     }
@@ -71,13 +72,12 @@ final class BrowserContentCardView: NSView {
     private var paintHoldToken: UUID?
     private var returningToHeldPage = false
     private var isPresentingSplit = false
-    private var edgeConstraints: [(NSLayoutConstraint, CGFloat)] = []
     private var contentTopConstraint: NSLayoutConstraint?
     private weak var headerView: NSView?
     private var headerConstraints: [NSLayoutConstraint] = []
     var headerHeight: CGFloat { headerView == nil ? 0 : BrowserDeveloperToolbar.height }
     var pageViewportSize: NSSize {
-        NSSize(width: max(0, clip.bounds.width - (assistantWidth > 0 ? assistantWidth + 10 : 0)), height: max(0, clip.bounds.height - headerHeight))
+        NSSize(width: max(0, clip.bounds.width), height: max(0, clip.bounds.height - headerHeight))
     }
     func setHeader(_ view: NSView?) {
         guard headerView !== view else { return }
@@ -149,18 +149,19 @@ final class BrowserContentCardView: NSView {
         super.init(frame: .zero)
         wantsLayer = true
         layer?.masksToBounds = false
-        for view in [clip, hairline] {
-            view.translatesAutoresizingMaskIntoConstraints = false
-            addSubview(view)
-            let edges = [
-                view.leadingAnchor.constraint(equalTo: leadingAnchor),
-                view.trailingAnchor.constraint(equalTo: trailingAnchor),
-                view.topAnchor.constraint(equalTo: topAnchor),
-                view.bottomAnchor.constraint(equalTo: bottomAnchor)
-            ]
-            edgeConstraints += zip(edges, [CGFloat(1), -1, 1, -1]).map { ($0.0, $0.1) }
-            NSLayoutConstraint.activate(edges)
-        }
+        clip.translatesAutoresizingMaskIntoConstraints = false
+        hairline.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(clip)
+        addSubview(hairline)
+        clipTrailing = clip.trailingAnchor.constraint(equalTo: trailingAnchor)
+        NSLayoutConstraint.activate([
+            clip.leadingAnchor.constraint(equalTo: leadingAnchor), clipTrailing!,
+            clip.topAnchor.constraint(equalTo: topAnchor), clip.bottomAnchor.constraint(equalTo: bottomAnchor),
+            hairline.leadingAnchor.constraint(equalTo: clip.leadingAnchor),
+            hairline.trailingAnchor.constraint(equalTo: clip.trailingAnchor),
+            hairline.topAnchor.constraint(equalTo: clip.topAnchor),
+            hairline.bottomAnchor.constraint(equalTo: clip.bottomAnchor)
+        ])
         hairline.borderColor = OrbitTokens.Color.Line.floatingScrimBorder
         hairline.borderWidth = OrbitTokens.Metrics.Content.cardHairlineWidth
         hairline.outerShadow = OrbitTokens.Shadow.contentCard
@@ -289,7 +290,7 @@ final class BrowserContentCardView: NSView {
         if view != nil {
             let top = presentation.topAnchor.constraint(equalTo: clip.topAnchor, constant: headerHeight)
             contentTopConstraint = top
-            pageTrailing = presentation.trailingAnchor.constraint(equalTo: clip.trailingAnchor, constant: assistant == nil ? 0 : -(assistantWidth + 10))
+            pageTrailing = presentation.trailingAnchor.constraint(equalTo: clip.trailingAnchor)
             NSLayoutConstraint.activate([
                 presentation.leadingAnchor.constraint(equalTo: clip.leadingAnchor),
                 pageTrailing!,

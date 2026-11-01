@@ -37,6 +37,21 @@ extension BrowserAssistantGeometryTests {
         #expect(card.isPresenting(page))
         #expect(abs(page.frame.width - (fullWidth - 382)) < 1)
         #expect(abs(panel.frame.width - 372) < 1)
+        let pageClip = try #require(page.superview)
+        #expect(abs(pageClip.frame.maxX + 10 - panel.frame.minX) < 1)
+        #expect(abs(pageClip.bounds.width - page.frame.width) < 1)
+        #expect(abs(card.pageViewportSize.width - page.frame.width) < 1)
+        #expect(pageClip.layer?.masksToBounds == true)
+        #expect(pageClip.layer?.cornerRadius == card.cornerRadius)
+        let border = try #require(card.subviews.first { $0 is OrbitSurfaceBackgroundView })
+        #expect(border.frame == pageClip.frame)
+        let header = NSView()
+        card.setHeader(header)
+        card.layoutSubtreeIfNeeded()
+        #expect(header.frame.width == pageClip.bounds.width)
+        #expect(card.pageViewportSize.height == pageClip.bounds.height - card.headerHeight)
+        card.setHeader(nil)
+        card.layoutSubtreeIfNeeded()
         let start = NSPoint(x: panel.frame.minX - 5, y: 200)
         let grip = try #require(card.hitTest(start))
         func mouse(_ type: NSEvent.EventType, _ x: CGFloat) throws -> NSEvent {
@@ -58,5 +73,26 @@ extension BrowserAssistantGeometryTests {
         #expect(card.isPresenting(page))
         #expect(abs(page.frame.width - fullWidth) < 1)
         #expect(panel.superview == nil)
+    }
+}
+
+struct BrowserAssistantModelTests {
+    @Test func metadataKeepsRequestIdentifiersAndSupportedEfforts() {
+        let model = BrowserAIModel(provider: .codex, id: "gpt-6.1-sol", displayName: "gpt-6.1-sol",
+            efforts: ["low", "high"], defaultEffort: "low")
+        #expect(BrowserAssistantModels.name(model) == "GPT 6.1 Sol")
+        let previous = BrowserAIModelChoice(provider: .codex, model: "other", effort: "ultra")
+        let selected = BrowserAssistantModels.selecting(model, previous: previous)
+        #expect(selected.model == model.id)
+        #expect(selected.effort == "low")
+        #expect(BrowserAssistantModels.selecting(model, previous: .init(provider: .codex, model: "other", effort: "high")).effort == "high")
+        let status = BrowserAIProviderStatus(id: .codex, state: .signedOut, models: [model])
+        #expect(BrowserAssistantModels.models(.codex, choices: [selected, selected], statuses: [.codex: status]) == [model])
+        #expect(BrowserAssistantModels.models(.claudeCode, choices: [selected], statuses: [.codex: status]).isEmpty)
+    }
+    @Test func popoverUsesWindowWidthAndKeepsReadableColumns() {
+        #expect(BrowserAssistantModels.pickerWidth(windowWidth: 1000) == 560)
+        #expect(BrowserAssistantModels.pickerWidth(windowWidth: 500) == 460)
+        #expect(BrowserAssistantModels.pickerWidth(windowWidth: 400) == 360)
     }
 }

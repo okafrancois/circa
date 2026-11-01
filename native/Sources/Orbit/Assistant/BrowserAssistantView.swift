@@ -6,6 +6,7 @@ import SwiftUI
 struct BrowserAssistantView: View {
     let conversation: BrowserAIConversation
     let choices: [BrowserAIModelChoice]
+    var statuses: [BrowserAIProviderID: BrowserAIProviderStatus] = [:]
     let sources: [BrowserAIContextSource]
     var usages: [BrowserAIProviderID: BrowserAIUsage] = [:]
     private var currentUsage: BrowserAIUsage? {
@@ -26,34 +27,9 @@ struct BrowserAssistantView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 8) {
-                Text(uiText("Assistant")).font(.system(size: 13, weight: .semibold))
                 Spacer(minLength: 0)
-                Menu {
-                    ForEach(choices, id: \.self) { choice in
-                        Button(choice.model ?? BrowserSettingsAIText.name(choice.provider)) { conversation.switchProvider(to: choice) }
-                    }
-                    if let usage = currentUsage {
-                        Divider()
-                        ForEach(Array(usage.windows.enumerated()), id: \.offset) { _, window in
-                            Text("\(window.usedPercent)%")
-                            if let reset = window.resetsAt { Text(reset, style: .time) }
-                        }
-                    }
-                } label: {
-                    HStack(spacing: 6) {
-                        BrowserAssistantProviderMark(provider: conversation.choice.provider)
-                        Text(conversation.choice.model ?? BrowserSettingsAIText.name(conversation.choice.provider)).lineLimit(1)
-                        if let usage = currentUsage?.windows.first(where: { $0.span == .fiveHours }) {
-                            Circle().trim(from: 0, to: Double(usage.usedPercent) / 100)
-                                .stroke(usage.isFull ? Color.red : usage.usedPercent >= 80 ? .orange : .secondary, lineWidth: 2)
-                                .rotationEffect(.degrees(-90)).frame(width: 12, height: 12)
-                        }
-                    }.font(.system(size: 12, weight: .medium)).padding(.horizontal, 6).frame(height: 26)
-                        .background(.quaternary, in: Capsule())
-                }.menuStyle(.borderlessButton).fixedSize().accessibilityIdentifier("assistant-provider")
-                Button(action: close) { Image(systemName: "xmark").frame(width: 26, height: 26) }.buttonStyle(.plain)
+                Button(action: close) { Image(systemName: "xmark").frame(width: 26, height: 26) }.buttonStyle(.plain).accessibilityLabel(uiText("Close")).accessibilityIdentifier("assistant-close")
             }.padding(.leading, 14).padding(.trailing, 10).frame(height: 48)
-            Divider()
             ScrollView(.horizontal) {
                 HStack(spacing: 6) {
                     ForEach(conversation.selectedSources) { source in
@@ -67,20 +43,9 @@ struct BrowserAssistantView: View {
                             .background(.quaternary, in: RoundedRectangle(cornerRadius: 7))
                             .transition(.asymmetric(insertion: .scale(scale: reduceMotion ? 1 : 0.6).combined(with: .opacity), removal: .opacity))
                     }
-                    Button { contextPickerPresented.toggle() } label: {
-                        Image(systemName: "at").frame(width: 24, height: 24)
-                    }.popover(isPresented: $contextPickerPresented, arrowEdge: .bottom) {
-                        VStack(alignment: .leading, spacing: 4) {
-                            ForEach(sources) { source in
-                                Button(source.title) { chooseContext([source]) }
-                            }
-                            ForEach(scopes.keys.sorted(), id: \.self) { name in
-                                Button(name) { chooseContext(scopes[name] ?? []) }
-                            }
-                        }.buttonStyle(.plain).padding(12).frame(minWidth: 220, alignment: .leading)
-                    }
+
                 }.buttonStyle(.plain)
-            }.padding(.horizontal, 14).padding(.top, 10)
+            }.padding(.horizontal, 14).padding(.top, conversation.selectedSources.isEmpty ? 0 : 4)
             ScrollView {
                 VStack(alignment: .leading, spacing: 14) {
                     if conversation.messages.isEmpty {
@@ -114,26 +79,35 @@ struct BrowserAssistantView: View {
                     if citationUnavailable { Text(uiText("This passage is no longer available.")).font(.system(size: 12)).foregroundStyle(.secondary) }
                 }.padding(.horizontal, 14).padding(.top, 14).padding(.bottom, 8)
             }
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 12) {
                 TextField(uiText("Ask a question"), text: $draft, axis: .vertical).textFieldStyle(.plain).accessibilityIdentifier("assistant-composer")
-                    .font(.system(size: 13)).lineLimit(1...5).focused($composing).onSubmit(send)
+                    .font(.system(size: 13)).lineLimit(3...7).focused($composing).onSubmit(send)
                     .onChange(of: draft) { old, new in
                         if new.count > old.count && new.hasSuffix("@") { contextPickerPresented = true }
                     }
-                HStack {
-                    if let usage = currentUsage {
-                        ForEach(Array(usage.windows.enumerated()), id: \.offset) { _, window in
-                            Text("\(window.usedPercent)%").font(.system(size: 11)).foregroundStyle(.secondary)
-                        }
+                HStack(spacing: 8) {
+                    Button { contextPickerPresented.toggle() } label: {
+                        Image(systemName: "at").frame(width: 24, height: 24)
+                    }.popover(isPresented: $contextPickerPresented, arrowEdge: .bottom) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            ForEach(sources) { source in
+                                Button(source.title) { chooseContext([source]) }
+                            }
+                            ForEach(scopes.keys.sorted(), id: \.self) { name in
+                                Button(name) { chooseContext(scopes[name] ?? []) }
+                            }
+                        }.buttonStyle(.plain).padding(12).frame(minWidth: 220, alignment: .leading)
                     }
                     Spacer(minLength: 0)
+                    BrowserAssistantModelControl(conversation: conversation, choices: choices, statuses: statuses)
+                        .help(currentUsage?.windows.map { BrowserSettingsAIText.meter($0, limitReached: currentUsage?.limitReached == true) }.joined(separator: " · ") ?? "")
                     Button { if conversation.isRunning { conversation.stop() } else { send() } } label: {
                         Image(systemName: conversation.isRunning ? "stop.fill" : "arrow.up").frame(width: 24, height: 24)
                             .contentTransition(.opacity).animation(.linear(duration: reduceMotion ? 0.15 : 0.12), value: conversation.isRunning)
                     }.accessibilityIdentifier("assistant-send-stop").disabled(!enabled || (!conversation.isRunning && draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty))
                 }
-            }.padding(10).background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 12))
-                .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(.quaternary, lineWidth: 0.5)).padding(10)
+            }.padding(12).background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 16))
+                .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(.quaternary, lineWidth: 0.5)).padding(10)
         }.frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity, alignment: .topLeading)
             .background(Color(nsColor: .windowBackgroundColor)).cornerRadius(6).task {
             await Task.yield()
