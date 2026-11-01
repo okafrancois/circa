@@ -13,4 +13,13 @@ struct BrowserAICitationTests {
         #expect(citations.first?.snapshot.source.revision == 5)
         #expect(citations.first?.passage == "An exact passage here")
     }
+    @Test func exactPassageMaySpanExtractedTextNodes() {
+        let source = BrowserAIContextSource(id: UUID(), revision: 5, url: URL(string: "https://example.com")!, title: "Example")
+        let passage = "An inline\nmarked passage\ncontinues here"
+        let message = BrowserAIMessage(id: UUID(), role: .assistant, choice: .init(provider: .codex),
+            text: "Answer [1: \"\(passage)\"]", state: .completed,
+            context: [.init(source: source, text: passage)])
+        #expect(BrowserAICitation.parse(message).first?.passage == passage)
+    }
+
 }

@@ -82,23 +82,26 @@ struct BrowserAssistantProviderMark: View {
 }
 
 struct BrowserAssistantThinkingView: View {
-    @Environment(\.accessibilityReduceMotion) private var reduced
-    @State private var breathing = false
+    @Environment(\.accessibilityReduceMotion) private var systemReduced
+    private var reduced: Bool { systemReduced || OrbitMotionPreferences.prefersReducedMotion }
     var body: some View {
         HStack(spacing: 8) {
-            Image(systemName: "sparkles").font(.system(size: 16))
-                .scaleEffect(reduced ? 1 : breathing ? 1.06 : 0.92)
-                .onAppear {
-                    guard !reduced else { return }
-                    withAnimation(.easeInOut(duration: 0.6).repeatForever(autoreverses: true)) { breathing = true }
+            if reduced {
+                Image(systemName: "sparkles").font(.system(size: 16))
+            } else {
+                TimelineView(.animation) { context in
+                    let phase = context.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 2.4) / 2.4
+                    Image(systemName: "sparkles").font(.system(size: 16))
+                        .scaleEffect(0.99 - 0.07 * cos(phase * 2 * .pi))
                 }
+            }
             if reduced { Text(uiText("Thinking")) } else {
                 TimelineView(.animation) { context in
                     let phase = context.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 1.6) / 1.6
                     Text(uiText("Thinking")).foregroundStyle(.secondary)
                         .overlay {
                             LinearGradient(colors: [.clear, Color(nsColor: .labelColor), .clear], startPoint: .leading, endPoint: .trailing)
-                                .frame(width: 24).offset(x: 70 - phase * 140)
+                                .frame(width: 24).offset(x: phase * 140 - 70)
                                 .mask(Text(uiText("Thinking")))
                         }
                 }
@@ -119,7 +122,8 @@ func browserAssistantErrorText(_ error: BrowserAIError) -> String {
 
 struct BrowserAssistantStreamingText: View {
     let message: BrowserAIMessage
-    @Environment(\.accessibilityReduceMotion) private var reduced
+    @Environment(\.accessibilityReduceMotion) private var systemReduced
+    private var reduced: Bool { systemReduced || OrbitMotionPreferences.prefersReducedMotion }
     @State private var visible: Set<UUID> = []
     var body: some View {
         rendered.onChange(of: message.chunks.map(\.id), initial: true) { _, ids in

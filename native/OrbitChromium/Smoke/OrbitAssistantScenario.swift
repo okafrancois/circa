@@ -44,6 +44,7 @@ extension OrbitSmokeDriver {
             $0.readsCurrentTabOnRequest = true
         }
         guard let window = owner.window else { check("assistant.window", false); return }
+        NSApp.setActivationPolicy(.regular)
         window.center()
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)

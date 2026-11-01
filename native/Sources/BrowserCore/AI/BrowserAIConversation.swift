@@ -190,7 +190,7 @@ public struct BrowserAICitation: Identifiable, Equatable, Sendable {
     public let snapshot: BrowserAIContextSnapshot
     public let passage: String
     public static func parse(_ message: BrowserAIMessage) -> [BrowserAICitation] {
-        guard message.role == .assistant, let regex = try? NSRegularExpression(pattern: #"\[(\d+): "([^"\n]{12,500})"\]"#) else { return [] }
+        guard message.role == .assistant, let regex = try? NSRegularExpression(pattern: #"\[(\d+): "([^"]{12,500})"\]"#) else { return [] }
         let text = message.text as NSString
         return regex.matches(in: message.text, range: NSRange(location: 0, length: text.length)).compactMap { match in
             guard let number = Int(text.substring(with: match.range(at: 1))), number > 0, number <= message.context.count else { return nil }

@@ -7,13 +7,19 @@ struct BrowserAssistantView: View {
     let conversation: BrowserAIConversation
     let choices: [BrowserAIModelChoice]
     let sources: [BrowserAIContextSource]
+    var usages: [BrowserAIProviderID: BrowserAIUsage] = [:]
+    private var currentUsage: BrowserAIUsage? {
+        conversation.messages.last(where: { $0.choice.provider == conversation.choice.provider })?.usage
+            ?? usages[conversation.choice.provider]
+    }
     let scopes: [String: [BrowserAIContextSource]]
     var currentTabID: UUID? = nil
     let enabled: Bool
     var citation: (BrowserAICitation) async -> Bool
     var close: () -> Void
     @State private var citationUnavailable = false
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
+    private var reduceMotion: Bool { systemReduceMotion || OrbitMotionPreferences.prefersReducedMotion }
     @FocusState private var composing: Bool
     @State private var draft = ""
     @State private var contextPickerPresented = false
@@ -26,7 +32,7 @@ struct BrowserAssistantView: View {
                     ForEach(choices, id: \.self) { choice in
                         Button(choice.model ?? BrowserSettingsAIText.name(choice.provider)) { conversation.switchProvider(to: choice) }
                     }
-                    if let usage = conversation.messages.last?.usage {
+                    if let usage = currentUsage {
                         Divider()
                         ForEach(Array(usage.windows.enumerated()), id: \.offset) { _, window in
                             Text("\(window.usedPercent)%")
@@ -37,7 +43,7 @@ struct BrowserAssistantView: View {
                     HStack(spacing: 6) {
                         BrowserAssistantProviderMark(provider: conversation.choice.provider)
                         Text(conversation.choice.model ?? BrowserSettingsAIText.name(conversation.choice.provider)).lineLimit(1)
-                        if let usage = conversation.messages.last?.usage?.windows.first {
+                        if let usage = currentUsage?.windows.first(where: { $0.span == .fiveHours }) {
                             Circle().trim(from: 0, to: Double(usage.usedPercent) / 100)
                                 .stroke(usage.isFull ? Color.red : usage.usedPercent >= 80 ? .orange : .secondary, lineWidth: 2)
                                 .rotationEffect(.degrees(-90)).frame(width: 12, height: 12)
@@ -113,7 +119,7 @@ struct BrowserAssistantView: View {
                         if new.count > old.count && new.hasSuffix("@") { contextPickerPresented = true }
                     }
                 HStack {
-                    if let usage = conversation.messages.last?.usage {
+                    if let usage = currentUsage {
                         ForEach(Array(usage.windows.enumerated()), id: \.offset) { _, window in
                             Text("\(window.usedPercent)%").font(.system(size: 11)).foregroundStyle(.secondary)
                         }

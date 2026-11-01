@@ -95,7 +95,7 @@ extension BrowserWindowController {
     private func assistantView(_ conversation: BrowserAIConversation) -> BrowserAssistantView {
         return BrowserAssistantView(conversation: conversation,
             choices: BrowserAIPolicy.choices(for: .chat, statuses: aiService?.statuses ?? [:]),
-            sources: assistantSources, scopes: assistantScopes, currentTabID: session.organization?.selectedTab?.id.rawValue, enabled: assistantEnabled, citation: { [weak self] in await self?.showAssistantCitation($0) ?? false }, close: { [weak self] in self?.closeAssistant() })
+            sources: assistantSources, usages: aiService?.statuses.compactMapValues { $0.state.usage } ?? [:], scopes: assistantScopes, currentTabID: session.organization?.selectedTab?.id.rawValue, enabled: assistantEnabled, citation: { [weak self] in await self?.showAssistantCitation($0) ?? false }, close: { [weak self] in self?.closeAssistant() })
     }
     func openAssistantSource(_ source: BrowserAIContextSource) {
         guard assistantSources.contains(source), let tab = session.organization?.allTabs.first(where: { $0.id.rawValue == source.id }) else { return }
