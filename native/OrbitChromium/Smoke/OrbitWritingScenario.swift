@@ -85,6 +85,26 @@ extension OrbitSmokeDriver {
                 capture.arguments = ["-x", "-l", String(window.windowNumber), runRoot.appendingPathComponent("writing-\(kind).png").path]
                 try? capture.run(); capture.waitUntilExit()
             }
+            if kind == "div", !live {
+                for action in [BrowserWritingHelp.Action.improve, .shorter, .translate] {
+                    owner.writingHelp?.run(action)
+                    _ = await until(5) { owner.writingHelp?.running == false }
+                    check("writing.action.\(action)", owner.writingHelp?.output.isEmpty == false)
+                }
+                try? Data("slow".utf8).write(to: runRoot.appendingPathComponent("fixture-mode"))
+                owner.writingHelp?.retry()
+                try? await Task.sleep(for: .milliseconds(150))
+                owner.writingHelp?.stop()
+                check("writing.stop", owner.writingHelp?.running == false)
+                try? Data("error".utf8).write(to: runRoot.appendingPathComponent("fixture-mode"))
+                owner.writingHelp?.retry()
+                _ = await until(3) { owner.writingHelp?.running == false }
+                check("writing.error", owner.writingHelp?.error.isEmpty == false)
+                try? FileManager.default.removeItem(at: runRoot.appendingPathComponent("fixture-mode"))
+                owner.writingHelp?.retry()
+                _ = await until(5) { owner.writingHelp?.running == false }
+                check("writing.retry-action", owner.writingHelp?.action == .translate && owner.writingHelp?.output.isEmpty == false)
+            }
             let output = owner.writingHelp?.output ?? ""
             owner.writingHelp?.apply(insertBelow: kind == "textarea")
             try? await Task.sleep(for: .milliseconds(500))
@@ -96,6 +116,23 @@ extension OrbitSmokeDriver {
             owner.writingHelp?.dismiss()
             if live { break }
         }
+        for key in ["master", "helper", "read", "site"] {
+            let saved = environment.settings.document.ai
+            try? await environment.settings.updateAI {
+                switch key {
+                case "master": $0.isEnabled = false
+                case "helper": $0.helpers.writingHelp = false
+                case "read": $0.readsCurrentTabOnRequest = false
+                default: $0.disabledSites = ["127.0.0.1"]
+                }
+            }
+            check("writing.block.\(key)", owner.writingChoice == nil)
+            try? await environment.settings.updateAI { $0 = saved }
+        }
+        _ = await evaluate("document.body.innerHTML='<input id=password type=password value=secret>';document.getElementById('password').focus();document.getElementById('password').select();true")
+        let password = try? await writer.writingSelection(revision: surface.documentGeneration, isCurrent: { true })
+        check("writing.block.password", password == nil)
+        _ = await until(14) { !recording.isRunning }
         environment.ai.terminateNow()
     }
 }

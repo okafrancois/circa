@@ -221,8 +221,7 @@ final class BrowserWritingHelp: ObservableObject {
     }
 
     private var toolbarWidth: CGFloat {
-        let font = BrandTextStyle.ui.font(size: 12, weight: .medium)
-        return ceil(Action.allCases.reduce(CGFloat(8 + 8 + 18), { $0 + ($1.label as NSString).size(withAttributes: [.font: font]).width + 18 }))
+        NSHostingView(rootView: BrowserWritingToolbar(model: self)).fittingSize.width
     }
 
     private func showToolbar() {
@@ -240,8 +239,8 @@ final class BrowserWritingHelp: ObservableObject {
     private func resizeResult() {
         let text = output.isEmpty ? error : output
         let width = max(100, frame(height: 100, above: false).width - 24)
-        let height = min(280, max(96, ceil((text as NSString).boundingRect(with: NSSize(width: width, height: 10_000),
-            options: [.usesLineFragmentOrigin, .usesFontLeading], attributes: [.font: BrandTextStyle.ui.font(size: 13)]).height) + 64))
+        let height = min(280, max(80, ceil((text as NSString).boundingRect(with: NSSize(width: width, height: 10_000),
+            options: [.usesLineFragmentOrigin, .usesFontLeading], attributes: [.font: BrandTextStyle.ui.font(size: 13)]).height) + 58))
         guard let result else { return }
         NSAnimationContext.runAnimationGroup { animation in
             animation.duration = OrbitMotionPreferences.prefersReducedMotion ? 0.15 : 0.3
@@ -285,9 +284,9 @@ private struct BrowserWritingToolbar: View {
                 Button { model.run(action) } label: {
                     HStack(spacing: 5) {
                         if action == .improve { OrbitIcon.view(sfName: "sparkles", pointSize: 13).frame(width: 13, height: 13) }
-                        Text(action.label)
+                        Text(action.label).fixedSize()
                     }.padding(.horizontal, 9).frame(height: 26)
-                }.buttonStyle(WritingActionStyle())
+                }.buttonStyle(WritingActionStyle(active: model.action == action && (model.running || !model.output.isEmpty)))
                     .accessibilityIdentifier("writing-\(action)")
             }
         }.font(Font(BrandTextStyle.ui.font(size: 12, weight: .medium)))
@@ -307,33 +306,58 @@ private struct BrowserWritingResult: View {
                     if !model.error.isEmpty { Text(model.error) }
                 }.frame(maxWidth: .infinity, alignment: .leading)
             }
-            HStack(spacing: 12) {
+            HStack(spacing: 6) {
                 if model.running { Button(uiText("Stop")) { model.stop() } }
                 else {
                     Button(uiText("Replace")) { model.apply(insertBelow: false) }
-                        .disabled(model.output.isEmpty || model.applying).accessibilityIdentifier("writing-replace")
+                        .disabled(model.output.isEmpty || model.applying).accessibilityIdentifier("writing-replace").buttonStyle(WritingResultActionStyle(primary: true))
                     Button(uiText("Insert Below")) { model.apply(insertBelow: true) }
                         .disabled(model.output.isEmpty || model.applying).accessibilityIdentifier("writing-insert")
                     Button(uiText("Retry")) { model.retry() }.disabled(model.applying)
                 }
-            }.buttonStyle(.plain).foregroundStyle(palette.accentInk.swiftUI)
+            }.buttonStyle(WritingResultActionStyle())
         }.font(Font(BrandTextStyle.ui.font(size: 13))).foregroundStyle(palette.ink.swiftUI)
             .padding(12).accessibilityIdentifier("writing-draft")
     }
 }
 
 private struct WritingActionStyle: ButtonStyle {
+    var active = false
     @Environment(\.assistantPalette) private var palette
     func makeBody(configuration: Configuration) -> some View {
-        WritingActionBody(configuration: configuration, palette: palette)
+        WritingActionBody(configuration: configuration, palette: palette, active: active)
     }
     private struct WritingActionBody: View {
         let configuration: ButtonStyleConfiguration
         let palette: BrowserAssistantPalette
+        let active: Bool
         @State private var hovered = false
         var body: some View {
-            configuration.label.background((configuration.isPressed ? palette.press : hovered ? palette.hover : .clear).swiftUI,
+            configuration.label.background((configuration.isPressed ? palette.press : hovered || active ? palette.hover : .clear).swiftUI,
                                            in: RoundedRectangle(cornerRadius: 6))
+                .onHover { hovered = $0 }
+        }
+    }
+}
+
+private struct WritingResultActionStyle: ButtonStyle {
+    var primary = false
+    func makeBody(configuration: Configuration) -> some View {
+        Body(configuration: configuration, primary: primary)
+    }
+    private struct Body: View {
+        let configuration: Configuration
+        let primary: Bool
+        @Environment(\.assistantPalette) private var palette
+        @Environment(\.isEnabled) private var enabled
+        @State private var hovered = false
+        var body: some View {
+            configuration.label.font(Font(BrandTextStyle.ui.font(size: 12.5, weight: .medium)))
+                .padding(.horizontal, 12).frame(height: 26)
+                .foregroundStyle((primary ? palette.onStrong : palette.ink).swiftUI)
+                .background((primary ? palette.strong : hovered ? palette.hover : palette.wash).swiftUI,
+                            in: RoundedRectangle(cornerRadius: 7))
+                .opacity(enabled ? (configuration.isPressed ? 0.8 : 1) : 0.45)
                 .onHover { hovered = $0 }
         }
     }
