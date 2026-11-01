@@ -1,5 +1,6 @@
 import AppKit
 import BrowserCore
+import ChromiumEngine
 
 /// Deterministic provider used only by the confined Chromium smoke executable.
 actor OrbitAssistantFixtureClient: BrowserAIProviderClient {
@@ -41,14 +42,38 @@ actor OrbitAssistantFixtureClient: BrowserAIProviderClient {
 extension OrbitSmokeDriver {
     func assistantInteractive(_ environment: OrbitEnvironment, _ owner: OrbitWindowController) async {
         environment.ai.terminateNow()
+        if !arguments.contains("--orbit-smoke-assistant-live") {
         for id in [BrowserAIProviderID.codex, .claudeCode] {
             let client = OrbitAssistantFixtureClient(id: id, root: runRoot)
             environment.ai.clientOverrides[id] = client
             environment.ai.statuses[id] = await client.status(refresh: false)
         }
+        }
+        let assistantDisabled = arguments.contains("--orbit-smoke-assistant-disabled")
+        let readingDisabled = arguments.contains("--orbit-smoke-assistant-read-off")
+        let siteExcluded = arguments.contains("--orbit-smoke-assistant-excluded")
         try? await environment.settings.updateAI {
-            $0.isEnabled = true
-            $0.readsCurrentTabOnRequest = true
+            $0.isEnabled = !assistantDisabled
+            $0.readsCurrentTabOnRequest = !readingDisabled
+            if siteExcluded { $0.disabledSites = ["127.0.0.1"] }
+        }
+        if arguments.contains("--orbit-smoke-assistant-live") {
+            environment.ai.refresh(explicit: true, keepRunning: true)
+            _ = await until(15) { !environment.ai.isChecking }
+        }
+        if arguments.contains("--orbit-smoke-assistant-folder"), let space = owner.session.organization?.spaceID {
+            var members: [BrowserOrganizationNode] = []
+            for name in ["folder-a", "folder-b"] {
+                let url = fixture.appendingPathComponent(name)
+                owner.openTab(url: url)
+                _ = await committed(owner, url)
+                if let tab = owner.session.organization?.selectedTab { members.append(.tab(tab.id)) }
+            }
+            _ = await owner.session.createFolder(title: "Synthetic folder", at: .init(.pinned(space)), containing: members).value
+        }
+        if arguments.contains("--orbit-smoke-assistant-private"), let application {
+            application.createPrivateCommandWindow()
+            await application.waitForPrivateWindowCommands()
         }
         guard let window = owner.window else { check("assistant.window", false); return }
         NSApp.setActivationPolicy(.regular)
@@ -60,31 +85,39 @@ extension OrbitSmokeDriver {
         let deadline = Date().addingTimeInterval(40)
         while Date() < deadline {
             let controllers = application.map { Array($0.windows.windows.values) } ?? environment.liveControllers
-            for controller in controllers where controller.window?.isVisible == false {
-                controller.window?.center()
-                controller.window?.makeKeyAndOrderFront(nil)
+            for controller in controllers {
+                guard let window = controller.window else { continue }
+                if !window.isVisible || !NSScreen.screens.contains(where: { $0.visibleFrame.intersects(window.frame) }) {
+                    window.center()
+                    window.makeKeyAndOrderFront(nil)
+                }
             }
             let commandURL = self.runRoot.appendingPathComponent("input-\(sequence).json")
             if let data = try? Data(contentsOf: commandURL) {
                 let command = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
                 let targetNumber = command?["window"] as? Int ?? window.windowNumber
                 let targetOwner = controllers.first { $0.window?.windowNumber == targetNumber } ?? owner
-                guard let targetWindow = targetOwner.window, targetWindow.windowNumber == targetNumber else { sequence += 1; continue }
+                guard let targetWindow = controllers.compactMap(\.window).first(where: { $0.windowNumber == targetNumber })
+                    ?? NSApp.windows.first(where: { $0.windowNumber == targetNumber }) else { sequence += 1; continue }
                 var result = self.assistantOwnedInput(data, window: targetWindow, owner: targetOwner)
                 result["windows"] = controllers.compactMap { controller -> [String: Any]? in
                     guard let window = controller.window else { return nil }
-                    return ["window": window.windowNumber, "owner": controller.id.uuidString, "private": controller.isPrivateWindow]
+                    return ["window": window.windowNumber, "owner": controller.id.uuidString, "private": controller.isPrivateWindow, "visible": window.isVisible,
+                            "frame": [window.frame.minX, window.frame.minY, window.frame.width, window.frame.height]]
                 }
                 if let panel = targetOwner.assistantHost {
                     result["panelFrame"] = [panel.frame.minX, panel.frame.minY, panel.frame.width, panel.frame.height]
                 }
+                if let settings = application?.settingsWindow?.window { result["settingsWindow"] = settings.windowNumber }
                 result["uptime"] = ProcessInfo.processInfo.systemUptime
                 result["frame"] = [targetWindow.frame.minX, targetWindow.frame.minY, targetWindow.frame.width, targetWindow.frame.height]
-                if command?["kind"] as? String == "capture", let surface = targetOwner.session.selectedSurface {
+                if let surface = targetOwner.session.selectedSurface,
+                   ["capture", "read-probe"].contains(command?["kind"] as? String ?? "") {
+                    result["pageReads"] = await self.assistantReadProbe(surface, install: command?["kind"] as? String == "read-probe")
                     let (_, document) = await surface.devToolsCall("Runtime.evaluate", params: #"{"expression":"JSON.stringify({url:location.href,marks:Array.from(document.querySelectorAll('mark')).map(n=>n.textContent),scrollY:scrollY})","returnByValue":true}"#)
                     result["document"] = String(decoding: document, as: UTF8.self)
                 }
-                if let conversation = targetOwner.aiConversation {
+                if targetOwner.window === targetWindow, let conversation = targetOwner.aiConversation {
                     result["conversation"] = conversation.id.uuidString
                     result["messages"] = conversation.messages.map { ["id": $0.id.uuidString, "text": $0.text] }
                     result["sources"] = conversation.selectedSources.count
@@ -114,6 +147,26 @@ extension OrbitSmokeDriver {
 
 
 extension OrbitSmokeDriver {
+    /// Counts extraction walkers in the reader's isolated world, on synthetic pages only.
+    private func assistantReadProbe(_ surface: ChromiumSurface, install: Bool) async -> Int? {
+        let (ok, data) = await surface.devToolsCall("Page.getFrameTree")
+        guard ok, let tree = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let node = tree["frameTree"] as? [String: Any], let frame = node["frame"] as? [String: Any],
+              let id = frame["id"] as? String,
+              let params = try? JSONSerialization.data(withJSONObject: ["frameId": id, "worldName": "OrbitAssistantData"]) else { return nil }
+        let (_, worldData) = await surface.devToolsCall("Page.createIsolatedWorld", params: String(decoding: params, as: UTF8.self))
+        guard let world = try? JSONSerialization.jsonObject(with: worldData) as? [String: Any],
+              let context = world["executionContextId"] as? Int else { return nil }
+        let script = install ? "(()=>{if(!globalThis.__ownedReaderProbe){globalThis.__ownedReaderProbe={count:0};const original=Document.prototype.createTreeWalker;Document.prototype.createTreeWalker=function(...args){globalThis.__ownedReaderProbe.count++;return Reflect.apply(original,this,args)}}return globalThis.__ownedReaderProbe.count})()" : "globalThis.__ownedReaderProbe?.count ?? 0"
+        guard let evaluation = try? JSONSerialization.data(withJSONObject: ["contextId": context, "expression": script, "returnByValue": true]) else { return nil }
+        let (_, reply) = await surface.devToolsCall("Runtime.evaluate", params: String(decoding: evaluation, as: UTF8.self))
+        let json = (try? JSONSerialization.jsonObject(with: reply)) as? [String: Any]
+        return (json?["result"] as? [String: Any])?["value"] as? Int
+    }
+}
+
+
+extension OrbitSmokeDriver {
     /// Only the marked, mock-keychain smoke driver calls this mailbox. Events never leave this process.
     private func assistantOwnedInput(_ data: Data, window: NSWindow, owner: OrbitWindowController) -> [String: Any] {
         guard FileManager.default.fileExists(atPath: runRoot.appendingPathComponent(".orbit-chromium-lab").path),
@@ -127,7 +180,7 @@ extension OrbitSmokeDriver {
               let kind = command["kind"] as? String else { return ["ok": false, "error": "Invalid owned window or command"] }
         var handled = false
         switch kind {
-        case "shortcut":
+        case "shortcut", "native-shortcut":
             var modifiers: NSEvent.ModifierFlags = []
             for flag in command["modifiers"] as? [String] ?? [] {
                 switch flag {
@@ -140,6 +193,14 @@ extension OrbitSmokeDriver {
             }
             if let key = command["text"] as? String,
                let event = BrowserGlobalQuickWindowShortcut.layoutEvent(for: .init(key: key, modifiers: modifiers)) {
+                if kind == "native-shortcut", let native = NSEvent.keyEvent(with: .keyDown, location: .zero,
+                    modifierFlags: modifiers, timestamp: ProcessInfo.processInfo.systemUptime,
+                    windowNumber: window.windowNumber, context: nil, characters: key,
+                    charactersIgnoringModifiers: key, isARepeat: false, keyCode: event.keyCode) {
+                    window.makeKeyAndOrderFront(nil)
+                    NSApp.postEvent(native, atStart: false)
+                    return ["ok": true, "pid": Int(getpid()), "window": window.windowNumber, "queued": true]
+                }
                 // The product's local monitor offers raw feature input before menu equivalents.
                 if owner.window === window, let registry = owner.palette.registry,
                    registry.capturePaletteTarget()?.windowID == owner.id {
@@ -182,7 +243,7 @@ extension OrbitSmokeDriver {
                     handled = true
                 }
             }
-        case "capture": handled = true
+        case "capture", "read-probe": handled = true
         default: break
         }
         let responder = window.firstResponder
