@@ -76,6 +76,14 @@ extension OrbitSmokeDriver {
             if let event = NSEvent.keyEvent(with: .keyUp, location: .zero, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber, context: nil, characters: "a", charactersIgnoringModifiers: "a", isARepeat: false, keyCode: 0) { NSApp.sendEvent(event) }
             try? await Task.sleep(for: .milliseconds(800))
             check("writing.\(kind).toolbar", window.childWindows?.contains { $0.identifier?.rawValue == "writing-toolbar" } == true)
+            if arguments.contains("--orbit-smoke-writing-ask") {
+                owner.writingHelp?.run(.ask)
+                try? await Task.sleep(for: .milliseconds(400))
+                check("writing.ask-prefilled", owner.palette.isPresented && owner.palette.draft == selection.text)
+                check("writing.ask-focused", window.firstResponder is NSTextView)
+                check("writing.ask-not-sent", !FileManager.default.fileExists(atPath: runRoot.appendingPathComponent("request-codex-1.txt").path))
+                return
+            }
             owner.writingHelp?.run(.fix)
             _ = await until(live ? 20 : 8) { owner.writingHelp?.running == false }
             check("writing.\(kind).draft", owner.writingHelp?.output.isEmpty == false)
@@ -113,6 +121,14 @@ extension OrbitSmokeDriver {
             guard owns() else { return }
             _ = await evaluate("e.focus();document.execCommand('undo');true")
             check("writing.\(kind).undo", await evaluate("('value' in e?e.value:e.textContent)==='The team are ready to ships this release.'") as? Bool == true)
+            if kind == "div", !live {
+                _ = await evaluate("var r=document.createRange();r.selectNodeContents(e);getSelection().removeAllRanges();getSelection().addRange(r);true")
+                if let lease = try? await writer.writingSelection(revision: revision, isCurrent: { true }) {
+                    _ = await evaluate("e.textContent+=' manual edit';true")
+                    let applied = try? await writer.applyWriting("stale draft", selection: lease, insertBelow: false, revision: revision, isCurrent: { true })
+                    check("writing.stale-rejected", applied == false)
+                } else { check("writing.stale-rejected", false) }
+            }
             owner.writingHelp?.dismiss()
             if live { break }
         }

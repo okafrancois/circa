@@ -343,9 +343,9 @@ private struct WritingActionStyle: ButtonStyle {
 private struct WritingResultActionStyle: ButtonStyle {
     var primary = false
     func makeBody(configuration: Configuration) -> some View {
-        Body(configuration: configuration, primary: primary)
+        Styled(configuration: configuration, primary: primary)
     }
-    private struct Body: View {
+    private struct Styled: View {
         let configuration: Configuration
         let primary: Bool
         @Environment(\.assistantPalette) private var palette
