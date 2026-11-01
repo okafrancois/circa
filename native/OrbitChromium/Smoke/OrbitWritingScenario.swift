@@ -39,6 +39,30 @@ extension OrbitSmokeDriver {
             let rows = CGWindowListCopyWindowInfo([.optionIncludingWindow], CGWindowID(window.windowNumber)) as? [[String: Any]]
             return rows?.contains { ($0[kCGWindowOwnerPID as String] as? Int32) == getpid() } == true
         }
+        if arguments.contains("--orbit-smoke-writing-reference") {
+            let reference = fixture.appendingPathComponent("reference.html")
+            owner.openTab(url: reference)
+            _ = await committed(owner, reference)
+            guard let referenceSurface = owner.pageCommandSurface() else { return }
+            func ref(_ script: String) async {
+                guard owns(), let data = try? JSONSerialization.data(withJSONObject: ["expression": script]) else { return }
+                _ = await referenceSurface.devToolsCall("Runtime.evaluate", params: String(decoding: data, as: UTF8.self))
+            }
+            await ref("document.querySelector('#h6').scrollIntoView({block:'center'})")
+            let recording = Process(); recording.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
+            recording.arguments = ["-x", "-v", "-V", "7", "-l", String(window.windowNumber), runRoot.appendingPathComponent("reference.mov").path]
+            if owns() { try? recording.run() }
+            try? await Task.sleep(for: .milliseconds(300))
+            await ref("document.querySelector('#h6b').click()")
+            try? await Task.sleep(for: .milliseconds(900))
+            await ref("document.querySelector('#h6w [data-w]').click()")
+            _ = await until(9) { !recording.isRunning }
+            return
+        }
+        let recording = Process(); recording.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
+        recording.arguments = ["-x", "-v", "-V", "12", "-l", String(window.windowNumber), runRoot.appendingPathComponent("native.mov").path]
+        if owns() { try? recording.run() }
+        defer { if recording.isRunning { recording.terminate() } }
         for kind in ["input", "textarea", "div"] {
             guard owns() else { check("writing.owner", false); return }
             _ = await evaluate("document.body.innerHTML='<\(kind) id=editor contenteditable=true style=\"margin:80px;width:600px;font:20px system-ui\"></\(kind)>';var e=document.getElementById('editor');if('value' in e)e.value='The team are ready to ships this release.';else e.textContent='The team are ready to ships this release.';e.focus();if('select' in e)e.select();else{var r=document.createRange();r.selectNodeContents(e);var s=getSelection();s.removeAllRanges();s.addRange(r)};true")
@@ -47,7 +71,7 @@ extension OrbitSmokeDriver {
             check("writing.\(kind).selection", selection.text == "The team are ready to ships this release.")
             guard owns() else { return }
             // Native key-up uses the same settle/capture path as a user's completed selection.
-            if let event = NSEvent.keyEvent(with: .keyUp, location: .zero, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber, context: nil, characters: "a", charactersIgnoringModifiers: "a", isARepeat: false, keyCode: 0) { window.sendEvent(event) }
+            if let event = NSEvent.keyEvent(with: .keyUp, location: .zero, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber, context: nil, characters: "a", charactersIgnoringModifiers: "a", isARepeat: false, keyCode: 0) { NSApp.sendEvent(event) }
             try? await Task.sleep(for: .milliseconds(800))
             check("writing.\(kind).toolbar", window.childWindows?.contains { $0.identifier?.rawValue == "writing-toolbar" } == true)
             owner.writingHelp?.run(.fix)
@@ -56,7 +80,7 @@ extension OrbitSmokeDriver {
             check("writing.\(kind).unchanged", await evaluate("('value' in e?e.value:e.textContent)==='The team are ready to ships this release.'") as? Bool == true)
             if owns() {
                 let capture = Process(); capture.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
-                capture.arguments = ["-x", runRoot.appendingPathComponent("writing-\(kind).png").path]
+                capture.arguments = ["-x", "-l", String(window.windowNumber), runRoot.appendingPathComponent("writing-\(kind).png").path]
                 try? capture.run(); capture.waitUntilExit()
             }
             let output = owner.writingHelp?.output ?? ""
