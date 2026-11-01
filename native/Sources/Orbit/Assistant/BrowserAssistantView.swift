@@ -109,7 +109,6 @@ struct BrowserAssistantView: View {
     private var transcript: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                if conversation.messages.isEmpty { ready }
                 ForEach(conversation.messages) { message in
                     if message.role == .user { userBubble(message) } else { answer(message) }
                 }
@@ -132,32 +131,6 @@ struct BrowserAssistantView: View {
             }
         }
         .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { viewportHeight = $0 }
-    }
-
-    private var ready: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            OrbitIcon.view(sfName: "sparkles", pointSize: 20).font(.system(size: 18)).foregroundStyle(palette.accentInk.swiftUI)
-            Text(uiText("Ask about this tab")).font(.system(size: 17, weight: .bold)).tracking(-0.34)
-            VStack(spacing: 6) {
-                suggestion("text.alignleft", uiText("Summarize this tab")) { _ = conversation.send(uiText("Summarize this tab")) }
-                    .disabled(!enabled)
-                suggestion("text.magnifyingglass", uiText("What matters on this page")) { _ = conversation.send(uiText("What matters on this page")) }
-                    .disabled(!enabled)
-                suggestion("sidebar.right", uiText("Compare with another tab…")) { contextPickerPresented = true }
-                    .disabled(!hasContextChoices)
-            }
-        }
-    }
-
-    private func suggestion(_ icon: String, _ title: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            HStack(spacing: 9) {
-                OrbitIcon.view(sfName: icon, pointSize: 16).font(.system(size: 13)).foregroundStyle(palette.secondary.swiftUI)
-                    .frame(width: 16, height: 16)
-                Text(title).font(.system(size: 13)).lineLimit(1).truncationMode(.tail)
-                Spacer(minLength: 0)
-            }.padding(.horizontal, 11).frame(height: 36).frame(maxWidth: .infinity)
-        }.buttonStyle(BrowserAssistantButtonStyle(kind: .outlined(radius: 10)))
     }
 
     private func userBubble(_ message: BrowserAIMessage) -> some View {
@@ -276,7 +249,7 @@ struct BrowserAssistantView: View {
                 }
             HStack(spacing: 6) {
                 Button { contextPickerPresented.toggle() } label: {
-                    OrbitIcon.view(sfName: "at", pointSize: 16).font(.system(size: 14)).foregroundStyle(palette.secondary.swiftUI)
+                    OrbitIcon.contextSymbol.font(.system(size: 14)).foregroundStyle(palette.secondary.swiftUI)
                         .frame(width: 30, height: 30)
                 }.buttonStyle(BrowserAssistantButtonStyle(kind: .icon, active: contextPickerPresented))
                     .disabled(!hasContextChoices).help(uiText("Add context")).accessibilityLabel(uiText("Add context"))

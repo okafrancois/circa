@@ -130,6 +130,28 @@ struct BrowserAssistantPaletteTests {
 struct BrowserAssistantDockGeometryTests {
     private let screen = NSRect(x: 0, y: 0, width: 1512, height: 949)
 
+    @Test("The native context symbol has transparent counters", arguments: [NSAppearance.Name.aqua, .darkAqua])
+    func contextSymbolRaster(appearanceName: NSAppearance.Name) throws {
+        let appearance = try #require(NSAppearance(named: appearanceName))
+        let renderer = ImageRenderer(content: OrbitIcon.contextSymbol.font(.system(size: 48))
+            .foregroundStyle(.black).frame(width: 64, height: 64))
+        let bitmap = try #require(NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 64, pixelsHigh: 64,
+            bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+            colorSpaceName: .deviceRGB, bytesPerRow: 256, bitsPerPixel: 32))
+        let context = try #require(NSGraphicsContext(bitmapImageRep: bitmap))
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = context
+        appearance.performAsCurrentDrawingAppearance {
+            context.cgContext.clear(CGRect(x: 0, y: 0, width: 64, height: 64))
+            renderer.nsImage?.draw(in: NSRect(x: 0, y: 0, width: 64, height: 64))
+        }
+        context.flushGraphics()
+        NSGraphicsContext.restoreGraphicsState()
+        let pixels = try #require(bitmap.bitmapData)
+        let ink = (0..<4096).filter { pixels[$0 * 4 + 3] > 32 }.count
+        #expect(ink > 200 && ink < 2500)
+    }
+
     @Test("Selector stays inside the dock at every width", arguments: [300.0, 372.0, 480.0] as [CGFloat])
     func selectorBounds(panelWidth: CGFloat) {
         let composer = NSRect(x: 1000, y: 40, width: panelWidth - 20, height: 120)
@@ -190,6 +212,14 @@ struct BrowserAssistantDockGeometryTests {
         #expect(edges.last?.frame == clip.frame)
         let page = try #require(edges.first)
         #expect(abs(clip.frame.minX - page.frame.maxX - 10) < 1)
+        // Fullscreen and windowed restoration use the same shell radius on both cards.
+        for radius: CGFloat in [0, OrbitTokens.Radius.contentCard, 0, OrbitTokens.Radius.contentCard] {
+            card.cornerRadius = radius
+            card.layoutSubtreeIfNeeded()
+            #expect(clip.layer?.cornerRadius == radius)
+            #expect(edges.allSatisfy { $0.cornerRadius == radius })
+            #expect(abs(clip.frame.minX - page.frame.maxX - 10) < 1)
+        }
         card.setAssistant(nil, width: 0)
     }
 }

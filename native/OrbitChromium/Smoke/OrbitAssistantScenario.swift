@@ -96,6 +96,8 @@ extension OrbitSmokeDriver {
             application.createPrivateCommandWindow()
             await application.waitForPrivateWindowCommands()
         }
+        owner.openTab(url: fixture)
+        _ = await committed(owner, fixture)
         guard let window = owner.window else { check("assistant.window", false); return }
         application?.windowPresenter = { controller, activate in
             if activate { controller.showWindow(nil) }
@@ -131,7 +133,17 @@ extension OrbitSmokeDriver {
                         }
                     }
                 }
+                if command?["kind"] as? String == "space-polarity",
+                   let space = targetOwner.session.organization?.spaceID,
+                   let profile = targetOwner.session.activeProfileID {
+                    let dark = command?["dark"] as? Bool ?? false
+                    let theme = BrowserSpaceThemePresets.theme(family: BrowserSpaceThemePresets.greyscale, index: dark ? 8 : 0, mode: dark ? .dark : .light)
+                    _ = try? await targetOwner.session.setSpaceTheme(theme, for: space, profileID: profile)
+                }
                 var result = self.assistantOwnedInput(data, window: targetWindow, owner: targetOwner)
+                result["cardRadius"] = targetOwner.contentCard.cornerRadius
+                result["fullscreen"] = targetWindow.styleMask.contains(.fullScreen)
+
                 result["windows"] = controllers.compactMap { controller -> [String: Any]? in
                     guard let window = controller.window else { return nil }
                     return ["window": window.windowNumber, "owner": controller.id.uuidString, "private": controller.isPrivateWindow, "visible": window.isVisible, "onActiveSpace": window.isOnActiveSpace,
@@ -143,6 +155,8 @@ extension OrbitSmokeDriver {
                     let frame = targetOwner.contentCard.convert(panel.bounds, from: panel)
                     result["panelFrame"] = [frame.minX, frame.minY, frame.width, frame.height]
                     if let clip = panel.superview {
+                        result["assistantRadius"] = clip.layer?.cornerRadius
+
                         let visible = targetOwner.contentCard.convert(clip.bounds, from: clip)
                         result["panelRevealFrame"] = [visible.minX, visible.minY, visible.width, visible.height]
                     }
@@ -378,7 +392,10 @@ extension OrbitSmokeDriver {
             window.makeKeyAndOrderFront(nil)
             window.orderFrontRegardless()
             handled = window.isVisible
-        case "capture", "read-probe", "fixture-status": handled = true
+        case "fullscreen":
+            window.toggleFullScreen(nil)
+            handled = true
+        case "capture", "read-probe", "fixture-status", "space-polarity": handled = true
         default: break
         }
         let responder = window.firstResponder

@@ -18,6 +18,8 @@ enum OrbitIcon {
     }()
     static var templateNames: [String] { catalog.template }
     static var colorNames: [String] { catalog.color }
+    /// The native context mark retains its transparent counters when tinted.
+    @MainActor static var contextSymbol: Image { Image(systemName: "at") }
     // Cached sources are immutable after publication; copies leave the lock.
     private static let images = OSAllocatedUnfairLock(uncheckedState: [String: NSImage]())
 
