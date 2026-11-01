@@ -244,6 +244,7 @@ struct State {
   // OnAfterCreated) or drop them silently; they no longer block quit.
   std::set<uint64_t> abandoned_popups;
   std::map<uint64_t, CefRefPtr<CefRequestContext>> profiles;
+  std::map<uint64_t, CefRefPtr<CefValue>> extension_import_original_preferences;
   std::set<uint64_t> ready_profiles;
   // Synthetic authenticated-import lane: no surface/extension route ever opens these targets.
   std::map<uint64_t, std::shared_ptr<orbit_auth::FreshDirectory>> auth_targets;
@@ -2259,6 +2260,17 @@ extern "C" int32_t ACRRun(int argc, char* argv[], const ACRRunOptions* options,
     state.unresponsive.clear();
     for (const auto& [token, context] : state.profiles) ACRObserveExtensions(token, 0);
     StopAuthenticationOperations(/*before_shutdown=*/true);
+    // A preference-service import has not entered ExtensionPrefs' live registration lifecycle.
+    // Restore its original in-memory IDs before keyed services shut down. The importer publishes
+    // the retained, target-generated integrity file after CefShutdown; next launch registers IDs.
+    for (const auto& [token, original] : state.extension_import_original_preferences) {
+      const auto profile = state.profiles.find(token);
+      if (profile != state.profiles.end()) {
+        CefString error;
+        profile->second->SetPreference("extensions.settings", original, error);
+      }
+    }
+    state.extension_import_original_preferences.clear();
     state.profiles.clear();
     state.windows.clear();
     state.pending_windows.clear();
@@ -3403,6 +3415,38 @@ extern "C" int32_t ACRExtensionsSnapshot(uint64_t token, char* output, uint32_t 
   const char* path = ExtensionProfilePath(token);
   return path && ACRExtensionsAvailable() ? g_state->orbit->extensions_snapshot(path, output, capacity) : -1;
 }
+// Import registration is performed before any browser surface exists. Chromium owns hashing
+// and persistence; the next context launch loads and verifies the installed packages normally.
+extern "C" int32_t ACRExtensionImportPreferences(uint64_t token, const char* json) {
+  if (!NSThread.isMainThread || !g_state || !json || !g_state->hosts.empty() ||
+      !g_state->ready_profiles.contains(token)) return 0;
+  auto found = g_state->profiles.find(token);
+  if (found == g_state->profiles.end()) return 0;
+  auto context = found->second;
+  auto parsed = CefParseJSON(json, JSON_PARSER_RFC);
+  if (!parsed || parsed->GetType() != VTYPE_DICTIONARY) return 0;
+  auto extensions = parsed->GetDictionary()->GetDictionary("extensions");
+  if (!extensions) return 0;
+  auto settings = extensions->GetDictionary("settings");
+  auto pinned = extensions->GetList("pinned_extensions");
+  if (!settings || !pinned || !context->CanSetPreference("extensions.settings") ||
+      !context->CanSetPreference("extensions.pinned_extensions")) return 0;
+  auto current = context->GetPreference("extensions.settings");
+  if (!current || current->GetType() != VTYPE_DICTIONARY) return 0;
+  g_state->extension_import_original_preferences.try_emplace(token, current->Copy());
+  auto merged = current->GetDictionary()->Copy(false);
+  CefDictionaryValue::KeyList ids;
+  settings->GetKeys(ids);
+  for (const auto& id : ids) {
+    if (!merged->HasKey(id)) merged->SetValue(id, settings->GetValue(id)->Copy());
+  }
+  auto value = CefValue::Create(); value->SetDictionary(merged);
+  CefString error;
+  if (!context->SetPreference("extensions.settings", value, error)) return 0;
+  value = CefValue::Create(); value->SetList(pinned->Copy());
+  return context->SetPreference("extensions.pinned_extensions", value, error) ? 1 : 0;
+}
+
 extern "C" int32_t ACRExtensionSetEnabled(uint64_t token, const char* id, int32_t enabled) {
   const char* path = ExtensionProfilePath(token);
   return path && ACRExtensionsAvailable() && orbit_bridge::ValidExtensionID(id) ?

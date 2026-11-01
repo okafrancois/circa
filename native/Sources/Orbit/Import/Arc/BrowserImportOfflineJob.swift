@@ -119,7 +119,9 @@ final class BrowserImportOfflineJob: @unchecked Sendable {
             let checkpoint: (String) throws -> Void = { point in
                 try BrowserImportUISynthetic.checkpoint(point, configuration: self.configuration)
             }
-            if let batch {
+            if adapter is ArcBrowserImportAdapter {
+                _ = try await importer.apply(refreshed, to: target)
+            } else if let batch {
                 _ = try await BrowserAuthenticationRun.applyBatch(batch, importer: importer, target: target,
                     recoveryKey: key, elapsedBeforeApply: elapsedBeforeApply, checkpoint: checkpoint)
             } else if let safari = adapter as? SafariBrowserImportAdapter {
@@ -176,6 +178,12 @@ extension OrbitApplication {
             if result.failed {
                 try? BrowserImportMetadata.removeResult(root: configuration.dataRoot)
                 BrowserImportPicker().failure(BrowserAuthenticationImportError.invalidState)
+                return
+            }
+            if result.sourceID == "arc", !result.restored {
+                try? BrowserImportMetadata.removeResult(root: configuration.dataRoot)
+                ArcImportFirstRunOffer.record(.accepted, at: ArcImportDataLocation(sessionFile: configuration.sessionFile))
+                startArcSiteSessionImport(continuingArcImport: true)
                 return
             }
             alert.messageText = result.restored ? uiText("Import Restored") : uiText("Import Complete")

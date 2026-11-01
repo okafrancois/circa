@@ -144,7 +144,27 @@ enum OrbitPerformanceProbe {
                 try? FileManager.default.removeItem(at: commandFile)
                 let name = command["command"] ?? ""
                 result["commandNonce"] = command["nonce"] ?? ""
-                if name == "sidebar-transparency", ownsWindow(owner, bundleID: "lab.orbit.orbit.sidebar-transparency"), let window = owner.window {
+                if name == "extension-import-check", ownsWindow(owner, bundleID: "lab.orbit.orbit.extensions-import") {
+                    application.confirmQuit = { .quit }
+                    let catalog = await environment.store.catalogSnapshot()
+                    var checks: [[String: Any]] = []
+                    for space in catalog.spaces {
+                        guard ownsWindow(owner, bundleID: "lab.orbit.orbit.extensions-import") else { break }
+                        owner.session.activateSpace(space.id)
+                        await owner.session.waitForPendingCommands()
+                        owner.session.openTab(url: URL(string: "http://127.0.0.1:18089/")!)
+                        await owner.session.waitForPendingCommands()
+                        if let surface = owner.session.selectedSurface {
+                            await waitForLoad(surface)
+                            try? await Task.sleep(for: .milliseconds(500))
+                            let items = (try? owner.engine.extensions?.installedExtensions(in: space.profileID)) ?? []
+                            let marker = await evaluate(surface, "({marker:document.documentElement.dataset.extensionImport||''})")
+                            checks.append(["profile": space.profileID.rawValue.uuidString,
+                                "items": items.map { ["id": $0.id, "enabled": $0.isEnabled, "pinned": $0.isPinned ?? false] }, "page": marker ?? [:]])
+                        }
+                    }
+                    result["extensionImport"] = checks
+                } else if name == "sidebar-transparency", ownsWindow(owner, bundleID: "lab.orbit.orbit.sidebar-transparency"), let window = owner.window {
                     if let mode = command["appearance"] {
                         window.appearance = NSAppearance(named: mode == "light" ? .aqua : .darkAqua)
                     }

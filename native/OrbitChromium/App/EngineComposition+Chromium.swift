@@ -149,6 +149,7 @@ enum OrbitLauncher {
     }
 
     private static var authenticationRecoveryRelaunch = false
+    private static var provisionedExtensions: [BrowserExtensionImportStage] = []
     private static var authenticationRun: BrowserAuthenticationRun?
 
     private static func prepareAuthenticationRun(_ configuration: OrbitProductConfiguration, beginPasswords: Bool = true) throws {
@@ -179,7 +180,7 @@ enum OrbitLauncher {
         }
         try OrbitOnboardingImportRecovery.reconcile(run.status, configuration: configuration)
         // Mark the startup attempt before CEF can mutate Local State or open a profile.
-        if beginPasswords, run.status.phase == .passwordsPending { try run.beginPasswordApplication() }
+        if beginPasswords, try BrowserExtensionImportStage.pending(dataRoot: configuration.dataRoot).isEmpty, run.status.phase == .passwordsPending { try run.beginPasswordApplication() }
         authenticationRun = run
     }
 
@@ -301,6 +302,40 @@ enum OrbitLauncher {
     static var passwordImportRestored = false
 
     private static func startAfterPasswordImport(_ configuration: OrbitProductConfiguration) {
+        do {
+            let stages = try BrowserExtensionImportStage.pending(dataRoot: configuration.dataRoot)
+            if !stages.isEmpty {
+                Task { @MainActor in
+                    let engine = makeActiveEngine()
+                    do {
+                        for stage in stages {
+                            await engine.profileReady(stage.profileID)
+                            try engine.stageImportedExtensions(stage.json, in: stage.profileID)
+                        }
+                        engine.prepareImportedExtensionProfiles(stages.map(\.profileID))
+                        let deadline = ContinuousClock.now + .seconds(18)
+                        while !stages.allSatisfy({ $0.isPersisted() }), ContinuousClock.now < deadline {
+                            try await Task.sleep(for: .milliseconds(100))
+                        }
+                        guard stages.allSatisfy({ $0.isPersisted() }) else { throw BrowserEngineError.unsupportedOperation }
+                        for stage in stages { try stage.retainRegistration() }
+                        await engine.shutdown()
+                        provisionedExtensions = stages
+                        authenticationRecoveryRelaunch = true
+                    } catch {
+                        try? BrowserExtensionImportStage.registrationFailed(dataRoot: configuration.dataRoot)
+                        await engine.shutdown()
+                        FileHandle.standardError.write(Data("orbit: extension registration failed; import staging retained\n".utf8))
+                    }
+                    ChromiumRuntime.shared.requestQuit()
+                }
+                return
+            }
+        } catch {
+            FileHandle.standardError.write(Data("orbit: extension staging unreadable; startup refused\n".utf8))
+            ChromiumRuntime.shared.requestQuit()
+            return
+        }
             if let run = authenticationRun, run.status.phase == .passwordsApplying {
                 Task { @MainActor in
                     let engine = makeActiveEngine()
@@ -359,6 +394,10 @@ enum OrbitLauncher {
             delegate?.pendingBrowserImport = nil
             authenticationRecoveryRelaunch = true
         }
+        do { for stage in provisionedExtensions { try stage.complete() } }
+        catch { FileHandle.standardError.write(Data("orbit: extension staging completion failed; retry retained\n".utf8)); exit(65) }
+        if !provisionedExtensions.isEmpty, configuration.syntheticGuard != nil,
+           CommandLine.arguments.contains("--orbit-extension-import-provision-only") { exit(status) }
         if delegate?.wantsSiteSessionRelaunch == true || authenticationRecoveryRelaunch {
             dataRootLock?.release()
             relaunchForSiteSessionImport()

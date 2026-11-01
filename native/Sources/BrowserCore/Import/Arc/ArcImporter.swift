@@ -165,6 +165,8 @@ public struct ArcImportOutcome: Codable, Equatable, Sendable {
     public var historyInserted = 0
     public var historyAlreadyPresent = 0
     public var historyProfilesSkipped = 0
+    public var extensionsStaged: Int? = nil
+    public var extensionsSkipped: Int? = nil
     public var backupID = ""
     public init() {}
 }
@@ -299,11 +301,22 @@ public struct BrowserImportOrchestrator: Sendable {
         let prepared = try (adapter ?? ArcBrowserImportAdapter(options: options)).makePlan(
             snapshot: snapshot, ledger: ledger, defaultProfile: await target.defaultProfile(), importedAt: importedAt)
         let plan = prepared.plan
+        var extensionBytes: Int64 = 0
+        if adapter == nil || adapter is ArcBrowserImportAdapter || adapter is ChromiumBrowserImportAdapter {
+            var count = 0, skipped = 0
+            for profile in plan.profiles {
+                guard let directory = profile.sourceDirectory else { continue }
+                let payload = try ChromiumExtensionImport.read(snapshot: snapshot, directory: directory, arc: adapter == nil || adapter is ArcBrowserImportAdapter)
+                count += payload.count; skipped += payload.skipped
+                extensionBytes += Int64(payload.files.values.reduce(0) { $0 + $1.count })
+            }
+            report.sourceCounts = ["extensions": count, "extensionsSkipped": skipped]
+        }
         report.formatVersion = prepared.formatVersion
         report.diagnostics = prepared.diagnostics
         report.archiveDocumentUnreadable = prepared.archiveUnreadable
         report.capabilities = prepared.capabilities
-        report.sourceCounts = prepared.sourceCounts
+        report.sourceCounts = (prepared.sourceCounts ?? [:]).merging(report.sourceCounts ?? [:]) { _, value in value }
         report.notImported = prepared.notImported ?? report.notImported
         if adapter == nil || adapter is ArcBrowserImportAdapter {
             report.passwordProfiles = plan.profiles.compactMap { profile in
@@ -318,6 +331,10 @@ public struct BrowserImportOrchestrator: Sendable {
         logger.log(.parsed(spaces: report.source.spaces, favorites: report.source.favorites, pinned: report.source.pinnedTabs,
                            folders: report.source.pinnedFolders, today: report.source.todayTabs, archived: report.source.archivedTabs))
         report.target = await target.preview(plan, ledger: ledger)
+        if (report.sourceCounts?["extensions"] ?? 0) > 0,
+           report.target.profilesAdded == plan.profiles.count, plan.profiles.allSatisfy({ !$0.isAdopted }) {
+            report.notImported.removeAll { $0 == "extensions" }
+        }
         report.sessionBudget.projectedBytes = report.target.projectedSessionBytes
         if !report.sessionBudget.fits {
             report.sessionBudget.withoutArchiveBytes = await target.preview(plan.excluding(.archive), ledger: ledger).projectedSessionBytes
@@ -356,6 +373,7 @@ public struct BrowserImportOrchestrator: Sendable {
             projectedSessionBytes: report.target.projectedSessionBytes,
             backupBytes: ArcImportBackups.estimatedBytes(at: location, historyProfiles: plan.historySources.map(\.profileID)),
             visits: report.history.importable, textBytes: report.history.importableTextBytes)
+        report.diskEstimateBytes += extensionBytes * 3
         if try ArcImportFiles.readExisting(ArcImportJournal.self, from: location.journalFile)?.state == .applying {
             report.interruptedImport = true
             logger.log(.interruptedImportDetected)
@@ -393,13 +411,13 @@ public struct BrowserImportOrchestrator: Sendable {
             }
             try validateHistoryDirectories(location, plan.historySources.map(\.profileID))
             // Backup (WAL content included), session copies and history growth, recomputed now.
-            let required = Self.applyRequirement(
+            let required = max(report.diskEstimateBytes, Self.applyRequirement(
                 projectedSessionBytes: report.target.projectedSessionBytes,
                 backupBytes: ArcImportBackups.estimatedBytes(at: location, historyProfiles: plan.historySources.map(\.profileID)),
-                visits: report.history.importable, textBytes: report.history.importableTextBytes)
+                visits: report.history.importable, textBytes: report.history.importableTextBytes))
             try OrbitDiskSpace.require(required, at: location.dataDirectory, probe: diskSpace)
             let recovery: BrowserImportRecovery?
-            if plan.registration != nil, report.target.profilesAdded == plan.profiles.count,
+            if (plan.registration != nil || target.holdsExclusiveAccess), report.target.profilesAdded == plan.profiles.count,
                plan.profiles.allSatisfy({ !$0.isAdopted }) {
                 recovery = try BrowserImportRecovery.begin(at: location, profiles: plan.profiles.map { $0.id.rawValue }, authentication: false)
             } else { recovery = nil }
@@ -415,6 +433,30 @@ public struct BrowserImportOrchestrator: Sendable {
             try ArcImportFiles.write(journal, to: location.journalFile)
             try checkpoint(.afterJournal)
 
+            if target.holdsExclusiveAccess, recovery?.isAuthentication != true,
+               adapter == nil || adapter is ArcBrowserImportAdapter || adapter is ChromiumBrowserImportAdapter {
+                for profile in plan.profiles {
+                    guard let directory = profile.sourceDirectory else { continue }
+                    let payload = try ChromiumExtensionImport.read(snapshot: preparation.snapshot, directory: directory, arc: adapter == nil || adapter is ArcBrowserImportAdapter)
+                    outcome.extensionsSkipped = (outcome.extensionsSkipped ?? 0) + payload.skipped
+                    guard !payload.files.isEmpty else { continue }
+                    let name = "profile-" + profile.id.rawValue.uuidString.lowercased()
+                    guard !profile.isAdopted, report.target.profilesAdded == plan.profiles.count else {
+                        outcome.extensionsSkipped = (outcome.extensionsSkipped ?? 0) + payload.count; continue
+                    }
+                    let engine = try OrbitSecureDirectory.open(location.dataDirectory, create: false).directory("Chromium", create: true)
+                    guard !engine.exists(name) else {
+                        outcome.extensionsSkipped = (outcome.extensionsSkipped ?? 0) + payload.count; continue
+                    }
+                    let destination = try engine.directory(name, create: true)
+                    for (path, data) in payload.files {
+                        let parts = path.split(separator: "/").map(String.init)
+                        let folder = parts.count == 1 ? destination : try destination.directory(parts.dropLast().joined(separator: "/"), create: true)
+                        try folder.write(data, to: parts.last!)
+                    }
+                    outcome.extensionsStaged = (outcome.extensionsStaged ?? 0) + payload.count
+                }
+            }
             progress(ArcImportProgress(.applying))
             var ledger = try ArcImportFiles.readExisting(BrowserImportLedger.self, from: location.ledgerFile) ?? BrowserImportLedger()
             let merged = try await target.apply(plan, ledger: ledger)
@@ -479,7 +521,10 @@ public struct BrowserImportOrchestrator: Sendable {
             journal.updatedAt = clock()
             try ArcImportFiles.write(journal, to: location.journalFile)
             try checkpoint(.afterCompletion)
-            if let recovery, !recovery.isAuthentication { try recovery.complete() }
+            if let recovery, !recovery.isAuthentication {
+                if (outcome.extensionsStaged ?? 0) > 0 { try recovery.runtimeReady() }
+                else { try recovery.complete() }
+            }
             progress(ArcImportProgress(.finished))
             logger.log(.completed(added: merged.counts.addedItems + merged.counts.archivedTabsAdded,
                                   historyInserted: outcome.historyInserted))

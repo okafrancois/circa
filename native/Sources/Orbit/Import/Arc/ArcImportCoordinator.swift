@@ -76,6 +76,7 @@ final class ArcImportCoordinator {
     private var cancelCurrent: (() -> Void)?
     private(set) var isRunning = false
     var onFinished: ((ArcImportOutcome?) -> Void)?
+    var onPrepared: ((ArcImportPreparation, ArcImporter) -> Void)?
 
     init(presenter: any ArcImportPresenting, defaultSource: URL = ArcSourceSnapshot.defaultSourceRoot,
          makeImporter: @escaping @MainActor (URL) -> ArcImporter = { ArcImportCoordinator.productionImporter($0) }) {
@@ -143,6 +144,10 @@ final class ArcImportCoordinator {
         let confirmed = preparation
         guard await presenter.confirm(confirmed.report) else {
             preparation.discard()
+            return nil
+        }
+        if let onPrepared {
+            onPrepared(confirmed, importer)
             return nil
         }
         do {

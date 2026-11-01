@@ -56,6 +56,7 @@ public struct ChromiumBrowserImportAdapter: BrowserImportSourceAdapter {
         }
         for name in Self.bookmarkFiles + ["Current Session", "Last Session", "Current Tabs", "Last Tabs"] { add(name) }
         for name in ["History", "History-wal", "History-journal"] { add(name, limit: 2 * 1024 * 1024 * 1024) }
+        manifest += try ChromiumExtensionImport.manifest(in: folder, prefix: profile.directory + "/")
         var sessionInventories: [String: [String]] = [:]
         for directory in ["Sessions", "Sessions_Encrypted"] {
             if folder.exists(directory) {
