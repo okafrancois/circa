@@ -8,6 +8,23 @@ import BrowserEngineConformance
 
 @MainActor
 struct SettingsAIPaneTests {
+    @Test func refreshUsesTheSameOverrideClientsAsTurns() async throws {
+        let service = OrbitAIService(startsPrograms: false)
+        defer { service.terminateNow() }
+        let codex = AssistantStatusOverrideFixture(id: .codex)
+        let claude = AssistantStatusOverrideFixture(id: .claudeCode)
+        let device = AssistantStatusOverrideFixture(id: .onDevice)
+        service.clientOverrides = [.codex: codex, .claudeCode: claude, .onDevice: device]
+        service.refresh(explicit: true, keepRunning: false)
+        let deadline = ContinuousClock.now + .seconds(2)
+        while service.isChecking && ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(10)) }
+        #expect(!service.isChecking)
+        #expect(service.statuses.count == 3 && service.statuses.values.allSatisfy { $0.state.isReady })
+        let checks = await codex.checks
+        let stops = await codex.stops
+        #expect(checks == 1 && stops == 1)
+    }
+
     private func model() -> BrowserSettingsModel<SyntheticEngine> {
         BrowserSettingsModel(environment: BrowserEnvironment(engine: SyntheticEngine()), profileID: nil, shortcuts: [],
             defaultBrowser: .init(status: { .init(http: "synthetic", https: "synthetic", html: "synthetic") },
@@ -177,4 +194,20 @@ struct SettingsAIOnDeviceLiveTests {
         print("AI-LIVE on-device answer: \(text)")
         #expect(terminal == .completed && !text.isEmpty)
     }
+}
+
+private actor AssistantStatusOverrideFixture: BrowserAIProviderClient {
+    nonisolated let id: BrowserAIProviderID
+    var checks = 0
+    var stops = 0
+    init(id: BrowserAIProviderID) { self.id = id }
+    func status(refresh: Bool) async -> BrowserAIProviderStatus {
+        checks += 1
+        return .init(id: id, state: .ready(.init(plan: nil, usage: nil)))
+    }
+    func startTurn(_ request: BrowserAITurnRequest) async -> BrowserAITurn {
+        Issue.record("Status refresh must not start a turn")
+        return BrowserAITurn(events: AsyncStream { $0.finish() }, interrupt: {})
+    }
+    func shutdown() async { stops += 1 }
 }

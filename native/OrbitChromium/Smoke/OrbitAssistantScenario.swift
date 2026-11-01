@@ -45,6 +45,7 @@ actor OrbitAssistantFixtureClient: BrowserAIProviderClient {
 extension OrbitSmokeDriver {
     func assistantInteractive(_ environment: OrbitEnvironment, _ owner: OrbitWindowController) async {
         environment.ai.terminateNow()
+        _ = await until(10) { !environment.ai.isChecking }
         if !arguments.contains("--orbit-smoke-assistant-live") {
         for id in [BrowserAIProviderID.codex, .claudeCode] {
             let client = OrbitAssistantFixtureClient(id: id, root: runRoot)
