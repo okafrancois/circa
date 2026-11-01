@@ -359,6 +359,7 @@ class SidebarTabRow: SidebarListRow {
         button.toolTip = uiText("Restore Original")
         button.isBordered = false
         button.isHidden = true
+        button.alphaValue = 0
         addSubview(button)
         return button
     }()
@@ -598,15 +599,19 @@ class SidebarTabRow: SidebarListRow {
     private func refreshControls() {
         restoreButton.frame = NSRect(x: bounds.width - (showsAudio ? 72 : 48), y: (bounds.height - 20) / 2, width: 20, height: 20)
         restoreButton.contentTintColor = effectiveAccent.icon
-        let restoreAvailable = !isRenaming && canRestoreTitle?() == true
-        if restoreAvailable && restoreButton.isHidden { restoreButton.alphaValue = 0 }
-        restoreButton.isHidden = !restoreAvailable
+        let restoreAvailable = !isRenaming && splitPreviewShift == 0 && canRestoreTitle?() == true
+        restoreButton.isEnabled = commandsEnabled && restoreAvailable
+        if restoreAvailable && isHovering { restoreButton.isHidden = false }
         let opacity: CGFloat = isHovering && restoreAvailable ? 0.8 : 0
         if restoreButton.alphaValue != opacity {
             NSAnimationContext.runAnimationGroup { context in
                 context.duration = OrbitMotionPreferences.prefersReducedMotion ? 0 : 0.2
                 context.timingFunction = CAMediaTimingFunction(controlPoints: 1 / 3, 2 / 3, 2 / 3, 1)
                 restoreButton.animator().alphaValue = opacity
+            } completionHandler: { [weak self] in
+                MainActor.assumeIsolated {
+                    if self?.restoreButton.alphaValue == 0 { self?.restoreButton.isHidden = true }
+                }
             }
         }
         let away = item.isAwayFromPinnedURL
