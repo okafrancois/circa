@@ -9,6 +9,10 @@ import BrowserShell
 extension BrowserWindowController {
     func installSidebarList() {
         sidebar.windowIdentifier = id
+        sidebar.splitDropVerdict = { [weak self] payload, target in self?.sidebarSplitDropVerdict(payload, target: target) }
+        sidebar.onSplitDrop = { [weak self] payload, target, leading in
+            self?.submitInput { $0.dropSidebarTab(payload, onto: target, leading: leading) }
+        }
         sidebar.onTextDrop = { [weak self] text, destination in
             self?.submitInput { owner in
                 // URL/text drops do not authorize local documents, including previously opened ones.

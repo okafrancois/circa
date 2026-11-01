@@ -7,7 +7,15 @@ enum BrowserSplitTokens {
     static let borderWidth = OrbitTokens.Metrics.Content.splitFocusBorderWidth
     static let radius = OrbitTokens.Radius.splitPane
     static let toolbarHeight = OrbitTokens.Metrics.Content.splitPaneToolbarHeight
-    static let minimumPaneExtent: CGFloat = 120 // estimate; scales down at smaller sizes
+    /// Narrowest side-by-side pane; panes that cannot all fit keep it and overflow the trailing edge.
+    static let minimumPaneWidth: CGFloat = 220
+    static let minimumPaneExtent: CGFloat = 120 // estimate (stacked panes); scales down at smaller sizes
+    static func minimumPane(_ orientation: BrowserSplitOrientation) -> CGFloat {
+        orientation == .horizontal ? minimumPaneWidth : minimumPaneExtent
+    }
+    /// Peek → Split: the other panes fade in (quadratic ease-out).
+    static let peekRevealDuration: CFTimeInterval = 0.215
+    static let peekRevealTiming = CAMediaTimingFunction(controlPoints: 0.25, 0.46, 0.45, 0.94)
     static let edgeBand: CGFloat = 48 // estimate
     static let focusFade = OrbitTokens.Motion.splitFocusCrossfade
     static let dividerHoverTiming = OrbitAnimationTiming(duration: 0.15, x1: 1.0 / 3, y1: 1, x2: 2.0 / 3, y2: 1)
@@ -19,7 +27,7 @@ struct BrowserSplitGeometry {
 
     /// No negative rectangles, even below the minimum size. Ratios survive tiny windows.
     static func layout(in bounds: CGRect, orientation: BrowserSplitOrientation,
-                       ratios: [Double], gap: CGFloat = 10) -> BrowserSplitGeometry {
+                       ratios: [Double], gap: CGFloat = 10, minimum: CGFloat = 0) -> BrowserSplitGeometry {
         guard !ratios.isEmpty, ratios.allSatisfy({ $0.isFinite && $0 > 0 }), gap.isFinite else { return .init(panes: [], dividers: []) }
         let horizontal = orientation == .horizontal
         let extent = max(0, horizontal ? bounds.width : bounds.height)
@@ -30,7 +38,8 @@ struct BrowserSplitGeometry {
         var panes: [CGRect] = [], dividers: [CGRect] = []
         for (index, ratio) in ratios.enumerated() {
             let last = index == ratios.count - 1
-            let rawSize = last ? max(0, (horizontal ? bounds.maxX : bounds.maxY) - cursor) : available * ratio / total
+            var rawSize = last ? max(0, (horizontal ? bounds.maxX : bounds.maxY) - cursor) : available * ratio / total
+            if minimum > 0, extent >= minimum { rawSize = max(rawSize, minimum) }
             // Remove arithmetic noise at integral extents so native engine viewports do not
             // truncate a nominal 320-point pane to 319 CSS pixels. Preserve fractional ratios.
             let integral = rawSize.rounded()

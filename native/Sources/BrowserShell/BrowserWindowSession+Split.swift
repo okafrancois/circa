@@ -31,6 +31,11 @@ public extension BrowserWindowSession {
             try await session.store.openTabInSplit(id, orientation: orientation, leading: leading, from: context)
         }
     }
+    func dropTab(_ id: TabID, onto target: TabID, leading: Bool) {
+        enqueueOrganization { session, context in
+            try await session.store.dropTab(id, onto: target, leading: leading, from: context)
+        }
+    }
     func duplicateSplit(_ id: SplitGroupID) {
         enqueueOrganization { session, context in try await session.store.duplicateSplit(id, from: context) }
     }

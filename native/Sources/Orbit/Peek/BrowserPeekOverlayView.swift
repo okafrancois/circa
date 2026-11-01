@@ -526,7 +526,8 @@ private final class PeekContainerView: NSView {
 final class BrowserPeekToolbarView: NSView {
     override var isFlipped: Bool { true }
     let addressLabel = NSTextField(labelWithString: "")
-    let splitButton = BrowserPeekToolbarButton(symbol: "rectangle.split.2x1", label: uiText("Open in Split View"), identifier: "peek-open-in-split")
+    let splitButton = BrowserPeekToolbarButton(symbol: "rectangle.split.2x1", label: uiText("Open in Split View"), identifier: "peek-open-in-split",
+                                               feedback: .motion)
     let openInTabButton = BrowserPeekToolbarButton(symbol: "arrow.up.left.and.arrow.down.right", label: uiText("Open in Tab"), identifier: "peek-open-in-tab")
     let closeButton = BrowserPeekToolbarButton(symbol: "xmark", label: uiText("Close Peek (Escape)"), identifier: "peek-close")
 
@@ -575,11 +576,18 @@ final class BrowserPeekToolbarView: NSView {
 
 @MainActor
 final class BrowserPeekToolbarButton: NSButton {
-    private var isHovered = false { didSet { needsDisplay = true } }
+    /// How the button answers the pointer: a lighter fill, or (Split) a lift on hover and a
+    /// smaller disc while pressed, with an unchanged fill.
+    enum Feedback { case fill, motion }
+    let feedback: Feedback
+    private var isHovered = false { didSet { needsDisplay = true; updateMotion() } }
+    private(set) var isPressed = false { didSet { updateMotion() } }
     private var trackingArea: NSTrackingArea?
 
-    init(symbol: String, label: String, identifier: String) {
+    init(symbol: String, label: String, identifier: String, feedback: Feedback = .fill) {
+        self.feedback = feedback
         super.init(frame: .zero)
+        wantsLayer = true
         image = OrbitIcon.image(sfName: symbol, pointSize: OrbitTokens.Metrics.Peek.controlGlyphSize, accessibilityDescription: label, weight: .medium)
         imagePosition = .imageOnly
         isBordered = false
@@ -618,8 +626,41 @@ final class BrowserPeekToolbarButton: NSButton {
     override func mouseEntered(with event: NSEvent) { isHovered = true }
     override func mouseExited(with event: NSEvent) { isHovered = false }
 
+    override func mouseDown(with event: NSEvent) {
+        isPressed = isEnabled
+        defer { isPressed = false }
+        super.mouseDown(with: event)
+    }
+
+    /// Current motion state: vertical lift (points, upward) and scale about the centre.
+    var motionState: (lift: CGFloat, scale: CGFloat) {
+        guard feedback == .motion, isEnabled else { return (0, 1) }
+        if isPressed { return (0, BrowserPeekStyle.splitButtonPressedScale) }
+        return (isHovered ? BrowserPeekStyle.splitButtonHoverLift : 0, 1)
+    }
+
+    private func updateMotion() {
+        guard feedback == .motion, let layer else { return }
+        let state = motionState
+        let w = bounds.width, h = bounds.height
+        // Layer-backed views transform about their origin; scale about the centre instead.
+        let lift = isFlipped ? -state.lift : state.lift
+        var transform = CATransform3DMakeTranslation(w / 2, h / 2 + lift, 0)
+        transform = CATransform3DScale(transform, state.scale, state.scale, 1)
+        transform = CATransform3DTranslate(transform, -w / 2, -h / 2, 0)
+        let old = layer.presentation()?.transform ?? layer.transform
+        layer.transform = transform
+        guard !BrowserPeekStyle.prefersReducedMotion else { return }
+        let animation = CABasicAnimation(keyPath: "transform")
+        animation.fromValue = NSValue(caTransform3D: old)
+        animation.toValue = NSValue(caTransform3D: transform)
+        animation.duration = isPressed ? BrowserPeekStyle.splitButtonPressDuration : BrowserPeekStyle.splitButtonHoverDuration
+        animation.timingFunction = CAMediaTimingFunction(name: .easeOut)
+        layer.add(animation, forKey: "peek.split.motion")
+    }
+
     override func draw(_ dirtyRect: NSRect) {
-        (isHovered && isEnabled ? BrowserPeekStyle.buttonHover : BrowserPeekStyle.buttonBackground).setFill()
+        (isHovered && isEnabled && feedback == .fill ? BrowserPeekStyle.buttonHover : BrowserPeekStyle.buttonBackground).setFill()
         NSBezierPath(ovalIn: bounds).fill()
         super.draw(dirtyRect)
     }

@@ -453,6 +453,13 @@ extension BrowserWindowController {
                 peek.revealPromotionIfPlaced(in: contentCard)
                 return
             }
+            if !expanding {
+                session.performWindowAction { [weak self, weak surface] in
+                    guard let self, let surface else { return }
+                    split.view.layoutSubtreeIfNeeded()
+                    split.view.revealPanes(excluding: surface.hostView)
+                }
+            }
             let reveal: @MainActor () -> Void = { [weak self, weak surface] in
                 guard let surface else { return }
                 surface.hostView.isHidden = false

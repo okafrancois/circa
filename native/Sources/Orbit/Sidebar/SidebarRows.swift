@@ -486,6 +486,21 @@ class SidebarTabRow: SidebarListRow {
         otherWindowMark.frame = NSRect(x: closeCenter - mark / 2, y: (bounds.height - mark) / 2, width: mark, height: mark)
         super.layout()
         closeButton.refreshPill()
+        if splitPreviewShift > 0 {
+            // Previews the split a drop on the leading half creates: this tab moves to the trailing half.
+            for view in [favicon, loadingIndicator, slash, titleLabel] as [NSView] { view.frame.origin.x += splitPreviewShift }
+            titleLabel.frame.size.width = max(0, min(titleLabel.frame.width, bounds.width - Metrics.rowInsetX - titleLabel.frame.minX))
+        }
+        for view in [closeButton, audioButton, otherWindowMark] as [NSView] where splitPreviewShift > 0 { view.isHidden = true }
+    }
+
+    /// Horizontal offset of the row content while a sidebar drop previews a split on its leading half.
+    var splitPreviewShift: CGFloat = 0 {
+        didSet {
+            guard splitPreviewShift != oldValue else { return }
+            if splitPreviewShift == 0 { closeButton.isHidden = false; refreshControls() }
+            needsLayout = true
+        }
     }
 
     override func hitTest(_ point: NSPoint) -> NSView? {
@@ -520,6 +535,7 @@ class SidebarTabRow: SidebarListRow {
     override func resetForReuse() {
         SidebarTabHoverCard.shared.invalidate(self)
         closeButton.dismissPill()
+        splitPreviewShift = 0
         super.resetForReuse()
         closeButton.setAccessibilityLabel(nil)
         closeButton.alphaValue = 0

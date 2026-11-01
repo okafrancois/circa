@@ -190,6 +190,45 @@ extension BrowserWindowController {
         guard canDropIntoSplit(payload), let tab = payload.nodes.first?.tabID else { return }
         session.openTabInSplit(tab, orientation: orientation, leading: leading)
     }
+
+    /// Whether a sidebar tab dragged onto another tab's row may split with it. A full split still
+    /// shows its drop band; releasing there shows the pane-limit bubble instead.
+    func sidebarSplitDropVerdict(_ payload: SidebarDragPayload, target targetID: TabID) -> SidebarSplitDropVerdict? {
+        guard acceptsCommands, let organization = session.organization,
+              payload.sourceWindow == id, payload.profileID == organization.profileID,
+              payload.spaceID == organization.spaceID, payload.nodes.count == 1,
+              let sourceID = payload.nodes.first?.tabID, sourceID != targetID,
+              let source = organization.tab(sourceID), let target = organization.tab(targetID),
+              source.section != .favorites(organization.profileID), target.section != .favorites(organization.profileID),
+              organization.split(containing: sourceID) == nil else { return nil }
+        if let group = organization.split(containing: targetID) {
+            // Sidebar row drops create a split from a standalone target. Existing split rows are
+            // not valid targets: the row's drop affordance belongs to the whole group, not a pane.
+            // Keep a distinct full result so a rejected fifth pane explains the limit.
+            return group.tabs.count >= BrowserSplitGroup.maximumPanes ? .full : nil
+        }
+        return .accepted
+    }
+
+    func dropSidebarTab(_ payload: SidebarDragPayload, onto target: TabID, leading: Bool) {
+        guard let source = payload.nodes.first?.tabID else { return }
+        switch sidebarSplitDropVerdict(payload, target: target) {
+        case .accepted?: session.dropTab(source, onto: target, leading: leading)
+        case .full?: showSplitPaneLimit()
+        case nil: break
+        }
+    }
+
+    func showSplitPaneLimit() {
+        guard let root = window?.contentView else { return }
+        BrowserSplitLimitBubble.show(in: root, theme: contentCard.splitTheme)
+    }
+}
+
+enum SidebarSplitDropVerdict: Equatable {
+    case accepted
+    /// The target split already holds the maximum number of panes.
+    case full
 }
 
 
