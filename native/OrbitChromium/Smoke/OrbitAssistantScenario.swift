@@ -120,11 +120,6 @@ extension OrbitSmokeDriver {
                     result["settingsWindow"] = settings.windowNumber
                     result["settingsVisible"] = settings.isVisible
                 }
-                result["nativeWindows"] = NSApp.windows.map { native -> [String: Any] in
-                    ["window": native.windowNumber, "type": String(describing: type(of: native)),
-                     "visible": native.isVisible, "activeSpace": native.isOnActiveSpace, "key": native.isKeyWindow,
-                     "frame": [native.frame.minX, native.frame.minY, native.frame.width, native.frame.height]]
-                }
                 result["uptime"] = ProcessInfo.processInfo.systemUptime
                 result["frame"] = [targetWindow.frame.minX, targetWindow.frame.minY, targetWindow.frame.width, targetWindow.frame.height]
                 if let surface = targetOwner.session.selectedSurface,
@@ -247,7 +242,7 @@ extension OrbitSmokeDriver {
                 responder.doCommand(by: NSSelectorFromString(selector))
                 handled = true
             }
-        case "gesture", "native-gesture":
+        case "gesture":
             if let points = command["points"] as? [[Double]], points.count >= 2,
                points.allSatisfy({ $0.count == 2 }) {
                 var pointerModifiers: NSEvent.ModifierFlags = []
@@ -269,10 +264,6 @@ extension OrbitSmokeDriver {
                     }
                 }
                 if events.count == points.count {
-                    if kind == "native-gesture" {
-                        for event in events { NSApp.postEvent(event, atStart: false) }
-                        return ["ok": true, "pid": Int(getpid()), "window": window.windowNumber, "queued": true]
-                    }
                     // Tracking controls consume the queued drag/up from their own nested event loop.
                     for event in events.dropFirst() { NSApp.postEvent(event, atStart: false) }
                     window.sendEvent(events[0])
@@ -287,12 +278,8 @@ extension OrbitSmokeDriver {
                 handled = true
             }
         case "raise-window":
-            window.collectionBehavior.remove(.canJoinAllSpaces)
-            window.collectionBehavior.insert(.moveToActiveSpace)
             window.center()
             window.makeKeyAndOrderFront(nil)
-            window.orderFrontRegardless()
-            NSApp.activate(ignoringOtherApps: true)
             handled = window.isVisible
         case "capture", "read-probe": handled = true
         default: break
