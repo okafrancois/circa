@@ -46,6 +46,10 @@ extension OrbitSmokeDriver {
             if owns() { try? movie.run() }
             try? await Task.sleep(for: .milliseconds(300))
             await evaluate("document.querySelector('#h2b').click();document.querySelector('#h3b').click()")
+            if arguments.contains("--orbit-smoke-tidy-reference-undo") {
+                try? await Task.sleep(for: .milliseconds(2500))
+                await evaluate("document.querySelector('#h3u').click();document.querySelector('#h2u').click()")
+            }
             _ = await until(12) { !movie.isRunning }
             if owns(), let data = try? JSONSerialization.data(withJSONObject: ["expression": "JSON.stringify(window.tidyTrace)", "returnByValue": true]) {
                 let (_, reply) = await surface.devToolsCall("Runtime.evaluate", params: String(decoding: data, as: UTF8.self))
