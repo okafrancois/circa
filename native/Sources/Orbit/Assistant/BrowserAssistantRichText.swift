@@ -109,7 +109,7 @@ enum BrowserAssistantRichText {
 
     @MainActor
     static func attributed(_ blocks: [Block], palette: BrowserAssistantPalette, activeCitation: String?,
-                           hoveredCitation: String?) -> NSAttributedString {
+                           hoveredCitation: String?, hoverFractions: [String: CGFloat] = [:]) -> NSAttributedString {
         let result = NSMutableAttributedString()
         let body = BrandTextStyle.ui.font(size: bodySize, weight: .regular)
         func style(indent: CGFloat = 0, spacing: CGFloat = 6) -> NSParagraphStyle {
@@ -126,7 +126,8 @@ enum BrowserAssistantRichText {
             for run in runs {
                 if let citation = run.citation {
                     let attachment = BrowserAssistantCitationAttachment(number: citation.number, palette: palette,
-                        highlighted: citation.id == activeCitation || citation.id == hoveredCitation)
+                        highlighted: citation.id == activeCitation || citation.id == hoveredCitation,
+                        fillFraction: citation.id == activeCitation ? 1 : hoverFractions[citation.id])
                     let pill = NSMutableAttributedString(attachment: attachment)
                     pill.addAttributes([citationKey: citation.id, .paragraphStyle: paragraph,
                                         .baselineOffset: baseline(base)], range: NSRange(location: 0, length: pill.length))
@@ -180,13 +181,14 @@ enum BrowserAssistantRichText {
 /// A 17 pt rounded citation pill, drawn from the palette, that flows inside the text.
 final class BrowserAssistantCitationAttachment: NSTextAttachment {
     @MainActor
-    init(number: Int, palette: BrowserAssistantPalette, highlighted: Bool) {
+    init(number: Int, palette: BrowserAssistantPalette, highlighted: Bool, fillFraction: CGFloat? = nil) {
         super.init(data: nil, ofType: nil)
         let label = NSAttributedString(string: String(number), attributes: [
             .font: NSFont.systemFont(ofSize: 11, weight: .semibold),
             .foregroundColor: highlighted ? palette.onStrong : palette.accentInk])
         let size = NSSize(width: max(17, ceil(label.size().width) + 8), height: 17)
-        let fill = highlighted ? palette.strong : palette.wash
+        let fraction = min(1, max(0, fillFraction ?? (highlighted ? 1 : 0)))
+        let fill = palette.wash.blended(withFraction: fraction, of: palette.strong) ?? palette.wash
         // Drawn with a small margin so neighbouring glyphs keep their distance from the pill.
         let canvas = NSSize(width: size.width + 2, height: size.height)
         image = NSImage(size: canvas, flipped: false) { _ in
@@ -248,7 +250,9 @@ struct BrowserAssistantAnswerText: NSViewRepresentable {
         var palette: BrowserAssistantPalette?
         var reduced = false
         var activeCitation: String? { didSet { if activeCitation != oldValue { render(animated: false) } } }
-        private var hoveredCitation: String? { didSet { if hoveredCitation != oldValue { render(animated: false) } } }
+        private var hoveredCitation: String? { didSet { if hoveredCitation != oldValue { animateCitationHover() } } }
+        private var hoverFractions: [String: CGFloat] = [:]
+        private var hoverAnimation: Task<Void, Never>?
         private var blocks: [BrowserAssistantRichText.Block] = []
         private var arriving: [(range: NSRange, start: CFTimeInterval)] = []
         private var fade: Task<Void, Never>?
@@ -262,7 +266,7 @@ struct BrowserAssistantAnswerText: NSViewRepresentable {
         private func render(animated: Bool) {
             guard let palette, let storage = textStorage else { return }
             let next = BrowserAssistantRichText.attributed(blocks, palette: palette, activeCitation: activeCitation,
-                                                           hoveredCitation: hoveredCitation)
+                                                           hoveredCitation: hoveredCitation, hoverFractions: hoverFractions)
             if storage.isEqual(to: next) { return }
             let previous = storage.string
             let selection = selectedRanges
@@ -313,6 +317,32 @@ struct BrowserAssistantAnswerText: NSViewRepresentable {
         // The transcript owns scrolling; this text view only owns selection and links.
         override func scrollWheel(with event: NSEvent) {
             nextResponder?.scrollWheel(with: event)
+        }
+
+        private func animateCitationHover() {
+            hoverAnimation?.cancel()
+            let initial = hoverFractions
+            let target = hoveredCitation
+            let ids = Set(initial.keys).union(target.map { [$0] } ?? [])
+            let start = CACurrentMediaTime()
+            let duration = reduced ? 0.15 : 0.12
+            hoverAnimation = Task { [weak self] in
+                while let self, !Task.isCancelled {
+                    let time = min(1, (CACurrentMediaTime() - start) / duration)
+                    let progress = reduced ? time : BrowserAssistantMotion.citationHoverProgress(time)
+                    for id in ids {
+                        let from = initial[id] ?? 0
+                        let to: CGFloat = id == target ? 1 : 0
+                        hoverFractions[id] = from + (to - from) * progress
+                    }
+                    render(animated: false)
+                    if time >= 1 {
+                        hoverFractions = target.map { [$0: 1] } ?? [:]
+                        return
+                    }
+                    try? await Task.sleep(for: .milliseconds(16))
+                }
+            }
         }
 
         private func citation(at point: NSPoint) -> String? {
