@@ -84,6 +84,10 @@ extension OrbitSmokeDriver {
             await application.waitForPrivateWindowCommands()
         }
         guard let window = owner.window else { check("assistant.window", false); return }
+        application?.windowPresenter = { controller, activate in
+            if activate { controller.showWindow(nil) }
+            else { controller.window?.orderFront(nil) }
+        }
         NSApp.setActivationPolicy(.regular)
         window.center()
         window.makeKeyAndOrderFront(nil)
@@ -110,7 +114,9 @@ extension OrbitSmokeDriver {
                 var result = self.assistantOwnedInput(data, window: targetWindow, owner: targetOwner)
                 result["windows"] = controllers.compactMap { controller -> [String: Any]? in
                     guard let window = controller.window else { return nil }
-                    return ["window": window.windowNumber, "owner": controller.id.uuidString, "private": controller.isPrivateWindow, "visible": window.isVisible,
+                    return ["window": window.windowNumber, "owner": controller.id.uuidString, "private": controller.isPrivateWindow, "visible": window.isVisible, "onActiveSpace": window.isOnActiveSpace,
+                            "occluded": !window.occlusionState.contains(.visible), "alpha": window.alphaValue,
+                            "miniaturized": window.isMiniaturized, "tabbedWindows": window.tabbedWindows?.map(\.windowNumber) ?? [],
                             "frame": [window.frame.minX, window.frame.minY, window.frame.width, window.frame.height]]
                 }
                 if let panel = targetOwner.assistantHost {
@@ -283,6 +289,7 @@ extension OrbitSmokeDriver {
                 handled = true
             }
         case "raise-window":
+            window.collectionBehavior.insert(.moveToActiveSpace)
             window.center()
             window.makeKeyAndOrderFront(nil)
             handled = window.isVisible
