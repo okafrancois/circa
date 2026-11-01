@@ -434,6 +434,44 @@ struct RoundThree {
         try await f.close()
     }
 
+    @Test("Closing an Archive Peek before hiding the Library leaves teardown state consistent")
+    func archivePeekCloseThenHide() async throws {
+        let f = try await LibraryR2Fixture.make()
+        let router = BrowserWindowRouter<BrowserWindowController<LibraryPersistentEngine>>(create: { _ in f.controller }, present: { _, _ in }, dispose: { _ in })
+        _ = router.newWindow(); await router.waitForPendingCommands()
+        let registry = try BrowserCommandRegistry(router: router, state: { $0?.commandState ?? .init() })
+        BrowserWindowCommands.install(in: registry)
+        BrowserPeekCommands.install(in: registry)
+        f.controller.openTab(url: URL(string: "https://archive-peek.library.test/source")!)
+        await f.controller.session.waitForPendingCommands()
+        let tabID = try #require(f.controller.session.organization?.selectedTab?.id)
+        f.controller.session.closeSelectedTab()
+        await f.controller.session.waitForPendingCommands()
+        f.controller.showArchive()
+        await f.controller.session.waitForPendingCommands()
+        await f.controller.archive.task?.value
+        let record = try #require(f.controller.archive.view.rows.compactMap { row -> BrowserArchivedTab? in
+            if case .tab(let value) = row, value.id == tabID { return value }
+            return nil
+        }.first)
+        f.controller.archive.view.onPreview?(record)
+        await f.controller.session.waitForPendingCommands()
+        let peek = try #require(f.controller.presentedPeekSurface)
+        #expect(f.controller.archive.previewTabID == tabID)
+
+        #expect(registry.dispatch(.archiveTab, origin: .keyboard))
+        #expect(!f.controller.isPeekPresented)
+        #expect(f.controller.library.isPresented)
+        #expect(f.controller.archive.previewTabID == nil)
+        f.controller.hideLibrary(focus: false)
+        await f.controller.session.waitForPendingCommands()
+        #expect(!f.controller.library.isPresented)
+        #expect(!f.controller.isPeekPresented)
+        #expect(!f.controller.peek.owns(peek))
+        router.shutdown()
+        try await f.close()
+    }
+
     @Test("Hidden downloads are purged once rather than on every History or Archive projection")
     func downloadsPurge() async throws {
         let f = try await LibraryR2Fixture.make()
