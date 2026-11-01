@@ -34,6 +34,7 @@ struct BrowserPaletteResult: Identifiable, Equatable, Sendable {
         if case .navigate(let url) = action { return url }; return sourceURL
     }
     var symbol: String {
+        if case .ask = action { return "sparkles" }
         if case .command(let id) = action { return BrowserDailyCommands.symbol(id) }
         switch section {
         case .address, .tabs, .pinned, .history: return "globe"

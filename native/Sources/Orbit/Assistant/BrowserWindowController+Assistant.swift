@@ -25,7 +25,11 @@ extension BrowserWindowController {
                       surface.documentGeneration == source.revision, let reader = surface as? any BrowserAIPageReading else {
                     throw BrowserEngineError.unsupportedOperation
                 }
-                return try await reader.readAIPage(revision: source.revision)
+                return try await reader.readAIPage(revision: source.revision, isCurrent: { [weak self, weak surface] in
+                    guard let self, let surface else { return false }
+                    return self.assistantSources.contains(source) && self.aiConversation?.selectedSources.contains(source) == true
+                        && self.session.surface(for: occurrence) === surface
+                })
             })
         if let selected = session.organization?.selectedTab,
            let source = assistantSources.first(where: { $0.id == selected.id.rawValue }) { conversation.select(source) }
@@ -47,10 +51,12 @@ extension BrowserWindowController {
             aiConversation?.close(); aiConversation = nil; closeAssistant()
         }
         guard let conversation = aiConversation else { return }
+        if conversation.isRunning, let status = aiService?.statuses[conversation.choice.provider], !status.state.isReady { conversation.stop() }
         let allowed = assistantSources
         let stale = conversation.selectedSources.filter { !allowed.contains($0) }
         if !assistantEnabled || !stale.isEmpty { conversation.stop() }
         for source in stale { conversation.removeSource(source.id) }
+        if let host = assistantHost as? NSHostingView<BrowserAssistantView> { host.rootView = assistantView(conversation) }
     }
     var assistantScopes: [String: [BrowserAIContextSource]] {
         guard let organization = session.organization else { return [:] }
@@ -64,7 +70,7 @@ extension BrowserWindowController {
                             switch child {
                             case .tab(let tab): return [tab.id.rawValue]
                             case .folder(let nested): return ids(nested.children)
-                            case .split: return []
+                            case .split(let group): return group.tabs.map { $0.id.rawValue }
                             }
                         }
                     }
@@ -80,12 +86,20 @@ extension BrowserWindowController {
     func toggleAssistant() {
         if assistantHost != nil { closeAssistant(); return }
         guard let conversation = ensureAssistant() else { return }
-        let view = BrowserAssistantView(conversation: conversation,
-            choices: BrowserAIPolicy.choices(for: .chat, statuses: aiService?.statuses ?? [:]),
-            sources: assistantSources, scopes: assistantScopes, enabled: assistantEnabled, citation: { [weak self] in await self?.showAssistantCitation($0) ?? false }, close: { [weak self] in self?.closeAssistant() })
+        dismissPeek()
+        let view = assistantView(conversation)
         let host = NSHostingView(rootView: view)
         assistantHost = host
         contentCard.setAssistant(host, width: 372)
+    }
+    private func assistantView(_ conversation: BrowserAIConversation) -> BrowserAssistantView {
+        return BrowserAssistantView(conversation: conversation,
+            choices: BrowserAIPolicy.choices(for: .chat, statuses: aiService?.statuses ?? [:]),
+            sources: assistantSources, scopes: assistantScopes, currentTabID: session.organization?.selectedTab?.id.rawValue, enabled: assistantEnabled, citation: { [weak self] in await self?.showAssistantCitation($0) ?? false }, close: { [weak self] in self?.closeAssistant() })
+    }
+    func openAssistantSource(_ source: BrowserAIContextSource) {
+        guard assistantSources.contains(source), let tab = session.organization?.allTabs.first(where: { $0.id.rawValue == source.id }) else { return }
+        session.selectTab(tab.id)
     }
     func showAssistantCitation(_ citation: BrowserAICitation) async -> Bool {
         guard assistantSources.contains(citation.snapshot.source),
@@ -93,7 +107,11 @@ extension BrowserWindowController {
               let occurrence = tab.occurrenceID, let surface = session.surface(for: occurrence),
               let reader = surface as? any BrowserAIPageReading else { return false }
         session.selectTab(tab.id)
-        return (try? await reader.highlightAIPassage(citation.passage, revision: citation.snapshot.source.revision)) ?? false
+        return (try? await reader.highlightAIPassage(citation.passage, revision: citation.snapshot.source.revision,
+            isCurrent: { [weak self, weak surface] in
+                guard let self, let surface else { return false }
+                return self.assistantSources.contains(citation.snapshot.source) && self.session.surface(for: occurrence) === surface
+            })) ?? false
     }
     func closeAssistant() {
         guard assistantHost != nil else { return }

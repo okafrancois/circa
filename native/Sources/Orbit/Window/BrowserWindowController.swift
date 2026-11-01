@@ -14,6 +14,7 @@ import BrowserShell
 final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, NSWindowDelegate, NSTextFieldDelegate {
     typealias Surface = Engine.Surface
 
+    var aiStatusObservation: AnyCancellable?
     weak var aiService: OrbitAIService?
     var aiProfileID: ProfileID?
     var aiConversation: BrowserAIConversation?

@@ -16,6 +16,11 @@ public struct BrowserAIContextSnapshot: Equatable, Sendable, Codable {
     public let text: String
 }
 
+public struct BrowserAITextChunk: Identifiable, Equatable, Sendable {
+    public let id: UUID
+    public let text: String
+}
+
 public struct BrowserAIMessage: Identifiable, Equatable, Sendable {
     public enum Role: String, Sendable { case user, assistant }
     public enum State: Equatable, Sendable { case streaming, completed, stopped, failed(BrowserAIError) }
@@ -23,6 +28,7 @@ public struct BrowserAIMessage: Identifiable, Equatable, Sendable {
     public let role: Role
     public let choice: BrowserAIModelChoice
     public internal(set) var text: String
+    public internal(set) var chunks: [BrowserAITextChunk] = []
     public internal(set) var state: State
     public internal(set) var usage: BrowserAIUsage?
     public internal(set) var context: [BrowserAIContextSnapshot]
@@ -142,7 +148,9 @@ public struct BrowserAIConversationBudgets: Sendable {
                     self.stop(); return
                 }
                 switch event {
-                case .text(let delta): self.messages[index].text += delta
+                case .text(let delta):
+                    self.messages[index].text += delta
+                    self.messages[index].chunks.append(.init(id: UUID(), text: delta))
                 case .usage(let usage): self.messages[index].usage = self.messages[index].usage?.merging(usage) ?? usage
                 case .completed: self.finish(.completed, index: index)
                 case .interrupted: self.finish(.stopped, index: index)
@@ -166,7 +174,7 @@ public struct BrowserAIConversationBudgets: Sendable {
     private func boundedHistory() -> [HistoryEntry] {
         var remaining = budgets.history
         var result: [HistoryEntry] = []
-        for message in messages.reversed() where !message.text.isEmpty {
+        for message in messages.reversed() where !message.text.isEmpty && message.context.allSatisfy({ eligible($0.source) }) {
             guard remaining > 0 else { break }
             let text = String(message.text.suffix(remaining)); remaining -= text.count
             result.append(.init(role: message.role.rawValue, text: text))

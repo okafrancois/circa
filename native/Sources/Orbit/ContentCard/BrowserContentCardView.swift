@@ -19,9 +19,7 @@ final class BrowserContentCardView: NSView {
             addSubview(assistantGrip)
             assistantGrip.onDrag = { [weak self] delta in
                 guard let self else { return }
-                assistantAnimation?.cancel()
-                assistantWidth = min(480, max(300, assistantWidth - delta))
-                updateAssistantLayout()
+                resizeAssistant(by: delta)
             }
         }
         let initial = assistantWidth
@@ -49,6 +47,12 @@ final class BrowserContentCardView: NSView {
             }
         }
     }
+    func resizeAssistant(by delta: CGFloat) {
+        guard assistant != nil else { return }
+        assistantAnimation?.cancel()
+        assistantWidth = min(480, max(300, assistantWidth - delta))
+        updateAssistantLayout()
+    }
     private func updateAssistantLayout() {
         pageTrailing?.constant = assistantWidth == 0 ? 0 : -(assistantWidth + 10)
         needsLayout = true
@@ -73,7 +77,7 @@ final class BrowserContentCardView: NSView {
     private var headerConstraints: [NSLayoutConstraint] = []
     var headerHeight: CGFloat { headerView == nil ? 0 : BrowserDeveloperToolbar.height }
     var pageViewportSize: NSSize {
-        NSSize(width: clip.bounds.width, height: max(0, clip.bounds.height - headerHeight))
+        NSSize(width: max(0, clip.bounds.width - (assistantWidth > 0 ? assistantWidth + 10 : 0)), height: max(0, clip.bounds.height - headerHeight))
     }
     func setHeader(_ view: NSView?) {
         guard headerView !== view else { return }

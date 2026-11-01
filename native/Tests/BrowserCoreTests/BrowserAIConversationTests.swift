@@ -66,7 +66,7 @@ private actor ConversationProvider: BrowserAIProviderClient {
         await until { await provider.requests.count == 2 }
         let request = await provider.requests[1]
         let json = try! JSONSerialization.jsonObject(with: Data(request.prompt.utf8)) as! [String: Any]
-        #expect((json["history"] as? [[String: String]])?.first?["text"] == "answer")
+        #expect((json["history"] as? [[String: String]])?.isEmpty == true)
         #expect((json["pages"] as? [Any])?.isEmpty == true)
         #expect(request.instructions.hasPrefix(BrowserAITurnRequest.defaultInstructions))
         #expect(conversation.id == identity)
@@ -197,5 +197,44 @@ extension BrowserAIConversationTests {
         await until { !conversation.isRunning }
         #expect(conversation.messages.last?.text.isEmpty == true)
         #expect(conversation.messages.last?.state == .stopped)
+    }
+}
+
+extension BrowserAIConversationTests {
+    @Test func removedContextIsNotRedisclosedThroughHistory() async {
+        let provider = ConversationProvider(), fixture = ContextFixture()
+        let conversation = fixture.conversation(provider)
+        conversation.select(fixture.source)
+        conversation.send("Question")
+        await until { await provider.requests.count == 1 }
+        await provider.emit(.text("Sensitive passage from the page"))
+        await provider.emit(.completed)
+        await until { !conversation.isRunning }
+        conversation.removeSource(fixture.source.id)
+        conversation.send("Follow-up")
+        await until { await provider.requests.count == 2 }
+        let request = await provider.requests[1]
+        #expect(!request.prompt.contains("Sensitive passage"))
+        #expect(!request.prompt.contains("PAGE"))
+        conversation.close()
+    }
+}
+
+extension BrowserAIConversationTests {
+    @Test func historyWithoutPageContextKeepsItsCharacterBudget() async throws {
+        let provider = ConversationProvider(), fixture = ContextFixture()
+        let conversation = fixture.conversation(provider, budgets: .init(history: 6))
+        conversation.send("Earlier question")
+        await until { await provider.requests.count == 1 }
+        await provider.emit(.text("long-answer")); await provider.emit(.completed)
+        await until { !conversation.isRunning }
+        conversation.send("Next question")
+        await until { await provider.requests.count == 2 }
+        let request = await provider.requests[1]
+        let json = try JSONSerialization.jsonObject(with: Data(request.prompt.utf8)) as? [String: Any]
+        let history = json?["history"] as? [[String: String]]
+        #expect(history?.count == 1)
+        #expect(history?.first?["text"] == "answer")
+        conversation.close()
     }
 }

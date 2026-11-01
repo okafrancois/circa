@@ -357,6 +357,11 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
         controller.themeEditors = themeEditors
         controller.settingsPreferences = BrowserWindowSettings(runtime: settings)
         controller.aiService = ai
+        controller.aiStatusObservation = ai.$statuses.sink { [weak controller] _ in
+            guard let controller else { return }
+            controller.reconcileAssistant()
+            if controller.palette.isPresented { controller.palette.query(controller.palette.draft, preserveSelection: true, userInitiated: false) }
+        }
         if settings.document.ai.isEnabled { ai.refresh(keepRunning: true) }
         controller.updateObservation = settings.updater.$readyVersion.sink { [weak controller] version in
             controller?.sidebar.updateReady = OrbitUpdater.showsCard(ready: version,
