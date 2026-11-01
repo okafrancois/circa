@@ -16,9 +16,7 @@ struct SettingsAIPaneTests {
         let device = AssistantStatusOverrideFixture(id: .onDevice)
         service.clientOverrides = [.codex: codex, .claudeCode: claude, .onDevice: device]
         service.refresh(explicit: true, keepRunning: false)
-        let deadline = ContinuousClock.now + .seconds(2)
-        while service.isChecking && ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(10)) }
-        #expect(!service.isChecking)
+        try await waitForNativeState("AI provider override status refresh") { !service.isChecking }
         #expect(service.statuses.count == 3 && service.statuses.values.allSatisfy { $0.state.isReady })
         let checks = await codex.checks
         let stops = await codex.stops

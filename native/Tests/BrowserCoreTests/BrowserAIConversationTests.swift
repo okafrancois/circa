@@ -238,3 +238,41 @@ extension BrowserAIConversationTests {
         conversation.close()
     }
 }
+
+
+extension BrowserAIConversationTests {
+    @Test(arguments: 0..<4)
+    func historyIsRevalidatedAfterPendingExtraction(gate: Int) async throws {
+        let provider = ConversationProvider(), fixture = ContextFixture()
+        let conversation = fixture.conversation(provider)
+        defer { conversation.close() }
+        conversation.select(fixture.source)
+        conversation.send("Initial question")
+        await until { await provider.requests.count == 1 }
+        await provider.emit(.text("HISTORICAL_PAGE_SECRET"))
+        await provider.emit(.completed)
+        await until { !conversation.isRunning }
+
+        fixture.suspend = true
+        conversation.send("Follow-up")
+        await until { fixture.pause != nil }
+        switch gate {
+        case 0: conversation.removeSource(fixture.source.id)
+        case 1: fixture.preferences.readsCurrentTabOnRequest = false
+        case 2: fixture.preferences.disabledSites = ["example.com"]
+        default:
+            fixture.source = .init(id: fixture.source.id, revision: 2, url: fixture.source.url, title: fixture.source.title)
+        }
+        let paused = try #require(fixture.pause)
+        fixture.pause = nil
+        paused.resume(returning: "NEW_PAGE_SECRET")
+        await until { await provider.requests.count == 2 }
+        let payload = await provider.requests[1].prompt
+        #expect(!payload.contains("HISTORICAL_PAGE_SECRET"))
+        #expect(!payload.contains("NEW_PAGE_SECRET"))
+        let envelope = try #require(try JSONSerialization.jsonObject(with: Data(payload.utf8)) as? [String: Any])
+        #expect((envelope["history"] as? [Any])?.isEmpty == true)
+        #expect((envelope["pages"] as? [Any])?.isEmpty == true)
+        #expect(envelope["prompt"] as? String == "Follow-up")
+    }
+}

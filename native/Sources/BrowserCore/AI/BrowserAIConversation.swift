@@ -105,7 +105,6 @@ public struct BrowserAIConversationBudgets: Sendable {
         stop()
         let token = UUID(); generation = token
         let prompt = String(text.prefix(budgets.prompt))
-        let history = boundedHistory()
         let sources = Array(selectedSources.prefix(budgets.sources))
         messages.append(.init(id: UUID(), role: .user, choice: choice, text: prompt, state: .completed, context: []))
         messages.append(.init(id: UUID(), role: .assistant, choice: choice, text: "", state: .streaming, context: []))
@@ -132,6 +131,8 @@ public struct BrowserAIConversationBudgets: Sendable {
             snapshots.removeAll { !self.eligible($0.source) }
             self.messages[index].context = snapshots
             self.messages[index - 1].context = snapshots
+            // Recheck prior context after extraction: permission or source identity may have changed.
+            let history = self.boundedHistory(before: index - 1)
             let envelope = Envelope(history: history, pages: snapshots, prompt: prompt)
             guard let data = try? JSONEncoder().encode(envelope), let payload = String(data: data, encoding: .utf8) else {
                 self.finish(.failed(.failed), index: index); return
@@ -171,10 +172,10 @@ public struct BrowserAIConversationBudgets: Sendable {
     private struct Envelope: Encodable {
         let history: [HistoryEntry]; let pages: [BrowserAIContextSnapshot]; let prompt: String
     }
-    private func boundedHistory() -> [HistoryEntry] {
+    private func boundedHistory(before endIndex: Int) -> [HistoryEntry] {
         var remaining = budgets.history
         var result: [HistoryEntry] = []
-        for message in messages.reversed() where !message.text.isEmpty && message.context.allSatisfy({ eligible($0.source) }) {
+        for message in messages.prefix(endIndex).reversed() where !message.text.isEmpty && message.context.allSatisfy({ eligible($0.source) }) {
             guard remaining > 0 else { break }
             let text = String(message.text.suffix(remaining)); remaining -= text.count
             result.append(.init(role: message.role.rawValue, text: text))

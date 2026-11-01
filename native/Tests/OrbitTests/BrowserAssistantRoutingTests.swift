@@ -37,8 +37,10 @@ extension BrowserAssistantGeometryTests {
         let panelClip = try #require(panel.superview)
         #expect(panelClip !== card)
         #expect(panelClip.layer?.masksToBounds == true)
-        try? await Task.sleep(for: .milliseconds(500))
-        card.layoutSubtreeIfNeeded()
+        try await waitForNativeState("assistant dock reaches its open geometry") {
+            card.layoutSubtreeIfNeeded()
+            return abs(page.frame.width - (fullWidth - 382)) < 0.001
+        }
         #expect(card.isPresenting(page))
         #expect(abs(page.frame.width - (fullWidth - 382)) < 1)
         #expect(abs(panel.frame.width - 372) < 1)
@@ -73,8 +75,10 @@ extension BrowserAssistantGeometryTests {
         #expect(abs(panel.frame.width - 300) < 1)
         #expect(abs(page.frame.width - (fullWidth - 310)) < 1)
         card.setAssistant(nil, width: 0)
-        try? await Task.sleep(for: .milliseconds(350))
-        card.layoutSubtreeIfNeeded()
+        try await waitForNativeState("assistant dock closes and restores its page") {
+            card.layoutSubtreeIfNeeded()
+            return panel.superview == nil && abs(page.frame.width - fullWidth) < 0.001
+        }
         #expect(card.isPresenting(page))
         #expect(abs(page.frame.width - fullWidth) < 1)
         #expect(panel.superview == nil)
