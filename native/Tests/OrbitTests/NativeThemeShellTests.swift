@@ -594,7 +594,8 @@ struct NativeThemeShellTests {
         for (index, center) in centers.enumerated() {
             #expect(close(center.x, 20 + CGFloat(index) * pitch, 0.5) && close(center.y, 24, 0.5), "window button at \(center)")
         }
-        #expect(root.subviews.first is OrbitThemeFillView)
+        #expect(root.subviews.first === controller.windowShell.sidebarMaterial)
+        #expect(root.subviews.dropFirst().first === controller.windowShell.themeFill)
         #expect(controller.windowShell.theme == OrbitSpaceThemes.theme(forSpace: controller.session.snapshot?.activeSpaceID,
                                                                      in: controller.session.catalog))
         let address = controller.sidebar.addressContainer.convert(controller.sidebar.addressContainer.bounds, to: controller.sidebar)

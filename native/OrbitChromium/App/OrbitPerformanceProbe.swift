@@ -15,6 +15,7 @@ import ObjectiveC.runtime
 @MainActor
 enum OrbitPerformanceProbe {
     private static var lastPublished: Data?
+    private static var sidebarBackdropFixture: NSWindow?
     static func pauseBeforeRuntime(_ configuration: OrbitProductConfiguration) {
         guard configuration.syntheticGuard != nil, CommandLine.arguments.contains("--perf-wait-for-profiler") else { return }
         raise(SIGSTOP)
@@ -143,7 +144,28 @@ enum OrbitPerformanceProbe {
                 try? FileManager.default.removeItem(at: commandFile)
                 let name = command["command"] ?? ""
                 result["commandNonce"] = command["nonce"] ?? ""
-                if name == "settings-tab-spacing", ownsWindow(owner, bundleID: "lab.orbit.orbit.settings-tab-spacing") {
+                if name == "sidebar-transparency", ownsWindow(owner, bundleID: "lab.orbit.orbit.sidebar-transparency"), let window = owner.window {
+                    if let mode = command["appearance"] {
+                        window.appearance = NSAppearance(named: mode == "light" ? .aqua : .darkAqua)
+                    }
+                    if sidebarBackdropFixture == nil {
+                        let backdrop = NSWindow(contentRect: window.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+                        backdrop.isReleasedWhenClosed = false
+                        sidebarBackdropFixture = backdrop
+                    }
+                    sidebarBackdropFixture?.setFrame(window.frame, display: true)
+                    sidebarBackdropFixture?.backgroundColor = command["backdrop"] == "white" ? .white : .black
+                    sidebarBackdropFixture?.order(.below, relativeTo: window.windowNumber)
+                    window.makeKeyAndOrderFront(nil)
+                    if command["editor"] == "open" { owner.presentActiveSpaceThemeEditor() }
+                    else { owner.themeEditor?.close(animated: false) }
+                    try? await Task.sleep(for: .milliseconds(800))
+                    result["sidebarGlass"] = ["opaque": window.isOpaque,
+                        "material": owner.windowShell.sidebarMaterial.material.rawValue,
+                        "behindWindow": owner.windowShell.sidebarMaterial.blendingMode == .behindWindow,
+                        "frostAmount": owner.windowShell.theme.frostAmount,
+                        "editorHeight": owner.themeEditor?.view.frame.height ?? 0]
+                } else if name == "settings-tab-spacing", ownsWindow(owner, bundleID: "lab.orbit.orbit.settings-tab-spacing") {
                     if application.settingsWindow == nil {
                         let model = BrowserSettingsModel(environment: environment, profileID: owner.session.activeProfileID, shortcuts: [])
                         application.settingsWindow = BrowserSettingsWindowController(model: model, appearanceOverride: nil)
@@ -923,11 +945,6 @@ extension OrbitPerformanceProbe {
                       windows.contains(where: { ($0[kCGWindowOwnerPID as String] as? Int32) == getpid()
                           && ($0[kCGWindowNumber as String] as? Int) == target.windowNumber }) else { return false }
                 editor.view.swatches[index].performClick(nil)
-            case "frost":
-                guard let editor = owner.themeEditor,
-                      ownsWindow(owner, bundleID: "lab.orbit.orbit.theme-fixture") else { return false }
-                editor.view.frostSwitch.state = command["enabled"] == "true" ? .on : .off
-                _ = editor.view.frostSwitch.sendAction(editor.view.frostSwitch.action, to: editor.view.frostSwitch.target)
             case "pick":
                 guard let editor = owner.themeEditor, let u = Double(command["u"] ?? ""),
                       let v = Double(command["v"] ?? "") else { return false }

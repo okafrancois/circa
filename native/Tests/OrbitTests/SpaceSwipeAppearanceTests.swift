@@ -97,7 +97,7 @@ func spaceSwipeThemeFramesAreIncremental() {
         shell.applySpaceSwipeBlend(.init(source: source, destination: target, progress: CGFloat(step) / 10))
         #expect(!shell.themeFill.grainNeedsDisplay)
     }
-    #expect(window.isOpaque)
+    #expect(!window.isOpaque)
     #expect(window.backgroundAssignments - assignments <= 7)
     shell.applySpaceSwipeBlend(nil)
     #expect(shell.themeFill.theme == source)
