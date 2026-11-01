@@ -1,4 +1,5 @@
 import AppKit
+import QuartzCore
 import BrowserCore
 import ChromiumEngine
 
@@ -9,7 +10,16 @@ actor OrbitAssistantFixtureClient: BrowserAIProviderClient {
     private var count = 0
     init(id: BrowserAIProviderID, root: URL) { self.id = id; self.root = root }
     func status(refresh: Bool) async -> BrowserAIProviderStatus {
-        .init(id: id, state: .ready(.init(plan: nil, usage: nil)), models: [.init(provider: id, id: id == .claudeCode ? "sonnet" : "synthetic-codex", displayName: id == .claudeCode ? "Sonnet" : "Synthetic model", efforts: ["low", "medium", "high", "xhigh"], defaultEffort: "low")])
+        let mode = (try? String(contentsOf: root.appendingPathComponent("provider-state-\(id.rawValue)"), encoding: .utf8))?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let state: BrowserAIProviderState
+        switch mode {
+        case "signed-out": state = .signedOut
+        case "missing": state = .notInstalled
+        case "unavailable": state = .unavailable(.programNotResponding)
+        case "usage", "quota": state = .ready(.init(plan: "Synthetic plan", usage: .init(windows: [.init(span: .fiveHours, usedPercent: mode == "quota" ? 100 : 42, resetsAt: nil)])))
+        default: state = .ready(.init(plan: nil, usage: nil))
+        }
+        return .init(id: id, state: state, models: [.init(provider: id, id: id == .claudeCode ? "sonnet" : "synthetic-codex", displayName: id == .claudeCode ? "Sonnet" : "Synthetic model", efforts: ["low", "medium", "high", "xhigh"], defaultEffort: "low")])
     }
     func startTurn(_ request: BrowserAITurnRequest) async -> BrowserAITurn {
         count += 1
@@ -111,6 +121,13 @@ extension OrbitSmokeDriver {
                 let targetOwner = controllers.first { $0.window?.windowNumber == targetNumber } ?? owner
                 guard let targetWindow = controllers.compactMap(\.window).first(where: { $0.windowNumber == targetNumber })
                     ?? NSApp.windows.first(where: { $0.windowNumber == targetNumber }) else { sequence += 1; continue }
+                if command?["kind"] as? String == "fixture-status" && !arguments.contains("--orbit-smoke-assistant-live") {
+                    for id in [BrowserAIProviderID.codex, .claudeCode] {
+                        if let client = environment.ai.clientOverrides[id] {
+                            environment.ai.statuses[id] = await client.status(refresh: true)
+                        }
+                    }
+                }
                 var result = self.assistantOwnedInput(data, window: targetWindow, owner: targetOwner)
                 result["windows"] = controllers.compactMap { controller -> [String: Any]? in
                     guard let window = controller.window else { return nil }
@@ -192,7 +209,8 @@ extension OrbitSmokeDriver {
         let (_, worldData) = await surface.devToolsCall("Page.createIsolatedWorld", params: String(decoding: params, as: UTF8.self))
         guard let world = try? JSONSerialization.jsonObject(with: worldData) as? [String: Any],
               let context = world["executionContextId"] as? Int else { return nil }
-        let script = install ? "(()=>{if(!globalThis.__ownedReaderProbe){globalThis.__ownedReaderProbe={count:0};const original=Document.prototype.createTreeWalker;Document.prototype.createTreeWalker=function(...args){globalThis.__ownedReaderProbe.count++;return Reflect.apply(original,this,args)}}return globalThis.__ownedReaderProbe.count})()" : "globalThis.__ownedReaderProbe?.count ?? 0"
+        let delay = FileManager.default.fileExists(atPath: runRoot.appendingPathComponent("delay-extraction").path) ? "const end=performance.now()+1800;while(performance.now()<end){};" : ""
+        let script = install ? "(()=>{if(!globalThis.__ownedReaderProbe){globalThis.__ownedReaderProbe={count:0};const original=Document.prototype.createTreeWalker;Document.prototype.createTreeWalker=function(...args){globalThis.__ownedReaderProbe.count++;\(delay)return Reflect.apply(original,this,args)}}return globalThis.__ownedReaderProbe.count})()" : "globalThis.__ownedReaderProbe?.count ?? 0"
         guard let evaluation = try? JSONSerialization.data(withJSONObject: ["contextId": context, "expression": script, "returnByValue": true]) else { return nil }
         let (_, reply) = await surface.devToolsCall("Runtime.evaluate", params: String(decoding: evaluation, as: UTF8.self))
         let json = (try? JSONSerialization.jsonObject(with: reply)) as? [String: Any]
@@ -259,7 +277,7 @@ extension OrbitSmokeDriver {
                 responder.doCommand(by: NSSelectorFromString(selector))
                 handled = true
             }
-        case "gesture":
+        case "gesture", "native-gesture":
             if let points = command["points"] as? [[Double]], points.count >= 2,
                points.allSatisfy({ $0.count == 2 }) {
                 var pointerModifiers: NSEvent.ModifierFlags = []
@@ -282,8 +300,12 @@ extension OrbitSmokeDriver {
                 }
                 if events.count == points.count {
                     // Tracking controls consume the queued drag/up from their own nested event loop.
-                    for event in events.dropFirst() { NSApp.postEvent(event, atStart: false) }
-                    window.sendEvent(events[0])
+                    if kind == "native-gesture" {
+                        for event in events { NSApp.postEvent(event, atStart: false) }
+                    } else {
+                        for event in events.dropFirst() { NSApp.postEvent(event, atStart: false) }
+                        window.sendEvent(events[0])
+                    }
                     handled = true
                 }
             }
@@ -293,6 +315,19 @@ extension OrbitSmokeDriver {
                 window.setFrame(NSRect(origin: window.frame.origin, size: NSSize(width: size[0], height: size[1])), display: true)
                 window.contentView?.layoutSubtreeIfNeeded()
                 handled = true
+            }
+        case "mouse-move":
+            if let point = command["point"] as? [Double], point.count == 2,
+               let content = window.contentView {
+                let location = content.convert(NSPoint(x: point[0], y: point[1]), from: nil)
+                if content.bounds.contains(location), let target = content.hitTest(location),
+                   let event = NSEvent.mouseEvent(with: .mouseMoved,
+                    location: NSPoint(x: point[0], y: point[1]), modifierFlags: [],
+                    timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
+                    context: nil, eventNumber: 0, clickCount: 0, pressure: 0) {
+                    target.mouseMoved(with: event)
+                    handled = true
+                }
             }
         case "scroll":
             if let point = command["point"] as? [Double], point.count == 2,
@@ -307,6 +342,31 @@ extension OrbitSmokeDriver {
                     handled = true
                 }
             }
+        case "sample-motion":
+            let destination = runRoot.appendingPathComponent("motion-\(UUID().uuidString).json")
+            Task { @MainActor in
+                var samples: [[String: Any]] = []
+                let start = ProcessInfo.processInfo.systemUptime
+                while ProcessInfo.processInfo.systemUptime - start < 2 {
+                    var layers: [[String: Any]] = []
+                    func collect(_ layer: CALayer, path: String) {
+                        if let presentation = layer.presentation() {
+                            let transform = presentation.transform
+                            layers.append(["path": path, "opacity": presentation.opacity,
+                                "frame": [presentation.frame.minX, presentation.frame.minY, presentation.frame.width, presentation.frame.height],
+                                "scale": [transform.m11, transform.m22], "animations": layer.animationKeys() ?? []])
+                        }
+                        for (index, child) in (layer.sublayers ?? []).enumerated() { collect(child, path: "\(path)/\(index)") }
+                    }
+                    for candidate in NSApp.windows where candidate === window || candidate.parent === window {
+                        if let layer = candidate.contentView?.layer { collect(layer, path: String(candidate.windowNumber)) }
+                    }
+                    samples.append(["uptime": ProcessInfo.processInfo.systemUptime, "layers": layers])
+                    try? await Task.sleep(for: .milliseconds(16))
+                }
+                if let data = try? JSONSerialization.data(withJSONObject: samples) { try? data.write(to: destination) }
+            }
+            handled = true
         case "raise-window":
             // A laboratory window can be shown without switching the owner's desktop.
             window.collectionBehavior.remove(.moveToActiveSpace)
@@ -315,7 +375,7 @@ extension OrbitSmokeDriver {
             window.makeKeyAndOrderFront(nil)
             window.orderFrontRegardless()
             handled = window.isVisible
-        case "capture", "read-probe": handled = true
+        case "capture", "read-probe", "fixture-status": handled = true
         default: break
         }
         let responder = window.firstResponder
