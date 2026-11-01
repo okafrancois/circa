@@ -68,29 +68,20 @@ struct SidebarBrandFixTests {
         }
     }
 
-    @Test("Theme changes recompute the tint and Reduce Transparency remains opaque")
-    func frostRefresh() {
+    @Test("Saved material flags leave controls unchanged while floating materials retain accessibility fallback")
+    func retiredControlMaterial() {
         let surface = OrbitSurfaceBackgroundView(cornerRadius: 8)
-        var opacities: [CGFloat] = []
         for preset in [BrandPalette.spaceGradients[0], BrandPalette.spaceGradients[4], BrandPalette.spaceGradients[2]] {
             var model = preset.theme(); model.frost = true
             let theme = OrbitSpaceThemes.rendered(model)
             surface.applyFrost(OrbitSpaceThemes.accent(for: theme))
-            #expect(surface.frost?.sidebarTheme == theme)
-            let frost = surface.frost!
-            #expect(frost.effect.appearance?.bestMatch(from: [.aqua, .darkAqua]) == (frost.style.variant == .dark ? .darkAqua : .aqua))
-            opacities.append(frost.style.tintOpacity)
-            surface.frost?.refresh(reduceTransparency: true)
-            #expect(surface.frost?.style.tintOpacity == 1)
-            #expect(surface.frost?.effect.isHidden == true)
+            #expect(theme.frostAmount == 0)
+            #expect(surface.frost == nil)
         }
-        #expect(Set(opacities).count > 1)
-        let appearance = NSAppearance(named: .darkAqua)!
-        let fresh = OrbitSpaceThemes.rendered(.radial(colors: [.init(hex: 0xADFF13)]))
-        let opaque = OrbitFloatingMaterial.Style(variant: .dark, reducesTransparency: true)
-        let tint = OrbitSidebarFrost.opacity(theme: fresh, appearance: appearance, style: opaque)
-        let translucent = OrbitFloatingMaterial.Style(variant: .dark, reducesTransparency: false)
-        #expect(OrbitSidebarFrost.passes(tint, samples: OrbitSidebarFrost.samples(fresh, appearance: appearance), style: translucent))
+        let floating = OrbitFrostView()
+        floating.refresh(reduceTransparency: true)
+        #expect(floating.style.tintOpacity == 1)
+        #expect(floating.effect.isHidden)
     }
 
     @Test("Coral retains its violet end through storage and native gradient rendering")
