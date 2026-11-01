@@ -23,6 +23,9 @@ actor OrbitAssistantFixtureClient: BrowserAIProviderClient {
                 pair.continuation.finish()
                 return
             }
+            if mode == "slow" {
+                do { try await Task.sleep(for: .milliseconds(3500)) } catch { return }
+            }
             for text in ["Synthetic ", "streamed ", "answer. ", "[1: \"\(passage)\"]"] {
                 do { try await Task.sleep(for: .milliseconds(450)) } catch { return }
                 pair.continuation.yield(.text(text))
@@ -178,6 +181,8 @@ extension OrbitSmokeDriver {
               }),
               let command = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
               let kind = command["kind"] as? String else { return ["ok": false, "error": "Invalid owned window or command"] }
+        assistantInputWindow = window
+        defer { assistantInputWindow = nil }
         var handled = false
         switch kind {
         case "shortcut", "native-shortcut":
