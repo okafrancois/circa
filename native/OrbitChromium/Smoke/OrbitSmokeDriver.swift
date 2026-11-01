@@ -350,7 +350,12 @@ final class OrbitSmokeDriver: OrbitLaunchHooks {
         // product start-up (`applicationDidFinishLaunching`), whose windows would be shown.
         let application = OrbitApplication(environment: environment,
             commandKeyWindow: { [weak self] in self?.assistantInputWindow ?? NSApp.keyWindow },
-            windowPresenter: { _, _ in })
+            windowPresenter: { [weak self] controller, activate in
+                guard self?.arguments.contains("--orbit-smoke-assistant") == true else { return }
+                NSApp.setActivationPolicy(.regular)
+                controller.showWindow(nil)
+                if activate { NSApp.activate(ignoringOtherApps: true) }
+            })
         self.application = application
         // Hidden smoke accepts the warning through the same injectable presenter as the unit tests.
         application.confirmQuit = { .quit }

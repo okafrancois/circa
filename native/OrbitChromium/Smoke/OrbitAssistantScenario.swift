@@ -242,7 +242,7 @@ extension OrbitSmokeDriver {
                 responder.doCommand(by: NSSelectorFromString(selector))
                 handled = true
             }
-        case "gesture":
+        case "gesture", "native-gesture":
             if let points = command["points"] as? [[Double]], points.count >= 2,
                points.allSatisfy({ $0.count == 2 }) {
                 var pointerModifiers: NSEvent.ModifierFlags = []
@@ -264,6 +264,10 @@ extension OrbitSmokeDriver {
                     }
                 }
                 if events.count == points.count {
+                    if kind == "native-gesture" {
+                        for event in events { NSApp.postEvent(event, atStart: false) }
+                        return ["ok": true, "pid": Int(getpid()), "window": window.windowNumber, "queued": true]
+                    }
                     // Tracking controls consume the queued drag/up from their own nested event loop.
                     for event in events.dropFirst() { NSApp.postEvent(event, atStart: false) }
                     window.sendEvent(events[0])
