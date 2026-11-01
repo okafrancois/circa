@@ -14,6 +14,10 @@ actor OrbitAssistantFixtureClient: BrowserAIProviderClient {
     func startTurn(_ request: BrowserAITurnRequest) async -> BrowserAITurn {
         count += 1
         try? Data(request.prompt.utf8).write(to: root.appendingPathComponent("request-\(id.rawValue)-\(count).txt"))
+        let selection = ["provider": id.rawValue, "model": request.model ?? "", "effort": request.effort ?? ""]
+        if let data = try? JSONSerialization.data(withJSONObject: selection, options: [.sortedKeys]) {
+            try? data.write(to: root.appendingPathComponent("selection-\(id.rawValue)-\(count).json"))
+        }
         let mode = (try? String(contentsOf: root.appendingPathComponent("fixture-mode"), encoding: .utf8))?.trimmingCharacters(in: .whitespacesAndNewlines)
         let passage = (try? String(contentsOf: root.appendingPathComponent("fixture-passage"), encoding: .utf8)) ?? "Actors protect mutable state."
         let pair = AsyncStream<BrowserAITurnEvent>.makeStream()
