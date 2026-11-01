@@ -45,6 +45,8 @@ private struct TidyDownloadToast: View {
     @State private var hovered = false
     @State private var restored = false
     @State private var visible = false
+    @State private var entered = false
+    @State private var dwellStarted: TimeInterval?
     @State private var remaining = 6.0
     var body: some View {
         HStack(spacing: 12) {
@@ -66,17 +68,30 @@ private struct TidyDownloadToast: View {
         .padding(.vertical, 10).padding(.horizontal, 12).background(palette.popover.swiftUI, in: RoundedRectangle(cornerRadius: 12))
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
         .overlay(RoundedRectangle(cornerRadius: 12).stroke(palette.popoverEdge.swiftUI, lineWidth: 1))
-        .opacity(visible ? 1 : 0).offset(y: visible ? 0 : 12)
-        .onHover { hovered = $0 }
-        .task {
-            withAnimation(OrbitMotionPreferences.prefersReducedMotion ? nil : .timingCurve(0.19, 1, 0.22, 1, duration: 0.36)) { visible = true }
-            while remaining > 0 {
-                try? await Task.sleep(for: .milliseconds(100))
-                if Task.isCancelled { return }
-                if !hovered { remaining -= 0.1 }
+        .opacity(visible ? 1 : 0).offset(y: entered ? 0 : 12)
+        .onHover { inside in
+            if inside, !hovered, let start = dwellStarted {
+                remaining = max(0, remaining - (ProcessInfo.processInfo.systemUptime - start))
+                dwellStarted = nil
             }
+            hovered = inside
+        }
+        .task(id: hovered) {
+            if !entered {
+                withAnimation(OrbitMotionPreferences.prefersReducedMotion ? nil : .timingCurve(0.19, 1, 0.22, 1, duration: 0.36)) {
+                    entered = true; visible = true
+                }
+            } else if hovered && !visible {
+                withAnimation(.timingCurve(1 / 3, 2 / 3, 2 / 3, 1, duration: 0.2)) { visible = true }
+            }
+            guard !hovered else { return }
+            dwellStarted = ProcessInfo.processInfo.systemUptime
+            do { try await Task.sleep(for: .seconds(remaining)) } catch { return }
+            guard !Task.isCancelled, !hovered else { return }
+            dwellStarted = nil; remaining = 0
             withAnimation(.timingCurve(1 / 3, 2 / 3, 2 / 3, 1, duration: 0.2)) { visible = false }
-            try? await Task.sleep(for: .milliseconds(200))
+            do { try await Task.sleep(for: .milliseconds(200)) } catch { return }
+            guard !Task.isCancelled, !hovered else { return }
             dismiss()
         }
     }
