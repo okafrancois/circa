@@ -40,7 +40,10 @@ actor OrbitAssistantFixtureClient: BrowserAIProviderClient {
             if mode == "slow" {
                 do { try await Task.sleep(for: .milliseconds(3500)) } catch { return }
             }
-            for text in ["Synthetic ", "streamed ", "answer. ", "[1: \"\(passage)\"]"] {
+            let chunks = mode == "code"
+                ? ["Use `await` safely. ", "A wrapped run: `await actor.update(value: value, revalidateAfterSuspension: true, preserveSelection: true)` ", "[1: \"\(passage)\"]"]
+                : ["Synthetic ", "streamed ", "answer. ", "[1: \"\(passage)\"]"]
+            for text in chunks {
                 do { try await Task.sleep(for: .milliseconds(450)) } catch { return }
                 pair.continuation.yield(.text(text))
             }
