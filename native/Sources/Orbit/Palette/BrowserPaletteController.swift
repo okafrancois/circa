@@ -634,8 +634,17 @@ final class BrowserPaletteController<Engine: BrowserEngine> {
 
 extension BrowserPaletteController {
     func handleAssistantKey(_ event: NSEvent) -> Bool {
-        guard isPresented, answerHost != nil, event.type == .keyDown else { return false }
+        guard isPresented, event.type == .keyDown else { return false }
         let flags = event.modifierFlags.intersection([.command, .option, .control, .shift])
+        if flags == .option, event.charactersIgnoringModifiers == "\t" {
+            let asks = results.compactMap { result -> BrowserAIModelChoice? in
+                if case .ask(let choice) = result.action { return choice }; return nil
+            }
+            guard asks.count > 1 else { return false }
+            showAnswer(asks[1])
+            return true
+        }
+        guard answerHost != nil else { return false }
         if flags == .option, event.charactersIgnoringModifiers == "\r" {
             showAnswerSources(); return true
         }

@@ -903,7 +903,8 @@ extension NativeWebKitTests.NativePaletteTests {
 }
 
 private actor PaletteAIProvider: BrowserAIProviderClient {
-    nonisolated let id: BrowserAIProviderID = .codex
+    nonisolated let id: BrowserAIProviderID
+    init(id: BrowserAIProviderID = .codex) { self.id = id }
     private(set) var requests = 0
     func status(refresh: Bool) async -> BrowserAIProviderStatus { .init(id: id, state: .ready(.init(plan: nil))) }
     func shutdown() async {}
@@ -932,7 +933,9 @@ extension NativeWebKitTests.NativePaletteTests {
         h.window.settingsPreferences = BrowserWindowSettings(runtime: runtime)
         h.window.aiService = service
         let provider = PaletteAIProvider()
-        let conversation = BrowserAIConversation(choice: .init(provider: .codex), clients: [provider],
+        let alternate = PaletteAIProvider(id: .claudeCode)
+        service.statuses[.claudeCode] = .init(id: .claudeCode, state: .ready(.init(plan: nil)))
+        let conversation = BrowserAIConversation(choice: .init(provider: .codex), clients: [provider, alternate],
             preferences: { runtime.document.ai }, isPrivate: { false }, currentSource: { _ in nil },
             reader: { _ in Issue.record("A question without context must not read a page"); return "" })
         h.window.aiConversation = conversation
@@ -963,6 +966,18 @@ extension NativeWebKitTests.NativePaletteTests {
         #expect(await provider.requests == 1)
         #expect(!h.window.palette.isPresented)
         h.window.closeAssistant()
+        await h.show()
+        h.window.palette.query(question)
+        await h.window.palette.waitForResults()
+        let alternateTab = try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: .option,
+            timestamp: 0, windowNumber: h.window.window?.windowNumber ?? 0, context: nil,
+            characters: "\t", charactersIgnoringModifiers: "\t", isARepeat: false, keyCode: 48))
+        #expect(h.window.palette.handleAssistantKey(alternateTab))
+        for _ in 0..<10_000 { if await alternate.requests == 1 { break }; await Task.yield() }
+        #expect(await alternate.requests == 1)
+        #expect(await provider.requests == 1)
+        #expect(conversation.choice.provider == .claudeCode)
+        h.window.palette.dismiss()
         let original = h.window
         _ = h.router.newWindow()
         await h.router.waitForPendingCommands()
