@@ -249,8 +249,7 @@ struct BrowserAssistantView: View {
                 }
             HStack(spacing: 6) {
                 Button { contextPickerPresented.toggle() } label: {
-                    // The native symbol preserves transparent counters when tinted.
-                    Image(systemName: "at").font(.system(size: 14)).foregroundStyle(palette.secondary.swiftUI)
+                    OrbitIcon.contextSymbol.font(.system(size: 14)).foregroundStyle(palette.secondary.swiftUI)
                         .frame(width: 30, height: 30)
                 }.buttonStyle(BrowserAssistantButtonStyle(kind: .icon, active: contextPickerPresented))
                     .disabled(!hasContextChoices).help(uiText("Add context")).accessibilityLabel(uiText("Add context"))

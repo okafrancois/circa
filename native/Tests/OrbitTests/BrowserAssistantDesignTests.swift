@@ -133,7 +133,8 @@ struct BrowserAssistantDockGeometryTests {
     @Test("The native context symbol has transparent counters", arguments: [NSAppearance.Name.aqua, .darkAqua])
     func contextSymbolRaster(appearanceName: NSAppearance.Name) throws {
         let appearance = try #require(NSAppearance(named: appearanceName))
-        let image = try #require(NSImage(systemSymbolName: "at", accessibilityDescription: nil))
+        let renderer = ImageRenderer(content: OrbitIcon.contextSymbol.font(.system(size: 48))
+            .foregroundStyle(.black).frame(width: 64, height: 64))
         let bitmap = try #require(NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 64, pixelsHigh: 64,
             bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
             colorSpaceName: .deviceRGB, bytesPerRow: 256, bitsPerPixel: 32))
@@ -141,7 +142,8 @@ struct BrowserAssistantDockGeometryTests {
         NSGraphicsContext.saveGraphicsState()
         NSGraphicsContext.current = context
         appearance.performAsCurrentDrawingAppearance {
-            image.draw(in: NSRect(x: 0, y: 0, width: 64, height: 64))
+            context.cgContext.clear(CGRect(x: 0, y: 0, width: 64, height: 64))
+            renderer.nsImage?.draw(in: NSRect(x: 0, y: 0, width: 64, height: 64))
         }
         context.flushGraphics()
         NSGraphicsContext.restoreGraphicsState()
