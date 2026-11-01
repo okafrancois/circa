@@ -602,6 +602,7 @@ uint32_t ACREssentialsLevel(void);
  * compatibility claim. Every operation refuses unknown, ephemeral or global profiles. */
 int32_t ACRExtensionsAvailable(void);
 int32_t ACRExtensionsSnapshot(uint64_t profile_token, char *json, uint32_t capacity);
+int32_t ACRExtensionImportPreferences(uint64_t profile_token, const char *json);
 int32_t ACRExtensionSetEnabled(uint64_t profile_token, const char *extension_id, int32_t enabled);
 int32_t ACRExtensionPinningAvailable(void);
 int32_t ACRExtensionSetPinned(uint64_t profile_token, const char *extension_id, int32_t pinned);

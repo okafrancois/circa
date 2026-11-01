@@ -22,13 +22,20 @@ extension OrbitApplication {
             ArcImportAlertPresenter().showFailure(.targetUnreadable)
             return
         }
-        orbitImport.onFinished = { [weak self] outcome in
-            guard outcome != nil else { return }
-            ArcImportFirstRunOffer.record(.accepted, at: target.location)
-            // Connections (cookies, site storage) need a restart; same command, next step.
-            self?.startArcSiteSessionImport(continuingArcImport: true)
+        guard let configuration = activeSiteSessionConfiguration() else { return }
+        orbitImport.onPrepared = { [weak self] preparation, importer in
+            guard let self else { preparation.discard(); return }
+            self.pendingBrowserImport = BrowserImportOfflineJob(configuration: configuration, importer: importer,
+                preparation: preparation, adapter: ArcBrowserImportAdapter(options: importer.options),
+                authentication: .init(), passwordCSV: nil)
+            NSApp.terminate(nil)
         }
-        if orbitImport.start(target: target) == nil { NSSound.beep() }
+        Task {
+            do {
+                let review = try BrowserImportReviewTarget(live: target, document: await environment.store.sessionDocument())
+                if orbitImport.start(target: review) == nil { NSSound.beep() }
+            } catch { ArcImportAlertPresenter().showFailure(.targetUnreadable) }
+        }
     }
 
     /// The daily build offers the import once, on a fresh session (`--offer-arc-import` forces the

@@ -38,9 +38,11 @@ enum ArcImportText {
             lines.append(uiText("A previous import was interrupted; importing again completes it."))
         }
         lines.append("")
+        lines.append(uiText("Circa will save your session and restart before importing."))
+        lines.append(BrowserImportText.extensionNotes(report))
         lines.append(passwordsAvailable
-            ? uiFormat("Passwords and connections are imported in the next step, after restarting %@. Extensions and settings are not imported.", ProductIdentity.displayName)
-            : uiText("Not imported: passwords, sign-ins (cookies), extensions, site data and settings."))
+            ? uiFormat("Passwords and connections are imported in the next step, after restarting %@. Browser settings are not imported.", ProductIdentity.displayName)
+            : uiText("Not imported: passwords, sign-ins (cookies), site data and browser settings."))
         lines.append(uiText("Circa keeps a backup of its current session and history. Nothing opens automatically."))
         return lines.joined(separator: "\n")
     }
@@ -130,7 +132,7 @@ enum ArcImportText {
     static var cancel: String { uiText("Cancel") }
     static var ok: String { uiText("OK") }
     static var confirmTitle: String { uiText("Import from Arc?") }
-    static var importButton: String { uiText("Import") }
+    static var importButton: String { uiText("Import and Restart") }
     static var doneTitle: String { uiText("Import Complete") }
     static var failureTitle: String { uiText("Import from Arc Failed") }
     static var progressTitle: String { uiText("Import from Arc") }

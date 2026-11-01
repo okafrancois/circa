@@ -240,7 +240,13 @@ public final class BrowserAuthenticationRun {
         }
         // The persisted pre-import session must agree with the target actor's state.
         guard backup["session.json"] == (try await target.sessionBackup()) else { throw BrowserAuthenticationImportError.invalidState }
-        let batchBytes = total + additional.reduce(0) { $0 + $1.files.values.reduce(0) { $0 + $1.count } }
+        var files = files
+        let additional = additional
+        if sourceID != "safari", !(importer.adapter is FirefoxBrowserImportAdapter) {
+            let payload = try ChromiumExtensionImport.read(snapshot: preparation.snapshot, directory: sourceProfile, arc: false)
+            files.merge(payload.files) { first, _ in first }
+        }
+        let batchBytes = files.values.reduce(0) { $0 + $1.count } + additional.reduce(0) { $0 + $1.files.values.reduce(0) { $0 + $1.count } }
         try OrbitDiskSpace.require(Int64(batchBytes) * 4 + 64 * 1024 * 1024, at: root.url, probe: importer.diskSpace)
         let directory = try root.directory("AuthenticationImport", create: true)
         let run = try Self(root: root, directory: directory, key: recoveryKey,
@@ -491,6 +497,8 @@ extension BrowserAuthenticationRun {
         }
         for name in ["Local Storage", "IndexedDB", "WebStorage"] where source.exists(name) { try collect(source.directory(name, create: false), prefix: name) }
 
+            let extensions = try ChromiumExtensionImport.read(snapshot: input.preparation.snapshot, directory: sourceProfile, arc: false)
+            files.merge(extensions.files) { first, _ in first }
             return ProfilePayload(id: profile.id, sourceProfile: sourceProfile, files: files, passwords: passwords, cookies: cookies, unsupported: unsupported)
         }
         if let adapter = input.adapter as? SafariBrowserImportAdapter {

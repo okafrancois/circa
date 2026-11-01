@@ -75,7 +75,11 @@ public struct ArcBrowserImportAdapter: BrowserImportSourceAdapter {
         let localState = snapshot.localState.flatMap { try? ArcJSON.parse(Data(contentsOf: $0)) }
         let graph = try ArcSidebarParser.parse(sidebar: sidebar, archive: archive, localState: localState,
                                               legacyProfileDirectories: options.legacyProfileDirectories)
-        return BrowserImportSourcePlan(plan: ArcImportMapper.plan(graph, options: options, defaultProfileTarget: defaultProfile,
+        var mappingOptions = options
+        for directory in graph.profiles.compactMap({ $0.key.directory }) {
+            if try ChromiumExtensionImport.read(snapshot: snapshot, directory: directory, arc: true).count > 0 { mappingOptions.adoptsDefaultProfile = false }
+        }
+        return BrowserImportSourcePlan(plan: ArcImportMapper.plan(graph, options: mappingOptions, defaultProfileTarget: defaultProfile,
             importedAt: importedAt, profileTargets: ledger.profileTargets), formatVersion: graph.formatVersion,
             diagnostics: graph.diagnostics, archiveUnreadable: snapshot.archive != nil && archive == nil)
     }

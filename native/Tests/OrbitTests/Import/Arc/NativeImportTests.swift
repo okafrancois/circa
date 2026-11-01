@@ -122,6 +122,24 @@ struct NativeOrbitImportTests {
         }
     }
 
+    @Test("Restart preparation transfers its snapshot without mutating the live session")
+    func preparedImportDoesNotApplyLive() async throws {
+        let harness = try await Harness.make()
+        let coordinator = harness.coordinator()
+        let before = try Data(contentsOf: harness.sessionFile)
+        var held: ArcImportPreparation?
+        coordinator.onPrepared = { preparation, _ in held = preparation }
+        let live = try #require(ArcImportLiveTarget(environment: harness.environment))
+        let review = try BrowserImportReviewTarget(live: live, document: await harness.environment.store.sessionDocument())
+        await coordinator.start(target: review)?.value
+        #expect(held != nil)
+        #expect(harness.presenter.calls == ["confirm"])
+        #expect(try Data(contentsOf: harness.sessionFile) == before)
+        #expect(!FileManager.default.fileExists(atPath: live.location.ledgerFile.path))
+        held?.discard()
+        await harness.close()
+    }
+
     @Test("The live import waits for source browser to quit, confirms counts, merges, saves and imports history")
     func liveImport() async throws {
         let harness = try await Harness.make(orbitRunning: true)

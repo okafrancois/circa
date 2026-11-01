@@ -234,6 +234,28 @@ public final class ChromiumBrowserEngine: BrowserPrivateEngine {
         return profiles[profileID]!.token
     }
 
+    private var extensionImportSurfaces: [ChromiumSurface] = []
+
+    /// Complete normal browser-context initialization in a windowless, blank tab before the
+    /// one-time registration process flushes preferences and shuts Chromium down.
+    public func prepareImportedExtensionProfiles(_ profileIDs: [ProfileID]) {
+        for profileID in profileIDs {
+            let surface = makePendingSurface(profileID: profileID)
+            extensionImportSurfaces.append(surface)
+            surface.awaitsHostedCreation = true
+            awaitingHostedCreation[surface.token] = WeakSurface(surface)
+            createHostedBrowserIfPossible(surface, commanded: true)
+        }
+    }
+
+    /// Startup-only preference registration; packages load after a clean CEF relaunch.
+    public func stageImportedExtensions(_ json: String, in profileID: ProfileID) throws {
+        guard ACRExtensionImportPreferences(profileToken(for: profileID), json) == 1 else {
+            try? BrowserExtensionImportStage.registrationFailed(dataRoot: URL(fileURLWithPath: runtime.rootCachePath).deletingLastPathComponent())
+            throw BrowserEngineError.unsupportedOperation
+        }
+    }
+
     public func profileReady(_ profileID: ProfileID) async {
         guard !removingProfiles.contains(profileID) else { return }
         await runtime.profileReady(profileToken(for: profileID))

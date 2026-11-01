@@ -2,12 +2,21 @@ import BrowserCore
 import Foundation
 
 enum BrowserImportText {
+    static func extensionNotes(_ report: ArcImportReport) -> String {
+        var lines = [uiFormat("Compatible extension packages found: %@. Chromium verifies them after restart.", ArcImportText.number(report.sourceCounts?["extensions"] ?? 0)),
+            uiText("Only installed user extensions using Manifest V3 are restored into new profiles. Extension settings, local data and logins are not transferred. Disabled extensions stay disabled; incompatible, missing and built-in extensions are skipped.")]
+        if let skipped = report.sourceCounts?["extensionsSkipped"], skipped > 0 {
+            lines.append(uiFormat("Extension entries skipped: %@.", ArcImportText.number(skipped)))
+        }
+        return lines.joined(separator: "\n")
+    }
     static func review(_ report: ArcImportReport, passwordCSV: Bool = false, sourceID: String? = nil) -> String {
         let counts = structuralCounts(report.target, history: report.history.importable)
         var lines = [counts.isEmpty ? uiText("A new Circa profile will be created.")
             : uiFormat("A new Circa profile will receive %@.", ListFormatter.localizedString(byJoining: counts))]
         let categories = availability(report, passwordCSV: passwordCSV, sourceID: sourceID)
         if !categories.isEmpty { lines.append(categories) }
+        if report.sourceCounts?["extensions"] != nil { lines.append(extensionNotes(report)) }
         lines.append(uiText("Circa will save your current session and restart to import. Nothing opens automatically. Restore can undo this import, replacing later session edits and removing the imported profile."))
         return lines.joined(separator: "\n\n")
     }

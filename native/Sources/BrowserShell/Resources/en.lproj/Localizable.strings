@@ -1852,3 +1852,17 @@
 "Change model" = "Change model";
 
 "%ld sources read" = "%ld sources read";
+
+"Circa will save your session and restart before importing." = "Circa will save your session and restart before importing.";
+
+"Passwords and connections are imported in the next step, after restarting %@. Browser settings are not imported." = "Passwords and connections are imported in the next step, after restarting %@. Browser settings are not imported.";
+
+"Not imported: passwords, sign-ins (cookies), site data and browser settings." = "Not imported: passwords, sign-ins (cookies), site data and browser settings.";
+
+"Compatible extension packages found: %@. Chromium verifies them after restart." = "Compatible extension packages found: %@. Chromium verifies them after restart.";
+
+"Only installed user extensions using Manifest V3 are restored into new profiles. Extension settings, local data and logins are not transferred. Disabled extensions stay disabled; incompatible, missing and built-in extensions are skipped." = "Only installed user extensions using Manifest V3 are restored into new profiles. Extension settings, local data and logins are not transferred. Disabled extensions stay disabled; incompatible, missing and built-in extensions are skipped.";
+
+"Extension entries skipped: %@." = "Extension entries skipped: %@.";
+
+"Quit the source browser before continuing. Circa imports available bookmarks, history, open tabs, passwords, cookies and compatible site storage into a new profile. After you choose Import, macOS may ask for access to the source browser’s Safe Storage. Encrypted bookmarks or tabs require an export and are not decoded here. Compatible installed user extensions are restored; extension settings, local data and logins are not transferred. Autofill, payment cards, browser account sign-in, browser settings, passkeys, password notes and verification codes are not transferred. Some websites may require you to sign in again." = "Quit the source browser before continuing. Circa imports available bookmarks, history, open tabs, passwords, cookies and compatible site storage into a new profile. After you choose Import, macOS may ask for access to the source browser’s Safe Storage. Encrypted bookmarks or tabs require an export and are not decoded here. Compatible installed user extensions are restored; extension settings, local data and logins are not transferred. Autofill, payment cards, browser account sign-in, browser settings, passkeys, password notes and verification codes are not transferred. Some websites may require you to sign in again.";

@@ -26,7 +26,7 @@ struct OrbitImportFlowTests {
         #expect(stat(snapshot.path, &info) == 0 && info.st_mode & 0o777 == 0o700)
         #expect(stat(preparation.snapshot.sidebar.path, &info) == 0 && info.st_mode & 0o777 == 0o600)
         let copied = FileManager.default.enumerator(atPath: snapshot.path)?.compactMap { $0 as? String } ?? []
-        #expect(!copied.contains { $0.contains("Cookies") || $0.contains("Preferences") })
+        #expect(!copied.contains { $0.contains("Cookies") })
         #expect(try Data(contentsOf: fixture.sessionFile) == before, "a dry run writes nothing")
 
         let report = preparation.report

@@ -2,7 +2,7 @@ import Darwin
 import Foundation
 
 /// Copy-on-read of the few Arc files the importer needs, in a private directory (mode 0700, files
-/// 0600) that is deleted when the import ends. Encrypted login databases are copied for counts; cookies, extensions and site storage are
+/// 0600) that is deleted when the import ends. Encrypted login databases are copied for counts; cookies and site storage are
 /// handled by the separate explicit authentication step. Every source file is fingerprinted before and after the copy; a change, or Arc
 /// running before or after, discards the copy. Arc is never quit by the importer.
 public final class ArcSourceSnapshot: @unchecked Sendable {
@@ -94,6 +94,8 @@ public final class ArcSourceSnapshot: @unchecked Sendable {
         if let userData = try? source.directory("User Data", create: false) {
             for name in userData.entries().sorted() where ArcSidebarParser.isProfileDirectory(name) && userData.kind(name) == S_IFDIR {
                 passwordDirectories.append(name)
+                let profile = try userData.directory(name, create: false)
+                plan += try ChromiumExtensionImport.manifest(in: profile, prefix: "User Data/" + name + "/")
                 for database in ["Login Data", "Login Data For Account"] {
                     for suffix in [""] + historySidecars {
                         plan.append(("User Data/" + name + "/" + database + suffix, 512 * 1024 * 1024, false))
@@ -158,7 +160,10 @@ public final class ArcSourceSnapshot: @unchecked Sendable {
                 if let limit = entry.limit, before.size > limit { throw ArcImportError.unsupportedSourceFile }
                 let folder = entry.relative.split(separator: "/").dropLast().joined(separator: "/")
                 let destination = folder.isEmpty ? snapshot : try snapshot.directory(folder, create: true)
-                try destination.copy(name, from: from, name)
+                if (name == "Preferences" || name == "Secure Preferences"), entry.relative.split(separator: "/").count <= 3 {
+                    guard let bytes = from.read(name, limit: ChromiumExtensionImport.fileLimit) else { throw ArcImportError.snapshotFailed }
+                    try destination.write(ChromiumExtensionImport.preferenceSnapshot(bytes), to: name)
+                } else { try destination.copy(name, from: from, name) }
             }
             afterCopy()
             // Arc writing a file, or starting meanwhile, invalidates the copy.
