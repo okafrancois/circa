@@ -435,24 +435,26 @@ public struct BrowserImportOrchestrator: Sendable {
 
             if target.holdsExclusiveAccess, recovery?.isAuthentication != true,
                adapter == nil || adapter is ArcBrowserImportAdapter || adapter is ChromiumBrowserImportAdapter {
-                let engine = try OrbitSecureDirectory.open(location.dataDirectory, create: false).directory("Chromium", create: true)
                 for profile in plan.profiles {
                     guard let directory = profile.sourceDirectory else { continue }
                     let payload = try ChromiumExtensionImport.read(snapshot: preparation.snapshot, directory: directory, arc: adapter == nil || adapter is ArcBrowserImportAdapter)
                     outcome.extensionsSkipped = (outcome.extensionsSkipped ?? 0) + payload.skipped
+                    guard !payload.files.isEmpty else { continue }
                     let name = "profile-" + profile.id.rawValue.uuidString.lowercased()
-                    guard !profile.isAdopted, report.target.profilesAdded == plan.profiles.count, !engine.exists(name) else {
+                    guard !profile.isAdopted, report.target.profilesAdded == plan.profiles.count else {
                         outcome.extensionsSkipped = (outcome.extensionsSkipped ?? 0) + payload.count; continue
                     }
-                    if !payload.files.isEmpty {
-                        let destination = try engine.directory(name, create: true)
-                        for (path, data) in payload.files {
-                            let parts = path.split(separator: "/").map(String.init)
-                            let folder = parts.count == 1 ? destination : try destination.directory(parts.dropLast().joined(separator: "/"), create: true)
-                            try folder.write(data, to: parts.last!)
-                        }
-                        outcome.extensionsStaged = (outcome.extensionsStaged ?? 0) + payload.count
+                    let engine = try OrbitSecureDirectory.open(location.dataDirectory, create: false).directory("Chromium", create: true)
+                    guard !engine.exists(name) else {
+                        outcome.extensionsSkipped = (outcome.extensionsSkipped ?? 0) + payload.count; continue
                     }
+                    let destination = try engine.directory(name, create: true)
+                    for (path, data) in payload.files {
+                        let parts = path.split(separator: "/").map(String.init)
+                        let folder = parts.count == 1 ? destination : try destination.directory(parts.dropLast().joined(separator: "/"), create: true)
+                        try folder.write(data, to: parts.last!)
+                    }
+                    outcome.extensionsStaged = (outcome.extensionsStaged ?? 0) + payload.count
                 }
             }
             progress(ArcImportProgress(.applying))
