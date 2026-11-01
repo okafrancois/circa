@@ -214,6 +214,14 @@ public extension BrowserWindowSession {
         enqueueOrganization { session, context in try await session.store.renameTab(id, to: title, from: context) }
     }
 
+    func tidyPinnedTitle(_ expected: BrowserOrganizationTabItem, revision: UInt64, to title: String?,
+                         isCurrent: @escaping @MainActor () -> Bool) {
+        enqueueOrganization { session, context in
+            guard isCurrent() else { throw CancellationError() }
+            return try await session.store.tidyPinnedTitle(expected, revision: revision, to: title, from: context)
+        }
+    }
+
     func changeTabIcon(_ id: TabID, to icon: BrowserSpaceIcon?) {
         enqueueOrganization { session, context in try await session.store.changeTabIcon(id, to: icon, from: context) }
     }

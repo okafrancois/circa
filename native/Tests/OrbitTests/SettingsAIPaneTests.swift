@@ -92,7 +92,7 @@ struct SettingsAIPaneTests {
         #expect(BrowserAIProcess.runningCount == 0)
         let helpers = BrowserSettingsAIPane<SyntheticEngine>.shippedHelpers
         #expect(helpers.contains(\.askInFind) && helpers.contains(\.writingHelp))
-        #expect(!helpers.contains(\.linkPreviewSummaries) && !helpers.contains(\.tidyTitlesAndDownloads)
+        #expect(!helpers.contains(\.linkPreviewSummaries) && helpers.contains(\.tidyTitlesAndDownloads)
             && !helpers.contains(\.tidyToday))
     }
 

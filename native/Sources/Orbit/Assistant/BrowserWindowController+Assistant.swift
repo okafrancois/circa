@@ -47,6 +47,7 @@ extension BrowserWindowController {
         }
     }
     func reconcileAssistant() {
+        tidyHelpers.revokeStaleRequests()
         writingHelp?.reconcile()
         reconcileFindAnswer()
         if aiConversation != nil, aiProfileID != session.activeProfileID {

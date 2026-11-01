@@ -349,6 +349,21 @@ class SidebarListRow: NSView, NSTextFieldDelegate {
 
 @MainActor
 class SidebarTabRow: SidebarListRow {
+    private var titleOverlay: NSTextField?
+    private var titleAnimation = UUID()
+    var canRestoreTitle: (() -> Bool)?
+    var restoreTitle: (() -> Void)?
+    lazy var restoreButton: NSButton = {
+        let button = NSButton(image: OrbitIcon.image(sfName: "arrow.uturn.backward", pointSize: 14)!, target: self, action: #selector(restoreTidyTitle))
+        button.setAccessibilityLabel(uiText("Restore Original"))
+        button.toolTip = uiText("Restore Original")
+        button.isBordered = false
+        button.isHidden = true
+        addSubview(button)
+        return button
+    }()
+    @objc private func restoreTidyTitle() { if commandsEnabled { restoreTitle?() } }
+
     private(set) var item: SidebarTabItem
     let favicon = NSImageView()
     private let slash = SidebarPinnedSlashView()
@@ -429,7 +444,41 @@ class SidebarTabRow: SidebarListRow {
         rebind(node: node ?? .tab(item.id), depth: depth)
         let changed = item != self.item
         self.item = item
-        if titleLabel.stringValue != item.title { titleLabel.stringValue = item.title }
+        if titleLabel.stringValue != item.title {
+            titleOverlay?.removeFromSuperview(); titleOverlay = nil
+            titleAnimation = UUID()
+            let animation = titleAnimation
+            let animate = window != nil && canRestoreTitle?() == true && !OrbitMotionPreferences.prefersReducedMotion
+            if animate {
+                let old = NSTextField(labelWithString: titleLabel.stringValue)
+                old.font = titleLabel.font
+                old.textColor = titleLabel.textColor
+                old.frame = titleLabel.frame
+                old.lineBreakMode = .byTruncatingTail
+                addSubview(old)
+                titleOverlay = old
+                titleLabel.stringValue = item.title
+                titleLabel.alphaValue = 0
+                NSAnimationContext.runAnimationGroup { context in
+                    context.duration = 0.12
+                    context.timingFunction = CAMediaTimingFunction(controlPoints: 1 / 3, 2 / 3, 2 / 3, 1)
+                    old.animator().alphaValue = 0
+                } completionHandler: { [weak self, weak old] in
+                    MainActor.assumeIsolated {
+                        old?.removeFromSuperview()
+                        guard let self, self.titleAnimation == animation else { return }
+                        let available = self.titleLabel.frame.width
+                        self.titleLabel.frame.size.width = min(available, old?.intrinsicContentSize.width ?? available)
+                        NSAnimationContext.runAnimationGroup { context in
+                            context.duration = 0.3
+                            context.timingFunction = CAMediaTimingFunction(controlPoints: 0.19, 1, 0.22, 1)
+                            self.titleLabel.animator().alphaValue = 1
+                            self.titleLabel.animator().setFrameSize(NSSize(width: min(available, self.titleLabel.intrinsicContentSize.width + 2), height: self.titleLabel.frame.height))
+                        }
+                    }
+                }
+            } else { titleLabel.stringValue = item.title; titleLabel.alphaValue = 1 }
+        }
         if titleLabel.textColor != titleColor { titleLabel.textColor = titleColor }
         let image = displayedFavicon ?? faviconPlaceholder
         if favicon.image !== image { favicon.image = image }
@@ -466,9 +515,10 @@ class SidebarTabRow: SidebarListRow {
 
     override var titleEnd: CGFloat {
         // The title truncates before the close button only while the button shows (S-SPL@1s).
-        if showsAudio { return audioButton.frame.minX - Metrics.titleTrailingGap }
-        return isHovering || item.isOpenInAnotherWindow
+        if showsAudio { return isHovering && canRestoreTitle?() == true ? min(audioButton.frame.minX - Metrics.titleTrailingGap, bounds.width - 76) : audioButton.frame.minX - Metrics.titleTrailingGap }
+        let end = isHovering || item.isOpenInAnotherWindow
             ? closeButton.frame.minX - Metrics.titleTrailingGap : bounds.width - Metrics.rowInsetX
+        return isHovering && canRestoreTitle?() == true ? min(end, bounds.width - 52) : end
     }
 
     override func layout() {
@@ -506,6 +556,7 @@ class SidebarTabRow: SidebarListRow {
     override func hitTest(_ point: NSPoint) -> NSView? {
         guard acceptsPointerInput, let local = superview.map({ convert(point, from: $0) }), bounds.contains(local) else { return nil }
         if let renameField, renameField.frame.contains(local) { return renameField.hitTest(local) ?? renameField }
+        if !restoreButton.isHidden, restoreButton.alphaValue > 0.01, restoreButton.frame.contains(local) { return restoreButton }
         if isCloseButtonVisible, closeButton.frame.contains(local) { return closeButton }
         if showsAudio, audioButton.frame.contains(local) { return audioButton }
         return self
@@ -533,6 +584,9 @@ class SidebarTabRow: SidebarListRow {
     }
 
     override func resetForReuse() {
+        titleOverlay?.removeFromSuperview(); titleOverlay = nil
+        titleAnimation = UUID()
+        titleLabel.alphaValue = 1
         SidebarTabHoverCard.shared.invalidate(self)
         closeButton.dismissPill()
         splitPreviewShift = 0
@@ -542,6 +596,19 @@ class SidebarTabRow: SidebarListRow {
     }
 
     private func refreshControls() {
+        restoreButton.frame = NSRect(x: bounds.width - (showsAudio ? 72 : 48), y: (bounds.height - 20) / 2, width: 20, height: 20)
+        restoreButton.contentTintColor = effectiveAccent.icon
+        let restoreAvailable = !isRenaming && canRestoreTitle?() == true
+        if restoreAvailable && restoreButton.isHidden { restoreButton.alphaValue = 0 }
+        restoreButton.isHidden = !restoreAvailable
+        let opacity: CGFloat = isHovering && restoreAvailable ? 0.8 : 0
+        if restoreButton.alphaValue != opacity {
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = OrbitMotionPreferences.prefersReducedMotion ? 0 : 0.2
+                context.timingFunction = CAMediaTimingFunction(controlPoints: 1 / 3, 2 / 3, 2 / 3, 1)
+                restoreButton.animator().alphaValue = opacity
+            }
+        }
         let away = item.isAwayFromPinnedURL
         slash.isHidden = !away
         let showsLoading = item.activity.isLoading && displayedFavicon == nil

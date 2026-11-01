@@ -1,5 +1,6 @@
 import BrowserCore
 import Foundation
+import Darwin
 
 /// The coordinator retains accepted transfers independently of source tabs and windows.
 /// Implementations must support cancellation during shutdown, even before engine startup.
@@ -39,7 +40,7 @@ public struct BrowserDownloadRegistration {
     }
 }
 
-/// Active-file lifecycle only: no persistence, filesystem probing, UI, or engine dependencies.
+/// Transfer lifetimes and owned terminal-file name leases; no persistence, UI, or engine dependencies.
 /// The application owns one coordinator; closing a source window does not shut it down.
 @MainActor
 public final class BrowserDownloadCoordinator {
@@ -280,6 +281,49 @@ public final class BrowserDownloadCoordinator {
         entry.fileAvailability = availability
         publish(entry: entry)
         drainEffects()
+    }
+
+    /// A regular-file lease captured before requesting a suggested name. No file data is read.
+    public struct RenameLease: Equatable, Sendable {
+        public let context: BrowserDownloadContext
+        public let url: URL
+        fileprivate let device: dev_t
+        fileprivate let inode: ino_t
+        fileprivate let size: off_t
+        fileprivate let modified: timespec
+        fileprivate let changed: timespec
+        public static func == (lhs: Self, rhs: Self) -> Bool {
+            lhs.context == rhs.context && lhs.url == rhs.url && lhs.device == rhs.device
+                && lhs.inode == rhs.inode && lhs.size == rhs.size
+                && lhs.modified.tv_sec == rhs.modified.tv_sec && lhs.modified.tv_nsec == rhs.modified.tv_nsec
+                && lhs.changed.tv_sec == rhs.changed.tv_sec && lhs.changed.tv_nsec == rhs.changed.tv_nsec
+        }
+    }
+
+    public func renameLease(in context: BrowserDownloadContext) -> RenameLease? {
+        guard let entry = try? resolve(context), entry.state == .complete,
+              let url = entry.destinationURL, url.isFileURL else { return nil }
+        var info = stat()
+        guard lstat(url.path, &info) == 0, info.st_mode & S_IFMT == S_IFREG else { return nil }
+        return RenameLease(context: context, url: url, device: info.st_dev, inode: info.st_ino,
+                           size: info.st_size, modified: info.st_mtimespec, changed: info.st_ctimespec)
+    }
+
+    /// Main-actor compare-and-move: publication and file mutation have no suspension point.
+    /// RENAME_EXCL atomically refuses existing files, including dangling symlinks.
+    public func rename(_ lease: RenameLease, to name: String) -> RenameLease? {
+        guard let safe = BrowserAIHelperName.download(name, original: lease.url.lastPathComponent), safe == name,
+              safe != lease.url.lastPathComponent, renameLease(in: lease.context) == lease,
+              let entry = try? resolve(lease.context), entry.revision < .max else { return nil }
+        let destination = lease.url.deletingLastPathComponent().appendingPathComponent(safe)
+        guard renamex_np(lease.url.path, destination.path, UInt32(RENAME_EXCL)) == 0 else { return nil }
+        entry.destinationURL = destination
+        entry.revision += 1
+        entry.fileAvailability = .available
+        let result = renameLease(in: entry.snapshot.context)
+        publish(entry: entry, historyChanged: true)
+        drainEffects()
+        return result
     }
 
     /// Applies a background availability batch in one publication; stale contexts are ignored.

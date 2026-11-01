@@ -19,6 +19,9 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
     var aiProfileID: ProfileID?
     var aiConversation: BrowserAIConversation?
     var assistantHost: NSView?
+    lazy var tidyHelpers = BrowserTidyHelpers(owner: self)
+    var tidyDownloadPanel: NSPanel?
+    var tidyDownloadSpace: SpaceID?
     var writingHelp: BrowserWritingHelp?
 
     let id: UUID
@@ -310,6 +313,7 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
         findSession.onChange = { [weak self] in self?.renderFind() }
         findSession.onFocusReturn = { [weak self] surface in self?.returnFocusAfterFind(on: surface) }
         downloads.observeChanges(id) { [weak self] delta in
+            self?.tidyHelpers.downloadChanges(delta)
             self?.renderDownloadFeedback()
             self?.renderDownloads(delta: delta)
             if delta.historyChanged || delta.changed.contains(where: { $0.state == .complete }) {
@@ -350,6 +354,8 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
     func windowDidResignKey(_ notification: Notification) { passwordPrompt.close() }
 
     func windowWillClose(_ notification: Notification) {
+        tidyHelpers.cancel()
+        if let panel = tidyDownloadPanel { window?.removeChildWindow(panel); panel.orderOut(nil); tidyDownloadPanel = nil }
         writingHelp?.close()
         writingHelp = nil
         cancelFindAnswer()
@@ -516,6 +522,7 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
     /// The single projection of session state onto the window. Each feature contributes one
     /// render call; feature logic stays in its extension.
     func renderSession(selection: Set<TabID>? = nil) {
+        tidyHelpers.reconcile()
         SpaceSwipeTrace.interval("RenderSession") { renderSessionProjection(selection: selection) }
     }
 

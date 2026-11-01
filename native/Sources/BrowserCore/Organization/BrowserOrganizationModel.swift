@@ -187,6 +187,8 @@ public struct BrowserOrganizedTab: Codable, Equatable, Sendable {
     /// Last web title reported by the engine. Distinct from the user's custom title.
     public internal(set) var pageTitle: String?
     public internal(set) var customTitle: String?
+    /// The exact generated title; a manual rename clears this local restoration marker.
+    public internal(set) var tidiedTitle: String? = nil
     public internal(set) var customIcon: BrowserSpaceIcon?
     /// Reference URL of a Favorite or Pinned tab. Always nil in Today.
     public internal(set) var pinnedURL: URL?

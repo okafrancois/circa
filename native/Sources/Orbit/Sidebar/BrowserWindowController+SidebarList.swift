@@ -8,6 +8,8 @@ import BrowserShell
 /// `submitInput`, so list gestures keep their order with keyboard and engine commands.
 extension BrowserWindowController {
     func installSidebarList() {
+        sidebar.page.list.canRestoreTitle = { [weak self] in self?.tidyHelpers.originals[$0] != nil }
+        sidebar.page.list.restoreTitle = { [weak self] in self?.tidyHelpers.restore($0) }
         sidebar.windowIdentifier = id
         sidebar.splitDropVerdict = { [weak self] payload, target in self?.sidebarSplitDropVerdict(payload, target: target) }
         sidebar.onSplitDrop = { [weak self] payload, target, leading in

@@ -143,7 +143,7 @@ extension BrowserStore {
                             ? pinnedLandings[$0.occurrenceID]?.url : nil } ?? entry.pinnedLandingURL,
                         localDocument: entry.localDocument,
                         isResolvingPinnedLanding: live.map { pinnedLandings[$0.occurrenceID]?.pinnedURL == entry.pinnedURL
-                            && pinnedLandings[$0.occurrenceID]?.isResolving == true } == true))
+                            && pinnedLandings[$0.occurrenceID]?.isResolving == true } == true, tidiedTitle: entry.tidiedTitle))
                 case let .split(id):
                     guard let split = organization.splits[id] else { return nil }
                     let panes = items(split.tabIDs.map(BrowserOrganizationNode.tab), section: section).compactMap { item -> BrowserOrganizationTabItem? in
@@ -714,6 +714,21 @@ extension BrowserStore {
 
     // MARK: Titles and pinned URLs
 
+    /// Reject any intervening organization edit, including rename/unpin/repin cycles.
+    public func tidyPinnedTitle(_ expected: BrowserOrganizationTabItem, revision: UInt64,
+                                to title: String?, from context: BrowserContext) throws -> BrowserWindowState {
+        guard organizationRevision == revision, case .pinned = expected.section,
+              let current = try captureWindowState(in: context.windowID).organization.allTabs.first(where: { $0.id == expected.id }),
+              current == expected else { throw BrowserStoreError.staleContext }
+        _ = try organizationWindow(context)
+        try requireOrdinaryTabs([expected.id])
+        let value = try title.map { try BrowserOrganizationState.validatedTitle($0) }
+        try commitOrganization(.renameTab, in: context) { state in
+            state.updateTab(expected.id) { $0.customTitle = value; $0.tidiedTitle = value }
+        }
+        return try captureWindowState(in: context.windowID)
+    }
+
     public func renameTab(_ id: TabID, to title: String?, from context: BrowserContext) throws -> BrowserWindowState {
         _ = try organizationWindow(context)
         _ = try visibleSection(of: .tab(id), in: context)
@@ -721,7 +736,7 @@ extension BrowserStore {
         let trimmed = title?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let customTitle = trimmed.isEmpty ? nil : try BrowserOrganizationState.validatedTitle(trimmed)
         try commitOrganization(.renameTab, in: context) { state in
-            state.updateTab(id) { $0.customTitle = customTitle }
+            state.updateTab(id) { $0.customTitle = customTitle; $0.tidiedTitle = nil }
         }
         return try captureWindowState(in: context.windowID)
     }
