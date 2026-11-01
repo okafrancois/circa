@@ -26,9 +26,7 @@ struct BrowserAssistantAnswerView: View {
                 }
             } label: {
             HStack(spacing: 7) {
-                Text(String(conversation.choice.provider.rawValue.prefix(1)).uppercased())
-                    .font(.system(size: 10, weight: .semibold)).frame(width: 18, height: 18)
-                    .background(.quaternary, in: Circle())
+                BrowserAssistantProviderMark(provider: conversation.choice.provider)
                 Text(conversation.choice.model ?? BrowserSettingsAIText.name(conversation.choice.provider))
                 if let usage = conversation.messages.last?.usage?.windows.first { Text("\(usage.usedPercent)%") }
             }.font(.system(size: 12)).foregroundStyle(.secondary)
@@ -65,6 +63,21 @@ struct BrowserAssistantAnswerView: View {
                 }
             }.font(.system(size: 13, weight: .medium)).buttonStyle(.plain)
         }.padding(.leading, 34).padding(.trailing, 12).padding(.vertical, 8)
+    }
+}
+
+struct BrowserAssistantProviderMark: View {
+    let provider: BrowserAIProviderID
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        Group {
+            if provider == .onDevice {
+                OrbitIcon.view(sfName: "laptopcomputer", pointSize: 16)
+            } else if let mark = BrowserSettingsAIMark.image(provider, isDark: colorScheme == .dark) {
+                Image(nsImage: mark).resizable()
+            }
+        }.frame(width: 18, height: 18).accessibilityHidden(true)
     }
 }
 

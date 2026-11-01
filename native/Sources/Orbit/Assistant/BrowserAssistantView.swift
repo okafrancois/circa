@@ -34,9 +34,7 @@ struct BrowserAssistantView: View {
                     }
                 } label: {
                     HStack(spacing: 6) {
-                        Text(String(conversation.choice.provider.rawValue.prefix(1)).uppercased())
-                            .font(.system(size: 10, weight: .semibold)).frame(width: 18, height: 18)
-                            .background(Color(nsColor: .windowBackgroundColor), in: Circle())
+                        BrowserAssistantProviderMark(provider: conversation.choice.provider)
                         Text(conversation.choice.model ?? BrowserSettingsAIText.name(conversation.choice.provider)).lineLimit(1)
                         if let usage = conversation.messages.last?.usage?.windows.first {
                             Circle().trim(from: 0, to: Double(usage.usedPercent) / 100)
