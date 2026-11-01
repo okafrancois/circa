@@ -18,7 +18,7 @@ extension OrbitSmokeDriver {
             $0.isEnabled = true
             $0.readsCurrentTabOnRequest = true
             $0.helpers.writingHelp = true
-            if !live { $0.defaultModels[.quick] = .init(provider: .codex, model: "synthetic-codex") }
+            if !live { $0.defaultModels[.quick] = .init(provider: .codex, model: "synthetic-codex", effort: "low") }
         }
         if live {
             environment.ai.refresh(explicit: true, keepRunning: true)
@@ -70,6 +70,8 @@ extension OrbitSmokeDriver {
             guard let selection = try? await writer.writingSelection(revision: revision, isCurrent: { true }) else { check("writing.\(kind).selection", false); continue }
             check("writing.\(kind).selection", selection.text == "The team are ready to ships this release.")
             guard owns() else { return }
+            window.makeFirstResponder(surface.hostView)
+            check("writing.\(kind).eligible", owner.writingChoice != nil)
             // Native key-up uses the same settle/capture path as a user's completed selection.
             if let event = NSEvent.keyEvent(with: .keyUp, location: .zero, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber, context: nil, characters: "a", charactersIgnoringModifiers: "a", isARepeat: false, keyCode: 0) { NSApp.sendEvent(event) }
             try? await Task.sleep(for: .milliseconds(800))

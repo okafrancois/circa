@@ -52,7 +52,7 @@ final class BrowserWritingHelp: ObservableObject {
     private var context: Context?
     private var toolbar: NSPanel?
     private var result: NSPanel?
-    private var action: Action = .improve
+    @Published private(set) var action: Action = .improve
     private var epoch = UUID()
     private var requestID = UUID()
     @Published private(set) var output = ""
@@ -187,6 +187,13 @@ final class BrowserWritingHelp: ObservableObject {
         background.wantsLayer = true; background.layer?.cornerRadius = 10; background.layer?.masksToBounds = true
         let host = NSHostingView(rootView: AnyView(content.environment(\.assistantPalette, palette)))
         host.frame = background.bounds; host.autoresizingMask = [.width, .height]
+        background.layer?.borderWidth = 1
+        background.layer?.borderColor = palette.popoverEdge.cgColor
+        let tint = NSView(frame: background.bounds)
+        tint.wantsLayer = true
+        tint.layer?.backgroundColor = (NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency ? palette.popoverSolid : palette.popover).cgColor
+        tint.autoresizingMask = [.width, .height]
+        background.addSubview(tint)
         background.addSubview(host); panel.contentView = background
         window.addChildWindow(panel, ordered: .above)
         panel.orderFront(nil)
@@ -224,7 +231,7 @@ final class BrowserWritingHelp: ObservableObject {
     }
     private func showResult() {
         if result == nil {
-            let pair = makePanel(frame: frame(height: 96, above: false),
+            let pair = makePanel(frame: frame(height: 0, above: false),
                                  content: AnyView(BrowserWritingResult(model: self)), identifier: "writing-result")
             result = pair?.0
         }
