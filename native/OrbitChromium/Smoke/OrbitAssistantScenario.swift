@@ -49,7 +49,23 @@ extension OrbitSmokeDriver {
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
         try? Data("\(getpid()) \(window.windowNumber)".utf8).write(to: runRoot.appendingPathComponent("assistant-ready"))
-        _ = await until(40) { FileManager.default.fileExists(atPath: self.runRoot.appendingPathComponent("assistant-finish").path) }
+        var sequence = 0
+        _ = await until(40) {
+            let commandURL = self.runRoot.appendingPathComponent("input-\(sequence).json")
+            if let data = try? Data(contentsOf: commandURL) {
+                var result = self.assistantOwnedInput(data, window: window)
+                if let conversation = owner.aiConversation {
+                    result["conversation"] = conversation.id.uuidString
+                    result["messages"] = conversation.messages.map { ["id": $0.id.uuidString, "text": $0.text] }
+                    result["sources"] = conversation.selectedSources.count
+                }
+                if let encoded = try? JSONSerialization.data(withJSONObject: result, options: [.sortedKeys]) {
+                    try? encoded.write(to: self.runRoot.appendingPathComponent("ack-\(sequence).json"), options: .atomic)
+                }
+                sequence += 1
+            }
+            return FileManager.default.fileExists(atPath: self.runRoot.appendingPathComponent("assistant-finish").path)
+        }
         if let conversation = owner.aiConversation {
             let evidence: [String: Any] = ["conversation": conversation.id.uuidString,
                 "messages": conversation.messages.map { ["id": $0.id.uuidString, "text": $0.text] },
@@ -59,5 +75,76 @@ extension OrbitSmokeDriver {
             }
             conversation.close()
         }
+    }
+}
+
+
+extension OrbitSmokeDriver {
+    /// Only the marked, mock-keychain smoke driver calls this mailbox. Events never leave this process.
+    private func assistantOwnedInput(_ data: Data, window: NSWindow) -> [String: Any] {
+        guard FileManager.default.fileExists(atPath: runRoot.appendingPathComponent(".orbit-chromium-lab").path),
+              NSApp.windows.contains(where: { $0 === window }),
+              let windows = CGWindowListCopyWindowInfo([.optionAll], kCGNullWindowID) as? [[String: Any]],
+              windows.contains(where: {
+                  ($0[kCGWindowNumber as String] as? Int) == window.windowNumber &&
+                  ($0[kCGWindowOwnerPID as String] as? Int) == Int(getpid())
+              }),
+              let command = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+              let kind = command["kind"] as? String else { return ["ok": false, "error": "Invalid owned window or command"] }
+        var handled = false
+        switch kind {
+        case "shortcut":
+            var modifiers: NSEvent.ModifierFlags = []
+            for flag in command["modifiers"] as? [String] ?? [] {
+                switch flag {
+                case "command": modifiers.insert(.command)
+                case "option": modifiers.insert(.option)
+                case "shift": modifiers.insert(.shift)
+                case "control": modifiers.insert(.control)
+                default: break
+                }
+            }
+            if let key = command["text"] as? String,
+               let event = BrowserGlobalQuickWindowShortcut.layoutEvent(for: .init(key: key, modifiers: modifiers)) {
+                handled = window.performKeyEquivalent(with: event)
+                if !handled { handled = NSApp.mainMenu?.performKeyEquivalent(with: event) ?? false }
+            }
+        case "text":
+            if let text = command["text"] as? String, let client = window.firstResponder as? NSTextInputClient {
+                client.insertText(text, replacementRange: NSRange(location: NSNotFound, length: 0))
+                handled = true
+            }
+        case "command":
+            let commands = ["return": "insertNewline:", "tab": "insertTab:", "escape": "cancelOperation:"]
+            if let name = command["text"] as? String, let selector = commands[name], let responder = window.firstResponder {
+                responder.doCommand(by: NSSelectorFromString(selector))
+                handled = true
+            }
+        case "gesture":
+            if let points = command["points"] as? [[Double]], points.count >= 2,
+               points.allSatisfy({ $0.count == 2 }) {
+                var events: [NSEvent] = []
+                for (index, point) in points.enumerated() {
+                    let type: NSEvent.EventType = index == 0 ? .leftMouseDown :
+                        (index == points.count - 1 ? .leftMouseUp : .leftMouseDragged)
+                    if let event = NSEvent.mouseEvent(with: type, location: NSPoint(x: point[0], y: point[1]),
+                        modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                        windowNumber: window.windowNumber, context: nil, eventNumber: index,
+                        clickCount: 1, pressure: type == .leftMouseUp ? 0 : 1) { events.append(event) }
+                }
+                if events.count == points.count {
+                    // Tracking controls consume the queued drag/up from their own nested event loop.
+                    for event in events.dropFirst() { NSApp.postEvent(event, atStart: false) }
+                    window.sendEvent(events[0])
+                    handled = true
+                }
+            }
+        case "capture": handled = true
+        default: break
+        }
+        let responder = window.firstResponder
+        return ["ok": handled, "pid": Int(getpid()), "window": window.windowNumber,
+                "responder": responder.map { String(describing: type(of: $0)) } ?? "none",
+                "text": (responder as? NSTextView)?.string ?? (responder as? NSTextField)?.stringValue ?? ""]
     }
 }
