@@ -124,6 +124,11 @@ extension OrbitSmokeDriver {
                 result["frame"] = [targetWindow.frame.minX, targetWindow.frame.minY, targetWindow.frame.width, targetWindow.frame.height]
                 if let surface = targetOwner.session.selectedSurface,
                    ["capture", "read-probe"].contains(command?["kind"] as? String ?? "") {
+                    let host = surface.hostView
+                    result["pageHost"] = ["width": host.bounds.width, "height": host.bounds.height,
+                        "window": host.window?.windowNumber ?? 0, "hidden": host.isHiddenOrHasHiddenAncestor,
+                        "children": host.subviews.map { ["type": String(describing: type(of: $0)), "width": $0.bounds.width,
+                            "height": $0.bounds.height, "window": $0.window?.windowNumber ?? 0, "hidden": $0.isHiddenOrHasHiddenAncestor] }]
                     result["pageReads"] = await self.assistantReadProbe(surface, install: command?["kind"] as? String == "read-probe")
                     let (_, document) = await surface.devToolsCall("Runtime.evaluate", params: #"{"expression":"JSON.stringify({url:location.href,marks:Array.from(document.querySelectorAll('mark')).map(n=>n.textContent),scrollY:scrollY})","returnByValue":true}"#)
                     result["document"] = String(decoding: document, as: UTF8.self)
@@ -264,6 +269,13 @@ extension OrbitSmokeDriver {
                     window.sendEvent(events[0])
                     handled = true
                 }
+            }
+        case "resize-window":
+            if let size = command["size"] as? [Double], size.count == 2,
+               (640...1440).contains(size[0]), (480...900).contains(size[1]) {
+                window.setFrame(NSRect(origin: window.frame.origin, size: NSSize(width: size[0], height: size[1])), display: true)
+                window.contentView?.layoutSubtreeIfNeeded()
+                handled = true
             }
         case "raise-window":
             window.center()
