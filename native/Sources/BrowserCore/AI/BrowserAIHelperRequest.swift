@@ -21,7 +21,8 @@ import Foundation
                     preferences: @escaping @MainActor () -> BrowserAIPreferences,
                     isCurrent: @escaping @MainActor () -> Bool,
                     extract: @MainActor () async throws -> String,
-                    outputLimit: Int = 4_096) async throws -> String {
+                    outputLimit: Int = 4_096,
+                    onText: @MainActor (String) -> Void = { _ in }) async throws -> String {
         cancel()
         let token = generation
         let initial = preferences()
@@ -52,6 +53,7 @@ import Foundation
                     await active.interrupt(); throw BrowserAIError.failed
                 }
                 output += delta
+                onText(output)
             case .completed:
                 guard valid(), !output.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
                     throw BrowserAIError.failed

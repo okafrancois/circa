@@ -5,17 +5,38 @@ import Testing
 private actor HelperProvider: BrowserAIProviderClient {
     nonisolated let id: BrowserAIProviderID = .codex
     var requests = 0
+    let chunks: [String]
+    init(chunks: [String] = ["Result"]) { self.chunks = chunks }
     func status(refresh: Bool) async -> BrowserAIProviderStatus { .init(id: id, state: .signedOut) }
     func shutdown() async {}
     func startTurn(_ request: BrowserAITurnRequest) async -> BrowserAITurn {
         requests += 1
         return BrowserAITurn(events: AsyncStream { continuation in
-            continuation.yield(.text("Result")); continuation.yield(.completed); continuation.finish()
+            for chunk in chunks { continuation.yield(.text(chunk)) }
+            continuation.yield(.completed); continuation.finish()
         }, interrupt: {})
     }
 }
 
 @Suite @MainActor struct BrowserAIHelperRequestTests {
+    @Test func draftsStreamAndPermissionRevocationStopsFurtherDelivery() async throws {
+        let provider = HelperProvider(chunks: ["First", " second"]), request = BrowserAIHelperRequest()
+        var preferences = BrowserAIPreferences(); preferences.isEnabled = true
+        var drafts: [String] = []
+        let text = try await request.run(client: provider, choice: .init(provider: .codex), instructions: "Improve",
+            preferences: { preferences }, isCurrent: { true }, extract: { "Selected text" },
+            onText: { drafts.append($0) })
+        #expect(drafts == ["First", "First second"] && text == drafts.last)
+        drafts = []
+        do {
+            _ = try await request.run(client: provider, choice: .init(provider: .codex), instructions: "Improve",
+                preferences: { preferences }, isCurrent: { true }, extract: { "Selected text" },
+                onText: { drafts.append($0); preferences.isEnabled = false })
+            Issue.record("Revoked draft completed")
+        } catch is CancellationError {} catch { Issue.record("Unexpected error") }
+        #expect(drafts == ["First"])
+    }
+
     @Test func staleExtractionNeverStartsProvider() async {
         let provider = HelperProvider(), request = BrowserAIHelperRequest()
         var current = true

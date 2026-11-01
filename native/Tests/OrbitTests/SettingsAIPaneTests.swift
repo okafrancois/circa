@@ -90,7 +90,10 @@ struct SettingsAIPaneTests {
         // Rendering on appear re-checks with the inert providers only.
         for _ in 0..<200 where ai.isChecking { try await Task.sleep(nanoseconds: 10_000_000) }
         #expect(BrowserAIProcess.runningCount == 0)
-        #expect(BrowserSettingsAIPane<SyntheticEngine>.shippedHelpers.isEmpty)
+        let helpers = BrowserSettingsAIPane<SyntheticEngine>.shippedHelpers
+        #expect(helpers.contains(\.askInFind) && helpers.contains(\.writingHelp))
+        #expect(!helpers.contains(\.linkPreviewSummaries) && !helpers.contains(\.tidyTitlesAndDownloads)
+            && !helpers.contains(\.tidyToday))
     }
 
     @Test("Usage meters, reset times, plans and model labels")

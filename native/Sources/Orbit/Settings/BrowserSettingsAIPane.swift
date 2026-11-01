@@ -15,7 +15,7 @@ struct BrowserSettingsAIPane<Engine: BrowserEngine>: View {
     @State private var editsSites = false
 
     /// Helpers whose visible flow has shipped.
-    static var shippedHelpers: [KeyPath<BrowserAIHelperPreferences, Bool>] { [\.askInFind] }
+    static var shippedHelpers: [KeyPath<BrowserAIHelperPreferences, Bool>] { [\.askInFind, \.writingHelp] }
 
     private var preferences: BrowserAIPreferences { runtime.document.ai }
     private var enabled: Bool { preferences.isEnabled }
@@ -38,6 +38,10 @@ struct BrowserSettingsAIPane<Engine: BrowserEngine>: View {
                         card {
                             Toggle(uiText("Ask in Find"), isOn: Binding(get: { preferences.helpers.askInFind }, set: { value in
                                 model.perform { try await runtime.updateAI { $0.helpers.askInFind = value } }
+                            })).padding(14)
+                            SettingsRule()
+                            Toggle(uiText("Writing help"), isOn: Binding(get: { preferences.helpers.writingHelp }, set: { value in
+                                model.perform { try await runtime.updateAI { $0.helpers.writingHelp = value } }
                             })).padding(14)
                         }
                     }
