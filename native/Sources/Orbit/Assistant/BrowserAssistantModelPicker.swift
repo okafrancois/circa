@@ -111,7 +111,7 @@ private struct BrowserAssistantModelPicker: View {
                 VStack(spacing: 0) { modelList; Divider(); reasoning }.frame(maxWidth: .infinity)
             }
         }.frame(width: width).fixedSize(horizontal: false, vertical: true)
-            .font(.system(size: 13)).accessibilityIdentifier("assistant-model-picker")
+            .font(.system(size: 13))
     }
 
     private var modelList: some View {
@@ -153,8 +153,8 @@ private struct BrowserAssistantModelPicker: View {
                         HStack(spacing: 6) {
                             Text(BrowserSettingsAIText.effort(effort))
                             Spacer(minLength: 0)
+                            if model.defaultEffort == effort { Text(uiText("Default")).font(.system(size: 11)).foregroundStyle(.secondary) }
                             if (conversation.choice.effort ?? model.defaultEffort) == effort { Image(systemName: "checkmark") }
-                            else if model.defaultEffort == effort { Text(uiText("Default")).font(.system(size: 11)).foregroundStyle(.secondary) }
                         }.padding(.horizontal, 8).frame(minHeight: 34)
                             .background((conversation.choice.effort ?? model.defaultEffort) == effort ? Color.primary.opacity(0.07) : .clear,
                                 in: RoundedRectangle(cornerRadius: 7))

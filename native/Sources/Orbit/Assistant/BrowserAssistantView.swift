@@ -88,7 +88,7 @@ struct BrowserAssistantView: View {
                 HStack(spacing: 8) {
                     Button { contextPickerPresented.toggle() } label: {
                         Image(systemName: "at").frame(width: 24, height: 24)
-                    }.popover(isPresented: $contextPickerPresented, arrowEdge: .bottom) {
+                    }.buttonStyle(.plain).popover(isPresented: $contextPickerPresented, arrowEdge: .bottom) {
                         VStack(alignment: .leading, spacing: 4) {
                             ForEach(sources) { source in
                                 Button(source.title) { chooseContext([source]) }
@@ -102,14 +102,15 @@ struct BrowserAssistantView: View {
                     BrowserAssistantModelControl(conversation: conversation, choices: choices, statuses: statuses)
                         .help(currentUsage?.windows.map { BrowserSettingsAIText.meter($0, limitReached: currentUsage?.limitReached == true) }.joined(separator: " · ") ?? "")
                     Button { if conversation.isRunning { conversation.stop() } else { send() } } label: {
-                        Image(systemName: conversation.isRunning ? "stop.fill" : "arrow.up").frame(width: 24, height: 24)
+                        Image(systemName: conversation.isRunning ? "stop.fill" : "arrow.up").frame(width: 28, height: 28)
+                            .background(Color.primary.opacity(0.07), in: Circle())
                             .contentTransition(.opacity).animation(.linear(duration: reduceMotion ? 0.15 : 0.12), value: conversation.isRunning)
-                    }.accessibilityIdentifier("assistant-send-stop").disabled(!enabled || (!conversation.isRunning && draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty))
+                    }.buttonStyle(.plain).accessibilityIdentifier("assistant-send-stop").disabled(!enabled || (!conversation.isRunning && draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty))
                 }
             }.padding(12).background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 16))
                 .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(.quaternary, lineWidth: 0.5)).padding(10)
         }.frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity, alignment: .topLeading)
-            .background(Color(nsColor: .windowBackgroundColor)).cornerRadius(6).task {
+            .background(Color(nsColor: .windowBackgroundColor)).cornerRadius(6).ignoresSafeArea().task {
             await Task.yield()
             composing = true
         }
