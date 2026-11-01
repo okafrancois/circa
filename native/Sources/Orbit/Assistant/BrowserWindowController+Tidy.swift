@@ -58,9 +58,18 @@ private struct TidyDownloadToast: View {
             }
             Spacer(minLength: 0)
             if !restored {
-                Button(uiText("Undo")) {
+                Button {
                     if undo() { withAnimation(.timingCurve(1 / 3, 2 / 3, 2 / 3, 1, duration: 0.2)) { restored = true } }
                     else { dismiss() }
+                } label: {
+                    HStack(spacing: 4) {
+                        OrbitIcon.view(sfName: "arrow.uturn.backward", pointSize: 12)
+                        Text(uiText("Undo"))
+                    }
+                    .font(Font(BrandTextStyle.ui.font(size: 12.5, weight: .medium)))
+                    .padding(.vertical, 5).padding(.horizontal, 8)
+                    .background(palette.hover.swiftUI, in: RoundedRectangle(cornerRadius: 6))
+                    .overlay(RoundedRectangle(cornerRadius: 6).stroke(palette.line.swiftUI, lineWidth: 1))
                 }.buttonStyle(.plain)
             }
         }
