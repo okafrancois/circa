@@ -129,7 +129,7 @@ final class OrbitWindowShell {
         root.addSubview(sidebarMaterial, positioned: .below, relativeTo: nil)
         root.addSubview(themeFill, positioned: .above, relativeTo: sidebarMaterial)
         // Keep the Space tint light enough for the native material to sample the desktop.
-        themeFill.tintOpacity = Float(OrbitSidebarFrost.minimum)
+        themeFill.tintOpacity = OrbitThemeFillView.sidebarTintOpacity
         root.onLayout = { [weak self] in self?.applyGeometry() }
         root.onTrackingAreasInvalidated = { [weak self] in self?.updateHoverRegions(force: true) }
         themeFill.onAppearanceChange = { [weak self] in self?.updateWindowBackground() }

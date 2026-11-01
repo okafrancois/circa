@@ -935,16 +935,46 @@ extension OrbitPerformanceProbe {
                 guard let index = Int(command["index"] ?? ""), document.spaces.indices.contains(index) else { return false }
                 owner.session.activateSpace(document.spaces[index].id)
                 await owner.session.waitForQueuedCommands()
-            case "open": owner.presentActiveSpaceThemeEditor()
+            case "open":
+                owner.window?.center()
+                owner.window?.makeKeyAndOrderFront(nil)
+                NSApp.activate(ignoringOtherApps: true)
+                owner.presentActiveSpaceThemeEditor()
+                await owner.session.waitForQueuedCommands()
+            case "backdrop":
+                guard let window = owner.window else { return false }
+                if sidebarBackdropFixture == nil {
+                    let backdrop = NSWindow(contentRect: window.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+                    backdrop.isReleasedWhenClosed = false
+                    sidebarBackdropFixture = backdrop
+                }
+                sidebarBackdropFixture?.setFrame(window.frame, display: true)
+                sidebarBackdropFixture?.backgroundColor = command["color"] == "white" ? .white : .black
+                sidebarBackdropFixture?.order(.below, relativeTo: window.windowNumber)
+                window.makeKeyAndOrderFront(nil)
             case "close": owner.themeEditor?.close(animated: false)
-            case "preset":
-                guard let editor = owner.themeEditor, let index = Int(command["index"] ?? ""),
-                      editor.view.swatches.indices.contains(index), !editor.view.swatches[index].isHidden,
-                      let target = editor.view.window,
+            case "preset", "page", "grain":
+                guard let editor = owner.themeEditor, let target = editor.view.window,
                       let windows = CGWindowListCopyWindowInfo([.optionIncludingWindow], CGWindowID(target.windowNumber)) as? [[String: Any]],
                       windows.contains(where: { ($0[kCGWindowOwnerPID as String] as? Int32) == getpid()
                           && ($0[kCGWindowNumber as String] as? Int) == target.windowNumber }) else { return false }
-                editor.view.swatches[index].performClick(nil)
+                if command["action"] == "grain" {
+                    guard let steps = Int(command["steps"] ?? ""), abs(steps) <= 20 else { return false }
+                    for _ in 0..<abs(steps) {
+                        let dial = editor.view.grainDial
+                        let accepted = steps > 0 ? dial.accessibilityPerformIncrement() : dial.accessibilityPerformDecrement()
+                        guard accepted else { return false }
+                    }
+                } else if command["action"] == "page" {
+                    guard let offset = Int(command["offset"] ?? ""), [-1, 1].contains(offset) else { return false }
+                    let button = offset > 0 ? editor.view.nextButton : editor.view.previousButton
+                    guard button.isEnabled, !button.isHidden else { return false }
+                    button.performClick(nil)
+                } else {
+                    guard let index = Int(command["index"] ?? ""), editor.view.swatches.indices.contains(index),
+                          !editor.view.swatches[index].isHidden else { return false }
+                    editor.view.swatches[index].performClick(nil)
+                }
             case "pick":
                 guard let editor = owner.themeEditor, let u = Double(command["u"] ?? ""),
                       let v = Double(command["v"] ?? "") else { return false }

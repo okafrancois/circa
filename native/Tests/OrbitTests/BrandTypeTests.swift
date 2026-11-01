@@ -38,27 +38,37 @@ struct BrandTypeTests {
             == NSFont.systemFont(ofSize: 13, weight: .medium))
     }
 
-    @Test("The editor shows six shared gradients in order and applies them without losing controls")
+    @Test("The editor exposes all 36 colors and keeps draft controls while paging")
     func presets() throws {
         var original = BrowserSpaceThemePresets.default
         original.mode = .dark
         original.noise = 0.27
         original.frost = true
         let view = OrbitThemeEditorView(state: .init(theme: original))
-        let visible = view.swatches.filter { !$0.isHidden }
-        #expect(visible.count == 6)
-        #expect(visible.map { $0.accessibilityLabel() } == BrandPalette.spaceGradients.map { uiText($0.name) })
-        #expect(view.previousButton.isHidden && view.nextButton.isHidden)
-        for (swatch, preset) in zip(visible, BrandPalette.spaceGradients) {
-            swatch.performClick(nil)
-            #expect(view.state.theme.presetID == preset.theme().presetID)
-            #expect(view.state.theme.light == preset.theme().light)
-            #expect(view.state.theme.dark == preset.theme().dark)
-            #expect(view.state.theme.mode == .dark)
-            #expect(view.state.theme.noise == 0.27)
-            #expect(view.state.theme.frost)
-            #expect(view.themeName.stringValue == uiText(preset.name))
+        var colors: Set<BrowserThemeColor> = []
+        for (page, family) in BrowserSpaceThemePresets.families.enumerated() {
+            #expect(view.state.familyIndex == page)
+            #expect(!view.previousButton.isHidden && !view.nextButton.isHidden)
+            #expect(view.previousButton.isEnabled == (page > 0))
+            #expect(view.nextButton.isEnabled == (page < 3))
+            let visible = view.swatches.filter { !$0.isHidden }
+            #expect(visible.count == 9)
+            for (index, swatch) in visible.enumerated() {
+                swatch.performClick(nil)
+                #expect(view.state.theme.presetID == BrowserSpaceThemePresets.presetID(family: family, index: index))
+                #expect(view.state.theme.colors == [family.swatches[index]])
+                #expect(view.state.theme.mode == .dark && view.state.theme.noise == 0.27)
+                #expect(view.state.theme.frost)
+                #expect(swatch.isSelected)
+                colors.insert(family.swatches[index])
+            }
+            let draft = view.state.theme
+            view.nextButton.performClick(nil)
+            #expect(view.state.theme == draft, "Paging alone never changes the theme")
         }
+        #expect(colors.count == 36)
+        for _ in 0..<3 { view.previousButton.performClick(nil) }
+        #expect(view.state.familyIndex == 0)
     }
 
     @Test("Opening the editor preserves arbitrary existing theme bytes and never reports a change")
