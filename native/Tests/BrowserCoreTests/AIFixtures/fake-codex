@@ -1,0 +1,111 @@
+#!/usr/bin/python3 -I
+"""Test double for `codex`. Replays recorded app-server JSONL (codex-<scenario>.jsonl).
+
+Environment: FAKE_AI_FIXTURES (fixture directory), FAKE_AI_SCENARIO, FAKE_AI_LOG (JSONL log of
+arguments and every message Circa sends), FAKE_AI_STATE (directory for once-only behaviours).
+Never contacts any service.
+"""
+import json, os, sys, time, signal
+
+def log(entry):
+    path = os.environ.get('FAKE_AI_LOG')
+    if path:
+        with open(path, 'a') as f:
+            f.write(json.dumps(entry) + '\n')
+
+if sys.argv[1:] == ['--version']:
+    print('codex-cli 0.165.0')
+    sys.exit(0)
+if not sys.argv[1:] or sys.argv[1] != 'app-server':
+    sys.exit(2)
+
+log({'argv': sys.argv[1:], 'cwd': os.getcwd()})
+fixtures = os.environ['FAKE_AI_FIXTURES']
+scenario = os.environ.get('FAKE_AI_SCENARIO', 'ready')
+state = os.environ.get('FAKE_AI_STATE', '/nonexistent')
+script = {}
+with open(os.path.join(fixtures, 'codex-%s.jsonl' % scenario)) as f:
+    for line in f:
+        line = line.strip()
+        if line and not line.startswith('//'):
+            entry = json.loads(line)
+            script.setdefault(entry['on'], []).append(entry)
+
+# The user's config before Circa's overrides, then `-c key=value` applied like the real parser:
+# dotted path segments, TOML-ish values.
+config = json.load(open(os.path.join(fixtures, script.get('config', [{'file': 'codex-config.json'}])[0]['file'])))
+def parse(value):
+    if value in ('true', 'false'): return value == 'true'
+    if value == '[]': return []
+    if value.startswith('"') and value.endswith('"'): return value[1:-1]
+    try: return int(value)
+    except ValueError: return value
+args = sys.argv[2:]
+for i, a in enumerate(args):
+    if a == '-c':
+        key, value = args[i + 1].split('=', 1)
+        node = config
+        parts = key.split('.')
+        for p in parts[:-1]:
+            node = node.setdefault(p, {})
+        node[parts[-1]] = parse(value)
+
+def send(message):
+    sys.stdout.write(json.dumps(message) + '\n')
+    sys.stdout.flush()
+
+def substitute(value, ids):
+    if isinstance(value, str) and value.startswith('$'):
+        return ids.get(value[1:], value)
+    if isinstance(value, dict): return {k: substitute(v, ids) for k, v in value.items()}
+    if isinstance(value, list): return [substitute(v, ids) for v in value]
+    return value
+
+pending_interrupt = [False]
+def read_message():
+    line = sys.stdin.readline()
+    if not line: sys.exit(0)
+    message = json.loads(line)
+    log({'received': message})
+    return message
+
+def play(entry, ids):
+    for step in entry.get('send', []):
+        if 'sleep' in step:
+            time.sleep(step['sleep']); continue
+        if step.get('crash'):
+            once = os.path.join(state, 'crashed')
+            if not os.path.exists(once):
+                open(once, 'w').close()
+                os._exit(9)
+            continue
+        if step.get('await') == 'interrupt':
+            while True:
+                message = read_message()
+                if message.get('method') == 'turn/interrupt':
+                    send({'id': message['id'], 'result': {}})
+                    break
+            continue
+        message = substitute(step, ids)
+        send(message)
+        if 'method' in message and 'id' in message:
+            # A request to Circa: wait for its reply, logged by read_message.
+            while True:
+                reply = read_message()
+                if reply.get('id') == message['id'] and 'method' not in reply:
+                    break
+
+while True:
+    message = read_message()
+    method = message.get('method')
+    if 'id' not in message:
+        continue
+    ids = {'id': message['id']}
+    if method == 'config/read':
+        send({'id': message['id'], 'result': {'config': config, 'origins': {}}})
+        continue
+    entries = script.get(method)
+    if not entries:
+        send({'id': message['id'], 'error': {'code': -32601, 'message': 'unknown'}})
+        continue
+    play(entries[0], ids)

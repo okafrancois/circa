@@ -15,7 +15,8 @@ ICON_CATALOG = json.loads((Path(__file__).resolve().parents[1] /
     'native/Sources/BrowserShell/Icons/catalog.json').read_text())
 ICON_RESOURCE_FILES = frozenset({'catalog.json'} | {
     f'template/{size}/{name}.pdf' for size in (16, 20, 24) for name in ICON_CATALOG['template']
-} | {f'color/24/{name}.svg' for name in ICON_CATALOG['color']})
+} | {f'color/24/{name}.svg' for name in ICON_CATALOG['color']}
+  | {f'ai-marks/{name}.svg' for name in ICON_CATALOG.get('aiMarks', [])})
 ICON_RESOURCE_DIRECTORIES = frozenset(str(parent) for name in ICON_RESOURCE_FILES
     for parent in Path(name).parents if str(parent) != '.') | {'', 'template', 'color'}
 BRAND_FONT_FILES = frozenset({'mark.pdf'})

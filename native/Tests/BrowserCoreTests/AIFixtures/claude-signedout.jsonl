@@ -1,0 +1,5 @@
+// Signed out: the CLI reports the failure as the result.
+{"type": "system", "subtype": "init", "session_id": "session-synthetic", "cwd": "/private/tmp/circa-ai", "model": "claude-sonnet-5-5", "permissionMode": "dontAsk", "tools": [], "mcp_servers": [], "slash_commands": [], "apiKeySource": "none"}
+{"type": "assistant", "message": {"role": "assistant", "content": [{"type": "text", "text": "Not logged in \u00b7 Please run /login"}]}, "session_id": "session-synthetic", "error": "authentication_failed"}
+{"type": "result", "subtype": "success", "is_error": true, "num_turns": 1, "result": "Not logged in \u00b7 Please run /login", "stop_reason": "end_turn", "permission_denials": [], "session_id": "session-synthetic"}
+{"exit": 1}

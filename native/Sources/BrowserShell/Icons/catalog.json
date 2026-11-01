@@ -119,6 +119,11 @@
     "keyboard",
     "macwindow.on.rectangle",
     "info.circle",
-    "slider.horizontal.3"
+    "slider.horizontal.3",
+    "sparkles"
+  ],
+  "aiMarks": [
+    "claudeCode",
+    "codex"
   ]
 }

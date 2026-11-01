@@ -1,0 +1,11 @@
+// Signed in; a streamed answer. Event shapes recorded from Claude Code 2.1.316 (identifiers synthetic).
+{"type": "system", "subtype": "init", "session_id": "session-synthetic", "cwd": "/private/tmp/circa-ai", "model": "claude-sonnet-5-5", "permissionMode": "dontAsk", "tools": [], "mcp_servers": [], "slash_commands": [], "apiKeySource": "none"}
+{"type": "system", "subtype": "status", "status": "requesting", "session_id": "session-synthetic"}
+{"type": "rate_limit_event", "rate_limit_info": {"status": "allowed_warning", "resetsAt": 1793923200, "rateLimitType": "seven_day", "utilization": 0.93, "overageStatus": "rejected", "isUsingOverage": false, "unifiedWindows": {"seven_day": {"utilization": 0.93, "resetsAt": 1793923200, "status": "allowed_warning"}}}, "uuid": "u-1", "session_id": "session-synthetic"}
+{"type": "stream_event", "event": {"type": "content_block_start", "index": 0, "content_block": {"type": "text", "text": ""}}, "session_id": "session-synthetic"}
+{"type": "stream_event", "event": {"type": "content_block_delta", "index": 0, "delta": {"type": "thinking_delta", "thinking": "private reasoning"}}, "session_id": "session-synthetic"}
+{"type": "stream_event", "event": {"type": "content_block_delta", "index": 0, "delta": {"type": "text_delta", "text": "Hello"}}, "session_id": "session-synthetic"}
+{"sleep": 0.05}
+{"type": "stream_event", "event": {"type": "content_block_delta", "index": 0, "delta": {"type": "text_delta", "text": " from Claude."}}, "session_id": "session-synthetic"}
+{"type": "assistant", "message": {"role": "assistant", "content": [{"type": "text", "text": "Hello from Claude."}]}, "session_id": "session-synthetic"}
+{"type": "result", "subtype": "success", "is_error": false, "num_turns": 1, "result": "Hello from Claude.", "stop_reason": "end_turn", "permission_denials": [], "session_id": "session-synthetic"}

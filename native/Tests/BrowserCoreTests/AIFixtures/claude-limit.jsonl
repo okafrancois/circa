@@ -1,0 +1,6 @@
+// Session limit reached.
+{"type": "system", "subtype": "init", "session_id": "session-synthetic", "cwd": "/private/tmp/circa-ai", "model": "claude-sonnet-5-5", "permissionMode": "dontAsk", "tools": [], "mcp_servers": [], "slash_commands": [], "apiKeySource": "none"}
+{"type": "rate_limit_event", "rate_limit_info": {"status": "rejected", "resetsAt": 1793539200, "rateLimitType": "five_hour", "utilization": 1.0, "overageStatus": "rejected", "isUsingOverage": false, "unifiedWindows": {"five_hour": {"utilization": 1.0, "resetsAt": 1793539200, "status": "rejected"}}}, "uuid": "u-1", "session_id": "session-synthetic"}
+{"type": "assistant", "message": {"role": "assistant", "content": [{"type": "text", "text": "You've hit your session limit"}]}, "session_id": "session-synthetic", "error": "rate_limit"}
+{"type": "result", "subtype": "success", "is_error": true, "num_turns": 1, "result": "You've hit your session limit \u00b7 resets 3:45pm", "stop_reason": "end_turn", "permission_denials": [], "session_id": "session-synthetic"}
+{"exit": 1}

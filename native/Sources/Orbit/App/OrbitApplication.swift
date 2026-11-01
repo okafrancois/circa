@@ -514,6 +514,7 @@ final class OrbitApplication: NSObject, NSApplicationDelegate {
         commands.globalQuickWindowShortcut.uninstall()
         environment?.retireQuickWindows()
         environment?.downloads.shutdown()
+        environment?.aiIfStarted?.terminateNow()
         windows.shutdown()
     }
 

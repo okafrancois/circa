@@ -1267,7 +1267,7 @@ extension NativeWebKitTests.NativeSettingsTests {
     @Test("Settings toolbar contains the public Orbit categories and resizing retains its top edge")
     func orbitSettingsCategoriesAndResize() async throws {
         NSApplication.shared.setActivationPolicy(.prohibited)
-        #expect(BrowserSettingsSection.allCases == [.general, .profiles, .shortcuts, .links, .advanced, .about])
+        #expect(BrowserSettingsSection.allCases == [.general, .profiles, .shortcuts, .links, .ai, .advanced, .about])
         let model = settingsModel(BrowserEnvironment(engine: SettingsFixtureEngine()))
         await model.reload()
         let controller = BrowserSettingsWindowController(model: model)
