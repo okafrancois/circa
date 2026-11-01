@@ -25,9 +25,14 @@ extension OrbitSmokeDriver {
             _ = await until(12) { !environment.ai.isChecking }
         }
         guard let window = owner.window else { check("writing.window", false); return }
+        if arguments.contains("--orbit-smoke-writing-light") {
+            NSApp.appearance = NSAppearance(named: .aqua)
+            window.appearance = NSAppearance(named: .aqua)
+        }
         window.center(); window.makeKeyAndOrderFront(nil)
         let page = fixture.appendingPathComponent("writing.html")
         owner.openTab(url: page)
+        await owner.session.waitForQueuedCommands()
         _ = await committed(owner, page)
         guard let surface = owner.pageCommandSurface(), let writer = surface as? any BrowserAIWriting else { check("writing.surface", false); return }
         func evaluate(_ expression: String) async -> Any? {
@@ -63,6 +68,26 @@ extension OrbitSmokeDriver {
         recording.arguments = ["-x", "-v", "-V", "12", "-l", String(window.windowNumber), runRoot.appendingPathComponent("native.mov").path]
         if owns() { try? recording.run() }
         defer { if recording.isRunning { recording.terminate() } }
+        _ = await until(3) { owns() }
+        if let choice = owner.writingChoice, let data = try? JSONSerialization.data(withJSONObject: [
+            "provider": choice.provider.rawValue, "model": choice.model ?? "", "effort": choice.effort ?? "",
+            "fixture": !live, "reducedMotion": OrbitMotionPreferences.prefersReducedMotion,
+            "appearance": window.effectiveAppearance.name.rawValue]) {
+            try? data.write(to: runRoot.appendingPathComponent("provider-choice.json"))
+        }
+        let measurement = Task { @MainActor in
+            let start = ProcessInfo.processInfo.systemUptime
+            var rows = "seconds,toolbarScale,resultHeight\n"
+            for _ in 0..<220 {
+                let toolbar = window.childWindows?.first { $0.identifier?.rawValue == "writing-toolbar" }
+                let result = window.childWindows?.first { $0.identifier?.rawValue == "writing-result" }
+                rows += "\(ProcessInfo.processInfo.systemUptime - start),\(toolbar?.contentView?.layer?.presentation()?.transform.m11 ?? 0),\(result?.frame.height ?? 0)\n"
+                try? await Task.sleep(for: .milliseconds(16))
+                if Task.isCancelled { return }
+            }
+            try? Data(rows.utf8).write(to: self.runRoot.appendingPathComponent("native-frames.csv"))
+        }
+        defer { measurement.cancel() }
         for kind in ["input", "textarea", "div"] {
             guard owns() else { check("writing.owner", false); return }
             _ = await evaluate("document.body.innerHTML='<\(kind) id=editor contenteditable=true style=\"margin:80px;width:600px;font:20px system-ui\"></\(kind)>';var e=document.getElementById('editor');if('value' in e)e.value='The team are ready to ships this release.';else e.textContent='The team are ready to ships this release.';e.focus();if('select' in e)e.select();else{var r=document.createRange();r.selectNodeContents(e);var s=getSelection();s.removeAllRanges();s.addRange(r)};true")
