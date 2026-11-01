@@ -199,9 +199,13 @@ final class BrowserWritingHelp: ObservableObject {
         panel.orderFront(nil)
         let opacity = CABasicAnimation(keyPath: "opacity")
         opacity.fromValue = 0; opacity.toValue = 1
-        opacity.duration = OrbitMotionPreferences.prefersReducedMotion ? 0.15 : 0.16
+        let isToolbar = identifier == "writing-toolbar"
+        opacity.duration = OrbitMotionPreferences.prefersReducedMotion ? 0.15 : isToolbar ? 0.16 : 0.3
+        opacity.timingFunction = OrbitMotionPreferences.prefersReducedMotion ? CAMediaTimingFunction(name: .linear)
+            : isToolbar ? CAMediaTimingFunction(controlPoints: 1 / 3, 1, 2 / 3, 1)
+            : CAMediaTimingFunction(controlPoints: 0.19, 1, 0.22, 1)
         background.layer?.add(opacity, forKey: "writing-opacity")
-        if !OrbitMotionPreferences.prefersReducedMotion {
+        if isToolbar && !OrbitMotionPreferences.prefersReducedMotion {
             let scale = CABasicAnimation(keyPath: "transform.scale")
             scale.fromValue = 0.97; scale.toValue = 1; scale.duration = 0.16
             scale.timingFunction = CAMediaTimingFunction(controlPoints: 1 / 3, 1, 2 / 3, 1)
