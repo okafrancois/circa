@@ -1866,3 +1866,24 @@
 "Extension entries skipped: %@." = "Extension entries skipped: %@.";
 
 "Quit the source browser before continuing. Circa imports available bookmarks, history, open tabs, passwords, cookies and compatible site storage into a new profile. After you choose Import, macOS may ask for access to the source browser’s Safe Storage. Encrypted bookmarks or tabs require an export and are not decoded here. Compatible installed user extensions are restored; extension settings, local data and logins are not transferred. Autofill, payment cards, browser account sign-in, browser settings, passkeys, password notes and verification codes are not transferred. Some websites may require you to sign in again." = "Quit the source browser before continuing. Circa imports available bookmarks, history, open tabs, passwords, cookies and compatible site storage into a new profile. After you choose Import, macOS may ask for access to the source browser’s Safe Storage. Encrypted bookmarks or tabs require an export and are not decoded here. Compatible installed user extensions are restored; extension settings, local data and logins are not transferred. Autofill, payment cards, browser account sign-in, browser settings, passkeys, password notes and verification codes are not transferred. Some websites may require you to sign in again.";
+"Ask in Find" = "Ask in Find";
+
+"Jump to passage" = "Jump to passage";
+
+"Improve" = "Improve";
+
+"Fix" = "Fix";
+
+"Shorter" = "Shorter";
+
+"Ask…" = "Ask…";
+
+"Insert Below" = "Insert Below";
+
+"Replace" = "Replace";
+
+"Retry" = "Retry";
+
+"The selection has changed." = "The selection has changed.";
+
+"Writing help" = "Writing help";

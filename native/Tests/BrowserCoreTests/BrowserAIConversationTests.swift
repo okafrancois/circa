@@ -7,10 +7,15 @@ private actor ConversationProvider: BrowserAIProviderClient {
     var requests: [BrowserAITurnRequest] = []
     var streams: [AsyncStream<BrowserAITurnEvent>.Continuation] = []
     var interruptions = 0
+    var suspendsLaunch = false
+    var launchPause: CheckedContinuation<Void, Never>?
+    func suspendLaunch() { suspendsLaunch = true }
+    func resumeLaunch() { launchPause?.resume(); launchPause = nil }
     func status(refresh: Bool) async -> BrowserAIProviderStatus { .init(id: id, state: .signedOut) }
     func shutdown() async {}
     func startTurn(_ request: BrowserAITurnRequest) async -> BrowserAITurn {
         requests.append(request)
+        if suspendsLaunch { await withCheckedContinuation { launchPause = $0 } }
         let pair = AsyncStream<BrowserAITurnEvent>.makeStream()
         streams.append(pair.continuation)
         return BrowserAITurn(events: pair.stream, interrupt: { await self.interrupted() })
@@ -43,6 +48,46 @@ private actor ConversationProvider: BrowserAIProviderClient {
     private func until(_ predicate: () async -> Bool) async {
         for _ in 0..<10_000 { if await predicate() { return }; await Task.yield() }
         Issue.record("Async operation did not finish")
+    }
+
+    @Test func revocationDuringLaunchInterruptsBeforeAnyEvent() async {
+        let provider = ConversationProvider(), fixture = ContextFixture()
+        await provider.suspendLaunch()
+        let conversation = fixture.conversation(provider)
+        conversation.select(fixture.source)
+        conversation.send("Question?")
+        await until { await provider.launchPause != nil }
+        fixture.preferences.isEnabled = false
+        await provider.resumeLaunch()
+        await until { !conversation.isRunning }
+        #expect(await provider.interruptions == 1)
+        #expect(conversation.messages.last?.state == .stopped)
+        #expect(conversation.messages.last?.text.isEmpty == true)
+    }
+
+    @Test func requiredPageReadFailureNeverStartsProvider() async {
+        let provider = ConversationProvider(), fixture = ContextFixture()
+        let conversation = BrowserAIConversation(choice: .init(provider: .codex), clients: [provider],
+            requiresContext: true, preferences: { fixture.preferences }, isPrivate: { false },
+            currentSource: { _ in fixture.source }, reader: { _ in throw CancellationError() })
+        conversation.select(fixture.source)
+        conversation.send("Question?")
+        await until { !conversation.isRunning }
+        #expect(await provider.requests.isEmpty)
+        #expect(conversation.messages.last?.state == .failed(.failed))
+    }
+
+    @Test func boundedHelperAnswerInterruptsOversizedStream() async {
+        let provider = ConversationProvider(), fixture = ContextFixture()
+        let conversation = fixture.conversation(provider, budgets: .init(history: 0, sources: 1, output: 8))
+        conversation.select(fixture.source)
+        conversation.send("Question?")
+        await until { await provider.requests.count == 1 }
+        await provider.emit(.text("123456789"))
+        await until { !conversation.isRunning }
+        #expect(conversation.messages.last?.text == "")
+        #expect(conversation.messages.last?.state == .failed(.failed))
+        #expect(await provider.interruptions == 1)
     }
 
     @Test func lifecycleAndHistory() async {

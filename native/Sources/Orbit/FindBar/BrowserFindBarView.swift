@@ -1,5 +1,6 @@
 import AppKit
 import BrowserShell
+import SwiftUI
 
 /// Presents native engine results; this view neither searches pages nor owns query state.
 @MainActor
@@ -11,6 +12,11 @@ final class BrowserFindBarView: NSView, NSSearchFieldDelegate {
     private let caseButton = NSButton(title: uiText("Aa"), target: nil, action: nil)
     private let closeButton = NSButton()
     var onQueryChange: ((String, Bool) -> Void)?
+    var onAsk: (() -> Void)?
+    private let askButton = NSButton(title: uiText("Ask"), target: nil, action: nil)
+    private var answerHost: NSView?
+    private var answerHeight: NSLayoutConstraint?
+    private let answerMotion = OrbitTimedAnimator(value: 42)
     var onNext: (() -> Void)?
     var onPrevious: (() -> Void)?
     var onClose: (() -> Void)?
@@ -18,6 +24,15 @@ final class BrowserFindBarView: NSView, NSSearchFieldDelegate {
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
+        answerMotion.onChange = { [weak self] value in
+            guard let self else { return }
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = 0
+                context.allowsImplicitAnimation = false
+                self.answerHeight?.constant = value
+                self.superview?.layoutSubtreeIfNeeded()
+            }
+        }
         wantsLayer = true
         layer?.cornerRadius = 9
         layer?.masksToBounds = true
@@ -44,7 +59,11 @@ final class BrowserFindBarView: NSView, NSSearchFieldDelegate {
         caseButton.action = #selector(changeCase(_:))
         caseButton.toolTip = uiText("Match Case")
         caseButton.setAccessibilityLabel(uiText("Match Case"))
-        let controls = NSStackView(views: [searchField, statusLabel, previousButton, nextButton, caseButton, closeButton])
+        askButton.target = self
+        askButton.action = #selector(ask(_:))
+        askButton.isBordered = false
+        askButton.isHidden = true
+        let controls = NSStackView(views: [searchField, statusLabel, askButton, previousButton, nextButton, caseButton, closeButton])
         controls.orientation = .horizontal
         controls.alignment = .centerY
         controls.spacing = 4
@@ -53,7 +72,8 @@ final class BrowserFindBarView: NSView, NSSearchFieldDelegate {
         NSLayoutConstraint.activate([
             controls.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
             controls.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -6),
-            controls.centerYAnchor.constraint(equalTo: centerYAnchor),
+            controls.topAnchor.constraint(equalTo: topAnchor, constant: 7),
+            controls.heightAnchor.constraint(equalToConstant: 28),
             statusLabel.widthAnchor.constraint(lessThanOrEqualToConstant: 100),
             caseButton.widthAnchor.constraint(equalToConstant: 26)
         ])
@@ -63,6 +83,8 @@ final class BrowserFindBarView: NSView, NSSearchFieldDelegate {
     }
 
     required init?(coder: NSCoder) { nil }
+
+    override var isFlipped: Bool { true }
 
     override func draw(_ dirtyRect: NSRect) {
         NSColor.controlBackgroundColor.setFill()
@@ -88,6 +110,8 @@ final class BrowserFindBarView: NSView, NSSearchFieldDelegate {
         nextButton.isEnabled = canNavigate && !searching
     }
 
+    override func cancelOperation(_ sender: Any?) { onClose?() }
+
     func focusQuery() {
         window?.makeFirstResponder(searchField)
         searchField.currentEditor()?.selectAll(nil)
@@ -112,6 +136,7 @@ final class BrowserFindBarView: NSView, NSSearchFieldDelegate {
         }
         if commandSelector == #selector(NSResponder.insertNewline(_:)) {
             if NSApp.currentEvent?.modifierFlags.contains(.shift) == true { onPrevious?() }
+            else if !askButton.isHidden { onAsk?() }
             else { onNext?() }
             return true
         }
@@ -129,6 +154,41 @@ final class BrowserFindBarView: NSView, NSSearchFieldDelegate {
         button.heightAnchor.constraint(equalToConstant: 28).isActive = true
     }
 
+    func offerAsk(_ offered: Bool) {
+        askButton.isHidden = !offered
+        statusLabel.isHidden = offered
+    }
+
+    func setAnswer(_ view: NSView?) {
+        answerHost?.removeFromSuperview()
+        answerHeight?.isActive = false
+        answerHost = view
+        let height = heightAnchor.constraint(equalToConstant: 42)
+        answerHeight = height
+        height.isActive = true
+        if let view {
+            view.translatesAutoresizingMaskIntoConstraints = false
+            addSubview(view)
+            NSLayoutConstraint.activate([
+                view.topAnchor.constraint(equalTo: topAnchor, constant: 42),
+                view.leadingAnchor.constraint(equalTo: leadingAnchor),
+                view.trailingAnchor.constraint(equalTo: trailingAnchor),
+                view.bottomAnchor.constraint(equalTo: bottomAnchor)
+            ])
+        }
+        answerMotion.set(42)
+    }
+
+    func resizeAnswer(_ height: CGFloat) {
+        guard answerHost != nil else { return }
+        if OrbitMotionPreferences.prefersReducedMotion { answerMotion.set(42 + height) }
+        else {
+            answerMotion.animate(to: 42 + height,
+                timing: OrbitAnimationTiming(duration: 0.3, x1: 0.19, y1: 1, x2: 0.22, y2: 1), in: self)
+        }
+    }
+
+    @objc private func ask(_ sender: Any?) { onAsk?() }
     @objc private func next(_ sender: Any?) { onNext?() }
     @objc private func previous(_ sender: Any?) { onPrevious?() }
     @objc private func close(_ sender: Any?) { onClose?() }

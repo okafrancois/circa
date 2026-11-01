@@ -19,6 +19,7 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
     var aiProfileID: ProfileID?
     var aiConversation: BrowserAIConversation?
     var assistantHost: NSView?
+    var writingHelp: BrowserWritingHelp?
 
     let id: UUID
     let engine: Engine
@@ -85,6 +86,8 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
         if let root = window?.contentView { installFindBar(in: root) }
         return view
     }
+    var findAnswer: BrowserAIConversation?
+    var findAnswerIsCurrent: (() -> Bool)?
     weak var findOwner: Surface?
     var displayedFindDocumentGeneration: UInt64 = 0
     weak var focusBeforeFind: NSResponder?
@@ -347,6 +350,9 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
     func windowDidResignKey(_ notification: Notification) { passwordPrompt.close() }
 
     func windowWillClose(_ notification: Notification) {
+        writingHelp?.close()
+        writingHelp = nil
+        cancelFindAnswer()
         aiConversation?.close()
         tabIconPicker?.cancel()
         pinnedURLEditor?.complete(save: false)
