@@ -53,7 +53,7 @@ extension OrbitSmokeDriver {
         _ = await until(40) {
             let commandURL = self.runRoot.appendingPathComponent("input-\(sequence).json")
             if let data = try? Data(contentsOf: commandURL) {
-                var result = self.assistantOwnedInput(data, window: window)
+                var result = self.assistantOwnedInput(data, window: window, owner: owner)
                 if let conversation = owner.aiConversation {
                     result["conversation"] = conversation.id.uuidString
                     result["messages"] = conversation.messages.map { ["id": $0.id.uuidString, "text": $0.text] }
@@ -81,7 +81,7 @@ extension OrbitSmokeDriver {
 
 extension OrbitSmokeDriver {
     /// Only the marked, mock-keychain smoke driver calls this mailbox. Events never leave this process.
-    private func assistantOwnedInput(_ data: Data, window: NSWindow) -> [String: Any] {
+    private func assistantOwnedInput(_ data: Data, window: NSWindow, owner: OrbitWindowController) -> [String: Any] {
         guard FileManager.default.fileExists(atPath: runRoot.appendingPathComponent(".orbit-chromium-lab").path),
               NSApp.windows.contains(where: { $0 === window }),
               let windows = CGWindowListCopyWindowInfo([.optionAll], kCGNullWindowID) as? [[String: Any]],
@@ -106,7 +106,12 @@ extension OrbitSmokeDriver {
             }
             if let key = command["text"] as? String,
                let event = BrowserGlobalQuickWindowShortcut.layoutEvent(for: .init(key: key, modifiers: modifiers)) {
-                handled = window.performKeyEquivalent(with: event)
+                // The product's local monitor offers raw feature input before menu equivalents.
+                if owner.window === window, let registry = owner.palette.registry,
+                   registry.capturePaletteTarget()?.windowID == owner.id {
+                    handled = registry.handleInputEvent(event)
+                }
+                if !handled { handled = window.performKeyEquivalent(with: event) }
                 if !handled { handled = NSApp.mainMenu?.performKeyEquivalent(with: event) ?? false }
             }
         case "text":
