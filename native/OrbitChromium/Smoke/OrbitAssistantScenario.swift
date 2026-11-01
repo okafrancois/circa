@@ -173,7 +173,7 @@ extension OrbitSmokeDriver {
     /// Only the marked, mock-keychain smoke driver calls this mailbox. Events never leave this process.
     private func assistantOwnedInput(_ data: Data, window: NSWindow, owner: OrbitWindowController) -> [String: Any] {
         guard FileManager.default.fileExists(atPath: runRoot.appendingPathComponent(".orbit-chromium-lab").path),
-              NSApp.windows.contains(where: { $0 === window }),
+              (owner.window === window || NSApp.windows.contains(where: { $0 === window })),
               let windows = CGWindowListCopyWindowInfo([.optionAll], kCGNullWindowID) as? [[String: Any]],
               windows.contains(where: {
                   ($0[kCGWindowNumber as String] as? Int) == window.windowNumber &&
@@ -185,7 +185,7 @@ extension OrbitSmokeDriver {
         defer { assistantInputWindow = nil }
         var handled = false
         switch kind {
-        case "shortcut", "native-shortcut":
+        case "shortcut", "native-shortcut", "menu-shortcut":
             var modifiers: NSEvent.ModifierFlags = []
             for flag in command["modifiers"] as? [String] ?? [] {
                 switch flag {
@@ -213,7 +213,7 @@ extension OrbitSmokeDriver {
                         firstResponder: { window.firstResponder })
                     handled = keyboard.handle(event)
                 }
-                if !handled { handled = window.performKeyEquivalent(with: event) }
+                if !handled && kind != "menu-shortcut" { handled = window.performKeyEquivalent(with: event) }
                 if !handled { handled = NSApp.mainMenu?.performKeyEquivalent(with: event) ?? false }
             }
         case "text":
@@ -230,12 +230,19 @@ extension OrbitSmokeDriver {
         case "gesture":
             if let points = command["points"] as? [[Double]], points.count >= 2,
                points.allSatisfy({ $0.count == 2 }) {
+                var pointerModifiers: NSEvent.ModifierFlags = []
+                for flag in command["modifiers"] as? [String] ?? [] {
+                    if flag == "shift" { pointerModifiers.insert(.shift) }
+                    if flag == "option" { pointerModifiers.insert(.option) }
+                    if flag == "command" { pointerModifiers.insert(.command) }
+                    if flag == "control" { pointerModifiers.insert(.control) }
+                }
                 var events: [NSEvent] = []
                 for (index, point) in points.enumerated() {
                     let type: NSEvent.EventType = index == 0 ? .leftMouseDown :
                         (index == points.count - 1 ? .leftMouseUp : .leftMouseDragged)
                     if let event = NSEvent.mouseEvent(with: type, location: NSPoint(x: point[0], y: point[1]),
-                        modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                        modifierFlags: pointerModifiers, timestamp: ProcessInfo.processInfo.systemUptime,
                         windowNumber: window.windowNumber, context: nil, eventNumber: index,
                         clickCount: 1, pressure: type == .leftMouseUp ? 0 : 1) {
                         events.append(event)
