@@ -120,6 +120,11 @@ extension OrbitSmokeDriver {
                     result["settingsWindow"] = settings.windowNumber
                     result["settingsVisible"] = settings.isVisible
                 }
+                result["nativeWindows"] = NSApp.windows.map { native -> [String: Any] in
+                    ["window": native.windowNumber, "type": String(describing: type(of: native)),
+                     "visible": native.isVisible, "activeSpace": native.isOnActiveSpace, "key": native.isKeyWindow,
+                     "frame": [native.frame.minX, native.frame.minY, native.frame.width, native.frame.height]]
+                }
                 result["uptime"] = ProcessInfo.processInfo.systemUptime
                 result["frame"] = [targetWindow.frame.minX, targetWindow.frame.minY, targetWindow.frame.width, targetWindow.frame.height]
                 if let surface = targetOwner.session.selectedSurface,
@@ -282,8 +287,12 @@ extension OrbitSmokeDriver {
                 handled = true
             }
         case "raise-window":
+            window.collectionBehavior.remove(.canJoinAllSpaces)
+            window.collectionBehavior.insert(.moveToActiveSpace)
             window.center()
             window.makeKeyAndOrderFront(nil)
+            window.orderFrontRegardless()
+            NSApp.activate(ignoringOtherApps: true)
             handled = window.isVisible
         case "capture", "read-probe": handled = true
         default: break
