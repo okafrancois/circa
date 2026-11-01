@@ -16,6 +16,7 @@ struct BrowserAssistantView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @FocusState private var composing: Bool
     @State private var draft = ""
+    @State private var contextPickerPresented = false
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 8) {
@@ -59,10 +60,18 @@ struct BrowserAssistantView: View {
                             .background(.quaternary, in: RoundedRectangle(cornerRadius: 7))
                             .transition(.asymmetric(insertion: .scale(scale: reduceMotion ? 1 : 0.6).combined(with: .opacity), removal: .opacity))
                     }
-                    Menu {
-                        ForEach(sources) { source in Button(source.title) { select([source]) } }
-                        ForEach(scopes.keys.sorted(), id: \.self) { name in Button(name) { select(scopes[name] ?? []) } }
-                    } label: { Image(systemName: "at").frame(width: 24, height: 24) }.menuStyle(.borderlessButton).fixedSize()
+                    Button { contextPickerPresented.toggle() } label: {
+                        Image(systemName: "at").frame(width: 24, height: 24)
+                    }.popover(isPresented: $contextPickerPresented, arrowEdge: .bottom) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            ForEach(sources) { source in
+                                Button(source.title) { chooseContext([source]) }
+                            }
+                            ForEach(scopes.keys.sorted(), id: \.self) { name in
+                                Button(name) { chooseContext(scopes[name] ?? []) }
+                            }
+                        }.buttonStyle(.plain).padding(12).frame(minWidth: 220, alignment: .leading)
+                    }
                 }.buttonStyle(.plain)
             }.padding(.horizontal, 14).padding(.top, 10)
             ScrollView {
@@ -98,8 +107,11 @@ struct BrowserAssistantView: View {
                 }.padding(.horizontal, 14).padding(.top, 14).padding(.bottom, 8)
             }
             VStack(alignment: .leading, spacing: 8) {
-                TextField(uiText("Ask a question"), text: $draft, axis: .vertical).textFieldStyle(.plain)
+                TextField(uiText("Ask a question"), text: $draft, axis: .vertical).textFieldStyle(.plain).accessibilityIdentifier("assistant-composer")
                     .font(.system(size: 13)).lineLimit(1...5).focused($composing).onSubmit(send)
+                    .onChange(of: draft) { old, new in
+                        if new.count > old.count && new.hasSuffix("@") { contextPickerPresented = true }
+                    }
                 HStack {
                     if let usage = conversation.messages.last?.usage {
                         ForEach(Array(usage.windows.enumerated()), id: \.offset) { _, window in
@@ -114,7 +126,16 @@ struct BrowserAssistantView: View {
                 }
             }.padding(10).background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 12))
                 .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(.quaternary, lineWidth: 0.5)).padding(10)
-        }.background(Color(nsColor: .windowBackgroundColor)).cornerRadius(6).onAppear { composing = true }
+        }.background(Color(nsColor: .windowBackgroundColor)).cornerRadius(6).task {
+            await Task.yield()
+            composing = true
+        }
+    }
+    private func chooseContext(_ sources: [BrowserAIContextSource]) {
+        select(sources)
+        if draft.hasSuffix("@") { draft.removeLast() }
+        contextPickerPresented = false
+        composing = true
     }
     private func select(_ sources: [BrowserAIContextSource]) {
         withAnimation(reduceMotion ? .linear(duration: 0.15) : .timingCurve(0.3, 1.6, 0.5, 1, duration: 0.32)) {

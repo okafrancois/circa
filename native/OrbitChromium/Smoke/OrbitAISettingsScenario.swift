@@ -8,6 +8,10 @@ extension OrbitSmokeDriver {
     func aiSettings(_ environment: OrbitEnvironment, _ owner: OrbitWindowController) async {
         func check(_ name: String, _ passed: Bool) { self.check("ai-settings." + name, passed) }
         guard let profile = owner.session.activeProfileID else { check("context", false); return }
+        if arguments.contains("--orbit-smoke-assistant") {
+            await assistantInteractive(environment, owner)
+            return
+        }
         owner.window?.setFrameOrigin(NSPoint(x: -8000, y: 0))
         let model = BrowserSettingsModel(environment: environment, profileID: profile, shortcuts: [])
         await model.reload()

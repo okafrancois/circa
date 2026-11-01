@@ -9,6 +9,7 @@ import Foundation
 final class OrbitAIService: ObservableObject {
     @Published var statuses: [BrowserAIProviderID: BrowserAIProviderStatus] = [:]
     @Published private(set) var isChecking = false
+    var clientOverrides: [BrowserAIProviderID: any BrowserAIProviderClient] = [:]
     let discovery: BrowserAIProgramDiscovery
     let workspace: BrowserAIWorkspace
     let codex: BrowserAICodexClient
@@ -35,7 +36,8 @@ final class OrbitAIService: ObservableObject {
     }
 
     func client(_ id: BrowserAIProviderID) -> any BrowserAIProviderClient {
-        switch id {
+        if let override = clientOverrides[id] { return override }
+        return switch id {
         case .codex: codex
         case .claudeCode: claude
         case .onDevice: onDevice
