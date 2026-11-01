@@ -24,7 +24,7 @@ final class BrowserContentCardView: NSView {
             assistantContentWidth = target
             assistantClip.wantsLayer = true
             assistantClip.layer?.masksToBounds = true
-            assistantClip.layer?.cornerRadius = 6
+            assistantClip.layer?.cornerRadius = cornerRadius
             installAssistantSurface()
             assistantClip.addSubview(view)
             assistantGrip.removeFromSuperview()
@@ -250,6 +250,8 @@ final class BrowserContentCardView: NSView {
         if peekRecede != 0 { layer?.transform = peekTransform }
         clip.layer?.cornerRadius = cornerRadius
         hairline.cornerRadius = cornerRadius
+        assistantClip.layer?.cornerRadius = cornerRadius
+        assistantEdge.cornerRadius = cornerRadius
         splitBackdrop.frame = captureShield.bounds
         if let root = window?.contentView {
             let rect = convert(bounds, to: root)
