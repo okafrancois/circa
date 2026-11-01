@@ -91,12 +91,38 @@ extension BrowserWindowController {
         let host = NSHostingView(rootView: view)
         host.sizingOptions = []
         assistantHost = host
+        paintAssistant(windowShell.theme)
+        contentCard.onEffectiveAppearanceChange = { [weak self] in
+            guard let self else { return }
+            paintAssistant(windowShell.theme)
+        }
         contentCard.setAssistant(host, width: 372)
+    }
+    /// Keeps the dock cut from the fill actually painted, including during a Space swipe. Its reading
+    /// colours settle with the published theme.
+    func paintAssistant(_ painted: OrbitTokens.SpaceTheme) {
+        guard let host = assistantHost as? NSHostingView<BrowserAssistantView>, let window else { return }
+        let palette = BrowserAssistantPalette(theme: painted, appearance: window.effectiveAppearance)
+        contentCard.setAssistantSurface(theme: painted, tint: palette.tint)
+        guard painted == windowShell.theme, let conversation = aiConversation else { return }
+        host.appearance = palette.appearance
+        host.rootView = assistantView(conversation)
     }
     private func assistantView(_ conversation: BrowserAIConversation) -> BrowserAssistantView {
         return BrowserAssistantView(conversation: conversation,
             choices: BrowserAIPolicy.choices(for: .chat, statuses: aiService?.statuses ?? [:]),
-            statuses: aiService?.statuses ?? [:], sources: assistantSources, usages: aiService?.statuses.compactMapValues { $0.state.usage } ?? [:], scopes: assistantScopes, currentTabID: session.organization?.selectedTab?.id.rawValue, enabled: assistantEnabled, citation: { [weak self] in await self?.showAssistantCitation($0) ?? false }, close: { [weak self] in self?.closeAssistant() })
+            statuses: aiService?.statuses ?? [:], sources: assistantSources, usages: aiService?.statuses.compactMapValues { $0.state.usage } ?? [:], scopes: assistantScopes, currentTabID: session.organization?.selectedTab?.id.rawValue, enabled: assistantEnabled,
+            palette: BrowserAssistantPalette(theme: windowShell.theme, appearance: window?.effectiveAppearance ?? NSApp.effectiveAppearance),
+            favicons: assistantFavicons, citation: { [weak self] in await self?.showAssistantCitation($0) ?? false }, close: { [weak self] in self?.closeAssistant() })
+    }
+    /// Icons the sidebar already shows for the offered tabs; nothing is fetched for the assistant.
+    private var assistantFavicons: [UUID: NSImage] {
+        let offered = Set(assistantSources.map(\.id))
+        var icons: [UUID: NSImage] = [:]
+        for tab in session.organization?.allTabs ?? [] where offered.contains(tab.id.rawValue) {
+            if let icon = sidebar.liveActivity(tab).favicon { icons[tab.id.rawValue] = icon }
+        }
+        return icons
     }
     func openAssistantSource(_ source: BrowserAIContextSource) {
         guard assistantSources.contains(source), let tab = session.organization?.allTabs.first(where: { $0.id.rawValue == source.id }) else { return }

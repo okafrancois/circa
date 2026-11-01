@@ -648,9 +648,9 @@ extension BrowserPaletteController {
         if flags == .option, event.charactersIgnoringModifiers == "\r" {
             showAnswerSources(); return true
         }
-        if flags == .command, event.charactersIgnoringModifiers == "c", let answer = owner?.aiConversation?.messages.last?.text {
+        if flags == .command, event.charactersIgnoringModifiers == "c", let answer = owner?.aiConversation?.messages.last {
             NSPasteboard.general.clearContents()
-            NSPasteboard.general.setString(answer, forType: .string)
+            NSPasteboard.general.setString(BrowserAICitation.displayText(answer), forType: .string)
             return true
         }
         if flags == .command, event.charactersIgnoringModifiers == "\r" { continueAnswer(); return true }
@@ -674,6 +674,7 @@ extension BrowserPaletteController {
         guard conversation.send(draft) else { return }
         let root = BrowserAssistantAnswerView(conversation: conversation,
             choices: BrowserAIPolicy.choices(for: .chat, statuses: owner.aiService?.statuses ?? [:]),
+            theme: owner.windowShell.theme,
             citation: { [weak owner] in await owner?.showAssistantCitation($0) ?? false },
             openSource: { [weak owner] in owner?.openAssistantSource($0) },
             continueInPanel: { [weak self] in self?.continueAnswer() })

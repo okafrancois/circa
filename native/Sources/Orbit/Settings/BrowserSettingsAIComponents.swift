@@ -31,10 +31,7 @@ enum BrowserSettingsAIStyle {
 }
 
 /// A program's mark from `Icons/ai-marks/<provider>.svg` (listed under `aiMarks` in the icon
-/// catalog). The shipped files are neutral placeholders: a letter monogram on a neutral disc, in
-/// the slot and size of the programs' own marks, which need their owners' written permission
-/// before a public release. Replacing a file is the whole swap: marks drawn in `currentColor`
-/// follow the appearance's ink, other colours are kept.
+/// catalog). Marks drawn in `currentColor` follow the ink of the surface behind them, other colours are kept.
 enum BrowserSettingsAIMark {
     @MainActor private static var cache: [String: NSImage] = [:]
 
@@ -43,7 +40,9 @@ enum BrowserSettingsAIMark {
         if let cached = cache[key] { return cached }
         guard let url = BrowserText.iconResource("ai-marks/" + provider.rawValue, extension: "svg"),
               let source = try? String(contentsOf: url, encoding: .utf8) else { return nil }
-        // Resolve ink before SwiftUI rasterizes the image outside AppKit's drawing appearance.
+        // The OpenAI mark (openai.com/brand) is monochrome, so its ink is resolved here, before SwiftUI
+        // rasterizes the image outside AppKit's drawing appearance. The Claude mark (claude.ai/favicon.svg)
+        // keeps its own colour on both polarities. `isDark` is the polarity of the surface behind the mark.
         let ink = isDark ? "#FFFFFF" : "#000000"
         guard let image = NSImage(data: Data(source.replacingOccurrences(of: "currentColor", with: ink).utf8)) else { return nil }
         image.isTemplate = false
@@ -65,7 +64,7 @@ struct BrowserSettingsAIProgramTile: View {
                 RoundedRectangle(cornerRadius: 8).fill(OrbitSettingsStyle.panel)
                 RoundedRectangle(cornerRadius: 8).strokeBorder(BrowserSettingsAIStyle.tileBorder, lineWidth: 1)
                 if let mark = BrowserSettingsAIMark.image(provider, isDark: colorScheme == .dark) {
-                    Image(nsImage: mark).resizable().frame(width: 19, height: 19)
+                    Image(nsImage: mark).resizable().aspectRatio(contentMode: .fit).frame(width: 19, height: 19)
                 }
             }
         }

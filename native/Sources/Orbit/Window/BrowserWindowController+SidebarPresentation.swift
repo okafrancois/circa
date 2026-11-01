@@ -117,6 +117,7 @@ extension BrowserWindowController {
             let accent = OrbitSpaceThemes.accent(for: painted)
             self?.sidebar.applyAccent(accent)
             self?.contentCard.themeForeground = accent.foreground
+            self?.paintAssistant(painted)
         }
         windowShell.apply(theme: theme, animated: switching)
         sidebar.prepareSpaceContentPublication(to: spaceID)

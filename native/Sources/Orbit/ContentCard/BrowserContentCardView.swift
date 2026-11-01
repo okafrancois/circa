@@ -11,6 +11,10 @@ final class BrowserContentCardView: NSView {
     private var pageTrailing: NSLayoutConstraint?
     private var clipTrailing: NSLayoutConstraint?
     private var assistantAnimation: Task<Void, Never>?
+    /// The dock's sibling card: Space fill aligned to the window, opaque tint, same edge and shadow as the page.
+    private let assistantSurface = OrbitThemeFillView()
+    private let assistantTint = NSView()
+    private let assistantEdge = OrbitSurfaceBackgroundView(cornerRadius: OrbitTokens.Radius.contentCard)
     func setAssistant(_ view: NSView?, width: CGFloat) {
         assistantAnimation?.cancel()
         let target = view == nil ? 0 : min(480, max(300, width))
@@ -21,7 +25,7 @@ final class BrowserContentCardView: NSView {
             assistantClip.wantsLayer = true
             assistantClip.layer?.masksToBounds = true
             assistantClip.layer?.cornerRadius = 6
-            if assistantClip.superview == nil { addSubview(assistantClip) }
+            installAssistantSurface()
             assistantClip.addSubview(view)
             assistantGrip.removeFromSuperview()
             addSubview(assistantGrip)
@@ -50,6 +54,7 @@ final class BrowserContentCardView: NSView {
                     if view == nil {
                         assistant?.removeFromSuperview(); assistant = nil
                         assistantClip.removeFromSuperview(); assistantGrip.removeFromSuperview()
+                        assistantEdge.removeFromSuperview()
                     }
                     assistant?.alphaValue = 1
                     updateAssistantLayout()
@@ -58,6 +63,25 @@ final class BrowserContentCardView: NSView {
                 try? await Task.sleep(for: .milliseconds(16))
             }
         }
+    }
+    private func installAssistantSurface() {
+        guard assistantClip.superview == nil else { return }
+        assistantEdge.borderWidth = OrbitTokens.Metrics.Content.cardHairlineWidth
+        assistantEdge.outerShadow = OrbitTokens.Shadow.contentCard
+        assistantEdge.borderColor = themeForeground?.withAlphaComponent(0.12) ?? OrbitTokens.Color.Line.floatingScrimBorder
+        addSubview(assistantClip)
+        addSubview(assistantEdge)
+        assistantClip.addSubview(assistantSurface)
+        assistantTint.wantsLayer = true
+        assistantClip.addSubview(assistantTint)
+    }
+    /// Grain and glass stay in the shell and stop at both edges of the dock.
+    func setAssistantSurface(theme: OrbitTokens.SpaceTheme, tint: NSColor) {
+        var fill = theme
+        fill.texture = .none
+        fill.textureIntensity = 0
+        assistantSurface.applyInteractiveTheme(fill)
+        assistantTint.layer?.backgroundColor = tint.cgColor
     }
     func resizeAssistant(by delta: CGFloat) {
         guard assistant != nil else { return }
@@ -71,6 +95,8 @@ final class BrowserContentCardView: NSView {
         needsLayout = true
         layoutSubtreeIfNeeded()
     }
+    /// The dock's palette follows the window appearance even though its own view is pinned to Space polarity.
+    var onEffectiveAppearanceChange: (() -> Void)?
     private let clip = BrowserContentCardClipView()
     private let hairline = OrbitSurfaceBackgroundView(cornerRadius: OrbitTokens.Radius.contentCard)
     private let emptyTitle = NSTextField(labelWithString: OrbitShellText.emptySpaceTitle)
@@ -140,7 +166,12 @@ final class BrowserContentCardView: NSView {
         layer.add(opacity, forKey: "peek.background.opacity")
     }
     var frameEdgeColor: NSColor? { hairline.borderColor }
-    var themeForeground: NSColor? { didSet { hairline.borderColor = themeForeground?.withAlphaComponent(0.12) ?? OrbitTokens.Color.Line.floatingScrimBorder } }
+    var themeForeground: NSColor? {
+        didSet {
+            hairline.borderColor = themeForeground?.withAlphaComponent(0.12) ?? OrbitTokens.Color.Line.floatingScrimBorder
+            assistantEdge.borderColor = hairline.borderColor
+        }
+    }
     var splitTheme: OrbitTokens.SpaceTheme = .default {
         didSet { splitBackdrop.apply(splitTheme) }
     }
@@ -201,8 +232,17 @@ final class BrowserContentCardView: NSView {
         super.layout()
         assistantGrip.frame = NSRect(x: bounds.width - assistantWidth - 10, y: 0, width: 10, height: bounds.height)
         assistantClip.frame = NSRect(x: bounds.width - assistantWidth, y: 0, width: assistantWidth, height: bounds.height)
-        // Reveal the dock without repeatedly reflowing its text into a narrow column.
-        assistant?.frame = NSRect(x: 0, y: 0, width: assistantContentWidth, height: bounds.height)
+        assistantEdge.frame = assistantClip.frame
+        // The clip reveals a stationary dock: no text reflow, and its fill stays aligned with the window's.
+        let dock = NSRect(x: assistantWidth - assistantContentWidth, y: 0, width: assistantContentWidth, height: bounds.height)
+        assistant?.frame = dock
+        assistantSurface.frame = dock
+        assistantTint.frame = dock
+        if assistant != nil, let root = window?.contentView {
+            let rect = convert(NSRect(x: bounds.width - assistantContentWidth, y: 0, width: assistantContentWidth, height: bounds.height), to: root)
+            assistantSurface.windowFillSize = root.bounds.size
+            assistantSurface.offsetInWindowFill = CGPoint(x: rect.minX, y: root.isFlipped ? rect.minY : root.bounds.height - rect.maxY)
+        }
         if peekRecede != 0 { layer?.transform = peekTransform }
         clip.layer?.cornerRadius = cornerRadius
         hairline.cornerRadius = cornerRadius
@@ -224,6 +264,7 @@ final class BrowserContentCardView: NSView {
         super.viewDidChangeEffectiveAppearance()
         // The hairline view owns the shadow (THEME-R2); only the capture shield needs re-resolving.
         refreshCaptureShield()
+        onEffectiveAppearanceChange?()
     }
 
     var emptyStateTitle: String {

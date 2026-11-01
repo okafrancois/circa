@@ -15,23 +15,6 @@ struct BrowserAssistantRoutingTests {
 }
 
 @MainActor struct BrowserAssistantGeometryTests {
-    @Test func anchoredMenusStayOnScreenAndFlipWhenNecessary() {
-        let screen = NSRect(x: 100, y: 100, width: 1000, height: 700)
-        let anchor = NSRect(x: 800, y: 200, width: 180, height: 28)
-        let above = BrowserAssistantPopover.frame(anchor: anchor, size: NSSize(width: 560, height: 300),
-                                                  visible: screen, trailing: true)
-        #expect(above.maxX == anchor.maxX)
-        #expect(above.minY == anchor.maxY + 6)
-        let nearTop = NSRect(x: 1050, y: 740, width: 24, height: 28)
-        let below = BrowserAssistantPopover.frame(anchor: nearTop, size: NSSize(width: 250, height: 300),
-                                                  visible: screen, trailing: false)
-        #expect(below.maxY == nearTop.minY - 6)
-        #expect(screen.insetBy(dx: 8, dy: 8).contains(below))
-        let oversized = BrowserAssistantPopover.frame(anchor: anchor, size: NSSize(width: 1500, height: 1000),
-                                                      visible: screen, trailing: true)
-        #expect(oversized == screen.insetBy(dx: 8, dy: 8))
-    }
-
     @Test func dockTimingHasExactEndpointsAndFastOpening() {
         #expect(BrowserAssistantMotion.progress(0, opening: true) < 0.0001)
         #expect(BrowserAssistantMotion.progress(1, opening: true) > 0.9999)
@@ -111,10 +94,5 @@ struct BrowserAssistantModelTests {
         let status = BrowserAIProviderStatus(id: .codex, state: .signedOut, models: [model])
         #expect(BrowserAssistantModels.models(.codex, choices: [selected, selected], statuses: [.codex: status]) == [model])
         #expect(BrowserAssistantModels.models(.claudeCode, choices: [selected], statuses: [.codex: status]).isEmpty)
-    }
-    @Test func popoverUsesWindowWidthAndKeepsReadableColumns() {
-        #expect(BrowserAssistantModels.pickerWidth(windowWidth: 1000) == 560)
-        #expect(BrowserAssistantModels.pickerWidth(windowWidth: 500) == 460)
-        #expect(BrowserAssistantModels.pickerWidth(windowWidth: 400) == 360)
     }
 }

@@ -193,12 +193,60 @@ public struct BrowserAICitation: Identifiable, Equatable, Sendable {
         guard message.role == .assistant, let regex = try? NSRegularExpression(pattern: #"\[(\d+): "([^"]{12,500})"\]"#) else { return [] }
         let text = message.text as NSString
         return regex.matches(in: message.text, range: NSRange(location: 0, length: text.length)).compactMap { match in
-            guard let number = Int(text.substring(with: match.range(at: 1))), number > 0, number <= message.context.count else { return nil }
-            let snapshot = message.context[number - 1]
-            let passage = text.substring(with: match.range(at: 2))
-            guard snapshot.text.contains(passage), ["http", "https"].contains(snapshot.source.url.scheme ?? ""),
-                  snapshot.source.url.user == nil, snapshot.source.url.password == nil else { return nil }
-            return .init(number: number, snapshot: snapshot, passage: passage)
+            guard let number = Int(text.substring(with: match.range(at: 1))) else { return nil }
+            return validated(number: number, passage: text.substring(with: match.range(at: 2)), in: message)
         }
+    }
+
+    private static func validated(number: Int, passage: String, in message: BrowserAIMessage) -> BrowserAICitation? {
+        guard number > 0, number <= message.context.count, (12...500).contains(passage.count) else { return nil }
+        let snapshot = message.context[number - 1]
+        guard snapshot.text.contains(passage), ["http", "https"].contains(snapshot.source.url.scheme ?? ""),
+              snapshot.source.url.user == nil, snapshot.source.url.password == nil else { return nil }
+        return .init(number: number, snapshot: snapshot, passage: passage)
+    }
+
+    public enum Segment: Equatable, Sendable {
+        case text(String)
+        case citation(BrowserAICitation)
+    }
+
+    /// Answer text for presentation. Valid markers become citations, while markers that fail validation
+    /// and a marker still arriving at the end of the stream leave no trace and no link.
+    public static func segments(_ message: BrowserAIMessage) -> [Segment] {
+        guard message.role == .assistant else { return message.text.isEmpty ? [] : [.text(message.text)] }
+        guard let marker = try? NSRegularExpression(pattern: #"\[(\d+):\s*"([^"]*)"\]"#) else { return [] }
+        let text = message.text as NSString
+        var result: [Segment] = []
+        var location = 0
+        func append(_ range: NSRange) {
+            guard range.length > 0 else { return }
+            result.append(.text(text.substring(with: range)))
+        }
+        for match in marker.matches(in: message.text, range: NSRange(location: 0, length: text.length)) {
+            append(NSRange(location: location, length: match.range.location - location))
+            location = match.range.location + match.range.length
+            if let number = Int(text.substring(with: match.range(at: 1))),
+               let citation = validated(number: number, passage: text.substring(with: match.range(at: 2)), in: message) {
+                result.append(.citation(citation))
+            }
+        }
+        let tailPattern = message.state == .streaming ? #"\[\d*(?::\s*(?:"[^"]*"?)?)?$"# : #"\[\d+:\s*"[^"]*"?$"#
+        let tail = NSRange(location: location, length: text.length - location)
+        let partial = (try? NSRegularExpression(pattern: tailPattern))?.firstMatch(in: message.text, range: tail)
+        append(NSRange(location: location, length: (partial?.range.location ?? text.length) - location))
+        return result
+    }
+
+    /// The answer as a reader sees it, for the clipboard: no provenance markers.
+    public static func displayText(_ message: BrowserAIMessage) -> String {
+        var result = ""
+        for segment in segments(message) {
+            switch segment {
+            case .text(let text): result += text
+            case .citation: while result.last == " " { result.removeLast() }
+            }
+        }
+        return result.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }

@@ -3,17 +3,19 @@ import QuartzCore
 import SwiftUI
 
 extension View {
-    func assistantPopover<Content: View>(isPresented: Binding<Bool>, trailing: Bool = false,
+    /// Attach to the composer: the menu is placed from its frame and never leaves the dock's width.
+    func assistantPopover<Content: View>(isPresented: Binding<Bool>, placement: BrowserAssistantPopover.Placement,
                                         @ViewBuilder content: () -> Content) -> some View {
-        background(AssistantPopoverAnchor(isPresented: isPresented, trailing: trailing, content: content()))
+        background(AssistantPopoverAnchor(isPresented: isPresented, placement: placement, content: content()))
     }
 }
 
 private struct AssistantPopoverAnchor<Content: View>: NSViewRepresentable {
     @Binding var isPresented: Bool
-    let trailing: Bool
+    let placement: BrowserAssistantPopover.Placement
     let content: Content
     @Environment(\.accessibilityReduceMotion) private var reduced
+    @Environment(\.assistantPalette) private var palette
 
     func makeCoordinator() -> BrowserAssistantPopover { BrowserAssistantPopover() }
     func makeNSView(context: Context) -> NSView { NSView() }
@@ -21,7 +23,8 @@ private struct AssistantPopoverAnchor<Content: View>: NSViewRepresentable {
         let binding = $isPresented
         context.coordinator.onDismiss = { binding.wrappedValue = false }
         if isPresented {
-            context.coordinator.show(from: view, trailing: trailing, content: AnyView(content),
+            context.coordinator.show(from: view, placement: placement,
+                                     content: AnyView(content.environment(\.assistantPalette, palette)), palette: palette,
                                      reduced: reduced || OrbitMotionPreferences.prefersReducedMotion)
         } else {
             context.coordinator.close(notify: false)
@@ -43,26 +46,42 @@ final class BrowserAssistantPopover: NSObject, NSWindowDelegate {
     private var monitor: Any?
     private var observers: [NSObjectProtocol] = []
 
-    static func frame(anchor: NSRect, size: NSSize, visible: NSRect, trailing: Bool) -> NSRect {
-        let width = min(size.width, max(1, visible.width - 16))
-        let height = min(size.height, max(1, visible.height - 16))
-        let x = trailing ? anchor.maxX - width : anchor.minX
-        let y = anchor.maxY + 6 + height <= visible.maxY - 8
-            ? anchor.maxY + 6 : anchor.minY - 6 - height
-        return NSRect(x: max(visible.minX + 8, min(x, visible.maxX - 8 - width)),
-                      y: max(visible.minY + 8, min(y, visible.maxY - 8 - height)),
-                      width: width, height: height)
+    enum Placement: Equatable {
+        /// Above the composer, leading aligned, at most this wide.
+        case above(maxWidth: CGFloat)
+        /// Over the composer, spanning its width and leaving its toolbar visible.
+        case over(bottomInset: CGFloat)
+        var trailingOrigin: Bool { if case .over = self { true } else { false } }
     }
 
-    func show(from anchor: NSView, trailing: Bool, content: AnyView, reduced: Bool) {
+    /// Opens upward from the composer. The dock's width is a hard bound; `top` limits the height so
+    /// a short window shrinks the scrolling list rather than moving the menu away from its composer.
+    static func frame(composer: NSRect, size: NSSize, placement: Placement, top: CGFloat, visible: NSRect) -> NSRect {
+        let minX = max(composer.minX, visible.minX + 8)
+        let available = max(1, min(composer.maxX, visible.maxX - 8) - minX)
+        let y: CGFloat, width: CGFloat
+        switch placement {
+        case .above(let maxWidth):
+            y = composer.maxY + 6
+            width = min(size.width, maxWidth, available)
+        case .over(let bottomInset):
+            y = composer.minY + bottomInset
+            width = available
+        }
+        let limit = min(top, visible.maxY - 8)
+        let origin = max(visible.minY + 8, min(y, limit - 1))
+        return NSRect(x: minX, y: origin, width: width, height: min(size.height, max(1, limit - origin)))
+    }
+
+    func show(from anchor: NSView, placement: Placement, content: AnyView, palette: BrowserAssistantPalette, reduced: Bool) {
         if let host { host.rootView = content; return }
         guard let source = anchor.window, source.isVisible,
               let screen = source.screen else { return }
         let host = NSHostingView(rootView: content)
         host.sizingOptions = [.intrinsicContentSize]
         let anchorFrame = source.convertToScreen(anchor.convert(anchor.bounds, to: nil))
-        let frame = Self.frame(anchor: anchorFrame, size: host.fittingSize,
-                               visible: screen.visibleFrame, trailing: trailing)
+        let frame = Self.frame(composer: anchorFrame, size: host.fittingSize, placement: placement,
+                               top: source.frame.maxY - 18, visible: screen.visibleFrame)
         let panel = AssistantMenuPanel(contentRect: frame, styleMask: [.borderless, .nonactivatingPanel],
                                        backing: .buffered, defer: false)
         panel.isReleasedWhenClosed = false
@@ -72,14 +91,31 @@ final class BrowserAssistantPopover: NSObject, NSWindowDelegate {
         panel.backgroundColor = .clear
         panel.hasShadow = true
         panel.level = .popUpMenu
-        panel.appearance = anchor.effectiveAppearance
+        panel.appearance = palette.appearance
         panel.delegate = self
         panel.onCancel = { [weak self] in self?.close() }
         let background = NSView(frame: NSRect(origin: .zero, size: frame.size))
         background.wantsLayer = true
-        background.layer?.cornerRadius = 10
+        background.layer?.cornerRadius = OrbitTokens.Radius.plusMenu
         background.layer?.masksToBounds = true
-        OrbitFloatingMaterial.install(in: background, blending: .behindWindow, radius: 10)
+        background.layer?.borderWidth = 1
+        background.layer?.borderColor = palette.popoverEdge.cgColor
+        // Denser than the bar's frost so neither the page nor the conversation ghosts through.
+        let solid = NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency
+        if !solid {
+            let effect = NSVisualEffectView(frame: background.bounds)
+            effect.material = .popover
+            effect.blendingMode = .behindWindow
+            effect.state = .active
+            effect.appearance = palette.appearance
+            effect.autoresizingMask = [.width, .height]
+            background.addSubview(effect)
+        }
+        let tint = NSView(frame: background.bounds)
+        tint.wantsLayer = true
+        tint.layer?.backgroundColor = (solid ? palette.popoverSolid : palette.popover).cgColor
+        tint.autoresizingMask = [.width, .height]
+        background.addSubview(tint)
         host.frame = background.bounds
         host.autoresizingMask = [.width, .height]
         background.addSubview(host)
@@ -90,7 +126,7 @@ final class BrowserAssistantPopover: NSObject, NSWindowDelegate {
         self.panel = panel
         source.addChildWindow(panel, ordered: .above)
         panel.makeKeyAndOrderFront(nil)
-        animate(background, anchor: anchorFrame, panelFrame: frame, trailing: trailing, reduced: reduced)
+        animate(background, panelFrame: frame, trailing: placement.trailingOrigin, reduced: reduced)
         monitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown]) { [weak self, weak panel] event in
             if let self, event.window !== self.panel {
                 // Let the clicked control update its own state before dismissing this menu.
@@ -113,7 +149,7 @@ final class BrowserAssistantPopover: NSObject, NSWindowDelegate {
         })
     }
 
-    private func animate(_ view: NSView, anchor: NSRect, panelFrame: NSRect, trailing: Bool, reduced: Bool) {
+    private func animate(_ view: NSView, panelFrame: NSRect, trailing: Bool, reduced: Bool) {
         guard let layer = view.layer else { return }
         let opacity = CABasicAnimation(keyPath: "opacity")
         opacity.fromValue = 0
@@ -123,8 +159,8 @@ final class BrowserAssistantPopover: NSObject, NSWindowDelegate {
             : CAMediaTimingFunction(controlPoints: 1 / 3, 1, 2 / 3, 1)
         layer.add(opacity, forKey: "assistant-entry-opacity")
         guard !reduced else { return }
-        let origin = CGPoint(x: trailing ? panelFrame.width : 0,
-                             y: anchor.midY < panelFrame.midY ? 0 : panelFrame.height)
+        // Menus always open upward, so they scale from their bottom edge.
+        let origin = CGPoint(x: trailing ? panelFrame.width : 0, y: 0)
         let scale = CABasicAnimation(keyPath: "transform")
         var transform = CATransform3DMakeTranslation(origin.x, origin.y, 0)
         transform = CATransform3DScale(transform, 0.97, 0.97, 1)
@@ -162,4 +198,9 @@ private final class AssistantMenuPanel: NSPanel {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
     override func cancelOperation(_ sender: Any?) { onCancel?() }
+    /// A focused search field must not consume Escape before the menu sees it.
+    override func sendEvent(_ event: NSEvent) {
+        if event.type == .keyDown, event.keyCode == BrowserAssistantKey.escape { onCancel?(); return }
+        super.sendEvent(event)
+    }
 }
