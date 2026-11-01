@@ -45,10 +45,13 @@ final class BrowserTidyHelpers<Engine: BrowserEngine> {
         for tab in next.allTabs {
             originals[tab.id] = tab.tidiedTitle == tab.customTitle ? tab.tidiedTitle : nil
         }
-        guard let old, old.profileID == next.profileID, old.spaceID == next.spaceID else { return }
+        guard let old, old.profileID == next.profileID, old.spaceID == next.spaceID,
+              owner.settingsPreferences?.runtime.document.ai.isEnabled == true,
+              owner.settingsPreferences?.runtime.document.ai.helpers.tidyTitlesAndDownloads == true else { return }
+        let previousTabs = Dictionary(old.allTabs.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         for tab in next.allTabs {
             guard case .pinned = tab.section, tab.customTitle == nil, let title = tab.pageTitle,
-                  let prior = old.allTabs.first(where: { $0.id == tab.id }), case .today = prior.section,
+                  let prior = previousTabs[tab.id], case .today = prior.section,
                   prior.customTitle == nil, let (preferences, model) = choice(for: tab.url),
                   let service = owner.aiService else { continue }
             let surface = tab.occurrenceID.flatMap { owner.session.surface(for: $0) }
