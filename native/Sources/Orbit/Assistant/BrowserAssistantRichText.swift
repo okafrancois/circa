@@ -105,6 +105,7 @@ enum BrowserAssistantRichText {
     // MARK: Attributed text
 
     static let citationKey = NSAttributedString.Key("BrowserAssistant.citation")
+    static let inlineCodeBackgroundKey = NSAttributedString.Key("BrowserAssistant.inlineCodeBackground")
     private static let lineHeight: CGFloat = 21, bodySize: CGFloat = 14
 
     @MainActor
@@ -143,7 +144,7 @@ enum BrowserAssistantRichText {
                     let code = NSFont.monospacedSystemFont(ofSize: 12.5, weight: .regular)
                     attributes[.font] = code
                     attributes[.baselineOffset] = baseline(code)
-                    attributes[.backgroundColor] = palette.hover
+                    attributes[inlineCodeBackgroundKey] = palette.hover
                 }
                 result.append(NSAttributedString(string: run.text, attributes: attributes))
             }
@@ -213,6 +214,7 @@ struct BrowserAssistantAnswerText: NSViewRepresentable {
 
     func makeNSView(context: Context) -> TextView {
         let view = TextView(usingTextLayoutManager: false)
+        view.textContainer?.replaceLayoutManager(BrowserAssistantAnswerLayoutManager())
         view.isEditable = false
         view.isSelectable = true
         view.drawsBackground = false
@@ -386,5 +388,27 @@ struct BrowserAssistantAnswerText: NSViewRepresentable {
             NSPasteboard.general.clearContents()
             NSPasteboard.general.setString(text.replacingOccurrences(of: "\u{FFFC}", with: ""), forType: .string)
         }
+    }
+}
+
+/// Draw inline code behind the selectable glyphs, including runs that wrap across lines.
+final class BrowserAssistantAnswerLayoutManager: NSLayoutManager {
+    override func drawBackground(forGlyphRange glyphsToShow: NSRange, at origin: NSPoint) {
+        if let storage = textStorage {
+            let characters = characterRange(forGlyphRange: glyphsToShow, actualGlyphRange: nil)
+            storage.enumerateAttribute(BrowserAssistantRichText.inlineCodeBackgroundKey, in: characters) { value, range, _ in
+                guard let color = value as? NSColor else { return }
+                let glyphs = self.glyphRange(forCharacterRange: range, actualCharacterRange: nil)
+                guard glyphs.length > 0, let container = self.textContainer(forGlyphAt: glyphs.location, effectiveRange: nil) else { return }
+                color.setFill()
+                self.enumerateEnclosingRects(forGlyphRange: glyphs, withinSelectedGlyphRange: NSRange(location: NSNotFound, length: 0),
+                                             in: container) { rect, _ in
+                    let background = rect.offsetBy(dx: origin.x, dy: origin.y).insetBy(dx: -4, dy: 0)
+                    NSBezierPath(roundedRect: background, xRadius: 4, yRadius: 4).fill()
+                }
+            }
+        }
+        // AppKit paints the selection above code backgrounds and below its glyphs.
+        super.drawBackground(forGlyphRange: glyphsToShow, at: origin)
     }
 }
