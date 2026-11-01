@@ -156,6 +156,11 @@ final class BrowserPageInteractionState {
 
     var menu: Menu?
     var fullscreen: Fullscreen?
+    /// "To exit full screen, press ⎋." while a web page holds fullscreen (never for native window fullscreen).
+    var fullscreenNotice: BrowserFullscreenNotice?
+    /// Waits for the window to finish entering native fullscreen, then shows the notice.
+    var fullscreenNoticeTask: Task<Void, Never>?
+    var fullscreenNoticeObserver: NSObjectProtocol?
     /// Surfaces whose unresponsive question is shown.
     var unresponsive: Set<ObjectIdentifier> = []
     /// Hidden smoke and tests: observes menus instead of showing them (never set by the product).

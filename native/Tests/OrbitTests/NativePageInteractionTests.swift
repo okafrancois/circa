@@ -450,6 +450,107 @@ struct NativePageInteractionTests {
         #expect(controller.isSidebarVisible && controller.elementFullscreenSurfaceKey == nil)
     }
 
+    @Test("A web page's fullscreen shows the exit notice at the top right; native window fullscreen does not")
+    func fullscreenExitNotice() async throws {
+        let (controller, surface) = try await loadedWindow()
+        defer { controller.window?.close() }
+        let window = try #require(controller.window)
+        var toggles = 0
+        controller.toggleNativeFullScreen = { _ in toggles += 1 }
+        func notices() -> [BrowserFullscreenNotice] { (window.contentView?.subviews ?? []).compactMap { $0 as? BrowserFullscreenNotice } }
+        // Native window fullscreen alone (green button, ⌃⌘F): no notice.
+        NotificationCenter.default.post(name: NSWindow.didEnterFullScreenNotification, object: window)
+        try await Task.sleep(for: .milliseconds(200))
+        #expect(notices().isEmpty)
+        // The page asks for fullscreen: the notice waits for the window, then appears.
+        controller.surface(surface, didChangeElementFullscreen: true)
+        #expect(toggles == 1 && notices().isEmpty)
+        NotificationCenter.default.post(name: NSWindow.didEnterFullScreenNotification, object: window)
+        try await Task.sleep(for: .milliseconds(300))
+        let notice = try #require(notices().first)
+        #expect(notices().count == 1)
+        window.contentView?.layoutSubtreeIfNeeded()
+        let root = try #require(window.contentView)
+        #expect(notice.frame.height == BrowserFullscreenNotice.height)
+        #expect(abs(root.bounds.maxX - notice.frame.maxX - BrowserFullscreenNotice.edgeInset) < 0.5)
+        #expect(notice.frame.maxY <= root.bounds.maxY - BrowserFullscreenNotice.edgeInset + 0.5)
+        // The notice stays while the page is fullscreen, then leaves with Escape or the page.
+        try await Task.sleep(for: .seconds(3.2))
+        #expect(notices().count == 1 && controller.elementFullscreenSurfaceKey == ObjectIdentifier(surface))
+        controller.surface(surface, didChangeElementFullscreen: false)
+        #expect(notices().isEmpty && controller.pageInteraction.fullscreenNotice == nil)
+        // Leaving before the window finished entering never shows it.
+        controller.surface(surface, didChangeElementFullscreen: true)
+        controller.surface(surface, didChangeElementFullscreen: false)
+        NotificationCenter.default.post(name: NSWindow.didEnterFullScreenNotification, object: window)
+        try await Task.sleep(for: .milliseconds(300))
+        #expect(notices().isEmpty)
+    }
+
+    @Test("Rapid fullscreen toggles leave at most one notice and cancel stale presentations")
+    func fullscreenNoticeRapidToggles() async throws {
+        let (controller, surface) = try await loadedWindow()
+        defer { controller.window?.close() }
+        let window = try #require(controller.window)
+        var toggles = 0
+        controller.toggleNativeFullScreen = { _ in toggles += 1 }
+        func notices() -> [BrowserFullscreenNotice] {
+            (window.contentView?.subviews ?? []).compactMap { $0 as? BrowserFullscreenNotice }
+        }
+
+        // Cancel several pending window-entry notices before the window reports completion.
+        for _ in 0..<8 {
+            controller.surface(surface, didChangeElementFullscreen: true)
+            controller.surface(surface, didChangeElementFullscreen: false)
+        }
+        #expect(notices().isEmpty && controller.pageInteraction.fullscreenNotice == nil)
+
+        // Schedule and cancel the delayed presentation repeatedly, then let one final entry settle.
+        for _ in 0..<8 {
+            controller.surface(surface, didChangeElementFullscreen: true)
+            NotificationCenter.default.post(name: NSWindow.didEnterFullScreenNotification, object: window)
+            controller.surface(surface, didChangeElementFullscreen: false)
+        }
+        controller.surface(surface, didChangeElementFullscreen: true)
+        NotificationCenter.default.post(name: NSWindow.didEnterFullScreenNotification, object: window)
+        try await Task.sleep(for: .milliseconds(300))
+        #expect(toggles == 17)
+        #expect(notices().count == 1 && controller.pageInteraction.fullscreenNotice === notices().first)
+
+        // A repeated enter signal is idempotent; leaving twice removes the same view safely.
+        controller.surface(surface, didChangeElementFullscreen: true)
+        #expect(notices().count == 1 && toggles == 17)
+        controller.surface(surface, didChangeElementFullscreen: false)
+        controller.surface(surface, didChangeElementFullscreen: false)
+        #expect(notices().isEmpty && controller.pageInteraction.fullscreenNotice == nil)
+    }
+
+    @Test("The exit notice uses frame layout: no window or common ancestor needed, it follows the top right corner")
+    func fullscreenNoticeFrameLayout() {
+        // A root outside any window (the transitional hierarchy of a fullscreen change) must not trap.
+        let detached = NSView(frame: NSRect(x: 0, y: 0, width: 600, height: 400))
+        let first = BrowserFullscreenNotice(in: detached)
+        let second = BrowserFullscreenNotice(in: detached)
+        #expect(detached.subviews.count == 2 && first.constraints.isEmpty && second.superview === detached)
+        first.dismiss()
+        first.dismiss()
+        #expect(first.superview == nil && detached.subviews == [second])
+        // Resizing the page area keeps the notice at the same distance from the top right corner.
+        let inset = BrowserFullscreenNotice.edgeInset
+        #expect(abs(detached.bounds.maxX - second.frame.maxX - inset) < 0.5 && abs(detached.bounds.maxY - second.frame.maxY - inset) < 0.5)
+        detached.setFrameSize(NSSize(width: 1000, height: 700))
+        #expect(abs(detached.bounds.maxX - second.frame.maxX - inset) < 0.5 && abs(detached.bounds.maxY - second.frame.maxY - inset) < 0.5)
+        // A flipped root anchors the same corner.
+        final class Flipped: NSView { override var isFlipped: Bool { true } }
+        let flipped = Flipped(frame: NSRect(x: 0, y: 0, width: 600, height: 400))
+        let third = BrowserFullscreenNotice(in: flipped)
+        #expect(abs(third.frame.minY - inset) < 0.5 && abs(flipped.bounds.maxX - third.frame.maxX - inset) < 0.5)
+        flipped.setFrameSize(NSSize(width: 900, height: 800))
+        #expect(abs(third.frame.minY - inset) < 0.5 && abs(flipped.bounds.maxX - third.frame.maxX - inset) < 0.5)
+        second.dismiss()
+        third.dismiss()
+    }
+
     @Test("A crashed page shows Aw, Snap! with Reload; a new document removes it")
     func crashedPage() async throws {
         let (controller, surface) = try await loadedWindow()

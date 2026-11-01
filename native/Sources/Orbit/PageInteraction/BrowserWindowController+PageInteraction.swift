@@ -117,9 +117,41 @@ extension BrowserWindowController {
                 contentCard.present(surface.hostView)
             }
             if !native { toggleNativeFullScreen(window) }
+            presentFullscreenNotice(for: key, in: window, waitingForWindow: !native)
         } else if pageInteraction.fullscreen?.surfaceKey == key {
             leaveElementFullscreenLayout()
         }
+    }
+
+    /// The notice appears once the page has the screen (after the window's own fullscreen
+    /// transition when it had to enter it), as the page content does.
+    private func presentFullscreenNotice(for key: ObjectIdentifier, in window: NSWindow, waitingForWindow: Bool) {
+        hideFullscreenNotice()
+        let schedule: @MainActor () -> Void = { [weak self, weak window] in
+            guard let self else { return }
+            if let observer = pageInteraction.fullscreenNoticeObserver { NotificationCenter.default.removeObserver(observer) }
+            pageInteraction.fullscreenNoticeObserver = nil
+            pageInteraction.fullscreenNoticeTask = Task { @MainActor [weak self, weak window] in
+                try? await Task.sleep(for: .milliseconds(90))
+                guard !Task.isCancelled, let self, let root = window?.contentView,
+                      pageInteraction.fullscreen?.surfaceKey == key else { return }
+                pageInteraction.fullscreenNotice = BrowserFullscreenNotice(in: root)
+            }
+        }
+        guard waitingForWindow else { schedule(); return }
+        pageInteraction.fullscreenNoticeObserver = NotificationCenter.default.addObserver(
+            forName: NSWindow.didEnterFullScreenNotification, object: window, queue: .main) { _ in
+            MainActor.assumeIsolated { schedule() }
+        }
+    }
+
+    private func hideFullscreenNotice() {
+        pageInteraction.fullscreenNoticeTask?.cancel()
+        pageInteraction.fullscreenNoticeTask = nil
+        if let observer = pageInteraction.fullscreenNoticeObserver { NotificationCenter.default.removeObserver(observer) }
+        pageInteraction.fullscreenNoticeObserver = nil
+        pageInteraction.fullscreenNotice?.dismiss()
+        pageInteraction.fullscreenNotice = nil
     }
 
     var elementFullscreenSurfaceKey: ObjectIdentifier? { pageInteraction.fullscreen?.surfaceKey }
@@ -139,6 +171,7 @@ extension BrowserWindowController {
     func leaveElementFullscreenLayout(restoringNativeFullScreen: Bool = true) {
         guard let state = pageInteraction.fullscreen else { return }
         pageInteraction.fullscreen = nil
+        hideFullscreenNotice()
         if let observer = state.windowObserver { NotificationCenter.default.removeObserver(observer) }
         guard restoringNativeFullScreen else {
             if state.sidebarWasVisible { setSidebarVisible(true, animated: false) }
