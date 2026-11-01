@@ -114,7 +114,12 @@ extension OrbitSmokeDriver {
                             "frame": [window.frame.minX, window.frame.minY, window.frame.width, window.frame.height]]
                 }
                 if let panel = targetOwner.assistantHost {
-                    result["panelFrame"] = [panel.frame.minX, panel.frame.minY, panel.frame.width, panel.frame.height]
+                    let frame = targetOwner.contentCard.convert(panel.bounds, from: panel)
+                    result["panelFrame"] = [frame.minX, frame.minY, frame.width, frame.height]
+                    if let clip = panel.superview {
+                        let visible = targetOwner.contentCard.convert(clip.bounds, from: clip)
+                        result["panelRevealFrame"] = [visible.minX, visible.minY, visible.width, visible.height]
+                    }
                 }
                 if let settings = application?.settingsWindow?.window {
                     result["settingsWindow"] = settings.windowNumber

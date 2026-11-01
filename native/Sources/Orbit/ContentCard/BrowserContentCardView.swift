@@ -4,6 +4,8 @@ import QuartzCore
 @MainActor
 final class BrowserContentCardView: NSView {
     private var assistant: NSView?
+    private let assistantClip = NSView()
+    private var assistantContentWidth: CGFloat = 0
     private let assistantGrip = BrowserAssistantResizeGrip()
     private var assistantWidth: CGFloat = 0
     private var pageTrailing: NSLayoutConstraint?
@@ -15,7 +17,12 @@ final class BrowserContentCardView: NSView {
         if let view {
             assistant?.removeFromSuperview()
             assistant = view
-            addSubview(view)
+            assistantContentWidth = target
+            assistantClip.wantsLayer = true
+            assistantClip.layer?.masksToBounds = true
+            assistantClip.layer?.cornerRadius = 6
+            if assistantClip.superview == nil { addSubview(assistantClip) }
+            assistantClip.addSubview(view)
             assistantGrip.removeFromSuperview()
             addSubview(assistantGrip)
             assistantGrip.onDrag = { [weak self] delta in
@@ -27,6 +34,7 @@ final class BrowserContentCardView: NSView {
         let reduced = OrbitMotionPreferences.prefersReducedMotion
         let duration = reduced ? 0.15 : view == nil ? 0.24 : 0.38
         let start = CACurrentMediaTime()
+        updateAssistantLayout()
         assistantAnimation = Task { [weak self] in
             while let self, !Task.isCancelled {
                 let fraction = min(1, (CACurrentMediaTime() - start) / duration)
@@ -39,7 +47,10 @@ final class BrowserContentCardView: NSView {
                 updateAssistantLayout()
                 if fraction >= 1 {
                     assistantWidth = target
-                    if view == nil { assistant?.removeFromSuperview(); assistant = nil; assistantGrip.removeFromSuperview() }
+                    if view == nil {
+                        assistant?.removeFromSuperview(); assistant = nil
+                        assistantClip.removeFromSuperview(); assistantGrip.removeFromSuperview()
+                    }
                     assistant?.alphaValue = 1
                     updateAssistantLayout()
                     return
@@ -52,6 +63,7 @@ final class BrowserContentCardView: NSView {
         guard assistant != nil else { return }
         assistantAnimation?.cancel()
         assistantWidth = min(480, max(300, assistantWidth - delta))
+        assistantContentWidth = assistantWidth
         updateAssistantLayout()
     }
     private func updateAssistantLayout() {
@@ -188,7 +200,9 @@ final class BrowserContentCardView: NSView {
     override func layout() {
         super.layout()
         assistantGrip.frame = NSRect(x: bounds.width - assistantWidth - 10, y: 0, width: 10, height: bounds.height)
-        assistant?.frame = NSRect(x: bounds.width - assistantWidth, y: 0, width: assistantWidth, height: bounds.height)
+        assistantClip.frame = NSRect(x: bounds.width - assistantWidth, y: 0, width: assistantWidth, height: bounds.height)
+        // Reveal the dock without repeatedly reflowing its text into a narrow column.
+        assistant?.frame = NSRect(x: 0, y: 0, width: assistantContentWidth, height: bounds.height)
         if peekRecede != 0 { layer?.transform = peekTransform }
         clip.layer?.cornerRadius = cornerRadius
         hairline.cornerRadius = cornerRadius

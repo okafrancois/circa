@@ -32,13 +32,18 @@ extension BrowserAssistantGeometryTests {
         let fullWidth = page.frame.width
         let panel = NSView()
         card.setAssistant(panel, width: 372)
+        // The reveal starts at zero width, but the chat keeps its destination text layout.
+        #expect(panel.bounds.width == 372)
+        let panelClip = try #require(panel.superview)
+        #expect(panelClip !== card)
+        #expect(panelClip.layer?.masksToBounds == true)
         try? await Task.sleep(for: .milliseconds(500))
         card.layoutSubtreeIfNeeded()
         #expect(card.isPresenting(page))
         #expect(abs(page.frame.width - (fullWidth - 382)) < 1)
         #expect(abs(panel.frame.width - 372) < 1)
         let pageClip = try #require(page.superview)
-        #expect(abs(pageClip.frame.maxX + 10 - panel.frame.minX) < 1)
+        #expect(abs(pageClip.frame.maxX + 10 - card.convert(panel.bounds, from: panel).minX) < 1)
         #expect(abs(pageClip.bounds.width - page.frame.width) < 1)
         #expect(abs(card.pageViewportSize.width - page.frame.width) < 1)
         #expect(pageClip.layer?.masksToBounds == true)
@@ -52,7 +57,7 @@ extension BrowserAssistantGeometryTests {
         #expect(card.pageViewportSize.height == pageClip.bounds.height - card.headerHeight)
         card.setHeader(nil)
         card.layoutSubtreeIfNeeded()
-        let start = NSPoint(x: panel.frame.minX - 5, y: 200)
+        let start = NSPoint(x: card.convert(panel.bounds, from: panel).minX - 5, y: 200)
         let grip = try #require(card.hitTest(start))
         func mouse(_ type: NSEvent.EventType, _ x: CGFloat) throws -> NSEvent {
             try #require(NSEvent.mouseEvent(with: type, location: NSPoint(x: x, y: start.y),
