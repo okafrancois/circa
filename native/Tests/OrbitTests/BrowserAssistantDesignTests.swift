@@ -35,6 +35,16 @@ private func source(_ title: String) -> BrowserAIContextSource {
 
 @MainActor @Suite("Assistant Space palette")
 struct BrowserAssistantPaletteTests {
+    @Test("The first dock paint retains its tint before a host is attached")
+    func firstDockPaint() throws {
+        let card = BrowserContentCardView()
+        let tint = NSColor(srgbRed: 0.13, green: 0.27, blue: 0.41, alpha: 0.66)
+        card.setAssistantSurface(theme: .default, tint: tint)
+        let clip = try #require(card.subviews.first { $0.subviews.contains { $0 is OrbitThemeFillView } })
+        let actual = try #require(clip.subviews.last?.layer?.backgroundColor)
+        #expect(NSColor(cgColor: actual)?.usingColorSpace(.sRGB) == tint.usingColorSpace(.sRGB))
+    }
+
     private static var themes: [(String, OrbitTokens.SpaceTheme)] {
         var result: [(String, OrbitTokens.SpaceTheme)] = [("default", .default)]
         for family in BrowserSpaceThemePresets.families {

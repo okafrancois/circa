@@ -77,6 +77,8 @@ final class BrowserContentCardView: NSView {
     }
     /// Grain and glass stay in the shell and stop at both edges of the dock.
     func setAssistantSurface(theme: OrbitTokens.SpaceTheme, tint: NSColor) {
+        // Painting can precede attaching the assistant host on its first reveal.
+        installAssistantSurface()
         var fill = theme
         fill.texture = .none
         fill.textureIntensity = 0
