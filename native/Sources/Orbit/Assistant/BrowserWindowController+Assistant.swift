@@ -47,6 +47,7 @@ extension BrowserWindowController {
         }
     }
     func reconcileAssistant() {
+        reconcileFindAnswer()
         if aiConversation != nil, aiProfileID != session.activeProfileID {
             aiConversation?.close(); aiConversation = nil; closeAssistant()
         }

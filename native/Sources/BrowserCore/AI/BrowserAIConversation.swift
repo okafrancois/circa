@@ -40,8 +40,9 @@ public struct BrowserAIConversationBudgets: Sendable {
     public let history: Int
     public let pages: Int
     public let sources: Int
-    public init(prompt: Int = 8_000, history: Int = 24_000, pages: Int = 24_000, sources: Int = 8) {
-        self.prompt = max(0, prompt); self.history = max(0, history); self.pages = max(0, pages); self.sources = max(0, sources)
+    public let output: Int
+    public init(prompt: Int = 8_000, history: Int = 24_000, pages: Int = 24_000, sources: Int = 8, output: Int = 64_000) {
+        self.prompt = max(0, prompt); self.history = max(0, history); self.pages = max(0, pages); self.sources = max(0, sources); self.output = max(0, output)
     }
 }
 
@@ -58,6 +59,7 @@ public struct BrowserAIConversationBudgets: Sendable {
     @ObservationIgnored private let isPrivate: @MainActor () -> Bool
     @ObservationIgnored private let currentSource: @MainActor (UUID) -> BrowserAIContextSource?
     @ObservationIgnored private let reader: @MainActor (BrowserAIContextSource) async throws -> String
+    @ObservationIgnored private let requiresContext: Bool
     @ObservationIgnored private let budgets: BrowserAIConversationBudgets
     @ObservationIgnored private var task: Task<Void, Never>?
     @ObservationIgnored private var turn: BrowserAITurn?
@@ -65,13 +67,13 @@ public struct BrowserAIConversationBudgets: Sendable {
     @ObservationIgnored private var closed = false
 
     public init(choice: BrowserAIModelChoice, clients: [any BrowserAIProviderClient],
-                budgets: BrowserAIConversationBudgets = .init(),
+                budgets: BrowserAIConversationBudgets = .init(), requiresContext: Bool = false,
                 preferences: @escaping @MainActor () -> BrowserAIPreferences,
                 isPrivate: @escaping @MainActor () -> Bool,
                 currentSource: @escaping @MainActor (UUID) -> BrowserAIContextSource?,
                 reader: @escaping @MainActor (BrowserAIContextSource) async throws -> String) {
         self.choice = choice; self.clients = Dictionary(clients.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
-        self.budgets = budgets; self.preferences = preferences; self.isPrivate = isPrivate
+        self.requiresContext = requiresContext; self.budgets = budgets; self.preferences = preferences; self.isPrivate = isPrivate
         self.currentSource = currentSource; self.reader = reader
     }
 
@@ -129,6 +131,9 @@ public struct BrowserAIConversationBudgets: Sendable {
                 self.finish(.stopped, index: index); return
             }
             snapshots.removeAll { !self.eligible($0.source) }
+            if self.requiresContext && (snapshots.isEmpty || snapshots.count != sources.count) {
+                self.finish(.failed(.failed), index: index); return
+            }
             self.messages[index].context = snapshots
             self.messages[index - 1].context = snapshots
             // Recheck prior context after extraction: permission or source identity may have changed.
@@ -142,6 +147,11 @@ public struct BrowserAIConversationBudgets: Sendable {
                 model: selectedChoice.model, effort: selectedChoice.effort)
             let active = await client.startTurn(request)
             guard self.generation == token else { await active.interrupt(); return }
+            guard self.preferences().isEnabled, !self.isPrivate(), snapshots.allSatisfy({ self.eligible($0.source) }) else {
+                await active.interrupt()
+                guard self.generation == token else { return }
+                self.finish(.stopped, index: index); return
+            }
             self.turn = active
             for await event in active.events {
                 guard self.generation == token else { return }
@@ -150,6 +160,11 @@ public struct BrowserAIConversationBudgets: Sendable {
                 }
                 switch event {
                 case .text(let delta):
+                    guard delta.utf8.count <= self.budgets.output * 4, self.messages[index].text.count + delta.count <= self.budgets.output else {
+                        await active.interrupt()
+                        guard self.generation == token else { return }
+                        self.finish(.failed(.failed), index: index); return
+                    }
                     self.messages[index].text += delta
                     self.messages[index].chunks.append(.init(id: UUID(), text: delta))
                 case .usage(let usage): self.messages[index].usage = self.messages[index].usage?.merging(usage) ?? usage

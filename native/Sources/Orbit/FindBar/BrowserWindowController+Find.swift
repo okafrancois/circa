@@ -11,12 +11,13 @@ extension BrowserWindowController {
         findBar.isHidden = true
         let preferredFindWidth = findBar.widthAnchor.constraint(equalToConstant: 400)
         preferredFindWidth.priority = .defaultHigh
-        NSLayoutConstraint.activate([preferredFindWidth, findBar.heightAnchor.constraint(equalToConstant: 42)])
+        NSLayoutConstraint.activate([preferredFindWidth, findBar.heightAnchor.constraint(greaterThanOrEqualToConstant: 42)])
         placeFindBar(in: root, over: contentCard)
         findBar.onQueryChange = { [weak self] query, matchCase in
             guard let self else { return }
             submitFind(query, matchCase: matchCase, optionsRevision: findBar.pendingOptionsRevision)
         }
+        findBar.onAsk = { [weak self] in self?.submitFindBarAction { $0.askInFind() } }
         findBar.onNext = { [weak self] in self?.submitFindBarAction { $0.findSession.next() } }
         findBar.onPrevious = { [weak self] in self?.submitFindBarAction { $0.findSession.previous() } }
         findBar.onClose = { [weak self] in self?.submitFindBarAction { $0.closeFind() } }
@@ -56,6 +57,7 @@ extension BrowserWindowController {
 
     /// Widget input belongs to the document displayed when the user typed, even if routing waits.
     func submitFind(_ query: String, matchCase: Bool = false, optionsRevision: UUID? = nil) {
+        cancelFindAnswer()
         submitFindBarAction {
             $0.findSession.submit(query, matchCase: matchCase)
             $0.findBar.acknowledgeOptions(optionsRevision)
@@ -88,14 +90,16 @@ extension BrowserWindowController {
     }
 
     func closeFind() {
+        cancelFindAnswer()
         shouldReturnFindFocus = isEditingFind
         findSession.close()
         shouldReturnFindFocus = false
     }
 
     private var isEditingFind: Bool {
-        findBarStorage?.searchField.currentEditor() != nil
-            && window?.firstResponder === findBar.searchField.currentEditor()
+        guard let bar = findBarStorage else { return false }
+        return (bar.searchField.currentEditor() != nil && window?.firstResponder === bar.searchField.currentEditor())
+            || (window?.firstResponder as? NSView)?.isDescendant(of: bar) == true
     }
 
     func returnFocusAfterFind(on surface: Surface) {
@@ -110,6 +114,7 @@ extension BrowserWindowController {
 
     func renderFind() {
         guard let state = findSession.state, let surface = pageCommandSurface() else {
+            cancelFindAnswer()
             findBarStorage?.isHidden = true
             findOwner = nil
             displayedFindDocumentGeneration = 0
@@ -117,10 +122,12 @@ extension BrowserWindowController {
         }
         guard state.isVisible || findBarStorage != nil else { return }
         let ownerChanged = findOwner !== surface || displayedFindDocumentGeneration != surface.findDocumentGeneration
+        if ownerChanged || !state.isVisible { cancelFindAnswer() }
         placeFindBar(for: surface)
         findOwner = surface
         displayedFindDocumentGeneration = surface.findDocumentGeneration
         findBar.isHidden = !state.isVisible
+        findBar.offerAsk(findAskChoice != nil && BrowserFindQuestion.isQuestion(state.query))
         let status: String
         if state.isPending { status = uiText("Searching…") }
         else if state.error != nil { status = uiText("Find Unavailable") }
