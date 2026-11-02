@@ -317,7 +317,7 @@ struct BrowserAssistantView: View {
                 Task { await useSkill(option, intent) }
             }, create: { openSkillEditor(nil) }, edit: { openSkillEditor($0) })
         }
-        .sheet(isPresented: $skillEditor) {
+        .assistantSheet(isPresented: $skillEditor, valid: { enabled && skillsOwnerValid() }) {
             if let runtime = skillRuntime, let expected = expectedSkills {
                 BrowserAssistantSkillEditor(runtime: runtime, expected: expected, original: editingSkill, sync: skillSync,
                     valid: { enabled && skillProfile == expected.profileID && skillsOwnerValid() }, dismiss: { skillEditor = false })

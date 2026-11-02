@@ -11,6 +11,7 @@ extension BrowserWindowController {
         var state = BrowserCommandState()
         state.isAvailable = acceptsCommands && !session.isClosed
         state.isModal = window?.attachedSheet != nil || boostEditor?.renameSheet != nil
+            || window?.contentView?.subviews.contains(where: { $0.identifier == BrowserAssistantSheet.identifier }) == true
         state.hasWindow = window != nil
         state.hasSurface = surface != nil
         state.hasURL = navigation?.url != nil
