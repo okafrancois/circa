@@ -46,6 +46,7 @@ final class BrowserTidyHelpers<Engine: BrowserEngine> {
             originals[tab.id] = tab.tidiedTitle == tab.customTitle ? tab.tidiedTitle : nil
         }
         guard let old, old.profileID == next.profileID, old.spaceID == next.spaceID,
+              !owner.todayTidy.applying,
               owner.settingsPreferences?.runtime.document.ai.isEnabled == true,
               owner.settingsPreferences?.runtime.document.ai.helpers.tidyTitlesAndDownloads == true else { return }
         let previousTabs = Dictionary(old.allTabs.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })

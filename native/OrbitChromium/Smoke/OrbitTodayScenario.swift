@@ -17,6 +17,7 @@ extension OrbitSmokeDriver {
         }
         try? await environment.settings.updateAI {
             $0.isEnabled = true; $0.readsCurrentTabOnRequest = true; $0.helpers.tidyToday = true
+            $0.helpers.tidyTitlesAndDownloads = true
             if !live { $0.defaultModels[.quick] = .init(provider: .codex, model: "synthetic-codex", effort: "low") }
         }
         if live { environment.ai.refresh(explicit: true, keepRunning: true); _ = await until(12) { !environment.ai.isChecking } }
@@ -138,6 +139,9 @@ extension OrbitSmokeDriver {
                 check("today.folder-applied", owner.todayTidy.suggestions.count == 1 && owner.session.organization?.organizationRevision != before)
                 capture("folder")
                 if let host = proposalPoint(0) {
+                    try? await Task.sleep(for: .milliseconds(600))
+                    check("today.grouping-preserves-title-metadata", owner.session.organization?.allTabs.allSatisfy { $0.tidiedTitle == nil } == true
+                        && owner.todayTidy.suggestions.count == 1)
                     let archiveIDs = Set(owner.todayTidy.suggestions.flatMap(\.tabs))
                     let archiveRows = archiveIDs.compactMap {
                         owner.sidebar.page.list.titleRestoreRow(for: $0)
