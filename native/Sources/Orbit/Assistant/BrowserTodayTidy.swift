@@ -112,8 +112,10 @@ final class BrowserTodayTidy<Engine: BrowserEngine>: ObservableObject {
                 && candidate.2 == preferences && candidate.3 == model
                 && Set(suggestion.tabs).isSubset(of: Set(candidate.1.map(\.id)))
         }
+        owner.sidebar.page.list.todayGroupingTabs = suggestion.action == .folder ? suggestion.tabs : []
         applying = true
         Task { [weak self] in
+            defer { owner.sidebar.page.list.todayGroupingTabs = [] }
             let success = await owner.session.applyTodaySuggestion(suggestion, revision: snapshot.organizationRevision, isCurrent: valid).value
             guard let self, epoch == token else { return }
             applying = false
@@ -145,7 +147,6 @@ final class BrowserTodayTidy<Engine: BrowserEngine>: ObservableObject {
 private struct BrowserTodayTidyView<Engine: BrowserEngine>: View {
     @ObservedObject var model: BrowserTodayTidy<Engine>
     let palette: BrowserAssistantPalette
-    @State private var visible = false
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
             HStack(spacing: 5) {
@@ -171,11 +172,21 @@ private struct BrowserTodayTidyView<Engine: BrowserEngine>: View {
                         .disabled(model.applying).buttonStyle(.plain)
                         .accessibilityIdentifier("today-suggestion-\(index)")
                 }.font(Font(BrandTextStyle.ui.font(size: 12.5))).frame(height: 30)
-                    .opacity(visible ? 1 : 0).offset(y: visible || OrbitMotionPreferences.prefersReducedMotion ? 0 : -4)
-                    .animation(OrbitMotionPreferences.prefersReducedMotion ? nil : .easeOut(duration: 0.24).delay(0.08 + Double(index) * 0.04), value: visible)
+                    .modifier(TodaySuggestionEntrance(index: index))
             }
         }.padding(6).foregroundStyle(palette.ink.swiftUI)
             .background(palette.hover.swiftUI, in: RoundedRectangle(cornerRadius: 10))
-            .environment(\.assistantPalette, palette).onAppear { visible = true }
+            .environment(\.assistantPalette, palette)
+    }
+}
+
+private struct TodaySuggestionEntrance: ViewModifier {
+    let index: Int
+    @State private var visible = false
+    func body(content: Content) -> some View {
+        content.opacity(visible ? 1 : 0)
+            .offset(y: visible || OrbitMotionPreferences.prefersReducedMotion ? 0 : -4)
+            .animation(OrbitMotionPreferences.prefersReducedMotion ? nil : .timingCurve(1.0 / 3, 2.0 / 3, 2.0 / 3, 1, duration: 0.24).delay(0.08 + Double(index) * 0.04), value: visible)
+            .onAppear { visible = true }
     }
 }

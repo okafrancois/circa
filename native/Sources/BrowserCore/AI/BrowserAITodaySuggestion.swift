@@ -16,6 +16,9 @@ public struct BrowserAITodaySuggestion: Equatable, Sendable, Identifiable {
         struct Row: Decodable { let action: Action; let title: String; let tabs: [UUID] }
         struct Response: Decodable { let suggestions: [Row] }
         guard text.utf8.count <= 16_384, allowed.count <= 40 else { throw BrowserAIError.failed }
+        guard let object = try JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any],
+              Set(object.keys) == ["suggestions"], let items = object["suggestions"] as? [[String: Any]],
+              items.allSatisfy({ Set($0.keys) == ["action", "title", "tabs"] }) else { throw BrowserAIError.failed }
         let rows = try JSONDecoder().decode(Response.self, from: Data(text.utf8)).suggestions
         guard rows.count <= 12 else { throw BrowserAIError.failed }
         var seen: Set<TabID> = []

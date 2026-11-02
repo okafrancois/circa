@@ -66,6 +66,7 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
     var onTidyToday: (() -> Void)?
     private var tidyAvailable = false
     private var todayAccessory: NSHostingView<AnyView>?
+    var todayGroupingTabs: [TabID] = []
     private var todayAccessoryHeight: CGFloat = 0
     private var todayAccessoryTask: Task<Void, Never>?
     private let gapPlaceholder = OrbitSurfaceBackgroundView(cornerRadius: OrbitTokens.Radius.tabRow)
@@ -190,7 +191,7 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
         clearButton.target = self
         clearButton.action = #selector(clearToday(_:))
         tidyButton.title = uiText("Tidy")
-        tidyButton.image = OrbitIcon.image(sfName: "wand.and.stars", pointSize: 12, accessibilityDescription: nil)
+        tidyButton.image = OrbitIcon.image(sfName: "sparkles", pointSize: 12, accessibilityDescription: nil)
         tidyButton.imagePosition = .imageLeading
         tidyButton.isBordered = false
         tidyButton.font = BrandTextStyle.ui.font(size: 12)
@@ -401,7 +402,12 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
             for placement in displayedLayout.rows {
                 let slot = SidebarListSlot.node(placement.node)
                 if let current = animator.value(of: slot, at: time) ?? old.centerY(of: slot) {
-                    animator.move(slot, from: current, to: placement.centerY, timing: timing, at: time)
+                    if case .tab(let id) = placement.node, let index = todayGroupingTabs.firstIndex(of: id) {
+                        animator.move(slot, from: current, to: placement.centerY,
+                            timing: .init(duration: 0.42, x1: 0.19, y1: 1, x2: 0.22, y2: 1), at: time + Double(index) * 0.05)
+                    } else {
+                        animator.move(slot, from: current, to: placement.centerY, timing: timing, at: time)
+                    }
                 } else if toggledPinned, placement.section == .pinned {
                     // Section rows are revealed by their row-height clips, without a content reload.
                 } else if let origin = enteringOrigin(of: placement.node, old: old, time: time, previous: previousByNode) {
@@ -872,6 +878,7 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
                 addSubview(host)
             }
         }
+        if content == nil { todayAccessory?.removeFromSuperview(); todayAccessory = nil }
         let target = content == nil ? 0 : max(0, height)
         let initial = todayAccessoryHeight
         if target == initial { refreshClear(); return }

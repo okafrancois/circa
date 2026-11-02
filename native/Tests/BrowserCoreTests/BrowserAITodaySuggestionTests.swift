@@ -17,7 +17,11 @@ struct BrowserAITodaySuggestionTests {
         let groups = try BrowserAITodaySuggestion.parse(response(rows), allowed: [a, b, c])
         #expect(groups.count == 2 && groups[0].tabs == [a, b] && groups[1].action == .archive)
         #expect(try BrowserAITodaySuggestion.parse(response([]), allowed: [a, b]).isEmpty)
+        #expect(throws: (any Error).self) {
+            try BrowserAITodaySuggestion.parse("{\"suggestions\":[],\"command\":\"run\"}", allowed: [a, b])
+        }
         for invalid in [
+            [["action": "archive", "title": "One", "tabs": [a.rawValue.uuidString], "command": "run"]],
             [["action": "folder", "title": "Project", "tabs": [a.rawValue.uuidString, c.rawValue.uuidString]]],
             [["action": "folder", "title": "Project", "tabs": [a.rawValue.uuidString, a.rawValue.uuidString]]],
             [["action": "archive", "title": "One", "tabs": [a.rawValue.uuidString]],
