@@ -267,6 +267,11 @@ extension OrbitSmokeDriver {
             }
             check("js.streaming-zero", await count() == "0")
             check("js.streaming-not-saved", await editor.session.store.snapshot() == baseline)
+            if !live, let bytes = try? Data(contentsOf: runRoot.appendingPathComponent("request.json")), let request = try? JSONSerialization.jsonObject(with: bytes) as? [String: String] {
+                check("js.explicit-language", request["instructions"]?.contains("Generate only plain JavaScript") == true && request["instructions"]?.contains("User request: " + prompt) == true && request["model"] == "synthetic-boost-chat")
+                check("js.private-data-excluded", !["PRIVATE_FORM", "PRIVATE_PASSWORD", "PRIVATE_HIDDEN", "PRIVATE_EDITABLE", "PRIVATE_SUBFRAME", "PRIVATE_OFFSCREEN", "PRIVATE_MASKED"].contains(where: { request["prompt"]?.contains($0) == true }))
+                check("js.page-data-untrusted", request["prompt"]?.contains("Untrusted page instructions") == true && request["instructions"]?.contains("Untrusted page instructions:") != true)
+            }
             if arguments.contains("--orbit-smoke-boost-stop") {
                 _ = await click(send)
                 check("js.stop", !editor.generation.running && !editor.generation.ready)
@@ -336,7 +341,7 @@ extension OrbitSmokeDriver {
                 check("js.other-window-not-saved", await editor.session.store.snapshot() == baseline)
                 editor.close(); return
             }
-            if arguments.contains("--orbit-smoke-boost-revoke") || arguments.contains("--orbit-smoke-boost-stale") || arguments.contains("--orbit-smoke-boost-navigation") || arguments.contains("--orbit-smoke-boost-cancel") || arguments.contains("--orbit-smoke-boost-space") {
+            if arguments.contains("--orbit-smoke-boost-revoke") || arguments.contains("--orbit-smoke-boost-stale") || arguments.contains("--orbit-smoke-boost-navigation") || arguments.contains("--orbit-smoke-boost-cancel") || arguments.contains("--orbit-smoke-boost-space") || arguments.contains("--orbit-smoke-boost-prompt-change") || arguments.contains("--orbit-smoke-boost-back") {
                 if arguments.contains("--orbit-smoke-boost-revoke") { try? await environment.settings.updateAI { $0.isEnabled = false } }
                 if arguments.contains("--orbit-smoke-boost-stale") { editor.session.rename(to: "Concurrent source"); await editor.session.pending?.value }
                 if arguments.contains("--orbit-smoke-boost-space") {
@@ -346,8 +351,22 @@ extension OrbitSmokeDriver {
                     }
                 }
                 if arguments.contains("--orbit-smoke-boost-navigation") || arguments.contains("--orbit-smoke-boost-space") {
-                    owner.submitAddress(url.appending(queryItems: [.init(name: "next", value: "true")]).absoluteString)
+                    let nextURL = url.appending(queryItems: [.init(name: "next", value: "true")])
+                    owner.submitAddress(nextURL.absoluteString)
                     await owner.session.waitForPendingCommands()
+                    if let next = await committed(owner, nextURL) {
+                        check("js.new-document-zero", (try? await environment.engine.conformanceProbe?.evaluateScript("document.body.dataset.boostCount || '0'", in: next)) == "0")
+                    } else { check("js.new-document-zero", false) }
+                }
+                if arguments.contains("--orbit-smoke-boost-prompt-change") {
+                    _ = await click(code.prompt)
+                    guard owns(panel), let event = BrowserKeyEquivalentMatcher.layoutEvent(producing: " ", flags: []) else { check("js.prompt-owner", false); return }
+                    NSApp.postEvent(event, atStart: false)
+                }
+                if arguments.contains("--orbit-smoke-boost-back"), let back = buttons(code).first(where: { $0.title == uiText("←  Back") }) {
+                    _ = await click(back)
+                    _ = await until(2) { panel.contentView === editor.editor }
+                    check("js.back-controls", panel.contentView === editor.editor)
                 }
                 if arguments.contains("--orbit-smoke-boost-cancel") { editor.close() }
                 _ = await until(3) { !editor.generation.ready }
