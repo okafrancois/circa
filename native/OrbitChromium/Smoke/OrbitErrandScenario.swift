@@ -190,11 +190,27 @@ extension OrbitSmokeDriver {
             capture("error"); return
         }
         guard let task = owner.errand, let approval = task.approval, let card = owner.errandHost else { check("errand.approval", false); capture("missing-approval"); return }
+        if live {
+            record("errand.live-provider", environment.ai.clientOverrides[task.choice.provider] == nil ? "proven" : "failed",
+                ["provider": task.choice.provider.rawValue, "model": task.choice.model, "fixture": false])
+        }
         _ = await until(3) { !card.isHidden }
         try? await Task.sleep(for: .milliseconds(400))
         check("errand.zero-before-approval", await evaluate("String(document.body.dataset.count||'0')") == "0")
         check("errand.card-bounds", abs(card.bounds.width - 420) < 1 && card.bounds.height > 80 && card.bounds.height < 400)
         capture("approval")
+        if mode == "owner-page" {
+            if let raw = await evaluate("JSON.stringify((()=>{const r=document.getElementById('search').getBoundingClientRect();return [r.x+r.width/2,r.y+r.height/2]})())"),
+               let point = try? JSONDecoder().decode([Double].self, from: Data(raw.utf8)), point.count == 2 {
+                let view = surface.hostView
+                _ = await click(view, point: NSPoint(x: point[0], y: view.isFlipped ? point[1] : view.bounds.height-point[1]))
+            }
+            _ = await until(3) { !owner.errandActive }
+            check("errand.native-owner-takeover", task.phase == .stopped && owner.errandHost == nil)
+            check("errand.manual-effect-only", await evaluate("String(document.body.dataset.count||'0')") == "1")
+            check("errand.owner-no-followup", await client.requests.count == 1)
+            return
+        }
         if ["stop", "revoke", "master", "site", "provider", "stale", "form-change", "navigate", "close", "space", "profile", "transfer"].contains(mode) {
             if mode == "stop" { _ = await click(owner.sidebar.errandStopButton) }
             if mode == "revoke" { try? await environment.settings.updateAI { $0.readsCurrentTabOnRequest = false } }

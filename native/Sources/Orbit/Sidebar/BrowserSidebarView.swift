@@ -264,7 +264,8 @@ final class BrowserSidebarView: NSView, SidebarListHost {
         }
         errandStopButton.isHidden = true
         errandStopButton.isBordered = false
-        errandStopButton.font = BrandTextStyle.ui.font(size: 13)
+        errandStopButton.font = BrandTextStyle.ui.font(size: 12.5, weight: .medium)
+        errandStopButton.wantsLayer = true; errandStopButton.layer?.cornerRadius = 7
         errandStopButton.target = self; errandStopButton.action = #selector(stopErrandPressed)
         errandStopButton.setAccessibilityIdentifier("sidebar-stop-errand")
         addSubview(errandStopButton)
@@ -384,7 +385,8 @@ final class BrowserSidebarView: NSView, SidebarListHost {
             width: max(0, bounds.width - 2 * Metrics.paddingX), height: SidebarUpdateCard.height)
         let errandHeight: CGFloat = errandStopButton.isHidden ? 0 : 36
         updateCard.frame.origin.y += errandHeight
-        errandStopButton.frame = NSRect(x: Metrics.paddingX, y: geometry.footerFrame.minY + 2, width: min(120, bounds.width - 2 * Metrics.paddingX), height: 28)
+        errandStopButton.frame = NSRect(x: Metrics.paddingX, y: geometry.footerFrame.minY + 2,
+            width: min(errandStopButton.attributedTitle.size().width + 24, bounds.width - 2 * Metrics.paddingX), height: 26)
         footer.frame = geometry.footerFrame.offsetBy(dx: 0, dy: (showsUpdateCard ? SidebarUpdateCard.height + 8 : 0) + errandHeight)
         footer.apply(geometry)
         recentDownloads.frame = NSRect(x: 0, y: footer.frame.minY + footer.libraryButton.frame.midY - 14.5 - CGFloat(recentDownloads.items.count) * 56, width: bounds.width, height: CGFloat(recentDownloads.items.count) * 56)
@@ -1110,6 +1112,9 @@ final class BrowserSidebarView: NSView, SidebarListHost {
             swipePreviewRaster = nil
         }
         self.accent = accent
+        errandStopButton.attributedTitle = NSAttributedString(string: uiText("Stop Errand"), attributes: [
+            .font: BrandTextStyle.ui.font(size: 12.5, weight: .medium), .foregroundColor: accent.foreground])
+        errandStopButton.layer?.backgroundColor = accent.foreground.withAlphaComponent(0.2).resolvedCGColor(for: effectiveAppearance)
         if addressContainer.accent != accent { addressContainer.accent = accent }
         if navigationContainer.accent != accent { navigationContainer.accent = accent }
         liveFavoritesGrid?.accent = accent
