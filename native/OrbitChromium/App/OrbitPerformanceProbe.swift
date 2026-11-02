@@ -144,7 +144,9 @@ enum OrbitPerformanceProbe {
                 try? FileManager.default.removeItem(at: commandFile)
                 let name = command["command"] ?? ""
                 result["commandNonce"] = command["nonce"] ?? ""
-                if name == "extension-import-check", ownsWindow(owner, bundleID: "lab.orbit.orbit.extensions-import") {
+                if name == "github-compatibility" {
+                    result["githubCompatibility"] = await OrbitGitHubCompatibilityProbe.run(application, root: root, action: command["action"] ?? "decode")
+                } else if name == "extension-import-check", ownsWindow(owner, bundleID: "lab.orbit.orbit.extensions-import") {
                     application.confirmQuit = { .quit }
                     let catalog = await environment.store.catalogSnapshot()
                     var checks: [[String: Any]] = []

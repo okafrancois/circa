@@ -21,6 +21,9 @@ enum OrbitLiveFolderScenario {
         func check(_ name: String, _ value: Bool) { record("live-folders." + name, value ? "proven" : "failed", [:]) }
         do {
             guard let context = await window.session.captureContextInCommandOrder().value else { throw BrowserStoreError.windowMissing }
+            var historyChanged = false
+            ChromiumGitHubDiagnostics.phase = { if $0 == "sameDocumentHistoryChanged" { historyChanged = true } }
+            defer { ChromiumGitHubDiagnostics.phase = nil }
             let session = FixtureGitHubSession(engine: environment.engine, origin: fixture)
             let runtime = BrowserLiveFoldersRuntime(store: environment.store, session: session, directory: nil)
             window.liveFoldersRuntime = runtime
@@ -79,6 +82,13 @@ enum OrbitLiveFolderScenario {
             guard case let .folder(folderItem) = folder, let config = folderItem.liveFolder else { throw BrowserGitHubProviderError.invalidResponse }
             let nativeMenu = try require(window.makeLiveFolderContextMenu(folder: folderItem, configuration: config)?.menu)
             let filters = try require(nativeMenu.items.first?.submenu)
+            check("same-document-history-fetch", historyChanged)
+            _ = try await environment.engine.conformanceProbe?.evaluateScript("document.cookie='orbit-live-folder-history=unknown; path=/'; 'ok'", in: surface)
+            do {
+                _ = try await session.pullRequests(profileID: context.profileID, query: "is:pr is:open", page: 1)
+                check("unknown-history-route-rejected", false)
+            } catch BrowserGitHubProviderError.invalidResponse { check("unknown-history-route-rejected", true) }
+            _ = try await environment.engine.conformanceProbe?.evaluateScript("document.cookie='orbit-live-folder-history=; Max-Age=0; path=/'; 'ok'", in: surface)
             check("native-filter-defaults", filters.items.filter { $0.state == .on }.count == 2)
             for (theme, appearance) in [("light", NSAppearance.Name.aqua), ("dark", .darkAqua)] {
                 window.window?.appearance = NSAppearance(named: appearance)

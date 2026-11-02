@@ -54,7 +54,7 @@ public struct BrowserGitHubWebPage: Sendable {
                   url.host == "github.com", url.port == nil, url.user == nil, url.password == nil,
                   url.fragment == nil, url.query == nil, BrowserGitHubPullRequestsProvider.validPullURL(url),
                   ISO8601DateFormatter().date(from: row.updatedAt) != nil,
-                  row.state == "REPO_PULL_REQUEST_STATE_OPEN" else { throw BrowserGitHubProviderError.invalidResponse }
+                  ["REPO_PULL_REQUEST_STATE_OPEN", "OPEN"].contains(row.state) else { throw BrowserGitHubProviderError.invalidResponse }
             return .init(identity: .init(itemID: "github.com:\(id):\(row.globalId)"), url: url,
                          title: row.title, fingerprint: row.updatedAt + ":" + row.title)
         }
@@ -64,6 +64,24 @@ public struct BrowserGitHubWebPage: Sendable {
         let currentPage: Int
         let totalPages: Int
         let totalCount: Int
+
+        private enum CodingKeys: String, CodingKey { case results, currentPage, totalPages, totalCount, pageInfo }
+        private struct PageInfo: Decodable { let currentPage: Int; let totalPages: Int; let totalCount: Int }
+        init(from decoder: any Decoder) throws {
+            let values = try decoder.container(keyedBy: CodingKeys.self)
+            results = try values.decode([Row].self, forKey: .results)
+            if values.contains(.pageInfo) {
+                guard !values.contains(.currentPage), !values.contains(.totalPages), !values.contains(.totalCount) else {
+                    throw BrowserGitHubProviderError.invalidResponse
+                }
+                let page = try values.decode(PageInfo.self, forKey: .pageInfo)
+                currentPage = page.currentPage; totalPages = page.totalPages; totalCount = page.totalCount
+            } else {
+                currentPage = try values.decode(Int.self, forKey: .currentPage)
+                totalPages = try values.decode(Int.self, forKey: .totalPages)
+                totalCount = try values.decode(Int.self, forKey: .totalCount)
+            }
+        }
     }
     private struct Row: Decodable {
         let globalId: String
@@ -71,5 +89,15 @@ public struct BrowserGitHubWebPage: Sendable {
         let updatedAt: String
         let state: String
         let title: String
+        private enum CodingKeys: String, CodingKey { case globalId, id, permalink, updatedAt, state, title }
+        init(from decoder: any Decoder) throws {
+            let values = try decoder.container(keyedBy: CodingKeys.self)
+            guard values.contains(.id) != values.contains(.globalId) else { throw BrowserGitHubProviderError.invalidResponse }
+            globalId = try values.decode(String.self, forKey: values.contains(.id) ? .id : .globalId)
+            permalink = try values.decode(String.self, forKey: .permalink)
+            updatedAt = try values.decode(String.self, forKey: .updatedAt)
+            state = try values.decode(String.self, forKey: .state)
+            title = try values.decode(String.self, forKey: .title)
+        }
     }
 }

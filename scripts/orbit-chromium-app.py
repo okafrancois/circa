@@ -117,17 +117,26 @@ def essentials_handler(run_root, counters):
 
         def do_GET(self):
             path = urlsplit(self.path).path
-            if path == "/pulls":
+            if path in ("/pulls", "/pulls/authored"):
                 signed_in = "orbit-live-folder=fixture" in self.headers.get("Cookie", "")
                 if not signed_in:
                     return self.reply(200, b'<html><head><meta name="user-login" content=""></head><body>Sign in</body></html>')
                 payload = {"payload": {"pullsDashboardSurfaceContentRoute": {"currentPage": 1, "totalPages": 1, "totalCount": 1,
-                    "results": [{"globalId": "PR_fixture", "title": "Synthetic change", "updatedAt": "2026-10-01T00:00:00Z",
-                                 "state": "REPO_PULL_REQUEST_STATE_OPEN", "permalink": "https://github.com/example/fixture/pull/1"}]}}}
+                    "results": [{"id": "PR_fixture", "title": "Synthetic change", "updatedAt": "2026-10-01T00:00:00Z",
+                                 "state": "OPEN", "permalink": "https://github.com/example/fixture/pull/1"}]}}}
+                content = payload["payload"]["pullsDashboardSurfaceContentRoute"]
+                content["pageInfo"] = {key: content.pop(key) for key in ("currentPage", "totalPages", "totalCount")}
                 if "-repo:example/fixture" in parse_qs(urlsplit(self.path).query).get("q", [""])[0]:
-                    payload["payload"]["pullsDashboardSurfaceContentRoute"].update(results=[], totalCount=0)
+                    content["results"] = []
+                    content["pageInfo"]["totalCount"] = 0
+                # Reproduce a dashboard history replacement while the isolated fetch is in flight.
+                query = parse_qs(urlsplit(self.path).query)
+                if "q" in query:
+                    time.sleep(0.15)
+                destination = "/unsupported-fixture" if "orbit-live-folder-history=unknown" in self.headers.get("Cookie", "") else "/pulls/inbox?fixture=history#updated"
+                hydration = "<script>addEventListener('load',()=>setTimeout(()=>history.replaceState(null,''," + json.dumps(destination) + "),50))</script>" if "q" not in query else ""
                 body = ('<html><head><meta name="user-login" content="fixture"><meta name="octolytics-actor-id" content="123"></head>'
-                        '<body><script type="application/json" data-target="react-app.embeddedData">' + json.dumps(payload) + '</script></body></html>')
+                        '<body><script type="application/json" data-target="react-app.embeddedData">' + json.dumps(payload) + '</script>' + hydration + '</body></html>')
                 return self.reply(200, body.encode())
             if path.startswith("/boosts/"):
                 counters[path] = counters.get(path, 0) + 1

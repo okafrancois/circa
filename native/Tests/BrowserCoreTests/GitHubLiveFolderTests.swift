@@ -41,6 +41,29 @@ struct GitHubLiveFolderTests {
         }
     }
 
+    @Test func dashboardNestedPaginationRequiresCompleteUnambiguousPageInfo() throws {
+        let flat = "\"currentPage\":1,\"totalPages\":1,\"totalCount\":1"
+        let nested = "\"pageInfo\":{\(flat)}"
+        let dashboardRow = row.replacingOccurrences(of: "globalId", with: "id").replacingOccurrences(of: "REPO_PULL_REQUEST_STATE_OPEN", with: "OPEN")
+        let fixture = html(rows: dashboardRow, count: 1).replacingOccurrences(of: flat, with: nested)
+        #expect(try BrowserGitHubWebPage(html: fixture).items.count == 1)
+        #expect(try BrowserGitHubWebPage(html: fixture).totalCount == 1)
+        #expect(try BrowserGitHubWebPage(html: fixture).items.first?.identity.itemID == "github.com:123:PR_fixture")
+        #expect(throws: BrowserGitHubProviderError.invalidResponse) {
+            try BrowserGitHubWebPage(html: fixture.replacingOccurrences(of: "\"id\":\"PR_fixture\"", with: "\"id\":\"PR_fixture\",\"globalId\":\"PR_other\""))
+        }
+        #expect(throws: BrowserGitHubProviderError.invalidResponse) {
+            try BrowserGitHubWebPage(html: fixture.replacingOccurrences(of: "\"state\":\"OPEN\"", with: "\"state\":\"CLOSED\""))
+        }
+        #expect(throws: DecodingError.self) { try BrowserGitHubWebPage(html: fixture.replacingOccurrences(of: "\"totalPages\":1,", with: "")) }
+        #expect(throws: BrowserGitHubProviderError.invalidResponse) {
+            try BrowserGitHubWebPage(html: fixture.replacingOccurrences(of: nested, with: nested + "," + flat))
+        }
+        #expect(throws: BrowserGitHubProviderError.invalidResponse) {
+            try BrowserGitHubWebPage(html: fixture.replacingOccurrences(of: "pullsDashboardSurfaceContentRoute", with: "pullsDashboardSurfaceLayoutRoute"))
+        }
+    }
+
     @Test func rejectsInvalidDestinationsAndInconsistentEmptyResult() {
         #expect(throws: BrowserGitHubProviderError.invalidResponse) {
             try BrowserGitHubWebPage(html: html(rows: row.replacingOccurrences(of: "github.com/", with: "github.com.attacker.invalid/"), count: 1))
