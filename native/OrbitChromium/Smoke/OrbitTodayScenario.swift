@@ -44,6 +44,28 @@ extension OrbitSmokeDriver {
             process.arguments = ["-x", "-l", String(window.windowNumber), runRoot.appendingPathComponent(name + ".png").path]
             try? process.run(); process.waitUntilExit()
         }
+        func suggestionButton(_ object: Any, id: String, depth: Int = 0) -> (any NSAccessibilityProtocol)? {
+            guard depth < 25, let element = object as? any NSAccessibilityProtocol else { return nil }
+            if element.accessibilityIdentifier() == id { return element }
+            for child in element.accessibilityChildren() ?? [] {
+                if let button = suggestionButton(child, id: id, depth: depth + 1) { return button }
+            }
+            return nil
+        }
+        func clickSuggestion(_ index: Int) async {
+            try? await Task.sleep(for: .milliseconds(400))
+            guard owns(), let button = suggestionButton(owner.sidebar.page.list, id: "today-suggestion-\(index)") else { return }
+            let frame = button.accessibilityFrame()
+            let location = window.convertPoint(fromScreen: NSPoint(x: frame.midX, y: frame.midY))
+            for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
+                guard owns() else { check("today.input-owner", false); return }
+                let event = NSEvent.mouseEvent(with: type, location: location, modifierFlags: [],
+                    timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
+                    context: nil, eventNumber: 1, clickCount: 1, pressure: type == .leftMouseDown ? 1 : 0)
+                if let event { NSApp.postEvent(event, atStart: false) }
+                try? await Task.sleep(for: .milliseconds(70))
+            }
+        }
         if arguments.contains("--orbit-smoke-today-reference") {
             let url = fixture.appendingPathComponent("reference.html")
             owner.openTab(url: url); _ = await committed(owner, url)
@@ -119,14 +141,13 @@ extension OrbitSmokeDriver {
                 return hosts(owner.sidebar.page.list).first
             }
             if let host = proposalPoint(0) {
-                let point = NSView(frame: NSRect(x: host.frame.maxX - 46, y: host.frame.minY + 53, width: 2, height: 2))
-                point.isHidden = true; owner.sidebar.page.list.addSubview(point)
-                await click(point); point.removeFromSuperview()
+                await clickSuggestion(0)
                 _ = await until(5) { owner.todayTidy.suggestions.count == 1 }
                 check("today.folder-applied", owner.todayTidy.suggestions.count == 1 && owner.session.organization?.organizationRevision != before)
                 capture("folder")
                 if let host = proposalPoint(0) {
-                    let archiveRows = owner.todayTidy.suggestions.flatMap(\.tabs).compactMap {
+                    let archiveIDs = Set(owner.todayTidy.suggestions.flatMap(\.tabs))
+                    let archiveRows = archiveIDs.compactMap {
                         owner.sidebar.page.list.titleRestoreRow(for: $0)
                     }
                     let traceStart = ProcessInfo.processInfo.systemUptime
@@ -144,10 +165,10 @@ extension OrbitSmokeDriver {
                             if Task.isCancelled { return }
                         }
                     }
-                    let point = NSView(frame: NSRect(x: host.frame.maxX - 40, y: host.frame.minY + 35, width: 2, height: 2))
-                    point.isHidden = true; owner.sidebar.page.list.addSubview(point); await click(point); point.removeFromSuperview()
+                    await clickSuggestion(0)
                     _ = await until(5) { owner.todayTidy.suggestions.isEmpty }
-                    check("today.second-archive", owner.todayTidy.suggestions.isEmpty)
+                    check("today.second-archive", owner.todayTidy.suggestions.isEmpty
+                        && owner.session.organization?.allTabs.allSatisfy { !archiveIDs.contains($0.id) } == true)
                     try? await Task.sleep(for: .milliseconds(500))
                     trace.cancel()
                 }
