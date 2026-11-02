@@ -1,0 +1,1 @@
+{"manifest_version": 3, "name": "Popup Lifecycle Fixture", "version": "1.0", "action": {"default_popup": "popup.html"}}

@@ -1,0 +1,16 @@
+diff --git a/chrome/browser/ui/views/extensions/extension_popup.cc b/chrome/browser/ui/views/extensions/extension_popup.cc
+--- a/chrome/browser/ui/views/extensions/extension_popup.cc
++++ b/chrome/browser/ui/views/extensions/extension_popup.cc
+@@ -416,7 +416,11 @@
+   auto weak = deferred_close_weak_ptr_factory_.GetWeakPtr();
+   if (extension_view_) RemoveChildViewT(extension_view_.ExtractAsDangling());
+   if (!weak) return;
+-  host_.reset();
++  // Cancellation can run from a WebContentsObserver notification (including
++  // popup load completion). Revoke immediately, but destroy the contents only
++  // after the observer stack and any nested native event loop have unwound.
++  base::SingleThreadTaskRunner::GetCurrentDefault()->DeleteSoon(
++      FROM_HERE, std::move(host_));
+   if (!weak) return;
+   withheld_from_view_.reset();
+   if (!orbit_destroying_ && GetWidget()) CloseDeferredIfNecessary();
