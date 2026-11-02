@@ -75,7 +75,7 @@ final class BrowserTidyHelpers<Engine: BrowserEngine> {
 
     func restore(_ id: TabID) {
         guard let owner, let name = originals[id], let tab = owner.session.organizationTab(id),
-              tab.customTitle == name, let snapshot = owner.session.organization else { return }
+              case .pinned = tab.section, tab.customTitle == name, let snapshot = owner.session.organization else { return }
         originals[id] = nil
         owner.session.tidyPinnedTitle(tab, revision: snapshot.organizationRevision, to: nil, isCurrent: { [weak owner] in
             owner?.session.organizationTab(id) == tab
@@ -88,7 +88,12 @@ final class BrowserTidyHelpers<Engine: BrowserEngine> {
             guard item.owner.sourceWindowID == owner.session.organization?.windowID else { continue }
             let fresh = downloadsSeen.insert(item.key).inserted
             // Registrations arrive before completion. History restored before subscription is excluded.
-            guard !fresh, item.state == .complete, item.fileAvailability == .available,
+            guard !fresh, item.state == .complete, item.fileAvailability != .unknown,
+                  !completed.contains(item.key) else { continue }
+            // Completion is consumed even when policy/provider/ownership currently disallows it.
+            // Later availability changes must never turn an old file into a new helper request.
+            completed.insert(item.key)
+            guard item.fileAvailability == .available,
                   item.owner.profileID == owner.session.activeProfileID,
                   let downloadURL = item.currentURL, choice(for: downloadURL) != nil,
                   let occurrence = item.owner.sourceOccurrenceID, let surface = owner.session.surface(for: occurrence),
@@ -96,9 +101,6 @@ final class BrowserTidyHelpers<Engine: BrowserEngine> {
                   let source = surface.navigationState.committedURL, let (preferences, model) = choice(for: source),
                   let service = owner.aiService,
                   let lease = owner.downloads.coordinator.renameLease(in: item.context) else { continue }
-            // Consume completion once, even if validation fails or the provider refuses.
-            guard !completed.contains(item.key) else { continue }
-            completed.insert(item.key)
             let generation = surface.documentGeneration
             let valid: @MainActor () -> Bool = { [weak self, weak owner, weak surface] in
                 guard let self, let owner, let surface else { return false }

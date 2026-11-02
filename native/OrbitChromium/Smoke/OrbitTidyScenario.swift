@@ -94,6 +94,15 @@ extension OrbitSmokeDriver {
         check("tidy.title-renamed", renamed)
         if let answer = owner.session.organizationTab(tab.id)?.customTitle { try? Data(answer.utf8).write(to: runRoot.appendingPathComponent("title-answer.txt")) }
         try? await Task.sleep(for: .milliseconds(650))
+        if arguments.contains("--orbit-smoke-tidy-repin") {
+            guard owns() else { return }
+            owner.togglePinSidebarTargets(); await owner.session.waitForQueuedCommands()
+            let control = owner.sidebar.page.list.titleRestoreRow(for: tab.id)?.restoreButton
+            check("tidy.unpin-disables-restore", control?.isEnabled == false)
+            guard owns() else { return }
+            owner.togglePinSidebarTargets(); await owner.session.waitForQueuedCommands()
+            try? await Task.sleep(for: .milliseconds(400))
+        }
         if owns(), let row = owner.sidebar.page.list.titleRestoreRow(for: tab.id),
            let event = NSEvent.enterExitEvent(with: .mouseEntered, location: .zero, modifierFlags: [], timestamp: 0,
                                               windowNumber: window.windowNumber, context: nil, eventNumber: 1, trackingNumber: 0, userData: nil) {
@@ -148,6 +157,16 @@ extension OrbitSmokeDriver {
             let items = owner.downloads.snapshots(profileID: profile)
             check("tidy.download-model", items.contains { $0.state == .complete && $0.destinationURL?.lastPathComponent != "INV-2026-10.pdf" })
         }
+        func labels(_ view: NSView) -> [String] {
+            let own = (view as? NSTextField).map { [$0.stringValue] } ?? []
+            return own + view.subviews.flatMap { labels($0) }
+        }
+        let checksLibrary = arguments.contains("--orbit-smoke-tidy-library")
+        if checksLibrary, owns(), renamedFile {
+            owner.showDownloads()
+            try? await Task.sleep(for: .milliseconds(200))
+            check("tidy.library-renamed", labels(owner.downloadsPane).contains("Synthetic notes.pdf"))
+        }
         try? await Task.sleep(for: .milliseconds(450))
         if owns() {
             let capture = Process(); capture.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
@@ -193,6 +212,12 @@ extension OrbitSmokeDriver {
             }
             try? await Task.sleep(for: .milliseconds(400))
             check("tidy.download-undo", FileManager.default.fileExists(atPath: runRoot.appendingPathComponent("INV-2026-10.pdf").path))
+            if checksLibrary, owns() {
+                check("tidy.library-undo", labels(owner.downloadsPane).contains("INV-2026-10.pdf"))
+                let capture = Process(); capture.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
+                capture.arguments = ["-x", "-l", String(window.windowNumber), runRoot.appendingPathComponent("undo.png").path]
+                try? capture.run(); capture.waitUntilExit()
+            }
         }
         if observesDismissal {
             let dismissed = await until(8) { owner.tidyDownloadPanel == nil }

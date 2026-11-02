@@ -353,6 +353,7 @@ class SidebarTabRow: SidebarListRow {
     private var titleAnimation = UUID()
     var canRestoreTitle: (() -> Bool)?
     var restoreTitle: (() -> Void)?
+    private var offersTitleRestoration: Bool { item.isPinned && canRestoreTitle?() == true }
     lazy var restoreButton: NSButton = {
         let button = NSButton(image: OrbitIcon.image(sfName: "arrow.uturn.backward", pointSize: 14)!, target: self, action: #selector(restoreTidyTitle))
         button.setAccessibilityLabel(uiText("Restore Original"))
@@ -449,7 +450,7 @@ class SidebarTabRow: SidebarListRow {
             titleOverlay?.removeFromSuperview(); titleOverlay = nil
             titleAnimation = UUID()
             let animation = titleAnimation
-            let animate = window != nil && canRestoreTitle?() == true && !OrbitMotionPreferences.prefersReducedMotion
+            let animate = window != nil && offersTitleRestoration && !OrbitMotionPreferences.prefersReducedMotion
             if animate {
                 let old = NSTextField(labelWithString: titleLabel.stringValue)
                 old.font = titleLabel.font
@@ -516,10 +517,10 @@ class SidebarTabRow: SidebarListRow {
 
     override var titleEnd: CGFloat {
         // The title truncates before the close button only while the button shows (S-SPL@1s).
-        if showsAudio { return isHovering && canRestoreTitle?() == true ? min(audioButton.frame.minX - Metrics.titleTrailingGap, bounds.width - 76) : audioButton.frame.minX - Metrics.titleTrailingGap }
+        if showsAudio { return isHovering && offersTitleRestoration ? min(audioButton.frame.minX - Metrics.titleTrailingGap, bounds.width - 76) : audioButton.frame.minX - Metrics.titleTrailingGap }
         let end = isHovering || item.isOpenInAnotherWindow
             ? closeButton.frame.minX - Metrics.titleTrailingGap : bounds.width - Metrics.rowInsetX
-        return isHovering && canRestoreTitle?() == true ? min(end, bounds.width - 52) : end
+        return isHovering && offersTitleRestoration ? min(end, bounds.width - 52) : end
     }
 
     override func layout() {
@@ -599,7 +600,7 @@ class SidebarTabRow: SidebarListRow {
     private func refreshControls() {
         restoreButton.frame = NSRect(x: bounds.width - (showsAudio ? 72 : 48), y: (bounds.height - 20) / 2, width: 20, height: 20)
         restoreButton.contentTintColor = effectiveAccent.icon
-        let restoreAvailable = !isRenaming && splitPreviewShift == 0 && canRestoreTitle?() == true
+        let restoreAvailable = !isRenaming && splitPreviewShift == 0 && offersTitleRestoration
         restoreButton.isEnabled = commandsEnabled && restoreAvailable
         if restoreAvailable && isHovering { restoreButton.isHidden = false }
         let opacity: CGFloat = isHovering && restoreAvailable ? 0.8 : 0

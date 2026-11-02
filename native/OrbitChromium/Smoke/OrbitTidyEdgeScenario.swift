@@ -84,6 +84,18 @@ extension OrbitSmokeDriver {
         await download()
         try? await Task.sleep(for: .seconds(1))
         check("tidy.disabled-no-request", requests() == beforeDisabled && FileManager.default.fileExists(atPath: disabled.path))
+        try? await environment.settings.updateAI { $0.helpers.tidyTitlesAndDownloads = true }
+        let held = runRoot.appendingPathComponent("disabled-held.pdf")
+        if disabled.deletingLastPathComponent() == runRoot {
+            try? FileManager.default.moveItem(at: disabled, to: held)
+            owner.downloads.invalidateFileChecks(in: runRoot)
+            let becameMissing = await until(3) { owner.downloads.coordinator.allSnapshots.contains { $0.destinationURL == disabled && $0.fileAvailability == .missing } }
+            try? FileManager.default.moveItem(at: held, to: disabled)
+            owner.downloads.invalidateFileChecks(in: runRoot)
+            let becameAvailable = await until(3) { owner.downloads.coordinator.allSnapshots.contains { $0.destinationURL == disabled && $0.fileAvailability == .available } }
+            try? await Task.sleep(for: .seconds(1))
+            check("tidy.reenabled-does-not-rename-old-file", becameMissing && becameAvailable && requests() == beforeDisabled && FileManager.default.fileExists(atPath: disabled.path))
+        }
         environment.ai.terminateNow()
     }
 }
