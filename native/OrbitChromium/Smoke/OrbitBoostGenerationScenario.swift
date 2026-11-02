@@ -237,15 +237,23 @@ extension OrbitSmokeDriver {
             _ = await click(js); await code.selectionTask?.value
             check("js.tab-no-consent", !code.isCSS && panel.attachedSheet == nil && !editor.session.boost.javaScriptOptIn)
             _ = await click(code.prompt)
-            let prompt = "on DOMContentLoaded once, or now if ready, set document.body.dataset.boostCount to String(Number(document.body.dataset.boostCount || 0) + 1)"
+            let prompt = "once the body is ready increment the body attribute whose html name is data boost count with hyphens between the three words"
             for character in prompt {
-                guard owns(panel), let event = BrowserKeyEquivalentMatcher.layoutEvent(producing: String(character), flags: []) else { check("js.input-owner", false); return }
+                guard owns(panel) else { check("js.input-owner", false); return }
+                guard let event = BrowserKeyEquivalentMatcher.layoutEvent(producing: String(character), flags: []) else { check("js.input-layout", false); return }
                 NSApp.postEvent(event, atStart: false)
                 try? await Task.sleep(for: .milliseconds(5))
             }
             try? await Task.sleep(for: .milliseconds(100))
             check("js.exact-prompt", code.prompt.stringValue == prompt)
             guard let send = buttons(code).first(where: { $0.accessibilityLabel() == uiText("Generate JavaScript") }) else { check("js.send", false); return }
+            var recording: Process?
+            if arguments.contains("--orbit-smoke-boost-motion"), owns(panel) {
+                let capture = Process(); capture.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
+                capture.arguments = ["-x", "-v", "-V", "8", "-l", String(panel.windowNumber), runRoot.appendingPathComponent("js-native.mov").path]
+                do { try capture.run(); recording = capture } catch { check("js.recording-start", false) }
+            }
+            defer { recording?.waitUntilExit() }
             _ = await click(send)
             _ = await until(3) { editor.generation.running && !code.textView.string.isEmpty }
             if !["js-invalid", "js-markdown", "empty", "error", "quota-error"].contains(failureMode) {
@@ -260,7 +268,17 @@ extension OrbitSmokeDriver {
                 check("js.stop-not-saved", await editor.session.store.snapshot() == baseline)
                 editor.close(); return
             }
-            _ = await until(live ? 28 : 5) { !editor.generation.running }
+            let deadline = ContinuousClock.now + .seconds(live ? 28 : 5)
+            var zeroThroughout = true, unchangedThroughout = true, samples = 0
+            while editor.generation.running, ContinuousClock.now < deadline {
+                if await count() != "0" { zeroThroughout = false }
+                if await editor.session.store.snapshot() != baseline { unchangedThroughout = false }
+                samples += 1
+                try? await Task.sleep(for: .milliseconds(40))
+            }
+            check("js.stream-observations-zero", zeroThroughout)
+            check("js.stream-observations-not-saved", unchangedThroughout)
+            if let bytes = try? JSONSerialization.data(withJSONObject: ["samples": samples, "zero": zeroThroughout, "unchanged": unchangedThroughout]) { try? bytes.write(to: runRoot.appendingPathComponent("js-observations.json")) }
             check("js.review-zero", await count() == "0")
             check("js.review-not-saved", await editor.session.store.snapshot() == baseline)
             if ["js-invalid", "js-markdown", "empty", "error", "quota-error"].contains(failureMode) {
@@ -274,10 +292,28 @@ extension OrbitSmokeDriver {
                 try? capture.run(); capture.waitUntilExit()
             }
             if let bytes = try? JSONSerialization.data(withJSONObject: ["source": editor.generation.output, "fixture": !live]) { try? bytes.write(to: runRoot.appendingPathComponent("js-review.json")) }
-            if arguments.contains("--orbit-smoke-boost-revoke") || arguments.contains("--orbit-smoke-boost-stale") || arguments.contains("--orbit-smoke-boost-navigation") || arguments.contains("--orbit-smoke-boost-cancel") {
+            if arguments.contains("--orbit-smoke-boost-other-window"), let application, let id = application.windows.newWindow() {
+                await application.windows.waitForPendingCommands()
+                if let other = application.windows.windows[id] {
+                    other.openTab(url: url); await other.session.waitForPendingCommands()
+                    if let page = await committed(other, url) {
+                        check("js.other-window-zero", (try? await other.engine.conformanceProbe?.evaluateScript("document.body.dataset.boostCount || '0'", in: page)) == "0")
+                    } else { check("js.other-window-zero", false) }
+                    other.window?.performClose(nil)
+                }
+                check("js.other-window-not-saved", await editor.session.store.snapshot() == baseline)
+                editor.close(); return
+            }
+            if arguments.contains("--orbit-smoke-boost-revoke") || arguments.contains("--orbit-smoke-boost-stale") || arguments.contains("--orbit-smoke-boost-navigation") || arguments.contains("--orbit-smoke-boost-cancel") || arguments.contains("--orbit-smoke-boost-space") {
                 if arguments.contains("--orbit-smoke-boost-revoke") { try? await environment.settings.updateAI { $0.isEnabled = false } }
                 if arguments.contains("--orbit-smoke-boost-stale") { editor.session.rename(to: "Concurrent source"); await editor.session.pending?.value }
-                if arguments.contains("--orbit-smoke-boost-navigation") {
+                if arguments.contains("--orbit-smoke-boost-space") {
+                    let profile = await environment.store.createProfile(name: "Synthetic JavaScript profile")
+                    if let space = try? await environment.store.createSpace(name: "Synthetic JavaScript Space", profileID: profile) {
+                        owner.session.activateSpace(space); await owner.session.waitForPendingCommands()
+                    }
+                }
+                if arguments.contains("--orbit-smoke-boost-navigation") || arguments.contains("--orbit-smoke-boost-space") {
                     owner.submitAddress(url.appending(queryItems: [.init(name: "next", value: "true")]).absoluteString)
                     await owner.session.waitForPendingCommands()
                 }
@@ -293,6 +329,11 @@ extension OrbitSmokeDriver {
             _ = await until(3) { panel.attachedSheet != nil }
             guard let sheet = panel.attachedSheet, let content = sheet.contentView,
                   let cancel = buttons(content).first(where: { $0.title == uiText("Cancel") }) else { check("js.consent", false); return }
+            if owns(sheet) {
+                let capture = Process(); capture.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
+                capture.arguments = ["-x", "-l", String(sheet.windowNumber), runRoot.appendingPathComponent("js-consent.png").path]
+                try? capture.run(); capture.waitUntilExit()
+            }
             _ = await click(cancel)
             _ = await until(2) { !editor.generation.applying }
             check("js.declined-unchanged", await editor.session.store.snapshot() == baseline)
@@ -384,17 +425,26 @@ extension OrbitSmokeDriver {
             check("boost.native-code-edit-not-saved", await editor.session.store.snapshot() == baseline)
         }
         if arguments.contains("--orbit-smoke-boost-js-consent") {
-            guard let js = buttons(code).first(where: { $0.title == uiText("JS") }) else { return }
-            _ = await click(js)
-            _ = await until(2) { panel.attachedSheet != nil }
+            guard let js = buttons(code).first(where: { $0.title == uiText("JS") }),
+                  let css = buttons(code).first(where: { $0.title == uiText("CSS") }) else { return }
+            _ = await click(js); await code.selectionTask?.value
+            check("boost.js-tab-no-consent", !code.isCSS && panel.attachedSheet == nil && !editor.session.boost.javaScriptOptIn)
+            func firstWrite() async {
+                _ = await click(code.textView)
+                guard owns(panel), let event = BrowserKeyEquivalentMatcher.layoutEvent(producing: "b", flags: []) else { check("boost.js-manual-owner", false); return }
+                NSApp.postEvent(event, atStart: false)
+                _ = await until(2) { panel.attachedSheet != nil }
+            }
+            await firstWrite()
             if let sheet = panel.attachedSheet, let content = sheet.contentView, let cancel = buttons(content).first(where: { $0.title == uiText("Cancel") }) { _ = await click(cancel) }
-            check("boost.js-cancel-no-consent", !editor.session.boost.javaScriptOptIn)
-            _ = await click(js)
-            _ = await until(2) { panel.attachedSheet != nil }
+            check("boost.js-cancel-no-consent", !editor.session.boost.javaScriptOptIn && editor.session.boost.content.customJavaScript.isEmpty)
+            _ = await click(css); await code.selectionTask?.value
+            _ = await click(js); await code.selectionTask?.value
+            await firstWrite()
             if let sheet = panel.attachedSheet, let content = sheet.contentView, let enable = buttons(content).first(where: { $0.title == uiText("Enable JavaScript") }) { _ = await click(enable) }
             await editor.session.pending?.value
             check("boost.js-explicit-consent", editor.session.boost.javaScriptOptIn)
-            check("boost.js-review-before-code", !code.isCSS && code.textView.string.isEmpty && editor.session.boost.content.customJavaScript.isEmpty)
+            check("boost.js-manual-write", !code.isCSS && code.textView.string == "b" && editor.session.boost.content.customJavaScript == "b")
             check("boost.js-no-generated-persistence", editor.session.boost.content.customCSS.isEmpty)
             editor.close(); return
         }
