@@ -20,7 +20,7 @@ extension OrbitSmokeDriver {
             if !live { $0.defaultModels[.quick] = .init(provider: .codex, model: "synthetic-codex", effort: "low") }
         }
         if live { environment.ai.refresh(explicit: true, keepRunning: true); _ = await until(12) { !environment.ai.isChecking } }
-        guard let window = owner.window else { check("link.window", false); return }
+        guard var window = owner.window else { check("link.window", false); return }
         window.appearance = NSAppearance(named: arguments.contains("--orbit-smoke-link-light") ? .aqua : .darkAqua)
         window.center(); window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
@@ -28,7 +28,7 @@ extension OrbitSmokeDriver {
         owner.openTab(url: page)
         await owner.session.waitForQueuedCommands()
         _ = await committed(owner, page)
-        guard let surface = owner.pageCommandSurface(), let reader = surface as? any BrowserLinkPreviewSource else { check("link.surface", false); return }
+        guard var surface = owner.pageCommandSurface(), let reader = surface as? any BrowserLinkPreviewSource else { check("link.surface", false); return }
         func owns() -> Bool {
             let rows = CGWindowListCopyWindowInfo([.optionIncludingWindow], CGWindowID(window.windowNumber)) as? [[String: Any]]
             return window.isKeyWindow && NSApp.isActive && rows?.contains { ($0[kCGWindowOwnerPID as String] as? Int32) == getpid() } == true
@@ -83,7 +83,11 @@ extension OrbitSmokeDriver {
         recording.arguments = ["-x", "-v", "-V", "12", "-l", String(window.windowNumber), runRoot.appendingPathComponent("native.mov").path]
         if owns() { try? recording.run() }
         defer { if recording.isRunning { recording.terminate() } }
-        let point = NSPoint(x: 100, y: surface.hostView.isFlipped ? 100 : surface.hostView.bounds.height - 100)
+        let hitY = arguments.contains("--orbit-smoke-link-bottom") ? surface.hostView.bounds.height - 45 : 100
+        if arguments.contains("--orbit-smoke-link-bottom"), let params = try? JSONSerialization.data(withJSONObject: ["expression": "document.querySelector('a').style.top=(innerHeight-65)+'px'"]) {
+            _ = await surface.devToolsCall("Runtime.evaluate", params: String(decoding: params, as: UTF8.self))
+        }
+        let point = NSPoint(x: 100, y: surface.hostView.isFlipped ? hitY : surface.hostView.bounds.height - hitY)
         let preferences = environment.settings.document.ai
         if let choice = preferences.defaultModels[.quick] ?? BrowserAIPolicy.automaticChoice(for: .quick, statuses: environment.ai.statuses),
            let data = try? JSONSerialization.data(withJSONObject: ["provider": choice.provider.rawValue, "model": choice.model ?? "", "live": live ? "true" : "false"]) {
@@ -94,7 +98,7 @@ extension OrbitSmokeDriver {
             _ = await until(3) { surface.pageZoom > 1.01 }
         }
         let revision = surface.documentGeneration
-        let target = try? await reader.previewLink(at: CGPoint(x: 100, y: 100), revision: revision, isCurrent: { true })
+        let target = try? await reader.previewLink(at: CGPoint(x: 100, y: hitY), revision: revision, isCurrent: { true })
         check("link.engine-hit", target?.url.lastPathComponent == "linked.html")
         await event(.mouseMoved, shift: false, local: point)
         try? await Task.sleep(for: .milliseconds(400))
@@ -115,7 +119,7 @@ extension OrbitSmokeDriver {
         }
         if arguments.contains("--orbit-smoke-link-unsupported") {
             _ = await until(8) { owner.linkPreviewHelp?.loading == false }
-            check("link.unsupported-fallback", owner.linkPreviewHelp?.panel != nil && owner.linkPreviewHelp?.lines.isEmpty == true
+            check("link.unsupported-fallback", (arguments.contains("--orbit-smoke-link-redirect") ? owner.linkPreviewHelp?.panel == nil : owner.linkPreviewHelp?.panel != nil) && owner.linkPreviewHelp?.lines.isEmpty == true
                 && owner.linkPreviewHelp?.document == nil
                 && !FileManager.default.fileExists(atPath: runRoot.appendingPathComponent("request-codex-1.txt").path))
             capture("unsupported")
@@ -175,6 +179,26 @@ extension OrbitSmokeDriver {
         owner.openTab(url: fixture.appendingPathComponent("linked.html"))
         _ = await until(3) { owner.linkPreviewHelp?.panel == nil }
         check("link.navigation", owner.linkPreviewHelp?.panel == nil)
+        if let application {
+            let previous = Set(application.windows.windows.keys)
+            application.createPrivateCommandWindow()
+            await application.waitForPrivateWindowCommands()
+            if let privateOwner = application.windows.windows.first(where: { !previous.contains($0.key) })?.value,
+               let privateWindow = privateOwner.window {
+                privateOwner.openTab(url: page)
+                _ = await committed(privateOwner, page)
+                if let privateSurface = privateOwner.pageCommandSurface() {
+                    window = privateWindow; surface = privateSurface
+                    window.makeKeyAndOrderFront(nil)
+                    let privatePoint = NSPoint(x: 100, y: surface.hostView.isFlipped ? 100 : surface.hostView.bounds.height - 100)
+                    await event(.flagsChanged, shift: false, local: privatePoint)
+                    await event(.flagsChanged, shift: true, local: privatePoint)
+                    check("link.private", privateOwner.isPrivateWindow && privateOwner.linkPreviewHelp?.panel == nil
+                        && privateOwner.linkPreviewHelp?.loading == false)
+                } else { check("link.private", false) }
+                privateWindow.close()
+            } else { check("link.private", false) }
+        }
         _ = await until(14) { !recording.isRunning }
         environment.ai.terminateNow()
     }
