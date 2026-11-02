@@ -9,6 +9,7 @@ import Observation
 
 @MainActor
 final class BrowserPaletteController<Engine: BrowserEngine> {
+    private let skillsPopover = BrowserAssistantPopover()
     private var answerTransition: Task<Void, Never>?
     private var isMovingAnswer = false
     private var answerHost: NSView?
@@ -21,6 +22,7 @@ final class BrowserPaletteController<Engine: BrowserEngine> {
     private var sourceContext: BrowserContext?
     private(set) var mode: BrowserPaletteMode = .newTab
     private var opensEmptyAddress = false
+    private var isSkillQuery: Bool { siteSearch == nil && draft.hasPrefix("/") }
     private(set) var results: [BrowserPaletteResult] = []
     private(set) var selection = BrowserPaletteSelection()
     private var candidates: [BrowserPaletteResult] = []
@@ -177,6 +179,8 @@ final class BrowserPaletteController<Engine: BrowserEngine> {
         presentationTask = Task { [weak self, weak owner] in
             let ready = await boundary.value
             guard let self, let owner, let ready, !Task.isCancelled, isPresented, presentation == ticket else { return }
+            if let profile = owner.session.activeProfileID { await owner.skillsRuntime?.refresh(profile) }
+            guard !Task.isCancelled, isPresented, presentation == ticket else { return }
             context = ready
             hasCapturedContext = true
             let sources = owner.session.paletteContext ?? ready
@@ -222,7 +226,7 @@ final class BrowserPaletteController<Engine: BrowserEngine> {
             installCandidates(owner?.session.organization.map(BrowserPaletteRanking.localCandidates) ?? [])
             loadDocument(for: ready)
             query(draft, preserveSelection: !changedProfile, userInitiated: false)
-        } else { renderResults() }
+        } else { renderResults(); renderSkills() }
     }
 
     private func loadDocument(for ready: BrowserContext) {
@@ -320,7 +324,7 @@ final class BrowserPaletteController<Engine: BrowserEngine> {
     }
 
     private func refreshSearchSuggestions() {
-        guard let owner, let profileID = sourceContext?.profileID, isPresented, siteSearch == nil else {
+        guard let owner, let profileID = sourceContext?.profileID, isPresented, siteSearch == nil, !isSkillQuery else {
             searchSuggestions.cancel(); return
         }
         searchSuggestions.update(query: draft, engine: owner.addressResolver.searchEngine, profileID: profileID,
@@ -371,7 +375,7 @@ final class BrowserPaletteController<Engine: BrowserEngine> {
         if siteSearch == nil {
             results = BrowserPaletteRanking.merging(searchSuggestions.values, into: results, engine: owner.addressResolver.searchEngine)
         }
-        if siteSearch == nil, owner.assistantEnabled,
+        if siteSearch == nil, !isSkillQuery, owner.assistantEnabled,
            (owner.settingsPreferences?.runtime.document.ai.defaultModels[.chat] != nil || BrowserAIPolicy.automaticChoice(for: .chat, statuses: owner.aiService?.statuses ?? [:]) != nil),
            BrowserPaletteQuestion.matches(draft, resolver: owner.addressResolver),
            let conversation = owner.ensureAssistant() {
@@ -384,13 +388,54 @@ final class BrowserPaletteController<Engine: BrowserEngine> {
                     detail: choice.model ?? "", section: .commands, action: .ask(choice), shortcut: index == 0 ? "⇥" : "⌥⇥")
             }, at: 0)
         }
+        if isSkillQuery {
+            results = []
+            if owner.assistantEnabled {
+                let filter = String(draft.dropFirst()).trimmingCharacters(in: .whitespacesAndNewlines)
+                let options = BrowserSkillOption.options(owner.session.activeProfileID.flatMap { owner.skillsRuntime?.documents[$0]?.skills } ?? [])
+                results = options.filter { filter.isEmpty || $0.name.localizedCaseInsensitiveContains(filter) }.map {
+                    BrowserPaletteResult(id: "skill:" + $0.id, title: $0.name, detail: uiText("Skills"), section: .commands, action: .skill($0.id))
+                }
+                if filter.isEmpty { results.append(BrowserPaletteResult(id: "new-skill", title: uiText("New Skill…"), detail: uiText("Skills"), section: .commands, action: .newSkill)) }
+            }
+        }
         if let selectedID, let index = results.firstIndex(where: { $0.id == selectedID }) { selection.select(index, count: results.count) }
         else { selection.reset() }
         renderResults()
+        renderSkills()
+    }
+
+    func reconcileSkills() { renderSkills() }
+
+    private func renderSkills() {
+        guard let owner, isPresented, isCurrent, owner.assistantEnabled, isSkillQuery else {
+            skillsPopover.close(notify: false); return
+        }
+        let profile = owner.session.activeProfileID
+        let filter = String(draft.dropFirst()).trimmingCharacters(in: .whitespacesAndNewlines)
+        let palette = BrowserAssistantPalette(theme: owner.windowShell.theme, appearance: owner.window?.effectiveAppearance ?? NSApp.effectiveAppearance)
+        let content = BrowserAssistantSkillSourceMenu(runtime: owner.skillsRuntime, profile: profile, filter: filter, width: 320, choose: { [weak self, weak owner] option in
+            guard let self, let owner, isPresented, isCurrent, owner.assistantEnabled, owner.session.activeProfileID == profile else { return }
+            dismiss(returnFocus: false)
+            Task { await owner.prefillSkill(option) }
+        }, create: { [weak self, weak owner] in self?.openSkillEditor(owner, profile: profile, skill: nil) },
+        edit: { [weak self, weak owner] skill in self?.openSkillEditor(owner, profile: profile, skill: skill) })
+        skillsPopover.show(from: view.input, placement: .below(maxWidth: 320),
+            content: AnyView(content.environment(\.assistantPalette, palette)), palette: palette,
+            reduced: OrbitMotionPreferences.prefersReducedMotion, forwardTyping: true)
+    }
+
+    private func openSkillEditor(_ owner: BrowserWindowController<Engine>?, profile: ProfileID?, skill: BrowserAISkill?) {
+        guard let owner, isPresented, isCurrent, owner.assistantEnabled, owner.session.activeProfileID == profile else { return }
+        dismiss(returnFocus: false)
+        owner.skillDraft.editing = skill
+        owner.skillDraft.editorRequested = true
+        if owner.assistantHost == nil { owner.toggleAssistant() }
     }
 
     private func renderResults() {
         guard let owner, let registry else { return }
+        if isSkillQuery { view.render([], selected: 0); return }
         var icons: [String: NSImage] = [:]
         let profileID = sourceContext?.profileID
         let historyIcons = Dictionary(history.compactMap { item -> (String, URL)? in
@@ -464,6 +509,21 @@ final class BrowserPaletteController<Engine: BrowserEngine> {
     func accept(modifiers: NSEvent.ModifierFlags = []) {
         if modifiers.contains(.command), answerHost != nil { continueAnswer(); return }
         guard isPresented, isCurrent, acceptTask == nil, results.indices.contains(selection.index), let owner else { return }
+        if case .newSkill = results[selection.index].action {
+            guard owner.assistantEnabled else { return }
+            dismiss(returnFocus: false)
+            if owner.assistantHost == nil { owner.toggleAssistant() }
+            owner.skillDraft.editorRequested = true
+            return
+        }
+        if case .skill = results[selection.index].action {
+            let id = String(results[selection.index].id.dropFirst(6))
+            let options = BrowserSkillOption.options(owner.session.activeProfileID.flatMap { owner.skillsRuntime?.documents[$0]?.skills } ?? [])
+            guard owner.assistantEnabled, let option = options.first(where: { $0.id == id }) else { return }
+            dismiss(returnFocus: false)
+            Task { await owner.prefillSkill(option) }
+            return
+        }
         if case .ask(let choice) = results[selection.index].action {
             if modifiers.isEmpty, !selectionWasMoved, let search = results.firstIndex(where: { $0.id == "search" }) {
                 selection.select(search, count: results.count)
@@ -505,7 +565,7 @@ final class BrowserPaletteController<Engine: BrowserEngine> {
                 action = .navigate(url)
             } else { action = result.action }
             switch action {
-            case .ask: return
+            case .ask, .skill, .newSkill: return
             case .navigate(let url):
                 owner.hideLibrary(focus: false)
                 let accepted = owner.session.navigateFromPalette(from: context, newTab: newTab) { [weak owner] surface in
@@ -590,6 +650,7 @@ final class BrowserPaletteController<Engine: BrowserEngine> {
     }
 
     func dismiss(returnFocus: Bool = true) {
+        skillsPopover.close(notify: false, restoreFocus: false)
         answerTransition?.cancel()
         answerTransition = nil
         isMovingAnswer = false

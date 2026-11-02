@@ -306,8 +306,9 @@ extension OrbitSmokeDriver {
                 responder.doCommand(by: NSSelectorFromString(selector))
                 handled = true
             }
-        case "gesture", "native-gesture":
+        case "gesture", "native-gesture", "native-context-menu":
             if let points = command["points"] as? [[Double]], points.count >= 2,
+               (kind != "native-context-menu" || points.count == 2),
                points.allSatisfy({ $0.count == 2 }) {
                 var pointerModifiers: NSEvent.ModifierFlags = []
                 for flag in command["modifiers"] as? [String] ?? [] {
@@ -318,18 +319,31 @@ extension OrbitSmokeDriver {
                 }
                 var events: [NSEvent] = []
                 for (index, point) in points.enumerated() {
-                    let type: NSEvent.EventType = index == 0 ? .leftMouseDown :
-                        (index == points.count - 1 ? .leftMouseUp : .leftMouseDragged)
+                    let type: NSEvent.EventType = kind == "native-context-menu"
+                        ? (index == 0 ? .rightMouseDown : .rightMouseUp)
+                        : (index == 0 ? .leftMouseDown : (index == points.count - 1 ? .leftMouseUp : .leftMouseDragged))
                     if let event = NSEvent.mouseEvent(with: type, location: NSPoint(x: point[0], y: point[1]),
                         modifierFlags: pointerModifiers, timestamp: ProcessInfo.processInfo.systemUptime,
                         windowNumber: window.windowNumber, context: nil, eventNumber: index,
-                        clickCount: 1, pressure: type == .leftMouseUp ? 0 : 1) {
+                        clickCount: 1, pressure: type == .leftMouseUp || type == .rightMouseUp ? 0 : 1) {
                         events.append(event)
                     }
                 }
                 if events.count == points.count {
                     // Tracking controls consume the queued drag/up from their own nested event loop.
-                    if kind == "native-gesture" {
+                    if kind == "native-gesture" || kind == "native-context-menu" {
+                        let keys = command["keys"] as? [String] ?? []
+                        guard keys.count <= 3, keys.isEmpty || kind == "native-context-menu" else { return ["ok": false] }
+                        let characters = ["down": "\u{F701}", "return": "\r", "escape": "\u{1B}"]
+                        for name in keys {
+                            guard let key = characters[name],
+                                  let layout = BrowserGlobalQuickWindowShortcut.layoutEvent(for: .init(key: key, modifiers: [])),
+                                  let event = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [],
+                                      timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
+                                      context: nil, characters: key, charactersIgnoringModifiers: key,
+                                      isARepeat: false, keyCode: layout.keyCode) else { return ["ok": false] }
+                            events.append(event)
+                        }
                         for event in events { NSApp.postEvent(event, atStart: false) }
                     } else {
                         for event in events.dropFirst() { NSApp.postEvent(event, atStart: false) }

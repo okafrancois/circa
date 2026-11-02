@@ -47,6 +47,13 @@ struct BrowserAssistantView: View {
     let scopes: [String: [BrowserAIContextSource]]
     var currentTabID: UUID? = nil
     let enabled: Bool
+    var skillSync: BrowserSyncRuntime? = nil
+    var skillRuntime: BrowserSkillsRuntime? = nil
+    var skillProfile: ProfileID? = nil
+    var skillDraft = BrowserSkillDraft()
+    var skillsOwnerValid: () -> Bool = { false }
+    var removeSkillContext: (UUID) -> Void = { _ in }
+    var useSkill: (BrowserSkillOption) async -> Void = { _ in }
     var palette = BrowserAssistantPalette(theme: .default, appearance: NSAppearance(named: .aqua)!)
     var favicons: [UUID: NSImage] = [:]
     var citation: (BrowserAICitation) async -> Bool
@@ -55,6 +62,12 @@ struct BrowserAssistantView: View {
     @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
     @FocusState private var composing: Bool
     @State private var draft = ""
+    @State private var isSkillDraft = false
+    @State private var skipComposerTrigger = false
+    @State private var skillsPresented = false
+    @State private var skillEditor = false
+    @State private var editingSkill: BrowserAISkill?
+    @State private var expectedSkills: BrowserAISkillDocument?
     @State private var chips = BrowserAssistantContextChips()
     @State private var leaving: Set<UUID> = []
     @State private var contextPickerPresented = false
@@ -98,7 +111,17 @@ struct BrowserAssistantView: View {
         .task {
             await Task.yield()
             composing = true
+            if !skillDraft.text.isEmpty { applySkillDraft() }
         }
+        .task(id: skillProfile) { if let skillProfile { await skillRuntime?.refresh(skillProfile) } }
+        .onChange(of: skillDraft.revokeRevision) { _, _ in skillsPresented = false; skillEditor = false; draft = "" }
+        .onChange(of: skillDraft.editorRequested, initial: true) { _, requested in
+            if requested { Task { if let skillProfile { await skillRuntime?.refresh(skillProfile) }; openSkillEditor(skillDraft.editing); skillDraft.editing = nil; skillDraft.editorRequested = false } }
+        }
+        .onChange(of: skillDraft.revision) { _, _ in applySkillDraft() }
+        .onChange(of: enabled) { _, value in if !value { skillsPresented = false; skillEditor = false; draft = "" } }
+        .onChange(of: sources) { _, _ in skillsPresented = false; skillEditor = false }
+        .onChange(of: skillProfile) { _, _ in skillsPresented = false; skillEditor = false; draft = "" }
         .onChange(of: hasContextChoices) { _, available in
             if !available { contextPickerPresented = false }
         }
@@ -245,8 +268,12 @@ struct BrowserAssistantView: View {
                 .padding(.horizontal, 4).focused($composing).onSubmit(send)
                 .accessibilityLabel(uiText("Ask a question")).accessibilityIdentifier("assistant-composer")
                 .onChange(of: draft) { old, new in
+                    if skipComposerTrigger { skipComposerTrigger = false; return }
+                    if new.isEmpty || new == "/" { isSkillDraft = false }
+                    skillsPresented = enabled && !isSkillDraft && new.hasPrefix("/")
                     if hasContextChoices && new.count > old.count && new.hasSuffix("@") { contextPickerPresented = true }
                 }
+            if let notice = skillDraft.notice { Text(notice).font(.system(size: 12)).foregroundStyle(palette.secondary.swiftUI).padding(4) }
             HStack(spacing: 6) {
                 Button { contextPickerPresented.toggle() } label: {
                     OrbitIcon.contextSymbol.font(.system(size: 14)).foregroundStyle(palette.secondary.swiftUI)
@@ -277,6 +304,18 @@ struct BrowserAssistantView: View {
         }
         .shadow(color: palette.isDark ? .clear : Color(red: 20.0 / 255, green: 19.0 / 255, blue: 23.0 / 255, opacity: 0.06), radius: 1.5, y: 1)
         .onGeometryChange(for: CGFloat.self, of: { $0.size.width }) { composerWidth = $0 }
+        .assistantPopover(isPresented: $skillsPresented, placement: .above(maxWidth: 320), forwardTyping: true) {
+            BrowserAssistantSkillsMenu(options: skillOptions, width: min(320, composerWidth), choose: { option in
+                skillsPresented = false
+                Task { await useSkill(option) }
+            }, create: { openSkillEditor(nil) }, edit: { openSkillEditor($0) })
+        }
+        .sheet(isPresented: $skillEditor) {
+            if let runtime = skillRuntime, let expected = expectedSkills {
+                BrowserAssistantSkillEditor(runtime: runtime, expected: expected, original: editingSkill, sync: skillSync,
+                    valid: { enabled && skillProfile == expected.profileID && skillsOwnerValid() }, dismiss: { skillEditor = false })
+            }
+        }
         .assistantPopover(isPresented: $contextPickerPresented, placement: .above(maxWidth: 288)) {
             BrowserAssistantContextPicker(sources: sources, scopes: scopes, selected: conversation.selectedSources,
                                           currentTabID: currentTabID, favicons: favicons,
@@ -288,6 +327,27 @@ struct BrowserAssistantView: View {
         }
     }
 
+    private func applySkillDraft() {
+        isSkillDraft = true
+        skipComposerTrigger = draft != skillDraft.text
+        skillsPresented = false; contextPickerPresented = false; modelPickerPresented = false
+        draft = skillDraft.text
+        composing = true
+    }
+    private var skillOptions: [BrowserSkillOption] {
+        let all = BrowserSkillOption.options(skillProfile.flatMap { skillRuntime?.documents[$0]?.skills } ?? [])
+        let filter = draft.hasPrefix("/") ? String(draft.dropFirst()).trimmingCharacters(in: .whitespacesAndNewlines) : ""
+        return filter.isEmpty ? all : all.filter { $0.name.localizedCaseInsensitiveContains(filter) }
+    }
+    private func openSkillEditor(_ skill: BrowserAISkill?) {
+        guard enabled, let profile = skillProfile, let document = skillRuntime?.documents[profile] else { return }
+        if let skill, !document.skills.contains(skill) {
+            skillDraft.notice = uiText("This Skill changed. Open the menu again.")
+            skillsPresented = false
+            return
+        }
+        expectedSkills = document; editingSkill = skill; skillsPresented = false; skillEditor = true
+    }
     private var usageHelp: String {
         currentUsage?.windows.map { BrowserSettingsAIText.meter($0, limitReached: currentUsage?.limitReached == true) }.joined(separator: " · ") ?? ""
     }
@@ -297,7 +357,7 @@ struct BrowserAssistantView: View {
         let hidden = item.leaving && leaving.contains(source.id)
         return HStack(spacing: 6) {
             BrowserAssistantFavicon(image: favicons[source.id])
-            Text(source.id == currentTabID ? uiText("This tab") : source.title).lineLimit(1).truncationMode(.tail)
+            Text(source.id == skillDraft.selectionID ? uiText("Selection") : source.id == currentTabID ? uiText("This tab") : source.title).lineLimit(1).truncationMode(.tail)
             Button { remove(source) } label: {
                 OrbitIcon.view(sfName: "xmark", pointSize: 12).font(.system(size: 10)).foregroundStyle(palette.secondary.swiftUI)
                     .frame(width: 20, height: 20)
@@ -314,6 +374,7 @@ struct BrowserAssistantView: View {
 
     /// The source leaves the conversation before any animation starts; only a detached snapshot fades.
     private func remove(_ source: BrowserAIContextSource) {
+        removeSkillContext(source.id)
         chips.revoke(source, from: conversation)
         withAnimation(contextRemoval, completionCriteria: .logicallyComplete) {
             _ = leaving.insert(source.id)
@@ -338,8 +399,8 @@ struct BrowserAssistantView: View {
     }
 
     private func send() {
-        guard enabled, !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-        if conversation.send(draft) { draft = "" }
+        guard !skillsPresented, enabled, (!draft.hasPrefix("/") || isSkillDraft), !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        if conversation.send(draft) { skillDraft.text = ""; draft = "" }
     }
 
     private func handleKey(_ event: NSEvent) -> Bool {

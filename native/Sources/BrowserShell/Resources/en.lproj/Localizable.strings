@@ -1938,3 +1938,47 @@
 "Delete Live Folder" = "Delete Live Folder";
 
 "GitHub" = "GitHub";
+
+"Compare tabs" = "Compare tabs";
+
+"Compare the selected tabs." = "Compare the selected tabs.";
+
+"Could not save Skill. Check the fields and try again." = "Could not save Skill. Check the fields and try again.";
+
+"Create Skill" = "Create Skill";
+
+"Draft a reply" = "Draft a reply";
+
+"Draft a reply to the selected text." = "Draft a reply to the selected text.";
+
+"Edit Skill" = "Edit Skill";
+
+"Edit Skill…" = "Edit Skill…";
+
+"Extract table to CSV" = "Extract table to CSV";
+
+"Extract the table as CSV in your answer." = "Extract the table as CSV in your answer.";
+
+"New Skill" = "New Skill";
+
+"New Skill…" = "New Skill…";
+
+"Selected tabs" = "Selected tabs";
+
+"Selection" = "Selection";
+
+"Skills" = "Skills";
+
+"Summarize this tab." = "Summarize this tab.";
+
+"What should it do?" = "What should it do?";
+
+"Works on" = "Works on";
+
+"Select visible page text to use this Skill." = "Select visible page text to use this Skill.";
+
+"@ tabs" = "@ tabs";
+
+"This Skill changed. Open the menu again." = "This Skill changed. Open the menu again.";
+
+"Skills changed. Reopen the editor and try again." = "Skills changed. Reopen the editor and try again.";

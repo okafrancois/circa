@@ -65,6 +65,17 @@ public actor BrowserSyncWorker {
         try persist()
     }
     private func project(_ snapshot: Snapshot) throws -> BrowserSyncProjection {
+        let profiles = Set(snapshot.session.profiles.map(\.id))
+        let supplied = Set(snapshot.skills.map(\.profileID))
+        // Omitted documents are unknown to a legacy consumer, rather than local deletions.
+        // An explicitly supplied empty document still owns its profile's deletion intent.
+        if !profiles.isSubset(of: supplied), state.replica.visible.keys.contains(where: { $0.hasPrefix("skill/") }) {
+            let visible = try BrowserSyncMapping.materialize(state.replica.visible, local: snapshot.session,
+                settings: snapshot.settings, boosts: snapshot.boosts, skills: snapshot.skills)
+            let inherited = visible.skills.filter { profiles.contains($0.profileID) && !supplied.contains($0.profileID) }
+            return try BrowserSyncMapping.project(session: snapshot.session, settings: snapshot.settings,
+                boosts: snapshot.boosts, skills: snapshot.skills + inherited)
+        }
         if let cache = projectionCache, cache.0 == snapshot { return cache.1 }
         let projection = try BrowserSyncMapping.project(session: snapshot.session, settings: snapshot.settings, boosts: snapshot.boosts, skills: snapshot.skills)
         projectionCache = (snapshot, projection)

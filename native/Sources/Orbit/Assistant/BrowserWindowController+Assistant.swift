@@ -10,6 +10,7 @@ extension BrowserWindowController {
         reconcileAssistant()
         if let aiConversation { return aiConversation }
         aiProfileID = session.activeProfileID
+        Task { [weak self] in guard let self, let profile = session.activeProfileID else { return }; await skillsRuntime?.refresh(profile) }
         let choice = settingsPreferences?.runtime.document.ai.defaultModels[.chat]
             ?? BrowserAIPolicy.automaticChoice(for: .chat, statuses: aiService.statuses)
             ?? BrowserAIModelChoice(provider: .codex)
@@ -25,6 +26,7 @@ extension BrowserWindowController {
                       surface.documentGeneration == source.revision, let reader = surface as? any BrowserAIPageReading else {
                     throw BrowserEngineError.unsupportedOperation
                 }
+                if let selection = self.skillSelection, selection.source == source { return selection.text }
                 return try await reader.readAIPage(revision: source.revision, isCurrent: { [weak self, weak surface] in
                     guard let self, let surface else { return false }
                     return self.assistantSources.contains(source) && self.aiConversation?.selectedSources.contains(source) == true
@@ -47,19 +49,26 @@ extension BrowserWindowController {
         }
     }
     func reconcileAssistant() {
+        palette.reconcileSkills()
         linkPreviewHelp?.reconcile()
         todayTidy.reconcile()
         tidyHelpers.revokeStaleRequests()
         writingHelp?.reconcile()
         reconcileFindAnswer()
         if aiConversation != nil, aiProfileID != session.activeProfileID {
+            skillSelection = nil; skillDraft.selectionID = nil; skillDraft.text = ""; skillDraft.revokeRevision += 1
             aiConversation?.close(); aiConversation = nil; closeAssistant()
         }
         guard let conversation = aiConversation else { return }
         if conversation.isRunning, let status = aiService?.statuses[conversation.choice.provider], !status.state.isReady { conversation.stop() }
         let allowed = assistantSources
         let stale = conversation.selectedSources.filter { !allowed.contains($0) }
-        if !assistantEnabled || !stale.isEmpty { conversation.stop() }
+        if !assistantEnabled || skillSelection.map({ !allowed.contains($0.source) }) == true {
+            skillSelection = nil; skillDraft.selectionID = nil; skillDraft.text = ""; skillDraft.revision += 1
+        }
+        if !assistantEnabled || !stale.isEmpty {
+            conversation.stop(); skillSelection = nil; skillDraft.selectionID = nil; skillDraft.text = ""; skillDraft.revokeRevision += 1
+        }
         for source in stale { conversation.removeSource(source.id) }
         if let host = assistantHost as? NSHostingView<BrowserAssistantView> { host.rootView = assistantView(conversation) }
     }
@@ -114,9 +123,21 @@ extension BrowserWindowController {
         host.rootView = assistantView(conversation)
     }
     private func assistantView(_ conversation: BrowserAIConversation) -> BrowserAssistantView {
+        let profile = session.activeProfileID
+        let sources = assistantSources
         return BrowserAssistantView(conversation: conversation,
             choices: BrowserAIPolicy.choices(for: .chat, statuses: aiService?.statuses ?? [:]),
             statuses: aiService?.statuses ?? [:], sources: assistantSources, usages: aiService?.statuses.compactMapValues { $0.state.usage } ?? [:], scopes: assistantScopes, currentTabID: session.organization?.selectedTab?.id.rawValue, enabled: assistantEnabled,
+            skillSync: skillsSyncRuntime, skillRuntime: skillsRuntime, skillProfile: session.activeProfileID, skillDraft: skillDraft,
+            skillsOwnerValid: { [weak self] in
+                guard let self else { return false }
+                return assistantEnabled && session.activeProfileID == profile && assistantSources == sources && aiConversation === conversation
+            },
+            removeSkillContext: { [weak self] id in
+                guard let self, skillSelection?.source.id == id else { return }
+                skillSelection = nil; skillDraft.selectionID = nil
+            },
+            useSkill: { [weak self] in await self?.prefillSkill($0) },
             palette: BrowserAssistantPalette(theme: windowShell.theme, appearance: window?.effectiveAppearance ?? NSApp.effectiveAppearance),
             favicons: assistantFavicons, citation: { [weak self] in await self?.showAssistantCitation($0) ?? false }, close: { [weak self] in self?.closeAssistant() })
     }

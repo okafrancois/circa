@@ -76,6 +76,7 @@ public actor BrowserAISkillStore {
     public func snapshot() -> BrowserAISkillDocument { document }
 
     public func save(_ skill: BrowserAISkill, expected: BrowserAISkillDocument) throws {
+        try Task.checkCancellation()
         guard document == expected else { throw BrowserAISkillError.staleRevision }
         try skill.validate()
         var next = document
@@ -85,6 +86,7 @@ public actor BrowserAISkillStore {
     }
 
     public func remove(_ id: UUID, expected: BrowserAISkillDocument) throws {
+        try Task.checkCancellation()
         guard document == expected, document.skills.contains(where: { $0.id == id }) else { throw BrowserAISkillError.staleRevision }
         var next = document; next.skills.removeAll { $0.id == id }; try publish(next)
     }

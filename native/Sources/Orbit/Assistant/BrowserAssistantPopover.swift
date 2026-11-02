@@ -4,15 +4,16 @@ import SwiftUI
 
 extension View {
     /// Attach to the composer: the menu is placed from its frame and never leaves the dock's width.
-    func assistantPopover<Content: View>(isPresented: Binding<Bool>, placement: BrowserAssistantPopover.Placement,
+    func assistantPopover<Content: View>(isPresented: Binding<Bool>, placement: BrowserAssistantPopover.Placement, forwardTyping: Bool = false,
                                         @ViewBuilder content: () -> Content) -> some View {
-        background(AssistantPopoverAnchor(isPresented: isPresented, placement: placement, content: content()))
+        background(AssistantPopoverAnchor(isPresented: isPresented, placement: placement, forwardTyping: forwardTyping, content: content()))
     }
 }
 
 private struct AssistantPopoverAnchor<Content: View>: NSViewRepresentable {
     @Binding var isPresented: Bool
     let placement: BrowserAssistantPopover.Placement
+    let forwardTyping: Bool
     let content: Content
     @Environment(\.accessibilityReduceMotion) private var reduced
     @Environment(\.assistantPalette) private var palette
@@ -25,7 +26,7 @@ private struct AssistantPopoverAnchor<Content: View>: NSViewRepresentable {
         if isPresented {
             context.coordinator.show(from: view, placement: placement,
                                      content: AnyView(content.environment(\.assistantPalette, palette)), palette: palette,
-                                     reduced: reduced || OrbitMotionPreferences.prefersReducedMotion)
+                                     reduced: reduced || OrbitMotionPreferences.prefersReducedMotion, forwardTyping: forwardTyping)
         } else {
             context.coordinator.close(notify: false)
         }
@@ -42,13 +43,17 @@ final class BrowserAssistantPopover: NSObject, NSWindowDelegate {
     private(set) var panel: NSPanel?
     private weak var source: NSWindow?
     private weak var previousResponder: NSResponder?
-    private var host: NSHostingView<AnyView>?
+    private var host: AssistantMenuHost?
+    private weak var anchor: NSView?
+    private var placement = Placement.above(maxWidth: 320)
+    private var trackingMenu = false
     private var monitor: Any?
     private var observers: [NSObjectProtocol] = []
 
     enum Placement: Equatable {
         /// Above the composer, leading aligned, at most this wide.
         case above(maxWidth: CGFloat)
+        case below(maxWidth: CGFloat)
         /// Over the composer, spanning its width and leaving its toolbar visible.
         case over(bottomInset: CGFloat)
         var trailingOrigin: Bool { if case .over = self { true } else { false } }
@@ -64,6 +69,9 @@ final class BrowserAssistantPopover: NSObject, NSWindowDelegate {
         case .above(let maxWidth):
             y = composer.maxY + 6
             width = min(size.width, maxWidth, available)
+        case .below(let maxWidth):
+            y = composer.minY - size.height - 6
+            width = min(size.width, maxWidth, available)
         case .over(let bottomInset):
             y = composer.minY + bottomInset
             width = available
@@ -73,11 +81,11 @@ final class BrowserAssistantPopover: NSObject, NSWindowDelegate {
         return NSRect(x: minX, y: origin, width: width, height: min(size.height, max(1, limit - origin)))
     }
 
-    func show(from anchor: NSView, placement: Placement, content: AnyView, palette: BrowserAssistantPalette, reduced: Bool) {
-        if let host { host.rootView = content; return }
+    func show(from anchor: NSView, placement: Placement, content: AnyView, palette: BrowserAssistantPalette, reduced: Bool, forwardTyping: Bool = false) {
+        if let host { host.rootView = content; resizeToContent(); return }
         guard let source = anchor.window, source.isVisible,
               let screen = source.screen else { return }
-        let host = NSHostingView(rootView: content)
+        let host = AssistantMenuHost(rootView: content)
         host.sizingOptions = [.intrinsicContentSize]
         let anchorFrame = source.convertToScreen(anchor.convert(anchor.bounds, to: nil))
         let frame = Self.frame(composer: anchorFrame, size: host.fittingSize, placement: placement,
@@ -121,9 +129,21 @@ final class BrowserAssistantPopover: NSObject, NSWindowDelegate {
         background.addSubview(host)
         panel.contentView = background
         self.source = source
+        self.anchor = anchor
+        self.placement = placement
+        host.sizeChanged = { [weak self] in self?.resizeToContent() }
         previousResponder = source.firstResponder
         self.host = host
         self.panel = panel
+        if forwardTyping {
+            panel.onTyping = { [weak self] event in
+                guard event.modifierFlags.intersection([.command, .control, .option]).isEmpty,
+                      let self, let source = self.source, source.isVisible,
+                      let responder = self.previousResponder, source.firstResponder === responder else { return false }
+                responder.keyDown(with: event)
+                return true
+            }
+        }
         source.addChildWindow(panel, ordered: .above)
         panel.makeKeyAndOrderFront(nil)
         animate(background, panelFrame: frame, trailing: placement.trailingOrigin, reduced: reduced)
@@ -137,6 +157,12 @@ final class BrowserAssistantPopover: NSObject, NSWindowDelegate {
             return event
         }
         let center = NotificationCenter.default
+        observers.append(center.addObserver(forName: NSMenu.didBeginTrackingNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.trackingMenu = true }
+        })
+        observers.append(center.addObserver(forName: NSMenu.didEndTrackingNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.trackingMenu = false }
+        })
         for name in [NSWindow.willCloseNotification, NSWindow.willEnterFullScreenNotification,
                      NSWindow.willExitFullScreenNotification, NSWindow.didResizeNotification,
                      NSWindow.didMoveNotification, NSWindow.willBeginSheetNotification] {
@@ -147,6 +173,15 @@ final class BrowserAssistantPopover: NSObject, NSWindowDelegate {
         observers.append(center.addObserver(forName: NSApplication.didResignActiveNotification, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.close(restoreFocus: false) }
         })
+    }
+
+    private func resizeToContent() {
+        guard let host, let panel, let anchor, let source, source.isVisible, let screen = source.screen else { return }
+        host.layoutSubtreeIfNeeded()
+        let composer = source.convertToScreen(anchor.convert(anchor.bounds, to: nil))
+        let frame = Self.frame(composer: composer, size: host.fittingSize, placement: placement,
+                               top: source.frame.maxY - 18, visible: screen.visibleFrame)
+        if frame != panel.frame { panel.setFrame(frame, display: true) }
     }
 
     private func animate(_ view: NSView, panelFrame: NSRect, trailing: Bool, reduced: Bool) {
@@ -175,6 +210,7 @@ final class BrowserAssistantPopover: NSObject, NSWindowDelegate {
         guard let panel else { return }
         let restoreKey = panel.isKeyWindow
         self.panel = nil
+        trackingMenu = false
         if let monitor { NSEvent.removeMonitor(monitor) }
         monitor = nil
         for observer in observers { NotificationCenter.default.removeObserver(observer) }
@@ -182,6 +218,7 @@ final class BrowserAssistantPopover: NSObject, NSWindowDelegate {
         source?.removeChildWindow(panel)
         panel.close()
         host = nil
+        anchor = nil
         if restoreFocus, restoreKey, source?.isVisible == true {
             source?.makeKey()
             if let previousResponder { source?.makeFirstResponder(previousResponder) }
@@ -189,18 +226,42 @@ final class BrowserAssistantPopover: NSObject, NSWindowDelegate {
         previousResponder = nil
         if notify { onDismiss?() }
     }
-    func windowDidResignKey(_ notification: Notification) { close(restoreFocus: false) }
+    func windowDidResignKey(_ notification: Notification) {
+        let expected = panel
+        DispatchQueue.main.async { [weak self, weak expected] in
+            guard let self, let expected, panel === expected, !trackingMenu else { return }
+            close(restoreFocus: false)
+        }
+    }
 }
 
 @MainActor
 private final class AssistantMenuPanel: NSPanel {
     var onCancel: (() -> Void)?
+    var onTyping: ((NSEvent) -> Bool)?
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
     override func cancelOperation(_ sender: Any?) { onCancel?() }
     /// A focused search field must not consume Escape before the menu sees it.
     override func sendEvent(_ event: NSEvent) {
         if event.type == .keyDown, event.keyCode == BrowserAssistantKey.escape { onCancel?(); return }
+        if event.type == .keyDown, onTyping?(event) == true { return }
         super.sendEvent(event)
+    }
+}
+
+@MainActor
+private final class AssistantMenuHost: NSHostingView<AnyView> {
+    var sizeChanged: (() -> Void)?
+    private var scheduled = false
+    override func invalidateIntrinsicContentSize() {
+        super.invalidateIntrinsicContentSize()
+        guard !scheduled else { return }
+        scheduled = true
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            scheduled = false
+            sizeChanged?()
+        }
     }
 }

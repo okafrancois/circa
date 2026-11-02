@@ -44,4 +44,60 @@ extension ChromiumSurface: BrowserAIPageReading {
         guard let result = reply["result"] as? [String: Any], let text = result["value"] as? String else { throw BrowserEngineError.unsupportedOperation }
         return text
     }
+    public func readAISelection(revision: UInt64, isCurrent: @escaping @MainActor () -> Bool) async throws -> String {
+        func call(_ method: String, _ params: [String: Any] = [:]) async throws -> [String: Any] {
+            guard isCurrent(), documentGeneration == revision, !isDisposed else { throw BrowserEngineError.documentChanged }
+            let data = try JSONSerialization.data(withJSONObject: params)
+            let (ok, reply) = await devToolsCall(method, params: String(decoding: data, as: UTF8.self))
+            guard ok, isCurrent(), documentGeneration == revision, !isDisposed,
+                  let json = try JSONSerialization.jsonObject(with: reply) as? [String: Any] else { throw BrowserEngineError.documentChanged }
+            return json
+        }
+        let tree = try await call("Page.getFrameTree")
+        guard let node = tree["frameTree"] as? [String: Any], let frame = node["frame"] as? [String: Any], let id = frame["id"] as? String else { throw BrowserEngineError.unsupportedOperation }
+        let world = try await call("Page.createIsolatedWorld", ["frameId": id, "worldName": "OrbitAssistantData"])
+        guard let context = world["executionContextId"] as? Int else { throw BrowserEngineError.unsupportedOperation }
+        let expression = """
+        (() => {
+          const forbidden='input,textarea,select,button,form,iframe,frame,object,embed,script,style,noscript,[hidden],[aria-hidden="true"],[contenteditable]';
+          const safe=n=>{
+            const e=n.nodeType===1?n:n.parentElement;
+            if(!e||!e.getClientRects().length)return false;
+            let depth=0;
+            for(let a=e;a;a=a.parentElement){
+              if(++depth>128||a.isContentEditable||a.matches(forbidden))return false;
+              const c=getComputedStyle(a);
+              if(c.display==='none'||c.visibility!=='visible'||Number(c.opacity)===0)return false;
+            }
+            return true;
+          };
+          if(document.designMode.toLowerCase()==='on')return '';
+          if(document.activeElement&&!safe(document.activeElement))return '';
+          const selection=getSelection();
+          if(!selection||selection.rangeCount!==1||selection.isCollapsed)return '';
+          const range=selection.getRangeAt(0),root=range.commonAncestorContainer;
+          if(root.getRootNode()!==document||!safe(range.startContainer)||!safe(range.endContainer))return '';
+          let output='',count=0;
+          const append=n=>{
+            if(!range.intersectsNode(n))return true;
+            if(!safe(n))return false;
+            const start=n===range.startContainer?range.startOffset:0;
+            const end=n===range.endContainer?range.endOffset:n.length;
+            const length=Math.min(Math.max(0,end-start),12000-output.length);
+            if(length>0)output+=n.substringData(start,length);
+            return true;
+          };
+          if(root.nodeType===3){if(!append(root))return ''}
+          else {
+            const walker=document.createTreeWalker(root,NodeFilter.SHOW_TEXT);
+            let node;
+            while((node=walker.nextNode())){if(++count>50000||!append(node))return ''}
+          }
+          return output;
+        })()
+        """
+        let reply = try await call("Runtime.evaluate", ["contextId": context, "expression": expression, "returnByValue": true])
+        guard let result = reply["result"] as? [String: Any], let text = result["value"] as? String else { throw BrowserEngineError.unsupportedOperation }
+        return text
+    }
 }

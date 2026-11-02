@@ -66,4 +66,49 @@ struct BrowserAISkillTests {
         #expect(deleted.skills[0].skills.isEmpty)
         #expect(b.records["skill/" + skill.id.uuidString]?.deleted == true)
     }
+    @Test func workerRecapturesLocalEditsAndPreservesUnknownSkillRecords() async throws {
+        let fixture = BrowserSyncTests(), session = BrowserSyncTests().document()
+        let root = URL(fileURLWithPath: "/private/tmp/OrbitSkillWorker-" + UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let a = BrowserSyncWorker(state: .init(), destination: root.appendingPathComponent("a.json"))
+        let b = BrowserSyncWorker(state: .init(), destination: root.appendingPathComponent("b.json"))
+        try await a.admit("synthetic"); try await b.admit("synthetic")
+        let store = try BrowserAISkillStore(profileID: fixture.profile)
+        var skill = try BrowserAISkill(name: "Summary", prompt: "Summarize this tab.")
+        try await store.save(skill, expected: store.snapshot())
+        func snapshot(_ document: BrowserAISkillDocument) -> BrowserSyncWorker.Snapshot {
+            .init(session: session, settings: .init(), skills: [document])
+        }
+        let outgoing = try await a.capture(snapshot(await store.snapshot()))
+        try await b.merge(outgoing, identity: "synthetic")
+        // A caller unaware of Skills must not delete records it has never projected.
+        let oldAPI = try await b.prepare(.init(session: session, settings: .init()))
+        #expect(oldAPI.value.skills.first?.skills == [skill])
+        try await b.acknowledge(oldAPI.projection)
+        let repeated = try await b.prepare(.init(session: session, settings: .init()))
+        #expect(repeated.value.skills.first?.skills == [skill])
+        try await b.acknowledge(repeated.projection)
+        let legacyCapture = try await b.capture(.init(session: session, settings: .init()))
+        #expect(legacyCapture.first { $0.id == "skill/" + skill.id.uuidString }?.deleted == false)
+        let original = await store.snapshot()
+        skill.prompt = "Write three points."
+        try await store.save(skill, expected: original)
+        // The post-network capture sees the edit and cannot reuse the old projection cache.
+        let edited = try await a.prepare(snapshot(await store.snapshot()))
+        #expect(edited.value.skills.first?.skills.first?.prompt == skill.prompt)
+        await #expect(throws: BrowserSyncError.localChange) {
+            try await store.applySync(oldAPI.value.skills[0], expected: original)
+        }
+        let latest = try await a.capture(snapshot(await store.snapshot()))
+        try await b.merge(latest, identity: "synthetic")
+        let received = try await b.prepare(snapshot(oldAPI.value.skills[0]))
+        #expect(received.value.skills.first?.skills.first?.prompt == skill.prompt)
+        try await b.acknowledge(received.projection)
+        try await store.remove(skill.id, expected: store.snapshot())
+        let deleted = try await a.capture(snapshot(await store.snapshot()))
+        try await b.merge(deleted, identity: "synthetic")
+        let tombstone = try await b.prepare(snapshot(received.value.skills[0]))
+        #expect(tombstone.value.skills.first?.skills.isEmpty == true)
+    }
 }

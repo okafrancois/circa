@@ -112,6 +112,10 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
     let archive = BrowserArchivePresentation()
     let library = BrowserLibraryPresentation()
     weak var liveFoldersRuntime: BrowserLiveFoldersRuntime?
+    var skillsSyncRuntime: BrowserSyncRuntime?
+    var skillsRuntime: BrowserSkillsRuntime?
+    var skillSelection: (source: BrowserAIContextSource, text: String)?
+    var skillDraft = BrowserSkillDraft()
     var boostsRuntime: BrowserBoostsRuntime?
     var boostEditor: BrowserBoostEditorController?
     let addressSecurityObservation = BrowserSecurityObservation()

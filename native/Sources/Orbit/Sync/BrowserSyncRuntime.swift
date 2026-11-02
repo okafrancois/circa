@@ -43,6 +43,9 @@ final class BrowserSyncRuntime: ObservableObject {
         status = .off
     }
 
+    func skillsChanged() {
+        if enabled, case .synced = status { status = .on }
+    }
     var statusText: String {
         switch status {
         case .unavailable: uiText("iCloud sync is unavailable in this build.")
@@ -200,6 +203,7 @@ final class BrowserSyncRuntime: ObservableObject {
             let store = try environment.skills.store(for: document.profileID)
             let expected = currentSkills.first { $0.profileID == document.profileID } ?? BrowserAISkillDocument(profileID: document.profileID)
             try await store.applySync(document, expected: expected)
+            await environment.skills.refresh(document.profileID)
         }
         await environment.settings.refresh()
         await environment.refreshSettingsCatalog()

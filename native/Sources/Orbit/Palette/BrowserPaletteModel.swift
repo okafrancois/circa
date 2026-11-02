@@ -3,6 +3,8 @@ import Foundation
 
 /// Result identities include the authority needed for activation, never just a URL.
 enum BrowserPaletteAction: Equatable, Sendable {
+    case skill(String)
+    case newSkill
     case ask(BrowserAIModelChoice)
     case navigate(URL)
     case tab(TabID, windowID: UUID?, spaceID: SpaceID?)
@@ -52,6 +54,7 @@ struct BrowserPaletteResult: Identifiable, Equatable, Sendable {
         case .archive: return uiText("Restore Tab")
         case .navigate: return section == .search ? uiText("Search") : uiText("Open")
         case .command: return uiText("Open")
+        case .skill, .newSkill: return uiText("Skills")
         case .ask: return uiText("Ask")
         }
     }

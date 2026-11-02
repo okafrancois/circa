@@ -4,5 +4,10 @@ import Foundation
 /// document identity on both sides of every asynchronous operation.
 @MainActor public protocol BrowserAIPageReading: AnyObject {
     func highlightAIPassage(_ passage: String, revision: UInt64, isCurrent: @escaping @MainActor () -> Bool) async throws -> Bool
+    func readAISelection(revision: UInt64, isCurrent: @escaping @MainActor () -> Bool) async throws -> String
     func readAIPage(revision: UInt64, isCurrent: @escaping @MainActor () -> Bool) async throws -> String
+}
+
+public extension BrowserAIPageReading {
+    func readAISelection(revision: UInt64, isCurrent: @escaping @MainActor () -> Bool) async throws -> String { throw BrowserEngineError.unsupportedOperation }
 }
