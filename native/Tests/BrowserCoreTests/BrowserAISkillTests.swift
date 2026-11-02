@@ -66,6 +66,44 @@ struct BrowserAISkillTests {
         #expect(deleted.skills[0].skills.isEmpty)
         #expect(b.records["skill/" + skill.id.uuidString]?.deleted == true)
     }
+    @Test func concurrentWorkerEditsAndProfileRemovalConverge() async throws {
+        let fixture = BrowserSyncTests(), session = BrowserSyncTests().document()
+        let root = URL(fileURLWithPath: "/private/tmp/OrbitSkillConflict-" + UUID().uuidString)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let a = BrowserSyncWorker(state: .init(), destination: root.appendingPathComponent("a.json"))
+        let b = BrowserSyncWorker(state: .init(), destination: root.appendingPathComponent("b.json"))
+        try await a.admit("synthetic"); try await b.admit("synthetic")
+        var left = BrowserAISkillDocument(profileID: fixture.profile)
+        left.skills = [try BrowserAISkill(name: "Summary", prompt: "Initial instructions.")]
+        func snapshot(_ document: BrowserAISkillDocument) -> BrowserSyncWorker.Snapshot {
+            .init(session: session, settings: .init(), skills: [document])
+        }
+        try await b.merge(a.capture(snapshot(left)), identity: "synthetic")
+        let initial = try await b.prepare(snapshot(left))
+        try await b.acknowledge(initial.projection)
+        var right = left
+        left.skills[0].prompt = "Left instructions."
+        right.skills[0].prompt = "Right instructions."
+        let editsA = try await a.capture(snapshot(left))
+        let editsB = try await b.capture(snapshot(right))
+        try await a.merge(editsB, identity: "synthetic")
+        try await b.merge(editsA, identity: "synthetic")
+        let resultA = try await a.prepare(snapshot(left))
+        let resultB = try await b.prepare(snapshot(right))
+        #expect(resultA.value.skills == resultB.value.skills)
+        #expect([left.skills[0].prompt, right.skills[0].prompt].contains(resultA.value.skills[0].skills[0].prompt))
+        try await a.acknowledge(resultA.projection)
+        try await b.acknowledge(resultB.projection)
+        let removed = BrowserSessionDocument(profiles: [], spaces: [], windows: [], tabs: [])
+        let deletion = try await a.capture(.init(session: removed, settings: .init()))
+        #expect(deletion.first { $0.id == "skill/" + left.skills[0].id.uuidString }?.deleted == true)
+        try await b.merge(deletion, identity: "synthetic")
+        let afterRemoval = try await b.prepare(snapshot(right))
+        #expect(afterRemoval.value.profiles.isEmpty)
+        #expect(afterRemoval.value.skills.isEmpty)
+    }
+
     @Test func workerRecapturesLocalEditsAndPreservesUnknownSkillRecords() async throws {
         let fixture = BrowserSyncTests(), session = BrowserSyncTests().document()
         let root = URL(fileURLWithPath: "/private/tmp/OrbitSkillWorker-" + UUID().uuidString)
