@@ -1,4 +1,4 @@
-# Building Orbit
+# Building Circa
 
 ## Shared Swift code
 
@@ -30,7 +30,7 @@ cmake --build native/OrbitChromium/build/public --target package_orbit_app
 
 The `ORBIT_CEF_*` variables above are local build inputs, not credentials. Their values must come from one matching engine distribution. The unsigned output retains the internal path `native/OrbitChromium/build/public/product/Orbit.app`.
 
-The product currently requires stable signing identity configuration (`ORBIT_STABLE_SIGNING_ROOT`, the certificate SHA-1) and signed packaging before normal launch. An unsigned successful build is not an installable Orbit release. Public signing/notarization and the Orbit bundle-name migration remain release work. Never bypass product admission or use ad hoc signing on an existing real profile.
+The product requires stable signing identity configuration (`ORBIT_STABLE_SIGNING_ROOT`, the certificate SHA-1) and signed packaging before normal launch. An unsigned successful build is not an installable Circa release. Published releases are signed and notarized through the [release pipeline](pipeline.md). Internal executable names, bundle identifiers and build paths retain the Orbit name. Never bypass product admission or use ad hoc signing on an existing real profile.
 
 The retained packaging scripts describe development workflows and may refer to excluded historical evidence. They are not a public installer. Do not run the retired Live/update installers. Keep engine binaries, certificates, private keys, profiles and build outputs outside version control.
 
