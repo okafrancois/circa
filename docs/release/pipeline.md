@@ -72,8 +72,10 @@
   cleanup step. It refuses local or self-hosted execution. Private files and keys
   are never included in build artifacts or source control.
 - Before switching releases, manually run `release.yml` with `hosted=true` and
-  `publish=false` against an existing version tag. This builds, signs and notarizes
-  without publishing or changing the update feed. Verify the resulting artifact.
+  `publish=false` with an existing version tag. Verification builds the selected
+  workflow ref and uses the tag only as version metadata, without publishing or
+  changing the update feed. Publishing always checks out the version tag.
+  Verify the resulting artifact.
 - Set repository variable `CIRCA_HOSTED_RELEASES=true` only after this verification.
   Future owner-pushed version tags then use GitHub's macOS runners. Without this
   variable, releases retain the existing self-hosted path. Neither release path
