@@ -517,6 +517,7 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
             if let surface { self?.surfaceDidChange(surface) }
         }
         surface.onDispose = { [weak self, weak surface] in
+            if let self, errandGuardedSurfaces.contains(key) { stopErrand(); errandGuardedSurfaces.remove(key) }
             if let surface { OrbitUnsavedInputGuard.clear(surface) }
             self?.nativeCreations.removeValue(forKey: key)
             self?.pendingNativeClosures.remove(key)
