@@ -12,6 +12,7 @@ enum BrowserDailyCommands {
             controller.toggleAssistant()
             return true
         }
+        try! registry.register(.startErrand, validate: { $0.canStartErrand }) { controller, _ in controller.prefillErrand() }
         BrowserPasswordCommands.install(in: registry)
         weak var cyclingOwner: BrowserWindowController<Engine>?
         registry.registerInputHandler("extensions") { [weak registry] controller, event in

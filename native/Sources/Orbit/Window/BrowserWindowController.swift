@@ -18,6 +18,26 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
     weak var aiService: OrbitAIService?
     var aiProfileID: ProfileID?
     var aiConversation: BrowserAIConversation?
+    var errand: BrowserAIErrand?
+    var errandFolder: FolderID?
+    var errandOwner: BrowserOrganizationSnapshot?
+    var errandTabs: Set<TabID> = []
+    var errandDraft = false
+    var errandHost: NSView?
+    var errandObservation = UUID()
+    var errandNavigationAdmission: BrowserSidebarSelectionAdmission?
+    var errandOpening: TabID?
+    var errandStarting = false
+    var errandOpeningURL: URL?
+    var errandRenderedApprovalID: UUID?
+    var errandCardSurfaceID: ObjectIdentifier?
+    var errandSummaryID = TabID()
+    var errandEpoch = UUID()
+    var errandStartAdmission: BrowserSidebarSelectionAdmission?
+    var errandStartTask: Task<Void, Never>?
+    var errandNavigationGrants: [ObjectIdentifier: BrowserErrandNavigationGrant] = [:]
+    var errandLeases: [UUID: (any BrowserAIErrandPageReading, BrowserAIErrandPage)] = [:]
+    var errandGuardedSurfaces: Set<ObjectIdentifier> = []
     var assistantHost: NSView?
     lazy var tidyHelpers = BrowserTidyHelpers(owner: self)
     var tidyDownloadPanel: NSPanel?
@@ -369,6 +389,7 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
         writingHelp?.close()
         writingHelp = nil
         cancelFindAnswer()
+        stopErrand()
         aiConversation?.close()
         tabIconPicker?.cancel()
         pinnedURLEditor?.complete(save: false)
@@ -468,6 +489,7 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
     // MARK: Input routing
 
     func recordExplicitInput() {
+        if !errandActive, let surface = session.selectedSurface { errandGuardedSurfaces.remove(ObjectIdentifier(surface)) }
         explicitInputToken = UUID()
         nativePromotion?.intent.revoke()
     }

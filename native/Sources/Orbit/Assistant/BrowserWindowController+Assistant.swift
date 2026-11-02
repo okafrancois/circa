@@ -4,6 +4,11 @@ import BrowserEngine
 import SwiftUI
 
 extension BrowserWindowController {
+    func refreshAssistantErrandPresentation() {
+        if let host = assistantHost as? NSHostingView<BrowserAssistantView>, let conversation = aiConversation {
+            host.rootView = assistantView(conversation)
+        }
+    }
     var assistantEnabled: Bool { settingsPreferences?.runtime.document.ai.isEnabled == true && !isPrivateWindow }
     func ensureAssistant() -> BrowserAIConversation? {
         guard assistantEnabled, let aiService else { return nil }
@@ -49,6 +54,7 @@ extension BrowserWindowController {
         }
     }
     func reconcileAssistant() {
+        reconcileErrand()
         if skillDraft.reconcilePermissions(settingsPreferences?.runtime.document.ai ?? .init()) {
             aiConversation?.stop()
             if let selection = skillSelection { aiConversation?.removeSource(selection.source.id) }
@@ -132,7 +138,7 @@ extension BrowserWindowController {
         let sources = assistantSources
         let invocation = skillInvocation
         return BrowserAssistantView(conversation: conversation,
-            choices: BrowserAIPolicy.choices(for: .chat, statuses: aiService?.statuses ?? [:]),
+            choices: BrowserAIPolicy.choices(for: errandDraft ? .errands : .chat, statuses: aiService?.statuses ?? [:]),
             statuses: aiService?.statuses ?? [:], sources: sources, usages: aiService?.statuses.compactMapValues { $0.state.usage } ?? [:], scopes: assistantScopes, currentTabID: session.organization?.selectedTab?.id.rawValue, enabled: assistantEnabled,
             skillSync: skillsSyncRuntime, skillRuntime: skillsRuntime, skillProfile: profile, skillDraft: skillDraft,
             skillsOwnerValid: { [weak self] in
@@ -145,7 +151,9 @@ extension BrowserWindowController {
             },
             useSkill: { [weak self] option, intent in await self?.prefillSkill(option, invocation: invocation, intent: intent) },
             palette: BrowserAssistantPalette(theme: windowShell.theme, appearance: window?.effectiveAppearance ?? NSApp.effectiveAppearance),
-            favicons: assistantFavicons, citation: { [weak self] in await self?.showAssistantCitation($0) ?? false }, close: { [weak self] in self?.closeAssistant() })
+            favicons: assistantFavicons, citation: { [weak self] in await self?.showAssistantCitation($0) ?? false }, errandSubmit: errandDraft ? { [weak self] in self?.submitErrand($0) ?? false } : nil,
+            errand: errandOwner?.profileID == session.activeProfileID && errandOwner?.spaceID == session.organization?.spaceID && assistantEnabled ? errand : nil,
+            close: { [weak self] in self?.closeAssistant() })
     }
     /// Icons the sidebar already shows for the offered tabs; nothing is fetched for the assistant.
     private var assistantFavicons: [UUID: NSImage] {
@@ -173,6 +181,7 @@ extension BrowserWindowController {
             })) ?? false
     }
     func closeAssistant() {
+        errandDraft = false
         skillDraft.cancelInvocation(); skillDraft.text = ""
         guard assistantHost != nil else { return }
         contentCard.setAssistant(nil, width: 0)

@@ -46,6 +46,19 @@ final class BrowserSidebarView: NSView, SidebarListHost {
     /// Pinned rows laid out above the separator, gap pitches included (0 when collapsed).
     var pinnedRowCount: Int { page.list.displayedLayout.pinnedSlotCount }
     let footer = SidebarFooterView()
+    let errandStopButton = NSButton(title: uiText("Stop Errand"), target: nil, action: nil)
+    var onStopErrand: (() -> Void)?
+    private var errandSummary: SidebarErrandSummary?
+    func presentErrandSummary(_ value: SidebarErrandSummary?) {
+        guard value != errandSummary else { return }
+        errandSummary = value
+        page.list.apply(makeContent(), animated: false)
+    }
+    func setErrandActive(_ active: Bool) {
+        guard errandStopButton.isHidden == active else { return }
+        errandStopButton.isHidden = !active; needsLayout = true
+    }
+    @objc private func stopErrandPressed() { onStopErrand?() }
     let recentDownloads = SidebarDownloadsView()
     private var downloadTracking: NSTrackingArea?
     let updateCard = SidebarUpdateCard()
@@ -249,6 +262,12 @@ final class BrowserSidebarView: NSView, SidebarListHost {
         for view in [navigationContainer, addressContainer, pageContainer, footer, updateCard, tooltip, privateIndicator] {
             addSubview(view)
         }
+        errandStopButton.isHidden = true
+        errandStopButton.isBordered = false
+        errandStopButton.font = BrandTextStyle.ui.font(size: 13)
+        errandStopButton.target = self; errandStopButton.action = #selector(stopErrandPressed)
+        errandStopButton.setAccessibilityIdentifier("sidebar-stop-errand")
+        addSubview(errandStopButton)
         addSubview(recentDownloads)
         privateIndicator.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
@@ -316,7 +335,7 @@ final class BrowserSidebarView: NSView, SidebarListHost {
         spaceSwipe.layoutChanged()
         let layout = page.list.displayedLayout
         geometry = OrbitSidebarGeometry.resolve(.init(
-            width: bounds.width, height: bounds.height - (showsUpdateCard ? SidebarUpdateCard.height + 8 : 0),
+            width: bounds.width, height: bounds.height - (showsUpdateCard ? SidebarUpdateCard.height + 8 : 0) - (errandStopButton.isHidden ? 0 : 36),
             favoriteCount: max(favoriteCount, favoritePreviewCount ?? 0, showsEmptyFavoritesDropZone ? 1 : 0),
             favoriteMinimumTileWidth: favoriteMinimumTileWidth,
             pinnedRowCount: layout.pinnedSlotCount, todayRowCount: layout.todaySlotCount,
@@ -363,7 +382,10 @@ final class BrowserSidebarView: NSView, SidebarListHost {
         updateCard.isHidden = !showsUpdateCard
         updateCard.frame = NSRect(x: Metrics.paddingX, y: geometry.footerFrame.minY,
             width: max(0, bounds.width - 2 * Metrics.paddingX), height: SidebarUpdateCard.height)
-        footer.frame = geometry.footerFrame.offsetBy(dx: 0, dy: showsUpdateCard ? SidebarUpdateCard.height + 8 : 0)
+        let errandHeight: CGFloat = errandStopButton.isHidden ? 0 : 36
+        updateCard.frame.origin.y += errandHeight
+        errandStopButton.frame = NSRect(x: Metrics.paddingX, y: geometry.footerFrame.minY + 2, width: min(120, bounds.width - 2 * Metrics.paddingX), height: 28)
+        footer.frame = geometry.footerFrame.offsetBy(dx: 0, dy: (showsUpdateCard ? SidebarUpdateCard.height + 8 : 0) + errandHeight)
         footer.apply(geometry)
         recentDownloads.frame = NSRect(x: 0, y: footer.frame.minY + footer.libraryButton.frame.midY - 14.5 - CGFloat(recentDownloads.items.count) * 56, width: bounds.width, height: CGFloat(recentDownloads.items.count) * 56)
         if isPrivate {
@@ -458,14 +480,25 @@ final class BrowserSidebarView: NSView, SidebarListHost {
             }
         }
         let inputs = ContentInputs(organization: organization, selection: selection, liveTitles: titles, liveActivities: activities)
-        guard inputs != contentInputs else { return cachedContent }
+        guard inputs != contentInputs else { return contentWithErrandSummary(cachedContent) }
         BrowserPerformance.count(.sidebarRebuilds)
         contentInputs = inputs
         cachedContent = SidebarListContent(snapshot: organization, selection: selection, liveTitle: { titles[$0.id] },
                                           liveActivity: { activities[$0.id] ?? .init() })
         metadataIndex = organization.map(BrowserOrganizationMetadataIndex.init)
         contentIndices = Dictionary(uniqueKeysWithValues: cachedContent.entries.enumerated().map { ($0.element.node, $0.offset) })
-        return cachedContent
+        return contentWithErrandSummary(cachedContent)
+    }
+
+    private func contentWithErrandSummary(_ source: SidebarListContent) -> SidebarListContent {
+        guard let value = errandSummary, organization?.profileID == value.profile, organization?.spaceID == value.space,
+              let folder = source.entries.first(where: { $0.node == .folder(value.folder) }), folder.folder?.isCollapsed == false,
+              let last = source.entries.lastIndex(where: { $0.node == .folder(value.folder) || $0.ancestors.contains(value.folder) }) else { return source }
+        var result = source
+        let item = SidebarTabItem(isErrandSummary: true, id: value.id, occurrenceID: nil, title: uiText("Summary · draft"), selected: false,
+            favicon: OrbitIcon.image(sfName: "text.alignleft", pointSize: 16))
+        result.entries.insert(.init(node: .tab(value.id), section: folder.section, ancestors: folder.ancestors + [value.folder], content: .tab(item)), at: last + 1)
+        return result
     }
 
     /// Only plain tab rows use this path. Composite rows retain the full projection fallback.

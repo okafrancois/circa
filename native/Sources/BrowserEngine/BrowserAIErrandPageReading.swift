@@ -8,7 +8,7 @@ import BrowserCore
                            isCurrent: @escaping @MainActor () -> Bool) async throws -> BrowserAIErrandPage
 
     /// Verifies the retained target and current form values before showing its approval outline.
-    func highlightErrandTarget(_ target: UUID, page: BrowserAIErrandPage, color: String,
+    func highlightErrandTarget(_ target: UUID, page: BrowserAIErrandPage, color: String, ink: String, provider: String, reducedMotion: Bool,
                                isCurrent: @escaping @MainActor () -> Bool) async throws -> Bool
 
     /// Revalidates document, exact retained node, attributes, form and value snapshot immediately
@@ -16,5 +16,5 @@ import BrowserCore
     func executeErrandAction(_ action: BrowserAIErrandAction, page: BrowserAIErrandPage,
                              isCurrent: @escaping @MainActor () -> Bool) async throws -> Bool
 
-    func clearErrandTarget() async
+    func clearErrandTarget(snapshot: UUID) async
 }

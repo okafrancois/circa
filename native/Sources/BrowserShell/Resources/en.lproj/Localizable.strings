@@ -1984,3 +1984,17 @@
 "Skills changed. Reopen the editor and try again." = "Skills changed. Reopen the editor and try again.";
 
 "Generate JavaScript" = "Generate JavaScript";
+
+"Start Errand…" = "Start Errand…";
+"Errand" = "Errand";
+"Open this page?" = "Open this page?";
+"Enter this text?" = "Enter this text?";
+"Submit this form?" = "Submit this form?";
+"Click this target?" = "Click this target?";
+"Summary · draft" = "Summary · draft";
+"Describe the task…" = "Describe the task…";
+"Stop Errand" = "Stop Errand";
+
+"Allow this action?" = "Allow this action?";
+
+"Sending, paying and deleting always ask." = "Sending, paying and deleting always ask.";

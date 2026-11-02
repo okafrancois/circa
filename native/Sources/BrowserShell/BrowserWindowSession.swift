@@ -227,6 +227,7 @@ public final class BrowserWindowSession<Surface: BrowserSurface> {
     public enum SurfaceLoadingPolicy { case eager, visibleOnly }
     public var surfaceLoadingPolicy: SurfaceLoadingPolicy = .eager
     private var requestedSurfaceIDs: Set<TabOccurrenceID> = []
+    private var deferredErrandSurfaceIDs: Set<TabOccurrenceID> = []
     /// Only the active Space is represented here. Inactive surfaces remain in ownedSurfaces.
     public private(set) var snapshot: BrowserWindowSnapshot?
     public private(set) var catalog: BrowserCatalogSnapshot?
@@ -469,6 +470,29 @@ public final class BrowserWindowSession<Surface: BrowserSurface> {
     public func refreshCatalog() {
         enqueue { session in
             try await session.withAdoptedContext { context in try await session.refreshCatalog(from: context) }
+        }
+    }
+
+    /// Serialized task navigation publishes its created occurrence already inside the folder.
+    public func createErrandFolder(title: String, tab: TabID, admission: BrowserSidebarSelectionAdmission,
+                                    isCurrent: @escaping @MainActor () -> Bool) -> Task<FolderID?, Never> {
+        enqueueOrganizationValue { session, context in
+            guard isCurrent(), admission.isValid else { throw BrowserStoreError.staleContext }
+            return try await session.store.createErrandFolder(title: title, tab: tab, from: context, admission: admission)
+        }
+    }
+
+    public func openErrandTab(url: URL, folder: FolderID, expectedTabs: Set<TabID>, admission: BrowserSidebarSelectionAdmission,
+                       isCurrent: @escaping @MainActor () -> Bool,
+                       onCreate: @escaping @MainActor (TabID) -> Void) -> Task<TabID?, Never> {
+        enqueueOrganizationValue { session, context in
+            guard isCurrent(), admission.isValid else { throw BrowserStoreError.staleContext }
+            let (tab, state) = try await session.store.openErrandTab(url: url, folder: folder, expectedTabs: expectedTabs, from: context, admission: admission)
+            if admission.isValid, isCurrent() {
+                onCreate(tab.id)
+                session.requestedSurfaceIDs.insert(tab.occurrenceID)
+            } else { session.deferredErrandSurfaceIDs.insert(tab.occurrenceID) }
+            return (tab.id, state)
         }
     }
 
@@ -941,7 +965,8 @@ public final class BrowserWindowSession<Surface: BrowserSurface> {
         var created: [(TabOccurrenceID, Surface, URL)] = []
         let visible = visibleOccurrenceIDs(in: state)
         for tab in state.snapshot.tabs
-        where (surfaceLoadingPolicy == .eager || visible.contains(tab.occurrenceID) || requestedSurfaceIDs.contains(tab.occurrenceID))
+        where (!deferredErrandSurfaceIDs.contains(tab.occurrenceID) || visible.contains(tab.occurrenceID))
+            && (surfaceLoadingPolicy == .eager || visible.contains(tab.occurrenceID) || requestedSurfaceIDs.contains(tab.occurrenceID))
             && surfaces[tab.occurrenceID] == nil && transits[tab.occurrenceID] == nil {
             guard let surface = makeSurface(state.context.profileID, tab.url) else {
                 if !isClosed { onError?(BrowserWindowSessionError.surfaceUnavailable) }
@@ -957,6 +982,7 @@ public final class BrowserWindowSession<Surface: BrowserSurface> {
         }
         BrowserPerformance.mark(.sessionSurfacesReady)
         requestedSurfaceIDs.subtract(created.map { $0.0 })
+        deferredErrandSurfaceIDs.subtract(created.map { $0.0 })
         activeContext = state.context
         modelOccurrenceAuthorities = state.occurrenceAuthorities
         occurrenceTabIDs = state.occurrenceTabIDs

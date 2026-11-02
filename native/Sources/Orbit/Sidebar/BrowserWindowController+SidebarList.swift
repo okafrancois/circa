@@ -90,6 +90,7 @@ extension BrowserWindowController {
         }
         sidebar.onSelectSplit = { [weak self] id in self?.submitInput { $0.session.selectSplit(id) } }
         sidebar.onSelectTab = { [weak self] id in
+            if let self, id == errandSummaryID { openErrandSummary(); return }
             BrowserSidebarInputDiagnostics.record("select-input", tab: id,
                 reason: self?.acceptsCommands == true ? "submitted" : "controller-disabled")
             self?.submitInput { $0.activateSidebarTab(id) }
@@ -110,6 +111,8 @@ extension BrowserWindowController {
         // ARCHIVE-UI's hook keeps visible and media tabs (archive-r2).
         sidebar.onClearToday = { [weak self] in self?.submitInput { $0.clearTodayFromArchiveCommand() } }
         sidebar.onTidyToday = { [weak self] in self?.submitInput { $0.todayTidy.start() } }
+        sidebar.onStopErrand = { [weak self] in self?.stopErrand(animated: true); self?.reconcileErrand() }
+        sidebar.page.list.onErrandSummary = { [weak self] in self?.openErrandSummary() }
         sidebar.page.list.prepareDesktopPreview = { [weak self] payload in
             guard let self, let tab = payload.nodes.first?.tabID, let surface = liveSidebarSurface(of: tab) else { return }
             let generation = surface.documentGeneration

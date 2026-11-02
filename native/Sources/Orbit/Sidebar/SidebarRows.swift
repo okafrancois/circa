@@ -47,6 +47,13 @@ extension SidebarRowEventHandler {
 
 @MainActor
 class SidebarListRow: NSView, NSTextFieldDelegate {
+    private var errandMark: BrowserErrandRowMark?
+    func setErrandMark(_ state: BrowserErrandRowMark.State?) {
+        guard let state else { errandMark?.removeFromSuperview(); errandMark = nil; needsLayout = true; return }
+        let mark = errandMark ?? BrowserErrandRowMark(frame: .zero)
+        if errandMark == nil { addSubview(mark); errandMark = mark }
+        mark.state = state; mark.tint = effectiveAccent.icon; needsLayout = true
+    }
     let background = OrbitSurfaceBackgroundView(cornerRadius: OrbitTokens.Radius.tabRow)
     let titleLabel = NSTextField(labelWithString: "")
     weak var events: (any SidebarRowEventHandler)?
@@ -114,6 +121,7 @@ class SidebarListRow: NSView, NSTextFieldDelegate {
 
     /// Clears state that must not survive into another row's content.
     func resetForReuse() {
+        setErrandMark(nil)
         onPreviewInvalidated?(self)
         isHovering = false
         onFolderHover = nil
@@ -130,7 +138,7 @@ class SidebarListRow: NSView, NSTextFieldDelegate {
     var iconX: CGFloat { Metrics.rowInsetX + OrbitSidebarGeometry.contentIndent(depth: depth) }
     var titleX: CGFloat { Metrics.titleOriginX - Metrics.paddingX + OrbitSidebarGeometry.contentIndent(depth: depth) }
     /// Trailing end of the title; subclasses stop before their hover controls.
-    var titleEnd: CGFloat { bounds.width - Metrics.rowInsetX }
+    var titleEnd: CGFloat { errandMark == nil ? bounds.width - Metrics.rowInsetX : bounds.width - (self is SidebarFolderRow ? 48 : 46) }
     var isSelected: Bool { false }
     var isMultiSelected: Bool { false }
     var isRenaming: Bool { renameField != nil }
@@ -141,6 +149,10 @@ class SidebarListRow: NSView, NSTextFieldDelegate {
 
     override func layout() {
         super.layout()
+        if let errandMark {
+            let folder = self is SidebarFolderRow
+            errandMark.frame = NSRect(x: bounds.width - (folder ? 42 : 40), y: (bounds.height - 14) / 2, width: folder ? 32 : 14, height: 14)
+        }
         background.frame = NSRect(x: backgroundLeadingInset, y: 0, width: max(0, bounds.width - backgroundLeadingInset + backgroundTrailingOutset), height: bounds.height)
         let height = ceil(titleLabel.intrinsicContentSize.height)
         let frame = NSRect(x: titleX, y: ((bounds.height - height) / 2).rounded() + titleOffsetY, width: max(0, titleEnd - titleX), height: height)
@@ -216,6 +228,7 @@ class SidebarListRow: NSView, NSTextFieldDelegate {
     }
 
     func accentDidChange() {
+        errandMark?.tint = effectiveAccent.icon
         titleLabel.textColor = effectiveAccent.sidebarText
         renameField?.textColor = effectiveAccent.sidebarText
         refreshFieldEditor()
@@ -511,6 +524,7 @@ class SidebarTabRow: SidebarListRow {
         setAccessibilitySelected(item.selected || item.isMultiSelected)
         refreshControls()
         SidebarTabHoverCard.shared.refresh(self)
+        if item.isErrandSummary { closeButton.isHidden = true }
         closeButton.refreshPill()
         refreshFill()
         if changed { needsLayout = true }
@@ -521,7 +535,7 @@ class SidebarTabRow: SidebarListRow {
         if showsAudio { return reservesTitleRestoration ? min(audioButton.frame.minX - Metrics.titleTrailingGap, bounds.width - 76) : audioButton.frame.minX - Metrics.titleTrailingGap }
         let end = isHovering || item.isOpenInAnotherWindow
             ? closeButton.frame.minX - Metrics.titleTrailingGap : bounds.width - Metrics.rowInsetX
-        return reservesTitleRestoration ? min(end, bounds.width - 52) : end
+        return min(super.titleEnd, reservesTitleRestoration ? min(end, bounds.width - 52) : end)
     }
 
     override func layout() {
@@ -599,6 +613,10 @@ class SidebarTabRow: SidebarListRow {
     }
 
     private func refreshControls() {
+        if item.isErrandSummary {
+            for view in [restoreButton, closeButton, audioButton, otherWindowMark, slash, loadingIndicator] as [NSView] { view.isHidden = true }
+            loadingIndicator.isLoading = false; favicon.isHidden = false; return
+        }
         restoreButton.frame = NSRect(x: bounds.width - (showsAudio ? 72 : 48), y: (bounds.height - 20) / 2, width: 20, height: 20)
         restoreButton.contentTintColor = effectiveAccent.icon
         let restoreAvailable = !isRenaming && splitPreviewShift == 0 && offersTitleRestoration

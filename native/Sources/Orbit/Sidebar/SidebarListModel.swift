@@ -18,6 +18,7 @@ struct SidebarTabActivity: Equatable {
 /// One tab row. Identity is the logical tab (`TabID`), stable across windows, moves and restarts;
 /// `occurrenceID` is this window's live document in the active Space, when there is one.
 struct SidebarTabItem: Equatable {
+    var isErrandSummary = false
     let id: TabID
     var occurrenceID: TabOccurrenceID?
     let title: String

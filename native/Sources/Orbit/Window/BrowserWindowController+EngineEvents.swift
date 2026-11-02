@@ -51,6 +51,7 @@ extension BrowserWindowController: BrowserEngineSurfaceDelegate {
     /// Records where this window shows a surface, for engines that expose it to extensions. The
     /// engine learns the NSWindow of the model window first (`shellWindowDidOpen`).
     func surfaceMembershipDidChange(_ surface: Surface, _ membership: BrowserSurfaceMembership?) {
+        if membership == nil, errandGuardedSurfaces.contains(ObjectIdentifier(surface)) { stopErrand() }
         if membership == nil { passwordPrompt.surfaceDidLeave(surface) }
         if let membership { announceEngineWindow(membership.windowID) }
         surface.placement = membership.map { .tab(windowID: $0.windowID, occurrenceID: $0.occurrenceID) } ?? .detached
@@ -142,6 +143,7 @@ extension BrowserWindowController: BrowserEngineSurfaceDelegate {
 
     func navigationActionPolicy(for action: BrowserNavigationAction, in surface: Surface) -> BrowserNavigationActionPolicy {
         guard holdsForNavigation(surface) else { return .cancel }
+        if let policy = errandNavigationPolicy(action, in: surface), policy != .allow { return policy }
         if action.isMainFrame != false, [.typed, .reload, .backForward].contains(action.kind), let url = action.url {
             restoreLocalDocumentGrant(for: surface, target: url)
         }
@@ -204,6 +206,10 @@ extension BrowserWindowController: BrowserEngineSurfaceDelegate {
 
     func surface(_ source: Surface, createSurfaceFor request: BrowserNewSurfaceRequest,
                  make: () -> Surface) -> Surface? {
+        if isErrandSurface(source) {
+            if !errandActive, request.isUserGesture == true { errandGuardedSurfaces.remove(ObjectIdentifier(source)) }
+            else { stopErrand(); return nil }
+        }
         guard acceptsCommands, owns(source),
               let sourceOccurrence = session.occurrenceID(for: source),
               let url = request.url else { return nil }
@@ -293,6 +299,7 @@ extension BrowserWindowController: BrowserEngineSurfaceDelegate {
     // MARK: Downloads
 
     func surface(_ surface: Surface, didStartDownload download: any BrowserEngineDownload) {
+        if isErrandSurface(surface) { download.cancel(); stopErrand(); return }
         let key = ObjectIdentifier(surface)
         // A target that turns into a download before its first commit belongs to its source tab,
         // even while its own adoption is still being recorded; after a commit it is its own.

@@ -57,6 +57,8 @@ struct BrowserAssistantView: View {
     var palette = BrowserAssistantPalette(theme: .default, appearance: NSAppearance(named: .aqua)!)
     var favicons: [UUID: NSImage] = [:]
     var citation: (BrowserAICitation) async -> Bool
+    var errandSubmit: ((String) -> Bool)? = nil
+    var errand: BrowserAIErrand? = nil
     var close: () -> Void
 
     @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
@@ -139,6 +141,16 @@ struct BrowserAssistantView: View {
             VStack(alignment: .leading, spacing: 16) {
                 ForEach(conversation.messages) { message in
                     if message.role == .user { userBubble(message) } else { answer(message) }
+                }
+                if let errand {
+                    Text(errand.goal).font(.system(size: 14)).textSelection(.enabled)
+                    if errand.phase == .thinking { BrowserAssistantThinkingView() }
+                    if !errand.summary.isEmpty {
+                        Text(uiText("Summary · draft")).font(.system(size: 12, weight: .medium)).foregroundStyle(palette.secondary.swiftUI)
+                        Text(errand.summary).font(.system(size: 14)).lineSpacing(3).textSelection(.enabled)
+                    }
+                    if errand.phase == .stopped { Text(uiText("Stopped")).font(.system(size: 12)).foregroundStyle(palette.secondary.swiftUI) }
+                    if case .failed(let error) = errand.phase { failure(error) }
                 }
                 if citationUnavailable {
                     Text(uiText("This passage is no longer available.")).font(.system(size: 12)).foregroundStyle(palette.secondary.swiftUI)
@@ -268,10 +280,10 @@ struct BrowserAssistantView: View {
                     ForEach(chipItems) { chip(item: $0) }
                 }.padding(.horizontal, 4).padding(.bottom, 8)
             }
-            TextField("", text: $draft, prompt: Text(uiText("Ask a question")).foregroundStyle(palette.tertiary.swiftUI), axis: .vertical)
+            TextField("", text: $draft, prompt: Text(errandSubmit == nil ? uiText("Ask a question") : uiText("Describe the task…")).foregroundStyle(palette.tertiary.swiftUI), axis: .vertical)
                 .textFieldStyle(.plain).font(.system(size: 14)).lineSpacing(3).lineLimit(3...7)
                 .padding(.horizontal, 4).focused($composing).onSubmit(send)
-                .accessibilityLabel(uiText("Ask a question")).accessibilityIdentifier("assistant-composer")
+                .accessibilityLabel(errandSubmit == nil ? uiText("Ask a question") : uiText("Describe the task…")).accessibilityIdentifier("assistant-composer")
                 .onChange(of: draft) { old, new in
                     if skipComposerTrigger { skipComposerTrigger = false; return }
                     skillDraft.cancelInvocation()
@@ -408,6 +420,9 @@ struct BrowserAssistantView: View {
 
     private func send() {
         guard !skillsPresented, enabled, (!draft.hasPrefix("/") || isSkillDraft), !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        if let errandSubmit {
+            if errandSubmit(draft) { skillDraft.text = ""; draft = "" }; return
+        }
         if conversation.send(draft) { skillDraft.text = ""; draft = "" }
     }
 

@@ -2,6 +2,7 @@ import AppKit
 
 /// Semantic IDs shared by menus, keyboard input, context menus and the command palette.
 enum BrowserCommandID: String, CaseIterable, Sendable {
+    case startErrand
     case openFile
     case boostGallery
     case showHideSidebar
@@ -490,7 +491,7 @@ enum OrbitCommandCatalog {
         .init(id: .pasteAsNewTab, title: "Paste as New Tab", menu: "Tabs", shortcuts: [.init(key: "v", modifiers: .init(rawValue: 1572864))], scope: .browser, requirement: .window, owner: "PALETTE", sources: ["Browser command"]),
     ]
 
-    static let featureDefinitions = BrowserSiteCommands.definitions + BrowserFavoritesCommands.definitions
+    static let featureDefinitions = [BrowserCommandDefinition(id: .startErrand, title: "Start Errand…", menu: "Tabs", shortcuts: [], scope: .browser, requirement: .surface, owner: "AI", sources: ["Browser command"])] + BrowserSiteCommands.definitions + BrowserFavoritesCommands.definitions
         + SidebarListCommands.definitions + ArcImportCommands.definitions + BrowserSplitCommands.definitions
         + BrowserPageContextCommands.definitions + BrowserBookmarkCommands.definitions
 

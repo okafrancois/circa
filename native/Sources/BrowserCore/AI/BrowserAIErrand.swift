@@ -9,8 +9,11 @@ public struct BrowserAIErrandPage: Codable, Equatable, Sendable, Identifiable {
         public let id: UUID
         public let kind: Kind
         public let label: String
-        public init(id: UUID, kind: Kind, label: String) {
+        public let destination: URL?
+        public let submitsForm: Bool
+        public init(id: UUID, kind: Kind, label: String, destination: URL? = nil, submitsForm: Bool = false) {
             self.id = id; self.kind = kind; self.label = label
+            self.destination = destination; self.submitsForm = submitsForm
         }
     }
     public let id: UUID
@@ -38,7 +41,7 @@ public struct BrowserAIErrandObservation: Codable, Equatable, Sendable {
             BrowserAIErrandAction.allowedURL(page.url) && page.title.utf8.count <= 640
                 && page.text.utf8.count <= 24_000 && page.targets.count <= 80
                 && Set(page.targets.map(\.id)).count == page.targets.count
-                && page.targets.allSatisfy { $0.label.utf8.count <= 640 }
+                && page.targets.allSatisfy { $0.label.utf8.count <= 640 && ($0.destination.map(BrowserAIErrandAction.allowedURL) ?? true) }
         } && pages.reduce(0, { $0 + $1.text.utf8.count }) <= 64_000
     }
 }
@@ -170,7 +173,9 @@ public struct BrowserAIErrandApproval: Equatable, Sendable, Identifiable {
     public func stop() {
         epoch = UUID(); operation?.cancel(); operation = nil; helper.cancel()
         approval = nil; pages = []; receipts = []; admission = nil
-        if phase != .completed { phase = .stopped }
+        if phase == .completed { return }
+        if case .failed = phase { return }
+        phase = .stopped
     }
 
     /// Called on native ownership, navigation and preference changes, including while waiting.
@@ -202,6 +207,7 @@ public struct BrowserAIErrandApproval: Equatable, Sendable, Identifiable {
                 case .finish: break
                 }
                 receipts = Array(receipts.suffix(8))
+                while (try? JSONEncoder().encode(receipts).count) ?? Int.max > 4_000, !receipts.isEmpty { receipts.removeFirst() }
                 completedActions += 1
                 guard completedActions < Self.maximumActions else { fail(.failed); return }
                 propose()

@@ -557,6 +557,22 @@ extension BrowserStore {
 
     // MARK: Moves
 
+    /// Creates a task tab and captures its folder membership without an intermediate publication.
+    public func openErrandTab(url: URL, folder: FolderID, expectedTabs: Set<TabID>, from context: BrowserContext,
+                              admission: BrowserSidebarSelectionAdmission) throws -> (BrowserTab, BrowserWindowState) {
+        let before = try captureWindowState(in: context.windowID)
+        guard admission.isValid, BrowserAIErrandAction.allowedURL(url),
+              before.context == context,
+              case .folder(let item)? = before.organization.item(for: .folder(folder)),
+              item.liveFolder == nil, item.children.count < 8,
+              item.children.count == expectedTabs.count,
+              Set(item.children.compactMap { $0.node.tabID }) == expectedTabs else { throw BrowserStoreError.staleContext }
+        let tab = try openTabAndCaptureDelivery(url: url, from: context, activate: false)
+        let current = try captureWindowState(in: context.windowID).context
+        let state = try moveItems([.tab(tab.id)], to: .init(.folder(folder)), from: current)
+        return (tab, state)
+    }
+
     public func moveItems(
         _ nodes: [BrowserOrganizationNode], to destination: BrowserOrganizationDestination,
         from context: BrowserContext
@@ -626,6 +642,14 @@ extension BrowserStore {
     }
 
     // MARK: Folders
+
+    /// Revocation is checked inside the store actor, before any folder/tab mutation.
+    public func createErrandFolder(title: String, tab: TabID, from context: BrowserContext,
+                                    admission: BrowserSidebarSelectionAdmission) throws -> (FolderID, BrowserWindowState) {
+        guard admission.isValid, let selected = try captureWindowState(in: context.windowID).organization.selectedTab,
+              selected.id == tab, isCurrent(context) else { throw BrowserStoreError.staleContext }
+        return try createFolder(title: title, at: .init(.pinned(context.spaceID)), containing: [.tab(tab)], from: context)
+    }
 
     /// Creates a folder in Pinned or inside another folder, optionally moving nodes into it, in one
     /// undoable transaction ("New Folder" from a selection).

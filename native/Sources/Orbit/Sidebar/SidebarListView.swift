@@ -74,6 +74,10 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
     let animator = SidebarListAnimator()
 
     private(set) var content = SidebarListContent.empty
+    var errandMarks: [BrowserOrganizationNode: BrowserErrandRowMark.State] = [:] {
+        didSet { for (node, row) in rowViews { row.setErrandMark(errandMarks[node]) } }
+    }
+    var onErrandSummary: (() -> Void)?
     private var hasRendered = false
     private(set) var displayedLayout = SidebarListLayout()
     /// Layout without drag gap (hidden rows excluded), the reference of drop resolution.
@@ -751,6 +755,7 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
     }
 
     private func configure(_ row: SidebarListRow, with entry: SidebarListEntry) {
+        row.setErrandMark(errandMarks[entry.node])
         BrowserPerformance.count(.rowsConfigured)
         row.isContextTarget = contextTargets.contains(entry.node) || dragGhostNodes.contains(entry.node)
         row.leavingEntry = entry
@@ -945,6 +950,7 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
     // MARK: Row events
 
     func rowMouseDown(_ row: SidebarListRow, with event: NSEvent) {
+        if (row as? SidebarTabRow)?.item.isErrandSummary == true { onErrandSummary?(); return }
         // A press whose release never arrived (taken by a drag loop or a menu) releases here.
         if let stale = pointerDown, let previous = rowViews[stale.node], previous !== row {
             previous.isPressed = false
@@ -965,6 +971,7 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
     }
 
     func rowMouseDragged(_ row: SidebarListRow, with event: NSEvent) {
+        if (row as? SidebarTabRow)?.item.isErrandSummary == true { return }
         guard let down = pointerDown, down.node == row.node, !isDragging, renamingNode != row.node else { return }
         let dx = event.locationInWindow.x - down.location.x, dy = event.locationInWindow.y - down.location.y
         if dx * dx + dy * dy >= 16 {
@@ -976,6 +983,7 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
     }
 
     func rowMouseUp(_ row: SidebarListRow, with event: NSEvent) {
+        if (row as? SidebarTabRow)?.item.isErrandSummary == true { return }
         row.isPressed = false
         let down = pointerDown
         pointerDown = nil
@@ -1020,11 +1028,13 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
     }
 
     func rowRightMouseDown(_ row: SidebarListRow, with event: NSEvent) {
+        if (row as? SidebarTabRow)?.item.isErrandSummary == true { return }
         window?.makeFirstResponder(self)
         host?.list(self, contextMenuFor: row.node, event: event, in: row)
     }
 
     func rowPerformPress(_ row: SidebarListRow) -> Bool {
+        if (row as? SidebarTabRow)?.item.isErrandSummary == true { onErrandSummary?(); return true }
         let reason = !commandsEnabled || !row.commandsEnabled ? "disabled"
             : rowViews[row.node] !== row ? "stale-node" : host == nil ? "missing-host" : "accepted"
         BrowserSidebarInputDiagnostics.record("row-press", tab: row.node.tabID, reason: reason)
