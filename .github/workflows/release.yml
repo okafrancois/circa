@@ -8,6 +8,16 @@ on:
         description: Existing vX.Y.Z tag to publish
         required: true
         type: string
+      hosted:
+        description: Verify this release on a GitHub-hosted Apple Silicon runner
+        required: false
+        default: false
+        type: boolean
+      publish:
+        description: Publish the signed release (disable for a CI verification build)
+        required: false
+        default: true
+        type: boolean
 permissions:
   contents: write
 concurrency:
@@ -19,7 +29,8 @@ jobs:
       github.repository_id == '1436869204' &&
       github.repository_owner == 'okafrancois' && github.actor == 'okafrancois' &&
       (github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v'))
-    runs-on: [self-hosted, macOS, ARM64, orbit-release]
+    runs-on: ${{ (vars.CIRCA_HOSTED_RELEASES == 'true' || (github.event_name == 'workflow_dispatch' && inputs.hosted)) && 'xcode-27' || fromJSON('["self-hosted", "macOS", "ARM64", "orbit-release"]') }}
+    timeout-minutes: 60
     steps:
       - name: Require a browser version tag
         env:
@@ -30,7 +41,33 @@ jobs:
           fetch-depth: 0
           ref: ${{ inputs.tag || github.ref }}
           clean: false
+      - uses: actions/setup-python@v5
+        if: runner.environment == 'github-hosted'
+        with:
+          python-version: '3.12'
+      - name: Prepare the hosted build tools and engine
+        if: runner.environment == 'github-hosted'
+        env:
+          CMAKE_BUILD_PARALLEL_LEVEL: '2'
+        run: |
+          test "$(uname -m)" = arm64
+          command -v ninja || brew install ninja
+          python3 scripts/ci_engine.py
+      - name: Configure ephemeral release credentials
+        if: runner.environment == 'github-hosted'
+        env:
+          ORBIT_SIGNING_DIRECTORY: ${{ runner.temp }}/circa-development-signing
+          CIRCA_SIGNING_CERTIFICATE: ${{ secrets.CIRCA_SIGNING_CERTIFICATE }}
+          CIRCA_SIGNING_PASSWORD: ${{ secrets.CIRCA_SIGNING_PASSWORD }}
+          CIRCA_PROVISIONING_PROFILE: ${{ secrets.CIRCA_PROVISIONING_PROFILE }}
+          CIRCA_SPARKLE_PRIVATE_KEY: ${{ secrets.CIRCA_SPARKLE_PRIVATE_KEY }}
+          CIRCA_NOTARY_CREDENTIALS: ${{ secrets.CIRCA_NOTARY_CREDENTIALS }}
+        run: |
+          echo "ORBIT_SIGNING_DIRECTORY=$ORBIT_SIGNING_DIRECTORY" >> "$GITHUB_ENV"
+          echo "CMAKE_BUILD_PARALLEL_LEVEL=2" >> "$GITHUB_ENV"
+          python3 scripts/ci_signing.py
       - name: Link the prebuilt engine tools
+        if: runner.environment == 'self-hosted'
         # The CEF distribution and Sparkle tools are local to the release Mac, never in Git.
         # Set ORBIT_TOOLS_DIR in the runner's .env file.
         run: |
@@ -40,4 +77,23 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
-        run: python3 scripts/release.py --tag "$RELEASE_TAG" --publish
+          PUBLISH: ${{ github.event_name != 'workflow_dispatch' || inputs.publish }}
+        run: |
+          args=(--config "${CIRCA_RELEASE_CONFIG:-release/config.json}" --tag "$RELEASE_TAG")
+          if test "$PUBLISH" = true; then args+=(--publish); fi
+          python3 scripts/release.py "${args[@]}"
+      - name: Retain verification results
+        if: runner.environment == 'github-hosted' && github.event_name == 'workflow_dispatch' && !inputs.publish
+        uses: actions/upload-artifact@v4
+        with:
+          name: Circa-signed-ci-verification
+          path: |
+            dist/release/*.json
+            dist/release/archives/*.zip
+            dist/release/*.dmg
+          retention-days: 3
+      - name: Remove ephemeral signing credentials
+        if: always() && runner.environment == 'github-hosted'
+        env:
+          ORBIT_SIGNING_DIRECTORY: ${{ runner.temp }}/circa-development-signing
+        run: python3 scripts/ci_signing.py --cleanup

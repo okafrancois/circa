@@ -85,7 +85,7 @@ AI is optional. When you request an AI feature, the selected provider processes 
 
 ## Build from source
 
-Use an Apple Silicon Mac with macOS 15+, Xcode with Swift 6, Git and Python 3.10+. To compile the shared modules and the WebKit development executable:
+Use an Apple Silicon Mac with Xcode 27 (Swift 6.4 and the macOS 27 SDK), Git and Python 3.10+. Published applications still target macOS 15+. To compile the shared modules and the WebKit development executable:
 
 ```sh
 swift build --package-path native

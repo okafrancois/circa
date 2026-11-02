@@ -2,7 +2,7 @@
 
 ## Shared Swift code
 
-Use an Apple Silicon Mac running macOS 15+ with Xcode and Swift 6. Select Xcode's developer directory and accept its license using the usual Xcode setup. Python 3.10+, Git, CMake 3.26+ and Ninja are needed for the Chromium build tools.
+Use an Apple Silicon Mac with Xcode 27, Swift 6.4 and the macOS 27 SDK. Published applications target macOS 15+. Select Xcode's developer directory and accept its license using the usual Xcode setup. Python 3.10+, Git, CMake 3.26+ and Ninja are needed for the Chromium build tools.
 
 ```sh
 swift build --package-path native

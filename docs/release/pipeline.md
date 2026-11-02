@@ -51,7 +51,35 @@
 - Feed: `https://github.com/<repository>/releases/download/update-feed/appcast.xml`.
   A rollback uses a newer build number; preserve user data and never downgrade the schema blindly.
 
-## Self-hosted runner (not registered in this lot)
+## GitHub-hosted macOS runners
+
+- `hosted-build.yml` compiles the product and smoke application on an Apple Silicon
+  `xcode-27` runner (currently a GitHub public-preview image), using the current SDK while retaining the app's deployment target.
+  It runs for relevant changes to `main`, pull requests, and manual dispatches.
+  Its short-lived unsigned artifact is for compilation checks, not installation.
+- `release/engine.json` pins a prebuilt engine release asset and the archive,
+  framework and wrapper SHA-256 values. `scripts/ci_engine.py` verifies them and
+  installs into the fresh checkout. Engine assets use `engine-*` prereleases with
+  `--latest=false`; they never replace the latest browser release.
+- Hosted signing uses five encrypted repository secrets:
+  `CIRCA_SIGNING_CERTIFICATE` (base64 PKCS#12), `CIRCA_SIGNING_PASSWORD`,
+  `CIRCA_PROVISIONING_PROFILE` (base64), `CIRCA_SPARKLE_PRIVATE_KEY` (exported key),
+  and `CIRCA_NOTARY_CREDENTIALS` (JSON). The latter accepts `apple_id`, `password`
+  (an Apple app-specific password), `team_id`; or `key_base64`, `key_id`, and
+  optional `issuer` for an App Store Connect API key.
+- `scripts/ci_signing.py` imports credentials into a new runner-only keychain,
+  creates a private release configuration and deletes credentials in an always-run
+  cleanup step. It refuses local or self-hosted execution. Private files and keys
+  are never included in build artifacts or source control.
+- Before switching releases, manually run `release.yml` with `hosted=true` and
+  `publish=false` against an existing version tag. This builds, signs and notarizes
+  without publishing or changing the update feed. Verify the resulting artifact.
+- Set repository variable `CIRCA_HOSTED_RELEASES=true` only after this verification.
+  Future owner-pushed version tags then use GitHub's macOS runners. Without this
+  variable, releases retain the existing self-hosted path. Neither release path
+  runs for pull requests or forks.
+
+## Self-hosted fallback runner
 - Run `scripts/setup-release-runner.sh` explicitly on this Mac as the repository owner.
   It downloads/checksums the official ARM64 runner, requests a short-lived registration token
   via `gh api` (kept out of argv/logs), assigns `orbit-release`, installs/starts its launchd service.
