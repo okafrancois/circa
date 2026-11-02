@@ -12,7 +12,7 @@ extension OrbitSmokeDriver {
             let client = OrbitAssistantFixtureClient(id: .codex, root: runRoot)
             environment.ai.clientOverrides[.codex] = client
             environment.ai.statuses[.codex] = await client.status(refresh: false)
-            try? Data("link-preview".utf8).write(to: runRoot.appendingPathComponent("fixture-mode"))
+            try? Data((arguments.contains("--orbit-smoke-link-error") ? "error" : "link-preview").utf8).write(to: runRoot.appendingPathComponent("fixture-mode"))
         }
         try? await environment.settings.updateAI {
             $0.isEnabled = true; $0.readsCurrentTabOnRequest = true; $0.helpers.linkPreviewSummaries = true
@@ -81,6 +81,10 @@ extension OrbitSmokeDriver {
            let data = try? JSONSerialization.data(withJSONObject: ["provider": choice.provider.rawValue, "model": choice.model ?? "", "live": live ? "true" : "false"]) {
             try? data.write(to: runRoot.appendingPathComponent("provider-choice.json"))
         }
+        if arguments.contains("--orbit-smoke-link-zoom") {
+            owner.changePageZoom(.increase)
+            _ = await until(3) { surface.pageZoom > 1.01 }
+        }
         let revision = surface.documentGeneration
         let target = try? await reader.previewLink(at: CGPoint(x: 100, y: 100), revision: revision, isCurrent: { true })
         check("link.engine-hit", target?.url.lastPathComponent == "linked.html")
@@ -92,6 +96,16 @@ extension OrbitSmokeDriver {
         _ = await until(3) { owner.linkPreviewHelp?.panel != nil }
         check("link.description", owner.linkPreviewHelp?.panel != nil && owner.linkPreviewHelp?.lines.isEmpty == true)
         capture("description")
+        if arguments.contains("--orbit-smoke-link-error") {
+            _ = await until(8) { owner.linkPreviewHelp?.loading == false }
+            check("link.error-fallback", owner.linkPreviewHelp?.panel != nil && owner.linkPreviewHelp?.lines.isEmpty == true
+                && owner.linkPreviewHelp?.document?.title == "Synthetic linked title")
+            capture("error")
+            await event(.flagsChanged, shift: false, local: point)
+            _ = await until(14) { !recording.isRunning }
+            environment.ai.terminateNow()
+            return
+        }
         _ = await until(live ? 22 : 8) { owner.linkPreviewHelp?.lines.isEmpty == false }
         check("link.summary", owner.linkPreviewHelp?.lines.isEmpty == false)
         if !live {
