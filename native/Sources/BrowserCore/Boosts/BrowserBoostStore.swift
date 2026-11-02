@@ -114,6 +114,15 @@ public actor BrowserBoostStore {
         return try save(current, expectedRevision: revision)
     }
 
+    /// A generated draft commits only against the complete store snapshot it reviewed.
+    public func applyGeneratedCSS(_ css: String, to id: BrowserBoostID, expected: BrowserBoostDocument) throws -> BrowserBoost {
+        guard document == expected, var current = document.boosts.first(where: { $0.id == id }) else {
+            throw BrowserBoostError.staleRevision
+        }
+        current.content.customCSS = css
+        return try save(current, expectedRevision: current.revision)
+    }
+
     /// An explicit delete acts on the current identity, without recreating a remote deletion.
     public func removeCurrent(_ id: BrowserBoostID) throws {
         guard let current = document.boosts.first(where: { $0.id == id }) else { throw BrowserBoostError.staleRevision }

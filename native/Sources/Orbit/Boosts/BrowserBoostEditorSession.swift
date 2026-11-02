@@ -11,7 +11,9 @@ final class BrowserBoostEditorSession {
     private(set) var isDeleting = false
     private(set) var isClosed = false
     private(set) var error: Error?
+    private var applyingGeneratedCSS: (generated: String, original: String)?
     private(set) var pending: Task<Void, Never>?
+    var onInvalidateDraft: (() -> Void)?
     var onChange: (() -> Void)?
     var onCommit: (() async throws -> Void)?
 
@@ -32,8 +34,13 @@ final class BrowserBoostEditorSession {
 
     private func update(_ mutation: @escaping @Sendable (inout BrowserBoost) -> Void) {
         guard !isClosed, !isDeleting else { return }
+        onInvalidateDraft?()
+        let restoration = applyingGeneratedCSS
         enqueue { [self] in
-            boost = try await store.update(boost.id, mutation: mutation)
+            boost = try await store.update(boost.id) {
+                if let restoration, $0.content.customCSS == restoration.generated { $0.content.customCSS = restoration.original }
+                mutation(&$0)
+            }
         }
     }
 
@@ -72,6 +79,7 @@ final class BrowserBoostEditorSession {
     /// Accepted deletion drains earlier edits and prevents later writes from recreating the item.
     func delete() {
         guard !isClosed, !isDeleting else { return }
+        onInvalidateDraft?()
         isDeleting = true
         enqueue { [self] in
             do {
@@ -84,10 +92,41 @@ final class BrowserBoostEditorSession {
         }
     }
 
+    func applyGeneratedCSS(_ css: String, expected: BrowserBoostDocument, isCurrent: @escaping @MainActor () -> Bool) async throws {
+        guard !isClosed, !isDeleting, isCurrent() else { throw CancellationError() }
+        await pending?.value
+        guard !isClosed, !isDeleting, isCurrent() else { throw CancellationError() }
+        let original = boost
+        applyingGeneratedCSS = (css, original.content.customCSS)
+        defer { applyingGeneratedCSS = nil }
+        let applied = try await store.applyGeneratedCSS(css, to: boost.id, expected: expected)
+        boost = applied
+        guard !isClosed, !isDeleting, isCurrent() else {
+            if let restored = try? await store.save(original, expectedRevision: applied.revision) { boost = restored }
+            throw CancellationError()
+        }
+        do { try await onCommit?() }
+        catch {
+            if let restored = try? await store.save(original, expectedRevision: applied.revision) {
+                boost = restored
+                try? await onCommit?()
+            }
+            throw error
+        }
+        guard !isClosed, !isDeleting, isCurrent() else {
+            if let restored = try? await store.save(original, expectedRevision: applied.revision) {
+                boost = restored
+                try await onCommit?()
+            }
+            throw CancellationError()
+        }
+        onChange?()
+    }
+
     func zap(_ selector: String) {
         edit { if !$0.zapSelectors.contains(selector) { $0.zapSelectors.append(selector) } }
     }
     func unzap(_ selector: String) { edit { $0.zapSelectors.removeAll { $0 == selector } } }
     func resetColors() { edit { $0.colorScheme = nil } }
-    func close() { isClosed = true }
+    func close() { onInvalidateDraft?(); isClosed = true }
 }
