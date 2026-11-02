@@ -52,5 +52,7 @@ import Testing
         #expect(made == 0)
         #expect(owner.errandGuardedSurfaces.contains(ObjectIdentifier(surface)))
         #expect(owner.navigationActionPolicy(for: .init(url: URL(string: "https://example.test/late"), isMainFrame: true, kind: .other, isUserGesture: false), in: surface) == .cancel)
+        _ = await owner.session.closeOwnedSurface(surface).value
+        #expect(!owner.errandGuardedSurfaces.contains(ObjectIdentifier(surface)))
     }
 }
