@@ -1,4 +1,5 @@
 import Foundation
+import Network
 import Testing
 @testable import BrowserCore
 @testable import Orbit
@@ -36,56 +37,93 @@ struct BrowserLinkPreviewTests {
     }
 
     @Test @MainActor func anonymousTransportRechecksRedirectPolicyAndRejectsFiles() async throws {
-        let configuration = URLSessionConfiguration.ephemeral
-        configuration.protocolClasses = [LinkPreviewURLProtocol.self]
-        let loader = BrowserLinkPreviewLoader(configuration: configuration)
-        LinkPreviewURLProtocol.requests.reset()
-        let page = try await loader.load(URL(string: "https://preview.test/article")!, allowed: { _ in true })
+        let server = try LinkPreviewFixtureServer()
+        let port = try await server.start()
+        defer { server.stop() }
+        let base = URL(string: "http://127.0.0.1:\(port)")!
+        let loader = BrowserLinkPreviewLoader()
+        let page = try await loader.load(base.appendingPathComponent("article"), allowed: { _ in true })
         #expect(page.title == "Public page" && page.text == "Useful text.")
-        let sent = try #require(LinkPreviewURLProtocol.requests.values.first)
-        #expect(sent.value(forHTTPHeaderField: "Cookie") == nil && sent.value(forHTTPHeaderField: "Authorization") == nil)
-        LinkPreviewURLProtocol.requests.reset()
+        let sent = try #require(server.requests.first)
+        #expect(sent.headers["cookie"] == nil && sent.headers["authorization"] == nil)
+        server.reset()
         await #expect(throws: CancellationError.self) {
-            try await loader.load(URL(string: "https://preview.test/redirect")!, allowed: { $0.path != "/blocked" })
+            try await loader.load(base.appendingPathComponent("redirect"), allowed: { $0.path != "/blocked" })
         }
-        #expect(LinkPreviewURLProtocol.requests.values.map { $0.url?.path } == ["/redirect"])
+        #expect(server.requests.map(\.path) == ["/redirect"])
         await #expect(throws: BrowserAIError.failed) {
-            try await loader.load(URL(string: "https://preview.test/file")!, allowed: { _ in true })
+            try await loader.load(base.appendingPathComponent("file"), allowed: { _ in true })
         }
         await #expect(throws: BrowserAIError.failed) {
-            try await loader.load(URL(string: "https://preview.test/oversized")!, allowed: { _ in true })
+            try await loader.load(base.appendingPathComponent("oversized"), allowed: { _ in true })
         }
     }
 }
 
-private final class LinkPreviewURLProtocol: URLProtocol, @unchecked Sendable {
-    private let operationLock = NSLock()
-    private var operation: DispatchWorkItem?
-    final class Requests: @unchecked Sendable {
-        private let lock = NSLock()
-        private var stored: [URLRequest] = []
-        var values: [URLRequest] { lock.withLock { stored } }
-        func reset() { lock.withLock { stored = [] } }
-        func record(_ request: URLRequest) { lock.withLock { stored.append(request) } }
+private final class LinkPreviewFixtureServer: @unchecked Sendable {
+    struct Request {
+        let path: String
+        let headers: [String: String]
     }
-    static let requests = Requests()
-    override class func canInit(with request: URLRequest) -> Bool { request.url?.host == "preview.test" }
-    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
-    override func startLoading() {
-        Self.requests.record(request)
-        let work = DispatchWorkItem { [self] in
-            operationLock.withLock { operation = nil }
-            let url = request.url!
-            var headers = ["Content-Type": url.path == "/file" ? "application/pdf" : "text/html"]
-            if url.path == "/redirect" { headers["Location"] = "https://preview.test/blocked" }
-            if url.path == "/oversized" { headers["Content-Length"] = "999999" }
-            let response = HTTPURLResponse(url: url, statusCode: url.path == "/redirect" ? 302 : 200, httpVersion: "HTTP/1.1", headerFields: headers)!
-            client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-            client?.urlProtocol(self, didLoad: Data("<title>Public page</title><body>Useful text.</body>".utf8))
-            client?.urlProtocolDidFinishLoading(self)
+    private let listener: NWListener
+    private let queue = DispatchQueue(label: "Orbit.LinkPreviewTests.HTTP")
+    private let lock = NSLock()
+    private var stored: [Request] = []
+    var requests: [Request] { lock.withLock { stored } }
+    func reset() { lock.withLock { stored = [] } }
+
+    init() throws {
+        let parameters = NWParameters.tcp
+        parameters.requiredLocalEndpoint = .hostPort(host: "127.0.0.1", port: .any)
+        listener = try NWListener(using: parameters, on: .any)
+        listener.newConnectionHandler = { [weak self] connection in
+            guard let self else { connection.cancel(); return }
+            connection.start(queue: queue)
+            receive(connection, buffer: Data())
         }
-        operationLock.withLock { operation = work }
-        DispatchQueue.global().asyncAfter(deadline: .now() + 0.01, execute: work)
     }
-    override func stopLoading() { operationLock.withLock { operation?.cancel(); operation = nil } }
+    func start() async throws -> UInt16 {
+        try await withCheckedThrowingContinuation { continuation in
+            listener.stateUpdateHandler = { [listener] state in
+                switch state {
+                case .ready:
+                    listener.stateUpdateHandler = nil
+                    continuation.resume(returning: listener.port!.rawValue)
+                case .failed(let error):
+                    listener.stateUpdateHandler = nil
+                    continuation.resume(throwing: error)
+                default: break
+                }
+            }
+            listener.start(queue: queue)
+        }
+    }
+    func stop() { listener.cancel() }
+
+    private func receive(_ connection: NWConnection, buffer: Data) {
+        connection.receive(minimumIncompleteLength: 1, maximumLength: 4096) { [self] data, _, complete, error in
+            var buffer = buffer
+            buffer.append(data ?? Data())
+            guard buffer.count < 16_384 else { connection.cancel(); return }
+            guard let request = String(data: buffer, encoding: .utf8), request.contains("\r\n\r\n") else {
+                if !complete && error == nil { receive(connection, buffer: buffer) }
+                else { connection.cancel() }
+                return
+            }
+            let lines = request.components(separatedBy: "\r\n")
+            let path = String(lines[0].split(separator: " ").dropFirst().first ?? "/")
+            let headers = Dictionary(lines.dropFirst().compactMap { line -> (String, String)? in
+                guard let colon = line.firstIndex(of: ":") else { return nil }
+                return (line[..<colon].lowercased(), line[line.index(after: colon)...].trimmingCharacters(in: .whitespaces))
+            }, uniquingKeysWith: { first, _ in first })
+            lock.withLock { stored.append(Request(path: path, headers: headers)) }
+            let body = "<title>Public page</title><body>Useful text.</body>"
+            let status = path == "/redirect" ? "302 Found" : "200 OK"
+            let mime = path == "/file" ? "application/pdf" : "text/html"
+            let length = path == "/oversized" ? 999999 : body.utf8.count
+            let location = path == "/redirect" ? "Location: /blocked\r\n" : ""
+            let response = "HTTP/1.1 \(status)\r\nContent-Type: \(mime)\r\nContent-Length: \(length)\r\n\(location)Connection: close\r\n\r\n\(body)"
+            connection.send(content: Data(response.utf8), completion: .contentProcessed { _ in connection.cancel() })
+        }
+    }
 }
