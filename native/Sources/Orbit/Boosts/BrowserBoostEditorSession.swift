@@ -129,16 +129,22 @@ final class BrowserBoostEditorSession {
         onChange?()
     }
 
-    func applyGeneratedJavaScript(_ css: String, expected: BrowserBoostDocument, isCurrent: @escaping @MainActor () -> Bool) async throws {
+    func applyGeneratedJavaScript(_ source: String, expected: BrowserBoostDocument, isCurrent: @escaping @MainActor () -> Bool) async throws {
         guard !isClosed, !isDeleting, isCurrent() else { throw CancellationError() }
         await pending?.value
         guard !isClosed, !isDeleting, isCurrent() else { throw CancellationError() }
         let original = boost
-        applyingGeneratedJavaScript = (css, original.content.customJavaScript, original.javaScriptOptIn)
+        applyingGeneratedJavaScript = (source, original.content.customJavaScript, original.javaScriptOptIn)
         defer { applyingGeneratedJavaScript = nil }
-        let applied = try await store.applyGeneratedJavaScript(css, to: boost.id, expected: expected)
+        let applied = try await store.applyGeneratedJavaScript(source, to: boost.id, expected: expected)
         boost = applied
-        guard !isClosed, !isDeleting, isCurrent() else {
+        func appliedSnapshotIsCurrent() async -> Bool {
+            let current = await store.snapshot()
+            return current.version == expected.version && current.profileID == expected.profileID
+                && current.revision == expected.revision + 1
+                && current.boosts == expected.boosts.map { $0.id == applied.id ? applied : $0 }
+        }
+        guard !isClosed, !isDeleting, isCurrent(), await appliedSnapshotIsCurrent(), !isClosed, !isDeleting, isCurrent() else {
             if let restored = try? await store.save(original, expectedRevision: applied.revision) { boost = restored }
             throw CancellationError()
         }
@@ -150,7 +156,7 @@ final class BrowserBoostEditorSession {
             }
             throw error
         }
-        guard !isClosed, !isDeleting, isCurrent() else {
+        guard !isClosed, !isDeleting, isCurrent(), await appliedSnapshotIsCurrent(), !isClosed, !isDeleting, isCurrent() else {
             if let restored = try? await store.save(original, expectedRevision: applied.revision) {
                 boost = restored
                 try await onCommit?()

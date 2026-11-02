@@ -167,6 +167,27 @@ private actor BoostDraftProvider: BrowserAIProviderClient {
         #expect(saved?.content.customCSS == "p { color: red }")
     }
 
+    @Test func externalStoreChangeDuringRegistrationRevokesOnlyTheGeneratedWrite() async throws {
+        let store = try BrowserBoostStore(profileID: ProfileID())
+        let session = try await BrowserBoostEditorSession.create(in: store, url: URL(string: "https://example.test")!, title: "Synthetic")
+        let expected = await store.snapshot()
+        var changed = false
+        session.onCommit = {
+            if !changed {
+                changed = true
+                _ = try await store.save(BrowserBoost(title: "Concurrent", hostPattern: BrowserBoostHostPattern(host: "other.test")))
+            }
+        }
+        do {
+            try await session.applyGeneratedJavaScript("document.title = 'Synthetic'", expected: expected, isCurrent: { true })
+            Issue.record("Concurrent store change did not revoke generated apply")
+        } catch is CancellationError {}
+        let saved = await store.snapshot()
+        #expect(saved.boosts.first { $0.id == session.boost.id }?.content.customJavaScript == "")
+        #expect(saved.boosts.first { $0.id == session.boost.id }?.javaScriptOptIn == false)
+        #expect(saved.boosts.contains { $0.title == "Concurrent" })
+    }
+
     @Test func promptEditsRevokeTheDraftWithoutAutosavingOrRetrying() async throws {
         let store = try BrowserBoostStore(profileID: ProfileID())
         let session = try await BrowserBoostEditorSession.create(in: store, url: URL(string: "https://example.test")!, title: "Synthetic")
