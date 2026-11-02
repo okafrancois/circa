@@ -354,6 +354,7 @@ class SidebarTabRow: SidebarListRow {
     var canRestoreTitle: (() -> Bool)?
     var restoreTitle: (() -> Void)?
     private var offersTitleRestoration: Bool { item.isPinned && canRestoreTitle?() == true }
+    private var reservesTitleRestoration: Bool { (isHovering && offersTitleRestoration) || !restoreButton.isHidden }
     lazy var restoreButton: NSButton = {
         let button = NSButton(image: OrbitIcon.image(sfName: "arrow.uturn.backward", pointSize: 14)!, target: self, action: #selector(restoreTidyTitle))
         button.setAccessibilityLabel(uiText("Restore Original"))
@@ -517,10 +518,10 @@ class SidebarTabRow: SidebarListRow {
 
     override var titleEnd: CGFloat {
         // The title truncates before the close button only while the button shows (S-SPL@1s).
-        if showsAudio { return isHovering && offersTitleRestoration ? min(audioButton.frame.minX - Metrics.titleTrailingGap, bounds.width - 76) : audioButton.frame.minX - Metrics.titleTrailingGap }
+        if showsAudio { return reservesTitleRestoration ? min(audioButton.frame.minX - Metrics.titleTrailingGap, bounds.width - 76) : audioButton.frame.minX - Metrics.titleTrailingGap }
         let end = isHovering || item.isOpenInAnotherWindow
             ? closeButton.frame.minX - Metrics.titleTrailingGap : bounds.width - Metrics.rowInsetX
-        return isHovering && offersTitleRestoration ? min(end, bounds.width - 52) : end
+        return reservesTitleRestoration ? min(end, bounds.width - 52) : end
     }
 
     override func layout() {
@@ -611,7 +612,10 @@ class SidebarTabRow: SidebarListRow {
                 restoreButton.animator().alphaValue = opacity
             } completionHandler: { [weak self] in
                 MainActor.assumeIsolated {
-                    if self?.restoreButton.alphaValue == 0 { self?.restoreButton.isHidden = true }
+                    if self?.restoreButton.alphaValue == 0 {
+                        self?.restoreButton.isHidden = true
+                        self?.needsLayout = true
+                    }
                 }
             }
         }
