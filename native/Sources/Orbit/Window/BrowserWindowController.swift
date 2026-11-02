@@ -111,6 +111,7 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
 
     let archive = BrowserArchivePresentation()
     let library = BrowserLibraryPresentation()
+    weak var liveFoldersRuntime: BrowserLiveFoldersRuntime?
     var boostsRuntime: BrowserBoostsRuntime?
     var boostEditor: BrowserBoostEditorController?
     let addressSecurityObservation = BrowserSecurityObservation()

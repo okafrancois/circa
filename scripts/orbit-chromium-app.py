@@ -498,6 +498,8 @@ def run_phase(phase, run, data, origin, args, tls_origin=None):
         command.append("--orbit-smoke-private-domain")
     if getattr(args, "live_folders_only", False):
         command.append("--orbit-smoke-live-folders")
+        if getattr(args, "live_folders_visible", False):
+            command.append("--orbit-smoke-live-folders-visible")
     if getattr(args, "profiles_only", False):
         command.append("--orbit-smoke-profiles")
     if getattr(args, "daily_qa", None):
@@ -538,8 +540,11 @@ def run_phase(phase, run, data, origin, args, tls_origin=None):
         os.chmod(root / "live-process.json", 0o600)
 
     def witness(process):
-        return [str(build_dir(args.flavor) / "OrbitWindowWatch"), str(process.pid), str(root / "window-watch.jsonl"),
+        command = [str(build_dir(args.flavor) / "OrbitWindowWatch"), str(process.pid), str(root / "window-watch.jsonl"),
                 "100", "--owned-process", str(root / "live-process.json")]
+        if getattr(args, "live_folders_visible", False):
+            command += ["--visible-owned-window", str(root / "visible-window.json"), "40"]
+        return command
 
     resources_before = resource_snapshot()
     error = None
@@ -552,7 +557,7 @@ def run_phase(phase, run, data, origin, args, tls_origin=None):
     after = lab.bundle_processes()
     reaped = reap_bundle_processes() if after else []
     lines = watch_lines(root / "window-watch.jsonl")
-    verdict = lab.verdict(root, owned["code"], owned["timed_out"], owned["quit_timed_out"], after, lines, "hidden")
+    verdict = lab.verdict(root, owned["code"], owned["timed_out"], owned["quit_timed_out"], after, lines, "visible-live-folders" if getattr(args, "live_folders_visible", False) else "hidden")
     checks = verdict["checks"]
     if getattr(args, "boosts_only", False):
         checks["boostWorldNetworkBlocked"] = args.fixture_counters.get("/boosts/forbidden", 0) == 0
@@ -609,7 +614,7 @@ def run_phase(phase, run, data, origin, args, tls_origin=None):
     verdict["resources"] = {"before": resources_before, "after": resource_snapshot()}
     verdict["quitSeconds"] = quit_seconds
     verdict["passed"] = all(checks.values())
-    verdict["hiddenPassed"] = verdict["passed"]
+    verdict["hiddenPassed"] = verdict["passed"] and not getattr(args, "live_folders_visible", False)
     verdict["phase"] = phase
     verdict["runnerError"] = error
     verdict["scenarios"] = {entry["id"]: entry["status"] for entry in results.get("results", [])}
@@ -690,7 +695,7 @@ def export(run, stamp, flavor):
         target.mkdir()
         for name in ("verdict.json", "results.json", "events.jsonl", "window-watch.jsonl", "ownership.json",
                      "stderr.log", "witness-stderr.log", "archive-session.json",
-                     "runtime-page.png", "boost-applied.png", "native-save.html"):
+                     "runtime-page.png", "boost-applied.png", "native-save.html", "live-folder-light.png", "live-folder-dark.png"):
             if (phase_root / name).exists():
                 shutil.copy2(phase_root / name, target / name)
         reports = phase_root / "reports"
@@ -713,6 +718,7 @@ def main():
     runner.add_argument("--fresh-only", action="store_true")
     runner.add_argument("--keep-going", action="store_true")
     runner.add_argument("--boosts-only", action="store_true", help="Hermetic document registration probes")
+    runner.add_argument("--live-folders-visible", action="store_true", help="Visible single-owned-window live-folder command proof; requires --live-folders-only")
     runner.add_argument("--live-folders-only", action="store_true", help="Profile-scoped live-folder web transport")
     runner.add_argument("--passwords-only", action="store_true", help="Hermetic native password controller probes")
     runner.add_argument("--engine-r5-only", action="store_true", help="Hermetic native discard/history/POST scenarios")
@@ -734,6 +740,8 @@ def main():
     runner.add_argument("--extension-timeout", type=int, default=25,
                         help="Bounded wait for an extension report (25..180 seconds; does not alter probe deadlines)")
     args = parser.parse_args()
+    if args.command == "smoke" and args.live_folders_visible and not args.live_folders_only:
+        parser.error("--live-folders-visible requires --live-folders-only")
     if args.command == "smoke" and args.daily_qa:
         if any((args.relaunch_only, args.boosts_only, args.passwords_only, args.engine_r5_only,
                 args.engine_r4_only, args.extension_only, args.private_domain_only, args.profiles_only,

@@ -386,6 +386,7 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
                 standalone: false, isPrivate: false)
         }
         controller.sidebar.updateCard.onRestart = { [weak settings] in settings?.updater.restartToUpdate() }
+        controller.liveFoldersRuntime = liveFolders
         controller.boostsRuntime = boosts
         controller.sidebar.resolveSpaceIcon = { [weak settings] id in
             settings?.document.space(id).iconSelection ?? .none

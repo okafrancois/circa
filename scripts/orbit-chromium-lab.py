@@ -595,7 +595,22 @@ def verdict(run_root, code, timed_out, quit_timed_out, after, watch_lines, mode=
         "externalWitnessNoOnScreenWindow": not on_screen,
         "noProcessLeft": not after,
     }
-    if mode == "visible-input":
+    if mode == "visible-live-folders":
+        for key in ("hiddenMonitorPresent", "hiddenAuditsAllProven", "noHiddenViolationEvents", "externalWitnessNoOnScreenWindow"):
+            checks.pop(key)
+        document = json.loads(results_path.read_text()) if results_path.exists() else {}
+        summary = watch_summary or {}
+        checks.update({
+            "visibleModeDeclared": document.get("auditMode") == "visible-live-folders" and document.get("hiddenPassed") is False,
+            "noHiddenResults": not hidden,
+            "nativeFolderCommandsProven": all(statuses.get("live-folders." + key) == "proven" for key in
+                ("native-activation", "native-filter-defaults", "native-filter-action", "native-filter-applied", "row-opens-owning-profile")),
+            "externalWitnessSingleOwnedWindow": summary.get("mode") == "visible-input"
+                and summary.get("maxVisibleWindows") == 1 and summary.get("onScreenSamples", 0) > 0
+                and summary.get("unexpectedOnScreenSamples") == 0 and summary.get("signalledRoot") is False,
+            "visibleDurationBoundRespected": summary.get("durationExceeded") is False,
+        })
+    elif mode == "visible-input":
         for key in ("hiddenMonitorPresent", "hiddenAuditsAllProven", "noHiddenViolationEvents", "externalWitnessNoOnScreenWindow"):
             checks.pop(key)
         document = json.loads(results_path.read_text()) if results_path.exists() else {}

@@ -12,9 +12,12 @@ public final class BrowserGitHubLiveFolderRefresh {
     public private(set) var account: BrowserGitHubAccount?
     public private(set) var state: State = .disconnected
     public private(set) var refreshNotBefore = Date.distantPast
+    public private(set) var boundAccount: BrowserGitHubAccount?
+    public private(set) var lastSuccessfulFetch: [FolderID: Date] = [:]
     private var epoch: UInt64 = 0
     private var task: Task<Void, Never>?
     private var activeFolder: FolderID?
+    private var activeConfiguration: BrowserLiveFolderConfiguration?
     private var operationID = UUID()
     private var folderDeadlines: [FolderID: Date] = [:]
     private let session: any BrowserGitHubWebSession
@@ -26,13 +29,16 @@ public final class BrowserGitHubLiveFolderRefresh {
 
     /// Binding is explicit. A different web account never silently adopts a configured folder.
     public func connect(account: BrowserGitHubAccount) async throws {
+        guard boundAccount == nil || boundAccount?.id == account.id else { throw BrowserGitHubProviderError.accountChanged }
         await disconnect()
+        boundAccount = account
         self.account = account
         state = .ready
     }
 
     public func restore(account: BrowserGitHubAccount) async throws {
         guard self.account == nil else { throw BrowserGitHubProviderError.invalidConfiguration }
+        boundAccount = account
         self.account = account
         state = .ready
     }
@@ -60,12 +66,13 @@ public final class BrowserGitHubLiveFolderRefresh {
 
     public func refresh(folderID: FolderID, configuration: BrowserLiveFolderConfiguration, now: Date = Date()) async {
         if let task {
-            let sameFolder = activeFolder == folderID
+            let sameFolder = activeFolder == folderID && activeConfiguration == configuration
             await task.value
             if sameFolder { return }
         }
         guard let account, now >= refreshNotBefore, now >= (folderDeadlines[folderID] ?? .distantPast) else { return }
         activeFolder = folderID
+        activeConfiguration = configuration
         let epoch = self.epoch
         let operation = UUID()
         operationID = operation
@@ -116,9 +123,12 @@ public final class BrowserGitHubLiveFolderRefresh {
                 let accepted = try await store.reconcileLiveFolder(folderID, profileID: profileID,
                     fetched: .init(generation: generation, coverage: complete ? .complete : .partial, items: items))
                 guard self.epoch == epoch else { return }
-                if accepted { state = items.isEmpty ? .empty : .ready }
+                if accepted {
+                    state = items.isEmpty ? .empty : .ready
+                    lastSuccessfulFetch[folderID] = now
+                }
                 else { state = .unavailable }
-                folderDeadlines[folderID] = now.addingTimeInterval(120)
+                if accepted { folderDeadlines[folderID] = now.addingTimeInterval(120) }
             } catch is CancellationError {
                 if self.epoch == epoch { state = .unavailable }
             } catch let error as BrowserGitHubProviderError {

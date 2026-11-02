@@ -17,6 +17,9 @@ final class BrowserLiveFoldersRuntime {
     private var stopped = false
     private var activationObserver: NSObjectProtocol?
     private var wakeObserver: NSObjectProtocol?
+    func lastFetched(_ folderID: FolderID) -> Date? {
+        connections.values.compactMap { $0.lastSuccessfulFetch[folderID] }.max()
+    }
     var onMutation: (() -> Void)?
     var onError: ((any Error) -> Void)?
 
@@ -57,7 +60,11 @@ final class BrowserLiveFoldersRuntime {
         }
         let page = try BrowserGitHubWebPage(html: response.body)
         let connection = try await connection(context.profileID)
-        if connection.account != page.account { try await connection.connect(account: page.account) }
+        if let bound = connection.account, bound.id != page.account.id {
+            await connection.disconnect()
+            throw BrowserGitHubProviderError.accountChanged
+        }
+        if connection.account == nil { try await connection.connect(account: page.account) }
         _ = try BrowserGitHubPullRequestsProvider.queries(configuration, login: page.account.login)
         let id = try await store.createLiveFolder(title: uiText("Pull Requests"), configuration: configuration,
             at: .init(.pinned(context.spaceID)), from: context)
@@ -68,14 +75,37 @@ final class BrowserLiveFoldersRuntime {
         return id
     }
 
-    func configure(_ folderID: FolderID, configuration: BrowserLiveFolderConfiguration, context: BrowserContext) async throws {
-        _ = try BrowserGitHubPullRequestsProvider.queries(configuration, login: "validation")
-        try await store.configureLiveFolder(folderID, configuration: configuration, from: context)
+    private func sessionResponse(profileID: ProfileID) async throws -> BrowserProfileWebResponse {
+        guard let session else { throw BrowserEngineError.unsupportedOperation }
+        let response = try await session.pullRequests(profileID: profileID, query: "is:pr is:open author:@me", page: 1)
+        guard response.status == 200 else {
+            if response.status == 401 { throw BrowserGitHubProviderError.signedOut }
+            throw BrowserGitHubProviderError.server(status: response.status)
+        }
+        return response
+    }
+
+    func configuration(_ folderID: FolderID) async -> BrowserLiveFolderConfiguration? {
+        await store.sessionDocument().organization.folders.first { $0.id == folderID }?.liveFolder
+    }
+
+    func refresh(_ folderID: FolderID, configuration: BrowserLiveFolderConfiguration, context: BrowserContext) async throws {
         let connection = try await connection(context.profileID)
+        if connection.account == nil {
+            let response = try await sessionResponse(profileID: context.profileID)
+            try await connection.connect(account: BrowserGitHubWebPage(html: response.body).account)
+        }
         connection.invalidateRefreshDeadline()
         await connection.refresh(folderID: folderID, configuration: configuration)
         try await persist(context.profileID)
         onMutation?()
+        if case let .failed(error) = connection.state { throw error }
+    }
+
+    func configure(_ folderID: FolderID, configuration: BrowserLiveFolderConfiguration, context: BrowserContext) async throws {
+        _ = try BrowserGitHubPullRequestsProvider.queries(configuration, login: "validation")
+        try await store.configureLiveFolder(folderID, configuration: configuration, from: context)
+        try await refresh(folderID, configuration: configuration, context: context)
     }
 
     func refresh() async {
@@ -123,7 +153,7 @@ final class BrowserLiveFoldersRuntime {
         guard !removed.contains(profile) else { return }
         guard let file = file(profile) else { return }
         let local = await store.liveFolderLocalStore(for: profile)
-        try BrowserLiveFolderProfileFile(local: local, account: connections[profile]?.account).save(to: file)
+        try BrowserLiveFolderProfileFile(local: local, account: connections[profile]?.boundAccount).save(to: file)
     }
 
     func start() {

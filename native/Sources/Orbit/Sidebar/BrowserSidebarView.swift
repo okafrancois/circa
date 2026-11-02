@@ -116,6 +116,7 @@ final class BrowserSidebarView: NSView, SidebarListHost {
         footer.cancelIconPicker()
         if !preservingSpaceDismissal { spaceHoverDidChange(nil) }
     }
+    var makeLiveFoldersMenu: ((SpaceID) -> NSMenuItem?)?
     var makeSpaceExportMenu: ((SpaceID) -> NSMenuItem?)?
     var onDeleteSpace: ((SpaceID) -> Void)?
     var onRenameSpace: ((SpaceID) -> Void)?
@@ -1020,6 +1021,10 @@ final class BrowserSidebarView: NSView, SidebarListHost {
     }
 
     private func configure(_ page: SidebarSpacePageView) {
+        page.liveFoldersMenuProvider = { [weak self, weak page] in
+            guard let id = page?.spaceID else { return nil }
+            return self?.makeLiveFoldersMenu?(id)
+        }
         page.exportMenuProvider = { [weak self, weak page] in
             guard let id = page?.spaceID else { return nil }
             return self?.makeSpaceExportMenu?(id)
@@ -1176,6 +1181,7 @@ final class SidebarSpacePageView: NSView, NSTextFieldDelegate, NSMenuDelegate {
     private var titleCommit: ((String) -> Void)?
     var isRenamingSpace: Bool { titleEditor != nil }
     var onDeleteSpace: (() -> Void)?
+    var liveFoldersMenuProvider: (() -> NSMenuItem?)?
     var exportMenuProvider: (() -> NSMenuItem?)?
     var profileMenuProvider: (() -> NSMenu?)?
     var canDeleteSpace = false { didSet { titleLabel.menu = titleMenu() } }
@@ -1406,6 +1412,7 @@ final class SidebarSpacePageView: NSView, NSTextFieldDelegate, NSMenuDelegate {
             menu.addItem(item)
         }
         menu.addItem(.separator())
+        if let live = liveFoldersMenuProvider?() { menu.addItem(live) }
         if let export = exportMenuProvider?() { menu.addItem(export) }
         let delete = menu.addItem(withTitle: uiText("Delete Space…"), action: #selector(deleteSpace(_:)), keyEquivalent: "")
         delete.target = self

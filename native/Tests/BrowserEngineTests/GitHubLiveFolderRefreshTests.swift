@@ -123,4 +123,39 @@ struct GitHubLiveFolderRefreshTests {
         #expect(await store.sessionDocument().organization.tabs.isEmpty)
     }
 
+    @Test func reconnectRetainsAccountBindingAndFetchTimestamp() async throws {
+        let (_, owner, _, id, _) = try await setup()
+        await owner.refresh(folderID: id, configuration: config, now: now)
+        #expect(owner.lastSuccessfulFetch[id] == now)
+        await owner.refresh(folderID: id, configuration: config, now: now.addingTimeInterval(1))
+        #expect(owner.lastSuccessfulFetch[id] == now)
+        await owner.disconnect()
+        #expect(owner.boundAccount?.id == 123)
+        await #expect(throws: BrowserGitHubProviderError.accountChanged) {
+            try await owner.connect(account: .init(id: 456, login: "other"))
+        }
+        #expect(owner.account == nil)
+        try await owner.connect(account: .init(id: 123, login: "renamed"))
+        await owner.refresh(folderID: id, configuration: config, now: now.addingTimeInterval(122))
+        #expect(owner.state == .ready)
+    }
+
+    @Test func filterChangeQueuedBehindFetchRunsNewQueryImmediately() async throws {
+        let (store, owner, session, id, context) = try await setup()
+        session.shouldPause = true
+        let old = Task { await owner.refresh(folderID: id, configuration: config, now: now) }
+        while session.pause == nil { await Task.yield() }
+        let changed = BrowserLiveFolderConfiguration(filters: [.reviewRequested])
+        try await store.configureLiveFolder(id, configuration: changed, from: context)
+        owner.invalidateRefreshDeadline()
+        let fresh = Task { await owner.refresh(folderID: id, configuration: changed, now: now) }
+        await Task.yield()
+        session.shouldPause = false
+        session.pause?.resume(); session.pause = nil
+        await old.value
+        await fresh.value
+        #expect(session.calls == 2)
+        #expect(owner.state == .ready)
+    }
+
 }

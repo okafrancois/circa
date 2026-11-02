@@ -82,4 +82,19 @@ struct GitHubLiveFolderTests {
         #expect(await f.store.sessionDocument().spaces.count == 3)
         try await f.validate()
     }
+    // Opt-in integration check consumes a freshly fetched, unauthenticated public repository
+    // page. Only synthetic viewer metadata is inserted; it does not prove authenticated schema.
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["ORBIT_PUBLIC_PULLS_HTML"] != nil))
+    func publicRepositoryPayloadCompatibility() throws {
+        let path = try #require(ProcessInfo.processInfo.environment["ORBIT_PUBLIC_PULLS_HTML"])
+        let html = try String(contentsOfFile: path, encoding: .utf8)
+        #expect(throws: BrowserGitHubProviderError.signedOut) { try BrowserGitHubWebPage(html: html) }
+        let metadata = "<meta name='octolytics-actor-id' content='123'>"
+        let viewerHTML = html.replacingOccurrences(of: #"<meta name="user-login" content="">"#, with: #"<meta name="user-login" content="fixture">"#)
+        let page = try BrowserGitHubWebPage(html: viewerHTML.replacingOccurrences(of: "</head>", with: metadata + "</head>"))
+        #expect(!page.items.isEmpty)
+        #expect(page.totalCount >= page.items.count)
+        #expect(page.items.allSatisfy { $0.url.host == "github.com" })
+    }
+
 }
