@@ -2744,7 +2744,7 @@ extension OrbitPerformanceProbe {
         let bundleID = "lab.orbit.orbit.p2-extensions"
         guard ownsWindow(owner, bundleID: bundleID), let window = owner.window,
               let host = owner.engine.extensions else { return ["refused": true] }
-        if owner.session.selectedSurface == nil, let base = command["base"].flatMap(URL.init(string:)),
+        if owner.session.selectedSurface == nil || ["cancel-loading", "site-popup"].contains(command["action"] ?? ""), let base = command["base"].flatMap(URL.init(string:)),
            base.scheme == "http", base.host == "127.0.0.1", base.user == nil, base.password == nil {
             guard ownsWindow(owner, bundleID: bundleID) else { return ["refused": true] }
             owner.submitAddress(base.absoluteString)
@@ -2752,6 +2752,12 @@ extension OrbitPerformanceProbe {
         }
         guard let surface = owner.session.selectedSurface else { return ["missingSurface": true] }
         for _ in 0..<60 where !surface.isReady { try? await Task.sleep(for: .milliseconds(50)) }
+        if ["cancel-loading", "site-popup"].contains(command["action"] ?? "") {
+            for _ in 0..<100 where surface.navigationState.isLoading {
+                try? await Task.sleep(for: .milliseconds(25))
+            }
+            try? await Task.sleep(for: .milliseconds(600))
+        }
         window.appearance = NSAppearance(named: command["appearance"] == "dark" ? .darkAqua : .aqua)
         var result: [String: Any] = [:]
         do {
@@ -2764,7 +2770,46 @@ extension OrbitPerformanceProbe {
                 try application.commands.registry.shortcutPreferences.setPriority(.browser, for: .cycleExtensions)
             }
             owner.extensionControls.render()
-            if command["action"] == "cycle" {
+            if command["action"] == "site-popup" {
+                guard let item = items.first(where: { $0.name == "Popup Lifecycle Fixture" }),
+                      ownsWindow(owner, bundleID: bundleID) else { return ["fixtureMissing": true] }
+                owner.sidebar.addressContainer.holdsAccessoriesVisible = true
+                window.contentView?.layoutSubtreeIfNeeded()
+                owner.siteControls.show()
+                func find(_ view: NSView) -> SiteControlButton? {
+                    if let button = view as? SiteControlButton,
+                       button.accessibilityIdentifier() == "extension-action-" + item.id { return button }
+                    return view.subviews.lazy.compactMap { find($0) }.first
+                }
+                var actionButton: SiteControlButton?
+                for _ in 0..<160 {
+                    actionButton = NSApp.windows.compactMap { $0.contentView.flatMap { find($0) } }.first
+                    if actionButton != nil { break }
+                    try? await Task.sleep(for: .milliseconds(50))
+                }
+                guard ownsWindow(owner, bundleID: bundleID), let button = actionButton else {
+                    return ["siteActionMissing": true, "popoverShown": owner.siteControls.isPopoverShown]
+                }
+                button.onPress?()
+                try? await Task.sleep(for: .milliseconds(6000))
+                result["siteActionSurvived"] = true
+                result["popupVisible"] = NSApp.windows.contains { $0 !== window && $0.isVisible }
+            } else if command["action"] == "cancel-loading" {
+                guard let item = items.first(where: { $0.name == "Popup Lifecycle Fixture" }),
+                      ownsWindow(owner, bundleID: bundleID) else { return ["fixtureMissing": true] }
+                let anchor = NSView(frame: NSRect(x: 100, y: 100, width: 24, height: 24))
+                window.contentView?.addSubview(anchor)
+                defer { anchor.removeFromSuperview() }
+                window.contentView?.layoutSubtreeIfNeeded()
+                try host.performAction(extensionID: item.id, on: surface, anchor: anchor)
+                // Invalidating an anchor while the popup is loading must revoke the
+                // invocation without deleting its contents inside the load observer.
+                anchor.isHidden = true
+                try? await Task.sleep(for: .milliseconds(1500))
+                anchor.isHidden = false
+                result["survivedCancellation"] = true
+                result["sourceReady"] = surface.isReady
+            } else if command["action"] == "cycle" {
                 guard ownsWindow(owner, bundleID: bundleID) else { return ["refused": true] }
                 result["accepted"] = application.commands.registry.dispatch(.cycleExtensions, origin: .keyboard)
             } else if command["action"] == "release" {
