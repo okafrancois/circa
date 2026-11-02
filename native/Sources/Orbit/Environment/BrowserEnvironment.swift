@@ -358,6 +358,7 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
         controller.settingsPreferences = BrowserWindowSettings(runtime: settings)
         controller.aiService = ai
         controller.installWritingHelp()
+        controller.installLinkPreviewHelp()
         controller.aiStatusObservation = ai.$statuses.sink { [weak controller] _ in
             guard let controller else { return }
             controller.reconcileAssistant()
