@@ -110,10 +110,10 @@ private struct BrowserErrandApprovalView: View {
             }
             HStack(spacing: 8) {
                 Spacer(minLength: 0)
-                Button(action: stop) { Text(uiText("Stop")).frame(minWidth: 80).frame(height: 32) }
-                    .buttonStyle(BrowserAssistantButtonStyle(kind: .outlined(radius: 6))).accessibilityIdentifier("errand-stop")
-                Button(action: allow) { Text(uiText("Allow Once")).frame(minWidth: 80).frame(height: 32)
-                    .foregroundStyle(palette.onStrong.swiftUI).background(palette.strong.swiftUI, in: RoundedRectangle(cornerRadius: 6)) }
+                Button(action: stop) { Text(uiText("Stop")).padding(.horizontal, 12).frame(minWidth: 80).frame(height: 32) }
+                    .buttonStyle(BrowserErrandSecondaryButtonStyle()).accessibilityIdentifier("errand-stop")
+                Button(action: allow) { Text(uiText("Allow Once")).padding(.horizontal, 12).frame(minWidth: 80).frame(height: 32)
+                    .foregroundStyle(palette.onStrong.swiftUI).background(palette.strong.swiftUI, in: RoundedRectangle(cornerRadius: 7)) }
                     .buttonStyle(.plain).accessibilityIdentifier("errand-allow-once")
             }.font(Font(BrandTextStyle.ui.font(size: 13))).padding(.top, 16)
         }.padding(20).foregroundStyle(OrbitFloatingMaterial.body.swiftUI)
@@ -124,5 +124,31 @@ private struct BrowserErrandApprovalView: View {
         let host = approval.page?.url.host ?? "", label = approval.target?.label ?? ""
         if case .type(_, _, let value) = approval.action { return host + "\n" + label + "\n" + value }
         return host + "\n" + label + (approval.target?.destination.map { "\n" + $0.absoluteString } ?? "")
+    }
+}
+
+private struct BrowserErrandSecondaryButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View { Content(configuration: configuration) }
+    private struct Content: View {
+        let configuration: Configuration
+        @Environment(\.colorScheme) private var scheme
+        @Environment(\.isFocused) private var focused
+        @State private var hovering = false
+        private var fill: NSColor {
+            if scheme == .dark {
+                return hovering || configuration.isPressed
+                    ? NSColor(srgbRed: 55/255, green: 53/255, blue: 61/255, alpha: 1)
+                    : NSColor(srgbRed: 44/255, green: 43/255, blue: 50/255, alpha: 1)
+            }
+            return hovering || configuration.isPressed
+                ? NSColor(srgbRed: 229/255, green: 224/255, blue: 216/255, alpha: 1)
+                : NSColor(srgbRed: 239/255, green: 235/255, blue: 228/255, alpha: 1)
+        }
+        var body: some View {
+            configuration.label.background(Color(nsColor: fill), in: RoundedRectangle(cornerRadius: 7))
+                .contentShape(RoundedRectangle(cornerRadius: 7))
+                .overlay { if focused { RoundedRectangle(cornerRadius: 7).strokeBorder(Color(nsColor: .controlAccentColor), lineWidth: 2) } }
+                .onHover { hovering = $0 }
+        }
     }
 }
