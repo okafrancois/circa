@@ -288,7 +288,31 @@ extension OrbitSmokeDriver {
                 editor.close(); return
             }
             check("js.review-ready", editor.generation.ready && !code.isCSS && code.textView.string == editor.generation.output)
-            let reviewedSource = editor.generation.output
+            var reviewedSource = editor.generation.output
+            if arguments.contains("--orbit-smoke-boost-edit") {
+                _ = await click(code.textView)
+                guard owns(panel), let selectAll = BrowserKeyEquivalentMatcher.layoutEvent(producing: "a", flags: .maskCommand) else { check("js.edit-owner", false); return }
+                NSApp.postEvent(selectAll, atStart: false)
+                try? await Task.sleep(for: .milliseconds(60))
+                for character in "return" {
+                    guard owns(panel), let event = BrowserKeyEquivalentMatcher.layoutEvent(producing: String(character), flags: []) else { check("js.edit-owner", false); return }
+                    NSApp.postEvent(event, atStart: false)
+                    try? await Task.sleep(for: .milliseconds(30))
+                }
+                check("js.edit-source", code.textView.string == "return" && editor.generation.output == "return")
+                check("js.edit-not-saved", await editor.session.store.snapshot() == baseline)
+                guard let apply = buttons(code).first(where: { $0.title == uiFormat("Apply to %@", editor.session.boost.hostPattern.host) }) else { return }
+                _ = await click(apply)
+                _ = await until(3) { !editor.generation.applying }
+                check("js.edit-syntax-rejected", !editor.generation.ready && !editor.generation.error.isEmpty)
+                check("js.edit-no-consent", panel.attachedSheet == nil)
+                check("js.edit-zero", await count() == "0")
+                check("js.edit-preserved", await editor.session.store.snapshot() == baseline)
+                _ = await click(send)
+                _ = await until(5) { !editor.generation.running }
+                check("js.edit-regenerated-ready", editor.generation.ready)
+                reviewedSource = editor.generation.output
+            }
             if owns(panel) {
                 let capture = Process(); capture.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
                 capture.arguments = ["-x", "-l", String(panel.windowNumber), runRoot.appendingPathComponent("js-review.png").path]
