@@ -49,6 +49,11 @@ extension BrowserWindowController {
         }
     }
     func reconcileAssistant() {
+        if skillDraft.reconcilePermissions(settingsPreferences?.runtime.document.ai ?? .init()) {
+            aiConversation?.stop()
+            if let selection = skillSelection { aiConversation?.removeSource(selection.source.id) }
+            skillSelection = nil; skillDraft.selectionID = nil; skillDraft.text = ""
+        }
         palette.reconcileSkills()
         linkPreviewHelp?.reconcile()
         todayTidy.reconcile()
@@ -125,19 +130,20 @@ extension BrowserWindowController {
     private func assistantView(_ conversation: BrowserAIConversation) -> BrowserAssistantView {
         let profile = session.activeProfileID
         let sources = assistantSources
+        let invocation = skillInvocation
         return BrowserAssistantView(conversation: conversation,
             choices: BrowserAIPolicy.choices(for: .chat, statuses: aiService?.statuses ?? [:]),
             statuses: aiService?.statuses ?? [:], sources: assistantSources, usages: aiService?.statuses.compactMapValues { $0.state.usage } ?? [:], scopes: assistantScopes, currentTabID: session.organization?.selectedTab?.id.rawValue, enabled: assistantEnabled,
             skillSync: skillsSyncRuntime, skillRuntime: skillsRuntime, skillProfile: session.activeProfileID, skillDraft: skillDraft,
             skillsOwnerValid: { [weak self] in
                 guard let self else { return false }
-                return assistantEnabled && session.activeProfileID == profile && assistantSources == sources && aiConversation === conversation
+                return window?.isVisible == true && assistantEnabled && session.activeProfileID == profile && assistantSources == sources && aiConversation === conversation
             },
             removeSkillContext: { [weak self] id in
                 guard let self, skillSelection?.source.id == id else { return }
                 skillSelection = nil; skillDraft.selectionID = nil
             },
-            useSkill: { [weak self] in await self?.prefillSkill($0) },
+            useSkill: { [weak self] in await self?.prefillSkill($0, invocation: invocation) },
             palette: BrowserAssistantPalette(theme: windowShell.theme, appearance: window?.effectiveAppearance ?? NSApp.effectiveAppearance),
             favicons: assistantFavicons, citation: { [weak self] in await self?.showAssistantCitation($0) ?? false }, close: { [weak self] in self?.closeAssistant() })
     }

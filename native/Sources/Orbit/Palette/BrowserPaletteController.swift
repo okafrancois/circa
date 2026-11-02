@@ -412,12 +412,13 @@ final class BrowserPaletteController<Engine: BrowserEngine> {
             skillsPopover.close(notify: false); return
         }
         let profile = owner.session.activeProfileID
+        let invocation = owner.skillInvocation
         let filter = String(draft.dropFirst()).trimmingCharacters(in: .whitespacesAndNewlines)
         let palette = BrowserAssistantPalette(theme: owner.windowShell.theme, appearance: owner.window?.effectiveAppearance ?? NSApp.effectiveAppearance)
         let content = BrowserAssistantSkillSourceMenu(runtime: owner.skillsRuntime, profile: profile, filter: filter, width: 320, choose: { [weak self, weak owner] option in
             guard let self, let owner, isPresented, isCurrent, owner.assistantEnabled, owner.session.activeProfileID == profile else { return }
             dismiss(returnFocus: false)
-            Task { await owner.prefillSkill(option) }
+            Task { await owner.prefillSkill(option, invocation: invocation) }
         }, create: { [weak self, weak owner] in self?.openSkillEditor(owner, profile: profile, skill: nil) },
         edit: { [weak self, weak owner] skill in self?.openSkillEditor(owner, profile: profile, skill: skill) })
         skillsPopover.show(from: view.input, placement: .below(maxWidth: 320),
@@ -520,8 +521,9 @@ final class BrowserPaletteController<Engine: BrowserEngine> {
             let id = String(results[selection.index].id.dropFirst(6))
             let options = BrowserSkillOption.options(owner.session.activeProfileID.flatMap { owner.skillsRuntime?.documents[$0]?.skills } ?? [])
             guard owner.assistantEnabled, let option = options.first(where: { $0.id == id }) else { return }
+            let invocation = owner.skillInvocation
             dismiss(returnFocus: false)
-            Task { await owner.prefillSkill(option) }
+            Task { await owner.prefillSkill(option, invocation: invocation) }
             return
         }
         if case .ask(let choice) = results[selection.index].action {

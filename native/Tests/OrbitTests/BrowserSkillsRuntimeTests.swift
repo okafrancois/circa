@@ -4,6 +4,26 @@ import BrowserCore
 @testable import Orbit
 
 @MainActor struct BrowserSkillsRuntimeTests {
+    @Test func permissionRoundTripRevokesQueuedWorkWithoutRevokingModelHandoff() {
+        let draft = BrowserSkillDraft()
+        var preferences = BrowserAIPreferences()
+        preferences.isEnabled = true
+        #expect(!draft.reconcilePermissions(preferences))
+        let admitted = draft.revokeRevision
+        preferences.defaultModels[.chat] = .init(provider: .codex, model: "synthetic")
+        #expect(!draft.reconcilePermissions(preferences))
+        #expect(draft.revokeRevision == admitted)
+        preferences.isEnabled = false
+        #expect(draft.reconcilePermissions(preferences))
+        preferences.isEnabled = true
+        #expect(draft.reconcilePermissions(preferences))
+        #expect(draft.revokeRevision == admitted + 2)
+        preferences.readsCurrentTabOnRequest = false
+        #expect(draft.reconcilePermissions(preferences))
+        preferences.disabledSites = ["example.invalid"]
+        #expect(draft.reconcilePermissions(preferences))
+    }
+
     @Test func mutationsRefreshBothConsumersAndProfileRemovalRevokesCache() async throws {
         let runtime = BrowserSkillsRuntime()
         let profile = ProfileID(), other = ProfileID()

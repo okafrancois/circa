@@ -12,6 +12,20 @@ import SwiftUI
     var editing: BrowserAISkill?
     var notice: String?
     var revokeRevision = 0
+    private struct Permissions: Equatable {
+        let enabled: Bool
+        let readsPage: Bool
+        let disabledSites: [String]
+    }
+    private var permissions: Permissions?
+    @discardableResult func reconcilePermissions(_ preferences: BrowserAIPreferences) -> Bool {
+        let next = Permissions(enabled: preferences.isEnabled, readsPage: preferences.readsCurrentTabOnRequest,
+                               disabledSites: preferences.disabledSites)
+        let changed = permissions.map { $0 != next } ?? false
+        permissions = next
+        if changed { revokeRevision += 1 }
+        return changed
+    }
 }
 
 struct BrowserSkillOption: Identifiable {
@@ -37,14 +51,29 @@ struct BrowserSkillOption: Identifiable {
     }
 }
 
+struct BrowserSkillInvocation: Equatable {
+    let profile: ProfileID?
+    let sources: [BrowserAIContextSource]
+    let selectedTab: TabID?
+    let conversation: UUID?
+    let revocation: Int
+}
+
 extension BrowserWindowController {
-    func prefillSkill(_ option: BrowserSkillOption) async {
-        guard assistantEnabled, let conversation = ensureAssistant() else { return }
+    var skillInvocation: BrowserSkillInvocation {
+        .init(profile: session.activeProfileID, sources: assistantSources,
+              selectedTab: session.organization?.selectedTab?.id,
+              conversation: aiConversation?.id, revocation: skillDraft.revokeRevision)
+    }
+    func prefillSkill(_ option: BrowserSkillOption, invocation: BrowserSkillInvocation) async {
+        guard assistantEnabled, window?.isVisible == true, skillInvocation == invocation,
+              let conversation = ensureAssistant() else { return }
+        let admitted = skillInvocation
         skillDraft.notice = nil
         let profile = session.activeProfileID
         if let custom = option.custom {
             guard let profile, let runtime = skillsRuntime, let store = try? runtime.store(for: profile),
-                  await store.snapshot().skills.contains(custom), assistantEnabled, session.activeProfileID == profile else { return }
+                  await store.snapshot().skills.contains(custom), skillInvocation == admitted else { return }
         }
         let current = assistantSources.first { $0.id == session.organization?.selectedTab?.id.rawValue }
         skillSelection = nil; skillDraft.selectionID = nil
@@ -56,10 +85,10 @@ extension BrowserWindowController {
                   let reader = surface as? any BrowserAIPageReading,
                   let text = try? await reader.readAISelection(revision: current.revision, isCurrent: { [weak self, weak surface] in
                       guard let self, let surface else { return false }
-                      return self.assistantEnabled && self.session.activeProfileID == profile && self.assistantSources.contains(current)
+                      return self.assistantEnabled && self.skillInvocation == admitted && self.assistantSources.contains(current)
                           && self.session.surface(for: occurrence) === surface && self.aiConversation === conversation
                   }), !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-                  assistantEnabled, session.activeProfileID == profile, assistantSources.contains(current), aiConversation === conversation else { return }
+                  assistantEnabled, skillInvocation == admitted, assistantSources.contains(current), aiConversation === conversation else { return }
             skillSelection = (source: current, text: text)
             skillDraft.selectionID = current.id
             conversation.select(current)
@@ -67,7 +96,7 @@ extension BrowserWindowController {
             for source in conversation.selectedSources { conversation.removeSource(source.id) }
             if let current { conversation.select(current) }
         }
-        guard assistantEnabled, session.activeProfileID == profile, aiConversation === conversation else { return }
+        guard assistantEnabled, skillInvocation == admitted, aiConversation === conversation else { return }
         skillDraft.notice = nil
         skillDraft.text = option.prompt
         skillDraft.revision += 1
