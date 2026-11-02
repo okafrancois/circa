@@ -590,7 +590,11 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
             let row = dequeue(for: entry)
             rowViews[placement.node] = row
             if enteringNodes.remove(placement.node) != nil, motionStyle(animated: true) == .spring {
-                Self.fade(row, from: 0, to: 1)
+                let timing: OrbitAnimationTiming
+                if case .folder = placement.node, !todayGroupingTabs.isEmpty {
+                    timing = .init(duration: 0.2, x1: 1.0 / 3, y1: 2.0 / 3, x2: 2.0 / 3, y2: 1)
+                } else { timing = .tabList }
+                Self.fade(row, from: 0, to: 1, timing: timing)
             }
         }
     }

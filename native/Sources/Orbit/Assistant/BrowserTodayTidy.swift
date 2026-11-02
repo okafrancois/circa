@@ -190,7 +190,7 @@ private struct TodaySuggestionEntrance: ViewModifier {
     func body(content: Content) -> some View {
         content.opacity(visible ? 1 : 0)
             .offset(y: visible || OrbitMotionPreferences.prefersReducedMotion ? 0 : -4)
-            .animation(OrbitMotionPreferences.prefersReducedMotion ? nil : .timingCurve(1.0 / 3, 2.0 / 3, 2.0 / 3, 1, duration: 0.24).delay(0.08 + Double(index) * 0.04), value: visible)
+            .animation(OrbitMotionPreferences.prefersReducedMotion ? nil : .timingCurve(1.0 / 3, 1, 2.0 / 3, 1, duration: 0.24).delay(0.08 + Double(index) * 0.04), value: visible)
             .onAppear { visible = true }
     }
 }
