@@ -15,8 +15,8 @@ import SwiftUI
         identifier = .init("errand-approval")
         appearance = palette.appearance
         wantsLayer = true
-        layer?.shadowColor = NSColor.black.cgColor; layer?.shadowOpacity = 0.22
-        layer?.shadowRadius = 18; layer?.shadowOffset = NSSize(width: 0, height: -8)
+        layer?.shadowColor = NSColor.black.cgColor; layer?.shadowOpacity = 0.35
+        layer?.shadowRadius = 20; layer?.shadowOffset = NSSize(width: 0, height: 18)
         OrbitFloatingMaterial.install(in: self, radius: 12)
         content.sizingOptions = [.intrinsicContentSize]
         content.translatesAutoresizingMaskIntoConstraints = false
@@ -27,6 +27,12 @@ import SwiftUI
         setAccessibilityLabel(uiText("Allow this action?"))
     }
     required init?(coder: NSCoder) { nil }
+    override func layout() {
+        super.layout()
+        // A negative spread narrows the shadow caster, independently of the alert corners.
+        layer?.shadowPath = bounds.width > 28 && bounds.height > 28
+            ? CGPath(rect: bounds.insetBy(dx: 14, dy: 14), transform: nil) : nil
+    }
     override func hitTest(_ point: NSPoint) -> NSView? {
         if exiting {
             let local = superview.map { convert(point, from: $0) } ?? point

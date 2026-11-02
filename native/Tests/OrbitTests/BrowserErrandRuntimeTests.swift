@@ -5,6 +5,26 @@ import Testing
 @testable import Orbit
 
 @MainActor struct BrowserErrandRuntimeTests {
+    @Test func completedTaskReleasesObservationWhenNativeHostReconciles() async throws {
+        NSApplication.shared.setActivationPolicy(.prohibited)
+        let environment = BrowserEnvironment(engine: PeekSyntheticEngine())
+        let owner = try await environment.makeWindow()
+        defer { environment.autoArchive.scheduler.stop(); owner.session.close(); owner.window?.close() }
+        var preferences = BrowserAIPreferences(); preferences.isEnabled = true
+        let enabled = preferences
+        let page = BrowserAIErrandPage(id: UUID(), snapshot: UUID(), revision: 1,
+            url: URL(string: "https://example.test/page")!, title: "Page", text: "Transient page data", targets: [])
+        let task = BrowserAIErrand(goal: "Read", choice: .init(provider: .codex), client: FinishedErrandProvider(),
+            preferences: { enabled }, ownerCurrent: { true }, observe: { .init(pages: [page]) },
+            isCurrent: { _ in true }, execute: { _, _ in false })
+        task.start()
+        let deadline = ContinuousClock.now.advanced(by: .seconds(2))
+        while task.phase != .completed, ContinuousClock.now < deadline { await Task.yield() }
+        #expect(task.phase == .completed)
+        owner.errand = task; owner.reconcileErrand()
+        #expect(task.pages.isEmpty)
+        #expect(task.phase == .completed && task.summary == "Done")
+    }
     @Test func stopAfterStoreAdmissionDefersNetworkUntilTheOwnerSelectsTheRetainedTab() async throws {
         NSApplication.shared.setActivationPolicy(.prohibited)
         let environment = BrowserEnvironment(engine: PeekSyntheticEngine())
@@ -86,5 +106,16 @@ import Testing
         #expect(owner.navigationActionPolicy(for: .init(url: URL(string: "https://example.test/late"), isMainFrame: true, kind: .other, isUserGesture: false), in: surface) == .cancel)
         _ = await owner.session.closeOwnedSurface(surface).value
         #expect(!owner.errandGuardedSurfaces.contains(ObjectIdentifier(surface)))
+    }
+}
+
+private actor FinishedErrandProvider: BrowserAIProviderClient {
+    nonisolated let id: BrowserAIProviderID = .codex
+    func status(refresh: Bool) async -> BrowserAIProviderStatus { .init(id: id, state: .signedOut) }
+    func shutdown() async {}
+    func startTurn(_ request: BrowserAITurnRequest) async -> BrowserAITurn {
+        .init(events: AsyncStream { stream in
+            stream.yield(.text(#"{"action":"finish","summary":"Done"}"#)); stream.yield(.completed); stream.finish()
+        }, interrupt: {})
     }
 }

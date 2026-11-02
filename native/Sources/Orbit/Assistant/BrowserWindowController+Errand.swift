@@ -265,8 +265,8 @@ extension BrowserWindowController {
         guard let task = errand else { return }
         if errandActive, !errandOwnerCurrent(task.choice) { stopErrand(); return }
         task.reconcile()
-        if task.phase == .stopped || { if case .failed = task.phase { return true }; return false }() {
-            if !errandLeases.isEmpty { stopErrand() }
+        if task.phase == .stopped || task.phase == .completed || { if case .failed = task.phase { return true }; return false }() {
+            if !errandLeases.isEmpty || !task.pages.isEmpty { stopErrand() }
         }
         renderErrand(task)
     }

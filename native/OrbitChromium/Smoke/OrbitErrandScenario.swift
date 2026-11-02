@@ -211,8 +211,9 @@ extension OrbitSmokeDriver {
             check("errand.owner-no-followup", await client.requests.count == 1)
             return
         }
-        if ["stop", "revoke", "master", "site", "provider", "stale", "form-change", "navigate", "close", "space", "profile", "transfer"].contains(mode) {
+        if ["stop", "card-stop", "revoke", "master", "site", "provider", "stale", "form-change", "navigate", "close", "space", "profile", "transfer"].contains(mode) {
             if mode == "stop" { _ = await click(owner.sidebar.errandStopButton) }
+            if mode == "card-stop" { _ = await click(card, point: NSPoint(x: card.bounds.width - 160, y: card.bounds.height - 36)) }
             if mode == "revoke" { try? await environment.settings.updateAI { $0.readsCurrentTabOnRequest = false } }
             if mode == "master" { try? await environment.settings.updateAI { $0.isEnabled = false } }
             if mode == "site" { try? await environment.settings.updateAI { $0.disabledSites = ["127.0.0.1"] } }
@@ -241,7 +242,7 @@ extension OrbitSmokeDriver {
             check("errand.revoked-no-followup", await client.requests.count == 1)
             if !["close", "space", "profile"].contains(mode) { check("errand.revoked-no-effect", await evaluate("String(document.body.dataset.count||'0')") == "0") }
             check("errand.revoked-card-removed", owner.errandHost == nil && !owner.errandActive)
-            if ["stop", "revoke", "master", "site", "provider", "stale", "form-change", "navigate", "transfer"].contains(mode) {
+            if ["stop", "card-stop", "revoke", "master", "site", "provider", "stale", "form-change", "navigate", "transfer"].contains(mode) {
                 check("errand.stopped-keeps-tabs", initialTabs.isSubset(of: Set(owner.session.organization?.allTabs.map(\.id) ?? [])))
             }
             if mode == "navigate" { check("errand.owner-navigation", surface.navigationState.committedURL?.path == "/owner-navigation") }
@@ -278,6 +279,8 @@ extension OrbitSmokeDriver {
             return
         }
         check("errand.finished", task.phase == .completed)
+        _ = await until(2) { task.pages.isEmpty && owner.errandLeases.isEmpty }
+        check("errand.completion-drops-page-leases", task.pages.isEmpty && owner.errandLeases.isEmpty)
         if ["open", "open-redirect"].contains(mode) {
             check("errand.open-owned", owner.errandTabs.count == 2 && owner.errandTabs.isSubset(of: Set(owner.session.organization?.allTabs.map(\.id) ?? [])))
             if mode == "open-redirect" { check("errand.redirect-final", owner.session.ownedSurfaces.contains { $0.navigationState.committedURL?.path == "/opened" }) }
