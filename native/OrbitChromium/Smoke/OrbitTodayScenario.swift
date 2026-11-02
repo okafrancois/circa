@@ -44,26 +44,18 @@ extension OrbitSmokeDriver {
             process.arguments = ["-x", "-l", String(window.windowNumber), runRoot.appendingPathComponent(name + ".png").path]
             try? process.run(); process.waitUntilExit()
         }
-        func suggestionButton(_ object: Any, id: String, depth: Int = 0) -> (any NSAccessibilityProtocol)? {
-            guard depth < 25, let element = object as? any NSAccessibilityProtocol else { return nil }
-            if element.accessibilityIdentifier() == id { return element }
-            for child in element.accessibilityChildren() ?? [] {
-                if let button = suggestionButton(child, id: id, depth: depth + 1) { return button }
-            }
-            return nil
-        }
+        var suggestionInputSequence = 0
         func clickSuggestion(_ index: Int) async {
             try? await Task.sleep(for: .milliseconds(400))
-            guard owns(), let button = suggestionButton(owner.sidebar.page.list, id: "today-suggestion-\(index)") else { return }
-            let frame = button.accessibilityFrame()
-            let location = window.convertPoint(fromScreen: NSPoint(x: frame.midX, y: frame.midY))
-            for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
-                guard owns() else { check("today.input-owner", false); return }
-                let event = NSEvent.mouseEvent(with: type, location: location, modifierFlags: [],
-                    timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
-                    context: nil, eventNumber: 1, clickCount: 1, pressure: type == .leftMouseDown ? 1 : 0)
-                if let event { NSApp.postEvent(event, atStart: false) }
-                try? await Task.sleep(for: .milliseconds(70))
+            guard owns() else { check("today.input-owner", false); return }
+            suggestionInputSequence += 1
+            let sequence = suggestionInputSequence
+            let input: [String: Any] = ["pid": getpid(), "window": window.windowNumber,
+                                       "identifier": "today-suggestion-\(index)"]
+            guard let data = try? JSONSerialization.data(withJSONObject: input) else { return }
+            try? data.write(to: runRoot.appendingPathComponent("click-request-\(sequence).json"))
+            _ = await until(4) {
+                FileManager.default.fileExists(atPath: self.runRoot.appendingPathComponent("click-complete-\(sequence)").path)
             }
         }
         if arguments.contains("--orbit-smoke-today-reference") {
@@ -154,7 +146,7 @@ extension OrbitSmokeDriver {
                     event("today-native-archive-click", [:])
                     let trace = Task { @MainActor in
                         var csv = "seconds,leaving,opacity,translationX\n"
-                        for _ in 0..<90 {
+                        for _ in 0..<200 {
                             for row in archiveRows {
                                 let layer = row.layer?.presentation()
                                 let x = (layer?.value(forKeyPath: "transform.translation.x") as? NSNumber)?.doubleValue ?? 0
