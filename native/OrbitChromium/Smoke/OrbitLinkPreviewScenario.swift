@@ -16,6 +16,7 @@ extension OrbitSmokeDriver {
         }
         try? await environment.settings.updateAI {
             $0.isEnabled = true; $0.readsCurrentTabOnRequest = true; $0.helpers.linkPreviewSummaries = true
+            if arguments.contains("--orbit-smoke-link-unsupported") { $0.disabledSites = ["localhost"] }
             if !live { $0.defaultModels[.quick] = .init(provider: .codex, model: "synthetic-codex", effort: "low") }
         }
         if live { environment.ai.refresh(explicit: true, keepRunning: true); _ = await until(12) { !environment.ai.isChecking } }
@@ -67,8 +68,15 @@ extension OrbitSmokeDriver {
             recording.arguments = ["-x", "-v", "-V", "7", "-l", String(window.windowNumber), runRoot.appendingPathComponent("reference.mov").path]
             if owns() { try? recording.run() }
             try? await Task.sleep(for: .milliseconds(300))
-            await ref("document.querySelector('#h1b').click()")
+            await ref("globalThis.previewTrace=[];globalThis.previewStart=performance.now();function samplePreview(){const e=document.querySelector('#h1c');previewTrace.push([performance.now()-previewStart,getComputedStyle(e).opacity,getComputedStyle(e).transform,...Array.from(document.querySelectorAll('#h1u li')).map(x=>getComputedStyle(x).opacity)]);if(performance.now()-previewStart<6000)requestAnimationFrame(samplePreview)}requestAnimationFrame(samplePreview);document.querySelector('#h1b').click()")
             _ = await until(9) { !recording.isRunning }
+            if let params = try? JSONSerialization.data(withJSONObject: ["expression": "JSON.stringify(previewTrace)", "returnByValue": true]) {
+                let (_, reply) = await referenceSurface.devToolsCall("Runtime.evaluate", params: String(decoding: params, as: UTF8.self))
+                if let result = try? JSONSerialization.jsonObject(with: reply) as? [String: Any],
+                   let text = (result["result"] as? [String: Any])?["value"] as? String {
+                    try? Data(text.utf8).write(to: runRoot.appendingPathComponent("reference-trace.json"))
+                }
+            }
             return
         }
         let recording = Process(); recording.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
@@ -96,6 +104,26 @@ extension OrbitSmokeDriver {
         _ = await until(3) { owner.linkPreviewHelp?.panel != nil }
         check("link.description", owner.linkPreviewHelp?.panel != nil && owner.linkPreviewHelp?.lines.isEmpty == true)
         capture("description")
+        if arguments.contains("--orbit-smoke-link-cancel") {
+            await event(.flagsChanged, shift: false, local: point)
+            try? await Task.sleep(for: .milliseconds(2500))
+            check("link.fetch-cancel", owner.linkPreviewHelp?.panel == nil && owner.linkPreviewHelp?.loading == false
+                && !FileManager.default.fileExists(atPath: runRoot.appendingPathComponent("request-codex-1.txt").path))
+            _ = await until(14) { !recording.isRunning }
+            environment.ai.terminateNow()
+            return
+        }
+        if arguments.contains("--orbit-smoke-link-unsupported") {
+            _ = await until(8) { owner.linkPreviewHelp?.loading == false }
+            check("link.unsupported-fallback", owner.linkPreviewHelp?.panel != nil && owner.linkPreviewHelp?.lines.isEmpty == true
+                && owner.linkPreviewHelp?.document == nil
+                && !FileManager.default.fileExists(atPath: runRoot.appendingPathComponent("request-codex-1.txt").path))
+            capture("unsupported")
+            await event(.flagsChanged, shift: false, local: point)
+            _ = await until(14) { !recording.isRunning }
+            environment.ai.terminateNow()
+            return
+        }
         if arguments.contains("--orbit-smoke-link-error") {
             _ = await until(8) { owner.linkPreviewHelp?.loading == false }
             check("link.error-fallback", owner.linkPreviewHelp?.panel != nil && owner.linkPreviewHelp?.lines.isEmpty == true
