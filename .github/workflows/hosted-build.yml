@@ -17,7 +17,6 @@ jobs:
     timeout-minutes: 45
     env:
       CMAKE_BUILD_PARALLEL_LEVEL: '2'
-      ORBIT_SIGNING_DIRECTORY: ${{ runner.temp }}/circa-development-signing
     steps:
       - uses: actions/checkout@v5
         with:
@@ -33,7 +32,9 @@ jobs:
       - name: Fetch the verified prebuilt engine
         run: python3 scripts/ci_engine.py
       - name: Prepare an ephemeral development signing identity
-        run: python3 -c 'import sys; sys.path.insert(0,"scripts"); import local_signing; local_signing.identity()'
+        run: |
+          echo "ORBIT_SIGNING_DIRECTORY=$RUNNER_TEMP/circa-development-signing" >> "$GITHUB_ENV"
+          ORBIT_SIGNING_DIRECTORY="$RUNNER_TEMP/circa-development-signing" python3 -c 'import sys; sys.path.insert(0,"scripts"); import local_signing; local_signing.identity()'
       - name: Validate packaging and public files
         run: |
           python3 -m unittest discover -s scripts -p 'test_ci_engine.py'
