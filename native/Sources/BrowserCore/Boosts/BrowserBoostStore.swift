@@ -123,6 +123,16 @@ public actor BrowserBoostStore {
         return try save(current, expectedRevision: current.revision)
     }
 
+    /// Source and local consent are committed together against the reviewed snapshot.
+    public func applyGeneratedJavaScript(_ source: String, to id: BrowserBoostID, expected: BrowserBoostDocument) throws -> BrowserBoost {
+        guard document == expected, var current = document.boosts.first(where: { $0.id == id }) else {
+            throw BrowserBoostError.staleRevision
+        }
+        current.content.customJavaScript = source
+        current.javaScriptOptIn = true
+        return try save(current, expectedRevision: current.revision)
+    }
+
     /// An explicit delete acts on the current identity, without recreating a remote deletion.
     public func removeCurrent(_ id: BrowserBoostID) throws {
         guard let current = document.boosts.first(where: { $0.id == id }) else { throw BrowserBoostError.staleRevision }

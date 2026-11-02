@@ -58,6 +58,7 @@ final class BrowserBoostEditorController: NSWindowController {
             alert.addButton(withTitle: uiText("Cancel"))
             alert.beginSheetModal(for: window) { response in completion(response == .alertFirstButtonReturn) }
         }
+        generation.requestJavaScriptConsent = code.requestJavaScriptConsent
         code.onBack = { [weak self] in self?.showControls() }
         var frame = window.frame
         frame.origin.x -= 480 - frame.width; frame.size.width = 480

@@ -59,6 +59,27 @@ extension ChromiumSurface: BrowserAIBoostPreview {
         return try await boostCall(script, revision: revision, isCurrent: isCurrent) as? Bool == true
     }
 
+    public func validateBoostJavaScript(_ source: String, revision: UInt64, isCurrent: @escaping @MainActor () -> Bool) async throws -> Bool {
+        guard !source.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              source.count <= 12000, source.utf8.count <= 24000,
+              !source.contains("```"), !source.lowercased().contains("<script") else { return false }
+        func call(_ method: String, _ params: [String: Any] = [:]) async throws -> [String: Any] {
+            guard isCurrent(), documentGeneration == revision, !isDisposed else { throw BrowserEngineError.documentChanged }
+            let data = try JSONSerialization.data(withJSONObject: params)
+            let (ok, reply) = await devToolsCall(method, params: String(decoding: data, as: UTF8.self))
+            guard ok, isCurrent(), documentGeneration == revision, !isDisposed,
+                  let result = try JSONSerialization.jsonObject(with: reply) as? [String: Any] else { throw BrowserEngineError.documentChanged }
+            return result
+        }
+        let tree = try await call("Page.getFrameTree")
+        guard let node = tree["frameTree"] as? [String: Any], let frame = node["frame"] as? [String: Any], let id = frame["id"] as? String else { return false }
+        let world = try await call("Page.createIsolatedWorld", ["frameId": id, "worldName": "OrbitBoostDraft"])
+        guard let context = world["executionContextId"] as? Int else { return false }
+        // Compile only. Never persist a script handle or execute generated source here.
+        let result = try await call("Runtime.compileScript", ["expression": source, "sourceURL": "", "persistScript": false, "executionContextId": context])
+        return result["exceptionDetails"] == nil
+    }
+
     public func clearBoostPreview(lease: UUID, revision: UInt64) async {
         let token = lease.uuidString
         _ = try? await boostCall("(()=>{const p=globalThis.__orbitBoostDraft;if(p&&p.token==='\(token)'){p.animations?.forEach(a=>a.cancel());document.adoptedStyleSheets=document.adoptedStyleSheets.filter(s=>s!==p.sheet);delete globalThis.__orbitBoostDraft}return true})()", revision: revision, isCurrent: { true })

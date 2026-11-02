@@ -137,18 +137,19 @@ final class BrowserBoostCodeView: NSView, NSTextViewDelegate, NSTextFieldDelegat
     }
     @objc private func submitPrompt() {
         guard let generation else { return }
-        if generation.running { generation.stop() } else { generation.run(prompt.stringValue) }
+        if generation.running { generation.stop() } else { generation.run(prompt.stringValue, language: isCSS ? .css : .javaScript) }
     }
     private func renderGeneration() {
         guard let generation else { apply.isEnabled = false; return }
-        send.image = OrbitIcon.image(sfName: generation.running ? "stop.fill" : "arrow.up", pointSize: 14, accessibilityDescription: generation.running ? uiText("Stop") : uiText("Generate CSS"))
-        send.setAccessibilityLabel(generation.running ? uiText("Stop") : uiText("Generate CSS"))
+        let generateLabel = isCSS ? uiText("Generate CSS") : uiText("Generate JavaScript")
+        send.image = OrbitIcon.image(sfName: generation.running ? "stop.fill" : "arrow.up", pointSize: 14, accessibilityDescription: generation.running ? uiText("Stop") : generateLabel)
+        send.setAccessibilityLabel(generation.running ? uiText("Stop") : generateLabel)
         apply.isEnabled = generation.ready && !generation.applying
         editCode.isEnabled = !generation.running && !generation.applying
         status.stringValue = generation.error
         if generation.running || generation.isDraftVisible {
             showingGeneratedDraft = true
-            if !isCSS { display(css: true) }
+            if isCSS != (generation.language == .css) { display(css: generation.language == .css) }
             if textView.string != generation.output { textView.string = generation.output }
             textView.isEditable = !generation.running && !generation.applying
         } else {
@@ -169,13 +170,14 @@ final class BrowserBoostCodeView: NSView, NSTextViewDelegate, NSTextFieldDelegat
         selectionTask = Task { [weak self] in
             await pending?.value
             guard let self, !session.isClosed else { return }
-            if !selected && !session.boost.javaScriptOptIn {
+            if !selected && generation == nil && !session.boost.javaScriptOptIn {
                 requestJavaScriptConsent? { [weak self] accepted in
                     guard let self, accepted, !session.isClosed else { return }
                     session.setJavaScriptConsent(true)
                     display(css: false)
                 }
             } else { display(css: selected) }
+            renderGeneration()
         }
     }
 
@@ -191,6 +193,17 @@ final class BrowserBoostCodeView: NSView, NSTextViewDelegate, NSTextFieldDelegat
     func textDidChange(_ notification: Notification) {
         if generation?.isDraftVisible == true { generation?.editDraft(textView.string); return }
         let source = textView.string, css = isCSS
+        if !css && !session.boost.javaScriptOptIn {
+            textView.isEditable = false
+            requestJavaScriptConsent? { [weak self] accepted in
+                guard let self else { return }
+                textView.isEditable = true
+                guard accepted, !session.isClosed, !isCSS, textView.string == source else { return }
+                session.setJavaScriptConsent(true)
+                session.edit { $0.customJavaScript = source }
+            }
+            return
+        }
         session.edit { if css { $0.customCSS = source } else { $0.customJavaScript = source } }
         scroll.verticalRulerView?.needsDisplay = true
     }

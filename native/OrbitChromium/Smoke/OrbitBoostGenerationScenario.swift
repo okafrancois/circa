@@ -19,6 +19,9 @@ private actor OrbitBoostFixtureClient: BrowserAIProviderClient {
         let task = Task {
             let source: String
             switch mode {
+            case "js", "js-slow": source = "// Reviewed generated draft\nconst count = () => { document.body.dataset.boostCount = String(Number(document.body.dataset.boostCount || 0) + 1); };\nif (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', count, {once:true}); else count();"
+            case "js-invalid": source = "document.body.dataset.boostCount = ;"
+            case "js-markdown": source = "```javascript\ndocument.body.dataset.boostCount = '1';\n```"
             case "invalid-comments": source = "h1 { color: blue; color: r/**/ed; }"
             case "source-map": source = "/*# sourceMappingURL=http://127.0.0.1:8893/forbidden-resource */\n.shorts-shelf { display: none; }"
             case "invalid": source = "<style>body { display:none }</style>"
@@ -28,7 +31,7 @@ private actor OrbitBoostFixtureClient: BrowserAIProviderClient {
             default: source = ".shorts-shelf { display: none !important; }\n#primary.watch-layout { grid-template-columns: 1fr; max-width: 100%; margin: 0; }\n#secondary { display: none; }"
             }
             for line in source.split(separator: "\n") {
-                do { try await Task.sleep(for: .milliseconds(mode == "slow" ? 3000 : 350)) } catch { return }
+                do { try await Task.sleep(for: .milliseconds(["slow", "js-slow"].contains(mode) ? 3000 : 350)) } catch { return }
                 pair.continuation.yield(.text(String(line) + "\n"))
             }
             pair.continuation.yield(mode == "quota-error" ? .failed(.limitReached(resetsAt: nil)) : mode == "error" ? .failed(.failed) : .completed)
@@ -96,6 +99,12 @@ extension OrbitSmokeDriver {
         let url = fixture.appendingPathComponent("boost.html")
         owner.openTab(url: url); await owner.session.waitForQueuedCommands()
         guard let surface = await committed(owner, url) else { check("boost.fixture", false); return }
+        if arguments.contains("--orbit-smoke-boost-relaunch"), arguments.contains("--orbit-smoke-boost-generated-js") {
+            try? await Task.sleep(for: .milliseconds(400))
+            check("js.relaunch-one", (try? await environment.engine.conformanceProbe?.evaluateScript("document.body.dataset.boostCount || '0'", in: surface)) == "1")
+            check("js.relaunch-no-generation", !FileManager.default.fileExists(atPath: runRoot.appendingPathComponent("request.json").path))
+            return
+        }
         if arguments.contains("--orbit-smoke-boost-relaunch") {
             var display: String?
             for _ in 0..<30 {
@@ -111,7 +120,7 @@ extension OrbitSmokeDriver {
             return
         }
         func owns(_ w: NSWindow) -> Bool {
-            guard NSApp.isActive, NSWorkspace.shared.frontmostApplication?.processIdentifier == getpid(), NSApp.keyWindow === w, w.isVisible else { return false }
+            guard NSApp.isActive, NSWorkspace.shared.frontmostApplication?.processIdentifier == getpid(), NSApp.keyWindow === w, w.isVisible, w.isOnActiveSpace, w.occlusionState.contains(.visible) else { return false }
             let rows = CGWindowListCopyWindowInfo([.optionIncludingWindow], CGWindowID(w.windowNumber)) as? [[String: Any]]
             return rows?.contains { ($0[kCGWindowOwnerPID as String] as? Int32) == getpid() } == true
         }
@@ -220,6 +229,89 @@ extension OrbitSmokeDriver {
             check("boost.manual-back", panel.contentView === editor.editor)
             check("boost.manual-controls-appearance", panel.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .aqua)
             editor.close(); return
+        }
+        if arguments.contains("--orbit-smoke-boost-generated-js") {
+            func buttons(_ view: NSView) -> [NSButton] { view.subviews.flatMap { ($0 as? NSButton).map { [$0] } ?? buttons($0) } }
+            func count() async -> String? { await evaluate("document.body.dataset.boostCount || '0'") }
+            guard let js = buttons(code).first(where: { $0.title == uiText("JS") }) else { check("js.tab", false); return }
+            _ = await click(js); await code.selectionTask?.value
+            check("js.tab-no-consent", !code.isCSS && panel.attachedSheet == nil && !editor.session.boost.javaScriptOptIn)
+            _ = await click(code.prompt)
+            let prompt = "on DOMContentLoaded once, or now if ready, set document.body.dataset.boostCount to String(Number(document.body.dataset.boostCount || 0) + 1)"
+            for character in prompt {
+                guard owns(panel), let event = BrowserKeyEquivalentMatcher.layoutEvent(producing: String(character), flags: []) else { check("js.input-owner", false); return }
+                NSApp.postEvent(event, atStart: false)
+                try? await Task.sleep(for: .milliseconds(5))
+            }
+            try? await Task.sleep(for: .milliseconds(100))
+            check("js.exact-prompt", code.prompt.stringValue == prompt)
+            guard let send = buttons(code).first(where: { $0.accessibilityLabel() == uiText("Generate JavaScript") }) else { check("js.send", false); return }
+            _ = await click(send)
+            _ = await until(3) { editor.generation.running && !code.textView.string.isEmpty }
+            if !["js-invalid", "js-markdown", "empty", "error", "quota-error"].contains(failureMode) {
+                check("js.streaming-visible", editor.generation.running && !code.textView.string.isEmpty)
+            }
+            check("js.streaming-zero", await count() == "0")
+            check("js.streaming-not-saved", await editor.session.store.snapshot() == baseline)
+            if arguments.contains("--orbit-smoke-boost-stop") {
+                _ = await click(send)
+                check("js.stop", !editor.generation.running && !editor.generation.ready)
+                check("js.stop-zero", await count() == "0")
+                check("js.stop-not-saved", await editor.session.store.snapshot() == baseline)
+                editor.close(); return
+            }
+            _ = await until(live ? 28 : 5) { !editor.generation.running }
+            check("js.review-zero", await count() == "0")
+            check("js.review-not-saved", await editor.session.store.snapshot() == baseline)
+            if ["js-invalid", "js-markdown", "empty", "error", "quota-error"].contains(failureMode) {
+                check("js.rejected", !editor.generation.ready && !editor.generation.error.isEmpty)
+                editor.close(); return
+            }
+            check("js.review-ready", editor.generation.ready && !code.isCSS && code.textView.string == editor.generation.output)
+            if owns(panel) {
+                let capture = Process(); capture.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
+                capture.arguments = ["-x", "-l", String(panel.windowNumber), runRoot.appendingPathComponent("js-review.png").path]
+                try? capture.run(); capture.waitUntilExit()
+            }
+            if let bytes = try? JSONSerialization.data(withJSONObject: ["source": editor.generation.output, "fixture": !live]) { try? bytes.write(to: runRoot.appendingPathComponent("js-review.json")) }
+            if arguments.contains("--orbit-smoke-boost-revoke") || arguments.contains("--orbit-smoke-boost-stale") || arguments.contains("--orbit-smoke-boost-navigation") || arguments.contains("--orbit-smoke-boost-cancel") {
+                if arguments.contains("--orbit-smoke-boost-revoke") { try? await environment.settings.updateAI { $0.isEnabled = false } }
+                if arguments.contains("--orbit-smoke-boost-stale") { editor.session.rename(to: "Concurrent source"); await editor.session.pending?.value }
+                if arguments.contains("--orbit-smoke-boost-navigation") {
+                    owner.submitAddress(url.appending(queryItems: [.init(name: "next", value: "true")]).absoluteString)
+                    await owner.session.waitForPendingCommands()
+                }
+                if arguments.contains("--orbit-smoke-boost-cancel") { editor.close() }
+                _ = await until(3) { !editor.generation.ready }
+                check("js.revoked", !editor.generation.ready)
+                let saved = await editor.session.store.snapshot().boosts.first
+                check("js.revoked-source", saved?.content.customJavaScript == baseline.boosts.first?.content.customJavaScript && saved?.javaScriptOptIn == baseline.boosts.first?.javaScriptOptIn)
+                editor.close(); return
+            }
+            guard let apply = buttons(code).first(where: { $0.title == uiFormat("Apply to %@", editor.session.boost.hostPattern.host) }) else { return }
+            _ = await click(apply)
+            _ = await until(3) { panel.attachedSheet != nil }
+            guard let sheet = panel.attachedSheet, let content = sheet.contentView,
+                  let cancel = buttons(content).first(where: { $0.title == uiText("Cancel") }) else { check("js.consent", false); return }
+            _ = await click(cancel)
+            _ = await until(2) { !editor.generation.applying }
+            check("js.declined-unchanged", await editor.session.store.snapshot() == baseline)
+            check("js.declined-zero", await count() == "0")
+            _ = await click(apply)
+            _ = await until(3) { panel.attachedSheet != nil }
+            guard let acceptedSheet = panel.attachedSheet, let acceptedContent = acceptedSheet.contentView,
+                  let enable = buttons(acceptedContent).first(where: { $0.title == uiText("Enable JavaScript") }) else { check("js.fresh-consent", false); return }
+            _ = await click(enable)
+            _ = await until(4) { !editor.generation.applying }
+            check("js.saved-consent", editor.session.boost.javaScriptOptIn && !editor.session.boost.content.customJavaScript.isEmpty)
+            check("js.applied-before-reload-zero", await count() == "0")
+            editor.close(); surface.reload(); _ = await committed(owner, url)
+            for _ in 0..<30 {
+                if await count() == "1" { break }
+                try? await Task.sleep(for: .milliseconds(100))
+            }
+            check("js.reload-one", await count() == "1")
+            return
         }
         let prompt = "hide shorts and make the player full width"
         for character in prompt {

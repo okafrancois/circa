@@ -3,6 +3,21 @@ import Testing
 @testable import BrowserCore
 
 @Suite struct BrowserBoostGeneratedDraftTests {
+    @Test func javaScriptSourceAndLocalConsentCommitAtomicallyAndRejectStaleSnapshot() async throws {
+        let store = try BrowserBoostStore(profileID: ProfileID())
+        var boost = BrowserBoost(title: "Synthetic", hostPattern: try BrowserBoostHostPattern(host: "example.test"))
+        boost.content.customCSS = "p { color: red }"
+        let saved = try await store.save(boost), expected = await store.snapshot()
+        let applied = try await store.applyGeneratedJavaScript("document.title = 'Synthetic'", to: saved.id, expected: expected)
+        #expect(applied.javaScriptOptIn && applied.content.customJavaScript == "document.title = 'Synthetic'")
+        #expect(applied.content.customCSS == boost.content.customCSS)
+        do {
+            _ = try await store.applyGeneratedJavaScript("stale()", to: saved.id, expected: expected)
+            Issue.record("Stale script replaced reviewed source")
+        } catch BrowserBoostError.staleRevision {}
+        #expect(await store.snapshot().boosts.first == applied)
+    }
+
     @Test func generatedApplyRejectsUnrelatedStoreChangesAndPreservesSavedCode() async throws {
         let store = try BrowserBoostStore(profileID: ProfileID())
         let pattern = try BrowserBoostHostPattern(host: "example.test")
