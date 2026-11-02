@@ -56,6 +56,7 @@ extension OrbitSmokeDriver {
             try? await Task.sleep(for: .milliseconds(1500))
             let movie = Process(); movie.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
             movie.arguments = ["-x", "-v", "-V", "8", "-l", String(window.windowNumber), runRoot.appendingPathComponent("reference.mov").path]
+            event("today-reference-movie-start", [:])
             if owns() { try? movie.run() }
             try? await Task.sleep(for: .milliseconds(350))
             await evaluate("document.querySelector('#h4b').click()")
@@ -63,6 +64,7 @@ extension OrbitSmokeDriver {
             capture("reference-proposals")
             await evaluate("document.querySelector('#h4g .r button').click()")
             try? await Task.sleep(for: .milliseconds(700))
+            event("today-reference-archive-click", [:])
             await evaluate("document.querySelector('#h4g .r[data-g=inv] button').click()")
             _ = await until(9) { !movie.isRunning }
             return
@@ -82,6 +84,7 @@ extension OrbitSmokeDriver {
         check("today.available", button.isEnabled)
         let movie = Process(); movie.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
         movie.arguments = ["-x", "-v", "-V", "8", "-l", String(window.windowNumber), runRoot.appendingPathComponent("native.mov").path]
+        event("today-native-movie-start", [:])
         if owns() { try? movie.run() }
         await click(button)
         if arguments.contains("--orbit-smoke-today-stop") {
@@ -127,6 +130,7 @@ extension OrbitSmokeDriver {
                         owner.sidebar.page.list.titleRestoreRow(for: $0)
                     }
                     let traceStart = ProcessInfo.processInfo.systemUptime
+                    event("today-native-archive-click", [:])
                     let trace = Task { @MainActor in
                         var csv = "seconds,leaving,opacity,translationX\n"
                         for _ in 0..<90 {
