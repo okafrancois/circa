@@ -246,6 +246,7 @@ extension OrbitSmokeDriver {
             }
             try? await Task.sleep(for: .milliseconds(100))
             check("js.exact-prompt", code.prompt.stringValue == prompt)
+            check("js.input-guards", owns(panel), ["pid": getpid(), "window": panel.windowNumber, "bundle": Bundle.main.bundleIdentifier ?? "", "activeSpace": panel.isOnActiveSpace, "visible": panel.isVisible, "occluded": !panel.occlusionState.contains(.visible), "foremost": NSWorkspace.shared.frontmostApplication?.processIdentifier == getpid()])
             guard let send = buttons(code).first(where: { $0.accessibilityLabel() == uiText("Generate JavaScript") }) else { check("js.send", false); return }
             var recording: Process?
             if arguments.contains("--orbit-smoke-boost-motion"), owns(panel) {
@@ -276,6 +277,7 @@ extension OrbitSmokeDriver {
                 samples += 1
                 try? await Task.sleep(for: .milliseconds(40))
             }
+            if !["js-invalid", "js-markdown", "empty", "error", "quota-error"].contains(failureMode) { check("js.stream-sampled", samples > 0) }
             check("js.stream-observations-zero", zeroThroughout)
             check("js.stream-observations-not-saved", unchangedThroughout)
             if let bytes = try? JSONSerialization.data(withJSONObject: ["samples": samples, "zero": zeroThroughout, "unchanged": unchangedThroughout]) { try? bytes.write(to: runRoot.appendingPathComponent("js-observations.json")) }
@@ -286,6 +288,7 @@ extension OrbitSmokeDriver {
                 editor.close(); return
             }
             check("js.review-ready", editor.generation.ready && !code.isCSS && code.textView.string == editor.generation.output)
+            let reviewedSource = editor.generation.output
             if owns(panel) {
                 let capture = Process(); capture.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
                 capture.arguments = ["-x", "-l", String(panel.windowNumber), runRoot.appendingPathComponent("js-review.png").path]
@@ -344,7 +347,7 @@ extension OrbitSmokeDriver {
                   let enable = buttons(acceptedContent).first(where: { $0.title == uiText("Enable JavaScript") }) else { check("js.fresh-consent", false); return }
             _ = await click(enable)
             _ = await until(4) { !editor.generation.applying }
-            check("js.saved-consent", editor.session.boost.javaScriptOptIn && !editor.session.boost.content.customJavaScript.isEmpty)
+            check("js.saved-consent", editor.session.boost.javaScriptOptIn && editor.session.boost.content.customJavaScript == reviewedSource && !reviewedSource.isEmpty)
             check("js.applied-before-reload-zero", await count() == "0")
             editor.close(); surface.reload(); _ = await committed(owner, url)
             for _ in 0..<30 {
