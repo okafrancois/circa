@@ -1,6 +1,7 @@
 import AppKit
 import BrowserShell
 import BrowserCore
+import SwiftUI
 
 private typealias Metrics = OrbitTokens.Metrics.Sidebar
 
@@ -67,6 +68,8 @@ final class BrowserSidebarView: NSView, SidebarListHost {
     var onRename: ((BrowserOrganizationNode, String) -> Void)?
     var onRenameDidEnd: (() -> Void)?
     var onClearToday: (() -> Void)?
+    var onTidyToday: (() -> Void)?
+    private weak var todayTidyPage: SidebarListView?
     var onTearOff: ((SidebarDragPayload, NSPoint) -> Void)?
     var onFileDrop: (([URL], BrowserOrganizationDestination) -> Void)?
     var onCopyDrop: ((SidebarDragPayload, BrowserOrganizationDestination) -> Void)?
@@ -217,6 +220,22 @@ final class BrowserSidebarView: NSView, SidebarListHost {
     var spaceTitles: [String] { renderedCatalog?.spaces.map(\.name) ?? [] }
     var isSwitchingSpace: Bool { leavingPage != nil }
     var listContent: SidebarListContent { page.list.content }
+
+    func setTodayTidyAvailable(_ available: Bool) {
+        if let old = todayTidyPage, old !== page.list {
+            old.showTodayAccessory(nil, height: 0)
+            old.setTodayTidyAvailable(false)
+        }
+        todayTidyPage = page.list
+        page.list.onTidyToday = { [weak self] in self?.onTidyToday?() }
+        page.list.setTodayTidyAvailable(available)
+    }
+
+    func showTodayTidy(_ content: AnyView?, height: CGFloat) {
+        if let old = todayTidyPage, old !== page.list { old.showTodayAccessory(nil, height: 0) }
+        todayTidyPage = page.list
+        page.list.showTodayAccessory(content, height: height)
+    }
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)

@@ -109,6 +109,7 @@ extension BrowserWindowController {
         sidebar.onRenameDidEnd = { [weak self] in self?.windowShell.hoverHoldDidChange() }
         // ARCHIVE-UI's hook keeps visible and media tabs (archive-r2).
         sidebar.onClearToday = { [weak self] in self?.submitInput { $0.clearTodayFromArchiveCommand() } }
+        sidebar.onTidyToday = { [weak self] in self?.submitInput { $0.todayTidy.start() } }
         sidebar.page.list.prepareDesktopPreview = { [weak self] payload in
             guard let self, let tab = payload.nodes.first?.tabID, let surface = liveSidebarSurface(of: tab) else { return }
             let generation = surface.documentGeneration

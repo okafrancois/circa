@@ -48,6 +48,21 @@ extension NativeWebKitTests {
 @Suite
 @MainActor
 struct SidebarListModelTests {
+    @Test func todayAccessoryReservesSpaceWithoutMovingPinnedRows() {
+        let org = SyntheticOrganization()
+        let content = SidebarListContent(snapshot: org.snapshot(pinned: [org.tab(pinned: true)], today: [org.tab(), org.tab()]))
+        let base = SidebarListLayout.resolve(entries: content.entries, spaceTitleCenterY: 28, width: 228)
+        for height: CGFloat in [0, 28, 56, 116, 296] {
+            let expanded = SidebarListLayout.resolve(entries: content.entries, spaceTitleCenterY: 28, width: 228, todayAccessoryHeight: height)
+            #expect(expanded.separatorCenterY == base.separatorCenterY)
+            #expect(expanded.newTabCenterY == base.newTabCenterY + height)
+            for (old, new) in zip(base.rows, expanded.rows) {
+                #expect(old.node == new.node)
+                #expect(new.centerY == old.centerY + (old.section == .today ? height : 0))
+            }
+        }
+    }
+
     @Test("Split rows keep group identity, pane order and cached icons across focus updates", arguments: [2, 3])
     func splitRowIdentityAndContent(count: Int) throws {
         let org = SyntheticOrganization()

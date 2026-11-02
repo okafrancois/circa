@@ -30,6 +30,18 @@ actor OrbitAssistantFixtureClient: BrowserAIProviderClient {
         }
         let mode = (try? String(contentsOf: root.appendingPathComponent("fixture-mode"), encoding: .utf8))?.trimmingCharacters(in: .whitespacesAndNewlines)
         let passage = (try? String(contentsOf: root.appendingPathComponent("fixture-passage"), encoding: .utf8)) ?? "Actors protect mutable state."
+        var todayAnswer: String?
+        if mode == "today", let envelope = (try? JSONSerialization.jsonObject(with: Data(request.prompt.utf8))) as? [String: String],
+           let data = envelope["data"]?.data(using: .utf8),
+           let rows = (try? JSONSerialization.jsonObject(with: data)) as? [[String: Any]] {
+            let ids = rows.compactMap { $0["id"] as? String }
+            if ids.count >= 3, let answer = try? JSONSerialization.data(withJSONObject: ["suggestions": [
+                ["action": "folder", "title": "Synthetic research", "tabs": Array(ids.prefix(2))],
+                ["action": "archive", "title": "Synthetic completed", "tabs": [ids[2]]]]]) {
+                todayAnswer = String(decoding: answer, as: UTF8.self)
+            }
+        }
+        let answer = todayAnswer
         let pair = AsyncStream<BrowserAITurnEvent>.makeStream()
         let task = Task {
             if mode == "error" || mode == "quota" {
@@ -40,7 +52,7 @@ actor OrbitAssistantFixtureClient: BrowserAIProviderClient {
             if mode == "slow" {
                 do { try await Task.sleep(for: .milliseconds(3500)) } catch { return }
             }
-            let chunks = mode == "tidy" ? ["Synthetic notes"] : mode == "code"
+            let chunks = mode == "today-empty" ? ["{\"suggestions\":[]}"] : mode == "today" ? [answer ?? "{\"suggestions\":[]}"] : mode == "tidy" ? ["Synthetic notes"] : mode == "code"
                 ? ["Use `await` safely. ", "A wrapped run: `await actor.update(value: value, revalidateAfterSuspension: true, preserveSelection: true)` ", "[1: \"\(passage)\"]"]
                 : ["Synthetic ", "streamed ", "answer. ", "[1: \"\(passage)\"]"]
             for text in chunks {

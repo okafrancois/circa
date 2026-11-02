@@ -284,7 +284,8 @@ struct SidebarListLayout: Equatable {
     }
 
     static func resolve(entries: [SidebarListEntry], spaceTitleCenterY title: CGFloat, width: CGFloat,
-                        hidden: Set<BrowserOrganizationNode> = [], gap: SidebarDropGap? = nil) -> SidebarListLayout {
+                        hidden: Set<BrowserOrganizationNode> = [], gap: SidebarDropGap? = nil,
+                        todayAccessoryHeight: CGFloat = 0) -> SidebarListLayout {
         var layout = SidebarListLayout()
         let pitch = Metrics.rowPitch
         let visible = hidden.isEmpty ? entries : entries.filter { !hidden.contains($0.node) }
@@ -317,7 +318,7 @@ struct SidebarListLayout: Equatable {
         let firstRow = title + Metrics.firstRowCenterFromSpaceTitle
         layout.separatorCenterY = rhythm.separatorCenterY + offset
         layout.isSeparatorVisible = rhythm.isSeparatorVisible
-        layout.newTabCenterY = rhythm.newTabCenterY + offset
+        layout.newTabCenterY = rhythm.newTabCenterY + offset + max(0, todayAccessoryHeight)
         let todayFirst = layout.newTabCenterY + pitch
         layout.rows.reserveCapacity(visible.count)
         layout.centers.reserveCapacity(visible.count)

@@ -1,6 +1,7 @@
 import AppKit
 import BrowserCore
 import BrowserShell
+import SwiftUI
 
 private typealias Metrics = OrbitTokens.Metrics.Sidebar
 
@@ -61,6 +62,13 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
     let separator = SidebarSeparatorView()
     let newTabRow = SidebarNewTabRow()
     let clearButton = SidebarClearButton()
+    let tidyButton = NSButton()
+    var onTidyToday: (() -> Void)?
+    private var tidyAvailable = false
+    private var todayAccessory: NSHostingView<AnyView>?
+    var todayGroupingTabs: [TabID] = []
+    private var todayAccessoryHeight: CGFloat = 0
+    private var todayAccessoryTask: Task<Void, Never>?
     private let gapPlaceholder = OrbitSurfaceBackgroundView(cornerRadius: OrbitTokens.Radius.tabRow)
     let animator = SidebarListAnimator()
 
@@ -182,9 +190,19 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
         separator.isHidden = true
         clearButton.target = self
         clearButton.action = #selector(clearToday(_:))
+        tidyButton.title = uiText("Tidy")
+        tidyButton.image = OrbitIcon.image(sfName: "sparkles", pointSize: 12, accessibilityDescription: nil)
+        tidyButton.imagePosition = .imageLeading
+        tidyButton.isBordered = false
+        tidyButton.font = BrandTextStyle.ui.font(size: 12)
+        tidyButton.target = self
+        tidyButton.action = #selector(tidyToday(_:))
+        tidyButton.setAccessibilityIdentifier("tidy-today")
+        tidyButton.isHidden = true
         newTabRow.target = self
         newTabRow.action = #selector(newTab(_:))
         for view in [gapPlaceholder, separator, newTabRow, clearButton] as [NSView] { addSubview(view) }
+        addSubview(tidyButton)
         splitDropHighlight.isHidden = true
         addSubview(insertionLine)
         insertionLine.isHidden = true
@@ -314,6 +332,7 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
         commandsEnabled = enabled
         newTabRow.isEnabled = enabled
         clearButton.isEnabled = enabled
+        tidyButton.isEnabled = enabled
         for row in rowViews.values { row.commandsEnabled = enabled }
         if !enabled { cancelRename() }
     }
@@ -339,10 +358,10 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
         let hidden = hiddenNodes
         let width = bounds.width
         dropLayout = SidebarListLayout.resolve(entries: content.entries, spaceTitleCenterY: spaceTitleCenterY,
-                                               width: width, hidden: hidden)
+                                               width: width, hidden: hidden, todayAccessoryHeight: todayAccessoryHeight)
         displayedLayout = effectiveGap == nil ? dropLayout
             : SidebarListLayout.resolve(entries: content.entries, spaceTitleCenterY: spaceTitleCenterY,
-                                        width: width, hidden: hidden, gap: effectiveGap)
+                                        width: width, hidden: hidden, gap: effectiveGap, todayAccessoryHeight: todayAccessoryHeight)
     }
 
     private func motionStyle(animated: Bool) -> OrbitMotionStyle {
@@ -383,7 +402,12 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
             for placement in displayedLayout.rows {
                 let slot = SidebarListSlot.node(placement.node)
                 if let current = animator.value(of: slot, at: time) ?? old.centerY(of: slot) {
-                    animator.move(slot, from: current, to: placement.centerY, timing: timing, at: time)
+                    if case .tab(let id) = placement.node, let index = todayGroupingTabs.firstIndex(of: id) {
+                        animator.move(slot, from: current, to: placement.centerY,
+                            timing: .init(duration: 0.42, x1: 0.19, y1: 1, x2: 0.22, y2: 1), at: time + Double(index) * 0.05)
+                    } else {
+                        animator.move(slot, from: current, to: placement.centerY, timing: timing, at: time)
+                    }
                 } else if toggledPinned, placement.section == .pinned {
                     // Section rows are revealed by their row-height clips, without a content reload.
                 } else if let origin = enteringOrigin(of: placement.node, old: old, time: time, previous: previousByNode) {
@@ -602,8 +626,17 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
                                    width: clearWidth, height: Metrics.clearButtonHeight)
         let textMinX = clearButton.frame.minX + Metrics.clearHoverPadding
         let lineEnd = clearButton.isRevealed ? textMinX - Metrics.clearSeparatorGap : bounds.width - Metrics.separatorInsetX
-        separator.frame = NSRect(x: Metrics.separatorInsetX, y: lineY, width: max(0, lineEnd - Metrics.separatorInsetX), height: line)
+        tidyButton.frame = NSRect(x: Metrics.separatorInsetX, y: (separatorY - Metrics.clearButtonHeight / 2).rounded(),
+                                  width: 62, height: Metrics.clearButtonHeight)
+        let foreground = accent.foreground.resolved(for: effectiveAppearance)
+        tidyButton.contentTintColor = foreground
+        tidyButton.attributedTitle = NSAttributedString(string: uiText("Tidy"), attributes: [.font: BrandTextStyle.ui.font(size: 12), .foregroundColor: foreground])
+        let lineStart = tidyButton.isHidden ? Metrics.separatorInsetX : tidyButton.frame.maxX + 6
+        separator.frame = NSRect(x: lineStart, y: lineY, width: max(0, lineEnd - lineStart), height: line)
         separator.isHidden = isStandalone || !displayedLayout.isSeparatorVisible || pinnedMotion != nil
+        todayAccessory?.frame = NSRect(x: Metrics.paddingX,
+            y: displayedLayout.newTabCenterY - todayAccessoryHeight - Metrics.rowHeight / 2,
+            width: max(0, bounds.width - 2 * Metrics.paddingX), height: todayAccessoryHeight)
     }
 
     override func layout() {
@@ -828,7 +861,47 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
 
     private func refreshClear() {
         clearButton.setRevealed(isTodayHovered && content.hasTodayTabs && commandsEnabled)
+        tidyButton.isHidden = !tidyAvailable || !commandsEnabled || (!isTodayHovered && todayAccessory == nil)
         positionViews(at: animator.now)
+    }
+
+    func setTodayTidyAvailable(_ available: Bool) { tidyAvailable = available; refreshClear() }
+
+    func showTodayAccessory(_ content: AnyView?, height: CGFloat) {
+        todayAccessoryTask?.cancel()
+        if let content {
+            if let todayAccessory { todayAccessory.rootView = content }
+            else {
+                let host = NSHostingView(rootView: content)
+                host.wantsLayer = true; host.layer?.masksToBounds = true
+                todayAccessory = host
+                addSubview(host)
+            }
+        }
+        if content == nil { todayAccessory?.removeFromSuperview(); todayAccessory = nil }
+        let target = content == nil ? 0 : max(0, height)
+        let initial = todayAccessoryHeight
+        if target == initial { refreshClear(); return }
+        let start = ProcessInfo.processInfo.systemUptime
+        todayAccessoryTask = Task { [weak self] in
+            while let self, !Task.isCancelled {
+                let t = min(1, (ProcessInfo.processInfo.systemUptime - start) / 0.34)
+                todayAccessoryHeight = initial + (target - initial) * (OrbitMotionPreferences.prefersReducedMotion ? 1 : BrowserAssistantMotion.progress(t, opening: true))
+                relayout(animated: false)
+                onLayoutChange?()
+                if t >= 1 || OrbitMotionPreferences.prefersReducedMotion {
+                    if content == nil { todayAccessory?.removeFromSuperview(); todayAccessory = nil }
+                    refreshClear()
+                    return
+                }
+                try? await Task.sleep(for: .milliseconds(16))
+            }
+        }
+    }
+
+    @objc private func tidyToday(_ sender: Any?) {
+        guard tidyAvailable, commandsEnabled else { return }
+        onTidyToday?()
     }
 
     @objc private func clearToday(_ sender: Any?) {

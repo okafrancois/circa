@@ -24,6 +24,7 @@ extension BrowserEnvironment {
                 theme: spaceTheme(for: little.sourceSpaceID))
         }
         for controller in liveControllers {
+            controller.todayTidy.close()
             controller.tidyHelpers.cancel()
             controller.writingHelp?.dismiss()
             controller.reconcileFindAnswer()

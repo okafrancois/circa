@@ -714,6 +714,30 @@ extension BrowserStore {
 
     // MARK: Titles and pinned URLs
 
+    /// User-confirmed metadata suggestions share the native folder/archive transaction and Undo.
+    /// A global organization revision guards the whole operation, not just each member in turn.
+    public func applyTodaySuggestion(_ suggestion: BrowserAITodaySuggestion, revision: UInt64,
+                                     from context: BrowserContext) throws -> BrowserWindowState {
+        guard organizationRevision == revision, !suggestion.tabs.isEmpty,
+              Set(suggestion.tabs).count == suggestion.tabs.count else { throw BrowserStoreError.staleContext }
+        _ = try organizationWindow(context)
+        let current = try captureWindowState(in: context.windowID).organization
+        for id in suggestion.tabs {
+            guard let tab = current.allTabs.first(where: { $0.id == id }),
+                  case .today = tab.section, !tab.isOpenInAnotherWindow else { throw BrowserStoreError.staleContext }
+        }
+        try requireOrdinaryTabs(suggestion.tabs)
+        switch suggestion.action {
+        case .folder:
+            guard suggestion.tabs.count >= 2 else { throw BrowserOrganizationError.invalidDestination }
+            // Folders have the same native Pinned destination as New Folder from a selection.
+            return try createFolder(title: suggestion.title, at: .init(.pinned(context.spaceID), position: .start),
+                                    containing: suggestion.tabs.map { .tab($0) }, from: context).1
+        case .archive:
+            return try archiveTabs(suggestion.tabs, from: context)
+        }
+    }
+
     /// Reject any intervening organization edit, including rename/unpin/repin cycles.
     public func tidyPinnedTitle(_ expected: BrowserOrganizationTabItem, revision: UInt64,
                                 to title: String?, from context: BrowserContext) throws -> BrowserWindowState {

@@ -280,6 +280,16 @@ public extension BrowserWindowSession {
         enqueueOrganization { session, context in try await session.store.archiveTabs(ids, from: context) }
     }
 
+    @discardableResult
+    func applyTodaySuggestion(_ suggestion: BrowserAITodaySuggestion, revision: UInt64,
+                              isCurrent: @escaping @MainActor () -> Bool) -> Task<Bool?, Never> {
+        enqueueOrganizationValue { session, context in
+            guard isCurrent() else { throw BrowserStoreError.staleContext }
+            let state = try await session.store.applyTodaySuggestion(suggestion, revision: revision, from: context)
+            return (true, state)
+        }
+    }
+
     /// ⌘W on a multi-selection.
     func closeTabs(_ ids: [TabID]) {
         enqueueOrganization { session, context in try await session.store.closeTabs(ids, from: context) }
