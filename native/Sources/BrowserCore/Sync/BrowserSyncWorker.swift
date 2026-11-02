@@ -28,8 +28,9 @@ public actor BrowserSyncWorker {
         public let session: BrowserSessionDocument
         public let settings: BrowserSettingsDocument
         public let boosts: [BrowserBoostDocument]
-        public init(session: BrowserSessionDocument, settings: BrowserSettingsDocument, boosts: [BrowserBoostDocument] = []) {
-            self.session = session; self.settings = settings; self.boosts = boosts
+        public let skills: [BrowserAISkillDocument]
+        public init(session: BrowserSessionDocument, settings: BrowserSettingsDocument, boosts: [BrowserBoostDocument] = [], skills: [BrowserAISkillDocument] = []) {
+            self.session = session; self.settings = settings; self.boosts = boosts; self.skills = skills
         }
     }
     public struct Prepared: Sendable {
@@ -65,7 +66,7 @@ public actor BrowserSyncWorker {
     }
     private func project(_ snapshot: Snapshot) throws -> BrowserSyncProjection {
         if let cache = projectionCache, cache.0 == snapshot { return cache.1 }
-        let projection = try BrowserSyncMapping.project(session: snapshot.session, settings: snapshot.settings, boosts: snapshot.boosts)
+        let projection = try BrowserSyncMapping.project(session: snapshot.session, settings: snapshot.settings, boosts: snapshot.boosts, skills: snapshot.skills)
         projectionCache = (snapshot, projection)
         return projection
     }
@@ -84,9 +85,9 @@ public actor BrowserSyncWorker {
         try state.replica.capture(current, now: now)
         let visible = state.replica.visible
         if let cache = materializationCache, cache.0 == snapshot, cache.1 == visible { return cache.2 }
-        let value = try BrowserSyncMapping.materialize(visible, local: snapshot.session, settings: snapshot.settings, boosts: snapshot.boosts)
+        let value = try BrowserSyncMapping.materialize(visible, local: snapshot.session, settings: snapshot.settings, boosts: snapshot.boosts, skills: snapshot.skills)
         let shared = BrowserSessionDocument(profiles: value.profiles, spaces: value.spaces, windows: [], tabs: [], organization: value.organization)
-        let projected = try BrowserSyncMapping.project(session: shared, settings: value.settings, boosts: value.boosts)
+        let projected = try BrowserSyncMapping.project(session: shared, settings: value.settings, boosts: value.boosts, skills: value.skills)
         let result = Prepared(value: value, projection: projected, changed: projected != current)
         // Missing local tabs acquire Date() during materialization. Do not reuse that
         // ephemeral timestamp if model publication was refused and the tab is still absent.

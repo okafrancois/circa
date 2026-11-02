@@ -90,6 +90,7 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
     var shortcutPreferences = BrowserShortcutPreferences()
     var settings = BrowserSettingsRuntime(store: try! BrowserSettingsStore())
     var boosts = BrowserBoostsRuntime()
+    var skills = BrowserSkillsRuntime()
     let sync = BrowserSyncRuntime()
     /// Created on first use (Settings › AI or an AI feature): no AI program starts at launch.
     private(set) var aiIfStarted: OrbitAIService?
@@ -199,6 +200,7 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
             .appendingPathComponent("Boosts", isDirectory: true),
             hostOverride: Bundle.main.object(forInfoDictionaryKey: "OrbitSyntheticBundle") as? Bool == true
                 && ProcessInfo.processInfo.environment["ORBIT_SYNTHETIC_BOOST_HOST"] == "1" ? BrowserFakeBoostHost() : nil)
+        environment.skills = BrowserSkillsRuntime(directory: sessionFile.deletingLastPathComponent().appendingPathComponent("Skills", isDirectory: true))
         environment.favoriteIcons = FavoriteIconStore(directory: sessionFile.deletingLastPathComponent()
             .appendingPathComponent("Favorite Icons", isDirectory: true))
         BrowserPerformance.mark(.iconPreload)
@@ -694,6 +696,7 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
     }
     func removeSettingsPermissions(profile: ProfileID) async throws {
         try await boosts.removeProfile(profile, engine: engine)
+        try await skills.removeProfile(profile)
         try await permissions.clear(profileID: profile)
         try sitePreferences.clear(profileID: profile)
     }

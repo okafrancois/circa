@@ -162,7 +162,9 @@ final class BrowserSyncRuntime: ObservableObject {
         let settings = await environment.settings.store.snapshot()
         var boostDocuments: [BrowserBoostDocument] = []
         for profile in session.profiles { boostDocuments.append(await (try environment.boosts.store(for: profile.id)).snapshot()) }
-        let outgoing = try await worker.capture(.init(session: session, settings: settings, boosts: boostDocuments))
+        var skillDocuments: [BrowserAISkillDocument] = []
+        for profile in session.profiles { skillDocuments.append(await (try environment.skills.store(for: profile.id)).snapshot()) }
+        let outgoing = try await worker.capture(.init(session: session, settings: settings, boosts: boostDocuments, skills: skillDocuments))
         guard enabled, !Task.isCancelled else { return }
         let incoming = try await transport.exchange(outgoing)
         guard enabled, !Task.isCancelled, !environment.isFinalizing, !environment.settingsRemovalIsRunning else { return }
@@ -173,7 +175,9 @@ final class BrowserSyncRuntime: ObservableObject {
         let currentSettings = await environment.settings.store.snapshot()
         var currentBoosts: [BrowserBoostDocument] = []
         for profile in current.profiles { currentBoosts.append(await (try environment.boosts.store(for: profile.id)).snapshot()) }
-        let prepared = try await worker.prepare(.init(session: current, settings: currentSettings, boosts: currentBoosts))
+        var currentSkills: [BrowserAISkillDocument] = []
+        for profile in current.profiles { currentSkills.append(await (try environment.skills.store(for: profile.id)).snapshot()) }
+        let prepared = try await worker.prepare(.init(session: current, settings: currentSettings, boosts: currentBoosts, skills: currentSkills))
         let value = prepared.value
         if !prepared.changed {
             try await worker.acknowledge(prepared.projection)
@@ -191,6 +195,11 @@ final class BrowserSyncRuntime: ObservableObject {
                 try await environment.boosts.synchronize(profileID: document.profileID,
                     enabled: value.settings.enablesBoostsOnWebsites, engine: environment.engine)
             }
+        }
+        for document in value.skills {
+            let store = try environment.skills.store(for: document.profileID)
+            let expected = currentSkills.first { $0.profileID == document.profileID } ?? BrowserAISkillDocument(profileID: document.profileID)
+            try await store.applySync(document, expected: expected)
         }
         await environment.settings.refresh()
         await environment.refreshSettingsCatalog()

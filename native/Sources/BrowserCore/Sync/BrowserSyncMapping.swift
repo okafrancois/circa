@@ -53,7 +53,7 @@ public enum BrowserSyncMapping {
     }
 
     public static func project(session: BrowserSessionDocument, settings: BrowserSettingsDocument,
-                               boosts: [BrowserBoostDocument] = []) throws -> BrowserSyncProjection {
+                               boosts: [BrowserBoostDocument] = [], skills: [BrowserAISkillDocument] = []) throws -> BrowserSyncProjection {
         var result = BrowserSyncProjection()
         result.lists["profiles"] = session.profiles.map { id("profile", $0.id.rawValue) }
         result.lists["spaces"] = session.spaces.map { id("space", $0.id.rawValue) }
@@ -116,6 +116,16 @@ public enum BrowserSyncMapping {
                 result.entries[id("boost", boost.id.rawValue)] = data
             }
         }
+        for document in skills {
+            try document.validate()
+            let parent = id("skills", document.profileID.rawValue)
+            if !document.skills.isEmpty { result.lists[parent] = document.skills.map { id("skill", $0.id) } }
+            for skill in document.skills {
+                var data = try fields(skill)
+                data["profileID"] = try BrowserSyncReplica.encodeValue(document.profileID)
+                result.entries[id("skill", skill.id)] = data
+            }
+        }
         return result
     }
 
@@ -125,10 +135,16 @@ public enum BrowserSyncMapping {
         public let organization: BrowserOrganizationDocument
         public let settings: BrowserSettingsDocument
         public let boosts: [BrowserBoostDocument]
+        public let skills: [BrowserAISkillDocument]
+        public init(profiles: [BrowserProfile], spaces: [BrowserSpace], organization: BrowserOrganizationDocument,
+                    settings: BrowserSettingsDocument, boosts: [BrowserBoostDocument], skills: [BrowserAISkillDocument] = []) {
+            self.profiles = profiles; self.spaces = spaces; self.organization = organization
+            self.settings = settings; self.boosts = boosts; self.skills = skills
+        }
     }
 
     public static func materialize(_ records: [String: [String: Data]], local: BrowserSessionDocument,
-                                   settings: BrowserSettingsDocument, boosts: [BrowserBoostDocument] = []) throws -> Materialized {
+                                   settings: BrowserSettingsDocument, boosts: [BrowserBoostDocument] = [], skills: [BrowserAISkillDocument] = []) throws -> Materialized {
         func entries(_ prefix: String) -> [(String, [String: Data])] {
             records.filter { $0.key.hasPrefix(prefix + "/") }.sorted { $0.key < $1.key }
         }
@@ -313,6 +329,20 @@ public enum BrowserSyncMapping {
             }
             documents.append(document)
         }
+        var skillDocuments: [BrowserAISkillDocument] = []
+        for profile in profiles {
+            var document = BrowserAISkillDocument(profileID: profile.id)
+            for key in ordered(entries("skill").map(\.0)) {
+                guard var data = records[key], let owner = data.removeValue(forKey: "profileID"),
+                      try JSONDecoder().decode(ProfileID.self, from: owner) == profile.id else { continue }
+                let skill = try decode(BrowserAISkill.self, data)
+                guard key == id("skill", skill.id) else { throw BrowserSyncError.invalidRecord }
+                try skill.validate()
+                document.skills.append(skill)
+            }
+            try document.validate()
+            skillDocuments.append(document)
+        }
         let owners = Dictionary(uniqueKeysWithValues: spaces.map { ($0.id, $0.profileID) })
         let archive = local.organization.archive.filter { profileIDs.contains($0.profileID) && !sharedIDs.contains($0.id) }.map { record in
             var record = record
@@ -324,7 +354,7 @@ public enum BrowserSyncMapping {
             spaces: sections, archive: archive,
             archivePolicy: policy, splits: sharedSplits,
             archivedSpaces: local.organization.archivedSpaces.filter { profileIDs.contains($0.space.profileID) }.map { $0.retainingTabs(archivedIDs) })
-        return .init(profiles: profiles, spaces: spaces, organization: organization, settings: nextSettings, boosts: documents)
+        return .init(profiles: profiles, spaces: spaces, organization: organization, settings: nextSettings, boosts: documents, skills: skillDocuments)
     }
 }
 
