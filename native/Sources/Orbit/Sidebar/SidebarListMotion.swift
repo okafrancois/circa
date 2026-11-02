@@ -76,6 +76,13 @@ final class SidebarListAnimator {
 
     func stop(_ slot: SidebarListSlot) { motions[slot] = nil }
 
+    /// Container height changes translate an existing segment without restarting its clock.
+    func offset(_ slot: SidebarListSlot, by distance: CGFloat) {
+        guard let motion = motions[slot] else { return }
+        motions[slot] = OrbitTimedSegment(from: motion.from + Double(distance),
+            target: motion.target + Double(distance), start: motion.start, timing: motion.timing)
+    }
+
     func stopAll() {
         motions.removeAll()
         stopTicking()

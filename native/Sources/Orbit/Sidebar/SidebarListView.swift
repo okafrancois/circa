@@ -901,8 +901,17 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
         todayAccessoryTask = Task { [weak self] in
             while let self, !Task.isCancelled {
                 let t = min(1, (ProcessInfo.processInfo.systemUptime - start) / 0.34)
-                todayAccessoryHeight = initial + (target - initial) * (OrbitMotionPreferences.prefersReducedMotion ? 1 : BrowserAssistantMotion.progress(t, opening: true))
-                relayout(animated: false)
+                let nextHeight = initial + (target - initial) * (OrbitMotionPreferences.prefersReducedMotion ? 1 : BrowserAssistantMotion.progress(t, opening: true))
+                let difference = nextHeight - todayAccessoryHeight
+                todayAccessoryHeight = nextHeight
+                // Accessory layout must not stop a concurrent folder move or archive departure.
+                for row in displayedLayout.rows where row.section == .today {
+                    animator.offset(.node(row.node), by: difference)
+                }
+                animator.offset(.newTab, by: difference)
+                resolveLayouts()
+                materialize(at: animator.now)
+                positionViews(at: animator.now)
                 onLayoutChange?()
                 if t >= 1 || OrbitMotionPreferences.prefersReducedMotion {
                     if content == nil { todayAccessory?.removeFromSuperview(); todayAccessory = nil }
