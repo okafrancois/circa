@@ -83,7 +83,8 @@ struct BrowserAssistantView: View {
 
     private var reduceMotion: Bool { systemReduceMotion || OrbitMotionPreferences.prefersReducedMotion }
     private var narrow: Bool { panelWidth < BrowserAssistantModels.narrowPanelWidth }
-    private var hasContextChoices: Bool { !sources.isEmpty || !scopes.isEmpty }
+    private var hasContextChoices: Bool { errandSubmit == nil && (!sources.isEmpty || !scopes.isEmpty) }
+    private var errandContextAvailable: Bool { errandSubmit == nil || conversation.selectedSources.contains { $0.id == currentTabID } }
     private var currentUsage: BrowserAIUsage? {
         conversation.messages.last(where: { $0.choice.provider == conversation.choice.provider })?.usage
             ?? usages[conversation.choice.provider]
@@ -274,7 +275,7 @@ struct BrowserAssistantView: View {
 
     private var composer: some View {
         VStack(alignment: .leading, spacing: 0) {
-            let chipItems = chips.chips(selected: conversation.selectedSources)
+            let chipItems = chips.chips(selected: errandSubmit == nil ? conversation.selectedSources : conversation.selectedSources.filter { $0.id == currentTabID })
             if !chipItems.isEmpty {
                 BrowserAssistantFlowLayout {
                     ForEach(chipItems) { chip(item: $0) }
@@ -288,7 +289,7 @@ struct BrowserAssistantView: View {
                     if skipComposerTrigger { skipComposerTrigger = false; return }
                     skillDraft.cancelInvocation()
                     if new.isEmpty || new == "/" { isSkillDraft = false }
-                    skillsPresented = enabled && !isSkillDraft && new.hasPrefix("/")
+                    skillsPresented = errandSubmit == nil && enabled && !isSkillDraft && new.hasPrefix("/")
                     if hasContextChoices && new.count > old.count && new.hasSuffix("@") { contextPickerPresented = true }
                 }
             if let notice = skillDraft.notice { Text(notice).font(.system(size: 12)).foregroundStyle(palette.secondary.swiftUI).padding(4) }
@@ -311,7 +312,7 @@ struct BrowserAssistantView: View {
                     .accessibilityLabel(conversation.isRunning ? uiText("Stop") : uiText("Send"))
                     .accessibilityIdentifier("assistant-send-stop")
                     .help(conversation.isRunning ? uiText("Stop") : uiText("Send"))
-                    .disabled(!enabled || (!conversation.isRunning && draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty))
+                    .disabled(!enabled || !errandContextAvailable || (!conversation.isRunning && draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty))
             }.padding(.top, 6)
         }
         .padding(.top, 10).padding(.horizontal, 8).padding(.bottom, 8)
@@ -419,7 +420,7 @@ struct BrowserAssistantView: View {
     }
 
     private func send() {
-        guard !skillsPresented, enabled, (!draft.hasPrefix("/") || isSkillDraft), !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+        guard !skillsPresented, enabled, errandContextAvailable, (errandSubmit != nil || !draft.hasPrefix("/") || isSkillDraft), !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         if let errandSubmit {
             if errandSubmit(draft) { skillDraft.text = ""; draft = "" }; return
         }

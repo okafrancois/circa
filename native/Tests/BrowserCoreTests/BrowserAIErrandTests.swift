@@ -148,4 +148,18 @@ private actor ErrandProvider: BrowserAIProviderClient {
         let id = errand.approval!.id; errand.stop(); errand.allowOnce(id)
         #expect(errand.phase == .stopped && errand.pages.isEmpty)
     }
+
+    @Test func plannerEncodingOmitsLocalFormDestinationsAndAcceptsOpaqueTargetRoundtrip() throws {
+        let destination = URL(string: "https://example.test/submit?csrf=private-sentinel")!
+        let target = BrowserAIErrandPage.Target(id: UUID(), kind: .button, label: "Search", destination: destination, submitsForm: true)
+        let encoded = try JSONEncoder().encode(target)
+        let text = String(decoding: encoded, as: UTF8.self)
+        #expect(!text.contains("private-sentinel") && !text.contains("destination") && !text.contains("submitsForm"))
+        let decoded = try JSONDecoder().decode(BrowserAIErrandPage.Target.self, from: encoded)
+        #expect(decoded.id == target.id && decoded.destination == nil)
+        let local = BrowserAIJSON.object(["id": .string(target.id.uuidString), "kind": "button", "label": "Search",
+            "destination": .string(destination.absoluteString), "submitsForm": true])
+        let internalTarget = try JSONDecoder().decode(BrowserAIErrandPage.Target.self, from: local.line())
+        #expect(internalTarget.destination == destination && internalTarget.submitsForm)
+    }
 }

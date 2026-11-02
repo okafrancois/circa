@@ -55,7 +55,7 @@ extension ChromiumSurface: BrowserAIErrandPageReading {
         if(document.designMode.toLowerCase()==='on'||!document.body)return null;
         const byte=s=>new TextEncoder().encode(s).length;
         const clip=(s,max)=>{let out='';for(const c of s){if(byte(out)+byte(c)>max)break;out+=c}return out};
-        const targets=[],map=new Map();let budget=8000;
+        const targets=[],map=new Map(),ids=\(try Self.errandJSON((0..<24).map { _ in UUID() }));let budget=8000;
         for(const e of Array.from(document.querySelectorAll('a[href],button,input,textarea,[role="button"]')).slice(0,5000)){
           if(targets.length>=24||!eligible(e))continue;
           let kind;if(e instanceof HTMLInputElement&&['submit','button','reset'].includes(e.type))kind='button';else if(e instanceof HTMLInputElement||e instanceof HTMLTextAreaElement){if(!(e instanceof HTMLTextAreaElement)&&!['text','search','url'].includes(e.type))continue;kind='text'}else kind=e instanceof HTMLAnchorElement?'link':'button';
@@ -64,7 +64,7 @@ extension ChromiumSurface: BrowserAIErrandPageReading {
           const label=clip((e.getAttribute('aria-label')||e.labels?.[0]?.textContent||(kind==='text'?e.getAttribute('placeholder'):(e instanceof HTMLInputElement?e.getAttribute('value'):e.textContent))||'').trim(),240);
           if(!label)continue;
           const s=state(e);if(!s)continue;
-          const id=crypto.randomUUID(),t={id,kind,label,destination,submitsForm};const cost=byte(JSON.stringify(t));if(cost>budget)break;budget-=cost;
+          const id=ids[targets.length],t={id,kind,label,destination,submitsForm};const cost=byte(JSON.stringify(t));if(cost>budget)break;budget-=cost;
           targets.push(t);map.set(id,{e,s});
         }
         let text='',count=0;const walk=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT);

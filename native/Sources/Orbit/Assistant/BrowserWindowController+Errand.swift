@@ -26,6 +26,7 @@ extension BrowserWindowController {
     var canStartErrand: Bool {
         guard !errandActive, assistantEnabled, errandChoice != nil,
               let current = session.organization, let selected = current.selectedTab,
+              !selected.isOpenInAnotherWindow,
               assistantSources.contains(where: { $0.id == selected.id.rawValue }),
               session.selectedSurface is any BrowserAIErrandPageReading else { return false }
         return !current.rows(includingCollapsed: true).contains { row in
@@ -38,12 +39,15 @@ extension BrowserWindowController {
         if assistantHost != nil { closeAssistant() }
         guard let conversation = ensureAssistant() else { return }
         conversation.stop(); conversation.switchProvider(to: choice)
+        if let selected = session.organization?.selectedTab,
+           let source = assistantSources.first(where: { $0.id == selected.id.rawValue }) { conversation.select(source) }
         errandDraft = true; toggleAssistant()
     }
     func submitErrand(_ goal: String) -> Bool {
         let choice = aiConversation?.choice ?? errandChoice
         guard errandDraft, canStartErrand, let choice, readyErrandChoice(choice), let service = aiService,
               let owner = session.organization, let selected = owner.selectedTab,
+              aiConversation?.selectedSources.contains(where: { $0.id == selected.id.rawValue }) == true,
               !goal.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
               goal.count <= 4000, goal.utf8.count <= 16000 else { return false }
         stopErrand()
@@ -51,6 +55,7 @@ extension BrowserWindowController {
         let admission = BrowserSidebarSelectionAdmission()
         errandStartAdmission = admission; errandStarting = true; errandDraft = false
         errandOwner = owner; errandTabs = [selected.id]; errandFolder = nil; errand = nil
+        tidyHelpers.revokeStaleRequests()
         errandSummaryID = TabID()
         renderErrandSidebar()
         let title = BrowserAIHelperName.title(String((goal.split(whereSeparator: \.isNewline).first ?? "").prefix(80))) ?? uiText("Errand")
@@ -127,7 +132,12 @@ extension BrowserWindowController {
                   BrowserAIPolicy.allowsPageAccess(settingsPreferences?.runtime.document.ai ?? .init(), isPrivate: isPrivateWindow, host: url.host) else { return false }
             let admission = BrowserSidebarSelectionAdmission()
             errandNavigationAdmission = admission; errandOpeningURL = url
-            defer { if errandEpoch == token { errandNavigationAdmission = nil; errandOpening = nil; errandOpeningURL = nil } }
+            defer {
+                if errandEpoch == token {
+                    errandNavigationAdmission = nil; errandOpening = nil; errandOpeningURL = nil
+                    errandNavigationGrants.values.forEach { $0.revoke() }; errandNavigationGrants = [:]
+                }
+            }
             let created = await session.openErrandTab(url: url, folder: folder, expectedTabs: errandTabs, admission: admission, isCurrent: { [weak self] in
                 guard let self else { return false }
                 return errandEpoch == token && admission.isValid && errandPagesCurrent(observation, choice: choice)
@@ -146,7 +156,7 @@ extension BrowserWindowController {
         if case .click = action, let target = page.targets.first(where: { $0.id == action.targetID }) {
             errandNavigationGrants[key] = .init(surface: surface, destination: target.destination ?? page.url, form: target.submitsForm)
         }
-        defer { errandNavigationGrants.removeValue(forKey: key)?.revoke() }
+        defer { if errandEpoch == token { errandNavigationGrants.removeValue(forKey: key)?.revoke() } }
         let result = try await reader.executeErrandAction(action, page: page, isCurrent: { [weak self, weak surface] in
             guard let self, let surface else { return false }
             return errandEpoch == token && errandOwnerCurrent(choice) && session.surface(for: occurrence) === surface

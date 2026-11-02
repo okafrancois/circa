@@ -51,7 +51,8 @@ final class BrowserTidyHelpers<Engine: BrowserEngine> {
               owner.settingsPreferences?.runtime.document.ai.helpers.tidyTitlesAndDownloads == true else { return }
         let previousTabs = Dictionary(old.allTabs.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
         for tab in next.allTabs {
-            guard case .pinned = tab.section, tab.customTitle == nil, let title = tab.pageTitle,
+            guard !(owner.errandActive && owner.errandTabs.contains(tab.id)),
+                  case .pinned = tab.section, tab.customTitle == nil, let title = tab.pageTitle,
                   let prior = previousTabs[tab.id], case .today = prior.section,
                   prior.customTitle == nil, let (preferences, model) = choice(for: tab.url),
                   let service = owner.aiService else { continue }
@@ -60,7 +61,8 @@ final class BrowserTidyHelpers<Engine: BrowserEngine> {
             let valid: @MainActor () -> Bool = { [weak self, weak owner, weak surface] in
                 guard let self, let owner, let current = owner.session.organization,
                       self.choice(for: tab.url)?.0 == preferences, self.choice(for: tab.url)?.1 == model else { return false }
-                return current.profileID == next.profileID && current.spaceID == next.spaceID
+                return !(owner.errandActive && owner.errandTabs.contains(tab.id))
+                    && current.profileID == next.profileID && current.spaceID == next.spaceID
                     && current.organizationRevision == next.organizationRevision
                     && owner.session.organizationTab(tab.id) == tab && surface?.documentGeneration == generation
             }

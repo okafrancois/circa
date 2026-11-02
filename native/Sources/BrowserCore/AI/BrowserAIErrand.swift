@@ -15,6 +15,21 @@ public struct BrowserAIErrandPage: Codable, Equatable, Sendable, Identifiable {
             self.id = id; self.kind = kind; self.label = label
             self.destination = destination; self.submitsForm = submitsForm
         }
+        private enum CodingKeys: String, CodingKey { case id, kind, label, destination, submitsForm }
+        public init(from decoder: Decoder) throws {
+            let fields = try decoder.container(keyedBy: CodingKeys.self)
+            id = try fields.decode(UUID.self, forKey: .id)
+            kind = try fields.decode(Kind.self, forKey: .kind)
+            label = try fields.decode(String.self, forKey: .label)
+            destination = try fields.decodeIfPresent(URL.self, forKey: .destination)
+            submitsForm = try fields.decodeIfPresent(Bool.self, forKey: .submitsForm) ?? false
+        }
+        /// Navigation/form destinations remain local approval metadata. They can contain hidden
+        /// query values and are not needed by the planner, which addresses the opaque target ID.
+        public func encode(to encoder: Encoder) throws {
+            var fields = encoder.container(keyedBy: CodingKeys.self)
+            try fields.encode(id, forKey: .id); try fields.encode(kind, forKey: .kind); try fields.encode(label, forKey: .label)
+        }
     }
     public let id: UUID
     public let snapshot: UUID
