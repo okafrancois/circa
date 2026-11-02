@@ -143,6 +143,11 @@ extension OrbitSmokeDriver {
         let failureMode = (try? String(contentsOf: runRoot.appendingPathComponent("fixture-mode"), encoding: .utf8))?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "valid"
         let existingCSSCase = ["--orbit-smoke-boost-cancel", "--orbit-smoke-boost-revoke", "--orbit-smoke-boost-stale", "--orbit-smoke-boost-stop", "--orbit-smoke-boost-prompt-change"].contains(where: arguments.contains) || ["invalid", "invalid-comments", "source-map", "resource", "script", "empty", "error", "quota-error"].contains(failureMode)
         if existingCSSCase { editor.session.edit { $0.customCSS = "h1 { color: #8b1717 !important; }" }; await editor.session.pending?.value }
+        if arguments.contains("--orbit-smoke-boost-existing-js") {
+            editor.session.edit { $0.customJavaScript = "document.addEventListener('DOMContentLoaded', () => { document.body.dataset.previousBoost = '1'; }, {once:true});" }
+            editor.session.setJavaScriptConsent(true)
+            await editor.session.pending?.value
+        }
         owner.windowShell.apply(theme: theme, animated: false)
         window.appearance = NSAppearance(named: desiredAppearance)
         editor.showCode()
@@ -235,7 +240,7 @@ extension OrbitSmokeDriver {
             func count() async -> String? { await evaluate("document.body.dataset.boostCount || '0'") }
             guard let js = buttons(code).first(where: { $0.title == uiText("JS") }) else { check("js.tab", false); return }
             _ = await click(js); await code.selectionTask?.value
-            check("js.tab-no-consent", !code.isCSS && panel.attachedSheet == nil && !editor.session.boost.javaScriptOptIn)
+            check("js.tab-no-consent", !code.isCSS && panel.attachedSheet == nil && editor.session.boost.javaScriptOptIn == baseline.boosts.first?.javaScriptOptIn)
             _ = await click(code.prompt)
             let prompt = "once the body is ready increment the body attribute whose html name is data boost count with hyphens between the three words"
             for character in prompt {
@@ -379,6 +384,7 @@ extension OrbitSmokeDriver {
                 try? await Task.sleep(for: .milliseconds(100))
             }
             check("js.reload-one", await count() == "1")
+            if arguments.contains("--orbit-smoke-boost-existing-js") { check("js.reload-old-script-absent", await evaluate("document.body.dataset.previousBoost || '0'") == "0") }
             return
         }
         let prompt = "hide shorts and make the player full width"
