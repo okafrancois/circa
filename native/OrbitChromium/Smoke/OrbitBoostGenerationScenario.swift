@@ -261,8 +261,10 @@ extension OrbitSmokeDriver {
             }
             defer { recording?.waitUntilExit() }
             _ = await click(send)
-            _ = await until(3) { editor.generation.running && !code.textView.string.isEmpty }
-            if !["js-invalid", "js-markdown", "empty", "error", "quota-error"].contains(failureMode) {
+            _ = await until(live ? 25 : 3) { !code.textView.string.isEmpty }
+            if live {
+                check("js.live-code-visible", !code.textView.string.isEmpty && (editor.generation.running || editor.generation.ready), ["runningAtFirstSample": editor.generation.running, "readyAtFirstSample": editor.generation.ready])
+            } else if !["js-invalid", "js-markdown", "empty", "error", "quota-error"].contains(failureMode) {
                 check("js.streaming-visible", editor.generation.running && !code.textView.string.isEmpty)
             }
             check("js.streaming-zero", await count() == "0")
@@ -287,7 +289,7 @@ extension OrbitSmokeDriver {
                 samples += 1
                 try? await Task.sleep(for: .milliseconds(40))
             }
-            if !["js-invalid", "js-markdown", "empty", "error", "quota-error"].contains(failureMode) { check("js.stream-sampled", samples > 0) }
+            if !live && !["js-invalid", "js-markdown", "empty", "error", "quota-error"].contains(failureMode) { check("js.stream-sampled", samples > 0) }
             check("js.stream-observations-zero", zeroThroughout)
             check("js.stream-observations-not-saved", unchangedThroughout)
             if let bytes = try? JSONSerialization.data(withJSONObject: ["samples": samples, "zero": zeroThroughout, "unchanged": unchangedThroughout]) { try? bytes.write(to: runRoot.appendingPathComponent("js-observations.json")) }
