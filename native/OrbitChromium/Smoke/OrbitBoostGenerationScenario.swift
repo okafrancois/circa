@@ -387,7 +387,7 @@ extension OrbitSmokeDriver {
             if arguments.contains("--orbit-smoke-boost-existing-js") { check("js.reload-old-script-absent", await evaluate("document.body.dataset.previousBoost || '0'") == "0") }
             return
         }
-        let prompt = "hide shorts and make the player full width"
+        let prompt = arguments.contains("--orbit-smoke-boost-css-js-request") ? "use javascript to remove the body" : "hide shorts and make the player full width"
         for character in prompt {
             guard owns(panel), let event = BrowserKeyEquivalentMatcher.layoutEvent(producing: String(character), flags: []) else { check("boost.character-route", false); return }
             NSApp.postEvent(event, atStart: false)
@@ -431,6 +431,7 @@ extension OrbitSmokeDriver {
 
         if ["invalid", "invalid-comments", "source-map", "resource", "script", "empty", "error", "quota-error"].contains(mode) {
             check("boost.rejected", !editor.generation.ready && !editor.generation.error.isEmpty)
+            if mode == "script" { check("boost.css-language-retained", code.isCSS && editor.generation.language == .css && !editor.session.boost.javaScriptOptIn) }
             check("boost.failure-preserves-store", await editor.session.store.snapshot() == baseline)
             check("boost.failure-restores-existing-style", await evaluate("getComputedStyle(document.querySelector('h1')).color") == baselineColor)
             check("boost.failure-preserves-page", await evaluate("getComputedStyle(document.querySelector('.shorts-shelf')).display") != "none")
