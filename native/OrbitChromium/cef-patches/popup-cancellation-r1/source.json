@@ -2,5 +2,8 @@
   "previous_flavor": "orbit-engine-extensions-r14",
   "chromium_commit": "538e6713d7fe77edf32bc448d8ba3d3df3aa9ae5",
   "patch_composition": "Apply chromium.patch after the complete engine-r14 patch union. No API or dependency changes.",
-  "regression": "scripts/orbit-popup-lifecycle-smoke.py; run cancel-loading and site-popup against a privately packaged candidate."
+  "regression": "scripts/orbit-popup-lifecycle-smoke.py; run cancel-loading and site-popup against a privately packaged candidate.",
+  "flavor": "orbit-engine-extensions-r15",
+  "framework_sha256": "1cb481278261a2862bc453a2d67e3b720797403b06a651bdfbcaa85fb0cfd02d",
+  "rebuild": "python3 scripts/cef-engine-r14-build.py --popup-cancellation --jobs 4"
 }

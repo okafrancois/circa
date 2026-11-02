@@ -23,13 +23,16 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--jobs', type=int, choices=range(1, 9), default=8)
     parser.add_argument('--logs', type=Path, default=Path('/tmp/engine-r14'))
+    parser.add_argument('--popup-cancellation', action='store_true',
+                        help='Apply the popup lifetime fix and export the separate r15 distribution')
     args = parser.parse_args()
+    flavor = 'orbit-engine-extensions-r15' if args.popup_cancellation else FLAVOR
     args.logs.mkdir(parents=True, exist_ok=True)
     with x2.source_tree_lock():
         x2.guard()
         if build.chromium_build_active():
             raise SystemExit('Another Chromium build is active')
-        if (x2.DISTRIB / FLAVOR).exists():
+        if (x2.DISTRIB / flavor).exists():
             raise SystemExit('Preserve the existing distribution and choose a new flavor')
         if subprocess.check_output(['git', 'status', '--porcelain'], cwd=x2.CEF_REPO).strip():
             raise SystemExit('CEF has uncommitted changes')
@@ -41,6 +44,13 @@ def main():
             actual = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=x2.SRC / name, text=True).strip()
             if actual != expected:
                 raise SystemExit('Security dependency revision mismatch: ' + name)
+        if args.popup_cancellation:
+            popup_patch = REPO / 'native/OrbitChromium/cef-patches/popup-cancellation-r1/chromium.patch'
+            present = subprocess.run(['git', 'apply', '-R', '--check', str(popup_patch)], cwd=x2.SRC,
+                                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            if present.returncode:
+                subprocess.run(['git', 'apply', '--check', str(popup_patch)], cwd=x2.SRC, check=True)
+                subprocess.run(['git', 'apply', str(popup_patch)], cwd=x2.SRC, check=True)
         patch = REPO / 'native/OrbitChromium/cef-patches/engine-r14/cef.patch'
         present = subprocess.run(['git', 'apply', '-R', '--check', str(patch)], cwd=x2.CEF_REPO,
                                  stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -77,12 +87,12 @@ def main():
         build.build_cef(command, env, args.logs)
         (args.logs / "build-summary.json").write_text(json.dumps({"tasks": tasks, "seconds": time.monotonic() - started}) + "\n")
         os.environ['CMAKE_BUILD_PARALLEL_LEVEL'] = '4'
-        if FLAVOR not in x2.PATCHED_FLAVORS:
-            x2.PATCHED_FLAVORS += (FLAVOR,)
+        if flavor not in x2.PATCHED_FLAVORS:
+            x2.PATCHED_FLAVORS += (flavor,)
         with (args.logs / 'distribution.log').open('w') as log, redirect_stdout(log), redirect_stderr(log):
-            x2.distrib(SimpleNamespace(flavor=FLAVOR, replace=False, build_dir_suffix='_GN_arm64_codecs',
+            x2.distrib(SimpleNamespace(flavor=flavor, replace=False, build_dir_suffix='_GN_arm64_codecs',
                                       incremental_build_completed=True))
-        print('Distribution:', x2.DISTRIB / FLAVOR, flush=True)
+        print('Distribution:', x2.DISTRIB / flavor, flush=True)
     return 0
 
 
