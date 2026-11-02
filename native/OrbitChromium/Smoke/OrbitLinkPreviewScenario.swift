@@ -190,10 +190,14 @@ extension OrbitSmokeDriver {
                 if let privateSurface = privateOwner.pageCommandSurface() {
                     window = privateWindow; surface = privateSurface
                     window.makeKeyAndOrderFront(nil)
+                    window.orderFrontRegardless()
+                    NSApp.activate(ignoringOtherApps: true)
+                    let foreground = await until(3) { owns() }
+                    check("link.private-owner", foreground)
                     let privatePoint = NSPoint(x: 100, y: surface.hostView.isFlipped ? 100 : surface.hostView.bounds.height - 100)
                     await event(.flagsChanged, shift: false, local: privatePoint)
                     await event(.flagsChanged, shift: true, local: privatePoint)
-                    check("link.private", privateOwner.isPrivateWindow && privateOwner.linkPreviewHelp?.panel == nil
+                    check("link.private", foreground && privateOwner.isPrivateWindow && privateOwner.linkPreviewHelp?.panel == nil
                         && privateOwner.linkPreviewHelp?.loading == false)
                 } else { check("link.private", false) }
                 privateWindow.close()
