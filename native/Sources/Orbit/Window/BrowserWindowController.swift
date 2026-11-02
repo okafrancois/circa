@@ -23,6 +23,7 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
     var tidyDownloadPanel: NSPanel?
     var tidyDownloadSpace: SpaceID?
     var writingHelp: BrowserWritingHelp?
+    lazy var todayTidy = BrowserTodayTidy(owner: self)
 
     let id: UUID
     let engine: Engine
@@ -354,6 +355,7 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
     func windowDidResignKey(_ notification: Notification) { passwordPrompt.close() }
 
     func windowWillClose(_ notification: Notification) {
+        todayTidy.close()
         tidyHelpers.cancel()
         if let panel = tidyDownloadPanel { window?.removeChildWindow(panel); panel.orderOut(nil); tidyDownloadPanel = nil }
         writingHelp?.close()

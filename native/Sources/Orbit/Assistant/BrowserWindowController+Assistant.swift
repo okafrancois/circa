@@ -47,6 +47,7 @@ extension BrowserWindowController {
         }
     }
     func reconcileAssistant() {
+        todayTidy.reconcile()
         tidyHelpers.revokeStaleRequests()
         writingHelp?.reconcile()
         reconcileFindAnswer()

@@ -93,7 +93,7 @@ struct SettingsAIPaneTests {
         let helpers = BrowserSettingsAIPane<SyntheticEngine>.shippedHelpers
         #expect(helpers.contains(\.askInFind) && helpers.contains(\.writingHelp))
         #expect(!helpers.contains(\.linkPreviewSummaries) && helpers.contains(\.tidyTitlesAndDownloads)
-            && !helpers.contains(\.tidyToday))
+            && helpers.contains(\.tidyToday))
     }
 
     @Test("Usage meters, reset times, plans and model labels")
