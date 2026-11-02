@@ -151,11 +151,20 @@ extension OrbitSmokeDriver {
         let params = try? JSONSerialization.data(withJSONObject: ["expression": script])
         if let params { _ = await surface.devToolsCall("Runtime.evaluate", params: String(decoding: params, as: UTF8.self)) }
         let renamedFile = await until(live ? 20 : 10) { owner.tidyDownloadPanel != nil }
-        check("tidy.download-toast", renamedFile)
+        if !live || renamedFile { check("tidy.download-toast", renamedFile) }
         check("tidy.native-focus", window.firstResponder === originalResponder)
         if let profile = owner.session.activeProfileID {
             let items = owner.downloads.snapshots(profileID: profile)
-            check("tidy.download-model", items.contains { $0.state == .complete && $0.destinationURL?.lastPathComponent != "INV-2026-10.pdf" })
+            if live && !renamedFile {
+                // A real provider may keep the existing basename or decline a suggestion.
+                // The live requirement is a genuine metadata answer plus safe no-op handling;
+                // deterministic suggestions separately exercise rename, presentation and Undo.
+                let preserved = items.contains { $0.state == .complete && $0.destinationURL?.lastPathComponent == "INV-2026-10.pdf" }
+                    && FileManager.default.fileExists(atPath: runRoot.appendingPathComponent("INV-2026-10.pdf").path)
+                check("tidy.live-download-keeps-original", preserved)
+            } else {
+                check("tidy.download-model", items.contains { $0.state == .complete && $0.destinationURL?.lastPathComponent != "INV-2026-10.pdf" })
+            }
         }
         func labels(_ view: NSView) -> [String] {
             let own = (view as? NSTextField).map { [$0.stringValue] } ?? []
