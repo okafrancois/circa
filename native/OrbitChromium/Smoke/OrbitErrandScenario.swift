@@ -97,7 +97,7 @@ extension OrbitSmokeDriver {
             _ = await reference("globalThis.__errandTrace=[];const start=performance.now();const tick=()=>{const c=document.querySelector('#eappr'),p=document.querySelector('#eag'),r=c.getBoundingClientRect();__errandTrace.push({t:(performance.now()-start)/1000,opacity:Number(getComputedStyle(c).opacity),transform:getComputedStyle(c).transform,display:getComputedStyle(c).display,x:r.x,y:r.y,width:r.width,height:r.height,pointer:getComputedStyle(p).transform});if(performance.now()-start<7000)requestAnimationFrame(tick)};requestAnimationFrame(tick);document.getElementById('e1').click();setTimeout(()=>document.getElementById('eok').click(),3500);true")
             _ = await until(9) { !recording.isRunning }
             if let trace = await reference("JSON.stringify(__errandTrace)") { try? Data(trace.utf8).write(to: runRoot.appendingPathComponent("reference-trace.json")) }
-            check("errand.reference-scale", await reference("String(document.querySelector('#eappr').getBoundingClientRect().width)") == "420")
+            check("errand.reference-scale", await reference("String(__errandTrace.some(x=>x.display!=='none'&&x.width===420)&&__errandTrace.filter(x=>x.display!=='none').every(x=>x.width===420))") == "true")
             check("errand.reference-recording", recording.terminationStatus == 0)
             return
         }
@@ -128,6 +128,7 @@ extension OrbitSmokeDriver {
         let priorRequests = await client.requests
         check("errand.draft-no-request", owner.errandDraft && owner.errand == nil && priorRequests.isEmpty)
         guard let composer = owner.assistantHost else { check("errand.composer", false); return }
+        guard await until(2, { (composer.superview?.bounds.width ?? 0) >= 371 && composer.visibleRect.width >= 350 }) else { check("errand.composer-settled", false); return }
         _ = await click(composer, point: NSPoint(x: composer.bounds.midX, y: composer.bounds.height - 84))
         let goal = live ? "click search once then finish with the result" : "type lisbon in destination then click search once and finish"
         for character in goal {

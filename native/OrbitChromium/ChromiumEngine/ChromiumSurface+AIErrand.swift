@@ -36,8 +36,8 @@ extension ChromiumSurface: BrowserAIErrandPageReading {
       for(let a=e;a;a=a.parentElement){const s=getComputedStyle(a);if(s.display==='none'||s.visibility!=='visible'||Number(s.opacity)===0)return false}
       const r=e.getBoundingClientRect();return r.width>0&&r.height>0&&r.bottom>0&&r.right>0&&r.top<innerHeight&&r.left<innerWidth;
     };
-    const secret=e=>/password|passcode|one.time|cc-|credit|card|cvc|cvv|token|secret|auth|iban|account|routing|social|ssn/i.test([e.name,e.id,e.autocomplete,e.getAttribute('aria-label'),e.getAttribute('placeholder'),e.type].join(' '));
-    const credential=e=>e instanceof HTMLInputElement&&(['password','file'].includes(e.type)||/password|cc-|credit.card|cvc|cvv|one.time/i.test([e.autocomplete,e.name,e.id].join(' ')));
+    const secret=e=>/password|passcode|username|one.time|cc-|credit|card|cvc|cvv|token|secret|auth|iban|account|routing|social|ssn/i.test([e.name,e.id,e.autocomplete,e.getAttribute('aria-label'),e.getAttribute('placeholder'),e.labels?.[0]?.textContent,e.type].join(' '));
+    const credential=e=>e instanceof HTMLInputElement&&(['password','file'].includes(e.type)||/password|username|cc-|credit.card|cvc|cvv|one.time/i.test([e.autocomplete,e.name,e.id].join(' ')));
     const targetVisible=e=>{if(!visible(e)||getComputedStyle(e).pointerEvents==='none')return false;const r=e.getBoundingClientRect(),h=document.elementFromPoint(Math.max(0,Math.min(innerWidth-1,r.x+r.width/2)),Math.max(0,Math.min(innerHeight-1,r.y+r.height/2)));return h===e||e.contains(h)};
     const eligible=e=>targetVisible(e)&&!e.disabled&&!e.readOnly&&!e.isContentEditable&&!secret(e)&&!(e.closest('form')&&Array.from(e.closest('form').elements).some(credential));
     const attrs=e=>JSON.stringify(Array.from(e.attributes).map(a=>[a.name,a.value]));

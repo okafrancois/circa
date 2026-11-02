@@ -76,6 +76,10 @@ private struct BrowserErrandApprovalView: View {
         case .finish: uiText("Summary · draft")
         }
     }
+    private var showsLock: Bool {
+        guard case .click = approval.action else { return false }
+        return (approval.target?.label ?? "").range(of: "pay|send|delete|purchase|buy|checkout|publish|envoyer|payer|supprimer|acheter", options: [.regularExpression, .caseInsensitive]) != nil
+    }
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(alignment: .top, spacing: 10) {
@@ -90,10 +94,12 @@ private struct BrowserErrandApprovalView: View {
                     }.frame(maxHeight: detail.count > 300 ? 110 : 60).fixedSize(horizontal: false, vertical: true)
                 }
             }
-            HStack(spacing: 5) {
-                OrbitIcon.view(sfName: "lock.fill", pointSize: 12)
-                Text(uiText("Sending, paying and deleting always ask."))
-            }.font(Font(BrandTextStyle.ui.font(size: 11.5))).foregroundStyle(OrbitFloatingMaterial.secondary.swiftUI).padding(.top, 8)
+            if showsLock {
+                HStack(spacing: 5) {
+                    OrbitIcon.view(sfName: "lock.fill", pointSize: 12)
+                    Text(uiText("Sending, paying and deleting always ask."))
+                }.font(Font(BrandTextStyle.ui.font(size: 11.5))).foregroundStyle(OrbitFloatingMaterial.secondary.swiftUI).padding(.top, 8)
+            }
             HStack(spacing: 8) {
                 Spacer(minLength: 0)
                 Button(action: stop) { Text(uiText("Stop")).frame(minWidth: 80).frame(height: 32) }
