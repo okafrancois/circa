@@ -70,7 +70,7 @@ final class BrowserLinkPreviewHelp: ObservableObject {
             inspect(at: point)
             return event
         }
-        for name in [NSWindow.willCloseNotification, NSWindow.didResizeNotification, NSWindow.didMoveNotification] {
+        for name in [NSWindow.willCloseNotification, NSWindow.didResizeNotification, NSWindow.didMoveNotification, NSWindow.didResignKeyNotification] {
             observers.append(NotificationCenter.default.addObserver(forName: name, object: window, queue: .main) { [weak self] _ in
                 MainActor.assumeIsolated { self?.dismiss() }
             })
@@ -90,17 +90,23 @@ final class BrowserLinkPreviewHelp: ObservableObject {
         task = Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(100))
             guard !Task.isCancelled, let self, shiftHeld, epoch == token,
-                  let next = await capture?(point), epoch == token, next.isCurrent() else { return }
+                  let next = await capture?(point), epoch == token, next.isCurrent(), next.anchor.contains(NSEvent.mouseLocation) else { return }
             context = next
             let valid: @MainActor () -> Bool = { [weak self] in
                 guard let self else { return false }
-                return epoch == token && shiftHeld && next.isCurrent()
+                return epoch == token && shiftHeld && next.isCurrent() && next.anchor.contains(NSEvent.mouseLocation)
             }
             validation = Task { [weak self] in
-                while let self, !Task.isCancelled, valid() {
+                while let self, !Task.isCancelled {
                     try? await Task.sleep(for: .milliseconds(250))
-                    guard !Task.isCancelled, valid() else { return }
-                    if !(await next.matches()) {
+                    guard !Task.isCancelled else { return }
+                    guard valid() else {
+                        if epoch == token { dismiss(purgeCache: !next.isCurrent()) }
+                        return
+                    }
+                    let pointerInside = next.anchor.contains(NSEvent.mouseLocation)
+                    let matches = pointerInside ? await next.matches() : false
+                    if !matches {
                         if epoch == token { dismiss() }
                         return
                     }
@@ -160,8 +166,15 @@ final class BrowserLinkPreviewHelp: ObservableObject {
         guard let context, let window else { return }
         let width = min(300, window.frame.width - 16)
         let content = AnyView(BrowserLinkPreviewCard(model: self, context: context)
-            .frame(width: width - 24).padding(12).environment(\.assistantPalette, context.palette))
-        if let host { host.rootView = content; position(size: host.fittingSize); return }
+            .frame(width: width - 24, alignment: .leading).padding(12).environment(\.assistantPalette, context.palette))
+        if let host {
+            // Measure the new state independently: the displayed host may still report its
+            // previous intrinsic height until SwiftUI completes the current update.
+            let measurement = NSHostingView(rootView: content)
+            host.rootView = content
+            position(size: measurement.fittingSize)
+            return
+        }
         let host = NSHostingView(rootView: content)
         host.sizingOptions = [.intrinsicContentSize]
         let panel = NSPanel(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
@@ -220,11 +233,12 @@ final class BrowserLinkPreviewHelp: ObservableObject {
             if !purgeCache, let context, let host {
                 // Only already-presented pixels depart. Revoked work and observations end above.
                 host.rootView = AnyView(LinkPreviewCardContent(context: context, document: document,
-                    lines: lines, loading: loading, animated: false).frame(width: panel.frame.width - 24).padding(12))
+                    lines: lines, loading: loading, animated: false).frame(width: panel.frame.width - 24, alignment: .leading).padding(12))
                 departing.append(panel)
                 let owner = window
                 NSAnimationContext.runAnimationGroup { animation in
                     animation.duration = 0.15
+                    animation.timingFunction = CAMediaTimingFunction(controlPoints: 1 / 3, 2 / 3, 2 / 3, 1)
                     panel.animator().alphaValue = 0
                 } completionHandler: { [weak self, weak panel, weak owner] in
                     MainActor.assumeIsolated {

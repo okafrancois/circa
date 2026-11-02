@@ -52,7 +52,7 @@ actor OrbitAssistantFixtureClient: BrowserAIProviderClient {
             if mode == "slow" {
                 do { try await Task.sleep(for: .milliseconds(3500)) } catch { return }
             }
-            let chunks = mode == "today-empty" ? ["{\"suggestions\":[]}"] : mode == "today" ? [answer ?? "{\"suggestions\":[]}"] : mode == "tidy" ? ["Synthetic notes"] : mode == "code"
+            let chunks = mode == "link-preview" ? ["{\"summary\":[\"Synthetic linked body verified.\",\"Anonymous HTML summary.\"]}"] : mode == "today-empty" ? ["{\"suggestions\":[]}"] : mode == "today" ? [answer ?? "{\"suggestions\":[]}"] : mode == "tidy" ? ["Synthetic notes"] : mode == "code"
                 ? ["Use `await` safely. ", "A wrapped run: `await actor.update(value: value, revalidateAfterSuspension: true, preserveSelection: true)` ", "[1: \"\(passage)\"]"]
                 : ["Synthetic ", "streamed ", "answer. ", "[1: \"\(passage)\"]"]
             for text in chunks {

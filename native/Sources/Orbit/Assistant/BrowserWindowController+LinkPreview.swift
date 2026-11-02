@@ -42,7 +42,7 @@ extension BrowserWindowController {
             return source.documentGeneration == revision && source.pageZoom == zoom && source.navigationState.committedURL == url
                 && pageCommandSurface() === source && session.activeProfileID == profile
                 && session.organization?.spaceID == space && linkPreviewChoice == choice
-                && settingsPreferences?.runtime.document.ai == preferences && self.window?.isVisible == true
+                && settingsPreferences?.runtime.document.ai == preferences && self.window?.isVisible == true && self.window?.isKeyWindow == true
         }
         guard let target = try? await reader.previewLink(at: flipped, revision: revision, isCurrent: valid), valid(),
               BrowserLinkPreviewLoader.validURL(target.url),
