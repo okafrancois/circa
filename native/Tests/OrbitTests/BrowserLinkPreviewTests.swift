@@ -59,6 +59,8 @@ struct BrowserLinkPreviewTests {
 }
 
 private final class LinkPreviewURLProtocol: URLProtocol, @unchecked Sendable {
+    private let operationLock = NSLock()
+    private var operation: DispatchWorkItem?
     final class Requests: @unchecked Sendable {
         private let lock = NSLock()
         private var stored: [URLRequest] = []
@@ -71,14 +73,19 @@ private final class LinkPreviewURLProtocol: URLProtocol, @unchecked Sendable {
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
     override func startLoading() {
         Self.requests.record(request)
-        let url = request.url!
-        var headers = ["Content-Type": url.path == "/file" ? "application/pdf" : "text/html"]
-        if url.path == "/redirect" { headers["Location"] = "https://preview.test/blocked" }
-        if url.path == "/oversized" { headers["Content-Length"] = "999999" }
-        let response = HTTPURLResponse(url: url, statusCode: url.path == "/redirect" ? 302 : 200, httpVersion: "HTTP/1.1", headerFields: headers)!
-        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-        client?.urlProtocol(self, didLoad: Data("<title>Public page</title><body>Useful text.</body>".utf8))
-        client?.urlProtocolDidFinishLoading(self)
+        let work = DispatchWorkItem { [self] in
+            operationLock.withLock { operation = nil }
+            let url = request.url!
+            var headers = ["Content-Type": url.path == "/file" ? "application/pdf" : "text/html"]
+            if url.path == "/redirect" { headers["Location"] = "https://preview.test/blocked" }
+            if url.path == "/oversized" { headers["Content-Length"] = "999999" }
+            let response = HTTPURLResponse(url: url, statusCode: url.path == "/redirect" ? 302 : 200, httpVersion: "HTTP/1.1", headerFields: headers)!
+            client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+            client?.urlProtocol(self, didLoad: Data("<title>Public page</title><body>Useful text.</body>".utf8))
+            client?.urlProtocolDidFinishLoading(self)
+        }
+        operationLock.withLock { operation = work }
+        DispatchQueue.global().asyncAfter(deadline: .now() + 0.01, execute: work)
     }
-    override func stopLoading() {}
+    override func stopLoading() { operationLock.withLock { operation?.cancel(); operation = nil } }
 }
