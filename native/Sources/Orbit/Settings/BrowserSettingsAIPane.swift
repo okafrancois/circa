@@ -15,7 +15,7 @@ struct BrowserSettingsAIPane<Engine: BrowserEngine>: View {
     @State private var editsSites = false
 
     /// Helpers whose visible flow has shipped.
-    static var shippedHelpers: [KeyPath<BrowserAIHelperPreferences, Bool>] { [\.askInFind, \.writingHelp] }
+    static var shippedHelpers: [KeyPath<BrowserAIHelperPreferences, Bool>] { [\.askInFind, \.writingHelp, \.tidyTitlesAndDownloads] }
 
     private var preferences: BrowserAIPreferences { runtime.document.ai }
     private var enabled: Bool { preferences.isEnabled }
@@ -42,6 +42,10 @@ struct BrowserSettingsAIPane<Engine: BrowserEngine>: View {
                             SettingsRule()
                             Toggle(uiText("Writing help"), isOn: Binding(get: { preferences.helpers.writingHelp }, set: { value in
                                 model.perform { try await runtime.updateAI { $0.helpers.writingHelp = value } }
+                            })).padding(14)
+                            SettingsRule()
+                            Toggle(uiText("Tidy titles and downloads"), isOn: Binding(get: { preferences.helpers.tidyTitlesAndDownloads }, set: { value in
+                                model.perform { try await runtime.updateAI { $0.helpers.tidyTitlesAndDownloads = value } }
                             })).padding(14)
                         }
                     }

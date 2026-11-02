@@ -93,6 +93,7 @@ public struct BrowserOrganizationTabItem: Equatable, Sendable {
     public var localDocument: BrowserLocalDocument? = nil
     public var isResolvingPinnedLanding = false
 
+    public internal(set) var tidiedTitle: String? = nil
     public var title: String? { customTitle ?? pageTitle }
     public var isAwayFromPinnedURL: Bool {
         isLoadedInThisWindow && !isResolvingPinnedLanding

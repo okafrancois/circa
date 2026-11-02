@@ -71,6 +71,9 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
     private(set) var dropLayout = SidebarListLayout()
     private var indicesByNode: [BrowserOrganizationNode: Int] = [:]
     private var entriesByNode: [BrowserOrganizationNode: SidebarListEntry] = [:]
+    func titleRestoreRow(for id: TabID) -> SidebarTabRow? { rowViews[.tab(id)] as? SidebarTabRow }
+    var canRestoreTitle: ((TabID) -> Bool)?
+    var restoreTitle: ((TabID) -> Void)?
     private var rowViews: [BrowserOrganizationNode: SidebarListRow] = [:]
     /// The last stale row skipped by `hitTest`, so its diagnostic is recorded once.
     private weak var staleHitRow: SidebarListRow?
@@ -679,6 +682,10 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
             }
         }
         row.accent = accent
+        if let tab = row as? SidebarTabRow {
+            tab.canRestoreTitle = { [weak self, weak tab] in tab?.node.tabID.map { self?.canRestoreTitle?($0) == true } ?? false }
+            tab.restoreTitle = { [weak self, weak tab] in if let id = tab?.node.tabID { self?.restoreTitle?(id) } }
+        }
         row.events = self
         row.onFolderHover = { [weak self] row, inside in self?.onFolderHover?(row, inside) }
         row.onPreviewInvalidated = { [weak self] row in self?.onPreviewInvalidated?(row) }

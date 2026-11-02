@@ -9,6 +9,7 @@ extension OrbitSmokeDriver {
     func aiSettings(_ environment: OrbitEnvironment, _ owner: OrbitWindowController) async {
         func check(_ name: String, _ passed: Bool) { self.check("ai-settings." + name, passed) }
         guard let profile = owner.session.activeProfileID else { check("context", false); return }
+        if arguments.contains("--orbit-smoke-tidy") { await tidyScenario(environment, owner); return }
         if arguments.contains("--orbit-smoke-writing") {
             await writingScenario(environment, owner)
             return
