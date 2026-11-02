@@ -372,6 +372,10 @@ extension BrowserWindowController {
     /// window or its session is busy (callers retry after publication).
     func makeSidebarContextMenu(for nodes: [BrowserOrganizationNode], modifiers: NSEvent.ModifierFlags = []) -> (menu: NSMenu, owner: AnyObject)? {
         let organization = session.organization
+        if nodes.count == 1, let id = nodes.first?.folderID,
+           case let .folder(folder)? = organization?.item(for: .folder(id)), let config = folder.liveFolder {
+            return makeLiveFolderContextMenu(folder: folder, configuration: config)
+        }
         let groups = SidebarListCommands.contextCommands(for: nodes, in: organization, option: modifiers.contains(.option))
         guard !groups.isEmpty, let built = SidebarCommandHub.contextMenu(for: self, commands: groups) else { return nil }
         for item in built.menu.items {

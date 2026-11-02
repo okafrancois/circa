@@ -32,6 +32,17 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
     }
     var onQuickWindowDestinationChange: (() -> Void)?
     let store: BrowserStore
+    private var liveFoldersIfStarted: BrowserLiveFoldersRuntime?
+    var liveFolders: BrowserLiveFoldersRuntime {
+        if let liveFoldersIfStarted { return liveFoldersIfStarted }
+        let runtime = BrowserLiveFoldersRuntime(store: store,
+            session: isPrivate ? nil : engine as? any BrowserGitHubWebSession,
+            directory: sessionFile?.deletingLastPathComponent())
+        runtime.onMutation = { [weak self] in self?.scheduleSave() }
+        runtime.onError = { [weak self] in self?.onPersistenceError?($0) }
+        liveFoldersIfStarted = runtime
+        return runtime
+    }
     let translationPages = BrowserTranslationPages()
     let themeEditors = OrbitThemeEditorRegistry()
     private var catalogObservation: Task<Void, Never>?
@@ -180,6 +191,9 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
         }
         environment.shortcutPreferences = BrowserShortcutPreferences(destination: sessionFile.appendingPathExtension("shortcuts.json"))
         environment.sessionFile = sessionFile
+        if effectiveDocument?.organization.folders.contains(where: { $0.liveFolder?.isEnabled == true }) == true {
+            environment.liveFolders.start()
+        }
         environment.launchedOnFreshDataDirectory = fresh
         environment.boosts = BrowserBoostsRuntime(directory: sessionFile.deletingLastPathComponent()
             .appendingPathComponent("Boosts", isDirectory: true),
@@ -372,6 +386,7 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
                 standalone: false, isPrivate: false)
         }
         controller.sidebar.updateCard.onRestart = { [weak settings] in settings?.updater.restartToUpdate() }
+        controller.liveFoldersRuntime = liveFolders
         controller.boostsRuntime = boosts
         controller.sidebar.resolveSpaceIcon = { [weak settings] id in
             settings?.document.space(id).iconSelection ?? .none
@@ -674,6 +689,9 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
                                    origin: BrowserSiteOrigin, profile: ProfileID) async throws {
         try await permissions.set(setting, for: [permission], origin: origin, profileID: profile)
     }
+    func removeSettingsLiveFolders(profile: ProfileID) async throws {
+        try await liveFolders.removeProfile(profile)
+    }
     func removeSettingsPermissions(profile: ProfileID) async throws {
         try await boosts.removeProfile(profile, engine: engine)
         try await permissions.clear(profileID: profile)
@@ -707,6 +725,7 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
                 try await Task.sleep(for: .milliseconds(150))
                 guard let self, !isFinalizing, let persistence else { return }
                 await captureWindowPlacements()
+                try await liveFoldersIfStarted?.persistAll()
                 let result = try await persistence.saveCurrentState(from: store)
                 if case .saved = result { onPersistenceSuccess?() }
             } catch is CancellationError {
@@ -723,6 +742,7 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
     func saveNow() async throws {
         guard let persistence, !isFinalizing else { throw BrowserSessionPersistence.PersistenceError.finalizationInProgress }
         await captureWindowPlacements()
+        try await liveFoldersIfStarted?.persistAll()
         for _ in 0..<5 {
             switch try await persistence.saveCurrentState(from: store) {
             case .saved: return
@@ -736,6 +756,7 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
     /// Call only after the windows have stopped publishing and their command queues are drained.
     func finalize(permitsTermination: () -> Bool = { true }) async throws {
         guard !settingsRemovalIsRunning else { throw BrowserTerminationPreparationError.commandsDidNotSettle }
+        await liveFoldersIfStarted?.stop()
         autoArchive.scheduler.stop()
         quickWindowArchiveTimer?.cancel()
         quickWindowArchiveTimer = nil
@@ -760,6 +781,7 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
             }
         } catch {
             autoArchive.scheduler.start()
+            liveFoldersIfStarted?.start()
             startQuickWindowArchiveTimer()
             themeEditors.thaw()
             isFinalizing = false

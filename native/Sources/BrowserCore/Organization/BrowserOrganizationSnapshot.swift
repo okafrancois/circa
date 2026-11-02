@@ -103,6 +103,7 @@ public struct BrowserOrganizationTabItem: Equatable, Sendable {
 }
 
 public struct BrowserOrganizationFolderItem: Equatable, Sendable {
+    public var liveFolder: BrowserLiveFolderConfiguration? = nil
     public let id: FolderID
     public let title: String
     public let isCollapsed: Bool

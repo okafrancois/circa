@@ -152,7 +152,7 @@ extension BrowserStore {
                     return .split(BrowserOrganizationSplitItem(group: split, tabs: panes))
                 case let .folder(id):
                     guard let folder = organization.folders[id] else { return nil }
-                    return .folder(BrowserOrganizationFolderItem(id: id, title: folder.title,
+                    return .folder(BrowserOrganizationFolderItem(liveFolder: folder.liveFolder, id: id, title: folder.title,
                         isCollapsed: folder.isCollapsed, children: items(folder.children, section: section)))
                 }
             }

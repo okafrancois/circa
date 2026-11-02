@@ -56,6 +56,7 @@ final class OrbitSmokeDriver: OrbitLaunchHooks {
             (arguments.contains("--orbit-smoke-site-data") ? ["--use-fake-device-for-media-stream"] : [])
     }
     private var visibleSmoke: Bool {
+        if arguments.contains("--orbit-smoke-live-folders-visible") { return true }
         if arguments.contains("--orbit-smoke-secure-input") || arguments.contains("--orbit-smoke-little") || (arguments.contains("--orbit-smoke-archive-options") || arguments.contains("--orbit-smoke-ai-settings")) || arguments.contains("--orbit-smoke-little-archive") || arguments.contains("--orbit-smoke-little-archive-stress") { return true }
         return arguments.contains(where: { $0.hasPrefix("--orbit-smoke-daily3") }) || (arguments.contains("--orbit-smoke-boost-menu-code") || arguments.contains("--orbit-smoke-boost-rename")) || arguments.contains("--orbit-smoke-translation") || arguments.contains("--orbit-smoke-library-boost") || arguments.contains("--orbit-smoke-password-prompt") || arguments.contains("--orbit-smoke-password-generation") ||
             (arguments.contains("--orbit-smoke-extension-update") && arguments.contains("--orbit-smoke-extension-update-manual"))
@@ -165,6 +166,8 @@ final class OrbitSmokeDriver: OrbitLaunchHooks {
         }
         let document: [String: Any] = [
             "phase": phase.rawValue, "aborted": aborted, "results": results,
+            "auditMode": arguments.contains("--orbit-smoke-live-folders-visible") ? "visible-live-folders" : "hidden",
+            "hiddenPassed": !visibleSmoke,
             "hidden": HiddenGuard.shared.summary, "extensionLoaded": extensionLoaded,
             "dataRootInsideRun": true, "secureStorage": "mock-keychain"
         ]
@@ -317,7 +320,7 @@ final class OrbitSmokeDriver: OrbitLaunchHooks {
         }
         if phase == .fresh && !arguments.contains("--orbit-smoke-secure-input") && !arguments.contains(where: { $0.hasPrefix("--orbit-smoke-daily3") }) && !(arguments.contains("--orbit-smoke-boost-menu-code") || arguments.contains("--orbit-smoke-boost-rename")) && !arguments.contains("--orbit-smoke-translation") && !arguments.contains("--orbit-smoke-password-store") && !arguments.contains(where: { $0.hasPrefix("--orbit-smoke-daily-qa=") }) && !arguments.contains("--orbit-smoke-library-boost") && !arguments.contains("--orbit-smoke-password-prompt") && !arguments.contains("--orbit-smoke-boosts") && !arguments.contains("--orbit-smoke-password-generation") && !arguments.contains("--orbit-smoke-passwords") && !arguments.contains("--orbit-smoke-engine-r5") && !arguments.contains("--orbit-smoke-extension-only")
             && !arguments.contains("--orbit-smoke-relaunch") && !arguments.contains("--orbit-smoke-private-domain")
-            && !arguments.contains("--orbit-smoke-profiles") && !arguments.contains("--orbit-smoke-site-data")
+            && !arguments.contains("--orbit-smoke-live-folders") && !arguments.contains("--orbit-smoke-profiles") && !arguments.contains("--orbit-smoke-site-data")
             && !arguments.contains("--orbit-smoke-space-profile") && !arguments.contains("--orbit-smoke-archive-auto") && !arguments.contains("--orbit-smoke-little") && !(arguments.contains("--orbit-smoke-archive-options") || arguments.contains("--orbit-smoke-ai-settings")) && !arguments.contains("--orbit-smoke-little-archive") && !arguments.contains("--orbit-smoke-little-archive-stress")
             && !arguments.contains("--orbit-smoke-passwords") && !arguments.contains("--orbit-smoke-quarantine") {
             if arguments.contains("--orbit-smoke-isolated-application") {
@@ -484,6 +487,11 @@ final class OrbitSmokeDriver: OrbitLaunchHooks {
         }
         if arguments.contains("--orbit-smoke-extension-update") {
             await OrbitExtensionUpdateScenario.run(environment: environment, window: first, fixture: fixture, record: record)
+            finish(aborted: false)
+            return
+        }
+        if arguments.contains("--orbit-smoke-live-folders") {
+            await OrbitLiveFolderScenario.run(environment: environment, window: first, fixture: fixture, root: runRoot, record: record)
             finish(aborted: false)
             return
         }

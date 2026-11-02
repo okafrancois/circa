@@ -113,6 +113,7 @@ extension BrowserEnvironment {
     private func processSettingsProfileRemoval(_ removal: BrowserProfileRemoval) async throws {
         var progress = removal
         do {
+            try await removeSettingsLiveFolders(profile: removal.profileID)
             try requireNoSettingsProfileSurfaces(removal.profileID)
             if progress.nextStep == .organization {
                 try await store.commitSettingsProfileRemoval(removal.profileID)
