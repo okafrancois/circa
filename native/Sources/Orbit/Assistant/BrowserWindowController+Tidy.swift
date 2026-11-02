@@ -54,7 +54,7 @@ private struct TidyDownloadToast: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(restored ? uiFormat("Kept “%@”", original) : uiFormat("Renamed to “%@”", name)).contentTransition(.opacity).lineLimit(1)
                 Text(restored ? uiText("Original name restored") : uiFormat("was %@", original))
-                    .contentTransition(.opacity).font(Font(BrandTextStyle.ui.font(size: 12))).foregroundStyle(palette.secondary.swiftUI).lineLimit(1)
+                    .font(Font(BrandTextStyle.ui.font(size: 12))).foregroundStyle(palette.secondary.swiftUI).lineLimit(1)
             }
             Spacer(minLength: 0)
             if !restored {
@@ -70,7 +70,7 @@ private struct TidyDownloadToast: View {
                     .padding(.vertical, 5).padding(.horizontal, 8)
                     .background(palette.hover.swiftUI, in: RoundedRectangle(cornerRadius: 6))
                     .overlay(RoundedRectangle(cornerRadius: 6).stroke(palette.line.swiftUI, lineWidth: 1))
-                }.buttonStyle(.plain)
+                }.buttonStyle(.plain).transition(.identity)
             }
         }
         .font(Font(BrandTextStyle.ui.font(size: 13, weight: .medium))).foregroundStyle(palette.ink.swiftUI)
