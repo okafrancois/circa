@@ -101,6 +101,7 @@ extension BrowserWindowController {
 
     func refreshNavigation(for surface: Surface) {
         guard owns(surface) else { return }
+        reconcileAssistant()
         guard session.selectedSurface === surface else { return }
         refreshPageZoom()
         renderLoadingIndicator()
