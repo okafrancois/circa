@@ -113,9 +113,13 @@ final class BrowserTodayTidy<Engine: BrowserEngine>: ObservableObject {
                 && Set(suggestion.tabs).isSubset(of: Set(candidate.1.map(\.id)))
         }
         owner.sidebar.page.list.todayGroupingTabs = suggestion.action == .folder ? suggestion.tabs : []
+        owner.sidebar.page.list.todayArchivingTabs = suggestion.action == .archive ? Set(suggestion.tabs) : []
         applying = true
         Task { [weak self] in
-            defer { owner.sidebar.page.list.todayGroupingTabs = [] }
+            defer {
+                owner.sidebar.page.list.todayGroupingTabs = []
+                owner.sidebar.page.list.todayArchivingTabs = []
+            }
             let success = await owner.session.applyTodaySuggestion(suggestion, revision: snapshot.organizationRevision, isCurrent: valid).value
             guard let self, epoch == token else { return }
             applying = false

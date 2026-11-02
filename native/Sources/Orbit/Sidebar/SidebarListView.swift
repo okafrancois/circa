@@ -67,6 +67,7 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
     private var tidyAvailable = false
     private var todayAccessory: NSHostingView<AnyView>?
     var todayGroupingTabs: [TabID] = []
+    var todayArchivingTabs: Set<TabID> = []
     private var todayAccessoryHeight: CGFloat = 0
     private var todayAccessoryTask: Task<Void, Never>?
     private let gapPlaceholder = OrbitSurfaceBackgroundView(cornerRadius: OrbitTokens.Radius.tabRow)
@@ -488,8 +489,20 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
         leavingRows[ObjectIdentifier(row)] = (row, node)
         row.isLeaving = true
         row.commandsEnabled = false
-        Self.fade(row, to: 0)
-        _ = OrbitRunLoopTimer(after: OrbitTokens.Motion.rowCloseFadeDuration) { [weak self, weak row] in
+        let archiving = node.tabID.map { todayArchivingTabs.contains($0) } == true
+        let fadeTiming = archiving
+            ? OrbitAnimationTiming(duration: 0.3, x1: 1.0 / 3, y1: 0, x2: 2.0 / 3, y2: 0)
+            : OrbitAnimationTiming.tabList
+        Self.fade(row, to: 0, timing: fadeTiming)
+        if archiving {
+            let slide = CABasicAnimation(keyPath: "transform.translation.x")
+            slide.fromValue = 0
+            slide.toValue = -20
+            slide.duration = fadeTiming.duration
+            slide.timingFunction = fadeTiming.mediaTimingFunction
+            row.layer?.add(slide, forKey: "orbit.todayArchiveSlide")
+        }
+        _ = OrbitRunLoopTimer(after: fadeTiming.duration) { [weak self, weak row] in
             guard let self, let row, leavingRows.removeValue(forKey: ObjectIdentifier(row)) != nil else { return }
             if rowViews[node] == nil, displayedLayout.centerY(of: slot) == nil { animator.stop(slot) }
             recycle(row)
@@ -497,13 +510,14 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
     }
 
     /// Orbit requests effectFade in its 120 ms NSOutlineView update group.
-    private static func fade(_ row: SidebarListRow, from start: CGFloat? = nil, to end: CGFloat) {
+    private static func fade(_ row: SidebarListRow, from start: CGFloat? = nil, to end: CGFloat,
+                             timing: OrbitAnimationTiming = .tabList) {
         let from = start ?? CGFloat(row.layer?.presentation()?.opacity ?? Float(row.alphaValue))
         row.alphaValue = end
         guard let layer = row.layer else { return }
         let animation = CABasicAnimation(keyPath: "opacity")
-        animation.duration = OrbitAnimationTiming.tabList.duration
-        animation.timingFunction = OrbitAnimationTiming.tabList.mediaTimingFunction
+        animation.duration = timing.duration
+        animation.timingFunction = timing.mediaTimingFunction
         animation.fromValue = from
         animation.toValue = end
         layer.add(animation, forKey: "orbit.rowFade")
@@ -752,6 +766,7 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
 
     private func recycle(_ row: SidebarListRow) {
         row.layer?.removeAnimation(forKey: "orbit.rowFade")
+        row.layer?.removeAnimation(forKey: "orbit.todayArchiveSlide")
         restorePinnedRow(row)
         row.cancelRename()
         row.resetForReuse()

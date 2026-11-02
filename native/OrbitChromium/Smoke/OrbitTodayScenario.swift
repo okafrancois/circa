@@ -62,6 +62,8 @@ extension OrbitSmokeDriver {
             try? await Task.sleep(for: .milliseconds(900))
             capture("reference-proposals")
             await evaluate("document.querySelector('#h4g .r button').click()")
+            try? await Task.sleep(for: .milliseconds(700))
+            await evaluate("document.querySelector('#h4g .r[data-g=inv] button').click()")
             _ = await until(9) { !movie.isRunning }
             return
         }
@@ -121,10 +123,29 @@ extension OrbitSmokeDriver {
                 check("today.folder-applied", owner.todayTidy.suggestions.count == 1 && owner.session.organization?.organizationRevision != before)
                 capture("folder")
                 if let host = proposalPoint(0) {
+                    let archiveRows = owner.todayTidy.suggestions.flatMap(\.tabs).compactMap {
+                        owner.sidebar.page.list.titleRestoreRow(for: $0)
+                    }
+                    let traceStart = ProcessInfo.processInfo.systemUptime
+                    let trace = Task { @MainActor in
+                        var csv = "seconds,leaving,opacity,translationX\n"
+                        for _ in 0..<90 {
+                            for row in archiveRows {
+                                let layer = row.layer?.presentation()
+                                let x = (layer?.value(forKeyPath: "transform.translation.x") as? NSNumber)?.doubleValue ?? 0
+                                csv += "\(ProcessInfo.processInfo.systemUptime - traceStart),\(row.isLeaving),\(layer?.opacity ?? Float(row.alphaValue)),\(x)\n"
+                            }
+                            try? Data(csv.utf8).write(to: self.runRoot.appendingPathComponent("archive-frames.csv"))
+                            try? await Task.sleep(for: .milliseconds(8))
+                            if Task.isCancelled { return }
+                        }
+                    }
                     let point = NSView(frame: NSRect(x: host.frame.maxX - 40, y: host.frame.minY + 35, width: 2, height: 2))
                     point.isHidden = true; owner.sidebar.page.list.addSubview(point); await click(point); point.removeFromSuperview()
                     _ = await until(5) { owner.todayTidy.suggestions.isEmpty }
                     check("today.second-archive", owner.todayTidy.suggestions.isEmpty)
+                    try? await Task.sleep(for: .milliseconds(500))
+                    trace.cancel()
                 }
                 _ = await owner.session.undoOrganization().value
                 _ = await owner.session.undoOrganization().value
