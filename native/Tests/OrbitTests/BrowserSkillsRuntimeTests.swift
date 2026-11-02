@@ -9,19 +9,39 @@ import BrowserCore
         var preferences = BrowserAIPreferences()
         preferences.isEnabled = true
         #expect(!draft.reconcilePermissions(preferences))
+        let intent = draft.beginInvocation()
         let admitted = draft.revokeRevision
         preferences.defaultModels[.chat] = .init(provider: .codex, model: "synthetic")
         #expect(!draft.reconcilePermissions(preferences))
         #expect(draft.revokeRevision == admitted)
+        #expect(draft.isCurrentInvocation(intent))
         preferences.isEnabled = false
         #expect(draft.reconcilePermissions(preferences))
         preferences.isEnabled = true
         #expect(draft.reconcilePermissions(preferences))
         #expect(draft.revokeRevision == admitted + 2)
+        #expect(!draft.applyInvocation(intent, text: "Revoked instructions"))
         preferences.readsCurrentTabOnRequest = false
         #expect(draft.reconcilePermissions(preferences))
         preferences.disabledSites = ["example.invalid"]
         #expect(draft.reconcilePermissions(preferences))
+    }
+
+    @Test func newerIntentAndUserCancellationRejectDelayedPrefills() {
+        let draft = BrowserSkillDraft()
+        let first = draft.beginInvocation()
+        let second = draft.beginInvocation()
+        #expect(draft.applyInvocation(second, text: "Current instructions"))
+        #expect(!draft.applyInvocation(first, text: "Delayed instructions"))
+        #expect(draft.text == "Current instructions")
+        #expect(draft.revision == 1)
+        let pending = draft.beginInvocation()
+        draft.editorRequested = true
+        draft.editing = try? BrowserAISkill(name: "Synthetic", prompt: "Instructions", scope: .thisTab)
+        draft.cancelInvocation()
+        #expect(!draft.applyInvocation(pending, text: "Canceled instructions"))
+        #expect(draft.text == "Current instructions")
+        #expect(!draft.editorRequested && draft.editing == nil)
     }
 
     @Test func mutationsRefreshBothConsumersAndProfileRemovalRevokesCache() async throws {

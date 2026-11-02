@@ -53,7 +53,7 @@ struct BrowserAssistantView: View {
     var skillDraft = BrowserSkillDraft()
     var skillsOwnerValid: () -> Bool = { false }
     var removeSkillContext: (UUID) -> Void = { _ in }
-    var useSkill: (BrowserSkillOption) async -> Void = { _ in }
+    var useSkill: (BrowserSkillOption, UUID) async -> Void = { _, _ in }
     var palette = BrowserAssistantPalette(theme: .default, appearance: NSAppearance(named: .aqua)!)
     var favicons: [UUID: NSImage] = [:]
     var citation: (BrowserAICitation) async -> Bool
@@ -116,7 +116,12 @@ struct BrowserAssistantView: View {
         .task(id: skillProfile) { if let skillProfile { await skillRuntime?.refresh(skillProfile) } }
         .onChange(of: skillDraft.revokeRevision) { _, _ in skillsPresented = false; skillEditor = false; draft = "" }
         .onChange(of: skillDraft.editorRequested, initial: true) { _, requested in
-            if requested { Task { if let skillProfile { await skillRuntime?.refresh(skillProfile) }; openSkillEditor(skillDraft.editing); skillDraft.editing = nil; skillDraft.editorRequested = false } }
+            if requested { Task {
+                if let skillProfile { await skillRuntime?.refresh(skillProfile) }
+                guard skillDraft.editorRequested, skillsOwnerValid() else { return }
+                openSkillEditor(skillDraft.editing)
+                skillDraft.editing = nil; skillDraft.editorRequested = false
+            } }
         }
         .onChange(of: skillDraft.revision) { _, _ in applySkillDraft() }
         .onChange(of: enabled) { _, value in if !value { skillsPresented = false; skillEditor = false; draft = "" } }
@@ -269,6 +274,7 @@ struct BrowserAssistantView: View {
                 .accessibilityLabel(uiText("Ask a question")).accessibilityIdentifier("assistant-composer")
                 .onChange(of: draft) { old, new in
                     if skipComposerTrigger { skipComposerTrigger = false; return }
+                    skillDraft.cancelInvocation()
                     if new.isEmpty || new == "/" { isSkillDraft = false }
                     skillsPresented = enabled && !isSkillDraft && new.hasPrefix("/")
                     if hasContextChoices && new.count > old.count && new.hasSuffix("@") { contextPickerPresented = true }
@@ -307,7 +313,8 @@ struct BrowserAssistantView: View {
         .assistantPopover(isPresented: $skillsPresented, placement: .above(maxWidth: 320), forwardTyping: true) {
             BrowserAssistantSkillsMenu(options: skillOptions, width: min(320, composerWidth), choose: { option in
                 skillsPresented = false
-                Task { await useSkill(option) }
+                let intent = skillDraft.beginInvocation()
+                Task { await useSkill(option, intent) }
             }, create: { openSkillEditor(nil) }, edit: { openSkillEditor($0) })
         }
         .sheet(isPresented: $skillEditor) {
@@ -340,12 +347,13 @@ struct BrowserAssistantView: View {
         return filter.isEmpty ? all : all.filter { $0.name.localizedCaseInsensitiveContains(filter) }
     }
     private func openSkillEditor(_ skill: BrowserAISkill?) {
-        guard enabled, let profile = skillProfile, let document = skillRuntime?.documents[profile] else { return }
+        guard enabled, skillsOwnerValid(), let profile = skillProfile, let document = skillRuntime?.documents[profile] else { return }
         if let skill, !document.skills.contains(skill) {
             skillDraft.notice = uiText("This Skill changed. Open the menu again.")
             skillsPresented = false
             return
         }
+        skillDraft.cancelInvocation()
         expectedSkills = document; editingSkill = skill; skillsPresented = false; skillEditor = true
     }
     private var usageHelp: String {

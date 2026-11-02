@@ -417,8 +417,9 @@ final class BrowserPaletteController<Engine: BrowserEngine> {
         let palette = BrowserAssistantPalette(theme: owner.windowShell.theme, appearance: owner.window?.effectiveAppearance ?? NSApp.effectiveAppearance)
         let content = BrowserAssistantSkillSourceMenu(runtime: owner.skillsRuntime, profile: profile, filter: filter, width: 320, choose: { [weak self, weak owner] option in
             guard let self, let owner, isPresented, isCurrent, owner.assistantEnabled, owner.session.activeProfileID == profile else { return }
+            let intent = owner.skillDraft.beginInvocation()
             dismiss(returnFocus: false)
-            Task { await owner.prefillSkill(option, invocation: invocation) }
+            Task { await owner.prefillSkill(option, invocation: invocation, intent: intent) }
         }, create: { [weak self, weak owner] in self?.openSkillEditor(owner, profile: profile, skill: nil) },
         edit: { [weak self, weak owner] skill in self?.openSkillEditor(owner, profile: profile, skill: skill) })
         skillsPopover.show(from: view.input, placement: .below(maxWidth: 320),
@@ -428,10 +429,11 @@ final class BrowserPaletteController<Engine: BrowserEngine> {
 
     private func openSkillEditor(_ owner: BrowserWindowController<Engine>?, profile: ProfileID?, skill: BrowserAISkill?) {
         guard let owner, isPresented, isCurrent, owner.assistantEnabled, owner.session.activeProfileID == profile else { return }
+        owner.skillDraft.cancelInvocation()
         dismiss(returnFocus: false)
+        if owner.assistantHost == nil { owner.toggleAssistant() }
         owner.skillDraft.editing = skill
         owner.skillDraft.editorRequested = true
-        if owner.assistantHost == nil { owner.toggleAssistant() }
     }
 
     private func renderResults() {
@@ -512,6 +514,7 @@ final class BrowserPaletteController<Engine: BrowserEngine> {
         guard isPresented, isCurrent, acceptTask == nil, results.indices.contains(selection.index), let owner else { return }
         if case .newSkill = results[selection.index].action {
             guard owner.assistantEnabled else { return }
+            owner.skillDraft.cancelInvocation()
             dismiss(returnFocus: false)
             if owner.assistantHost == nil { owner.toggleAssistant() }
             owner.skillDraft.editorRequested = true
@@ -522,8 +525,9 @@ final class BrowserPaletteController<Engine: BrowserEngine> {
             let options = BrowserSkillOption.options(owner.session.activeProfileID.flatMap { owner.skillsRuntime?.documents[$0]?.skills } ?? [])
             guard owner.assistantEnabled, let option = options.first(where: { $0.id == id }) else { return }
             let invocation = owner.skillInvocation
+            let intent = owner.skillDraft.beginInvocation()
             dismiss(returnFocus: false)
-            Task { await owner.prefillSkill(option, invocation: invocation) }
+            Task { await owner.prefillSkill(option, invocation: invocation, intent: intent) }
             return
         }
         if case .ask(let choice) = results[selection.index].action {

@@ -72,7 +72,7 @@ extension BrowserWindowController {
             skillSelection = nil; skillDraft.selectionID = nil; skillDraft.text = ""; skillDraft.revision += 1
         }
         if !assistantEnabled || !stale.isEmpty {
-            conversation.stop(); skillSelection = nil; skillDraft.selectionID = nil; skillDraft.text = ""; skillDraft.revokeRevision += 1
+            conversation.stop(); skillDraft.cancelInvocation(); skillSelection = nil; skillDraft.selectionID = nil; skillDraft.text = ""; skillDraft.revokeRevision += 1
         }
         for source in stale { conversation.removeSource(source.id) }
         if let host = assistantHost as? NSHostingView<BrowserAssistantView> { host.rootView = assistantView(conversation) }
@@ -133,17 +133,17 @@ extension BrowserWindowController {
         let invocation = skillInvocation
         return BrowserAssistantView(conversation: conversation,
             choices: BrowserAIPolicy.choices(for: .chat, statuses: aiService?.statuses ?? [:]),
-            statuses: aiService?.statuses ?? [:], sources: assistantSources, usages: aiService?.statuses.compactMapValues { $0.state.usage } ?? [:], scopes: assistantScopes, currentTabID: session.organization?.selectedTab?.id.rawValue, enabled: assistantEnabled,
-            skillSync: skillsSyncRuntime, skillRuntime: skillsRuntime, skillProfile: session.activeProfileID, skillDraft: skillDraft,
+            statuses: aiService?.statuses ?? [:], sources: sources, usages: aiService?.statuses.compactMapValues { $0.state.usage } ?? [:], scopes: assistantScopes, currentTabID: session.organization?.selectedTab?.id.rawValue, enabled: assistantEnabled,
+            skillSync: skillsSyncRuntime, skillRuntime: skillsRuntime, skillProfile: profile, skillDraft: skillDraft,
             skillsOwnerValid: { [weak self] in
                 guard let self else { return false }
-                return window?.isVisible == true && assistantEnabled && session.activeProfileID == profile && assistantSources == sources && aiConversation === conversation
+                return window?.isVisible == true && assistantEnabled && skillInvocation == invocation && aiConversation === conversation
             },
             removeSkillContext: { [weak self] id in
                 guard let self, skillSelection?.source.id == id else { return }
                 skillSelection = nil; skillDraft.selectionID = nil
             },
-            useSkill: { [weak self] in await self?.prefillSkill($0, invocation: invocation) },
+            useSkill: { [weak self] option, intent in await self?.prefillSkill(option, invocation: invocation, intent: intent) },
             palette: BrowserAssistantPalette(theme: windowShell.theme, appearance: window?.effectiveAppearance ?? NSApp.effectiveAppearance),
             favicons: assistantFavicons, citation: { [weak self] in await self?.showAssistantCitation($0) ?? false }, close: { [weak self] in self?.closeAssistant() })
     }
@@ -173,6 +173,7 @@ extension BrowserWindowController {
             })) ?? false
     }
     func closeAssistant() {
+        skillDraft.cancelInvocation(); skillDraft.text = ""
         guard assistantHost != nil else { return }
         contentCard.setAssistant(nil, width: 0)
         assistantHost = nil

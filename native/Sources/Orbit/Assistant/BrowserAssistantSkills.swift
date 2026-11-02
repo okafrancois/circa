@@ -12,6 +12,23 @@ import SwiftUI
     var editing: BrowserAISkill?
     var notice: String?
     var revokeRevision = 0
+    private var pendingInvocation: UUID?
+    func beginInvocation() -> UUID {
+        cancelInvocation()
+        let id = UUID(); pendingInvocation = id
+        return id
+    }
+    func isCurrentInvocation(_ id: UUID) -> Bool { pendingInvocation == id }
+    func cancelInvocation() {
+        pendingInvocation = nil; notice = nil
+        editorRequested = false; editing = nil
+    }
+    @discardableResult func applyInvocation(_ id: UUID, text: String) -> Bool {
+        guard isCurrentInvocation(id) else { return false }
+        pendingInvocation = nil; notice = nil
+        self.text = text; revision += 1
+        return true
+    }
     private struct Permissions: Equatable {
         let enabled: Bool
         let readsPage: Bool
@@ -23,7 +40,7 @@ import SwiftUI
                                disabledSites: preferences.disabledSites)
         let changed = permissions.map { $0 != next } ?? false
         permissions = next
-        if changed { revokeRevision += 1 }
+        if changed { cancelInvocation(); revokeRevision += 1 }
         return changed
     }
 }
@@ -65,15 +82,17 @@ extension BrowserWindowController {
               selectedTab: session.organization?.selectedTab?.id,
               conversation: aiConversation?.id, revocation: skillDraft.revokeRevision)
     }
-    func prefillSkill(_ option: BrowserSkillOption, invocation: BrowserSkillInvocation) async {
+    func prefillSkill(_ option: BrowserSkillOption, invocation: BrowserSkillInvocation, intent: UUID) async {
         guard assistantEnabled, window?.isVisible == true, skillInvocation == invocation,
-              let conversation = ensureAssistant() else { return }
+              skillDraft.isCurrentInvocation(intent), let conversation = ensureAssistant(),
+              skillDraft.isCurrentInvocation(intent) else { return }
         let admitted = skillInvocation
         skillDraft.notice = nil
         let profile = session.activeProfileID
         if let custom = option.custom {
             guard let profile, let runtime = skillsRuntime, let store = try? runtime.store(for: profile),
-                  await store.snapshot().skills.contains(custom), skillInvocation == admitted else { return }
+                  await store.snapshot().skills.contains(custom), skillInvocation == admitted,
+                  skillDraft.isCurrentInvocation(intent) else { return }
         }
         let current = assistantSources.first { $0.id == session.organization?.selectedTab?.id.rawValue }
         skillSelection = nil; skillDraft.selectionID = nil
@@ -85,10 +104,10 @@ extension BrowserWindowController {
                   let reader = surface as? any BrowserAIPageReading,
                   let text = try? await reader.readAISelection(revision: current.revision, isCurrent: { [weak self, weak surface] in
                       guard let self, let surface else { return false }
-                      return self.assistantEnabled && self.skillInvocation == admitted && self.assistantSources.contains(current)
+                      return self.assistantEnabled && self.skillInvocation == admitted && self.skillDraft.isCurrentInvocation(intent) && self.assistantSources.contains(current)
                           && self.session.surface(for: occurrence) === surface && self.aiConversation === conversation
                   }), !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-                  assistantEnabled, skillInvocation == admitted, assistantSources.contains(current), aiConversation === conversation else { return }
+                  assistantEnabled, skillInvocation == admitted, skillDraft.isCurrentInvocation(intent), assistantSources.contains(current), aiConversation === conversation else { return }
             skillSelection = (source: current, text: text)
             skillDraft.selectionID = current.id
             conversation.select(current)
@@ -96,10 +115,8 @@ extension BrowserWindowController {
             for source in conversation.selectedSources { conversation.removeSource(source.id) }
             if let current { conversation.select(current) }
         }
-        guard assistantEnabled, skillInvocation == admitted, aiConversation === conversation else { return }
-        skillDraft.notice = nil
-        skillDraft.text = option.prompt
-        skillDraft.revision += 1
+        guard assistantEnabled, skillInvocation == admitted, aiConversation === conversation,
+              skillDraft.applyInvocation(intent, text: option.prompt) else { return }
         if assistantHost == nil { toggleAssistant() }
     }
 }
