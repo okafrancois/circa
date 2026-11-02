@@ -41,6 +41,8 @@ def prepare(directory):
     private_file(directory / 'profile.provisionprofile', base64.b64decode(os.environ['CIRCA_PROVISIONING_PROFILE'], validate=True))
     private_file(directory / 'sparkle-key', os.environ['CIRCA_SPARKLE_PRIVATE_KEY'].encode())
     security(['create-keychain', '-p', password, keychain], 'CI keychain creation')
+    security(['list-keychains', '-d', 'user', '-s', keychain,
+              *json.loads((directory / 'original-keychains.json').read_text())], 'CI keychain search path')
     security(['set-keychain-settings', '-lut', '21600', keychain], 'CI keychain timeout')
     security(['unlock-keychain', '-p', password, keychain], 'CI keychain unlock')
     security(['import', directory / 'identity.p12', '-k', keychain, '-f', 'pkcs12',
