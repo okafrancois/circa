@@ -220,13 +220,9 @@ extension BrowserWindowController {
         if action.isMainFrame == false { return .allow }
         let key = ObjectIdentifier(surface)
         if !errandActive {
-            if action.isUserGesture == true { errandGuardedSurfaces.remove(key); return nil }
             return .cancel
         }
         errandGuardedSurfaces.insert(key)
-        if action.isUserGesture == true, action.kind != .redirect {
-            stopErrand(); errandGuardedSurfaces.remove(key); return nil
-        }
         if errandNavigationGrants[key] == nil, let url = errandOpeningURL,
            let occurrence = session.occurrenceID(for: surface), session.tabID(for: occurrence) == errandOpening,
            errandNavigationAdmission?.isValid == true {
@@ -341,6 +337,19 @@ extension BrowserWindowController {
     func cancelErrandForOwnerNavigation(_ surface: Surface) {
         guard isErrandSurface(surface) else { return }
         stopErrand(); errandGuardedSurfaces.remove(ObjectIdentifier(surface))
+    }
+    /// CEF's gesture bit may remain true for several scripted callbacks after one approved
+    /// action. Only a new native event delivered to the actual page releases its quarantine.
+    func handleErrandOwnerInput(_ event: NSEvent) {
+        guard event.window === window, let surface = session.selectedSurface, isErrandSurface(surface),
+              let root = window?.contentView else { return }
+        let hit: NSView?
+        if event.type == .keyDown { hit = window?.firstResponder as? NSView }
+        else if [.leftMouseDown, .rightMouseDown, .otherMouseDown].contains(event.type) {
+            hit = root.hitTest(root.convert(event.locationInWindow, from: nil))
+        } else { return }
+        guard let hit, hit === surface.hostView || hit.isDescendant(of: surface.hostView) else { return }
+        cancelErrandForOwnerNavigation(surface)
     }
     func renderErrandSidebar() {
         let current = assistantEnabled && errandOwner?.profileID == session.activeProfileID && errandOwner?.spaceID == session.organization?.spaceID

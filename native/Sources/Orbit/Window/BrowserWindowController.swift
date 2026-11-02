@@ -491,7 +491,6 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
     // MARK: Input routing
 
     func recordExplicitInput() {
-        if !errandActive, let surface = session.selectedSurface { errandGuardedSurfaces.remove(ObjectIdentifier(surface)) }
         explicitInputToken = UUID()
         nativePromotion?.intent.revoke()
     }

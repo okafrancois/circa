@@ -76,9 +76,10 @@ import Testing
         let surface = try #require(owner.session.selectedSurface)
         owner.errandGuardedSurfaces.insert(ObjectIdentifier(surface))
         var made = 0
-        let request = BrowserNewSurfaceRequest(url: URL(string: "https://example.test/popup")!, isUserGesture: false)
-        for _ in 0..<2 {
+        for gesture in [false, true, true] {
+            let request = BrowserNewSurfaceRequest(url: URL(string: "https://example.test/popup")!, isUserGesture: gesture)
             #expect(owner.surface(surface, createSurfaceFor: request, make: { made += 1; return surface }) == nil)
+            #expect(owner.navigationActionPolicy(for: .init(url: URL(string: "https://example.test/late")!, isMainFrame: true, kind: .other, isUserGesture: gesture), in: surface) == .cancel)
         }
         #expect(made == 0)
         #expect(owner.errandGuardedSurfaces.contains(ObjectIdentifier(surface)))

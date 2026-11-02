@@ -23,7 +23,10 @@ private actor OrbitErrandFixtureClient: BrowserAIProviderClient {
         let raw = object?["observation"]?.line() ?? Data()
         let observation = try? JSONDecoder().decode(BrowserAIErrandObservation.self, from: raw)
         var result: BrowserAIJSON = ["action": "finish", "summary": "The synthetic task is complete."]
-        if mode == "open", receiptCount == 0 { result = ["action": "open", "url": .string(destination.absoluteString)] }
+        if ["open", "open-redirect", "open-cross"].contains(mode), receiptCount == 0 {
+            let target = mode == "open" ? destination : root.appendingPathComponent(mode == "open-cross" ? "cross" : "redirect")
+            result = ["action": "open", "url": .string(target.absoluteString)]
+        }
         else if let page = observation?.pages.first, receiptCount < (["functional", "double"].contains(mode) ? 2 : 1) {
             let typing = ["functional", "double"].contains(mode) && receiptCount == 0
             let label = ["pay", "send", "delete"].contains(mode) ? mode : "search"
@@ -54,7 +57,7 @@ extension OrbitSmokeDriver {
     func errandScenario(_ environment: OrbitEnvironment, _ owner: OrbitWindowController) async {
         let mode = (try? String(contentsOf: runRoot.appendingPathComponent("fixture-mode"), encoding: .utf8))?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "functional"
         let live = arguments.contains("--orbit-smoke-errand-live")
-        let client = OrbitErrandFixtureClient(root: runRoot, destination: fixture.appendingPathComponent("opened"), mode: mode)
+        let client = OrbitErrandFixtureClient(root: fixture, destination: fixture.appendingPathComponent("opened"), mode: mode)
         if live {
             environment.ai.refresh(explicit: true, keepRunning: true)
             _ = await until(12) { !environment.ai.isChecking }
@@ -151,7 +154,12 @@ extension OrbitSmokeDriver {
         check("errand.native-draft", (window.firstResponder as? NSTextView)?.string == goal)
         guard (window.firstResponder as? NSTextView)?.string == goal else { capture("draft-diagnostic"); return }
         var denseTrace: [[String: Any]] = []
+        let pointerStart = ProcessInfo.processInfo.systemUptime
+        if arguments.contains("--orbit-smoke-errand-motion") {
+            _ = await evaluate("globalThis.__pointerTrace=[];const pt=performance.now();const pointerTick=()=>{const nodes=[...document.documentElement.children],p=nodes.find(x=>x.style.zIndex==='2147483647'&&x.style.pointerEvents==='none'),o=nodes.find(x=>x.style.zIndex==='2147483646'&&x.style.pointerEvents==='none');__pointerTrace.push({t:(performance.now()-pt)/1000,transform:p?getComputedStyle(p).transform:null,outline:o?getComputedStyle(o).outlineWidth:null});if(performance.now()-pt<7000)requestAnimationFrame(pointerTick)};requestAnimationFrame(pointerTick);true")
+        }
         let sampleStart = ContinuousClock.now
+        let pointerEnd = ProcessInfo.processInfo.systemUptime
         let sampling = Task { @MainActor in
             var last: NSView?
             while !Task.isCancelled, owns() {
@@ -249,8 +257,15 @@ extension OrbitSmokeDriver {
             check("errand.popup-contained", task.phase == .stopped && owner.session.ownedSurfaces.count == initialSurfaces)
             return
         }
+        if mode == "open-cross" {
+            check("errand.cross-origin-contained", task.phase == .stopped && owner.errandTabs.count == 2)
+            return
+        }
         check("errand.finished", task.phase == .completed)
-        if mode == "open" { check("errand.open-owned", owner.errandTabs.count == 2 && owner.errandTabs.isSubset(of: Set(owner.session.organization?.allTabs.map(\.id) ?? []))) }
+        if ["open", "open-redirect"].contains(mode) {
+            check("errand.open-owned", owner.errandTabs.count == 2 && owner.errandTabs.isSubset(of: Set(owner.session.organization?.allTabs.map(\.id) ?? [])))
+            if mode == "open-redirect" { check("errand.redirect-final", owner.session.ownedSurfaces.contains { $0.navigationState.committedURL?.path == "/opened" }) }
+        }
         else { check("errand.exactly-one-effect", await evaluate("String(document.body.dataset.count||'0')") == "1") }
         check("errand.summary-draft", !task.summary.isEmpty)
         if mode == "double" { check("errand.fading-card-shields-input", await evaluate("String(document.body.dataset.danger||'0')") == "0") }
@@ -266,6 +281,12 @@ extension OrbitSmokeDriver {
             check("errand.no-secret-content", requests.allSatisfy { !$0.prompt.contains("private-sentinel") && $0.instructions.contains("You have no tools") })
         }
         capture("result")
+        if arguments.contains("--orbit-smoke-errand-motion"), let trace = await evaluate("JSON.stringify(__pointerTrace)") {
+            try? Data(trace.utf8).write(to: runRoot.appendingPathComponent("pointer-trace.json"))
+            if let timing = try? JSONSerialization.data(withJSONObject: ["clockAdmissionSeconds": pointerEnd - pointerStart]) {
+                try? timing.write(to: runRoot.appendingPathComponent("pointer-timing.json"))
+            }
+        }
         if let recording { _ = await until(9) { !recording.isRunning }; check("errand.motion-recording", recording.terminationStatus == 0) }
     }
 }

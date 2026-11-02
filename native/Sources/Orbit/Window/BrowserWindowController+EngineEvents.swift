@@ -209,8 +209,7 @@ extension BrowserWindowController: BrowserEngineSurfaceDelegate {
     func surface(_ source: Surface, createSurfaceFor request: BrowserNewSurfaceRequest,
                  make: () -> Surface) -> Surface? {
         if isErrandSurface(source) {
-            if !errandActive, request.isUserGesture == true { errandGuardedSurfaces.remove(ObjectIdentifier(source)) }
-            else { stopErrand(); return nil }
+            stopErrand(); return nil
         }
         guard acceptsCommands, owns(source),
               let sourceOccurrence = session.occurrenceID(for: source),

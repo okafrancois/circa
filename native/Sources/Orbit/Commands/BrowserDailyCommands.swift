@@ -5,6 +5,10 @@ import BrowserEngine
 @MainActor
 enum BrowserDailyCommands {
     static func install<Engine: BrowserEngine>(in registry: BrowserCommandRegistry<BrowserWindowController<Engine>>) {
+        registry.registerInputHandler("errand-owner") { controller, event in
+            controller?.handleErrandOwnerInput(event)
+            return false
+        }
         registry.registerInputHandler("assistant") { controller, event in
             if controller?.palette.handleAssistantKey(event) == true { return true }
             guard let controller, event.type == .keyDown, event.modifierFlags.intersection([.command, .option, .control, .shift]) == .command,
