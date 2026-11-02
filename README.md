@@ -1,51 +1,100 @@
-<p align="center"><img src="web/assets/favicon.svg" alt="Circa" width="88"></p>
+<p align="center">
+  <img src="web/assets/favicon.svg" alt="Circa logo" width="128" height="128">
+</p>
 
-# Circa
+<h1 align="center">Circa</h1>
 
-Circa is an independent macOS browser built with Swift and AppKit, powered by a maintained CEF/Chromium 156 engine. Your tabs live in a sidebar, your work in Spaces, and your browsing data stays in local profiles. No Circa account is required.
+<p align="center">
+  A native Mac browser with your tabs in a sidebar and your work in Spaces.<br>
+  Free and open source. Built with Swift, AppKit and Chromium.
+</p>
 
-[Website](https://circa-alpha.vercel.app) · [Download for Mac](https://github.com/okafrancois/circa/releases/latest/download/Circa.dmg) · [Releases](https://github.com/okafrancois/circa/releases) · [Report an issue](https://github.com/okafrancois/circa/issues)
+<p align="center">
+  <a href="https://github.com/okafrancois/circa/releases/latest/download/Circa.dmg"><b>Download for macOS</b></a> ·
+  <a href="https://circabrowser.com">circabrowser.com</a> ·
+  <a href="https://github.com/okafrancois/circa/releases">What's new</a> ·
+  <a href="https://github.com/okafrancois/circa/issues">Report an issue</a>
+</p>
 
-**Status: preview.** Circa ships signed, notarized releases with automatic updates. Features, website and extension compatibility, and performance are still evolving.
+<p align="center">
+  <a href="https://github.com/okafrancois/circa/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/okafrancois/circa?label=release"></a>
+  <img alt="macOS 15+, Apple silicon" src="https://img.shields.io/badge/macOS-15%2B%20%C2%B7%20Apple%20silicon-lightgrey">
+  <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/github/license/okafrancois/circa"></a>
+</p>
 
-## Features
+Keep everyday sites close, separate projects into Spaces, and open two pages side by side. The Command Bar brings tabs, history and browser actions together. Peek and Little Circa give you a quick look without losing your place.
 
-- Spaces, separate profiles, favorites, pinned tabs and folders.
-- A Command Bar, Split View, Peek and Little Circa for quick browsing.
-- Space themes, browsing history, downloads and a tab archive.
-- Chromium extensions and browser imports. Compatible internal Manifest V3 extensions can be imported into fresh profiles; their settings, stored data and sign-ins are not transferred.
-- Optional AI using supported providers already available on your Mac: Codex, Claude Code and Apple's on-device model. AI starts off and requires a configured, available provider.
-- An AI sidebar, Ask in Find, writing help, link summaries, tab organization, reusable Skills and staged CSS/JavaScript Boosts.
-- Browser Errands with a fresh approval for each proposed page action. Stop keeps the task's tabs.
+**Preview software.** Circa ships signed, notarized releases with automatic updates. Features, website and extension compatibility, and performance are still evolving.
 
-## Installation and updates
+## Install
 
-1. Download [Circa.dmg](https://github.com/okafrancois/circa/releases/latest/download/Circa.dmg), or choose a version from [GitHub Releases](https://github.com/okafrancois/circa/releases/latest).
-2. Open it and drag Circa to Applications. Builds are signed with a Developer ID and notarized by Apple.
-3. To make Circa your default browser, choose it in System Settings › Desktop & Dock › Default web browser.
+1. [Download Circa for Mac](https://github.com/okafrancois/circa/releases/latest/download/Circa.dmg).
+2. Open the DMG and drag Circa to Applications.
+3. To make it your default browser, select Circa in System Settings › Desktop & Dock › Default web browser.
 
-Circa checks for updates at launch and every hour, downloads them in the background and offers a restart when ready. Use Circa › Check for Updates… to check manually. Updates are signed with an EdDSA key and verified by [Sparkle](https://sparkle-project.org). Supported systems: macOS 15 or later on Apple Silicon.
+Requires **macOS 15 or later and Apple Silicon**. Releases are Developer ID signed and notarized by Apple. Circa downloads updates in the background and offers a restart when ready. You can also use Circa › Check for Updates… . Updates are verified by [Sparkle](https://sparkle-project.org).
 
-## Build
+## Make room for your work
 
-Prerequisites: Apple Silicon, macOS 15 or later, Xcode with Swift 6 and its command-line tools, Git and Python 3.10 or later. The Chromium application also requires CMake 3.26+, Ninja and a matching prebuilt, patched CEF 156 distribution with its sandbox and compiled wrapper library. Engine binaries and signing credentials are not included.
+| Feature | What it does |
+|---|---|
+| Spaces and profiles | Separate projects and browsing sessions |
+| Favorites, pinned tabs and folders | Keep the sites you return to within reach |
+| Command Bar | Open pages, find tabs and history, and run browser actions |
+| Split View | Work with pages side by side |
+| Peek and Little Circa | Take a quick look in a preview or a small window |
+| Themes | Give each Space its own appearance |
+| Library | Return to history, downloads and archived tabs |
+| Chromium extensions | Use compatible browser extensions |
+| CSS and JavaScript Boosts | Customize sites with edits you control |
 
-For a source compilation check without CEF:
+## Optional AI
+
+AI starts **off**. Choose an available provider in Settings: Codex, Claude Code, or Apple's on-device model on a supported Mac. No Circa account is required; external providers use their own accounts and availability limits.
+
+- Ask about a chosen page in the sidebar, or use Ask in Find.
+- Get writing help and link summaries, tidy tab titles and downloads, and organize Today tabs.
+- Save reusable prompts as Skills and generate staged CSS or JavaScript Boosts.
+- Start a Browser Errand from the Command Bar. Each proposed page action needs a fresh **Allow Once**; Stop keeps the task's tabs.
+
+Generated edits are reviewed before applying. Page access follows your AI settings and site exclusions.
+
+## Bring your browsing with you
+
+Use Circa's import commands to move supported data from another browser into a new profile. Available categories depend on the source browser and its export format. Review the import summary before proceeding.
+
+Compatible internal Manifest V3 extension packages can be restored into fresh profiles. Extension settings, local storage, sign-ins and private-browsing grants are not transferred. Safari and Firefox extensions are not imported.
+
+## Keyboard
+
+A few everyday shortcuts; the full bindings are available in Settings › Shortcuts.
+
+| Shortcut | Action |
+|---|---|
+| <kbd>⌘</kbd> <kbd>T</kbd> | Open the Command Bar for a new tab |
+| <kbd>⌘</kbd> <kbd>L</kbd> | Edit the current URL |
+| <kbd>⌘</kbd> <kbd>W</kbd> | Close the current tab |
+| <kbd>⌘</kbd> <kbd>D</kbd> | Pin or unpin a tab |
+| <kbd>⌘</kbd> <kbd>S</kbd> | Show or hide the sidebar |
+
+## Your data
+
+Circa does not require a browser account. Local profiles hold your browsing state; optional iCloud organization sync is controlled in Settings. Passwords and cookies use the Chromium store with macOS Keychain-backed encryption.
+
+AI is optional. When you request an AI feature, the selected provider processes the context permitted by your settings. An external provider's own data policies apply.
+
+## Build from source
+
+Use an Apple Silicon Mac with macOS 15+, Xcode with Swift 6, Git and Python 3.10+. To compile the shared modules and the WebKit development executable:
 
 ```sh
 swift build --package-path native
 ```
 
-This builds the shared modules and the WebKit development executable; the Chromium application is built separately with CMake. Do not treat the SwiftPM executable as the Chromium product.
+The Chromium product is built separately with CMake 3.26+, Ninja and a matching patched CEF 156 distribution. Engine binaries and signing credentials are not included. See the [build guide](docs/release/building.md), [architecture](docs/native-port/orbit-architecture.md) and [release pipeline](docs/release/pipeline.md).
 
-See [building Circa](docs/release/building.md) for the Chromium configuration and packaging requirements, and [architecture](docs/native-port/orbit-architecture.md) for the module layout. Tests use synthetic data and a mock Keychain; building does not install an app or change your default browser. Internal modules, tooling paths and bundle identifiers retain the Orbit name.
+Tests use synthetic data and a mock Keychain. Internal modules, tooling paths and bundle identifiers retain the Orbit name. Browser code lives in `native/`, release tools in `scripts/` and `release/`, and the static website in `web/`.
 
-## Repository layout
+## License
 
-`native/`, `scripts/`, `release/`, `docs/` and `.github/` stay at the repository root because browser builds, worktrees and the self-hosted release runner depend on those paths. New website and mobile projects live in `web/` and `mobile/`. Their releases use `web-vX.Y.Z` and `mobile-vX.Y.Z` tags, always pass `--latest=false`, use workflows filtered to their own folder, and never run on the self-hosted browser runner.
-
-## Source and licensing
-
-This repository contains the native application, tests, engine patch sources, build and release tools. Browser data and credentials are never part of it.
-
-Circa's original code is licensed under the [MIT License](LICENSE), Copyright (c) 2026 Okatech. Dependencies retain their own licenses; see [third-party notices](THIRD_PARTY_NOTICES.md).
+[MIT](LICENSE), Copyright (c) 2026 Okatech. Dependencies retain their own licenses; see [third-party notices](THIRD_PARTY_NOTICES.md).
