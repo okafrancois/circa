@@ -5,6 +5,7 @@ import BrowserEngine
 @MainActor
 final class BrowserBoostEditorController: NSWindowController {
     let session: BrowserBoostEditorSession
+    let generation: BrowserBoostGeneration
     let editor: BrowserBoostEditorView
     var zapView: BrowserBoostZapView?
     weak var pageHost: NSView?
@@ -15,6 +16,7 @@ final class BrowserBoostEditorController: NSWindowController {
     private var resizeBegan: TimeInterval?
     init(session: BrowserBoostEditorSession, parent: NSWindow, firstRun: Bool) {
         self.session = session
+        generation = BrowserBoostGeneration(session: session)
         editor = BrowserBoostEditorView(session: session, firstRun: firstRun)
         let panel = BrowserBoostPanel(contentRect: NSRect(x: 0, y: 0, width: 183, height: 588),
                             styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
@@ -45,7 +47,8 @@ final class BrowserBoostEditorController: NSWindowController {
     required init?(coder: NSCoder) { nil }
     func showCode() {
         guard let window else { return }
-        let code = BrowserBoostCodeView(session: session)
+        window.appearance = presentingWindow?.effectiveAppearance
+        let code = BrowserBoostCodeView(session: session, generation: generation, appearance: window.effectiveAppearance)
         code.requestJavaScriptConsent = { [weak self] completion in
             guard let self, let window = self.window, !session.isClosed else { completion(false); return }
             let alert = OrbitFloatingMaterial.alert()
@@ -62,7 +65,9 @@ final class BrowserBoostEditorController: NSWindowController {
         resize(to: frame)
     }
     func showControls() {
+        generation.cancel()
         guard let window else { return }
+        window.appearance = NSAppearance(named: .aqua)
         var frame = window.frame
         frame.origin.x += frame.width - 183; frame.size.width = 183
         resize(to: frame) { [weak self] in guard let self else { return }; window.contentView = editor }
@@ -212,6 +217,11 @@ extension BrowserWindowController {
             self?.showLibrary(.boosts)
         }
         controller.pageHost = pageCommandSurface()?.hostView
+        controller.generation.unavailableText = { [weak self] in self?.boostGenerationUnavailableText ?? uiText("AI is unavailable") }
+        controller.generation.capture = { [weak self, weak controller] in
+            guard let self, let controller else { return nil }
+            return boostGenerationContext(controller)
+        }
         let profile = draft.store.profileID
         draft.onCommit = { [weak self] in
             guard let self else { return }
