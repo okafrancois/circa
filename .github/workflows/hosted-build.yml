@@ -1,0 +1,59 @@
+name: Hosted macOS build
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['native/**', 'scripts/**', 'release/**', '.github/workflows/hosted-build.yml']
+  pull_request:
+    paths: ['native/**', 'scripts/**', 'release/**', '.github/workflows/hosted-build.yml']
+permissions:
+  contents: read
+concurrency:
+  group: hosted-build-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 45
+    env:
+      CMAKE_BUILD_PARALLEL_LEVEL: '2'
+      ORBIT_SIGNING_DIRECTORY: ${{ runner.temp }}/circa-development-signing
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify Apple Silicon and build tools
+        run: |
+          test "$(uname -m)" = arm64
+          xcodebuild -version
+          command -v ninja || brew install ninja
+      - name: Fetch the verified prebuilt engine
+        run: python3 scripts/ci_engine.py
+      - name: Prepare an ephemeral development signing identity
+        run: python3 -c 'import sys; sys.path.insert(0,"scripts"); import local_signing; local_signing.identity()'
+      - name: Validate packaging and public files
+        run: |
+          python3 -m unittest discover -s scripts -p 'test_ci_engine.py'
+          python3 -m unittest discover -s scripts -p 'test_orbit_app.py'
+          python3 scripts/check-public-hygiene.py
+      - name: Compile the Chromium product and smoke application
+        run: python3 scripts/orbit-chromium-app.py build
+      - name: Archive the unsigned build
+        run: |
+          ENGINE_FLAVOR=$(python3 -c 'import json; print(json.load(open("release/config.json"))["cef_flavor"])')
+          ditto -c -k --keepParent "native/OrbitChromium/build/app-$ENGINE_FLAVOR/product/Orbit.app" "$RUNNER_TEMP/Circa-unsigned.zip"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Circa-unsigned-${{ github.sha }}
+          path: ${{ runner.temp }}/Circa-unsigned.zip
+          retention-days: 3
+      - name: Remove the ephemeral signing keychain
+        if: always()
+        run: |
+          if test -d "$ORBIT_SIGNING_DIRECTORY"; then
+            find "$ORBIT_SIGNING_DIRECTORY" -name '*-signing.keychain-db' -exec security delete-keychain {} \;
+            rm -rf "$ORBIT_SIGNING_DIRECTORY"
+          fi

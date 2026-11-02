@@ -1,0 +1,7 @@
+{
+  "flavor": "orbit-engine-extensions-r15",
+  "url": "https://github.com/okafrancois/circa/releases/download/engine-r15/orbit-engine-extensions-r15.tar.gz",
+  "archive_sha256": "6e069cac9244446655ae3c2669a703ffb6598c9577f73ac7d587db75ef3309ea",
+  "framework_sha256": "1cb481278261a2862bc453a2d67e3b720797403b06a651bdfbcaa85fb0cfd02d",
+  "wrapper_sha256": "c0425a863f02323f06e1137d0f650fd185087ba82ed3c1e3d5b02b13cd2f359c"
+}
