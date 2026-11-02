@@ -24,9 +24,10 @@ private actor OrbitErrandFixtureClient: BrowserAIProviderClient {
         let observation = try? JSONDecoder().decode(BrowserAIErrandObservation.self, from: raw)
         var result: BrowserAIJSON = ["action": "finish", "summary": "The synthetic task is complete."]
         if mode == "open", receiptCount == 0 { result = ["action": "open", "url": .string(destination.absoluteString)] }
-        else if let page = observation?.pages.first, receiptCount < (mode == "functional" ? 2 : 1) {
-            let typing = mode == "functional" && receiptCount == 0
-            if let target = page.targets.first(where: { $0.label.lowercased() == (typing ? "destination" : "search") }) {
+        else if let page = observation?.pages.first, receiptCount < (["functional", "double"].contains(mode) ? 2 : 1) {
+            let typing = ["functional", "double"].contains(mode) && receiptCount == 0
+            let label = ["pay", "send", "delete"].contains(mode) ? mode : "search"
+            if let target = page.targets.first(where: { $0.label.lowercased() == (typing ? "destination" : label) }) {
                 result = ["action": typing ? "type" : "click", "tab": .string(page.id.uuidString), "target": .string(target.id.uuidString)]
                 if typing, case .object(var fields) = result { fields["value"] = "lisbon"; result = .object(fields) }
             }
@@ -122,6 +123,16 @@ extension OrbitSmokeDriver {
         guard let surface = await committed(owner, url) else { check("errand.fixture", false); return }
         func evaluate(_ code: String) async -> String? { try? await environment.engine.conformanceProbe?.evaluateScript(code, in: surface) }
         let initialTabs = Set(owner.session.organization?.allTabs.map(\.id) ?? [])
+        let initialSurfaces = owner.session.ownedSurfaces.count
+        if mode == "private", let application {
+            application.createPrivateCommandWindow(); await application.waitForPrivateWindowCommands()
+            let privateController = application.windows.windows.values.first { $0.isPrivateWindow }
+            check("errand.private-controller", privateController != nil)
+            check("errand.private-suppressed", privateController?.canStartErrand == false && privateController?.ensureAssistant() == nil)
+            let requests = await client.requests
+            check("errand.private-no-request", requests.isEmpty)
+            return
+        }
         check("errand.command-available", owner.canStartErrand)
         guard owns(), owner.palette.registry?.dispatch(.startErrand, origin: .palette) == true else { check("errand.entry", false); return }
         _ = await until(3) { owner.errandDraft && owner.assistantHost != nil }
@@ -163,7 +174,7 @@ extension OrbitSmokeDriver {
             if let bytes = try? JSONSerialization.data(withJSONObject: denseTrace) { try? bytes.write(to: runRoot.appendingPathComponent("native-dense-trace.json")) }
         }
         _ = await click(composer, point: NSPoint(x: composer.bounds.width - 36, y: composer.bounds.height - 34))
-        _ = await until(live ? 25 : 5) { owner.errand?.approval != nil || { if case .failed = owner.errand?.phase { return true }; return false }() }
+        _ = await until(live ? 25 : 5) { (owner.errand?.approval != nil && owner.errandHost != nil) || { if case .failed = owner.errand?.phase { return true }; return false }() }
         check("errand.folder-created", owner.errandFolder != nil && owner.errandTabs.count == 1)
         if ["error", "quota"].contains(mode) {
             check("errand.error-no-mutation", await evaluate("String(document.body.dataset.count||'0')") == "0")
@@ -176,16 +187,40 @@ extension OrbitSmokeDriver {
         check("errand.zero-before-approval", await evaluate("String(document.body.dataset.count||'0')") == "0")
         check("errand.card-bounds", abs(card.bounds.width - 420) < 1 && card.bounds.height > 80 && card.bounds.height < 400)
         capture("approval")
-        if ["stop", "revoke", "stale"].contains(mode) {
+        if ["stop", "revoke", "master", "site", "provider", "stale", "form-change", "navigate", "close", "space", "profile", "transfer"].contains(mode) {
             if mode == "stop" { _ = await click(owner.sidebar.errandStopButton) }
-            if mode == "revoke" { try? await environment.settings.updateAI { $0.readsCurrentTabOnRequest = false }; owner.reconcileErrand() }
-            if mode == "stale" {
-                _ = await evaluate("document.getElementById('search').replaceWith(document.getElementById('search').cloneNode(true));true")
+            if mode == "revoke" { try? await environment.settings.updateAI { $0.readsCurrentTabOnRequest = false } }
+            if mode == "master" { try? await environment.settings.updateAI { $0.isEnabled = false } }
+            if mode == "site" { try? await environment.settings.updateAI { $0.disabledSites = ["127.0.0.1"] } }
+            if mode == "provider" { environment.ai.statuses[.codex] = .init(id: .codex, state: .signedOut) }
+            if mode == "navigate" {
+                owner.submitAddress(fixture.appendingPathComponent("owner-navigation").absoluteString)
+                await owner.session.waitForPendingCommands()
+                _ = await until(3) { surface.navigationState.committedURL?.path == "/owner-navigation" }
+            }
+            if mode == "close" { owner.closeSelectedTab(); await owner.session.waitForPendingCommands() }
+            if mode == "transfer", let space = owner.session.organization?.spaceID, let tab = owner.session.organization?.selectedTab?.id {
+                _ = await owner.session.moveItems([.tab(tab)], to: .init(.today(space))).value
+            }
+            if ["space", "profile"].contains(mode), let profile = owner.session.activeProfileID {
+                let targetProfile = mode == "profile" ? await environment.store.createProfile(name: "Synthetic Other") : profile
+                if let space = try? await environment.store.createSpace(name: "Synthetic Other", profileID: targetProfile) {
+                    owner.session.activateSpace(space); await owner.session.waitForPendingCommands()
+                }
+            }
+            if ["stale", "form-change"].contains(mode) {
+                _ = await evaluate(mode == "stale" ? "document.getElementById('search').replaceWith(document.getElementById('search').cloneNode(true));true" : "document.getElementById('destination').value='changed';true")
                 _ = await click(card, point: NSPoint(x: card.bounds.width - 60, y: card.bounds.height - 36))
             }
             _ = await until(3) { !owner.errandActive }
-            check("errand.revoked-no-effect", await evaluate("String(document.body.dataset.count||'0')") == "0")
-            check("errand.stopped-keeps-tabs", initialTabs.isSubset(of: Set(owner.session.organization?.allTabs.map(\.id) ?? [])) && owner.errandHost == nil)
+            task.allowOnce(approval.id)
+            check("errand.revoked-no-followup", await client.requests.count == 1)
+            if !["close", "space", "profile"].contains(mode) { check("errand.revoked-no-effect", await evaluate("String(document.body.dataset.count||'0')") == "0") }
+            check("errand.revoked-card-removed", owner.errandHost == nil && !owner.errandActive)
+            if ["stop", "revoke", "master", "site", "provider", "stale", "form-change", "navigate", "transfer"].contains(mode) {
+                check("errand.stopped-keeps-tabs", initialTabs.isSubset(of: Set(owner.session.organization?.allTabs.map(\.id) ?? [])))
+            }
+            if mode == "navigate" { check("errand.owner-navigation", surface.navigationState.committedURL?.path == "/owner-navigation") }
             return
         }
         var approvals: [UUID] = [], trace: [[String: Any]] = []
@@ -202,6 +237,7 @@ extension OrbitSmokeDriver {
                 try? await Task.sleep(for: .milliseconds(16))
             }
             _ = await click(view, point: NSPoint(x: view.bounds.width - 60, y: view.bounds.height - 36))
+            if mode == "double", view.window === window { _ = await click(view, point: NSPoint(x: view.bounds.width - 60, y: view.bounds.height - 36)) }
             guard await until(1, { task.approval?.id != pending.id }) else { check("errand.native-allow", false); capture("allow-diagnostic"); return }
             task.allowOnce(pending.id)
             _ = await until(live ? 20 : 5) { task.approval?.id != pending.id && (task.approval != nil || !owner.errandActive) }
@@ -209,10 +245,21 @@ extension OrbitSmokeDriver {
         }
         if let bytes = try? JSONSerialization.data(withJSONObject: trace) { try? bytes.write(to: runRoot.appendingPathComponent("native-trace.json")) }
         check("errand.single-use-ids", Set(approvals).count == approvals.count && approvals.contains(approval.id))
+        if mode == "popup" {
+            check("errand.popup-contained", task.phase == .stopped && owner.session.ownedSurfaces.count == initialSurfaces)
+            return
+        }
         check("errand.finished", task.phase == .completed)
         if mode == "open" { check("errand.open-owned", owner.errandTabs.count == 2 && owner.errandTabs.isSubset(of: Set(owner.session.organization?.allTabs.map(\.id) ?? []))) }
         else { check("errand.exactly-one-effect", await evaluate("String(document.body.dataset.count||'0')") == "1") }
         check("errand.summary-draft", !task.summary.isEmpty)
+        if mode == "double" { check("errand.fading-card-shields-input", await evaluate("String(document.body.dataset.danger||'0')") == "0") }
+        if task.phase == .completed {
+            _ = await until(2) { owner.sidebar.page.list.row(for: .tab(owner.errandSummaryID)) != nil }
+            if let row = owner.sidebar.page.list.row(for: .tab(owner.errandSummaryID)) { _ = await click(row) }
+            _ = await until(2) { (owner.assistantHost?.superview?.bounds.width ?? 0) >= 371 }
+            check("errand.native-summary-open", owner.assistantHost != nil)
+        }
         if !live {
             let requests = await client.requests
             check("errand.exact-goal-and-model", requests.allSatisfy { $0.prompt.contains(goal) && $0.model == "synthetic-errand" && $0.effort == "low" })

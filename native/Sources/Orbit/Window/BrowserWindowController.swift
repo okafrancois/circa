@@ -34,6 +34,8 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
     var errandSummaryID = TabID()
     var errandEpoch = UUID()
     var errandStartAdmission: BrowserSidebarSelectionAdmission?
+    var errandStartChoice: BrowserAIModelChoice?
+    var errandStartPreferences: BrowserAIPreferences?
     var errandStartTask: Task<Void, Never>?
     var errandNavigationGrants: [ObjectIdentifier: BrowserErrandNavigationGrant] = [:]
     var errandLeases: [UUID: (any BrowserAIErrandPageReading, BrowserAIErrandPage)] = [:]

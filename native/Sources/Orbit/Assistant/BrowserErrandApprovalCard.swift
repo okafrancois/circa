@@ -27,7 +27,15 @@ import SwiftUI
         setAccessibilityLabel(uiText("Allow this action?"))
     }
     required init?(coder: NSCoder) { nil }
-    override func hitTest(_ point: NSPoint) -> NSView? { exiting ? nil : super.hitTest(point) }
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        if exiting {
+            let local = superview.map { convert(point, from: $0) } ?? point
+            return bounds.contains(local) ? self : nil
+        }
+        return super.hitTest(point)
+    }
+    override func mouseDown(with event: NSEvent) {}
+    override func mouseUp(with event: NSEvent) {}
     func enter() {
         guard let layer else { return }
         let reduced = OrbitMotionPreferences.prefersReducedMotion

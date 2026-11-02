@@ -228,6 +228,7 @@ public final class BrowserWindowSession<Surface: BrowserSurface> {
     public var surfaceLoadingPolicy: SurfaceLoadingPolicy = .eager
     private var requestedSurfaceIDs: Set<TabOccurrenceID> = []
     private var deferredErrandSurfaceIDs: Set<TabOccurrenceID> = []
+    private var errandSurfaceAdmissions: [TabOccurrenceID: BrowserSidebarSelectionAdmission] = [:]
     /// Only the active Space is represented here. Inactive surfaces remain in ownedSurfaces.
     public private(set) var snapshot: BrowserWindowSnapshot?
     public private(set) var catalog: BrowserCatalogSnapshot?
@@ -488,6 +489,7 @@ public final class BrowserWindowSession<Surface: BrowserSurface> {
         enqueueOrganizationValue { session, context in
             guard isCurrent(), admission.isValid else { throw BrowserStoreError.staleContext }
             let (tab, state) = try await session.store.openErrandTab(url: url, folder: folder, expectedTabs: expectedTabs, from: context, admission: admission)
+            session.errandSurfaceAdmissions[tab.occurrenceID] = admission
             if admission.isValid, isCurrent() {
                 onCreate(tab.id)
                 session.requestedSurfaceIDs.insert(tab.occurrenceID)
@@ -968,6 +970,11 @@ public final class BrowserWindowSession<Surface: BrowserSurface> {
         where (!deferredErrandSurfaceIDs.contains(tab.occurrenceID) || visible.contains(tab.occurrenceID))
             && (surfaceLoadingPolicy == .eager || visible.contains(tab.occurrenceID) || requestedSurfaceIDs.contains(tab.occurrenceID))
             && surfaces[tab.occurrenceID] == nil && transits[tab.occurrenceID] == nil {
+            if let admission = errandSurfaceAdmissions[tab.occurrenceID], !admission.isValid, !visible.contains(tab.occurrenceID) {
+                deferredErrandSurfaceIDs.insert(tab.occurrenceID); requestedSurfaceIDs.remove(tab.occurrenceID)
+                errandSurfaceAdmissions.removeValue(forKey: tab.occurrenceID)
+                continue
+            }
             guard let surface = makeSurface(state.context.profileID, tab.url) else {
                 if !isClosed { onError?(BrowserWindowSessionError.surfaceUnavailable) }
                 break
@@ -1000,6 +1007,13 @@ public final class BrowserWindowSession<Surface: BrowserSurface> {
         // delivered synchronously by the engine see a consistent owner.
         if let startSurface {
             for (occurrenceID, surface, url) in created where !isClosed && surfaces[occurrenceID] === surface {
+                if let admission = errandSurfaceAdmissions.removeValue(forKey: occurrenceID), !admission.isValid, !visible.contains(occurrenceID) {
+                    deferredErrandSurfaceIDs.insert(occurrenceID)
+                    surfaces.removeValue(forKey: occurrenceID); authorities.removeValue(forKey: occurrenceID)
+                    occurrencesBySurface.removeValue(forKey: ObjectIdentifier(surface)); surfaceOrder.removeAll { $0 == occurrenceID }
+                    BrowserSurfaceProvenance.revoke(surface, ownedBy: self); disposeSurface(surface)
+                    continue
+                }
                 startSurface(surface, url)
             }
         }

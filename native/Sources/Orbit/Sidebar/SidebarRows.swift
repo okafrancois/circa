@@ -49,6 +49,7 @@ extension SidebarRowEventHandler {
 class SidebarListRow: NSView, NSTextFieldDelegate {
     private var errandMark: BrowserErrandRowMark?
     func setErrandMark(_ state: BrowserErrandRowMark.State?) {
+        (self as? SidebarFolderRow)?.setErrandRole(state != nil)
         guard let state else { errandMark?.removeFromSuperview(); errandMark = nil; needsLayout = true; return }
         let mark = errandMark ?? BrowserErrandRowMark(frame: .zero)
         if errandMark == nil { addSubview(mark); errandMark = mark }
@@ -774,6 +775,18 @@ final class SidebarSplitPaneCell: NSView {
 final class SidebarFolderRow: SidebarListRow {
     private(set) var item: SidebarFolderItem
     let glyph = SidebarFolderGlyphView()
+    private var errandGlyph: NSImageView?
+    func setErrandRole(_ active: Bool) {
+        glyph.isHidden = active
+        if active {
+            if errandGlyph == nil {
+                let image = NSImageView(image: OrbitIcon.image(sfName: "sparkles", pointSize: 16) ?? NSImage())
+                image.setAccessibilityElement(false); addSubview(image); errandGlyph = image
+            }
+            errandGlyph?.contentTintColor = effectiveAccent.icon
+        } else { errandGlyph?.removeFromSuperview(); errandGlyph = nil }
+        needsLayout = true
+    }
 
     init(item: SidebarFolderItem, depth: Int = 0) {
         self.item = item
@@ -794,6 +807,7 @@ final class SidebarFolderRow: SidebarListRow {
     override func accentDidChange() {
         super.accentDidChange()
         glyph.accent = effectiveAccent
+        errandGlyph?.contentTintColor = effectiveAccent.icon
     }
 
     func update(_ item: SidebarFolderItem, depth: Int) {
@@ -813,6 +827,7 @@ final class SidebarFolderRow: SidebarListRow {
         let size = Metrics.folderIconSize
         let center = iconX + Metrics.faviconSize / 2
         glyph.frame = NSRect(x: center - size / 2, y: (bounds.height - size) / 2, width: size, height: size)
+        errandGlyph?.frame = NSRect(x: center - 8, y: (bounds.height - 16) / 2, width: 16, height: 16)
         super.layout()
     }
 

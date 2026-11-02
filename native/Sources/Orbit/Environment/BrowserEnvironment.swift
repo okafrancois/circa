@@ -376,9 +376,13 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
         controller.installWritingHelp()
         controller.installLinkPreviewHelp()
         controller.aiStatusObservation = ai.$statuses.sink { [weak controller] _ in
-            guard let controller else { return }
-            controller.reconcileAssistant()
-            if controller.palette.isPresented { controller.palette.query(controller.palette.draft, preserveSelection: true, userInitiated: false) }
+            // Published emits before committing storage. Reconcile against the new status in
+            // the next actor turn, including revocation while a task waits for approval.
+            Task { @MainActor in
+                guard let controller else { return }
+                controller.reconcileAssistant()
+                if controller.palette.isPresented { controller.palette.query(controller.palette.draft, preserveSelection: true, userInitiated: false) }
+            }
         }
         if settings.document.ai.isEnabled { ai.refresh(keepRunning: true) }
         controller.updateObservation = settings.updater.$readyVersion.sink { [weak controller] version in

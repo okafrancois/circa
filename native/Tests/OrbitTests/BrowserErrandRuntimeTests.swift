@@ -5,6 +5,37 @@ import Testing
 @testable import Orbit
 
 @MainActor struct BrowserErrandRuntimeTests {
+    @Test func stopAfterStoreAdmissionDefersNetworkUntilTheOwnerSelectsTheRetainedTab() async throws {
+        NSApplication.shared.setActivationPolicy(.prohibited)
+        let environment = BrowserEnvironment(engine: PeekSyntheticEngine())
+        let owner = try await environment.makeWindow()
+        defer { environment.autoArchive.scheduler.stop(); owner.session.close(); owner.window?.close() }
+        owner.submitAddress("https://example.test/source"); await owner.session.waitForPendingCommands()
+        let id = try #require(owner.session.organization?.selectedTab?.id)
+        let gate = BrowserSidebarSelectionAdmission()
+        let folder = try #require(await owner.session.createErrandFolder(title: "Task", tab: id, admission: gate, isCurrent: { true }).value)
+        let created = try #require(await owner.session.openErrandTab(url: URL(string: "https://example.test/approved")!, folder: folder,
+            expectedTabs: [id], admission: gate, isCurrent: { true }, onCreate: { _ in gate.revoke() }).value)
+        let tab = try #require(owner.session.organization?.tab(created))
+        let occurrence = try #require(tab.occurrenceID)
+        #expect(owner.session.surface(for: occurrence) == nil)
+        #expect(owner.session.organization?.tab(id) != nil && owner.session.organization?.tab(created) != nil)
+        owner.session.selectTab(created); await owner.session.waitForPendingCommands()
+        #expect(owner.session.surface(for: occurrence)?.currentURL == URL(string: "https://example.test/approved"))
+    }
+
+    @Test func explicitOwnerAddressNavigationReleasesStoppedTaskGuard() async throws {
+        NSApplication.shared.setActivationPolicy(.prohibited)
+        let environment = BrowserEnvironment(engine: PeekSyntheticEngine())
+        let owner = try await environment.makeWindow()
+        defer { environment.autoArchive.scheduler.stop(); owner.session.close(); owner.window?.close() }
+        owner.submitAddress("https://example.test/source"); await owner.session.waitForPendingCommands()
+        let source = try #require(owner.session.selectedSurface)
+        owner.errandGuardedSurfaces.insert(ObjectIdentifier(source))
+        owner.submitAddress("https://example.test/owner"); await owner.session.waitForPendingCommands()
+        #expect(source.currentURL == URL(string: "https://example.test/owner"))
+        #expect(!owner.errandGuardedSurfaces.contains(ObjectIdentifier(source)))
+    }
     @Test func navigationApprovalIsOneRequestWithBoundedSameOriginRedirects() {
         let source = NSObject(), other = NSObject(), url = URL(string: "https://example.test/search?q=a")!
         let grant = BrowserErrandNavigationGrant(surface: source, destination: url)

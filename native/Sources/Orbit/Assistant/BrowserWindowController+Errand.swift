@@ -54,18 +54,31 @@ extension BrowserWindowController {
         let token = UUID(); errandEpoch = token
         let admission = BrowserSidebarSelectionAdmission()
         errandStartAdmission = admission; errandStarting = true; errandDraft = false
+        errandStartChoice = choice; errandStartPreferences = settingsPreferences?.runtime.document.ai
         errandOwner = owner; errandTabs = [selected.id]; errandFolder = nil; errand = nil
         tidyHelpers.revokeStaleRequests()
         errandSummaryID = TabID()
         renderErrandSidebar()
+        let departingComposer = assistantHost
+        closeAssistant()
         let title = BrowserAIHelperName.title(String((goal.split(whereSeparator: \.isNewline).first ?? "").prefix(80))) ?? uiText("Errand")
         errandStartTask = Task { [weak self] in
             guard let self else { return }
-            defer { if errandEpoch == token { errandStarting = false; errandStartAdmission = nil; errandStartTask = nil; renderErrandSidebar() } }
+            defer { if errandEpoch == token {
+                errandStarting = false; errandStartAdmission = nil; errandStartTask = nil
+                errandStartChoice = nil; errandStartPreferences = nil; renderErrandSidebar()
+            } }
+            let closeDeadline = ContinuousClock.now.advanced(by: .seconds(2))
+            while departingComposer?.superview != nil {
+                guard !Task.isCancelled, errandEpoch == token, admission.isValid, window?.isVisible == true,
+                      ContinuousClock.now < closeDeadline else { stopErrand(); return }
+                try? await Task.sleep(for: .milliseconds(16))
+            }
             let folder = await session.createErrandFolder(title: title, tab: selected.id, admission: admission,
                 isCurrent: { [weak self] in
                     guard let self, errandEpoch == token, admission.isValid else { return false }
                     return assistantEnabled && readyErrandChoice(choice) && session.activeProfileID == owner.profileID
+                        && window?.isVisible == true && settingsPreferences?.runtime.document.ai == errandStartPreferences
                         && session.organization?.spaceID == owner.spaceID && session.organization?.selectedTab?.id == selected.id
                         && assistantSources.contains { $0.id == selected.id.rawValue }
                 }).value
@@ -179,9 +192,11 @@ extension BrowserWindowController {
               let owner = errandOwner, let current = session.organization,
               owner.profileID == current.profileID, owner.spaceID == current.spaceID, owner.windowID == current.windowID,
               let folder = errandFolder, case .folder(let item)? = current.item(for: .folder(folder)), item.liveFolder == nil,
-              Set(item.children.compactMap { child -> TabID? in if case .tab(let tab) = child { return tab.id }; return nil }) == errandTabs,
+              Set(item.children.compactMap { $0.node.tabID }) == Set(errandTabs.filter({ $0 != errandOpening || current.tab($0) != nil })),
+              item.children.count == errandTabs.filter({ $0 != errandOpening || current.tab($0) != nil }).count,
               !errandTabs.isEmpty, errandTabs.count <= 8, readyErrandChoice(choice) else { return false }
         return errandTabs.allSatisfy { id in
+            if id == errandOpening, current.tab(id) == nil { return errandNavigationAdmission?.isValid == true }
             guard let tab = current.tab(id), !tab.isOpenInAnotherWindow, let occurrence = tab.occurrenceID else { return false }
             if id == errandOpening, session.surface(for: occurrence) == nil { return true }
             guard let surface = session.surface(for: occurrence), surface.profileID == owner.profileID else { return false }
@@ -209,6 +224,9 @@ extension BrowserWindowController {
             return .cancel
         }
         errandGuardedSurfaces.insert(key)
+        if action.isUserGesture == true, action.kind != .redirect {
+            stopErrand(); errandGuardedSurfaces.remove(key); return nil
+        }
         if errandNavigationGrants[key] == nil, let url = errandOpeningURL,
            let occurrence = session.occurrenceID(for: surface), session.tabID(for: occurrence) == errandOpening,
            errandNavigationAdmission?.isValid == true {
@@ -222,6 +240,7 @@ extension BrowserWindowController {
     func stopErrand(animated: Bool = false) {
         let wasActive = errandActive
         errandEpoch = UUID(); errandStartAdmission?.revoke(); errandStartAdmission = nil
+        errandStartChoice = nil; errandStartPreferences = nil
         errandStartTask?.cancel(); errandStartTask = nil
         errandNavigationAdmission?.revoke(); errandNavigationAdmission = nil
         errandNavigationGrants.values.forEach { $0.revoke() }; errandNavigationGrants = [:]
@@ -242,6 +261,11 @@ extension BrowserWindowController {
         for (_, (reader, page)) in leases { await reader.clearErrandTarget(snapshot: page.snapshot) }
     }
     func reconcileErrand() {
+        if errandStarting {
+            guard assistantEnabled, window?.isVisible == true, let choice = errandStartChoice, readyErrandChoice(choice),
+                  errandStartPreferences == settingsPreferences?.runtime.document.ai,
+                  errandOwner?.profileID == session.activeProfileID, errandOwner?.spaceID == session.organization?.spaceID else { stopErrand(); return }
+        }
         guard let task = errand else { return }
         if errandActive, !errandOwnerCurrent(task.choice) { stopErrand(); return }
         task.reconcile()
@@ -277,6 +301,7 @@ extension BrowserWindowController {
         let host = BrowserErrandApprovalCard(approval: approval, palette: palette,
             stop: { [weak self] in self?.stopErrand(animated: true) }, allow: { [weak self, weak task] in
                 guard let self, let task, self.errand === task, window?.isKeyWindow == true,
+                      window?.isOnActiveSpace == true, errandHost?.isHiddenOrHasHiddenAncestor == false,
                       errandRenderedApprovalID == approval.id, session.selectedSurface === surface,
                       errandPagesCurrent(approval.observation, choice: task.choice) else { return }
                 task.allowOnce(approval.id)
@@ -312,6 +337,10 @@ extension BrowserWindowController {
         guard assistantEnabled, errandOwner?.profileID == session.activeProfileID,
               errandOwner?.spaceID == session.organization?.spaceID, errand?.summary.isEmpty == false else { return }
         if assistantHost == nil { toggleAssistant() } else { reconcileAssistant() }
+    }
+    func cancelErrandForOwnerNavigation(_ surface: Surface) {
+        guard isErrandSurface(surface) else { return }
+        stopErrand(); errandGuardedSurfaces.remove(ObjectIdentifier(surface))
     }
     func renderErrandSidebar() {
         let current = assistantEnabled && errandOwner?.profileID == session.activeProfileID && errandOwner?.spaceID == session.organization?.spaceID

@@ -282,6 +282,7 @@ struct BrowserAssistantView: View {
                 }.padding(.horizontal, 4).padding(.bottom, 8)
             }
             TextField("", text: $draft, prompt: Text(errandSubmit == nil ? uiText("Ask a question") : uiText("Describe the task…")).foregroundStyle(palette.tertiary.swiftUI), axis: .vertical)
+                .id(errandSubmit == nil)
                 .textFieldStyle(.plain).font(.system(size: 14)).lineSpacing(3).lineLimit(3...7)
                 .padding(.horizontal, 4).focused($composing).onSubmit(send)
                 .accessibilityLabel(errandSubmit == nil ? uiText("Ask a question") : uiText("Describe the task…")).accessibilityIdentifier("assistant-composer")

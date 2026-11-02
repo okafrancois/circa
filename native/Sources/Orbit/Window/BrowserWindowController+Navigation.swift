@@ -50,6 +50,7 @@ extension BrowserWindowController {
         }
         hideLibrary()
         session.performOnSelectedSurface(createIfMissing: true) { [weak self] surface in
+            self?.cancelErrandForOwnerNavigation(surface)
             self?.authorizeEnteredFile(destination.url, for: surface)
             surface.navigate(to: destination.url)
             self?.session.updateDestination(for: surface, to: destination.url)
@@ -77,6 +78,7 @@ extension BrowserWindowController {
         guard acceptsCommands else { return }
         hideLibrary()
         session.performOnSelectedSurface { [weak self] surface in
+            self?.cancelErrandForOwnerNavigation(surface)
             if let url = surface.goBack() {
                 self?.session.updateDestination(for: surface, to: url)
             }
@@ -87,6 +89,7 @@ extension BrowserWindowController {
         guard acceptsCommands else { return }
         hideLibrary()
         session.performOnSelectedSurface { [weak self] surface in
+            self?.cancelErrandForOwnerNavigation(surface)
             if let url = surface.goForward() {
                 self?.session.updateDestination(for: surface, to: url)
             }
@@ -96,7 +99,7 @@ extension BrowserWindowController {
     func reload() {
         guard acceptsCommands else { return }
         hideLibrary()
-        session.performOnSelectedSurface { $0.reload() }
+        session.performOnSelectedSurface { [weak self] surface in self?.cancelErrandForOwnerNavigation(surface); surface.reload() }
     }
 
     func refreshNavigation(for surface: Surface) {
