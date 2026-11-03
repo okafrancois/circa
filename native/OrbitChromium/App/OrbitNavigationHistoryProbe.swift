@@ -33,7 +33,7 @@ enum OrbitNavigationHistoryProbe {
         guard let surface = owner.session.selectedSurface,
               await loaded(surface, at: base.appendingPathComponent("sidebar")),
               let id = owner.session.organization?.selectedTab?.id,
-              let row = owner.sidebar.list.row(for: .tab(id)) as? SidebarTabRow else { return ["missingRow": true] }
+              let row = owner.sidebar.page.list.row(for: .tab(id)) as? SidebarTabRow else { return ["missingRow": true] }
         window.setFrameOrigin(NSPoint(x: 160, y: 140))
         NSApp.activate(ignoringOtherApps: true)
         window.makeKeyAndOrderFront(nil)
