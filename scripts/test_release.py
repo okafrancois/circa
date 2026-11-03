@@ -105,7 +105,7 @@ class ReleaseTests(unittest.TestCase):
                                    self.config, '0.1.0', 123)
         self.assertFalse(any(key in info for key in ['OrbitDataRoot', 'OrbitSyntheticBundle', 'OrbitUseMockKeychain', 'OrbitUpdaterLocalTest']))
         self.assertEqual(info['CFBundleName'], 'Circa')
-        self.assertEqual(info['CFBundleDisplayName'], 'Orbit')
+        self.assertEqual(info['CFBundleDisplayName'], 'Circa')
         self.assertTrue(info['LSHasLocalizedDisplayName'])
         self.assertEqual(info['CFBundleIdentifier'], self.config['bundle_id'])
 

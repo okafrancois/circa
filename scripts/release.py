@@ -48,7 +48,7 @@ def update_info(info, config, version, build, local_test_root=None, feed_url=Non
     if key and len(base64.b64decode(key, validate=True)) != 32:
         raise ValueError('public_ed_key must be a base64 Ed25519 public key')
     info.update(CFBundleIdentifier=config['bundle_id'], CFBundleName=config['name'],
-                CFBundleDisplayName=PRODUCT_NAME, LSHasLocalizedDisplayName=True, CFBundleShortVersionString=version,
+                CFBundleDisplayName=config['name'], LSHasLocalizedDisplayName=True, CFBundleShortVersionString=version,
                 CFBundleVersion=str(build), OrbitDeveloperTeamID=config.get('team_id', ''),
                 OrbitRepository=config['repository'], SUFeedURL=feed_url or update_feed_url(config['repository']),
                 SUPublicEDKey=key, SUEnableAutomaticChecks=True, SUAllowsAutomaticUpdates=True,
@@ -299,7 +299,7 @@ def main():
     if archive.exists() or dmg.exists():
         raise ValueError('Version artifacts already exist; choose a new version or output directory')
     with tempfile.TemporaryDirectory(prefix='orbit-release-', dir=output) as temporary:
-        app = Path(temporary) / (PRODUCT_NAME + '.app')
+        app = Path(temporary) / (config['name'] + '.app')
         prepare_bundle(source, app, config, version, build, args.local_test_root, args.feed_url)
         profile = config.get('notarytool_profile')
         if profile:

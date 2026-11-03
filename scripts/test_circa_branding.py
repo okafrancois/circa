@@ -6,8 +6,6 @@ import re
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
-# Approved macOS exception: raw display name matches Orbit.app; localized name is Circa.
-BUNDLE_METADATA_EXCEPTIONS = {'CFBundleDisplayName': 'Orbit'}
 # Exact technical literals: persisted identities, resource paths, signing and named colors.
 INTERNAL = {
     'Orbit', 'Orbit Native', 'Orbit Live', 'Orbit Live Chromium', 'Orbit Safe Storage',
@@ -55,8 +53,8 @@ class CircaBrandingTests(unittest.TestCase):
         for identifier in [app.BUNDLE_ID, app.LIVE_BUNDLE_ID, 'lab.orbit.orbit.synthetic']:
             info = app.bundle_info('0.1.0', identifier)
             self.assertEqual(info['CFBundleName'], 'Circa')
-            # Raw display name must match Orbit.app so Finder uses localized Circa.
-            self.assertEqual(info['CFBundleDisplayName'], BUNDLE_METADATA_EXCEPTIONS['CFBundleDisplayName'])
+            # Launchers must see the same name without consulting localized resources.
+            self.assertEqual(info['CFBundleDisplayName'], 'Circa')
             self.assertTrue(info['LSHasLocalizedDisplayName'])
             self.assertEqual(info['CFBundleIdentifier'], identifier)
             self.assertEqual(info['CFBundleExecutable'], 'Orbit')
@@ -65,8 +63,8 @@ class CircaBrandingTests(unittest.TestCase):
             self.assertEqual(info['SUPublicEDKey'], config['public_ed_key'])
         template = plistlib.loads((ROOT / 'native/OrbitChromium/App/Info.plist.in').read_bytes())
         self.assertEqual(template['CFBundleName'], 'Circa')
-        # Approved exception to the visible-name scan: raw display metadata only.
-        self.assertEqual(template['CFBundleDisplayName'], BUNDLE_METADATA_EXCEPTIONS['CFBundleDisplayName'])
+        # Compiled metadata and packaged metadata have the same visible identity.
+        self.assertEqual(template['CFBundleDisplayName'], 'Circa')
         self.assertTrue(template['LSHasLocalizedDisplayName'])
         for file in (ROOT / 'native/OrbitChromium/App/Branding').glob('*.lproj/InfoPlist.strings'):
             self.assertEqual(plistlib.loads(file.read_bytes())['CFBundleDisplayName'], 'Circa')

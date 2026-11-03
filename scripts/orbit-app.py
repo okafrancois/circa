@@ -54,7 +54,7 @@ def bundle_info(version, bundle_id=BUNDLE_ID, principal='ACRApplication'):
         'SUScheduledCheckInterval': 3600,
         'CFBundleIdentifier': bundle_id,
         'CFBundleName': DISPLAY_NAME,
-        'CFBundleDisplayName': PRODUCT_NAME,
+        'CFBundleDisplayName': DISPLAY_NAME,
         'LSHasLocalizedDisplayName': True,
         'CFBundleIconFile': 'Orbit.icns',
         'CFBundleDevelopmentRegion': 'en', 'CFBundleLocalizations': ['en', 'fr'],
@@ -300,7 +300,7 @@ def assemble(source_app, executable, framework, helpers_dir, output, bundle_id, 
     shutil.copy2(ROOT / 'native/Scripting/Circa.sdef', resources / 'Circa.sdef')
     metadata.update(NSAppleScriptEnabled=True, OSAScriptingDefinition='Circa.sdef')
     displayed_name = DISPLAY_NAME
-    metadata.update(CFBundleName=displayed_name, CFBundleDisplayName=PRODUCT_NAME, LSHasLocalizedDisplayName=True)
+    metadata.update(CFBundleName=displayed_name, CFBundleDisplayName=displayed_name, LSHasLocalizedDisplayName=True)
     for language in ('en', 'fr'):
         localized = resources / (language + '.lproj')
         localized.mkdir(exist_ok=True)
@@ -497,7 +497,7 @@ def install(app, destination, relaunch=False):
             raise
         previous = None
         warnings = []
-        if destination == Path.home() / 'Applications/Orbit.app':
+        if destination in [Path.home() / 'Applications/Orbit.app', Path.home() / 'Applications/Circa.app']:
             try:
                 run([LSREGISTER, '-f', destination], capture_output=True)
             except (OSError, subprocess.SubprocessError):
@@ -540,7 +540,7 @@ def main():
     build.add_argument('--synthetic', action='store_true', help='Hidden test agent; requires a test bundle id')
     installer = sub.add_parser('install')
     installer.add_argument('--app', type=Path, required=True)
-    installer.add_argument('--destination', type=Path, default=Path.home() / 'Applications/Orbit.app')
+    installer.add_argument('--destination', type=Path, default=Path.home() / 'Applications/Circa.app')
     installer.add_argument('--relaunch', action='store_true')
     cleaner = sub.add_parser('clean-stale', help='Disable unconfined build bundles; never scans installed apps')
     cleaner.add_argument('--repo', type=Path, default=ROOT)
@@ -559,7 +559,7 @@ def main():
     stamp = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')
     sha = run(['git', '-C', ROOT, 'rev-parse', '--short=12', 'HEAD'], capture_output=True, text=True).stdout.strip()
     version = sha + '.' + stamp
-    output = (args.output or WORK / 'build' / stamp / ('Orbit.app' if args.synthetic else 'Orbit.app.staged')).absolute()
+    output = (args.output or WORK / 'build' / stamp / ('Orbit.app' if args.synthetic else 'Circa.app.staged')).absolute()
     if not args.synthetic and output.suffix == '.app':
         output = output.with_name(output.name + '.staged')
     output.parent.mkdir(parents=True, exist_ok=True)

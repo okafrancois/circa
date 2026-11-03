@@ -8,7 +8,7 @@
   <key>CFBundleExecutable</key><string>@ORBIT_PRODUCT_NAME@</string>
   <key>CFBundleName</key><string>Circa</string>
   <key>LSHasLocalizedDisplayName</key><true/>
-  <key>CFBundleDisplayName</key><string>Orbit</string>
+  <key>CFBundleDisplayName</key><string>Circa</string>
   <key>CFBundleIconFile</key><string>Orbit.icns</string>
   <key>CFBundleDevelopmentRegion</key><string>en</string>
   <key>CFBundleLocalizations</key><array><string>en</string><string>fr</string></array>
