@@ -3014,6 +3014,9 @@ extension OrbitPerformanceProbe {
         if command["step"] == "editing" {
             return await windowFreezeEditing(application, environment: environment, owner: owner, base: base)
         }
+        if command["step"] == "sidebar-move-undo" {
+            return await sidebarMoveUndo(application, environment: environment, owner: owner, base: base)
+        }
         var checks: [String: Any] = [:]
         func settle(_ c: OrbitWindowController) async {
             await application.windows.waitForPendingCommands()
@@ -3159,6 +3162,87 @@ extension OrbitPerformanceProbe {
 }
 
 extension OrbitPerformanceProbe {
+    private static func sidebarMoveUndo(_ application: OrbitApplication, environment: OrbitEnvironment,
+                                        owner: OrbitWindowController, base: URL) async -> [String: Any] {
+        let bundle = "lab.orbit.orbit.window-freeze"
+        guard ownsWindow(owner, bundleID: bundle), let window = owner.window,
+              let space = owner.session.snapshot?.activeSpaceID,
+              let root = activeSiteSessionConfiguration()?.dataRoot else { return ["refused": true] }
+        var checks: [String: Any] = [:]
+        owner.palette.dismiss()
+        NSApp.activate(ignoringOtherApps: true)
+        window.makeKeyAndOrderFront(nil)
+        func settle() async {
+            await application.windows.waitForPendingCommands()
+            await owner.session.waitForPendingCommands()
+            await owner.sidebar.undoRouter.waitForPendingCommands()
+        }
+        func key(redo: Bool) async -> Bool {
+            guard ownsWindow(owner, bundleID: bundle), window.isKeyWindow, NSApp.isActive,
+                  let code = characterKeyCode("z"),
+                  let event = NSEvent.keyEvent(with: .keyDown, location: .zero,
+                    modifierFlags: redo ? [.command, .shift] : [.command],
+                    timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
+                    context: nil, characters: redo ? "Z" : "z", charactersIgnoringModifiers: redo ? "Z" : "z",
+                    isARepeat: false, keyCode: code) else { return false }
+            NSApp.postEvent(event, atStart: false)
+            try? await Task.sleep(for: .milliseconds(250))
+            await settle()
+            return true
+        }
+        func children(_ folder: FolderID) -> [BrowserOrganizationNode]? {
+            guard case let .folder(value)? = owner.session.organization?.item(for: .folder(folder)) else { return nil }
+            return value.children.map(\.node)
+        }
+        owner.openTab(url: base.appendingPathComponent("moving"))
+        await settle()
+        guard let tab = owner.session.organization?.selectedTab?.id,
+              let target = await owner.session.createFolder(title: "Target", at: .init(.pinned(space))).value,
+              let moving = await owner.session.createFolder(title: "Moving folder", at: .init(.pinned(space))).value else {
+            return ["seedFailed": true]
+        }
+        await settle()
+        let manager = window.undoManager!
+        manager.groupsByEvent = false
+        for (name, node) in [("tab", BrowserOrganizationNode.tab(tab)), ("folder", .folder(moving))] {
+            guard ownsWindow(owner, bundleID: bundle), let payload = owner.sidebar.list(owner.sidebar.page.list,
+                dragPayloadFor: node, grabOffsetX: 0) else { return ["ownershipLost": true] }
+            owner.performSidebarDrop(payload, to: .init(.folder(target)), changesOrganization: true)
+            await settle()
+            checks[name + "Moved"] = children(target)?.contains(node) == true
+            window.makeFirstResponder(owner.sidebar.page.list)
+            final class NativeEdit: NSObject { var undoCalls = 0 }
+            let edit = NativeEdit()
+            manager.beginUndoGrouping()
+            manager.registerUndo(withTarget: edit) { $0.undoCalls += 1 }
+            checks[name + "UndoKey"] = await key(redo: false)
+            checks[name + "Restored"] = children(target)?.contains(node) == false
+            checks[name + "RedoKey"] = await key(redo: true)
+            checks[name + "Redone"] = children(target)?.contains(node) == true
+            checks[name + "NativeGroupIntact"] = manager.groupingLevel == 1 && edit.undoCalls == 0
+            manager.endUndoGrouping()
+        }
+        if let context = await owner.session.captureContextInCommandOrder().value {
+            do {
+                let folder = try await environment.store.createLiveFolder(title: "Pull Requests", configuration: .init(isEnabled: false),
+                    at: .init(.pinned(space)), from: context)
+                owner.session.synchronizeOrganization()
+                await settle()
+                if let row = owner.sidebar.page.list.row(for: .folder(folder)) as? SidebarFolderRow {
+                    checks["providerMark"] = row.glyph.showsGitHubMark && row.glyph.providerMark.image != nil
+                }
+            } catch { checks["providerMark"] = false }
+        }
+        guard ownsWindow(owner, bundleID: bundle) else { return ["ownershipLost": true] }
+        window.contentView?.layoutSubtreeIfNeeded()
+        let view = owner.sidebar
+        if let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds) {
+            view.cacheDisplay(in: view.bounds, to: bitmap)
+            try? bitmap.representation(using: .png, properties: [:])?.write(to: root.appendingPathComponent("sidebar-provider.png"))
+        }
+        return checks
+    }
+
     private static func windowFreezeEditing(_ application: OrbitApplication, environment: OrbitEnvironment,
                                             owner: OrbitWindowController, base: URL) async -> [String: Any] {
         let bundle = "lab.orbit.orbit.window-freeze"

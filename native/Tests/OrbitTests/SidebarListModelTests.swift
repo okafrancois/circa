@@ -48,6 +48,35 @@ extension NativeWebKitTests {
 @Suite
 @MainActor
 struct SidebarListModelTests {
+    @Test("Live folder provider marks survive collapse, rename and row reuse without marking ordinary folders")
+    func liveFolderProviderIdentity() throws {
+        let org = SyntheticOrganization()
+        let id = FolderID()
+        let list = SidebarListView(frame: NSRect(x: 0, y: 0, width: 260, height: 500))
+        for collapsed in [false, true, false] {
+            let folder = BrowserOrganizationFolderItem(liveFolder: .init(), id: id, title: "Custom name",
+                                                       isCollapsed: collapsed, children: [])
+            let content = SidebarListContent(snapshot: org.snapshot(pinned: [.folder(folder)]))
+            #expect(content.entries.first?.folder?.isGitHubLiveFolder == true)
+            list.apply(content, animated: false)
+            list.layoutSubtreeIfNeeded()
+            let row = try #require(list.row(for: .folder(id)) as? SidebarFolderRow)
+            #expect(row.glyph.providerMark.image != nil)
+            #expect(!row.glyph.providerMark.isHidden)
+            #expect(row.glyph.bounds.contains(row.glyph.providerMark.frame))
+        }
+        let ordinary = BrowserOrganizationFolderItem(liveFolder: nil, id: id, title: "Pull Requests", isCollapsed: false, children: [])
+        #expect(ordinary.liveFolder == nil)
+        let plain = SidebarListContent(snapshot: org.snapshot(pinned: [.folder(ordinary)]))
+        #expect(plain.entries.first?.folder?.isGitHubLiveFolder == false)
+        #expect(plain != list.content)
+        list.apply(plain, animated: false)
+        let row = try #require(list.row(for: .folder(id)) as? SidebarFolderRow)
+        #expect(row.item.title == "Pull Requests")
+        #expect(!row.item.isGitHubLiveFolder)
+        #expect(!row.glyph.showsGitHubMark && row.glyph.providerMark.isHidden)
+    }
+
     @Test func todayAccessoryReservesSpaceWithoutMovingPinnedRows() {
         let org = SyntheticOrganization()
         let content = SidebarListContent(snapshot: org.snapshot(pinned: [org.tab(pinned: true)], today: [org.tab(), org.tab()]))

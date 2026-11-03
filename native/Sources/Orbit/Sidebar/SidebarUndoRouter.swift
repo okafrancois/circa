@@ -232,9 +232,13 @@ final class SidebarUndoRouter: NSResponder, NSUserInterfaceValidations {
         guard request.nativeManager == manager.map(ObjectIdentifier.init) else { return .nativeManagerChanged }
         guard request.nativeEditGeneration == nativeEditGeneration else { return .newerNativeEdit }
         guard request.nativeReplayGeneration == nativeReplayGeneration else { return .externalNativeReplay }
-        // Public UndoManager has no immutable operation token inside an open group. Never close
-        // a native/IME group here or risk undoing edits added after the physical request.
-        guard !request.hadOpenNativeGroup, (manager?.groupingLevel ?? 0) == 0 else { return .unstableNativeGroup }
+        // An explicit sidebar replay does not enter UndoManager. An unrelated native group
+        // may stay open while the organization journal replays its own immutable record.
+        let hasSidebarCandidate = request.prefersOrganization && !request.isTextFocused
+            && (request.redo ? canRedoOrganization() : canUndoOrganization())
+        // Native replays still need a closed group: never close a text/IME group on its behalf.
+        guard hasSidebarCandidate || (!request.hadOpenNativeGroup && (manager?.groupingLevel ?? 0) == 0)
+        else { return .unstableNativeGroup }
         return nil
     }
 

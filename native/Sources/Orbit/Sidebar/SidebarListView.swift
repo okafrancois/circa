@@ -1492,7 +1492,7 @@ enum SidebarDragImage {
             let size = Metrics.folderIconSize
             let center = iconX + Metrics.faviconSize / 2
             SidebarFolderGlyphView.draw(in: NSRect(x: center - size / 2, y: (rect.height - size) / 2, width: size, height: size),
-                                        isOpen: !item.isCollapsed, accent: accent)
+                                        isOpen: !item.isCollapsed, accent: accent, showsGitHubMark: item.isGitHubLiveFolder)
         }
         let style = NSMutableParagraphStyle()
         style.lineBreakMode = .byTruncatingTail

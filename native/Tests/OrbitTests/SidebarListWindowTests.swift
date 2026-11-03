@@ -75,6 +75,11 @@ private extension BrowserWindowController where Engine == SiteSyntheticEngine {
     var list: SidebarListView { sidebar.page.list }
     var organization: BrowserOrganizationSnapshot { session.organization! }
 
+    func folderChildren(_ id: FolderID) -> [BrowserOrganizationNode]? {
+        guard case let .folder(folder)? = organization.item(for: .folder(id)) else { return nil }
+        return folder.children.map(\.node)
+    }
+
     /// A sidebar point over a list row (x inside the title area unless given).
     func sidebarPoint(listY: CGFloat, x: CGFloat = 120) -> NSPoint {
         sidebar.convert(NSPoint(x: x, y: listY), from: list)
@@ -120,6 +125,40 @@ extension NativeWebKitTests {
 @Suite(.serialized)
 @MainActor
 struct SidebarListWindowTests {
+    @Test("Sidebar move Undo keeps an unrelated open native edit group intact", arguments: [false, true])
+    func undoSidebarDrop(folder: Bool) async throws {
+        let harness = try await SidebarListHarness(usesSyntheticKeyWindow: true)
+        defer { harness.shutdown() }
+        let controller = harness.window
+        let window = try #require(controller.window)
+        let tab = try #require(await harness.openTab("https://move-undo.test/"))
+        let target = try #require(await controller.session.createFolder(title: "Destination", at: .init(.pinned(harness.spaceID))).value)
+        let movedFolder = try #require(await controller.session.createFolder(title: "Moved folder", at: .init(.pinned(harness.spaceID))).value)
+        await harness.settle()
+        let node: BrowserOrganizationNode = folder ? .folder(movedFolder) : .tab(tab)
+        let before = controller.organization
+        window.makeFirstResponder(controller.list)
+        let verdict = controller.sidebar.simulateDrop(controller.payload(node),
+            at: controller.sidebarPoint(listY: controller.center(.folder(target))))
+        #expect(verdict?.isValid == true)
+        await harness.settle()
+        #expect(controller.folderChildren(target) == [node])
+        let manager = try #require(window.undoManager)
+        manager.groupsByEvent = false
+        #expect(manager.groupingLevel == 0)
+        manager.beginUndoGrouping()
+        defer { manager.endUndoGrouping() }
+        let nativeEdit = SyntheticUndoEdit(manager: manager)
+        nativeEdit.change(to: 1)
+        #expect(harness.registry.isEnabled(.undo))
+        #expect(harness.registry.dispatch(.undo, origin: .keyboard))
+        await harness.settle()
+        #expect(controller.organization.pinned.map(\.node) == before.pinned.map(\.node))
+        #expect(controller.organization.today.map(\.node) == before.today.map(\.node))
+        #expect(controller.folderChildren(target)?.isEmpty == true)
+        #expect(manager.groupingLevel == 1 && nativeEdit.value == 1)
+    }
+
     @Test("Command-click selection copies URLs in sidebar order and exposes the Command Bar action")
     func copySelectionAndNestedFolder() async throws {
         let harness = try await SidebarListHarness(); defer { harness.shutdown() }

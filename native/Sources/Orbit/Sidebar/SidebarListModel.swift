@@ -63,6 +63,7 @@ struct SidebarFolderItem: Equatable {
     let isCollapsed: Bool
     let childCount: Int
     var isMultiSelected = false
+    var isGitHubLiveFolder = false
 }
 
 enum SidebarListSection: Equatable, Sendable {
@@ -181,9 +182,10 @@ struct SidebarListContent: Equatable {
                     result.append(SidebarListEntry(node: .split(split.group.id), section: section, ancestors: ancestors,
                                                    content: .split(row, split.group.tabIDs)))
                 case let .folder(folder):
-                    let row = SidebarFolderItem(id: folder.id, title: folder.title, isCollapsed: folder.isCollapsed,
+                    var row = SidebarFolderItem(id: folder.id, title: folder.title, isCollapsed: folder.isCollapsed,
                                                 childCount: folder.children.count,
                                                 isMultiSelected: multi.contains(.folder(folder.id)))
+                    if let configuration = folder.liveFolder { row.isGitHubLiveFolder = configuration.provider == .githubPullRequests }
                     result.append(SidebarListEntry(node: .folder(folder.id), section: section, ancestors: ancestors,
                                                    content: .folder(row)))
                     if !folder.isCollapsed {

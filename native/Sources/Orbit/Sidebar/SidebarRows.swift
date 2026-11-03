@@ -815,6 +815,7 @@ final class SidebarFolderRow: SidebarListRow {
         self.item = item
         titleLabel.stringValue = item.title
         glyph.isOpen = !item.isCollapsed
+        glyph.showsGitHubMark = item.isGitHubLiveFolder
         setAccessibilityLabel(SidebarListStrings.folder(item.title))
         setAccessibilityValue(item.isCollapsed ? SidebarListStrings.collapsed : SidebarListStrings.expanded)
         setAccessibilityExpanded(!item.isCollapsed)
@@ -841,7 +842,48 @@ final class SidebarFolderRow: SidebarListRow {
 @MainActor
 final class SidebarFolderGlyphView: NSView {
     var isOpen = false { didSet { if isOpen != oldValue { needsDisplay = true } } }
-    var accent = OrbitTokens.ThemeAccent.defaultSpace { didSet { if accent != oldValue { needsDisplay = true } } }
+    var accent = OrbitTokens.ThemeAccent.defaultSpace {
+        didSet {
+            providerMark.contentTintColor = accent.icon
+            if accent != oldValue { needsDisplay = true }
+        }
+    }
+    var showsGitHubMark = false {
+        didSet {
+            providerMark.image = showsGitHubMark ? Self.githubMark : nil
+            providerMark.isHidden = providerMark.image == nil
+        }
+    }
+    let providerMark = NSImageView()
+    private static let githubMark: NSImage? = {
+        guard let url = BrowserText.iconResource("provider-marks/github", extension: "svg"),
+              let image = NSImage(contentsOf: url) else { return nil }
+        image.size = NSSize(width: 8, height: 8)
+        image.isTemplate = true
+        return image
+    }()
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        providerMark.isHidden = true
+        providerMark.contentTintColor = accent.icon
+        providerMark.imageScaling = .scaleProportionallyUpOrDown
+        providerMark.setAccessibilityElement(false)
+        addSubview(providerMark)
+    }
+
+    required init?(coder: NSCoder) { nil }
+
+    override func layout() {
+        super.layout()
+        providerMark.frame = Self.providerMarkFrame(in: bounds)
+    }
+
+    private static func providerMarkFrame(in bounds: NSRect) -> NSRect {
+        let size = bounds.width * (8 / 22.0)
+        return NSRect(x: bounds.midX - size / 2, y: bounds.minY + bounds.height * 0.60 - size / 2,
+                      width: size, height: size)
+    }
 
     override var isFlipped: Bool { true }
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
@@ -851,7 +893,7 @@ final class SidebarFolderGlyphView: NSView {
     }
 
     /// Draws the glyph in `bounds` of the current (flipped) graphics context.
-    static func draw(in bounds: NSRect, isOpen: Bool, accent: OrbitTokens.ThemeAccent) {
+    static func draw(in bounds: NSRect, isOpen: Bool, accent: OrbitTokens.ThemeAccent, showsGitHubMark: Bool = false) {
         let glyph = OrbitTokens.Metrics.FolderGlyph.self
         let line = glyph.lineWidth
         let box = bounds.insetBy(dx: line, dy: bounds.height * 0.16 + line / 2)
@@ -899,6 +941,9 @@ final class SidebarFolderGlyphView: NSView {
         }
         accent.icon.setStroke()
         front.stroke()
+        if showsGitHubMark, let githubMark {
+            OrbitGlyph.drawTemplate(githubMark, centeredIn: providerMarkFrame(in: bounds), tint: accent.icon)
+        }
     }
 }
 
