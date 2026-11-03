@@ -230,14 +230,24 @@ def validate_appcast(path, build):
         raise ValueError('Latest release requires a signed full archive, independent of delta coverage')
 
 
+def release_notes_path(version):
+    release_version('v' + version)
+    path = ROOT / 'release' / 'notes' / (version + '.md')
+    return path if path.is_file() else None
+
+
 def publish_release(config, version, archive, dmg, appcast, deltas=(), stable_dmg=None):
     # stable_dmg is an unversioned copy, so releases/latest/download/<name>.dmg stays a fixed download link.
     repo, tag = config['repository'], 'v' + version
+    notes = release_notes_path(version)
     existing = subprocess.run(['gh', 'release', 'view', tag, '--repo', repo, '--json', 'isDraft'], capture_output=True, text=True)
     if existing.returncode:
-        run('gh', 'release', 'create', tag, '--repo', repo, '--verify-tag', '--draft', '--title', f"{config['name']} {version}", '--generate-notes')
+        run('gh', 'release', 'create', tag, '--repo', repo, '--verify-tag', '--draft', '--title', f"{config['name']} {version}",
+            *(['--notes-file', notes] if notes else ['--generate-notes']))
     elif not json.loads(existing.stdout)['isDraft']:
         raise ValueError('Refusing to mutate an already published release')
+    elif notes:
+        run('gh', 'release', 'edit', tag, '--repo', repo, '--notes-file', notes)
     run('gh', 'release', 'upload', tag, '--repo', repo, '--clobber', archive, dmg, *([stable_dmg] if stable_dmg else []), appcast, *sorted(deltas))
     run('gh', 'release', 'edit', tag, '--repo', repo, '--draft=false', '--latest')
     feed = subprocess.run(['gh', 'release', 'view', 'update-feed', '--repo', repo, '--json', 'isDraft,isPrerelease'], capture_output=True, text=True)
@@ -332,6 +342,7 @@ def main():
     run('swift', ROOT / 'scripts/sparkle_verify.swift', config['public_ed_key'], signature[1], archive)
     prefix = args.feed_url.rsplit('/', 1)[0] + '/' if args.feed_url else f"https://github.com/{config['repository']}/releases/download/v{version}/"
     run(sparkle / 'bin/generate_appcast', *signing, '--versions', str(build), '--download-url-prefix', prefix,
+        '--full-release-notes-url', 'https://circabrowser.com/changelog',
         '--delta-compression', 'lzfse', '--maximum-versions', '3', '--maximum-deltas', '5', archives)
     validate_appcast(archives / 'appcast.xml', build)
     if args.publish:

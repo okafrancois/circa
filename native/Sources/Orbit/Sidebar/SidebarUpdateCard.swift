@@ -8,10 +8,11 @@ final class SidebarUpdateCard: NSView {
     private let paper = CALayer()
     let icon = NSImageView()
     let title = NSTextField(labelWithString: uiText("An update is ready!"))
-    let body = NSTextField(labelWithString: uiText("Click to restart"))
+    let body = NSButton(title: uiText("Release Notes"), target: nil, action: nil)
     let restart = SidebarUpdateRestartButton(title: uiText("Restart and Update"), target: nil, action: nil)
     let sticker = SidebarUpdateSticker(text: uiText("New"))
     var onRestart: (() -> Void)?
+    var onReleaseNotes: (() -> Void)?
     var accent = OrbitTokens.ThemeAccent.defaultPurple
 
     override init(frame: NSRect) {
@@ -30,10 +31,15 @@ final class SidebarUpdateCard: NSView {
         icon.imageScaling = .scaleProportionallyUpOrDown
         title.font = BrandTextStyle.ui.font(size: 13, weight: .semibold)
         body.font = BrandTextStyle.body.font(size: 12)
-        title.textColor = BrandPalette.ink; body.textColor = BrandPalette.ink2
+        title.textColor = BrandPalette.ink
+        body.isBordered = false
+        body.attributedTitle = NSAttributedString(string: uiText("Release Notes"), attributes: [
+            .font: BrandTextStyle.body.font(size: 12), .foregroundColor: BrandPalette.ink2,
+            .underlineStyle: NSUnderlineStyle.single.rawValue])
+        body.target = self; body.action = #selector(openReleaseNotes)
+        body.setAccessibilityIdentifier("sidebar-update-release-notes")
         title.alignment = .center; body.alignment = .center
         title.lineBreakMode = .byTruncatingTail; body.lineBreakMode = .byWordWrapping
-        body.maximumNumberOfLines = 2
         restart.isBordered = false
         restart.font = BrandTextStyle.ui.font(size: 12, weight: .semibold)
         restart.target = self; restart.action = #selector(performRestart)
@@ -52,11 +58,12 @@ final class SidebarUpdateCard: NSView {
         paper.frame = NSRect(x: 0, y: 20, width: width, height: bounds.height - 20)
         icon.frame = NSRect(x: (width - 26) / 2, y: 34, width: 26, height: 20)
         title.frame = NSRect(x: 12, y: 60, width: max(0, width - 24), height: 22)
-        body.frame = NSRect(x: 12, y: 84, width: max(0, width - 24), height: 16)
+        body.frame = NSRect(x: 12, y: 84, width: max(0, width - 24), height: 20)
         restart.frame = NSRect(x: 12, y: bounds.height - 42, width: max(0, width - 24), height: 30)
         sticker.frame = NSRect(x: bounds.width - 46, y: 8, width: 46, height: 24)
         sticker.frameRotation = 8
     }
+    @objc private func openReleaseNotes() { onReleaseNotes?() }
     @objc private func performRestart() { onRestart?() }
 }
 

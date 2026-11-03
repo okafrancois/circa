@@ -153,3 +153,31 @@ ORBIT-RENAME is merged: packaging uses the Orbit executable, icon and product id
    `spctl -a -vv <app>` and `<app>/Contents/MacOS/Orbit --orbit-verify-icloud` (exit 0).
    Never open the production-ID bundle normally alongside a personal Orbit for this check.
    Retain verification evidence, then remove the local artifacts. The PM tags and publishes.
+
+
+## Public release notes
+
+Write concise user-facing notes in `release/notes/X.Y.Z.md` before tagging a browser release.
+The publisher uses this file for the GitHub release; older releases without a file keep generated notes.
+The website at https://circabrowser.com/changelog includes recent static notes and loads newer published
+browser releases from the public GitHub API. Drafts, prereleases and non-browser tags are excluded.
+The app's update card links to the staged version's notes; the Release Notes command links to the running
+version. Sparkle appcasts also expose the full changelog URL.
+
+## Release download counts
+
+GitHub records a `download_count` for each release asset. These counts include automatic updates,
+repeat requests, CI and validation downloads; they do not measure unique installations or active users.
+
+Run **Release download statistics** from the repository's Actions tab to see its report in the run summary:
+https://github.com/okafrancois/circa/actions/workflows/download-stats.yml
+
+Locally, with GitHub CLI authenticated:
+
+```sh
+python3 scripts/download-stats.py
+python3 scripts/download-stats.py --json
+```
+
+The report separates DMG installers, full ZIP updates and delta updates; it excludes feed and engine assets.
+Totals include every published stable browser release even when the table shows only recent versions.

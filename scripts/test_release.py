@@ -65,6 +65,24 @@ class ReleaseTests(unittest.TestCase):
         self.assertIn('--latest=false', feed_create)
         self.assertEqual(feed_upload, ['gh', 'release', 'upload', 'update-feed', '--repo', self.config['repository'], '--clobber', 'appcast.xml'])
 
+    def test_publish_uses_editorial_notes_when_present(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            notes = root / 'release/notes/1.2.3.md'
+            notes.parent.mkdir(parents=True)
+            notes.write_text('A user-facing change.\n')
+            commands = []
+            responses = [SimpleNamespace(returncode=1), SimpleNamespace(returncode=1)]
+            with patch.object(release, 'ROOT', root), patch.object(release.subprocess, 'run', side_effect=responses), \
+                    patch.object(release, 'run', side_effect=lambda *args, **kwargs: commands.append(list(map(str, args)))):
+                release.publish_release(self.config, '1.2.3', Path('app.zip'), Path('app.dmg'), Path('appcast.xml'))
+                self.assertEqual(release.release_notes_path('1.2.3'), notes)
+                with self.assertRaises(ValueError):
+                    release.release_notes_path('1.2.3/../../other')
+            create = next(command for command in commands if command[:3] == ['gh', 'release', 'create'])
+            self.assertEqual(create[-2:], ['--notes-file', str(notes)])
+            self.assertNotIn('--generate-notes', create)
+
     def test_publish_uploads_unversioned_stable_dmg(self):
         responses = [SimpleNamespace(returncode=1), SimpleNamespace(returncode=1)]
         commands = []

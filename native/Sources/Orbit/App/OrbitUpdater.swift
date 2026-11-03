@@ -48,6 +48,11 @@ final class OrbitUpdater: NSObject, ObservableObject {
     static let checkInterval: TimeInterval = 3600
     @Published private(set) var readyVersion: String?
     private(set) var pendingVersion: String?
+    private var pendingDisplayVersion: String?
+    var releaseNotesURL: URL? {
+        guard readyVersion != nil else { return nil }
+        return pendingDisplayVersion.flatMap(OrbitReleaseNotes.versionURL) ?? OrbitReleaseNotes.changelogURL
+    }
     private var newestVersion: String?
     private var freshnessTimer: Timer?
     private var isQuitting = false
@@ -101,10 +106,11 @@ final class OrbitUpdater: NSObject, ObservableObject {
     var downloadLatestUpdate: (() -> Void)?
     var installPendingUpdate: (() -> Void)?
 
-    func prepared(version: String) {
+    func prepared(version: String, displayVersion: String? = nil) {
         // Each installer owns its validation, even when callbacks repeat a version.
         pendingRevision &+= 1
         pendingVersion = version
+        pendingDisplayVersion = displayVersion
         readyVersion = nil
         Task { _ = await validatePendingUpdate() }
     }
@@ -254,6 +260,7 @@ final class OrbitUpdater: NSObject, ObservableObject {
     private var discarding = false
     private var installing = false
     private var extractingVersion: String?
+    private var extractingDisplayVersion: String?
     private var replacing = false
     private var replacementRetries = 0
     private var resumePreparedUpdate = false
@@ -406,6 +413,7 @@ extension OrbitUpdater: SPUUpdaterDelegate {
         }
         beganStaging()
         extractingVersion = item.versionString
+        extractingDisplayVersion = item.displayVersionString
         if state.stage == .installing {
             ready(reply: reply)
             return
@@ -434,7 +442,7 @@ extension OrbitUpdater: SPUUpdaterDelegate {
                 reply(.skip)
             }
         }
-        if let extractingVersion { prepared(version: extractingVersion) }
+        if let extractingVersion { prepared(version: extractingVersion, displayVersion: extractingDisplayVersion) }
         finishedStaging()
         scheduleIdleInstallation()
     }
@@ -451,6 +459,7 @@ extension OrbitUpdater: SPUUpdaterDelegate {
         beganStaging()
         record("extracting")
         extractingVersion = item.versionString
+        extractingDisplayVersion = item.displayVersionString
     }
 }
 

@@ -138,9 +138,56 @@ enum OrbitNavigationHistoryProbe {
         }
         return checks
     }
+    /// Uses the real card callback with a staged display version and a non-installing fixture.
+    private static func changelog(_ owner: OrbitWindowController, root: URL) async -> [String: Any] {
+        guard owns(owner), let window = owner.window,
+              let updater = owner.settingsPreferences?.runtime.updater else { return ["refused": true] }
+        var installed = 0
+        updater.fetchLatestVersion = { "27" }
+        updater.installPendingUpdate = { installed += 1 }
+        updater.prepared(version: "27", displayVersion: "0.60.3")
+        guard await updater.validatePendingUpdate() else { return ["stagingFailed": true] }
+        window.setFrameOrigin(NSPoint(x: 160, y: 140))
+        NSApp.activate(ignoringOtherApps: true); window.makeKeyAndOrderFront(nil)
+        var checks: [String: Any] = [:]
+        for dark in [false, true] {
+            guard owns(owner) else { return ["ownershipLost": true] }
+            window.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
+            // Ordinary synthetic bundles hide updater UI. Show this staged fixture explicitly.
+            owner.sidebar.updateReady = true
+            window.contentView?.layoutSubtreeIfNeeded(); window.displayIfNeeded()
+            try? await Task.sleep(for: .milliseconds(250))
+            let mode = dark ? "dark" : "light"
+            let card = owner.sidebar.updateCard
+            checks[mode + "CardVisible"] = !card.isHidden && card.body.window === window
+            let capture = Process()
+            capture.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
+            capture.arguments = ["-x", "-o", "-l", String(window.windowNumber), root.appendingPathComponent(mode + "-card.png").path]
+            try? capture.run(); capture.waitUntilExit()
+            checks[mode + "Captured"] = capture.terminationStatus == 0
+            guard owns(owner), window.isKeyWindow, NSApp.isActive else { return ["inputRefused": true] }
+            let point = card.body.convert(NSPoint(x: card.body.bounds.midX, y: card.body.bounds.midY), to: nil)
+            let time = ProcessInfo.processInfo.systemUptime
+            guard let down = NSEvent.mouseEvent(with: .leftMouseDown, location: point, modifierFlags: [], timestamp: time,
+                windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1),
+                  let up = NSEvent.mouseEvent(with: .leftMouseUp, location: point, modifierFlags: [], timestamp: time + 0.05,
+                windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 0) else { return ["eventFailed": true] }
+            NSApp.postEvent(up, atStart: true)
+            card.body.mouseDown(with: down)
+            await owner.session.waitForQueuedCommands()
+            let expected = OrbitReleaseNotes.versionURL("0.60.3")!
+            checks[mode + "OpenedStagedNotes"] = owner.session.organization?.selectedTab?.url == expected
+            checks[mode + "NoInstall"] = installed == 0 && updater.pendingVersion == "27"
+            if let surface = owner.session.selectedSurface {
+                checks[mode + "ChromiumLoaded"] = await loaded(surface, at: expected)
+            }
+        }
+        return checks
+    }
     static func run(_ owner: OrbitWindowController, command: [String: String], root: URL) async -> [String: Any] {
         guard owns(owner), let text = command["url"], let base = URL(string: text),
               base.host == "127.0.0.1", base.scheme == "http", let window = owner.window else { return ["refused": true] }
+        if command["changelog"] == "1" { return await changelog(owner, root: root) }
         if command["favoriteIcons"] == "1" { return await favoriteIcons(owner, base: base, root: root) }
         if command["rows"] == "1" { return await rowDecoration(owner, base: base, root: root) }
         var result: [String: Any] = [:]

@@ -16,8 +16,12 @@ struct SidebarBrandFixTests {
         card.onRestart = { restarts += 1 }
         #expect(card.restart.sendAction(card.restart.action, to: card.restart.target))
         #expect(restarts == 1)
+        var openedNotes = 0
+        card.onReleaseNotes = { openedNotes += 1 }
+        #expect(card.body.sendAction(card.body.action, to: card.body.target))
+        #expect(openedNotes == 1 && restarts == 1)
         #expect(card.title.stringValue == uiText("An update is ready!"))
-        #expect(card.body.stringValue == uiText("Click to restart"))
+        #expect(card.body.title == uiText("Release Notes"))
         #expect(card.restart.title == uiText("Restart and Update"))
         #expect(card.sticker.stringValue == uiText("New"))
         #expect(card.icon.image != nil)

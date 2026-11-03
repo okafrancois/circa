@@ -392,6 +392,10 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
                 standalone: false, isPrivate: false)
         }
         controller.sidebar.updateCard.onRestart = { [weak settings] in settings?.updater.restartToUpdate() }
+        controller.sidebar.updateCard.onReleaseNotes = { [weak controller, weak settings] in
+            guard let controller, let url = settings?.updater.releaseNotesURL else { return }
+            controller.openTab(url: url)
+        }
         controller.liveFoldersRuntime = liveFolders
         controller.skillsSyncRuntime = sync
         controller.skillsRuntime = skills

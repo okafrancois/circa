@@ -130,6 +130,23 @@ struct IdleUpdateTests {
         #expect(installs == 1)
     }
 
+    @Test("Update notes use the staged display version instead of its numeric build and retire stale links")
+    func stagedReleaseNotes() async throws {
+        let updater = try updater()
+        updater.fetchLatestVersion = { "27" }
+        updater.prepared(version: "27", displayVersion: "1.2.3")
+        #expect(await updater.validatePendingUpdate())
+        #expect(updater.releaseNotesURL?.absoluteString == "https://circabrowser.com/changelog#v1.2.3")
+        updater.fetchLatestVersion = { "28" }
+        #expect(!(await updater.validatePendingUpdate()))
+        #expect(updater.releaseNotesURL == nil)
+        updater.prepared(version: "28", displayVersion: "not-a-version")
+        #expect(await updater.validatePendingUpdate())
+        #expect(updater.releaseNotesURL == OrbitReleaseNotes.changelogURL)
+        #expect(OrbitReleaseNotes.versionURL("1.2.3#other") == nil)
+        #expect(OrbitReleaseNotes.versionURL("١.٢.٣") == nil)
+    }
+
     @Test("What's new matches the existing release command and targets exactly the running version")
     func releaseNotes() throws {
         let row = BrowserPaletteResult(id: "release", title: "Release Notes", detail: "", section: .commands,
@@ -139,7 +156,7 @@ struct IdleUpdateTests {
         }
         #expect(OrbitApplication().makeCommandSystem().registry.isImplemented(.releaseNotes))
         #expect(OrbitReleaseNotes.runningVersionURL(info: ["CFBundleShortVersionString": "1.2.3", "OrbitRepository": "example/browser"])?.absoluteString
-            == "https://github.com/example/browser/releases/tag/v1.2.3")
+            == "https://circabrowser.com/changelog#v1.2.3")
         for version in ["", "1.2", "1.2.3/other", "fixture.20261030"] {
             #expect(OrbitReleaseNotes.runningVersionURL(info: ["CFBundleShortVersionString": version, "OrbitRepository": "example/browser"]) == nil)
         }
