@@ -1,0 +1,294 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>%ld sources read</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@value@</string>
+		<key>value</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>ld</string>
+			<key>one</key>
+			<string>%ld source lue</string>
+			<key>other</key>
+			<string>%ld sources lues</string>
+		</dict>
+	</dict>
+	<key>%ld Spaces</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@count@</string>
+		<key>count</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>ld</string>
+			<key>one</key>
+			<string>%ld espace</string>
+			<key>other</key>
+			<string>%ld espaces</string>
+		</dict>
+	</dict>
+	<key>%ld tabs and folders</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@count@</string>
+		<key>count</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>ld</string>
+			<key>one</key>
+			<string>%ld onglet ou dossier</string>
+			<key>other</key>
+			<string>%ld onglets et dossiers</string>
+		</dict>
+	</dict>
+	<key>%ld archived tabs</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@count@</string>
+		<key>count</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>ld</string>
+			<key>one</key>
+			<string>%ld onglet archivé</string>
+			<key>other</key>
+			<string>%ld onglets archivés</string>
+		</dict>
+	</dict>
+	<key>%ld history visits</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@count@</string>
+		<key>count</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>ld</string>
+			<key>one</key>
+			<string>%ld visite dans l’historique</string>
+			<key>other</key>
+			<string>%ld visites dans l’historique</string>
+		</dict>
+	</dict>
+	<key>%ld passwords</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@count@</string>
+		<key>count</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>ld</string>
+			<key>one</key>
+			<string>%ld mot de passe</string>
+			<key>other</key>
+			<string>%ld mots de passe</string>
+		</dict>
+	</dict>
+	<key>%ld cookies</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@count@</string>
+		<key>count</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>ld</string>
+			<key>one</key>
+			<string>%ld cookie</string>
+			<key>other</key>
+			<string>%ld cookies</string>
+		</dict>
+	</dict>
+	<key>%ld passwords could not be imported.</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@count@</string>
+		<key>count</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>ld</string>
+			<key>one</key>
+			<string>%ld mot de passe n’a pas pu être importé.</string>
+			<key>other</key>
+			<string>%ld mots de passe n’ont pas pu être importés.</string>
+		</dict>
+	</dict>
+	<key>%ld existing passwords were kept.</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@count@</string>
+		<key>count</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>ld</string>
+			<key>one</key>
+			<string>%ld mot de passe existant a été conservé.</string>
+			<key>other</key>
+			<string>%ld mots de passe existants ont été conservés.</string>
+		</dict>
+	</dict>
+	<key>%ld additional history visits have no dates in the export and will not be added.</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@count@</string>
+		<key>count</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>ld</string>
+			<key>one</key>
+			<string>%ld visite supplémentaire n’a pas de date dans l’exportation et ne sera pas ajoutée à l’historique.</string>
+			<key>other</key>
+			<string>%ld visites supplémentaires n’ont pas de date dans l’exportation et ne seront pas ajoutées à l’historique.</string>
+		</dict>
+	</dict>
+	<key>%ld additional history visits had no dates in the export and were not added.</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@count@</string>
+		<key>count</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>ld</string>
+			<key>one</key>
+			<string>%ld visite supplémentaire n’avait pas de date dans l’exportation et n’a pas été ajoutée à l’historique.</string>
+			<key>other</key>
+			<string>%ld visites supplémentaires n’avaient pas de date dans l’exportation et n’ont pas été ajoutées à l’historique.</string>
+		</dict>
+	</dict>
+	<key>%d passwords found</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@count@</string>
+		<key>count</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>%d mot de passe trouvé</string>
+			<key>other</key>
+			<string>%d mots de passe trouvés</string>
+		</dict>
+	</dict>
+	<key>%d passwords added</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@count@</string>
+		<key>count</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>%d mot de passe ajouté</string>
+			<key>other</key>
+			<string>%d mots de passe ajoutés</string>
+		</dict>
+	</dict>
+	<key>%d passwords already in %@</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%1$#@count@</string>
+		<key>count</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>%1$d mot de passe déjà dans %2$@</string>
+			<key>other</key>
+			<string>%1$d mots de passe déjà dans %2$@</string>
+		</dict>
+	</dict>
+	<key>%d passwords not replaced (%@'s version kept)</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%1$#@count@</string>
+		<key>count</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>%1$d mot de passe non remplacé (version de %2$@ conservée)</string>
+			<key>other</key>
+			<string>%1$d mots de passe non remplacés (version de %2$@ conservée)</string>
+		</dict>
+	</dict>
+	<key>%d passwords skipped</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@count@</string>
+		<key>count</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>%d mot de passe ignoré</string>
+			<key>other</key>
+			<string>%d mots de passe ignorés</string>
+		</dict>
+	</dict>
+	<key>%d imported passwords removed</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@count@</string>
+		<key>count</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>%d mot de passe importé supprimé</string>
+			<key>other</key>
+			<string>%d mots de passe importés supprimés</string>
+		</dict>
+	</dict>
+	<key>%d edited passwords kept</key>
+	<dict>
+		<key>NSStringLocalizedFormatKey</key>
+		<string>%#@count@</string>
+		<key>count</key>
+		<dict>
+			<key>NSStringFormatSpecTypeKey</key>
+			<string>NSStringPluralRuleType</string>
+			<key>NSStringFormatValueTypeKey</key>
+			<string>d</string>
+			<key>one</key>
+			<string>%d mot de passe modifié conservé</string>
+			<key>other</key>
+			<string>%d mots de passe modifiés conservés</string>
+		</dict>
+	</dict>
+</dict>
+</plist>

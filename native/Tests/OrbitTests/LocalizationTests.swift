@@ -1,6 +1,6 @@
 import Foundation
 import Testing
-import BrowserShell
+@testable import BrowserShell
 import BrowserCore
 @testable import Orbit
 
@@ -21,6 +21,156 @@ struct LocalizationTests {
             #expect(keys.insert(key).inserted, "Duplicate English resource key: \(key)")
         }
         #expect(keys.count > 600)
+    }
+
+    private func catalog(_ language: String) throws -> [String: String] {
+        let url = package.appendingPathComponent("Sources/BrowserShell/Resources/\(language).lproj/Localizable.strings")
+        let data = try Data(contentsOf: url)
+        let table = try #require(PropertyListSerialization.propertyList(from: data, format: nil) as? [String: String])
+        let source = try String(contentsOf: url, encoding: .utf8)
+        let entries = try NSRegularExpression(pattern: #"(?m)^\s*"(?:[^"\\]|\\.)*"\s*="#)
+        #expect(entries.numberOfMatches(in: source, range: NSRange(source.startIndex..., in: source)) == table.count,
+                "Duplicate keys in \(language)")
+        return table
+    }
+
+    // Preserve argument positions and ABI types while allowing idiomatic word order.
+    private func formatSignature(_ value: String) throws -> [String] {
+        let regex = try NSRegularExpression(pattern: #"%(?:([0-9]+)\$)?([-+ #0]*[0-9]*(?:\.[0-9]+)?(?:hh|ll|[hljztL])?[@diuoxXfFeEgGaAcCsSp]|%)"#)
+        var next = 1
+        return regex.matches(in: value, range: NSRange(value.startIndex..., in: value)).map { match in
+            let spec = String(value[Range(match.range(at: 2), in: value)!])
+            if spec == "%" { return "%%" }
+            let position: String
+            if let range = Range(match.range(at: 1), in: value) { position = String(value[range]) }
+            else { position = String(next); next += 1 }
+            return position + ":" + spec
+        }.sorted()
+    }
+
+    @Test("French catalog is complete, unique and preserves format arguments and escapes")
+    func frenchCatalog() throws {
+        let english = try catalog("en"), french = try catalog("fr")
+        #expect(Set(english.keys) == Set(french.keys))
+        for (key, value) in french {
+            let original = try #require(english[key])
+            #expect(!value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, "Empty translation: \(key)")
+            #expect(try formatSignature(original) == formatSignature(value), "Format mismatch: \(key)")
+            for escape in ["\n", "\t"] {
+                #expect(original.filter { String($0) == escape }.count == value.filter { String($0) == escape }.count,
+                        "Escaped whitespace mismatch: \(key)")
+            }
+        }
+        // Names, symbols and words whose French spelling is identical are intentional.
+        // Every other entry must contain a translation, not a copied English default.
+        let invariant = Set([
+            "%@\n%@\n→ %@", "%@ %@", "%@ %ld", "%@ · %@\n%@", "%ld%%",
+            "%ld/%ld", "Aa", "Animations", "Circa", "Bing",
+            "Bookmarks.html", "DuckDuckGo", "Extensions", "Format", "Google",
+            "Grain", "Little Circa", "MIDI", "MIDI SysEx", "Microphone",
+            "Notifications", "OK", "Option", "Pastel", "Services",
+            "Substitutions", "Transformations", "Zoom", "Circa Live", "Chrome Web Store…",
+            "Chrome Web Store", "Emoji", "Globe", "Art", "Photo",
+            "Film", "Finance", "Terminal", "Code", "Puzzle",
+            "Sport", "5 minutes", "15 minutes", "30 minutes", "example.org",
+            "%@ · %@", "1 cookie", "%ld cookies", "Page", "%ld %%",
+            "AA", "Boost", "Boosts", "CSS", "JS",
+            "aa", "{}", "Options", "Cookies", "%@: %@",
+            "%@ — %@", "%d s · %@", "iCloud", "Cobalt", "Version %@ (%@)",
+            "Riso", "⌘", "W", "URL", "Perplexity",
+            "Chromium %@", "%@, %@", "Little Circa — %@", "example.com", "Codex",
+            "Claude Code", "%ld min", "Max", "Ultra", "Assistant",
+            "Suggestions", "Boost · %@", "GitHub",
+        ])
+        #expect(Set(french.filter { $0.key == $0.value }.keys) == invariant)
+        #expect(french["Downloads"] == "Téléchargements")
+        #expect(french["New Space…"] == "Nouvel espace…")
+        #expect(french["Quit and Cancel Downloads"] == "Quitter et annuler les téléchargements")
+    }
+
+    @Test("French plural rules cover every English plural and preserve each branch's arguments")
+    func frenchPluralCatalog() throws {
+        func read(_ language: String) throws -> [String: [String: Any]] {
+            let url = package.appendingPathComponent("Sources/BrowserShell/Resources/\(language).lproj/Localizable.stringsdict")
+            return try #require(PropertyListSerialization.propertyList(from: Data(contentsOf: url), format: nil) as? [String: [String: Any]])
+        }
+        let english = try read("en"), french = try read("fr")
+        #expect(Set(english.keys) == Set(french.keys))
+        for (key, entry) in english {
+            let translated = try #require(french[key])
+            #expect(entry["NSStringLocalizedFormatKey"] as? String == translated["NSStringLocalizedFormatKey"] as? String)
+            for (name, value) in entry where name != "NSStringLocalizedFormatKey" {
+                let rule = try #require(value as? [String: String])
+                let localized = try #require(translated[name] as? [String: String])
+                #expect(Set(rule.keys) == Set(localized.keys))
+                for (branch, text) in rule {
+                    let actual = try #require(localized[branch])
+                    if branch.hasPrefix("NSString") { #expect(actual == text) }
+                    else {
+                        #expect(!actual.isEmpty)
+                        #expect(try formatSignature(text) == formatSignature(actual), "Plural format mismatch: \(key), \(branch)")
+                    }
+                }
+            }
+        }
+    }
+
+    /// A fresh Foundation process avoids Bundle's cached process language preferences.
+    /// Compile the production lookup unchanged and exercise an adjacent packaged bundle.
+    private func checkPreferredLanguages(in bundle: URL) throws {
+        let temporary = FileManager.default.temporaryDirectory.appendingPathComponent("OrbitFrenchLookup-" + UUID().uuidString)
+        try FileManager.default.createDirectory(at: temporary, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: temporary) }
+        let app = temporary.appendingPathComponent("LocaleProbe.app/Contents")
+        let resources = app.appendingPathComponent("Resources")
+        let binaries = app.appendingPathComponent("MacOS")
+        try FileManager.default.createDirectory(at: resources, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: binaries, withIntermediateDirectories: true)
+        let info: [String: Any] = ["CFBundleExecutable": "lookup", "CFBundlePackageType": "APPL",
+                                   "CFBundleDevelopmentRegion": "en", "CFBundleLocalizations": ["en", "fr"]]
+        try PropertyListSerialization.data(fromPropertyList: info, format: .xml, options: 0).write(to: app.appendingPathComponent("Info.plist"))
+        try FileManager.default.createSymbolicLink(at: resources.appendingPathComponent("OrbitLabNative_BrowserShell.bundle"), withDestinationURL: bundle)
+        let source = temporary.appendingPathComponent("main.swift")
+        try #"""
+        import Foundation
+        let french = CommandLine.arguments[1] == "fr"
+        func require(_ actual: String, _ expected: String) {
+            if actual != expected { fputs("Expected \(expected), got \(actual)\n", stderr); exit(1) }
+        }
+        require(BrowserText.string("Downloads"), french ? "Téléchargements" : "Downloads")
+        require(BrowserText.string("New Space…"), french ? "Nouvel espace…" : "New Space…")
+        require(BrowserText.string("Unregistered fallback"), "Unregistered fallback")
+        require(String(format: BrowserText.string("%@ of %@"), "12 MB", "20 MB"), french ? "12 MB sur 20 MB" : "12 MB of 20 MB")
+        if french {
+            for count in [0, 1, 2] {
+                let word = count < 2 ? "mot de passe" : "mots de passe"
+                require(String.localizedStringWithFormat(BrowserText.string("%ld passwords"), count), "\(count) \(word)")
+                require(String.localizedStringWithFormat(BrowserText.string("%d passwords already in %@"), count, "Circa"), "\(count) \(word) déjà dans Circa")
+            }
+            require(String(format: BrowserText.string("Search %@ for “%@”"), "Google", "Circa"), "Rechercher « Circa » avec Google")
+        }
+        """#.write(to: source, atomically: true, encoding: .utf8)
+        let executable = binaries.appendingPathComponent("lookup")
+        func run(_ executable: URL, _ arguments: [String]) throws -> Int32 {
+            let process = Process()
+            process.executableURL = executable
+            process.arguments = arguments
+            try process.run(); process.waitUntilExit()
+            return process.terminationStatus
+        }
+        let result = try run(URL(fileURLWithPath: "/usr/bin/xcrun"), ["swiftc", "-module-cache-path", temporary.appendingPathComponent("module-cache").path,
+            package.appendingPathComponent("Sources/BrowserShell/BrowserText.swift").path, source.path, "-o", executable.path])
+        try #require(result == 0)
+        #expect(try run(executable, ["fr", "-AppleLanguages", "(fr-CA, fr, en)", "-AppleLocale", "fr_CA"]) == 0)
+        #expect(try run(executable, ["en", "-AppleLanguages", "(en, fr)", "-AppleLocale", "en_US"]) == 0)
+        #expect(try run(executable, ["en", "-AppleLanguages", "(de)", "-AppleLocale", "de_DE"]) == 0)
+    }
+
+    @Test("SwiftPM resources select French regional preferences through production lookup")
+    func swiftPMFrenchLookup() throws {
+        let bundle = try #require(BrowserText.resourceBundle)
+        #expect(Set(bundle.localizations) == Set(["en", "fr"]))
+        try checkPreferredLanguages(in: bundle.bundleURL)
     }
 
     @Test("English defaults and formats are shared across feature helpers")
@@ -178,7 +328,7 @@ struct LocalizationTests {
         return directories.map { $0 + "/cmake" }.first { FileManager.default.isExecutableFile(atPath: $0) }
     }
 
-    @Test("CMake produces an English resource bundle without CEF or app execution",
+    @Test("CMake packages both languages and selects French without CEF or app execution",
           .enabled(if: LocalizationTests.cmakeExecutable != nil, "Requires CMake for resource assembly"))
     func chromiumResourceAssembly() throws {
         let cmake = try #require(Self.cmakeExecutable)
@@ -197,6 +347,8 @@ struct LocalizationTests {
         #expect(try assemble(source: package.appendingPathComponent("Sources/BrowserShell/Resources")) == 0)
         let bundle = try #require(Bundle(url: output))
         #expect(bundle.developmentLocalization == "en")
+        #expect(Set(bundle.localizations) == Set(["en", "fr"]))
+        try checkPreferredLanguages(in: output)
         #expect(bundle.localizedString(forKey: "Downloads", value: "missing", table: nil) == "Downloads")
         let plural = bundle.localizedString(forKey: "%ld passwords", value: "missing", table: nil)
         #expect(String.localizedStringWithFormat(plural, 1) == "1 password")
