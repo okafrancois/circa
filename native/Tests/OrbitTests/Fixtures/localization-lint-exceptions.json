@@ -142,7 +142,10 @@
     "\"history-day\"",
     "\"history-visit\"",
     "\"library-history-list\"",
-    "\"library-history-search\""
+    "\"library-history-search\"",
+    "\"arrow.clockwise\"",
+    "\"arrow.up.right.square\"",
+    "\"trash\""
   ],
   "App/OrbitApplication.swift": [
     "\"--window-diagnostics\"",

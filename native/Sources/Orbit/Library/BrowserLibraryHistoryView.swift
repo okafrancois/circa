@@ -53,12 +53,21 @@ final class BrowserLibraryHistoryView: NSView, NSTableViewDataSource, NSTableVie
         searchField.setAccessibilityIdentifier("library-history-search")
         status.font = OrbitTokens.Typography.emptyStateDetail
         status.textColor = OrbitTokens.Color.Text.secondary
-        let reload = NSButton(title: libraryText("refresh", "Refresh"), target: self, action: #selector(refresh))
+        let reload = NSButton(image: NSImage(systemSymbolName: "arrow.clockwise", accessibilityDescription: libraryText("refresh", "Refresh"))!, target: self, action: #selector(refresh))
+        reload.toolTip = libraryText("refresh", "Refresh")
+        reload.setAccessibilityLabel(libraryText("refresh", "Refresh"))
         searchField.font = BrandTextStyle.body.font(size: NSFont.systemFontSize)
         for control in [more, open, remove, removeSite, reload, deleteOptions] { control.font = BrandTextStyle.ui.font(size: 13) }
         deleteOptions.addItems(withTitles: [libraryText("clearHistory", "Clear History…"), libraryText("lastHour", "Last Hour…"), libraryText("lastDay", "Last 24 Hours…"), libraryText("dateRange", "Date Range…"), libraryText("allTime", "All Time…")])
         deleteOptions.target = self; deleteOptions.action = #selector(deleteRange)
         deleteOptions.setAccessibilityLabel(libraryText("clearHistory", "Clear History…"))
+        for (button, symbol) in [(open, "arrow.up.right.square"), (remove, "trash")] {
+            let label = button.title
+            button.image = NSImage(systemSymbolName: symbol, accessibilityDescription: label)
+            button.imagePosition = .imageOnly
+            button.toolTip = label
+            button.setAccessibilityLabel(label)
+        }
         open.target = self; open.action = #selector(openSelected)
         remove.target = self; remove.action = #selector(deleteSelected)
         removeSite.target = self; removeSite.action = #selector(deleteSelectedSite)
@@ -75,9 +84,10 @@ final class BrowserLibraryHistoryView: NSView, NSTableViewDataSource, NSTableVie
         table.onEscape = { [weak self] in self?.onBack?() }
         let scroll = BrowserGestureScrollView(); scroll.documentView = table
         BrowserLibraryStyle.configure(scroll)
-        let header = NSStackView(views: [title, NSView(), reload, deleteOptions])
-        let actions = NSStackView(views: [open, remove, removeSite, NSView(), more])
-        let stack = NSStackView(views: [header, profileLabel, searchField, status, scroll, actions])
+        let header = NSStackView(views: [title, NSView(), reload])
+        let actions = NSStackView(views: [open, remove, NSView(), more])
+        let siteActions = NSStackView(views: [removeSite, NSView()])
+        let stack = NSStackView(views: [header, profileLabel, searchField, deleteOptions, status, scroll, actions, siteActions])
         stack.orientation = .vertical; stack.alignment = .leading; stack.spacing = 12
         stack.translatesAutoresizingMaskIntoConstraints = false; addSubview(stack)
         NSLayoutConstraint.activate([
@@ -87,7 +97,7 @@ final class BrowserLibraryHistoryView: NSView, NSTableViewDataSource, NSTableVie
             stack.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -16),
             scroll.heightAnchor.constraint(greaterThanOrEqualToConstant: 40)
         ])
-        for view in [header, searchField, scroll, actions] { view.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true }
+        for view in [header, searchField, deleteOptions, scroll, actions, siteActions] { view.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true }
         dates.onChange = { [weak self] in self?.refreshDates() }
         updateActions()
     }
@@ -184,29 +194,24 @@ final class BrowserLibraryHistoryView: NSView, NSTableViewDataSource, NSTableVie
     func tableView(_ tableView: NSTableView, heightOfRow row: Int) -> CGFloat { if case .day = rows[row] { return 32 }; return 52 }
     func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
         let identifier = NSUserInterfaceItemIdentifier({ if case .day = rows[row] { return "history-day" }; return "history-visit" }())
-        let cell = (tableView.makeView(withIdentifier: identifier, owner: self) as? NSTableCellView) ?? makeCell(identifier)
-        guard let label = cell.textField else { return cell }
-        switch rows[row] {
-        case .day(let day):
-            label.stringValue = formatter.string(from: day)
-            label.font = OrbitTokens.Typography.sidebarFolderTitle
-            label.textColor = OrbitTokens.Color.Text.secondary
-            label.setAccessibilityRole(NSAccessibility.Role(rawValue: "AXHeading"))
-        case .visit(let visit):
-            let time = timeFormatter.string(from: visit.visitedAt)
-            let value = uiFormat("%@ · %@\n%@", time, visit.title.isEmpty ? visit.url.host ?? visit.url.absoluteString : visit.title, visit.url.absoluteString)
-            let text = NSMutableAttributedString(string: value, attributes: [.font: OrbitTokens.Typography.sidebarTabTitle])
-            if let range = value.range(of: time) {
-                text.addAttribute(.font, value: BrandTextStyle.mono.font(size: 14), range: NSRange(range, in: value))
-            }
-            label.attributedStringValue = text
-            label.textColor = OrbitTokens.Color.Text.primary
+        if case .visit(let visit) = rows[row] {
+            let cell = (tableView.makeView(withIdentifier: identifier, owner: self) as? BrowserHistoryVisitCell)
+                ?? BrowserHistoryVisitCell()
+            cell.identifier = identifier
+            cell.render(visit, time: timeFormatter.string(from: visit.visitedAt))
+            return cell
         }
+        let cell = (tableView.makeView(withIdentifier: identifier, owner: self) as? NSTableCellView) ?? makeDayCell(identifier)
+        if case .day(let day) = rows[row] { cell.textField?.stringValue = formatter.string(from: day) }
         return cell
     }
-    private func makeCell(_ identifier: NSUserInterfaceItemIdentifier) -> NSTableCellView {
+    private func makeDayCell(_ identifier: NSUserInterfaceItemIdentifier) -> NSTableCellView {
         let cell = NSTableCellView(); cell.identifier = identifier
-        let label = NSTextField(wrappingLabelWithString: ""); label.maximumNumberOfLines = 2
+        let label = NSTextField(labelWithString: "")
+        label.font = OrbitTokens.Typography.sidebarFolderTitle
+        label.textColor = OrbitTokens.Color.Text.secondary
+        label.lineBreakMode = .byTruncatingTail
+        label.setAccessibilityRole(NSAccessibility.Role(rawValue: "AXHeading"))
         label.translatesAutoresizingMaskIntoConstraints = false; cell.addSubview(label); cell.textField = label
         NSLayoutConstraint.activate([label.leadingAnchor.constraint(equalTo: cell.leadingAnchor, constant: 8), label.trailingAnchor.constraint(equalTo: cell.trailingAnchor, constant: -8), label.centerYAnchor.constraint(equalTo: cell.centerYAnchor)])
         return cell
@@ -237,4 +242,52 @@ final class BrowserLibraryHistoryView: NSView, NSTableViewDataSource, NSTableVie
     @objc private func loadMore() { onMore?() }
     @objc private func refresh() { onReload?() }
     @objc private func deleteRange() { let index = deleteOptions.indexOfSelectedItem; deleteOptions.selectItem(at: 0); if index > 0 { onDeleteRange?(index) } }
+}
+
+/// Independent single-line fields prevent a long title from consuming the URL's line.
+@MainActor
+final class BrowserHistoryVisitCell: NSTableCellView {
+    let titleLabel = NSTextField(labelWithString: "")
+    let urlLabel = NSTextField(labelWithString: "")
+    let timeLabel = NSTextField(labelWithString: "")
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        titleLabel.font = OrbitTokens.Typography.sidebarTabTitle
+        titleLabel.textColor = OrbitTokens.Color.Text.primary
+        urlLabel.font = BrandTextStyle.body.font(size: 12)
+        timeLabel.font = BrandTextStyle.mono.font(size: 12)
+        for label in [urlLabel, timeLabel] { label.textColor = OrbitTokens.Color.Text.secondary }
+        for label in [titleLabel, urlLabel, timeLabel] {
+            label.maximumNumberOfLines = 1
+            label.lineBreakMode = .byTruncatingTail
+            label.translatesAutoresizingMaskIntoConstraints = false
+            addSubview(label)
+        }
+        titleLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        urlLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        timeLabel.setContentCompressionResistancePriority(.required, for: .horizontal)
+        textField = titleLabel
+        NSLayoutConstraint.activate([
+            titleLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
+            titleLabel.topAnchor.constraint(equalTo: topAnchor, constant: 7),
+            timeLabel.leadingAnchor.constraint(greaterThanOrEqualTo: titleLabel.trailingAnchor, constant: 12),
+            timeLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
+            timeLabel.firstBaselineAnchor.constraint(equalTo: titleLabel.firstBaselineAnchor),
+            urlLabel.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
+            urlLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
+            urlLabel.topAnchor.constraint(equalTo: titleLabel.bottomAnchor, constant: 3)
+        ])
+    }
+    convenience init() { self.init(frame: .zero) }
+    required init?(coder: NSCoder) { nil }
+
+    func render(_ visit: BrowserHistoryVisit, time: String) {
+        titleLabel.stringValue = visit.title.isEmpty ? visit.url.host ?? visit.url.absoluteString : visit.title
+        urlLabel.stringValue = visit.url.absoluteString
+        timeLabel.stringValue = time
+        let summary = uiFormat("%@ · %@\n%@", time, titleLabel.stringValue, visit.url.absoluteString)
+        toolTip = summary
+        setAccessibilityLabel(summary)
+    }
 }
