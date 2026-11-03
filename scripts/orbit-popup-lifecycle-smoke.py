@@ -72,7 +72,9 @@ def phase(args):
                 if process.poll() is not None:
                     raise AssertionError(f'Popup process exited: {process.returncode}')
                 checks = result.get('extensionControls', {})
-                required = ['survivedCancellation', 'sourceReady'] if args.action == 'cancel-loading' else ['siteActionSurvived', 'popupVisible']
+                required = (['survivedCancellation', 'sourceReady'] if args.action == 'cancel-loading'
+                            else ['sidebarFloatingBeforeAction', 'popupVisibleAfterLoad', 'sidebarFloatingAfterPopup', 'sourceStayedVisible']
+                            if args.action == 'pinned-popup' else ['siteActionSurvived', 'popupVisible'])
                 assert all(checks.get(key) is True for key in required), checks
             finally:
                 if process.poll() is None:
@@ -87,7 +89,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--app', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
-    parser.add_argument('--action', choices=['cancel-loading', 'site-popup'], default='cancel-loading')
+    parser.add_argument('--action', choices=['cancel-loading', 'site-popup', 'pinned-popup'], default='cancel-loading')
     parser.add_argument('--phase', action='store_true')
     parser.add_argument('--port', type=int)
     args = parser.parse_args()

@@ -2744,7 +2744,7 @@ extension OrbitPerformanceProbe {
         let bundleID = "lab.orbit.orbit.p2-extensions"
         guard ownsWindow(owner, bundleID: bundleID), let window = owner.window,
               let host = owner.engine.extensions else { return ["refused": true] }
-        if owner.session.selectedSurface == nil || ["cancel-loading", "site-popup"].contains(command["action"] ?? ""), let base = command["base"].flatMap(URL.init(string:)),
+        if owner.session.selectedSurface == nil || ["cancel-loading", "site-popup", "pinned-popup"].contains(command["action"] ?? ""), let base = command["base"].flatMap(URL.init(string:)),
            base.scheme == "http", base.host == "127.0.0.1", base.user == nil, base.password == nil {
             guard ownsWindow(owner, bundleID: bundleID) else { return ["refused": true] }
             owner.submitAddress(base.absoluteString)
@@ -2752,7 +2752,7 @@ extension OrbitPerformanceProbe {
         }
         guard let surface = owner.session.selectedSurface else { return ["missingSurface": true] }
         for _ in 0..<60 where !surface.isReady { try? await Task.sleep(for: .milliseconds(50)) }
-        if ["cancel-loading", "site-popup"].contains(command["action"] ?? "") {
+        if ["cancel-loading", "site-popup", "pinned-popup"].contains(command["action"] ?? "") {
             for _ in 0..<100 where surface.navigationState.isLoading {
                 try? await Task.sleep(for: .milliseconds(25))
             }
@@ -2770,7 +2770,59 @@ extension OrbitPerformanceProbe {
                 try application.commands.registry.shortcutPreferences.setPriority(.browser, for: .cycleExtensions)
             }
             owner.extensionControls.render()
-            if command["action"] == "site-popup" {
+            if command["action"] == "pinned-popup" {
+                guard let item = items.first(where: { $0.name == "Popup Lifecycle Fixture" }) else { return ["fixtureMissing": true] }
+                try host.setPinned(true, extensionID: item.id, in: surface.profileID)
+                owner.extensionControls.render()
+                window.setFrameOrigin(NSPoint(x: 160, y: 120))
+                NSApp.activate(ignoringOtherApps: true)
+                window.makeKeyAndOrderFront(nil)
+                try? await Task.sleep(for: .milliseconds(300))
+                owner.setSidebarVisible(false, animated: false)
+                owner.windowShell.hoverReveal.pointerEnteredEdge()
+                try? await Task.sleep(for: .milliseconds(600))
+                window.contentView?.layoutSubtreeIfNeeded()
+                result["sidebarFloatingBeforeAction"] = owner.isSidebarFloating
+                let before = Set(NSApp.windows.map(ObjectIdentifier.init))
+                guard ownsWindow(owner, bundleID: bundleID), window.isKeyWindow,
+                      NSWorkspace.shared.frontmostApplication?.processIdentifier == getpid(),
+                      let button = owner.sidebar.extensionsContainer.subviews.compactMap({ $0 as? NSButton })
+                        .first(where: { $0.accessibilityIdentifier() == "pinned-extension-" + item.id }),
+                      button.window === window, !button.isHiddenOrHasHiddenAncestor else {
+                    return ["inputGuardRefused": true]
+                }
+                button.performClick(nil)
+                var trace: [[String: Any]] = []
+                var popup: NSWindow?
+                for _ in 0..<50 {
+                    let created = NSApp.windows.filter { !before.contains(ObjectIdentifier($0)) }
+                    if let live = created.first(where: { $0.isVisible }) { popup = live }
+                    trace.append(["floating": owner.isSidebarFloating, "mainKey": window.isKeyWindow,
+                        "children": created.map { child in ["number": child.windowNumber,
+                            "visible": child.isVisible, "key": child.isKeyWindow,
+                            "parentIsSource": child.parentWindow === window,
+                            "class": String(describing: type(of: child))] as [String: Any] }])
+                    try? await Task.sleep(for: .milliseconds(100))
+                }
+                result["focusTrace"] = trace
+                result["popupVisibleAfterLoad"] = popup?.isVisible == true
+                result["popupParentIsSource"] = popup?.parentWindow === window
+                result["popupKeyAfterLoad"] = popup?.isKeyWindow == true
+                result["sidebarFloatingAfterPopup"] = owner.isSidebarFloating
+                result["sourceStayedVisible"] = window.isVisible
+                func capture(_ target: NSWindow, name: String) {
+                    guard let rows = CGWindowListCopyWindowInfo(.optionIncludingWindow,
+                        CGWindowID(target.windowNumber)) as? [[String: Any]],
+                        rows.contains(where: { ($0[kCGWindowOwnerPID as String] as? Int32) == getpid() }) else { return }
+                    let process = Process()
+                    process.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
+                    process.arguments = ["-x", "-l", String(target.windowNumber), root.appendingPathComponent(name).path]
+                    try? process.run(); process.waitUntilExit()
+                }
+                capture(window, name: "pinned-popup-source.png")
+                if let popup, popup.isVisible { capture(popup, name: "pinned-popup-content.png"); popup.close() }
+                return result
+            } else if command["action"] == "site-popup" {
                 guard let item = items.first(where: { $0.name == "Popup Lifecycle Fixture" }),
                       ownsWindow(owner, bundleID: bundleID) else { return ["fixtureMissing": true] }
                 owner.sidebar.addressContainer.holdsAccessoriesVisible = true
