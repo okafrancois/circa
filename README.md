@@ -71,7 +71,7 @@ Compatible internal Manifest V3 extension packages can be restored into fresh pr
 
 ## Keyboard
 
-A few everyday shortcuts; the full bindings are available in Settings › Shortcuts.
+A few everyday shortcuts; see the [full default shortcut reference](docs/shortcuts.md), grouped by menu. Customize supported bindings in Settings › Shortcuts.
 
 | Shortcut | Action |
 |---|---|
