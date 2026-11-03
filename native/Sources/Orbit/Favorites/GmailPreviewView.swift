@@ -46,7 +46,7 @@ final class GmailPreviewView: NSView {
         document.addSubview(empty)
         compose.bezelStyle = .circular
         compose.isBordered = true
-        compose.image = NSImage(systemSymbolName: "plus", accessibilityDescription: nil)
+        compose.image = OrbitIcon.image(sfName: "plus", pointSize: 16, accessibilityDescription: nil)
         compose.imagePosition = .imageOnly
         compose.target = self
         compose.action = #selector(composeMessage)
