@@ -22,6 +22,10 @@
   <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/github/license/okafrancois/circa"></a>
 </p>
 
+<p align="center">
+  <img src="docs/media/circa-demo.gif" alt="Circa switching between three coloured Spaces, then opening a second page side by side from the Command Bar" width="760">
+</p>
+
 Keep everyday sites close, separate projects into Spaces, and open two pages side by side. The Command Bar brings tabs, history and browser actions together. Peek and Little Circa give you a quick look without losing your place.
 
 **Preview software.** Circa ships signed, notarized releases with automatic updates. Features, website and extension compatibility, and performance are still evolving.
@@ -94,6 +98,10 @@ swift build --package-path native
 The Chromium product is built separately with CMake 3.26+, Ninja and a matching patched CEF 156 distribution. Engine binaries and signing credentials are not included. See the [build guide](docs/release/building.md), [architecture](docs/native-port/orbit-architecture.md) and [release pipeline](docs/release/pipeline.md).
 
 Tests use synthetic data and a mock Keychain. Internal modules, tooling paths and bundle identifiers retain the Orbit name. Browser code lives in `native/`, release tools in `scripts/` and `release/`, and the static website in `web/`.
+
+## Contribute
+
+Bug reports and pull requests are welcome. Most of the code builds without the Chromium engine. See [CONTRIBUTING.md](CONTRIBUTING.md) and the [good first issues](https://github.com/okafrancois/circa/labels/good%20first%20issue).
 
 ## License
 
