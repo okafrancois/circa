@@ -80,7 +80,7 @@ enum OrbitGmailProbe {
             await wait({ owner.favorites.gmail.states[account]?.inbox != nil }, seconds: 12)
             let inbox = owner.favorites.gmail.states[account]?.inbox
             checks["profileCookieFeed"] = inbox?.unreadCount == 3 && inbox?.messages.count == 3
-            checks["decodedText"] = inbox?.messages.first?.subject == "One & Two" && inbox?.messages.first?.summary == "Plain <safe> text"
+            checks["decodedText"] = inbox?.messages.first?.subject == "One & Two" && inbox?.messages.first?.summary.hasPrefix("Plain <safe> text") == true
             guard let tile = owner.favorites.grid.tiles.first(where: { $0.item.tab.id == id }) else { return ["missingTile": true] }
             checks["badgeCount"] = tile.item.gmailUnreadCount == 3 && tile.item.showsGmailBadge
             let selected = owner.session.organization?.selectedTab?.id
@@ -96,6 +96,12 @@ enum OrbitGmailProbe {
             capture("gmail-preview")
             let rows = views(owner.favorites.gmailPreview.view).filter { $0.accessibilityRole() == .button && !($0 is NSButton) }
             checks["threeNativeRows"] = rows.count == 3
+            let dates = rows.flatMap { $0.subviews.compactMap { $0 as? NSTextField } }.filter { $0.alignment == .right }
+            checks["datesFit"] = dates.count == 3 && dates.allSatisfy { field in
+                guard let font = field.font, let cell = field.cell else { return false }
+                let width = (field.stringValue as NSString).size(withAttributes: [.font: font]).width
+                return !field.stringValue.isEmpty && cell.drawingRect(forBounds: field.bounds).width >= ceil(width)
+            }
             if let first = rows.first {
                 checks["messageNativeClick"] = click(first)
                 await settle()

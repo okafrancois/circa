@@ -59,5 +59,21 @@ struct GmailPresentationTests {
         #expect(view.contentHeight == 84)
         #expect(document.subviews.filter { $0.accessibilityRole() == .button }.isEmpty)
     }
+
+    @Test("Relative dates have enough drawing width to avoid truncating short hour labels")
+    func dateDrawingWidth() throws {
+        let view = GmailPreviewView(frame: .init(x: 0, y: 0, width: 250, height: 84))
+        view.render(.init(unreadCount: 1, messages: [.init(id: "abc", sender: "Synthetic sender", subject: "Synthetic subject",
+            summary: "Synthetic preview", receivedAt: Date().addingTimeInterval(-7200))]))
+        view.layoutSubtreeIfNeeded()
+        let row = try #require(view.scroll.documentView?.subviews.first { $0.accessibilityRole() == .button })
+        row.layoutSubtreeIfNeeded()
+        let date = try #require(row.subviews.compactMap { $0 as? NSTextField }.first { $0.alignment == .right })
+        let font = try #require(date.font)
+        let textWidth = (date.stringValue as NSString).size(withAttributes: [.font: font]).width
+        let drawingWidth = try #require(date.cell).drawingRect(forBounds: date.bounds).width
+        #expect(!date.stringValue.isEmpty)
+        #expect(drawingWidth >= ceil(textWidth))
+    }
 }
 }

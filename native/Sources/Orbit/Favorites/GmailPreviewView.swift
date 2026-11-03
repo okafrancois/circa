@@ -157,7 +157,7 @@ private final class GmailPreviewRow: NSView {
     }
     override func layout() {
         super.layout()
-        let dateWidth = min(64, date.intrinsicContentSize.width)
+        let dateWidth = min(64, ceil(date.intrinsicContentSize.width) + 2)
         date.frame = .init(x: bounds.width - dateWidth - 12, y: 10, width: dateWidth, height: 16)
         sender.frame = .init(x: 12, y: 10, width: max(0, date.frame.minX - 18), height: 16)
         subject.frame = .init(x: 12, y: 27, width: max(0, bounds.width - 24), height: 16)
