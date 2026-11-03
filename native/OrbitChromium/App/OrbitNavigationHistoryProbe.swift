@@ -66,9 +66,82 @@ enum OrbitNavigationHistoryProbe {
         }
         return checks
     }
+    private static func favoriteIcons(_ owner: OrbitWindowController, base: URL, root: URL) async -> [String: Any] {
+        guard owns(owner), let window = owner.window else { return ["refused": true] }
+        var ids: [TabID] = []
+        for index in 0..<9 {
+            owner.session.openTab(url: base.appendingPathComponent("icon-\(index)"))
+            await owner.session.waitForQueuedCommands()
+            guard let id = owner.session.organization?.selectedTab?.id else { return ["missingTab": true] }
+            ids.append(id)
+        }
+        owner.session.addToFavorites(ids)
+        await owner.session.waitForQueuedCommands()
+        guard let surface = owner.session.selectedSurface,
+              await loaded(surface, at: base.appendingPathComponent("icon-8")) else { return ["loadFailed": true] }
+        try? await Task.sleep(for: .seconds(1))
+        owner.favorites.render()
+        window.setFrameOrigin(NSPoint(x: 160, y: 140))
+        NSApp.activate(ignoringOtherApps: true); window.makeKeyAndOrderFront(nil)
+        var items = owner.favorites.grid.items
+        guard items.count == 9 else { return ["wrongTileCount": items.count] }
+        for index in items.indices {
+            let side = [16, 32, 64][index % 3]
+            guard let bitmap = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: side, pixelsHigh: side,
+                bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+                colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0), let bytes = bitmap.bitmapData else { return ["bitmapFailed": true] }
+            bytes.initialize(repeating: 0, count: bitmap.bytesPerRow * side)
+            let inset = index >= 3 ? side / 4 : 0
+            for y in inset..<(side - inset) { for x in inset..<(side - inset) {
+                let offset = y * bitmap.bytesPerRow + x * 4
+                bytes[offset] = UInt8(40 + index * 22); bytes[offset + 1] = UInt8(200 - index * 14)
+                bytes[offset + 2] = UInt8(90 + index * 17); bytes[offset + 3] = 255
+            } }
+            let image = NSImage(size: NSSize(width: side, height: side)); image.addRepresentation(bitmap)
+            items[index].favicon = image
+        }
+        var checks: [String: Any] = [:]
+        for dark in [false, true] {
+            guard owns(owner) else { return ["ownershipLost": true] }
+            window.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
+            owner.favorites.grid.render(items, profileID: owner.session.activeProfileID)
+            window.contentView?.layoutSubtreeIfNeeded()
+            window.displayIfNeeded()
+            try? await Task.sleep(for: .milliseconds(300))
+            let mode = dark ? "dark" : "light"
+            checks[mode + "NineTiles"] = owner.favorites.grid.tiles.count == 9
+            checks[mode + "CommonFrames"] = owner.favorites.grid.tiles.enumerated().allSatisfy { index, tile in
+                tile.item.favicon === items[index].favicon && tile.subviews.compactMap { $0 as? FavoriteFaviconImageView }.first?.frame.size == NSSize(width: 20, height: 20)
+            }
+            let visibleSizes = owner.favorites.grid.tiles.compactMap { tile -> CGFloat? in
+                guard let icon = tile.subviews.compactMap({ $0 as? FavoriteFaviconImageView }).first,
+                      let bitmap = icon.bitmapImageRepForCachingDisplay(in: icon.bounds) else { return nil }
+                icon.cacheDisplay(in: icon.bounds, to: bitmap)
+                var minX = bitmap.pixelsWide, minY = bitmap.pixelsHigh, maxX = -1, maxY = -1
+                for y in 0..<bitmap.pixelsHigh { for x in 0..<bitmap.pixelsWide {
+                    if (bitmap.colorAt(x: x, y: y)?.alphaComponent ?? 0) > 0.2 {
+                        minX = min(minX, x); minY = min(minY, y)
+                        maxX = max(maxX, x); maxY = max(maxY, y)
+                    }
+                } }
+                let width = CGFloat(maxX - minX + 1) * 20 / CGFloat(bitmap.pixelsWide)
+                let height = CGFloat(maxY - minY + 1) * 20 / CGFloat(bitmap.pixelsHigh)
+                return max(width, height)
+            }
+            checks[mode + "CommonArtworkSize"] = visibleSizes.count == 9 && visibleSizes.allSatisfy { abs($0 - 20) <= 1 }
+            guard owns(owner) else { return ["ownershipLost": true] }
+            let capture = Process()
+            capture.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
+            capture.arguments = ["-x", "-o", "-l", String(window.windowNumber), root.appendingPathComponent(mode + ".png").path]
+            try? capture.run(); capture.waitUntilExit()
+            checks[mode + "Captured"] = capture.terminationStatus == 0
+        }
+        return checks
+    }
     static func run(_ owner: OrbitWindowController, command: [String: String], root: URL) async -> [String: Any] {
         guard owns(owner), let text = command["url"], let base = URL(string: text),
               base.host == "127.0.0.1", base.scheme == "http", let window = owner.window else { return ["refused": true] }
+        if command["favoriteIcons"] == "1" { return await favoriteIcons(owner, base: base, root: root) }
         if command["rows"] == "1" { return await rowDecoration(owner, base: base, root: root) }
         var result: [String: Any] = [:]
         let urls = ["first", "second", "third"].map { base.appendingPathComponent($0) }

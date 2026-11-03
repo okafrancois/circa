@@ -51,7 +51,7 @@ final class FavoriteTileView: NSView {
         self.item = item
         super.init(frame: .zero)
         wantsLayer = true
-        favicon.imageScaling = .scaleProportionallyDown
+        favicon.imageScaling = .scaleProportionallyUpOrDown
         letter.font = BrandTextStyle.ui.font(size: FavoritesPresentationTokens.placeholderFontSize, weight: .semibold)
         letter.alignment = .center
         letter.textColor = OrbitTokens.Color.Text.primary
@@ -196,7 +196,8 @@ final class FavoriteTileView: NSView {
         }
     }
 
-    private static func iconPresentation(_ image: NSImage) -> (image: NSImage, tint: NSColor)? {
+    private static func iconPresentation(_ source: NSImage) -> (image: NSImage, tint: NSColor)? {
+        let image = source
         guard let bitmap = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 16, pixelsHigh: 16,
             bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
             colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0),
@@ -222,12 +223,13 @@ final class FavoriteTileView: NSView {
         } }
         // Transparent black marks (e.g. GitHub's fallback favicon) must remain visible on a
         // dark tile. Two-tone icons with an opaque white backing retain their original pixels.
+        let normalized = FavoriteIconArtwork.normalized(image)
         let rendered: NSImage
         if transparent > 32, visible > 0, monochrome * 100 / visible > 95,
-           let template = image.copy() as? NSImage {
+           let template = normalized.copy() as? NSImage {
             template.isTemplate = true
             rendered = template
-        } else { rendered = image }
+        } else { rendered = normalized }
         guard weight > 1 else { return (rendered, OrbitTokens.Color.Text.secondary) }
         let color = NSColor(srgbRed: red / weight, green: green / weight, blue: blue / weight, alpha: 1)
         return (rendered, NSColor(srgbRed: color.redComponent * 0.65 + 0.35, green: color.greenComponent * 0.65 + 0.35,
@@ -243,7 +245,7 @@ final class FavoriteFaviconImageView: NSImageView {
             super.draw(dirtyRect)
             return
         }
-        let scale = min(1, min(bounds.width / max(1, image.size.width), bounds.height / max(1, image.size.height)))
+        let scale = min(bounds.width / max(1, image.size.width), bounds.height / max(1, image.size.height))
         let size = NSSize(width: image.size.width * scale, height: image.size.height * scale)
         let target = NSRect(x: bounds.midX - size.width / 2, y: bounds.midY - size.height / 2,
                             width: size.width, height: size.height)
