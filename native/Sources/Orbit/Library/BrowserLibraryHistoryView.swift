@@ -286,7 +286,8 @@ final class BrowserHistoryVisitCell: NSTableCellView {
         titleLabel.stringValue = visit.title.isEmpty ? visit.url.host ?? visit.url.absoluteString : visit.title
         urlLabel.stringValue = visit.url.absoluteString
         timeLabel.stringValue = time
-        toolTip = titleLabel.stringValue + "\n" + visit.url.absoluteString
-        setAccessibilityLabel(titleLabel.stringValue + ", " + time + ", " + visit.url.absoluteString)
+        let summary = uiFormat("%@ · %@\n%@", time, titleLabel.stringValue, visit.url.absoluteString)
+        toolTip = summary
+        setAccessibilityLabel(summary)
     }
 }
