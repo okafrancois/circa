@@ -143,6 +143,8 @@ private final class GmailPreviewRow: NSView {
             date.stringValue = formatter.string(from: max(60, Date().timeIntervalSince(received))) ?? ""
         }
         for field in [sender, subject, summary, date] { field.lineBreakMode = .byTruncatingTail; addSubview(field) }
+        summary.lineBreakMode = .byWordWrapping
+        summary.cell?.truncatesLastVisibleLine = true
         setAccessibilityElement(true)
         setAccessibilityRole(.button)
         setAccessibilityLabel([message.sender, message.subject, message.summary].joined(separator: ", "))

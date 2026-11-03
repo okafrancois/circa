@@ -42,7 +42,8 @@ struct GmailPresentationTests {
     func nativeRows() throws {
         let view = GmailPreviewView(frame: .init(x: 0, y: 0, width: 250, height: 300))
         let inbox = BrowserGmailInbox(unreadCount: 20, messages: (1...20).map {
-            .init(id: String($0, radix: 16), sender: "Synthetic sender", subject: "<b>Plain subject</b>", summary: "Synthetic preview", receivedAt: nil)
+            .init(id: String($0, radix: 16), sender: "Synthetic sender", subject: "<b>Plain subject</b>",
+                  summary: "A longer invented message preview wraps across two lines without opening the email or rendering remote markup.", receivedAt: nil)
         })
         var chosen: String?
         view.onMessage = { chosen = $0 }
@@ -53,6 +54,10 @@ struct GmailPresentationTests {
         let rows = document.subviews.filter { $0.accessibilityRole() == .button }
         #expect(rows.count == 20)
         #expect(rows.first?.accessibilityLabel()?.contains("<b>Plain subject</b>") == true)
+        let row = try #require(rows.first)
+        row.layoutSubtreeIfNeeded()
+        let summary = try #require(row.subviews.compactMap { $0 as? NSTextField }.first { $0.maximumNumberOfLines == 2 })
+        #expect(try #require(summary.cell).cellSize(forBounds: summary.bounds).height > 20)
         #expect(rows.first?.accessibilityPerformPress() == true)
         #expect(chosen == "1")
         view.render(.init(unreadCount: 0, messages: []))
