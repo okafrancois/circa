@@ -610,6 +610,8 @@ enum OrbitPerformanceProbe {
                     result["thumbnailPerformance"] = await OrbitThumbnailPerformanceProbe.run(owner, command: command, root: root)
                 } else if name == "permissions" {
                     result["permissions"] = await OrbitPermissionsProbe.run(owner, environment: environment, root: root, command: command)
+                } else if name == "history-library" {
+                    result["historyLibrary"] = await OrbitHistoryLibraryProbe.run(owner, environment: environment, command: command, root: root)
                 } else if name == "navigation-history" {
                     result["navigationHistory"] = await OrbitNavigationHistoryProbe.run(owner, command: command, root: root)
                 } else if name == "security-pill" {
