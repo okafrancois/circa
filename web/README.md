@@ -35,3 +35,5 @@ Recent verified entries are in the static HTML, so the page remains useful witho
 Newer published `vX.Y.Z` browser releases load from GitHub; drafts, prereleases and other tag families are ignored.
 Release content is inserted with DOM text nodes. Older history remains available through the GitHub archive link.
 After publishing a release, no website redeployment is needed for its new entry to appear.
+
+The ignored-build check compares against the previous successful deployment, so a push containing several commits still deploys website changes. A missing or unavailable base starts a deployment.
