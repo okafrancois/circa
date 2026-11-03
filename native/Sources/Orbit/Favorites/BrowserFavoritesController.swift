@@ -119,6 +119,12 @@ final class BrowserFavoritesController<Engine: BrowserEngine> {
         observer = owner.engineEventHooks.observe { [weak self] surface, event in
             guard let self, let owner = self.owner, owner.owns(surface) else { return }
             let occurrence = owner.session.occurrenceID(for: surface)
+            if event == .navigationFinished,
+               let id = owner.session.snapshot?.tabs.first(where: { $0.occurrenceID == occurrence })?.id,
+               let tab = owner.session.organization?.tab(id), tab.section.keepsPinnedURL,
+               let account = BrowserGmailAccount(url: tab.pinnedURL ?? tab.url) {
+                gmail.refresh(account, force: true)
+            }
             guard grid.items.contains(where: { surfacesByTab[$0.tab.id]?.value === surface })
                 || owner.session.organization?.favorites.contains(where: {
                     if case let .tab(tab) = $0 { return occurrence != nil && tab.occurrenceID == occurrence }

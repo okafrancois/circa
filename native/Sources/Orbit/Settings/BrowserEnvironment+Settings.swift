@@ -34,6 +34,7 @@ extension BrowserEnvironment {
             controller.renderChrome()
             controller.siteControls.render()
             controller.settingsPreferences?.renderIcons(in: controller)
+            controller.favorites.render()
             controller.renderLibrary()
             controller.palette.renderContext()
             if controller.palette.isPresented {
