@@ -2771,7 +2771,7 @@ extension OrbitPerformanceProbe {
             }
             owner.extensionControls.render()
             if command["action"] == "pinned-popup" {
-                guard let item = items.first(where: { $0.name == "Popup Lifecycle Fixture" }) else { return ["fixtureMissing": true] }
+                guard let item = items.first(where: { $0.id == command["extensionID"] || $0.name == "Popup Lifecycle Fixture" }) else { return ["fixtureMissing": true] }
                 try host.setPinned(true, extensionID: item.id, in: surface.profileID)
                 owner.extensionControls.render()
                 window.setFrameOrigin(NSPoint(x: 160, y: 120))
@@ -2800,13 +2800,13 @@ extension OrbitPerformanceProbe {
                     trace.append(["floating": owner.isSidebarFloating, "mainKey": window.isKeyWindow,
                         "children": created.map { child in ["number": child.windowNumber,
                             "visible": child.isVisible, "key": child.isKeyWindow,
-                            "parentIsSource": child.parentWindow === window,
+                            "parentIsSource": child.parent === window,
                             "class": String(describing: type(of: child))] as [String: Any] }])
                     try? await Task.sleep(for: .milliseconds(100))
                 }
                 result["focusTrace"] = trace
                 result["popupVisibleAfterLoad"] = popup?.isVisible == true
-                result["popupParentIsSource"] = popup?.parentWindow === window
+                result["popupParentIsSource"] = popup?.parent === window
                 result["popupKeyAfterLoad"] = popup?.isKeyWindow == true
                 result["sidebarFloatingAfterPopup"] = owner.isSidebarFloating
                 result["sourceStayedVisible"] = window.isVisible
