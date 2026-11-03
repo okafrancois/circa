@@ -274,7 +274,7 @@
 "Focus Next Split Pane" = "Activer le volet partagé suivant";
 "Focus Previous Split Pane" = "Activer le volet partagé précédent";
 "Folder %@" = "Dossier %@";
-"Follow System" = "Suivre le système";
+"Follow System" = "Système";
 "Font" = "Police";
 "Force Refresh the Page" = "Forcer l’actualisation de la page";
 "Format" = "Format";
@@ -282,7 +282,7 @@
 "Found" = "Trouvé";
 "From %@ to %@ (end excluded)" = "Du %@ au %@ (fin exclue)";
 "From (inclusive)" = "Du (inclus)";
-"Full Motion" = "Toutes les animations";
+"Full Motion" = "Complètes";
 "General" = "Général";
 "Getting Started" = "Premiers pas";
 "Go Back" = "Reculer";
@@ -475,7 +475,7 @@
 "Reading history…" = "Lecture de l’historique…";
 "Record Trace" = "Enregistrer une trace";
 "Redo" = "Rétablir";
-"Reduce Motion" = "Réduire les animations";
+"Reduce Motion" = "Réduites";
 "Refresh" = "Actualiser";
 "Refresh the Page" = "Actualiser la page";
 "Release Notes" = "Notes de version";
@@ -1592,3 +1592,4 @@
 "Compose" = "Rédiger";
 "Show Unread Badge" = "Afficher la pastille des messages non lus";
 "Unread: %d" = "Non lus : %d";
+"Website data and permissions" = "Données et autorisations des sites";

@@ -249,7 +249,7 @@ struct LocalizationTests {
             #expect(table[definition.title] == definition.title)
             #expect(definition.localizedTitle == uiText(definition.title))
         }
-        let pattern = #"(?:uiText|uiFormat|BrowserText\.string)\("([^"\n]+)"|(?:archiveText|libraryText|siteText|settingsText|\bstring|\btext)\("[^"\n]+", "([^"\n]*)""#
+        let pattern = #"(?:uiText|uiFormat|BrowserText\.string|\bsettingRow|\bliveToggle)\("([^"\n]+)"|(?:archiveText|libraryText|siteText|settingsText|\bstring|\btext)\("[^"\n]+", "([^"\n]*)""#
         let regex = try NSRegularExpression(pattern: pattern)
         let files = try #require(FileManager.default.enumerator(at: package.appendingPathComponent("Sources"), includingPropertiesForKeys: nil))
         for case let file as URL in files where file.pathExtension == "swift" && (file.path.contains("/Orbit/") || file.path.contains("/BrowserShell/")) {
