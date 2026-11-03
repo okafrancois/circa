@@ -364,6 +364,14 @@ class SidebarListRow: NSView, NSTextFieldDelegate {
 
 @MainActor
 class SidebarTabRow: SidebarListRow {
+    private let gmailUnreadDot = NSView()
+    private var gmailUnreadCount: Int?
+    private var gmailBadgeEnabled = true
+    func setGmailUnread(count: Int?, showsBadge: Bool) {
+        gmailUnreadCount = count; gmailBadgeEnabled = showsBadge
+        setAccessibilityHelp(count.map { String(format: uiText("Unread: %d"), $0) })
+        refreshControls(); needsLayout = true
+    }
     private var titleOverlay: NSTextField?
     private var titleAnimation = UUID()
     var canRestoreTitle: (() -> Bool)?
@@ -411,7 +419,12 @@ class SidebarTabRow: SidebarListRow {
         otherWindowMark.contentTintColor = effectiveAccent.icon
         slash.tint = effectiveAccent.icon
         otherWindowMark.setAccessibilityElement(false)
-        for view in [favicon, loadingIndicator, slash, otherWindowMark, audioButton, closeButton] { addSubview(view) }
+        gmailUnreadDot.wantsLayer = true
+        gmailUnreadDot.identifier = .init("gmail-unread")
+        gmailUnreadDot.layer?.cornerRadius = 3
+        gmailUnreadDot.isHidden = true
+        gmailUnreadDot.setAccessibilityElement(false)
+        for view in [favicon, loadingIndicator, slash, otherWindowMark, audioButton, closeButton, gmailUnreadDot] { addSubview(view) }
         update(item, depth: depth)
     }
 
@@ -537,7 +550,8 @@ class SidebarTabRow: SidebarListRow {
         if showsAudio { return reservesTitleRestoration ? min(audioButton.frame.minX - Metrics.titleTrailingGap, bounds.width - 76) : audioButton.frame.minX - Metrics.titleTrailingGap }
         let end = isHovering || item.isOpenInAnotherWindow
             ? closeButton.frame.minX - Metrics.titleTrailingGap : bounds.width - Metrics.rowInsetX
-        return min(super.titleEnd, reservesTitleRestoration ? min(end, bounds.width - 52) : end)
+        let badgeEnd = gmailUnreadDot.isHidden ? end : min(end, gmailUnreadDot.frame.minX - 6)
+        return min(super.titleEnd, reservesTitleRestoration ? min(badgeEnd, bounds.width - 52) : badgeEnd)
     }
 
     override func layout() {
@@ -553,6 +567,8 @@ class SidebarTabRow: SidebarListRow {
         audioButton.frame = closeButton.frame.offsetBy(dx: isHovering ? -Metrics.audioControlPitch : 0, dy: 0)
         let mark = Metrics.otherWindowGlyphSize + 4
         otherWindowMark.frame = NSRect(x: closeCenter - mark / 2, y: (bounds.height - mark) / 2, width: mark, height: mark)
+        gmailUnreadDot.frame = NSRect(x: closeCenter - 3, y: bounds.midY - 3, width: 6, height: 6)
+        gmailUnreadDot.layer?.backgroundColor = effectiveAccent.icon.resolvedCGColor(for: effectiveAppearance)
         super.layout()
         closeButton.refreshPill()
         if splitPreviewShift > 0 {
@@ -604,6 +620,7 @@ class SidebarTabRow: SidebarListRow {
     }
 
     override func resetForReuse() {
+        gmailUnreadCount = nil; gmailUnreadDot.isHidden = true
         titleOverlay?.removeFromSuperview(); titleOverlay = nil
         titleAnimation = UUID()
         titleLabel.alphaValue = 1
@@ -616,6 +633,8 @@ class SidebarTabRow: SidebarListRow {
     }
 
     private func refreshControls() {
+        gmailUnreadDot.isHidden = !gmailBadgeEnabled || (gmailUnreadCount ?? 0) == 0 || isHovering
+            || item.isErrandSummary || showsAudio || item.isOpenInAnotherWindow
         if item.isErrandSummary {
             for view in [restoreButton, closeButton, audioButton, otherWindowMark, slash, loadingIndicator] as [NSView] { view.isHidden = true }
             loadingIndicator.isLoading = false; favicon.isHidden = false; return

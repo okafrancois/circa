@@ -433,7 +433,9 @@ extension BrowserWindowController {
             parent.submenu = submenu.menu
             editOwner = submenu.owner
         }
-        return (built.menu, SidebarObjectMenuOwner(commands: built.owner, move: move, editing: editOwner))
+        let gmail = nodes.count == 1 ? nodes.first?.tabID.flatMap { favorites.gmailBadgeMenu(for: $0) } : nil
+        if let gmail { built.menu.insertItem(.separator(), at: 0); built.menu.insertItem(gmail.item, at: 0) }
+        return (built.menu, SidebarObjectMenuOwner(commands: built.owner, move: move, editing: editOwner, gmail: gmail))
     }
 
     func showSidebarContextMenu(for nodes: [BrowserOrganizationNode], event: NSEvent, in view: NSView) {
@@ -669,7 +671,8 @@ private final class SidebarObjectMenuOwner {
     let commands: AnyObject
     let move: AnyObject?
     let editing: AnyObject?
-    init(commands: AnyObject, move: AnyObject?, editing: AnyObject?) {
-        self.commands = commands; self.move = move; self.editing = editing
+    let gmail: AnyObject?
+    init(commands: AnyObject, move: AnyObject?, editing: AnyObject?, gmail: AnyObject? = nil) {
+        self.commands = commands; self.move = move; self.editing = editing; self.gmail = gmail
     }
 }

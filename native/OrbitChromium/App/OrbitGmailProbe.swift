@@ -126,6 +126,29 @@ enum OrbitGmailProbe {
                 checks["badgeSettingSaved"] = settings.document.profile(profile).hiddenGmailBadges.contains(id)
                 checks["badgeHidden"] = owner.favorites.grid.tiles.first(where: { $0.item.tab.id == id })?.item.showsGmailBadge == false
             }
+            surface.navigate(to: base.appendingPathComponent("seed"))
+            await wait { !surface.navigationState.isLoading && surface.navigationState.committedURL?.path == "/seed" }
+            if let space = owner.session.organization?.spaceID {
+                owner.session.moveItems([.tab(id)], to: .init(.pinned(space), position: .end))
+                await settle(); owner.favorites.render()
+                try? await Task.sleep(for: .milliseconds(500))
+                if let row = owner.sidebar.page.list.row(for: .tab(id)) as? SidebarTabRow {
+                    let menu = owner.makeSidebarContextMenu(for: [.tab(id)])
+                    let badge = menu?.menu.items.first { $0.title == uiText("Show Unread Badge") }
+                    checks["pinnedBadgePreference"] = badge?.state == .off
+                    if owns(), let badge, let action = badge.action {
+                        withExtendedLifetime(menu?.owner) { (badge.target as? NSObject)?.perform(action, with: badge) }
+                    }
+                    await wait { owner.settingsPreferences?.runtime.document.profile(profile).hiddenGmailBadges.contains(id) == false }
+                    owner.favorites.render(); window.contentView?.layoutSubtreeIfNeeded()
+                    checks["pinnedUnreadDot"] = row.subviews.contains { $0.identifier?.rawValue == "gmail-unread" && !$0.isHidden && $0.frame.width == 6 }
+                    if owns() { row.mouseEntered(with: hover) }
+                    await wait { owner.favorites.gmailPreview.isPresented }
+                    checks["pinnedHoverPreview"] = owner.favorites.gmailPreview.isPresented
+                    capture("gmail-pinned")
+                    owner.favorites.gmailPreview.dismiss()
+                }
+            }
             let otherProfile = await environment.store.createProfile(name: "Synthetic isolated inbox")
             do { _ = try await owner.engine.gmailInboxFixture(profileID: otherProfile, origin: base); checks["otherProfileSignedOut"] = false }
             catch BrowserGmailPreviewError.signedOut { checks["otherProfileSignedOut"] = true }

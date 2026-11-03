@@ -21,6 +21,7 @@ final class GmailPreviewController {
     private var epoch: UInt64 = 0
     private var container: NSView?
     var isPresented: Bool { container != nil }
+    var onPresentationChange: (() -> Void)?
 
     init() {
         view.onPointer = { [weak self] inside in
@@ -66,7 +67,7 @@ final class GmailPreviewController {
         let enabled = (tile as? FavoriteTileView)?.commandsEnabled
             ?? (tile as? SidebarListRow).map { $0.commandsEnabled && !$0.isRenaming && !$0.isLeaving } ?? false
         let identity = (tile as? FavoriteTileView)?.item.tab.id ?? (tile as? SidebarTabRow)?.item.id
-        return enabled && identity == tab.id && tile.window?.isKeyWindow == true && tile.window?.attachedSheet == nil
+        return enabled && identity == tab.id && NSApp.isActive && tile.window?.isKeyWindow == true && tile.window?.attachedSheet == nil
             && !tile.isHiddenOrHasHiddenAncestor && !tile.visibleRect.isEmpty
             && tile.convert(tile.visibleRect, to: nil) == anchorFrame && permitted(tile, tab, account)
     }
@@ -82,9 +83,11 @@ final class GmailPreviewController {
         container.addSubview(view)
         host.addSubview(container, positioned: .above, relativeTo: nil)
         self.container = container
+        onPresentationChange?()
         monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .leftMouseDown, .rightMouseDown, .otherMouseDown, .scrollWheel]) { [weak self] event in
             guard let self else { return event }
             if event.type == .keyDown {
+                guard event.window === self.anchor?.window else { self.dismiss(); return event }
                 if event.keyCode == 53 { self.dismiss(); return nil }
                 self.dismiss()
             } else if let container = self.container {
@@ -103,6 +106,9 @@ final class GmailPreviewController {
         observations.append(NotificationCenter.default.addObserver(forName: NSApplication.didResignActiveNotification, object: nil, queue: .main) { [weak self] _ in
             MainActor.assumeIsolated { self?.dismiss() }
         })
+        observations.append(NotificationCenter.default.addObserver(forName: NSMenu.didBeginTrackingNotification, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.dismiss() }
+        })
     }
 
     private func layout(_ tile: NSView) {
@@ -118,6 +124,7 @@ final class GmailPreviewController {
     }
 
     private func leave() {
+        if !armed && !isPresented { dismiss(); return }
         departure?.cancel()
         let token = epoch
         departure = OrbitRunLoopTimer(after: 0.18) { [weak self] in
@@ -134,12 +141,14 @@ final class GmailPreviewController {
     }
 
     func dismiss() {
+        let wasPresented = isPresented
         epoch &+= 1
         timer?.cancel(); timer = nil; departure?.cancel(); departure = nil
         if let monitor { NSEvent.removeMonitor(monitor) }; monitor = nil
         for observation in observations { NotificationCenter.default.removeObserver(observation) }
         observations.removeAll()
-        view.removeFromSuperview(); container?.removeFromSuperview(); container = nil
+        view.removeFromSuperview(); view.clear(); container?.removeFromSuperview(); container = nil
         anchor = nil; tab = nil; account = nil; armed = false
+        if wasPresented { onPresentationChange?() }
     }
 }

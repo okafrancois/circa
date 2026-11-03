@@ -60,6 +60,7 @@ final class BrowserFavoritesController<Engine: BrowserEngine> {
         grid.makeContextMenu = { [weak self] id in self?.contextMenu(for: id) }
         grid.onHover = { [weak self] tile, inside in self?.gmailPreview.hover(tile, inside: inside) }
         gmail.onChange = { [weak self] in self?.render() }
+        gmailPreview.onPresentationChange = { [weak owner] in owner?.windowShell.hoverHoldDidChange() }
         gmailPreview.inbox = { [weak self] in self?.gmail.states[$0]?.inbox }
         gmailPreview.refresh = { [weak self] in self?.gmail.refresh($0) }
         gmailPreview.permitted = { [weak self] _, captured, account in
@@ -190,6 +191,11 @@ final class BrowserFavoritesController<Engine: BrowserEngine> {
         owner.sidebar.favoriteCount = items.count
         grid.accent = owner.sidebar.currentThemeAccent
         grid.render(items, profileID: snapshot?.profileID)
+        let hidden = snapshot.flatMap { owner.settingsPreferences?.runtime.document.profile($0.profileID).hiddenGmailBadges } ?? []
+        for row in owner.sidebar.page.list.tabRows {
+            let account = snapshot?.tab(row.item.id).flatMap { $0.section.keepsPinnedURL ? BrowserGmailAccount(url: $0.pinnedURL ?? $0.url) : nil }
+            row.setGmailUnread(count: account.flatMap { gmail.states[$0]?.inbox?.unreadCount }, showsBadge: !hidden.contains(row.item.id))
+        }
         gmailPreview.reconcile()
     }
 
@@ -261,17 +267,27 @@ final class BrowserFavoritesController<Engine: BrowserEngine> {
         }
         menuController = controller
         for item in controller.menu.items where !item.isSeparatorItem && item.submenu == nil { item.isEnabled = controller.validateMenuItem(item) }
-        if BrowserGmailAccount(url: tab.pinnedURL ?? tab.url) != nil, !owner.isPrivateWindow,
-           let runtime = owner.settingsPreferences?.runtime {
-            let badge = GmailBadgeMenu(tab: id, profile: snapshot.profileID, runtime: runtime,
-                permitted: { [weak self] in self?.matches(captured) == true },
-                changed: { [weak self] in self?.render() },
-                failed: { [weak owner] in owner?.session.onError?($0) })
+        if let badge = gmailBadgeMenu(for: id) {
             controller.retainedOwners.append(badge)
             controller.menu.insertItem(.separator(), at: 0)
             controller.menu.insertItem(badge.item, at: 0)
         }
         return controller.menu
+    }
+
+    func gmailBadgeMenu(for id: TabID) -> GmailBadgeMenu? {
+        guard let owner, !owner.isPrivateWindow, let snapshot = owner.session.organization,
+              let tab = snapshot.tab(id), tab.section.keepsPinnedURL,
+              let account = BrowserGmailAccount(url: tab.pinnedURL ?? tab.url),
+              let runtime = owner.settingsPreferences?.runtime else { return nil }
+        return GmailBadgeMenu(tab: id, profile: snapshot.profileID, runtime: runtime,
+            permitted: { [weak owner] in
+                guard let owner, owner.acceptsCommands, !owner.session.isClosed,
+                      let current = owner.session.organization, current.profileID == snapshot.profileID,
+                      current.spaceID == snapshot.spaceID, let tab = current.tab(id), tab.section.keepsPinnedURL else { return false }
+                return BrowserGmailAccount(url: tab.pinnedURL ?? tab.url) == account
+            }, changed: { [weak self] in self?.render() },
+            failed: { [weak owner] in owner?.session.onError?($0) })
     }
 
     private func openGmail(_ tab: BrowserOrganizationTabItem, account: BrowserGmailAccount, message: String?) {

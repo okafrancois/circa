@@ -82,6 +82,14 @@ final class GmailPreviewView: NSView {
         scroll.contentView.scroll(to: .init(x: 0, y: min(position.y, max(0, document.frame.height - scroll.contentSize.height))))
     }
 
+    func clear() {
+        inbox = nil
+        for row in rows { row.removeFromSuperview() }
+        rows.removeAll()
+        empty.isHidden = true
+        scroll.contentView.scroll(to: .zero)
+    }
+
     override func layout() {
         super.layout()
         scroll.frame = bounds
@@ -128,9 +136,11 @@ private final class GmailPreviewRow: NSView {
         date.textColor = .tertiaryLabelColor
         date.alignment = .right
         if let received = message.receivedAt {
-            let formatter = RelativeDateTimeFormatter()
+            let formatter = DateComponentsFormatter()
             formatter.unitsStyle = .abbreviated
-            date.stringValue = formatter.localizedString(for: received, relativeTo: Date())
+            formatter.allowedUnits = [.year, .month, .day, .hour, .minute]
+            formatter.maximumUnitCount = 1
+            date.stringValue = formatter.string(from: max(60, Date().timeIntervalSince(received))) ?? ""
         }
         for field in [sender, subject, summary, date] { field.lineBreakMode = .byTruncatingTail; addSubview(field) }
         setAccessibilityElement(true)

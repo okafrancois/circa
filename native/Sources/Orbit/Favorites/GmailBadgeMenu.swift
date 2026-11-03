@@ -24,8 +24,8 @@ final class GmailBadgeMenu: NSObject, NSMenuItemValidation {
     @objc private func toggleBadge() {
         guard validateMenuItem(item), let runtime else { return }
         let hide = item.state == .on, tab = tab, profile = profile
-        Task { [weak self] in
-            guard let self, permitted() else { return }
+        Task { [self] in
+            guard permitted() else { return }
             do {
                 try await runtime.updateProfile(profile) { settings in
                     if hide { settings.hiddenGmailBadges.insert(tab) }

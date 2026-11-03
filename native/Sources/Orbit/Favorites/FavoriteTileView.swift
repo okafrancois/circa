@@ -58,9 +58,10 @@ final class FavoriteTileView: NSView {
         letter.wantsLayer = true
         letter.layer?.cornerRadius = 4
         letter.layer?.masksToBounds = true
-        // Orbit's favorite tiles carry no corner glyphs (audio, loading, "away from pinned URL");
-        // those states stay in the accessibility value and the context menu (user, 28/10).
+        // Generic audio/loading/address glyphs stay in accessibility and the context menu.
+        // The service-specific unread indicator is enabled independently.
         unread.wantsLayer = true
+        unread.identifier = .init("gmail-unread")
         unread.layer?.cornerRadius = 3
         unread.setAccessibilityElement(false)
         for view in [background, favicon, letter, unread] { addSubview(view) }
