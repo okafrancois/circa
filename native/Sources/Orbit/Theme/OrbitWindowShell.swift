@@ -96,15 +96,35 @@ final class OrbitWindowShell {
     var isSidebarOnScreen: Bool { isAnimating || (geometry?.isSidebarOnScreen ?? isDocked) }
     var isFloatingRevealed: Bool { !isDocked && floatProgress > 0 }
     var isAnimating: Bool { sidebarTransition != nil }
+    private let keyWindow: () -> NSWindow?
+    private let applicationIsActive: () -> Bool
+    private weak var focusHoldingChild: NSWindow?
+
+    /// A native popup may take key status while its sidebar button remains its anchor.
+    /// Visibility alone is insufficient: fullscreen chrome is also a persistent child.
+    private var hasFocusedChildWindow: Bool {
+        guard applicationIsActive(), let window, let focused = keyWindow(),
+              focused !== window, focused.isVisible else { return false }
+        var candidate = focused.parent
+        while let parent = candidate {
+            if parent === window { return true }
+            candidate = parent.parent
+        }
+        return false
+    }
 
     /// Native input is injectable so hidden tests do not inherit the user's physical mouse state.
-    init(isMouseButtonPressed: @escaping () -> Bool = { NSEvent.pressedMouseButtons != 0 }) {
+    init(isMouseButtonPressed: @escaping () -> Bool = { NSEvent.pressedMouseButtons != 0 },
+         keyWindow: @escaping () -> NSWindow? = { NSApp?.keyWindow },
+         applicationIsActive: @escaping () -> Bool = { NSApp?.isActive == true }) {
+        self.keyWindow = keyWindow
+        self.applicationIsActive = applicationIsActive
         hoverReveal.onRevealChange = { [weak self] reveal in self?.setFloating(reveal) }
         hoverReveal.isHeld = { [weak self] in
             guard let self else { return false }
             // Only feature-owned presentations hold the sidebar. AppKit also attaches persistent
             // fullscreen chrome as a visible child window; child visibility is not a popover signal.
-            return menuTrackingDepth > 0 || isHoverHeld() || isMouseButtonPressed()
+            return menuTrackingDepth > 0 || isHoverHeld() || isMouseButtonPressed() || hasFocusedChildWindow
         }
         hoverReveal.isPointerInside = { [weak self] in self?.hoverTracker.isPointerInsideKeepRegion() ?? false }
     }
@@ -540,6 +560,22 @@ final class OrbitWindowShell {
 
     // MARK: Window notifications
 
+    /// AppKit posts the old window's resign notification before publishing the new key
+    /// window. Keep the anchor intact until that focus handoff has completed.
+    private func reconcileFocusAfterHandoff() {
+        DispatchQueue.main.async { [weak self] in
+            guard let self, let window else { return }
+            let childFocused = hasFocusedChildWindow
+            focusHoldingChild = childFocused ? keyWindow() : nil
+            if applicationIsActive() && (keyWindow() === window || childFocused) {
+                hoverHoldDidChange()
+            } else {
+                hoverReveal.dismiss()
+            }
+            applyGeometry()
+        }
+    }
+
     /// Observes a notification for the lifetime of the shell.
     func observe(_ name: Notification.Name, object: AnyObject?, _ action: @escaping @Sendable @MainActor () -> Void) {
         observers.add(NotificationCenter.default.addObserver(forName: name, object: object, queue: .main) { _ in
@@ -574,8 +610,25 @@ final class OrbitWindowShell {
         }
         on(NSWindow.didResizeNotification) { $0.applyGeometry() }
         on(NSWindow.didEndLiveResizeNotification) { $0.applyGeometry() }
-        on(NSWindow.didBecomeKeyNotification) { $0.applyGeometry() }
+        on(NSWindow.didBecomeKeyNotification) { shell in
+            shell.focusHoldingChild = nil
+            shell.hoverHoldDidChange()
+            shell.applyGeometry()
+        }
         on(NSWindow.didResignKeyNotification) { shell in
+            if shell.applicationIsActive() { shell.reconcileFocusAfterHandoff() }
+            else { shell.hoverReveal.dismiss(); shell.applyGeometry() }
+        }
+        on(NSWindow.didBecomeKeyNotification, object: nil) { shell in
+            if shell.focusHoldingChild != nil || shell.hasFocusedChildWindow {
+                shell.reconcileFocusAfterHandoff()
+            }
+        }
+        on(NSWindow.didResignKeyNotification, object: nil) { shell in
+            if shell.focusHoldingChild != nil { shell.reconcileFocusAfterHandoff() }
+        }
+        on(NSApplication.didResignActiveNotification, object: NSApp) { shell in
+            shell.focusHoldingChild = nil
             shell.hoverReveal.dismiss()
             shell.applyGeometry()
         }

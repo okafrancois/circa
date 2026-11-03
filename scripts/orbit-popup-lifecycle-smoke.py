@@ -5,6 +5,7 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import re
 import signal
 import subprocess
 import sys
@@ -31,11 +32,15 @@ def phase(args):
     signal.signal(signal.SIGALRM, expired)
     signal.alarm(45)
     assert not state.exists(), 'Use a fresh synthetic root'
+    extension = args.extension_dir.resolve() if args.extension_dir else REPO / 'native/OrbitChromium/Tests/PopupLifecycleExtension'
+    assert extension.is_dir() and not extension.is_symlink()
+    if args.extension_id:
+        assert re.fullmatch('[a-p]{32}', args.extension_id), 'Invalid synthetic extension identity'
     with lab.OwnedProcessRun() as owner:
         with (root / 'stdout.log').open('w') as out, (root / 'stderr.log').open('w') as err:
             process = owner.launch([str(lab.APP / 'Contents/MacOS/Orbit'), '--use-mock-keychain',
                 '--perf-probe', f'--orbit-data-root={data}',
-                '--load-extension=' + str(REPO / 'native/OrbitChromium/Tests/PopupLifecycleExtension')],
+                '--load-extension=' + str(extension)],
                 stdout=out, stderr=err, stdin=subprocess.DEVNULL,
                 env=dict(os.environ, ORBIT_EXTENSION_DIAGNOSTICS="1"))
             result = {}
@@ -54,6 +59,8 @@ def phase(args):
                 nonce = str(time.monotonic_ns())
                 command = {'command': 'extension-controls', 'action': args.action, 'nonce': nonce,
                            'base': f'http://127.0.0.1:{args.port}/'}
+                if args.extension_id:
+                    command['extensionID'] = args.extension_id
                 pending = data / 'command.pending'
                 pending.write_text(json.dumps(command))
                 pending.replace(control)
@@ -92,6 +99,8 @@ def main():
     parser.add_argument('--action', choices=['cancel-loading', 'site-popup', 'pinned-popup'], default='cancel-loading')
     parser.add_argument('--phase', action='store_true')
     parser.add_argument('--port', type=int)
+    parser.add_argument('--extension-dir', type=Path)
+    parser.add_argument('--extension-id')
     args = parser.parse_args()
     validation.validate_bundle(args.app.resolve(), args.output.resolve())
     if args.phase:
@@ -101,9 +110,14 @@ def main():
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     try:
-        subprocess.run(['/usr/bin/lockf', '-k', '/tmp/orbit-gui-slot.lock', sys.executable, __file__,
+        command = ['/usr/bin/lockf', '-t', '1', '-k', '/tmp/orbit-gui-slot.lock', sys.executable, __file__,
             '--app', str(args.app.resolve()), '--output', str(args.output.resolve()), '--phase',
-            '--action', args.action, '--port', str(server.server_port)], check=True)
+            '--action', args.action, '--port', str(server.server_port)]
+        if args.extension_dir:
+            command += ['--extension-dir', str(args.extension_dir.resolve())]
+        if args.extension_id:
+            command += ['--extension-id', args.extension_id]
+        subprocess.run(command, check=True)
     finally:
         server.shutdown()
         server.server_close()
