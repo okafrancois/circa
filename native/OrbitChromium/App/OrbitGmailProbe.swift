@@ -85,9 +85,9 @@ enum OrbitGmailProbe {
             checks["badgeCount"] = tile.item.gmailUnreadCount == 3 && tile.item.showsGmailBadge
             let selected = owner.session.organization?.selectedTab?.id
             let responder = window.firstResponder
-            guard owns(), let hover = NSEvent.mouseEvent(with: .mouseEntered, location: tile.convert(.zero, to: nil), modifierFlags: [],
+            guard owns(), let hover = NSEvent.enterExitEvent(with: .mouseEntered, location: tile.convert(.zero, to: nil), modifierFlags: [],
                 timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber, context: nil,
-                eventNumber: 1, clickCount: 0, pressure: 0) else { return ["hoverRefused": true] }
+                eventNumber: 1, trackingNumber: 0, userData: nil) else { return ["hoverRefused": true] }
             tile.mouseEntered(with: hover)
             await wait { owner.favorites.gmailPreview.isPresented }
             checks["hoverPreview"] = owner.favorites.gmailPreview.isPresented
