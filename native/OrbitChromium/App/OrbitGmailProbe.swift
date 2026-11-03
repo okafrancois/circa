@@ -101,6 +101,7 @@ enum OrbitGmailProbe {
                 guard let font = field.font, let cell = field.cell else { return false }
                 let width = (field.stringValue as NSString).size(withAttributes: [.font: font]).width
                 return !field.stringValue.isEmpty && cell.drawingRect(forBounds: field.bounds).width >= ceil(width)
+                    && field.bounds.width >= ceil(cell.cellSize.width)
             }
             if let first = rows.first {
                 checks["messageNativeClick"] = click(first)

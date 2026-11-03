@@ -76,9 +76,11 @@ struct GmailPresentationTests {
         let date = try #require(row.subviews.compactMap { $0 as? NSTextField }.first { $0.alignment == .right })
         let font = try #require(date.font)
         let textWidth = (date.stringValue as NSString).size(withAttributes: [.font: font]).width
-        let drawingWidth = try #require(date.cell).drawingRect(forBounds: date.bounds).width
+        let cell = try #require(date.cell)
+        let drawingWidth = cell.drawingRect(forBounds: date.bounds).width
         #expect(!date.stringValue.isEmpty)
         #expect(drawingWidth >= ceil(textWidth))
+        #expect(date.bounds.width >= ceil(cell.cellSize.width))
     }
 }
 }
