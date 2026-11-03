@@ -647,9 +647,12 @@ final class BrowserPaletteController<Engine: BrowserEngine> {
     private func finishAccept(ticket: UUID, returnFocus: Bool) {
         guard presentation == ticket else { return }
         dismiss(returnFocus: false)
+        let dismissedPresentation = presentation
         if returnFocus, let owner {
-            owner.session.performWindowAction { [weak owner] in
-                guard let owner, owner.window?.isKeyWindow == true else { return }
+            owner.session.performWindowAction { [weak self, weak owner] in
+                // A delivered command may open a replacement draft before this callback runs.
+                guard let self, let owner, presentation == dismissedPresentation, !isPresented,
+                      owner.window?.isKeyWindow == true else { return }
                 owner.focusSelectedDocument()
             }
         }

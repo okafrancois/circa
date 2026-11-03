@@ -133,6 +133,43 @@ struct NativePaletteTests {
         try await h.close()
     }
 
+    @Test("A split command keeps the replacement address editor focused after command delivery",
+          arguments: [BrowserCommandID.addRightSplit, .addLeftSplit, .addTopSplit, .addBottomSplit, .addSplitView])
+    func splitAddressFocus(_ command: BrowserCommandID) async throws {
+        let h = try await PaletteHarness()
+        h.window.submitAddress("https://split.test/source")
+        await h.settle()
+        let source = try #require(h.window.session.selectedSurface)
+        let originalWindow = try #require(h.window.window)
+        let hidden = PaletteFocusWindow(contentRect: originalWindow.frame, styleMask: [.titled, .closable], backing: .buffered, defer: false)
+        hidden.contentView = originalWindow.contentView
+        hidden.delegate = h.window
+        h.window.window = hidden
+        await h.show()
+        h.window.palette.query(h.registry.definition(command)!.localizedTitle)
+        await h.window.palette.waitForResults()
+        let index = try #require(h.window.palette.results.firstIndex { $0.action == .command(command) })
+        h.window.palette.move(index - h.window.palette.selection.index)
+        h.window.palette.accept()
+        await h.settle()
+        #expect(h.window.palette.isPresented)
+        #expect(h.window.session.activeSplit?.tabs.count == 2)
+        let editor = h.window.palette.view.input.currentEditor()
+        #expect(editor != nil)
+        if let editor {
+            #expect(hidden.firstResponder === editor)
+            editor.insertText("https://split.test/typed-target")
+            await h.window.palette.waitForResults()
+            #expect(h.window.palette.view.input.stringValue == "https://split.test/typed-target")
+            h.window.palette.accept()
+            await h.settle()
+            #expect(h.window.session.selectedSurface?.currentURL?.absoluteString == "https://split.test/typed-target")
+            #expect(source.currentURL?.absoluteString == "https://split.test/source")
+        }
+        #expect(!hidden.isVisible)
+        try await h.close()
+    }
+
     @Test("Command-T opens instantly without creating a tab; Escape cancels; repeated shortcut toggles")
     func presentation() async throws {
         let h = try await PaletteHarness()

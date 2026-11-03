@@ -3017,6 +3017,9 @@ extension OrbitPerformanceProbe {
         if command["step"] == "sidebar-move-undo" {
             return await sidebarMoveUndo(application, environment: environment, owner: owner, base: base)
         }
+        if command["step"] == "split-command-focus" {
+            return await splitCommandFocus(application, owner: owner, base: base)
+        }
         if command["step"] == "gmail-preview" {
             return await OrbitGmailProbe.run(application, environment: environment, owner: owner, base: base, root: activeSiteSessionConfiguration()!.dataRoot, command: command)
         }
@@ -3442,5 +3445,99 @@ extension OrbitPerformanceProbe {
             application.windows.windows.first(where: { !before.contains($0.key) })?.value.window?.close()
         } else { checks["tearOffCandidate"] = false }
         return checks
+    }
+}
+
+
+extension OrbitPerformanceProbe {
+    /// Native typing stays in the new pane's address draft after accepting a split command.
+    private static func splitCommandFocus(_ application: OrbitApplication, owner: OrbitWindowController,
+                                          base: URL) async -> [String: Any] {
+        let bundle = "lab.orbit.orbit.window-freeze"
+        guard ownsWindow(owner, bundleID: bundle), let window = owner.window,
+              let root = activeSiteSessionConfiguration()?.dataRoot else { return ["refused": true] }
+        func owns() -> Bool { ownsWindow(owner, bundleID: bundle) && window.isKeyWindow && NSApp.isActive }
+        func settle() async {
+            await application.windows.waitForPendingCommands()
+            await owner.palette.waitForAcceptance()
+            await owner.session.waitForPendingCommands()
+            window.contentView?.layoutSubtreeIfNeeded()
+        }
+        func key(_ character: String, modifiers: NSEvent.ModifierFlags = []) -> Bool {
+            guard owns() else { return false }
+            var resolved: (UInt16, NSEvent.ModifierFlags)?
+            if character == "\r" { resolved = (UInt16(kVK_Return), []) }
+            else if character == "\u{F701}" { resolved = (UInt16(kVK_DownArrow), []) }
+            else if let source = TISCopyCurrentKeyboardLayoutInputSource()?.takeRetainedValue(),
+                    let property = TISGetInputSourceProperty(source, kTISPropertyUnicodeKeyLayoutData) {
+                let data = Unmanaged<CFData>.fromOpaque(property).takeUnretainedValue()
+                if let bytes = CFDataGetBytePtr(data) {
+                    let layout = UnsafeRawPointer(bytes).assumingMemoryBound(to: UCKeyboardLayout.self)
+                    for shifted in [false, true] where resolved == nil {
+                        for code in UInt16(0)..<128 {
+                            var state: UInt32 = 0, length = 0
+                            var output = [UniChar](repeating: 0, count: 4)
+                            let status = UCKeyTranslate(layout, code, UInt16(kUCKeyActionDown), shifted ? UInt32(shiftKey >> 8) : 0,
+                                UInt32(LMGetKbdType()), UInt32(kUCKeyTranslateNoDeadKeysBit), &state, output.count, &length, &output)
+                            if status == noErr, String(utf16CodeUnits: output, count: length) == character {
+                                resolved = (code, shifted ? .shift : []); break
+                            }
+                        }
+                    }
+                }
+            }
+            guard let (code, flags) = resolved else { return false }
+            for type in [NSEvent.EventType.keyDown, .keyUp] {
+                guard owns(), let event = NSEvent.keyEvent(with: type, location: .zero, modifierFlags: flags.union(modifiers),
+                    timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber, context: nil,
+                    characters: character, charactersIgnoringModifiers: character, isARepeat: false, keyCode: code) else { return false }
+                NSApp.sendEvent(event)
+            }
+            return true
+        }
+        func type(_ text: String) -> Bool { text.allSatisfy { key(String($0)) } }
+        func capture() {
+            guard owns(), let content = window.contentView,
+                  let bitmap = content.bitmapImageRepForCachingDisplay(in: content.bounds) else { return }
+            content.cacheDisplay(in: content.bounds, to: bitmap)
+            try? bitmap.representation(using: .png, properties: [:])?.write(to: root.appendingPathComponent("split-command-focus.png"))
+        }
+        window.setFrame(.init(x: 100, y: 100, width: 1100, height: 760), display: true)
+        NSApp.activate(ignoringOtherApps: true); window.makeKeyAndOrderFront(nil)
+        for _ in 0..<100 where !owns() { try? await Task.sleep(for: .milliseconds(10)) }
+        guard owns() else { return ["refused": true] }
+        owner.palette.showsSearchSuggestions = false
+        owner.session.openTab(url: base.appendingPathComponent("source"))
+        await settle()
+        guard let source = owner.session.selectedSurface else { return ["missingSource": true] }
+        await waitForLoad(source)
+        var checks: [String: Bool] = [:]
+        checks["commandT"] = key("t", modifiers: .command)
+        await owner.palette.waitForResults()
+        checks["nativeCommandQuery"] = type("add right")
+        await owner.palette.waitForResults()
+        guard let index = owner.palette.results.firstIndex(where: { $0.action == .command(.addRightSplit) }) else { return ["checks": checks, "missingCommand": true] }
+        for _ in owner.palette.results.indices where owner.palette.selection.index < index {
+            guard key("\u{F701}") else { return ["inputRefused": true] }
+        }
+        guard owner.palette.selection.index == index else { return ["selectionRefused": true] }
+        checks["nativeCommandReturn"] = key("\r")
+        await settle()
+        try? await Task.sleep(for: .milliseconds(300))
+        guard let target = owner.session.selectedSurface else { return ["missingTarget": true] }
+        checks["newPane"] = target !== source && owner.session.activeSplit?.tabs.count == 2
+        checks["replacementDraft"] = owner.palette.isPresented && owner.palette.mode == .currentTab && owner.palette.view.input.stringValue.isEmpty
+        let editor = owner.palette.view.input.currentEditor()
+        checks["editorHasFocus"] = editor != nil && window.firstResponder === editor
+        capture()
+        let destination = base.appendingPathComponent("target")
+        checks["nativeURLTyping"] = type(destination.absoluteString)
+        checks["exactDraft"] = owner.palette.view.input.stringValue == destination.absoluteString
+        checks["nativeURLReturn"] = key("\r")
+        await settle(); await waitForLoad(target)
+        checks["newPaneNavigated"] = target.navigationState.committedURL == destination && !target.navigationState.isLoading
+        checks["originalUnchanged"] = source.currentURL == base.appendingPathComponent("source")
+        checks["paletteDismissed"] = !owner.palette.isPresented
+        return ["pid": getpid(), "checks": checks, "passed": checks.values.allSatisfy { $0 }]
     }
 }
