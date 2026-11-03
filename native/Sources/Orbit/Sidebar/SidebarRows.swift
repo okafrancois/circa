@@ -59,6 +59,7 @@ class SidebarListRow: NSView, NSTextFieldDelegate {
     let titleLabel = NSTextField(labelWithString: "")
     weak var events: (any SidebarRowEventHandler)?
     var onFolderHover: ((SidebarListRow, Bool) -> Void)?
+    var onTabHover: ((SidebarTabRow, Bool) -> Bool)?
     var onPreviewInvalidated: ((SidebarListRow) -> Void)?
     private(set) var node: BrowserOrganizationNode
     private(set) var depth = 0
@@ -582,7 +583,8 @@ class SidebarTabRow: SidebarListRow {
 
     override func hoverDidChange() {
         super.hoverDidChange()
-        if !closeButton.isHovering { SidebarTabHoverCard.shared.hover(self, inside: isHovering) }
+        if onTabHover?(self, isHovering) == true { SidebarTabHoverCard.shared.invalidate(self) }
+        else if !closeButton.isHovering { SidebarTabHoverCard.shared.hover(self, inside: isHovering) }
         if !isHovering { closeButton.dismissPill(animated: true) }
         refreshControls()
         titleLabel.textColor = titleColor

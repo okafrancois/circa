@@ -11,6 +11,7 @@ final class FavoritesGridView: NSView, NSDraggingSource, FavoritesLocalDragSourc
     var onDragWillBegin: (() -> Void)?
     var onSelect: ((TabID) -> Void)?
     var makeContextMenu: ((TabID) -> NSMenu?)?
+    var onHover: ((FavoriteTileView, Bool) -> Void)?
     var commandsEnabled = true { didSet { for tile in tiles { tile.commandsEnabled = commandsEnabled } } }
     let dropTarget = FavoritesDropTarget()
     private(set) var favoritesDragPayload: FavoritesDragPayload?
@@ -71,6 +72,9 @@ final class FavoritesGridView: NSView, NSDraggingSource, FavoritesLocalDragSourc
                 if let tile { self?.beginDrag(tile: tile, event: event) }
             }
             tile.makeContextMenu = { [weak self] in self?.makeContextMenu?(item.tab.id) }
+            tile.onHover = { [weak self, weak tile] inside in
+                if let tile { self?.onHover?(tile, inside) }
+            }
             tile.frame = geometry.favoriteTileFrame(index: items.firstIndex(where: { $0.tab.id == item.tab.id }) ?? 0)
             addSubview(tile, positioned: .above, relativeTo: placeholder)
             if canAnimate, !profileChanged {

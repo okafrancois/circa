@@ -58,4 +58,21 @@ struct GmailPreviewTests {
             #expect(throws: BrowserGmailPreviewError.invalidResponse) { try BrowserGmailInbox.decodeFeed(data) }
         }
     }
+
+    @Test("Unread badge choices persist per profile and older preferences retain their default")
+    func badgePreferences() async throws {
+        let directory = URL(fileURLWithPath: "/private/tmp/gmail-preferences-\(UUID())", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let destination = directory.appendingPathComponent("settings.json")
+        let first = ProfileID(), second = ProfileID(), tab = TabID()
+        let store = try BrowserSettingsStore(destination: destination)
+        try await store.updateProfile(first) { $0.hiddenGmailBadges.insert(tab) }
+        let restored = try BrowserSettingsStore(destination: destination)
+        let snapshot = await restored.snapshot()
+        #expect(snapshot.profile(first).hiddenGmailBadges == [tab])
+        #expect(snapshot.profile(second).hiddenGmailBadges.isEmpty)
+        var legacy = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(BrowserProfileSettings())) as? [String: Any])
+        legacy.removeValue(forKey: "hiddenGmailBadges")
+        #expect(try JSONDecoder().decode(BrowserProfileSettings.self, from: JSONSerialization.data(withJSONObject: legacy)).hiddenGmailBadges.isEmpty)
+    }
 }

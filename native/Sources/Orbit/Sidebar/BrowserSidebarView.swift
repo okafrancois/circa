@@ -71,6 +71,7 @@ final class BrowserSidebarView: NSView, SidebarListHost {
     private let standaloneProfilePill = NSTextField(labelWithString: "")
     private let standaloneProfileIcon = NSImageView(image: OrbitIcon.image(sfName: "face.smiling.fill", pointSize: 12, accessibilityDescription: nil) ?? NSImage())
     var onFolderHover: ((SidebarListRow, Bool) -> Void)?
+    var onTabHover: ((SidebarTabRow, Bool) -> Bool)?
     var onPreviewInvalidated: ((SidebarListRow) -> Void)?
     var onSelectTab: ((TabID) -> Void)?
     var onCloseTabs: (([TabID]) -> Void)?
@@ -1070,6 +1071,7 @@ final class BrowserSidebarView: NSView, SidebarListHost {
         }
         page.list.host = self
         page.list.onFolderHover = { [weak self] row, inside in self?.onFolderHover?(row, inside) }
+        page.list.onTabHover = { [weak self] row, inside in self?.onTabHover?(row, inside) ?? false }
         page.list.onPreviewInvalidated = { [weak self] row in self?.onPreviewInvalidated?(row) }
         page.accent = accent
         page.onSetPinnedSectionCollapsed = { [weak self, weak page] collapsed in

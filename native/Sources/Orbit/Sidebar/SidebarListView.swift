@@ -126,6 +126,7 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
     var forcesAnimation = false
     var onLayoutChange: (() -> Void)?
     var onFolderHover: ((SidebarListRow, Bool) -> Void)?
+    var onTabHover: ((SidebarTabRow, Bool) -> Bool)?
     var onPreviewInvalidated: ((SidebarListRow) -> Void)?
 
     var prepareDesktopPreview: ((SidebarDragPayload) -> Void)?
@@ -743,6 +744,7 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
         }
         row.events = self
         row.onFolderHover = { [weak self] row, inside in self?.onFolderHover?(row, inside) }
+        row.onTabHover = { [weak self] row, inside in self?.onTabHover?(row, inside) ?? false }
         row.onPreviewInvalidated = { [weak self] row in self?.onPreviewInvalidated?(row) }
         row.leavingEntry = entry
         row.isLeaving = false

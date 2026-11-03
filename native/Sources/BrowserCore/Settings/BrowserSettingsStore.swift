@@ -29,9 +29,10 @@ public struct BrowserProfileSettings: Codable, Equatable, Sendable {
     public var opensPinnedLinksInPeek = true
     public var shiftClickOpensPeek = true
     public var extensionPinOrder: [String] = []
+    public var hiddenGmailBadges: Set<TabID> = []
     public init() {}
     private enum CodingKeys: String, CodingKey {
-        case showSearchSuggestions, searchEngine, opensPinnedLinksInPeek, shiftClickOpensPeek, extensionPinOrder
+        case showSearchSuggestions, searchEngine, opensPinnedLinksInPeek, shiftClickOpensPeek, extensionPinOrder, hiddenGmailBadges
     }
     public init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
@@ -40,6 +41,7 @@ public struct BrowserProfileSettings: Codable, Equatable, Sendable {
         opensPinnedLinksInPeek = try values.decode(Bool.self, forKey: .opensPinnedLinksInPeek)
         shiftClickOpensPeek = try values.decode(Bool.self, forKey: .shiftClickOpensPeek)
         extensionPinOrder = (try? values.decode([String].self, forKey: .extensionPinOrder)) ?? []
+        hiddenGmailBadges = try values.decodeIfPresent(Set<TabID>.self, forKey: .hiddenGmailBadges) ?? []
     }
 }
 

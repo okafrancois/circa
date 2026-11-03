@@ -3017,6 +3017,9 @@ extension OrbitPerformanceProbe {
         if command["step"] == "sidebar-move-undo" {
             return await sidebarMoveUndo(application, environment: environment, owner: owner, base: base)
         }
+        if command["step"] == "gmail-preview" {
+            return await OrbitGmailProbe.run(application, environment: environment, owner: owner, base: base, root: activeSiteSessionConfiguration()!.dataRoot, command: command)
+        }
         var checks: [String: Any] = [:]
         func settle(_ c: OrbitWindowController) async {
             await application.windows.waitForPendingCommands()

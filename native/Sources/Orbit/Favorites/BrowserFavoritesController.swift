@@ -9,6 +9,10 @@ final class BrowserFavoritesController<Engine: BrowserEngine> {
     weak var owner: BrowserWindowController<Engine>?
     let grid = FavoritesGridView()
     let icons: FavoriteIconPipeline<Surface>
+    let gmail = BrowserGmailRuntime()
+    let gmailPreview = GmailPreviewController()
+    private let gmailSession: (any BrowserGmailWebSession)?
+    private var gmailRefreshTimer: Timer?
     private weak var registry: BrowserCommandRegistry<BrowserWindowController<Engine>>?
     private(set) var menuController: FavoritesContextMenu?
     private struct MenuSelection {
@@ -22,14 +26,16 @@ final class BrowserFavoritesController<Engine: BrowserEngine> {
     private var acceptedMenuCommands: [(id: BrowserCommandID, selection: MenuSelection)] = []
     private var observer: BrowserHookRegistration?
     private var profileID: ProfileID?
+    private var spaceID: SpaceID?
     private final class WeakSurface {
         weak var value: Surface?
         init(_ value: Surface) { self.value = value }
     }
     private var surfacesByTab: [TabID: WeakSurface] = [:]
 
-    init(owner: BrowserWindowController<Engine>) {
+    init(owner: BrowserWindowController<Engine>, gmailSession: (any BrowserGmailWebSession)? = nil) {
         self.owner = owner
+        self.gmailSession = gmailSession ?? owner.engine as? any BrowserGmailWebSession
         icons = FavoriteIconPipeline<Surface>()
     }
 
@@ -40,6 +46,7 @@ final class BrowserFavoritesController<Engine: BrowserEngine> {
         owner.sidebar.favoritesContainer.addSubview(grid)
         grid.onDragWillBegin = { [weak self] in self?.owner?.sidebar.spaceSwipe.cancel() }
         grid.onSelect = { [weak self] id in
+            self?.gmailPreview.dismiss()
             self?.owner?.submitInput { controller in
                 controller.hideLibrary()
                 controller.session.selectTab(id)
@@ -51,6 +58,32 @@ final class BrowserFavoritesController<Engine: BrowserEngine> {
             }
         }
         grid.makeContextMenu = { [weak self] id in self?.contextMenu(for: id) }
+        grid.onHover = { [weak self] tile, inside in self?.gmailPreview.hover(tile, inside: inside) }
+        gmail.onChange = { [weak self] in self?.render() }
+        gmailPreview.inbox = { [weak self] in self?.gmail.states[$0]?.inbox }
+        gmailPreview.refresh = { [weak self] in self?.gmail.refresh($0) }
+        gmailPreview.permitted = { [weak self] _, captured, account in
+            guard let self, let owner = self.owner, owner.acceptsCommands, !owner.isPrivateWindow,
+                  !owner.sidebar.isPresentationHidden, !owner.sidebar.isSwitchingSpace,
+                  !owner.palette.isPresented, !owner.library.isPresented, owner.themeEditor == nil,
+                  !owner.session.isClosed, let current = owner.session.organization,
+                  current.profileID == self.profileID,
+                  let tab = current.tab(captured.id), tab.section.keepsPinnedURL else { return false }
+            return captured.section == tab.section && BrowserGmailAccount(url: tab.pinnedURL ?? tab.url) == account
+        }
+        gmailPreview.open = { [weak self] tab, account, message in self?.openGmail(tab, account: account, message: message) }
+        owner.sidebar.onTabHover = { [weak self] row, inside in
+            guard let self, let tab = self.owner?.session.organization?.tab(row.item.id), tab.section.keepsPinnedURL,
+                  BrowserGmailAccount(url: tab.pinnedURL ?? tab.url) != nil else { return false }
+            self.gmailPreview.hover(row, tab: tab, inside: inside)
+            return true
+        }
+        gmailRefreshTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self, self.owner?.window?.occlusionState.contains(.visible) == true else { return }
+                self.render()
+            }
+        }
         grid.dropTarget.onPreviewCountChange = { [weak self] count in self?.owner?.sidebar.favoritePreviewCount = count }
         grid.dropTarget.onEmptyZoneVisibilityChange = { [weak self] visible in
             guard let sidebar = self?.owner?.sidebar else { return }
@@ -99,6 +132,8 @@ final class BrowserFavoritesController<Engine: BrowserEngine> {
     }
 
     func shutdown() {
+        gmailRefreshTimer?.invalidate(); gmailRefreshTimer = nil
+        gmailPreview.dismiss(); gmail.clear()
         observer?.cancel()
         observer = nil
         icons.clear()
@@ -117,7 +152,9 @@ final class BrowserFavoritesController<Engine: BrowserEngine> {
         owner.sidebar.spaceSwipe.validate(catalog: session.catalog, active: session.snapshot?.activeSpaceID)
         owner.sidebar.prepareSpaceContentPublication(to: session.snapshot?.activeSpaceID)
         let snapshot = session.organization
+        if spaceID != snapshot?.spaceID { gmailPreview.dismiss(); spaceID = snapshot?.spaceID }
         if profileID != snapshot?.profileID {
+            gmailPreview.dismiss(); gmail.clear()
             icons.clear()
             surfacesByTab.removeAll()
             menuSelection = nil
@@ -129,6 +166,11 @@ final class BrowserFavoritesController<Engine: BrowserEngine> {
             return nil
         } ?? []
         let ids = Set(tabs.map(\.id))
+        let pinnedTabs = snapshot.map { FolderPreviewResult.ordered($0.pinned).map(\.tab) } ?? []
+        let accounts = Set((tabs + pinnedTabs).compactMap { BrowserGmailAccount(url: $0.pinnedURL ?? $0.url) })
+        gmail.reconcile(profile: owner.isPrivateWindow ? nil : snapshot?.profileID,
+                        accounts: owner.isPrivateWindow ? [] : accounts,
+                        session: owner.isPrivateWindow ? nil : gmailSession)
         icons.retain(ids)
         surfacesByTab = surfacesByTab.filter { ids.contains($0.key) && $0.value.value.map(owner.owns) == true }
         let items = tabs.map { tab in
@@ -136,14 +178,19 @@ final class BrowserFavoritesController<Engine: BrowserEngine> {
             let surface = surfacesByTab[tab.id]?.value
             let media = surface.flatMap { owner.siteControls.mediaStates[ObjectIdentifier($0)] }
             let icon = icons.image(for: tab, surface: surface, isOwned: { [weak owner] in owner?.owns($0) == true })
+            let account = BrowserGmailAccount(url: tab.pinnedURL ?? tab.url)
+            let count = account.flatMap { gmail.states[$0]?.inbox?.unreadCount }
+            let badges = snapshot.flatMap { owner.settingsPreferences?.runtime.document.profile($0.profileID).hiddenGmailBadges } ?? []
             return FavoriteTileItem(tab: tab, favicon: icon, isLoading: surface?.navigationState.isLoading == true,
-                                    isAudible: media?.isAudible ?? media?.isAudioPlaying, isAudioMuted: media?.isAudioMuted)
+                                    isAudible: media?.isAudible ?? media?.isAudioPlaying, isAudioMuted: media?.isAudioMuted,
+                                    gmailUnreadCount: count, showsGmailBadge: !badges.contains(tab.id))
         }
         grid.commandsEnabled = !owner.isPreparingForTermination && !session.isClosed
         grid.minimumTileWidth = owner.sidebar.favoriteMinimumTileWidth
         owner.sidebar.favoriteCount = items.count
         grid.accent = owner.sidebar.currentThemeAccent
         grid.render(items, profileID: snapshot?.profileID)
+        gmailPreview.reconcile()
     }
 
     func applySelection(_ ids: Set<TabID>) {
@@ -151,7 +198,8 @@ final class BrowserFavoritesController<Engine: BrowserEngine> {
         let items = grid.items.compactMap { item -> FavoriteTileItem? in
             guard ids.contains(item.tab.id), let tab = owner.session.organizationTab(item.tab.id) else { return nil }
             return FavoriteTileItem(tab: tab, favicon: item.favicon, isLoading: item.isLoading,
-                isAudible: item.isAudible, isAudioMuted: item.isAudioMuted)
+                isAudible: item.isAudible, isAudioMuted: item.isAudioMuted,
+                gmailUnreadCount: item.gmailUnreadCount, showsGmailBadge: item.showsGmailBadge)
         }
         grid.applySelection(items)
     }
@@ -177,6 +225,7 @@ final class BrowserFavoritesController<Engine: BrowserEngine> {
         return captured.tab
     }
     func contextMenu(for id: TabID) -> NSMenu? {
+        gmailPreview.dismiss()
         guard let owner, let registry, let snapshot = owner.session.organization,
               let tab = snapshot.tab(id), snapshot.favorites.contains(where: { $0.node == .tab(id) }),
               let target = registry.captureTarget(windowID: owner.id) else { return nil }
@@ -212,7 +261,38 @@ final class BrowserFavoritesController<Engine: BrowserEngine> {
         }
         menuController = controller
         for item in controller.menu.items where !item.isSeparatorItem && item.submenu == nil { item.isEnabled = controller.validateMenuItem(item) }
+        if BrowserGmailAccount(url: tab.pinnedURL ?? tab.url) != nil, !owner.isPrivateWindow,
+           let runtime = owner.settingsPreferences?.runtime {
+            let badge = GmailBadgeMenu(tab: id, profile: snapshot.profileID, runtime: runtime,
+                permitted: { [weak self] in self?.matches(captured) == true },
+                changed: { [weak self] in self?.render() },
+                failed: { [weak owner] in owner?.session.onError?($0) })
+            controller.retainedOwners.append(badge)
+            controller.menu.insertItem(.separator(), at: 0)
+            controller.menu.insertItem(badge.item, at: 0)
+        }
         return controller.menu
+    }
+
+    private func openGmail(_ tab: BrowserOrganizationTabItem, account: BrowserGmailAccount, message: String?) {
+        guard let owner, let current = owner.session.organization,
+              tab.section.keepsPinnedURL,
+              let url = message.flatMap({ account.messageURL(id: $0) }) ?? (message == nil ? account.composeURL : nil) else { return }
+        let id = tab.id, profile = current.profileID, space = current.spaceID
+        owner.submitInput { controller in
+            guard !controller.isPrivateWindow, let current = controller.session.organization,
+                  current.profileID == profile, current.spaceID == space,
+                  let tab = current.tab(id), tab.section.keepsPinnedURL,
+                  BrowserGmailAccount(url: tab.pinnedURL ?? tab.url) == account else { return }
+            controller.session.selectTab(id)
+            controller.session.performOnSelectedSurface { [weak controller] surface in
+                guard let controller, controller.session.organization?.selectedTab?.id == id,
+                      controller.session.activeProfileID == profile,
+                      controller.session.organization?.spaceID == space else { return }
+                surface.navigate(to: url)
+                controller.focusSelectedDocument()
+            }
+        }
     }
 
     func performMenuCommand(_ id: BrowserCommandID, origin: BrowserCommandOrigin) {

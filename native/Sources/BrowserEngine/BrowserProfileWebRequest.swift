@@ -19,3 +19,10 @@ public struct BrowserProfileWebResponse: Sendable {
 public protocol BrowserGitHubWebSession: AnyObject {
     func pullRequests(profileID: ProfileID, query: String, page: Int) async throws -> BrowserProfileWebResponse
 }
+
+/// Read-only inbox metadata using the selected profile's existing web session.
+/// Cookies and authentication stay inside the engine; results must remain ephemeral.
+@MainActor
+public protocol BrowserGmailWebSession: AnyObject {
+    func gmailInbox(profileID: ProfileID, account: BrowserGmailAccount) async throws -> BrowserGmailInbox
+}

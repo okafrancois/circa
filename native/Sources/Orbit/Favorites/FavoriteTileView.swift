@@ -14,6 +14,8 @@ struct FavoriteTileItem: Equatable {
     var isLoading = false
     var isAudible: Bool?
     var isAudioMuted: Bool?
+    var gmailUnreadCount: Int?
+    var showsGmailBadge = true
 
     var title: String { tab.title ?? tab.pinnedURL?.host ?? tab.url.host ?? uiText("Favorite") }
     var placeholder: String {
@@ -32,6 +34,7 @@ final class FavoriteTileView: NSView {
     let background = OrbitSurfaceBackgroundView(cornerRadius: OrbitTokens.Radius.favoriteTile)
     private let favicon = FavoriteFaviconImageView()
     private let letter = NSTextField(labelWithString: "")
+    private let unread = NSView()
     private var tracking: NSTrackingArea?
     private var pressPoint: NSPoint?
     private var selectionTint: NSColor?
@@ -42,6 +45,7 @@ final class FavoriteTileView: NSView {
     var onSelect: (() -> Void)?
     var onDrag: ((NSEvent) -> Void)?
     var makeContextMenu: (() -> NSMenu?)?
+    var onHover: ((Bool) -> Void)?
 
     init(item: FavoriteTileItem) {
         self.item = item
@@ -56,7 +60,10 @@ final class FavoriteTileView: NSView {
         letter.layer?.masksToBounds = true
         // Orbit's favorite tiles carry no corner glyphs (audio, loading, "away from pinned URL");
         // those states stay in the accessibility value and the context menu (user, 28/10).
-        for view in [background, favicon, letter] { addSubview(view) }
+        unread.wantsLayer = true
+        unread.layer?.cornerRadius = 3
+        unread.setAccessibilityElement(false)
+        for view in [background, favicon, letter, unread] { addSubview(view) }
         setAccessibilityElement(true)
         setAccessibilityRole(.button)
         update(item)
@@ -77,6 +84,7 @@ final class FavoriteTileView: NSView {
             favicon.contentTintColor = presentation?.image.isTemplate == true ? OrbitTokens.Color.Text.primary : nil
         }
         self.item = item
+        unread.isHidden = !item.showsGmailBadge || (item.gmailUnreadCount ?? 0) == 0
         favicon.isHidden = item.favicon == nil
         letter.stringValue = item.placeholder
         letter.layer?.backgroundColor = OrbitTokens.Color.Text.secondary.withAlphaComponent(0.18).cgColor
@@ -92,6 +100,7 @@ final class FavoriteTileView: NSView {
         if item.isAudioMuted == true { states.append(uiText("Muted")) }
         else if item.isAudible == true { states.append(uiText("Playing Audio")) }
         if !item.tab.isLoadedInThisWindow { states.append(uiText("Not Loaded")) }
+        if let count = item.gmailUnreadCount { states.append(String(format: uiText("Unread: %d"), count)) }
         setAccessibilityValue(states.joined(separator: ", "))
         setAccessibilityHelp(item.tab.isAwayFromPinnedURL ? uiText("Use the menu to reset the favorite to its original URL.") : nil)
         toolTip = item.title
@@ -107,6 +116,7 @@ final class FavoriteTileView: NSView {
         favicon.frame = icon
         let height = max(size, ceil(letter.intrinsicContentSize.height))
         letter.frame = NSRect(x: (bounds.width - height) / 2, y: (bounds.height - height) / 2, width: height, height: height)
+        unread.frame = NSRect(x: bounds.width - 12, y: 6, width: 6, height: 6)
     }
 
     override func updateTrackingAreas() {
@@ -117,8 +127,8 @@ final class FavoriteTileView: NSView {
         if let tracking { addTrackingArea(tracking) }
     }
 
-    override func mouseEntered(with event: NSEvent) { isHovering = true; refreshFill() }
-    override func mouseExited(with event: NSEvent) { isHovering = false; refreshFill() }
+    override func mouseEntered(with event: NSEvent) { isHovering = true; refreshFill(); onHover?(true) }
+    override func mouseExited(with event: NSEvent) { isHovering = false; refreshFill(); onHover?(false) }
     override func hitTest(_ point: NSPoint) -> NSView? {
         guard commandsEnabled, let superview, bounds.contains(convert(point, from: superview)) else { return nil }
         return self
@@ -161,6 +171,7 @@ final class FavoriteTileView: NSView {
     private func refreshFill() {
         background.applyFrost(accent, selected: item.tab.isSelected)
         let ink = OrbitFloatingMaterial.sidebarInk(accent).foreground
+        unread.layer?.backgroundColor = ink.resolvedCGColor(for: effectiveAppearance)
         if (accent.contrastTheme?.frostAmount ?? 0) > 0 {
             letter.textColor = ink
             letter.layer?.backgroundColor = NSColor.clear.cgColor
