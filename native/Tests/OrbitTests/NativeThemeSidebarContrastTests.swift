@@ -129,7 +129,7 @@ struct NativeThemeSidebarContrastTests {
         #expect(same(row.titleLabel.textColor, accent.sidebarSecondaryText, appearance: appearance))
         #expect(same(row.closeButton.tint, accent.icon, appearance: appearance))
         let imageViews = descendants(row, of: NSImageView.self)
-        #expect(imageViews.count == 2)
+        #expect(imageViews.count == 1)
         for image in imageViews { #expect(same(image.contentTintColor, accent.icon, appearance: appearance)) }
         let slash = try #require(descendants(row, of: SidebarPinnedSlashView.self).first)
         #expect(same(slash.tint, accent.icon, appearance: appearance))
