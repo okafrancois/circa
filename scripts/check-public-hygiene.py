@@ -168,6 +168,7 @@ MENTION = re.compile(
 )
 PROVENANCE = re.compile(r"(?i)\bparity\b")
 LOCALIZATION_PATH = "native/Sources/BrowserShell/Resources/en.lproj/Localizable.strings"
+FRENCH_LOCALIZATION_PATH = "native/Sources/BrowserShell/Resources/fr.lproj/Localizable.strings"
 
 
 def mask_literals(line, literals):
@@ -193,6 +194,12 @@ def check_text(path, text):
             match = re.fullmatch(r'("(?:[^"\\]|\\.)*") = ("(?:[^"\\]|\\.)*");', line)
             if match and json.loads(match[1]) in LOCALIZED_IMPORT_KEYS and match[1] == match[2]:
                 continue
+        elif path == FRENCH_LOCALIZATION_PATH:
+            # Translated import copy uses the same narrowly approved lookup keys.
+            # Only the standalone product name is allowed in its translated value.
+            match = re.fullmatch(r'("(?:[^"\\]|\\.)*") = ("(?:[^"\\]|\\.)*");', line)
+            if match and json.loads(match[1]) in LOCALIZED_IMPORT_KEYS:
+                line = mask_literals(json.loads(match[2]), (SOURCE_NAME,))
         scrubbed = mask_literals(line, (*TECHNICAL_TEXT, *ALLOWED_TEXT.get(path, ())))
         if MENTION.search(scrubbed):
             findings.append((path, number, "source-browser mention outside the import allowlist"))

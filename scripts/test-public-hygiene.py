@@ -53,6 +53,19 @@ class PublicHygieneTests(unittest.TestCase):
         self.assertTrue(policy.check_text(policy.LOCALIZATION_PATH, line.replace("Import from", "Styled like")))
         self.assertTrue(policy.check_text("unrelated.strings", line))
 
+    def test_french_import_copy_keeps_the_same_key_boundary(self):
+        key = json.dumps("Import from " + policy.SOURCE_NAME + "…", ensure_ascii=False)
+        value = json.dumps("Importer depuis " + policy.SOURCE_NAME + "…", ensure_ascii=False)
+        line = f"{key} = {value};"
+        path = policy.FRENCH_LOCALIZATION_PATH
+        self.assertFalse(policy.check_text(path, line))
+        self.assertTrue(policy.check_text(path, line.replace("Import from", "Styled like")))
+        self.assertTrue(policy.check_text(path, line + " // " + policy.SOURCE_NAME))
+        self.assertTrue(policy.check_text(path, line.replace("Importer depuis", "0x" + "123456789")))
+        self.assertTrue(policy.check_text(path, line.replace("Importer depuis", "pa" + "rity")))
+        self.assertTrue(policy.check_text(path, line.replace("…\";", "Sidebar…\";")))
+        self.assertTrue(policy.check_text("unrelated.strings", line))
+
     def test_addresses_and_api_constants(self):
         for digits in ("123456789", "0000000123456789", "12345678", "7ff0abcdef12"):
             self.assertTrue(policy.check_text("example.swift", "// 0x" + digits))
