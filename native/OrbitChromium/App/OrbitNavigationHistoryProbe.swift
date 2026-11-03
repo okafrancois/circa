@@ -25,9 +25,51 @@ enum OrbitNavigationHistoryProbe {
         }
         return false
     }
+    /// Exercises a foreign-window row projection in the actual product sidebar.
+    private static func rowDecoration(_ owner: OrbitWindowController, base: URL, root: URL) async -> [String: Any] {
+        guard let window = owner.window, owns(owner) else { return ["refused": true] }
+        owner.session.openTab(url: base.appendingPathComponent("sidebar"))
+        await owner.session.waitForQueuedCommands()
+        guard let surface = owner.session.selectedSurface,
+              await loaded(surface, at: base.appendingPathComponent("sidebar")),
+              let id = owner.session.organization?.selectedTab?.id,
+              let row = owner.sidebar.list.row(for: .tab(id)) as? SidebarTabRow else { return ["missingRow": true] }
+        window.setFrameOrigin(NSPoint(x: 160, y: 140))
+        NSApp.activate(ignoringOtherApps: true)
+        window.makeKeyAndOrderFront(nil)
+        var checks: [String: Any] = [:]
+        for dark in [false, true] {
+            guard owns(owner) else { return ["ownershipLost": true] }
+            window.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
+            var item = row.item
+            item.isOpenInAnotherWindow = false
+            row.update(item, depth: row.depth)
+            row.layoutSubtreeIfNeeded()
+            let ordinaryEnd = row.titleEnd
+            let ordinaryImages = row.subviews.compactMap { $0 as? NSImageView }.count
+            item.isOpenInAnotherWindow = true
+            row.update(item, depth: row.depth)
+            row.layoutSubtreeIfNeeded()
+            let mode = dark ? "dark" : "light"
+            checks[mode + "FullTitleWidth"] = abs(row.titleEnd - ordinaryEnd) < 0.01
+            checks[mode + "NoAdditionalImage"] = row.subviews.compactMap { $0 as? NSImageView }.count == ordinaryImages
+                && ordinaryImages == 1
+            checks[mode + "ForeignStateRetained"] = row.item.isOpenInAnotherWindow
+            window.displayIfNeeded()
+            try? await Task.sleep(for: .milliseconds(250))
+            guard owns(owner) else { return ["ownershipLost": true] }
+            let capture = Process()
+            capture.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
+            capture.arguments = ["-x", "-o", "-l", String(window.windowNumber), root.appendingPathComponent(mode + ".png").path]
+            try? capture.run(); capture.waitUntilExit()
+            checks[mode + "Captured"] = capture.terminationStatus == 0
+        }
+        return checks
+    }
     static func run(_ owner: OrbitWindowController, command: [String: String], root: URL) async -> [String: Any] {
         guard owns(owner), let text = command["url"], let base = URL(string: text),
               base.host == "127.0.0.1", base.scheme == "http", let window = owner.window else { return ["refused": true] }
+        if command["rows"] == "1" { return await rowDecoration(owner, base: base, root: root) }
         var result: [String: Any] = [:]
         let urls = ["first", "second", "third"].map { base.appendingPathComponent($0) }
         owner.session.openTab(url: urls[0])

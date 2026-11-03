@@ -14,8 +14,6 @@ extension OrbitTokens.Metrics.Sidebar {
     static let pinnedSlashCenterFromFaviconRight: CGFloat = 5
     static let pinnedSlashHeight: CGFloat = 12
     static let pinnedSlashLineWidth: CGFloat = 1.5
-    ///  — trailing glyph of a tab open in another window, centred like the close button.
-    static let otherWindowGlyphSize: CGFloat = 11
     static let dragAutoScrollEdge: CGFloat = 28
     static let dragAutoScrollMaximumStep: CGFloat = 14
     static let folderDropEdgeFraction: CGFloat = 0.25

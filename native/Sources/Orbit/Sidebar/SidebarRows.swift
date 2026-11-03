@@ -5,9 +5,6 @@ import BrowserCore
 private typealias Metrics = OrbitTokens.Metrics.Sidebar
 
 extension OrbitGlyph {
-    ///  — trailing mark of a tab open in another window.
-    static var otherWindow: NSImage? { symbol("macwindow.on.rectangle", pointSize: OrbitTokens.Metrics.Sidebar.otherWindowGlyphSize, weight: .regular) }
-
     /// Draws a template glyph centred in `rect` of the current graphics context (no view needed,
     /// e.g. for drag images).
     static func drawTemplate(_ glyph: NSImage, centeredIn rect: NSRect, tint: NSColor) {
@@ -394,7 +391,6 @@ class SidebarTabRow: SidebarListRow {
     let favicon = NSImageView()
     private let slash = SidebarPinnedSlashView()
     let closeButton = SidebarTabActionButton(glyph: OrbitGlyph.close, label: "")
-    private let otherWindowMark = NSImageView()
     let audioButton = OrbitGlyphButton(glyph: nil, label: "")
     private let loadingIndicator = SidebarTabLoadingView()
     private let faviconPlaceholder = OrbitGlyph.faviconPlaceholder
@@ -415,16 +411,13 @@ class SidebarTabRow: SidebarListRow {
         audioButton.target = self
         audioButton.action = #selector(toggleAudio(_:))
         audioButton.isHidden = true
-        otherWindowMark.image = OrbitGlyph.otherWindow
-        otherWindowMark.contentTintColor = effectiveAccent.icon
         slash.tint = effectiveAccent.icon
-        otherWindowMark.setAccessibilityElement(false)
         gmailUnreadDot.wantsLayer = true
         gmailUnreadDot.identifier = .init("gmail-unread")
         gmailUnreadDot.layer?.cornerRadius = 3
         gmailUnreadDot.isHidden = true
         gmailUnreadDot.setAccessibilityElement(false)
-        for view in [favicon, loadingIndicator, slash, otherWindowMark, audioButton, closeButton, gmailUnreadDot] { addSubview(view) }
+        for view in [favicon, loadingIndicator, slash, audioButton, closeButton, gmailUnreadDot] { addSubview(view) }
         update(item, depth: depth)
     }
 
@@ -461,7 +454,6 @@ class SidebarTabRow: SidebarListRow {
         super.accentDidChange()
         titleLabel.textColor = titleColor
         closeButton.tint = effectiveAccent.icon
-        otherWindowMark.contentTintColor = effectiveAccent.icon
         slash.tint = effectiveAccent.icon
         audioButton.tint = effectiveAccent.icon
         loadingIndicator.tint = effectiveAccent.icon
@@ -548,7 +540,7 @@ class SidebarTabRow: SidebarListRow {
     override var titleEnd: CGFloat {
         // The title truncates before the close button only while the button shows (S-SPL@1s).
         if showsAudio { return reservesTitleRestoration ? min(audioButton.frame.minX - Metrics.titleTrailingGap, bounds.width - 76) : audioButton.frame.minX - Metrics.titleTrailingGap }
-        let end = isHovering || item.isOpenInAnotherWindow
+        let end = isHovering
             ? closeButton.frame.minX - Metrics.titleTrailingGap : bounds.width - Metrics.rowInsetX
         let badgeEnd = gmailUnreadDot.isHidden ? end : min(end, gmailUnreadDot.frame.minX - 6)
         return min(super.titleEnd, reservesTitleRestoration ? min(badgeEnd, bounds.width - 52) : badgeEnd)
@@ -565,8 +557,6 @@ class SidebarTabRow: SidebarListRow {
         let closeCenter = bounds.width - Metrics.closeCenterFromRowRight + backgroundTrailingOutset
         closeButton.frame = NSRect(x: closeCenter - closeSize / 2, y: (bounds.height - closeSize) / 2, width: closeSize, height: closeSize)
         audioButton.frame = closeButton.frame.offsetBy(dx: isHovering ? -Metrics.audioControlPitch : 0, dy: 0)
-        let mark = Metrics.otherWindowGlyphSize + 4
-        otherWindowMark.frame = NSRect(x: closeCenter - mark / 2, y: (bounds.height - mark) / 2, width: mark, height: mark)
         gmailUnreadDot.frame = NSRect(x: closeCenter - 3, y: bounds.midY - 3, width: 6, height: 6)
         gmailUnreadDot.layer?.backgroundColor = effectiveAccent.icon.resolvedCGColor(for: effectiveAppearance)
         super.layout()
@@ -576,7 +566,7 @@ class SidebarTabRow: SidebarListRow {
             for view in [favicon, loadingIndicator, slash, titleLabel] as [NSView] { view.frame.origin.x += splitPreviewShift }
             titleLabel.frame.size.width = max(0, min(titleLabel.frame.width, bounds.width - Metrics.rowInsetX - titleLabel.frame.minX))
         }
-        for view in [closeButton, audioButton, otherWindowMark] as [NSView] where splitPreviewShift > 0 { view.isHidden = true }
+        for view in [closeButton, audioButton] as [NSView] where splitPreviewShift > 0 { view.isHidden = true }
     }
 
     /// Horizontal offset of the row content while a sidebar drop previews a split on its leading half.
@@ -634,9 +624,9 @@ class SidebarTabRow: SidebarListRow {
 
     private func refreshControls() {
         gmailUnreadDot.isHidden = !gmailBadgeEnabled || (gmailUnreadCount ?? 0) == 0 || isHovering
-            || item.isErrandSummary || showsAudio || item.isOpenInAnotherWindow
+            || item.isErrandSummary || showsAudio
         if item.isErrandSummary {
-            for view in [restoreButton, closeButton, audioButton, otherWindowMark, slash, loadingIndicator] as [NSView] { view.isHidden = true }
+            for view in [restoreButton, closeButton, audioButton, slash, loadingIndicator] as [NSView] { view.isHidden = true }
             loadingIndicator.isLoading = false; favicon.isHidden = false; return
         }
         restoreButton.frame = NSRect(x: bounds.width - (showsAudio ? 72 : 48), y: (bounds.height - 20) / 2, width: 20, height: 20)
@@ -665,7 +655,6 @@ class SidebarTabRow: SidebarListRow {
         favicon.isHidden = showsLoading
         loadingIndicator.isHidden = !showsLoading
         audioButton.isHidden = !showsAudio || isRenaming
-        otherWindowMark.isHidden = !item.isOpenInAnotherWindow || isHovering
         if !isHovering || isRenaming { closeButton.alphaValue = 0 }
     }
 

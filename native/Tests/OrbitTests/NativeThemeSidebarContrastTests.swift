@@ -54,7 +54,7 @@ struct NativeThemeSidebarContrastTests {
 
         #expect(same(zoom.contentTintColor, accent.sidebarSecondaryText, appearance: appearance))
         #expect(address.textColor == .systemOrange, "The installed address editor retains its separate styling")
-        let lateAccessory = NSButton(image: try #require(OrbitGlyph.otherWindow), target: nil, action: nil)
+        let lateAccessory = NSButton(image: try #require(OrbitGlyph.close), target: nil, action: nil)
         sidebar.addressContainer.installAccessory(lateAccessory)
         #expect(same(lateAccessory.contentTintColor, OrbitTokens.Color.Text.secondary, appearance: appearance))
         let lateCustomGlyph = OrbitGlyphButton(glyph: OrbitGlyph.close, label: "Synthetic accessory")
