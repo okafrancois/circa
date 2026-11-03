@@ -271,7 +271,7 @@ final class BrowserHistoryVisitCell: NSTableCellView {
         NSLayoutConstraint.activate([
             titleLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 8),
             titleLabel.topAnchor.constraint(equalTo: topAnchor, constant: 7),
-            timeLabel.leadingAnchor.constraint(greaterThanOrEqualTo: titleLabel.trailingAnchor, constant: 8),
+            timeLabel.leadingAnchor.constraint(greaterThanOrEqualTo: titleLabel.trailingAnchor, constant: 12),
             timeLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -8),
             timeLabel.firstBaselineAnchor.constraint(equalTo: titleLabel.firstBaselineAnchor),
             urlLabel.leadingAnchor.constraint(equalTo: titleLabel.leadingAnchor),
