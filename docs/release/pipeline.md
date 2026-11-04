@@ -2,9 +2,16 @@
 
 ## Configuration and prerequisites
 - `release/config.json` is the single release configuration; initial version is **0.1.0**, bundle ID `io.github.okatech.orbit`.
-- The Chromium product uses CEF 156, flavor `orbit-engine-extensions-r4`.
+- The Chromium product uses the maintained CEF/Chromium 156 fork (8078 branch). The
+  `cef_flavor` in `release/config.json` and the descriptor in `release/engine.json` are
+  the source of truth for the shipped engine; each engine's sources and patch union are
+  recorded under `native/OrbitChromium/cef-patches/engine-r*/`.
 - Keep the engine distribution under the repository's `.tools/chromium-fork/distrib/`.
   Worktrees reuse the main checkout's distribution; the pipeline does not build CEF.
+- Security updates on the maintained branch: `scripts/cef-engine-security-update.py`
+  moves the shared sources to a newer `156.0.8078.x` tag while preserving the patch union,
+  a versioned `scripts/cef-engine-r*-build.py` exports a new flavor, and
+  `scripts/package_ci_engine.py` produces the archive and descriptor for `release/engine.json`.
 - Install Xcode/CLT, Python 3, CMake, Ninja, and `gh`; authenticate `gh` for the public
   repository `okafrancois/circa`. Nothing is published without `--publish`.
 - Sparkle **2.10.1** is downloaded from its official GitHub release and SHA-256 checked.

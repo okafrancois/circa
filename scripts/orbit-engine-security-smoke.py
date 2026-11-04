@@ -123,7 +123,12 @@ def phase(args):
     assert process.returncode == 0 and not owner.remaining and not owner.forced_signals
     checks['guiSeconds'] = time.monotonic() - started
     (root / 'verification.json').write_text(json.dumps(checks, indent=2) + '\n')
-    pins = json.loads((REPO / 'native/OrbitChromium/cef-patches/engine-r14/source.json').read_text())
+    flavor = json.loads((REPO / 'release/config.json').read_text())['cef_flavor']
+    pins = [pin for pin in (json.loads(path.read_text()) for path in
+            (REPO / 'native/OrbitChromium/cef-patches').glob('engine-r*/source.json'))
+            if pin.get('flavor') == flavor and 'chromium_tag' in pin]
+    assert len(pins) == 1, 'Missing source pins for the released engine ' + flavor
+    pins = pins[0]
     version = json.loads(checks['version'])
     assert version['product'] == 'Chrome/' + pins['chromium_tag'], checks
     assert version['revision'].lstrip('@') == pins['chromium_commit'], checks

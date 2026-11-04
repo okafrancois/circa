@@ -1,8 +1,9 @@
 # OrbitChromium — Chromium engine adapter, laboratory and product build
 
-`ChromiumEngine`, an adapter of the `BrowserEngine` contract on the stock (unpatched) CEF 156 SDK,
-with Alloy-style browsers parented to shell-owned AppKit views. Laboratory only; not linked into
-the SwiftPM package and not a preview build.
+`ChromiumEngine`, an adapter of the `BrowserEngine` contract on the maintained CEF/Chromium 156
+fork, with browsers parented to shell-owned AppKit views. It is built by CMake into the shipped
+product, not linked into the SwiftPM package. The engine flavor comes from `release/config.json`;
+its sources and patch union are recorded under `cef-patches/`.
 
 - `Bridge/` — C ABI 5 (`OrbitChromiumBridge.h`) over CEF; main thread only.
 - `ChromiumEngine/` — Swift adapter (`ChromiumBrowserEngine`, `ChromiumSurface`, `ChromiumRuntime`).

@@ -611,6 +611,7 @@ enum OrbitPerformanceProbe {
                 } else if name == "permissions" {
                     result["permissions"] = await OrbitPermissionsProbe.run(owner, environment: environment, root: root, command: command)
                 } else if name == "history-library" {
+                    if Bundle.main.bundleIdentifier == OrbitHistoryLibraryProbe.bundleID { application.confirmQuit = { .quit } }
                     result["historyLibrary"] = await OrbitHistoryLibraryProbe.run(owner, environment: environment, command: command, root: root)
                 } else if name == "navigation-history" {
                     result["navigationHistory"] = await OrbitNavigationHistoryProbe.run(owner, command: command, root: root)

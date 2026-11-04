@@ -53,7 +53,7 @@ final class BrowserLibraryHistoryView: NSView, NSTableViewDataSource, NSTableVie
         searchField.setAccessibilityIdentifier("library-history-search")
         status.font = OrbitTokens.Typography.emptyStateDetail
         status.textColor = OrbitTokens.Color.Text.secondary
-        let reload = NSButton(image: NSImage(systemSymbolName: "arrow.clockwise", accessibilityDescription: libraryText("refresh", "Refresh"))!, target: self, action: #selector(refresh))
+        let reload = NSButton(image: OrbitIcon.image(sfName: "arrow.clockwise", pointSize: NSFont.systemFontSize, accessibilityDescription: libraryText("refresh", "Refresh")) ?? NSImage(), target: self, action: #selector(refresh))
         reload.toolTip = libraryText("refresh", "Refresh")
         reload.setAccessibilityLabel(libraryText("refresh", "Refresh"))
         searchField.font = BrandTextStyle.body.font(size: NSFont.systemFontSize)
@@ -63,7 +63,7 @@ final class BrowserLibraryHistoryView: NSView, NSTableViewDataSource, NSTableVie
         deleteOptions.setAccessibilityLabel(libraryText("clearHistory", "Clear History…"))
         for (button, symbol) in [(open, "arrow.up.right.square"), (remove, "trash")] {
             let label = button.title
-            button.image = NSImage(systemSymbolName: symbol, accessibilityDescription: label)
+            button.image = OrbitIcon.image(sfName: symbol, pointSize: NSFont.systemFontSize, accessibilityDescription: label)
             button.imagePosition = .imageOnly
             button.toolTip = label
             button.setAccessibilityLabel(label)
