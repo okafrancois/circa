@@ -8,6 +8,7 @@ import tempfile
 import unittest
 
 from ci_engine import install
+from package_ci_engine import package
 
 
 @unittest.skipUnless(hasattr(tarfile, 'data_filter'), 'CI engine extraction requires Python 3.12+')
@@ -62,6 +63,36 @@ class EngineAdmissionTests(unittest.TestCase):
             with self.assertRaises(tarfile.FilterError):
                 install(archive, descriptor, root / 'distrib')
             self.assertFalse((root / 'escaped').exists())
+
+    def test_packaged_local_distribution_installs_with_its_printed_descriptor(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            flavor = 'orbit-engine-extensions-r99'
+            distribution = root / 'local' / flavor
+            engine = distribution / 'cef_binary_fixture_macosarm64_minimal'
+            framework = engine / 'Release/Chromium Embedded Framework.framework/Chromium Embedded Framework'
+            wrapper = distribution / 'wrapper/libcef_dll_wrapper/libcef_dll_wrapper.a'
+            for path, data in ((framework, b'framework'), (wrapper, b'wrapper'),
+                               (engine / 'include/cef_version.h', b'header'),
+                               (distribution / 'wrapper/CMakeCache.txt', b'local build state')):
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(data)
+            (distribution / 'manifest.json').write_text(json.dumps({
+                'flavor': flavor, 'root': str(engine),
+                'framework_sha256': hashlib.sha256(b'framework').hexdigest(),
+                'wrapper_sha256': hashlib.sha256(b'wrapper').hexdigest()}))
+            archive = root / 'out' / (flavor + '.tar.gz')
+            descriptor = package(distribution, archive, 'owner/repository')
+            self.assertEqual(descriptor['url'], 'https://github.com/owner/repository/releases/download/'
+                                                'engine-r99/orbit-engine-extensions-r99.tar.gz')
+            with tarfile.open(archive) as bundle:
+                members = bundle.getmembers()
+            self.assertNotIn(flavor + '/wrapper/CMakeCache.txt', [member.name for member in members])
+            self.assertEqual({(member.uid, member.uname) for member in members}, {(0, '')})
+            target = install(archive, descriptor, root / 'distrib')
+            self.assertEqual((target / 'cef_binary_fixture_macosarm64_minimal/include/cef_version.h').read_bytes(), b'header')
+            with self.assertRaises(ValueError):
+                package(distribution, archive, 'owner/repository')
 
 
 if __name__ == '__main__':
