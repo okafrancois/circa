@@ -536,17 +536,18 @@ struct BrowserAssistantContextPicker: View {
     @Environment(\.assistantPalette) private var palette
 
     private var options: [BrowserAssistantMentionOption] {
-        let tabs = sources.map { source in
-            BrowserAssistantMentionOption(id: .tab(source.id), kind: .tab, title: source.title,
-                path: uiText("Tabs"), detail: BrowserAssistantMentionOptions.origin(source.url), members: [source])
-        }
         if let memberGroup {
             return memberGroup.members.map { source in
                 BrowserAssistantMentionOption(id: .tab(source.id), kind: .tab, title: source.title,
                     path: memberGroup.path, detail: BrowserAssistantMentionOptions.origin(source.url), members: [source])
             }.filter { BrowserAssistantMentionOptions.matching(query, options: [$0]).isEmpty == false }
         }
-        return BrowserAssistantMentionOptions.matching(query, options: tabs + scopes.filter { $0.kind != .tab })
+        let listedIDs = Set(scopes.filter { $0.kind == .tab }.compactMap { $0.members.first?.id })
+        let missingTabs = sources.filter { !listedIDs.contains($0.id) }.map { source in
+            BrowserAssistantMentionOption(id: .tab(source.id), kind: .tab, title: source.title,
+                path: uiText("Tabs"), detail: BrowserAssistantMentionOptions.origin(source.url), members: [source])
+        }
+        return BrowserAssistantMentionOptions.matching(query, options: scopes + missingTabs)
     }
     private var rowCount: Int { options.count }
     private var contentHeight: CGFloat {
