@@ -121,6 +121,25 @@ struct BrowserAssistantMentionTests {
         #expect(snapshot.members.count == 2)
     }
 
+    @Test("Overflow, member choices and cap feedback fit inside the context popover")
+    func pickerStateLayoutReservesNoticeSpace() {
+        let regular = BrowserAssistantMentionPickerLayout.contentHeight(rowCount: 1, isEmpty: false,
+            choosingMembers: false, showingOverflow: false, showingNotice: false)
+        let overflow = BrowserAssistantMentionPickerLayout.contentHeight(rowCount: 1, isEmpty: false,
+            choosingMembers: false, showingOverflow: true, showingNotice: false)
+        let memberEmpty = BrowserAssistantMentionPickerLayout.contentHeight(rowCount: 0, isEmpty: true,
+            choosingMembers: true, showingOverflow: false, showingNotice: false)
+        let capped = BrowserAssistantMentionPickerLayout.contentHeight(rowCount: 1, isEmpty: false,
+            choosingMembers: true, showingOverflow: false, showingNotice: true)
+
+        #expect(regular == 116)
+        #expect(overflow >= regular + 72)
+        #expect(memberEmpty > regular)
+        #expect(capped >= regular + 100)
+        #expect(BrowserAssistantMentionPickerLayout.contentHeight(rowCount: 12, isEmpty: false,
+            choosingMembers: true, showingOverflow: false, showingNotice: false) == 336)
+    }
+
     @Test("Selecting a suggestion adds context without reading a page or starting a provider")
     @MainActor
     func suggestionSelectionDoesNotReadOrSend() async {

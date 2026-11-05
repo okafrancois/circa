@@ -95,6 +95,18 @@ enum BrowserAssistantMentionOptions {
     }
 }
 
+enum BrowserAssistantMentionPickerLayout {
+    static func contentHeight(rowCount: Int, isEmpty: Bool, choosingMembers: Bool,
+                              showingOverflow: Bool, showingNotice: Bool) -> CGFloat {
+        let rows = CGFloat(max(1, rowCount)) * 50
+        let emptyState: CGFloat = isEmpty ? 38 : 0
+        let memberControls: CGFloat = choosingMembers ? 42 : 0
+        let overflowControls: CGFloat = showingOverflow ? 72 : 0
+        let notice: CGFloat = showingNotice ? 58 : 0
+        return min(336, rows + 66 + emptyState + memberControls + overflowControls + notice)
+    }
+}
+
 /// Keeps the original group mention separate from the member list's temporary search text.
 struct BrowserAssistantMentionMemberSelection: Equatable {
     private(set) var group: BrowserAssistantMentionOption?

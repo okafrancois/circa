@@ -647,7 +647,9 @@ struct BrowserAssistantContextPicker: View {
     }
     private var rowCount: Int { options.count }
     private var contentHeight: CGFloat {
-        min(336, CGFloat(max(1, rowCount)) * 50 + 66)
+        BrowserAssistantMentionPickerLayout.contentHeight(rowCount: rowCount, isEmpty: options.isEmpty,
+            choosingMembers: choosingMembers, showingOverflow: overflowGroup != nil,
+            showingNotice: selectionNotice != nil)
     }
     private func isSelected(_ source: BrowserAIContextSource) -> Bool { selected.contains { $0.id == source.id } }
     private func newMemberCount(_ option: BrowserAssistantMentionOption) -> Int {
