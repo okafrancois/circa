@@ -765,7 +765,8 @@ final class BrowserSidebarView: NSView, SidebarListHost {
         let point = convert(sender.draggingLocation, from: nil)
         page.autoscrollDuringDrag(at: convert(point, to: page))
         let verdict = dropCoordinator.update(payload: payload, at: point, in: self, targets: dropTargets,
-                                             snapshot: organization, catalog: renderedCatalog)
+                                             snapshot: organization, catalog: renderedCatalog,
+                                             emitsHaptic: splitArming == nil)
         if verdict?.isValid == true, payload.sourceWindow != windowIdentifier {
             SidebarWindowDirectory.keepSourceKey(payload.sourceWindow)
         }

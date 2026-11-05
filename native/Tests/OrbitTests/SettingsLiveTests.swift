@@ -159,15 +159,23 @@ struct SettingsLiveTests {
         }
         #expect(haptics == 1)
         coordinator.clear()
+        coordinator.update(payload: payload, at: NSPoint(x: 30, y: 30), in: container, targets: [target],
+                           snapshot: snapshot, catalog: org.catalog, emitsHaptic: false)
+        #expect(haptics == 1)
+        coordinator.clear()
+        coordinator.update(payload: payload, at: NSPoint(x: 30, y: 30), in: container, targets: [target],
+                           snapshot: snapshot, catalog: org.catalog)
+        #expect(haptics == 2)
+        coordinator.clear()
         try await environment.settings.updateInteraction { $0.hapticFeedback = false }
         coordinator.update(payload: payload, at: NSPoint(x: 30, y: 30), in: container, targets: [target], snapshot: snapshot, catalog: org.catalog)
-        #expect(haptics == 1)
+        #expect(haptics == 2)
         try await environment.settings.updateInteraction { $0.hapticFeedback = true }
         coordinator.clear()
         let invalid = SidebarDragPayload(sourceWindow: UUID(), spaceID: org.spaceID, profileID: ProfileID(),
             nodes: [.tab(tab)], rowCount: 1, grabOffsetX: 0)
         coordinator.update(payload: invalid, at: NSPoint(x: 30, y: 30), in: container, targets: [target], snapshot: snapshot, catalog: org.catalog)
-        #expect(haptics == 1)
+        #expect(haptics == 2)
     }
 }
 }

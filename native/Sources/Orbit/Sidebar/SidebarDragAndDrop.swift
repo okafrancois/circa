@@ -102,7 +102,7 @@ final class SidebarDropCoordinator {
     @discardableResult
     func update(payload: SidebarDragPayload, at point: NSPoint, in container: NSView,
                 targets: [any SidebarDropTarget], snapshot: BrowserOrganizationSnapshot?,
-                catalog: BrowserCatalogSnapshot?) -> Verdict? {
+                catalog: BrowserCatalogSnapshot?, emitsHaptic: Bool = true) -> Verdict? {
         self.payload = payload
         let previousTarget = target
         let previousVerdict = verdict
@@ -126,7 +126,7 @@ final class SidebarDropCoordinator {
         let next = Verdict(proposal: proposal, error: error)
         if next != verdict { hit.showDropFeedback(proposal, isValid: error == nil, payload: payload) }
         verdict = next
-        if next.isValid, previousTarget !== hit || previousVerdict?.proposal.destination != proposal.destination
+        if emitsHaptic, next.isValid, previousTarget !== hit || previousVerdict?.proposal.destination != proposal.destination
             || previousVerdict?.isValid != true {
             onReorderSnap?()
         }
