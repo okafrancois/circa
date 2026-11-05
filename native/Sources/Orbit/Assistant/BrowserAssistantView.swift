@@ -590,6 +590,7 @@ struct BrowserAssistantContextPicker: View {
         .frame(minHeight: 44, idealHeight: contentHeight, maxHeight: contentHeight)
         .foregroundStyle(palette.ink.swiftUI)
         .background(BrowserAssistantKeyMonitor(handler: handleKey).frame(width: 0, height: 0))
+        .onChange(of: query) { _, _ in cursor = nil; memberGroup = nil }
     }
 
     private func row<Icon: View>(_ title: String, path: String, on: Bool, index: Int, @ViewBuilder icon: () -> Icon, action: @escaping () -> Void) -> some View {
@@ -613,7 +614,7 @@ struct BrowserAssistantContextPicker: View {
         case BrowserAssistantKey.down: cursor = ((cursor ?? -1) + 1) % rowCount; return true
         case BrowserAssistantKey.up: cursor = ((cursor ?? rowCount) - 1 + rowCount) % rowCount; return true
         case BrowserAssistantKey.returnKey, BrowserAssistantKey.keypadEnter:
-            guard let cursor else { return false }
+            guard let cursor, options.indices.contains(cursor) else { return false }
             let option = options[cursor]
             if option.kind != .tab, BrowserAssistantMentionOptions.additions(for: option.members, selected: selected) == nil {
                 memberGroup = option
