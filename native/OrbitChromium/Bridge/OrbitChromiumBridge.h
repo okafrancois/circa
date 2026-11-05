@@ -629,6 +629,10 @@ void ACRPagePerformanceClosing(uint64_t token);
 int32_t ACRBoostCacheTraceBegin(void (*)(void*, int32_t), void*);
 int32_t ACRBoostCacheTraceEnd(const char* path, void (*)(void*, int32_t), void*);
 int32_t ACRMemoryDump(orbit_memory_callback_t, void*);
+/* Side API v17. Purge completes exactly once on UI; absent allocator measurements are nil. */
+int32_t ACRFreezeTab(uint64_t surface_token, int32_t freeze);
+int32_t ACRPurgeMemory(uint32_t flags, orbit_purge_callback_t, void*);
+int32_t ACRPreconnect(uint64_t profile_token, const char* url, int32_t sockets);
 int32_t ACRPageLifecycle(uint64_t token, orbit_page_lifecycle_t*);
 int32_t ACRPageLifecycleObserve(uint64_t token, orbit_lifecycle_callback_t, void*);
 int32_t ACRCaptureView(uint64_t token, orbit_capture_rect_t, int32_t, int32_t, int32_t, orbit_capture_callback_t, void*);

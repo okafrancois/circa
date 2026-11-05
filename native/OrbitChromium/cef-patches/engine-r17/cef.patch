@@ -1,0 +1,546 @@
+diff --git a/libcef/browser/orbit/orbit_cef_api.h b/libcef/browser/orbit/orbit_cef_api.h
+index 9ffeeff..a403152 100644
+--- a/libcef/browser/orbit/orbit_cef_api.h
++++ b/libcef/browser/orbit/orbit_cef_api.h
+@@ -14,6 +14,7 @@
+ #define CEF_LIBCEF_BROWSER_ORBIT_ORBIT_CEF_API_H_
+ 
+ #include <stdint.h>
++#include <stddef.h>
+ 
+ #ifdef __cplusplus
+ extern "C" {
+@@ -26,7 +27,7 @@ extern "C" {
+ // Version 3 (CHROMIUM-APP-R3): additive, hold_window/release_window. Earlier
+ // versions keep their layout as the prefix of the table.
+ // Version 4 (EXTENSIONS-PRODUCT-R1): additive, native per-profile extension services.
+-#define ORBIT_CEF_API_VERSION 16u
++#define ORBIT_CEF_API_VERSION 17u
+ 
+ // Version 8. Callback once after live renderer CSS installation (1), or failure (0).
+ typedef void (*orbit_boost_ack_t)(void*, uint64_t revision, int32_t installed);
+@@ -134,6 +135,8 @@ typedef struct {
+   uint64_t cannot_discard_mask, footprint_kb;
+   int32_t renderer_pid;
+   uint64_t document_id;
++  // Version 17. Bit per performance_manager::freezing::CannotFreezeReason.
++  uint64_t cannot_freeze_mask;
+ } orbit_page_lifecycle_t;
+ // event: 0 state changed, 1 about to discard, 2 discarded, 3 closed.
+ // initiator: 0 none, 1 embedder, 2 native policy. Null state only for closed.
+@@ -167,6 +170,15 @@ typedef void (*orbit_activation_callback_t)(void*,
+ // Allocator nodes contain native numeric metrics; absent metrics are unknown.
+ typedef void (*orbit_memory_callback_t)(void*, int32_t status, const char* json, uint32_t length);
+ 
++// Version 17. Purge results use UINT64_MAX for an unavailable measurement.
++// Accepted requests callback exactly once on UI. Status: 1 measured, 2 purge
++// completed but one or both allocator measurements were unavailable, -1 failed.
++typedef void (*orbit_purge_callback_t)(void*, int32_t status,
++    uint64_t committed_before_kb, uint64_t committed_after_kb, uint64_t elapsed_us);
++#define ORBIT_PURGE_FAST 0u
++#define ORBIT_PURGE_AGGRESSIVE 1u
++#define ORBIT_PURGE_UNKNOWN_KB UINT64_MAX
++
+ typedef struct {
+   uint32_t struct_size;
+   uint32_t version;
+@@ -352,6 +364,12 @@ typedef struct {
+   int32_t (*trace_end)(const char* profile_path, const char* file, orbit_trace_callback_t, void*);
+   int32_t (*extension_options_open)(int32_t browser_id, const char* extension_id);
+   int32_t (*extension_incognito_set)(const char* profile_path, const char* extension_id, int32_t allowed);
++
++  // Version 17: additive lifecycle, purge, and per-profile preconnect services.
++  int32_t (*freeze_tab)(int32_t browser_id, int32_t freeze);
++  int32_t (*purge_memory)(uint32_t flags, orbit_purge_callback_t callback, void* context);
++  int32_t (*preconnect)(const char* profile_id, const char* url, int32_t sockets);
++
+ } orbit_cef_api_t;
+ 
+ // Returns the API table for `version`, or NULL when unsupported.
+diff --git a/libcef/browser/orbit/orbit_cef_api.mm b/libcef/browser/orbit/orbit_cef_api.mm
+index 78e9024..8b4a7a6 100644
+--- a/libcef/browser/orbit/orbit_cef_api.mm
++++ b/libcef/browser/orbit/orbit_cef_api.mm
+@@ -38,6 +38,7 @@
+ // Lifecycle helpers are shared by capture, activation and suspension.
+ // clang-format off
+ #include "cef/libcef/browser/orbit/orbit_runtime_state.inc"
++#include "cef/libcef/browser/orbit/orbit_freezing.inc"
+ #include "cef/libcef/browser/orbit/orbit_lifecycle.inc"
+ #include "cef/libcef/browser/orbit/orbit_suspension.inc"
+ #include "cef/libcef/browser/orbit/orbit_capture.inc"
+@@ -45,6 +46,8 @@
+ #include "cef/libcef/browser/orbit/orbit_memory.inc"
+ #include "cef/libcef/browser/orbit/orbit_security.inc"
+ #include "cef/libcef/browser/orbit/orbit_media.inc"
++#include "cef/libcef/browser/orbit/orbit_purge.inc"
++#include "cef/libcef/browser/orbit/orbit_preconnect.inc"
+ // clang-format on
+ 
+ namespace {
+@@ -385,7 +388,7 @@ int32_t ReleaseWindow(uint64_t window_token) {
+ // Version 1 callers check `version == 1` and a size of at least their layout;
+ // later versions keep the earlier layouts as their prefix.
+ const orbit_cef_api_t kApiV1 = {
+-    sizeof(orbit_cef_api_t),
++    offsetof(orbit_cef_api_t, freeze_tab),
+     1u,
+     &WindowCreated,
+     &WindowDestroyed,
+@@ -405,7 +408,7 @@ int32_t ReleaseWindow(uint64_t window_token) {
+ };
+ 
+ const orbit_cef_api_t kApiV2 = {
+-    sizeof(orbit_cef_api_t),
++    offsetof(orbit_cef_api_t, freeze_tab),
+     2u,
+     &WindowCreated,
+     &WindowDestroyed,
+@@ -425,7 +428,7 @@ int32_t ReleaseWindow(uint64_t window_token) {
+ };
+ 
+ const orbit_cef_api_t kApiV3 = {
+-    sizeof(orbit_cef_api_t),
++    offsetof(orbit_cef_api_t, freeze_tab),
+     3u,
+     &WindowCreated,
+     &WindowDestroyed,
+@@ -445,7 +448,7 @@ int32_t ReleaseWindow(uint64_t window_token) {
+ };
+ 
+ const orbit_cef_api_t kApiV4 = {
+-    sizeof(orbit_cef_api_t), 4u,
++    offsetof(orbit_cef_api_t, freeze_tab), 4u,
+     &WindowCreated, &WindowDestroyed, &WindowActivationChanged, &WindowBoundsChanged,
+     &PrepareHostedTab, &CancelHostedTab, &AttachView, &ActivateTab, &GetTabInfo,
+     &WindowBrowserCount, &MoveTab, &ProfileLoaded, &HoldWindow, &ReleaseWindow,
+@@ -555,7 +558,7 @@ int32_t ReleaseWindow(uint64_t window_token) {
+ }();
+ const orbit_cef_api_t kApiV16 = [] {
+   auto api = kApiV15;
+-  api.struct_size = sizeof(orbit_cef_api_t);
++  api.struct_size = offsetof(orbit_cef_api_t, freeze_tab);
+   api.version = 16u;
+   api.diagnostic_capabilities = &DiagnosticCapabilities;
+   api.task_manager = &TaskManager;
+@@ -565,6 +568,15 @@ int32_t ReleaseWindow(uint64_t window_token) {
+   api.extension_incognito_set = &ExtensionIncognitoSet;
+   return api;
+ }();
++const orbit_cef_api_t kApiV17 = [] {
++  auto api = kApiV16;
++  api.struct_size = sizeof(orbit_cef_api_t);
++  api.version = 17u;
++  api.freeze_tab = &FreezeTab;
++  api.purge_memory = &PurgeMemory;
++  api.preconnect = &Preconnect;
++  return api;
++}();
+ }  // namespace
+ 
+ extern "C" CEF_EXPORT const orbit_cef_api_t* orbit_cef_get_api(uint32_t version);
+@@ -613,6 +625,8 @@ int32_t ReleaseWindow(uint64_t window_token) {
+       return &kApiV15;
+     case 16u:
+       return &kApiV16;
++    case 17u:
++      return &kApiV17;
+     default:
+       return nullptr;
+   }
+diff --git a/libcef/browser/orbit/orbit_freezing.inc b/libcef/browser/orbit/orbit_freezing.inc
+new file mode 100644
+index 0000000..ed41186
+--- /dev/null
++++ b/libcef/browser/orbit/orbit_freezing.inc
+@@ -0,0 +1,79 @@
++// Copyright 2026 Orbit. BSD-style license; see LICENSE.
++#include <map>
++#include <memory>
++
++#include "base/functional/bind.h"
++#include "base/location.h"
++#include "base/no_destructor.h"
++#include "base/task/single_thread_task_runner.h"
++#include "components/performance_manager/public/freezing/freezing.h"
++#include "components/performance_manager/public/performance_manager.h"
++#include "content/public/browser/web_contents.h"
++#include "content/public/browser/web_contents_observer.h"
++
++namespace {
++namespace pm = performance_manager;
++
++void ReleaseFreezeVote(int32_t browser_id);
++
++class FreezeVoteObserver final : public content::WebContentsObserver {
++ public:
++  FreezeVoteObserver(int32_t browser_id, content::WebContents* contents)
++      : content::WebContentsObserver(contents), browser_id_(browser_id) {}
++  void WebContentsDestroyed() override {
++    const int32_t browser_id = browser_id_;
++    base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
++        FROM_HERE, base::BindOnce(&ReleaseFreezeVote, browser_id));
++  }
++ private:
++  const int32_t browser_id_;
++};
++
++struct FreezeVoteEntry {
++  std::unique_ptr<pm::freezing::FreezingVote> vote;
++  std::unique_ptr<FreezeVoteObserver> observer;
++};
++using OrbitFreezeVotes = std::map<int32_t, FreezeVoteEntry>;
++OrbitFreezeVotes& FreezeVotes() {
++  static base::NoDestructor<OrbitFreezeVotes> votes;
++  return *votes;
++}
++void ReleaseFreezeVote(int32_t browser_id) {
++  FreezeVotes().erase(browser_id);
++}
++
++uint64_t CannotFreezeMask(const pm::freezing::CanFreezeDetails& details) {
++  uint64_t mask = 0;
++  for (auto reason : details.cannot_freeze_reasons)
++    mask |= uint64_t{1} << static_cast<unsigned>(reason);
++  for (auto reason : details.cannot_freeze_reasons_connected_pages)
++    mask |= uint64_t{1} << static_cast<unsigned>(reason);
++  return mask;
++}
++
++int32_t FreezeTab(int32_t browser_id, int32_t freeze) {
++  if (!OnValidUIThread() || (freeze != 0 && freeze != 1) ||
++      !pm::PerformanceManager::IsAvailable())
++    return 0;
++  auto host = CefBrowserHostBase::GetBrowserForBrowserId(browser_id);
++  auto* contents = host ? host->GetWebContents() : nullptr;
++  if (!contents)
++    return 0;
++  auto page = pm::PerformanceManager::GetPrimaryPageNodeForWebContents(contents);
++  if (!page)
++    return 0;
++  auto found = FreezeVotes().find(browser_id);
++  if (freeze == 0) {
++    if (found != FreezeVotes().end())
++      FreezeVotes().erase(found);
++    return 1;
++  }
++  if (found != FreezeVotes().end())
++    return 1;
++  FreezeVoteEntry entry;
++  entry.observer = std::make_unique<FreezeVoteObserver>(browser_id, contents);
++  entry.vote = std::make_unique<pm::freezing::FreezingVote>(contents);
++  FreezeVotes().emplace(browser_id, std::move(entry));
++  return 1;
++}
++}  // namespace
+diff --git a/libcef/browser/orbit/orbit_lifecycle.inc b/libcef/browser/orbit/orbit_lifecycle.inc
+index 85e42f7..b4189e8 100644
+--- a/libcef/browser/orbit/orbit_lifecycle.inc
++++ b/libcef/browser/orbit/orbit_lifecycle.inc
+@@ -4,6 +4,7 @@
+ #include "chrome/browser/media/webrtc/media_stream_capture_indicator.h"
+ #include "chrome/browser/performance_manager/policies/discard_eligibility_policy.h"
+ #include "chrome/browser/performance_manager/public/user_tuning/user_tuning_utils.h"
++#include "components/performance_manager/public/freezing/freezing.h"
+ #include "components/performance_manager/public/graph/graph.h"
+ #include "components/performance_manager/public/graph/page_node.h"
+ #include "components/performance_manager/public/performance_manager.h"
+@@ -13,6 +14,8 @@
+ #include "content/public/browser/render_widget_host_view.h"
+ #include "content/public/browser/web_contents.h"
+ #include "content/public/browser/web_contents_observer.h"
++#include <algorithm>
++#include <cstring>
+ 
+ namespace {
+ namespace pm = performance_manager;
+@@ -64,14 +67,19 @@ class LifecycleObservation final
+     }
+   }
+   bool Read(orbit_page_lifecycle_t* s) {
++    const uint32_t requested_size = s->struct_size;
++    constexpr uint32_t kV16Size = offsetof(orbit_page_lifecycle_t,
++                                             cannot_freeze_mask);
++    if (requested_size < kV16Size)
++      return false;
+     auto* wc = web_contents();
+     if (!wc || !pm::PerformanceManager::IsAvailable())
+       return false;
+     auto page = pm::PerformanceManager::GetPrimaryPageNodeForWebContents(wc);
+     if (!page)
+       return false;
+-    *s = {};
+-    s->struct_size = sizeof(*s);
++    std::memset(s, 0, std::min<size_t>(requested_size, sizeof(*s)));
++    s->struct_size = requested_size;
+     s->playing_video = wc->GetCurrentlyPlayingVideoCount() > 0;
+     s->playing_media = !players_.empty() || s->playing_video;
+     s->audio_context_running = !audio_contexts_.empty();
+@@ -106,6 +114,10 @@ class LifecycleObservation final
+                        false, &reasons);
+     for (auto reason : reasons)
+       s->cannot_discard_mask |= uint64_t{1} << static_cast<unsigned>(reason);
++    if (requested_size >= sizeof(*s)) {
++      s->cannot_freeze_mask = CannotFreezeMask(
++          pm::freezing::GetCanFreezeDetailsForPageNode(page.get()));
++    }
+     s->footprint_kb =
+         pm::user_tuning::GetDiscardedMemoryEstimateForPage(page.get()).InKiB();
+     auto* frame = wc->GetPrimaryMainFrame();
+@@ -130,6 +142,7 @@ class LifecycleObservation final
+   void Emit(int event, int initiator) {
+     auto alive = shared_from_this();
+     orbit_page_lifecycle_t state{};
++    state.struct_size = sizeof(state);
+     if (changed && Read(&state))
+       changed(context, event, initiator, &state);
+   }
+@@ -236,7 +249,9 @@ std::shared_ptr<LifecycleObservation> EnsureLifecycle(int32_t id) {
+   return observation;
+ }
+ int32_t PageLifecycle(int32_t id, orbit_page_lifecycle_t* state) {
+-  if (!OnValidUIThread() || !state || state->struct_size < sizeof(*state))
++  if (!OnValidUIThread() || !state ||
++      state->struct_size < offsetof(orbit_page_lifecycle_t,
++                                    cannot_freeze_mask))
+     return 0;
+   auto observation = EnsureLifecycle(id);
+   return observation && observation->Read(state);
+diff --git a/libcef/browser/orbit/orbit_preconnect.inc b/libcef/browser/orbit/orbit_preconnect.inc
+new file mode 100644
+index 0000000..4179b0c
+--- /dev/null
++++ b/libcef/browser/orbit/orbit_preconnect.inc
+@@ -0,0 +1,87 @@
++// Copyright 2026 Orbit. BSD-style license; see LICENSE.
++#include <deque>
++#include <map>
++#include <string>
++#include <vector>
++
++#include "base/no_destructor.h"
++#include "base/time/time.h"
++#include "chrome/browser/predictors/loading_predictor.h"
++#include "chrome/browser/predictors/loading_predictor_config.h"
++#include "chrome/browser/predictors/loading_predictor_factory.h"
++#include "chrome/browser/predictors/predictors_traffic_annotations.h"
++#include "chrome/browser/profiles/profile.h"
++#include "content/public/browser/preconnect_manager.h"
++#include "content/public/browser/preconnect_request.h"
++#include "content/public/browser/storage_partition.h"
++#include "net/base/network_anonymization_key.h"
++#include "services/network/public/cpp/constants.h"
++#include "url/origin.h"
++
++namespace {
++struct OrbitPreconnectProfileState {
++  std::deque<base::TimeTicks> accepted;
++  std::map<std::string, base::TimeTicks> origin_time;
++};
++
++std::map<std::string, OrbitPreconnectProfileState>& PreconnectStates() {
++  static base::NoDestructor<std::map<std::string, OrbitPreconnectProfileState>> states;
++  return *states;
++}
++
++int32_t Preconnect(const char* profile_id, const char* url, int32_t sockets) {
++  if (!OnValidUIThread() || !profile_id || !*profile_id || !url ||
++      sockets < 1 || sockets > 6 || !g_browser_process ||
++      !g_browser_process->profile_manager())
++    return 0;
++  auto* profile = g_browser_process->profile_manager()->GetProfileByPath(
++      base::FilePath(profile_id));
++  if (!profile || profile->IsOffTheRecord() ||
++      !predictors::IsLoadingPredictorEnabled(profile) ||
++      !predictors::IsPreconnectAllowed(profile))
++    return 0;
++
++  const GURL target(url);
++  if (!target.is_valid() || !target.SchemeIsHTTPOrHTTPS() ||
++      !target.has_host())
++    return 0;
++  const url::Origin origin = url::Origin::Create(target);
++  if (origin.opaque())
++    return 0;
++  const std::string origin_key = origin.Serialize();
++  auto& state = PreconnectStates()[profile->GetPath().AsUTF8Unsafe()];
++  const base::TimeTicks now = base::TimeTicks::Now();
++  while (!state.accepted.empty() &&
++         now - state.accepted.front() >= base::Minutes(1))
++    state.accepted.pop_front();
++  for (auto it = state.origin_time.begin(); it != state.origin_time.end();) {
++    if (now - it->second >= base::Seconds(10))
++      it = state.origin_time.erase(it);
++    else
++      ++it;
++  }
++  if (state.accepted.size() >= 6 || state.origin_time.contains(origin_key))
++    return 0;
++
++  auto* predictor = predictors::LoadingPredictorFactory::GetForProfile(profile);
++  if (!predictor || predictor->WasShutdown())
++    return 0;
++  auto* manager = predictor->preconnect_manager();
++  auto* partition = profile->GetDefaultStoragePartition();
++  if (!manager || !partition)
++    return 0;
++
++  const auto key = net::NetworkAnonymizationKey::CreateSameSite(
++      net::SchemefulSite(origin));
++  if (key.IsEmpty() && net::NetworkAnonymizationKey::IsPartitioningEnabled())
++    return 0;
++  std::vector<content::PreconnectRequest> requests;
++  requests.emplace_back(origin, sockets, key,
++                        network::GetNoOpNetworkRestrictionsId());
++  manager->Start(origin.GetURL(), std::move(requests),
++                 predictors::kLoadingPredictorPreconnectTrafficAnnotation);
++  state.accepted.push_back(now);
++  state.origin_time[origin_key] = now;
++  return 1;
++}
++}  // namespace
+diff --git a/libcef/browser/orbit/orbit_purge.inc b/libcef/browser/orbit/orbit_purge.inc
+new file mode 100644
+index 0000000..faac298
+--- /dev/null
++++ b/libcef/browser/orbit/orbit_purge.inc
+@@ -0,0 +1,139 @@
++// Copyright 2026 Orbit. BSD-style license; see LICENSE.
++#include <memory>
++#include <optional>
++
++#include "base/allocator/partition_allocator/src/partition_alloc/memory_reclaimer.h"
++#include "base/functional/bind.h"
++#include "base/process/process.h"
++#include "base/task/single_thread_task_runner.h"
++#include "base/time/time.h"
++#include "services/resource_coordinator/public/cpp/memory_instrumentation/global_memory_dump.h"
++#include "services/resource_coordinator/public/cpp/memory_instrumentation/memory_instrumentation.h"
++
++namespace {
++using memory_instrumentation::GlobalMemoryDump;
++using memory_instrumentation::mojom::RequestOutcome;
++
++std::optional<uint64_t> CommittedAllocatorKB(const GlobalMemoryDump* dump) {
++  if (!dump)
++    return std::nullopt;
++  for (const auto& process : dump->process_dumps()) {
++    if (process.pid() != base::GetCurrentProcId())
++      continue;
++    const auto bytes = process.GetMetric("partition_alloc/partitions",
++                                        "virtual_committed_size");
++    return bytes ? std::optional<uint64_t>(*bytes / 1024) : std::nullopt;
++  }
++  return std::nullopt;
++}
++
++class OrbitPurgeRequest : public std::enable_shared_from_this<OrbitPurgeRequest> {
++ public:
++  OrbitPurgeRequest(uint32_t flags, orbit_purge_callback_t callback, void* context)
++      : flags_(flags), callback_(callback), context_(context) {}
++
++  void Start() {
++    auto* instrumentation = memory_instrumentation::MemoryInstrumentation::GetInstance();
++    if (!instrumentation || !instrumentation->GetCoordinator()) {
++      Reclaim();
++      Finish();
++      return;
++    }
++    instrumentation->RequestGlobalDumpForPid(
++        base::GetCurrentProcId(), {"partition_alloc/partitions"},
++        base::BindOnce(&OrbitPurgeRequest::OnBeforeDump, shared_from_this()));
++    base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
++        FROM_HERE,
++        base::BindOnce(&OrbitPurgeRequest::OnBeforeTimeout, shared_from_this()),
++        base::Seconds(15));
++  }
++
++ private:
++  void OnBeforeTimeout() {
++    if (done_ || reclaimed_)
++      return;
++    Reclaim();
++    Finish();
++  }
++
++  void OnBeforeDump(RequestOutcome outcome,
++                    std::unique_ptr<GlobalMemoryDump> dump) {
++    if (done_ || reclaimed_)
++      return;
++    if (outcome == RequestOutcome::kSuccess)
++      before_ = CommittedAllocatorKB(dump.get());
++    Reclaim();
++    auto* instrumentation = memory_instrumentation::MemoryInstrumentation::GetInstance();
++    if (!instrumentation || !instrumentation->GetCoordinator()) {
++      Finish();
++      return;
++    }
++    instrumentation->RequestGlobalDumpForPid(
++        base::GetCurrentProcId(), {"partition_alloc/partitions"},
++        base::BindOnce(&OrbitPurgeRequest::OnAfterDump, shared_from_this()));
++    base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
++        FROM_HERE, base::BindOnce(&OrbitPurgeRequest::Finish, shared_from_this()),
++        base::Seconds(15));
++  }
++
++  void Reclaim() {
++    if (reclaimed_)
++      return;
++    reclaimed_ = true;
++    const base::TimeTicks started = base::TimeTicks::Now();
++    auto* reclaimer = partition_alloc::MemoryReclaimer::Instance();
++    if (!reclaimer) {
++      reclaim_succeeded_ = false;
++      return;
++    }
++    if (flags_ == ORBIT_PURGE_FAST)
++      reclaimer->ReclaimFast();
++    else
++      reclaimer->ReclaimAll();
++    elapsed_us_ = static_cast<uint64_t>(
++        (base::TimeTicks::Now() - started).InMicroseconds());
++    reclaim_succeeded_ = true;
++  }
++
++  void OnAfterDump(RequestOutcome outcome,
++                   std::unique_ptr<GlobalMemoryDump> dump) {
++    if (done_)
++      return;
++    if (outcome == RequestOutcome::kSuccess)
++      after_ = CommittedAllocatorKB(dump.get());
++    Finish();
++  }
++
++  void Finish() {
++    if (done_ || !callback_)
++      return;
++    done_ = true;
++    auto callback = callback_;
++    callback_ = nullptr;
++    const uint64_t before = before_.value_or(ORBIT_PURGE_UNKNOWN_KB);
++    const uint64_t after = after_.value_or(ORBIT_PURGE_UNKNOWN_KB);
++    const int32_t status = !reclaim_succeeded_ ? -1
++                           : (before_ && after_ ? 1 : 2);
++    callback(context_, status, before, after, elapsed_us_);
++  }
++
++  const uint32_t flags_;
++  orbit_purge_callback_t callback_;
++  void* const context_;
++  bool reclaimed_ = false;
++  bool done_ = false;
++  bool reclaim_succeeded_ = true;
++  uint64_t elapsed_us_ = 0;
++  std::optional<uint64_t> before_;
++  std::optional<uint64_t> after_;
++};
++
++int32_t PurgeMemory(uint32_t flags, orbit_purge_callback_t callback, void* context) {
++  if (!OnValidUIThread() || !callback ||
++      (flags != ORBIT_PURGE_FAST && flags != ORBIT_PURGE_AGGRESSIVE))
++    return 0;
++  auto request = std::make_shared<OrbitPurgeRequest>(flags, callback, context);
++  request->Start();
++  return 1;
++}
++}  // namespace

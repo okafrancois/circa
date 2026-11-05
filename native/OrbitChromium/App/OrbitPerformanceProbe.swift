@@ -625,6 +625,8 @@ enum OrbitPerformanceProbe {
                     result["nativeSecurity"] = await OrbitEngineSecurityProbe.run(owner, command: command)
                 } else if name == "native-performance" {
                     result["nativePerformance"] = await OrbitEnginePerformanceProbe.run(owner, command: command, root: root)
+                } else if name == "native-r17" {
+                    result["nativeR17"] = await OrbitEngineR17Probe.run(owner, command: command)
                 } else if name == "download-audio" {
                     result["downloadAudio"] = await OrbitDownloadAudioProbe.run(owner, command: command, root: root)
                 } else if name == "safe-browsing", ownsWindow(owner, bundleID: "lab.orbit.orbit.sec-safebrowsing") {

@@ -791,6 +791,50 @@ final class ChromiumConformanceProbe: BrowserEngineConformanceProbe {
     }
 }
 
+extension ChromiumBrowserEngine {
+    public func freezeTab(_ surface: ChromiumSurface, frozen: Bool) -> Bool {
+        guard !isShutDown, !surface.isDisposed, surface.engine === self else { return false }
+        return ACRFreezeTab(surface.token, frozen ? 1 : 0) == 1
+    }
+
+    public func purgeMemory(_ strategy: BrowserMemoryPurgeStrategy) async -> BrowserMemoryPurgeResult {
+        guard !isShutDown else { return .unavailable }
+        return await withCheckedContinuation { continuation in
+            let context = Unmanaged.passRetained(PurgeReply(continuation)).toOpaque()
+            let accepted = ACRPurgeMemory(strategy.rawValue, { ctx, status, before, after, elapsed in
+                guard let ctx else { return }
+                MainActor.assumeIsolated {
+                    let reply = Unmanaged<PurgeReply>.fromOpaque(ctx).takeRetainedValue()
+                    reply.continuation.resume(returning: BrowserMemoryPurgeResult(
+                        status: .init(rawValue: status) ?? .failed,
+                        committedBeforeKB: before == UInt64.max ? nil : before,
+                        committedAfterKB: after == UInt64.max ? nil : after,
+                        elapsedMicroseconds: elapsed))
+                }
+            }, context)
+            if accepted != 1 {
+                Unmanaged<PurgeReply>.fromOpaque(context).takeRetainedValue()
+                    .continuation.resume(returning: .unavailable)
+            }
+        }
+    }
+
+    public func preconnect(profileID: ProfileID, to url: URL, sockets: Int) -> Bool {
+        guard !isShutDown, persistence == .persistent,
+              let profile = profiles[profileID], !removingProfiles.contains(profileID),
+              runtime.isProfileReady(profile.token), let count = Int32(exactly: sockets) else { return false }
+        return ACRPreconnect(profile.token, url.absoluteString, count) == 1
+    }
+}
+
+@MainActor
+private final class PurgeReply {
+    let continuation: CheckedContinuation<BrowserMemoryPurgeResult, Never>
+    init(_ continuation: CheckedContinuation<BrowserMemoryPurgeResult, Never>) {
+        self.continuation = continuation
+    }
+}
+
 // The optional printing service is shared by browser windows and Little Orbit.
 extension ChromiumBrowserEngine: BrowserPagePrinting {
     public func printPage(_ surface: ChromiumSurface) throws {

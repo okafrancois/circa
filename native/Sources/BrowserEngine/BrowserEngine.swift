@@ -165,6 +165,13 @@ public protocol BrowserEngine: AnyObject {
     /// Built-in credential store. Nil for unsupported or private engines.
     var passwordStore: (any BrowserPasswordStore)? { get }
 
+    /// Adds or removes the embedder's Chromium freezing vote for a live surface.
+    func freezeTab(_ surface: Surface, frozen: Bool) -> Bool
+    /// Runs PartitionAlloc reclamation in the browser process.
+    func purgeMemory(_ strategy: BrowserMemoryPurgeStrategy) async -> BrowserMemoryPurgeResult
+    /// Schedules a profile-scoped HTTP(S) connection hint when the engine permits it.
+    func preconnect(profileID: ProfileID, to url: URL, sockets: Int) -> Bool
+
     /// Shell windows (CHROMIUM-APP). The shell shows the surfaces whose `placement.windowID` is
     /// `windowID` in `window`. Engines that model windows natively (hosted Chromium: one logical
     /// Chrome `Browser` per window and profile, the source of extension `windows`/`tabs`
@@ -214,6 +221,9 @@ public protocol BrowserEngine: AnyObject {
 public extension BrowserEngine {
     func diagnosticDataRoot(for profileID: ProfileID) -> URL? { nil }
     var passwordStore: (any BrowserPasswordStore)? { nil }
+    func freezeTab(_ surface: Surface, frozen: Bool) -> Bool { false }
+    func purgeMemory(_ strategy: BrowserMemoryPurgeStrategy) async -> BrowserMemoryPurgeResult { .unavailable }
+    func preconnect(profileID: ProfileID, to url: URL, sockets: Int) -> Bool { false }
     var boosts: (any BrowserBoostHost)? { nil }
     var extensionManagement: (any BrowserExtensionManagement)? { nil }
     var conformanceProbe: (any BrowserEngineConformanceProbe<Surface>)? { nil }

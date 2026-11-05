@@ -1804,11 +1804,11 @@ const orbit_cef_api_t* ResolveOrbitApi() {
   void* handle = dlopen(path.fileSystemRepresentation, RTLD_LAZY | RTLD_LOCAL | RTLD_NOLOAD);
   if (!handle) return nullptr;
   const auto get = reinterpret_cast<orbit_cef_get_api_t>(dlsym(handle, "orbit_cef_get_api"));
-  // The newest side API the framework has: v3 (transfer holds), v2 (move_tab, profile_loaded) or
-  // v1. Each version's layout is the prefix of the next; a function beyond the resolved version
-  // is never called.
+  // Prefer v17, then accept every older table through v1. Each version is a stable prefix;
+  // callers gate each added function by the resolved version before invoking it.
   const orbit_cef_api_t* api = nullptr;
-  const std::pair<uint32_t, size_t> versions[] = {{16u, sizeof(orbit_cef_api_t)},
+  const std::pair<uint32_t, size_t> versions[] = {{17u, sizeof(orbit_cef_api_t)},
+                                                   {16u, offsetof(orbit_cef_api_t, freeze_tab)},
                                                    {15u, offsetof(orbit_cef_api_t, diagnostic_capabilities)},
                                                    {14u, offsetof(orbit_cef_api_t, media_snapshot)},
                                                    {13u, offsetof(orbit_cef_api_t, permission_accept_once)},
@@ -3751,6 +3751,30 @@ extern "C" int32_t ACRMemoryDump(orbit_memory_callback_t cb, void* ctx) {
       ![[NSProcessInfo processInfo].arguments containsObject:@"--perf-probe"])
     return 0;
   return g_state->orbit->memory_dump(cb, ctx);
+}
+extern "C" int32_t ACRFreezeTab(uint64_t token, int32_t freeze) {
+  const int32_t id = PerformanceBrowser(token);
+  return id < 0 || g_state->orbit->version < 17
+      ? 0 : g_state->orbit->freeze_tab(id, freeze);
+}
+extern "C" int32_t ACRPurgeMemory(uint32_t flags, orbit_purge_callback_t cb,
+                                    void* ctx) {
+  if (!NSThread.isMainThread || !g_state || !g_state->orbit ||
+      g_state->orbit->version < 17 || g_state->quitting)
+    return 0;
+  return g_state->orbit->purge_memory(flags, cb, ctx);
+}
+extern "C" int32_t ACRPreconnect(uint64_t profile, const char* url,
+                                  int32_t sockets) {
+  if (!NSThread.isMainThread || !g_state || !g_state->orbit ||
+      g_state->orbit->version < 17 || g_state->quitting || !url)
+    return 0;
+  const auto found = g_state->profile_paths.find(profile);
+  if (found == g_state->profile_paths.end() || found->second.first.empty() ||
+      !g_state->profiles.contains(profile) ||
+      !g_state->ready_profiles.contains(profile))
+    return 0;
+  return g_state->orbit->preconnect(found->second.first.c_str(), url, sockets);
 }
 extern "C" int32_t ACRPageLifecycle(uint64_t token, orbit_page_lifecycle_t* state) {
   int32_t id = PerformanceBrowser(token); return id < 0 ? 0 : g_state->orbit->page_lifecycle(id, state);

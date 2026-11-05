@@ -18,6 +18,8 @@ public struct BrowserPageLifecycle: Sendable, Equatable {
     public var state: State = .running
     /// Chromium CannotDiscardReason values, bits 0 through 29. The shell chooses its vetoes.
     public var cannotDiscardMask: UInt64 = 0
+    /// Chromium CannotFreezeReason ordinals, including connected-page reasons.
+    public var cannotFreezeMask: UInt64 = 0
     public var footprintKB: UInt64 = 0
     public var rendererPID: Int32 = 0
     /// Opaque native document identity; separate from the surface's document generation.
@@ -89,6 +91,29 @@ public protocol BrowserPagePerformance: AnyObject {
 
 public extension BrowserPagePerformance {
     func memoryDump() async -> BrowserMemoryDump { .init(status: .unavailable) }
+}
+
+/// Requested PartitionAlloc purge mode. The shell chooses when to request either mode.
+public enum BrowserMemoryPurgeStrategy: UInt32, Sendable {
+    case fast = 0
+    case aggressive = 1
+}
+
+/// Result of a browser-process PartitionAlloc purge. Missing measurements stay nil.
+public struct BrowserMemoryPurgeResult: Sendable, Equatable {
+    public enum Status: Int32, Sendable { case measured = 1, partial = 2, failed = -1, unavailable = 0 }
+    public let status: Status
+    public let committedBeforeKB: UInt64?
+    public let committedAfterKB: UInt64?
+    public let elapsedMicroseconds: UInt64?
+    public init(status: Status, committedBeforeKB: UInt64? = nil,
+                committedAfterKB: UInt64? = nil, elapsedMicroseconds: UInt64? = nil) {
+        self.status = status
+        self.committedBeforeKB = committedBeforeKB
+        self.committedAfterKB = committedAfterKB
+        self.elapsedMicroseconds = elapsedMicroseconds
+    }
+    public static let unavailable = Self(status: .unavailable)
 }
 
 /// Background native memory attribution. Parent/child allocators overlap; do not sum them.

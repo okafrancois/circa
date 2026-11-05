@@ -12,7 +12,7 @@ int main() {
   static_assert(offsetof(orbit_cef_api_t, extensions_snapshot) == 120);
   static_assert(offsetof(orbit_cef_api_t, hold_window) == 104);
   static_assert(offsetof(orbit_cef_api_t, move_tab) == 88);
-  static_assert(sizeof(orbit_cef_api_t) == 176);
+  static_assert(sizeof(orbit_cef_api_t) == 200);
   using orbit_bridge::ExtensionManagerRoute;
   // Every rejected main-frame attempt must revoke a previous trusted manager,
   // even if the old frame's URL is still chrome://extensions/ after cancellation.
