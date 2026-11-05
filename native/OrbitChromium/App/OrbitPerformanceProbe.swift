@@ -34,7 +34,7 @@ enum OrbitPerformanceProbe {
                 controller.window?.makeKey()
             }
         }
-        if [OrbitCommandGapsProbe.bundleID, OrbitNavigationHistoryProbe.bundleID, OrbitTabErgonomicsProbe.bundleID, "lab.orbit.orbit.pinned-tabs", "lab.orbit.orbit.search-suggestions", "lab.orbit.orbit.circa-rename", "lab.orbit.orbit.local-files-pdf", "lab.orbit.orbit.local-files-restore", "lab.orbit.orbit.p2-split", "lab.orbit.orbit.p2-extensions", "lab.orbit.orbit.site-search", "lab.orbit.orbit.updater-input", "io.github.okatech.orbit.test.update"].contains(Bundle.main.bundleIdentifier ?? "") {
+        if [OrbitCommandGapsProbe.bundleID, OrbitNavigationHistoryProbe.bundleID, OrbitTabErgonomicsProbe.bundleID, "lab.orbit.orbit.pinned-tabs", "lab.orbit.orbit.search-suggestions", "lab.orbit.orbit.circa-rename", "lab.orbit.orbit.local-files-pdf", "lab.orbit.orbit.local-files-restore", "lab.orbit.orbit.p2-split", "lab.orbit.orbit.p2-extensions", "lab.orbit.orbit.site-search", "lab.orbit.orbit.updater-input", "lab.orbit.orbit.perf-engine-prep", "io.github.okatech.orbit.test.update"].contains(Bundle.main.bundleIdentifier ?? "") {
             application.confirmQuit = { .quit }
             application.windowPresenter = { controller, _ in
                 let origin = Bundle.main.bundleIdentifier == OrbitCommandGapsProbe.bundleID
@@ -146,6 +146,9 @@ enum OrbitPerformanceProbe {
                 result["commandNonce"] = command["nonce"] ?? ""
                 if name == "github-compatibility" {
                     result["githubCompatibility"] = await OrbitGitHubCompatibilityProbe.run(application, root: root, action: command["action"] ?? "decode")
+                } else if name == "bfcache-boosts" {
+                    result["bfcacheBoosts"] = await bfcacheBoosts(environment: environment,
+                                                                  owner: owner, command: command)
                 } else if name == "extension-import-check", ownsWindow(owner, bundleID: "lab.orbit.orbit.extensions-import") {
                     application.confirmQuit = { .quit }
                     let catalog = await environment.store.catalogSnapshot()
@@ -655,6 +658,78 @@ enum OrbitPerformanceProbe {
             try? await Task.sleep(for: .milliseconds(20))
         }
         try? await Task.sleep(for: .milliseconds(100))
+    }
+
+    private static func bfcacheBoosts(environment: OrbitEnvironment,
+                                     owner: OrbitWindowController,
+                                     command: [String: String]) async -> [String: Any] {
+        let bundleID = "lab.orbit.orbit.perf-engine-prep"
+        guard ownsWindow(owner, bundleID: bundleID),
+              activeSiteSessionConfiguration()?.syntheticGuard != nil,
+              let text = command["url"], let base = URL(string: text),
+              base.scheme == "http", base.host == "127.0.0.1",
+              let profile = owner.session.activeProfileID else { return ["refused": true] }
+        let cases = command["case"].map { [$0] } ?? ["none", "css", "javascript", "javascript-live-update"]
+        guard cases.allSatisfy(["none", "css", "javascript", "javascript-live-update"].contains) else { return ["caseRefused": true] }
+        let repetitions = command["repeat"].flatMap(Int.init).map { [$0] } ?? [1, 2, 3]
+        guard repetitions.allSatisfy({ (1...3).contains($0) }) else { return ["repeatRefused": true] }
+        var rows: [[String: Any]] = []
+        do {
+            let store = try environment.boosts.store(for: profile)
+            for kind in cases {
+                for repetition in repetitions {
+                    try await store.removeAll()
+                    var boost: BrowserBoost?
+                    if kind != "none" {
+                        var content = BrowserBoostContent()
+                        if kind == "css" {
+                            content.customCSS = "html { --orbit-perf-boost: 1; }"
+                        } else {
+                            content.customJavaScript = "document.documentElement.dataset.orbitPerfBoost = 'initial';"
+                        }
+                        let pattern = try BrowserBoostHostPattern(host: "127.0.0.1", schemes: [.http], port: base.port)
+                        let item = BrowserBoost(title: "Synthetic BFCache \(kind)", hostPattern: pattern,
+                                                content: content, javaScriptOptIn: kind != "css")
+                        boost = item
+                        _ = try await store.save(item)
+                    }
+                    try await environment.boosts.synchronize(profileID: profile, enabled: true,
+                                                              engine: environment.engine)
+                    let components = URLComponents(url: base.appendingPathComponent("a"), resolvingAgainstBaseURL: false)!
+                    var start = components
+                    start.queryItems = [URLQueryItem(name: "case", value: kind),
+                                        URLQueryItem(name: "run", value: String(repetition))]
+                    owner.session.openTab(url: start.url!)
+                    await owner.session.waitForQueuedCommands()
+                    guard let surface = owner.session.selectedSurface else { return ["missingSurface": true] }
+                    await waitForLoad(surface)
+                    var updateValue: String?
+                    if kind == "javascript-live-update", let boost {
+                        _ = try await store.update(boost.id) { current in
+                            current.content.customJavaScript = "document.documentElement.dataset.orbitPerfBoost = 'updated';"
+                        }
+                        try await environment.boosts.synchronize(profileID: profile, enabled: true,
+                                                                  engine: environment.engine)
+                        try? await Task.sleep(for: .milliseconds(250))
+                        updateValue = await evaluate(surface, "({value:document.documentElement.dataset.orbitPerfBoost || ''})")?["value"] as? String
+                    }
+                    let destination = base.appendingPathComponent("b")
+                    surface.navigate(to: destination)
+                    await waitForLoad(surface)
+                    surface.goBack()
+                    await waitForLoad(surface)
+                    let observation = await evaluate(surface, "(() => { const n=performance.getEntriesByType('navigation')[0]; return {path:location.pathname, persisted:window.__orbitPageshowPersisted ?? null, navigationType:n?.type ?? '', notRestoredReasons:n?.notRestoredReasons ?? null, boost:document.documentElement.dataset.orbitPerfBoost || ''}; })()") ?? [:]
+                    rows.append(["case": kind, "repeat": repetition, "observation": observation,
+                                 "liveUpdateValue": updateValue as Any? ?? NSNull()])
+                    owner.session.closeSelectedTab()
+                    await owner.session.waitForQueuedCommands()
+                }
+            }
+            return ["rows": rows, "profile": profile.rawValue.uuidString,
+                    "source": "hosted-bundle synthetic Chromium"]
+        } catch {
+            return ["error": String(describing: error), "rows": rows]
+        }
     }
 
     private static func verifySuspension(_ owner: OrbitWindowController, fixture: URL) async -> [String: Bool] {
