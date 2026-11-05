@@ -344,7 +344,12 @@ public enum BrowserCalendarTransportError: Error, Sendable {
 
 /// Ephemeral transport with no cookies, cache, or redirect following and a streaming byte cap.
 public struct BrowserCalendarURLSessionTransport: BrowserCalendarHTTPTransport {
-    public init() {}
+    private let protocolClasses: [AnyClass]?
+
+    public init() { protocolClasses = nil }
+
+    /// Confined transport tests may replace networking without changing request admission.
+    init(protocolClasses: [AnyClass]) { self.protocolClasses = protocolClasses }
 
     public func send(url: URL, bearerToken: String, maximumResponseBytes: Int) async throws -> BrowserCalendarHTTPResponse {
         guard url.scheme == "https", url.host == "www.googleapis.com",
@@ -359,6 +364,7 @@ public struct BrowserCalendarURLSessionTransport: BrowserCalendarHTTPTransport {
         request.setValue("no-store", forHTTPHeaderField: "Cache-Control")
         request.httpShouldHandleCookies = false
         let configuration = URLSessionConfiguration.ephemeral
+        if let protocolClasses { configuration.protocolClasses = protocolClasses }
         configuration.httpCookieStorage = nil
         configuration.httpShouldSetCookies = false
         configuration.urlCache = nil
@@ -386,6 +392,9 @@ public struct BrowserCalendarURLSessionTransport: BrowserCalendarHTTPTransport {
 }
 
 private final class CalendarResponseCollector: NSObject, URLSessionDataDelegate, @unchecked Sendable {
+    private let taskLock = NSLock()
+    private var activeTask: URLSessionDataTask?
+    private var cancellationRequested = false
     private let maximumBytes: Int
     private var continuation: CheckedContinuation<(Data, URLResponse), Error>?
     private var response: URLResponse?
@@ -395,9 +404,22 @@ private final class CalendarResponseCollector: NSObject, URLSessionDataDelegate,
     init(maximumBytes: Int) { self.maximumBytes = maximumBytes }
 
     func perform(session: URLSession, request: URLRequest) async throws -> (Data, URLResponse) {
-        try await withCheckedThrowingContinuation { continuation in
-            self.continuation = continuation
-            session.dataTask(with: request).resume()
+        try await withTaskCancellationHandler {
+            try Task.checkCancellation()
+            return try await withCheckedThrowingContinuation { continuation in
+                self.continuation = continuation
+                let task = session.dataTask(with: request)
+                taskLock.withLock {
+                    activeTask = task
+                    if cancellationRequested { task.cancel() }
+                    task.resume()
+                }
+            }
+        } onCancel: {
+            self.taskLock.withLock {
+                self.cancellationRequested = true
+                self.activeTask?.cancel()
+            }
         }
     }
 
@@ -431,6 +453,7 @@ private final class CalendarResponseCollector: NSObject, URLSessionDataDelegate,
     }
 
     func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+        taskLock.withLock { activeTask = nil }
         guard let continuation else { return }
         self.continuation = nil
         if let failure { continuation.resume(throwing: failure) }
