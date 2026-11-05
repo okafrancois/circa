@@ -46,10 +46,13 @@ jobs:
         run: |
           ENGINE_FLAVOR=$(python3 -c 'import json; print(json.load(open("release/config.json"))["cef_flavor"])')
           ditto -c -k --keepParent "native/OrbitChromium/build/app-$ENGINE_FLAVOR/product/Orbit.app" "$RUNNER_TEMP/Circa-unsigned.zip"
+          ditto -c -k --keepParent "native/OrbitChromium/build/app-$ENGINE_FLAVOR/smoke/Orbit.app" "$RUNNER_TEMP/OrbitAssistantSmoke-unsigned.zip"
       - uses: actions/upload-artifact@v4
         with:
           name: Circa-unsigned-${{ github.sha }}
-          path: ${{ runner.temp }}/Circa-unsigned.zip
+          path: |
+            ${{ runner.temp }}/Circa-unsigned.zip
+            ${{ runner.temp }}/OrbitAssistantSmoke-unsigned.zip
           retention-days: 3
       - name: Remove the ephemeral signing keychain
         if: always()

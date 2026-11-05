@@ -447,7 +447,7 @@ final class BrowserPaletteController<Engine: BrowserEngine> {
         let picker = BrowserAssistantContextPicker(sources: owner.assistantSources, scopes: owner.assistantScopes,
             query: range.query, selected: conversation.selectedSources,
             currentTabID: owner.session.organization?.selectedTab?.id.rawValue,
-            favicons: [:], width: 320, choose: { [weak self, weak owner, weak conversation] members, toggles, label, _ in
+            favicons: [:], width: 320, choose: { [weak self, weak owner, weak conversation] members, toggles, label, keepOpen in
                 guard let self, let owner, let conversation, isPresented, isCurrent,
                       owner.assistantEnabled, owner.session.activeProfileID == profile else { return false }
                 if toggles, let source = members.first, conversation.selectedSources.contains(where: { $0.id == source.id }) {
@@ -455,6 +455,10 @@ final class BrowserPaletteController<Engine: BrowserEngine> {
                 } else if let additions = BrowserAssistantMentionOptions.additions(for: members, selected: conversation.selectedSources) {
                     for source in additions { conversation.select(source) }
                 } else { return false }
+                if keepOpen {
+                    renderContext()
+                    return true
+                }
                 let updated = range.replacing(in: draft, with: label)
                 query(updated.text, preserveSelection: true, userInitiated: false)
                 editor?.setSelectedRange(NSRange(location: updated.caretUTF16, length: 0))

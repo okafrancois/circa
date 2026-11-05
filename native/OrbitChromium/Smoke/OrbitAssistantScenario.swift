@@ -104,6 +104,28 @@ extension OrbitSmokeDriver {
             }
             _ = await owner.session.createFolder(title: "Synthetic folder", at: .init(.pinned(space)), containing: members).value
         }
+        if arguments.contains("--orbit-smoke-assistant-mention-fixture"), let space = owner.session.organization?.spaceID {
+            var members: [BrowserOrganizationNode] = []
+            for index in 1...10 {
+                let url = fixture.appendingPathComponent("mention-tab-\(index)")
+                owner.openTab(url: url)
+                guard await committed(owner, url, 5) != nil,
+                      let tab = owner.session.organization?.selectedTab else { break }
+                members.append(.tab(tab.id))
+            }
+            var foldersCreated = false
+            if members.count == 10,
+               let north = await owner.session.createFolder(title: "Synthetic North", at: .init(.pinned(space))).value,
+               let south = await owner.session.createFolder(title: "Synthetic South", at: .init(.pinned(space))).value {
+                let first = await owner.session.createFolder(title: "Research", at: .init(.folder(north)),
+                    containing: Array(members.prefix(2))).value
+                let second = await owner.session.createFolder(title: "Research", at: .init(.folder(south)),
+                    containing: Array(members.dropFirst(2).prefix(2))).value
+                foldersCreated = first != nil && second != nil
+            }
+            check("assistant.mention-fixture", members.count == 10 && foldersCreated,
+                  ["tabCount": members.count, "duplicateFolderPaths": foldersCreated])
+        }
         if arguments.contains("--orbit-smoke-assistant-private"), let application {
             application.createPrivateCommandWindow()
             await application.waitForPrivateWindowCommands()
@@ -251,7 +273,14 @@ extension OrbitSmokeDriver {
 extension OrbitSmokeDriver {
     /// Only the marked, mock-keychain smoke driver calls this mailbox. Events never leave this process.
     private func assistantOwnedInput(_ data: Data, window: NSWindow, owner: OrbitWindowController) -> [String: Any] {
-        guard FileManager.default.fileExists(atPath: runRoot.appendingPathComponent(".orbit-chromium-lab").path),
+        let bundlePath = Bundle.main.bundleURL.standardizedFileURL.resolvingSymlinksInPath().path
+        let executablePath = Bundle.main.executableURL?.standardizedFileURL.resolvingSymlinksInPath().path ?? ""
+        guard configuration.usesMockKeychain,
+              Bundle.main.object(forInfoDictionaryKey: "OrbitSyntheticBundle") as? Bool == true,
+              executablePath.hasPrefix(bundlePath + "/"),
+              NSWorkspace.shared.frontmostApplication?.processIdentifier == getpid(), NSApp.isActive,
+              window.isKeyWindow, NSApp.keyWindow === window,
+              FileManager.default.fileExists(atPath: runRoot.appendingPathComponent(".orbit-chromium-lab").path),
               (owner.window === window || NSApp.windows.contains(where: { $0 === window })),
               let windows = CGWindowListCopyWindowInfo([.optionAll], kCGNullWindowID) as? [[String: Any]],
               windows.contains(where: {
@@ -304,6 +333,20 @@ extension OrbitSmokeDriver {
             let commands = ["return": "insertNewline:", "tab": "insertTab:", "escape": "cancelOperation:"]
             if let name = command["text"] as? String, let selector = commands[name], let responder = window.firstResponder {
                 responder.doCommand(by: NSSelectorFromString(selector))
+                handled = true
+            }
+        case "key":
+            let keys: [String: (UInt16, String)] = [
+                "up": (126, "\u{F700}"), "down": (125, "\u{F701}"),
+                "left": (123, "\u{F702}"), "right": (124, "\u{F703}"),
+                "return": (36, "\r"), "escape": (53, "\u{1B}"), "backspace": (51, "\u{7F}")
+            ]
+            if let name = command["text"] as? String, let (keyCode, character) = keys[name],
+               let event = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [],
+                   timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
+                   context: nil, characters: character, charactersIgnoringModifiers: character,
+                   isARepeat: false, keyCode: keyCode) {
+                NSApp.postEvent(event, atStart: false)
                 handled = true
             }
         case "gesture", "native-gesture", "native-context-menu":
