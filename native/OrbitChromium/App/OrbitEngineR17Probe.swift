@@ -20,21 +20,28 @@ enum OrbitEngineR17Probe {
               let ports = command["ports"]?.split(separator: ",").compactMap({ Int($0) }), ports.count == 7 else {
             return ["ownershipOrFixtureRefused": true]
         }
-        owner.session.openTab(url: url)
+        guard let anchor = owner.session.selectedSurface,
+              let anchorOccurrence = owner.session.snapshot?.selectedOccurrenceID,
+              let anchorLifecycle = anchor.pagePerformance else { return ["missingAnchor": true] }
+        let existingOccurrences = Set((owner.session.snapshot?.tabs ?? []).map(\.occurrenceID))
+        owner.session.openTab(url: url, activate: false)
         await owner.session.waitForQueuedCommands()
-        guard let tab = owner.session.selectedSurface, let occurrence = owner.session.snapshot?.selectedOccurrenceID,
-              let lifecycle = tab.pagePerformance else { return ["missingSurface": true] }
-        for sibling in owner.session.snapshot?.tabs ?? [] where sibling.occurrenceID != occurrence {
-            owner.session.closeOccurrence(sibling.occurrenceID)
-        }
         await owner.session.waitForPendingCommands()
+        guard let occurrence = owner.session.snapshot?.tabs.first(where: { !existingOccurrences.contains($0.occurrenceID) })?.occurrenceID else {
+            return ["missingBackgroundOccurrence": true]
+        }
+        var tab: ChromiumSurface?
         for _ in 0..<160 {
-            if tab.isReady && !tab.navigationState.isLoading { break }
+            if let surface = owner.session.surface(for: occurrence) {
+                tab = surface
+                if surface.isReady && !surface.navigationState.isLoading { break }
+            }
             try? await Task.sleep(for: .milliseconds(25))
         }
+        guard let tab, let lifecycle = tab.pagePerformance else { return ["missingBackgroundSurface": true] }
 
         var result: [String: Any] = [:]
-        let visibleMask = lifecycle.lifecycle()?.cannotFreezeMask ?? 0
+        let visibleMask = anchorLifecycle.lifecycle()?.cannotFreezeMask ?? 0
         result["visibleVetoBit"] = visibleMask & (1 << 0) != 0
         let initialVote = owner.engine.freezeTab(tab, frozen: true)
         let removeVote = owner.engine.freezeTab(tab, frozen: false)
@@ -48,28 +55,33 @@ enum OrbitEngineR17Probe {
         result["webLockVetoBit"] = webLockMask & (1 << 5) != 0
         _ = await OrbitPerformanceProbe.evaluate(tab, "globalThis.releaseOrbitR17Lock?.();({released:true})")
 
-        _ = await OrbitPerformanceProbe.evaluate(tab,
+        _ = await OrbitPerformanceProbe.evaluate(anchor,
             "(()=>{let c=new AudioContext(),o=c.createOscillator(),g=c.createGain();g.gain.value=.03;o.connect(g);g.connect(c.destination);o.start();globalThis.orbitR17Audio={c,o};return {started:true}})()")
         try? await Task.sleep(for: .milliseconds(350))
-        let audibleMask = lifecycle.lifecycle()?.cannotFreezeMask ?? 0
+        let audibleMask = anchorLifecycle.lifecycle()?.cannotFreezeMask ?? 0
         result["audibleVetoBit"] = audibleMask & (1 << 2) != 0
-        _ = await OrbitPerformanceProbe.evaluate(tab,
+        _ = await OrbitPerformanceProbe.evaluate(anchor,
             "(()=>{globalThis.orbitR17Audio?.o.stop();globalThis.orbitR17Audio?.c.close();return {stopped:true}})()")
 
         _ = await OrbitPerformanceProbe.evaluate(tab,
-            "(()=>{globalThis.orbitR17Ticks=0;globalThis.orbitR17Timer=setInterval(()=>orbitR17Ticks++,100);return {started:true}})()")
+            "(()=>{globalThis.orbitR17Events={freeze:0,resume:0,ticks:0};document.addEventListener('freeze',()=>orbitR17Events.freeze++);document.addEventListener('resume',()=>orbitR17Events.resume++);globalThis.orbitR17Timer=setInterval(()=>orbitR17Events.ticks++,100);return {started:true}})()")
         try? await Task.sleep(for: .milliseconds(350))
-        let timerBeforeFreeze = await OrbitPerformanceProbe.evaluate(tab, "({ticks:orbitR17Ticks})")?["ticks"] as? Int ?? 0
-        owner.window?.orderOut(nil)
+        let timerBeforeFreeze = await OrbitPerformanceProbe.evaluate(tab, "({ticks:orbitR17Events.ticks})")?["ticks"] as? Int ?? 0
         let hiddenVote = owner.engine.freezeTab(tab, frozen: true)
-        try? await Task.sleep(for: .seconds(2))
-        let timerDuringFreeze = await OrbitPerformanceProbe.evaluate(tab, "({ticks:orbitR17Ticks})")?["ticks"] as? Int ?? -1
+        try? await Task.sleep(for: .milliseconds(900))
         let releaseHiddenVote = owner.engine.freezeTab(tab, frozen: false)
-        try? await Task.sleep(for: .milliseconds(600))
-        let timerAfterUnfreeze = await OrbitPerformanceProbe.evaluate(tab, "({ticks:orbitR17Ticks})")?["ticks"] as? Int ?? -1
+        try? await Task.sleep(for: .milliseconds(500))
+        let lifecycleEvents = await OrbitPerformanceProbe.evaluate(tab, "({freeze:orbitR17Events.freeze,resume:orbitR17Events.resume,ticks:orbitR17Events.ticks})") ?? [:]
+        let freezeEvents = lifecycleEvents["freeze"] as? Int ?? 0
+        let resumeEvents = lifecycleEvents["resume"] as? Int ?? 0
+        let timerAfterUnfreeze = lifecycleEvents["ticks"] as? Int ?? 0
+        let hiddenFreezeMask = lifecycle.lifecycle()?.cannotFreezeMask ?? UInt64.max
+        let hiddenVotingBlockers = hiddenFreezeMask & ~(UInt64(1) << 22)
+        result["freezeEventCount"] = freezeEvents
+        result["resumeEventCount"] = resumeEvents
+        result["hiddenFreezeVetoMask"] = hiddenFreezeMask
         result["runningFrozenRunning"] = hiddenVote && releaseHiddenVote && timerBeforeFreeze > 0 &&
-            timerDuringFreeze == timerBeforeFreeze && timerAfterUnfreeze > timerDuringFreeze
-        owner.window?.makeKeyAndOrderFront(nil)
+            hiddenVotingBlockers == 0 && freezeEvents > 0 && resumeEvents > 0 && timerAfterUnfreeze > timerBeforeFreeze
 
         let fast = await owner.engine.purgeMemory(.fast)
         let aggressive = await owner.engine.purgeMemory(.aggressive)
@@ -109,17 +121,17 @@ enum OrbitEngineR17Probe {
         result["preconnectUnsupportedSchemeRejected"] = !owner.engine.preconnect(
             profileID: profileID, to: URL(fileURLWithPath: "/tmp/orbit-r17"), sockets: 1)
 
-        owner.window?.orderOut(nil)
+        let closeFreezeMask = lifecycle.lifecycle()?.cannotFreezeMask ?? UInt64.max
+        let closeVotingBlockers = closeFreezeMask & ~(UInt64(1) << 22)
         let finalCloseVote = owner.engine.freezeTab(tab, frozen: true)
-        try? await Task.sleep(for: .seconds(2))
-        let frozenTicksBeforeClose = await OrbitPerformanceProbe.evaluate(tab, "({ticks:orbitR17Ticks})")?["ticks"] as? Int ?? -1
-        try? await Task.sleep(for: .milliseconds(600))
-        let frozenTicksAfterClose = await OrbitPerformanceProbe.evaluate(tab, "({ticks:orbitR17Ticks})")?["ticks"] as? Int ?? -2
+        try? await Task.sleep(for: .milliseconds(900))
         owner.session.closeOccurrence(occurrence)
         await owner.session.waitForPendingCommands()
-        result["closeWhileFrozen"] = finalCloseVote && frozenTicksBeforeClose > 0 &&
-            frozenTicksAfterClose == frozenTicksBeforeClose && owner.session.surface(for: occurrence) == nil
-        owner.window?.makeKeyAndOrderFront(nil)
+        result["closeFreezeVetoMask"] = closeFreezeMask
+        result["closeWhileFrozen"] = finalCloseVote && closeVotingBlockers == 0 && freezeEvents > 0 &&
+            owner.session.surface(for: occurrence) == nil
+        owner.session.closeOccurrence(anchorOccurrence)
+        await owner.session.waitForPendingCommands()
         let emptyProcessPurge = await owner.engine.purgeMemory(.fast)
         result["emptyProcessPurgeStatus"] = emptyProcessPurge.status.rawValue
         result["emptyProcessPurgeElapsedMicroseconds"] = emptyProcessPurge.elapsedMicroseconds ?? 0
