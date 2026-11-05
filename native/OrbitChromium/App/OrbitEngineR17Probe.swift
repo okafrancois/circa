@@ -109,10 +109,20 @@ enum OrbitEngineR17Probe {
         result["preconnectUnsupportedSchemeRejected"] = !owner.engine.preconnect(
             profileID: profileID, to: URL(fileURLWithPath: "/tmp/orbit-r17"), sockets: 1)
 
+        owner.window?.orderOut(nil)
         let finalCloseVote = owner.engine.freezeTab(tab, frozen: true)
+        try? await Task.sleep(for: .seconds(2))
+        let frozenTicksBeforeClose = await OrbitPerformanceProbe.evaluate(tab, "({ticks:orbitR17Ticks})")?["ticks"] as? Int ?? -1
+        try? await Task.sleep(for: .milliseconds(600))
+        let frozenTicksAfterClose = await OrbitPerformanceProbe.evaluate(tab, "({ticks:orbitR17Ticks})")?["ticks"] as? Int ?? -2
         owner.session.closeOccurrence(occurrence)
         await owner.session.waitForPendingCommands()
-        result["closeWhileVoted"] = finalCloseVote && owner.session.surface(for: occurrence) == nil
+        result["closeWhileFrozen"] = finalCloseVote && frozenTicksBeforeClose > 0 &&
+            frozenTicksAfterClose == frozenTicksBeforeClose && owner.session.surface(for: occurrence) == nil
+        owner.window?.makeKeyAndOrderFront(nil)
+        let emptyProcessPurge = await owner.engine.purgeMemory(.fast)
+        result["emptyProcessPurgeStatus"] = emptyProcessPurge.status.rawValue
+        result["emptyProcessPurgeElapsedMicroseconds"] = emptyProcessPurge.elapsedMicroseconds ?? 0
         return result
     }
 }

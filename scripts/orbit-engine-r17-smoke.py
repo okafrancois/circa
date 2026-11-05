@@ -121,13 +121,14 @@ def phase(args):
     (root / 'verification.json').write_text(json.dumps(checks, indent=2) + '\n')
 
     required_true = ('visibleVetoBit', 'webLockVetoBit', 'audibleVetoBit', 'freezeAddRemoveReadd',
-                     'runningFrozenRunning', 'closeWhileVoted', 'preconnectSixAccepted',
+                     'runningFrozenRunning', 'closeWhileFrozen', 'preconnectSixAccepted',
                      'preconnectDuplicateRejected', 'preconnectSeventhRejected',
                      'preconnectBadSocketCountRejected', 'preconnectUnsupportedSchemeRejected')
     assert all(checks.get(key) is True for key in required_true), checks
-    for key in ('fastStatus', 'aggressiveStatus', 'concurrentPurgeStatus'):
+    for key in ('fastStatus', 'aggressiveStatus', 'concurrentPurgeStatus', 'emptyProcessPurgeStatus'):
         assert checks.get(key) in (1, 2), checks
-    assert checks.get('fastElapsedMicroseconds', 0) > 0 and checks.get('aggressiveElapsedMicroseconds', 0) > 0, checks
+    assert checks.get('fastElapsedMicroseconds', 0) > 0 and checks.get('aggressiveElapsedMicroseconds', 0) > 0 and \
+           checks.get('emptyProcessPurgeElapsedMicroseconds', 0) > 0, checks
     assert checks.get('fastMeasurements') == (checks.get('fastStatus') == 1), checks
     assert checks.get('aggressiveMeasurements') == (checks.get('aggressiveStatus') == 1), checks
     assert all(listener.count > 0 for listener in args.listeners[:6]), checks
