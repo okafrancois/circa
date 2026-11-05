@@ -23,22 +23,18 @@ enum OrbitEngineR17Probe {
         guard let anchor = owner.session.selectedSurface,
               let anchorOccurrence = owner.session.snapshot?.selectedOccurrenceID,
               let anchorLifecycle = anchor.pagePerformance else { return ["missingAnchor": true] }
-        let existingOccurrences = Set((owner.session.snapshot?.tabs ?? []).map(\.occurrenceID))
-        owner.session.openTab(url: url, activate: false)
-        await owner.session.waitForQueuedCommands()
-        await owner.session.waitForPendingCommands()
-        guard let occurrence = owner.session.snapshot?.tabs.first(where: { !existingOccurrences.contains($0.occurrenceID) })?.occurrenceID else {
-            return ["missingBackgroundOccurrence": true]
-        }
-        var tab: ChromiumSurface?
+        let delegate = FreezeDelegate()
+        let tab = owner.engine.makeSurface(profileID: anchor.profileID, delegate: delegate)
+        tab.navigate(to: url)
         for _ in 0..<160 {
-            if let surface = owner.session.surface(for: occurrence) {
-                tab = surface
-                if surface.isReady && !surface.navigationState.isLoading { break }
-            }
+            if tab.isReady && !tab.navigationState.isLoading { break }
             try? await Task.sleep(for: .milliseconds(25))
         }
-        guard let tab, let lifecycle = tab.pagePerformance else { return ["missingBackgroundSurface": true] }
+        guard tab.isReady, !tab.navigationState.isLoading, let lifecycle = tab.pagePerformance else {
+            tab.dispose()
+            return ["missingBackgroundSurface": true]
+        }
+        defer { if !tab.isDisposed { tab.dispose() }; withExtendedLifetime(delegate) {} }
 
         var result: [String: Any] = [:]
         let visibleMask = anchorLifecycle.lifecycle()?.cannotFreezeMask ?? 0
@@ -55,6 +51,10 @@ enum OrbitEngineR17Probe {
         result["webLockVetoBit"] = webLockMask & (1 << 5) != 0
         _ = await OrbitPerformanceProbe.evaluate(tab, "globalThis.releaseOrbitR17Lock?.();({released:true})")
 
+        anchor.navigate(to: url)
+        for _ in 0..<160 where anchor.navigationState.isLoading || anchor.navigationState.committedURL != url {
+            try? await Task.sleep(for: .milliseconds(25))
+        }
         _ = await OrbitPerformanceProbe.evaluate(anchor,
             "(()=>{let c=new AudioContext(),o=c.createOscillator(),g=c.createGain();g.gain.value=.03;o.connect(g);g.connect(c.destination);o.start();globalThis.orbitR17Audio={c,o};return {started:true}})()")
         try? await Task.sleep(for: .milliseconds(350))
@@ -125,16 +125,33 @@ enum OrbitEngineR17Probe {
         let closeVotingBlockers = closeFreezeMask & ~(UInt64(1) << 22)
         let finalCloseVote = owner.engine.freezeTab(tab, frozen: true)
         try? await Task.sleep(for: .milliseconds(900))
-        owner.session.closeOccurrence(occurrence)
-        await owner.session.waitForPendingCommands()
+        tab.dispose()
+        for _ in 0..<200 where !tab.isTeardownComplete {
+            try? await Task.sleep(for: .milliseconds(25))
+        }
         result["closeFreezeVetoMask"] = closeFreezeMask
         result["closeWhileFrozen"] = finalCloseVote && closeVotingBlockers == 0 && freezeEvents > 0 &&
-            owner.session.surface(for: occurrence) == nil
+            tab.isDisposed && tab.isTeardownComplete
         owner.session.closeOccurrence(anchorOccurrence)
         await owner.session.waitForPendingCommands()
         let emptyProcessPurge = await owner.engine.purgeMemory(.fast)
         result["emptyProcessPurgeStatus"] = emptyProcessPurge.status.rawValue
         result["emptyProcessPurgeElapsedMicroseconds"] = emptyProcessPurge.elapsedMicroseconds ?? 0
         return result
+    }
+
+    private final class FreezeDelegate: BrowserEngineSurfaceDelegate {
+        func surfaceDidStartNavigation(_ surface: ChromiumSurface) {}
+        func surfaceDidCommitNavigation(_ surface: ChromiumSurface) {}
+        func surfaceDidFinishNavigation(_ surface: ChromiumSurface) {}
+        func surfaceDidFailNavigation(_ surface: ChromiumSurface) {}
+        func surfaceDidRequestClose(_ surface: ChromiumSurface) {}
+        func surface(_ surface: ChromiumSurface, decidePolicyFor action: BrowserNavigationAction,
+                     decision: BrowserPolicyDecision<BrowserNavigationActionPolicy>) {
+            decision.decide(action.url?.scheme == "http" && action.url?.host == "127.0.0.1" ? .allow : .cancel)
+        }
+        func surface(_ surface: ChromiumSurface, createSurfaceFor request: BrowserNewSurfaceRequest,
+                     make: () -> ChromiumSurface) -> ChromiumSurface? { nil }
+        func surface(_ surface: ChromiumSurface, didStartDownload download: any BrowserEngineDownload) { download.cancel() }
     }
 }
