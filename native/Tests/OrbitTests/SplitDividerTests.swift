@@ -6,6 +6,25 @@ import Testing
 @Suite(.serialized)
 @MainActor
 struct SplitDividerTests {
+    @Test("Split drop feedback fires once for each admitted edge target change")
+    func splitDropTargetTransitions() {
+        let payload = SidebarDragPayload(sourceWindow: UUID(), spaceID: SpaceID(), profileID: ProfileID(),
+                                         nodes: [.tab(TabID())], rowCount: 1, grabOffsetX: 0)
+        let target = BrowserSplitView.DropTarget(payload: payload, orientation: .horizontal, leading: true)
+        var current: BrowserSplitView.DropTarget?
+        var events = 0
+        for candidate in [target, target,
+                          .init(payload: payload, orientation: .horizontal, leading: false),
+                          .init(payload: payload, orientation: .vertical, leading: false)] {
+            if candidate != current { events += 1 }
+            current = candidate
+        }
+        #expect(events == 3)
+        current = nil
+        if target != current { events += 1 }
+        #expect(events == 4)
+    }
+
     @Test("The full gap is interactive while the rounded grip stays centered at 2 by 24 points")
     func hitRegionAndCursor() throws {
         let parent = NSView(frame: CGRect(x: 0, y: 0, width: 1002, height: 929))

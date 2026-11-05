@@ -441,7 +441,7 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
                 liveToggle(uiFormat("Play %@ sound effects", applicationName), value: runtime.document.interaction.playSoundEffects,
                            identifier: "settings-sound-effects", icon: "speaker.wave.2", save: model.setPlaySoundEffects)
                 rule
-                liveToggle("Haptic feedback when reordering tabs", value: runtime.document.interaction.hapticFeedback,
+                liveToggle("Haptic feedback for tab organization and resizing", value: runtime.document.interaction.hapticFeedback,
                            identifier: "settings-reorder-haptics", icon: "hand.raised", save: model.setHapticFeedback)
             }
             panel {

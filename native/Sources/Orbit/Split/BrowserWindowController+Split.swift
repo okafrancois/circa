@@ -49,6 +49,7 @@ extension BrowserWindowController {
     }
 
     private func configureSplitView(_ view: BrowserSplitView) {
+        view.onDropTargetEntered = { [weak self] in self?.settingsPreferences?.runtime.feedback.reorderSnapped() }
         view.onConfigureHistory = { [weak self] id, interaction, direction in
             self?.configureHistoryInteraction(interaction, direction: direction, tabID: id)
         }

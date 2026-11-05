@@ -8,6 +8,7 @@ extension BrowserWindowController {
         windowShell.onSidebarWidthChange = { [weak self] in self?.windowPlacementDidChange() }
         windowShell.onPresentationChange = { [weak self] in self?.updateSidebarColumnVisibility() }
         windowShell.onCollapseRequest = { [weak self] in self?.submitInput { $0.hideSidebar() } }
+        windowShell.onResizeCollapseDetent = { [weak self] in self?.settingsPreferences?.runtime.feedback.reorderSnapped() }
         sidebar.onFooterPresentationChange = { [weak self] in self?.windowShell.hoverHoldDidChange() }
         windowShell.onFullScreenChange = { [weak self] fullScreen in
             self?.sidebar.cancelFooterPresentations()

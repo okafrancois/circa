@@ -789,6 +789,7 @@ final class BrowserSidebarView: NSView, SidebarListHost {
         }
         let leading = listPoint.x < candidate.midX
         if var arming = splitArming, arming.payload == payload, arming.target == candidate {
+            if arming.armed, arming.leading != leading { onReorderSnap?() }
             arming.leading = leading
             splitArming = arming
             if arming.armed { page.list.showSplitDropFeedback(candidate, leading: leading) }
@@ -811,6 +812,7 @@ final class BrowserSidebarView: NSView, SidebarListHost {
         splitArming = arming
         dropCoordinator.clear()
         page.list.showSplitDropFeedback(arming.target, leading: arming.leading)
+        onReorderSnap?()
     }
 
     private func clearSplitDrop() {

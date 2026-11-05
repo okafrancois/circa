@@ -36,6 +36,17 @@ final class BrowserSplitView: NSView {
     var onNavigate: ((TabID, NavigationAction) -> Void)?
     var canDrop: ((SidebarDragPayload) -> Bool)?
     var onDrop: ((SidebarDragPayload, BrowserSplitOrientation, Bool) -> Void)?
+    var onDropTargetEntered: (() -> Void)?
+    struct DropTarget: Equatable {
+        let payload: SidebarDragPayload
+        let orientation: BrowserSplitOrientation
+        let leading: Bool
+
+        static func == (lhs: DropTarget, rhs: DropTarget) -> Bool {
+            lhs.payload == rhs.payload && lhs.orientation.rawValue == rhs.orientation.rawValue && lhs.leading == rhs.leading
+        }
+    }
+    private var activeDropTarget: DropTarget?
     var accent = OrbitTokens.ThemeAccent.defaultPurple
     private var presentedPanes: [Pane] = []
     private var active: TabID?
@@ -116,6 +127,8 @@ final class BrowserSplitView: NSView {
         onConfigureHistory = nil
         canDrop = nil
         onDrop = nil
+        onDropTargetEntered = nil
+        activeDropTarget = nil
     }
 
     func presentSingle(_ host: NSView) {
@@ -379,7 +392,14 @@ final class BrowserSplitView: NSView {
     override func draggingUpdated(_ sender: any NSDraggingInfo) -> NSDragOperation {
         let point = convert(sender.draggingLocation, from: nil)
         guard let payload = SidebarDragPayload(pasteboard: sender.draggingPasteboard), canDrop?(payload) == true,
-              let (orientation, leading) = edge(at: point) else { dropHint.isHidden = true; return [] }
+              let (orientation, leading) = edge(at: point) else {
+            activeDropTarget = nil
+            dropHint.isHidden = true
+            return []
+        }
+        let nextTarget = DropTarget(payload: payload, orientation: orientation, leading: leading)
+        if nextTarget != activeDropTarget { onDropTargetEntered?() }
+        activeDropTarget = nextTarget
         var hint = bounds
         if orientation == .horizontal { hint.size.width /= 2; if !leading { hint.origin.x += hint.width } }
         else { hint.size.height /= 2; if !leading { hint.origin.y += hint.height } }
@@ -388,9 +408,9 @@ final class BrowserSplitView: NSView {
         dropHint.isHidden = false
         return .move
     }
-    override func draggingExited(_ sender: (any NSDraggingInfo)?) { dropHint.isHidden = true }
+    override func draggingExited(_ sender: (any NSDraggingInfo)?) { activeDropTarget = nil; dropHint.isHidden = true }
     override func performDragOperation(_ sender: any NSDraggingInfo) -> Bool {
-        defer { dropHint.isHidden = true }
+        defer { activeDropTarget = nil; dropHint.isHidden = true }
         guard let payload = SidebarDragPayload(pasteboard: sender.draggingPasteboard), canDrop?(payload) == true,
               let (orientation, leading) = edge(at: convert(sender.draggingLocation, from: nil)) else { return false }
         onDrop?(payload, orientation, leading)

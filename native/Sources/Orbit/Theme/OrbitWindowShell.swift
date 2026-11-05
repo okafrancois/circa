@@ -89,6 +89,7 @@ final class OrbitWindowShell {
     var onPresentationChange: (() -> Void)?
     var onSidebarWidthChange: (() -> Void)?
     var onCollapseRequest: (() -> Void)?
+    var onResizeCollapseDetent: (() -> Void)?
     var onFullScreenChange: ((Bool) -> Void)?
     /// Centre spacing of this window's system buttons.
     var trafficLightPitch: CGFloat { trafficLights?.pitch ?? OrbitTrafficLights.pitch }
@@ -193,7 +194,11 @@ final class OrbitWindowShell {
         root.addSubview(resizeHandle)
         resizeHandle.currentWidth = { [weak self] in self?.width?.constant ?? OrbitTokens.Metrics.Sidebar.widthDefault }
         resizeHandle.onResize = { [weak self] value in self?.setSidebarWidth(value) }
-        resizeHandle.onCollapse = { [weak self] in self?.onCollapseRequest?() }
+        resizeHandle.onCollapse = { [weak self] in
+            guard let self else { return }
+            onResizeCollapseDetent?()
+            onCollapseRequest?()
+        }
     }
 
     /// Lays out the sidebar column and the card. `width` and `leading` stay owned by the
