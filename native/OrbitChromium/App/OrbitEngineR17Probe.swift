@@ -416,7 +416,7 @@ enum OrbitEngineR17Probe {
         }
         let disposed = await trace.perform("freeze.dispose_while_voted") {
             tab.dispose()
-            tab.isDisposed
+            return tab.isDisposed
         } ?? false
         let teardownComplete = await trace.perform("freeze.wait_for_teardown", timeout: .seconds(5)) {
             for _ in 0..<200 {
