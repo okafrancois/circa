@@ -44,7 +44,7 @@ struct BrowserAssistantView: View {
     var statuses: [BrowserAIProviderID: BrowserAIProviderStatus] = [:]
     let sources: [BrowserAIContextSource]
     var usages: [BrowserAIProviderID: BrowserAIUsage] = [:]
-    let scopes: [String: [BrowserAIContextSource]]
+    let scopes: [BrowserAssistantMentionOption]
     var currentTabID: UUID? = nil
     let enabled: Bool
     var skillSync: BrowserSyncRuntime? = nil
@@ -64,6 +64,7 @@ struct BrowserAssistantView: View {
     @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
     @FocusState private var composing: Bool
     @State private var draft = ""
+    @State private var composerSelection: TextSelection?
     @State private var isSkillDraft = false
     @State private var skipComposerTrigger = false
     @State private var skillsPresented = false
@@ -73,6 +74,7 @@ struct BrowserAssistantView: View {
     @State private var chips = BrowserAssistantContextChips()
     @State private var leaving: Set<UUID> = []
     @State private var contextPickerPresented = false
+    @State private var mentionRange: BrowserAssistantMentionRange?
     @State private var modelPickerPresented = false
     @State private var citationUnavailable = false
     @State private var activeCitation: String?
@@ -281,7 +283,8 @@ struct BrowserAssistantView: View {
                     ForEach(chipItems) { chip(item: $0) }
                 }.padding(.horizontal, 4).padding(.bottom, 8)
             }
-            TextField("", text: $draft, prompt: Text(errandSubmit == nil ? uiText("Ask a question") : uiText("Describe the task…")).foregroundStyle(palette.tertiary.swiftUI), axis: .vertical)
+            TextField("", text: $draft, selection: $composerSelection,
+                      prompt: Text(errandSubmit == nil ? uiText("Ask a question") : uiText("Describe the task…")).foregroundStyle(palette.tertiary.swiftUI), axis: .vertical)
                 .id(errandSubmit == nil)
                 .textFieldStyle(.plain).font(.system(size: 14)).lineSpacing(3).lineLimit(3...7)
                 .padding(.horizontal, 4).focused($composing).onSubmit(send)
@@ -291,7 +294,22 @@ struct BrowserAssistantView: View {
                     skillDraft.cancelInvocation()
                     if new.isEmpty || new == "/" { isSkillDraft = false }
                     skillsPresented = errandSubmit == nil && enabled && !isSkillDraft && new.hasPrefix("/")
-                    if hasContextChoices && new.count > old.count && new.hasSuffix("@") { contextPickerPresented = true }
+                    if hasContextChoices {
+                        let selection = Self.utf16Selection(composerSelection, in: new)
+                        mentionRange = BrowserAssistantMentionRange.atCaret(in: new,
+                            utf16Offset: selection.map { $0.location + $0.length } ?? (new as NSString).length,
+                            selection: selection)
+                        if mentionRange != nil { contextPickerPresented = true }
+                        else if !contextPickerPresented { mentionRange = nil }
+                    }
+                }
+                .onChange(of: composerSelection) { _, selection in
+                    let selected = Self.utf16Selection(selection, in: draft)
+                    mentionRange = BrowserAssistantMentionRange.atCaret(in: draft,
+                        utf16Offset: selected.map { $0.location + $0.length } ?? (draft as NSString).length,
+                        selection: selected)
+                    if mentionRange != nil { contextPickerPresented = true }
+                    else if !contextPickerPresented { mentionRange = nil }
                 }
             if let notice = skillDraft.notice { Text(notice).font(.system(size: 12)).foregroundStyle(palette.secondary.swiftUI).padding(4) }
             HStack(spacing: 6) {
@@ -301,6 +319,9 @@ struct BrowserAssistantView: View {
                 }.buttonStyle(BrowserAssistantButtonStyle(kind: .icon, active: contextPickerPresented))
                     .disabled(!hasContextChoices).help(uiText("Add context")).accessibilityLabel(uiText("Add context"))
                     .accessibilityIdentifier("assistant-add-context")
+                Text(uiFormat("%d / 8 sources", conversation.selectedSources.count))
+                    .font(.system(size: 10.5, weight: .medium)).foregroundStyle(palette.secondary.swiftUI)
+                    .accessibilityIdentifier("assistant-source-count")
                 Spacer(minLength: 0)
                 BrowserAssistantModelControl(conversation: conversation, choices: choices, statuses: statuses, narrow: narrow,
                                              presented: $modelPickerPresented)
@@ -338,7 +359,7 @@ struct BrowserAssistantView: View {
             }
         }
         .assistantPopover(isPresented: $contextPickerPresented, placement: .above(maxWidth: 288)) {
-            BrowserAssistantContextPicker(sources: sources, scopes: scopes, selected: conversation.selectedSources,
+            BrowserAssistantContextPicker(sources: sources, scopes: scopes, query: mentionRange?.query ?? "", selected: conversation.selectedSources,
                                           currentTabID: currentTabID, favicons: favicons,
                                           width: min(288, composerWidth), choose: chooseContext)
         }
@@ -406,16 +427,29 @@ struct BrowserAssistantView: View {
         }
     }
 
-    private func chooseContext(_ chosen: [BrowserAIContextSource], toggles: Bool) {
+    private func chooseContext(_ chosen: [BrowserAIContextSource], toggles: Bool, displayName: String) {
         if toggles, let source = chosen.first, conversation.selectedSources.contains(where: { $0.id == source.id }) {
             remove(source)
         } else {
+            guard let additions = BrowserAssistantMentionOptions.additions(for: chosen, selected: conversation.selectedSources) else {
+                contextPickerPresented = true
+                return
+            }
             for source in chosen { leaving.remove(source.id) }
             withAnimation(reduceMotion ? .linear(duration: 0.15) : .timingCurve(0.3, 1.6, 0.5, 1, duration: 0.32)) {
-                for source in chosen { conversation.select(source) }
+                for source in additions { conversation.select(source) }
             }
         }
-        if draft.hasSuffix("@") { draft.removeLast() }
+        if let mentionRange {
+            let replacement = mentionRange.replacing(in: draft, with: displayName)
+            skipComposerTrigger = true
+            draft = replacement.text
+            if let index = replacement.text.utf16.index(replacement.text.utf16.startIndex, offsetBy: replacement.caretUTF16, limitedBy: replacement.text.utf16.endIndex),
+               let stringIndex = String.Index(index, within: replacement.text) {
+                composerSelection = TextSelection(insertionPoint: stringIndex)
+            }
+            self.mentionRange = nil
+        } else if draft.hasSuffix("@") { draft.removeLast() }
         contextPickerPresented = false
         composing = true
     }
@@ -432,6 +466,15 @@ struct BrowserAssistantView: View {
         guard event.keyCode == BrowserAssistantKey.escape, conversation.isRunning else { return false }
         conversation.stop()
         return true
+    }
+
+    private static func utf16Selection(_ selection: TextSelection?, in text: String) -> NSRange? {
+        guard let selection else { return nil }
+        guard case .selection(let range) = selection.indices,
+              let start = range.lowerBound.samePosition(in: text.utf16),
+              let end = range.upperBound.samePosition(in: text.utf16) else { return nil }
+        let location = text.utf16.distance(from: text.utf16.startIndex, to: start)
+        return NSRange(location: location, length: text.utf16.distance(from: start, to: end))
     }
 }
 
@@ -473,39 +516,64 @@ struct BrowserAssistantCopyButton: View {
 
 struct BrowserAssistantContextPicker: View {
     let sources: [BrowserAIContextSource]
-    let scopes: [String: [BrowserAIContextSource]]
+    let scopes: [BrowserAssistantMentionOption]
+    let query: String
     let selected: [BrowserAIContextSource]
     let currentTabID: UUID?
     let favicons: [UUID: NSImage]
     let width: CGFloat
-    let choose: ([BrowserAIContextSource], Bool) -> Void
+    let choose: ([BrowserAIContextSource], Bool, String) -> Void
     @State private var cursor: Int?
+    @State private var memberGroup: BrowserAssistantMentionOption?
     @Environment(\.assistantPalette) private var palette
 
-    private var scopeNames: [String] { scopes.keys.sorted() }
-    private var rowCount: Int { sources.count + scopeNames.count }
+    private var options: [BrowserAssistantMentionOption] {
+        let tabs = sources.map { source in
+            BrowserAssistantMentionOption(id: .tab(source.id), kind: .tab, title: source.title,
+                path: uiText("Tabs"), detail: source.url.host ?? "", members: [source])
+        }
+        if let memberGroup {
+            return memberGroup.members.map { source in
+                BrowserAssistantMentionOption(id: .tab(source.id), kind: .tab, title: source.title,
+                    path: memberGroup.path, detail: source.url.host ?? "", members: [source])
+            }.filter { BrowserAssistantMentionOptions.matching(query, options: [$0]).isEmpty == false }
+        }
+        return BrowserAssistantMentionOptions.matching(query, options: tabs + scopes.filter { $0.kind != .tab })
+    }
+    private var rowCount: Int { options.count }
     private var contentHeight: CGFloat {
-        min(336, CGFloat(rowCount) * 32 + (sources.isEmpty ? 0 : 28) + (scopeNames.isEmpty ? 0 : 28) + 12)
+        min(336, CGFloat(max(1, rowCount)) * 44 + 52)
     }
     private func isSelected(_ source: BrowserAIContextSource) -> Bool { selected.contains { $0.id == source.id } }
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-                if !sources.isEmpty { header(uiText("Tabs")) }
-                ForEach(Array(sources.enumerated()), id: \.element.id) { index, source in
-                    row(source.id == currentTabID ? source.title + " — " + uiText("This tab").lowercased() : source.title,
-                        on: isSelected(source), index: index) {
-                        BrowserAssistantFavicon(image: favicons[source.id])
-                    } action: { choose([source], true) }
+                Text(uiFormat("%d / 8 sources", selected.count))
+                    .font(.system(size: 10.5, weight: .medium)).foregroundStyle(palette.secondary.swiftUI)
+                    .padding(.horizontal, 8).padding(.vertical, 5)
+                if options.isEmpty {
+                    Text(uiFormat("No results for %@", query)).font(.system(size: 12)).foregroundStyle(palette.secondary.swiftUI).padding(12)
                 }
-                if !scopeNames.isEmpty { header(uiText("Scopes")) }
-                ForEach(Array(scopeNames.enumerated()), id: \.element) { offset, name in
-                    let members = scopes[name] ?? []
-                    row(name, on: !members.isEmpty && members.allSatisfy(isSelected), index: sources.count + offset) {
-                        OrbitIcon.view(sfName: name == uiText("Whole Space") ? "square.grid.2x2" : "folder", pointSize: 16)
-                            .font(.system(size: 13)).foregroundStyle(palette.secondary.swiftUI).frame(width: 14, height: 14)
-                    } action: { choose(members, false) }
+                if memberGroup != nil {
+                    Button(uiText("Back to all context")) { memberGroup = nil; cursor = nil }
+                        .font(.system(size: 11)).buttonStyle(.plain).foregroundStyle(palette.accentInk.swiftUI).padding(.horizontal, 10).padding(.vertical, 6)
+                    Text(uiFormat("Choose individual tabs · %d places left", max(0, 8 - selected.count)))
+                        .font(.system(size: 10.5)).foregroundStyle(palette.secondary.swiftUI).padding(.horizontal, 8).padding(.bottom, 5)
+                }
+                ForEach(Array(options.enumerated()), id: \.element.id) { index, option in
+                    let members = option.members
+                    row(option.title, path: option.path + (option.kind == .tab ? " · " + option.detail : ""),
+                        on: !members.isEmpty && members.allSatisfy(isSelected), index: index) {
+                        if option.kind == .tab, let source = members.first { BrowserAssistantFavicon(image: favicons[source.id]) }
+                        else { OrbitIcon.view(sfName: option.kind == .space ? "square.grid.2x2" : "folder", pointSize: 16).font(.system(size: 13)).foregroundStyle(palette.secondary.swiftUI).frame(width: 14, height: 14) }
+                    } action: {
+                        if option.kind != .tab,
+                           BrowserAssistantMentionOptions.additions(for: members, selected: selected) == nil {
+                            memberGroup = option
+                            cursor = nil
+                        } else { choose(members, option.kind == .tab, option.title) }
+                    }
                 }
             }.padding(6)
         }
@@ -515,17 +583,14 @@ struct BrowserAssistantContextPicker: View {
         .background(BrowserAssistantKeyMonitor(handler: handleKey).frame(width: 0, height: 0))
     }
 
-    private func header(_ title: String) -> some View {
-        Text(title).font(.system(size: 11.5, weight: .semibold)).foregroundStyle(palette.secondary.swiftUI)
-            .padding(.horizontal, 8).frame(height: 28, alignment: .bottomLeading).padding(.bottom, 0)
-    }
-
-    private func row<Icon: View>(_ title: String, on: Bool, index: Int, @ViewBuilder icon: () -> Icon, action: @escaping () -> Void) -> some View {
+    private func row<Icon: View>(_ title: String, path: String, on: Bool, index: Int, @ViewBuilder icon: () -> Icon, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack(spacing: 8) {
                 icon()
-                Text(title).font(.system(size: 13, weight: .medium)).lineLimit(1).truncationMode(.tail)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(title).font(.system(size: 13, weight: .medium)).lineLimit(1).truncationMode(.tail)
+                    Text(path).font(.system(size: 10.5)).foregroundStyle(palette.secondary.swiftUI).lineLimit(1)
+                }.frame(maxWidth: .infinity, alignment: .leading)
                 if on {
                     OrbitIcon.view(sfName: "checkmark", pointSize: 14).font(.system(size: 12)).foregroundStyle(palette.accentInk.swiftUI)
                 }
@@ -540,8 +605,10 @@ struct BrowserAssistantContextPicker: View {
         case BrowserAssistantKey.up: cursor = ((cursor ?? rowCount) - 1 + rowCount) % rowCount; return true
         case BrowserAssistantKey.returnKey, BrowserAssistantKey.keypadEnter:
             guard let cursor else { return false }
-            if cursor < sources.count { choose([sources[cursor]], true) }
-            else { choose(scopes[scopeNames[cursor - sources.count]] ?? [], false) }
+            let option = options[cursor]
+            if option.kind != .tab, BrowserAssistantMentionOptions.additions(for: option.members, selected: selected) == nil {
+                memberGroup = option
+            } else { choose(option.members, option.kind == .tab, option.title) }
             return true
         default: return false
         }

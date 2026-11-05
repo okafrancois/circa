@@ -83,30 +83,59 @@ extension BrowserWindowController {
         for source in stale { conversation.removeSource(source.id) }
         if let host = assistantHost as? NSHostingView<BrowserAssistantView> { host.rootView = assistantView(conversation) }
     }
-    var assistantScopes: [String: [BrowserAIContextSource]] {
-        guard let organization = session.organization else { return [:] }
+    var assistantScopes: [BrowserAssistantMentionOption] {
+        guard let organization = session.organization else { return [] }
         let sources = assistantSources
-        var scopes: [String: [BrowserAIContextSource]] = [uiText("Whole Space"): Array(sources.prefix(8))]
-        func visit(_ items: [BrowserOrganizationItem]) {
-            for item in items {
-                if case .folder(let folder) = item {
-                    func ids(_ children: [BrowserOrganizationItem]) -> [UUID] {
-                        children.flatMap { child -> [UUID] in
-                            switch child {
-                            case .tab(let tab): return [tab.id.rawValue]
-                            case .folder(let nested): return ids(nested.children)
-                            case .split(let group): return group.tabs.map { $0.id.rawValue }
-                            }
-                        }
-                    }
-                    let members = Set(ids(folder.children))
-                    scopes[folder.title] = Array(sources.filter { members.contains($0.id) }.prefix(8))
-                    visit(folder.children)
+        let byID = Dictionary(uniqueKeysWithValues: sources.map { ($0.id, $0) })
+        func ids(_ children: [BrowserOrganizationItem]) -> [UUID] {
+            children.flatMap { child -> [UUID] in
+                switch child {
+                case .tab(let tab): return [tab.id.rawValue]
+                case .folder(let nested): return ids(nested.children)
+                case .split(let group): return group.tabs.map { $0.id.rawValue }
                 }
             }
         }
-        visit(organization.pinned + organization.today)
-        return scopes.filter { !$0.value.isEmpty }
+        var result: [BrowserAssistantMentionOption] = []
+        func visit(_ items: [BrowserOrganizationItem], path: [String]) {
+            for item in items {
+                switch item {
+                case .tab(let tab):
+                    guard let source = byID[tab.id.rawValue] else { continue }
+                    result.append(.init(id: .tab(source.id), kind: .tab, title: source.title,
+                        path: path.isEmpty ? uiText("Tabs") : path.joined(separator: " / "),
+                        detail: mentionOrigin(source.url), members: [source]))
+                case .split(let split):
+                    for tab in split.tabs {
+                        guard let source = byID[tab.id.rawValue] else { continue }
+                        result.append(.init(id: .tab(source.id), kind: .tab, title: source.title,
+                            path: path.isEmpty ? uiText("Tabs") : path.joined(separator: " / "),
+                            detail: mentionOrigin(source.url), members: [source]))
+                    }
+                case .folder(let folder):
+                    let folderPath = path + [folder.title]
+                    let members = ids(folder.children).compactMap { byID[$0] }
+                    if !members.isEmpty {
+                        result.append(.init(id: .folder(folder.id.rawValue), kind: .folder,
+                            title: folder.title, path: folderPath.joined(separator: " / "),
+                            detail: uiText("Folder"), members: members))
+                    }
+                    visit(folder.children, path: folderPath)
+                }
+            }
+        }
+        result.append(.init(id: .space(organization.spaceID.rawValue), kind: .space,
+            title: uiText("Whole Space"), path: uiText("Space"), detail: uiText("Current window"), members: sources))
+        visit(organization.pinned + organization.today, path: [])
+        // Keep flat live tabs unique while preserving their first organization position.
+        var emitted = Set<UUID>()
+        let liveTabs = result.filter { $0.kind == .tab && emitted.insert($0.members[0].id).inserted }
+        return liveTabs + result.filter { $0.kind != .tab }
+    }
+    private func mentionOrigin(_ url: URL) -> String {
+        let host = url.host ?? ""
+        let path = url.path == "/" ? "" : url.path
+        return host + path
     }
     func toggleAssistant() {
         if assistantHost != nil { closeAssistant(); return }

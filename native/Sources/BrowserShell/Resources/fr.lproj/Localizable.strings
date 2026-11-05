@@ -810,6 +810,10 @@
 "Bookmark" = "Signet";
 "Flag" = "Drapeau";
 "Folder" = "Dossier";
+"Current window" = "Fenêtre actuelle";
+"%d / 8 sources" = "%d sur 8 sources";
+"Choose individual tabs · %d places left" = "Choisir les onglets un par un · %d places disponibles";
+"Back to all context" = "Retour à tout le contexte";
 "Inbox" = "Boîte de réception";
 "Books" = "Livres";
 "Study" = "Études";
@@ -1004,6 +1008,7 @@
 "Search Spaces…" = "Rechercher des espaces…";
 "Search Archived Tabs…" = "Rechercher des onglets archivés…";
 "No results found for\n“%@”" = "Aucun résultat pour\n« %@ »";
+"No results for %@" = "Aucun résultat pour %@";
 "Add Extension" = "Ajouter une extension";
 "Manage" = "Gérer";
 "Manage Extension" = "Gérer l’extension";

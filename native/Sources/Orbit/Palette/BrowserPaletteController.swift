@@ -10,6 +10,7 @@ import Observation
 @MainActor
 final class BrowserPaletteController<Engine: BrowserEngine> {
     private let skillsPopover = BrowserAssistantPopover()
+    private let mentionsPopover = BrowserAssistantPopover()
     private var answerTransition: Task<Void, Never>?
     private var isMovingAnswer = false
     private var answerHost: NSView?
@@ -293,6 +294,7 @@ final class BrowserPaletteController<Engine: BrowserEngine> {
         }
         refreshSearchSuggestions()
         rebuild(preserveSelection: preserveSelection)
+        renderMentions()
         guard siteSearch == nil, let owner, let profileID = sourceContext?.profileID else { return }
         queryTask = Task { [weak self, weak owner] in
             guard let owner, !Task.isCancelled else { return }
@@ -406,6 +408,37 @@ final class BrowserPaletteController<Engine: BrowserEngine> {
     }
 
     func reconcileSkills() { renderSkills() }
+
+    private func renderMentions() {
+        guard let owner, isPresented, isCurrent, siteSearch == nil, owner.assistantEnabled,
+              let conversation = owner.ensureAssistant() else { mentionsPopover.close(notify: false); return }
+        let editor = view.input.currentEditor() as? NSTextView
+        let caret = editor?.selectedRange().location ?? (draft as NSString).length
+        guard let range = BrowserAssistantMentionRange.atCaret(in: draft, utf16Offset: caret,
+                selection: editor?.selectedRange()), !owner.assistantScopes.isEmpty || !owner.assistantSources.isEmpty else {
+            mentionsPopover.close(notify: false); return
+        }
+        let profile = owner.session.activeProfileID
+        let palette = BrowserAssistantPalette(theme: owner.windowShell.theme, appearance: owner.window?.effectiveAppearance ?? NSApp.effectiveAppearance)
+        let picker = BrowserAssistantContextPicker(sources: owner.assistantSources, scopes: owner.assistantScopes,
+            query: range.query, selected: conversation.selectedSources,
+            currentTabID: owner.session.organization?.selectedTab?.id.rawValue,
+            favicons: [:], width: 320, choose: { [weak self, weak owner, weak conversation] members, toggles, label in
+                guard let self, let owner, let conversation, isPresented, isCurrent,
+                      owner.assistantEnabled, owner.session.activeProfileID == profile else { return }
+                if toggles, let source = members.first, conversation.selectedSources.contains(where: { $0.id == source.id }) {
+                    conversation.removeSource(source.id)
+                } else if let additions = BrowserAssistantMentionOptions.additions(for: members, selected: conversation.selectedSources) {
+                    for source in additions { conversation.select(source) }
+                } else { return }
+                let updated = range.replacing(in: draft, with: label)
+                query(updated.text, preserveSelection: true, userInitiated: false)
+                editor?.setSelectedRange(NSRange(location: updated.caretUTF16, length: 0))
+                mentionsPopover.close(notify: false)
+            })
+        mentionsPopover.show(from: view.input, placement: .below(maxWidth: 320), content: AnyView(picker), palette: palette,
+            reduced: OrbitMotionPreferences.prefersReducedMotion, forwardTyping: true)
+    }
 
     private func renderSkills() {
         guard let owner, isPresented, isCurrent, owner.assistantEnabled, isSkillQuery else {
@@ -660,6 +693,7 @@ final class BrowserPaletteController<Engine: BrowserEngine> {
 
     func dismiss(returnFocus: Bool = true) {
         skillsPopover.close(notify: false, restoreFocus: false)
+        mentionsPopover.close(notify: false, restoreFocus: false)
         answerTransition?.cancel()
         answerTransition = nil
         isMovingAnswer = false
