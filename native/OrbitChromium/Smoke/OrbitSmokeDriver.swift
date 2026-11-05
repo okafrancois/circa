@@ -43,6 +43,7 @@ final class OrbitSmokeDriver: OrbitLaunchHooks {
     private(set) var application: OrbitApplication?
     var assistantInputWindow: NSWindow?
     private var configuration: OrbitProductConfiguration!
+    var usesMockKeychain: Bool { configuration?.usesMockKeychain == true }
     private var signalSource: DispatchSourceSignal?
     private let started = ContinuousClock.now
 

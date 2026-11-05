@@ -273,20 +273,7 @@ extension OrbitSmokeDriver {
 extension OrbitSmokeDriver {
     /// Only the marked, mock-keychain smoke driver calls this mailbox. Events never leave this process.
     private func assistantOwnedInput(_ data: Data, window: NSWindow, owner: OrbitWindowController) -> [String: Any] {
-        let bundlePath = Bundle.main.bundleURL.standardizedFileURL.resolvingSymlinksInPath().path
-        let executablePath = Bundle.main.executableURL?.standardizedFileURL.resolvingSymlinksInPath().path ?? ""
-        guard configuration.usesMockKeychain,
-              Bundle.main.object(forInfoDictionaryKey: "OrbitSyntheticBundle") as? Bool == true,
-              executablePath.hasPrefix(bundlePath + "/"),
-              NSWorkspace.shared.frontmostApplication?.processIdentifier == getpid(), NSApp.isActive,
-              window.isKeyWindow, NSApp.keyWindow === window,
-              FileManager.default.fileExists(atPath: runRoot.appendingPathComponent(".orbit-chromium-lab").path),
-              (owner.window === window || NSApp.windows.contains(where: { $0 === window })),
-              let windows = CGWindowListCopyWindowInfo([.optionAll], kCGNullWindowID) as? [[String: Any]],
-              windows.contains(where: {
-                  ($0[kCGWindowNumber as String] as? Int) == window.windowNumber &&
-                  ($0[kCGWindowOwnerPID as String] as? Int) == Int(getpid())
-              }),
+        guard assistantOwnsInputTarget(window, owner: owner),
               let command = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
               let kind = command["kind"] as? String else { return ["ok": false, "error": "Invalid owned window or command"] }
         assistantInputWindow = window
@@ -306,13 +293,9 @@ extension OrbitSmokeDriver {
             }
             if let key = command["text"] as? String,
                let event = BrowserGlobalQuickWindowShortcut.layoutEvent(for: .init(key: key, modifiers: modifiers)) {
-                if kind == "native-shortcut", let native = NSEvent.keyEvent(with: .keyDown, location: .zero,
-                    modifierFlags: modifiers, timestamp: ProcessInfo.processInfo.systemUptime,
-                    windowNumber: window.windowNumber, context: nil, characters: key,
-                    charactersIgnoringModifiers: key, isARepeat: false, keyCode: event.keyCode) {
-                    window.makeKeyAndOrderFront(nil)
-                    NSApp.postEvent(native, atStart: false)
-                    return ["ok": true, "pid": Int(getpid()), "window": window.windowNumber, "queued": true]
+                if kind == "native-shortcut" {
+                    let posted = assistantPostKey(event.keyCode, flags: event.cgEvent?.flags ?? [], window: window, owner: owner)
+                    return ["ok": posted, "pid": Int(getpid()), "window": window.windowNumber, "posted": posted]
                 }
                 // The product's local monitor offers raw feature input before menu equivalents.
                 if owner.window === window, let registry = owner.palette.registry,
@@ -325,9 +308,9 @@ extension OrbitSmokeDriver {
                 if !handled { handled = NSApp.mainMenu?.performKeyEquivalent(with: event) ?? false }
             }
         case "text":
-            if let text = command["text"] as? String, let client = window.firstResponder as? NSTextInputClient {
-                client.insertText(text, replacementRange: NSRange(location: NSNotFound, length: 0))
-                handled = true
+            if let text = command["text"] as? String, !text.isEmpty,
+               window.firstResponder is NSTextInputClient {
+                handled = text.allSatisfy { assistantPostKey(0, unicode: String($0), window: window, owner: owner) }
             }
         case "command":
             let commands = ["return": "insertNewline:", "tab": "insertTab:", "escape": "cancelOperation:"]
@@ -336,18 +319,14 @@ extension OrbitSmokeDriver {
                 handled = true
             }
         case "key":
-            let keys: [String: (UInt16, String)] = [
-                "up": (126, "\u{F700}"), "down": (125, "\u{F701}"),
-                "left": (123, "\u{F702}"), "right": (124, "\u{F703}"),
-                "return": (36, "\r"), "escape": (53, "\u{1B}"), "backspace": (51, "\u{7F}")
+            let keys: [String: UInt16] = [
+                "up": 126, "down": 125, "left": 123, "right": 124,
+                "return": 36, "escape": 53, "backspace": 51
             ]
-            if let name = command["text"] as? String, let (keyCode, character) = keys[name],
-               let event = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [],
-                   timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
-                   context: nil, characters: character, charactersIgnoringModifiers: character,
-                   isARepeat: false, keyCode: keyCode) {
-                NSApp.postEvent(event, atStart: false)
-                handled = true
+            if let name = command["text"] as? String, let keyCode = keys[name] {
+                var flags: CGEventFlags = []
+                if (123...126).contains(keyCode) { flags.formUnion([.maskSecondaryFn, .maskNumericPad]) }
+                handled = assistantPostKey(keyCode, flags: flags, window: window, owner: owner)
             }
         case "gesture", "native-gesture", "native-context-menu":
             if let points = command["points"] as? [[Double]], points.count >= 2,
@@ -471,5 +450,40 @@ extension OrbitSmokeDriver {
         return ["ok": handled, "pid": Int(getpid()), "window": window.windowNumber,
                 "responder": responder.map { String(describing: type(of: $0)) } ?? "none",
                 "text": (responder as? NSTextView)?.string ?? (responder as? NSTextField)?.stringValue ?? ""]
+    }
+
+    private func assistantOwnsInputTarget(_ window: NSWindow, owner: OrbitWindowController) -> Bool {
+        let bundlePath = Bundle.main.bundleURL.standardizedFileURL.resolvingSymlinksInPath().path
+        let executablePath = Bundle.main.executableURL?.standardizedFileURL.resolvingSymlinksInPath().path ?? ""
+        guard usesMockKeychain, Bundle.main.object(forInfoDictionaryKey: "OrbitSyntheticBundle") as? Bool == true,
+              executablePath.hasPrefix(bundlePath + "/"),
+              NSWorkspace.shared.frontmostApplication?.processIdentifier == getpid(), NSApp.isActive,
+              window.isKeyWindow, NSApp.keyWindow === window,
+              FileManager.default.fileExists(atPath: runRoot.appendingPathComponent(".orbit-chromium-lab").path),
+              (owner.window === window || NSApp.windows.contains(where: { $0 === window })),
+              let windows = CGWindowListCopyWindowInfo([.optionAll], kCGNullWindowID) as? [[String: Any]] else { return false }
+        return windows.contains {
+            ($0[kCGWindowNumber as String] as? Int) == window.windowNumber &&
+            ($0[kCGWindowOwnerPID as String] as? Int) == Int(getpid())
+        }
+    }
+
+    private func assistantPostKey(_ keyCode: UInt16, flags: CGEventFlags = [], unicode: String? = nil,
+                                  window: NSWindow, owner: OrbitWindowController) -> Bool {
+        guard assistantOwnsInputTarget(window, owner: owner),
+              let down = CGEvent(keyboardEventSource: nil, virtualKey: keyCode, keyDown: true) else { return false }
+        down.flags = flags
+        if let unicode {
+            let units = Array(unicode.utf16)
+            units.withUnsafeBufferPointer { buffer in
+                down.keyboardSetUnicodeString(stringLength: buffer.count, unicodeString: buffer.baseAddress)
+            }
+        }
+        down.post(tap: .cghidEventTap)
+        guard assistantOwnsInputTarget(window, owner: owner),
+              let up = CGEvent(keyboardEventSource: nil, virtualKey: keyCode, keyDown: false) else { return false }
+        up.flags = flags
+        up.post(tap: .cghidEventTap)
+        return true
     }
 }
