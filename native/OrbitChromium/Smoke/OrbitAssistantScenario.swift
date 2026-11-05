@@ -308,8 +308,11 @@ extension OrbitSmokeDriver {
                 if !handled { handled = NSApp.mainMenu?.performKeyEquivalent(with: event) ?? false }
             }
         case "text":
-            if let text = command["text"] as? String, !text.isEmpty,
-               window.firstResponder is NSTextInputClient {
+            // The nonactivating assistant menu forwards these native key events to the
+            // composer responder that opened it. The popup itself is intentionally not a
+            // text client; assistantOwnsInputTarget still fences every posted event to the
+            // exact foreground synthetic window.
+            if let text = command["text"] as? String, !text.isEmpty {
                 handled = text.allSatisfy { assistantPostKey(0, unicode: String($0), window: window, owner: owner) }
             }
         case "command":
