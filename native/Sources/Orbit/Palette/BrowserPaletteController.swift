@@ -331,8 +331,13 @@ final class BrowserPaletteController<Engine: BrowserEngine> {
         guard let owner, let profileID = sourceContext?.profileID, isPresented, siteSearch == nil, !isSkillQuery else {
             searchSuggestions.cancel(); return
         }
+        let editor = view.input.currentEditor() as? NSTextView
+        let selection = editor?.selectedRange()
+        let caret = selection?.location ?? (draft as NSString).length
+        let mention = BrowserAssistantMentionRange.atCaret(in: draft, utf16Offset: caret, selection: selection)
         searchSuggestions.update(query: draft, engine: owner.addressResolver.searchEngine, profileID: profileID,
-                                 enabled: showsSearchSuggestions, isPrivate: owner.isPrivateWindow)
+                                 enabled: showsSearchSuggestions, isPrivate: owner.isPrivateWindow,
+                                 activeMention: mention, assistantMode: assistantMentionMode)
     }
 
     var canDeleteSuggestion: Bool {
@@ -422,6 +427,7 @@ final class BrowserPaletteController<Engine: BrowserEngine> {
         let caret = editor?.selectedRange().location ?? (draft as NSString).length
         let palette = BrowserAssistantPalette(theme: owner.windowShell.theme, appearance: owner.window?.effectiveAppearance ?? NSApp.effectiveAppearance)
         let range = BrowserAssistantMentionRange.atCaret(in: draft, utf16Offset: caret, selection: editor?.selectedRange())
+        if range != nil { searchSuggestions.cancel() }
         let hasSelectedContext = owner.aiConversation?.selectedSources.isEmpty == false
         guard range != nil || assistantMentionMode || hasSelectedContext else {
             mentionsPopover.close(notify: false)

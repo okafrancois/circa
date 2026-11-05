@@ -144,6 +144,32 @@ struct BrowserAssistantMentionTests {
         #expect(await provider.starts == 0)
     }
 
+    @Test("Active mention and assistant drafts do not request remote search suggestions")
+    @MainActor
+    func mentionDraftDoesNotRequestSearchSuggestions() throws {
+        var endpointCalls = 0
+        let suggestions = BrowserSearchSuggestions(debounce: .milliseconds(1), endpoint: { _, _ in
+            endpointCalls += 1
+            return URL(string: "http://127.0.0.1:1/suggestions")
+        })
+        let mentionText = "Compare @Synthetic North Research"
+        let mentionCaret = (mentionText as NSString).length
+        let mention = try #require(BrowserAssistantMentionRange.atCaret(in: mentionText, utf16Offset: mentionCaret))
+
+        suggestions.update(query: mentionText, engine: .google, profileID: ProfileID(), enabled: true,
+                           isPrivate: false, activeMention: mention)
+        #expect(endpointCalls == 0)
+
+        suggestions.update(query: "A selected source prompt", engine: .google, profileID: ProfileID(), enabled: true,
+                           isPrivate: false, assistantMode: true)
+        #expect(endpointCalls == 0)
+
+        suggestions.update(query: "ordinary search", engine: .google, profileID: ProfileID(), enabled: true,
+                           isPrivate: false)
+        #expect(endpointCalls == 1)
+        suggestions.cancel()
+    }
+
     private func source(_ title: String) -> BrowserAIContextSource {
         .init(id: UUID(), revision: 1, url: URL(string: "https://example.test/\(title.hashValue)")!, title: title)
     }

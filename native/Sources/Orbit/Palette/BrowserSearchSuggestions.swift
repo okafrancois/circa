@@ -34,8 +34,9 @@ final class BrowserSearchSuggestions {
 
     deinit { task?.cancel(); session.invalidateAndCancel() }
 
-    func update(query: String, engine: SearchEngine, profileID: ProfileID, enabled: Bool, isPrivate: Bool) {
-        guard enabled, !isPrivate,
+    func update(query: String, engine: SearchEngine, profileID: ProfileID, enabled: Bool, isPrivate: Bool,
+                activeMention: BrowserAssistantMentionRange? = nil, assistantMode: Bool = false) {
+        guard !assistantMode, activeMention == nil, enabled, !isPrivate,
               case .search(_, let text) = try? AddressResolver(searchEngine: engine).resolve(query),
               case .search = try? AddressResolver(searchEngine: engine).resolve(text),
               let url = endpoint(engine, text) else { cancel(); return }
