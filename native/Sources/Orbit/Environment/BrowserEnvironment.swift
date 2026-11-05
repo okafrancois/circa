@@ -131,9 +131,10 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
     }
 
     static func open(engine: Engine, sessionFile: URL?) async throws -> BrowserEnvironment {
+        let startsAIPrograms = OrbitAIService.allowsExternalProgramDiscovery(for: activeSiteSessionConfiguration())
         guard let sessionFile else {
             let environment = BrowserEnvironment(engine: engine)
-            environment.startsAIPrograms = true
+            environment.startsAIPrograms = startsAIPrograms
             return environment
         }
         // Shared for the whole lifetime: an offline Orbit import or restore (exclusive) cannot write
@@ -160,7 +161,7 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
         BrowserPerformance.mark(.themesLoaded)
         let effectiveDocument = pendingRemovals.isEmpty && !migratesThemes ? document : await store.sessionDocument()
         let environment = BrowserEnvironment(engine: engine, store: store, document: effectiveDocument, persistence: persistence)
-        environment.startsAIPrograms = true
+        environment.startsAIPrograms = startsAIPrograms
         BrowserPerformance.mark(.environmentCreated)
         do {
             let history = try BrowserDownloadHistoryStore(destination: sessionFile.appendingPathExtension("downloads.json"))

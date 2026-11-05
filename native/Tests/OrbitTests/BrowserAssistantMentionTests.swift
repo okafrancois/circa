@@ -3,6 +3,18 @@ import Testing
 import BrowserCore
 @testable import Orbit
 
+private actor SyntheticMentionProviderFixture: BrowserAIProviderClient {
+    nonisolated let id: BrowserAIProviderID = .codex
+    private(set) var starts = 0
+    func status(refresh: Bool) async -> BrowserAIProviderStatus { .init(id: id, state: .signedOut) }
+    func shutdown() async {}
+    func startTurn(_ request: BrowserAITurnRequest) async -> BrowserAITurn {
+        starts += 1
+        let events = AsyncStream<BrowserAITurnEvent> { $0.finish() }
+        return .init(events: events, interrupt: {})
+    }
+}
+
 @Suite("Assistant mentions")
 struct BrowserAssistantMentionTests {
     @Test("Mention range uses UTF-16 offsets and preserves suffix")
@@ -58,6 +70,29 @@ struct BrowserAssistantMentionTests {
             path: "Space / Snapshot", detail: "Folder", members: liveMembers)
         liveMembers.append(source("Added later"))
         #expect(snapshot.members.count == 2)
+    }
+
+    @Test("Selecting a suggestion adds context without reading a page or starting a provider")
+    @MainActor
+    func suggestionSelectionDoesNotReadOrSend() async {
+        let source = source("Overview", host: "fixture.test")
+        var preferences = BrowserAIPreferences()
+        preferences.isEnabled = true
+        var pageReads = 0
+        let provider = SyntheticMentionProviderFixture()
+        let conversation = BrowserAIConversation(choice: .init(provider: .codex), clients: [provider],
+            preferences: { preferences }, isPrivate: { false },
+            currentSource: { $0 == source.id ? source : nil },
+            reader: { _ in pageReads += 1; return "Synthetic page" })
+        let option = BrowserAssistantMentionOption(id: .tab(source.id), kind: .tab, title: source.title,
+            path: "Tabs", detail: source.url.host ?? "", members: [source])
+
+        let additions = BrowserAssistantMentionOptions.additions(for: option.members, selected: conversation.selectedSources)!
+        for item in additions { conversation.select(item) }
+
+        #expect(conversation.selectedSources == [source])
+        #expect(pageReads == 0)
+        #expect(await provider.starts == 0)
     }
 
     private func source(_ title: String) -> BrowserAIContextSource {

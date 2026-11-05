@@ -20,7 +20,11 @@ final class OrbitAIService: ObservableObject {
     /// Display order in Settings: programs first, then this Mac.
     static let order: [BrowserAIProviderID] = [.codex, .claudeCode, .onDevice]
 
-    init(startsPrograms: Bool = true,
+    static func allowsExternalProgramDiscovery(for configuration: OrbitProductConfiguration?) -> Bool {
+        configuration?.allowsExternalAIProgramDiscovery == true
+    }
+
+    init(startsPrograms: Bool = false,
          version: String = (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String) ?? "1") {
         let workspace = BrowserAIWorkspace()
         let parent = workspace.root.deletingLastPathComponent()

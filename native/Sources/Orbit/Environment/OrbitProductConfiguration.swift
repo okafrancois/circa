@@ -69,6 +69,8 @@ struct OrbitProductConfiguration: Equatable {
     /// CEF `root_cache_path`.
     var engineRoot: URL { dataRoot.appendingPathComponent("Chromium", isDirectory: true) }
     var usesMockKeychain: Bool { secureStorage == .mockKeychain }
+    /// Synthetic runs must not inspect installed provider programs or their credentials.
+    var allowsExternalAIProgramDiscovery: Bool { !usesMockKeychain }
     /// Chromium's product network services (component updater, extension updates) for the signed
     /// daily build only; every synthetic run stays hermetic (CHROMIUM-APP-R2, PM decision).
     var usesProductNetwork: Bool { !usesMockKeychain }

@@ -37,6 +37,7 @@ struct OrbitProductConfigurationTests {
         #expect(configuration.sessionFile.path == personal.path + "/session.json")
         #expect(configuration.engineRoot.path == personal.path + "/Chromium")
         #expect(!configuration.usesMockKeychain)
+        #expect(configuration.allowsExternalAIProgramDiscovery)
     }
 
     @Test("Automated runs need the mock Keychain with an explicit synthetic root")
@@ -46,6 +47,7 @@ struct OrbitProductConfigurationTests {
         #expect(synthetic.secureStorage == .mockKeychain)
         #expect(synthetic.dataRoot.path == "/private/tmp/orbit-run/data")
         #expect(synthetic.engineRoot.path == "/private/tmp/orbit-run/data/Chromium")
+        #expect(!synthetic.allowsExternalAIProgramDiscovery)
         #expect(throws: OrbitProductConfiguration.Failure.mockKeychainNeedsSyntheticRoot) {
             try OrbitProductConfiguration(arguments: ["Orbit", "--use-mock-keychain"], applicationSupport: support, build: stable)
         }
@@ -55,6 +57,26 @@ struct OrbitProductConfigurationTests {
                                              applicationSupport: support, build: stable)
             }
         }
+    }
+
+    @Test("Synthetic provider discovery avoids installed CLI programs and the login shell")
+    @MainActor
+    func syntheticAIProviderDiscoveryIsInert() async throws {
+        let synthetic = try OrbitProductConfiguration(arguments: ["Orbit", "--use-mock-keychain", "--orbit-data-root=/private/tmp/orbit-run/data"],
+                                                     applicationSupport: support, build: stable)
+        #expect(!OrbitAIService.allowsExternalProgramDiscovery(for: synthetic))
+        #expect(!OrbitAIService.allowsExternalProgramDiscovery(for: nil))
+        let service = OrbitAIService(startsPrograms: OrbitAIService.allowsExternalProgramDiscovery(for: synthetic))
+        let codex = await service.codex.status(refresh: true)
+        let claude = await service.claude.status(refresh: true)
+        #expect(codex.state == .notInstalled)
+        #expect(claude.state == .notInstalled)
+        #expect(await service.discovery.shellLookupCount == 0)
+
+        let directService = OrbitAIService()
+        let directCodex = await directService.codex.status(refresh: true)
+        #expect(directCodex.state == .notInstalled)
+        #expect(await directService.discovery.shellLookupCount == 0)
     }
 
     @Test("A configurable product root keeps the real Keychain; malformed options refuse")
@@ -95,6 +117,7 @@ struct OrbitProductConfigurationTests {
         let configuration = try OrbitProductConfiguration(arguments: ["Orbit"], infoDictionary: info, applicationSupport: support, build: stable)
         #expect(configuration.dataRoot.path == "/private/tmp/orbit-daily-test/data")
         #expect(configuration.usesMockKeychain)
+        #expect(!configuration.allowsExternalAIProgramDiscovery)
         let runner = try OrbitProductConfiguration(arguments: ["Orbit", "--use-mock-keychain",
             "--orbit-data-root=/private/tmp/orbit-other-run/data"], infoDictionary: info, applicationSupport: support, build: stable)
         #expect(runner.usesMockKeychain)
