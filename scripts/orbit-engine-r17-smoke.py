@@ -73,8 +73,8 @@ def phase(args):
     data = root / 'data'
     state, control = data / 'perf-state.json', data / 'perf-command.json'
     nonce = str(time.monotonic_ns())
-    signal.signal(signal.SIGALRM, lambda *_: (_ for _ in ()).throw(TimeoutError('40-second GUI lease')))
-    signal.alarm(40)
+    signal.signal(signal.SIGALRM, lambda *_: (_ for _ in ()).throw(TimeoutError('43-second GUI lease')))
+    signal.alarm(43)
     started = time.monotonic()
     with lab.OwnedProcessRun() as owner:
         with (root / 'stdout.log').open('w') as out, (root / 'stderr.log').open('w') as err:
@@ -93,7 +93,22 @@ def phase(args):
                 pending = data / 'perf-command.pending'
                 pending.write_text(json.dumps(command))
                 pending.replace(control)
-                deadline = time.monotonic() + 25
+                receipt_deadline = time.monotonic() + 5
+                receipt = None
+                while time.monotonic() < receipt_deadline:
+                    try:
+                        result = json.loads(state.read_text())
+                    except (OSError, ValueError):
+                        result = {}
+                    candidate = result.get('commandReceipt')
+                    if isinstance(candidate, dict) and candidate.get('nonce') == nonce:
+                        receipt = candidate
+                        break
+                    time.sleep(.05)
+                if receipt is None:
+                    raise TimeoutError('Native r17 command receipt; state=' + json.dumps(result, sort_keys=True))
+
+                deadline = time.monotonic() + 30
                 while time.monotonic() < deadline:
                     try:
                         result = json.loads(state.read_text())
@@ -104,10 +119,13 @@ def phase(args):
                         break
                     time.sleep(.05)
                 else:
-                    raise TimeoutError('Native r17 probe')
+                    progress = result.get('nativeR17Progress', {})
+                    raise TimeoutError('Native r17 probe; progress=' + json.dumps(progress, sort_keys=True))
+                checks['commandReceipt'] = receipt
+                checks['progressTrace'] = result.get('nativeR17Progress', {})
             finally:
                 control.write_text('{"command":"quit"}')
-                process.wait(timeout=5)
+                process.wait(timeout=3)
     signal.alarm(0)
     assert process.returncode == 0 and not owner.remaining and not owner.forced_signals
     for _ in range(30):

@@ -74,11 +74,12 @@ enum OrbitPerformanceProbe {
         }
     }
 
-    static func evaluate(_ surface: ChromiumSurface, _ expression: String) async -> [String: Any]? {
+    static func evaluate(_ surface: ChromiumSurface, _ expression: String,
+                         timeout: Duration = .seconds(8)) async -> [String: Any]? {
         let parameters: [String: Any] = ["expression": expression, "returnByValue": true, "userGesture": true]
         guard let json = try? JSONSerialization.data(withJSONObject: parameters),
               let params = String(data: json, encoding: .utf8) else { return nil }
-        let (ok, data) = await surface.devToolsCall("Runtime.evaluate", params: params)
+        let (ok, data) = await surface.devToolsCall("Runtime.evaluate", params: params, timeout: timeout)
         guard ok, let result = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let remote = result["result"] as? [String: Any] else { return nil }
         return remote["value"] as? [String: Any]
@@ -144,6 +145,14 @@ enum OrbitPerformanceProbe {
                 try? FileManager.default.removeItem(at: commandFile)
                 let name = command["command"] ?? ""
                 result["commandNonce"] = command["nonce"] ?? ""
+                if name == "native-r17" {
+                    result["commandReceipt"] = [
+                        "command": name,
+                        "nonce": command["nonce"] ?? "",
+                        "receivedUptime": ProcessInfo.processInfo.systemUptime
+                    ]
+                    write(result, to: output)
+                }
                 if name == "github-compatibility" {
                     result["githubCompatibility"] = await OrbitGitHubCompatibilityProbe.run(application, root: root, action: command["action"] ?? "decode")
                 } else if name == "extension-import-check", ownsWindow(owner, bundleID: "lab.orbit.orbit.extensions-import") {
@@ -626,7 +635,10 @@ enum OrbitPerformanceProbe {
                 } else if name == "native-performance" {
                     result["nativePerformance"] = await OrbitEnginePerformanceProbe.run(owner, command: command, root: root)
                 } else if name == "native-r17" {
-                    result["nativeR17"] = await OrbitEngineR17Probe.run(owner, command: command)
+                    result["nativeR17"] = await OrbitEngineR17Probe.run(owner, command: command) { progress in
+                        result["nativeR17Progress"] = progress
+                        write(result, to: output)
+                    }
                 } else if name == "download-audio" {
                     result["downloadAudio"] = await OrbitDownloadAudioProbe.run(owner, command: command, root: root)
                 } else if name == "safe-browsing", ownsWindow(owner, bundleID: "lab.orbit.orbit.sec-safebrowsing") {
