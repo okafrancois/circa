@@ -1,10 +1,13 @@
 import AppKit
+import BrowserCore
 import BrowserShell
+import SwiftUI
 
 /// Transparent hit shield: outside clicks dismiss without reaching the underlying document.
 @MainActor
 final class BrowserPaletteView: NSView, NSTextFieldDelegate, NSTableViewDataSource, NSTableViewDelegate {
     weak var answerView: NSView?
+    private var assistantContextHost: NSHostingView<BrowserAssistantAskContextRow>?
     private var answerHeight: CGFloat?
     private var answerAnimation: Task<Void, Never>?
     func updateAnswerHeight(text: String) {
@@ -183,10 +186,10 @@ final class BrowserPaletteView: NSView, NSTextFieldDelegate, NSTableViewDataSour
     }
     required init?(coder: NSCoder) { nil }
 
-    static func panelFrame(in size: NSSize, resultCount: Int = 5) -> NSRect {
+    static func panelFrame(in size: NSSize, resultCount: Int = 5, contextHeight: CGFloat = 0) -> NSRect {
         let m = OrbitTokens.Metrics.CommandBar.self
         let count = min(5, max(0, resultCount))
-        let preferredHeight = m.searchRowHeight + m.firstRowGap + CGFloat(count) * m.rowPitch
+        let preferredHeight = m.searchRowHeight + contextHeight + m.firstRowGap + CGFloat(count) * m.rowPitch
             - (count > 0 ? m.rowPitch - m.rowHeight : 0) + m.bottomPadding
         let top = max(m.rowInsetX, min(m.top(windowHeight: size.height), size.height - m.searchRowHeight - m.rowInsetX))
         let height = min(preferredHeight, max(m.searchRowHeight, size.height - top - m.rowInsetX))
@@ -197,7 +200,8 @@ final class BrowserPaletteView: NSView, NSTextFieldDelegate, NSTableViewDataSour
     override func layout() {
         super.layout()
         let m = OrbitTokens.Metrics.CommandBar.self
-        panel.frame = Self.panelFrame(in: bounds.size, resultCount: results.count)
+        let contextHeight: CGFloat = assistantContextHost == nil ? 0 : 34
+        panel.frame = Self.panelFrame(in: bounds.size, resultCount: results.count, contextHeight: contextHeight)
         if answerView != nil { panel.frame.size.height = answerHeight ?? 230 }
         panelShadow.frame = panel.frame
         panelShadow.shadowPath = CGPath(roundedRect: panelShadow.bounds, cornerWidth: OrbitTokens.Radius.commandBar,
@@ -214,10 +218,12 @@ final class BrowserPaletteView: NSView, NSTextFieldDelegate, NSTableViewDataSour
         infoButton.frame = NSRect(x: panel.bounds.width - 46, y: panel.bounds.height - 44, width: 24, height: 24)
         siteHint.frame = NSRect(x: panel.bounds.width - 144, y: panel.bounds.height - 43, width: 96, height: 20)
         searchIcon.frame = NSRect(x: 23, y: panel.bounds.height - m.searchRowHeight / 2 - 8, width: 16, height: 16)
-        divider.frame = NSRect(x: m.rowInsetX, y: panel.bounds.height - m.searchRowHeight,
+        assistantContextHost?.frame = NSRect(x: m.rowInsetX, y: panel.bounds.height - m.searchRowHeight - contextHeight,
+            width: max(0, panel.bounds.width - 2 * m.rowInsetX), height: contextHeight)
+        divider.frame = NSRect(x: m.rowInsetX, y: panel.bounds.height - m.searchRowHeight - contextHeight,
                                width: max(0, panel.bounds.width - 2 * m.rowInsetX), height: 1 / (window?.backingScaleFactor ?? 2))
         scroll.frame = NSRect(x: m.rowInsetX, y: m.bottomPadding, width: max(0, panel.bounds.width - 2 * m.rowInsetX),
-                              height: max(0, panel.bounds.height - m.searchRowHeight - m.firstRowGap - m.bottomPadding))
+                              height: max(0, panel.bounds.height - m.searchRowHeight - contextHeight - m.firstRowGap - m.bottomPadding))
         answerView?.frame = scroll.frame
         resizeList()
     }
@@ -279,6 +285,25 @@ final class BrowserPaletteView: NSView, NSTextFieldDelegate, NSTableViewDataSour
                 layer.add(slide, forKey: "assistant.ask.slide")
             }
         }
+    }
+
+    func setAssistantContext(_ conversation: BrowserAIConversation?, palette: BrowserAssistantPalette?) {
+        guard let conversation, let palette else {
+            assistantContextHost?.removeFromSuperview()
+            assistantContextHost = nil
+            needsLayout = true
+            return
+        }
+        let row = BrowserAssistantAskContextRow(conversation: conversation, palette: palette)
+        if let assistantContextHost {
+            assistantContextHost.rootView = row
+        } else {
+            let host = NSHostingView(rootView: row)
+            host.sizingOptions = []
+            panel.addSubview(host)
+            assistantContextHost = host
+        }
+        needsLayout = true
     }
 
     func updateSelection(_ selected: Int) {

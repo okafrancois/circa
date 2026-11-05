@@ -24,6 +24,7 @@ final class BrowserPaletteController<Engine: BrowserEngine> {
     private(set) var mode: BrowserPaletteMode = .newTab
     private var opensEmptyAddress = false
     private var isSkillQuery: Bool { siteSearch == nil && draft.hasPrefix("/") }
+    private var assistantMentionMode = false
     private(set) var results: [BrowserPaletteResult] = []
     private(set) var selection = BrowserPaletteSelection()
     private var candidates: [BrowserPaletteResult] = []
@@ -272,6 +273,7 @@ final class BrowserPaletteController<Engine: BrowserEngine> {
             Self.signposter.endInterval("PaletteFirstDisplay", signpost)
         }
         draft = text
+        if text.isEmpty { assistantMentionMode = false }
         if view.input.stringValue != text { view.input.stringValue = text }
         if userInitiated {
             selectionWasMoved = false
@@ -410,16 +412,38 @@ final class BrowserPaletteController<Engine: BrowserEngine> {
     func reconcileSkills() { renderSkills() }
 
     private func renderMentions() {
-        guard let owner, isPresented, isCurrent, siteSearch == nil, owner.assistantEnabled,
-              let conversation = owner.ensureAssistant() else { mentionsPopover.close(notify: false); return }
+        guard let owner, isPresented, isCurrent, siteSearch == nil, owner.assistantEnabled else {
+            mentionsPopover.close(notify: false)
+            assistantMentionMode = false
+            view.setAssistantContext(nil, palette: nil)
+            return
+        }
         let editor = view.input.currentEditor() as? NSTextView
         let caret = editor?.selectedRange().location ?? (draft as NSString).length
-        guard let range = BrowserAssistantMentionRange.atCaret(in: draft, utf16Offset: caret,
-                selection: editor?.selectedRange()), !owner.assistantScopes.isEmpty || !owner.assistantSources.isEmpty else {
-            mentionsPopover.close(notify: false); return
-        }
-        let profile = owner.session.activeProfileID
         let palette = BrowserAssistantPalette(theme: owner.windowShell.theme, appearance: owner.window?.effectiveAppearance ?? NSApp.effectiveAppearance)
+        let range = BrowserAssistantMentionRange.atCaret(in: draft, utf16Offset: caret, selection: editor?.selectedRange())
+        let hasSelectedContext = owner.aiConversation?.selectedSources.isEmpty == false
+        guard range != nil || assistantMentionMode || hasSelectedContext else {
+            mentionsPopover.close(notify: false)
+            view.setAssistantContext(nil, palette: nil)
+            return
+        }
+        guard let conversation = owner.ensureAssistant() else {
+            mentionsPopover.close(notify: false)
+            assistantMentionMode = false
+            view.setAssistantContext(nil, palette: nil)
+            return
+        }
+        guard let range else {
+            mentionsPopover.close(notify: false)
+            if draft.isEmpty { assistantMentionMode = false }
+            view.setAssistantContext(assistantMentionMode ? conversation : nil, palette: assistantMentionMode ? palette : nil)
+            return
+        }
+        assistantMentionMode = true
+        view.setAssistantContext(conversation, palette: palette)
+        let profile = owner.session.activeProfileID
+        guard !owner.assistantScopes.isEmpty || !owner.assistantSources.isEmpty else { mentionsPopover.close(notify: false); return }
         let picker = BrowserAssistantContextPicker(sources: owner.assistantSources, scopes: owner.assistantScopes,
             query: range.query, selected: conversation.selectedSources,
             currentTabID: owner.session.organization?.selectedTab?.id.rawValue,
@@ -694,6 +718,8 @@ final class BrowserPaletteController<Engine: BrowserEngine> {
     func dismiss(returnFocus: Bool = true) {
         skillsPopover.close(notify: false, restoreFocus: false)
         mentionsPopover.close(notify: false, restoreFocus: false)
+        assistantMentionMode = false
+        view.setAssistantContext(nil, palette: nil)
         answerTransition?.cancel()
         answerTransition = nil
         isMovingAnswer = false

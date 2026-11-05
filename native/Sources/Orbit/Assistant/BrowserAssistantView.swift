@@ -38,6 +38,67 @@ struct BrowserAssistantContextChips: Equatable {
     }
 }
 
+/// Compact context chips for the command bar's direct Ask entry.
+struct BrowserAssistantAskContextRow: View {
+    let conversation: BrowserAIConversation
+    let palette: BrowserAssistantPalette
+    @State private var chips = BrowserAssistantContextChips()
+    @State private var leaving: Set<UUID> = []
+    @Environment(\.accessibilityReduceMotion) private var systemReduceMotion
+    private var reduceMotion: Bool { systemReduceMotion || OrbitMotionPreferences.prefersReducedMotion }
+
+    var body: some View {
+        HStack(spacing: 8) {
+            ScrollView(.horizontal) {
+                HStack(spacing: 5) {
+                    ForEach(chips.chips(selected: conversation.selectedSources)) { item in
+                        chip(item)
+                    }
+                }.padding(.vertical, 2)
+            }.scrollIndicators(.hidden)
+            Spacer(minLength: 0)
+            Text(uiFormat("%d / 8 sources", conversation.selectedSources.count))
+                .font(.system(size: 10.5, weight: .medium)).foregroundStyle(palette.secondary.swiftUI)
+                .accessibilityIdentifier("palette-assistant-source-count")
+        }
+        .padding(.horizontal, 5).frame(height: 30)
+        .environment(\.assistantPalette, palette)
+    }
+
+    private func chip(_ item: BrowserAssistantContextChips.Chip) -> some View {
+        let source = item.source
+        let hidden = item.leaving && leaving.contains(source.id)
+        let duplicate = conversation.selectedSources.filter { $0.title == source.title }.count > 1
+        return HStack(spacing: 4) {
+            Text(source.title).lineLimit(1).truncationMode(.tail)
+            if duplicate {
+                Text(BrowserAssistantMentionOptions.origin(source.url)).font(.system(size: 9))
+                    .foregroundStyle(palette.secondary.swiftUI).lineLimit(1).truncationMode(.middle)
+            }
+            Button { remove(source) } label: {
+                OrbitIcon.view(sfName: "xmark", pointSize: 11).font(.system(size: 9))
+                    .foregroundStyle(palette.secondary.swiftUI).frame(width: 16, height: 16)
+            }.buttonStyle(BrowserAssistantButtonStyle(kind: .quiet(radius: 5)))
+                .help(uiFormat("Remove %@", source.title)).accessibilityLabel(uiFormat("Remove %@", source.title))
+                .accessibilityIdentifier("assistant-remove-" + source.id.uuidString)
+        }
+        .font(.system(size: 11, weight: .medium)).padding(.leading, 7).padding(.trailing, 3).frame(height: 24)
+        .background(palette.wash.swiftUI, in: RoundedRectangle(cornerRadius: 8))
+        .scaleEffect(hidden && !reduceMotion ? 0.8 : 1).opacity(hidden ? 0 : 1)
+        .allowsHitTesting(!item.leaving).accessibilityHidden(item.leaving)
+        .transition(.asymmetric(insertion: .scale(scale: reduceMotion ? 1 : 0.6).combined(with: .opacity), removal: .identity))
+    }
+
+    private func remove(_ source: BrowserAIContextSource) {
+        chips.revoke(source, from: conversation)
+        let animation = reduceMotion ? Animation.linear(duration: 0.15) : .timingCurve(1.0 / 3, 2.0 / 3, 2.0 / 3, 1, duration: 0.16)
+        withAnimation(animation, completionCriteria: .logicallyComplete) { _ = leaving.insert(source.id) } completion: {
+            chips.finish(source.id)
+            leaving.remove(source.id)
+        }
+    }
+}
+
 struct BrowserAssistantView: View {
     let conversation: BrowserAIConversation
     let choices: [BrowserAIModelChoice]
