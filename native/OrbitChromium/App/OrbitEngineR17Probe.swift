@@ -107,7 +107,7 @@ enum OrbitEngineR17Probe {
 
         var description: String { "state=\(stateName), mask=\(maskHex), reasons=\(decodedReasons)" }
 
-        static func read(_ performance: (any BrowserPagePerformance)?) -> Self {
+        @MainActor static func read(_ performance: (any BrowserPagePerformance)?) -> Self {
             let now = ProcessInfo.processInfo.systemUptime
             guard let value = performance?.lifecycle() else {
                 return .init(state: nil, mask: nil, audible: nil, playingMedia: nil,
@@ -363,7 +363,7 @@ enum OrbitEngineR17Probe {
             preferenceValue(engine: owner.engine, profileID: liveAnchor.profileID) ?? -1
         }
         let onProfileReady = await trace.perform("preconnect.create_enabled_profile", timeout: .seconds(5)) {
-            owner.engine.profile(for: onID)
+            _ = owner.engine.profile(for: onID)
             await owner.engine.profileReady(onID)
             return true
         } ?? false
