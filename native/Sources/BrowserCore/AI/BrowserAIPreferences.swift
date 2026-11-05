@@ -76,18 +76,29 @@ public enum BrowserAIPolicy {
     /// Private windows are always off; the per-site list and the master switch apply everywhere.
     public static func allowsPageAccess(_ preferences: BrowserAIPreferences, isPrivate: Bool, host: String?) -> Bool {
         guard preferences.isEnabled, preferences.readsCurrentTabOnRequest, !isPrivate else { return false }
-        guard let host = host.flatMap(site(from:)) else { return true }
+        guard let host = host.flatMap(pageSite(from:)) else { return true }
         return !preferences.disabledSites.contains { host == $0 || host.hasSuffix("." + $0) }
     }
 
-    /// "https://www.Example.com/path" and "example.com" both become "example.com".
+    /// A host reported by the engine. It is never parsed through the stricter Settings input
+    /// grammar alone: a present host that grammar rejects must still meet the site list.
+    static func pageSite(from host: String) -> String? {
+        if let site = site(from: host) { return site }
+        let normalized = host.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            .trimmingCharacters(in: CharacterSet(charactersIn: ".[]"))
+        guard !normalized.isEmpty else { return nil }
+        return normalized.hasPrefix("www.") ? String(normalized.dropFirst(4)) : normalized
+    }
+
+    /// "https://www.Example.com/path" and "example.com" both become "example.com". Underscores
+    /// stay valid: real hosts use them in DNS labels and the engine loads them.
     public static func site(from input: String) -> String? {
         var text = input.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard !text.isEmpty else { return nil }
         if !text.contains("://") { text = "https://" + text }
         guard let host = URL(string: text)?.host(percentEncoded: false)?.trimmingCharacters(in: CharacterSet(charactersIn: ".")),
               !host.isEmpty, host.count <= 253,
-              host.unicodeScalars.allSatisfy({ CharacterSet.alphanumerics.contains($0) || "-.".unicodeScalars.contains($0) }) else {
+              host.unicodeScalars.allSatisfy({ CharacterSet.alphanumerics.contains($0) || "-._".unicodeScalars.contains($0) }) else {
             return nil
         }
         return host.hasPrefix("www.") ? String(host.dropFirst(4)) : host
