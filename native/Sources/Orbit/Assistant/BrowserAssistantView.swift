@@ -398,9 +398,17 @@ struct BrowserAssistantView: View {
     private func chip(item: BrowserAssistantContextChips.Chip) -> some View {
         let source = item.source
         let hidden = item.leaving && leaving.contains(source.id)
+        let duplicateTitle = conversation.selectedSources.filter { $0.title == source.title }.count > 1
         return HStack(spacing: 6) {
             BrowserAssistantFavicon(image: favicons[source.id])
-            Text(source.id == skillDraft.selectionID ? uiText("Selection") : source.id == currentTabID ? uiText("This tab") : source.title).lineLimit(1).truncationMode(.tail)
+            HStack(spacing: 3) {
+                Text(source.id == skillDraft.selectionID ? uiText("Selection") : source.id == currentTabID ? uiText("This tab") : source.title)
+                    .lineLimit(1).truncationMode(.tail)
+                if duplicateTitle && source.id != currentTabID {
+                    Text(BrowserAssistantMentionOptions.origin(source.url)).font(.system(size: 9, weight: .regular))
+                        .foregroundStyle(palette.secondary.swiftUI).lineLimit(1).truncationMode(.middle)
+                }
+            }
             Button { remove(source) } label: {
                 OrbitIcon.view(sfName: "xmark", pointSize: 12).font(.system(size: 10)).foregroundStyle(palette.secondary.swiftUI)
                     .frame(width: 20, height: 20)
@@ -530,12 +538,12 @@ struct BrowserAssistantContextPicker: View {
     private var options: [BrowserAssistantMentionOption] {
         let tabs = sources.map { source in
             BrowserAssistantMentionOption(id: .tab(source.id), kind: .tab, title: source.title,
-                path: uiText("Tabs"), detail: source.url.host ?? "", members: [source])
+                path: uiText("Tabs"), detail: BrowserAssistantMentionOptions.origin(source.url), members: [source])
         }
         if let memberGroup {
             return memberGroup.members.map { source in
                 BrowserAssistantMentionOption(id: .tab(source.id), kind: .tab, title: source.title,
-                    path: memberGroup.path, detail: source.url.host ?? "", members: [source])
+                    path: memberGroup.path, detail: BrowserAssistantMentionOptions.origin(source.url), members: [source])
             }.filter { BrowserAssistantMentionOptions.matching(query, options: [$0]).isEmpty == false }
         }
         return BrowserAssistantMentionOptions.matching(query, options: tabs + scopes.filter { $0.kind != .tab })

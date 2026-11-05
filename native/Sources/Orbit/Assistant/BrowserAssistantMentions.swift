@@ -63,7 +63,11 @@ enum BrowserAssistantMentionOptions {
     static func additions(for members: [BrowserAIContextSource], selected: [BrowserAIContextSource], cap: Int = 8) -> [BrowserAIContextSource]? {
         var seen = Set(selected.map(\.id))
         let additions = members.filter { seen.insert($0.id).inserted }
-        guard selected.count + additions.count <= cap else { return nil }
+        guard seen.count <= cap else { return nil }
         return additions
+    }
+
+    static func origin(_ url: URL) -> String {
+        (url.host ?? "") + (url.path == "/" ? "" : url.path)
     }
 }

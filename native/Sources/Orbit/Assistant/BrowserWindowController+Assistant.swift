@@ -104,13 +104,13 @@ extension BrowserWindowController {
                     guard let source = byID[tab.id.rawValue] else { continue }
                     result.append(.init(id: .tab(source.id), kind: .tab, title: source.title,
                         path: path.isEmpty ? uiText("Tabs") : path.joined(separator: " / "),
-                        detail: mentionOrigin(source.url), members: [source]))
+                        detail: BrowserAssistantMentionOptions.origin(source.url), members: [source]))
                 case .split(let split):
                     for tab in split.tabs {
                         guard let source = byID[tab.id.rawValue] else { continue }
                         result.append(.init(id: .tab(source.id), kind: .tab, title: source.title,
                             path: path.isEmpty ? uiText("Tabs") : path.joined(separator: " / "),
-                            detail: mentionOrigin(source.url), members: [source]))
+                            detail: BrowserAssistantMentionOptions.origin(source.url), members: [source]))
                     }
                 case .folder(let folder):
                     let folderPath = path + [folder.title]
@@ -124,18 +124,16 @@ extension BrowserWindowController {
                 }
             }
         }
-        result.append(.init(id: .space(organization.spaceID.rawValue), kind: .space,
-            title: uiText("Whole Space"), path: uiText("Space"), detail: uiText("Current window"), members: sources))
+        if !sources.isEmpty {
+            let spaceName = session.catalog?.spaces.first { $0.id == organization.spaceID }?.name ?? uiText("Space")
+            result.append(.init(id: .space(organization.spaceID.rawValue), kind: .space,
+                title: uiText("Whole Space"), path: spaceName, detail: uiText("Current window"), members: sources))
+        }
         visit(organization.pinned + organization.today, path: [])
         // Keep flat live tabs unique while preserving their first organization position.
         var emitted = Set<UUID>()
         let liveTabs = result.filter { $0.kind == .tab && emitted.insert($0.members[0].id).inserted }
         return liveTabs + result.filter { $0.kind != .tab }
-    }
-    private func mentionOrigin(_ url: URL) -> String {
-        let host = url.host ?? ""
-        let path = url.path == "/" ? "" : url.path
-        return host + path
     }
     func toggleAssistant() {
         if assistantHost != nil { closeAssistant(); return }
