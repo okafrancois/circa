@@ -53,6 +53,11 @@ struct BrowserAssistantMentionTests {
         let tooMany = [source("A"), source("B")]
         #expect(BrowserAssistantMentionOptions.additions(for: tooMany, selected: selected) == nil)
         #expect(BrowserAssistantMentionOptions.additions(for: tooMany, selected: [])?.count == 2)
+        var liveMembers = [source("Snapshot A"), source("Snapshot B")]
+        let snapshot = BrowserAssistantMentionOption(id: .folder(UUID()), kind: .folder, title: "Snapshot",
+            path: "Space / Snapshot", detail: "Folder", members: liveMembers)
+        liveMembers.append(source("Added later"))
+        #expect(snapshot.members.count == 2)
     }
 
     private func source(_ title: String) -> BrowserAIContextSource {
