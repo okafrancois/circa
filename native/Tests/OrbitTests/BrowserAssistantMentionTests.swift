@@ -27,6 +27,7 @@ struct BrowserAssistantMentionTests {
         let replacement = found.replacing(in: draft, with: "Références")
         #expect(replacement.text == "😀 résumé Références après")
         #expect((replacement.text as NSString).substring(from: replacement.caretUTF16) == " après")
+        #expect(BrowserAssistantMentionRange.atCaret(in: "😀 @x", utf16Offset: 1) == nil)
     }
 
     @Test("E-mail, URL and selected ranges stay literal")
@@ -38,7 +39,26 @@ struct BrowserAssistantMentionTests {
             selection: NSRange(location: 0, length: 6)) == nil)
     }
 
-    @Test("Duplicate names retain distinct identity and path matches")
+    @Test("Parsed multiword path query selects the matching duplicate and replaces only its range")
+    func parsedPathQueryReplacement() throws {
+        let first = BrowserAssistantMentionOption(id: .folder(UUID()), kind: .folder, title: "Notes",
+            path: "Work / Notes", detail: "Folder", members: [])
+        let second = BrowserAssistantMentionOption(id: .folder(UUID()), kind: .folder, title: "Notes",
+            path: "Personal / Notes", detail: "Folder", members: [])
+        let draft = "😀 Compare\nOpen @Personal / Notes after this"
+        let ns = draft as NSString
+        let mention = ns.range(of: "@Personal / Notes")
+        let caret = NSMaxRange(mention)
+        let parsed = try #require(BrowserAssistantMentionRange.atCaret(in: draft, utf16Offset: caret))
+        #expect(parsed.query == "Personal / Notes")
+        let matches = BrowserAssistantMentionOptions.matching(parsed.query, options: [first, second])
+        #expect(matches.map(\.id) == [second.id])
+        let replacement = parsed.replacing(in: draft, with: matches[0].title)
+        #expect(replacement.text == "😀 Compare\nOpen Notes after this")
+        #expect((replacement.text as NSString).substring(from: replacement.caretUTF16) == " after this")
+    }
+
+    @Test("Duplicate folder and tab names retain distinct identity and path matches")
     func duplicateOptionIdentity() {
         let first = BrowserAssistantMentionOption(id: .folder(UUID()), kind: .folder, title: "Notes",
             path: "Work / Notes", detail: "Folder", members: [])
@@ -56,6 +76,34 @@ struct BrowserAssistantMentionTests {
         #expect(BrowserAssistantMentionOptions.matching("overview personal.test", options: tabs).map(\.id) == [.tab(tabB.id)])
     }
 
+    @Test("Whole Space member filtering starts empty and resets when returning to all context")
+    func memberFilterIsIndependentFromGroupQuery() {
+        let overview = source("Overview", host: "work.test")
+        let roadmap = source("Roadmap", host: "personal.test")
+        let group = BrowserAssistantMentionOption(id: .space(UUID()), kind: .space, title: "Whole Space",
+            path: "Research", detail: "Current window", members: [overview, roadmap])
+        let options = [
+            BrowserAssistantMentionOption(id: .tab(overview.id), kind: .tab, title: overview.title,
+                path: "Research / Notes", detail: "work.test", members: [overview]),
+            BrowserAssistantMentionOption(id: .tab(roadmap.id), kind: .tab, title: roadmap.title,
+                path: "Research / Notes", detail: "personal.test", members: [roadmap]),
+        ]
+        var selection = BrowserAssistantMentionMemberSelection()
+        selection.begin(group, originalQuery: "Whole Space")
+        selection.updateQuery("Whole Space")
+        #expect(selection.query.isEmpty)
+        #expect(BrowserAssistantMentionOptions.matching(selection.query, options: options).count == 2)
+        selection.updateQuery("Whole Space roadmap personal.test")
+        #expect(selection.query == "roadmap personal.test")
+        selection.updateQuery("whole space roadmap")
+        #expect(selection.query == "roadmap")
+        selection.updateQuery("Whole Space")
+        #expect(selection.query.isEmpty)
+        selection.back()
+        #expect(selection.group == nil)
+        #expect(selection.originalQuery.isEmpty && selection.query.isEmpty)
+    }
+
     @Test("Group additions deduplicate overlaps and reject overflow atomically")
     func groupCapIsAtomic() {
         let selected = (0..<7).map { source("Selected \($0)") }
@@ -65,6 +113,7 @@ struct BrowserAssistantMentionTests {
         let tooMany = [source("A"), source("B")]
         #expect(BrowserAssistantMentionOptions.additions(for: tooMany, selected: selected) == nil)
         #expect(BrowserAssistantMentionOptions.additions(for: tooMany, selected: [])?.count == 2)
+        #expect(BrowserAssistantMentionOptions.additions(for: [overlap, oneNew], selected: Array(repeating: overlap, count: 8), cap: 2)?.map(\.id) == [oneNew.id])
         var liveMembers = [source("Snapshot A"), source("Snapshot B")]
         let snapshot = BrowserAssistantMentionOption(id: .folder(UUID()), kind: .folder, title: "Snapshot",
             path: "Space / Snapshot", detail: "Folder", members: liveMembers)

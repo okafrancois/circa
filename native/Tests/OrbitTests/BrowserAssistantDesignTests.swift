@@ -35,6 +35,22 @@ private func source(_ title: String) -> BrowserAIContextSource {
 
 @MainActor @Suite("Assistant Space palette")
 struct BrowserAssistantPaletteTests {
+    @Test("Picker navigation stays in the menu while text and Backspace reach the composer")
+    func pickerKeyRouting() throws {
+        func event(_ keyCode: UInt16, _ characters: String, modifiers: NSEvent.ModifierFlags = []) throws -> NSEvent {
+            try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: modifiers,
+                timestamp: 0, windowNumber: 0, context: nil, characters: characters,
+                charactersIgnoringModifiers: characters, isARepeat: false, keyCode: keyCode))
+        }
+        for key in [BrowserAssistantKey.up, BrowserAssistantKey.down, BrowserAssistantKey.returnKey,
+                    BrowserAssistantKey.keypadEnter, BrowserAssistantKey.escape] {
+            #expect(!BrowserAssistantPopover.shouldForwardTyping(try event(key, "")))
+        }
+        #expect(BrowserAssistantPopover.shouldForwardTyping(try event(51, "\u{8}")))
+        #expect(BrowserAssistantPopover.shouldForwardTyping(try event(0, "a")))
+        #expect(!BrowserAssistantPopover.shouldForwardTyping(try event(14, "e", modifiers: .command)))
+    }
+
     @Test("The first dock paint retains its tint before a host is attached")
     func firstDockPaint() throws {
         let card = BrowserContentCardView()

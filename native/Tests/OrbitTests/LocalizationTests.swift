@@ -75,7 +75,7 @@ struct LocalizationTests {
             "Sport", "5 minutes", "15 minutes", "30 minutes", "example.org",
             "%@ · %@", "1 cookie", "%ld cookies", "Page", "%ld %%",
             "AA", "Boost", "Boosts", "CSS", "JS",
-            "aa", "{}", "Options", "Cookies", "%@: %@",
+            "aa", "+%d", "{}", "Options", "Cookies", "%@: %@",
             "%@ — %@", "%d s · %@", "iCloud", "Cobalt", "Version %@ (%@)",
             "Riso", "⌘", "W", "URL", "Perplexity",
             "Chromium %@", "%@, %@", "Little Circa — %@", "example.com", "Codex",

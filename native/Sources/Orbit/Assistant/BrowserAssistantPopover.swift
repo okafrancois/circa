@@ -137,7 +137,7 @@ final class BrowserAssistantPopover: NSObject, NSWindowDelegate {
         self.panel = panel
         if forwardTyping {
             panel.onTyping = { [weak self] event in
-                guard event.modifierFlags.intersection([.command, .control, .option]).isEmpty,
+                guard Self.shouldForwardTyping(event),
                       let self, let source = self.source, source.isVisible,
                       let responder = self.previousResponder, source.firstResponder === responder else { return false }
                 responder.keyDown(with: event)
@@ -182,6 +182,12 @@ final class BrowserAssistantPopover: NSObject, NSWindowDelegate {
         let frame = Self.frame(composer: composer, size: host.fittingSize, placement: placement,
                                top: source.frame.maxY - 18, visible: screen.visibleFrame)
         if frame != panel.frame { panel.setFrame(frame, display: true) }
+    }
+
+    static func shouldForwardTyping(_ event: NSEvent) -> Bool {
+        guard event.modifierFlags.intersection([.command, .control, .option]).isEmpty else { return false }
+        return ![BrowserAssistantKey.up, BrowserAssistantKey.down, BrowserAssistantKey.returnKey,
+                 BrowserAssistantKey.keypadEnter, BrowserAssistantKey.escape].contains(event.keyCode)
     }
 
     private func animate(_ view: NSView, panelFrame: NSRect, trailing: Bool, reduced: Bool) {

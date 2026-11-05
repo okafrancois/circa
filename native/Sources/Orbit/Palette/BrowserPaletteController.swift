@@ -447,21 +447,32 @@ final class BrowserPaletteController<Engine: BrowserEngine> {
         let picker = BrowserAssistantContextPicker(sources: owner.assistantSources, scopes: owner.assistantScopes,
             query: range.query, selected: conversation.selectedSources,
             currentTabID: owner.session.organization?.selectedTab?.id.rawValue,
-            favicons: [:], width: 320, choose: { [weak self, weak owner, weak conversation] members, toggles, label in
+            favicons: [:], width: 320, choose: { [weak self, weak owner, weak conversation] members, toggles, label, _ in
                 guard let self, let owner, let conversation, isPresented, isCurrent,
-                      owner.assistantEnabled, owner.session.activeProfileID == profile else { return }
+                      owner.assistantEnabled, owner.session.activeProfileID == profile else { return false }
                 if toggles, let source = members.first, conversation.selectedSources.contains(where: { $0.id == source.id }) {
                     conversation.removeSource(source.id)
                 } else if let additions = BrowserAssistantMentionOptions.additions(for: members, selected: conversation.selectedSources) {
                     for source in additions { conversation.select(source) }
-                } else { return }
+                } else { return false }
                 let updated = range.replacing(in: draft, with: label)
                 query(updated.text, preserveSelection: true, userInitiated: false)
                 editor?.setSelectedRange(NSRange(location: updated.caretUTF16, length: 0))
                 mentionsPopover.close(notify: false)
-            })
+                return true
+            }, restoreGroupQuery: { [weak self] groupQuery in self?.restoreAssistantMentionQuery(groupQuery) })
         mentionsPopover.show(from: view.input, placement: .below(maxWidth: 320), content: AnyView(picker), palette: palette,
             reduced: OrbitMotionPreferences.prefersReducedMotion, forwardTyping: true)
+    }
+
+    private func restoreAssistantMentionQuery(_ groupQuery: String) {
+        guard let editor = view.input.currentEditor() as? NSTextView,
+              let range = BrowserAssistantMentionRange.atCaret(in: draft,
+                  utf16Offset: editor.selectedRange().location, selection: editor.selectedRange()) else { return }
+        let token = "@" + groupQuery
+        let updated = range.replacing(in: draft, with: token)
+        query(updated.text, preserveSelection: true, userInitiated: false)
+        editor.setSelectedRange(NSRange(location: range.range.location + (token as NSString).length, length: 0))
     }
 
     private func renderSkills() {

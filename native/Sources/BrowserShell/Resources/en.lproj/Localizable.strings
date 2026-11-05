@@ -872,6 +872,13 @@
 "Current window" = "Current window";
 "%d / 8 sources" = "%d / 8 sources";
 "Choose individual tabs · %d places left" = "Choose individual tabs · %d places left";
+"Added" = "Added";
+"+%d" = "+%d";
+"%d tabs · +%d" = "%d tabs · +%d";
+"Nothing was added: %d new sources do not fit in %d places." = "Nothing was added: %d new sources do not fit in %d places.";
+"Choose individual tabs" = "Choose individual tabs";
+"No matching tabs in this group." = "No matching tabs in this group.";
+"All 8 context sources are in use. Remove one before adding a tab." = "All 8 context sources are in use. Remove one before adding a tab.";
 "Back to all context" = "Back to all context";
 
 "Inbox" = "Inbox";
