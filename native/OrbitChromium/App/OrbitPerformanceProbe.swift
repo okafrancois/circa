@@ -664,7 +664,7 @@ enum OrbitPerformanceProbe {
                                      owner: OrbitWindowController,
                                      command: [String: String]) async -> [String: Any] {
         let bundleID = "lab.orbit.orbit.perf-engine-prep"
-        guard ownsWindow(owner, bundleID: bundleID),
+        guard Bundle.main.bundleIdentifier == bundleID,
               activeSiteSessionConfiguration()?.syntheticGuard != nil,
               let text = command["url"], let base = URL(string: text),
               base.scheme == "http", base.host == "127.0.0.1",
