@@ -53,6 +53,7 @@ def phase(args):
                f'--orbit-data-root={data}', f'--orbit-smoke-run={output}',
                f'--orbit-smoke-fixture=http://127.0.0.1:{server.server_port}/',
                '--orbit-smoke-phase=fresh', '--orbit-smoke-ai-settings',
+               *(['--orbit-smoke-ai-site-exclusion'] if args.site_exclusion else []),
                '-AppleLanguages', '(en)', '-AppleLocale', 'en_US']
     try:
         with lab.OwnedProcessRun() as owner:
@@ -62,8 +63,13 @@ def phase(args):
         results = json.loads((output / 'results.json').read_text())
         assert process.returncode == 0 and not owner.remaining and not owner.forced_signals
         assert not results['aborted'] and all(row['status'] != 'failed' for row in results['results'])
-        required = {'default-off', 'section', 'discovery', 'persisted', 'capture-owner'}
         proven = {row['id'] for row in results['results'] if row['status'] == 'proven'}
+        if args.site_exclusion:
+            required = {'fixture-host', 'settings-accepts-host', 'page-committed', 'excluded', 'shared-without-exclusion'}
+            assert {'ai-site-exclusion.' + name for name in required} <= proven
+            print(f'AI site exclusion: {len(required)} checks, clean normal shutdown')
+            return
+        required = {'default-off', 'section', 'discovery', 'persisted', 'capture-owner'}
         assert {'ai-settings.' + name for name in required} <= proven
         captures = {name + '-' + surface + '.png' for name in ('light', 'dark')
                     for surface in ('off-top', 'off-lower', 'on-top', 'on-lower')}
@@ -80,12 +86,15 @@ def main():
     parser.add_argument('--app', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--phase', action='store_true')
+    parser.add_argument('--site-exclusion', action='store_true',
+                        help='Per-site AI exclusion on a committed page with an underscore host')
     args = parser.parse_args()
     if args.phase:
         phase(args)
     else:
         subprocess.run(['/usr/bin/lockf', '-k', '/tmp/orbit-gui-slot.lock', 'python3', __file__,
-                        '--app', str(args.app.resolve()), '--output', str(args.output.resolve()), '--phase'], check=True)
+                        '--app', str(args.app.resolve()), '--output', str(args.output.resolve()), '--phase',
+                        *(['--site-exclusion'] if args.site_exclusion else [])], check=True)
 
 
 if __name__ == '__main__':

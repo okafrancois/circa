@@ -465,6 +465,13 @@ struct BrowserAIPreferencesTests {
         #expect(!BrowserAIPolicy.allowsPageAccess(preferences, isPrivate: false, host: "www.bank.example"))
         #expect(!BrowserAIPolicy.allowsPageAccess(preferences, isPrivate: false, host: "login.bank.example"))
         #expect(BrowserAIPolicy.allowsPageAccess(preferences, isPrivate: false, host: "notbank.example"))
+        // Engine hosts that the Settings input grammar rejects must still honor the site list.
+        #expect(!BrowserAIPolicy.allowsPageAccess(preferences, isPrivate: false, host: "team_a.bank.example"))
+        #expect(!BrowserAIPolicy.allowsPageAccess(preferences, isPrivate: false, host: "WWW.Team_A.Bank.Example."))
+        #expect(BrowserAIPolicy.allowsPageAccess(preferences, isPrivate: false, host: "team_a.notbank.example"))
+        preferences.disabledSites = ["bank.example", "intranet_wiki.example"]
+        #expect(!BrowserAIPolicy.allowsPageAccess(preferences, isPrivate: false, host: "intranet_wiki.example"))
+        #expect(BrowserAIPolicy.adding("intranet_wiki.example", to: []) == ["intranet_wiki.example"])
         preferences.readsCurrentTabOnRequest = false
         #expect(!BrowserAIPolicy.allowsPageAccess(preferences, isPrivate: false, host: "news.example"))
         #expect(BrowserAIPolicy.site(from: " https://WWW.Example.com/path?q=1 ") == "example.com")

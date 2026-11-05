@@ -10,6 +10,7 @@ extension OrbitSmokeDriver {
         func check(_ name: String, _ passed: Bool) { self.check("ai-settings." + name, passed) }
         guard let profile = owner.session.activeProfileID else { check("context", false); return }
         if arguments.contains("--orbit-smoke-errand") { await errandScenario(environment, owner); return }
+        if arguments.contains("--orbit-smoke-ai-site-exclusion") { await aiSiteExclusionScenario(environment, owner); return }
         if arguments.contains("--orbit-smoke-boost-generation") { await boostGenerationScenario(environment, owner); return }
         if arguments.contains("--orbit-smoke-link-preview") { await linkPreviewScenario(environment, owner); return }
         if arguments.contains("--orbit-smoke-today") { await todayScenario(environment, owner); return }
