@@ -158,24 +158,29 @@ struct SettingsLiveTests {
             coordinator.update(payload: payload, at: NSPoint(x: 30, y: 30), in: container, targets: [target], snapshot: snapshot, catalog: org.catalog)
         }
         #expect(haptics == 1)
-        coordinator.clear()
-        coordinator.update(payload: payload, at: NSPoint(x: 30, y: 30), in: container, targets: [target],
-                           snapshot: snapshot, catalog: org.catalog, emitsHaptic: false)
-        #expect(haptics == 1)
-        coordinator.clear()
-        coordinator.update(payload: payload, at: NSPoint(x: 30, y: 30), in: container, targets: [target],
+        let changedTarget = RecordingDropTarget(frame: container.bounds, destination: .init(.pinned(org.spaceID)))
+        container.addSubview(changedTarget.view)
+        coordinator.update(payload: payload, at: NSPoint(x: 30, y: 30), in: container, targets: [changedTarget],
                            snapshot: snapshot, catalog: org.catalog)
         #expect(haptics == 2)
         coordinator.clear()
+        coordinator.update(payload: payload, at: NSPoint(x: 30, y: 30), in: container, targets: [target],
+                           snapshot: snapshot, catalog: org.catalog, emitsHaptic: false)
+        #expect(haptics == 2)
+        coordinator.clear()
+        coordinator.update(payload: payload, at: NSPoint(x: 30, y: 30), in: container, targets: [target],
+                           snapshot: snapshot, catalog: org.catalog)
+        #expect(haptics == 3)
+        coordinator.clear()
         try await environment.settings.updateInteraction { $0.hapticFeedback = false }
         coordinator.update(payload: payload, at: NSPoint(x: 30, y: 30), in: container, targets: [target], snapshot: snapshot, catalog: org.catalog)
-        #expect(haptics == 2)
+        #expect(haptics == 3)
         try await environment.settings.updateInteraction { $0.hapticFeedback = true }
         coordinator.clear()
         let invalid = SidebarDragPayload(sourceWindow: UUID(), spaceID: org.spaceID, profileID: ProfileID(),
             nodes: [.tab(tab)], rowCount: 1, grabOffsetX: 0)
         coordinator.update(payload: invalid, at: NSPoint(x: 30, y: 30), in: container, targets: [target], snapshot: snapshot, catalog: org.catalog)
-        #expect(haptics == 2)
+        #expect(haptics == 3)
     }
 }
 }
