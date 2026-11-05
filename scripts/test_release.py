@@ -249,6 +249,32 @@ class CloudProfileTests(unittest.TestCase):
             self.assertTrue(all(observed[-1][1][key] == value for key, value in expected.items()))
             self.assertTrue(all('com.apple.developer.icloud-services' not in values for path, values in observed[:-1]))
             self.assertTrue(all(values['com.apple.security.cs.allow-jit'] for _, values in observed))
+            for capability in ('com.apple.security.device.audio-input', 'com.apple.security.device.camera'):
+                self.assertIs(observed[-1][1][capability], True)
+                self.assertTrue(all(capability not in values for _, values in observed[:-1]))
+
+    def test_local_synthetic_signing_keeps_media_capabilities_without_cloud_grants(self):
+        from contextlib import nullcontext
+        import plistlib
+        with tempfile.TemporaryDirectory() as temporary:
+            bundle = Path(temporary) / 'Orbit.app'
+            helper = bundle / 'Contents/Frameworks/Orbit Helper.app/Contents/MacOS/Helper'
+            helper.parent.mkdir(parents=True)
+            helper.write_bytes(b'\xcf\xfa\xed\xfe')
+            observed = []
+            def run(arguments, **kwargs):
+                if '--entitlements' in arguments:
+                    filename = Path(arguments[arguments.index('--entitlements') + 1])
+                    observed.append((Path(arguments[-1]), plistlib.loads(filename.read_bytes())))
+                return b''
+            with patch.object(local_signing, 'configured_identity', return_value=nullcontext(['--sign', 'synthetic'])), patch.object(local_signing, 'run', side_effect=run):
+                local_signing.sign_chromium_bundle(bundle)
+            self.assertEqual(observed[-1][0], bundle)
+            self.assertIs(observed[-1][1]['com.apple.security.device.audio-input'], True)
+            self.assertIs(observed[-1][1]['com.apple.security.device.camera'], True)
+            self.assertTrue(all('com.apple.developer.icloud-services' not in values for _, values in observed))
+            self.assertTrue(all('com.apple.security.device.camera' not in values and
+                                'com.apple.security.device.audio-input' not in values for _, values in observed[:-1]))
 
     def test_no_profile_or_synthetic_bundle_never_embeds_cloud_capabilities(self):
         self.assertIsNone(release.embed_cloud_profile(Path('/unused'), self.config))

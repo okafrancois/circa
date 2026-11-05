@@ -293,6 +293,11 @@ def sign_chromium_bundle(bundle, identity_name='local', main_entitlements=None):
         }))
         host_entitlements = Path(temporary) / 'host.plist'
         host_values = plistlib.loads(entitlements.read_bytes())
+        # Hardened Runtime capture requires these capabilities in addition to site and OS consent.
+        host_values.update({
+            'com.apple.security.device.audio-input': True,
+            'com.apple.security.device.camera': True,
+        })
         host_values.update(main_entitlements or {})
         host_entitlements.write_bytes(plistlib.dumps(host_values))
         def sign_one(path, chromium=False, preserve=False):
