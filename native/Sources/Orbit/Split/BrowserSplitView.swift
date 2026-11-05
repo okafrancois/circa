@@ -47,6 +47,13 @@ final class BrowserSplitView: NSView {
         }
     }
     private var activeDropTarget: DropTarget?
+
+    func updateDropTarget(_ target: DropTarget?) -> Bool {
+        guard let target else { activeDropTarget = nil; return false }
+        guard target != activeDropTarget else { return false }
+        activeDropTarget = target
+        return true
+    }
     var accent = OrbitTokens.ThemeAccent.defaultPurple
     private var presentedPanes: [Pane] = []
     private var active: TabID?
@@ -393,13 +400,12 @@ final class BrowserSplitView: NSView {
         let point = convert(sender.draggingLocation, from: nil)
         guard let payload = SidebarDragPayload(pasteboard: sender.draggingPasteboard), canDrop?(payload) == true,
               let (orientation, leading) = edge(at: point) else {
-            activeDropTarget = nil
+            _ = updateDropTarget(nil)
             dropHint.isHidden = true
             return []
         }
         let nextTarget = DropTarget(payload: payload, orientation: orientation, leading: leading)
-        if nextTarget != activeDropTarget { onDropTargetEntered?() }
-        activeDropTarget = nextTarget
+        if updateDropTarget(nextTarget) { onDropTargetEntered?() }
         var hint = bounds
         if orientation == .horizontal { hint.size.width /= 2; if !leading { hint.origin.x += hint.width } }
         else { hint.size.height /= 2; if !leading { hint.origin.y += hint.height } }
@@ -408,9 +414,9 @@ final class BrowserSplitView: NSView {
         dropHint.isHidden = false
         return .move
     }
-    override func draggingExited(_ sender: (any NSDraggingInfo)?) { activeDropTarget = nil; dropHint.isHidden = true }
+    override func draggingExited(_ sender: (any NSDraggingInfo)?) { _ = updateDropTarget(nil); dropHint.isHidden = true }
     override func performDragOperation(_ sender: any NSDraggingInfo) -> Bool {
-        defer { activeDropTarget = nil; dropHint.isHidden = true }
+        defer { _ = updateDropTarget(nil); dropHint.isHidden = true }
         guard let payload = SidebarDragPayload(pasteboard: sender.draggingPasteboard), canDrop?(payload) == true,
               let (orientation, leading) = edge(at: convert(sender.draggingLocation, from: nil)) else { return false }
         onDrop?(payload, orientation, leading)

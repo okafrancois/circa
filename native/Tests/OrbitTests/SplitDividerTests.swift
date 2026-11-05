@@ -11,17 +11,24 @@ struct SplitDividerTests {
         let payload = SidebarDragPayload(sourceWindow: UUID(), spaceID: SpaceID(), profileID: ProfileID(),
                                          nodes: [.tab(TabID())], rowCount: 1, grabOffsetX: 0)
         let target = BrowserSplitView.DropTarget(payload: payload, orientation: .horizontal, leading: true)
-        var current: BrowserSplitView.DropTarget?
+        let view = BrowserSplitView()
+        let feedback = OrbitInteractionFeedback()
         var events = 0
-        for candidate in [target, target,
-                          .init(payload: payload, orientation: .horizontal, leading: false),
-                          .init(payload: payload, orientation: .vertical, leading: false)] {
-            if candidate != current { events += 1 }
-            current = candidate
+        feedback.performAlignment = { events += 1 }
+        let candidates = [target, target,
+            BrowserSplitView.DropTarget(payload: payload, orientation: .horizontal, leading: false),
+            BrowserSplitView.DropTarget(payload: payload, orientation: .vertical, leading: false)]
+        for candidate in candidates {
+            if view.updateDropTarget(candidate) { feedback.reorderSnapped() }
         }
         #expect(events == 3)
-        current = nil
-        if target != current { events += 1 }
+        #expect(!view.updateDropTarget(nil))
+        #expect(!view.updateDropTarget(nil))
+        if view.updateDropTarget(target) { feedback.reorderSnapped() }
+        #expect(events == 4)
+        feedback.preferences.hapticFeedback = false
+        if view.updateDropTarget(nil) { feedback.reorderSnapped() }
+        if view.updateDropTarget(target) { feedback.reorderSnapped() }
         #expect(events == 4)
     }
 
