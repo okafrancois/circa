@@ -139,8 +139,11 @@ final class BrowserAssistantPopover: NSObject, NSWindowDelegate {
             panel.onTyping = { [weak self] event in
                 guard Self.shouldForwardTyping(event),
                       let self, let source = self.source, source.isVisible,
-                      let responder = self.previousResponder, source.firstResponder === responder else { return false }
-                responder.keyDown(with: event)
+                      let responder = self.previousResponder, source.firstResponder === responder,
+                      let forwarded = Self.forwardingEvent(event, to: source.windowNumber) else { return false }
+                // Route the event through the owning window so AppKit's text system updates its
+                // selection and caret. Calling keyDown directly skips that normal dispatch path.
+                source.sendEvent(forwarded)
                 return true
             }
         }
@@ -188,6 +191,15 @@ final class BrowserAssistantPopover: NSObject, NSWindowDelegate {
         guard event.modifierFlags.intersection([.command, .control, .option]).isEmpty else { return false }
         return ![BrowserAssistantKey.up, BrowserAssistantKey.down, BrowserAssistantKey.returnKey,
                  BrowserAssistantKey.keypadEnter, BrowserAssistantKey.escape].contains(event.keyCode)
+    }
+
+    static func forwardingEvent(_ event: NSEvent, to windowNumber: Int) -> NSEvent? {
+        guard event.type == .keyDown else { return nil }
+        return NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: event.modifierFlags,
+                                timestamp: event.timestamp, windowNumber: windowNumber, context: nil,
+                                characters: event.characters ?? "",
+                                charactersIgnoringModifiers: event.charactersIgnoringModifiers ?? "",
+                                isARepeat: event.isARepeat, keyCode: event.keyCode)
     }
 
     private func animate(_ view: NSView, panelFrame: NSRect, trailing: Bool, reduced: Bool) {

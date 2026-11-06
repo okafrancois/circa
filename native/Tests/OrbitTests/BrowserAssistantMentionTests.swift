@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Testing
 import BrowserCore
@@ -17,6 +18,32 @@ private actor SyntheticMentionProviderFixture: BrowserAIProviderClient {
 
 @Suite("Assistant mentions")
 struct BrowserAssistantMentionTests {
+    @Test("Context popover forwards editable keys through the owning window event path")
+    @MainActor
+    func popoverForwardingPreservesNativeKeyEvent() throws {
+        let event = try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [],
+            timestamp: 1, windowNumber: 41, context: nil, characters: "←",
+            charactersIgnoringModifiers: "←", isARepeat: false, keyCode: BrowserAssistantKey.left))
+        let forwarded = try #require(BrowserAssistantPopover.forwardingEvent(event, to: 73))
+
+        #expect(BrowserAssistantPopover.shouldForwardTyping(event))
+        #expect(forwarded.windowNumber == 73)
+        #expect(forwarded.keyCode == BrowserAssistantKey.left)
+        #expect(forwarded.characters == event.characters)
+        #expect(forwarded.charactersIgnoringModifiers == event.charactersIgnoringModifiers)
+        #expect(forwarded.modifierFlags == event.modifierFlags)
+        #expect(BrowserAssistantPopover.forwardingEvent(event, to: 73)?.type == .keyDown)
+
+        let commandEvent = try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: .command,
+            timestamp: 1, windowNumber: 41, context: nil, characters: "e",
+            charactersIgnoringModifiers: "e", isARepeat: false, keyCode: 14))
+        #expect(!BrowserAssistantPopover.shouldForwardTyping(commandEvent))
+        let keyUp = try #require(NSEvent.keyEvent(with: .keyUp, location: .zero, modifierFlags: [],
+            timestamp: 1, windowNumber: 41, context: nil, characters: "←",
+            charactersIgnoringModifiers: "←", isARepeat: false, keyCode: BrowserAssistantKey.left))
+        #expect(BrowserAssistantPopover.forwardingEvent(keyUp, to: 73) == nil)
+    }
+
     @Test("Mention range uses UTF-16 offsets and preserves suffix")
     func unicodeCaretReplacement() throws {
         let draft = "😀 résumé @réf après"
