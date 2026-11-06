@@ -89,7 +89,8 @@ final class RichTabPreviewController {
         view.alphaValue = 1
         view.isInteractive = true
         view.configure(current)
-        let frame = row.convert(row.visibleRect, to: host)
+        // Rows permit drawing outside their bounds; visibleRect can cover the whole viewport.
+        let frame = row.convert(row.bounds.intersection(row.visibleRect), to: host)
         view.frame = Self.frame(anchor: frame, bounds: host.bounds, flipped: host.isFlipped)
         if view.superview !== host { host.addSubview(view, positioned: .above, relativeTo: nil) }
         if animated, !reducedMotion() {
@@ -105,7 +106,8 @@ final class RichTabPreviewController {
         let size = NSSize(width: min(RichTabPreviewView.size.width, max(0, bounds.width - 16)),
                           height: min(RichTabPreviewView.size.height, max(0, bounds.height - 16)))
         let x = min(max(bounds.minX + 8, anchor.maxX + 8), bounds.maxX - size.width - 8)
-        let y = flipped ? anchor.minY : anchor.maxY - size.height
+        // Keep the action row beside the hovered tab so reaching it does not cross other tabs.
+        let y = flipped ? anchor.maxY - size.height : anchor.minY
         return NSRect(x: x, y: max(bounds.minY + 8, min(y, bounds.maxY - size.height - 8)), width: size.width, height: size.height)
     }
 
@@ -132,6 +134,16 @@ final class RichTabPreviewController {
         let captured = current.identity
         dismiss()
         action(selected, captured)
+    }
+
+    /// A new composer targets the requested tab, rather than its automatic active-page chip.
+    /// An existing draft keeps the sources the user already chose.
+    static func selectSource(_ source: BrowserAIContextSource, in conversation: BrowserAIConversation,
+                             replacingAutomaticContext: Bool) {
+        if replacingAutomaticContext {
+            for selected in conversation.selectedSources { conversation.removeSource(selected.id) }
+        }
+        conversation.select(source)
     }
 
     private func cancelPending() { epoch &+= 1; pending?.cancel(); pending = nil }
@@ -222,9 +234,10 @@ extension BrowserWindowController {
                     else { owner.session.addToFavorites([captured.tab]) }
                 case .split: owner.session.openTabInSplit(captured.tab)
                 case .ask:
-                    guard owner.assistantEnabled, let source = owner.assistantSources.first(where: { $0.id == captured.tab.rawValue }),
-                          let conversation = owner.ensureAssistant() else { return }
-                    conversation.select(source)
+                    guard owner.assistantEnabled, let source = owner.assistantSources.first(where: { $0.id == captured.tab.rawValue }) else { return }
+                    let previous = owner.aiConversation
+                    guard let conversation = owner.ensureAssistant() else { return }
+                    RichTabPreviewController.selectSource(source, in: conversation, replacingAutomaticContext: previous !== conversation)
                     if owner.assistantHost == nil { owner.toggleAssistant() }
                     owner.reconcileAssistant()
                 }

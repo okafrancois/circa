@@ -66,6 +66,11 @@ struct RichTabPreviewTests {
         #expect(f.tickets[0].cancelled && !f.controller.isPresented)
         f.show()
         #expect(f.controller.isPresented)
+        if let host = f.window.contentView {
+            let expected = RichTabPreviewController.frame(anchor: f.first.convert(f.first.bounds, to: host),
+                bounds: host.bounds, flipped: host.isFlipped)
+            #expect(f.controller.view.frame == expected)
+        }
         f.controller.hover(f.first, inside: false)
         let departure = f.tickets.last!
         let count = f.tickets.count
@@ -158,7 +163,27 @@ struct RichTabPreviewTests {
             let result = RichTabPreviewController.frame(anchor: NSRect(x: 8, y: 270, width: 230, height: 28), bounds: viewport, flipped: flipped)
             #expect(viewport.insetBy(dx: 8, dy: 8).contains(result))
             #expect(result.size == RichTabPreviewView.size)
+            let roomy = NSRect(x: 0, y: 0, width: 900, height: 700)
+            let row = NSRect(x: 8, y: 350, width: 230, height: 36)
+            let beside = RichTabPreviewController.frame(anchor: row, bounds: roomy, flipped: flipped)
+            let actionY = flipped ? beside.minY + 221 : beside.maxY - 221
+            #expect(abs(actionY - row.midY) <= 10)
         }
+    }
+
+    @Test("Ask replaces a new composer's automatic page but preserves sources in an existing draft")
+    func assistantContext() {
+        let a = BrowserAIContextSource(id: UUID(), revision: 1, url: URL(string: "https://example.test/current")!, title: "Current")
+        let b = BrowserAIContextSource(id: UUID(), revision: 1, url: URL(string: "https://example.test/hovered")!, title: "Hovered")
+        let conversation = BrowserAIConversation(choice: .init(provider: .codex), clients: [],
+            preferences: { .init() }, isPrivate: { false }, currentSource: { _ in nil }, reader: { _ in "" })
+        conversation.select(a)
+        RichTabPreviewController.selectSource(b, in: conversation, replacingAutomaticContext: true)
+        #expect(conversation.selectedSources == [b])
+        conversation.select(a)
+        RichTabPreviewController.selectSource(b, in: conversation, replacingAutomaticContext: false)
+        #expect(Set(conversation.selectedSources.map(\.id)) == [a.id, b.id])
+        #expect(!conversation.isRunning && conversation.messages.isEmpty)
     }
 }
 }
