@@ -170,8 +170,8 @@ final class BrowserWindowSettings {
 }
 
 extension BrowserSettingsDocument {
-    /// The icon a Space indicator draws. With dots enabled this is `.none`, which the header and
-    /// switcher already render as the plain dot presentation; the stored choice stays intact.
+    /// The icon a Space indicator draws. With dots enabled the switcher draws its existing dot
+    /// and the header uses its icon-free layout; the stored choice stays intact.
     func displayedSpaceIcon(_ id: SpaceID) -> BrowserSpaceIcon {
         usesDotsForSpaceIcons ? .none : space(id).iconSelection
     }
