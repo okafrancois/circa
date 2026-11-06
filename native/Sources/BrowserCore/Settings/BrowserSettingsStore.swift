@@ -151,6 +151,9 @@ public struct BrowserSettingsDocument: Codable, Equatable, Sendable {
     public var siteSearches: [BrowserSiteSearch] = BrowserSiteSearch.builtIns
     public var memorySaver: BrowserMemorySaverSetting = .oneHour
     public var safeBrowsingEnabled = false
+    /// Off by default: web pages keep their classic scrollbars unless the user opts in. Read once
+    /// at launch, because the engine fixes its scrollbar mode at startup.
+    public var overlayScrollbars = false
     public var allowJavaScriptFromAppleEvents = false
     public var automaticPictureInPicture = true
     public var quickWindowArchiveThreshold: BrowserAutoArchiveThreshold = .sixHours
@@ -177,7 +180,7 @@ public struct BrowserSettingsDocument: Codable, Equatable, Sendable {
     public var spaces: [SpaceID: BrowserSpaceSettings] = [:]
     public init() {}
     private enum CodingKeys: String, CodingKey {
-        case ai, allowJavaScriptFromAppleEvents, siteSearches, safeBrowsingEnabled, quickWindowArchiveThreshold, quickWindowProfilesByDomain, downloads, automaticPictureInPicture, hasSeenBoostsIntroduction, enablesBoostsOnWebsites, interaction, memorySaver, linkRouting, version, reducedMotion, profiles, spaces, opensExternalLinksInQuickWindow, lastActiveWindowID, lastActiveSpaceID
+        case ai, allowJavaScriptFromAppleEvents, siteSearches, safeBrowsingEnabled, overlayScrollbars, quickWindowArchiveThreshold, quickWindowProfilesByDomain, downloads, automaticPictureInPicture, hasSeenBoostsIntroduction, enablesBoostsOnWebsites, interaction, memorySaver, linkRouting, version, reducedMotion, profiles, spaces, opensExternalLinksInQuickWindow, lastActiveWindowID, lastActiveSpaceID
     }
     public init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
@@ -197,6 +200,7 @@ public struct BrowserSettingsDocument: Codable, Equatable, Sendable {
         quickWindowArchiveThreshold = try values.decodeIfPresent(BrowserAutoArchiveThreshold.self, forKey: .quickWindowArchiveThreshold) ?? .sixHours
         quickWindowProfilesByDomain = try values.decodeIfPresent([String: ProfileID].self, forKey: .quickWindowProfilesByDomain) ?? [:]
         safeBrowsingEnabled = try values.decodeIfPresent(Bool.self, forKey: .safeBrowsingEnabled) ?? false
+        overlayScrollbars = try values.decodeIfPresent(Bool.self, forKey: .overlayScrollbars) ?? false
         allowJavaScriptFromAppleEvents = try values.decodeIfPresent(Bool.self, forKey: .allowJavaScriptFromAppleEvents) ?? false
         automaticPictureInPicture = try values.decodeIfPresent(Bool.self, forKey: .automaticPictureInPicture) ?? true
         hasSeenBoostsIntroduction = try values.decodeIfPresent(Bool.self, forKey: .hasSeenBoostsIntroduction) ?? false
@@ -241,6 +245,17 @@ public actor BrowserSettingsStore {
         let loaded = try JSONDecoder().decode(BrowserSettingsDocument.self, from: data)
         try validate(loaded)
         return loaded.safeBrowsingEnabled
+    }
+
+    /// Read-only startup snapshot of the page scrollbar style. Any unreadable or unsupported
+    /// settings file keeps the classic scrollbars.
+    public static func overlayScrollbarsAtLaunch(destination: URL) -> Bool {
+        guard let data = try? BrowserPermissionFile.load(destination),
+              let header = try? JSONDecoder().decode(Header.self, from: data),
+              [1, BrowserSettingsDocument.currentVersion].contains(header.version),
+              let loaded = try? JSONDecoder().decode(BrowserSettingsDocument.self, from: data),
+              (try? validate(loaded)) != nil else { return false }
+        return loaded.overlayScrollbars
     }
 
     public static func unavailable() -> BrowserSettingsStore { BrowserSettingsStore(unavailable: ()) }
@@ -393,6 +408,12 @@ public actor BrowserSettingsStore {
     public func setSafeBrowsingEnabled(_ enabled: Bool) throws {
         var next = document
         next.safeBrowsingEnabled = enabled
+        try publish(next)
+    }
+
+    public func setOverlayScrollbars(_ enabled: Bool) throws {
+        var next = document
+        next.overlayScrollbars = enabled
         try publish(next)
     }
 

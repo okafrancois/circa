@@ -444,6 +444,7 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
                 liveToggle("Haptic feedback for tab organization and resizing", value: runtime.document.interaction.hapticFeedback,
                            identifier: "settings-reorder-haptics", icon: "hand.raised", save: model.setHapticFeedback)
             }
+            panel { BrowserOverlayScrollbarsSettingsRow(model: model) }
             panel {
                 settingRow("Website data and permissions", icon: "lock") {
                     Button(uiText("Manage…")) { model.navigate(to: .privacy) }

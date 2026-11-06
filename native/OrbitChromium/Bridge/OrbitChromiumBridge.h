@@ -306,6 +306,9 @@ typedef struct {
   int32_t network_policy;
   /* Explicit process-wide opt-in, resolved before initialization; requires GOOGLE_API_KEY. */
   int32_t safe_browsing_enabled;
+  /* 1 forces Chromium's own overlay scrollbar mode for web content (OverlayScrollbar feature,
+   * mode "overlay"); 0 keeps the engine default. Fixed for the process lifetime. */
+  int32_t overlay_scrollbars;
 } ACRRunOptions;
 
 /* (ABI 8) Chrome's initial profile, which backs CEF's global request context, is pinned to

@@ -262,6 +262,10 @@ enum OrbitLauncher {
         var options = productRuntimeOptions(configuration, extraSwitches: hooks?.runtimeSwitches ?? [],
                                             hiddenApplication: hooks?.hiddenApplication ?? false)
         options.safeBrowsingEnabled = launch.enabled
+        let overlayScrollbars = BrowserSettingsStore.overlayScrollbarsAtLaunch(
+            destination: configuration.sessionFile.appendingPathExtension("settings.json"))
+        options.overlayScrollbars = overlayScrollbars
+        BrowserOverlayScrollbars.enabledAtLaunch = overlayScrollbars
         BrowserPerformance.mark(.runtime)
         if BrowserPerformance.enabled {
             ACRSetStartupTimingCallback { phase in

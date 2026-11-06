@@ -41,6 +41,8 @@ public final class ChromiumRuntime {
         /// Laboratory measurement of `OnBeforeResourceLoad` holds; see the bridge header.
         public var asyncNavigationHold: Bool
         public var safeBrowsingEnabled = false
+        /// Forces the engine's existing overlay scrollbar mode for web content; fixed at launch.
+        public var overlayScrollbars = false
         public var networkPolicy: NetworkPolicy
 
         public init(rootCachePath: String, keychainServiceName: String, keychainAccountName: String,
@@ -235,6 +237,7 @@ public final class ChromiumRuntime {
                 runOptions.secure_storage = Int32(keychain == nil ? ACR_SECURE_STORAGE_MOCK.rawValue
                                                                   : ACR_SECURE_STORAGE_KEYCHAIN.rawValue)
                 runOptions.safe_browsing_enabled = options.safeBrowsingEnabled ? 1 : 0
+                runOptions.overlay_scrollbars = options.overlayScrollbars ? 1 : 0
                 runOptions.network_policy = Int32(options.networkPolicy == .product ? ACR_NETWORK_PRODUCT.rawValue
                                                                                     : ACR_NETWORK_HERMETIC.rawValue)
                 return ACRRun(CommandLine.argc, CommandLine.unsafeArgv, &runOptions, &callbacks, context)

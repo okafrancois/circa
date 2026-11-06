@@ -207,6 +207,9 @@ enum OrbitPerformanceProbe {
                             return ["id": item.itemIdentifier.rawValue, "height": view.bounds.height, "width": view.bounds.width]
                         }
                     }
+                } else if name == "overlay-scrollbars", ownsWindow(owner, bundleID: OrbitOverlayScrollbarsProbe.bundleID) {
+                    result["overlayScrollbars"] = await OrbitOverlayScrollbarsProbe.run(application, environment: environment,
+                                                                                        owner: owner, command: command)
                 } else if name == "peek-control-geometry", ownsWindow(owner, bundleID: "lab.orbit.orbit.peek-control-geometry") {
                     NSApp.appearance = NSAppearance(named: command["appearance"] == "dark" ? .darkAqua : .aqua)
                     if !owner.isPeekPresented { _ = owner.openPeek(URL(string: "http://127.0.0.1:8769/peek-controls")!) }

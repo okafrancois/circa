@@ -245,6 +245,12 @@ final class BrowserSettingsModel<Engine: BrowserEngine>: ObservableObject {
         await environment.refreshSettingsCatalog()
     }
 
+    func setOverlayScrollbars(_ value: Bool) async throws {
+        do { try await runtime.store.setOverlayScrollbars(value) }
+        catch { await runtime.refresh(); throw error }
+        await runtime.refresh()
+    }
+
     func setAutomaticPictureInPicture(_ value: Bool) async throws {
         do { try await runtime.store.setAutomaticPictureInPicture(value) }
         catch { await runtime.refresh(); throw error }

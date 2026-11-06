@@ -209,6 +209,7 @@ struct State {
   std::vector<std::string> switches;
   int32_t secure_storage = ACR_SECURE_STORAGE_MOCK;
   bool safe_browsing_enabled = false;
+  bool overlay_scrollbars = false;
   int32_t network_policy = ACR_NETWORK_HERMETIC;
   // CHROMIUM-APP-R3: the engine root, opened once (descriptor-anchored profile operations), and
   // the allow-listed browser arguments actually given to Chromium.
@@ -1900,7 +1901,10 @@ class App final : public CefApp, public CefBrowserProcessHandler {
     }
     auto enabled = command->GetSwitchValue("enable-features").ToString();
     if (!enabled.empty()) enabled += ",";
-    command->AppendSwitchWithValue("enable-features", enabled + "WebContentsDiscard");
+    // The user's page scrollbar choice selects the engine's existing overlay mode; otherwise the
+    // feature keeps its default (follow the system scroller style).
+    command->AppendSwitchWithValue("enable-features", enabled + "WebContentsDiscard" +
+        (g_state && g_state->overlay_scrollbars ? ",OverlayScrollbar:mode/overlay" : ""));
     // Disabled features of the allow-listed arguments, the extra switches and the policy, as one
     // value (the filtered argv carries none itself).
     std::vector<std::string> disabled = {command->GetSwitchValue("disable-features").ToString()};
@@ -2157,6 +2161,7 @@ extern "C" int32_t ACRRun(int argc, char* argv[], const ACRRunOptions* options,
     state.network_policy = options->network_policy;
     const char* api_key = getenv("GOOGLE_API_KEY");
     state.safe_browsing_enabled = options->safe_browsing_enabled == 1 && api_key && *api_key;
+    state.overlay_scrollbars = options->overlay_scrollbars == 1;
     if (state.secure_storage == ACR_SECURE_STORAGE_KEYCHAIN) {
       if (!options->keychain_service_name || !*options->keychain_service_name
           || !options->keychain_account_name || !*options->keychain_account_name) return 64;
