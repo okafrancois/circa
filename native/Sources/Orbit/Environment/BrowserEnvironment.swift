@@ -401,7 +401,7 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
         controller.skillsRuntime = skills
         controller.boostsRuntime = boosts
         controller.sidebar.resolveSpaceIcon = { [weak settings] id in
-            settings?.document.space(id).iconSelection ?? .none
+            settings?.document.displayedSpaceIcon(id) ?? .none
         }
         controller.favorites.icons.store = favoriteIcons
         controller.favorites.icons.memoryCache = sidebarIconMemory

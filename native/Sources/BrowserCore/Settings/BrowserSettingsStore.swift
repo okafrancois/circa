@@ -151,16 +151,22 @@ public struct BrowserSettingsDocument: Codable, Equatable, Sendable {
     public var siteSearches: [BrowserSiteSearch] = BrowserSiteSearch.builtIns
     public var memorySaver: BrowserMemorySaverSetting = .oneHour
     public var safeBrowsingEnabled = false
-    /// Off by default: web pages keep their classic scrollbars unless the user opts in. Read once
+    /// Off by default: web pages follow the standard scrollbar behavior unless the user opts in. Read once
     /// at launch, because the engine fixes its scrollbar mode at startup.
     public var overlayScrollbars = false
     public var allowJavaScriptFromAppleEvents = false
     public var automaticPictureInPicture = true
+    /// Pages fill the window edge to edge unless the user keeps the spaced layout. Absent keys
+    /// decode as false, so existing installations get the edge-to-edge layout.
+    public var showsSpaceAroundPages = false
     public var quickWindowArchiveThreshold: BrowserAutoArchiveThreshold = .sixHours
     /// Device-local domain/account choices, excluded from the sync projection.
     public var quickWindowProfilesByDomain: [String: ProfileID] = [:]
     public var enablesBoostsOnWebsites = true
     public var hasSeenBoostsIntroduction = false
+    /// Device-local presentation preference: Space indicators draw dots instead of the chosen
+    /// icons. Stored per-Space icon choices are never modified by this preference.
+    public var usesDotsForSpaceIcons = false
     public var opensExternalLinksInQuickWindow = true {
         didSet {
             // Keep the legacy preference and ATC's destination consistent before encoding.
@@ -180,7 +186,8 @@ public struct BrowserSettingsDocument: Codable, Equatable, Sendable {
     public var spaces: [SpaceID: BrowserSpaceSettings] = [:]
     public init() {}
     private enum CodingKeys: String, CodingKey {
-        case ai, allowJavaScriptFromAppleEvents, siteSearches, safeBrowsingEnabled, overlayScrollbars, quickWindowArchiveThreshold, quickWindowProfilesByDomain, downloads, automaticPictureInPicture, hasSeenBoostsIntroduction, enablesBoostsOnWebsites, interaction, memorySaver, linkRouting, version, reducedMotion, profiles, spaces, opensExternalLinksInQuickWindow, lastActiveWindowID, lastActiveSpaceID
+        case ai, allowJavaScriptFromAppleEvents, siteSearches, safeBrowsingEnabled, overlayScrollbars, quickWindowArchiveThreshold, quickWindowProfilesByDomain, downloads, automaticPictureInPicture, showsSpaceAroundPages, hasSeenBoostsIntroduction, enablesBoostsOnWebsites, interaction, memorySaver, linkRouting, version, reducedMotion, profiles, spaces, opensExternalLinksInQuickWindow, lastActiveWindowID, lastActiveSpaceID
+        case usesDotsForSpaceIcons
     }
     public init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
@@ -203,8 +210,10 @@ public struct BrowserSettingsDocument: Codable, Equatable, Sendable {
         overlayScrollbars = try values.decodeIfPresent(Bool.self, forKey: .overlayScrollbars) ?? false
         allowJavaScriptFromAppleEvents = try values.decodeIfPresent(Bool.self, forKey: .allowJavaScriptFromAppleEvents) ?? false
         automaticPictureInPicture = try values.decodeIfPresent(Bool.self, forKey: .automaticPictureInPicture) ?? true
+        showsSpaceAroundPages = (try? values.decodeIfPresent(Bool.self, forKey: .showsSpaceAroundPages)) ?? false
         hasSeenBoostsIntroduction = try values.decodeIfPresent(Bool.self, forKey: .hasSeenBoostsIntroduction) ?? false
         enablesBoostsOnWebsites = try values.decodeIfPresent(Bool.self, forKey: .enablesBoostsOnWebsites) ?? true
+        usesDotsForSpaceIcons = try values.decodeIfPresent(Bool.self, forKey: .usesDotsForSpaceIcons) ?? false
         profiles = try values.decode([ProfileID: BrowserProfileSettings].self, forKey: .profiles)
         spaces = try values.decode([SpaceID: BrowserSpaceSettings].self, forKey: .spaces)
         lastActiveWindowID = try values.decodeIfPresent(WindowID.self, forKey: .lastActiveWindowID)
@@ -248,7 +257,7 @@ public actor BrowserSettingsStore {
     }
 
     /// Read-only startup snapshot of the page scrollbar style. Any unreadable or unsupported
-    /// settings file keeps the classic scrollbars.
+    /// settings file keeps the standard scrollbar behavior.
     public static func overlayScrollbarsAtLaunch(destination: URL) -> Bool {
         guard let data = try? BrowserPermissionFile.load(destination),
               let header = try? JSONDecoder().decode(Header.self, from: data),
@@ -429,6 +438,12 @@ public actor BrowserSettingsStore {
         try publish(next)
     }
 
+    public func setShowsSpaceAroundPages(_ enabled: Bool) throws {
+        var next = document
+        next.showsSpaceAroundPages = enabled
+        try publish(next)
+    }
+
     /// Site entries are normalized and de-duplicated before they are saved.
     public func updateAI(_ edit: @Sendable (inout BrowserAIPreferences) -> Void) throws {
         var next = document
@@ -441,6 +456,12 @@ public actor BrowserSettingsStore {
     public func markBoostsIntroductionSeen() throws {
         var next = document
         next.hasSeenBoostsIntroduction = true
+        try publish(next)
+    }
+
+    public func setUsesDotsForSpaceIcons(_ enabled: Bool) throws {
+        var next = document
+        next.usesDotsForSpaceIcons = enabled
         try publish(next)
     }
 

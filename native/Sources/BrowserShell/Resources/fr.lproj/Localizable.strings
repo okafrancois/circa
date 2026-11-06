@@ -1036,6 +1036,8 @@
 "Automatically update" = "Mettre à jour automatiquement";
 "Warn before quitting" = "Avertir avant de quitter";
 "Haptic feedback for tab organization and resizing" = "Retour haptique lors du réagencement des onglets et du redimensionnement";
+"Space around pages" = "Espace autour des pages";
+"Use dots for Space icons" = "Remplacer les icônes des espaces par des points";
 "Quit Circa?" = "Quitter Circa ?";
 "Your tabs will be here when you return." = "Vos onglets vous attendront à votre retour.";
 "Quit, and don’t ask again" = "Quitter et ne plus demander";
@@ -1596,4 +1598,4 @@
 "Overlay scrollbars on web pages" = "Barres de défilement superposées sur les pages web";
 "Shows thin native scrollbars over page content instead of beside it, including on sites that style their own. Scrollbars a site hides stay hidden." = "Affiche de fines barres de défilement natives par-dessus le contenu plutôt qu’à côté, y compris sur les sites qui personnalisent les leurs. Les barres masquées par un site restent masquées.";
 "Restart Circa to show overlay scrollbars." = "Redémarrez Circa pour afficher les barres de défilement superposées.";
-"Restart Circa to restore classic scrollbars." = "Redémarrez Circa pour rétablir les barres de défilement classiques.";
+"Restart Circa to restore standard scrollbars." = "Redémarrez Circa pour rétablir les barres de défilement standard.";

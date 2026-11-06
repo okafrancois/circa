@@ -2750,7 +2750,7 @@ extension OrbitPerformanceProbe {
         let bundleID = "lab.orbit.orbit.p2-extensions"
         guard ownsWindow(owner, bundleID: bundleID), let window = owner.window,
               let host = owner.engine.extensions else { return ["refused": true] }
-        if owner.session.selectedSurface == nil || ["cancel-loading", "site-popup", "pinned-popup"].contains(command["action"] ?? ""), let base = command["base"].flatMap(URL.init(string:)),
+        if owner.session.selectedSurface == nil || ["cancel-loading", "site-popup", "pinned-popup", "pinned-hover"].contains(command["action"] ?? ""), let base = command["base"].flatMap(URL.init(string:)),
            base.scheme == "http", base.host == "127.0.0.1", base.user == nil, base.password == nil {
             guard ownsWindow(owner, bundleID: bundleID) else { return ["refused": true] }
             owner.submitAddress(base.absoluteString)
@@ -2758,7 +2758,7 @@ extension OrbitPerformanceProbe {
         }
         guard let surface = owner.session.selectedSurface else { return ["missingSurface": true] }
         for _ in 0..<60 where !surface.isReady { try? await Task.sleep(for: .milliseconds(50)) }
-        if ["cancel-loading", "site-popup", "pinned-popup"].contains(command["action"] ?? "") {
+        if ["cancel-loading", "site-popup", "pinned-popup", "pinned-hover"].contains(command["action"] ?? "") {
             for _ in 0..<100 where surface.navigationState.isLoading {
                 try? await Task.sleep(for: .milliseconds(25))
             }
@@ -2828,6 +2828,9 @@ extension OrbitPerformanceProbe {
                 capture(window, name: "pinned-popup-source.png")
                 if let popup, popup.isVisible { capture(popup, name: "pinned-popup-content.png"); popup.close() }
                 return result
+            } else if command["action"] == "pinned-hover" {
+                return await pinnedHover(owner, host: host, items: items, surface: surface, root: root,
+                                         bundleID: bundleID, base: command["base"] ?? "")
             } else if command["action"] == "site-popup" {
                 guard let item = items.first(where: { $0.name == "Popup Lifecycle Fixture" }),
                       ownsWindow(owner, bundleID: bundleID) else { return ["fixtureMissing": true] }
@@ -3597,5 +3600,134 @@ extension OrbitPerformanceProbe {
         checks["originalUnchanged"] = source.currentURL == base.appendingPathComponent("source")
         checks["paletteDismissed"] = !owner.palette.isPresented
         return ["pid": getpid(), "checks": checks, "passed": checks.values.allSatisfy { $0 }]
+    }
+}
+
+extension OrbitPerformanceProbe {
+    /// Pointer reveal, popup hold and stale-state clearing for a pinned action in the URL field.
+    private static func pinnedHover(_ owner: OrbitWindowController, host: any BrowserExtensionHost,
+        items: [BrowserExtensionSummary], surface: ChromiumSurface, root: URL, bundleID: String,
+        base: String) async -> [String: Any] {
+        guard let window = owner.window, let item = items.first(where: { $0.name == "Popup Lifecycle Fixture" })
+        else { return ["fixtureMissing": true] }
+        do { try host.setPinned(true, extensionID: item.id, in: surface.profileID) }
+        catch { return ["pinFailed": true] }
+        owner.extensionControls.render()
+        window.setFrameOrigin(NSPoint(x: 160, y: 120))
+        NSApp.activate(ignoringOtherApps: true)
+        window.makeKeyAndOrderFront(nil)
+        try? await Task.sleep(for: .milliseconds(400))
+        let address = owner.sidebar.addressContainer, strip = owner.sidebar.extensionsContainer
+        func owned() -> Bool {
+            ownsWindow(owner, bundleID: bundleID) && window.isVisible
+                && NSWorkspace.shared.frontmostApplication?.processIdentifier == getpid()
+        }
+        func pointer(_ type: NSEvent.EventType) -> NSEvent? {
+            let point = address.convert(NSPoint(x: address.bounds.midX, y: address.bounds.midY), to: nil)
+            return NSEvent.enterExitEvent(with: type, location: point, modifierFlags: [],
+                timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
+                context: nil, eventNumber: 0, trackingNumber: 0, userData: nil)
+        }
+        func enter() -> Bool {
+            guard owned(), let event = pointer(.mouseEntered) else { return false }
+            address.mouseEntered(with: event); return true
+        }
+        func exit() -> Bool {
+            guard owned(), let event = pointer(.mouseExited) else { return false }
+            address.mouseExited(with: event); return true
+        }
+        var states: [[String: Any]] = []
+        func record(_ name: String) {
+            window.contentView?.layoutSubtreeIfNeeded()
+            window.displayIfNeeded()
+            let realPointer = address.convert(window.mouseLocationOutsideOfEventStream, from: nil)
+            states.append(["state": name, "alpha": strip.alphaValue, "hidden": strip.isHidden,
+                           "accessibilityHidden": strip.isAccessibilityHidden(), "mainKey": window.isKeyWindow,
+                           "realPointerInsideField": address.bounds.contains(realPointer),
+                           "pinCount": strip.visiblePinCount])
+            let area = owner.sidebar.convert(address.bounds, from: address).insetBy(dx: -10, dy: -10)
+                .intersection(owner.sidebar.bounds)
+            if let bitmap = owner.sidebar.bitmapImageRepForCachingDisplay(in: area) {
+                owner.sidebar.cacheDisplay(in: area, to: bitmap)
+                try? bitmap.representation(using: .png, properties: [:])?
+                    .write(to: root.appendingPathComponent("hover-" + name + ".png"))
+            }
+        }
+        func capture(_ target: NSWindow, name: String) {
+            guard let rows = CGWindowListCopyWindowInfo(.optionIncludingWindow,
+                CGWindowID(target.windowNumber)) as? [[String: Any]],
+                rows.contains(where: { ($0[kCGWindowOwnerPID as String] as? Int32) == getpid() }) else { return }
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
+            process.arguments = ["-x", "-o", "-l", String(target.windowNumber), root.appendingPathComponent(name).path]
+            try? process.run(); process.waitUntilExit()
+        }
+        var result: [String: Any] = ["installed": items.count]
+        record("light-initial")
+        guard enter() else { return ["inputGuardRefused": "enter"] }
+        record("light-hovered")
+        capture(window, name: "window-light-hovered.png")
+        guard exit() else { return ["inputGuardRefused": "exit"] }
+        record("light-exited")
+        capture(window, name: "window-light-exited.png")
+        // Actual native popup through the visible pinned anchor.
+        guard enter(), window.isKeyWindow, let button = strip.subviews.compactMap({ $0 as? NSButton })
+            .first(where: { $0.accessibilityIdentifier() == "pinned-extension-" + item.id }),
+            button.window === window, !button.isHiddenOrHasHiddenAncestor, owned() else {
+            return ["inputGuardRefused": "popup"]
+        }
+        let before = Set(NSApp.windows.map(ObjectIdentifier.init))
+        button.performClick(nil)
+        var popup: NSWindow?
+        for _ in 0..<60 {
+            popup = NSApp.windows.first { !before.contains(ObjectIdentifier($0)) && $0.isVisible && $0.isKeyWindow }
+            if popup != nil { break }
+            try? await Task.sleep(for: .milliseconds(100))
+        }
+        result["popupVisible"] = popup?.isVisible == true
+        result["popupKey"] = popup?.isKeyWindow == true
+        result["popupParentIsSource"] = popup?.parent === window
+        guard exit() else { return ["inputGuardRefused": "popup-exit"] }
+        record("popup-open-pointer-left")
+        result["anchorAttached"] = button.superview === strip && !strip.isHidden
+        capture(window, name: "window-popup-open.png")
+        if let popup { capture(popup, name: "popup-content.png"); popup.close() }
+        for _ in 0..<20 where !window.isKeyWindow { try? await Task.sleep(for: .milliseconds(50)) }
+        result["sourceRegainedKeyAfterClose"] = window.isKeyWindow
+        if !window.isKeyWindow, owned() { window.makeKeyAndOrderFront(nil); try? await Task.sleep(for: .milliseconds(200)) }
+        record("popup-closed")
+        // A stale hover state must not survive selection or navigation.
+        guard enter() else { return ["inputGuardRefused": "tab"] }
+        record("before-tab-switch")
+        if let url = URL(string: base + "two"), url.host == "127.0.0.1", owned() {
+            owner.openTab(url: url)
+            await owner.session.waitForPendingCommands()
+            try? await Task.sleep(for: .milliseconds(500))
+        }
+        record("after-tab-switch")
+        guard enter() else { return ["inputGuardRefused": "navigation"] }
+        if let url = URL(string: base + "three"), url.host == "127.0.0.1", owned() {
+            owner.submitAddress(url.absoluteString)
+            await owner.session.waitForPendingCommands()
+            try? await Task.sleep(for: .milliseconds(500))
+        }
+        record("after-navigation")
+        window.appearance = NSAppearance(named: .darkAqua)
+        guard enter() else { return ["inputGuardRefused": "dark"] }
+        record("dark-hovered")
+        capture(window, name: "window-dark-hovered.png")
+        guard exit() else { return ["inputGuardRefused": "dark-exit"] }
+        record("dark-exited")
+        capture(window, name: "window-dark-exited.png")
+        result["states"] = states
+        func alpha(_ name: String) -> CGFloat? { states.first { $0["state"] as? String == name }?["alpha"] as? CGFloat }
+        result["hiddenInitially"] = alpha("light-initial") == 0
+        result["revealedOnHover"] = alpha("light-hovered") == 1 && alpha("dark-hovered") == 1
+        result["hiddenOnExit"] = alpha("light-exited") == 0 && alpha("dark-exited") == 0
+        result["heldWhilePopupOpen"] = alpha("popup-open-pointer-left") == 1
+        result["hiddenAfterPopupClose"] = alpha("popup-closed") == 0
+        result["tabSwitchCleared"] = alpha("after-tab-switch") == 0
+        result["navigationCleared"] = alpha("after-navigation") == 0
+        return result
     }
 }

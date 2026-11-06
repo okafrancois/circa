@@ -15,7 +15,7 @@ struct OverlayScrollbarsSettingsTests {
         #expect(!restored.overlayScrollbars)
     }
 
-    @Test("The launch snapshot follows the saved choice and falls back to classic scrollbars")
+    @Test("The launch snapshot follows the saved choice and falls back to standard scrollbars")
     func launchSnapshot() async throws {
         let canonical = realpath(FileManager.default.temporaryDirectory.path, nil)!
         defer { free(canonical) }
@@ -45,6 +45,6 @@ struct OverlayScrollbarsSettingsTests {
         #expect(BrowserOverlayScrollbars.state(enabled: true, atLaunch: true) == nil)
         #expect(BrowserOverlayScrollbars.state(enabled: false, atLaunch: false) == nil)
         #expect(BrowserOverlayScrollbars.state(enabled: true, atLaunch: false) == uiText("Restart Circa to show overlay scrollbars."))
-        #expect(BrowserOverlayScrollbars.state(enabled: false, atLaunch: true) == uiText("Restart Circa to restore classic scrollbars."))
+        #expect(BrowserOverlayScrollbars.state(enabled: false, atLaunch: true) == uiText("Restart Circa to restore standard scrollbars."))
     }
 }

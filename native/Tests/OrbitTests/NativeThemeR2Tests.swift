@@ -267,7 +267,7 @@ struct ThemeR2BehaviourTests {
         #expect(editor.isHorizontallyResizable && !container.widthTracksTextView)
     }
 
-    @Test("Below 224 pt the toolbar turns compact; in full screen the toggle moves to x 28.6")
+    @Test("Below 224 pt the toolbar turns compact; in full screen the toggle hover aligns with the sidebar inset")
     func compactToolbarAndFullScreen() async throws {
         NSApplication.shared.setActivationPolicy(.prohibited)
         let controller = try await PreviewEnvironment().makeWindow()
@@ -287,7 +287,7 @@ struct ThemeR2BehaviourTests {
         #expect(row.layoutState?.isCompact == false && !row.buttons[0].isHidden && !row.buttons[3].isHidden && overflow.isHidden)
         NotificationCenter.default.post(name: NSWindow.willEnterFullScreenNotification, object: window)
         root.layoutSubtreeIfNeeded()
-        #expect(row.buttons[0].frame.midX == 28.6)
+        #expect(row.buttons[0].frame.minX == 8)
         NotificationCenter.default.post(name: NSWindow.willExitFullScreenNotification, object: window)
         NotificationCenter.default.post(name: NSWindow.didExitFullScreenNotification, object: window)
         root.layoutSubtreeIfNeeded()
@@ -304,8 +304,14 @@ struct ThemeR2BehaviourTests {
         window.setContentSize(reference)
         root.layoutSubtreeIfNeeded()
         let capsule = controller.windowShell.loadingIndicator
+        // The edge-to-edge default leaves no top margin, so the capsule stays hidden.
         controller.windowShell.setLoadingPhase(.waiting)
-        // Card 228…1014 × 10…630: centre x 621, capsule 4 high centred in the 10 pt margin.
+        #expect(capsule.isHidden)
+        controller.windowShell.setLoadingPhase(.idle)
+        controller.windowShell.showsSpaceAroundPages = true
+        root.layoutSubtreeIfNeeded()
+        controller.windowShell.setLoadingPhase(.waiting)
+        // Spaced layout: card 228…1014 × 10…630: centre x 621, capsule 4 high centred in the 10 pt margin.
         #expect(!capsule.isHidden && capsule.frame == NSRect(x: 621 - 23.5, y: 640 - 7, width: 47, height: 4))
         controller.windowShell.setLoadingPhase(.progress)
         #expect(!capsule.isHidden && capsule.frame.width == 127.5 && capsule.frame.midX == 621)

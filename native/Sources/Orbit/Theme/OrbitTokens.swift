@@ -452,12 +452,12 @@ extension OrbitTokens {
             ///  — compact arrows 13 × 10.5, overflow dots 13 × 3.
             public static let compactArrowGlyphSize = NSSize(width: 13, height: 10.5)
             public static let compactOverflowGlyphSize = NSSize(width: 13, height: 3)
-            /// Full screen hides the window buttons; the toggle glyph's leading edge then lines up with
+            /// Full screen hides the window buttons; the toggle hover background then lines up with
             /// the address field and Favorites (the sidebar's horizontal padding, 8).
             public static var fullScreenSidebarToggleLeading: CGFloat { Sidebar.paddingX }
             public static let sidebarToggleGlyphWidth: CGFloat = 15
             public static var fullScreenSidebarToggleCenterX: CGFloat {
-                fullScreenSidebarToggleLeading + sidebarToggleGlyphWidth / 2
+                fullScreenSidebarToggleLeading + buttonHitSize / 2
             }
             public static let buttonHitSize: CGFloat = 28
         }
@@ -568,6 +568,9 @@ extension OrbitTokens {
             public static let cardHairlineWidth: CGFloat = 0
             ///  — the card corners follow the inset to 0 in full screen with the sidebar hidden.
             public static let cardRadiusFullscreenHidden: CGFloat = 0
+            /// Edge-to-edge layout (default): the card is flush with the window's top, trailing and
+            /// bottom edges and rounds only its leading corners, which open to 0 with the sidebar hidden.
+            public static let edgeCardLeadingRadius: CGFloat = 14
             public static let loadingCapsuleHeight: CGFloat = 4
             public static let loadingCapsuleWaitingWidth: CGFloat = 47
             public static let loadingCapsuleProgressWidth: CGFloat = 127.5
@@ -681,6 +684,8 @@ extension OrbitTokens {
         public static let tabSelected = ShadowSpec(color: Color.ShadowColor.tabSelected, offsetY: 1, blur: 2)
         ///  black 24 %; pair with Color.Line.floatingScrimBorder hairline.
         public static let contentCard = ShadowSpec(color: Color.ShadowColor.contentCard, offsetY: 1, blur: 6)
+        /// Soft leading shadow of the edge-to-edge page card: black 12 %, no offset, blur 4.
+        public static let contentCardEdge = ShadowSpec(color: .orbitSRGB(0x000000, 0.12), offsetY: 0, blur: 4)
         ///  black 50 %, σ 48, RMS 0.54/255; no scrim behind the command bar.
         public static let commandBar = ShadowSpec(color: Color.ShadowColor.commandBar, offsetY: 24, blur: 96)
         ///  — sidebar "+" menu.

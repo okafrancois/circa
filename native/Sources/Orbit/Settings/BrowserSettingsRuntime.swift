@@ -68,6 +68,12 @@ final class BrowserSettingsRuntime: ObservableObject {
         await refresh()
     }
 
+    func setUsesDotsForSpaceIcons(_ enabled: Bool) async throws {
+        do { try await store.setUsesDotsForSpaceIcons(enabled) }
+        catch { await refresh(); throw error }
+        await refresh()
+    }
+
     func setEnablesBoostsOnWebsites(_ enabled: Bool) async throws {
         do { try await store.setEnablesBoostsOnWebsites(enabled) }
         catch { await refresh(); throw error }
@@ -133,6 +139,7 @@ final class BrowserWindowSettings {
     func apply<Engine: BrowserEngine>(to owner: BrowserWindowController<Engine>) {
         owner.palette.siteSearches = runtime.document.siteSearches
         owner.sidebar.onReorderSnap = { [weak runtime] in runtime?.feedback.reorderSnapped() }
+        owner.windowShell.showsSpaceAroundPages = runtime.document.showsSpaceAroundPages
         guard let profileID = owner.session.activeProfileID else { return }
         let settings = runtime.document.profile(profileID)
         owner.addressResolver.searchEngine = settings.searchEngine
@@ -154,11 +161,19 @@ final class BrowserWindowSettings {
 
     func renderIcons<Engine: BrowserEngine>(in owner: BrowserWindowController<Engine>) {
         if let id = owner.sidebar.page.spaceID {
-            owner.sidebar.page.iconSelection = runtime.document.space(id).iconSelection
+            owner.sidebar.page.iconSelection = runtime.document.displayedSpaceIcon(id)
         }
         for button in owner.sidebar.footer.spaceButtons {
-            let icon = runtime.document.space(button.space.id).iconSelection
-            button.iconSelection = icon
+            button.iconSelection = runtime.document.displayedSpaceIcon(button.space.id)
         }
+        owner.sidebar.footer.usesDotsForSpaceIcons = runtime.document.usesDotsForSpaceIcons
+    }
+}
+
+extension BrowserSettingsDocument {
+    /// The icon a Space indicator draws. With dots enabled the switcher draws its existing dot
+    /// and the header uses its icon-free layout; the stored choice stays intact.
+    func displayedSpaceIcon(_ id: SpaceID) -> BrowserSpaceIcon {
+        usesDotsForSpaceIcons ? .none : space(id).iconSelection
     }
 }

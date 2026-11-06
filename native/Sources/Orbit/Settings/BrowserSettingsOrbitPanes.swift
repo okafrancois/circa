@@ -438,6 +438,10 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
                         .frame(width: 300).accessibilityIdentifier("settings-reduced-motion")
                 }
                 rule
+                liveToggle("Space around pages", value: runtime.document.showsSpaceAroundPages,
+                           identifier: "settings-space-around-pages", icon: "rectangle.inset.filled",
+                           save: model.setShowsSpaceAroundPages)
+                rule
                 liveToggle(uiFormat("Play %@ sound effects", applicationName), value: runtime.document.interaction.playSoundEffects,
                            identifier: "settings-sound-effects", icon: "speaker.wave.2", save: model.setPlaySoundEffects)
                 rule
@@ -445,6 +449,10 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
                            identifier: "settings-reorder-haptics", icon: "hand.raised", save: model.setHapticFeedback)
             }
             panel { BrowserOverlayScrollbarsSettingsRow(model: model) }
+            panel {
+                liveToggle("Use dots for Space icons", value: runtime.document.usesDotsForSpaceIcons,
+                           identifier: "settings-space-icon-dots", save: runtime.setUsesDotsForSpaceIcons)
+            }
             panel {
                 settingRow("Website data and permissions", icon: "lock") {
                     Button(uiText("Manage…")) { model.navigate(to: .privacy) }

@@ -81,7 +81,11 @@ def phase(args):
                 checks = result.get('extensionControls', {})
                 required = (['survivedCancellation', 'sourceReady'] if args.action == 'cancel-loading'
                             else ['sidebarFloatingBeforeAction', 'popupVisibleAfterLoad', 'sidebarFloatingAfterPopup', 'sourceStayedVisible']
-                            if args.action == 'pinned-popup' else ['siteActionSurvived', 'popupVisible'])
+                            if args.action == 'pinned-popup'
+                            else ['hiddenInitially', 'revealedOnHover', 'hiddenOnExit', 'popupVisible', 'popupKey',
+                                  'heldWhilePopupOpen', 'anchorAttached', 'hiddenAfterPopupClose', 'tabSwitchCleared',
+                                  'navigationCleared']
+                            if args.action == 'pinned-hover' else ['siteActionSurvived', 'popupVisible'])
                 assert all(checks.get(key) is True for key in required), checks
             finally:
                 if process.poll() is None:
@@ -96,7 +100,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--app', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
-    parser.add_argument('--action', choices=['cancel-loading', 'site-popup', 'pinned-popup'], default='cancel-loading')
+    parser.add_argument('--action', choices=['cancel-loading', 'site-popup', 'pinned-popup', 'pinned-hover'], default='cancel-loading')
     parser.add_argument('--phase', action='store_true')
     parser.add_argument('--port', type=int)
     parser.add_argument('--extension-dir', type=Path)

@@ -315,8 +315,16 @@ struct NativeExtensionControlsTests {
         owner.window?.contentView?.layoutSubtreeIfNeeded()
         #expect(badge.frame.midX > anchor.bounds.midX)
         #expect(anchor.isFlipped ? badge.frame.midY > anchor.bounds.midY : badge.frame.midY < anchor.bounds.midY)
-        owner.sidebar.addressContainer.mouseExited(with: NSEvent())
+        let address = owner.sidebar.addressContainer
+        address.mouseEntered(with: NSEvent())
         #expect(owner.sidebar.extensionsContainer.alphaValue == 1)
+        address.mouseExited(with: NSEvent())
+        // Pinned actions hide with the other accessories but keep their popup anchor attached.
+        #expect(owner.sidebar.extensionsContainer.alphaValue == 0 && !owner.sidebar.extensionsContainer.isHidden)
+        address.holdsExtensionPopupVisible = true
+        #expect(owner.sidebar.extensionsContainer.alphaValue == 1)
+        address.holdsExtensionPopupVisible = false
+        #expect(owner.sidebar.extensionsContainer.alphaValue == 0)
         owner.openTab(url: URL(string: "https://extensions.example.invalid/two")!)
         await owner.session.waitForPendingCommands()
         let two = try #require(owner.session.selectedSurface)

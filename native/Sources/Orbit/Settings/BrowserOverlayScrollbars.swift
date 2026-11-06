@@ -17,7 +17,7 @@ enum BrowserOverlayScrollbars {
     static func state(enabled: Bool, atLaunch: Bool?) -> String? {
         guard let atLaunch, atLaunch != enabled else { return nil }
         return enabled ? uiText("Restart Circa to show overlay scrollbars.")
-            : uiText("Restart Circa to restore classic scrollbars.")
+            : uiText("Restart Circa to restore standard scrollbars.")
     }
 }
 

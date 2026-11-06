@@ -69,7 +69,7 @@ final class BrowserContentCardView: NSView {
     private func installAssistantSurface() {
         guard assistantClip.superview == nil else { return }
         assistantEdge.borderWidth = OrbitTokens.Metrics.Content.cardHairlineWidth
-        assistantEdge.outerShadow = OrbitTokens.Shadow.contentCard
+        assistantEdge.outerShadow = cardShadow
         assistantEdge.borderColor = themeForeground?.withAlphaComponent(0.12) ?? OrbitTokens.Color.Line.floatingScrimBorder
         addSubview(assistantClip)
         addSubview(assistantEdge)
@@ -192,6 +192,27 @@ final class BrowserContentCardView: NSView {
         didSet { if cornerRadius != oldValue { needsLayout = true } }
     }
 
+    /// Edge-to-edge layout: the card meets the window's top, trailing and bottom edges, so only
+    /// leading corners round and the shadow is the soft edge shadow. Off restores the spaced card.
+    var isFlushWithWindow = false {
+        didSet {
+            guard isFlushWithWindow != oldValue else { return }
+            hairline.outerShadow = cardShadow
+            assistantEdge.outerShadow = cardShadow
+            needsLayout = true
+        }
+    }
+    private var cardShadow: OrbitTokens.ShadowSpec {
+        isFlushWithWindow ? OrbitTokens.Shadow.contentCardEdge : OrbitTokens.Shadow.contentCard
+    }
+    /// The page's rounded corners: with a dock beside it the page no longer meets the trailing edge.
+    var pageCorners: CACornerMask {
+        isFlushWithWindow && assistantWidth == 0 ? OrbitCornerPath.leadingCorners : OrbitCornerPath.allCorners
+    }
+    var assistantCorners: CACornerMask {
+        isFlushWithWindow ? OrbitCornerPath.leadingCorners : OrbitCornerPath.allCorners
+    }
+
     init() {
         super.init(frame: .zero)
         wantsLayer = true
@@ -249,9 +270,13 @@ final class BrowserContentCardView: NSView {
         }
         if peekRecede != 0 { layer?.transform = peekTransform }
         clip.layer?.cornerRadius = cornerRadius
+        clip.layer?.maskedCorners = pageCorners
         hairline.cornerRadius = cornerRadius
+        hairline.maskedCorners = pageCorners
         assistantClip.layer?.cornerRadius = cornerRadius
+        assistantClip.layer?.maskedCorners = assistantCorners
         assistantEdge.cornerRadius = cornerRadius
+        assistantEdge.maskedCorners = assistantCorners
         splitBackdrop.frame = captureShield.bounds
         if let root = window?.contentView {
             let rect = convert(bounds, to: root)

@@ -1178,6 +1178,8 @@
 "Automatically update" = "Automatically update";
 "Warn before quitting" = "Warn before quitting";
 "Haptic feedback for tab organization and resizing" = "Haptic feedback for tab organization and resizing";
+"Space around pages" = "Space around pages";
+"Use dots for Space icons" = "Use dots for Space icons";
 "Quit Circa?" = "Quit Circa?";
 "Your tabs will be here when you return." = "Your tabs will be here when you return.";
 "Quit, and don’t ask again" = "Quit, and don’t ask again";
@@ -2008,4 +2010,4 @@
 "Overlay scrollbars on web pages" = "Overlay scrollbars on web pages";
 "Shows thin native scrollbars over page content instead of beside it, including on sites that style their own. Scrollbars a site hides stay hidden." = "Shows thin native scrollbars over page content instead of beside it, including on sites that style their own. Scrollbars a site hides stay hidden.";
 "Restart Circa to show overlay scrollbars." = "Restart Circa to show overlay scrollbars.";
-"Restart Circa to restore classic scrollbars." = "Restart Circa to restore classic scrollbars.";
+"Restart Circa to restore standard scrollbars." = "Restart Circa to restore standard scrollbars.";

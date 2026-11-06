@@ -277,7 +277,8 @@ extension BrowserWindowController {
 
     private func presentPeek(_ surface: Surface, source: Surface?, sourceOccurrenceID: TabOccurrenceID?,
                              trigger: BrowserPeekTrigger, activationPoint: NSPoint? = nil, isLibraryBoost: Bool = false) {
-        peek.overlay.scrimCornerRadius = contentCard.cornerRadius
+        // An edge-to-edge card meets the window corners, so the window-wide scrim stays square.
+        peek.overlay.scrimCornerRadius = contentCard.isFlushWithWindow ? 0 : contentCard.cornerRadius
         let pointer = peek.overlay.convert(window?.mouseLocationOutsideOfEventStream ?? .zero, from: nil)
         if let previous = peek.presentedSurface { closeBoostEditor(on: previous) }
         peek.overlay.sourceRect = isLibraryBoost ? BrowserPeekMotion.librarySource(in: peek.overlay.bounds)
