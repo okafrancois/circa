@@ -537,20 +537,6 @@ void ConfigureSafeBrowsing(CefRefPtr<CefRequestContext> context) {
   }
 }
 
-// The launch snapshot also decides whether pages keep their own scrollbar styling. With the
-// overlay choice, Chromium's default-scrollbar preference ignores ::-webkit-scrollbar and the
-// standard scrollbar-color/scrollbar-width properties (scrollbars hidden with
-// `scrollbar-width: none` or `display: none` stay hidden). Without it, the preference is reset so
-// page styles apply again.
-void ConfigureScrollbarStyles(CefRefPtr<CefRequestContext> context) {
-  constexpr char kName[] = "settings.a11y.prefers_default_scrollbar_styles";
-  if (!context || !context->HasPreference(kName) || !context->CanSetPreference(kName)) return;
-  CefRefPtr<CefValue> value = CefValue::Create();
-  value->SetBool(g_state && g_state->overlay_scrollbars);
-  CefString error;
-  context->SetPreference(kName, value, error);
-}
-
 class ProfileHandler final : public CefRequestContextHandler {
  public:
   explicit ProfileHandler(uint64_t token) : token_(token) {}
@@ -559,7 +545,6 @@ class ProfileHandler final : public CefRequestContextHandler {
     if (!g_state) return;
     g_state->ready_profiles.insert(token_);
     ConfigureSafeBrowsing(context);
-    ConfigureScrollbarStyles(context);
     // Admitted persistent Orbit profiles may generate locally; Sync stays disabled.
     if (!context->GetCachePath().empty() && context->HasPreference("password_manager.local_generation_enabled")) {
       auto value = CefValue::Create(); value->SetBool(true);
@@ -1920,12 +1905,6 @@ class App final : public CefApp, public CefBrowserProcessHandler {
     // feature keeps its default (follow the system scroller style).
     command->AppendSwitchWithValue("enable-features", enabled + "WebContentsDiscard" +
         (g_state && g_state->overlay_scrollbars ? ",OverlayScrollbar:mode/overlay" : ""));
-    // The runtime feature that lets the default-scrollbar preference apply in renderers.
-    if (g_state && g_state->overlay_scrollbars) {
-      auto blink = command->GetSwitchValue("enable-blink-features").ToString();
-      command->AppendSwitchWithValue("enable-blink-features",
-          (blink.empty() ? "" : blink + ",") + "PreferDefaultScrollbarStyles");
-    }
     // Disabled features of the allow-listed arguments, the extra switches and the policy, as one
     // value (the filtered argv carries none itself).
     std::vector<std::string> disabled = {command->GetSwitchValue("disable-features").ToString()};
@@ -1941,6 +1920,16 @@ class App final : public CefApp, public CefBrowserProcessHandler {
         if (separator == std::string::npos) command->AppendSwitch(name);
         else command->AppendSwitchWithValue(name, value.substr(separator + 1));
       }
+    }
+    // Apply the style choice to this renderer lifetime without changing a profile's saved
+    // accessibility preference. Blink reapplies these command-line settings after WebPreferences.
+    if (g_state && g_state->overlay_scrollbars) {
+      auto blink = command->GetSwitchValue("enable-blink-features").ToString();
+      command->AppendSwitchWithValue("enable-blink-features",
+          (blink.empty() ? "" : blink + ",") + "PreferDefaultScrollbarStyles");
+      auto settings = command->GetSwitchValue("blink-settings").ToString();
+      command->AppendSwitchWithValue("blink-settings",
+          (settings.empty() ? "" : settings + ",") + "prefersDefaultScrollbarStyles=true");
     }
     // Confined mixed-content fixture: fixed loopback mapping, never product argv.
     if (g_state && g_state->secure_storage == ACR_SECURE_STORAGE_MOCK &&
@@ -2035,7 +2024,6 @@ class App final : public CefApp, public CefBrowserProcessHandler {
       if (g_state->set_unowned_tab_handler(&AdoptUnownedTab, nullptr) != 1) g_state->set_unowned_tab_handler = nullptr;
     }
     ConfigureSafeBrowsing(CefRequestContext::GetGlobalContext());
-    ConfigureScrollbarStyles(CefRequestContext::GetGlobalContext());
     g_state->Simple(ACR_EVENT_READY, 0);
   }
 

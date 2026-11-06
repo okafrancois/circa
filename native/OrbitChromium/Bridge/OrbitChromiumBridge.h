@@ -307,9 +307,9 @@ typedef struct {
   /* Explicit process-wide opt-in, resolved before initialization; requires GOOGLE_API_KEY. */
   int32_t safe_browsing_enabled;
   /* 1 forces Chromium's own overlay scrollbar mode for web content (OverlayScrollbar feature,
-   * mode "overlay") and Chromium's default-scrollbar-style preference in every profile, so page
-   * scrollbar styling is ignored; 0 keeps the engine default and resets that preference. Fixed
-   * for the process lifetime. */
+   * mode "overlay") and the renderer's default-scrollbar style, so page scrollbar styling is
+   * ignored without changing saved profile preferences; 0 keeps the engine default. Fixed for
+   * the process lifetime. */
   int32_t overlay_scrollbars;
 } ACRRunOptions;
 
