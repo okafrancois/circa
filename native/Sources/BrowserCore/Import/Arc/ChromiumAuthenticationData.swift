@@ -162,4 +162,45 @@ public enum ChromiumPasswordReader {
               url.host != nil, url.user == nil, url.password == nil else { return false }
         return true
     }
+
+    /// The password store keeps a credential's URL in canonical form: lowercase scheme and host,
+    /// IDNA host, no default port, dot segments removed and "/" for an empty path. Its signon
+    /// realm is that URL's origin followed by "/". Hand-written CSV exports often omit the
+    /// trailing slash or use another spelling of the same origin; nil means unsupported.
+    public static func canonicalWebURL(_ text: String) -> (url: String, realm: String)? {
+        guard validWebURL(text), var components = URLComponents(string: text),
+              let scheme = components.scheme?.lowercased(), let host = components.encodedHost?.lowercased(),
+              !host.isEmpty, !host.contains("%") else { return nil }
+        components.scheme = scheme
+        components.encodedHost = host
+        if components.port == (scheme == "https" ? 443 : 80) { components.port = nil }
+        components.percentEncodedPath = removingDotSegments(components.percentEncodedPath)
+        var origin = components
+        origin.percentEncodedPath = "/"; origin.percentEncodedQuery = nil; origin.percentEncodedFragment = nil
+        guard let url = components.string, let realm = origin.string else { return nil }
+        return (url, realm)
+    }
+
+    /// Two spellings of one credential URL: the store returns the canonical form of what was added.
+    public static func sameWebURL(_ first: String, _ second: String) -> Bool {
+        if first == second { return true }
+        guard let canonical = canonicalWebURL(first)?.url else { return false }
+        return canonical == canonicalWebURL(second)?.url
+    }
+
+    /// RFC 3986 section 5.2.4, applied to an absolute path.
+    static func removingDotSegments(_ path: String) -> String {
+        guard !path.isEmpty else { return "/" }
+        var output: [Substring] = []
+        let segments = path.split(separator: "/", omittingEmptySubsequences: false).dropFirst()
+        for (index, segment) in segments.enumerated() {
+            let last = index == segments.count - 1
+            switch segment {
+            case ".": if last { output.append("") }
+            case "..": if !output.isEmpty { output.removeLast() }; if last { output.append("") }
+            default: output.append(segment)
+            }
+        }
+        return "/" + output.joined(separator: "/")
+    }
 }

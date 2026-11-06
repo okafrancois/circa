@@ -53,12 +53,11 @@ public enum BrowserPasswordCSV {
                 result.unsupported += 1; continue
             }
             if row[passwordIndex].isEmpty { result.unsupported += 1; continue }
-            let origin = row[urlIndex]
-            guard ChromiumPasswordReader.validWebURL(origin), var components = URLComponents(string: origin) else {
+            // The store canonicalizes the URL it is given; keep the same spelling so identity checks
+            // and autofill realm lookups match what it returns.
+            guard let (origin, realm) = ChromiumPasswordReader.canonicalWebURL(row[urlIndex]) else {
                 result.unsupported += 1; continue
             }
-            components.path = "/"; components.query = nil; components.fragment = nil
-            guard let realm = components.string else { throw BrowserAuthenticationImportError.invalidCSV }
             result.passwords.append(.init(realm: realm, origin: origin, action: "", usernameElement: "", username: row[usernameIndex],
                 passwordElement: "", password: row[passwordIndex], created: 0, lastUsed: 0, modified: 0, blocked: false, scheme: 0))
         }

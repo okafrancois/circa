@@ -41,7 +41,7 @@ jobs:
           fetch-depth: 0
           ref: ${{ (github.event_name == 'workflow_dispatch' && !inputs.publish && github.sha) || inputs.tag || github.ref }}
           clean: false
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         if: runner.environment == 'github-hosted'
         with:
           python-version: '3.12'
@@ -84,7 +84,7 @@ jobs:
           python3 scripts/release.py "${args[@]}"
       - name: Retain verification results
         if: runner.environment == 'github-hosted' && github.event_name == 'workflow_dispatch' && !inputs.publish
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: Circa-signed-ci-verification
           path: |

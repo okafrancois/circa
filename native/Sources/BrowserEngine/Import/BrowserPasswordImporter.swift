@@ -18,7 +18,7 @@ public struct BrowserPasswordImportCounts: Codable, Sendable, Equatable {
 public enum BrowserPasswordImporter {
     public static func apply(_ passwords: [ImportedBrowserPassword], to store: any BrowserPasswordStore,
                              profileID: ProfileID) async throws -> BrowserPasswordImportCounts {
-        var existing = Dictionary(try await store.list(profileID: profileID).map { ($0.primaryKey, $0) }, uniquingKeysWith: { first, _ in first })
+        var existing = Dictionary(try await store.list(profileID: profileID).map { ($0.primaryKey.canonical, $0) }, uniquingKeysWith: { first, _ in first })
         var counts = BrowserPasswordImportCounts()
         for password in passwords {
             try Task.checkCancellation()
@@ -26,16 +26,16 @@ public enum BrowserPasswordImporter {
                 usernameElement: password.usernameElement, usernameValue: password.username, passwordElement: password.passwordElement),
                 actionURL: password.action, passwordValue: password.password, dateCreated: password.created, dateLastUsed: password.lastUsed,
                 datePasswordModified: password.modified, blockedByUser: password.blocked, scheme: password.scheme)
-            if let present = existing[record.primaryKey] {
+            if let present = existing[record.primaryKey.canonical] {
                 if present.passwordValue == record.passwordValue && present.blockedByUser == record.blockedByUser && present.scheme == record.scheme {
                     counts.alreadyPresent += 1
                 } else { counts.conflicts += 1 }
             } else {
                 try await store.add(record, profileID: profileID)
-                existing[record.primaryKey] = record; counts.imported += 1
+                existing[record.primaryKey.canonical] = record; counts.imported += 1
             }
         }
-        let verified = Dictionary(try await store.list(profileID: profileID).map { ($0.primaryKey, $0) }, uniquingKeysWith: { first, _ in first })
+        let verified = Dictionary(try await store.list(profileID: profileID).map { ($0.primaryKey.canonical, $0) }, uniquingKeysWith: { first, _ in first })
         guard existing.allSatisfy({ key, value in
             verified[key]?.passwordValue == value.passwordValue && verified[key]?.blockedByUser == value.blockedByUser && verified[key]?.scheme == value.scheme
         }) else { throw BrowserAuthenticationImportError.verificationFailed }

@@ -50,6 +50,7 @@ ALLOWED_TEXT = {path: tuple(expand(value) for value in values) for path, values 
                                                                '{source_bundle}',
                                                                '{lower}IsRunning'],
  'native/OrbitChromium/App/OrbitPerformanceProbe.swift': ['{source}PasswordProductProbe'],
+ 'native/OrbitChromium/Smoke/OrbitPasswordStoreScenario.swift': ['{source}PasswordImportJournal', '{source}PasswordImportRunner'],
  'native/OrbitChromium/ChromiumEngine/ChromiumAuthenticationImport.swift': ['{source}PreparedSyntheticCookie'],
  'native/OrbitChromium/Tests/AuthenticationCoordinatorTests.swift': ['{source}AuthenticationError',
                                                                      '{source}ChromiumSecretDecoder',
