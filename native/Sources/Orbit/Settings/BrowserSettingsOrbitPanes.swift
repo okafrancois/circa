@@ -438,6 +438,10 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
                         .frame(width: 300).accessibilityIdentifier("settings-reduced-motion")
                 }
                 rule
+                liveToggle("Space around pages", value: runtime.document.showsSpaceAroundPages,
+                           identifier: "settings-space-around-pages", icon: "rectangle.inset.filled",
+                           save: model.setShowsSpaceAroundPages)
+                rule
                 liveToggle(uiFormat("Play %@ sound effects", applicationName), value: runtime.document.interaction.playSoundEffects,
                            identifier: "settings-sound-effects", icon: "speaker.wave.2", save: model.setPlaySoundEffects)
                 rule

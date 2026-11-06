@@ -225,6 +225,8 @@ final class OrbitSurfaceBackgroundView: NSView {
     var outerShadow: OrbitTokens.ShadowSpec? { didSet { refresh(); needsLayout = true } }
     var borderColor: NSColor? { didSet { refresh() } }
     var borderWidth: CGFloat = 0 { didSet { refresh() } }
+    /// Corners that round; the others stay square (a surface flush with the window edge).
+    var maskedCorners: CACornerMask = OrbitCornerPath.allCorners { didSet { needsLayout = true } }
 
     func applyFrost(_ accent: OrbitTokens.ThemeAccent, selected: Bool = false) {
         let amount = accent.contrastTheme?.frostAmount ?? 0
@@ -280,14 +282,16 @@ final class OrbitSurfaceBackgroundView: NSView {
         // AppKit owns the backing layer frame; resetting it moves inset surfaces to x=0.
         fill.frame = bounds
         fill.cornerRadius = cornerRadius
+        fill.maskedCorners = maskedCorners
         let margin = (outerShadow.map { $0.blur + abs($0.offsetY) } ?? 0) + 2
         shadowCaster.frame = bounds.insetBy(dx: -margin, dy: -margin)
         let shape = CGRect(x: margin, y: margin, width: bounds.width, height: bounds.height)
-        shadowCaster.shadowPath = CGPath(roundedRect: shape, cornerWidth: cornerRadius, cornerHeight: cornerRadius, transform: nil)
-        shadowCaster.path = shadowCaster.shadowPath
+        let outline = OrbitCornerPath.path(shape, radius: cornerRadius, corners: maskedCorners)
+        shadowCaster.shadowPath = outline
+        shadowCaster.path = outline
         let mask = CGMutablePath()
         mask.addRect(shadowCaster.bounds)
-        mask.addPath(CGPath(roundedRect: shape, cornerWidth: cornerRadius, cornerHeight: cornerRadius, transform: nil))
+        mask.addPath(outline)
         shadowMask.frame = shadowCaster.bounds
         shadowMask.path = mask
         CATransaction.commit()
@@ -312,6 +316,41 @@ final class OrbitSurfaceBackgroundView: NSView {
             shadowCaster.isHidden = true
         }
         CATransaction.commit()
+    }
+}
+
+/// Rounded rectangles whose corners round selectively, matching `CALayer.maskedCorners`.
+enum OrbitCornerPath {
+    static let allCorners: CACornerMask = [.layerMinXMinYCorner, .layerMaxXMinYCorner, .layerMinXMaxYCorner, .layerMaxXMaxYCorner]
+    static let leadingCorners: CACornerMask = [.layerMinXMinYCorner, .layerMinXMaxYCorner]
+    static let trailingCorners: CACornerMask = [.layerMaxXMinYCorner, .layerMaxXMaxYCorner]
+
+    static func path(_ rect: CGRect, radius: CGFloat, corners: CACornerMask) -> CGPath {
+        let r = max(0, min(radius, rect.width / 2, rect.height / 2))
+        if corners == allCorners || r == 0 {
+            return CGPath(roundedRect: rect, cornerWidth: r, cornerHeight: r, transform: nil)
+        }
+        func cornerRadius(_ corner: CACornerMask) -> CGFloat { corners.contains(corner) ? r : 0 }
+        // Quarter circles as cubic curves (control distance 0.5523 r), clockwise from the minY edge.
+        let k: CGFloat = 0.5523
+        let path = CGMutablePath()
+        let a = cornerRadius(.layerMinXMinYCorner), b = cornerRadius(.layerMaxXMinYCorner)
+        let c = cornerRadius(.layerMaxXMaxYCorner), d = cornerRadius(.layerMinXMaxYCorner)
+        path.move(to: CGPoint(x: rect.minX + a, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX - b, y: rect.minY))
+        path.addCurve(to: CGPoint(x: rect.maxX, y: rect.minY + b), control1: CGPoint(x: rect.maxX - b + k * b, y: rect.minY),
+                      control2: CGPoint(x: rect.maxX, y: rect.minY + b - k * b))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY - c))
+        path.addCurve(to: CGPoint(x: rect.maxX - c, y: rect.maxY), control1: CGPoint(x: rect.maxX, y: rect.maxY - c + k * c),
+                      control2: CGPoint(x: rect.maxX - c + k * c, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.minX + d, y: rect.maxY))
+        path.addCurve(to: CGPoint(x: rect.minX, y: rect.maxY - d), control1: CGPoint(x: rect.minX + d - k * d, y: rect.maxY),
+                      control2: CGPoint(x: rect.minX, y: rect.maxY - d + k * d))
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.minY + a))
+        path.addCurve(to: CGPoint(x: rect.minX + a, y: rect.minY), control1: CGPoint(x: rect.minX, y: rect.minY + a - k * a),
+                      control2: CGPoint(x: rect.minX + a - k * a, y: rect.minY))
+        path.closeSubpath()
+        return path
     }
 }
 

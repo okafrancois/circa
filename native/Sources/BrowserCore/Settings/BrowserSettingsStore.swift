@@ -153,6 +153,9 @@ public struct BrowserSettingsDocument: Codable, Equatable, Sendable {
     public var safeBrowsingEnabled = false
     public var allowJavaScriptFromAppleEvents = false
     public var automaticPictureInPicture = true
+    /// Pages fill the window edge to edge unless the user keeps the spaced layout. Absent keys
+    /// decode as false, so existing installations get the edge-to-edge layout.
+    public var showsSpaceAroundPages = false
     public var quickWindowArchiveThreshold: BrowserAutoArchiveThreshold = .sixHours
     /// Device-local domain/account choices, excluded from the sync projection.
     public var quickWindowProfilesByDomain: [String: ProfileID] = [:]
@@ -177,7 +180,7 @@ public struct BrowserSettingsDocument: Codable, Equatable, Sendable {
     public var spaces: [SpaceID: BrowserSpaceSettings] = [:]
     public init() {}
     private enum CodingKeys: String, CodingKey {
-        case ai, allowJavaScriptFromAppleEvents, siteSearches, safeBrowsingEnabled, quickWindowArchiveThreshold, quickWindowProfilesByDomain, downloads, automaticPictureInPicture, hasSeenBoostsIntroduction, enablesBoostsOnWebsites, interaction, memorySaver, linkRouting, version, reducedMotion, profiles, spaces, opensExternalLinksInQuickWindow, lastActiveWindowID, lastActiveSpaceID
+        case ai, allowJavaScriptFromAppleEvents, siteSearches, safeBrowsingEnabled, quickWindowArchiveThreshold, quickWindowProfilesByDomain, downloads, automaticPictureInPicture, showsSpaceAroundPages, hasSeenBoostsIntroduction, enablesBoostsOnWebsites, interaction, memorySaver, linkRouting, version, reducedMotion, profiles, spaces, opensExternalLinksInQuickWindow, lastActiveWindowID, lastActiveSpaceID
     }
     public init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
@@ -199,6 +202,7 @@ public struct BrowserSettingsDocument: Codable, Equatable, Sendable {
         safeBrowsingEnabled = try values.decodeIfPresent(Bool.self, forKey: .safeBrowsingEnabled) ?? false
         allowJavaScriptFromAppleEvents = try values.decodeIfPresent(Bool.self, forKey: .allowJavaScriptFromAppleEvents) ?? false
         automaticPictureInPicture = try values.decodeIfPresent(Bool.self, forKey: .automaticPictureInPicture) ?? true
+        showsSpaceAroundPages = (try? values.decodeIfPresent(Bool.self, forKey: .showsSpaceAroundPages)) ?? false
         hasSeenBoostsIntroduction = try values.decodeIfPresent(Bool.self, forKey: .hasSeenBoostsIntroduction) ?? false
         enablesBoostsOnWebsites = try values.decodeIfPresent(Bool.self, forKey: .enablesBoostsOnWebsites) ?? true
         profiles = try values.decode([ProfileID: BrowserProfileSettings].self, forKey: .profiles)
@@ -405,6 +409,12 @@ public actor BrowserSettingsStore {
     public func setAutomaticPictureInPicture(_ enabled: Bool) throws {
         var next = document
         next.automaticPictureInPicture = enabled
+        try publish(next)
+    }
+
+    public func setShowsSpaceAroundPages(_ enabled: Bool) throws {
+        var next = document
+        next.showsSpaceAroundPages = enabled
         try publish(next)
     }
 

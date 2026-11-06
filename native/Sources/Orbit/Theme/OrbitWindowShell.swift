@@ -80,6 +80,10 @@ final class OrbitWindowShell {
     private(set) var spaceSwipeBlend: SpaceSwipeThemeBlend?
     /// Width chosen by the user's resize; the downloads column temporarily overrides the constraint.
     private(set) var preferredSidebarWidth = OrbitTokens.Metrics.Sidebar.widthDefault
+    /// User preference: keep the spaced page card instead of the edge-to-edge default.
+    var showsSpaceAroundPages = false {
+        didSet { if oldValue != showsSpaceAroundPages { applyGeometry() } }
+    }
 
     var allowsHoverReveal: () -> Bool = { true }
     var allowsResize: () -> Bool = { true }
@@ -377,7 +381,8 @@ final class OrbitWindowShell {
         let size = root.bounds.size
         var resolved = OrbitShellGeometry.resolve(.init(
             contentSize: size, sidebarWidth: width.constant, dockProgress: CGFloat(dockProgress),
-            floatProgress: CGFloat(floatProgress), usesFloatingFrame: usesFloatingFrame, isFullScreen: isFullScreen, trafficLightPitch: trafficLightPitch))
+            floatProgress: CGFloat(floatProgress), usesFloatingFrame: usesFloatingFrame, isFullScreen: isFullScreen, trafficLightPitch: trafficLightPitch,
+            spaceAroundPages: showsSpaceAroundPages))
         if libraryVisibleWidth > 0 {
             // WindowLayoutController interpolates the document edge between sidebarPage
             // and home. It moves throughout the transition, including while Home is offscreen.
@@ -399,6 +404,7 @@ final class OrbitWindowShell {
         set(cardTrailing, size.width - resolved.cardFrame.maxX)
         set(cardBottom, size.height - resolved.cardFrame.maxY)
         card.cornerRadius = resolved.cardRadius
+        card.isFlushWithWindow = resolved.isCardFlush
         loadingIndicator.place(over: resolved.cardFrame, in: size)
 
         let chrome = resolved.floatingChrome
