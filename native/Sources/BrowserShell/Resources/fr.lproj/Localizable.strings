@@ -1594,6 +1594,6 @@
 "Unread: %d" = "Non lus : %d";
 "Website data and permissions" = "Données et autorisations des sites";
 "Overlay scrollbars on web pages" = "Barres de défilement superposées sur les pages web";
-"Shows thin scrollbars over page content instead of beside it. Sites that style their own scrollbars keep their design." = "Affiche de fines barres de défilement par-dessus le contenu de la page plutôt qu’à côté. Les sites qui personnalisent leurs barres de défilement conservent leur style.";
+"Shows thin native scrollbars over page content instead of beside it, including on sites that style their own. Scrollbars a site hides stay hidden." = "Affiche de fines barres de défilement natives par-dessus le contenu plutôt qu’à côté, y compris sur les sites qui personnalisent les leurs. Les barres masquées par un site restent masquées.";
 "Restart Circa to show overlay scrollbars." = "Redémarrez Circa pour afficher les barres de défilement superposées.";
 "Restart Circa to restore classic scrollbars." = "Redémarrez Circa pour rétablir les barres de défilement classiques.";

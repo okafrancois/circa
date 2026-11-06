@@ -11,7 +11,7 @@ enum BrowserOverlayScrollbars {
     static var enabledAtLaunch: Bool?
 
     static var explanation: String {
-        uiText("Shows thin scrollbars over page content instead of beside it. Sites that style their own scrollbars keep their design.")
+        uiText("Shows thin native scrollbars over page content instead of beside it, including on sites that style their own. Scrollbars a site hides stay hidden.")
     }
 
     static func state(enabled: Bool, atLaunch: Bool?) -> String? {

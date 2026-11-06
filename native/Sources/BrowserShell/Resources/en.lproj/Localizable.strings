@@ -2006,6 +2006,6 @@
 "Unread: %d" = "Unread: %d";
 "Website data and permissions" = "Website data and permissions";
 "Overlay scrollbars on web pages" = "Overlay scrollbars on web pages";
-"Shows thin scrollbars over page content instead of beside it. Sites that style their own scrollbars keep their design." = "Shows thin scrollbars over page content instead of beside it. Sites that style their own scrollbars keep their design.";
+"Shows thin native scrollbars over page content instead of beside it, including on sites that style their own. Scrollbars a site hides stay hidden." = "Shows thin native scrollbars over page content instead of beside it, including on sites that style their own. Scrollbars a site hides stay hidden.";
 "Restart Circa to show overlay scrollbars." = "Restart Circa to show overlay scrollbars.";
 "Restart Circa to restore classic scrollbars." = "Restart Circa to restore classic scrollbars.";

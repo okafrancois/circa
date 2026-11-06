@@ -4,26 +4,19 @@ import ChromiumEngine
 import Foundation
 
 /// Confined page scrollbar fixture: measures layout gutters on a loopback page and drives the
-/// Settings row through the same model call as its switch. Synthetic bundle only.
+/// window geometry for bounded native input. Synthetic bundle only.
 @MainActor
 enum OrbitOverlayScrollbarsProbe {
     static let bundleID = "lab.orbit.orbit.overlay-scrollbars"
 
+    /// The loopback fixture defines `__overlayFixtureMeasure()`; it reports its own boxes, shadow
+    /// roots and the gutters its frames post back. Only the page gutter is measured here.
     private static let measurement = """
     (() => {
-      const box = id => { const e = document.getElementById(id); return e ? {
-        vertical: e.offsetWidth - e.clientWidth - (parseFloat(getComputedStyle(e).borderLeftWidth) || 0) - (parseFloat(getComputedStyle(e).borderRightWidth) || 0),
-        horizontal: e.offsetHeight - e.clientHeight - (parseFloat(getComputedStyle(e).borderTopWidth) || 0) - (parseFloat(getComputedStyle(e).borderBottomWidth) || 0),
-        scrollLeft: e.scrollLeft, scrollTop: e.scrollTop } : null; };
-      let frame = null;
-      try { const d = document.getElementById('frame').contentDocument;
-        frame = {innerWidth: d.defaultView.innerWidth, clientWidth: d.documentElement.clientWidth,
-                 gutter: d.defaultView.innerWidth - d.documentElement.clientWidth}; } catch (e) { frame = {error: String(e)}; }
-      return {innerWidth: innerWidth, clientWidth: document.documentElement.clientWidth,
+      const own = typeof window.__overlayFixtureMeasure === 'function' ? window.__overlayFixtureMeasure() : {};
+      return Object.assign({innerWidth: innerWidth, clientWidth: document.documentElement.clientWidth,
         gutter: innerWidth - document.documentElement.clientWidth, devicePixelRatio: devicePixelRatio,
-        scrollY: scrollY, nested: box('nested'), dark: box('dark'), custom: box('custom'),
-        horizontal: box('horizontal'), rtl: box('rtl'), frame: frame,
-        marker: document.documentElement.dataset.fixture || ''};
+        scrollY: scrollY}, {fixture: own});
     })()
     """
 
@@ -55,24 +48,6 @@ enum OrbitOverlayScrollbarsProbe {
                 result["pageScreenFrame"] = [frame.minX, frame.minY, frame.width, frame.height]
                 result["windowNumber"] = window.windowNumber
             }
-        case "settings":
-            if application.settingsWindow == nil {
-                let model = BrowserSettingsModel(environment: environment, profileID: owner.session.activeProfileID, shortcuts: [])
-                application.settingsWindow = BrowserSettingsWindowController(model: model, appearanceOverride: nil)
-            }
-            guard let settings = application.settingsWindow, let window = settings.window else { return result }
-            window.makeKeyAndOrderFront(nil)
-            _ = settings.selectSection(.advanced)
-            result["settingsWindowNumber"] = window.windowNumber
-        case "toggle":
-            guard let model = application.settingsWindow?.model else { return result }
-            let enabled = command["value"] == "on"
-            try? await model.setOverlayScrollbars(enabled)
-            result["setting"] = environment.settings.document.overlayScrollbars
-            result["notice"] = BrowserOverlayScrollbars.state(enabled: enabled, atLaunch: BrowserOverlayScrollbars.enabledAtLaunch) ?? ""
-        case "close-settings":
-            application.settingsWindow?.window?.close()
-            owner.window?.makeKeyAndOrderFront(nil)
         default:
             break
         }
