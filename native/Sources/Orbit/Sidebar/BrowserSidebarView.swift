@@ -1568,6 +1568,8 @@ final class SidebarAddressField: SidebarFlippedView {
     private var accessoryOrder: [ObjectIdentifier: Int] = [:]
     private var hoverAccessories: [NSView] = []
     var holdsAccessoriesVisible = false { didSet { refresh() } }
+    /// Set while a pinned extension popup anchored to this field owns key focus.
+    var holdsExtensionPopupVisible = false { didSet { if holdsExtensionPopupVisible != oldValue { refresh() } } }
     private weak var field: NSTextField?
     var accent = OrbitTokens.ThemeAccent.defaultSpace { didSet { if accent != oldValue { refreshAccent() } } }
     var effectiveAccent: OrbitTokens.ThemeAccent {
@@ -1726,9 +1728,17 @@ final class SidebarAddressField: SidebarFlippedView {
     override func mouseEntered(with event: NSEvent) { isHovering = true }
     override func mouseExited(with event: NSEvent) { isHovering = false }
 
+    /// Tracking areas miss the exit when the app or window deactivates under the pointer.
+    /// Only clears hover; entering is always reported by the tracking area itself.
+    func clearHoverIfPointerOutside() {
+        guard isHovering, let window else { return }
+        let point = convert(window.mouseLocationOutsideOfEventStream, from: nil)
+        if !bounds.contains(point) { isHovering = false }
+    }
+
     private func refresh() {
         for view in hoverAccessories {
-            let revealed = (view === extensions || isHovering || holdsAccessoriesVisible) && !isEditing
+            let revealed = (isHovering || holdsAccessoriesVisible || holdsExtensionPopupVisible) && !isEditing
             // Keep native popup anchors in the visible hierarchy after the pointer enters
             // a menu or an extension popup. Editing alone reclaims their layout width.
             view.alphaValue = revealed ? 1 : 0
