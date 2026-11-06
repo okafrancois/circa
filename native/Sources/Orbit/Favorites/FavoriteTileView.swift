@@ -6,6 +6,12 @@ enum FavoritesPresentationTokens {
     static let unloadedIconOpacity: CGFloat = 1
     static let placeholderFontSize: CGFloat = 18
     static let dragThreshold: CGFloat = 4
+    /// Hairline outline of an unselected tile, composited over its fill: one device pixel wide.
+    static let restingOutline = NSColor(name: nil) { appearance in
+        appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+            ? NSColor(srgbRed: 1, green: 1, blue: 1, alpha: 0.17)
+            : NSColor(srgbRed: 14 / 255, green: 15 / 255, blue: 16 / 255, alpha: 0.10)
+    }
 }
 
 struct FavoriteTileItem: Equatable {
@@ -109,9 +115,21 @@ final class FavoriteTileView: NSView {
         needsLayout = true
     }
 
+    override func setFrameOrigin(_ newOrigin: NSPoint) {
+        super.setFrameOrigin(newOrigin)
+        // Grid columns have fractional widths; re-snap the surface so the hairline stays crisp.
+        needsLayout = true
+    }
+
+    override func viewDidChangeBackingProperties() {
+        super.viewDidChangeBackingProperties()
+        needsLayout = true
+        refreshFill()
+    }
+
     override func layout() {
         super.layout()
-        background.frame = bounds
+        background.frame = window == nil ? bounds : backingAlignedRect(bounds, options: .alignAllEdgesNearest)
         let size = OrbitTokens.Metrics.Sidebar.favoriteIconSize
         let icon = NSRect(x: (bounds.width - size) / 2, y: (bounds.height - size) / 2, width: size, height: size)
         favicon.frame = icon
@@ -186,8 +204,13 @@ final class FavoriteTileView: NSView {
         background.fillColor = isPressed ? state.tabPressed : item.tab.isSelected ? state.tabCurrent
             : isHovering ? state.sidebarItemHovered : state.sidebarItem
         background.outerShadow = item.tab.isSelected && !isPressed ? OrbitTokens.Shadow.tabSelected : nil
-        background.borderWidth = item.tab.isSelected && selectionTint != nil ? OrbitTokens.Metrics.Sidebar.favoriteSelectedRingWidth : 0
-        background.borderColor = item.tab.isSelected ? selectionTint : nil
+        if item.tab.isSelected {
+            background.borderWidth = selectionTint != nil ? OrbitTokens.Metrics.Sidebar.favoriteSelectedRingWidth : 0
+            background.borderColor = selectionTint
+        } else {
+            background.borderWidth = 1 / max(1, window?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 2)
+            background.borderColor = FavoritesPresentationTokens.restingOutline
+        }
         if item.tab.isSelected, !isPressed, let selectionTint {
             let darkFill = selectionTint.withAlphaComponent(isHovering ? 0.32 : 0.24)
             background.fillColor = NSColor(name: nil) { appearance in
