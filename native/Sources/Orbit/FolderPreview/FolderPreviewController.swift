@@ -256,7 +256,10 @@ extension BrowserWindowController {
         // dormant tabs. A known icon is installed before the first preview frame is exposed.
         folderPreview.favicon = { [weak self] in self?.sidebar.liveActivity($0).favicon }
         sidebar.onFolderHover = { [weak self] in self?.folderPreview.hover($0, inside: $1) }
-        sidebar.onPreviewInvalidated = { [weak self] in self?.folderPreview.invalidate($0) }
+        sidebar.onPreviewInvalidated = { [weak self] in
+            self?.folderPreview.invalidate($0)
+            self?.richTabPreview.invalidate($0)
+        }
         folderPreview.activate = { [weak self] id, token, snapshot in
             guard let self else { return }
             let admission = folderPreview.intent.admission

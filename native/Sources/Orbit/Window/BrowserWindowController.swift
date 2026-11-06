@@ -92,6 +92,7 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
     var onTearOffTab: ((SidebarDragPayload, NSPoint) -> Void)?
     var restoresFullScreen = false
     let folderPreview = FolderPreviewController<Surface>()
+    let richTabPreview = RichTabPreviewController()
     var favorites: BrowserFavoritesController<Engine>!
     var sidebarWidth: NSLayoutConstraint!
     var sidebarLeading: NSLayoutConstraint!
@@ -331,6 +332,7 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
             }
             sidebar.applyMetadata(ids, organization: session.organization)
             folderPreview.intent.reconcile(session.organization)
+            richTabPreview.reconcile()
             palette.renderContext()
             if ids.contains(where: { session.organizationTab($0).map { if case .favorites = $0.section { return true }; return false } == true }) {
                 favorites.render()
@@ -410,6 +412,7 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
         library.isPresented = false
         library.drawer.finishClosing()
         folderPreview.shutdown()
+        richTabPreview.shutdown()
         sidebar.spaceSwipe.detach()
         library.swipe.detach()
         themeEditor?.close(animated: false)
@@ -632,6 +635,7 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
         if selectionChanged, !library.isPresented, !palette.isPresented, !preserveAddressDraft, window?.isKeyWindow == true { focusSelectedDocument() }
         renderPeek()
         tabSwitcher.renderSession()
+        richTabPreview.reconcile()
         palette.renderContext()
         settingsPreferences?.renderSession(in: self)
         passwordPrompt.render()

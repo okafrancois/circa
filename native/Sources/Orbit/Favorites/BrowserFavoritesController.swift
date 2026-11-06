@@ -74,10 +74,15 @@ final class BrowserFavoritesController<Engine: BrowserEngine> {
         }
         gmailPreview.open = { [weak self] tab, account, message in self?.openGmail(tab, account: account, message: message) }
         owner.sidebar.onTabHover = { [weak self] row, inside in
-            guard let self, let tab = self.owner?.session.organization?.tab(row.item.id), tab.section.keepsPinnedURL,
-                  BrowserGmailAccount(url: tab.pinnedURL ?? tab.url) != nil else { return false }
-            self.gmailPreview.hover(row, tab: tab, inside: inside)
-            return true
+            guard let self, let owner = self.owner else { return false }
+            if let tab = owner.session.organization?.tab(row.item.id), tab.section.keepsPinnedURL,
+               BrowserGmailAccount(url: tab.pinnedURL ?? tab.url) != nil {
+                if inside { owner.richTabPreview.dismiss() }
+                self.gmailPreview.hover(row, tab: tab, inside: inside)
+                return true
+            }
+            if inside { self.gmailPreview.dismiss() }
+            return owner.richTabPreview.hover(row, inside: inside)
         }
         gmailRefreshTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated {

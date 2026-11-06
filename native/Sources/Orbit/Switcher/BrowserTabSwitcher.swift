@@ -30,6 +30,7 @@ final class BrowserTabSwitcher<Engine: BrowserEngine> {
         snapshots.onChange = { [weak self] in
             self?.renderOverlay()
             self?.owner?.folderPreview.view.refreshImages()
+            self?.owner?.richTabPreview.reconcile()
         }
         icons.onChange = { [weak self] in self?.renderOverlay() }
         view.onHover = { [weak self] id in self?.model.highlight(id); self?.renderOverlay() }

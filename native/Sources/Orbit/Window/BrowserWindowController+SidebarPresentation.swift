@@ -24,7 +24,7 @@ extension BrowserWindowController {
         }
         windowShell.isHoverHeld = { [weak self] in
             guard let self else { return false }
-            return sidebar.hasFooterPresentation || isEditingInSidebar || folderPreview.isPresented || favorites?.gmailPreview.isPresented == true || siteControls?.isPopoverShown == true
+            return sidebar.hasFooterPresentation || isEditingInSidebar || folderPreview.isPresented || richTabPreview.isPresented || favorites?.gmailPreview.isPresented == true || siteControls?.isPopoverShown == true
                 || themeEditor?.panel?.isVisible == true
         }
         for name in [NSControl.textDidBeginEditingNotification, NSControl.textDidEndEditingNotification] {

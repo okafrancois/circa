@@ -30,6 +30,7 @@ extension BrowserWindowController {
             submitInput { receiver in source.duplicateSidebarTab(tab, into: receiver, at: destination) }
         }
         installFolderPreview()
+        installRichTabPreview()
         SidebarWindowDirectory.register(self, id: id, activeSpace: { [weak self] in self?.session.snapshot?.activeSpaceID },
                                         organization: { [weak self] in self?.session.organization })
         // Rows dropped on the Favorites zone go through the FAVORITES lot's adapter.
