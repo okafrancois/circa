@@ -135,7 +135,12 @@ extension BrowserWindowController {
                 try? await Task.sleep(for: .milliseconds(90))
                 guard !Task.isCancelled, let self, let root = window?.contentView,
                       pageInteraction.fullscreen?.surfaceKey == key else { return }
-                pageInteraction.fullscreenNotice = BrowserFullscreenNotice(in: root)
+                let notice = BrowserFullscreenNotice(in: root)
+                pageInteraction.fullscreenNotice = notice
+                try? await Task.sleep(for: BrowserFullscreenNotice.displayDuration)
+                guard !Task.isCancelled, pageInteraction.fullscreen?.surfaceKey == key,
+                      pageInteraction.fullscreenNotice === notice else { return }
+                hideFullscreenNotice()
             }
         }
         guard waitingForWindow else { schedule(); return }

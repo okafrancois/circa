@@ -2,7 +2,7 @@ import AppKit
 import QuartzCore
 
 /// "To exit full screen, press ⎋." pill shown at the top right while a web page holds element or
-/// page fullscreen. It stays until fullscreen ends (no timer) and leaves with the fullscreen layout.
+/// page fullscreen. The reminder expires independently of the fullscreen layout.
 /// Values come from frame measurements: 14 pt medium label, 12 pt horizontal padding, 42 pt tall,
 /// 12 pt corners, 4 pt from the top and right edges of the page area, the same navy in light and dark.
 @MainActor
@@ -11,6 +11,7 @@ final class BrowserFullscreenNotice: NSView {
     static let cornerRadius: CGFloat = 12
     static let edgeInset: CGFloat = 4
     static let horizontalPadding: CGFloat = 12
+    static let displayDuration: Duration = .milliseconds(3800)
     /// Entry spring (scale 0.42 → 1, anchored top centre) and linear opacity ramp, measured at 60 fps.
     static let springStiffness: CGFloat = 324
     static let springDamping: CGFloat = 22.68

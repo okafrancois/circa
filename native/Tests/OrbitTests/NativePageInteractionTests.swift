@@ -474,9 +474,12 @@ struct NativePageInteractionTests {
         #expect(notice.frame.height == BrowserFullscreenNotice.height)
         #expect(abs(root.bounds.maxX - notice.frame.maxX - BrowserFullscreenNotice.edgeInset) < 0.5)
         #expect(notice.frame.maxY <= root.bounds.maxY - BrowserFullscreenNotice.edgeInset + 0.5)
-        // The notice stays while the page is fullscreen, then leaves with Escape or the page.
+        // The reminder expires without exiting fullscreen or restoring the sidebar.
         try await Task.sleep(for: .seconds(3.2))
         #expect(notices().count == 1 && controller.elementFullscreenSurfaceKey == ObjectIdentifier(surface))
+        try await Task.sleep(for: .seconds(0.8))
+        #expect(notices().isEmpty && controller.pageInteraction.fullscreenNotice == nil)
+        #expect(controller.elementFullscreenSurfaceKey == ObjectIdentifier(surface) && !controller.isSidebarVisible)
         controller.surface(surface, didChangeElementFullscreen: false)
         #expect(notices().isEmpty && controller.pageInteraction.fullscreenNotice == nil)
         // Leaving before the window finished entering never shows it.
