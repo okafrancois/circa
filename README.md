@@ -44,6 +44,7 @@ Requires **macOS 15 or later and Apple Silicon**. Releases are Developer ID sign
 |---|---|
 | Spaces and profiles | Separate projects and browsing sessions |
 | Favorites, pinned tabs and folders | Keep the sites you return to within reach |
+| Rich tab previews | Hover over a tab for a sharp cached preview and quick pin, Favorite, Split and Assistant actions |
 | Command Bar | Open pages, find tabs and history, and run browser actions |
 | Split View | Work with pages side by side |
 | Peek and Little Circa | Take a quick look in a preview or a small window |
