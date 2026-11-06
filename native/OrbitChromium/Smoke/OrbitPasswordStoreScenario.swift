@@ -12,6 +12,7 @@ enum OrbitPasswordStoreScenario {
         func check(_ id: String, _ value: Bool) { record("password-store." + id, value ? "proven" : "failed", [:]) }
         guard let store = engine.passwordStore else { check("available", false); return }
         await syncRoundTrip(engine: engine, store: store, check: check)
+        await csvImportSpelling(engine: engine, store: store, check: check)
         let profile = ProfileID(), other = ProfileID()
         do {
             check("empty", try await store.list(profileID: profile).isEmpty)
@@ -141,6 +142,45 @@ enum OrbitPasswordStoreScenario {
             try await engine.removeProfile(localA); try await engine.removeProfile(localB)
             try FileManager.default.removeItem(at: root)
         } catch { check("sync-unexpected-error", false) }
+    }
+
+    /// CSV exports often spell an origin differently from the canonical URL the store keeps.
+    private static func csvImportSpelling(engine: ChromiumBrowserEngine, store: any BrowserPasswordStore,
+                                          check: (String, Bool) -> Void) async {
+        guard let option = ProcessInfo.processInfo.arguments.first(where: { $0.hasPrefix("--orbit-data-root=") }) else {
+            check("csv-confinement", false); return
+        }
+        let root = URL(fileURLWithPath: String(option.dropFirst("--orbit-data-root=".count))).appendingPathComponent("PasswordCSVSmoke")
+        let profile = ProfileID()
+        do {
+            let csv = Data("url,username,password\nHTTPS://CSV-Fixture.test:443,synthetic-csv-user,synthetic-csv-secret\n".utf8)
+            let first = try await BrowserPasswordImporter.importCSV(csv, to: store, profileID: profile)
+            let rows = try await store.list(profileID: profile)
+            check("csv-canonical-import", first.imported == 1 && rows.count == 1
+                && rows.first?.primaryKey.originURL == "https://csv-fixture.test/"
+                && rows.first?.primaryKey.signonRealm == "https://csv-fixture.test/")
+            let again = try await BrowserPasswordImporter.importCSV(csv, to: store, profileID: profile)
+            let afterRetry = try await store.list(profileID: profile)
+            check("csv-reimport-present", again.imported == 0 && again.alreadyPresent == 1 && afterRetry.count == 1)
+            // A journal row spelled differently from what the store keeps must still verify and undo.
+            var raw = try BrowserPasswordCSV.read(Data("url,username,password\nhttps://raw-fixture.test/,synthetic-raw-user,synthetic-raw-secret\n".utf8)).passwords[0]
+            raw.origin = "https://Raw-Fixture.test"
+            try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+            let journal = try ArcPasswordImportJournal.create(root: root, key: SymmetricKey(size: .bits256), groups: [(profile, [raw])],
+                skipped: 0, sourcePassword: Data("synthetic-source-key".utf8), targetPassword: Data("synthetic-target-key".utf8))
+            try journal.activate()
+            try await ArcPasswordImportRunner.run(journal, store: store)
+            let stored = try await store.list(profileID: profile)
+            check("csv-runner-verified", journal.counts.added == 1 && stored.count == 2
+                && stored.contains { $0.primaryKey.originURL == "https://raw-fixture.test/" })
+            try journal.activate(restoring: true)
+            try await ArcPasswordImportRunner.run(journal, store: store)
+            let restored = try await store.list(profileID: profile)
+            check("csv-runner-undo", journal.counts.removed == 1 && restored.count == 1)
+            for row in restored { try await store.remove(row.primaryKey, profileID: profile) }
+            try await engine.removeProfile(profile)
+            try FileManager.default.removeItem(at: root)
+        } catch { check("csv-unexpected-error", false) }
     }
 
 }

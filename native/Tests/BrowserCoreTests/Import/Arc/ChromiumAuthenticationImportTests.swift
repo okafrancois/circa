@@ -62,6 +62,27 @@ import Testing
             #expect(throws: BrowserAuthenticationImportError.invalidCSV) { try BrowserPasswordCSV.read(Data(invalid.utf8)) }
         }
     }
+    /// Expected values are what the engine's URL canonicalizer stores for each spelling.
+    @Test func csvUsesTheStoreSpellingOfEachURL() throws {
+        let cases: [(String, String, String)] = [
+            ("https://fixture.test", "https://fixture.test/", "https://fixture.test/"),
+            ("HTTPS://Fixture.TEST:443/a/./b/../login?x=1#top", "https://fixture.test/a/login?x=1#top", "https://fixture.test/"),
+            ("http://fixture.test:80", "http://fixture.test/", "http://fixture.test/"),
+            ("https://fixture.test:8443/login", "https://fixture.test:8443/login", "https://fixture.test:8443/"),
+            ("https://b\u{fc}cher.example/", "https://xn--bcher-kva.example/", "https://xn--bcher-kva.example/"),
+            ("https://[::1]:443/", "https://[::1]/", "https://[::1]/"),
+            ("https://fixture.test/a/..", "https://fixture.test/", "https://fixture.test/"),
+        ]
+        let csv = "url,username,password\n" + cases.map { "\($0.0),user,synthetic-secret" }.joined(separator: "\n")
+            + "\nhttps://fixture%2Etest/,user,synthetic-secret\n"
+        let result = try BrowserPasswordCSV.read(Data(csv.utf8))
+        #expect(result.passwords.map(\.origin) == cases.map(\.1))
+        #expect(result.passwords.map(\.realm) == cases.map(\.2))
+        #expect(result.unsupported == 1)
+        #expect(ChromiumPasswordReader.sameWebURL("https://Fixture.test", "https://fixture.test/"))
+        #expect(!ChromiumPasswordReader.sameWebURL("https://fixture.test/a", "https://fixture.test/b"))
+        #expect(!ChromiumPasswordReader.sameWebURL("not a url", "https://fixture.test/"))
+    }
     @Test func identities() {
         #expect(BrowserSafeStorageIdentity.verified(sourceID: "brave")?.account == "Brave")
         #expect(BrowserSafeStorageIdentity.verified(sourceID: "dia")?.account == "Dia")

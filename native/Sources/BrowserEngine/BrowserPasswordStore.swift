@@ -16,6 +16,14 @@ public struct BrowserPasswordKey: Hashable, Sendable {
         self.usernameElement = usernameElement; self.usernameValue = usernameValue
         self.passwordElement = passwordElement
     }
+
+    /// The store returns the canonical spelling of the URL it was given, so a key built from
+    /// imported data is compared with its origin URL in that form.
+    public var canonical: Self {
+        var key = self
+        key.originURL = ChromiumPasswordReader.canonicalWebURL(originURL)?.url ?? originURL
+        return key
+    }
 }
 
 /// In-memory only. Never serialize into diagnostics or ordinary sync payloads.
