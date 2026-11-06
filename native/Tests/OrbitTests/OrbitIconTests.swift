@@ -124,9 +124,9 @@ struct OrbitIconTests {
         }
     }
 
-    @Test("Picker category fallbacks remain available as native interface symbols")
+    @Test("Picker and scrollbar setting fallbacks remain available as native interface symbols")
     func documentedFallbacks() throws {
-        for name in ["box.truck", "face.smiling.inverse", "flag", "gift", "heart", "mug", "rosette", "sun.max"] {
+        for name in ["box.truck", "face.smiling.inverse", "flag", "gift", "heart", "mug", "rosette", "scroll", "sun.max"] {
             #expect(OrbitIcon.resourceURL(sfName: name, pointSize: 16) == nil)
             let image = try #require(OrbitIcon.image(sfName: name, pointSize: 16))
             #expect(!image.representations.contains { $0 is NSCustomImageRep })
@@ -137,10 +137,12 @@ struct OrbitIconTests {
     func sourceCoverage() throws {
         let native = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
         let sources = native.appendingPathComponent("Sources/Orbit")
-        // Onboarding keeps its own reviewed artwork, like the empty-state and new-Space illustrations.
+        // Onboarding and hover-card controls keep their reviewed native artwork, like illustrations.
         let exclusions: Set<String> = ["SpaceIconImages.swift", "OrbitIcon.swift", "BrowserLibraryEmptyView.swift",
                                        "BrowserLibraryMediaView.swift", "SidebarNewSpacePageView.swift",
-                                       "OrbitOnboardingControls.swift", "OrbitOnboardingSyncDiagram.swift"]
+                                       "OrbitOnboardingControls.swift", "OrbitOnboardingSyncDiagram.swift",
+                                       "RichTabPreviewView.swift"]
+        let nativeFallbacks: [String: Set<String>] = ["BrowserOverlayScrollbars.swift": ["scroll"]]
         let files = try #require(FileManager.default.enumerator(at: sources, includingPropertiesForKeys: nil))
         for case let file as URL in files where file.pathExtension == "swift" {
             let source = try String(contentsOf: file, encoding: .utf8)
@@ -152,7 +154,8 @@ struct OrbitIconTests {
                 let capture = match.range(at: 1).location == NSNotFound ? 2 : 1
                 let range = try #require(Range(match.range(at: capture), in: source))
                 let name = String(source[range])
-                #expect(OrbitIcon.resourceURL(sfName: name, pointSize: 16) != nil,
+                #expect(OrbitIcon.resourceURL(sfName: name, pointSize: 16) != nil
+                        || nativeFallbacks[file.lastPathComponent]?.contains(name) == true,
                         "Unbundled interface literal in \(file.lastPathComponent): \(name)")
             }
             if source.contains("NSImage(systemSymbolName:") || source.contains("Image(systemName:") {
