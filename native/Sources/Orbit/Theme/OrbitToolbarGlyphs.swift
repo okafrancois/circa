@@ -26,9 +26,9 @@ enum OrbitToolbarGlyphs {
         let center = NSPoint(x: rect.midX, y: rect.minY + lineWidth / 2 + radius)
         // Open circle running clockwise from the right side down, round and up into the arrowhead.
         let start: CGFloat = 14, end: CGFloat = 68
-        let arc = NSBezierPath()
-        arc.appendArc(withCenter: center, radius: radius, startAngle: start, endAngle: end, clockwise: true)
-        stroke(arc)
+        let ring = NSBezierPath()
+        ring.appendArc(withCenter: center, radius: radius, startAngle: start, endAngle: end, clockwise: true)
+        stroke(ring)
         let angle = end * .pi / 180
         let tip = NSPoint(x: center.x + radius * cos(angle), y: center.y + radius * sin(angle))
         // Arms fold back along the tangent of the clockwise motion, 45° either side.
