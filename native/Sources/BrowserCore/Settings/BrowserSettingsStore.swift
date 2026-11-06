@@ -161,6 +161,9 @@ public struct BrowserSettingsDocument: Codable, Equatable, Sendable {
     public var quickWindowProfilesByDomain: [String: ProfileID] = [:]
     public var enablesBoostsOnWebsites = true
     public var hasSeenBoostsIntroduction = false
+    /// Device-local presentation preference: Space indicators draw dots instead of the chosen
+    /// icons. Stored per-Space icon choices are never modified by this preference.
+    public var usesDotsForSpaceIcons = false
     public var opensExternalLinksInQuickWindow = true {
         didSet {
             // Keep the legacy preference and ATC's destination consistent before encoding.
@@ -181,6 +184,7 @@ public struct BrowserSettingsDocument: Codable, Equatable, Sendable {
     public init() {}
     private enum CodingKeys: String, CodingKey {
         case ai, allowJavaScriptFromAppleEvents, siteSearches, safeBrowsingEnabled, quickWindowArchiveThreshold, quickWindowProfilesByDomain, downloads, automaticPictureInPicture, showsSpaceAroundPages, hasSeenBoostsIntroduction, enablesBoostsOnWebsites, interaction, memorySaver, linkRouting, version, reducedMotion, profiles, spaces, opensExternalLinksInQuickWindow, lastActiveWindowID, lastActiveSpaceID
+        case usesDotsForSpaceIcons
     }
     public init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
@@ -205,6 +209,7 @@ public struct BrowserSettingsDocument: Codable, Equatable, Sendable {
         showsSpaceAroundPages = (try? values.decodeIfPresent(Bool.self, forKey: .showsSpaceAroundPages)) ?? false
         hasSeenBoostsIntroduction = try values.decodeIfPresent(Bool.self, forKey: .hasSeenBoostsIntroduction) ?? false
         enablesBoostsOnWebsites = try values.decodeIfPresent(Bool.self, forKey: .enablesBoostsOnWebsites) ?? true
+        usesDotsForSpaceIcons = try values.decodeIfPresent(Bool.self, forKey: .usesDotsForSpaceIcons) ?? false
         profiles = try values.decode([ProfileID: BrowserProfileSettings].self, forKey: .profiles)
         spaces = try values.decode([SpaceID: BrowserSpaceSettings].self, forKey: .spaces)
         lastActiveWindowID = try values.decodeIfPresent(WindowID.self, forKey: .lastActiveWindowID)
@@ -430,6 +435,12 @@ public actor BrowserSettingsStore {
     public func markBoostsIntroductionSeen() throws {
         var next = document
         next.hasSeenBoostsIntroduction = true
+        try publish(next)
+    }
+
+    public func setUsesDotsForSpaceIcons(_ enabled: Bool) throws {
+        var next = document
+        next.usesDotsForSpaceIcons = enabled
         try publish(next)
     }
 

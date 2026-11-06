@@ -449,6 +449,10 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
                            identifier: "settings-reorder-haptics", icon: "hand.raised", save: model.setHapticFeedback)
             }
             panel {
+                liveToggle("Use dots for Space icons", value: runtime.document.usesDotsForSpaceIcons,
+                           identifier: "settings-space-icon-dots", save: runtime.setUsesDotsForSpaceIcons)
+            }
+            panel {
                 settingRow("Website data and permissions", icon: "lock") {
                     Button(uiText("Manage…")) { model.navigate(to: .privacy) }
                         .accessibilityIdentifier("settings-site-data")
