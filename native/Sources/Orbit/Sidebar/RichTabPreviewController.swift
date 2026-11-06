@@ -45,7 +45,10 @@ final class RichTabPreviewController {
         }
         guard allowed(), candidate.commandsEnabled, !candidate.isRenaming,
               candidate.window?.isKeyWindow == true, let current = content(candidate.item.id) else { dismiss(); return false }
-        if row === candidate, identity == current.identity { cancelPending(); return true }
+        if row === candidate, identity == current.identity {
+            if isPresented { cancelPending() }
+            return true
+        }
         let handoff = view.superview != nil && view.window === candidate.window
         dismiss(keepingView: handoff)
         row = candidate

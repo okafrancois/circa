@@ -185,5 +185,57 @@ struct RichTabPreviewTests {
         #expect(Set(conversation.selectedSources.map(\.id)) == [a.id, b.id])
         #expect(!conversation.isRunning && conversation.messages.isEmpty)
     }
+
+    @Test("Retina captures promote to backing resolution without overlapping work or waking detached tabs")
+    func backingResolution() async {
+        let f = RichPreviewFixture(); defer { f.close() }
+        let surface = SwitcherSnapshotSurface()
+        f.window.contentView?.addSubview(surface.hostView)
+        let cache = BrowserSwitcherSnapshots<SwitcherSnapshotSurface>()
+        defer { cache.shutdown() }
+        var scale: CGFloat = 1
+        cache.captureWidth = { _ in RichTabPreviewView.size.width * scale }
+        let first = cache.request(surface)
+        while surface.continuations.isEmpty { await Task.yield() }
+        #expect(surface.requests.last?.width == 240)
+        scale = 2
+        cache.request(surface)
+        #expect(surface.requests.count == 1)
+        surface.complete(generation: 1)
+        await first?.value
+        #expect(cache.image(for: surface) == nil)
+        let retina = cache.request(surface)
+        while surface.continuations.isEmpty { await Task.yield() }
+        #expect(surface.requests.last?.width == 480)
+        surface.complete(generation: 1)
+        await retina?.value
+        #expect(cache.image(for: surface) != nil)
+        cache.request(surface)
+        #expect(surface.requests.count == 2)
+        surface.hostView.removeFromSuperview()
+        #expect(cache.request(surface, force: true) == nil)
+        #expect(surface.requests.count == 2)
+        surface.findDocumentGeneration = 2
+        #expect(cache.image(for: surface) == nil)
+    }
+
+    @Test("Duplicate entry preserves its dwell and the same row can reopen after a completed exit")
+    func repeatedEntryAndReopen() {
+        let f = RichPreviewFixture(); defer { f.close() }
+        f.controller.hover(f.first, inside: true)
+        let initial = f.tickets.last!
+        f.controller.hover(f.first, inside: true)
+        #expect(f.tickets.count == 1 && !initial.cancelled)
+        initial.action()
+        #expect(f.controller.isPresented)
+        f.controller.view.updateTrackingAreas()
+        #expect(f.controller.view.trackingAreas.allSatisfy { !$0.options.contains(.inVisibleRect) && $0.rect == f.controller.view.bounds })
+        f.controller.dismiss(animated: true)
+        f.tickets.last?.action()
+        #expect(!f.controller.isPresented)
+        f.controller.hover(f.first, inside: true)
+        f.tickets.last?.action()
+        #expect(f.controller.isPresented && f.controller.row === f.first)
+    }
 }
 }

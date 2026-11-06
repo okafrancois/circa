@@ -210,6 +210,20 @@ enum OrbitPerformanceProbe {
                 } else if name == "overlay-scrollbars", ownsWindow(owner, bundleID: OrbitOverlayScrollbarsProbe.bundleID) {
                     result["overlayScrollbars"] = await OrbitOverlayScrollbarsProbe.run(application, environment: environment,
                                                                                         owner: owner, command: command)
+                } else if name == "rich-tab-preview", ownsWindow(owner, bundleID: "lab.orbit.orbit.rich-previews") {
+                    let preview = owner.richTabPreview
+                    let picture = preview.view.picture
+                    let bitmap = picture.image?.cgImage(forProposedRect: nil, context: nil, hints: nil)
+                    result["richTabPreview"] = [
+                        "presented": preview.isPresented, "attached": preview.view.superview != nil,
+                        "interactive": preview.view.isInteractive,
+                        "rowHovered": preview.row?.isHovering ?? false,
+                        "windowKey": owner.window?.isKeyWindow ?? false,
+                        "bitmapWidth": bitmap?.width ?? 0, "bitmapHeight": bitmap?.height ?? 0,
+                        "displayWidth": picture.bounds.width, "displayHeight": picture.bounds.height,
+                        "backingScale": owner.window?.backingScaleFactor ?? 0,
+                        "layerScale": picture.layer?.contentsScale ?? 0
+                    ] as [String: Any]
                 } else if name == "peek-control-geometry", ownsWindow(owner, bundleID: "lab.orbit.orbit.peek-control-geometry") {
                     NSApp.appearance = NSAppearance(named: command["appearance"] == "dark" ? .darkAqua : .aqua)
                     if !owner.isPeekPresented { _ = owner.openPeek(URL(string: "http://127.0.0.1:8769/peek-controls")!) }

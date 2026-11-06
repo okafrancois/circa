@@ -107,7 +107,7 @@ final class RichTabPreviewView: NSView {
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
         if let tracking { removeTrackingArea(tracking) }
-        let next = NSTrackingArea(rect: bounds, options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect], owner: self)
+        let next = NSTrackingArea(rect: bounds, options: [.mouseEnteredAndExited, .activeInKeyWindow], owner: self)
         tracking = next
         addTrackingArea(next)
     }
@@ -127,6 +127,7 @@ final class RichTabPreviewImageView: NSView {
     override func draw(_ dirtyRect: NSRect) {
         guard let image, image.size.width > 0, image.size.height > 0 else { return }
         NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current?.imageInterpolation = .high
         NSBezierPath(rect: bounds).addClip()
         let scale = max(bounds.width / image.size.width, bounds.height / image.size.height)
         let size = NSSize(width: image.size.width * scale, height: image.size.height * scale)

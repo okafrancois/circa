@@ -26,6 +26,12 @@ final class BrowserTabSwitcher<Engine: BrowserEngine> {
         self.owner = owner
         snapshots = BrowserSwitcherSnapshots()
         icons = FavoriteIconPipeline()
+        let captureWidth: (Engine.Surface) -> CGFloat = { [weak owner] surface in
+            let scale = owner?.window?.backingScaleFactor ?? surface.hostView.window?.backingScaleFactor ?? 1
+            return RichTabPreviewView.size.width * (owner?.engine.kind == .chromium ? scale : 1)
+        }
+        snapshots.captureWidth = captureWidth
+        owner.folderPreview.snapshots.captureWidth = captureWidth
         owner.folderPreview.previouslyVisibleSnapshots = snapshots
         snapshots.onChange = { [weak self] in
             self?.renderOverlay()

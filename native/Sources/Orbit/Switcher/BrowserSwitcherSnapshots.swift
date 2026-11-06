@@ -13,11 +13,13 @@ final class BrowserSwitcherSnapshots<Surface: BrowserEngineSurface> {
 
     private struct Entry {
         let generation: UInt64
+        let requestedWidth: CGFloat
         var token: UUID
         var created: TimeInterval
         var imageCreated: TimeInterval? = nil
         var access: UInt64
         var image: NSImage?
+        var imageCaptureWidth: CGFloat? = nil
         var task: Task<Void, Never>?
     }
     private var entries: [ObjectIdentifier: Entry] = [:]
@@ -25,6 +27,9 @@ final class BrowserSwitcherSnapshots<Surface: BrowserEngineSurface> {
     private var clock: UInt64 = 0
     var now: () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }
     var onChange: (() -> Void)?
+    /// Chromium's explicit snapshot width is a pixel count. Presentation owners supply their
+    /// actual backing size instead of enlarging a low-resolution switcher thumbnail.
+    var captureWidth: (Surface) -> CGFloat = { _ in OrbitTokens.Switcher.thumbnailWidth }
     /// Attachment admission is injectable for engine-free capture race tests.
     var isAttached: (Surface) -> Bool = { $0.hostView.window != nil }
     let capacity = 12
@@ -37,6 +42,7 @@ final class BrowserSwitcherSnapshots<Surface: BrowserEngineSurface> {
         let key = ObjectIdentifier(surface)
         guard let entry = entries[key], entry.generation == surface.documentGeneration,
               now() - (entry.imageCreated ?? entry.created) <= maximumAge,
+              (entry.imageCaptureWidth ?? entry.requestedWidth) >= requestedWidth(for: surface),
               !surface.isDisposed, !surface.navigationState.isLoading else { return nil }
         touch(key)
         return entry.image
@@ -46,11 +52,13 @@ final class BrowserSwitcherSnapshots<Surface: BrowserEngineSurface> {
     @discardableResult
     func request(_ surface: Surface, force: Bool = false, freshness: TimeInterval? = nil) -> Task<Void, Never>? {
         let key = ObjectIdentifier(surface)
+        let width = requestedWidth(for: surface)
         guard admitsAttachment(surface) else { invalidate(surface); return nil }
         guard !surface.isDisposed, !surface.navigationState.isLoading else { invalidate(surface); return nil }
         if let entry = entries[key], entry.generation == surface.documentGeneration {
             if entry.task != nil { touch(key); return entry.task }
-            if !force, now() - entry.created <= (freshness ?? maximumAge) { touch(key); return nil }
+            if entry.task == nil, entry.requestedWidth >= width,
+               !force, now() - entry.created <= (freshness ?? maximumAge) { touch(key); return nil }
         }
         // A detached browser may return a successful white image. Do not replace its cached paint.
         guard isAttached(surface) else { return nil }
@@ -59,15 +67,19 @@ final class BrowserSwitcherSnapshots<Surface: BrowserEngineSurface> {
                 .min(by: { $0.value.access < $1.value.access })?.key else { return nil }
             entries.removeValue(forKey: victim)?.task?.cancel()
         }
-        let previous = entries[key].flatMap { $0.generation == surface.documentGeneration ? $0 : nil }
+        let previous = entries[key].flatMap {
+            $0.generation == surface.documentGeneration && ($0.imageCaptureWidth ?? $0.requestedWidth) >= width ? $0 : nil
+        }
         invalidate(surface)
         let generation = surface.documentGeneration
         let token = UUID()
         clock &+= 1
-        entries[key] = Entry(generation: generation, token: token, created: now(), imageCreated: previous?.imageCreated, access: clock, image: previous?.image)
+        entries[key] = Entry(generation: generation, requestedWidth: width, token: token, created: now(),
+            imageCreated: previous?.imageCreated, access: clock, image: previous?.image,
+            imageCaptureWidth: previous?.imageCaptureWidth)
         let task = Task { [weak self, weak surface] in
             guard let surface else { return }
-            let result = try? await surface.captureSnapshot(.init(width: OrbitTokens.Switcher.thumbnailWidth,
+            let result = try? await surface.captureSnapshot(.init(width: width,
                 afterScreenUpdates: true, documentGeneration: generation))
             guard let self, self.entries[key]?.token == token else { return }
             self.entries[key]?.task = nil
@@ -81,11 +93,17 @@ final class BrowserSwitcherSnapshots<Surface: BrowserEngineSurface> {
             guard let result, result.documentGeneration == generation,
                   !Self.isBlank(result.image) else { self.entries[key]?.image = nil; return }
             self.entries[key]?.imageCreated = self.now()
+            self.entries[key]?.imageCaptureWidth = width
             self.entries[key]?.image = NSImage(cgImage: result.image, size: .zero)
             self.onChange?()
         }
         entries[key]?.task = task
         return task
+    }
+
+    private func requestedWidth(for surface: Surface) -> CGFloat {
+        let proposed = captureWidth(surface)
+        return proposed.isFinite ? min(1024, max(OrbitTokens.Switcher.thumbnailWidth, ceil(proposed))) : OrbitTokens.Switcher.thumbnailWidth
     }
 
     private func admitsAttachment(_ surface: Surface) -> Bool {
