@@ -292,18 +292,18 @@ struct FooterSpaceLayout: Equatable {
     var centerXs: [CGFloat]
 
     static func resolve(count: Int, libraryCenterX: CGFloat, plusCenterX: CGFloat,
-                        backingScale: CGFloat = 1) -> FooterSpaceLayout {
+                        backingScale: CGFloat = 1, prefersDots: Bool = false) -> FooterSpaceLayout {
         let half = SidebarMetrics.footerButtonSize / 2
         // 4 pt clearance from the side buttons' hit squares.
         let leading = libraryCenterX + half + 4, trailing = plusCenterX - half - 4
         let available = max(0, trailing - leading)
         let count = max(0, count)
         guard count > 0 else {
-            return .init(presentation: .icons, pitch: 0, dotDiameter: SidebarMetrics.footerSpaceDotDiameter, centerXs: [])
+            return .init(presentation: prefersDots ? .dots : .icons, pitch: 0, dotDiameter: SidebarMetrics.footerSpaceDotDiameter, centerXs: [])
         }
         let share = available / CGFloat(count)
         let iconPitch = min(SidebarMetrics.footerSpaceIconPitch, share)
-        let presentation: Presentation = iconPitch >= SidebarMetrics.footerSpaceIconMinimumPitch ? .icons : .dots
+        let presentation: Presentation = !prefersDots && iconPitch >= SidebarMetrics.footerSpaceIconMinimumPitch ? .icons : .dots
         let pitch = presentation == .icons ? iconPitch : min(SidebarMetrics.footerSpaceDotPitch, share)
         let desiredDiameter = presentation == .icons ? SidebarMetrics.footerSpaceDotDiameter
             : min(SidebarMetrics.footerSpaceDotDiameter, max(SidebarMetrics.footerSpaceDotMinimumDiameter, pitch - 3))

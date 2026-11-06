@@ -459,12 +459,12 @@ struct ShellGeometryTests {
         #expect(toolbar.hitWidth <= toolbar.forwardCenterX - toolbar.backCenterX + 0.001)
     }
 
-    @Test("The toggle follows the system pitch and lines up with the address field in full screen")
+    @Test("The toggle follows the system pitch and its hover aligns with the address field in full screen")
     func toolbarPitchAndFullScreen() {
         #expect(OrbitSidebarGeometry.Toolbar.resolve(width: 228, trafficLightPitch: 20).sidebarToggleCenterX == 87.25)
         #expect(OrbitSidebarGeometry.Toolbar.resolve(width: 228, trafficLightPitch: 23).sidebarToggleCenterX == 93.25)
         let fullScreen = OrbitSidebarGeometry.Toolbar.resolve(width: 228, isFullScreen: true)
-        let leading = (fullScreen.sidebarToggleCenterX ?? 0) - OrbitTokens.Metrics.Toolbar.sidebarToggleGlyphWidth / 2
+        let leading = (fullScreen.sidebarToggleCenterX ?? 0) - OrbitTokens.Metrics.Toolbar.buttonHitSize / 2
         #expect(leading == OrbitTokens.Metrics.Sidebar.paddingX && fullScreen.backCenterX == 228 - 90.25)
     }
 

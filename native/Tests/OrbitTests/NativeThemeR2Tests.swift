@@ -267,7 +267,7 @@ struct ThemeR2BehaviourTests {
         #expect(editor.isHorizontallyResizable && !container.widthTracksTextView)
     }
 
-    @Test("Below 224 pt the toolbar turns compact; in full screen the toggle aligns with the sidebar inset")
+    @Test("Below 224 pt the toolbar turns compact; in full screen the toggle hover aligns with the sidebar inset")
     func compactToolbarAndFullScreen() async throws {
         NSApplication.shared.setActivationPolicy(.prohibited)
         let controller = try await PreviewEnvironment().makeWindow()
@@ -287,7 +287,7 @@ struct ThemeR2BehaviourTests {
         #expect(row.layoutState?.isCompact == false && !row.buttons[0].isHidden && !row.buttons[3].isHidden && overflow.isHidden)
         NotificationCenter.default.post(name: NSWindow.willEnterFullScreenNotification, object: window)
         root.layoutSubtreeIfNeeded()
-        #expect(row.buttons[0].frame.midX == 15.5)
+        #expect(row.buttons[0].frame.minX == 8)
         NotificationCenter.default.post(name: NSWindow.willExitFullScreenNotification, object: window)
         NotificationCenter.default.post(name: NSWindow.didExitFullScreenNotification, object: window)
         root.layoutSubtreeIfNeeded()

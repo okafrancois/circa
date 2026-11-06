@@ -166,6 +166,7 @@ final class BrowserWindowSettings {
         for button in owner.sidebar.footer.spaceButtons {
             button.iconSelection = runtime.document.displayedSpaceIcon(button.space.id)
         }
+        owner.sidebar.footer.usesDotsForSpaceIcons = runtime.document.usesDotsForSpaceIcons
     }
 }
 

@@ -64,12 +64,18 @@ struct SpaceIconDotsSettingsTests {
             controller.sidebar.footer.spaceButtons.first { $0.space.id == id }?.iconSelection
         }
         for controller in [first, second] {
+            controller.window?.contentView?.layoutSubtreeIfNeeded()
             for (id, icon) in expected { #expect(displayed(controller, id) == icon) }
+            #expect(controller.sidebar.footer.spaceLayout.pitch == 34)
         }
         #expect(first.sidebar.page.iconSelection == .grapheme("🏀") && !first.sidebar.page.iconButton.isHidden)
 
         try await environment.settings.setUsesDotsForSpaceIcons(true)
         for controller in [first, second] {
+            let buttons = controller.sidebar.footer.spaceButtons
+            #expect(controller.sidebar.footer.spaceLayout.presentation == .dots)
+            #expect(buttons[1].frame.midX - buttons[0].frame.midX == 18)
+            #expect(buttons[0].frame.maxX <= buttons[1].frame.minX)
             for id in expected.keys { #expect(displayed(controller, id) == BrowserSpaceIcon.none) }
             #expect(controller.sidebar.page.iconSelection == .none && controller.sidebar.page.iconButton.isHidden)
             #expect(controller.sidebar.resolveSpaceIcon(firstSpace) == .none)
@@ -89,6 +95,9 @@ struct SpaceIconDotsSettingsTests {
 
         try await environment.settings.setUsesDotsForSpaceIcons(false)
         for controller in [first, second] {
+            let buttons = controller.sidebar.footer.spaceButtons
+            #expect(controller.sidebar.footer.spaceLayout.presentation == .icons)
+            #expect(buttons[1].frame.midX - buttons[0].frame.midX == 34)
             #expect(displayed(controller, firstSpace) == .grapheme("🏀"))
             #expect(displayed(controller, other) == .grapheme("🎯"))
             #expect(controller.window?.isVisible == false)

@@ -13,6 +13,13 @@ final class SidebarFooterView: NSView {
     let plusButton = OrbitGlyphButton(glyph: OrbitGlyph.footerPlus, label: OrbitShellText.create)
     private(set) var spaceButtons: [SidebarSpaceButton] = []
     private var spaces: [BrowserSpace] = []
+    private var lastGeometry: OrbitSidebarGeometry?
+    var usesDotsForSpaceIcons = false {
+        didSet {
+            guard usesDotsForSpaceIcons != oldValue, let lastGeometry else { return }
+            apply(lastGeometry)
+        }
+    }
     private let creationDot = NSView()
     let background = OrbitSurfaceBackgroundView(cornerRadius: 10)
     private let backgroundContainer = SidebarFlippedView()
@@ -123,6 +130,7 @@ final class SidebarFooterView: NSView {
 
     /// Lays the footer out from the sidebar geometry (centres in footer coordinates).
     func apply(_ geometry: OrbitSidebarGeometry) {
+        lastGeometry = geometry
         backgroundContainer.frame = NSRect(x: 8, y: geometry.footerCenterY - 20, width: max(0, bounds.width - 16), height: 40)
         background.frame = backgroundContainer.bounds
         let size = Metrics.footerButtonSize
@@ -132,7 +140,7 @@ final class SidebarFooterView: NSView {
         plusButton.frame = NSRect(x: geometry.plusCenterX - size / 2, y: y, width: size, height: size)
         spaceLayout = FooterSpaceLayout.resolve(count: spaceButtons.count, libraryCenterX: geometry.libraryCenterX,
                                                 plusCenterX: geometry.plusCenterX,
-                                                backingScale: window?.backingScaleFactor ?? 1)
+                                                backingScale: window?.backingScaleFactor ?? 1, prefersDots: usesDotsForSpaceIcons)
         let progress = min(1, max(0, creationProgress))
         let group = FooterSpaceLayout.resolve(count: spaceButtons.count + 2, libraryCenterX: geometry.libraryCenterX,
                                               plusCenterX: geometry.plusCenterX,
