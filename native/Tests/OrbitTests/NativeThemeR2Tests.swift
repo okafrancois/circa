@@ -304,8 +304,14 @@ struct ThemeR2BehaviourTests {
         window.setContentSize(reference)
         root.layoutSubtreeIfNeeded()
         let capsule = controller.windowShell.loadingIndicator
+        // The edge-to-edge default leaves no top margin, so the capsule stays hidden.
         controller.windowShell.setLoadingPhase(.waiting)
-        // Card 228…1014 × 10…630: centre x 621, capsule 4 high centred in the 10 pt margin.
+        #expect(capsule.isHidden)
+        controller.windowShell.setLoadingPhase(.idle)
+        controller.windowShell.showsSpaceAroundPages = true
+        root.layoutSubtreeIfNeeded()
+        controller.windowShell.setLoadingPhase(.waiting)
+        // Spaced layout: card 228…1014 × 10…630: centre x 621, capsule 4 high centred in the 10 pt margin.
         #expect(!capsule.isHidden && capsule.frame == NSRect(x: 621 - 23.5, y: 640 - 7, width: 47, height: 4))
         controller.windowShell.setLoadingPhase(.progress)
         #expect(!capsule.isHidden && capsule.frame.width == 127.5 && capsule.frame.midX == 621)
