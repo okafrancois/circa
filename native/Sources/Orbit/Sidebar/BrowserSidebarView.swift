@@ -1578,6 +1578,7 @@ final class SidebarAddressField: SidebarFlippedView {
     var isEditing = false { didSet { if isEditing != oldValue { refresh() } } }
     private var isHovering = false { didSet { if isHovering != oldValue { refresh() } } }
     private var hasPage = true
+    private var displayedAddress = ""
     private var selectionWidth: CGFloat?
     private var hoverArea: NSTrackingArea?
 
@@ -1603,8 +1604,15 @@ final class SidebarAddressField: SidebarFlippedView {
         self.field = field as? NSTextField
         if let address = field as? OrbitLocationField {
             hasPage = !address.stringValue.isEmpty
-            address.onAddressChange = { [weak self] hasPage in
-                guard let self, self.hasPage != hasPage else { return }
+            displayedAddress = address.stringValue
+            address.onAddressChange = { [weak self, weak address] hasPage in
+                guard let self else { return }
+                // Navigation replaces the displayed address; a hover the pointer has left must not survive it.
+                if let value = address?.stringValue, value != self.displayedAddress {
+                    self.displayedAddress = value
+                    if !self.isEditing { self.clearHoverIfPointerOutside() }
+                }
+                guard self.hasPage != hasPage else { return }
                 self.hasPage = hasPage
                 self.refresh()
             }
