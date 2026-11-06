@@ -50,18 +50,15 @@ enum OrbitGlyph {
         return image
     }
 
-    /// 19×14 for the ≈18.7×14.9 toggle.
-    static var sidebarToggle: NSImage? { symbol("sidebar.left", pointSize: 13) }
-    /// 15×12 for the 14.4×11.7 arrows.
-    static var back: NSImage? { symbol("arrow.left", pointSize: 12) }
-    static var forward: NSImage? { symbol("arrow.right", pointSize: 12) }
-    /// 13×10.5 arrows of the compact toolbar ().
-    static var backCompact: NSImage? { symbol("arrow.left", pointSize: 10.5) }
-    static var forwardCompact: NSImage? { symbol("arrow.right", pointSize: 10.5) }
+    /// Thin toolbar glyphs (see `OrbitToolbarGlyphs`).
+    static var sidebarToggle: NSImage? { OrbitToolbarGlyphs.sidebarToggle }
+    static var back: NSImage? { OrbitToolbarGlyphs.back }
+    static var forward: NSImage? { OrbitToolbarGlyphs.forward }
+    static var backCompact: NSImage? { OrbitToolbarGlyphs.backCompact }
+    static var forwardCompact: NSImage? { OrbitToolbarGlyphs.forwardCompact }
     /// ≈13×3 "•••" overflow of the compact toolbar ().
     static var toolbarOverflow: NSImage? { symbol("ellipsis", pointSize: 12, weight: .bold) }
-    /// 15×17 for the 14.4×17.6 reload glyph.
-    static var reload: NSImage? { symbol("arrow.clockwise", pointSize: 14) }
+    static var reload: NSImage? { OrbitToolbarGlyphs.reload }
     /// 10×10 for the 10.5 close cross.
     static var close: NSImage? { symbol("xmark", pointSize: 10, weight: .semibold) }
     /// 13 for the New Tab "+".
