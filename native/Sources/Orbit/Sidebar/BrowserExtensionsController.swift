@@ -36,6 +36,18 @@ final class BrowserExtensionsController<Engine: BrowserEngine> {
     private var cyclingID: String?
     private var cyclingEpoch: UInt64?
     private var windowObservation: NSObjectProtocol?
+    private var keyObservation: NSObjectProtocol?
+    /// A started action arms the hold; the popup taking key focus from this window opens it.
+    /// The window regaining key focus (popup closed), selection or navigation clears it.
+    private enum PopupHold: Equatable { case none, armed(UInt64), open }
+    private var popupHold = PopupHold.none {
+        didSet {
+            guard popupHold != oldValue else { return }
+            owner?.sidebar.addressContainer.holdsExtensionPopupVisible = popupHold == .open
+        }
+    }
+    private var popupHoldEpoch: UInt64 = 0
+    private var popupHoldExpiry: Task<Void, Never>?
 
     private var generation: UInt64?
     private var selectionEpoch: UInt64 = 0
@@ -49,7 +61,19 @@ final class BrowserExtensionsController<Engine: BrowserEngine> {
         guard let owner else { return }
         windowObservation = NotificationCenter.default.addObserver(forName: NSWindow.didResignKeyNotification,
             object: owner.window, queue: .main) { [weak self] _ in
-                MainActor.assumeIsolated { self?.cancelCycle() }
+                MainActor.assumeIsolated {
+                    guard let self else { return }
+                    self.cancelCycle()
+                    if case .armed = self.popupHold { self.popupHold = .open }
+                }
+            }
+        keyObservation = NotificationCenter.default.addObserver(forName: NSWindow.didBecomeKeyNotification,
+            object: owner.window, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated {
+                    guard let self else { return }
+                    if self.popupHold == .open { self.clearPopupHold() }
+                    self.owner?.sidebar.addressContainer.clearHoverIfPointerOutside()
+                }
             }
         owner.siteControls.extensionContextMenu = { [weak self] item, surface in
             self?.contextMenu(for: item, surface: surface)
@@ -74,6 +98,10 @@ final class BrowserExtensionsController<Engine: BrowserEngine> {
         buttonsByProfile = buttonsByProfile.filter { liveProfiles.contains($0.key) }
         if selectedSurface !== surface || generation != surface?.documentGeneration || !owner.acceptsCommands {
             cancelCycle()
+            if selectedSurface != nil || popupHold != .none {
+                clearPopupHold()
+                owner.sidebar.addressContainer.clearHoverIfPointerOutside()
+            }
             selectionEpoch &+= 1
             selectedSurface = surface
             generation = surface?.documentGeneration
@@ -240,8 +268,9 @@ final class BrowserExtensionsController<Engine: BrowserEngine> {
                           self.previewProfile == nil, let anchor = self.pinnedButtons.first(where: {
                               $0.accessibilityIdentifier() == identifier
                           }) else { return }
+                    self.armPopupHold()
                     do { try owner.engine.extensions?.performAction(extensionID: item.id, on: surface, anchor: anchor) }
-                    catch { owner.session.onError?(error) }
+                    catch { self.clearPopupHold(); owner.session.onError?(error) }
                 }
                 created.imagePosition = .imageOnly
                 created.imageScaling = .scaleProportionallyDown
@@ -326,8 +355,30 @@ final class BrowserExtensionsController<Engine: BrowserEngine> {
         // Overflow buttons are detached from visible geometry; use the persistent toolbar anchor.
         let anchor = button.isHiddenOrHasHiddenAncestor || button.visibleRect.isEmpty
             ? owner.siteControls.actionAnchor : button
+        armPopupHold()
         do { try owner.engine.extensions?.performAction(extensionID: extensionID, on: surface, anchor: anchor) }
-        catch { owner.session.onError?(error) }
+        catch { clearPopupHold(); owner.session.onError?(error) }
+    }
+
+    /// Native popups appear after their document loads; an action without a popup never
+    /// takes key focus, so the arm expires instead of keeping the strip revealed.
+    private func armPopupHold() {
+        guard owner?.window?.isKeyWindow == true else { return }
+        popupHoldEpoch &+= 1
+        let epoch = popupHoldEpoch
+        popupHold = .armed(epoch)
+        popupHoldExpiry?.cancel()
+        popupHoldExpiry = Task { [weak self] in
+            do { try await Task.sleep(for: .seconds(5)) } catch { return }
+            guard let self, self.popupHold == .armed(epoch) else { return }
+            self.popupHold = .none
+        }
+    }
+
+    private func clearPopupHold() {
+        popupHoldExpiry?.cancel()
+        popupHoldExpiry = nil
+        popupHold = .none
     }
 
     func releaseMemory() {
@@ -347,6 +398,9 @@ final class BrowserExtensionsController<Engine: BrowserEngine> {
         cancelCycle()
         if let windowObservation { NotificationCenter.default.removeObserver(windowObservation) }
         windowObservation = nil
+        if let keyObservation { NotificationCenter.default.removeObserver(keyObservation) }
+        keyObservation = nil
+        clearPopupHold()
         iconImages.removeAll()
         registryRetry?.cancel()
         registryRetry = nil

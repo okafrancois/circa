@@ -136,7 +136,7 @@ struct URLPillLayoutTests {
         #expect(!window.isVisible)
     }
 
-    @Test("Pinned controls remain visible outside hover and yield their width while editing")
+    @Test("Pinned controls reveal on hover, stay anchored while hidden and yield their width while editing")
     func hoverAndEditing() {
         let sidebar = BrowserSidebarView(frame: NSRect(x: 0, y: 0, width: 328, height: 640))
         let pill = sidebar.addressContainer, strip = sidebar.extensionsContainer
@@ -145,7 +145,7 @@ struct URLPillLayoutTests {
         pill.installAccessory(strip, onHover: true)
         sidebar.layoutSubtreeIfNeeded()
         let page = sidebar.geometry.pageFrame
-        #expect(strip.alphaValue == 1)
+        #expect(strip.alphaValue == 0 && !strip.isHidden)
         pill.mouseEntered(with: NSEvent())
         #expect(!strip.isHidden && strip.alphaValue == 1)
         pill.holdsAccessoriesVisible = true
@@ -155,7 +155,7 @@ struct URLPillLayoutTests {
         #expect(strip.isHidden)
         pill.isEditing = false
         pill.holdsAccessoriesVisible = false
-        #expect(strip.alphaValue == 1 && !strip.isHidden)
+        #expect(strip.alphaValue == 0 && !strip.isHidden)
         sidebar.layoutSubtreeIfNeeded()
         #expect(sidebar.geometry.pageFrame == page)
         #expect(strip.isDescendant(of: pill))

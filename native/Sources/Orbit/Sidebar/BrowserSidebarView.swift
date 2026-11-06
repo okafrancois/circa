@@ -1568,6 +1568,8 @@ final class SidebarAddressField: SidebarFlippedView {
     private var accessoryOrder: [ObjectIdentifier: Int] = [:]
     private var hoverAccessories: [NSView] = []
     var holdsAccessoriesVisible = false { didSet { refresh() } }
+    /// Set while a pinned extension popup anchored to this field owns key focus.
+    var holdsExtensionPopupVisible = false { didSet { if holdsExtensionPopupVisible != oldValue { refresh() } } }
     private weak var field: NSTextField?
     var accent = OrbitTokens.ThemeAccent.defaultSpace { didSet { if accent != oldValue { refreshAccent() } } }
     var effectiveAccent: OrbitTokens.ThemeAccent {
@@ -1576,6 +1578,7 @@ final class SidebarAddressField: SidebarFlippedView {
     var isEditing = false { didSet { if isEditing != oldValue { refresh() } } }
     private var isHovering = false { didSet { if isHovering != oldValue { refresh() } } }
     private var hasPage = true
+    private var displayedAddress = ""
     private var selectionWidth: CGFloat?
     private var hoverArea: NSTrackingArea?
 
@@ -1601,8 +1604,15 @@ final class SidebarAddressField: SidebarFlippedView {
         self.field = field as? NSTextField
         if let address = field as? OrbitLocationField {
             hasPage = !address.stringValue.isEmpty
-            address.onAddressChange = { [weak self] hasPage in
-                guard let self, self.hasPage != hasPage else { return }
+            displayedAddress = address.stringValue
+            address.onAddressChange = { [weak self, weak address] hasPage in
+                guard let self else { return }
+                // Navigation replaces the displayed address; a hover the pointer has left must not survive it.
+                if let value = address?.stringValue, value != self.displayedAddress {
+                    self.displayedAddress = value
+                    if !self.isEditing { self.clearHoverIfPointerOutside() }
+                }
+                guard self.hasPage != hasPage else { return }
                 self.hasPage = hasPage
                 self.refresh()
             }
@@ -1726,9 +1736,17 @@ final class SidebarAddressField: SidebarFlippedView {
     override func mouseEntered(with event: NSEvent) { isHovering = true }
     override func mouseExited(with event: NSEvent) { isHovering = false }
 
+    /// Tracking areas miss the exit when the app or window deactivates under the pointer.
+    /// Only clears hover; entering is always reported by the tracking area itself.
+    func clearHoverIfPointerOutside() {
+        guard isHovering, let window else { return }
+        let point = convert(window.mouseLocationOutsideOfEventStream, from: nil)
+        if !bounds.contains(point) { isHovering = false }
+    }
+
     private func refresh() {
         for view in hoverAccessories {
-            let revealed = (view === extensions || isHovering || holdsAccessoriesVisible) && !isEditing
+            let revealed = (isHovering || holdsAccessoriesVisible || holdsExtensionPopupVisible) && !isEditing
             // Keep native popup anchors in the visible hierarchy after the pointer enters
             // a menu or an extension popup. Editing alone reclaims their layout width.
             view.alphaValue = revealed ? 1 : 0
