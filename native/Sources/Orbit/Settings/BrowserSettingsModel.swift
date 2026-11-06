@@ -251,6 +251,12 @@ final class BrowserSettingsModel<Engine: BrowserEngine>: ObservableObject {
         await runtime.refresh()
     }
 
+    func setShowsSpaceAroundPages(_ value: Bool) async throws {
+        do { try await runtime.store.setShowsSpaceAroundPages(value) }
+        catch { await runtime.refresh(); throw error }
+        await runtime.refresh()
+    }
+
     func setWarnBeforeQuitting(_ value: Bool) async throws {
         try await runtime.updateInteraction { $0.warnBeforeQuitting = value }
     }

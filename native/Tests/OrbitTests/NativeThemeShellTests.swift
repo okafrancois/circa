@@ -585,9 +585,10 @@ struct NativeThemeShellTests {
         #expect(window.styleMask.contains(.fullSizeContentView) && window.titlebarAppearsTransparent)
         #expect(window.titleVisibility == .hidden && window.minSize == NSSize(width: 600, height: 400))
         #expect(controller.sidebar.frame.width == 228)
+        // Edge to edge by default: flush with the top, trailing and bottom edges.
         let card = controller.contentCard.convert(controller.contentCard.bounds, to: root)
-        #expect(close(card, CGRect(x: 228, y: 10, width: 786, height: 620)))
-        #expect(controller.contentCard.cornerRadius == 6)
+        #expect(close(card, CGRect(x: 228, y: 0, width: 796, height: 640)))
+        #expect(controller.contentCard.cornerRadius == OrbitTokens.Metrics.Content.edgeCardLeadingRadius)
         let centers = try trafficLightCenters(window)
         #expect(centers.count == 3)
         let pitch = controller.windowShell.trafficLightPitch
@@ -610,7 +611,7 @@ struct NativeThemeShellTests {
         #expect(!window.isVisible)
     }
 
-    @Test("⌘S hides the sidebar and its window buttons, the card takes the window with a 10 pt inset, and back")
+    @Test("⌘S hides the sidebar and its window buttons, the edge-to-edge card takes the whole window, and back")
     func toggleSidebarGeometry() async throws {
         NSApplication.shared.setActivationPolicy(.prohibited)
         let controller = try await PreviewEnvironment().makeWindow()
@@ -622,14 +623,14 @@ struct NativeThemeShellTests {
         await controller.session.waitForPendingCommands()
         root.layoutSubtreeIfNeeded()
         #expect(!controller.isSidebarShown && controller.sidebar.isHidden)
-        #expect(close(controller.contentCard.convert(controller.contentCard.bounds, to: root), CGRect(x: 10, y: 10, width: 1004, height: 620)))
+        #expect(close(controller.contentCard.convert(controller.contentCard.bounds, to: root), CGRect(origin: .zero, size: reference)))
         #expect(window.standardWindowButton(.closeButton)?.isHidden == true)
         #expect(controller.windowShell.hoverReveal.phase == .idle)
         controller.toggleSidebar()
         await controller.session.waitForPendingCommands()
         root.layoutSubtreeIfNeeded()
         #expect(controller.isSidebarShown && !controller.sidebar.isHidden)
-        #expect(close(controller.contentCard.convert(controller.contentCard.bounds, to: root), CGRect(x: 228, y: 10, width: 786, height: 620)))
+        #expect(close(controller.contentCard.convert(controller.contentCard.bounds, to: root), CGRect(x: 228, y: 0, width: 796, height: 640)))
         #expect(window.standardWindowButton(.closeButton)?.isHidden == false)
         #expect(controller.windowShell.hoverReveal.phase == .disabled)
     }
@@ -648,7 +649,7 @@ struct NativeThemeShellTests {
         root.layoutSubtreeIfNeeded()
         #expect(controller.isSidebarFloating && !controller.sidebar.isHidden)
         #expect(close(controller.sidebar.convert(controller.sidebar.bounds, to: root), CGRect(x: 5, y: 5, width: 228, height: 630)))
-        #expect(close(controller.contentCard.convert(controller.contentCard.bounds, to: root), CGRect(x: 10, y: 10, width: 1004, height: 620)))
+        #expect(close(controller.contentCard.convert(controller.contentCard.bounds, to: root), CGRect(origin: .zero, size: reference)))
         #expect(!controller.windowShell.floatingBackdrop.isHidden)
         #expect(close(controller.windowShell.floatingBackdrop.frame, CGRect(x: 5, y: 5, width: 228, height: 630)))
         #expect(controller.windowShell.floatingBackdrop.cornerRadius == 12)
@@ -694,11 +695,15 @@ struct NativeThemeShellTests {
         #expect(controller.contentCard.convert(controller.contentCard.bounds, to: root).minX == 300)
     }
 
-    @Test("Full screen with the sidebar hidden puts the card edge to edge without corners")
+    @Test("Spaced layout: full screen with the sidebar hidden puts the card edge to edge without corners")
     func fullScreenLayout() async throws {
         NSApplication.shared.setActivationPolicy(.prohibited)
-        let controller = try await PreviewEnvironment().makeWindow()
+        let environment = PreviewEnvironment()
+        try await environment.settings.store.setShowsSpaceAroundPages(true)
+        await environment.settings.refresh()
+        let controller = try await environment.makeWindow()
         defer { controller.window?.close() }
+        #expect(controller.windowShell.showsSpaceAroundPages)
         let window = try #require(controller.window)
         let root = try #require(window.contentView)
         window.setContentSize(reference)
@@ -774,7 +779,7 @@ struct NativeThemeShellTests {
         await controller.session.waitForPendingCommands()
         root.layoutSubtreeIfNeeded()
         #expect(!controller.isSidebarShown && controller.windowShell.dockProgress == 0)
-        #expect(close(controller.contentCard.convert(controller.contentCard.bounds, to: root), CGRect(x: 10, y: 10, width: 1004, height: 620)))
+        #expect(close(controller.contentCard.convert(controller.contentCard.bounds, to: root), CGRect(origin: .zero, size: reference)))
         #expect(registry.dispatch(.showHideSidebar, origin: .menu))
         await router.waitForPendingCommands()
         await controller.session.waitForPendingCommands()

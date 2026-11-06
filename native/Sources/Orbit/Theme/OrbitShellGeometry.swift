@@ -24,6 +24,9 @@ struct OrbitShellGeometry: Equatable {
         /// Centre spacing of the system window buttons (`OrbitTrafficLights.systemPitch`): 23 on the capture
         /// machine, 20 on older macOS (). The system defines it, not Orbit.
         var trafficLightPitch: CGFloat = WindowMetrics.trafficLightPitch
+        /// The spaced layout (10 pt around the card, all corners rounded). The shell passes the user
+        /// preference, whose default is the edge-to-edge layout.
+        var spaceAroundPages = true
     }
 
     /// Leading edge of the docked column (−W when hidden); the card follows its trailing edge.
@@ -33,6 +36,8 @@ struct OrbitShellGeometry: Equatable {
     var sidebarFrame: CGRect
     var cardFrame: CGRect
     var cardRadius: CGFloat
+    /// The card touches the window's top, trailing and bottom edges; only its leading corners round.
+    var isCardFlush = false
     /// Opacity of the floating panel (fill, shadow, edge) behind the sidebar.
     var floatingChrome: CGFloat
     var floatingRadius: CGFloat
@@ -46,13 +51,15 @@ struct OrbitShellGeometry: Equatable {
         let dock = state.dockProgress
         let float = state.floatProgress
         //  10 with the sidebar;  10 hidden, 0 in full screen.
-        let hiddenInset = state.isFullScreen ? ContentMetrics.fullscreenHiddenSidebarInset : ContentMetrics.cardInsetSidebarHidden
-        let inset = lerp(hiddenInset, ContentMetrics.cardInset, dock)
+        let spaced = state.spaceAroundPages
+        let hiddenInset = !spaced ? 0 : state.isFullScreen ? ContentMetrics.fullscreenHiddenSidebarInset : ContentMetrics.cardInsetSidebarHidden
+        let inset = spaced ? lerp(hiddenInset, ContentMetrics.cardInset, dock) : 0
         let columnMinX = -width * (1 - dock)
         let gap = hiddenInset * (1 - dock)
         let cardMinX = columnMinX + width + gap
         let card = CGRect(x: cardMinX, y: inset, width: size.width - inset - cardMinX, height: size.height - 2 * inset)
-        let hiddenRadius = state.isFullScreen ? ContentMetrics.cardRadiusFullscreenHidden : OrbitTokens.Radius.contentCard
+        let hiddenRadius = !spaced || state.isFullScreen ? ContentMetrics.cardRadiusFullscreenHidden : OrbitTokens.Radius.contentCard
+        let dockedRadius = spaced ? OrbitTokens.Radius.contentCard : ContentMetrics.edgeCardLeadingRadius
         let docked = CGRect(x: columnMinX, y: 0, width: width, height: size.height)
         let sidebar: CGRect
         if float > 0 || state.usesFloatingFrame {
@@ -72,7 +79,7 @@ struct OrbitShellGeometry: Equatable {
         let onScreen = sidebar.maxX > 0.5 && (dock > 0.001 || float > 0.001)
         return OrbitShellGeometry(
             dockedColumnMinX: columnMinX, cardGap: gap, sidebarFrame: sidebar, cardFrame: card,
-            cardRadius: lerp(hiddenRadius, OrbitTokens.Radius.contentCard, dock),
+            cardRadius: lerp(hiddenRadius, dockedRadius, dock), isCardFlush: !spaced,
             floatingChrome: float > 0 ? max(0, min(1, 1 - dock)) : 0,
             floatingRadius: OrbitTokens.Radius.floatingSidebar * max(0, 1 - dock),
             trafficLightCenters: lights,
