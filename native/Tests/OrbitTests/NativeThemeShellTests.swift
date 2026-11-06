@@ -459,12 +459,13 @@ struct ShellGeometryTests {
         #expect(toolbar.hitWidth <= toolbar.forwardCenterX - toolbar.backCenterX + 0.001)
     }
 
-    @Test("The toggle follows the system pitch and moves to x 28.6 in full screen")
+    @Test("The toggle follows the system pitch and lines up with the address field in full screen")
     func toolbarPitchAndFullScreen() {
         #expect(OrbitSidebarGeometry.Toolbar.resolve(width: 228, trafficLightPitch: 20).sidebarToggleCenterX == 87.25)
         #expect(OrbitSidebarGeometry.Toolbar.resolve(width: 228, trafficLightPitch: 23).sidebarToggleCenterX == 93.25)
         let fullScreen = OrbitSidebarGeometry.Toolbar.resolve(width: 228, isFullScreen: true)
-        #expect(fullScreen.sidebarToggleCenterX == 28.6 && fullScreen.backCenterX == 228 - 90.25)
+        let leading = (fullScreen.sidebarToggleCenterX ?? 0) - OrbitTokens.Metrics.Toolbar.sidebarToggleGlyphWidth / 2
+        #expect(leading == OrbitTokens.Metrics.Sidebar.paddingX && fullScreen.backCenterX == 228 - 90.25)
     }
 
     @Test("Footer Space icons compress instead of overlapping the side buttons")

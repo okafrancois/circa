@@ -452,8 +452,13 @@ extension OrbitTokens {
             ///  — compact arrows 13 × 10.5, overflow dots 13 × 3.
             public static let compactArrowGlyphSize = NSSize(width: 13, height: 10.5)
             public static let compactOverflowGlyphSize = NSSize(width: 13, height: 3)
-            /// : full screen hides the window buttons; the toggle moves to x 28.6.
-            public static let fullScreenSidebarToggleCenterX: CGFloat = 28.6
+            /// Full screen hides the window buttons; the toggle glyph's leading edge then lines up with
+            /// the address field and Favorites (the sidebar's horizontal padding, 8).
+            public static var fullScreenSidebarToggleLeading: CGFloat { Sidebar.paddingX }
+            public static let sidebarToggleGlyphWidth: CGFloat = 15
+            public static var fullScreenSidebarToggleCenterX: CGFloat {
+                fullScreenSidebarToggleLeading + sidebarToggleGlyphWidth / 2
+            }
             public static let buttonHitSize: CGFloat = 28
         }
 
