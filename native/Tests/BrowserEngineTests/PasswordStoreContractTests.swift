@@ -9,7 +9,11 @@ private final class MockPasswordStore: BrowserPasswordStore {
     var rows: [ProfileID: [BrowserPasswordKey: BrowserPasswordRecord]] = [:]
     var listeners: [ProfileID: [AsyncStream<BrowserPasswordStoreChange>.Continuation]] = [:]
     func list(profileID: ProfileID) async throws -> [BrowserPasswordRecord] { Array(rows[profileID, default: [:]].values) }
+    /// The engine store keeps the canonical spelling of an added URL; map the inputs a test uses.
+    var storedSpelling: [String: String] = [:]
     func add(_ record: BrowserPasswordRecord, profileID: ProfileID) async throws {
+        var record = record
+        record.primaryKey.originURL = storedSpelling[record.primaryKey.originURL] ?? record.primaryKey.originURL
         guard rows[profileID]?[record.primaryKey] == nil else { throw BrowserPasswordStoreError.conflict }
         rows[profileID, default: [:]][record.primaryKey] = record; changed(profileID)
     }
@@ -87,6 +91,20 @@ struct PasswordStoreContractTests {
         #expect(conflict.conflicts == 1)
         #expect(try await store.list(profileID: profile).first?.passwordValue == "first")
         #expect(try await store.list(profileID: other).isEmpty)
+    }
+
+
+    @Test("Import verification accepts the canonical URL the store returns")
+    func importMatchesStoredSpelling() async throws {
+        let store = MockPasswordStore(), profile = ProfileID()
+        store.storedSpelling = ["https://Fixture.test": "https://fixture.test/"]
+        var password = try #require(BrowserPasswordCSV.read(Data("url,username,password\nhttps://fixture.test/,user,first\n".utf8)).passwords.first)
+        password.origin = "https://Fixture.test"
+        let first = try await BrowserPasswordImporter.apply([password], to: store, profileID: profile)
+        #expect(first.imported == 1)
+        let again = try await BrowserPasswordImporter.apply([password], to: store, profileID: profile)
+        #expect(again.imported == 0 && again.alreadyPresent == 1)
+        #expect(try await store.list(profileID: profile).map(\.primaryKey.originURL) == ["https://fixture.test/"])
     }
 
 }

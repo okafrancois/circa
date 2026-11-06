@@ -5,7 +5,8 @@ import Foundation
 @MainActor
 public enum ArcPasswordImportRunner {
     private static func sameIdentity(_ a: BrowserPasswordRecord, _ b: ImportedBrowserPassword) -> Bool {
-        a.primaryKey.signonRealm == b.realm && a.primaryKey.originURL == b.origin && a.primaryKey.usernameValue == b.username
+        a.primaryKey.signonRealm == b.realm && ChromiumPasswordReader.sameWebURL(a.primaryKey.originURL, b.origin)
+            && a.primaryKey.usernameValue == b.username
     }
     private static func record(_ row: ImportedBrowserPassword) -> BrowserPasswordRecord {
         .init(primaryKey: .init(signonRealm: row.realm, originURL: row.origin, usernameElement: row.usernameElement,
@@ -40,7 +41,7 @@ public enum ArcPasswordImportRunner {
                 guard row.state == .owned || row.state == .intent else { continue }
                 if let found {
                     if journal.hash(found.passwordValue) == row.hash,
-                       found.primaryKey == record(row.credential).primaryKey,
+                       found.primaryKey.canonical == record(row.credential).primaryKey.canonical,
                        found.datePasswordModified == row.credential.modified {
                         try journal.checkpoint("password-before-remove:" + String(index))
                         try await store.remove(found.primaryKey, profileID: row.profile)

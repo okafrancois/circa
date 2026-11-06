@@ -24,7 +24,11 @@ private final class ImportPasswordStore: BrowserPasswordStore {
         }
         return rows[profileID] ?? []
     }
+    /// The engine store keeps the canonical spelling of an added URL; map the inputs a test uses.
+    var storedSpelling: [String: String] = [:]
     func add(_ value: BrowserPasswordRecord, profileID: ProfileID) async throws {
+        var value = value
+        value.primaryKey.originURL = storedSpelling[value.primaryKey.originURL] ?? value.primaryKey.originURL
         guard !(rows[profileID] ?? []).contains(where: { $0.primaryKey == value.primaryKey }) else { throw BrowserPasswordStoreError.conflict }
         rows[profileID, default: []].append(value); adds += 1; try save()
     }
@@ -106,6 +110,20 @@ struct ArcPasswordImportTests {
         #expect(job.counts.removed == 1 && job.counts.retained == 1)
         #expect(store.rows[Self.profile]?.count == 3)
         #expect(store.rows[Self.profile]?.contains { $0.passwordValue == "edited-after-import" } == true)
+    }
+    @Test func storeSpellingOfTheOriginStillVerifiesAndUndoes() async throws {
+        let root = try temporary(); defer { try? FileManager.default.removeItem(at: root) }
+        let store = ImportPasswordStore()
+        store.storedSpelling = ["https://Fixture.test": "https://fixture.test/"]
+        var value = try Self.values()[0]; value.origin = "https://Fixture.test"; value.realm = "https://fixture.test/"
+        let job = try ArcPasswordImportJournal.create(root: root, key: Self.key, groups: [(Self.profile, [value])], skipped: 0,
+            sourcePassword: Data("synthetic-source-key".utf8), targetPassword: Data("synthetic-target-key".utf8))
+        try job.activate()
+        try await ArcPasswordImportRunner.run(job, store: store)
+        #expect(job.counts.added == 1 && store.rows[Self.profile]?.map(\.primaryKey.originURL) == ["https://fixture.test/"])
+        try job.activate(restoring: true)
+        try await ArcPasswordImportRunner.run(job, store: store)
+        #expect(job.counts.removed == 1 && store.rows[Self.profile]?.isEmpty == true)
     }
     @Test func startupOrdering() async throws {
         let root = try temporary(); defer { try? FileManager.default.removeItem(at: root) }
