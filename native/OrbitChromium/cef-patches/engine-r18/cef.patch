@@ -1,0 +1,1062 @@
+diff --git a/libcef/browser/browser_host_base.cc b/libcef/browser/browser_host_base.cc
+index c9f84e5039b81a7e5724fd775c54f237c2cf5581..a6adafe43b55b46abd42105002ac96235ef5eeb8 100644
+--- a/libcef/browser/browser_host_base.cc
++++ b/libcef/browser/browser_host_base.cc
+@@ -3,6 +3,9 @@
+ // found in the LICENSE file.
+ 
+ #include "cef/libcef/browser/browser_host_base.h"
++#if BUILDFLAG(IS_MAC)
++#include "cef/libcef/browser/orbit/orbit_devtools.h"
++#endif
+ 
+ #include <tuple>
+ 
+@@ -698,6 +701,9 @@ void CefBrowserHostBase::CloseDevTools() {
+     return;
+   }
+ 
++#if BUILDFLAG(IS_MAC)
++  if (orbit::CloseHostedDevTools(GetWebContents())) return;
++#endif
+   if (devtools_window_runner_) {
+     devtools_window_runner_->CloseDevTools();
+   }
+@@ -709,6 +715,9 @@ bool CefBrowserHostBase::HasDevTools() {
+     return false;
+   }
+ 
++#if BUILDFLAG(IS_MAC)
++  if (orbit::CanHostDevTools(GetWebContents())) return orbit::HasHostedDevTools(GetWebContents());
++#endif
+   if (devtools_window_runner_) {
+     return devtools_window_runner_->HasDevTools();
+   }
+diff --git a/libcef/browser/devtools/devtools_window_runner.cc b/libcef/browser/devtools/devtools_window_runner.cc
+index fe9cad5d5a4f3a07c2b17d1a0b7331547b90d378..19fae830a534e6d41142ef9f70735acf2a56cb24 100644
+--- a/libcef/browser/devtools/devtools_window_runner.cc
++++ b/libcef/browser/devtools/devtools_window_runner.cc
+@@ -3,6 +3,10 @@
+ // found in the LICENSE file.
+ 
+ #include "cef/libcef/browser/devtools/devtools_window_runner.h"
++#include "build/build_config.h"
++#if BUILDFLAG(IS_MAC)
++#include "cef/libcef/browser/orbit/orbit_devtools.h"
++#endif
+ 
+ #include "cef/libcef/browser/chrome/chrome_browser_host_impl.h"
+ #include "cef/libcef/browser/request_context_impl.h"
+@@ -26,6 +30,20 @@ void CefDevToolsWindowRunner::ShowDevTools(
+ 
+   auto inspect_element_at = params->inspect_element_at_;
+ 
++#if BUILDFLAG(IS_MAC)
++  if (orbit::CanHostDevTools(web_contents)) {
++    if (!inspect_element_at.IsEmpty()) {
++      DevToolsWindow::InspectElement(web_contents->GetPrimaryMainFrame(),
++                                   inspect_element_at.x, inspect_element_at.y);
++    } else {
++      DevToolsWindow::OpenDevToolsWindow(web_contents, profile,
++          DevToolsOpenedByAction::kUnknown,
++          content::DevToolsManagerDelegate::DevToolsOptions());
++    }
++    return;
++  }
++#endif
++
+   if (!browser_host_) {
+     // Configure parameters for ChromeBrowserDelegate::CreateDevToolsBrowser
+     // which will be called indirectly to create the DevTools window.
+diff --git a/libcef/browser/orbit/orbit_browser_window.h b/libcef/browser/orbit/orbit_browser_window.h
+index caea95a2b37adcff1c3536915edd6daff4ec6989..5e74b26d00b52939c9026c6490947cfce0edc5fe 100644
+--- a/libcef/browser/orbit/orbit_browser_window.h
++++ b/libcef/browser/orbit/orbit_browser_window.h
+@@ -59,7 +59,7 @@ class OrbitBrowserWindow : public BrowserWindow, public ExclusiveAccessContext {
+   bool IsVisible() const override;
+   void SetBounds(const gfx::Rect& bounds) override {}
+   void Close() override;
+-  void Activate() override {}
++  void Activate() override;
+   void Deactivate() override {}
+   bool IsActive() const override;
+   void FlashFrame(bool flash) override {}
+diff --git a/libcef/browser/orbit/orbit_browser_window.mm b/libcef/browser/orbit/orbit_browser_window.mm
+index fa930874f1b12201a4116a26f0805d461b9e76b0..44932d55c96a954f082ba782b394f61b059abd81 100644
+--- a/libcef/browser/orbit/orbit_browser_window.mm
++++ b/libcef/browser/orbit/orbit_browser_window.mm
+@@ -11,6 +11,9 @@
+ #include "base/functional/bind.h"
+ #include "base/task/single_thread_task_runner.h"
+ #include "cef/libcef/browser/orbit/orbit_hosted.h"
++#include "cef/libcef/browser/browser_host_base.h"
++#include "cef/include/cef_focus_handler.h"
++#include "chrome/browser/ui/tabs/tab_strip_model.h"
+ #include "cef/libcef/browser/orbit/orbit_modal_dialog_host.h"
+ #include "chrome/browser/profiles/profile.h"
+ #include "chrome/browser/themes/theme_service.h"
+@@ -84,6 +87,15 @@ explicit OrbitNativeModalDialogHost(NSWindow* window)
+ 
+ }  // namespace
+ 
++void OrbitBrowserWindow::Activate() {
++  if (!browser_) return;
++  auto* contents = browser_->tab_strip_model()->GetActiveWebContents();
++  auto host = contents ? CefBrowserHostBase::GetBrowserForContents(contents) : nullptr;
++  if (!host || !host->GetClient()) return;
++  if (auto handler = host->GetClient()->GetFocusHandler())
++    handler->OnSetFocus(host->GetBrowser(), FOCUS_SOURCE_SYSTEM);
++}
++
+ // StubLocationBar -------------------------------------------------------------
+ 
+ OmniboxView* OrbitBrowserWindow::StubLocationBar::GetOmniboxView() {
+diff --git a/libcef/browser/orbit/orbit_cef_api.h b/libcef/browser/orbit/orbit_cef_api.h
+index 9ffeeff0de1274a8b61b8cbffd8c368cf012ba0d..d951b8d6db0f45c24ccb2579dea3b4f043feac51 100644
+--- a/libcef/browser/orbit/orbit_cef_api.h
++++ b/libcef/browser/orbit/orbit_cef_api.h
+@@ -14,6 +14,7 @@
+ #define CEF_LIBCEF_BROWSER_ORBIT_ORBIT_CEF_API_H_
+ 
+ #include <stdint.h>
++#include <stddef.h>
+ 
+ #ifdef __cplusplus
+ extern "C" {
+@@ -26,7 +27,7 @@ extern "C" {
+ // Version 3 (CHROMIUM-APP-R3): additive, hold_window/release_window. Earlier
+ // versions keep their layout as the prefix of the table.
+ // Version 4 (EXTENSIONS-PRODUCT-R1): additive, native per-profile extension services.
+-#define ORBIT_CEF_API_VERSION 16u
++#define ORBIT_CEF_API_VERSION 18u
+ 
+ // Version 8. Callback once after live renderer CSS installation (1), or failure (0).
+ typedef void (*orbit_boost_ack_t)(void*, uint64_t revision, int32_t installed);
+@@ -37,6 +38,10 @@ typedef void (*orbit_boost_ack_t)(void*, uint64_t revision, int32_t installed);
+ // begin reports an empty path. A refused call returns 0 and never calls back.
+ typedef void (*orbit_trace_callback_t)(void*, int32_t success, const char* path);
+ 
++// v18. UI-thread callback: 0 closed, 1 left, 2 bottom, 3 right, 4 undocked,
++// 5 loading. Flags bit0 requests focus. Views are owned by the embedder.
++typedef void (*orbit_devtools_changed_t)(void*, int32_t state, uint32_t flags);
++
+ typedef struct {
+   uint32_t struct_size;
+   uint32_t transition_type;
+@@ -134,6 +139,8 @@ typedef struct {
+   uint64_t cannot_discard_mask, footprint_kb;
+   int32_t renderer_pid;
+   uint64_t document_id;
++  // Version 17. Bit per performance_manager::freezing::CannotFreezeReason.
++  uint64_t cannot_freeze_mask;
+ } orbit_page_lifecycle_t;
+ // event: 0 state changed, 1 about to discard, 2 discarded, 3 closed.
+ // initiator: 0 none, 1 embedder, 2 native policy. Null state only for closed.
+@@ -167,6 +174,15 @@ typedef void (*orbit_activation_callback_t)(void*,
+ // Allocator nodes contain native numeric metrics; absent metrics are unknown.
+ typedef void (*orbit_memory_callback_t)(void*, int32_t status, const char* json, uint32_t length);
+ 
++// Version 17. Purge results use UINT64_MAX for an unavailable measurement.
++// Accepted requests callback exactly once on UI. Status: 1 measured, 2 purge
++// completed but one or both allocator measurements were unavailable, -1 failed.
++typedef void (*orbit_purge_callback_t)(void*, int32_t status,
++    uint64_t committed_before_kb, uint64_t committed_after_kb, uint64_t elapsed_us);
++#define ORBIT_PURGE_FAST 0u
++#define ORBIT_PURGE_AGGRESSIVE 1u
++#define ORBIT_PURGE_UNKNOWN_KB UINT64_MAX
++
+ typedef struct {
+   uint32_t struct_size;
+   uint32_t version;
+@@ -352,6 +368,21 @@ typedef struct {
+   int32_t (*trace_end)(const char* profile_path, const char* file, orbit_trace_callback_t, void*);
+   int32_t (*extension_options_open)(int32_t browser_id, const char* extension_id);
+   int32_t (*extension_incognito_set)(const char* profile_path, const char* extension_id, int32_t allowed);
++
++  // Version 17: additive lifecycle, purge, and per-profile preconnect services.
++  int32_t (*freeze_tab)(int32_t browser_id, int32_t freeze);
++  int32_t (*purge_memory)(uint32_t flags, orbit_purge_callback_t callback, void* context);
++  int32_t (*preconnect)(const char* profile_id, const char* url, int32_t sockets);
++
++  // Version 18. Only an exact hosted browser and its native parent/container.
++  // Null views/callback revoke and force-close before the embedder releases them.
++  int32_t (*devtools_set_host)(int32_t, void*, void*, void*, orbit_devtools_changed_t, void*);
++  int32_t (*devtools_show)(int32_t, int32_t inspect, int32_t x, int32_t y, const char* panel);
++  int32_t (*devtools_close)(int32_t, int32_t force);
++  int32_t (*devtools_state)(int32_t);
++  int32_t (*devtools_layout)(int32_t);
++  int32_t (*devtools_focus)(int32_t);
++
+ } orbit_cef_api_t;
+ 
+ // Returns the API table for `version`, or NULL when unsupported.
+diff --git a/libcef/browser/orbit/orbit_cef_api.mm b/libcef/browser/orbit/orbit_cef_api.mm
+index 78e9024509e4731db50fc5d75678ac4f5556657b..a8553eef8bef52d36cd3c63a9e375dd35c0751ba 100644
+--- a/libcef/browser/orbit/orbit_cef_api.mm
++++ b/libcef/browser/orbit/orbit_cef_api.mm
+@@ -38,6 +38,7 @@
+ // Lifecycle helpers are shared by capture, activation and suspension.
+ // clang-format off
+ #include "cef/libcef/browser/orbit/orbit_runtime_state.inc"
++#include "cef/libcef/browser/orbit/orbit_freezing.inc"
+ #include "cef/libcef/browser/orbit/orbit_lifecycle.inc"
+ #include "cef/libcef/browser/orbit/orbit_suspension.inc"
+ #include "cef/libcef/browser/orbit/orbit_capture.inc"
+@@ -45,6 +46,9 @@
+ #include "cef/libcef/browser/orbit/orbit_memory.inc"
+ #include "cef/libcef/browser/orbit/orbit_security.inc"
+ #include "cef/libcef/browser/orbit/orbit_media.inc"
++#include "cef/libcef/browser/orbit/orbit_purge.inc"
++#include "cef/libcef/browser/orbit/orbit_preconnect.inc"
++#include "cef/libcef/browser/orbit/orbit_devtools.inc"
+ // clang-format on
+ 
+ namespace {
+@@ -385,7 +389,7 @@ int32_t ReleaseWindow(uint64_t window_token) {
+ // Version 1 callers check `version == 1` and a size of at least their layout;
+ // later versions keep the earlier layouts as their prefix.
+ const orbit_cef_api_t kApiV1 = {
+-    sizeof(orbit_cef_api_t),
++    offsetof(orbit_cef_api_t, freeze_tab),
+     1u,
+     &WindowCreated,
+     &WindowDestroyed,
+@@ -405,7 +409,7 @@ int32_t ReleaseWindow(uint64_t window_token) {
+ };
+ 
+ const orbit_cef_api_t kApiV2 = {
+-    sizeof(orbit_cef_api_t),
++    offsetof(orbit_cef_api_t, freeze_tab),
+     2u,
+     &WindowCreated,
+     &WindowDestroyed,
+@@ -425,7 +429,7 @@ int32_t ReleaseWindow(uint64_t window_token) {
+ };
+ 
+ const orbit_cef_api_t kApiV3 = {
+-    sizeof(orbit_cef_api_t),
++    offsetof(orbit_cef_api_t, freeze_tab),
+     3u,
+     &WindowCreated,
+     &WindowDestroyed,
+@@ -445,7 +449,7 @@ int32_t ReleaseWindow(uint64_t window_token) {
+ };
+ 
+ const orbit_cef_api_t kApiV4 = {
+-    sizeof(orbit_cef_api_t), 4u,
++    offsetof(orbit_cef_api_t, freeze_tab), 4u,
+     &WindowCreated, &WindowDestroyed, &WindowActivationChanged, &WindowBoundsChanged,
+     &PrepareHostedTab, &CancelHostedTab, &AttachView, &ActivateTab, &GetTabInfo,
+     &WindowBrowserCount, &MoveTab, &ProfileLoaded, &HoldWindow, &ReleaseWindow,
+@@ -555,7 +559,7 @@ int32_t ReleaseWindow(uint64_t window_token) {
+ }();
+ const orbit_cef_api_t kApiV16 = [] {
+   auto api = kApiV15;
+-  api.struct_size = sizeof(orbit_cef_api_t);
++  api.struct_size = offsetof(orbit_cef_api_t, freeze_tab);
+   api.version = 16u;
+   api.diagnostic_capabilities = &DiagnosticCapabilities;
+   api.task_manager = &TaskManager;
+@@ -565,6 +569,27 @@ int32_t ReleaseWindow(uint64_t window_token) {
+   api.extension_incognito_set = &ExtensionIncognitoSet;
+   return api;
+ }();
++const orbit_cef_api_t kApiV17 = [] {
++  auto api = kApiV16;
++  api.struct_size = offsetof(orbit_cef_api_t, devtools_set_host);
++  api.version = 17u;
++  api.freeze_tab = &FreezeTab;
++  api.purge_memory = &PurgeMemory;
++  api.preconnect = &Preconnect;
++  return api;
++}();
++const orbit_cef_api_t kApiV18 = [] {
++  auto api = kApiV17;
++  api.struct_size = sizeof(orbit_cef_api_t);
++  api.version = 18u;
++  api.devtools_set_host = &orbit::DevToolsSetHost;
++  api.devtools_show = &orbit::DevToolsShow;
++  api.devtools_close = &orbit::DevToolsClose;
++  api.devtools_state = &orbit::DevToolsState;
++  api.devtools_layout = &orbit::DevToolsLayout;
++  api.devtools_focus = &orbit::DevToolsFocus;
++  return api;
++}();
+ }  // namespace
+ 
+ extern "C" CEF_EXPORT const orbit_cef_api_t* orbit_cef_get_api(uint32_t version);
+@@ -613,6 +638,10 @@ int32_t ReleaseWindow(uint64_t window_token) {
+       return &kApiV15;
+     case 16u:
+       return &kApiV16;
++    case 17u:
++      return &kApiV17;
++    case 18u:
++      return &kApiV18;
+     default:
+       return nullptr;
+   }
+diff --git a/libcef/browser/orbit/orbit_freezing.inc b/libcef/browser/orbit/orbit_freezing.inc
+new file mode 100644
+index 0000000000000000000000000000000000000000..ed41186bb746e3147c43f5c3d16851e3fcfb823e
+--- /dev/null
++++ b/libcef/browser/orbit/orbit_freezing.inc
+@@ -0,0 +1,79 @@
++// Copyright 2026 Orbit. BSD-style license; see LICENSE.
++#include <map>
++#include <memory>
++
++#include "base/functional/bind.h"
++#include "base/location.h"
++#include "base/no_destructor.h"
++#include "base/task/single_thread_task_runner.h"
++#include "components/performance_manager/public/freezing/freezing.h"
++#include "components/performance_manager/public/performance_manager.h"
++#include "content/public/browser/web_contents.h"
++#include "content/public/browser/web_contents_observer.h"
++
++namespace {
++namespace pm = performance_manager;
++
++void ReleaseFreezeVote(int32_t browser_id);
++
++class FreezeVoteObserver final : public content::WebContentsObserver {
++ public:
++  FreezeVoteObserver(int32_t browser_id, content::WebContents* contents)
++      : content::WebContentsObserver(contents), browser_id_(browser_id) {}
++  void WebContentsDestroyed() override {
++    const int32_t browser_id = browser_id_;
++    base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
++        FROM_HERE, base::BindOnce(&ReleaseFreezeVote, browser_id));
++  }
++ private:
++  const int32_t browser_id_;
++};
++
++struct FreezeVoteEntry {
++  std::unique_ptr<pm::freezing::FreezingVote> vote;
++  std::unique_ptr<FreezeVoteObserver> observer;
++};
++using OrbitFreezeVotes = std::map<int32_t, FreezeVoteEntry>;
++OrbitFreezeVotes& FreezeVotes() {
++  static base::NoDestructor<OrbitFreezeVotes> votes;
++  return *votes;
++}
++void ReleaseFreezeVote(int32_t browser_id) {
++  FreezeVotes().erase(browser_id);
++}
++
++uint64_t CannotFreezeMask(const pm::freezing::CanFreezeDetails& details) {
++  uint64_t mask = 0;
++  for (auto reason : details.cannot_freeze_reasons)
++    mask |= uint64_t{1} << static_cast<unsigned>(reason);
++  for (auto reason : details.cannot_freeze_reasons_connected_pages)
++    mask |= uint64_t{1} << static_cast<unsigned>(reason);
++  return mask;
++}
++
++int32_t FreezeTab(int32_t browser_id, int32_t freeze) {
++  if (!OnValidUIThread() || (freeze != 0 && freeze != 1) ||
++      !pm::PerformanceManager::IsAvailable())
++    return 0;
++  auto host = CefBrowserHostBase::GetBrowserForBrowserId(browser_id);
++  auto* contents = host ? host->GetWebContents() : nullptr;
++  if (!contents)
++    return 0;
++  auto page = pm::PerformanceManager::GetPrimaryPageNodeForWebContents(contents);
++  if (!page)
++    return 0;
++  auto found = FreezeVotes().find(browser_id);
++  if (freeze == 0) {
++    if (found != FreezeVotes().end())
++      FreezeVotes().erase(found);
++    return 1;
++  }
++  if (found != FreezeVotes().end())
++    return 1;
++  FreezeVoteEntry entry;
++  entry.observer = std::make_unique<FreezeVoteObserver>(browser_id, contents);
++  entry.vote = std::make_unique<pm::freezing::FreezingVote>(contents);
++  FreezeVotes().emplace(browser_id, std::move(entry));
++  return 1;
++}
++}  // namespace
+diff --git a/libcef/browser/orbit/orbit_lifecycle.inc b/libcef/browser/orbit/orbit_lifecycle.inc
+index 85e42f7542390d35e0db1edb693cf7ea4f9a8120..b4189e8335ac45f96b2797b4bbe5aabe7b5cd11b 100644
+--- a/libcef/browser/orbit/orbit_lifecycle.inc
++++ b/libcef/browser/orbit/orbit_lifecycle.inc
+@@ -4,6 +4,7 @@
+ #include "chrome/browser/media/webrtc/media_stream_capture_indicator.h"
+ #include "chrome/browser/performance_manager/policies/discard_eligibility_policy.h"
+ #include "chrome/browser/performance_manager/public/user_tuning/user_tuning_utils.h"
++#include "components/performance_manager/public/freezing/freezing.h"
+ #include "components/performance_manager/public/graph/graph.h"
+ #include "components/performance_manager/public/graph/page_node.h"
+ #include "components/performance_manager/public/performance_manager.h"
+@@ -13,6 +14,8 @@
+ #include "content/public/browser/render_widget_host_view.h"
+ #include "content/public/browser/web_contents.h"
+ #include "content/public/browser/web_contents_observer.h"
++#include <algorithm>
++#include <cstring>
+ 
+ namespace {
+ namespace pm = performance_manager;
+@@ -64,14 +67,19 @@ class LifecycleObservation final
+     }
+   }
+   bool Read(orbit_page_lifecycle_t* s) {
++    const uint32_t requested_size = s->struct_size;
++    constexpr uint32_t kV16Size = offsetof(orbit_page_lifecycle_t,
++                                             cannot_freeze_mask);
++    if (requested_size < kV16Size)
++      return false;
+     auto* wc = web_contents();
+     if (!wc || !pm::PerformanceManager::IsAvailable())
+       return false;
+     auto page = pm::PerformanceManager::GetPrimaryPageNodeForWebContents(wc);
+     if (!page)
+       return false;
+-    *s = {};
+-    s->struct_size = sizeof(*s);
++    std::memset(s, 0, std::min<size_t>(requested_size, sizeof(*s)));
++    s->struct_size = requested_size;
+     s->playing_video = wc->GetCurrentlyPlayingVideoCount() > 0;
+     s->playing_media = !players_.empty() || s->playing_video;
+     s->audio_context_running = !audio_contexts_.empty();
+@@ -106,6 +114,10 @@ class LifecycleObservation final
+                        false, &reasons);
+     for (auto reason : reasons)
+       s->cannot_discard_mask |= uint64_t{1} << static_cast<unsigned>(reason);
++    if (requested_size >= sizeof(*s)) {
++      s->cannot_freeze_mask = CannotFreezeMask(
++          pm::freezing::GetCanFreezeDetailsForPageNode(page.get()));
++    }
+     s->footprint_kb =
+         pm::user_tuning::GetDiscardedMemoryEstimateForPage(page.get()).InKiB();
+     auto* frame = wc->GetPrimaryMainFrame();
+@@ -130,6 +142,7 @@ class LifecycleObservation final
+   void Emit(int event, int initiator) {
+     auto alive = shared_from_this();
+     orbit_page_lifecycle_t state{};
++    state.struct_size = sizeof(state);
+     if (changed && Read(&state))
+       changed(context, event, initiator, &state);
+   }
+@@ -236,7 +249,9 @@ std::shared_ptr<LifecycleObservation> EnsureLifecycle(int32_t id) {
+   return observation;
+ }
+ int32_t PageLifecycle(int32_t id, orbit_page_lifecycle_t* state) {
+-  if (!OnValidUIThread() || !state || state->struct_size < sizeof(*state))
++  if (!OnValidUIThread() || !state ||
++      state->struct_size < offsetof(orbit_page_lifecycle_t,
++                                    cannot_freeze_mask))
+     return 0;
+   auto observation = EnsureLifecycle(id);
+   return observation && observation->Read(state);
+diff --git a/libcef/browser/orbit/orbit_preconnect.inc b/libcef/browser/orbit/orbit_preconnect.inc
+new file mode 100644
+index 0000000000000000000000000000000000000000..4179b0c8c39347363b4768f3d8e69ad67fa62e8a
+--- /dev/null
++++ b/libcef/browser/orbit/orbit_preconnect.inc
+@@ -0,0 +1,87 @@
++// Copyright 2026 Orbit. BSD-style license; see LICENSE.
++#include <deque>
++#include <map>
++#include <string>
++#include <vector>
++
++#include "base/no_destructor.h"
++#include "base/time/time.h"
++#include "chrome/browser/predictors/loading_predictor.h"
++#include "chrome/browser/predictors/loading_predictor_config.h"
++#include "chrome/browser/predictors/loading_predictor_factory.h"
++#include "chrome/browser/predictors/predictors_traffic_annotations.h"
++#include "chrome/browser/profiles/profile.h"
++#include "content/public/browser/preconnect_manager.h"
++#include "content/public/browser/preconnect_request.h"
++#include "content/public/browser/storage_partition.h"
++#include "net/base/network_anonymization_key.h"
++#include "services/network/public/cpp/constants.h"
++#include "url/origin.h"
++
++namespace {
++struct OrbitPreconnectProfileState {
++  std::deque<base::TimeTicks> accepted;
++  std::map<std::string, base::TimeTicks> origin_time;
++};
++
++std::map<std::string, OrbitPreconnectProfileState>& PreconnectStates() {
++  static base::NoDestructor<std::map<std::string, OrbitPreconnectProfileState>> states;
++  return *states;
++}
++
++int32_t Preconnect(const char* profile_id, const char* url, int32_t sockets) {
++  if (!OnValidUIThread() || !profile_id || !*profile_id || !url ||
++      sockets < 1 || sockets > 6 || !g_browser_process ||
++      !g_browser_process->profile_manager())
++    return 0;
++  auto* profile = g_browser_process->profile_manager()->GetProfileByPath(
++      base::FilePath(profile_id));
++  if (!profile || profile->IsOffTheRecord() ||
++      !predictors::IsLoadingPredictorEnabled(profile) ||
++      !predictors::IsPreconnectAllowed(profile))
++    return 0;
++
++  const GURL target(url);
++  if (!target.is_valid() || !target.SchemeIsHTTPOrHTTPS() ||
++      !target.has_host())
++    return 0;
++  const url::Origin origin = url::Origin::Create(target);
++  if (origin.opaque())
++    return 0;
++  const std::string origin_key = origin.Serialize();
++  auto& state = PreconnectStates()[profile->GetPath().AsUTF8Unsafe()];
++  const base::TimeTicks now = base::TimeTicks::Now();
++  while (!state.accepted.empty() &&
++         now - state.accepted.front() >= base::Minutes(1))
++    state.accepted.pop_front();
++  for (auto it = state.origin_time.begin(); it != state.origin_time.end();) {
++    if (now - it->second >= base::Seconds(10))
++      it = state.origin_time.erase(it);
++    else
++      ++it;
++  }
++  if (state.accepted.size() >= 6 || state.origin_time.contains(origin_key))
++    return 0;
++
++  auto* predictor = predictors::LoadingPredictorFactory::GetForProfile(profile);
++  if (!predictor || predictor->WasShutdown())
++    return 0;
++  auto* manager = predictor->preconnect_manager();
++  auto* partition = profile->GetDefaultStoragePartition();
++  if (!manager || !partition)
++    return 0;
++
++  const auto key = net::NetworkAnonymizationKey::CreateSameSite(
++      net::SchemefulSite(origin));
++  if (key.IsEmpty() && net::NetworkAnonymizationKey::IsPartitioningEnabled())
++    return 0;
++  std::vector<content::PreconnectRequest> requests;
++  requests.emplace_back(origin, sockets, key,
++                        network::GetNoOpNetworkRestrictionsId());
++  manager->Start(origin.GetURL(), std::move(requests),
++                 predictors::kLoadingPredictorPreconnectTrafficAnnotation);
++  state.accepted.push_back(now);
++  state.origin_time[origin_key] = now;
++  return 1;
++}
++}  // namespace
+diff --git a/libcef/browser/orbit/orbit_purge.inc b/libcef/browser/orbit/orbit_purge.inc
+new file mode 100644
+index 0000000000000000000000000000000000000000..faac2984c1eac11d608d6403ec5cca6475061e51
+--- /dev/null
++++ b/libcef/browser/orbit/orbit_purge.inc
+@@ -0,0 +1,139 @@
++// Copyright 2026 Orbit. BSD-style license; see LICENSE.
++#include <memory>
++#include <optional>
++
++#include "base/allocator/partition_allocator/src/partition_alloc/memory_reclaimer.h"
++#include "base/functional/bind.h"
++#include "base/process/process.h"
++#include "base/task/single_thread_task_runner.h"
++#include "base/time/time.h"
++#include "services/resource_coordinator/public/cpp/memory_instrumentation/global_memory_dump.h"
++#include "services/resource_coordinator/public/cpp/memory_instrumentation/memory_instrumentation.h"
++
++namespace {
++using memory_instrumentation::GlobalMemoryDump;
++using memory_instrumentation::mojom::RequestOutcome;
++
++std::optional<uint64_t> CommittedAllocatorKB(const GlobalMemoryDump* dump) {
++  if (!dump)
++    return std::nullopt;
++  for (const auto& process : dump->process_dumps()) {
++    if (process.pid() != base::GetCurrentProcId())
++      continue;
++    const auto bytes = process.GetMetric("partition_alloc/partitions",
++                                        "virtual_committed_size");
++    return bytes ? std::optional<uint64_t>(*bytes / 1024) : std::nullopt;
++  }
++  return std::nullopt;
++}
++
++class OrbitPurgeRequest : public std::enable_shared_from_this<OrbitPurgeRequest> {
++ public:
++  OrbitPurgeRequest(uint32_t flags, orbit_purge_callback_t callback, void* context)
++      : flags_(flags), callback_(callback), context_(context) {}
++
++  void Start() {
++    auto* instrumentation = memory_instrumentation::MemoryInstrumentation::GetInstance();
++    if (!instrumentation || !instrumentation->GetCoordinator()) {
++      Reclaim();
++      Finish();
++      return;
++    }
++    instrumentation->RequestGlobalDumpForPid(
++        base::GetCurrentProcId(), {"partition_alloc/partitions"},
++        base::BindOnce(&OrbitPurgeRequest::OnBeforeDump, shared_from_this()));
++    base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
++        FROM_HERE,
++        base::BindOnce(&OrbitPurgeRequest::OnBeforeTimeout, shared_from_this()),
++        base::Seconds(15));
++  }
++
++ private:
++  void OnBeforeTimeout() {
++    if (done_ || reclaimed_)
++      return;
++    Reclaim();
++    Finish();
++  }
++
++  void OnBeforeDump(RequestOutcome outcome,
++                    std::unique_ptr<GlobalMemoryDump> dump) {
++    if (done_ || reclaimed_)
++      return;
++    if (outcome == RequestOutcome::kSuccess)
++      before_ = CommittedAllocatorKB(dump.get());
++    Reclaim();
++    auto* instrumentation = memory_instrumentation::MemoryInstrumentation::GetInstance();
++    if (!instrumentation || !instrumentation->GetCoordinator()) {
++      Finish();
++      return;
++    }
++    instrumentation->RequestGlobalDumpForPid(
++        base::GetCurrentProcId(), {"partition_alloc/partitions"},
++        base::BindOnce(&OrbitPurgeRequest::OnAfterDump, shared_from_this()));
++    base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
++        FROM_HERE, base::BindOnce(&OrbitPurgeRequest::Finish, shared_from_this()),
++        base::Seconds(15));
++  }
++
++  void Reclaim() {
++    if (reclaimed_)
++      return;
++    reclaimed_ = true;
++    const base::TimeTicks started = base::TimeTicks::Now();
++    auto* reclaimer = partition_alloc::MemoryReclaimer::Instance();
++    if (!reclaimer) {
++      reclaim_succeeded_ = false;
++      return;
++    }
++    if (flags_ == ORBIT_PURGE_FAST)
++      reclaimer->ReclaimFast();
++    else
++      reclaimer->ReclaimAll();
++    elapsed_us_ = static_cast<uint64_t>(
++        (base::TimeTicks::Now() - started).InMicroseconds());
++    reclaim_succeeded_ = true;
++  }
++
++  void OnAfterDump(RequestOutcome outcome,
++                   std::unique_ptr<GlobalMemoryDump> dump) {
++    if (done_)
++      return;
++    if (outcome == RequestOutcome::kSuccess)
++      after_ = CommittedAllocatorKB(dump.get());
++    Finish();
++  }
++
++  void Finish() {
++    if (done_ || !callback_)
++      return;
++    done_ = true;
++    auto callback = callback_;
++    callback_ = nullptr;
++    const uint64_t before = before_.value_or(ORBIT_PURGE_UNKNOWN_KB);
++    const uint64_t after = after_.value_or(ORBIT_PURGE_UNKNOWN_KB);
++    const int32_t status = !reclaim_succeeded_ ? -1
++                           : (before_ && after_ ? 1 : 2);
++    callback(context_, status, before, after, elapsed_us_);
++  }
++
++  const uint32_t flags_;
++  orbit_purge_callback_t callback_;
++  void* const context_;
++  bool reclaimed_ = false;
++  bool done_ = false;
++  bool reclaim_succeeded_ = true;
++  uint64_t elapsed_us_ = 0;
++  std::optional<uint64_t> before_;
++  std::optional<uint64_t> after_;
++};
++
++int32_t PurgeMemory(uint32_t flags, orbit_purge_callback_t callback, void* context) {
++  if (!OnValidUIThread() || !callback ||
++      (flags != ORBIT_PURGE_FAST && flags != ORBIT_PURGE_AGGRESSIVE))
++    return 0;
++  auto request = std::make_shared<OrbitPurgeRequest>(flags, callback, context);
++  request->Start();
++  return 1;
++}
++}  // namespace
+diff --git a/libcef/browser/orbit/orbit_devtools.h b/libcef/browser/orbit/orbit_devtools.h
+new file mode 100644
+--- /dev/null
++++ b/libcef/browser/orbit/orbit_devtools.h
+@@ -0,0 +1,23 @@
++// Copyright 2026 Orbit. Portions copyright The Chromium Authors and the
++// Chromium Embedded Framework Authors. All rights reserved. BSD-style license.
++#ifndef CEF_LIBCEF_BROWSER_ORBIT_ORBIT_DEVTOOLS_H_
++#define CEF_LIBCEF_BROWSER_ORBIT_ORBIT_DEVTOOLS_H_
++
++namespace content { class WebContents; }
++class DevToolsContentsResizingStrategy;
++namespace orbit {
++// Available only after the embedder registers the exact hosted tab's views.
++bool CanHostDevTools(content::WebContents* inspected);
++bool IsHostedDevToolsFrontend(content::WebContents* frontend);
++void PrepareHostedDevTools(content::WebContents* inspected);
++void HostedDevToolsCreated(content::WebContents* inspected,
++                           content::WebContents* frontend);
++void PresentHostedDevTools(content::WebContents* inspected,
++                          content::WebContents* frontend, bool docked,
++                          const DevToolsContentsResizingStrategy& strategy);
++bool RefreshHostedDevTools(content::WebContents* inspected);
++bool ActivateHostedDevTools(content::WebContents* inspected);
++bool CloseHostedDevTools(content::WebContents* inspected);
++bool HasHostedDevTools(content::WebContents* inspected);
++}  // namespace orbit
++#endif
+diff --git a/libcef/browser/orbit/orbit_devtools.inc b/libcef/browser/orbit/orbit_devtools.inc
+new file mode 100644
+--- /dev/null
++++ b/libcef/browser/orbit/orbit_devtools.inc
+@@ -0,0 +1,335 @@
++// Copyright 2026 Orbit. Portions copyright The Chromium Authors and the
++// Chromium Embedded Framework Authors. All rights reserved. BSD-style license.
++// Included once by the private Objective-C++ side API translation unit.
++#include "cef/libcef/browser/orbit/orbit_devtools.h"
++#include "base/no_destructor.h"
++#include "base/auto_reset.h"
++#include <map>
++#include <memory>
++#include <string>
++#include "base/strings/utf_string_conversions.h"
++#include "base/task/single_thread_task_runner.h"
++#include "chrome/browser/devtools/devtools_contents_resizing_strategy.h"
++#include "chrome/browser/devtools/devtools_ui_bindings.h"
++#include "chrome/browser/devtools/devtools_window.h"
++#include "chrome/common/pref_names.h"
++#include "components/prefs/scoped_user_pref_update.h"
++#include "content/public/browser/web_contents_observer.h"
++
++namespace orbit {
++namespace {
++class HostedDevTools;
++using DevToolsHosts = std::map<int, std::unique_ptr<HostedDevTools>>;
++DevToolsHosts& GetDevToolsHosts() {
++  static base::NoDestructor<DevToolsHosts> hosts;
++  return *hosts;
++}
++
++int HostedBrowserID(content::WebContents* contents) {
++  auto host = CefBrowserHostBase::GetBrowserForContents(contents);
++  if (!host || !CefBrowserPlatformDelegateChromeHosted::FromBrowserId(host->GetIdentifier())) return 0;
++  return host->GetIdentifier();
++}
++
++class FrontendObservation final : public content::WebContentsObserver {
++ public:
++  FrontendObservation(content::WebContents* frontend, HostedDevTools* owner)
++      : content::WebContentsObserver(frontend), owner_(owner) {}
++  void WebContentsDestroyed() override;
++ private:
++  raw_ptr<HostedDevTools> owner_;
++};
++
++class HostedDevTools final : public content::WebContentsObserver {
++ public:
++  HostedDevTools(int id, content::WebContents* inspected, NSView* root, NSView* document,
++                 NSView* container, orbit_devtools_changed_t callback, void* context)
++      : content::WebContentsObserver(inspected), id_(id),
++        inspected_(inspected->GetWeakPtr()), root_(root), document_(document), container_(container),
++        callback_(callback), context_(context) {}
++  ~HostedDevTools() override {
++    callback_ = nullptr;
++    frontend_observation_.reset();
++    [frontend_view_ removeFromSuperview];
++    [toolbox_view_ removeFromSuperview];
++  }
++
++  bool live() const { return inspected_ && root_ && document_ && container_; }
++  int state() const { return state_; }
++  content::WebContents* frontend() const { return frontend_.get(); }
++  void Rebind(NSView* root, NSView* document, NSView* container, orbit_devtools_changed_t callback, void* context) {
++    root_ = root; document_ = document; container_ = container; callback_ = callback; context_ = context;
++    Layout();
++    Notify(false, true);
++  }
++  void SetFrontend(content::WebContents* frontend) {
++    if (frontend_.get() == frontend) return;
++    frontend_ = frontend->GetWeakPtr();
++    frontend_observation_ = std::make_unique<FrontendObservation>(frontend, this);
++    frontend_view_ = frontend->GetNativeView().GetNativeNSView();
++    container_.frame = root_.bounds;
++    [container_ addSubview:frontend_view_];
++    frontend_view_.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
++    frontend_view_.frame = container_.bounds;
++    frontend->WasShown();
++    state_ = 5;
++    Notify(false);
++  }
++  void Present(content::WebContents* frontend, bool docked,
++               const DevToolsContentsResizingStrategy& strategy) {
++    if (!live()) return;
++    SetFrontend(frontend);
++    docked_ = docked;
++    strategy_.CopyFrom(strategy);
++    state_ = docked ? DockState(strategy) : 4;
++    Layout();
++    Notify(true);
++  }
++  bool Refresh() {
++    if (!live() || !frontend_) return false;
++    DevToolsContentsResizingStrategy strategy;
++    auto* in_tab = DevToolsWindow::GetInTabWebContents(inspected_.get(), &strategy);
++    if (in_tab) {
++      strategy_.CopyFrom(strategy);
++      if (docked_) state_ = DockState(strategy);
++    }
++    Layout();
++    Notify(false);
++    return true;
++  }
++  bool Layout() {
++    if (laying_out_ || !live() || !frontend_) return false;
++    base::AutoReset<bool> applying_layout(&laying_out_, true);
++    NSView* root = root_;
++    NSView* page = document_;
++    NSView* container = container_;
++    if (!container) return false;
++    if (frontend_view_.superview == container) frontend_view_.frame = container.bounds;
++    if (!page || page.superview != root) return true;
++    if (docked_ || state_ == 5) {
++      if (container.superview == root) container.frame = root.bounds;
++    }
++    if (frontend_view_.superview == container) frontend_view_.frame = container.bounds;
++    DevToolsContentsResizingStrategy current;
++    content::WebContents* in_tab = DevToolsWindow::GetInTabWebContents(inspected_.get(), &current);
++    // When device emulation remains in the page while the main frontend is
++    // undocked, Chromium owns a separate toolbox WebContents for that viewport.
++    NSView* toolbox = in_tab && in_tab != frontend_.get()
++        ? in_tab->GetNativeView().GetNativeNSView() : nil;
++    if (toolbox_view_ != toolbox) {
++      [toolbox_view_ removeFromSuperview];
++      toolbox_view_ = toolbox;
++    }
++    if (toolbox && toolbox.superview != root) [root addSubview:toolbox positioned:NSWindowBelow relativeTo:page];
++    if (toolbox) toolbox.frame = root.bounds;
++    if (in_tab) strategy_.CopyFrom(current);
++    gfx::Rect tools_bounds, page_bounds;
++    const NSRect bounds = root.bounds;
++    if (in_tab) {
++      ApplyDevToolsContentsResizingStrategy(strategy_, gfx::Rect(0, 0, bounds.size.width, bounds.size.height),
++                                            &tools_bounds, &page_bounds);
++    } else {
++      page_bounds = gfx::Rect(0, 0, bounds.size.width, bounds.size.height);
++    }
++    const CGFloat y = root.isFlipped ? page_bounds.y()
++        : bounds.size.height - page_bounds.bottom();
++    NSRect frame = NSMakeRect(bounds.origin.x + page_bounds.x(), bounds.origin.y + y,
++                             page_bounds.width(), page_bounds.height());
++    if (!NSEqualRects(page.frame, frame)) page.frame = frame;
++    return true;
++  }
++  void FrontendDestroyed() {
++    [frontend_view_ removeFromSuperview];
++    [toolbox_view_ removeFromSuperview];
++    frontend_view_ = nil; toolbox_view_ = nil; frontend_ = nullptr;
++    state_ = 0; docked_ = false;
++    RestorePage();
++    Notify(false);
++  }
++  void WebContentsDestroyed() override {
++    inspected_ = nullptr;
++    auto frontend = frontend_;
++    if (frontend) frontend->Close();
++    callback_ = nullptr; context_ = nullptr;
++    const int id = id_;
++    base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(FROM_HERE, base::BindOnce([](int id) {
++      auto it = GetDevToolsHosts().find(id);
++      if (it != GetDevToolsHosts().end() && !it->second->live()) GetDevToolsHosts().erase(it);
++    }, id));
++  }
++  void Unregister() {
++    callback_ = nullptr; context_ = nullptr;
++    auto frontend = frontend_;
++    if (frontend) frontend->Close();
++    root_ = nil; document_ = nil; container_ = nil;
++  }
++  void RequestClose(bool force) {
++    if (!frontend_) return;
++    if (force || state_ == 5) { frontend_->Close(); return; }
++    auto* window = DevToolsWindow::GetInstanceForInspectedWebContents(inspected_.get());
++    if (window) static_cast<DevToolsUIBindings::Delegate*>(window)->CloseWindow();
++  }
++  void Focus() { Notify(true, true); }
++
++ private:
++  static int DockState(const DevToolsContentsResizingStrategy& strategy) {
++    switch (strategy.dock_side()) {
++      case devtools::DockSide::kLeft: return 1;
++      case devtools::DockSide::kBottom: return 2;
++      case devtools::DockSide::kRight: return 3;
++      case devtools::DockSide::kNone: return 3;
++    }
++  }
++  void RestorePage() {
++    if (inspected_ && root_) {
++      NSView* page = document_;
++      if (page.superview == root_ && !NSEqualRects(page.frame, root_.bounds)) page.frame = root_.bounds;
++    }
++  }
++  void Notify(bool focus, bool force = false) {
++    if (!callback_ || (!focus && !force && reported_state_ == state_)) return;
++    reported_state_ = state_;
++    auto callback = callback_;
++    void* context = context_;
++    callback(context, state_, focus ? 1u : 0u);
++  }
++  const int id_;
++  base::WeakPtr<content::WebContents> inspected_;
++  base::WeakPtr<content::WebContents> frontend_;
++  __weak NSView* root_;
++  __weak NSView* document_;
++  __weak NSView* container_;
++  __weak NSView* frontend_view_ = nil;
++  __weak NSView* toolbox_view_ = nil;
++  orbit_devtools_changed_t callback_;
++  void* context_;
++  bool docked_ = false;
++  bool laying_out_ = false;
++  int state_ = 0;
++  int reported_state_ = 0;
++  DevToolsContentsResizingStrategy strategy_;
++  std::unique_ptr<FrontendObservation> frontend_observation_;
++};
++
++void FrontendObservation::WebContentsDestroyed() { owner_->FrontendDestroyed(); }
++HostedDevTools* FindDevTools(content::WebContents* inspected) {
++  const int id = HostedBrowserID(inspected);
++  auto it = GetDevToolsHosts().find(id);
++  return it == GetDevToolsHosts().end() ? nullptr : it->second.get();
++}
++}  // namespace
++
++bool CanHostDevTools(content::WebContents* inspected) {
++  auto* state = inspected ? FindDevTools(inspected) : nullptr;
++  return state && state->live();
++}
++bool IsHostedDevToolsFrontend(content::WebContents* frontend) {
++  if (!frontend) return false;
++  for (const auto& [id, state] : GetDevToolsHosts())
++    if (state->frontend() == frontend) return true;
++  return false;
++}
++void PrepareHostedDevTools(content::WebContents* inspected) {
++  if (!CanHostDevTools(inspected)) return;
++  // Earlier CEF versions could only save an undocked state. Migrate once;
++  // subsequent native menu choices remain the profile's own preferences.
++  auto* profile = Profile::FromBrowserContext(inspected->GetBrowserContext());
++  ScopedDictPrefUpdate update(profile->GetPrefs(), prefs::kDevToolsPreferences);
++  if (!update->contains("orbit-docking-initialized")) {
++    update->Set("currentDockState", "\"right\"");
++    update->Set("lastDockState", "\"right\"");
++    update->Set("orbit-docking-initialized", "true");
++  }
++}
++void HostedDevToolsCreated(content::WebContents* inspected, content::WebContents* frontend) {
++  if (auto* state = FindDevTools(inspected)) state->SetFrontend(frontend);
++}
++void PresentHostedDevTools(content::WebContents* inspected, content::WebContents* frontend,
++                          bool docked, const DevToolsContentsResizingStrategy& strategy) {
++  if (auto* state = FindDevTools(inspected)) state->Present(frontend, docked, strategy);
++}
++bool RefreshHostedDevTools(content::WebContents* inspected) {
++  auto* state = inspected ? FindDevTools(inspected) : nullptr;
++  return state && state->Refresh();
++}
++bool ActivateHostedDevTools(content::WebContents* inspected) {
++  auto* state = inspected ? FindDevTools(inspected) : nullptr;
++  if (!state || !state->frontend()) return false;
++  state->Focus(); return true;
++}
++
++bool CloseHostedDevTools(content::WebContents* inspected) {
++  auto* state = inspected ? FindDevTools(inspected) : nullptr;
++  if (!state) return false;
++  state->RequestClose(false); return true;
++}
++bool HasHostedDevTools(content::WebContents* inspected) {
++  auto* state = inspected ? FindDevTools(inspected) : nullptr;
++  return state && state->state() != 0;
++}
++
++int32_t DevToolsSetHost(int32_t id, void* root_view, void* document_view, void* frontend_view,
++                       orbit_devtools_changed_t callback, void* context) {
++  if (!CONTEXT_STATE_VALID() || !CEF_CURRENTLY_ON_UIT()) return 0;
++  auto it = GetDevToolsHosts().find(id);
++  if (!root_view || !document_view || !frontend_view || !callback) {
++    if (it != GetDevToolsHosts().end()) { it->second->Unregister(); GetDevToolsHosts().erase(id); }
++    return 1;
++  }
++  auto host = CefBrowserHostBase::GetBrowserForBrowserId(id);
++  if (!host || !CefBrowserPlatformDelegateChromeHosted::FromBrowserId(id) || !host->GetWebContents()) return 0;
++  NSView* root = (__bridge NSView*)root_view;
++  NSView* document = (__bridge NSView*)document_view;
++  NSView* container = (__bridge NSView*)frontend_view;
++  NSView* page = host->GetWebContents()->GetNativeView().GetNativeNSView();
++  if (page.superview != document || document.superview != root || container.superview != root || root.window != container.window) return 0;
++  if (it != GetDevToolsHosts().end()) { it->second->Rebind(root, document, container, callback, context); return 1; }
++  GetDevToolsHosts()[id] = std::make_unique<HostedDevTools>(id, host->GetWebContents(), root, document, container, callback, context);
++  return 1;
++}
++int32_t DevToolsShow(int32_t id, int32_t inspect, int32_t x, int32_t y, const char* panel) {
++  if (!CONTEXT_STATE_VALID() || !CEF_CURRENTLY_ON_UIT()) return 0;
++  auto host = CefBrowserHostBase::GetBrowserForBrowserId(id);
++  if (!host || !CanHostDevTools(host->GetWebContents())) return 0;
++  const std::string name = panel ? panel : "";
++  if (!name.empty() && name != "elements" && name != "console" && name != "network") return 0;
++  auto* contents = host->GetWebContents();
++  if (inspect) {
++    DevToolsWindow::InspectElement(contents->GetPrimaryMainFrame(), x, y);
++  } else {
++    content::DevToolsManagerDelegate::DevToolsOptions options(
++        name.empty() ? std::nullopt : std::make_optional(name));
++    DevToolsWindow::OpenDevToolsWindow(contents, Profile::FromBrowserContext(contents->GetBrowserContext()),
++                                     DevToolsOpenedByAction::kMainMenuOrMainShortcut, options);
++  }
++  if (!name.empty()) {
++    if (auto* window = DevToolsWindow::GetInstanceForInspectedWebContents(contents)) {
++      if (auto* bindings = DevToolsUIBindings::ForWebContents(window->GetDevToolsWebContents()))
++        bindings->CallClientMethod("DevToolsAPI", "showPanel", base::Value(name));
++    }
++  }
++  return 1;
++}
++int32_t DevToolsClose(int32_t id, int32_t force) {
++  if (!CONTEXT_STATE_VALID() || !CEF_CURRENTLY_ON_UIT()) return 0;
++  auto it = GetDevToolsHosts().find(id);
++  if (it == GetDevToolsHosts().end()) return 0;
++  it->second->RequestClose(force != 0); return 1;
++}
++int32_t DevToolsState(int32_t id) {
++  if (!CONTEXT_STATE_VALID() || !CEF_CURRENTLY_ON_UIT()) return 0;
++  auto it = GetDevToolsHosts().find(id);
++  return it == GetDevToolsHosts().end() ? 0 : it->second->state();
++}
++int32_t DevToolsFocus(int32_t id) {
++  if (!CONTEXT_STATE_VALID() || !CEF_CURRENTLY_ON_UIT()) return 0;
++  auto it = GetDevToolsHosts().find(id);
++  if (it == GetDevToolsHosts().end() || !it->second->frontend()) return 0;
++  it->second->frontend()->Focus(); return 1;
++}
++int32_t DevToolsLayout(int32_t id) {
++  if (!CONTEXT_STATE_VALID() || !CEF_CURRENTLY_ON_UIT()) return 0;
++  auto it = GetDevToolsHosts().find(id);
++  return it != GetDevToolsHosts().end() && it->second->Layout() ? 1 : 0;
++}
++}  // namespace orbit
