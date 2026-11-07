@@ -42,7 +42,7 @@ final class BrowserCaptureController<Engine: BrowserEngine> {
                     return
                 }
                 let view = BrowserCaptureSelectionView(image: snapshot.image)
-                view.frame = surface.hostView.bounds
+                view.frame = surface.documentView.bounds
                 view.autoresizingMask = [.width, .height]
                 view.onFinish = { [weak self, weak surface, weak owner] rect in
                     self?.overlay?.removeFromSuperview()
@@ -54,7 +54,7 @@ final class BrowserCaptureController<Engine: BrowserEngine> {
                     self.finish(image: snapshot.image, normalizedRect: rect)
                 }
                 overlay = view
-                surface.hostView.addSubview(view)
+                surface.documentView.addSubview(view)
                 owner.window?.makeFirstResponder(view)
             } catch {
                 guard !Task.isCancelled, let owner, let surface, isCurrent(),

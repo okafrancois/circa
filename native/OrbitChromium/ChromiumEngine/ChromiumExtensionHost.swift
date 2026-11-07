@@ -124,8 +124,8 @@ final class ChromiumExtensionHost: BrowserExtensionHost {
     func performAction(extensionID: String, on surface: any BrowserEngineSurface, anchor: NSView) throws {
         guard let engine, let surface = surface as? ChromiumSurface, surface.engine === engine,
               !surface.isDisposed, surface.isReady, surface.hostedWindowToken != 0,
-              let window = surface.hostView.window, anchor.window === window,
-              !surface.hostView.isHiddenOrHasHiddenAncestor else {
+              let window = surface.documentView.window, anchor.window === window,
+              !surface.documentView.isHiddenOrHasHiddenAncestor else {
             throw BrowserEngineError.unsupportedOperation
         }
         // Restoring or reattaching a visible tab may have revoked the previous
@@ -174,7 +174,7 @@ final class ChromiumExtensionManagement: BrowserExtensionManagement {
               engine.surfaceMode == .hosted, ACRExtensionManagementAvailable() == 1,
               let surface = surface as? ChromiumSurface, surface.engine === engine,
               !surface.isDisposed, surface.isReady, surface.hostedWindowToken != 0,
-              let window = surface.hostView.window,
+              let window = surface.documentView.window,
               engine.shellWindows.values.contains(where: {
                   !$0.isClosed && $0.token == surface.hostedWindowToken && $0.window === window
               }),

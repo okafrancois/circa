@@ -107,7 +107,7 @@ extension BrowserWindowController {
         let responder = focusBeforeFind
         focusBeforeFind = nil
         if let view = responder as? NSView, view.window === window,
-           !view.isHiddenOrHasHiddenAncestor, !view.isDescendant(of: surface.hostView),
+           !view.isHiddenOrHasHiddenAncestor, !view.isDescendant(of: surface.documentView),
            window?.makeFirstResponder(view) == true { return }
         surface.focusDocument()
     }

@@ -14,6 +14,7 @@
 #define CEF_LIBCEF_BROWSER_ORBIT_ORBIT_CEF_API_H_
 
 #include <stdint.h>
+#include <stddef.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -26,7 +27,7 @@ extern "C" {
 // Version 3 (CHROMIUM-APP-R3): additive, hold_window/release_window. Earlier
 // versions keep their layout as the prefix of the table.
 // Version 4 (EXTENSIONS-PRODUCT-R1): additive, native per-profile extension services.
-#define ORBIT_CEF_API_VERSION 16u
+#define ORBIT_CEF_API_VERSION 18u
 
 // Version 8. Callback once after live renderer CSS installation (1), or failure (0).
 typedef void (*orbit_boost_ack_t)(void*, uint64_t revision, int32_t installed);
@@ -36,6 +37,10 @@ typedef void (*orbit_boost_ack_t)(void*, uint64_t revision, int32_t installed);
 // v16: callback once on UI after an accepted operation. Path bytes are borrowed;
 // begin reports an empty path. A refused call returns 0 and never calls back.
 typedef void (*orbit_trace_callback_t)(void*, int32_t success, const char* path);
+
+// v18. UI-thread callback: 0 closed, 1 left, 2 bottom, 3 right, 4 undocked,
+// 5 loading. Flags bit0 requests focus. Views are owned by the embedder.
+typedef void (*orbit_devtools_changed_t)(void*, int32_t state, uint32_t flags);
 
 typedef struct {
   uint32_t struct_size;
@@ -134,6 +139,8 @@ typedef struct {
   uint64_t cannot_discard_mask, footprint_kb;
   int32_t renderer_pid;
   uint64_t document_id;
+  // Version 17. Bit per performance_manager::freezing::CannotFreezeReason.
+  uint64_t cannot_freeze_mask;
 } orbit_page_lifecycle_t;
 // event: 0 state changed, 1 about to discard, 2 discarded, 3 closed.
 // initiator: 0 none, 1 embedder, 2 native policy. Null state only for closed.
@@ -166,6 +173,15 @@ typedef void (*orbit_activation_callback_t)(void*,
 // JSON is borrowed until return. Status: 1 complete, 2 partial, -1 unavailable.
 // Allocator nodes contain native numeric metrics; absent metrics are unknown.
 typedef void (*orbit_memory_callback_t)(void*, int32_t status, const char* json, uint32_t length);
+
+// Version 17. Purge results use UINT64_MAX for an unavailable measurement.
+// Accepted requests callback exactly once on UI. Status: 1 measured, 2 purge
+// completed but one or both allocator measurements were unavailable, -1 failed.
+typedef void (*orbit_purge_callback_t)(void*, int32_t status,
+    uint64_t committed_before_kb, uint64_t committed_after_kb, uint64_t elapsed_us);
+#define ORBIT_PURGE_FAST 0u
+#define ORBIT_PURGE_AGGRESSIVE 1u
+#define ORBIT_PURGE_UNKNOWN_KB UINT64_MAX
 
 typedef struct {
   uint32_t struct_size;
@@ -352,6 +368,21 @@ typedef struct {
   int32_t (*trace_end)(const char* profile_path, const char* file, orbit_trace_callback_t, void*);
   int32_t (*extension_options_open)(int32_t browser_id, const char* extension_id);
   int32_t (*extension_incognito_set)(const char* profile_path, const char* extension_id, int32_t allowed);
+
+  // Version 17: additive lifecycle, purge, and per-profile preconnect services.
+  int32_t (*freeze_tab)(int32_t browser_id, int32_t freeze);
+  int32_t (*purge_memory)(uint32_t flags, orbit_purge_callback_t callback, void* context);
+  int32_t (*preconnect)(const char* profile_id, const char* url, int32_t sockets);
+
+  // Version 18. Only an exact hosted browser and its native parent/container.
+  // Null views/callback revoke and force-close before the embedder releases them.
+  int32_t (*devtools_set_host)(int32_t, void*, void*, void*, orbit_devtools_changed_t, void*);
+  int32_t (*devtools_show)(int32_t, int32_t inspect, int32_t x, int32_t y, const char* panel);
+  int32_t (*devtools_close)(int32_t, int32_t force);
+  int32_t (*devtools_state)(int32_t);
+  int32_t (*devtools_layout)(int32_t);
+  int32_t (*devtools_focus)(int32_t);
+
 } orbit_cef_api_t;
 
 // Returns the API table for `version`, or NULL when unsupported.

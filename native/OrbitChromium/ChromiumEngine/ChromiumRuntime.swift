@@ -155,7 +155,7 @@ public final class ChromiumRuntime {
                     .takeUnretainedValue()
                 guard let created = runtime.surface(source)?.decideNewSurface(
                     url: target, disposition: disposition, userGesture: gesture != 0, keepsOpener: kind == 1) else { return (0, 0) }
-                return (created.token, UInt(bitPattern: Unmanaged.passUnretained(created.hostView).toOpaque()))
+                return (created.token, UInt(bitPattern: Unmanaged.passUnretained(created.documentView).toOpaque()))
             }
             guard decision.0 != 0 else { return nil }
             token.pointee = decision.0
@@ -171,7 +171,7 @@ public final class ChromiumRuntime {
                     .takeUnretainedValue()
                 guard let created = runtime.windowOwner(window)?.adoptEngineCreatedTab(
                     windowToken: window, profileToken: profile, url: target, foreground: foreground != 0) else { return (0, 0) }
-                return (created.token, UInt(bitPattern: Unmanaged.passUnretained(created.hostView).toOpaque()))
+                return (created.token, UInt(bitPattern: Unmanaged.passUnretained(created.documentView).toOpaque()))
             }
             guard decision.0 != 0 else { return nil }
             token.pointee = decision.0

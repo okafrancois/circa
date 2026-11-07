@@ -87,7 +87,7 @@ extension BrowserWindowController {
         if let responder = window?.firstResponder as? NSView {
             if responder.isDescendant(of: peek.overlay) {
                 peek.pageFocus = .peek
-            } else if let tab = session.selectedSurface, responder.isDescendant(of: tab.hostView) {
+            } else if let tab = session.selectedSurface, responder.isDescendant(of: tab.documentView) {
                 peek.pageFocus = .tab
             }
         }

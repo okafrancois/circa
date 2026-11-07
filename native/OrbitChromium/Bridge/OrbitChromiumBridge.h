@@ -88,7 +88,8 @@ typedef enum {
   ACR_EVENT_EXTENSIONS_CHANGED, /* ABI 10: profile_token only */
   ACR_EVENT_ACTIVATION_REQUEST, /* CefFocusHandler FOCUS_SOURCE_SYSTEM; exact surface_token */
   ACR_EVENT_MEDIA_ACTIVITY,     /* method in detail; CDP WebAudio/Media metadata in payload */
-  ACR_EVENT_BROWSER_STATE       /* orbit_browser_state_t payload: native audibility, mute and page colors */
+  ACR_EVENT_BROWSER_STATE,      /* orbit_browser_state_t payload: native audibility, mute and page colors */
+  ACR_EVENT_DEVTOOLS_PRESENTATION /* value 0 closed, 1 left, 2 bottom, 3 right, 4 undocked, 5 loading; flags bit0 focus */
 } ACREventKind;
 
 typedef enum {
@@ -579,7 +580,7 @@ int32_t ACRExitFullscreen(uint64_t surface_token);
 /* 1 in element fullscreen, 0 not, -1 unknown surface. */
 int32_t ACRIsFullscreen(uint64_t surface_token);
 
-/* DevTools in Chrome's own undocked window (Views; CEF disables docking). The tab becomes the
+/* DevTools uses the registered page host when available, with a native undocked fallback. The tab becomes the
  * active tab of its logical Browser first (Chrome resolves the inspected tab from it). inspect 1
  * inspects the element at (x, y), view coordinates. Never pass a parent view: hosted openers
  * reset it to Alloy and CHECK (chrome_browser_delegate.cc:143-161). */
@@ -588,6 +589,12 @@ int32_t ACRShowDevToolsPanel(uint64_t surface_token, const char* panel);
 int32_t ACRCloseDevTools(uint64_t surface_token);
 /* 1 when the surface has DevTools open, 0 when not, -1 unknown surface. */
 int32_t ACRHasDevTools(uint64_t surface_token);
+/* Additive hosted frontend services; null/zero when unavailable on older engines. */
+int32_t ACRSetDevToolsHostViews(uint64_t surface_token, void* root, void* document);
+void* ACRDevToolsContainer(uint64_t surface_token);
+int32_t ACRDevToolsPresentation(uint64_t surface_token);
+int32_t ACRLayoutDevTools(uint64_t surface_token);
+int32_t ACRFocusDevTools(uint64_t surface_token);
 /* Executes a Chrome command by name (cef_command_ids.h) on the surface's tab, made active first,
  * when Chrome reports it enabled (CanExecuteChromeCommand). Hosted tabs only. */
 int32_t ACRDuplicateTab(uint64_t surface_token);

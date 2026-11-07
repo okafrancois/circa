@@ -217,7 +217,7 @@ extension BrowserWindowController {
             controller?.close()
             self?.showLibrary(.boosts)
         }
-        controller.pageHost = pageCommandSurface()?.hostView
+        controller.pageHost = pageCommandSurface()?.documentView
         controller.generation.unavailableText = { [weak self] in self?.boostGenerationUnavailableText ?? uiText("AI is unavailable") }
         controller.generation.capture = { [weak self, weak controller] in
             guard let self, let controller else { return nil }
@@ -246,7 +246,7 @@ extension BrowserWindowController {
     }
 
     func closeBoostEditor(on surface: Surface) {
-        guard let editor = boostEditor, editor.pageHost === surface.hostView else { return }
+        guard let editor = boostEditor, editor.pageHost === surface.documentView else { return }
         editor.close()
         boostEditor = nil
     }
@@ -254,10 +254,10 @@ extension BrowserWindowController {
     func beginBoostZap(_ controller: BrowserBoostEditorController) {
         if let picker = controller.zapView { picker.stop(); controller.zapView = nil; controller.editor.isZapping = false; return }
         guard let surface = pageCommandSurface(), isBoostPageTarget(surface),
-              controller.pageHost === surface.hostView, surface.profileID == controller.session.store.profileID,
+              controller.pageHost === surface.documentView, surface.profileID == controller.session.store.profileID,
               let probe = engine.conformanceProbe else { return }
         let generation = surface.documentGeneration
-        let picker = BrowserBoostZapView(frame: surface.hostView.bounds)
+        let picker = BrowserBoostZapView(frame: surface.documentView.bounds)
         picker.autoresizingMask = [.width, .height]
         picker.inspect = { [weak self, weak surface] point in
             guard let self, let surface, isBoostPageTarget(surface),
@@ -278,7 +278,7 @@ extension BrowserWindowController {
         picker.renderZaps(controller.session.boost.content.zapSelectors)
         controller.zapView = picker
         controller.editor.isZapping = true
-        surface.hostView.addSubview(picker, positioned: .above, relativeTo: nil)
+        surface.documentView.addSubview(picker, positioned: .above, relativeTo: nil)
         window?.makeFirstResponder(picker)
     }
 

@@ -58,10 +58,10 @@ extension ChromiumSurface {
         guard isBrowserCreated, !pageTintFailed, !navigationState.isLoading,
               let url = navigationState.committedURL,
               ["http", "https", "file"].contains(url.scheme?.lowercased() ?? ""),
-              let window = hostView.window, window.occlusionState.contains(.visible),
-              !hostView.isHiddenOrHasHiddenAncestor else { return }
+              let window = documentView.window, window.occlusionState.contains(.visible),
+              !documentView.isHiddenOrHasHiddenAncestor else { return }
         let generation = documentGeneration
-        let size = hostView.bounds.size
+        let size = documentView.bounds.size
         guard (try? await beginSnapshotCapture()) != nil else { return }
         defer { snapshotCaptureInFlight = false }
         guard !Task.isCancelled, generation == documentGeneration, pageTintObservationEnabled else { return }
@@ -71,9 +71,9 @@ extension ChromiumSurface {
             request.width = Int32(size.width.rounded(.down)); request.height = 2
             guard let captured = try? await captureNativeSnapshot(api, request: request) else { return }
             guard !Task.isCancelled, !isDisposed, generation == documentGeneration,
-                  size == hostView.bounds.size, !pageTintFailed, pageTintObservationEnabled,
-                  window === hostView.window, window.occlusionState.contains(.visible),
-                  !hostView.isHiddenOrHasHiddenAncestor else { return }
+                  size == documentView.bounds.size, !pageTintFailed, pageTintObservationEnabled,
+                  window === documentView.window, window.occlusionState.contains(.visible),
+                  !documentView.isHiddenOrHasHiddenAncestor else { return }
             if let image = ChromiumSnapshotDecoder.nativeImage(captured),
                let tint = BrowserPageTint.sampledTopEdge(image) {
                 updatePageTint(nativeThemeTint ?? tint)
@@ -86,8 +86,8 @@ extension ChromiumSurface {
             guard let json = try? JSONSerialization.data(withJSONObject: params) else { return }
             let (ok, data) = await devToolsCall("Runtime.evaluate", params: String(decoding: json, as: UTF8.self))
             guard ok, !Task.isCancelled, generation == documentGeneration, !pageTintFailed, pageTintObservationEnabled,
-                  window === hostView.window, window.occlusionState.contains(.visible),
-                  !hostView.isHiddenOrHasHiddenAncestor,
+                  window === documentView.window, window.occlusionState.contains(.visible),
+                  !documentView.isHiddenOrHasHiddenAncestor,
                   let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                   let result = root["result"] as? [String: Any], let value = result["value"] as? [String: Any] else { return }
             if let bytes = value["color"] as? [Int], bytes.count == 3, bytes.allSatisfy({ (0...255).contains($0) }) {
@@ -107,8 +107,8 @@ extension ChromiumSurface {
         }
         let tint = await withTaskCancellationHandler { await worker.value } onCancel: { worker.cancel() }
         guard !Task.isCancelled, !isDisposed, generation == documentGeneration, !pageTintFailed,
-              pageTintObservationEnabled, window === hostView.window,
-              window.occlusionState.contains(.visible), !hostView.isHiddenOrHasHiddenAncestor, let tint else { return }
+              pageTintObservationEnabled, window === documentView.window,
+              window.occlusionState.contains(.visible), !documentView.isHiddenOrHasHiddenAncestor, let tint else { return }
         updatePageTint(nativeThemeTint ?? tint)
     }
 }

@@ -84,6 +84,21 @@
 
 @end
 
+@interface ACRDeveloperContainerView : NSView
+@end
+@implementation ACRDeveloperContainerView
+- (void)resizeSubviewsWithOldSize:(NSSize)oldSize {
+  for (NSView* child in self.subviews) {
+    if (!NSEqualRects(child.frame, self.bounds)) child.frame = self.bounds;
+  }
+}
+- (void)didAddSubview:(NSView*)child {
+  [super didAddSubview:child];
+  child.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+  if (!NSEqualRects(child.frame, self.bounds)) child.frame = self.bounds;
+}
+@end
+
 namespace {
 
 // A popup decision can reenter the shell. Keep metadata scoped to this exact
@@ -122,6 +137,11 @@ struct Host {
   CefRefPtr<CefRegistration> devtools;
   CefRefPtr<CefBrowser> developer_browser;
   std::string developer_panel;
+  __strong NSView* developer_container = nil;
+  __weak NSView* developer_root = nil;
+  __weak NSView* developer_document = nil;
+  bool native_devtools_registered = false;
+  bool native_devtools_open = false;
   uint64_t generation = 0;
   bool closing_by_shell = false;
   bool close_requested = false;
@@ -194,6 +214,8 @@ void CancelPermission(const PendingPermission& pending) {
 }
 
 class Client;
+bool ConfigureNativeDevTools(Host* host);
+void ReleaseNativeDevTools(Host* host);
 
 uint64_t NextExtensionRuntimeLifetime() {
   static uint64_t next = 1; // CEF runtime construction is main-thread only.
@@ -1215,6 +1237,7 @@ class Client final : public CefClient, public CefLifeSpanHandler, public CefDisp
     }
     host.devtools = browser->GetHost()->AddDevToolsMessageObserver(new DevToolsObserver(token_));
     g_state->hosts[token_] = host;
+    ConfigureNativeDevTools(g_state->Find(token_));
     NSView* view = (__bridge NSView*)browser->GetHost()->GetWindowHandle();
     if (view) view.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
     auto created = g_state->Event(ACR_EVENT_CREATED, token_);
@@ -1279,7 +1302,10 @@ class Client final : public CefClient, public CefLifeSpanHandler, public CefDisp
     if (!g_state) return;
     if (g_state->orbit && g_state->orbit->version >= 5)
       g_state->orbit->browser_state_observe(browser->GetIdentifier(), nullptr, nullptr);
-    if (auto* host = g_state->Find(token_)) g_state->RevokeExtensionSurface(*host);
+    if (auto* host = g_state->Find(token_)) {
+      g_state->RevokeExtensionSurface(*host);
+      ReleaseNativeDevTools(host);
+    }
     g_state->CancelRequestsOf(token_);
     // Popups still being created by this opener: per the SDK, their state is cleared here
     // when OnBeforePopupAborted can no longer be delivered to a live opener.
@@ -1809,7 +1835,9 @@ const orbit_cef_api_t* ResolveOrbitApi() {
   // v1. Each version's layout is the prefix of the next; a function beyond the resolved version
   // is never called.
   const orbit_cef_api_t* api = nullptr;
-  const std::pair<uint32_t, size_t> versions[] = {{16u, sizeof(orbit_cef_api_t)},
+  const std::pair<uint32_t, size_t> versions[] = {{18u, sizeof(orbit_cef_api_t)},
+                                                   {17u, offsetof(orbit_cef_api_t, devtools_set_host)},
+                                                   {16u, offsetof(orbit_cef_api_t, freeze_tab)},
                                                    {15u, offsetof(orbit_cef_api_t, diagnostic_capabilities)},
                                                    {14u, offsetof(orbit_cef_api_t, media_snapshot)},
                                                    {13u, offsetof(orbit_cef_api_t, permission_accept_once)},
@@ -3252,6 +3280,59 @@ void ActivateHosted(Host* host) {
   if (host->window && g_state->orbit) g_state->orbit->activate_tab(host->browser->GetIdentifier());
 }
 
+void NativeDevToolsChanged(void* context, int32_t state, uint32_t flags) {
+  const uint64_t token = reinterpret_cast<uintptr_t>(context);
+  if (!g_state) return;
+  auto* host = g_state->Find(token);
+  if (!host) return;
+  const bool open = state != 0;
+  if (open != host->native_devtools_open) {
+    host->native_devtools_open = open;
+    if (open) ++g_state->developer_tool_count;
+    else { --g_state->developer_tool_count; host->developer_panel.clear(); }
+  }
+  if (g_state->quitting && open) {
+    PostUI([token] { if (g_state) if (auto* h = g_state->Find(token))
+      g_state->orbit->devtools_close(h->browser->GetIdentifier(), 1); });
+    return;
+  }
+  auto event = g_state->Event(ACR_EVENT_DEVTOOLS_PRESENTATION, token);
+  event.value = state; event.flags = flags;
+  g_state->Send(event);
+  if (!open) g_state->MaybeFinishQuit();
+}
+
+bool ConfigureNativeDevTools(Host* host) {
+  if (!host || !g_state || g_state->quitting || !g_state->orbit ||
+      g_state->orbit->version < 18 || !g_state->orbit->devtools_set_host) return false;
+  if (host->native_devtools_registered) return true;
+  NSView* page = (__bridge NSView*)host->browser->GetHost()->GetWindowHandle();
+  NSView* root = host->developer_root;
+  NSView* document = host->developer_document;
+  if (!root || !document || document.superview != root || page.superview != document || !host->window) return false;
+  if (!host->developer_container) host->developer_container = [[ACRDeveloperContainerView alloc] initWithFrame:root.bounds];
+  if (host->developer_container.superview != root)
+    [root addSubview:host->developer_container positioned:NSWindowBelow relativeTo:document];
+  host->developer_container.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+  host->native_devtools_registered = g_state->orbit->devtools_set_host(
+      host->browser->GetIdentifier(), (__bridge void*)root, (__bridge void*)document,
+      (__bridge void*)host->developer_container, &NativeDevToolsChanged,
+      reinterpret_cast<void*>(static_cast<uintptr_t>(host->token))) == 1;
+  return host->native_devtools_registered;
+}
+
+void ReleaseNativeDevTools(Host* host) {
+  if (!host || !host->native_devtools_registered || !g_state || !g_state->orbit) return;
+  host->native_devtools_registered = false;
+  g_state->orbit->devtools_set_host(host->browser->GetIdentifier(), nullptr, nullptr, nullptr, nullptr, nullptr);
+  if (host->native_devtools_open) {
+    host->native_devtools_open = false;
+    --g_state->developer_tool_count;
+  }
+  [host->developer_container removeFromSuperview];
+  host->developer_container = nil;
+}
+
 void SelectDeveloperPanel(Host* host) {
   if (!host->developer_browser || host->developer_panel.empty()) return;
   auto frame = host->developer_browser->GetMainFrame();
@@ -3306,6 +3387,8 @@ class DeveloperPanelClient final : public CefClient, public CefLifeSpanHandler, 
 extern "C" int32_t ACRShowDevTools(uint64_t token, int32_t inspect, int32_t x, int32_t y) {
   ACR_HOST(token);
   ActivateHosted(host);
+  if (ConfigureNativeDevTools(host))
+    return g_state->orbit->devtools_show(host->browser->GetIdentifier(), inspect, x, y, "");
   // An empty CefWindowInfo: Chrome's own undocked DevTools window. A parent view makes a hosted
   // opener reset the DevTools browser to Alloy and CHECK (chrome_browser_delegate.cc:143-161).
   CefWindowInfo window;
@@ -3317,6 +3400,8 @@ extern "C" int32_t ACRShowDevTools(uint64_t token, int32_t inspect, int32_t x, i
 
 extern "C" int32_t ACRCloseDevTools(uint64_t token) {
   ACR_HOST(token);
+  if (host->native_devtools_registered)
+    return g_state->orbit->devtools_close(host->browser->GetIdentifier(), 0);
   host->browser->GetHost()->CloseDevTools();
   return 1;
 }
@@ -3325,6 +3410,12 @@ extern "C" int32_t ACRShowDevToolsPanel(uint64_t token, const char* panel) {
   ACR_HOST(token);
   const std::string name = panel ? panel : "";
   if (name != "console" && name != "network" && name != "elements") return 0;
+  if (ConfigureNativeDevTools(host)) {
+    if (host->native_devtools_open && host->developer_panel == name) return ACRCloseDevTools(token);
+    host->developer_panel = name;
+    ActivateHosted(host);
+    return g_state->orbit->devtools_show(host->browser->GetIdentifier(), 0, 0, 0, name.c_str());
+  }
   if (host->developer_browser) {
     if (host->developer_panel == name) return ACRCloseDevTools(token);
     host->developer_panel = name;
@@ -3348,7 +3439,37 @@ extern "C" int32_t ACRHasDevTools(uint64_t token) {
   if (!NSThread.isMainThread || !g_state) return -1;
   Host* host = g_state->Find(token);
   if (!host) return -1;
+  if (host->native_devtools_registered)
+    return g_state->orbit->devtools_state(host->browser->GetIdentifier()) > 0 ? 1 : 0;
   return host->browser->GetHost()->HasDevTools() ? 1 : 0;
+}
+
+extern "C" int32_t ACRSetDevToolsHostViews(uint64_t token, void* root, void* document) {
+  ACR_HOST(token);
+  if (!root || !document) { ReleaseNativeDevTools(host); return 1; }
+  host->developer_root = (__bridge NSView*)root;
+  host->developer_document = (__bridge NSView*)document;
+  return ConfigureNativeDevTools(host) ? 1 : 0;
+}
+extern "C" void* ACRDevToolsContainer(uint64_t token) {
+  if (!NSThread.isMainThread || !g_state) return nullptr;
+  auto* host = g_state->Find(token);
+  return host && host->native_devtools_registered ? (__bridge void*)host->developer_container : nullptr;
+}
+extern "C" int32_t ACRDevToolsPresentation(uint64_t token) {
+  if (!NSThread.isMainThread || !g_state) return 0;
+  auto* host = g_state->Find(token);
+  return host && host->native_devtools_registered ? g_state->orbit->devtools_state(host->browser->GetIdentifier()) : 0;
+}
+extern "C" int32_t ACRLayoutDevTools(uint64_t token) {
+  if (!NSThread.isMainThread || !g_state) return 0;
+  auto* host = g_state->Find(token);
+  return host && host->native_devtools_registered ? g_state->orbit->devtools_layout(host->browser->GetIdentifier()) : 0;
+}
+extern "C" int32_t ACRFocusDevTools(uint64_t token) {
+  if (!NSThread.isMainThread || !g_state) return 0;
+  auto* host = g_state->Find(token);
+  return host && host->native_devtools_registered ? g_state->orbit->devtools_focus(host->browser->GetIdentifier()) : 0;
 }
 
 extern "C" int32_t ACRExecuteChromeCommand(uint64_t token, const char* name) {

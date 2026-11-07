@@ -116,7 +116,7 @@ public extension ChromiumSurface {
                                    windowToken: info.window_token)
     }
 
-    /// The engine's content view inside `hostView` (Alloy: CEF's host view; tab surface: the
+    /// The engine's content view inside `documentView` (Alloy: CEF's host view; tab surface: the
     /// WebContents view). Laboratory introspection.
     var engineContentView: NSView? {
         guard isBrowserCreated, !isDisposed, let view = ACRBrowserNSView(token) else { return nil }
@@ -146,7 +146,7 @@ public extension ChromiumSurface {
     }
 
     /// Moves the content view of a tab surface under `view` (same window). Alloy surfaces are
-    /// moved by moving `hostView` instead.
+    /// moved by moving `documentView` instead.
     @discardableResult
     func attachContent(to view: NSView) -> Bool {
         guard isBrowserCreated, !isDisposed else { return false }

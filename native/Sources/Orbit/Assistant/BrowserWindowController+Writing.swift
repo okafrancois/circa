@@ -8,7 +8,7 @@ extension BrowserWindowController {
         guard let preferences = settingsPreferences?.runtime.document.ai,
               preferences.helpers.writingHelp, let service = aiService,
               let owner = pageCommandSurface(), owner.profileID == session.activeProfileID,
-              owner.hostView.window === window, let url = owner.navigationState.committedURL,
+              owner.documentView.window === window, let url = owner.navigationState.committedURL,
               ["http", "https"].contains(url.scheme ?? ""),
               BrowserAIPolicy.allowsPageAccess(preferences, isPrivate: isPrivateWindow, host: url.host) else { return nil }
         let choice = preferences.defaultModels[.quick] ?? BrowserAIPolicy.automaticChoice(for: .quick, statuses: service.statuses)
@@ -29,10 +29,10 @@ extension BrowserWindowController {
         help.acceptsInput = { [weak self] event in
             guard let self, writingChoice != nil, let owner = pageCommandSurface(), let window = self.window else { return false }
             if event.type == .leftMouseUp || event.type == .leftMouseDown || event.type == .scrollWheel {
-                return owner.hostView.bounds.contains(owner.hostView.convert(event.locationInWindow, from: nil))
+                return owner.documentView.bounds.contains(owner.documentView.convert(event.locationInWindow, from: nil))
             }
             guard let responder = window.firstResponder as? NSView else { return false }
-            return responder === owner.hostView || responder.isDescendant(of: owner.hostView)
+            return responder === owner.documentView || responder.isDescendant(of: owner.documentView)
         }
         help.capture = { [weak self] in await self?.captureWritingContext() }
         help.ask = { [weak self] text in
@@ -56,7 +56,7 @@ extension BrowserWindowController {
                 && self.window?.isVisible == true
         }
         guard valid(), let selection = try? await writer.writingSelection(revision: revision, isCurrent: valid), valid() else { return nil }
-        let view = owner.hostView
+        let view = owner.documentView
         let box = selection.bounds
         let local = NSRect(x: box.minX, y: view.isFlipped ? box.minY : view.bounds.height - box.maxY,
                            width: box.width, height: box.height)

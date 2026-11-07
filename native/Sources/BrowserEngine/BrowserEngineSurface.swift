@@ -181,6 +181,9 @@ public protocol BrowserEngineSurface: BrowserFindSurface {
     /// Dedicated opt-in metadata channel, absent on engines without a native manager.
     var passwordPrompts: (any BrowserPasswordPromptSource)? { get }
     var hostView: NSView { get }
+    /// The actual page viewport for document coordinates, overlays and responder ownership.
+    /// It may be inset within hostView when native developer tools share the presentation.
+    var documentView: NSView { get }
     var isDisposed: Bool { get }
     /// True once the engine finished closing the native document after `dispose()` (CEF:
     /// `OnBeforeClose`; WebKit: synchronously in `dispose()`). Engine-reported, never inferred
@@ -296,6 +299,8 @@ public protocol BrowserEngineSurface: BrowserFindSurface {
 }
 
 public extension BrowserEngineSurface {
+    var documentView: NSView { hostView }
+
     var pagePerformance: (any BrowserPagePerformance)? { nil }
     var nativePageServices: (any BrowserNativePageServices)? { nil }
     func activationPaintBarrier() -> Task<Bool, Never>? { nil }

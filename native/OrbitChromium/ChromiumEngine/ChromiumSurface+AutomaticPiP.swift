@@ -1,6 +1,10 @@
+import AppKit
 import Foundation
+import BrowserShell
 import BrowserEngine
 import OrbitChromiumBridge
+
+private func uiText(_ english: String) -> String { BrowserText.string(english) }
 
 extension ChromiumSurface {
     public func showDeveloperPanel(_ panel: BrowserDeveloperPanel) throws {
@@ -11,7 +15,7 @@ extension ChromiumSurface {
     public func updateAutomaticPictureInPicture(isSelected: Bool, allowed: Bool) {
         let enter = !isSelected && allowed
         guard !isDisposed, isBrowserCreated, (enter != automaticPiPShouldEnter || isSelected != automaticPiPIsSelected) else { return }
-        if enter { automaticPiPSourceWindow = hostView.window }
+        if enter { automaticPiPSourceWindow = documentView.window }
         automaticPiPShouldEnter = enter
         automaticPiPIsSelected = isSelected
         automaticPiPRevision &+= 1
@@ -90,5 +94,109 @@ extension ChromiumSurface {
             "expression": expression, "contextId": context, "returnByValue": true, "awaitPromise": true
         ]) else { return (false, Data()) }
         return await devToolsCall("Runtime.evaluate", params: String(decoding: parameters, as: UTF8.self))
+    }
+}
+
+
+extension ChromiumSurface {
+    func layoutHostedDeveloperTools() -> Bool {
+        guard !isDisposed, isBrowserCreated else { return false }
+        return ACRLayoutDevTools(token) == 1
+    }
+}
+
+/// Only the outer native window is owned here. Chromium owns the frontend,
+/// its dock menu/splitter, protocol connection and inspected-page geometry.
+@MainActor
+final class ChromiumDeveloperToolsPresentation: NSObject, NSWindowDelegate {
+    private weak var surface: ChromiumSurface?
+    private var window: ChromiumDevToolsWindow?
+    private var focusTask: Task<Void, Never>?
+
+    init(surface: ChromiumSurface) { self.surface = surface }
+
+    func reconcile(requestsFocus: Bool) {
+        focusTask?.cancel()
+        focusTask = nil
+        guard let surface, !surface.isDisposed,
+              let pointer = ACRDevToolsContainer(surface.token) else { close(); return }
+        let state = ACRDevToolsPresentation(surface.token)
+        let container = Unmanaged<NSView>.fromOpaque(pointer).takeUnretainedValue()
+        if state == 4 {
+            if window == nil {
+                let native = ChromiumDevToolsWindow(contentRect: NSRect(x: 100, y: 100, width: 640, height: 640),
+                    styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
+                native.isReleasedWhenClosed = false
+                native.title = uiText("Developer Tools")
+                native.setAccessibilityIdentifier("devtools-undocked")
+                native.delegate = self
+                native.requestClose = { [weak surface] in
+                    guard let surface, !surface.isDisposed else { return }
+                    _ = ACRCloseDevTools(surface.token)
+                }
+                window = native
+            }
+            if window?.contentView !== container { window?.contentView = container }
+            if requestsFocus { window?.makeKeyAndOrderFront(nil) }
+        } else {
+            if let native = window {
+                native.contentView = nil
+                native.close()
+                window = nil
+            }
+            let root = surface.hostView
+            if container.superview !== root {
+                container.frame = root.bounds
+                root.addSubview(container, positioned: .below, relativeTo: surface.documentView)
+            }
+            _ = ACRLayoutDevTools(surface.token)
+            if state == 0 || state == 5 { return }
+            if requestsFocus, root.window?.isKeyWindow != true {
+                surface.delegate?.surfaceDidRequestActivation(surface)
+            }
+        }
+        guard requestsFocus else { return }
+        focusTask = Task { @MainActor [weak self, weak surface] in
+            for _ in 0..<20 {
+                guard !Task.isCancelled, let self, let surface, !surface.isDisposed,
+                      ACRDevToolsPresentation(surface.token) == state else { return }
+                let target = state == 4 ? window : surface.hostView.window
+                if let target, target.isVisible {
+                    NSApp.activate(ignoringOtherApps: true)
+                    target.makeKeyAndOrderFront(nil)
+                    _ = ACRFocusDevTools(surface.token)
+                    return
+                }
+                try? await Task.sleep(for: .milliseconds(10))
+            }
+        }
+    }
+
+    func windowShouldClose(_ sender: NSWindow) -> Bool {
+        guard sender === window else { return true }
+        window?.requestClose?()
+        return false
+    }
+
+    func close() {
+        focusTask?.cancel()
+        focusTask = nil
+        window?.contentView = nil
+        window?.close()
+        window = nil
+    }
+}
+
+@MainActor
+private final class ChromiumDevToolsWindow: NSWindow {
+    var requestClose: (() -> Void)?
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        let modifiers = event.modifierFlags.intersection([.command, .option, .control, .shift])
+        let key = event.charactersIgnoringModifiers?.lowercased()
+        if (modifiers == .command && key == "w") || (modifiers == [.command, .option] && key == "i") {
+            requestClose?()
+            return true
+        }
+        return super.performKeyEquivalent(with: event)
     }
 }

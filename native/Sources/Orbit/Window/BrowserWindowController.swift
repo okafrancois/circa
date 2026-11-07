@@ -583,7 +583,7 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
         renderDownloads()
         renderArchive()
         if let boostEditor, boostEditor.session.store.profileID != session.activeProfileID
-            || (boostEditor.pageHost !== selected?.hostView && boostEditor.pageHost !== peek.presentedSurface?.hostView) {
+            || (boostEditor.pageHost !== selected?.documentView && boostEditor.pageHost !== peek.presentedSurface?.documentView) {
             boostEditor.close(); self.boostEditor = nil
         }
         renderLibrary()

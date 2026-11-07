@@ -44,7 +44,8 @@ final class ChromiumHostView: NSView {
         if window != nil { surface?.hostViewDidBecomeVisible() }
     }
 
-    // Geometry authority. The engine content view must always fill this view exactly: the shell
+    // Geometry authority. Outside a negotiated native DevTools layout the content fills this view:
+    // the shell
     // sizes the card, Chromium renders into it. AppKit autoresizing only adds size deltas, so a
     // content frame that Chromium set itself (WebContentsViewMac::Resize, e.g. a tab added in the
     // background sized like the previously active tab) would keep its offset across every later
@@ -127,6 +128,28 @@ final class ChromiumHostView: NSView {
     }
 }
 
+@MainActor
+final class ChromiumPresentationView: NSView {
+    weak var surface: ChromiumSurface?
+    private let document: NSView
+    private var arranging = false
+    init(document: NSView) {
+        self.document = document
+        super.init(frame: document.frame)
+        wantsLayer = true
+        addSubview(document)
+    }
+    required init?(coder: NSCoder) { nil }
+    override func resizeSubviews(withOldSize oldSize: NSSize) {
+        guard !arranging else { return }
+        arranging = true
+        defer { arranging = false }
+        for child in subviews where child !== document { child.frame = bounds }
+        if surface?.layoutHostedDeveloperTools() == true { return }
+        document.frame = bounds
+    }
+}
+
 /// Unregisters a content-frame observer when its subview leaves or its host view goes away.
 private final class ContentFrameObservation {
     private let token: NSObjectProtocol
@@ -136,13 +159,14 @@ private final class ContentFrameObservation {
 
 /// One browser hosted in a shell-owned container view: an Alloy browser (stock SDK, or an engine
 /// in `.alloy` mode), or a Chrome-style tab of a logical Browser (patched CEF, `.hosted` mode).
-/// The shell places and moves `hostView`; the adapter never creates windows the shell sees. A
+/// The shell places and moves `hostView`; documentView contains only the inspected page. A
 /// hosted surface's native tab is created on its first placement in a shell window (see
 /// `ChromiumBrowserEngine.SurfaceMode`).
 @MainActor
 public final class ChromiumSurface: BrowserEngineSurface {
     public let profileID: ProfileID
     public let hostView: NSView
+    public let documentView: NSView
     public private(set) var pageThemeColor: UInt32?
     public private(set) var pageBackgroundColor: UInt32?
     private var nativeAudible: Bool?
@@ -227,6 +251,7 @@ public final class ChromiumSurface: BrowserEngineSurface {
     var audioContexts = ChromiumAudioContextActivity()
     weak var automaticPiPSourceWindow: NSWindow?
     var automaticPiPPresentation: ChromiumPictureInPicturePresentation?
+    var developerToolsPresentation: ChromiumDeveloperToolsPresentation?
     var automaticPiPTask: Task<Void, Never>?
     var automaticPiPShouldEnter = false
     var automaticPiPIsSelected = true
@@ -280,8 +305,11 @@ public final class ChromiumSurface: BrowserEngineSurface {
         let view = ChromiumHostView(frame: NSRect(x: 0, y: 0, width: 800, height: 600))
         view.wantsLayer = true
         view.autoresizesSubviews = true
-        hostView = view
+        documentView = view
+        let presentation = ChromiumPresentationView(document: view)
+        hostView = presentation
         view.surface = self
+        presentation.surface = self
 
     }
 
@@ -297,7 +325,7 @@ public final class ChromiumSurface: BrowserEngineSurface {
         isCreationPending = true
         // Tracked before the call: CreateBrowserSync delivers OnAfterCreated inside it.
         engine?.nativeCreationStarted(token)
-        let result = ACRCreateSurface(token, profileToken, Unmanaged.passUnretained(hostView).toOpaque(), "")
+        let result = ACRCreateSurface(token, profileToken, Unmanaged.passUnretained(documentView).toOpaque(), "")
         if result == 0 {
             isCreationPending = false
             engine?.nativeEnded(token)
@@ -325,7 +353,7 @@ public final class ChromiumSurface: BrowserEngineSurface {
     }
 
     /// ABI 6 (patched CEF): a Chrome-style tab of the logical Browser of `window`, its content
-    /// view a child of `hostView`. See `ChromiumBrowserEngine.makeTabSurface`.
+    /// view a child of `documentView`. See `ChromiumBrowserEngine.makeTabSurface`.
     func createTabBrowser(window: UInt64, index: Int32) {
         awaitsHostedCreation = false
         hostedWindowToken = window
@@ -336,7 +364,7 @@ public final class ChromiumSurface: BrowserEngineSurface {
         BrowserPerformance.mark(.nativeBrowserBegin)
         defer { BrowserPerformance.mark(.nativeBrowserReady) }
         let result = ACRCreateTabSurface(token, profileToken, window, index,
-                                         Unmanaged.passUnretained(hostView).toOpaque(), "")
+                                         Unmanaged.passUnretained(documentView).toOpaque(), "")
         if result == 0 {
             isCreationPending = false
             engine?.nativeEnded(token)
@@ -417,7 +445,7 @@ public final class ChromiumSurface: BrowserEngineSurface {
 
     @discardableResult
     public func focusDocument() -> Bool {
-        guard !isDisposed, let window = hostView.window else {
+        guard !isDisposed, let window = documentView.window else {
             BrowserSidebarInputDiagnostics.record("native-focus", tab: sidebarInputTabID,
                 reason: isDisposed ? "surface-disposed" : "host-detached")
             return false
@@ -430,7 +458,7 @@ public final class ChromiumSurface: BrowserEngineSurface {
             return true
         }
         // A shown tab discarded natively (memory pressure) wakes on focus, as on presentation.
-        if isSuspended, !hostView.isHiddenOrHasHiddenAncestor { resumeDiscardedTab() }
+        if isSuspended, !documentView.isHiddenOrHasHiddenAncestor { resumeDiscardedTab() }
         if hostedWindowToken != 0 { engine?.activateHostedTab(self) }
         let browserView = Unmanaged<NSView>.fromOpaque(view).takeUnretainedValue()
         window.makeFirstResponder(browserView)
@@ -449,7 +477,7 @@ public final class ChromiumSurface: BrowserEngineSurface {
         return Task { [weak self] in
             // This task runs after the synchronous card placement and native visibility /
             // logical-tab activation. Finish layout before registering against that geometry.
-            guard let self, let host = self.hostView as? ChromiumHostView else { return false }
+            guard let self, let host = self.documentView as? ChromiumHostView else { return false }
             host.window?.contentView?.layoutSubtreeIfNeeded()
             let geometry = host.paintGeometryGeneration
             return await BrowserActivationPaintBarrier.wait(performance: performance, host: host,
@@ -462,7 +490,7 @@ public final class ChromiumSurface: BrowserEngineSurface {
         }
     }
 
-    /// The shell showed `hostView` in a window, or the user clicked into it.
+    /// The shell showed `documentView` in a window, or the user clicked into it.
     func hostViewDidBecomeVisible() {
         guard !isDisposed, isBrowserCreated, hostedWindowToken != 0 else { return }
         secureInputHostHidden = false
@@ -470,7 +498,7 @@ public final class ChromiumSurface: BrowserEngineSurface {
         engine?.activateHostedTab(self)
     }
 
-    /// Call after the shell moved `hostView` to another window or changed its visibility.
+    /// Call after the shell moved `documentView` to another window or changed its visibility.
     public func hostDidChange(hidden: Bool) {
         secureInputHostHidden = hidden
         if hidden {
@@ -580,8 +608,8 @@ public final class ChromiumSurface: BrowserEngineSurface {
         let generation = request.documentGeneration ?? documentGeneration
         guard generation == documentGeneration else { throw BrowserEngineError.documentChanged }
         guard isBrowserCreated else { throw BrowserEngineError.snapshotUnavailable }
-        let size = hostView.bounds.size
-        let scale = hostView.window?.backingScaleFactor ?? hostView.layer?.contentsScale ?? 1
+        let size = documentView.bounds.size
+        let scale = documentView.window?.backingScaleFactor ?? documentView.layer?.contentsScale ?? 1
         if !request.fullPage, let api = pagePerformance,
            let target = ChromiumSnapshotDecoder.nativeRequest(size: size, scale: scale, width: request.width) {
             let captured = try await captureNativeSnapshot(api, request: target)
@@ -589,8 +617,8 @@ public final class ChromiumSurface: BrowserEngineSurface {
             try Task.checkCancellation()
             guard !isDisposed else { throw BrowserEngineError.surfaceDisposed }
             guard generation == documentGeneration, captured.status != .documentChanged else { throw BrowserEngineError.documentChanged }
-            guard size == hostView.bounds.size,
-                  scale == (hostView.window?.backingScaleFactor ?? hostView.layer?.contentsScale ?? 1) else {
+            guard size == documentView.bounds.size,
+                  scale == (documentView.window?.backingScaleFactor ?? documentView.layer?.contentsScale ?? 1) else {
                 throw BrowserEngineError.snapshotUnavailable
             }
             if captured.status == .closed { throw BrowserEngineError.surfaceDisposed }
@@ -800,6 +828,8 @@ public final class ChromiumSurface: BrowserEngineSurface {
         automaticPiPTask = nil
         cancelExtensionAction()
         guard !isDisposed else { return }
+        developerToolsPresentation?.close()
+        developerToolsPresentation = nil
         if isBrowserCreated { releaseSecureInputFocus() }
         isDisposed = true
         state.faviconURL = nil
@@ -946,7 +976,7 @@ public final class ChromiumSurface: BrowserEngineSurface {
     func decideKey(_ key: ChromiumKeyEvent) -> (consume: Bool, track: Bool) {
         guard !isDisposed, let event = key.event, event.type == .keyDown else { return (false, false) }
         // Enter/Space can activate a focused link. Never reuse a preceding mouse click for it.
-        (hostView as? ChromiumHostView)?.linkActivation = nil
+        (documentView as? ChromiumHostView)?.linkActivation = nil
         guard Self.isShortcutCandidate(event), let delegate else { return (false, false) }
         let modifiers = event.modifierFlags.intersection([.command, .shift, .option, .control])
         if key.isEditableFieldFocused, modifiers == [.command] || modifiers == [.command, .shift],
@@ -1060,7 +1090,7 @@ public final class ChromiumSurface: BrowserEngineSurface {
     }
 
     private var recentLinkModifiers: BrowserModifierKeys? {
-        guard let host = hostView as? ChromiumHostView, let activation = host.linkActivation,
+        guard let host = documentView as? ChromiumHostView, let activation = host.linkActivation,
               activation.generation == documentGeneration,
               ProcessInfo.processInfo.systemUptime - activation.timestamp < 1,
               NSApp.currentEvent?.type != .keyDown else { return nil }
@@ -1145,12 +1175,14 @@ public final class ChromiumSurface: BrowserEngineSurface {
             onEngineEvent?("created", ["style": event.value == 1 ? "alloy" : "chrome", "browser": String(event.browserID)])
             if let view = ACRBrowserNSView(token) {
                 let browserView = Unmanaged<NSView>.fromOpaque(view).takeUnretainedValue()
-                browserView.frame = hostView.bounds
+                browserView.frame = documentView.bounds
                 browserView.autoresizingMask = [.width, .height]
             }
             // Popups and new-tab targets of a hosted tab are hosted tabs of the same window.
             if let identity = tabIdentity, identity.isHosted { hostedWindowToken = identity.windowToken }
             if hostedWindowToken != 0 { engine?.hostedTabDidCreate(self) }
+            _ = ACRSetDevToolsHostViews(token, Unmanaged.passUnretained(hostView).toOpaque(),
+                                       Unmanaged.passUnretained(documentView).toOpaque())
             // Submit before the first navigation. CEF may not answer until it has a document;
             // waiting for the reply here would delay that document by the command timeout.
             _ = ACRExecuteDevToolsMethod(token, "Page.enable", "")
@@ -1289,6 +1321,10 @@ public final class ChromiumSurface: BrowserEngineSurface {
             handlePermission(event)
         case ACR_EVENT_ACTIVATION_REQUEST:
             delegate?.surfaceDidRequestActivation(self)
+        case ACR_EVENT_DEVTOOLS_PRESENTATION:
+            guard !isDisposed else { return }
+            if developerToolsPresentation == nil { developerToolsPresentation = ChromiumDeveloperToolsPresentation(surface: self) }
+            developerToolsPresentation?.reconcile(requestsFocus: event.flags & 1 != 0)
         case ACR_EVENT_DOWNLOAD:
             handleDownload(event)
         case ACR_EVENT_RENDER_TERMINATED:

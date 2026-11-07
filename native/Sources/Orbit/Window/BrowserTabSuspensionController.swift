@@ -119,13 +119,13 @@ final class BrowserTabSuspensionController<Engine: BrowserEngine> {
         guard let cover = covers.value(for: id) else { return }
         guard surface.navigationState.committedURL == cover.url,
               surface.documentGeneration == cover.generation,
-              surface.hostView.bounds.size == cover.size,
+              surface.documentView.bounds.size == cover.size,
               owner.window?.backingScaleFactor == cover.scale,
               let image = cover.image() else { covers.remove(id); return }
         let view = BrowserSuspensionCoverView(image: image, size: cover.size, scale: cover.scale)
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        surface.hostView.addSubview(view, positioned: .above, relativeTo: nil)
+        surface.documentView.addSubview(view, positioned: .above, relativeTo: nil)
         CATransaction.commit()
         view.resized = { [weak self] in self?.dismissCover(id) }
         let timeout = Task { [weak self] in
@@ -245,7 +245,7 @@ final class BrowserTabSuspensionController<Engine: BrowserEngine> {
             guard let candidate = await surface.captureStateForSuspension() else { continue }
             var cover: BrowserSuspensionCover?
             if surface.supportsSuspensionPaint {
-                let size = surface.hostView.bounds.size
+                let size = surface.documentView.bounds.size
                 let scale = owner.window?.backingScaleFactor ?? 1
                 guard size.width > 0, size.height > 0, await surface.prepareSuspensionPaint(),
                       let snapshot = try? await surface.captureSnapshot(.init(width: size.width * scale,
@@ -254,7 +254,7 @@ final class BrowserTabSuspensionController<Engine: BrowserEngine> {
                 cover = await Task.detached(priority: .utility) {
                     BrowserSuspensionCover.encode(snapshot, size: size, scale: scale, url: candidate.url, maximumBytes: limit)
                 }.value
-                guard cover != nil, surface.hostView.bounds.size == size else { continue }
+                guard cover != nil, surface.documentView.bounds.size == size else { continue }
             }
             // Capturing/encoding yields: re-check form/media state and scroll before discard.
             guard let state = await surface.captureStateForSuspension(), !surface.isDisposed, surface.allowsSuspension,

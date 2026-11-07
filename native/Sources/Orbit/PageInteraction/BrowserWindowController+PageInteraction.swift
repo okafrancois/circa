@@ -16,7 +16,7 @@ extension BrowserWindowController {
         guard showsPageSurface(surface) else { return .suppressed }
         if case .beforeUnload = dialog.kind { OrbitUnsavedInputGuard.observedBeforeUnload(surface) }
         return await BrowserPageDialogCenter.shared.runJavaScriptDialog(
-            dialog, on: surface.hostView, surface: ObjectIdentifier(surface), generation: surface.documentGeneration)
+            dialog, on: surface.documentView, surface: ObjectIdentifier(surface), generation: surface.documentGeneration)
     }
 
     func surfaceDidResetJavaScriptDialogs(_ surface: Surface) {
@@ -26,13 +26,13 @@ extension BrowserWindowController {
 
     func surface(_ surface: Surface, requestsCredentialsFor challenge: BrowserAuthenticationChallenge) async -> BrowserCredential? {
         guard showsPageSurface(surface) else { return nil }
-        return await BrowserPageDialogCenter.shared.requestCredentials(challenge, on: surface.hostView,
+        return await BrowserPageDialogCenter.shared.requestCredentials(challenge, on: surface.documentView,
                                                                        surface: ObjectIdentifier(surface))
     }
 
     func surface(_ surface: Surface, runFileChooser request: BrowserFileChooserRequest) async -> [URL]? {
         guard showsPageSurface(surface) else { return nil }
-        return await BrowserFileChooserPresenter.shared.run(request, on: surface.hostView, surface: ObjectIdentifier(surface))
+        return await BrowserFileChooserPresenter.shared.run(request, on: surface.documentView, surface: ObjectIdentifier(surface))
     }
 
     // MARK: External application links
@@ -42,7 +42,7 @@ extension BrowserWindowController {
     /// of this window (tabs, Split panes, Peek).
     func handleExternalApplicationLink(_ action: BrowserNavigationAction, from surface: Surface) -> Bool {
         guard showsPageSurface(surface) else { return BrowserExternalProtocolGate.isExternal(action.url) }
-        return BrowserExternalProtocolGate.shared.handle(action, hostView: surface.hostView, surface: ObjectIdentifier(surface),
+        return BrowserExternalProtocolGate.shared.handle(action, hostView: surface.documentView, surface: ObjectIdentifier(surface),
                                                          pageURL: surface.navigationState.committedURL)
     }
 
@@ -53,7 +53,7 @@ extension BrowserWindowController {
         pageInteraction.unresponsive.remove(key)
         if pageInteraction.fullscreen?.surfaceKey == key { leaveElementFullscreenLayout() }
         guard showsPageSurface(surface) else { return }
-        BrowserPageDialogCenter.shared.showCrashedPage(on: surface.hostView, surface: key, termination: termination) {
+        BrowserPageDialogCenter.shared.showCrashedPage(on: surface.documentView, surface: key, termination: termination) {
             [weak self, weak surface] in
             guard let self, let surface, self.showsPageSurface(surface) else { return }
             surface.reload()
@@ -70,7 +70,7 @@ extension BrowserWindowController {
         guard showsPageSurface(surface), pageInteraction.unresponsive.insert(key).inserted else { return }
         Task { [weak self, weak surface] in
             guard let surface else { return }
-            let wait = await BrowserPageDialogCenter.shared.askToWaitForUnresponsivePage(on: surface.hostView, surface: key)
+            let wait = await BrowserPageDialogCenter.shared.askToWaitForUnresponsivePage(on: surface.documentView, surface: key)
             guard let self, self.pageInteraction.unresponsive.remove(key) != nil, !surface.isDisposed else { return }
             try? surface.perform(wait ? .waitForUnresponsiveRenderer : .terminateUnresponsiveRenderer)
         }
@@ -241,13 +241,13 @@ extension BrowserWindowController {
         built.menu.autoenablesItems = true
         pageInteraction.menu?.owner = built.owner
         let location = NSPoint(x: request.location.x,
-                               y: surface.hostView.isFlipped ? request.location.y : surface.hostView.bounds.height - request.location.y)
+                               y: surface.documentView.isFlipped ? request.location.y : surface.documentView.bounds.height - request.location.y)
         let extensions = BrowserExtensionContextMenu { [weak self, weak surface] id in
             self?.performExtensionContextCommand(id, request: request, surface: surface)
         }
         extensions.append(request.extensionItems, to: built.menu)
         withExtendedLifetime(extensions) {
-            built.menu.popUp(positioning: nil, at: location, in: surface.hostView)
+            built.menu.popUp(positioning: nil, at: location, in: surface.documentView)
         }
         // Commands dispatched by the menu already ran or are queued; release the native menu after.
         Task { [weak self, weak surface] in

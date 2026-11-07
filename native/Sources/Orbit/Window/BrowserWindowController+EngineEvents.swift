@@ -116,7 +116,7 @@ extension BrowserWindowController: BrowserEngineSurfaceDelegate {
         guard BrowserPageKeyContext.accepts(receipt, windowID: id, current: commandState.context,
                                             isKeyWindow: window?.isKeyWindow == true,
                                             isSelected: session.selectedSurface === surface,
-                                            focusInsideDocument: responder?.isDescendant(of: surface.hostView) == true)
+                                            focusInsideDocument: responder?.isDescendant(of: surface.documentView) == true)
         else { return false }
         return NSApp.mainMenu?.performKeyEquivalent(with: event) ?? false
     }
@@ -126,7 +126,7 @@ extension BrowserWindowController: BrowserEngineSurfaceDelegate {
         guard acceptsCommands, owns(surface),
               BrowserPageKeyContext.accepts(receipt, windowID: id, current: commandState.context,
                   isKeyWindow: window?.isKeyWindow == true, isSelected: session.selectedSurface === surface,
-                  focusInsideDocument: responder?.isDescendant(of: surface.hostView) == true),
+                  focusInsideDocument: responder?.isDescendant(of: surface.documentView) == true),
               sidebar.undoRouter.nextSource(redo: false) != nil else { return false }
         sidebar.undoRouter.undo(nil)
         return true

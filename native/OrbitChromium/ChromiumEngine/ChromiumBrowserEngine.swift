@@ -11,7 +11,7 @@ public final class ChromiumBrowserEngine: BrowserPrivateEngine {
     private static let transferSignposter = OSSignposter(subsystem: "local.orbit", category: "surface-transfer")
     /// How `makeSurface` creates native browsers.
     public enum SurfaceMode: Equatable, Sendable {
-        /// Alloy browsers parented to `hostView` (stock SDK behaviour, laboratory default).
+        /// Alloy browsers parented to `documentView` (stock SDK behaviour, laboratory default).
         case alloy
         /// Chrome-style tabs: a surface's tab is created in the logical Browser of the shell
         /// window named by its `placement` (`shellWindowDidOpen`), at its first placement there or
@@ -493,7 +493,7 @@ extension ChromiumBrowserEngine {
         // unready the profile, dispose the surface or shut the engine down: verify everything
         // again. A refusal now aborts the surface the shell recorded, exactly once; the bridge
         // receives no view and sends no second abort.
-        let hostWindow = accepted.hostView.window
+        let hostWindow = accepted.documentView.window
         guard !isShutDown, !accepted.isDisposed, accepted.isCreationPending,
               let current = shellWindows[windowID], current === engineWindow, !current.isClosed,
               current.token == windowToken, let window = current.window, window === nativeWindow,
@@ -587,12 +587,12 @@ extension ChromiumBrowserEngine {
         let source = surface.hostedWindowToken
         guard surface.isBrowserCreated, !surface.isDisposed, source != 0,
               ACRMoveSurfaceToWindow(surface.token, token, index.map { Int32(clamping: $0) } ?? -1,
-                                     Unmanaged.passUnretained(surface.hostView).toOpaque()) == 1 else { return false }
+                                     Unmanaged.passUnretained(surface.documentView).toOpaque()) == 1 else { return false }
         guard source != token else { return true }
         surface.hostedWindowToken = token
         if activeHostedTabs[source]?.surface === surface { activeHostedTabs[source] = nil }
         // The tab the destination shows stays its active tab (Chrome inserts in the background).
-        if surface.hostView.window != nil, !surface.hostView.isHiddenOrHasHiddenAncestor { activateHostedTab(surface) }
+        if surface.documentView.window != nil, !surface.documentView.isHiddenOrHasHiddenAncestor { activateHostedTab(surface) }
         runtime.trace?("hosted-tab-moved", ["token": String(surface.token), "from": String(source), "to": String(token)])
         return true
     }
@@ -693,7 +693,7 @@ extension ChromiumBrowserEngine {
         // Moved by the shell while its creation was in flight: it follows its placement now.
         followPlacementWindow(surface)
         let window = surface.hostedWindowToken
-        if surface.hostView.window != nil, !surface.hostView.isHiddenOrHasHiddenAncestor {
+        if surface.documentView.window != nil, !surface.documentView.isHiddenOrHasHiddenAncestor {
             // Publishing native shell selection must precede the activation cache:
             // Chrome already reports a newly inserted tab active, even in a new profile.
             let accepted = surface.activateTab()

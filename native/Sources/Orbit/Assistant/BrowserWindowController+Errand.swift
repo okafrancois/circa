@@ -285,7 +285,7 @@ extension BrowserWindowController {
         guard let approval = task.approval,
               let selected = session.organization?.selectedTab, errandTabs.contains(selected.id),
               approval.page == nil || approval.page?.id == selected.id.rawValue,
-              let surface = session.selectedSurface, let parent = surface.hostView.superview else {
+              let surface = session.selectedSurface, let parent = surface.documentView.superview else {
             let sameSurface = session.selectedSurface.map { ObjectIdentifier($0) == errandCardSurfaceID } ?? false
             let departing = [.acting, .thinking, .completed].contains(task.phase) && sameSurface && errandOwnerCurrent(task.choice)
             (errandHost as? BrowserErrandApprovalCard)?.dismiss(animated: departing)
@@ -307,9 +307,9 @@ extension BrowserWindowController {
         parent.addSubview(host); errandHost = host; errandRenderedApprovalID = approval.id
         errandCardSurfaceID = ObjectIdentifier(surface)
         let width = host.widthAnchor.constraint(equalToConstant: 420); width.priority = .defaultHigh
-        NSLayoutConstraint.activate([host.centerXAnchor.constraint(equalTo: surface.hostView.centerXAnchor),
-            host.bottomAnchor.constraint(equalTo: surface.hostView.bottomAnchor, constant: -20), width,
-            host.widthAnchor.constraint(lessThanOrEqualTo: surface.hostView.widthAnchor, constant: -40)])
+        NSLayoutConstraint.activate([host.centerXAnchor.constraint(equalTo: surface.documentView.centerXAnchor),
+            host.bottomAnchor.constraint(equalTo: surface.documentView.bottomAnchor, constant: -20), width,
+            host.widthAnchor.constraint(lessThanOrEqualTo: surface.documentView.widthAnchor, constant: -40)])
         parent.layoutSubtreeIfNeeded()
         if !host.isHidden { host.enter() }
         if let page = approval.page, let target = approval.action.targetID, let reader = surface as? any BrowserAIErrandPageReading {
@@ -348,7 +348,7 @@ extension BrowserWindowController {
         else if [.leftMouseDown, .rightMouseDown, .otherMouseDown].contains(event.type) {
             hit = root.hitTest(root.convert(event.locationInWindow, from: nil))
         } else { return }
-        guard let hit, hit === surface.hostView || hit.isDescendant(of: surface.hostView) else { return }
+        guard let hit, hit === surface.documentView || hit.isDescendant(of: surface.documentView) else { return }
         cancelErrandForOwnerNavigation(surface)
     }
     func renderErrandSidebar() {

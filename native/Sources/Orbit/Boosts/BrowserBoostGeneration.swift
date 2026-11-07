@@ -188,7 +188,7 @@ extension BrowserWindowController {
     }
     func boostGenerationContext(_ editor: BrowserBoostEditorController) -> BrowserBoostGeneration.Context? {
         guard let choice = boostChatChoice, let service = aiService, let surface = pageCommandSurface(),
-              editor.pageHost === surface.hostView, let preview = surface as? any BrowserAIBoostPreview,
+              editor.pageHost === surface.documentView, let preview = surface as? any BrowserAIBoostPreview,
               surface.profileID == editor.session.store.profileID,
               settingsPreferences?.runtime.document.enablesBoostsOnWebsites != false,
               let url = surface.navigationState.committedURL,

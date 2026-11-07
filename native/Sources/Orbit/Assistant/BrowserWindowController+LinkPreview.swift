@@ -29,14 +29,14 @@ extension BrowserWindowController {
         guard let choice = linkPreviewChoice, let service = aiService,
               let source = pageCommandSurface(), let reader = source as? any BrowserLinkPreviewSource,
               let url = source.navigationState.committedURL, let window, window.isKeyWindow,
-              source.hostView.window === window, let profile = session.activeProfileID,
+              source.documentView.window === window, let profile = session.activeProfileID,
               let preferences = settingsPreferences?.runtime.document.ai else { return nil }
         let space = session.organization?.spaceID
         let revision = source.documentGeneration
         let zoom = source.pageZoom
-        let local = source.hostView.convert(point, from: nil)
-        guard source.hostView.bounds.contains(local) else { return nil }
-        let flipped = CGPoint(x: local.x, y: source.hostView.isFlipped ? local.y : source.hostView.bounds.height - local.y)
+        let local = source.documentView.convert(point, from: nil)
+        guard source.documentView.bounds.contains(local) else { return nil }
+        let flipped = CGPoint(x: local.x, y: source.documentView.isFlipped ? local.y : source.documentView.bounds.height - local.y)
         let valid: @MainActor () -> Bool = { [weak self, weak source] in
             guard let self, let source else { return false }
             return source.documentGeneration == revision && source.pageZoom == zoom && source.navigationState.committedURL == url
@@ -48,13 +48,13 @@ extension BrowserWindowController {
               BrowserLinkPreviewLoader.validURL(target.url),
               BrowserAIPolicy.allowsPageAccess(preferences, isPrivate: false, host: target.url.host) else { return nil }
         let box = target.bounds
-        let anchor = NSRect(x: box.minX, y: source.hostView.isFlipped ? box.minY : source.hostView.bounds.height - box.maxY,
+        let anchor = NSRect(x: box.minX, y: source.documentView.isFlipped ? box.minY : source.documentView.bounds.height - box.maxY,
                             width: box.width, height: box.height)
         let normalized = BrowserLinkPreviewTarget(id: target.id, url: target.url,
             title: target.title.isEmpty ? target.url.host ?? "" : target.title,
             description: target.description, bounds: target.bounds)
         return .init(target: normalized, profile: profile,
-            anchor: window.convertToScreen(source.hostView.convert(anchor, to: nil)), preferences: preferences,
+            anchor: window.convertToScreen(source.documentView.convert(anchor, to: nil)), preferences: preferences,
             choice: choice, client: service.client(choice.provider),
             palette: BrowserAssistantPalette(theme: windowShell.theme ?? .default, appearance: window.effectiveAppearance),
             icon: sidebarIcons.memoryCache.image(profile: profile, home: target.url), isCurrent: valid,

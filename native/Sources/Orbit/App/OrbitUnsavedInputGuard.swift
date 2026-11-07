@@ -12,27 +12,27 @@ final class OrbitUnsavedInputGuard: NSObject {
     private var observationFailed = false
 
     static func register(_ surface: any BrowserEngineSurface) {
-        if state(on: surface.hostView) == nil {
-            objc_setAssociatedObject(surface.hostView, &associationKey, OrbitUnsavedInputGuard(), .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+        if state(on: surface.documentView) == nil {
+            objc_setAssociatedObject(surface.documentView, &associationKey, OrbitUnsavedInputGuard(), .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
         }
-        prepare(surface.hostView.window?.firstResponder)
+        prepare(surface.documentView.window?.firstResponder)
     }
 
     static func observedBeforeUnload(_ surface: any BrowserEngineSurface) {
         // A dialog proves this document registered a handler. Keep the veto after Stay;
         // the bridge has no notification for handler registration/removal.
         register(surface)
-        state(on: surface.hostView)?.dirty = true
+        state(on: surface.documentView)?.dirty = true
     }
 
     static func paste(into surface: any BrowserEngineSurface) {
-        guard let responder = surface.hostView.window?.firstResponder as? NSView,
-              responder.isDescendant(of: surface.hostView) else { return }
+        guard let responder = surface.documentView.window?.firstResponder as? NSView,
+              responder.isDescendant(of: surface.documentView) else { return }
         prepare(responder)
         state(for: responder)?.dirty = true
     }
 
-    static func clear(_ surface: any BrowserEngineSurface) { state(on: surface.hostView)?.dirty = false }
+    static func clear(_ surface: any BrowserEngineSurface) { state(on: surface.documentView)?.dirty = false }
 
     static func preventsInstallation(_ surfaces: [any BrowserEngineSurface]) -> Bool {
         surfaces.contains { surface in
@@ -40,7 +40,7 @@ final class OrbitUnsavedInputGuard: NSObject {
                 clear(surface)
                 return false
             }
-            guard let state = state(on: surface.hostView) else { return true }
+            guard let state = state(on: surface.documentView) else { return true }
             return state.dirty || state.observationFailed
         }
     }

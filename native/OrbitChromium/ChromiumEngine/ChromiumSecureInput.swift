@@ -65,25 +65,25 @@ final class ChromiumSecureInput {
 extension ChromiumSurface {
     func releaseSecureInputFocus() {
         if isReady { _ = ACRSetFocus(token, 0) }
-        if let window = hostView.window, let responder = window.firstResponder as? NSView,
-           responder.isDescendant(of: hostView) {
+        if let window = documentView.window, let responder = window.firstResponder as? NSView,
+           responder.isDescendant(of: documentView) {
             window.makeFirstResponder(nil)
         }
     }
 
     func reconcileSecureInput(forceInactive: Bool, enabled: Bool) {
         guard isReady, !isDisposed else { return }
-        let window = hostView.window
+        let window = documentView.window
         let responder = window?.firstResponder as? NSView
         let intersectsWindow = window?.contentView.map { content in
-            !hostView.convert(hostView.bounds, to: content).intersection(content.bounds).isEmpty
+            !documentView.convert(documentView.bounds, to: content).intersection(content.bounds).isEmpty
         } == true
         let intersectsScreen = window.map { window in
             NSScreen.screens.contains { !$0.frame.intersection(window.frame).isEmpty }
         } == true
         let focus = BrowserSecureInputFocus(applicationActive: NSApp.isActive && !forceInactive,
             windowKey: window?.isKeyWindow == true, windowVisible: window?.isVisible == true && window?.isMiniaturized == false && window?.isOnActiveSpace == true && intersectsScreen,
-            viewVisible: window != nil && !hostView.isHiddenOrHasHiddenAncestor && !hostView.visibleRect.isEmpty && intersectsWindow && !secureInputHostHidden,
+            viewVisible: window != nil && !documentView.isHiddenOrHasHiddenAncestor && !documentView.visibleRect.isEmpty && intersectsWindow && !secureInputHostHidden,
             responderInSurface: engineContentView.map { responder?.isDescendant(of: $0) == true } == true, retired: isSuspended)
         if let active = secureInputReconciliation.update(eligible: focus.permitsSecureInput, secureInputEnabled: enabled) {
             _ = ACRSetFocus(token, active ? 1 : 0)

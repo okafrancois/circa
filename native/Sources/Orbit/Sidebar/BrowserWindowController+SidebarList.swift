@@ -117,7 +117,7 @@ extension BrowserWindowController {
         sidebar.page.list.prepareDesktopPreview = { [weak self] payload in
             guard let self, let tab = payload.nodes.first?.tabID, let surface = liveSidebarSurface(of: tab) else { return }
             let generation = surface.documentGeneration
-            let viewport = surface.hostView.bounds.size
+            let viewport = surface.documentView.bounds.size
             Task { [weak self, weak surface] in
                 guard let surface, let snapshot = try? await surface.captureSnapshot(.init(width: 1024, documentGeneration: generation)),
                       surface.documentGeneration == generation else { return }
@@ -166,7 +166,7 @@ extension BrowserWindowController {
            let surface = session.selectedSurface {
             // A click on the selected row must leave its page on screen. If the projection lost
             // the host (or never placed it), re-project before focusing instead of a silent no-op.
-            let displayed = surface.hostView.window === window && !surface.hostView.isHiddenOrHasHiddenAncestor
+            let displayed = surface.documentView.window === window && !surface.documentView.isHiddenOrHasHiddenAncestor
             BrowserSidebarInputDiagnostics.record("selection", tab: id, window: session.snapshot?.id,
                 reason: displayed ? "already-selected" : "already-selected-repaired")
             if !displayed { renderSession() }

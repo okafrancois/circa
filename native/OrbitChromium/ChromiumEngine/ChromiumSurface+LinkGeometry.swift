@@ -4,7 +4,7 @@ import Foundation
 
 extension ChromiumSurface: BrowserLinkGeometrySource {
     public var linkActivationPoint: NSPoint? {
-        guard let activation = (hostView as? ChromiumHostView)?.linkActivation,
+        guard let activation = (documentView as? ChromiumHostView)?.linkActivation,
               activation.generation == documentGeneration,
               ProcessInfo.processInfo.systemUptime - activation.timestamp < 1,
               NSApp.currentEvent?.type != .keyDown else { return nil }

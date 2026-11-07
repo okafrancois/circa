@@ -634,7 +634,7 @@ final class BrowserQuickWindowWindowController<Engine: BrowserEngine>: NSWindowC
         let responder = window?.firstResponder as? NSView
         guard BrowserPageKeyContext.accepts(receipt, windowID: id.rawValue, current: pageKeyContext,
             isKeyWindow: window?.isKeyWindow == true, isSelected: container.owns(surface),
-            focusInsideDocument: responder?.isDescendant(of: surface.hostView) == true) else { return false }
+            focusInsideDocument: responder?.isDescendant(of: surface.documentView) == true) else { return false }
         return NSApp.mainMenu?.performKeyEquivalent(with: event) ?? false
     }
 
@@ -672,7 +672,7 @@ final class BrowserQuickWindowWindowController<Engine: BrowserEngine>: NSWindowC
             decision.decide(.cancel)
             return
         }
-        if held, BrowserExternalProtocolGate.shared.handle(action, hostView: surface.hostView,
+        if held, BrowserExternalProtocolGate.shared.handle(action, hostView: surface.documentView,
             surface: ObjectIdentifier(surface), pageURL: surface.navigationState.committedURL) {
             decision.decide(.cancel)
             return
@@ -697,7 +697,7 @@ final class BrowserQuickWindowWindowController<Engine: BrowserEngine>: NSWindowC
         guard showsPage(surface) else { return .suppressed }
         if case .beforeUnload = dialog.kind { OrbitUnsavedInputGuard.observedBeforeUnload(surface) }
         return await BrowserPageDialogCenter.shared.runJavaScriptDialog(
-            dialog, on: surface.hostView, surface: ObjectIdentifier(surface), generation: surface.documentGeneration)
+            dialog, on: surface.documentView, surface: ObjectIdentifier(surface), generation: surface.documentGeneration)
     }
 
     func surfaceDidResetJavaScriptDialogs(_ surface: Surface) {
@@ -707,17 +707,17 @@ final class BrowserQuickWindowWindowController<Engine: BrowserEngine>: NSWindowC
 
     func surface(_ surface: Surface, requestsCredentialsFor challenge: BrowserAuthenticationChallenge) async -> BrowserCredential? {
         guard showsPage(surface) else { return nil }
-        return await BrowserPageDialogCenter.shared.requestCredentials(challenge, on: surface.hostView, surface: ObjectIdentifier(surface))
+        return await BrowserPageDialogCenter.shared.requestCredentials(challenge, on: surface.documentView, surface: ObjectIdentifier(surface))
     }
 
     func surface(_ surface: Surface, runFileChooser request: BrowserFileChooserRequest) async -> [URL]? {
         guard showsPage(surface) else { return nil }
-        return await BrowserFileChooserPresenter.shared.run(request, on: surface.hostView, surface: ObjectIdentifier(surface))
+        return await BrowserFileChooserPresenter.shared.run(request, on: surface.documentView, surface: ObjectIdentifier(surface))
     }
 
     func surface(_ surface: Surface, rendererDidTerminate termination: BrowserRendererTermination) {
         guard showsPage(surface) else { return }
-        BrowserPageDialogCenter.shared.showCrashedPage(on: surface.hostView, surface: ObjectIdentifier(surface),
+        BrowserPageDialogCenter.shared.showCrashedPage(on: surface.documentView, surface: ObjectIdentifier(surface),
                                                        termination: termination) { [weak surface] in
             guard let surface, !surface.isDisposed else { return }
             surface.reload()
@@ -737,7 +737,7 @@ final class BrowserQuickWindowWindowController<Engine: BrowserEngine>: NSWindowC
         Task { [weak self, weak surface] in
             guard let self, let surface, self.unresponsivePageRequests[key] == request,
                   self.showsPage(surface), !surface.isDisposed else { return }
-            let wait = await BrowserPageDialogCenter.shared.askToWaitForUnresponsivePage(on: surface.hostView, surface: key)
+            let wait = await BrowserPageDialogCenter.shared.askToWaitForUnresponsivePage(on: surface.documentView, surface: key)
             guard self.unresponsivePageRequests[key] == request, !surface.isDisposed, surface.isReady else { return }
             self.unresponsivePageRequests.removeValue(forKey: key)
             try? surface.perform(wait ? .waitForUnresponsiveRenderer : .terminateUnresponsiveRenderer)
@@ -772,7 +772,7 @@ final class BrowserQuickWindowWindowController<Engine: BrowserEngine>: NSWindowC
                 do { try surface.performContextMenuCommand(.extensionAction(id), for: request); return true }
                 catch { return false }
             }
-            let delivered = menu.popUp(at: request.location, in: surface.hostView)
+            let delivered = menu.popUp(at: request.location, in: surface.documentView)
             if !delivered { surface.contextMenuDidClose(request) }
         }
     }
