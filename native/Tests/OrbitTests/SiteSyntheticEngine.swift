@@ -111,7 +111,7 @@ final class SiteSyntheticSurface: BrowserEngineSurface {
     let profileID: ProfileID
     /// A plain parent view, like the `NSView` handed to CEF; it is not itself focusable.
     let hostView = NSView()
-    let documentView = SiteSyntheticDocumentView()
+    let documentView: NSView = SiteSyntheticDocumentView()
     weak var delegate: (any BrowserEngineSurfaceDelegate<SiteSyntheticSurface>)?
     weak var engine: SiteSyntheticEngine?
     let siteData: SiteSyntheticSiteData
