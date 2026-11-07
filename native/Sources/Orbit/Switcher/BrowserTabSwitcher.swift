@@ -27,6 +27,9 @@ final class BrowserTabSwitcher<Engine: BrowserEngine> {
         snapshots = BrowserSwitcherSnapshots()
         icons = FavoriteIconPipeline()
         let captureWidth: (Engine.Surface) -> CGFloat = { [weak owner] surface in
+            guard owner?.settingsPreferences?.runtime.document.showsTabHoverPreviews == true else {
+                return OrbitTokens.Switcher.thumbnailWidth
+            }
             let scale = owner?.window?.backingScaleFactor ?? surface.hostView.window?.backingScaleFactor ?? 1
             return RichTabPreviewView.size.width * (owner?.engine.kind == .chromium ? scale : 1)
         }

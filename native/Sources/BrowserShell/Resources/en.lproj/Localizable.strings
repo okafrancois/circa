@@ -2011,3 +2011,5 @@
 "Shows thin native scrollbars over page content instead of beside it, including on sites that style their own. Scrollbars a site hides stay hidden." = "Shows thin native scrollbars over page content instead of beside it, including on sites that style their own. Scrollbars a site hides stay hidden.";
 "Restart Circa to show overlay scrollbars." = "Restart Circa to show overlay scrollbars.";
 "Restart Circa to restore standard scrollbars." = "Restart Circa to restore standard scrollbars.";
+
+"Show tab hover previews" = "Show tab hover previews";

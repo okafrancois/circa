@@ -1599,3 +1599,5 @@
 "Shows thin native scrollbars over page content instead of beside it, including on sites that style their own. Scrollbars a site hides stay hidden." = "Affiche de fines barres de défilement natives par-dessus le contenu plutôt qu’à côté, y compris sur les sites qui personnalisent les leurs. Les barres masquées par un site restent masquées.";
 "Restart Circa to show overlay scrollbars." = "Redémarrez Circa pour afficher les barres de défilement superposées.";
 "Restart Circa to restore standard scrollbars." = "Redémarrez Circa pour rétablir les barres de défilement standard.";
+
+"Show tab hover previews" = "Afficher les aperçus des onglets au survol";

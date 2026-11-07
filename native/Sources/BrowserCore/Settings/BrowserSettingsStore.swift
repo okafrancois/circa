@@ -156,6 +156,8 @@ public struct BrowserSettingsDocument: Codable, Equatable, Sendable {
     public var overlayScrollbars = false
     public var allowJavaScriptFromAppleEvents = false
     public var automaticPictureInPicture = true
+    /// Device-local opt-in for cached sidebar tab hover cards.
+    public var showsTabHoverPreviews = false
     /// Pages fill the window edge to edge unless the user keeps the spaced layout. Absent keys
     /// decode as false, so existing installations get the edge-to-edge layout.
     public var showsSpaceAroundPages = false
@@ -187,7 +189,7 @@ public struct BrowserSettingsDocument: Codable, Equatable, Sendable {
     public init() {}
     private enum CodingKeys: String, CodingKey {
         case ai, allowJavaScriptFromAppleEvents, siteSearches, safeBrowsingEnabled, overlayScrollbars, quickWindowArchiveThreshold, quickWindowProfilesByDomain, downloads, automaticPictureInPicture, showsSpaceAroundPages, hasSeenBoostsIntroduction, enablesBoostsOnWebsites, interaction, memorySaver, linkRouting, version, reducedMotion, profiles, spaces, opensExternalLinksInQuickWindow, lastActiveWindowID, lastActiveSpaceID
-        case usesDotsForSpaceIcons
+        case usesDotsForSpaceIcons, showsTabHoverPreviews
     }
     public init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
@@ -210,6 +212,7 @@ public struct BrowserSettingsDocument: Codable, Equatable, Sendable {
         overlayScrollbars = try values.decodeIfPresent(Bool.self, forKey: .overlayScrollbars) ?? false
         allowJavaScriptFromAppleEvents = try values.decodeIfPresent(Bool.self, forKey: .allowJavaScriptFromAppleEvents) ?? false
         automaticPictureInPicture = try values.decodeIfPresent(Bool.self, forKey: .automaticPictureInPicture) ?? true
+        showsTabHoverPreviews = (try? values.decodeIfPresent(Bool.self, forKey: .showsTabHoverPreviews)) ?? false
         showsSpaceAroundPages = (try? values.decodeIfPresent(Bool.self, forKey: .showsSpaceAroundPages)) ?? false
         hasSeenBoostsIntroduction = try values.decodeIfPresent(Bool.self, forKey: .hasSeenBoostsIntroduction) ?? false
         enablesBoostsOnWebsites = try values.decodeIfPresent(Bool.self, forKey: .enablesBoostsOnWebsites) ?? true
@@ -435,6 +438,12 @@ public actor BrowserSettingsStore {
     public func setAutomaticPictureInPicture(_ enabled: Bool) throws {
         var next = document
         next.automaticPictureInPicture = enabled
+        try publish(next)
+    }
+
+    public func setShowsTabHoverPreviews(_ enabled: Bool) throws {
+        var next = document
+        next.showsTabHoverPreviews = enabled
         try publish(next)
     }
 

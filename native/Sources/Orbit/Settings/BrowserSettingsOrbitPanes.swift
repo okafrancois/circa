@@ -438,6 +438,10 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
                         .frame(width: 300).accessibilityIdentifier("settings-reduced-motion")
                 }
                 rule
+                liveToggle("Show tab hover previews", value: runtime.document.showsTabHoverPreviews,
+                           identifier: "settings-tab-hover-previews", icon: "rectangle.on.rectangle",
+                           save: runtime.setShowsTabHoverPreviews)
+                rule
                 liveToggle("Space around pages", value: runtime.document.showsSpaceAroundPages,
                            identifier: "settings-space-around-pages", icon: "rectangle.inset.filled",
                            save: model.setShowsSpaceAroundPages)

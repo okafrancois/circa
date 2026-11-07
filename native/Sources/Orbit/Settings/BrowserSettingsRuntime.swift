@@ -68,6 +68,12 @@ final class BrowserSettingsRuntime: ObservableObject {
         await refresh()
     }
 
+    func setShowsTabHoverPreviews(_ enabled: Bool) async throws {
+        do { try await store.setShowsTabHoverPreviews(enabled) }
+        catch { await refresh(); throw error }
+        await refresh()
+    }
+
     func setUsesDotsForSpaceIcons(_ enabled: Bool) async throws {
         do { try await store.setUsesDotsForSpaceIcons(enabled) }
         catch { await refresh(); throw error }
@@ -140,6 +146,7 @@ final class BrowserWindowSettings {
         owner.palette.siteSearches = runtime.document.siteSearches
         owner.sidebar.onReorderSnap = { [weak runtime] in runtime?.feedback.reorderSnapped() }
         owner.windowShell.showsSpaceAroundPages = runtime.document.showsSpaceAroundPages
+        if !runtime.document.showsTabHoverPreviews { owner.richTabPreview.dismiss() }
         guard let profileID = owner.session.activeProfileID else { return }
         let settings = runtime.document.profile(profileID)
         owner.addressResolver.searchEngine = settings.searchEngine

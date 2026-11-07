@@ -217,7 +217,8 @@ extension BrowserWindowController {
         }
         richTabPreview.allowed = { [weak self] in
             guard let self else { return false }
-            return acceptsCommands && !session.isClosed && !palette.isPresented && !library.isPresented
+            return settingsPreferences?.runtime.document.showsTabHoverPreviews == true
+                && acceptsCommands && !session.isClosed && !palette.isPresented && !library.isPresented
                 && !peek.isPresented && themeEditor == nil && tabSwitcher.view.superview == nil
                 && sidebar.contextMenuNodes.isEmpty && sidebar.page.list.renamingNode == nil
                 && !sidebar.isPresentationHidden && !sidebar.isSwitchingSpace && !folderPreview.isPresented
@@ -249,7 +250,8 @@ extension BrowserWindowController {
     }
 
     func richTabContent(_ id: TabID) -> RichTabPreviewContent? {
-        guard let current = session.organization, let tab = current.tab(id) else { return nil }
+        guard settingsPreferences?.runtime.document.showsTabHoverPreviews == true,
+              let current = session.organization, let tab = current.tab(id) else { return nil }
         let surface = tab.occurrenceID.flatMap { session.surface(for: $0) }
         guard surface.map({ owns($0) && !$0.isDisposed }) != false else { return nil }
         let identity = RichTabPreviewIdentity(profile: current.profileID, space: current.spaceID,
