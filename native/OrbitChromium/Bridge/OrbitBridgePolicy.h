@@ -305,6 +305,13 @@ inline std::vector<BrowserSwitch> BrowserSwitches(NetworkPolicy policy) {
   return switches;
 }
 
+// Extra switches for one child process, selected by its --type. Renderers run without XSLT:
+// Blink reads this switch before any origin trial, so a page cannot turn XSLT back on.
+inline std::vector<BrowserSwitch> ChildProcessSwitches(const std::string& process_type) {
+  if (process_type == "renderer") return {{"xslt-enabled-policy", "false"}};
+  return {};
+}
+
 inline std::vector<std::string> DisabledFeatures(NetworkPolicy policy) {
   if (policy == NetworkPolicy::kHermetic) return {"NetworkTimeServiceQuerying", "AutofillServerCommunication"};
   return {"AutofillServerCommunication"};

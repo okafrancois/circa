@@ -2026,6 +2026,10 @@ class App final : public CefApp, public CefBrowserProcessHandler {
     // (DAILY-1 restore SIGTRAP, `ChromiumBrowserEngine.profile(for:)` precondition).
     command->AppendSwitchWithValue("profile-directory", kInitialProfileDirectory);
   }
+  void OnBeforeChildProcessLaunch(CefRefPtr<CefCommandLine> command) override {
+    for (const auto& item : orbit_bridge::ChildProcessSwitches(command->GetSwitchValue("type").ToString()))
+      command->AppendSwitchWithValue(item.name, item.value);
+  }
   void OnContextInitialized() override {
     CEF_REQUIRE_UI_THREAD();
     if (!g_state) return;
