@@ -98,6 +98,14 @@ bool DisablesFeature(NetworkPolicy policy, const std::string& feature) {
   return std::find(features.begin(), features.end(), feature) != features.end();
 }
 
+void RenderersRunWithoutXSLT() {
+  const auto renderer = orbit_bridge::ChildProcessSwitches("renderer");
+  Check(renderer.size() == 1 && renderer[0].name == "xslt-enabled-policy" && renderer[0].value == "false",
+        "every renderer starts with XSLT off");
+  for (const char* type : {"gpu-process", "utility", "", "Renderer"})
+    Check(orbit_bridge::ChildProcessSwitches(type).empty(), "other process types get no renderer switch");
+}
+
 void NetworkSwitchesPerPolicy() {
   // Every automated run stays hermetic.
   Check(HasSwitch(NetworkPolicy::kHermetic, "disable-background-networking"), "hermetic: no background networking");
@@ -308,6 +316,7 @@ void AnchoredRootRemovesOnlyItsOwnChildren() {
 }  // namespace
 
 int main() {
+  RenderersRunWithoutXSLT();
   KeyReceiptsAreBoundedPerSurface();
   OneSurfaceCannotEvictAnother();
   ReceiptsMatchSurfaceAndEvent();
