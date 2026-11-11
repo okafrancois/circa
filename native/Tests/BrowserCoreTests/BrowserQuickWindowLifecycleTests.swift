@@ -61,6 +61,23 @@ struct BrowserQuickWindowLifecycleTests {
         #expect(try BrowserSyncMapping.project(session: session, settings: settings) == before)
     }
 
+    @Test("Little page titles are normalized before archiving and remain readable after saving",
+          arguments: ["", "  \n", "  Synthetic\nLittle\tTitle  ", String(repeating: "x", count: 2048)])
+    func archiveEngineTitle(_ title: String) async throws {
+        let store = BrowserStore()
+        let profile = await store.createProfile(name: "Synthetic")
+        let space = try await store.createSpace(name: "Synthetic", profileID: profile)
+        let date = Date(timeIntervalSince1970: 1_800_000_000)
+        let tab = BrowserOrganizedTab(id: TabID(), url: URL(string: "https://synthetic.test/little")!,
+                                     pageTitle: title, createdAt: date, lastActiveAt: date)
+        try await store.archiveQuickWindow(.init(tab: tab, profileID: profile, spaceID: space,
+            origin: .quickWindow, reason: .automatic, archivedAt: date))
+        let saved = try BrowserSessionDocument.decode(await store.sessionDocument().encoded())
+        let record = try #require(saved.organization.archive.first)
+        #expect(record.tab.pageTitle == BrowserOrganizedTab.normalizedPageTitle(title))
+        #expect(record.id == tab.id && record.isLittleWindow)
+    }
+
     @Test("Little archive origin and automatic reason survive session persistence; old Today records stay ordinary")
     func archivePersistence() async throws {
         let store = BrowserStore()
