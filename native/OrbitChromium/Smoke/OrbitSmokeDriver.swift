@@ -318,7 +318,7 @@ final class OrbitSmokeDriver: OrbitLaunchHooks {
             finish(aborted: false)
             return
         }
-        if phase == .fresh && !arguments.contains("--orbit-smoke-secure-input") && !arguments.contains(where: { $0.hasPrefix("--orbit-smoke-daily3") }) && !(arguments.contains("--orbit-smoke-boost-menu-code") || arguments.contains("--orbit-smoke-boost-rename")) && !arguments.contains("--orbit-smoke-translation") && !arguments.contains("--orbit-smoke-password-store") && !arguments.contains(where: { $0.hasPrefix("--orbit-smoke-daily-qa=") }) && !arguments.contains("--orbit-smoke-library-boost") && !arguments.contains("--orbit-smoke-password-prompt") && !arguments.contains("--orbit-smoke-boosts") && !arguments.contains("--orbit-smoke-password-generation") && !arguments.contains("--orbit-smoke-passwords") && !arguments.contains("--orbit-smoke-engine-r5") && !arguments.contains("--orbit-smoke-extension-only")
+        if phase == .fresh && !arguments.contains("--orbit-smoke-persistence") && !arguments.contains("--orbit-smoke-secure-input") && !arguments.contains(where: { $0.hasPrefix("--orbit-smoke-daily3") }) && !(arguments.contains("--orbit-smoke-boost-menu-code") || arguments.contains("--orbit-smoke-boost-rename")) && !arguments.contains("--orbit-smoke-translation") && !arguments.contains("--orbit-smoke-password-store") && !arguments.contains(where: { $0.hasPrefix("--orbit-smoke-daily-qa=") }) && !arguments.contains("--orbit-smoke-library-boost") && !arguments.contains("--orbit-smoke-password-prompt") && !arguments.contains("--orbit-smoke-boosts") && !arguments.contains("--orbit-smoke-password-generation") && !arguments.contains("--orbit-smoke-passwords") && !arguments.contains("--orbit-smoke-engine-r5") && !arguments.contains("--orbit-smoke-extension-only")
             && !arguments.contains("--orbit-smoke-relaunch") && !arguments.contains("--orbit-smoke-private-domain")
             && !arguments.contains("--orbit-smoke-live-folders") && !arguments.contains("--orbit-smoke-profiles") && !arguments.contains("--orbit-smoke-site-data")
             && !arguments.contains("--orbit-smoke-space-profile") && !arguments.contains("--orbit-smoke-archive-auto") && !arguments.contains("--orbit-smoke-little") && !(arguments.contains("--orbit-smoke-archive-options") || arguments.contains("--orbit-smoke-ai-settings")) && !arguments.contains("--orbit-smoke-little-archive") && !arguments.contains("--orbit-smoke-little-archive-stress")
@@ -375,6 +375,20 @@ final class OrbitSmokeDriver: OrbitLaunchHooks {
             return
         }
         check("app.window", true, ["windows": application.windows.windows.count, "restored": restored.count])
+        if arguments.contains("--orbit-smoke-persistence") {
+            application.configurePersistenceReporting()
+            let before = NSApp.windows.count
+            environment.onPersistenceError?(BrowserSessionFileError.io(operation: .writeTemporaryFile, code: 28))
+            check("persistence.background-nonmodal", NSApp.modalWindow == nil && NSApp.windows.count == before
+                && application.backgroundPersistenceDiagnostic != nil && !application.isPreparingToQuit)
+            first.openTab(url: page("persistence-after-failure"))
+            await first.session.waitForPendingCommands()
+            let recovered = await until(10) { application.backgroundPersistenceDiagnostic == nil }
+            check("persistence.navigation-and-save-recover", recovered && first.acceptsCommands
+                && sessionContains("persistence-after-failure"))
+            finish(aborted: false)
+            return
+        }
         if arguments.contains("--orbit-smoke-little") {
             await littleLifecycle(application, environment)
             finish(aborted: false)

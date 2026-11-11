@@ -152,7 +152,14 @@
     "\"orbit-window event=present visible=\\(window.isVisible) key=\\(window.isKeyWindow) active=\\(NSApp.isActive) number=\\(window.windowNumber) width=\\(Int(window.frame.width)) height=\\(Int(window.frame.height))\"",
     "\"orbit-window event=route-error\"",
     "\"orbit: engine shutdown timed out; quitting with the saved session\\n\"",
-    "\"--scripting-test-offscreen\""
+    "\"--scripting-test-offscreen\"",
+    "\"io.github.okatech.orbit\"",
+    "\"persistence\"",
+    "\"Background persistence failed: \\(diagnostic, privacy: .public)\"",
+    "\"session.\\(error)\"",
+    "\"session-file.\\(error)\"",
+    "\"persistence.\\(error)\"",
+    "\"\\(String(reflecting: type(of: error))) code=\\((error as NSError).code)\""
   ],
   "Import/Arc/ArcImportText.swift": [
     "\"StorableSidebar.json\"",
