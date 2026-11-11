@@ -3,6 +3,7 @@ import QuartzCore
 import BrowserCore
 import BrowserEngine
 import BrowserShell
+import OSLog
 
 /// Application lifetime: startup, window routing, termination. Engine-independent; the engine
 /// comes from `makeActiveEngine()` in the composition root.
@@ -59,6 +60,7 @@ final class OrbitApplication: NSObject, NSApplicationDelegate {
     private var pendingExternalURLs: [URL] = []
     private(set) var isPreparingToQuit = false
     private var didPresentSaveError = false
+    private(set) var backgroundPersistenceDiagnostic: String?
     var isImportingSiteSessions = false
     var pendingSiteSessionRequest: ArcSiteSessionRequest?
     var wantsSiteSessionRelaunch = false
@@ -260,12 +262,11 @@ final class OrbitApplication: NSObject, NSApplicationDelegate {
                 commands.registry.useShortcutPreferences(environment.shortcutPreferences)
                 environment.onReopenClosedWindow = { [weak self] id in self?.windows.newWindow(id: id.rawValue) }
             }
-            environment?.onPersistenceError = { [weak self] error in self?.presentSaveError(error) }
+            configurePersistenceReporting()
             environment?.onRescueNeedsWindow = { [weak self] profileID in self?.openRescueWindow(for: profileID) }
             environment?.onRescueSplitNeedsWindow = { [weak self] profileID, spaceID in
                 self?.openRescueWindow(for: profileID, preferredSpaceID: spaceID)
             }
-            environment?.onPersistenceSuccess = { [weak self] in self?.didPresentSaveError = false }
             let restoredWindowCount = environment?.restoredWindowIDs.count ?? 0
             await prepareOnboarding()
             if let ids = environment?.restoredWindowIDs, !ids.isEmpty {
@@ -274,7 +275,7 @@ final class OrbitApplication: NSObject, NSApplicationDelegate {
                 windows.newWindow()
             }
             do { try await environment?.restoreQuickWindowsAfterUpdate(present: quickWindowPresenter) }
-            catch { presentSaveError(error) }
+            catch { reportBackgroundPersistenceError(error) }
             finishExternalURLStartup()
             presentSiteSessionImportOutcome()
             presentBrowserImportResult()
@@ -384,7 +385,7 @@ final class OrbitApplication: NSObject, NSApplicationDelegate {
             } catch {
                 if updater.automaticRelaunchRequested {
                     updater.cancelAutomaticRelaunch()
-                    if !(error is CancellationError) { presentSaveError(error) }
+                    if !(error is CancellationError) { reportBackgroundPersistenceError(error) }
                 } else { presentSaveError(error) }
                 sender.reply(toApplicationShouldTerminate: false)
                 return
@@ -491,7 +492,32 @@ final class OrbitApplication: NSObject, NSApplicationDelegate {
         }
     }
 
+    /// Background failures must never cover a page or steal keyboard focus. Only a failed
+    /// explicit quit presents a sheet, because it requires a decision before discarding state.
+    func configurePersistenceReporting() {
+        environment?.onPersistenceError = { [weak self] in self?.reportBackgroundPersistenceError($0) }
+        environment?.onPersistenceSuccess = { [weak self] in self?.backgroundPersistenceDiagnostic = nil }
+    }
+
+    func reportBackgroundPersistenceError(_ error: any Error) {
+        let diagnostic = Self.persistenceDiagnostic(error)
+        guard backgroundPersistenceDiagnostic != diagnostic else { return }
+        backgroundPersistenceDiagnostic = diagnostic
+        Logger(subsystem: "io.github.okatech.orbit", category: "persistence")
+            .error("Background persistence failed: \(diagnostic, privacy: .public)")
+    }
+
+    /// Never log localized descriptions or NSError userInfo: they may contain visited URLs,
+    /// page titles, or personal filesystem paths. Session enums contain only fixed codes.
+    static func persistenceDiagnostic(_ error: any Error) -> String {
+        if let error = error as? BrowserSessionError { return "session.\(error)" }
+        if let error = error as? BrowserSessionFileError { return "session-file.\(error)" }
+        if let error = error as? BrowserSessionPersistence.PersistenceError { return "persistence.\(error)" }
+        return "\(String(reflecting: type(of: error))) code=\((error as NSError).code)"
+    }
+
     func presentSaveError(_ error: any Error) {
+        reportBackgroundPersistenceError(error)
         guard !didPresentSaveError else { return }
         didPresentSaveError = true
         let alert = OrbitFloatingMaterial.alert()
@@ -504,8 +530,12 @@ final class OrbitApplication: NSObject, NSApplicationDelegate {
             alert.informativeText = uiText("The last complete session file was kept. Keep your windows open and check the available disk space and folder permissions before trying again.")
         }
         alert.addButton(withTitle: uiText("Continue"))
-        if let window = activeBrowserWindow?.window { alert.beginSheetModal(for: window) }
-        else { alert.runModal() }
+        if let window = activeBrowserWindow?.window {
+            alert.beginSheetModal(for: window) { [weak self] _ in self?.didPresentSaveError = false }
+        } else {
+            alert.runModal()
+            didPresentSaveError = false
+        }
     }
 
     /// Normally a no-op: termination already detached everything after saving.

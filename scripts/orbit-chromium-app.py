@@ -492,6 +492,8 @@ def run_phase(phase, run, data, origin, args, tls_origin=None):
                "--use-fake-device-for-media-stream"]
     if tls_origin and phase == "fresh":
         command.append("--orbit-smoke-tls-fixture=" + tls_origin)
+    if getattr(args, "persistence_only", False):
+        command.append("--orbit-smoke-persistence")
     if getattr(args, "boosts_only", False):
         command += ["--orbit-smoke-boosts", "--load-extension=" + str((LAB_DIR / "Smoke/boosts-extension").resolve())]
     if getattr(args, "passwords_only", False):
@@ -728,6 +730,7 @@ def main():
     runner.add_argument("--no-extension", action="store_true")
     runner.add_argument("--fresh-only", action="store_true")
     runner.add_argument("--keep-going", action="store_true")
+    runner.add_argument("--persistence-only", action="store_true", help="Background persistence errors never present a modal")
     runner.add_argument("--boosts-only", action="store_true", help="Hermetic document registration probes")
     runner.add_argument("--live-folders-visible", action="store_true", help="Visible single-owned-window live-folder command proof; requires --live-folders-only")
     runner.add_argument("--live-folders-only", action="store_true", help="Profile-scoped live-folder web transport")

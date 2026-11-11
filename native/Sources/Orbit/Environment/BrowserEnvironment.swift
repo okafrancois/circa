@@ -734,18 +734,23 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
         BrowserPerformance.count(.savesScheduled)
         saveTask?.cancel()
         saveTask = Task { [weak self] in
-            do {
-                try await Task.sleep(for: .milliseconds(150))
-                guard let self, !isFinalizing, let persistence else { return }
-                await captureWindowPlacements()
-                try await liveFoldersIfStarted?.persistAll()
-                let result = try await persistence.saveCurrentState(from: store)
-                if case .saved = result { onPersistenceSuccess?() }
-            } catch is CancellationError {
-                // A newer mutation or termination owns the next save.
-            } catch {
-                guard let self, !Task.isCancelled else { return }
-                onPersistenceError?(error)
+            // Retry transient failures without requiring another user mutation. New input or
+            // termination cancels the entire retry sequence and owns the next snapshot.
+            for delay in [Duration.milliseconds(150), .seconds(1), .seconds(5)] {
+                do {
+                    try await Task.sleep(for: delay)
+                    guard let self, !isFinalizing, let persistence else { return }
+                    await captureWindowPlacements()
+                    try await liveFoldersIfStarted?.persistAll()
+                    let result = try await persistence.saveCurrentState(from: store)
+                    if case .saved = result { onPersistenceSuccess?() }
+                    return
+                } catch is CancellationError {
+                    return
+                } catch {
+                    guard let self, !Task.isCancelled else { return }
+                    onPersistenceError?(error)
+                }
             }
         }
     }
