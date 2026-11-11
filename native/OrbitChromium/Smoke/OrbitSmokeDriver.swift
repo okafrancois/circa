@@ -386,6 +386,48 @@ final class OrbitSmokeDriver: OrbitLaunchHooks {
             let recovered = await until(10) { application.backgroundPersistenceDiagnostic == nil }
             check("persistence.navigation-and-save-recover", recovered && first.acceptsCommands
                 && sessionContains("persistence-after-failure"))
+            do {
+                let emptyURL = fixture.appendingPathComponent("essentials/little-empty-title")
+                let longURL = fixture.appendingPathComponent("essentials/little-long-title")
+                let empty = try await environment.makeQuickWindow(url: emptyURL)
+                let long = try await environment.makeQuickWindow(url: longURL)
+                let ready = await until(10) {
+                    empty.surface?.isReady == true && long.surface?.isReady == true
+                        && empty.surface?.currentURL == emptyURL && long.surface?.currentURL == longURL
+                        && (long.surface?.navigationState.title?.count ?? 0) > 1024
+                        && empty.surface?.navigationState.isLoading == false
+                        && long.surface?.navigationState.isLoading == false
+                }
+                check("persistence.two-little-ready", ready && environment.quickWindows.count == 2)
+                check("persistence.long-little-title", (long.surface?.navigationState.title?.count ?? 0) > 1024)
+                for _ in 0..<3 { try await environment.saveNow() }
+                check("persistence.two-little-open-save", application.backgroundPersistenceDiagnostic == nil)
+                let beforeExpiry = environment.quickWindowClock().addingTimeInterval(30)
+                environment.quickWindowClock = { beforeExpiry }
+                await environment.sweepQuickWindowArchives()
+                check("persistence.young-little-stays-open", !empty.isClosed && !long.isClosed)
+                // Exercise automatic archival without wall-clock waiting, including repeated sweeps.
+                let expired = beforeExpiry.addingTimeInterval(13 * 3600)
+                environment.quickWindowClock = { expired }
+                await environment.sweepQuickWindowArchives()
+                await environment.sweepQuickWindowArchives()
+                try await environment.saveNow()
+                let archived = await environment.store.sessionDocument().organization.archive
+                check("persistence.little-expiry-save", empty.isClosed && long.isClosed
+                    && archived.filter { $0.id == empty.archiveID || $0.id == long.archiveID }.count == 2
+                    && application.backgroundPersistenceDiagnostic == nil)
+                // Leave two real Little documents open for the normal quit/final-save path.
+                _ = try await environment.makeQuickWindow(url: emptyURL)
+                _ = try await environment.makeQuickWindow(url: longURL)
+                let quitReady = await until(10) {
+                    environment.quickWindows.values.allSatisfy {
+                        $0.surface?.isReady == true && $0.surface?.navigationState.isLoading == false
+                    }
+                }
+                check("persistence.two-little-left-open-for-quit", quitReady && environment.quickWindows.count == 2)
+            } catch {
+                record("persistence.little-operation", "failed", ["code": OrbitApplication.persistenceDiagnostic(error)])
+            }
             finish(aborted: false)
             return
         }

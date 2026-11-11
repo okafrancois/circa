@@ -63,6 +63,8 @@ MOVE_EVENTS_EXTENSION = LAB_DIR / "Smoke/move-events-extension"
 ESSENTIALS_USER = "orbit-synthetic-user"
 ESSENTIALS_PASSWORD = "orbit-synthetic-password"
 ESSENTIALS_PAGES = {
+    "little-empty-title": "<!doctype html><title></title><p>Synthetic Little</p>",
+    "little-long-title": "<!doctype html><title>" + "x" * 2048 + "</title><p>Synthetic Little</p>",
     "password-login": """<!doctype html><title>Login fixture</title>
 <form method="post" action="/essentials/password-submit">
 <label>Username<input id="username" name="username" autocomplete="username"></label>

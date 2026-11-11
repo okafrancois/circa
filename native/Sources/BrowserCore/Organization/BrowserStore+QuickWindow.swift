@@ -9,7 +9,11 @@ public extension BrowserStore {
         let destination = spaces[record.spaceID]?.profileID == record.profileID ? record.spaceID
             : spaceOrder.first { spaces[$0]?.profileID == record.profileID }
         guard profiles[record.profileID] != nil else { throw BrowserStoreError.profileMissing }
-        var saved = BrowserArchivedTab(tab: record.tab, profileID: record.profileID, spaceID: destination ?? record.spaceID,
+        // Engine metadata follows the same normalization as ordinary tab navigation. Empty,
+        // control-bearing or oversized titles must never prevent archival or the final save.
+        var tab = record.tab
+        tab.pageTitle = BrowserOrganizedTab.normalizedPageTitle(tab.pageTitle)
+        var saved = BrowserArchivedTab(tab: tab, profileID: record.profileID, spaceID: destination ?? record.spaceID,
                                        origin: .quickWindow, reason: record.reason, archivedAt: record.archivedAt)
         if destination == nil, let owner = spaces[record.spaceID]?.profileID, owner != record.profileID {
             saved.spaceProfileWasChanged = true
