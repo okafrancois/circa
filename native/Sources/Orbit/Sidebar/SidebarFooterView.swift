@@ -375,6 +375,14 @@ final class SidebarSpaceButton: OrbitGlyphButton {
         iconEmphasis = isActive ? 1 : 0
         setAccessibilityValue(isActive ? OrbitShellText.selected : "")
         customDrawing = { button, bounds in
+            if let button = button as? SidebarSpaceButton, button.iconSelection == .none,
+               let image = SpaceIconImages.planet(at: button.index) {
+                let diameter: CGFloat = button.presentation == .dots ? button.dotDiameter : (button.isActive ? 26 : 19)
+                image.draw(in: NSRect(x: bounds.midX - diameter / 2, y: bounds.midY - diameter / 2,
+                                      width: diameter, height: diameter), from: .zero, operation: .sourceOver,
+                           fraction: button.isActive ? 1 : 0.5, respectFlipped: true, hints: nil)
+                return
+            }
             if let button = button as? SidebarSpaceButton, button.presentation == .icons,
                case .systemSymbol(let name) = button.iconSelection,
                let image = SpaceIconImages.symbol(name, pointSize: 15, tint: button.tint,

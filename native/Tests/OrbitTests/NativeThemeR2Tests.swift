@@ -47,8 +47,8 @@ struct ThemeR2GradientTests {
             let c = colour.resolved(for: appearance)
             return [c.redComponent * 255, c.greenComponent * 255, c.blueComponent * 255]
         }
-        for (colour, appearance, hex) in [(stops[0], light, UInt32(0xD9DBF5)), (stops[1], light, 0xF3E5E5),
-                                          (stops[0], dark, 0x252538), (stops[1], dark, 0x352337)] {
+        for (colour, appearance, hex) in [(stops[0], light, UInt32(0xFBDFD5)), (stops[1], light, 0xFBDFD5),
+                                          (stops[0], dark, 0x1B2057), (stops[1], dark, 0x1B2057)] {
             #expect(zip(rgb(colour, appearance), components(hex)).allSatisfy { close($0, $1, 0.6) })
         }
         #expect(zip(rgb(OrbitTokens.SpaceTheme.legacyFlat.stops[0], light), components(0xE6E6E8)).allSatisfy { close($0, $1, 0.6) })
@@ -66,7 +66,7 @@ struct ThemeR2GradientTests {
         view.appearance = NSAppearance(named: isDark ? .darkAqua : .aqua)
         view.layoutSubtreeIfNeeded()
         let pixel = try render(view)
-        let start = components(isDark ? 0x252538 : 0xD9DBF5), end = components(isDark ? 0x352337 : 0xF3E5E5)
+        let start = components(isDark ? 0x1B2057 : 0xFBDFD5), end = components(isDark ? 0x1B2057 : 0xFBDFD5)
         let range = OrbitTokens.SpaceTheme.default.stopRange.range(isDark: isDark)
         func expected(_ point: CGPoint) -> [CGFloat] {
             let f = OrbitThemeGradient.axisFraction(of: point, in: size)

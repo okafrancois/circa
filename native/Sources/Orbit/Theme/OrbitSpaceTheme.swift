@@ -1,22 +1,20 @@
 import AppKit
 import BrowserCore
+import BrowserShell
 
 @MainActor
 enum OrbitSpaceThemes {
     typealias Resolver = @MainActor (_ space: BrowserSpace, _ index: Int) -> OrbitTokens.SpaceTheme
 
     static var resolver: Resolver = { _, index in defaultTheme(at: index) }
-    /// Dedicated charcoal appearance, independent of the selected normal Space or system mode.
-    static let privateWindow = OrbitTokens.SpaceTheme(stops: [
-        NSColor(srgbRed: 0.16, green: 0.17, blue: 0.19, alpha: 1),
-        NSColor(srgbRed: 0.12, green: 0.13, blue: 0.15, alpha: 1)
-    ], mode: .dark, texture: .none, textureIntensity: 0)
+    /// Private windows share the ink-night surface.
+    static let privateWindow = OrbitTokens.SpaceTheme(stops: [BrandPalette.stage2, BrandPalette.stage2], mode: .dark, texture: .none, textureIntensity: 0)
 
     static let previewFlag = ProcessInfo.processInfo.arguments.contains("--theme-preview")
     static let previewThemes: [OrbitTokens.SpaceTheme] = [.default, .amberCoral, .lavender, .rosePlum, .limeCitrus]
 
     static func defaultTheme(at index: Int, preview: Bool = previewFlag) -> OrbitTokens.SpaceTheme {
-        preview ? previewThemes[index % previewThemes.count] : .default
+        preview ? previewThemes[index % previewThemes.count] : rendered(BrandPalette.spaceGradients[((index % 4) + 4) % 4].theme())
     }
 
     /// Theme of a Space: stored theme, else `legacy` (the Settings palette), else the resolver; the

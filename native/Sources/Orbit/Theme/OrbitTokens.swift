@@ -42,25 +42,25 @@ extension OrbitTokens {
         public enum Text {
             ///  — primary labels outside the themed sidebar.
             /// Sidebar tab/folder titles are theme-tinted: use `ThemeAccent.sidebarText` ().
-            public static let primary = NSColor.orbitDynamic("Text.primary", light: .orbitP3(0x0E0F10, 0.90), dark: .orbitSRGB(0xFFFFFF, 0.80))
-            public static let secondary = NSColor.orbitDynamic("Text.secondary", light: .orbitSRGB(0x000000, 0.50), dark: .orbitSRGB(0xFFFFFF, 0.50))
+            public static let primary = NSColor.orbitDynamic("Text.primary", light: .orbitP3(0x1B2057, 0.90), dark: .orbitSRGB(0xFFFDF7, 0.80))
+            public static let secondary = NSColor.orbitDynamic("Text.secondary", light: .orbitSRGB(0x1B2057, 0.50), dark: .orbitSRGB(0xFFFDF7, 0.50))
             ///  — disabled toolbar glyphs.
-            public static let tertiary = NSColor.orbitDynamic("Text.tertiary", light: .orbitSRGB(0x000000, 0.30), dark: .orbitSRGB(0xFFFFFF, 0.30))
+            public static let tertiary = NSColor.orbitDynamic("Text.tertiary", light: .orbitSRGB(0x1B2057, 0.30), dark: .orbitSRGB(0xFFFDF7, 0.30))
             ///  — address text, enabled toolbar/footer glyphs.
-            public static let baseSecondary = NSColor.orbitDynamic("Text.baseSecondary", light: .orbitSRGB(0x000000, 0.70), dark: .orbitSRGB(0xFFFFFF, 0.70))
-            public static let splitToolbar = NSColor.orbitDynamic("Text.splitToolbar", light: baseSecondary, dark: .orbitSRGB(0xFFFFFF, 0.65))
-            public static let splitToolbarEmphasized = NSColor.orbitDynamic("Text.splitToolbarEmphasized", light: baseSecondary, dark: .orbitSRGB(0x000000, 0.55))
-            public static let sidebar = NSColor.orbitDynamic("Text.sidebar", light: .orbitSRGB(0x000000, 0.30), dark: .orbitSRGB(0xFFFFFF, 0.45))
-            public static let sidebarLabel = NSColor.orbitDynamic("Text.sidebarLabel", light: .orbitSRGB(0x000000, 0.50), dark: .orbitSRGB(0xFFFFFF, 0.50))
+            public static let baseSecondary = NSColor.orbitDynamic("Text.baseSecondary", light: .orbitSRGB(0x1B2057, 0.70), dark: .orbitSRGB(0xFFFDF7, 0.70))
+            public static let splitToolbar = NSColor.orbitDynamic("Text.splitToolbar", light: baseSecondary, dark: .orbitSRGB(0xFFFDF7, 0.65))
+            public static let splitToolbarEmphasized = NSColor.orbitDynamic("Text.splitToolbarEmphasized", light: baseSecondary, dark: .orbitSRGB(0x1B2057, 0.55))
+            public static let sidebar = NSColor.orbitDynamic("Text.sidebar", light: .orbitSRGB(0x1B2057, 0.30), dark: .orbitSRGB(0xFFFDF7, 0.45))
+            public static let sidebarLabel = NSColor.orbitDynamic("Text.sidebarLabel", light: .orbitSRGB(0x1B2057, 0.50), dark: .orbitSRGB(0xFFFDF7, 0.50))
             ///  +  — "New Tab" label and "+" glyph,
             /// hover-revealed controls.
-            public static let sidebarDarker = NSColor.orbitDynamic("Text.sidebarDarker", light: .orbitSRGB(0x000000, 0.45), dark: .orbitSRGB(0xFFFFFF, 0.45))
+            public static let sidebarDarker = NSColor.orbitDynamic("Text.sidebarDarker", light: .orbitSRGB(0x1B2057, 0.45), dark: .orbitSRGB(0xFFFDF7, 0.45))
             ///  — "Search or Enter URL…".
-            public static let placeholder = NSColor.orbitDynamic("Text.placeholder", light: .orbitSRGB(0x000000, 0.30), dark: .orbitSRGB(0xFFFFFF, 0.30))
-            public static let commandBarPrimary = NSColor.orbitDynamic("Text.commandBarPrimary", light: .orbitSRGB(0x000000, 0.80), dark: .orbitSRGB(0xFFFFFF, 0.80))
+            public static let placeholder = NSColor.orbitDynamic("Text.placeholder", light: .orbitSRGB(0x1B2057, 0.30), dark: .orbitSRGB(0xFFFDF7, 0.30))
+            public static let commandBarPrimary = NSColor.orbitDynamic("Text.commandBarPrimary", light: .orbitSRGB(0x1B2057, 0.80), dark: .orbitSRGB(0xFFFDF7, 0.80))
             ///  — "Switch to Tab", URL suffix.
-            public static let commandBarSecondary = NSColor.orbitDynamic("Text.commandBarSecondary", light: .orbitSRGB(0x000000, 0.33), dark: .orbitSRGB(0xFFFFFF, 0.33))
-            public static let vibrant = NSColor.orbitDynamic("Text.vibrant", light: .orbitSRGB(0x0C50FF), dark: .orbitSRGB(0x2AB6F6))
+            public static let commandBarSecondary = NSColor.orbitDynamic("Text.commandBarSecondary", light: .orbitSRGB(0x1B2057, 0.33), dark: .orbitSRGB(0xFFFDF7, 0.33))
+            public static let vibrant = NSColor.orbitDynamic("Text.vibrant", light: .orbitSRGB(0x2F4FE3), dark: .orbitSRGB(0xCFDCFA))
             ///  — text on a selected command-bar row.
             public static let onAccent = NSColor.white
             // THEME lot additions
@@ -74,79 +74,79 @@ extension OrbitTokens {
         public enum Surface {
             /// : mid-point of the default Space gradient (SpaceTheme.default).
             /// Flat fallback only — the default Space itself is a two-stop gradient.
-            public static let windowDefault = NSColor.orbitDynamic("Surface.windowDefault", light: .orbitSRGB(0xE6E0ED), dark: .orbitSRGB(0x2D2438))
-            public static let contentEmptyPage = NSColor.orbitDynamic("Surface.contentEmptyPage", light: .orbitSRGB(0xFFFFFF, 0.70), dark: .orbitSRGB(0xFFFFFF, 0.10))
+            public static let windowDefault = NSColor.orbitDynamic("Surface.windowDefault", light: .orbitSRGB(0xFBDFD5), dark: .orbitSRGB(0x1B2057))
+            public static let contentEmptyPage = NSColor.orbitDynamic("Surface.contentEmptyPage", light: .orbitSRGB(0xFFFDF7, 0.70), dark: .orbitSRGB(0xFFFDF7, 0.10))
             ///  — sidebar "+" menu, popovers.
-            public static let popover = NSColor.orbitDynamic("Surface.popover", light: .orbitSRGB(0xFAFBFF), dark: .orbitSRGB(0x151C30))
-            public static let commandBar = NSColor.orbitDynamic("Surface.commandBar", light: .orbitSRGB(0xF9F9F9), dark: .orbitSRGB(0x313131))
-            public static let commandBarTint = NSColor.orbitDynamic("Surface.commandBarTint", light: .orbitSRGB(0xFFFFFF, 0.12), dark: .orbitSRGB(0x000000, 0.12))
-            public static let preview = NSColor.orbitDynamic("Surface.preview", light: .orbitSRGB(0xFFFFFF), dark: .orbitSRGB(0x212222))
+            public static let popover = NSColor.orbitDynamic("Surface.popover", light: .orbitSRGB(0xFFFDF7), dark: .orbitSRGB(0x1B2057))
+            public static let commandBar = NSColor.orbitDynamic("Surface.commandBar", light: .orbitSRGB(0xFFFDF7), dark: .orbitSRGB(0x1B2057))
+            public static let commandBarTint = NSColor.orbitDynamic("Surface.commandBarTint", light: .orbitSRGB(0xFFFDF7, 0.12), dark: .orbitSRGB(0x1B2057, 0.12))
+            public static let preview = NSColor.orbitDynamic("Surface.preview", light: .orbitSRGB(0xFFFDF7), dark: .orbitSRGB(0x1B2057))
             public static let splitToolbar = NSColor.orbitDynamic("Surface.splitToolbar", light: preview, dark: NSColor(white: 0.31, alpha: 1))
-            public static let splitToolbarEmphasized = NSColor.orbitDynamic("Surface.splitToolbarEmphasized", light: preview, dark: .orbitSRGB(0xFFFFFF))
+            public static let splitToolbarEmphasized = NSColor.orbitDynamic("Surface.splitToolbarEmphasized", light: preview, dark: .orbitSRGB(0xFFFDF7))
             ///  — Little Circa input.
-            public static let secondaryWindowInput = NSColor.orbitDynamic("Surface.secondaryWindowInput", light: .orbitSRGB(0xFAFBFF), dark: .orbitSRGB(0x0E0F10))
-            public static let menu = NSColor.orbitDynamic("Surface.menu", light: .orbitSRGB(0xFAFBFF), dark: .orbitSRGB(0x393841))
-            public static let libraryBackground = NSColor.orbitDynamic("Surface.libraryBackground", light: .orbitSRGB(0xF7F7F7), dark: .orbitSRGB(0x1E1E1F))
+            public static let secondaryWindowInput = NSColor.orbitDynamic("Surface.secondaryWindowInput", light: .orbitSRGB(0xFFFDF7), dark: .orbitSRGB(0x1B2057))
+            public static let menu = NSColor.orbitDynamic("Surface.menu", light: .orbitSRGB(0xFFFDF7), dark: .orbitSRGB(0x1B2057))
+            public static let libraryBackground = NSColor.orbitDynamic("Surface.libraryBackground", light: .orbitSRGB(0xF6F1E7), dark: .orbitSRGB(0x1B2057))
         }
 
         // MARK: Interaction states (overlays drawn on top of the Space fill)
         public enum State {
             ///  — address field and Favorite rest, tab hover.
-            public static let sidebarItem = NSColor.orbitDynamic("State.sidebarItem", light: .orbitP3(0x0E0F10, 0.05), dark: .orbitP3(0xFAFBFF, 0.10))
+            public static let sidebarItem = NSColor.orbitDynamic("State.sidebarItem", light: .orbitP3(0x1B2057, 0.05), dark: .orbitP3(0xFFFDF7, 0.10))
             ///  — hover on filled items.
-            public static let sidebarItemHovered = NSColor.orbitDynamic("State.sidebarItemHovered", light: .orbitP3(0x0E0F10, 0.10), dark: .orbitP3(0xFAFBFF, 0.15))
-            public static let tabCurrent = NSColor.orbitDynamic("State.tabCurrent", light: .orbitSRGB(0xF6F6F6, 0.88), dark: .orbitP3(0xFAFBFF, 0.20))
+            public static let sidebarItemHovered = NSColor.orbitDynamic("State.sidebarItemHovered", light: .orbitP3(0x1B2057, 0.10), dark: .orbitP3(0xFFFDF7, 0.15))
+            public static let tabCurrent = NSColor.orbitDynamic("State.tabCurrent", light: .orbitSRGB(0xFFFDF7, 0.88), dark: .orbitP3(0xFFFDF7, 0.20))
             ///  — visible split member.
-            public static let tabContentVisible = NSColor.orbitDynamic("State.tabContentVisible", light: .orbitSRGB(0xFFFFFF, 0.70), dark: .orbitP3(0xFAFBFF, 0.15))
+            public static let tabContentVisible = NSColor.orbitDynamic("State.tabContentVisible", light: .orbitSRGB(0xFFFDF7, 0.70), dark: .orbitP3(0xFFFDF7, 0.15))
             public static let pinnedSelectedText = NSColor.orbitSRGB(0x1F1920)
             public static let pinnedSelectedIcon = NSColor.orbitSRGB(0x666666)
-            public static let pinnedSelected = NSColor.orbitSRGB(0xEEEDEE)
-            public static let pinnedHover = NSColor.orbitDynamic("State.pinnedHover", light: .orbitSRGB(0x000000, 0.05), dark: .orbitP3(0xFAFBFF, 0.10))
-            public static let tabPrevious = NSColor.orbitDynamic("State.tabPrevious", light: .orbitSRGB(0xFFFFFF, 0.32), dark: .orbitP3(0xFAFBFF, 0.08))
-            public static let tabPreviousHovered = NSColor.orbitDynamic("State.tabPreviousHovered", light: .orbitSRGB(0xFFFFFF, 0.50), dark: .orbitP3(0xFAFBFF, 0.12))
-            public static let tabPressed = NSColor.orbitDynamic("State.tabPressed", light: .orbitSRGB(0x000000, 0.10), dark: .orbitSRGB(0xFFFFFF, 0.10))
-            public static let tabMultiselected = NSColor.orbitDynamic("State.tabMultiselected", light: .orbitSRGB(0x000000, 0.10), dark: .orbitP3(0xFAFBFF, 0.10))
-            public static let tabChild = NSColor.orbitDynamic("State.tabChild", light: .orbitSRGB(0x000000, 0.07), dark: .orbitSRGB(0xFFFFFF, 0.07))
+            public static let pinnedSelected = NSColor.orbitSRGB(0xFFFDF7)
+            public static let pinnedHover = NSColor.orbitDynamic("State.pinnedHover", light: .orbitSRGB(0x1B2057, 0.05), dark: .orbitP3(0xFFFDF7, 0.10))
+            public static let tabPrevious = NSColor.orbitDynamic("State.tabPrevious", light: .orbitSRGB(0xFFFDF7, 0.32), dark: .orbitP3(0xFFFDF7, 0.08))
+            public static let tabPreviousHovered = NSColor.orbitDynamic("State.tabPreviousHovered", light: .orbitSRGB(0xFFFDF7, 0.50), dark: .orbitP3(0xFFFDF7, 0.12))
+            public static let tabPressed = NSColor.orbitDynamic("State.tabPressed", light: .orbitSRGB(0x1B2057, 0.10), dark: .orbitSRGB(0xFFFDF7, 0.10))
+            public static let tabMultiselected = NSColor.orbitDynamic("State.tabMultiselected", light: .orbitSRGB(0x1B2057, 0.10), dark: .orbitP3(0xFFFDF7, 0.10))
+            public static let tabChild = NSColor.orbitDynamic("State.tabChild", light: .orbitSRGB(0x1B2057, 0.07), dark: .orbitSRGB(0xFFFDF7, 0.07))
             ///  — glyph button hover square.
-            public static let standaloneButton = NSColor.orbitDynamic("State.standaloneButton", light: .orbitSRGB(0x000000, 0.08), dark: .orbitSRGB(0xFFFFFF, 0.15))
+            public static let standaloneButton = NSColor.orbitDynamic("State.standaloneButton", light: .orbitSRGB(0x1B2057, 0.08), dark: .orbitSRGB(0xFFFDF7, 0.15))
             ///  — 24 × 24 hover square of the × close button in a tab row.
-            public static let rowCloseButtonHover = NSColor.orbitDynamic("State.rowCloseButtonHover", light: .orbitSRGB(0x000000, 0.07), dark: .orbitSRGB(0xFFFFFF, 0.075))
-            public static let commandBarRowSelected = NSColor.orbitDynamic("State.commandBarRowSelected", light: .orbitSRGB(0x000000, 0.10), dark: .orbitSRGB(0xFFFFFF, 0.10))
-            public static let commandBarRowHover = NSColor.orbitDynamic("State.commandBarRowHover", light: .orbitSRGB(0x000000, 0.05), dark: .orbitSRGB(0xFFFFFF, 0.05))
+            public static let rowCloseButtonHover = NSColor.orbitDynamic("State.rowCloseButtonHover", light: .orbitSRGB(0x1B2057, 0.07), dark: .orbitSRGB(0xFFFDF7, 0.075))
+            public static let commandBarRowSelected = NSColor.orbitDynamic("State.commandBarRowSelected", light: .orbitSRGB(0x1B2057, 0.10), dark: .orbitSRGB(0xFFFDF7, 0.10))
+            public static let commandBarRowHover = NSColor.orbitDynamic("State.commandBarRowHover", light: .orbitSRGB(0x1B2057, 0.05), dark: .orbitSRGB(0xFFFDF7, 0.05))
             ///  — arrow chip.
-            public static let commandBarAccessory = NSColor.orbitDynamic("State.commandBarAccessory", light: .orbitSRGB(0x000000, 0.05), dark: .orbitSRGB(0xFFFFFF, 0.05))
-            public static let commandBarAccessoryForeground = NSColor.orbitDynamic("State.commandBarAccessoryForeground", light: .orbitSRGB(0x000000, 0.50), dark: .orbitSRGB(0xFFFFFF, 0.66))
+            public static let commandBarAccessory = NSColor.orbitDynamic("State.commandBarAccessory", light: .orbitSRGB(0x1B2057, 0.05), dark: .orbitSRGB(0xFFFDF7, 0.05))
+            public static let commandBarAccessoryForeground = NSColor.orbitDynamic("State.commandBarAccessoryForeground", light: .orbitSRGB(0x1B2057, 0.50), dark: .orbitSRGB(0xFFFDF7, 0.66))
             ///  — white icon tile on the selected row.
-            public static let commandBarIconActive = NSColor.orbitDynamic("State.commandBarIconActive", light: .orbitSRGB(0xFFFFFF), dark: .orbitSRGB(0x1A1A1A))
-            public static let littleInput = NSColor.orbitDynamic("State.littleInput", light: .orbitSRGB(0x0E0F10, 0.06), dark: .orbitSRGB(0xFAFBFF, 0.10))
-            public static let littleInputHovered = NSColor.orbitDynamic("State.littleInputHovered", light: .orbitSRGB(0x0E0F10, 0.10), dark: .orbitSRGB(0xFAFBFF, 0.15))
+            public static let commandBarIconActive = NSColor.orbitDynamic("State.commandBarIconActive", light: .orbitSRGB(0xFFFDF7), dark: .orbitSRGB(0x1A1A1A))
+            public static let littleInput = NSColor.orbitDynamic("State.littleInput", light: .orbitSRGB(0x1B2057, 0.06), dark: .orbitSRGB(0xFFFDF7, 0.10))
+            public static let littleInputHovered = NSColor.orbitDynamic("State.littleInputHovered", light: .orbitSRGB(0x1B2057, 0.10), dark: .orbitSRGB(0xFFFDF7, 0.15))
             ///  /
-            public static let dragHint = NSColor.orbitDynamic("State.dragHint", light: .orbitSRGB(0x000000, 0.20), dark: .orbitSRGB(0xFFFFFF, 0.20))
-            public static let dragHintHighlighted = NSColor.orbitDynamic("State.dragHintHighlighted", light: .orbitSRGB(0x000000, 0.50), dark: .orbitSRGB(0xFFFFFF, 0.50))
-            public static let floatingSidebarDim = NSColor.orbitSRGB(0x000000, 0.12)
+            public static let dragHint = NSColor.orbitDynamic("State.dragHint", light: .orbitSRGB(0x1B2057, 0.20), dark: .orbitSRGB(0xFFFDF7, 0.20))
+            public static let dragHintHighlighted = NSColor.orbitDynamic("State.dragHintHighlighted", light: .orbitSRGB(0x1B2057, 0.50), dark: .orbitSRGB(0xFFFDF7, 0.50))
+            public static let floatingSidebarDim = NSColor.orbitSRGB(0x1B2057, 0.12)
             ///  — split divider handle (2 × 24), white 20 % at rest, 50 % on hover.
-            public static let splitDividerHandle = NSColor.orbitSRGB(0xFFFFFF, 0.20)
-            public static let splitDividerHandleHovered = NSColor.orbitSRGB(0xFFFFFF, 0.50)
+            public static let splitDividerHandle = NSColor.orbitSRGB(0xFFFDF7, 0.20)
+            public static let splitDividerHandleHovered = NSColor.orbitSRGB(0xFFFDF7, 0.50)
             ///  — loading capsule in the top margin: black 21 % track, black 78 % fill, neutral.
-            public static let loadingTrack = NSColor.orbitSRGB(0x000000, 0.21)
-            public static let loadingFill = NSColor.orbitSRGB(0x000000, 0.78)
+            public static let loadingTrack = NSColor.orbitSRGB(0x1B2057, 0.21)
+            public static let loadingFill = NSColor.orbitSRGB(0x1B2057, 0.78)
         }
 
         // MARK: Lines
         public enum Line {
             ///  — 1 device pixel.
-            public static let sidebarSeparator = NSColor.orbitDynamic("Line.sidebarSeparator", light: .orbitSRGB(0x000000, 0.15), dark: .orbitSRGB(0xFFFFFF, 0.15))
-            public static let tabListOverlap = NSColor.orbitDynamic("Line.tabListOverlap", light: .orbitSRGB(0x000000, 0.05), dark: .orbitSRGB(0xFFFFFF, 0.05))
+            public static let sidebarSeparator = NSColor.orbitDynamic("Line.sidebarSeparator", light: .orbitSRGB(0x1B2057, 0.15), dark: .orbitSRGB(0xFFFDF7, 0.15))
+            public static let tabListOverlap = NSColor.orbitDynamic("Line.tabListOverlap", light: .orbitSRGB(0x1B2057, 0.05), dark: .orbitSRGB(0xFFFDF7, 0.05))
             ///  +  — inner 1 pt light edge of the floating sidebar.
-            public static let sidebarBorder = NSColor.orbitSRGB(0xFFFFFF, 0.30)
+            public static let sidebarBorder = NSColor.orbitSRGB(0xFFFDF7, 0.30)
             ///  — card, Peek, floating sidebar hairline.
-            public static let floatingScrimBorder = NSColor.orbitDynamic("Line.floatingScrimBorder", light: .orbitSRGB(0x000000, 0.10), dark: .orbitSRGB(0xFFFFFF, 0.20))
-            public static let commandBarMaterialOuterStroke = NSColor.orbitDynamic("Line.commandBarMaterialOuterStroke", light: .orbitSRGB(0x000000, 0.25), dark: .orbitSRGB(0x000000, 0.90))
-            public static let commandBarMaterialInnerStroke = NSColor.orbitDynamic("Line.commandBarMaterialInnerStroke", light: .orbitSRGB(0x000000, 0.10), dark: .orbitSRGB(0xFFFFFF, 0.10))
-            public static let commandBarHairline = NSColor.orbitDynamic("Line.commandBarHairline", light: .orbitSRGB(0x000000, 0.10), dark: .orbitSRGB(0xFFFFFF, 0.10))
-            public static let commandBarOuterStroke = NSColor.orbitDynamic("Line.commandBarOuterStroke", light: .orbitSRGB(0x000000, 0.25), dark: .orbitSRGB(0x000000, 0.98))
-            public static let commandBarInnerStroke = NSColor.orbitDynamic("Line.commandBarInnerStroke", light: .orbitSRGB(0xFFFFFF, 0.0), dark: .orbitSRGB(0xFFFFFF, 0.23))
-            public static let popoverBorder = NSColor.orbitDynamic("Line.popoverBorder", light: .orbitSRGB(0xFFFFFF, 0.0), dark: .orbitSRGB(0xD3CEED, 0.20))
+            public static let floatingScrimBorder = NSColor.orbitSRGB(0x1B2057)
+            public static let commandBarMaterialOuterStroke = NSColor.orbitDynamic("Line.commandBarMaterialOuterStroke", light: .orbitSRGB(0x1B2057, 0.25), dark: .orbitSRGB(0x1B2057, 0.90))
+            public static let commandBarMaterialInnerStroke = NSColor.orbitDynamic("Line.commandBarMaterialInnerStroke", light: .orbitSRGB(0x1B2057, 0.10), dark: .orbitSRGB(0xFFFDF7, 0.10))
+            public static let commandBarHairline = NSColor.orbitDynamic("Line.commandBarHairline", light: .orbitSRGB(0x1B2057, 0.10), dark: .orbitSRGB(0xFFFDF7, 0.10))
+            public static let commandBarOuterStroke = NSColor.orbitDynamic("Line.commandBarOuterStroke", light: .orbitSRGB(0x1B2057, 0.25), dark: .orbitSRGB(0x1B2057, 0.98))
+            public static let commandBarInnerStroke = NSColor.orbitDynamic("Line.commandBarInnerStroke", light: .orbitSRGB(0xFFFDF7, 0.0), dark: .orbitSRGB(0xFFFDF7, 0.23))
+            public static let popoverBorder = NSColor.orbitDynamic("Line.popoverBorder", light: .orbitSRGB(0xFFFDF7, 0.0), dark: .orbitSRGB(0xD3CEED, 0.20))
         }
 
         public enum FrameBrightness {
@@ -158,12 +158,12 @@ extension OrbitTokens {
         // MARK: Shadow colours
         public enum ShadowColor {
             ///  — none in dark.
-            public static let tabSelected = NSColor.orbitDynamic("Shadow.tabSelected", light: .orbitSRGB(0x000000, 0.20), dark: .orbitSRGB(0x000000, 0.0))
+            public static let tabSelected = NSColor.orbitDynamic("Shadow.tabSelected", light: .orbitSRGB(0x1B2057, 0.20), dark: .orbitSRGB(0x1B2057, 0.0))
             public static let popover = NSColor.orbitDynamic("Shadow.popover", light: .orbitP3(0x151C32, 0.30), dark: .orbitP3(0x151C32, 0.80))
             ///  — neutral black 50 %, identical in both appearances.
-            public static let commandBar = NSColor.orbitSRGB(0x000000, 0.50)
+            public static let commandBar = NSColor.orbitSRGB(0x1B2057, 0.50)
             ///  — black 24 %, same relative depth in dark.
-            public static let contentCard = NSColor.orbitSRGB(0x000000, 0.24)
+            public static let contentCard = NSColor.orbitSRGB(0x1B2057, 0.24)
         }
 
         // MARK: Accents
@@ -171,7 +171,7 @@ extension OrbitTokens {
             public static var focusRing: NSColor { .controlAccentColor }
             /// . : draws no glow
             /// around the card — loading is the capsule of `State.loadingTrack/loadingFill`.
-            public static let loadingBorder = NSColor.orbitDynamic("Accent.loadingBorder", light: .orbitSRGB(0x0C50FF), dark: .orbitSRGB(0x2AB6F6))
+            public static let loadingBorder = NSColor.orbitDynamic("Accent.loadingBorder", light: .orbitSRGB(0x2F4FE3), dark: .orbitSRGB(0xCFDCFA))
             public static let brandBlue = NSColor.orbitP3(0x3139FB)
             public static var primaryButton: NSColor { .controlAccentColor }
             public static var primaryButtonHovered: NSColor { .controlAccentColor }
@@ -185,7 +185,7 @@ extension OrbitTokens {
         public enum Scale {
             public static let grayLight: [UInt32] = [0xFCFCFC, 0xF8F8F8, 0xF3F3F3, 0xEDEDED, 0xE8E8E8, 0xE2E2E2, 0xDBDBDB, 0xC7C7C7, 0x8F8F8F, 0x858585, 0x6F6F6F, 0x171717]
             public static let grayDark: [UInt32] = [0x161616, 0x1C1C1C, 0x232323, 0x282828, 0x2E2E2E, 0x343434, 0x3E3E3E, 0x505050, 0x707070, 0x7E7E7E, 0xA0A0A0, 0xEDEDED]
-            public static let indigoLight: [UInt32] = [0xFFFFFF, 0xF7F8FF, 0xF0F0FF, 0xE8E9FF, 0xD9DAFC, 0xC8CAFA, 0xAEB0F5, 0x8E91F0, 0x3138F9, 0x393ECC, 0x3438B2, 0x101245]
+            public static let indigoLight: [UInt32] = [0xFFFDF7, 0xF7F8FF, 0xF0F0FF, 0xE8E9FF, 0xD9DAFC, 0xC8CAFA, 0xAEB0F5, 0x8E91F0, 0x3138F9, 0x393ECC, 0x3438B2, 0x101245]
             public static let indigoDark: [UInt32] = [0x141421, 0x16162E, 0x191A40, 0x1C1D4F, 0x1F215C, 0x22246E, 0x272A8A, 0x2E32B2, 0x3239FA, 0x5458E8, 0x8589FF, 0xEDEEFC]
 
             /// Step 1…12 of the gray scale for the current appearance.
@@ -199,7 +199,7 @@ extension OrbitTokens {
         public enum ThemePicker {
             public static let pastel: [NSColor] = [0xFDFBFA, 0xFBEAF3, 0xECD2EA, 0xF7CDD2, 0xFAE1D5, 0xFEF9E7, 0xE4FCEC, 0xE0F2FB, 0xC5C6E2].map { .orbitP3($0) }
             public static let drab: [NSColor] = [0x4B3B58, 0x623856, 0x854444, 0xA77048, 0xD1B46A, 0xCDCCA8, 0x84A885, 0x34604B, 0x2D4468].map { .orbitP3($0) }
-            public static let greyscale: [NSColor] = [0xFFFFFF, 0xE5E5E5, 0xCCCCCC, 0xB2B2B2, 0x808080, 0x666666, 0x333333, 0x1A1A1A, 0x000000].map { .orbitP3($0) }
+            public static let greyscale: [NSColor] = [0xFFFDF7, 0xE5E5E5, 0xCCCCCC, 0xB2B2B2, 0x808080, 0x666666, 0x333333, 0x1A1A1A, 0x1B2057].map { .orbitP3($0) }
             /// Brand row; item 5 is stored as extended linear sRGB (1, 0.235, 0.098) ≈ sRGB #FF8558.
             public static let brand: [NSColor] = [
                 .orbitSRGB(0xF2EAE4), .orbitSRGB(0xF29BBB), .orbitSRGB(0xA6729D), .orbitSRGB(0xF25E6B),
@@ -256,8 +256,8 @@ extension OrbitTokens {
         /// dark #252538 → #352337 (see Gradient). Whether every new Space gets it or a rotating default is
         /// not established.
         public static let `default` = SpaceTheme(
-            stops: [NSColor.orbitDynamic("Theme.default.0", light: .orbitSRGB(0xD9DBF5), dark: .orbitSRGB(0x252538)),
-                    NSColor.orbitDynamic("Theme.default.1", light: .orbitSRGB(0xF3E5E5), dark: .orbitSRGB(0x352337))],
+            stops: [NSColor.orbitDynamic("Theme.default.0", light: .orbitSRGB(0xFBDFD5), dark: .orbitSRGB(0x1B2057)),
+                    NSColor.orbitDynamic("Theme.default.1", light: .orbitSRGB(0xFBDFD5), dark: .orbitSRGB(0x1B2057))],
             mode: .automatic, texture: .none, textureIntensity: 0,
             stopRange: StopRange(light: Gradient.startFraction.light...Gradient.endFraction.light,
                                  dark: Gradient.startFraction.dark...Gradient.endFraction.dark))
@@ -565,7 +565,7 @@ extension OrbitTokens {
             // THEME lot additions
             /// User report (2026-10-28): Orbit draws no border around the page card, in windowed or full
             /// screen; the earlier 0.5 pt reading (S-NT) was the shadow's edge. The card keeps its shadow only.
-            public static let cardHairlineWidth: CGFloat = 0
+            public static let cardHairlineWidth: CGFloat = 2
             ///  — the card corners follow the inset to 0 in full screen with the sidebar hidden.
             public static let cardRadiusFullscreenHidden: CGFloat = 0
             /// Edge-to-edge layout (default): the card is flush with the window's top, trailing and
@@ -595,7 +595,7 @@ extension OrbitTokens {
             public static let accessoryChipSize: CGFloat = 24
             public static let infoButtonSize: CGFloat = 24
             ///  — the outline is one device pixel (dark: plus one inner pixel).
-            public static let outlineDevicePixels: CGFloat = 1
+            public static let outlineDevicePixels: CGFloat = 2
         }
 
         public enum QuickWindow {
@@ -637,10 +637,10 @@ extension OrbitTokens {
     public enum Radius {
         public static let contentCard: CGFloat = 6
         public static let splitPane: CGFloat = 6
-        public static let addressField: CGFloat = 12
+        public static let addressField: CGFloat = 8
         public static let favoriteTile: CGFloat = 12
-        public static let tabRow: CGFloat = 11
-        public static let commandBar: CGFloat = 27
+        public static let tabRow: CGFloat = 8
+        public static let commandBar: CGFloat = 16
         public static let commandBarRow: CGFloat = 8
         public static let commandBarIconTile: CGFloat = 6
         public static let plusMenu: CGFloat = 12
@@ -679,24 +679,24 @@ extension OrbitTokens {
     }
 
     public enum Shadow {
-        public static let pinnedSelected = ShadowSpec(color: .orbitSRGB(0x000000, 0.20), offsetY: 1, blur: 2)
+        public static let pinnedSelected = ShadowSpec(color: .orbitSRGB(0x1B2057, 0.20), offsetY: 1, blur: 2)
         ///  black 20 %, y 1, σ 1; none in dark.
         public static let tabSelected = ShadowSpec(color: Color.ShadowColor.tabSelected, offsetY: 1, blur: 2)
         ///  black 24 %; pair with Color.Line.floatingScrimBorder hairline.
-        public static let contentCard = ShadowSpec(color: Color.ShadowColor.contentCard, offsetY: 1, blur: 6)
+        public static let contentCard = ShadowSpec(color: .orbitSRGB(0x1B2057), offsetY: 3, blur: 0)
         /// Soft leading shadow of the edge-to-edge page card: black 12 %, no offset, blur 4.
-        public static let contentCardEdge = ShadowSpec(color: .orbitSRGB(0x000000, 0.12), offsetY: 0, blur: 4)
+        public static let contentCardEdge = ShadowSpec(color: .orbitSRGB(0x1B2057, 0.12), offsetY: 0, blur: 4)
         ///  black 50 %, σ 48, RMS 0.54/255; no scrim behind the command bar.
-        public static let commandBar = ShadowSpec(color: Color.ShadowColor.commandBar, offsetY: 24, blur: 96)
+        public static let commandBar = ShadowSpec(color: .orbitSRGB(0x1B2057), offsetY: 3, blur: 0)
         ///  — sidebar "+" menu.
-        public static let popover = ShadowSpec(color: .orbitSRGB(0x000000, 0.20), offsetY: 1, blur: 6)
+        public static let popover = ShadowSpec(color: .orbitSRGB(0x1B2057, 0.20), offsetY: 1, blur: 6)
         /// , RMS 0.18
-        public static let floatingSidebar = ShadowSpec(color: .orbitSRGB(0x000000, 0.175), offsetY: 0, blur: 8)
-        public static let peek = ShadowSpec(color: .orbitSRGB(0x000000, 0.30), offsetY: 1, blur: 8)
+        public static let floatingSidebar = ShadowSpec(color: .orbitSRGB(0x1B2057, 0.175), offsetY: 0, blur: 8)
+        public static let peek = ShadowSpec(color: .orbitSRGB(0x1B2057, 0.30), offsetY: 1, blur: 8)
         ///  — light halo outside the focused split pane.
-        public static let splitActiveHalo = ShadowSpec(color: .orbitSRGB(0xFFFFFF, 0.35), offsetY: 0, blur: 16)
-        public static let findBar = ShadowSpec(color: .orbitSRGB(0x000000, 0.70), offsetY: 3, blur: 10)
-        public static let dragPreview = ShadowSpec(color: .orbitSRGB(0x000000, 0.25), offsetY: 8, blur: 24)
+        public static let splitActiveHalo = ShadowSpec(color: .orbitSRGB(0xFFFDF7, 0.35), offsetY: 0, blur: 16)
+        public static let findBar = ShadowSpec(color: .orbitSRGB(0x1B2057, 0.70), offsetY: 3, blur: 10)
+        public static let dragPreview = ShadowSpec(color: .orbitSRGB(0x1B2057, 0.25), offsetY: 8, blur: 24)
     }
 }
 

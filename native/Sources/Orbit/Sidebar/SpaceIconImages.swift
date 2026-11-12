@@ -1,9 +1,15 @@
 import AppKit
 import BrowserCore
+import BrowserShell
 
 /// Shared bounded caches: swipe redraws reuse symbol images instead of rasterizing them again.
 @MainActor
 enum SpaceIconImages {
+    private static let planets: [NSImage?] = ["work", "home", "read", "side"].map {
+        BrowserText.secondaryBrandResource("planet-" + $0, extension: "png").flatMap { NSImage(contentsOf: $0) }
+    }
+    static func planet(at index: Int) -> NSImage? { planets[((index % 4) + 4) % 4] }
+
     private static let templates = NSCache<NSString, NSImage>()
     private static let tinted = NSCache<NSString, NSImage>()
     private static let graphemes = NSCache<NSString, NSImage>()

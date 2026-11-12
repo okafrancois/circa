@@ -12,8 +12,8 @@ public enum BrowserSpaceThemePresets {
         let axis = 1512 * cos(43 * Double.pi / 180) + 949 * sin(43 * Double.pi / 180)
         return BrowserSpaceTheme(
             presetID: defaultID, mode: .automatic, colors: [], intensity: BrowserSpaceTheme.defaultIntensity, noise: 0,
-            light: .init(stops: [.init(hex: 0xD9DBF5), .init(hex: 0xF3E5E5)], start: 20 / axis, end: 1300 / axis),
-            dark: .init(stops: [.init(hex: 0x252538), .init(hex: 0x352337)], start: 160 / axis, end: 1380 / axis))
+            light: .init(stops: [.init(hex: 0xFBDFD5), .init(hex: 0xFBDFD5)], start: 20 / axis, end: 1300 / axis),
+            dark: .init(stops: [.init(hex: 0x1B2057), .init(hex: 0x1B2057)], start: 160 / axis, end: 1380 / axis))
     }()
 
     public static let brand = Family(id: "brand", swatches: [

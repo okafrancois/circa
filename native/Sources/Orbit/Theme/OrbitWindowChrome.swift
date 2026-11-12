@@ -1,4 +1,5 @@
 import AppKit
+import BrowserShell
 
 @MainActor
 enum OrbitWindowChrome {
@@ -104,6 +105,9 @@ final class OrbitWindowRootView: NSView {
 
     override func layout() {
         super.layout()
+        layer?.borderWidth = 2
+        layer?.borderColor = BrandPalette.ink.cgColor
+        layer?.cornerRadius = 13
         onLayout?()
     }
 

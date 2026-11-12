@@ -452,6 +452,7 @@ final class BrowserSidebarView: NSView, SidebarListHost {
             page.spaceID = activeSpaceID
             page.render(title: title, content: content, animated: true)
         }
+        page.planetIndex = catalog?.spaces.firstIndex(where: { $0.id == activeSpaceID }) ?? 0
     }
 
     private struct ContentInputs: Equatable {
@@ -1206,19 +1207,18 @@ final class SidebarSpacePageView: NSView, NSTextFieldDelegate, NSMenuDelegate {
     let moreButton = OrbitGlyphButton(glyph: OrbitGlyph.symbol("ellipsis", pointSize: 12, weight: .semibold), label: uiText("Space Settings"))
     var onSetPinnedSectionCollapsed: ((Bool) -> Void)?
     let iconButton = OrbitGlyphButton(glyph: nil, label: uiText("Change Icon or Emoji…"))
-    var iconSelection: BrowserSpaceIcon = .none {
-        didSet {
-            guard iconSelection != oldValue else { return }
-            iconButton.subviews.forEach { $0.removeFromSuperview() }
-            iconButton.isHidden = iconSelection == .none
-            if iconSelection != .none {
-                let image = SpaceIconImages.view(iconSelection, pointSize: Metrics.spaceIconSize)
-                image.frame = iconButton.bounds.insetBy(dx: 4, dy: 4)
-                image.autoresizingMask = [.width, .height]
-                iconButton.addSubview(image)
-            }
-            needsLayout = true
-        }
+    var planetIndex = 0 { didSet { refreshSpaceIcon() } }
+    var iconSelection: BrowserSpaceIcon = .none { didSet { refreshSpaceIcon() } }
+    private func refreshSpaceIcon() {
+        iconButton.subviews.forEach { $0.removeFromSuperview() }
+        iconButton.isHidden = false
+        let image: NSView = iconSelection == .none
+            ? NSImageView(image: SpaceIconImages.planet(at: planetIndex) ?? NSImage())
+            : SpaceIconImages.view(iconSelection, pointSize: Metrics.spaceIconSize)
+        image.frame = iconButton.bounds.insetBy(dx: 2, dy: 2)
+        image.autoresizingMask = [.width, .height]
+        iconButton.addSubview(image)
+        needsLayout = true
     }
     private var titleEditor: NSTextField?
     private var titleCommit: ((String) -> Void)?
@@ -1407,7 +1407,7 @@ final class SidebarSpacePageView: NSView, NSTextFieldDelegate, NSMenuDelegate {
             list.frame = NSRect(x: 0, y: 0, width: width, height: documentHeight)
         }
         let titleHeight = ceil(titleLabel.intrinsicContentSize.height)
-        let titleX = iconSelection == .none && !disclosure.isHovering ? geometry.spaceTitleOriginX : Metrics.titleOriginX
+        let titleX = Metrics.titleOriginX
         iconButton.frame = NSRect(x: Metrics.faviconCenterX - 12, y: geometry.spaceTitleCenterY - 12,
                                   width: 24, height: 24)
         titleLabel.frame = NSRect(x: titleX, y: (geometry.spaceTitleCenterY - titleHeight / 2).rounded(),
@@ -1841,6 +1841,7 @@ extension BrowserSidebarView {
             let incoming = SidebarSpacePageView()
             incoming.appearance = effectiveAppearance
             incoming.spaceID = space.id
+            incoming.planetIndex = neighbor
             incoming.iconSelection = key.icon
             incoming.accent = key.accent
             incoming.setCommandsEnabled(false)
@@ -2043,6 +2044,7 @@ extension BrowserSidebarView {
                 } ?? false
                 if iconChanged || inkChanged { prepared?.pageRaster?.restore() }
                 incoming.appearance = nil
+                incoming.planetIndex = renderedCatalog?.spaces.firstIndex(where: { $0.id == space.id }) ?? 0
                 incoming.iconSelection = icon
                 if incoming.accent != nextAccent { incoming.accent = nextAccent }
                 if prepared == nil {
