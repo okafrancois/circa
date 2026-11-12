@@ -58,16 +58,18 @@ extension BrowserHistoryStore {
 
     /// Durable, immutable record packing. Only enabled sync calls this maintenance path.
     /// Existing history, imports and subsequent metadata revisions all enter the same journal.
-    public func historySyncBatches(now: Date = Date()) throws -> [BrowserHistorySyncBatch] {
+    public func historySyncBatches(now: Date = Date(), forcePacking: Bool = true) throws -> [BrowserHistorySyncBatch] {
         guard let database else { return [] }
         let changes = database.withHandle { sqlite3_total_changes64($0) }
         let dataVersion = try database.scalarText("PRAGMA data_version")
         let requestedCutoff = BrowserHistorySyncSchema.cutoff(now)
-        if let cache = syncBatchCache, cache.changes == changes, cache.dataVersion == dataVersion, requestedCutoff <= cache.cutoff {
+        if let cache = syncBatchCache, now < syncBatchCacheDeadline,
+           (!forcePacking || syncBatchCacheDeadline == .distantFuture), cache.changes == changes, cache.dataVersion == dataVersion, requestedCutoff <= cache.cutoff {
             return cache.batches
         }
-        // Never publish a cache before COMMIT, or while unpacked rows remain.
+        // Publish only after COMMIT; deferred journal rows impose a cache deadline.
         syncBatchCache = nil
+        var deferredUntil: Date?
         let result = try database.transaction {
             let previous = try syncCutoff()
             let cutoff = max(previous, BrowserHistorySyncSchema.cutoff(now))
@@ -79,6 +81,13 @@ extension BrowserHistoryStore {
                 while try database.next(rows) {
                     events.append(try JSONDecoder().decode(BrowserHistorySyncEvent.self, from: Data(database.text(rows, 0).utf8)))
                 }
+            }
+            // Journal rows are already durable; defer only ordinary light traffic. Deletions
+            // publish immediately, and termination can explicitly flush the remaining rows.
+            if !forcePacking, events.count < 100, !events.contains(where: { $0.deletion != nil }),
+               let oldest = events.map(\.time).min(), now.timeIntervalSince(oldest) < 60 {
+                deferredUntil = oldest.addingTimeInterval(60)
+                events = []
             }
             var batches = try BrowserHistorySyncBatch.pack(profileID: profileID, cutoff: cutoff, events: events)
             if batches.isEmpty && cutoff > previous {
@@ -103,16 +112,18 @@ extension BrowserHistoryStore {
             }
             return result
         }
-        if try database.scalarText("SELECT COUNT(*) FROM historySyncEvents WHERE batch IS NULL") == "0" {
+        if try deferredUntil != nil || database.scalarText("SELECT COUNT(*) FROM historySyncEvents WHERE batch IS NULL") == "0" {
+            syncBatchCacheDeadline = deferredUntil ?? .distantFuture
             syncBatchCache = (database.withHandle { sqlite3_total_changes64($0) }, dataVersion, try syncCutoff(), result)
         }
         return result
     }
 
     private func saveSyncBatch(_ batch: BrowserHistorySyncBatch) throws {
-        try batch.validate()
+        let bytes = try batch.encoded()
+        try batch.validate(encodedSize: bytes.count)
         try database?.execute("INSERT OR IGNORE INTO historySyncBatches VALUES(?,?,?)",
-            [.text(batch.id.uuidString), .text(String(decoding: try batch.encoded(), as: UTF8.self)), .number(batch.expires.timeIntervalSince1970)])
+            [.text(batch.id.uuidString), .text(String(decoding: bytes, as: UTF8.self)), .number(batch.expires.timeIntervalSince1970)])
     }
 
     private func advanceSyncCutoff(_ cutoff: Date) throws {

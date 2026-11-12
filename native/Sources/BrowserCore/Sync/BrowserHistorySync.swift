@@ -75,9 +75,10 @@ public struct BrowserHistorySyncBatch: Codable, Equatable, Sendable {
         version = 1; self.id = id; self.profileID = profileID; self.cutoff = cutoff; self.events = events
     }
     public func encoded() throws -> Data { try BrowserSyncReplica.encodeValue(self) }
-    public func validate() throws {
+    public func validate() throws { try validate(encodedSize: encoded().count) }
+    func validate(encodedSize: Int) throws {
         guard version == 1, events.count <= BrowserHistorySyncSchema.maximumEvents,
-              try encoded().count <= BrowserHistorySyncSchema.maximumBytes,
+              encodedSize <= BrowserHistorySyncSchema.maximumBytes,
               cutoff.timeIntervalSince1970.isFinite else { throw BrowserSyncError.invalidRecord }
         for event in events {
             guard event.time.timeIntervalSince1970.isFinite, event.expires.timeIntervalSince1970.isFinite,
