@@ -18,6 +18,8 @@ func makeActiveEngine() -> ActiveEngine { WebKitBrowserEngine() }
 func makePrivateEngine() -> ActiveEngine { WebKitBrowserEngine() }
 
 /// Session file used without `--session-file` or `--ephemeral`.
+@MainActor func activeStartupSettingsStore() -> BrowserSettingsStore? { nil }
+
 func activeDefaultSessionFile() -> URL {
     FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         .appendingPathComponent("Orbit Native", isDirectory: true)

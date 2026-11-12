@@ -28,6 +28,9 @@ nonisolated(unsafe) private var launchedConfiguration: OrbitProductConfiguration
 
 func activeSiteSessionConfiguration() -> OrbitProductConfiguration? { launchedConfiguration }
 
+@MainActor private var launchSettingsStore: BrowserSettingsStore?
+@MainActor func activeStartupSettingsStore() -> BrowserSettingsStore? { launchSettingsStore }
+
 /// Session file used without `--session-file` or `--ephemeral`: `<data root>/session.json`.
 func activeDefaultSessionFile() -> URL {
     if let launchedConfiguration { return launchedConfiguration.sessionFile }
@@ -151,6 +154,13 @@ enum OrbitLauncher {
     private static var authenticationRecoveryRelaunch = false
     private static var provisionedExtensions: [BrowserExtensionImportStage] = []
     private static var authenticationRun: BrowserAuthenticationRun?
+    private static var pendingExtensionStages: [BrowserExtensionImportStage]?
+    private static func startupExtensionStages(_ configuration: OrbitProductConfiguration) throws -> [BrowserExtensionImportStage] {
+        if let stages = pendingExtensionStages { return stages }
+        let stages = try BrowserExtensionImportStage.pending(dataRoot: configuration.dataRoot)
+        pendingExtensionStages = stages
+        return stages
+    }
 
     private static func prepareAuthenticationRun(_ configuration: OrbitProductConfiguration, beginPasswords: Bool = true) throws {
         if let recovery = try BrowserImportRecovery.open(at: configuration.dataRoot) {
@@ -180,7 +190,7 @@ enum OrbitLauncher {
         }
         try OrbitOnboardingImportRecovery.reconcile(run.status, configuration: configuration)
         // Mark the startup attempt before CEF can mutate Local State or open a profile.
-        if beginPasswords, try BrowserExtensionImportStage.pending(dataRoot: configuration.dataRoot).isEmpty, run.status.phase == .passwordsPending { try run.beginPasswordApplication() }
+        if beginPasswords, try startupExtensionStages(configuration).isEmpty, run.status.phase == .passwordsPending { try run.beginPasswordApplication() }
         authenticationRun = run
     }
 
@@ -252,18 +262,19 @@ enum OrbitLauncher {
         let launch: BrowserSafeBrowsingLaunch
         do {
             let destination = configuration.sessionFile.appendingPathExtension("settings.json")
-            let enabled = try BrowserSettingsStore.safeBrowsingEnabledAtLaunch(destination: destination)
-            launch = try browsing.prepare(enabled: enabled)
+            let settings = try BrowserSettingsStore(destination: destination)
+            launchSettingsStore = settings
+            launch = try browsing.prepare(enabled: settings.launchDocument.safeBrowsingEnabled)
         } catch {
             // Settings/keychain damage cannot enable a service or disclose an underlying error.
+            if launchSettingsStore == nil { launchSettingsStore = .unavailable() }
             launch = try! BrowserSafeBrowsingLaunch(enabled: false, storage: storage)
         }
         launch.applyEnvironment()
         var options = productRuntimeOptions(configuration, extraSwitches: hooks?.runtimeSwitches ?? [],
                                             hiddenApplication: hooks?.hiddenApplication ?? false)
         options.safeBrowsingEnabled = launch.enabled
-        let overlayScrollbars = BrowserSettingsStore.overlayScrollbarsAtLaunch(
-            destination: configuration.sessionFile.appendingPathExtension("settings.json"))
+        let overlayScrollbars = launchSettingsStore?.launchDocument.overlayScrollbars ?? false
         options.overlayScrollbars = overlayScrollbars
         BrowserOverlayScrollbars.enabledAtLaunch = overlayScrollbars
         BrowserPerformance.mark(.runtime)
@@ -307,7 +318,7 @@ enum OrbitLauncher {
 
     private static func startAfterPasswordImport(_ configuration: OrbitProductConfiguration) {
         do {
-            let stages = try BrowserExtensionImportStage.pending(dataRoot: configuration.dataRoot)
+            let stages = try startupExtensionStages(configuration)
             if !stages.isEmpty {
                 Task { @MainActor in
                     let engine = makeActiveEngine()

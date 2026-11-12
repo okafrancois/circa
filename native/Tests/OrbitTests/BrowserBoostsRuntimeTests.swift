@@ -14,6 +14,8 @@ private final class BoostTestEngine: BrowserEngine {
     var capabilities: BrowserEngineCapabilities = [.boosts]
     var boosts: (any BrowserBoostHost)? { host }
     var extensions: (any BrowserExtensionHost)? { nil }
+    var prepareProfile: (@MainActor (ProfileID) async -> Void)?
+    func setProfilePreparation(_ prepare: @escaping @MainActor (ProfileID) async -> Void) { prepareProfile = prepare }
     func profile(for profileID: ProfileID) -> BrowserEngineProfile { backend.profile(for: profileID) }
     func makeSurface(profileID: ProfileID, delegate: any BrowserEngineSurfaceDelegate<SyntheticSurface>) -> SyntheticSurface {
         backend.makeSurface(profileID: profileID, delegate: delegate)
@@ -47,17 +49,21 @@ struct BrowserBoostsRuntimeTests {
         }
     }
 
-    @Test func persistentProfilesPreloadBeforeEnvironmentReturns() async throws {
+    @Test func visibleProfilePreloadsAndDormantProfileWaitsForUse() async throws {
         let root = URL(fileURLWithPath: "/private/tmp", isDirectory: true)
             .appendingPathComponent("OrbitBoostPreload-" + UUID().uuidString)
         defer { try? FileManager.default.removeItem(at: root) }
         let seed = BrowserStore()
         let profile = await seed.createProfile(name: "Synthetic")
         _ = try await seed.createSpace(name: "Synthetic", profileID: profile)
+        let dormant = await seed.createProfile(name: "Dormant")
+        _ = try await seed.createSpace(name: "Dormant", profileID: dormant)
         let session = root.appendingPathComponent("session.json")
         try BrowserSessionFileStore().save(await seed.sessionDocument(), to: session)
         let saved = try BrowserBoostStore(profileID: profile, persistence: .profileDirectory(root.appendingPathComponent("Boosts")))
         let boost = try await saved.save(.init(title: "Persisted", hostPattern: try .init(host: "example.test")))
+        let dormantStore = try BrowserBoostStore(profileID: dormant, persistence: .profileDirectory(root.appendingPathComponent("Boosts")))
+        let dormantBoost = try await dormantStore.save(.init(title: "Deferred", hostPattern: try .init(host: "deferred.test")))
         let engine = BoostTestEngine()
         let environment = try await BrowserEnvironment.open(engine: engine, sessionFile: session)
         #expect(engine.host.profiles[profile]?.boosts.map(\.id) == [boost.id])
@@ -69,6 +75,39 @@ struct BrowserBoostsRuntimeTests {
         }
         #expect(engine.host.profiles[profile]?.boosts.isEmpty == true)
         #expect(await saved.snapshot().boosts.count == 1)
+        #expect(engine.host.profiles[dormant] == nil)
+        await engine.prepareProfile?(dormant)
+        #expect(engine.host.profiles[dormant]?.boosts.isEmpty == true)
+        #expect(environment.boosts.acknowledgements[dormant] != nil)
+        try await environment.settings.setEnablesBoostsOnWebsites(true)
+        for _ in 0..<50 {
+            if engine.host.profiles[dormant]?.boosts.map(\.id) == [dormantBoost.id] { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(engine.host.profiles[dormant]?.boosts.map(\.id) == [dormantBoost.id])
+        await engine.shutdown()
+    }
+
+    @Test func restoredWindowsPrepareOnlyTheirVisibleProfiles() async throws {
+        let root = URL(fileURLWithPath: "/private/tmp", isDirectory: true)
+            .appendingPathComponent("OrbitVisibleProfiles-" + UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let seed = BrowserStore()
+        var visible = Set<ProfileID>()
+        for index in 0..<4 {
+            let profile = await seed.createProfile(name: "Synthetic \(index)")
+            let space = try await seed.createSpace(name: "Synthetic \(index)", profileID: profile)
+            if index < 2 {
+                _ = try await seed.createWindow(activeSpaceID: space)
+                visible.insert(profile)
+            }
+        }
+        let session = root.appendingPathComponent("session.json")
+        try BrowserSessionFileStore().save(await seed.sessionDocument(), to: session)
+        let engine = BoostTestEngine()
+        let environment = try await BrowserEnvironment.open(engine: engine, sessionFile: session)
+        #expect(Set(engine.host.profiles.keys) == visible)
+        #expect(Set(environment.boosts.acknowledgements.keys) == visible)
         await engine.shutdown()
     }
 

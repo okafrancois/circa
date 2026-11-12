@@ -244,6 +244,7 @@ public enum BrowserSettingsError: Error, Equatable {
 public actor BrowserSettingsStore {
     public nonisolated let isUnavailable: Bool
     private let destination: URL?
+    public nonisolated let launchDocument: BrowserSettingsDocument
     var document: BrowserSettingsDocument
 
     /// Read-only startup snapshot, before an engine or the settings actor's executor exists.
@@ -275,6 +276,7 @@ public actor BrowserSettingsStore {
     private init(unavailable: Void) {
         destination = nil
         document = .init()
+        launchDocument = document
         isUnavailable = true
     }
 
@@ -296,6 +298,7 @@ public actor BrowserSettingsStore {
             }
             try Self.validate(document)
         } else { document = .init() }
+        launchDocument = document
     }
 
     public func applySync(_ value: BrowserSettingsDocument, expected: BrowserSettingsDocument) throws {

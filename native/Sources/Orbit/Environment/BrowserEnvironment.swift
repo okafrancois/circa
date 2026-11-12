@@ -130,7 +130,7 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
         if let permissions { self.permissions = permissions }
     }
 
-    static func open(engine: Engine, sessionFile: URL?) async throws -> BrowserEnvironment {
+    static func open(engine: Engine, sessionFile: URL?, settingsStore: BrowserSettingsStore? = nil) async throws -> BrowserEnvironment {
         guard let sessionFile else {
             let environment = BrowserEnvironment(engine: engine)
             environment.startsAIPrograms = true
@@ -173,7 +173,7 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
         environment.downloads.onHistoryError = { [weak environment] in environment?.onPersistenceError?($0) }
         environment.profileRemovalJournal = removals
         do {
-            environment.settings = BrowserSettingsRuntime(store: try BrowserSettingsStore(destination: sessionFile.appendingPathExtension("settings.json")))
+            environment.settings = BrowserSettingsRuntime(store: try settingsStore ?? BrowserSettingsStore(destination: sessionFile.appendingPathExtension("settings.json")))
         } catch {
             // Settings damage never discards a healthy tab session or overwrites a future schema.
             environment.settings = BrowserSettingsRuntime(store: BrowserSettingsStore.unavailable())
@@ -205,7 +205,9 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
             .appendingPathComponent("Favorite Icons", isDirectory: true))
         BrowserPerformance.mark(.iconPreload)
         if let effectiveDocument, let icons = environment.favoriteIcons {
-            await environment.sidebarIconMemory.preload(document: effectiveDocument, store: icons)
+            await environment.sidebarIconMemory.preload(document: effectiveDocument, store: icons,
+                spaces: Set(effectiveDocument.windows.map(\.activeSpaceID)
+                    + [environment.lastUsedSpaceID ?? effectiveDocument.spaces.first?.id].compactMap { $0 }))
         }
         BrowserPerformance.mark(.iconsLoaded)
         environment.dataDirectoryLock = lock
@@ -237,18 +239,52 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
         BrowserPerformance.mark(.profilesBegin)
         if environment.boosts.hostOverride != nil || engine.capabilities.contains(.boosts) {
             _ = try await environment.initialContext.value
-            for profile in await store.catalogSnapshot().profiles {
-                do {
-                    try await environment.boosts.synchronize(profileID: profile.id,
-                        enabled: environment.settings.document.enablesBoostsOnWebsites, engine: engine)
-                } catch { environment.onPersistenceError?(error) }
+            let catalog = await store.catalogSnapshot()
+            var visibleSpaces = Set(effectiveDocument?.windows.map(\.activeSpaceID) ?? [])
+            if visibleSpaces.isEmpty {
+                let initialSpace = try await environment.initialContext.value.0
+                visibleSpaces.insert(environment.lastUsedSpaceID ?? initialSpace)
+            }
+            for profile in Set(catalog.spaces.filter { visibleSpaces.contains($0.id) }.map(\.profileID)) {
+                await environment.prepareStartupProfile(profile)
+            }
+            engine.setProfilePreparation { [weak environment] profile in
+                await environment?.prepareStartupProfile(profile)
             }
         }
         BrowserPerformance.mark(.profilesReady)
-        do { try environment.sync.configure(environment, destination: sessionFile.appendingPathExtension("sync.json")) }
-        catch { environment.onPersistenceError?(error) }
+        environment.startupIconDocument = effectiveDocument
         if migratesThemes { environment.scheduleSave() }
         return environment
+    }
+
+    private var startupIconDocument: BrowserSessionDocument?
+    private var didCommitStartup = false
+
+    private func prepareStartupProfile(_ profile: ProfileID) async {
+        guard boosts.acknowledgements[profile] == nil else { return }
+        while !isFinalizing {
+            let enabled = settings.document.enablesBoostsOnWebsites
+            do { try await boosts.synchronize(profileID: profile, enabled: enabled, engine: engine) }
+            catch BrowserBoostError.staleRevision { continue }
+            catch { onPersistenceError?(error); return }
+            if settings.document.enablesBoostsOnWebsites == enabled { return }
+        }
+    }
+
+    func startAfterWindowCommit() {
+        guard !didCommitStartup else { return }
+        didCommitStartup = true
+        if let sessionFile {
+            do { try sync.configure(self, destination: sessionFile.appendingPathExtension("sync.json")) }
+            catch { onPersistenceError?(error) }
+        }
+        let document = startupIconDocument
+        startupIconDocument = nil
+        Task(priority: .utility) { [weak self] in
+            guard let self, let document, let icons = favoriteIcons else { return }
+            await sidebarIconMemory.preload(document: document, store: icons)
+        }
     }
 
     private init(engine: Engine, store: BrowserStore, document: BrowserSessionDocument?,
@@ -305,8 +341,8 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
             let context = try await store.captureContext(in: restoredID)
             spaceID = context.spaceID
         } else if let requestedSpaceID {
-            let document = await store.sessionDocument()
-            guard let space = document.spaces.first(where: { $0.id == requestedSpaceID }) else {
+            let catalog = await store.catalogSnapshot()
+            guard let space = catalog.spaces.first(where: { $0.id == requestedSpaceID }) else {
                 throw BrowserStoreError.spaceMissing
             }
             spaceID = space.id
@@ -358,7 +394,7 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
         }
         BrowserPerformance.mark(.windowBuilt)
         if let restoredID {
-            let placement = await store.sessionDocument().windows.first { $0.id == restoredID }?.placement
+            let placement = await store.windowPlacement(for: restoredID)
             controller.restoreWindowPlacement(placement)
         }
         BrowserPerformance.mark(.windowPlacementReady)

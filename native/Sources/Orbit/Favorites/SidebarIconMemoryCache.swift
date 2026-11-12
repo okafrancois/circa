@@ -2,7 +2,7 @@ import AppKit
 import BrowserCore
 
 /// Decoded, profile-scoped pixels shared by live rows and detached Space previews.
-/// The disk pass finishes before restored windows are exposed; network discovery stays lazy.
+/// Visible Spaces preload before restored windows are exposed; network discovery stays lazy.
 @MainActor
 final class SidebarIconMemoryCache {
     private struct Key: Hashable {
@@ -47,11 +47,11 @@ final class SidebarIconMemoryCache {
         ["entries": images.count, "bytes": images.cost, "representations": images.values.reduce(0) { $0 + $1.representations.count }]
     }
 
-    func preload(document: BrowserSessionDocument, store: FavoriteIconStore) async {
+    func preload(document: BrowserSessionDocument, store: FavoriteIconStore, spaces: Set<SpaceID>? = nil) async {
         diskStore = store
         let folders = Dictionary(document.organization.folders.map { ($0.id, $0.children) }, uniquingKeysWith: { first, _ in first })
         let splits = Dictionary(document.organization.splits.map { ($0.id, $0.tabIDs) }, uniquingKeysWith: { first, _ in first })
-        for space in document.spaces {
+        for space in document.spaces where spaces?.contains(space.id) ?? true {
             let favorites = SpaceSwipePreview.favorites(document: document, spaceID: space.id, windowID: nil)?.items ?? []
             // A collapsed folder's icons are needed on its very first hover too. Traverse the
             // stored tree rather than the visible (collapsed) sidebar rows; never open a page.

@@ -8,6 +8,8 @@ import Foundation
 final class BrowserBoostsRuntime {
     private let directory: URL?
     let hostOverride: (any BrowserBoostHost)?
+    /// Includes in-flight registrations so a settings change can supersede them.
+    private(set) var requestedProfileIDs = Set<ProfileID>()
     private var stores: [ProfileID: BrowserBoostStore] = [:]
     private var generations: [ProfileID: UInt64] = [:]
     var loadedProfileIDs: Set<ProfileID> { Set(stores.keys) }
@@ -32,6 +34,7 @@ final class BrowserBoostsRuntime {
         guard let host = hostOverride ?? (engine.capabilities.contains(.boosts) ? engine.boosts : nil) else {
             throw BrowserEngineError.unsupportedOperation
         }
+        requestedProfileIDs.insert(profileID)
         let store = try store(for: profileID)
         let generation = try nextGeneration(for: profileID)
         let table = await store.matchTable()
@@ -53,6 +56,7 @@ final class BrowserBoostsRuntime {
         }
         stores[profileID] = nil
         acknowledgements[profileID] = nil
+        requestedProfileIDs.remove(profileID)
     }
 
     private func nextGeneration(for profileID: ProfileID) throws -> UInt64 {
