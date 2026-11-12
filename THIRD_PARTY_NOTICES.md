@@ -28,3 +28,13 @@ The permissive BSD and MIT grants permit combining these components with Orbit's
 Engine binaries are not present in this repository. Before shipping a binary, include the complete LICENSE/NOTICE material and generated third-party credits from the exact CEF/Chromium distribution being shipped, including its sandbox and helper dependencies. Do not assume all Chromium dependencies use BSD. Preserve the exact Sparkle release's complete license file when integrating the updater. This inventory is not a substitute for those bundled license texts.
 
 CEF/Chromium builds with optional proprietary media codecs need a separate redistribution and patent review. The source license check does not grant patent rights for every codec. Public engine and installer distribution remain pending that review and the release validation described in `docs/release/distribution.md`.
+
+## Bundled typefaces
+
+Bricolage Grotesque (800), DM Sans (400–700), and DM Mono (400) are distributed under the SIL Open Font License 1.1. Static instances of the variable fonts are bundled for predictable AppKit registration.
+
+- Bricolage Grotesque: https://github.com/google/fonts/tree/main/ofl/bricolagegrotesque
+- DM Sans: https://github.com/google/fonts/tree/main/ofl/dmsans
+- DM Mono: https://github.com/google/fonts/tree/main/ofl/dmmono
+
+Copyright notices and full licenses are bundled alongside the fonts in `native/Sources/BrowserShell/Resources/BrandFonts/*-OFL.txt`.

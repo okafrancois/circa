@@ -12,7 +12,7 @@ struct BrowserSettingsAbout: View {
                 if let image = icons.current.image { Image(nsImage: image).resizable().scaledToFit() }
             }.frame(width: 112, height: 112).accessibilityLabel(uiText("App Icon"))
             Text(ProductIdentity.displayName).font(Font(BrandTextStyle.title.font(size: 36))).kerning(BrandTextStyle.title.tracking(size: 36))
-            Text(uiText("Everything revolves around you.")).foregroundStyle(.secondary)
+            Text(uiText("Space to think.")).foregroundStyle(.secondary)
             Text(version).font(Font(BrandFonts.mono(11))).foregroundStyle(.secondary)
                 .textSelection(.enabled)
                 .help(uiText("Copy Version"))

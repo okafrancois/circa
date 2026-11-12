@@ -1,13 +1,28 @@
 import AppKit
+import CoreText
 
-/// Shared system typography and the unchanged brand mark.
+/// Bundled brand typography and vector mark.
 public enum BrandFonts {
+    private static let registration: Void = {
+        for name in ["BricolageGrotesque-ExtraBold", "DMSans-Regular", "DMSans-Medium", "DMSans-SemiBold", "DMSans-Bold", "DMMono-Regular"] {
+            if let url = BrowserText.resourceBundle?.url(forResource: name, withExtension: "ttf", subdirectory: "BrandFonts")
+                ?? BrowserText.resourceBundle?.url(forResource: name, withExtension: "ttf") {
+                CTFontManagerRegisterFontsForURL(url as CFURL, .process, nil)
+            }
+        }
+    }()
+
+    static func registered(_ name: String, size: CGFloat) -> NSFont? {
+        _ = registration
+        return NSFont(name: name, size: size)
+    }
+
     public static func ui(_ size: CGFloat, weight: NSFont.Weight = .regular) -> NSFont {
         BrandTextStyle.ui.font(size: size, weight: weight)
     }
-    /// Onboarding copy and controls share the system face used by browser chrome.
+    /// Branded copy uses the bundled text family.
     public static func onboardingBody(_ size: CGFloat, weight: NSFont.Weight = .regular) -> NSFont {
-        .systemFont(ofSize: size, weight: weight)
+        BrandTextStyle.body.font(size: size, weight: weight)
     }
     public static func mono(_ size: CGFloat) -> NSFont {
         BrandTextStyle.mono.font(size: size)
@@ -22,15 +37,24 @@ public enum BrandFonts {
     }
 }
 
-/// Browser text uses system roles; selected branded headings use the display title role.
+/// Browser controls retain native type; copy, labels and headings use brand roles.
 public enum BrandTextStyle: CaseIterable {
     case body, ui, caption, mono, title
 
     public func font(size: CGFloat, weight: NSFont.Weight = .regular) -> NSFont {
-        .systemFont(ofSize: size, weight: self == .title ? .bold : weight)
+        let name: String
+        switch self {
+        case .ui: return .systemFont(ofSize: size, weight: weight)
+        case .title: name = "BricolageGrotesque-ExtraBold"
+        case .mono: name = "DMMono-Regular"
+        case .body, .caption:
+            let style = weight >= .bold ? "Bold" : weight >= .semibold ? "SemiBold" : weight >= .medium ? "Medium" : "Regular"
+            name = "DMSans-" + style
+        }
+        return BrandFonts.registered(name, size: size) ?? .systemFont(ofSize: size, weight: weight)
     }
 
-    public func tracking(size: CGFloat) -> CGFloat { self == .title ? -0.02 * size : 0 }
+    public func tracking(size: CGFloat) -> CGFloat { self == .title ? -0.045 * size : 0 }
 
     /// Shortcut letters, digits and modifier symbols share the system face.
     public func attributedString(_ text: String, size: CGFloat, weight: NSFont.Weight = .regular,

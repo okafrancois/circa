@@ -7,28 +7,19 @@ enum OrbitAppIcon: String, CaseIterable, Identifiable {
     case stage, paper, sunset, afterglow, frost, riso, ink
     static let defaultIcon = Self.stage
     var id: String { rawValue }
+    // Keep persisted identifiers compatible with earlier icon selections.
+    static let allCases: [Self] = [.stage, .frost, .sunset, .riso, .afterglow, .ink]
     var name: String {
         switch self {
-        case .stage: uiText("Bow")
-        case .paper: uiText("Paper")
-        case .sunset: uiText("Sunset")
-        case .afterglow: uiText("Afterglow")
-        case .frost: uiText("Frost")
-        case .riso: uiText("Riso")
-        case .ink: uiText("Ink")
+        case .stage, .paper: uiText("Day")
+        case .frost: uiText("Cobalt")
+        case .sunset: uiText("Mandarine")
+        case .riso: uiText("Soleil")
+        case .afterglow: uiText("Aurore")
+        case .ink: uiText("Night")
         }
     }
-    var description: String {
-        switch self {
-        case .stage: uiText("The default: the sticker on the dark stage.")
-        case .paper: uiText("The sticker on warm paper.")
-        case .sunset: uiText("White bands on the Sunset gradient.")
-        case .afterglow: uiText("Lit outlines over a night horizon.")
-        case .frost: uiText("White bands on frosted glass.")
-        case .riso: uiText("Two inks printed slightly off register.")
-        case .ink: uiText("One colour, paper on ink.")
-        }
-    }
+    var description: String { name }
     var iconURL: URL? { BrowserText.appIconResource(rawValue, extension: "icns") }
     var previewURL: URL? { BrowserText.appIconResource(rawValue, extension: "png") }
     var image: NSImage? { iconURL.flatMap { NSImage(contentsOf: $0) } }

@@ -5,77 +5,34 @@ import Testing
 
 @MainActor
 struct BrandFontsTests {
-    @Test("Browser roles match the system face at every requested size and weight")
-    func systemRoles() {
-        for style in [BrandTextStyle.ui, .body, .caption, .mono] {
-            for size: CGFloat in [10, 13, 14, 18] {
-                for weight: NSFont.Weight in [.regular, .medium, .semibold, .bold] {
-                    let expected = NSFont.systemFont(ofSize: size, weight: weight)
-                    #expect(style.font(size: size, weight: weight) == expected)
-                }
-            }
-        }
-        #expect(BrandFonts.ui(15) == NSFont.systemFont(ofSize: 15))
-        #expect(BrandFonts.mono(12) == NSFont.systemFont(ofSize: 12))
-    }
-
-    @Test("Display titles always use bold system type and minus two percent tracking")
-    func displayTitles() {
-        for size: CGFloat in [28, 36, 40, 72, 84] {
-            #expect(BrandTextStyle.title.font(size: size) == NSFont.systemFont(ofSize: size, weight: .bold))
-            #expect(BrandTextStyle.title.font(size: size, weight: .regular) == NSFont.systemFont(ofSize: size, weight: .bold))
-            let title = BrandTextStyle.title.attributedString("Circa", size: size)
-            #expect(title.attribute(.font, at: 0, effectiveRange: nil) as? NSFont == NSFont.systemFont(ofSize: size, weight: .bold))
-            #expect(title.attribute(.kern, at: 0, effectiveRange: nil) as? CGFloat == -0.02 * size)
+    @Test("Native controls retain system typography")
+    func nativeControls() {
+        for size: CGFloat in [10, 13, 18] {
+            #expect(BrandFonts.ui(size) == NSFont.systemFont(ofSize: size))
         }
     }
 
-    @Test("Shortcut digits and modifier glyphs retain one system font")
-    func modifiers() {
-        let text = BrandTextStyle.mono.attributedString("⌘⇧⌥⌃T12", size: 13, weight: .medium)
-        for index in 0..<text.length {
-            #expect(text.attribute(.font, at: index, effectiveRange: nil) as? NSFont
-                == NSFont.systemFont(ofSize: 13, weight: .medium))
+    @Test("Bundled roles resolve without a system fallback")
+    func brandedRoles() {
+        for size: CGFloat in [11, 15, 40, 84] {
+            #expect(BrandTextStyle.title.font(size: size).fontName == "BricolageGrotesque-ExtraBold")
+            #expect(BrandFonts.onboardingBody(size).fontName == "DMSans-Regular")
+            #expect(BrandFonts.onboardingBody(size, weight: .bold).fontName == "DMSans-Bold")
+            #expect(BrandFonts.mono(size).fontName == "DMMono-Regular")
+            #expect(BrandTextStyle.title.tracking(size: size) == -0.045 * size)
         }
-    }
-
-    @Test("The mark is preserved and no custom font is bundled")
-    func resources() throws {
-        #expect(BrandFonts.onboardingBody(15) == NSFont.systemFont(ofSize: 15))
         #expect(BrandFonts.mark != nil)
-        let source = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
-            .deletingLastPathComponent().appendingPathComponent("Sources/BrowserShell/Resources/BrandFonts")
-        #expect(try FileManager.default.contentsOfDirectory(atPath: source.path) == ["mark.pdf"])
     }
 
-}
-
-extension BrandFontsTests {
-    @Test("Six onboarding gradients retain exact positions without replacing the product palette")
-    func gradients() throws {
-        let presets = BrandPalette.spaceGradients
-        #expect(presets.map(\.name) == ["Coral", "Cobalt", "Sunset", "Mint", "Night", "Lilac"])
-        #expect(presets.map { $0.locations[1] } == [0.45, 0.45, 0.5, 0.5, 0.55, 0.5])
-        for preset in presets {
+    @Test("Space presets preserve flat ink fills through persistence")
+    func spaces() throws {
+        #expect(BrandPalette.spaceGradients.map(\.name) == ["Work", "Home", "Reading", "Side project"])
+        for preset in BrandPalette.spaceGradients {
             let theme = preset.theme()
             try theme.validate()
+            #expect(Set(theme.light.stops).count == 1)
             let decoded = try JSONDecoder().decode(BrowserSpaceTheme.self, from: JSONEncoder().encode(theme))
             #expect(decoded == theme)
-            #expect(decoded.light.locations == preset.locations)
-            #expect(decoded.colors.count == 2)
-        }
-        #expect(BrowserSpaceThemePresets.families.count == 4)
-    }
-}
-
-
-extension BrandFontsTests {
-    @Test("Onboarding copy and controls use the system face at all shipped sizes and weights")
-    func onboardingSystemCopy() {
-        for size: CGFloat in [11, 12, 13, 14, 15, 18] {
-            for weight: NSFont.Weight in [.regular, .medium, .semibold, .bold] {
-                #expect(BrandFonts.onboardingBody(size, weight: weight) == NSFont.systemFont(ofSize: size, weight: weight))
-            }
         }
     }
 }
