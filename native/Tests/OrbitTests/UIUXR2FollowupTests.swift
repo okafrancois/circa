@@ -32,16 +32,16 @@ struct UIUXR2FollowupTests {
         #expect(!picker.handle(#selector(NSResponder.insertBacktab(_:))))
         #expect(picker.grid.selectedIndex == selected)
         var controls: [NSView] = []
-        var next: NSView? = picker.modes
+        var next: NSView? = picker.removeButton
         for _ in 0..<20 {
             guard let control = next, !controls.contains(where: { $0 === control }) else { break }
             controls.append(control)
             next = control.nextKeyView
         }
-        for required in [picker.modes, picker.search] as [NSView] {
+        for required in [picker.removeButton, picker.search] as [NSView] {
             #expect(controls.contains(where: { $0 === required }))
         }
-        // Emoji & Symbols and Remove Icon live in the grid's context menu, not in the key-view loop.
+        // Character Palette remains in the context menu; Dots is also a visible keyboard control.
         let menuTitles = picker.grid.menu?.items.map(\.title) ?? []
         #expect(menuTitles.contains(picker.paletteButton.title))
         #expect(menuTitles.contains(picker.removeButton.title))
@@ -52,8 +52,8 @@ struct UIUXR2FollowupTests {
         let picker = SpaceIconPicker(currentIcon: "", accent: .defaultSpace)
         picker.setSearch("grinning")
         let retained = try #require((picker.grid.accessibilityChildren() as? [NSAccessibilityElement])?.first)
-        var chosen: [String] = []
-        picker.onChoose = { chosen.append($0) }
+        var chosen: [BrowserSpaceIcon] = []
+        picker.onChooseIcon = { chosen.append($0) }
         for mode in [SpaceIconPicker.Mode.icons, .emoji] {
             picker.modes.selectedSegment = mode.rawValue
             _ = picker.modes.sendAction(picker.modes.action, to: picker.modes.target)

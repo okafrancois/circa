@@ -25,7 +25,7 @@ struct SpaceIconDotsSettingsTests {
         let store = try BrowserSettingsStore(destination: file)
         #expect(await store.snapshot().usesDotsForSpaceIcons == false)
         try await store.updateSpace(emoji) { $0.iconSelection = .grapheme("🧪") }
-        try await store.updateSpace(symbol) { $0.iconSelection = .systemSymbol("star.fill") }
+        try await store.updateSpace(symbol) { $0.iconSelection = .planet(.closest(to: "star.fill")) }
         let spaces = await store.snapshot().spaces
         try await store.setUsesDotsForSpaceIcons(true)
         let enabled = try BrowserSettingsStore(destination: file)
@@ -35,7 +35,7 @@ struct SpaceIconDotsSettingsTests {
         try await enabled.setUsesDotsForSpaceIcons(false)
         let restored = try BrowserSettingsStore(destination: file)
         #expect(await restored.snapshot().displayedSpaceIcon(emoji) == .grapheme("🧪"))
-        #expect(await restored.snapshot().displayedSpaceIcon(symbol) == .systemSymbol("star.fill"))
+        #expect(await restored.snapshot().displayedSpaceIcon(symbol) == .planet(.closest(to: "star.fill")))
         // A file written before the preference existed loads as off and is not rewritten.
         var legacy = try #require(JSONSerialization.jsonObject(with: Data(contentsOf: file)) as? [String: Any])
         legacy.removeValue(forKey: "usesDotsForSpaceIcons")
@@ -58,8 +58,8 @@ struct SpaceIconDotsSettingsTests {
         defer { environment.autoArchive.scheduler.stop(); first.window?.close(); second.window?.close() }
         await first.session.waitForPendingCommands(); await second.session.waitForPendingCommands()
         try await environment.settings.updateSpace(firstSpace) { $0.iconSelection = .grapheme("🏀") }
-        try await environment.settings.updateSpace(other) { $0.iconSelection = .systemSymbol("heart.fill") }
-        let expected: [SpaceID: BrowserSpaceIcon] = [firstSpace: .grapheme("🏀"), other: .systemSymbol("heart.fill")]
+        try await environment.settings.updateSpace(other) { $0.iconSelection = .planet(.closest(to: "heart.fill")) }
+        let expected: [SpaceID: BrowserSpaceIcon] = [firstSpace: .grapheme("🏀"), other: .planet(.closest(to: "heart.fill"))]
         func displayed(_ controller: BrowserWindowController<SiteSyntheticEngine>, _ id: SpaceID) -> BrowserSpaceIcon? {
             controller.sidebar.footer.spaceButtons.first { $0.space.id == id }?.iconSelection
         }

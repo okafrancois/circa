@@ -1,4 +1,5 @@
 import AppKit
+import BrowserShell
 @testable import BrowserCore
 import Testing
 @testable import Orbit
@@ -135,7 +136,7 @@ struct ThemeFrostTests {
         view.sidebarForeground = .black
         view.refresh(reduceTransparency: true)
         #expect(view.style.variant == .light)
-        #expect(OrbitFloatingMaterial.contrast(view.style.background(over: .black), .white) == 1)
+        #expect(OrbitFloatingMaterial.contrast(view.style.background(over: .black), BrandPalette.pageWhite) == 1)
     }
 
     @Test("Legacy material choices stay inert throughout a Space transition")

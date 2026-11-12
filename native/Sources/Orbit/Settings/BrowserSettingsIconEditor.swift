@@ -45,10 +45,13 @@ struct BrowserSettingsIconEditor: View {
           if compact {
             HStack(spacing: 6) {
               if choice != .none, draft.text.isEmpty {
-                Menu {
-                    Button(uiText("Clear Icon")) { save("") }
-                } label: { BrowserSettingsIconPreview(choice: choice).frame(width: 20, height: 20) }
-                    .menuStyle(.borderlessButton).frame(width: 30)
+                BrowserSettingsIconPreview(choice: choice).frame(width: 20, height: 20)
+                    .overlay {
+                        Menu {
+                            Button(uiText("Clear Icon")) { save("") }
+                        } label: { Color.clear.frame(width: 20, height: 20) }
+                        .menuStyle(.borderlessButton)
+                    }
               }
               TextField(settingsText("spaceIcon", "Icon (one character or emoji)"), text: $draft.text)
                 .textFieldStyle(.roundedBorder).multilineTextAlignment(.center).frame(width: 52, height: 26)

@@ -49,7 +49,7 @@ extension OrbitTokens {
             ///  — address text, enabled toolbar/footer glyphs.
             public static let baseSecondary = NSColor.orbitDynamic("Text.baseSecondary", light: .orbitSRGB(0x1B2057, 0.70), dark: .orbitSRGB(0xFFFDF7, 0.70))
             public static let splitToolbar = NSColor.orbitDynamic("Text.splitToolbar", light: baseSecondary, dark: .orbitSRGB(0xFFFDF7, 0.65))
-            public static let splitToolbarEmphasized = NSColor.orbitDynamic("Text.splitToolbarEmphasized", light: baseSecondary, dark: .orbitSRGB(0x1B2057, 0.55))
+            public static let splitToolbarEmphasized = NSColor.orbitDynamic("Text.splitToolbarEmphasized", light: baseSecondary, dark: .orbitSRGB(0x1B2057, 0.70))
             public static let sidebar = NSColor.orbitDynamic("Text.sidebar", light: .orbitSRGB(0x1B2057, 0.30), dark: .orbitSRGB(0xFFFDF7, 0.45))
             public static let sidebarLabel = NSColor.orbitDynamic("Text.sidebarLabel", light: .orbitSRGB(0x1B2057, 0.50), dark: .orbitSRGB(0xFFFDF7, 0.50))
             ///  +  — "New Tab" label and "+" glyph,
@@ -81,7 +81,7 @@ extension OrbitTokens {
             public static let commandBar = NSColor.orbitDynamic("Surface.commandBar", light: .orbitSRGB(0xFFFDF7), dark: .orbitSRGB(0x1B2057))
             public static let commandBarTint = NSColor.orbitDynamic("Surface.commandBarTint", light: .orbitSRGB(0xFFFDF7, 0.12), dark: .orbitSRGB(0x1B2057, 0.12))
             public static let preview = NSColor.orbitDynamic("Surface.preview", light: .orbitSRGB(0xFFFDF7), dark: .orbitSRGB(0x1B2057))
-            public static let splitToolbar = NSColor.orbitDynamic("Surface.splitToolbar", light: preview, dark: NSColor(white: 0.31, alpha: 1))
+            public static let splitToolbar = NSColor.orbitDynamic("Surface.splitToolbar", light: preview, dark: .orbitSRGB(0x1B2057))
             public static let splitToolbarEmphasized = NSColor.orbitDynamic("Surface.splitToolbarEmphasized", light: preview, dark: .orbitSRGB(0xFFFDF7))
             ///  — Little Circa input.
             public static let secondaryWindowInput = NSColor.orbitDynamic("Surface.secondaryWindowInput", light: .orbitSRGB(0xFFFDF7), dark: .orbitSRGB(0x1B2057))

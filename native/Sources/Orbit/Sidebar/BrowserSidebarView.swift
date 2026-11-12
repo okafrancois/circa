@@ -1211,10 +1211,12 @@ final class SidebarSpacePageView: NSView, NSTextFieldDelegate, NSMenuDelegate {
     var iconSelection: BrowserSpaceIcon = .none { didSet { refreshSpaceIcon() } }
     private func refreshSpaceIcon() {
         iconButton.subviews.forEach { $0.removeFromSuperview() }
-        iconButton.isHidden = false
-        let image: NSView = iconSelection == .none
-            ? NSImageView(image: SpaceIconImages.planet(at: planetIndex) ?? NSImage())
-            : SpaceIconImages.view(iconSelection, pointSize: Metrics.spaceIconSize)
+        iconButton.isHidden = iconSelection == .none
+        guard iconSelection != .none else { needsLayout = true; return }
+        let image: NSView
+        if case .planet(let variant) = iconSelection {
+            image = NSImageView(image: SpaceIconImages.planet(variant, defaultIndex: planetIndex) ?? NSImage())
+        } else { image = SpaceIconImages.view(iconSelection, pointSize: Metrics.spaceIconSize) }
         image.frame = iconButton.bounds.insetBy(dx: 2, dy: 2)
         image.autoresizingMask = [.width, .height]
         iconButton.addSubview(image)
@@ -1407,7 +1409,7 @@ final class SidebarSpacePageView: NSView, NSTextFieldDelegate, NSMenuDelegate {
             list.frame = NSRect(x: 0, y: 0, width: width, height: documentHeight)
         }
         let titleHeight = ceil(titleLabel.intrinsicContentSize.height)
-        let titleX = Metrics.titleOriginX
+        let titleX = iconSelection == .none && !disclosure.isHovering ? geometry.spaceTitleOriginX : Metrics.titleOriginX
         iconButton.frame = NSRect(x: Metrics.faviconCenterX - 12, y: geometry.spaceTitleCenterY - 12,
                                   width: 24, height: 24)
         titleLabel.frame = NSRect(x: titleX, y: (geometry.spaceTitleCenterY - titleHeight / 2).rounded(),

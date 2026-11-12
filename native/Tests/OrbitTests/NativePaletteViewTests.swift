@@ -1,4 +1,5 @@
 import AppKit
+import BrowserShell
 import Testing
 @testable import Orbit
 
@@ -89,7 +90,7 @@ struct NativePaletteViewTests {
         #expect(cell.detailLabel.stringValue == "— result-0.test")
         #expect(cell.actionLabel.stringValue == "Switch to Tab" && !cell.actionLabel.isHidden)
         #expect(cell.titleLabel.textColor == cell.actionLabel.textColor)
-        #expect(cell.background.layer?.backgroundColor == NSColor.controlAccentColor.withAlphaComponent(0.12).resolvedCGColor(for: cell.effectiveAppearance))
+        #expect(cell.background.layer?.backgroundColor == BrandPalette.sky.resolvedCGColor(for: cell.effectiveAppearance))
         #expect(cell.icon.contentTintColor == nil)
         for size in [NSSize(width: 1024, height: 640), NSSize(width: 1512, height: 949)] {
             let panel = BrowserPaletteView.panelFrame(in: size)
@@ -112,14 +113,14 @@ struct NativePaletteViewTests {
         #expect(material.frame == h.view.panel.bounds && material.layer?.masksToBounds == true)
         #expect(material.hitTest(NSPoint(x: 20, y: 20)) == nil)
         #expect(!material.effect.isHidden && h.view.panel.layer?.backgroundColor?.alpha == 0)
-        #expect(cell.background.layer?.backgroundColor?.alpha == 0.12)
+        #expect(cell.background.layer?.backgroundColor?.alpha == 1)
         h.view.refreshMaterial(reduceTransparency: true)
         #expect(material.effect.isHidden && !h.view.usesMaterial)
         #expect(material.style.tintOpacity == 1)
-        #expect(cell.background.layer?.backgroundColor == h.view.accent.withAlphaComponent(0.12).resolvedCGColor(for: cell.effectiveAppearance))
+        #expect(cell.background.layer?.backgroundColor == BrandPalette.sky.resolvedCGColor(for: cell.effectiveAppearance))
         h.view.refreshMaterial(reduceTransparency: false)
         #expect(!material.effect.isHidden && h.view.usesMaterial)
-        #expect(cell.background.layer?.backgroundColor?.alpha == 0.12)
+        #expect(cell.background.layer?.backgroundColor?.alpha == 1)
         #expect(h.table.view(atColumn: 0, row: 0, makeIfNecessary: false) === cell)
     }
 
@@ -158,7 +159,7 @@ struct NativePaletteViewTests {
         cell.mouseEntered(with: event)
         #expect(cell.background.layer?.backgroundColor == OrbitTokens.Color.State.commandBarRowHover.resolvedCGColor(for: cell.effectiveAppearance))
         h.view.updateSelection(1)
-        #expect(cell.background.layer?.backgroundColor == NSColor.controlAccentColor.withAlphaComponent(0.12).resolvedCGColor(for: cell.effectiveAppearance))
+        #expect(cell.background.layer?.backgroundColor == BrandPalette.sky.resolvedCGColor(for: cell.effectiveAppearance))
         h.render([paletteViewResult(0), paletteViewResult(3)])
         #expect(cell.background.layer?.backgroundColor == NSColor.clear.resolvedCGColor(for: cell.effectiveAppearance))
     }

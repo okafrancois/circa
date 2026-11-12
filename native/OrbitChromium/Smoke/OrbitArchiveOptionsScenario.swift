@@ -173,6 +173,12 @@ extension OrbitSmokeDriver {
             owner.palette.present(.newTab)
             await capture("command-bar", window)
             owner.palette.dismiss()
+            if let id = owner.session.snapshot?.activeSpaceID,
+               let button = owner.sidebar.footer.spaceButtons.first(where: { $0.space.id == id }),
+               let picker = owner.makeSpaceIconPicker(for: id), picker.show(relativeTo: button) {
+                if let panel = picker.popup.window { await capture("space-icon-picker", panel) }
+                picker.cancel()
+            } else { check("brand.space-icon-picker", false) }
             let model = BrowserSettingsModel(environment: environment, profileID: profile, shortcuts: [])
             let settings = BrowserSettingsWindowController(model: model, appearanceOverride: .aqua)
             defer { settings.window?.close() }

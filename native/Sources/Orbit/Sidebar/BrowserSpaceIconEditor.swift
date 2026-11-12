@@ -76,7 +76,12 @@ extension BrowserWindowController {
     /// The footer picker shares the editor's captured-identity commit; it is the default surface.
     func makeSpaceIconPicker(for id: SpaceID) -> SpaceIconPicker? {
         guard let commit = makeSpaceIconCommit(for: id) else { return nil }
-        let picker = SpaceIconPicker(currentChoice: commit.choice, accent: sidebar.footer.accent)
+        let displayed: BrowserSpaceIcon
+        if commit.choice == .planet(.automatic) {
+            let index = session.catalog?.spaces.firstIndex(where: { $0.id == id }) ?? 0
+            displayed = .planet(BrowserSpacePlanet.selectable[index % 4])
+        } else { displayed = commit.choice }
+        let picker = SpaceIconPicker(currentChoice: displayed, accent: sidebar.footer.accent)
         picker.onChooseIcon = { value in
             guard value.isValid else { return }
             Task { @MainActor in await commit.save(value) }

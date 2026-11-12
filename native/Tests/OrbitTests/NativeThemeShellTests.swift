@@ -212,13 +212,13 @@ struct ThemeAppearanceTests {
             zip(values, [CGFloat((hex >> 16) & 0xFF), CGFloat((hex >> 8) & 0xFF), CGFloat(hex & 0xFF)]).allSatisfy { close($0, $1, 0.6) }
         }
         // : round 2 values.
-        #expect(matches(rgb(OrbitTokens.Color.Surface.windowDefault, light), 0xE6E0ED))
-        #expect(matches(rgb(OrbitTokens.Color.Surface.windowDefault, dark), 0x2D2438))
-        #expect(matches(rgb(OrbitTokens.Color.Surface.commandBar, light), 0xF9F9F9))
-        #expect(matches(rgb(OrbitTokens.Color.Surface.commandBar, dark), 0x313131))
+        #expect(matches(rgb(OrbitTokens.Color.Surface.windowDefault, light), 0xFBDFD5))
+        #expect(matches(rgb(OrbitTokens.Color.Surface.windowDefault, dark), 0x1B2057))
+        #expect(matches(rgb(OrbitTokens.Color.Surface.commandBar, light), 0xFFFDF7))
+        #expect(matches(rgb(OrbitTokens.Color.Surface.commandBar, dark), 0x1B2057))
         #expect(close(OrbitTokens.Color.Surface.contentEmptyPage.resolved(for: light).alphaComponent, 0.70))
         #expect(close(OrbitTokens.Color.Surface.contentEmptyPage.resolved(for: dark).alphaComponent, 0.10))
-        #expect(matches(rgb(OrbitTokens.Color.State.tabCurrent, light), 0xF6F6F6))
+        #expect(matches(rgb(OrbitTokens.Color.State.tabCurrent, light), 0xFFFDF7))
         #expect(close(OrbitTokens.Color.State.tabCurrent.resolved(for: light).alphaComponent, 0.88))
         #expect(close(OrbitTokens.Color.State.tabCurrent.resolved(for: dark).alphaComponent, 0.20))
         #expect(close(OrbitTokens.Color.State.tabPressed.resolved(for: light).alphaComponent, 0.10))
@@ -270,11 +270,11 @@ struct ThemeAppearanceTests {
         let profile = ProfileID()
         let spaces = (0..<3).map { BrowserSpace(id: SpaceID(), profileID: profile, name: "Synthetic \($0)") }
         let catalog = BrowserCatalogSnapshot(profiles: [BrowserProfile(id: profile, name: "Synthetic")], spaces: spaces)
-        #expect(OrbitSpaceThemes.theme(forSpace: spaces[2].id, in: catalog) == (OrbitSpaceThemes.previewFlag ? .lavender : .default))
+        #expect(OrbitSpaceThemes.theme(forSpace: spaces[2].id, in: catalog) == OrbitSpaceThemes.defaultTheme(at: 2))
         #expect(OrbitSpaceThemes.theme(forSpace: SpaceID(), in: catalog) == .default)
         #expect(OrbitSpaceThemes.defaultTheme(at: 1, preview: true) == .amberCoral)
         #expect(OrbitSpaceThemes.defaultTheme(at: 5, preview: true) == .default)
-        #expect(OrbitSpaceThemes.defaultTheme(at: 1, preview: false) == .default)
+        #expect(OrbitSpaceThemes.defaultTheme(at: 1, preview: false) == OrbitSpaceThemes.rendered(BrandPalette.spaceGradients[1].theme()))
     }
 
     @Test("The window fill runs from the top-left stop to the bottom-right stop")

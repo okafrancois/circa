@@ -15,7 +15,7 @@ struct BrowserSettingsSpaceRow: View {
         Button(action: select) {
             HStack(spacing: 8) {
                 Group {
-                    if icon == .none, let image = SpaceIconImages.planet(at: planetIndex) {
+                    if case .planet(let variant) = icon, let image = SpaceIconImages.planet(variant, defaultIndex: planetIndex) {
                         Image(nsImage: image).resizable().scaledToFit()
                     } else {
                         BrowserSettingsIconPreview(choice: icon)

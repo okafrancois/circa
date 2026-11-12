@@ -1,4 +1,5 @@
 import AppKit
+import BrowserShell
 @testable import BrowserCore
 import Testing
 @testable import Orbit
@@ -259,7 +260,7 @@ struct NativeThemeSidebarContrastTests {
             }
             NSGraphicsContext.restoreGraphicsState()
             let center = try #require(bitmap.colorAt(x: 14, y: 14)?.usingColorSpace(.sRGB))
-            let expected = footer.accent.icon.resolved(for: appearance)
+            let expected = [BrandPalette.coral, BrandPalette.cobalt][button.index].resolved(for: appearance)
             #expect(abs(center.redComponent - expected.redComponent) < 0.02)
             #expect(abs(center.greenComponent - expected.greenComponent) < 0.02)
             #expect(abs(center.blueComponent - expected.blueComponent) < 0.02)

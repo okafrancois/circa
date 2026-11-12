@@ -85,7 +85,7 @@ extension SettingsPresentationTests {
         model.queueSpaceIconEdit(spaceID: second, profileID: profile, icon: .grapheme("🌿"))
         try await model.waitForPendingActions()
         #expect(environment.settings.document.space(second).iconSelection == .grapheme("🌿"))
-        #expect(environment.settings.document.space(first).iconSelection == .none)
+        #expect(environment.settings.document.space(first).iconSelection == .planet(.automatic))
         var selected = first
         let space = try #require(model.catalog.spaces.first { $0.id == second })
         let row = BrowserSettingsSpaceRow(space: space, theme: space.theme, icon: .grapheme("🌿"), isSelected: false) { selected = second }

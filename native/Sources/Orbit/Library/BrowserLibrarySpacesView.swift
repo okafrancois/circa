@@ -71,9 +71,12 @@ final class BrowserLibrarySpacesView: NSView, NSSearchFieldDelegate {
         self.catalog = catalog
         self.themes = themes
         let profiles = Dictionary(uniqueKeysWithValues: catalog.profiles.map { ($0.id, $0.name) })
-        items = catalog.spaces.compactMap { space in
+        items = catalog.spaces.enumerated().compactMap { index, space in
             guard let profile = profiles[space.profileID] else { return nil }
-            return Item(space: space, profileName: profile, iconSelection: icons[space.id] ?? .none)
+            let stored = icons[space.id] ?? .planet(.automatic)
+            let choice: BrowserSpaceIcon = stored == .planet(.automatic)
+                ? .planet(BrowserSpacePlanet.selectable[index % 4]) : stored
+            return Item(space: space, profileName: profile, iconSelection: choice)
         }
         filter()
     }
