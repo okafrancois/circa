@@ -1,3 +1,5 @@
+import AppKit
+
 import BrowserCore
 import BrowserEngine
 import BrowserShell
@@ -62,6 +64,10 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
     let initialContext: Task<(SpaceID, ProfileID), Error>
     private let persistence: BrowserSessionPersistence?
     private var saveTask: Task<Void, Never>?
+    private var sessionPowerObserver: BrowserSessionPowerObserver?
+    private var saveSchedule = BrowserSessionSaveSchedule()
+    // Tokens are registered on MainActor; NotificationCenter removal is thread-safe in deinit.
+    private nonisolated(unsafe) var saveObservers: [(NotificationCenter, NSObjectProtocol)] = []
     private(set) var isFinalizing = false
     private let restoredSpaces: [UUID: SpaceID]
     private var retiringSessions: [ObjectIdentifier: BrowserWindowSession<Engine.Surface>] = [:]
@@ -280,9 +286,36 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
         settings.onChange = { [weak self] in self?.settingsDidChange() }
         rescue.onRescue = { [weak self] _ in self?.rehomeRescuedSurfaces() }
         rescue.onRescueReadinessChange = { [weak self] in self?.rehomeRescuedSurfaces() }
+        if persistence != nil {
+            sessionPowerObserver = BrowserSessionPowerObserver { [weak self] in
+                guard let self, !self.isFinalizing else { return }
+                self.saveTask?.cancel()
+                self.saveSchedule.reset()
+                do { try await self.saveNow(fullSync: true) }
+                catch { self.onPersistenceError?(error) }
+            }
+            for (center, name, fullSync) in [
+                (NotificationCenter.default, NSApplication.didResignActiveNotification, false),
+                (NSWorkspace.shared.notificationCenter, NSWorkspace.willPowerOffNotification, true)
+            ] {
+                let token = center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                    Task { @MainActor in
+                        guard let self, !self.isFinalizing else { return }
+                        self.saveTask?.cancel()
+                        self.saveSchedule.reset()
+                        do { try await self.saveNow(fullSync: fullSync) }
+                        catch { self.onPersistenceError?(error) }
+                    }
+                }
+                saveObservers.append((center, token))
+            }
+        }
     }
 
-    deinit { catalogObservation?.cancel() }
+    deinit {
+        catalogObservation?.cancel()
+        for (center, token) in saveObservers { center.removeObserver(token) }
+    }
 
     func makeWindow(
         id: UUID = UUID(),
@@ -326,6 +359,13 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
             downloads: downloads, history: history, translationPages: translationPages, rescue: rescue,
             onInput: onInput,
             onCatalogChange: { [weak self] catalog in self?.catalogDidChange(catalog) },
+            onMetadataStateChange: { [weak self] in
+                if let controller = self?.controllers[id]?.controller, controller.window?.isKeyWindow == true {
+                    self?.recordActiveWindow(controller)
+                }
+                self?.onQuickWindowDestinationChange?()
+                self?.scheduleSave(metadataOnly: true)
+            },
             onStateChange: { [weak self] in
                 if let controller = self?.controllers[id]?.controller, controller.window?.isKeyWindow == true {
                     self?.recordActiveWindow(controller)
@@ -729,19 +769,20 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
         await store.updateWindowPlacements(placements)
     }
 
-    func scheduleSave() {
+    func scheduleSave(metadataOnly: Bool = false) {
         guard persistence != nil, !isFinalizing else { return }
         BrowserPerformance.count(.savesScheduled)
+        let delay = saveSchedule.schedule(at: ProcessInfo.processInfo.systemUptime, metadataOnly: metadataOnly)
         saveTask?.cancel()
         saveTask = Task { [weak self] in
             // Retry transient failures without requiring another user mutation. New input or
             // termination cancels the entire retry sequence and owns the next snapshot.
-            for delay in [Duration.milliseconds(150), .seconds(1), .seconds(5)] {
+            for delay in [Duration.seconds(delay), .seconds(1), .seconds(5)] {
                 do {
                     try await Task.sleep(for: delay)
                     guard let self, !isFinalizing, let persistence else { return }
+                    saveSchedule.reset()
                     await captureWindowPlacements()
-                    try await liveFoldersIfStarted?.persistAll()
                     let result = try await persistence.saveCurrentState(from: store)
                     if case .saved = result { onPersistenceSuccess?() }
                     return
@@ -757,12 +798,13 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
 
     /// Saves now and returns once the current model is durably written (used by the Orbit import,
     /// which records its ledger only after the merged session is on disk).
-    func saveNow() async throws {
+    func saveNow(fullSync: Bool = false) async throws {
         guard let persistence, !isFinalizing else { throw BrowserSessionPersistence.PersistenceError.finalizationInProgress }
-        await captureWindowPlacements()
+        await windowActivitySave?.value
         try await liveFoldersIfStarted?.persistAll()
+        await captureWindowPlacements()
         for _ in 0..<5 {
-            switch try await persistence.saveCurrentState(from: store) {
+            switch try await persistence.saveCurrentState(from: store, fullSync: fullSync) {
             case .saved: return
             case .superseded: continue
             case .stopped: throw BrowserSessionPersistence.PersistenceError.finalizationInProgress

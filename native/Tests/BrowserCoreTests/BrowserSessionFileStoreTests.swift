@@ -1,10 +1,27 @@
 import Darwin
 import Foundation
 import Testing
+import Synchronization
 @testable import BrowserCore
 
 @Suite("Explicit local session file persistence")
 struct BrowserSessionFileStoreTests {
+    @Test("Routine checkpoints use fsync and final upgrades preserve the inode")
+    func checkpointBarriers() throws {
+        let directory = try SessionFileTestDirectory()
+        let counts = Mutex([0, 0, 0])
+        let writer = BrowserSessionFileStore(operations: .init(
+            syncFile: { descriptor in counts.withLock { $0[0] += 1 }; return fsync(descriptor) },
+            fullSyncFile: { descriptor in counts.withLock { $0[1] += 1 }; return fcntl(descriptor, F_FULLFSYNC) },
+            syncDirectory: { descriptor in counts.withLock { $0[2] += 1 }; return fsync(descriptor) }))
+        try writer.save(emptySessionFileDocument(), to: directory.file, fullSync: false)
+        #expect(counts.withLock { $0 } == [1, 0, 1])
+        let inode = try sessionFileStat(directory.file).st_ino
+        try writer.synchronizeExisting(at: directory.file)
+        #expect(counts.withLock { $0 } == [2, 1, 1])
+        #expect(try sessionFileStat(directory.file).st_ino == inode)
+    }
+
     @Test("Round trips preserve the complete multi-profile model and empty windows")
     func roundTrip() async throws {
         let directory = try SessionFileTestDirectory()

@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 import Testing
 @testable import BrowserCore
@@ -39,6 +40,34 @@ struct LiveFolderModelTests {
         let next = BrowserSessionDocument(profiles: value.profiles, spaces: value.spaces, windows: [], tabs: [], organization: value.organization)
         try next.validate()
         return next
+    }
+
+    @Test func identicalRefreshDoesNotPublishOrChangeSession() async throws {
+        let (f, id, generation) = try await fixture()
+        let response = BrowserLiveFolderFetch(generation: generation, coverage: .complete, items: [item()])
+        #expect(try await f.store.reconcileLiveFolderChanges(id, profileID: f.personal, fetched: response) == true)
+        let before = await f.store.sessionDocument()
+        for _ in 0..<30 {
+            #expect(try await f.store.reconcileLiveFolderChanges(id, profileID: f.personal, fetched: response) == false)
+        }
+        #expect(await f.store.sessionDocument() == before)
+    }
+
+    @Test func localWriterSkipsIdenticalSnapshots() async throws {
+        let canonical = realpath(FileManager.default.temporaryDirectory.path, nil)!
+        defer { free(canonical) }
+        let root = URL(fileURLWithPath: String(cString: canonical), isDirectory: true)
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let file = root.appendingPathComponent("local.json")
+        let writer = BrowserLiveFolderFileWriter()
+        var local = BrowserLiveFolderLocalStore(profileID: ProfileID())
+        #expect(try await writer.save(.init(local: local, account: nil), to: file))
+        for _ in 0..<30 { #expect(try await !writer.save(.init(local: local, account: nil), to: file)) }
+        local.advanceGeneration(for: .githubPullRequests)
+        #expect(try await writer.save(.init(local: local, account: nil), to: file))
+        #expect(try BrowserLiveFolderProfileFile.load(from: file, profileID: local.profileID).local == local)
     }
 
     @Test func oldFolderEncodingIsUnchanged() throws {

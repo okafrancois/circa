@@ -7,6 +7,96 @@ import Synchronization
 
 @Suite("Automatic session persistence", .timeLimit(.minutes(1)))
 struct BrowserSessionPersistenceTests {
+    @Test("Scripted minute coalesces metadata, preserves structural latency and stays idle")
+    func scriptedMinuteWriteCounts() async throws {
+        var events: [(Double, Int)] = []
+        for cycle in 0..<10 {
+            let t = Double(cycle * 6)
+            events += [(t, 0), (t + 1, 1), (t + 2, 1)]
+            if cycle.isMultiple(of: 2) { events.append((t + 3, 2)) }
+        }
+        events += [(24.5, 3), (48.5, 3)]
+        events.sort { $0.0 < $1.0 }
+        let directory = try PersistenceTestDirectory()
+        let fixture = try await persistenceFixture()
+        let writes = EncodingCounts()
+        let persistence = BrowserSessionPersistence(destination: directory.file, fileAccess: .init(save: { value, url in
+            writes.saves.withLock { $0 += 1 }
+            return try BrowserSessionFileStore().save(value, to: url, fullSync: false)
+        }))
+        _ = try await persistence.load()
+        var schedule = BrowserSessionSaveSchedule()
+        var baselineDeadline: Double?
+        var baselineWrites = 0
+        for (time, kind) in events {
+            if let deadline = schedule.deadline, deadline <= time {
+                _ = try await persistence.saveCurrentState(from: fixture.store)
+                schedule.reset()
+            }
+            if let deadline = baselineDeadline, deadline <= time {
+                try BrowserSessionFileStore().save(await fixture.store.sessionDocument(), to: directory.root.appendingPathComponent("baseline.json"))
+                baselineWrites += 1
+            }
+            baselineDeadline = time + 0.15
+            let context = try await fixture.store.captureContext(in: fixture.windowID)
+            let document = await fixture.store.sessionDocument()
+            let tab = try #require(document.tabs.first { $0.windowID == fixture.windowID && $0.spaceID == context.spaceID })
+            switch kind {
+            case 0:
+                _ = try await fixture.store.updateDestination(for: tab.occurrenceID,
+                    to: URL(string: "https://synthetic.example/\(Int(time))")!, from: context)
+            case 1:
+                let authority = try await fixture.store.captureOccurrenceAuthority(for: tab.occurrenceID, from: context)
+                _ = try await fixture.store.updatePageTitle("Synthetic title \(time)", from: authority)
+            case 2:
+                await fixture.store.updateWindowPlacements([fixture.windowID: .init(x: time, y: 0, width: 900, height: 700, sidebarWidth: 220)])
+            default: try await appendPersistenceTab(to: fixture)
+            }
+            let delay = schedule.schedule(at: time, metadataOnly: kind != 3)
+            if kind == 3 { #expect(delay <= 0.151) }
+        }
+        if baselineDeadline != nil {
+            try BrowserSessionFileStore().save(await fixture.store.sessionDocument(), to: directory.root.appendingPathComponent("baseline.json"))
+            baselineWrites += 1
+        }
+        _ = try await persistence.saveCurrentState(from: fixture.store)
+        let after = writes.saves.withLock { $0 }
+        // Replay the old refresh -> local save -> session save -> local save call topology.
+        let local = BrowserLiveFolderProfileFile(local: .init(profileID: ProfileID()), account: nil)
+        let localWriter = BrowserLiveFolderFileWriter()
+        let idleFile = directory.root.appendingPathComponent("idle-local.json")
+        _ = try await localWriter.save(local, to: idleFile)
+        let idleDocument = await fixture.store.sessionDocument()
+        var oldIdleWrites = 0
+        for _ in 0..<30 {
+            try local.save(to: directory.root.appendingPathComponent("baseline-local.json"))
+            try BrowserSessionFileStore().save(idleDocument, to: directory.root.appendingPathComponent("baseline.json"))
+            try local.save(to: directory.root.appendingPathComponent("baseline-local.json"))
+            oldIdleWrites += 3
+            #expect(try await !localWriter.save(local, to: idleFile))
+            _ = try await persistence.saveCurrentState(from: fixture.store)
+        }
+        #expect(oldIdleWrites == 90)
+        print("acceleratedIdleHour baselineWrites=90 afterWrites=0 unchangedLiveFolders=1 refreshTicks=30")
+        #expect(writes.saves.withLock { $0 } == after)
+        _ = try await persistence.finalize(from: fixture.store)
+        #expect(writes.saves.withLock { $0 } == after)
+        let expected = await fixture.store.sessionDocument()
+        #expect(try BrowserSessionFileStore().load(from: directory.file) == expected)
+        #expect(baselineWrites == 37)
+        #expect(after == 15)
+        print("scriptedMinute baselineWrites=\(baselineWrites) afterWrites=\(after) baselineWithQuitWrites=\(baselineWrites + 1) afterWithQuitWrites=\(after) baselineWithQuitFsyncs=\((baselineWrites + 1) * 2) afterWithQuitFsyncs=\(after * 2 + 1) baselineWithQuitFullSyncs=\(baselineWrites + 1) afterWithQuitFullSyncs=1 idleSessionWritesPerHour=0")
+    }
+
+    @Test("Continuous metadata is bounded and cannot delay structural checkpoints")
+    func boundedSchedule() {
+        var schedule = BrowserSessionSaveSchedule()
+        #expect(schedule.schedule(at: 0, metadataOnly: true) == 2.5)
+        #expect(schedule.schedule(at: 2, metadataOnly: true) == 0.5)
+        #expect(schedule.schedule(at: 2.1, metadataOnly: false) < 0.151)
+        #expect(schedule.schedule(at: 2.2, metadataOnly: true) < 0.051)
+    }
+
     @Test("A late activity veto resumes autosaves after the final document was written")
     func cancelledFinalizationResumesSaving() async throws {
         let directory = try PersistenceTestDirectory()

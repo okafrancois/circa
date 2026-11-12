@@ -208,6 +208,7 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
 
     // MARK: Window coordination
     private let onStateChange: () -> Void
+    private let onMetadataStateChange: () -> Void
     private let onCatalogChange: (BrowserCatalogSnapshot) -> Void
     private let onInput: ((@escaping @MainActor (BrowserWindowController) -> Void) -> Void)?
     private var publishedCatalog: BrowserCatalogSnapshot?
@@ -234,6 +235,7 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
         rescue: BrowserSurfaceContainer<Engine.Surface>? = nil,
         onInput: ((@escaping @MainActor (BrowserWindowController) -> Void) -> Void)? = nil,
         onCatalogChange: @escaping (BrowserCatalogSnapshot) -> Void = { _ in },
+        onMetadataStateChange: (() -> Void)? = nil,
         onStateChange: @escaping () -> Void = {},
         onRetire: @escaping (BrowserWindowSession<Surface>) -> Void = { _ in },
         onClose: @escaping () -> Void,
@@ -246,6 +248,7 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
         self.onClose = onClose
         self.onActivate = onActivate
         self.onStateChange = onStateChange
+        self.onMetadataStateChange = onMetadataStateChange ?? onStateChange
         self.onCatalogChange = onCatalogChange
         self.onInput = onInput
         self.onRetire = onRetire
@@ -320,14 +323,15 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
             defer { BrowserPerformance.end(.windowRender, since: perfStart) }
             self?.bookmarkTransfer?.contextDidChange()
             self?.renderSession(selection: self?.session.selectionChangeTabIDs)
-            self?.onStateChange()
+            if self?.session.selectionChangeTabIDs != nil { self?.onMetadataStateChange() }
+            else { self?.onStateChange() }
         }
         session.onMetadataChange = { [weak self] ids in
             guard let self else { return }
             // Split headers and pane controls remain on the full feature projection path.
             if session.activeSplit != nil {
                 renderSession()
-                onStateChange()
+                self.onMetadataStateChange()
                 return
             }
             sidebar.applyMetadata(ids, organization: session.organization)
@@ -337,7 +341,7 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
             if ids.contains(where: { session.organizationTab($0).map { if case .favorites = $0.section { return true }; return false } == true }) {
                 favorites.render()
             }
-            onStateChange()
+            self.onMetadataStateChange()
         }
         session.onError = { _ in NSSound.beep() }
         session.observeOrganizationChanges()
@@ -367,7 +371,7 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
     func windowPlacementDidChange() {
         guard session != nil, let window, !window.styleMask.contains(.fullScreen), !windowShell.isFullScreen else { return }
         windowedFrame = window.frame
-        onStateChange()
+        onMetadataStateChange()
     }
 
     func windowDidBecomeKey(_ notification: Notification) {

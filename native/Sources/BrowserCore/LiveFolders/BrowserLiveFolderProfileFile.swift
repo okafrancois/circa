@@ -44,3 +44,28 @@ public struct BrowserLiveFolderProfileFile: Codable, Equatable, Sendable {
         }
     }
 }
+
+/// Serial file authority keeps blocking IO off the UI actor and deduplicates local snapshots.
+public actor BrowserLiveFolderFileWriter {
+    private var saved: [URL: BrowserLiveFolderProfileFile] = [:]
+    public init() {}
+
+    public func load(from url: URL, profileID: ProfileID) throws -> BrowserLiveFolderProfileFile {
+        let value = try BrowserLiveFolderProfileFile.load(from: url, profileID: profileID)
+        saved[url] = value
+        return value
+    }
+
+    @discardableResult
+    public func save(_ value: BrowserLiveFolderProfileFile, to url: URL) throws -> Bool {
+        guard saved[url] != value else { return false }
+        try value.save(to: url)
+        saved[url] = value
+        return true
+    }
+
+    public func remove(_ url: URL) throws {
+        if FileManager.default.fileExists(atPath: url.path) { try FileManager.default.removeItem(at: url) }
+        saved[url] = nil
+    }
+}

@@ -1,4 +1,5 @@
 import BrowserCore
+import CryptoKit
 import Foundation
 
 public actor BrowserSessionPersistence {
@@ -33,7 +34,10 @@ public actor BrowserSessionPersistence {
             try BrowserSessionFileStore.EncodedDocument($0)
         }
         var save: @Sendable (BrowserSessionFileStore.EncodedDocument, URL) throws -> BrowserSessionFileStore.SaveResult = {
-            try BrowserSessionFileStore().save($0, to: $1)
+            try BrowserSessionFileStore().save($0, to: $1, fullSync: false)
+        }
+        var synchronize: @Sendable (URL) throws -> Void = {
+            try BrowserSessionFileStore().synchronizeExisting(at: $0)
         }
     }
 
@@ -91,7 +95,7 @@ public actor BrowserSessionPersistence {
     /// Assigns order before awaiting the model, so a delayed old snapshot cannot replace
     /// a newer request. Callers must observe errors rather than silently dropping failed saves.
     @discardableResult
-    public func saveCurrentState(from store: BrowserStore) async throws -> SaveResult {
+    public func saveCurrentState(from store: BrowserStore, fullSync: Bool = false) async throws -> SaveResult {
         let perfStart = BrowserPerformance.begin()
         defer { BrowserPerformance.end(.sessionSave, since: perfStart) }
         switch state {
@@ -103,7 +107,7 @@ public actor BrowserSessionPersistence {
         let request = nextGeneration()
         let document = await snapshot(store)
         guard request == generation, state == .ready else { return .superseded }
-        return try await fileIO.save(document, generation: request)
+        return try await fileIO.save(document, generation: request, fullSync: fullSync)
     }
 
     /// Await pending model commands first, then await this method before tearing down windows.
@@ -123,7 +127,7 @@ public actor BrowserSessionPersistence {
         let request = nextGeneration()
         let document = await snapshot(store)
         do {
-            let result = try await fileIO.save(document, generation: request)
+            let result = try await fileIO.save(document, generation: request, fullSync: true)
             state = .finalized
             return result
         } catch {
@@ -153,6 +157,9 @@ private final class SessionFileIO: @unchecked Sendable {
     private let maximumBytes: Int
     private let access: BrowserSessionPersistence.FileAccess
     private var latestGeneration: UInt64 = 0
+    private var lastHash: SHA256.Digest?
+    private var lastResult: BrowserSessionFileStore.SaveResult?
+    private var fullySynchronized = false
 
     init(destination: URL, maximumBytes: Int, access: BrowserSessionPersistence.FileAccess) {
         self.destination = destination
@@ -163,13 +170,16 @@ private final class SessionFileIO: @unchecked Sendable {
     func load(generation: UInt64) async throws -> BrowserSessionDocument? {
         try await perform { io in
             io.latestGeneration = max(io.latestGeneration, generation)
+            io.lastHash = nil
+            io.lastResult = nil
+            io.fullySynchronized = false
             do { return try io.access.load(io.destination, io.maximumBytes) }
             catch BrowserSessionFileError.notFound { return nil }
         }
     }
 
     func save(
-        _ document: BrowserSessionDocument, generation: UInt64
+        _ document: BrowserSessionDocument, generation: UInt64, fullSync: Bool
     ) async throws -> BrowserSessionPersistence.SaveResult {
         try await perform { io in
             guard generation > io.latestGeneration else { return .superseded }
@@ -181,7 +191,20 @@ private final class SessionFileIO: @unchecked Sendable {
             guard encoded.data.count <= io.maximumBytes else {
                 throw BrowserSessionError.limitExceeded
             }
-            return .saved(try io.access.save(encoded, io.destination))
+            let hash = SHA256.hash(data: encoded.data)
+            if hash == io.lastHash, let result = io.lastResult {
+                if fullSync && !io.fullySynchronized {
+                    try io.access.synchronize(io.destination)
+                    io.fullySynchronized = true
+                }
+                return .saved(result)
+            }
+            let result = try io.access.save(encoded, io.destination)
+            if fullSync { try io.access.synchronize(io.destination) }
+            io.lastHash = hash
+            io.lastResult = result
+            io.fullySynchronized = fullSync
+            return .saved(result)
         }
     }
 

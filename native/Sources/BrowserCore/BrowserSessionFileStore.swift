@@ -41,7 +41,7 @@ public enum BrowserSessionFileError: Error, Equatable, Sendable, LocalizedError 
 /// before supplying a document and schedule disk work away from the UI thread.
 public struct BrowserSessionFileStore: Sendable {
     public struct SaveResult: Equatable, Sendable {
-        /// False means fsync succeeded but the filesystem does not support F_FULLFSYNC.
+        /// False means full synchronization was not requested or is unsupported.
         public let usedFullFileSync: Bool
         /// Covers the immediate parent and any directory links created by this save.
         /// False means at least one filesystem does not support directory fsync.
@@ -66,13 +66,13 @@ public struct BrowserSessionFileStore: Sendable {
     }
 
     @discardableResult
-    public func save(_ document: BrowserSessionDocument, to destination: URL) throws -> SaveResult {
+    public func save(_ document: BrowserSessionDocument, to destination: URL, fullSync: Bool = true) throws -> SaveResult {
         _ = try Self.components(of: destination)
-        return try save(EncodedDocument(document), to: destination)
+        return try save(EncodedDocument(document), to: destination, fullSync: fullSync)
     }
 
     @discardableResult
-    public func save(_ document: EncodedDocument, to destination: URL) throws -> SaveResult {
+    public func save(_ document: EncodedDocument, to destination: URL, fullSync: Bool = true) throws -> SaveResult {
         let path = try Self.components(of: destination)
         let data = document.data
         let parent = try Self.openParent(of: path, create: true, syncDirectory: operations.syncDirectory)
@@ -106,9 +106,9 @@ public struct BrowserSessionFileStore: Sendable {
         guard Self.retryInterrupted({ operations.syncFile(file.value) }) == 0 else {
             throw Self.io(.synchronizeFile)
         }
-        let fullSync = Self.retryInterrupted { operations.fullSyncFile(file.value) }
-        let usedFullSync = fullSync == 0
-        if !usedFullSync, !Self.isUnsupported(errno) { throw Self.io(.fullySynchronizeFile) }
+        let fullSyncResult = fullSync ? Self.retryInterrupted { operations.fullSyncFile(file.value) } : -1
+        let usedFullSync = fullSyncResult == 0
+        if fullSync, !usedFullSync, !Self.isUnsupported(errno) { throw Self.io(.fullySynchronizeFile) }
         try file.closeBeforeReplacement()
 
         // Recheck type and identity after writing. No pathname is ever followed by renameat.
@@ -122,6 +122,23 @@ public struct BrowserSessionFileStore: Sendable {
         }
         return SaveResult(usedFullFileSync: usedFullSync,
                           didSyncDirectory: directorySync == 0 && parent.didSyncCreatedDirectories)
+    }
+
+    /// Upgrade an unchanged checkpoint without rewriting its bytes.
+    public func synchronizeExisting(at destination: URL) throws {
+        let path = try Self.components(of: destination)
+        let directory = try Self.openParent(of: path, create: false).handle
+        let descriptor = openat(directory.value, path.last!, O_RDWR | O_NOFOLLOW | O_CLOEXEC)
+        guard descriptor >= 0 else { throw Self.io(.openFile) }
+        let file = SessionFileDescriptor(descriptor)
+        var metadata = stat()
+        guard fstat(file.value, &metadata) == 0, metadata.st_mode & S_IFMT == S_IFREG else {
+            throw BrowserSessionFileError.notRegularFile
+        }
+        guard Self.retryInterrupted({ operations.syncFile(file.value) }) == 0 else { throw Self.io(.synchronizeFile) }
+        if Self.retryInterrupted({ operations.fullSyncFile(file.value) }) != 0, !Self.isUnsupported(errno) {
+            throw Self.io(.fullySynchronizeFile)
+        }
     }
 
     public func load(
