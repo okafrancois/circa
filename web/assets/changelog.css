@@ -1,45 +1,77 @@
-.changelog-page .nav::before { background: var(--stage); opacity: 1; backdrop-filter: none; -webkit-backdrop-filter: none; }
-.changelog-page .nav [aria-current] { color: var(--cream); }
-.changelog { padding-top: 72px; padding-bottom: 100px; }
-.release-intro { margin-bottom: 64px; }
-.release-intro h1 { font: 700 clamp(48px, 7vw, 88px)/1.02 var(--display); letter-spacing: -.045em; }
-.release-intro p { margin-top: 20px; font-size: 21px; }
-.release-layout { display: grid; grid-template-columns: 190px minmax(0, 1fr); gap: 72px; }
-.version-nav { align-self: start; position: sticky; top: 104px; }
-.version-nav input { width: 100%; padding: 12px 14px; border: 0; border-radius: 8px; background: var(--stage-3); color: var(--cream); font: inherit; margin-bottom: 20px; }
-.version-nav nav { display: grid; gap: 9px; font-variant-numeric: tabular-nums; }
-.version-nav a { width: fit-content; }
-.version-nav a:hover, .release a:hover, .archive-link:hover { text-decoration: underline; text-underline-offset: 4px; }
-.archive-link { display: block; margin-top: 28px; color: var(--mute); }
-.release { display: grid; grid-template-columns: 125px minmax(0, 1fr); gap: 32px; margin-bottom: 72px; scroll-margin-top: 110px; }
-.release-meta h2 { font: 650 30px/1.15 var(--display); letter-spacing: -.03em; font-variant-numeric: tabular-nums; }
-.release-meta time { display: block; margin-top: 12px; font-size: 15px; color: var(--mute); }
-.release-copy { max-width: 680px; overflow-wrap: anywhere; }
-.release-copy h3 { font: 650 24px/1.25 var(--display); letter-spacing: -.02em; margin-bottom: 16px; }
-.release-copy p, .release-copy ul { margin-bottom: 16px; }
-.release-copy ul { padding-left: 22px; }
-.release-copy li { margin-bottom: 8px; }
-.release-source { display: inline-block; font-size: 16px; text-decoration: underline; text-underline-offset: 4px; }
-#release-status { margin-bottom: 28px; }
-#release-status a, #no-releases button, noscript a { color: inherit; text-decoration: underline; text-underline-offset: 4px; }
-#no-releases button { background: none; border: 0; font: inherit; cursor: pointer; }
+/* Changelog — same identity as the landing page (loaded after landing.css). */
+
+.links a[aria-current] { color: var(--cobalt); }
+
+/* Intro: the sky, fading into paper */
+.cl-hero { padding-top: 120px; background: linear-gradient(180deg, #C4D4FA 0%, #D6DFF7 40%, var(--paper) 100%); }
+.cl-hero-in { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: var(--gutter); padding-block: clamp(28px, 4vw, 64px) clamp(36px, 5vw, 80px); }
+.cl-hero h1 { margin: 0; font-size: clamp(60px, 9vw, 150px); line-height: .86; }
+.cl-hero .sub { margin-bottom: 0; }
+.clart { width: clamp(220px, 28vw, 400px); height: auto; overflow: visible; }
+
+/* Layout: sticky version list, then the timeline */
+.changelog { position: relative; padding-block: clamp(24px, 3vw, 48px) calc(var(--section) * .6); }
+.changelog > .wrap { position: relative; z-index: 1; }
+.release-layout { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: clamp(32px, 5vw, 96px); }
+.version-nav { align-self: start; position: sticky; top: 28px; }
+.vn-title { margin: 0 0 14px; color: var(--cobalt); }
+.version-nav input { width: 100%; padding: 11px 14px; border: 0; border-radius: 12px; background: var(--white); color: var(--ink); font: inherit; font-size: 14px; margin-bottom: 18px; box-shadow: 0 0 0 2px var(--ink), 0 3px 0 var(--ink); }
+.version-nav input::placeholder { color: #1B205788; }
+.version-nav input:focus { outline: none; box-shadow: 0 0 0 2px var(--cobalt), 0 3px 0 var(--cobalt); }
+.version-nav nav { display: grid; gap: 4px; }
+.version-nav nav a { display: flex; align-items: center; gap: 10px; width: fit-content; padding: 4px 10px 4px 4px; border-radius: 99px; font-family: var(--mono); font-size: 13px; font-variant-numeric: tabular-nums; }
+.version-nav nav a::before { content: ""; width: 9px; height: 9px; border-radius: 50%; background: var(--c, var(--cobalt)); box-shadow: 0 0 0 1.5px var(--ink); }
+.version-nav nav a:nth-child(4n+1) { --c: var(--mandarine); }
+.version-nav nav a:nth-child(4n+2) { --c: var(--cobalt); }
+.version-nav nav a:nth-child(4n+3) { --c: var(--sun); }
+.version-nav nav a:nth-child(4n+4) { --c: var(--aurora); }
+.version-nav nav a:hover { background: #1B20570d; }
+.archive-link { display: inline-block; margin-top: 22px; font-size: 14px; font-weight: 600; border-bottom: 2px solid var(--ink); }
+.archive-link:hover { color: var(--cobalt); border-color: var(--cobalt); }
+
+/* Timeline: a dotted orbit, one planet per release */
+.timeline { position: relative; min-width: 0; padding-left: 44px; }
+.timeline::before { content: ""; position: absolute; left: 11px; top: 14px; bottom: 0; width: 2px;
+  background: radial-gradient(circle, var(--ink) 1px, transparent 1.4px) 50% 0 / 2px 9px repeat-y; opacity: .55; }
+.release { position: relative; display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 28px; padding-bottom: clamp(44px, 4vw, 64px); scroll-margin-top: 28px; }
+.release::before { content: ""; position: absolute; left: -44px; top: 6px; width: 22px; height: 22px; border-radius: 50%;
+  background: radial-gradient(circle at 30% 30%, transparent 40%, #1B205740 41%, #1B205740 43%, transparent 44%) , var(--c, var(--cobalt)); box-shadow: 0 0 0 2px var(--ink), 3px 3px 0 -1px var(--ink); }
+.release:nth-child(4n+1) { --c: var(--mandarine); }
+.release:nth-child(4n+2) { --c: var(--cobalt); }
+.release:nth-child(4n+3) { --c: var(--sun); }
+.release:nth-child(4n+4) { --c: var(--aurora); }
+.release:first-child::before { width: 30px; height: 30px; left: -48px; top: 2px; }
+.release:first-child .release-meta h2::after { content: "Latest"; display: inline-block; margin-left: 10px; vertical-align: middle; font: 500 10px/1 var(--mono); letter-spacing: .12em; text-transform: uppercase; background: var(--ink); color: var(--paper); border-radius: 99px; padding: 5px 9px; }
+.release-meta h2 { margin: 0; font-family: var(--display); font-weight: 800; font-size: clamp(26px, 2.2vw, 34px); letter-spacing: -.04em; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.release-meta time { display: block; margin-top: 8px; font-family: var(--mono); font-size: 11px; letter-spacing: .1em; text-transform: uppercase; opacity: .65; }
+.release-copy { max-width: 680px; overflow-wrap: anywhere; font-size: 16.5px; line-height: 1.55; }
+.release-copy h3 { margin: 0 0 12px; font-family: var(--display); font-weight: 800; font-size: clamp(24px, 2.2vw, 34px); line-height: 1.05; letter-spacing: -.035em; }
+.release-copy p, .release-copy ul { margin: 0 0 14px; opacity: .88; }
+.release-copy ul { padding-left: 20px; list-style: disc; }
+.release-copy li { margin-bottom: 6px; }
+.release-source { display: inline-block; font-size: 14px; font-weight: 600; border-bottom: 2px solid var(--ink); }
+.release-source:hover { color: var(--cobalt); border-color: var(--cobalt); }
+.release-meta h2 a:hover { color: var(--cobalt); }
+#release-status { margin: 0 0 28px; font-size: 14px; }
+#release-status a, #no-releases button, noscript a { color: inherit; border-bottom: 2px solid currentColor; }
+#no-releases button { background: none; border: 0; border-bottom: 2px solid currentColor; padding: 0; font: inherit; cursor: pointer; color: inherit; }
+
+/* Closing band reuses the landing horizon */
+.cl-fin { padding-top: calc(var(--section) * .5); }
+
 @media (max-width: 900px) {
-  .release-layout { grid-template-columns: 150px minmax(0, 1fr); gap: 40px; }
-  .release { grid-template-columns: 1fr; gap: 18px; }
-  .release-meta { display: flex; align-items: baseline; flex-wrap: wrap; gap: 16px; }
+  .release-layout { grid-template-columns: 170px minmax(0, 1fr); }
+  .release { grid-template-columns: 1fr; gap: 12px; }
+  .release-meta { display: flex; align-items: baseline; flex-wrap: wrap; gap: 14px; }
   .release-meta time { margin: 0; }
 }
-@media (max-width: 600px) {
-  .changelog { padding-top: 40px; padding-bottom: 50px; }
-  .release-intro { margin-bottom: 36px; }
-  .release-intro p { font-size: 18px; }
+@media (max-width: 680px) {
+  .cl-hero { padding-top: 96px; }
+  .cl-hero-in { grid-template-columns: 1fr; }
+  .clart { position: absolute; right: -40px; top: 70px; width: 220px; opacity: .3; }
+  .cl-hero { position: relative; overflow: hidden; }
   .release-layout { display: block; }
-  .version-nav { position: static; margin-bottom: 40px; }
-  .version-nav nav { display: flex; flex-wrap: wrap; gap: 10px 20px; }
-  .version-nav input { margin-bottom: 16px; }
-  .archive-link { margin-top: 16px; }
-  .release { margin-bottom: 48px; }
-  .release-copy h3 { font-size: 22px; }
+  .version-nav { position: static; margin-bottom: 36px; }
+  .version-nav nav { display: flex; flex-wrap: wrap; gap: 4px 6px; }
 }
-
-.changelog-page footer .label { color: var(--mute); }
+@media (max-width: 680px) { .release-copy { font-size: 15px; } .timeline { padding-left: 36px; } .release::before { left: -36px; } .release:first-child::before { left: -40px; } .timeline::before { left: 10px; } }

@@ -23,7 +23,7 @@ Then open http://localhost:4400. Opening `index.html` from disk works too, but t
 Vercel serves this folder as is: set the project's Root Directory to `web`, framework preset "Other", no build command. `vercel.json` skips deployments when nothing under `web/` changed, and sets the cache and security headers.
 
 ## Rules
-- No external resources: fonts, scripts and images are served from this folder. The landing page's fonts (Bricolage Grotesque, DM Sans, DM Mono, SIL Open Font License) live in `assets/fonts/`; the changelog still uses the system fonts. The pages only call the public GitHub API for published release metadata. Changelog notes are rendered as text, never injected HTML.
+- No external resources: fonts, scripts and images are served from this folder. Both pages use the fonts in `assets/fonts/` (Bricolage Grotesque, DM Sans, DM Mono, SIL Open Font License) and share `assets/landing.css`; `assets/changelog.css` adds the changelog layout. The pages only call the public GitHub API for published release metadata. Changelog notes are rendered as text, never injected HTML.
 - Lines that name another browser stay in `copy/reference.json`. The page reads correctly without that file.
 - The Download buttons point to `https://github.com/okafrancois/circa/releases/latest/download/Circa.dmg`, uploaded with every browser release.
 - Use tags `web-vX.Y.Z` for website releases. Always create GitHub releases with `--latest=false`. Website workflows must use `paths:` filters limited to `web/**` and must never run on the self-hosted browser runner.

@@ -1,54 +1,70 @@
 <!doctype html>
-<html lang="en"><head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Changelog — Circa</title>
 <meta name="description" content="New features and fixes in Circa, release by release. Read the latest changes and download the browser for Mac.">
 <link rel="canonical" href="https://circabrowser.com/changelog">
-<meta property="og:title" content="Changelog — Circa"><meta property="og:description" content="New features and fixes, release by release.">
-<meta property="og:image" content="https://circabrowser.com/assets/og.png"><meta name="twitter:card" content="summary_large_image">
+<meta name="theme-color" content="#CFDCFA">
+<meta property="og:title" content="Changelog — Circa">
+<meta property="og:description" content="New features and fixes, release by release.">
+<meta property="og:image" content="https://circabrowser.com/assets/og.png">
+<meta name="twitter:card" content="summary_large_image">
 <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="assets/site.css"><link rel="stylesheet" href="assets/changelog.css">
-<script>(()=>{let saved;try{saved=localStorage.getItem('circa-theme')}catch{}document.documentElement.dataset.theme=saved||(matchMedia('(prefers-color-scheme: light)').matches?'light':'dark')})()</script>
+<link rel="apple-touch-icon" href="assets/apple-touch-icon.png">
+<link rel="preload" href="assets/fonts/bricolage-grotesque-600-800.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="assets/fonts/dm-sans-400-700.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="assets/landing.css">
+<link rel="stylesheet" href="assets/changelog.css">
 <script src="assets/changelog.js" defer></script>
-</head><body class="changelog-page">
-<svg width="0" height="0" style="position:absolute" aria-hidden="true">
-  <defs>
-    <symbol id="mark" viewBox="0 0 100 74">
-      <g fill="none" stroke-linecap="round">
-        <path d="M14 62a30 30 0 0 1 60 0" stroke="#fff" stroke-width="30"/>
-        <path d="M30 56a28 28 0 0 1 56 0" stroke="#fff" stroke-width="30"/>
-        <path d="M14 62a30 30 0 0 1 60 0" stroke="#2D5BFF" stroke-width="16"/>
-        <path d="M30 56a28 28 0 0 1 56 0" stroke="#FF5A5F" stroke-width="16"/>
-        <path d="M30 56a28 28 0 0 1 9.2-20.7" stroke="#7B4DFF" stroke-width="16"/>
-      </g>
-    </symbol>
-  </defs>
-</svg>
+</head>
+<body class="changelog-page">
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency=".035" numOctaves="2" seed="3"/><feDisplacementMap in="SourceGraphic" scale="3.2"/></filter>
+<filter id="rough2" x="-5%" y="-5%" width="110%" height="110%"><feTurbulence type="fractalNoise" baseFrequency=".06" numOctaves="2" seed="8"/><feDisplacementMap in="SourceGraphic" scale="1.8"/></filter>
+<pattern id="dInk" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(28)"><circle cx="2.5" cy="2.5" r="1.3" fill="#1B2057"/></pattern>
+<pattern id="dCob" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(28)"><circle cx="2.5" cy="2.5" r="1.35" fill="#2F4FE3"/></pattern>
+<pattern id="dTan" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(62)"><circle cx="2.5" cy="2.5" r="1.35" fill="#FF5A36"/></pattern>
+<pattern id="dPap" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(28)"><circle cx="2.5" cy="2.5" r="1.2" fill="#F6F1E7"/></pattern>
+<pattern id="sInk" width="2.6" height="2.6" patternUnits="userSpaceOnUse" patternTransform="rotate(28)"><circle cx="1.3" cy="1.3" r=".7" fill="#1B2057"/></pattern>
+<pattern id="sCob" width="2.6" height="2.6" patternUnits="userSpaceOnUse" patternTransform="rotate(28)"><circle cx="1.3" cy="1.3" r=".7" fill="#2F4FE3"/></pattern>
+<pattern id="sTan" width="2.6" height="2.6" patternUnits="userSpaceOnUse" patternTransform="rotate(62)"><circle cx="1.3" cy="1.3" r=".7" fill="#FF5A36"/></pattern>
+<pattern id="sPap" width="2.6" height="2.6" patternUnits="userSpaceOnUse" patternTransform="rotate(28)"><circle cx="1.3" cy="1.3" r=".65" fill="#F6F1E7"/></pattern>
+</defs></svg>
 
-<header class="nav" id="nav">
-  <div class="wrap">
-    <a class="brand" href="/"><svg viewBox="0 0 100 74" aria-hidden="true"><use href="#mark"/></svg>Circa</a>
-    <nav class="links" aria-label="Main"><a href="/#loved">Features</a><a href="/changelog" aria-current="page">Changelog</a><a href="https://github.com/okafrancois/circa">GitHub</a></nav>
-    <div class="right">
-      <button class="theme" id="themeToggle" type="button" aria-label="Switch between light and dark">
-        <svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4"/></svg>
-        <svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/></svg>
-      </button>
-      <a class="btn btn-light" href="https://github.com/okafrancois/circa/releases/latest/download/Circa.dmg" data-download>Download</a>
-    </div>
-  </div>
+<header class="nav wrap">
+  <a class="brand disp" href="/"><svg viewBox="0 0 100 100" class=""><g transform="translate(0 0) scale(1.0)"><defs><mask id="i73"><rect width="100" height="100" fill="#fff"/><circle cx="65" cy="44" r="29.5" fill="#000"/></mask></defs><circle cx="65" cy="44" r="25" fill="#FF5A36"/><circle cx="50" cy="50" r="42" fill="#2F4FE3" mask="url(#i73)"/></g></svg>Circa</a>
+  <nav class="links" aria-label="Main"><a href="/#features">Features</a><a href="/#spaces">Spaces</a><a href="/#move">Moving in</a><a href="/changelog" aria-current="page">Changelog</a><a class="dl" href="https://github.com/okafrancois/circa/releases/latest/download/Circa.dmg" data-download>Download</a></nav>
 </header>
 
-<main class="changelog wrap" id="main">
-<header class="release-intro"><h1>Changelog</h1><p>New features and fixes, release by release.</p></header>
-<div class="release-layout">
+<main id="main">
+<section class="cl-hero">
+  <div class="wrap cl-hero-in">
+    <div>
+      <p class="eye mono">Changelog</p>
+      <h1 class="disp">Mission <i>log.</i></h1>
+      <p class="sub">New features and fixes, release by release. Installed copies update on their own.</p>
+    </div>
+    <svg class="clart" viewBox="0 0 360 240" aria-hidden="true">
+<g filter="url(#rough2)"><ellipse transform="rotate(-16 190 128)" cx="190" cy="128" rx="150" ry="40" fill="none" stroke="#2F4FE3" stroke-width="1.8" stroke-linecap="round" stroke-dasharray="1 8"/></g>
+<g filter="url(#rough)"><defs><radialGradient id="i68" gradientUnits="userSpaceOnUse" cx="161.2" cy="99.2" r="136.8"><stop offset=".42" stop-color="#000"/><stop offset=".62" stop-color="#777"/><stop offset=".9" stop-color="#fff"/></radialGradient><mask id="i67"><circle cx="190" cy="128" r="72" fill="url(#i68)"/></mask></defs><circle cx="195" cy="132" r="72" fill="none" stroke="#FF5A36" stroke-width="2"/><circle cx="190" cy="128" r="72" fill="#FFF8E6"/><ellipse cx="162.6" cy="113.6" rx="14.4" ry="12.4" fill="#F3D9C4" style="mix-blend-mode:multiply"/><ellipse cx="203.0" cy="94.9" rx="9.4" ry="8.0" fill="#F3D9C4" style="mix-blend-mode:multiply"/><ellipse cx="211.6" cy="136.6" rx="17.3" ry="14.9" fill="#F3D9C4" style="mix-blend-mode:multiply"/><ellipse cx="175.6" cy="158.2" rx="10.8" ry="9.3" fill="#F3D9C4" style="mix-blend-mode:multiply"/><ellipse cx="145.4" cy="149.6" rx="5.0" ry="4.3" fill="#F3D9C4" style="mix-blend-mode:multiply"/><circle cx="190" cy="128" r="72" fill="url(#dCob)" mask="url(#i67)" opacity="1.0" style="mix-blend-mode:multiply"/></g>
+<g filter="url(#rough2)"><path transform="rotate(-16 190 128)" d="M40 128A150 40 0 0 0 340 128" fill="none" stroke="#2F4FE3" stroke-width="2" stroke-linecap="round" stroke-dasharray="1 8"/></g>
+<g transform="translate(330 96) rotate(-24) scale(0.9)"><path d="M-3 -3L-30 -16M-4 0L-34 -3M-4 2L-33 10M-2 5L-26 22" stroke="#1B2057" stroke-width="1.6" stroke-linecap="round" fill="none"/><circle r="9" fill="#FF5A36"/><circle r="9" fill="url(#dInk)" opacity=".28" style="mix-blend-mode:multiply"/><circle cx="-2.5" cy="-2.5" r="2.4" fill="#F6F1E7" opacity=".9"/></g>
+<g filter="url(#rough2)"><defs><radialGradient id="i70" gradientUnits="userSpaceOnUse" cx="47.2" cy="201.2" r="22.8"><stop offset=".42" stop-color="#000"/><stop offset=".62" stop-color="#777"/><stop offset=".9" stop-color="#fff"/></radialGradient><mask id="i69"><circle cx="52" cy="206" r="12" fill="url(#i70)"/></mask></defs><circle cx="52" cy="206" r="12" fill="#FF9DB8"/><circle cx="52" cy="206" r="12" fill="url(#dCob)" mask="url(#i69)" opacity="1.0" style="mix-blend-mode:multiply"/></g>
+<path transform="translate(40 40) rotate(0)" d="M0 -10Q1.6 -1.6 10 0Q1.6 1.6 0 10Q-1.6 1.6 -10 0Q-1.6 -1.6 0 -10Z" fill="#1B2057"/><path transform="translate(300 214) rotate(0)" d="M0 -7Q1.12 -1.12 7 0Q1.12 1.12 0 7Q-1.12 1.12 -7 0Q-1.12 -1.12 0 -7Z" fill="#FF5A36"/><path transform="translate(338 28) rotate(0)" d="M0 -5Q0.8 -0.8 5 0Q0.8 0.8 0 5Q-0.8 0.8 -5 0Q-0.8 -0.8 0 -5Z" fill="#2F4FE3"/></svg>
+  </div>
+</section>
+
+<section class="changelog"><div class="deco" aria-hidden="true"><span style="left:6%;top:30%;width:14px"><svg viewBox="-10 -10 20 20"><path transform="translate(0 0) rotate(0)" d="M0 -10Q1.6 -1.6 10 0Q1.6 1.6 0 10Q-1.6 1.6 -10 0Q-1.6 -1.6 0 -10Z" fill="#1B2057"/></svg></span><span style="left:3%;top:62%;width:4px"><svg viewBox="0 0 10 10"><circle cx="5" cy="5" r="5" fill="#2F4FE3"/></svg></span><span style="left:97%;top:40%;width:12px"><svg viewBox="-10 -10 20 20"><path transform="translate(0 0) rotate(0)" d="M0 -10Q1.6 -1.6 10 0Q1.6 1.6 0 10Q-1.6 1.6 -10 0Q-1.6 -1.6 0 -10Z" fill="#FF5A36"/></svg></span><span style="left:95%;top:70%;width:22px"><svg viewBox="0 0 40 40"><g filter="url(#rough2)"><defs><radialGradient id="i72" gradientUnits="userSpaceOnUse" cx="13.2" cy="13.2" r="32.3"><stop offset=".42" stop-color="#000"/><stop offset=".62" stop-color="#777"/><stop offset=".9" stop-color="#fff"/></radialGradient><mask id="i71"><circle cx="20" cy="20" r="17" fill="url(#i72)"/></mask></defs><circle cx="20" cy="20" r="17" fill="#FFC83D"/><circle cx="20" cy="20" r="17" fill="url(#sTan)" mask="url(#i71)" opacity="1.0" style="mix-blend-mode:multiply"/></g></svg></span><span style="left:4%;top:88%;width:4px"><svg viewBox="0 0 10 10"><circle cx="5" cy="5" r="5" fill="#1B2057"/></svg></span><span style="left:98%;top:92%;width:10px"><svg viewBox="-10 -10 20 20"><path transform="translate(0 0) rotate(0)" d="M0 -10Q1.6 -1.6 10 0Q1.6 1.6 0 10Q-1.6 1.6 -10 0Q-1.6 -1.6 0 -10Z" fill="#2F4FE3"/></svg></span></div><div class="wrap release-layout">
 <aside class="version-nav" aria-label="Release navigation">
+<p class="mono vn-title">Releases</p>
 <label for="release-search" hidden id="search-label">Find a release</label>
 <input id="release-search" type="search" placeholder="Find a release" aria-label="Find a release" hidden>
 <nav aria-label="Versions" id="versions"><a href="#v0.60.3">0.60.3</a><a href="#v0.60.2">0.60.2</a><a href="#v0.60.1">0.60.1</a><a href="#v0.60.0">0.60.0</a><a href="#v0.59.2">0.59.2</a><a href="#v0.59.1">0.59.1</a><a href="#v0.59.0">0.59.0</a><a href="#v0.58.2">0.58.2</a></nav>
 <a class="archive-link" href="https://github.com/okafrancois/circa/releases">Earlier releases ↗</a>
 </aside>
-<div><p id="release-status" role="status" hidden></p><div id="releases"><article class="release" id="v0.60.3" data-version="0.60.3">
+<div class="timeline"><p id="release-status" role="status" hidden></p><div id="releases"><article class="release" id="v0.60.3" data-version="0.60.3">
   <div class="release-meta"><h2><a href="#v0.60.3" aria-label="Link to version 0.60.3">0.60.3</a></h2><time datetime="2026-11-03">November 3, 2026</time></div>
   <div class="release-copy"><h3>Consistent Favorites icons</h3><p>Small icons scale up and transparent padding is removed, so Favorites share a consistent visible size. Logo proportions are preserved.</p><a class="release-source" href="https://github.com/okafrancois/circa/releases/tag/v0.60.3">Full release notes ↗</a></div>
 </article><article class="release" id="v0.60.2" data-version="0.60.2">
@@ -75,7 +91,26 @@
 </article></div>
 <p id="no-releases" hidden>No matching release. <button type="button" id="clear-search">Clear search</button></p>
 <noscript><p>These recent notes are available without JavaScript. <a href="https://github.com/okafrancois/circa/releases">See all published releases on GitHub.</a></p></noscript>
-</div></div>
+</div></div></section>
+
+<section class="fin cl-fin" aria-label="Download">
+  <div class="wrap fin-in">
+    <h2 class="disp">Always <i>the latest.</i></h2>
+    <div class="cta"><a class="btn" href="https://github.com/okafrancois/circa/releases/latest/download/Circa.dmg" data-download><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4v11m0 0-4.5-4.5M12 15l4.5-4.5M5 20h14"/></svg>Download Circa for Mac</a><span class="fine mono">Free · open source · no account</span></div>
+  </div>
+  <svg class="hzn" viewBox="0 0 1440 380" preserveAspectRatio="xMidYMax slice" aria-hidden="true">
+<g id="hmoon"><g filter="url(#rough)"><defs><radialGradient id="i51" gradientUnits="userSpaceOnUse" cx="471.0" cy="263.0" r="3154.0"><stop offset=".42" stop-color="#000"/><stop offset=".62" stop-color="#777"/><stop offset=".9" stop-color="#fff"/></radialGradient><mask id="i50"><circle cx="720" cy="1840" r="1660" fill="url(#i51)"/></mask></defs><circle cx="720" cy="1831" r="1660" fill="none" stroke="#FF5A36" stroke-width="2.6"/><circle cx="720" cy="1840" r="1660" fill="#FFF8E6"/><ellipse cx="170.0" cy="307.8" rx="40.0" ry="34.4" fill="#F3D9C4" style="mix-blend-mode:multiply"/><ellipse cx="400.0" cy="269.1" rx="30.0" ry="25.8" fill="#F3D9C4" style="mix-blend-mode:multiply"/><ellipse cx="620.0" cy="223.0" rx="52.0" ry="44.7" fill="#F3D9C4" style="mix-blend-mode:multiply"/><ellipse cx="880.0" cy="249.7" rx="32.0" ry="27.5" fill="#F3D9C4" style="mix-blend-mode:multiply"/><ellipse cx="1150.0" cy="284.7" rx="46.0" ry="39.6" fill="#F3D9C4" style="mix-blend-mode:multiply"/><ellipse cx="760.0" cy="300.5" rx="24.0" ry="20.6" fill="#F3D9C4" style="mix-blend-mode:multiply"/><circle cx="720" cy="1840" r="1660" fill="url(#dCob)" mask="url(#i50)" opacity="1.0" style="mix-blend-mode:multiply"/></g>
+<g id="hflag"><path d="M1060 206V110" stroke="#1B2057" stroke-width="3" stroke-linecap="round"/><path d="M1060 111h66l-12 15 12 15h-66Z" fill="#2F4FE3"/><g transform="translate(1066 113) scale(0.26)"><defs><mask id="i52"><rect width="100" height="100" fill="#fff"/><circle cx="65" cy="44" r="29.5" fill="#000"/></mask></defs><circle cx="65" cy="44" r="25" fill="#FF5A36"/><circle cx="50" cy="50" r="42" fill="#F6F1E7" mask="url(#i52)"/></g></g></g>
+<g filter="url(#rough2)"><ellipse transform="rotate(-20 250 110)" cx="250" cy="110" rx="52" ry="13" fill="none" stroke="#2F4FE3" stroke-width="3" stroke-linecap="round"/><defs><radialGradient id="i54" gradientUnits="userSpaceOnUse" cx="239.2" cy="99.2" r="51.3"><stop offset=".42" stop-color="#000"/><stop offset=".62" stop-color="#777"/><stop offset=".9" stop-color="#fff"/></radialGradient><mask id="i53"><circle cx="250" cy="110" r="27" fill="url(#i54)"/></mask></defs><circle cx="250" cy="110" r="27" fill="#FFC83D"/><circle cx="250" cy="110" r="27" fill="url(#dTan)" mask="url(#i53)" opacity="1.0" style="mix-blend-mode:multiply"/><path transform="rotate(-20 250 110)" d="M198 110A52 13 0 0 0 302 110" fill="none" stroke="#2F4FE3" stroke-width="3" stroke-linecap="round"/></g>
+<g id="hsat"><g transform="translate(560 96) rotate(-28) scale(1)"><path d="M-3 -3L-30 -16M-4 0L-34 -3M-4 2L-33 10M-2 5L-26 22" stroke="#1B2057" stroke-width="1.6" stroke-linecap="round" fill="none"/><circle r="9" fill="#FF5A36"/><circle r="9" fill="url(#dInk)" opacity=".28" style="mix-blend-mode:multiply"/><circle cx="-2.5" cy="-2.5" r="2.4" fill="#F6F1E7" opacity=".9"/></g></g>
+<path transform="translate(120 210) rotate(0)" d="M0 -10Q1.6 -1.6 10 0Q1.6 1.6 0 10Q-1.6 1.6 -10 0Q-1.6 -1.6 0 -10Z" fill="#1B2057"/><path transform="translate(1300 90) rotate(0)" d="M0 -9Q1.44 -1.44 9 0Q1.44 1.44 0 9Q-1.44 1.44 -9 0Q-1.44 -1.44 0 -9Z" fill="#2F4FE3"/><path transform="translate(420 60) rotate(0)" d="M0 -6Q0.96 -0.96 6 0Q0.96 0.96 0 6Q-0.96 0.96 -6 0Q-0.96 -0.96 0 -6Z" fill="#FF5A36"/><path transform="translate(1220 230) rotate(0)" d="M0 -7Q1.12 -1.12 7 0Q1.12 1.12 0 7Q-1.12 1.12 -7 0Q-1.12 -1.12 0 -7Z" fill="#FF5A36"/><path transform="translate(860 70) rotate(0)" d="M0 -5Q0.8 -0.8 5 0Q0.8 0.8 0 5Q-0.8 0.8 -5 0Q-0.8 -0.8 0 -5Z" fill="#1B2057"/>
+<g fill="#1B2057"><circle cx="330" cy="40" r="2"/><circle cx="960" cy="120" r="1.8"/><circle cx="1380" cy="200" r="1.6"/><circle cx="60" cy="90" r="1.6"/></g></svg>
+  <footer class="foot"><div class="wrap foot-in">
+    <a class="brand disp" href="/"><svg viewBox="0 0 100 100" class=""><g transform="translate(0 0) scale(1.0)"><defs><mask id="i74"><rect width="100" height="100" fill="#fff"/><circle cx="65" cy="44" r="29.5" fill="#000"/></mask></defs><circle cx="65" cy="44" r="25" fill="#FF5A36"/><circle cx="50" cy="50" r="42" fill="#2F4FE3" mask="url(#i74)"/></g></svg>Circa</a>
+    <span class="fine">© 2026 Circa<span data-ref="footer.notice" hidden></span></span>
+    <nav aria-label="Footer"><a href="https://github.com/okafrancois/circa">GitHub</a><a href="/changelog">Changelog</a><a href="https://github.com/okafrancois/circa/releases">Releases</a></nav>
+  </div></footer>
+</section>
 </main>
-<footer><div class="wrap"><span class="label">© 2026 Circa</span><nav aria-label="Footer"><a href="/">Circa</a><a href="https://github.com/okafrancois/circa">GitHub</a><a href="https://github.com/okafrancois/circa/releases">Releases</a></nav></div></footer>
-</body></html>
+</body>
+</html>

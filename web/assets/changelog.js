@@ -18,11 +18,13 @@ document.addEventListener('DOMContentLoaded', () => {
     if (className) el.className = className;
     return el;
   };
-  document.querySelector('#themeToggle').addEventListener('click', () => {
-    const theme = document.documentElement.dataset.theme === 'light' ? 'dark' : 'light';
-    document.documentElement.dataset.theme = theme;
-    try { localStorage.setItem('circa-theme', theme); } catch {}
-  });
+  // Lines that name another browser live in one file; the page reads well without it.
+  fetch('copy/reference.json').then(r => r.ok ? r.json() : {}).then(copy => {
+    document.querySelectorAll('[data-ref]').forEach(el => {
+      const text = copy[el.dataset.ref];
+      if (typeof text === 'string' && text) { el.textContent = text; el.hidden = false; }
+    });
+  }).catch(() => {});
   const filter = () => {
     const query = search.value.trim().toLowerCase();
     let count = 0;
