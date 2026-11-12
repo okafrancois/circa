@@ -1098,7 +1098,10 @@ class Client final : public CefClient, public CefLifeSpanHandler, public CefDisp
     if (g_state->callbacks.decide_key(g_state->context, &key, &track) == 1) return true;
     if (track == 1 && os_event) {
       g_state->TrackKey(key.key_id, token_, (__bridge NSEvent*)os_event);
-      *is_keyboard_shortcut = true;
+      // Option-only raw keys may precede character/dead-key input. Observe their
+      // receipt without suppressing the character event while the renderer handles it.
+      *is_keyboard_shortcut = !(event.modifiers & EVENTFLAG_ALT_DOWN) ||
+          (event.modifiers & (EVENTFLAG_COMMAND_DOWN | EVENTFLAG_CONTROL_DOWN));
     }
     return false;
   }

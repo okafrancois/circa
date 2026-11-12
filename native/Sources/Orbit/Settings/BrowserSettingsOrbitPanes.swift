@@ -380,7 +380,7 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
                 }
             }
             BrowserShortcutSettingsPane(preferences: model.environment.shortcutPreferences,
-                definitions: model.settingsShortcuts, conflictDefinitions: model.shortcuts,
+                definitions: model.settingsShortcuts,
                 openExtensionSettings: model.selectedProfileID.map { profile in { open(.extensionShortcuts, profile: profile) } },
                 extensionSettingsAvailable: model.selectedProfileID.map { model.canOpenExtensionSettings(profile: $0) } ?? false)
         }

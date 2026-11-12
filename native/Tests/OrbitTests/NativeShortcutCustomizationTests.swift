@@ -17,6 +17,60 @@ struct NativeShortcutCustomizationTests {
             charactersIgnoringModifiers: key, isARepeat: false, keyCode: code))
     }
 
+    @Test("Assistant defaults to Option-E, leaves Command-E to extensions and supports version-one overrides")
+    func assistantShortcutRouting() throws {
+        let router = BrowserWindowRouter<Window>(create: { _ in Window() }, present: { _, _ in }, dispose: { _ in })
+        let registry = try BrowserCommandRegistry(router: router, state: { _ in .init() })
+        try registry.registerApplication(.toggleAssistant) {}
+        try registry.registerApplication(.cycleExtensions) {}
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let destination = root.appendingPathComponent("shortcuts.json")
+        let preferences = BrowserShortcutPreferences(destination: destination)
+        registry.useShortcutPreferences(preferences)
+        #expect(registry.definition(.toggleAssistant)?.shortcuts == [.init(key: "e", modifiers: .option)])
+        #expect(registry.resolve(try event("e")) == .cycleExtensions)
+        #expect(registry.resolve(try event("e", flags: .option)) == .toggleAssistant)
+        #expect(!registry.prefersBrowser(.toggleAssistant))
+        let keyboard = BrowserCommandKeyboard(registry: registry, acceptsKeyboard: { true }, firstResponder: { nil })
+        // The monitor leaves character/dead-key input to the page, including composition.
+        #expect(!keyboard.handle(try event("e", flags: .option)))
+        #expect(!keyboard.handle(try event("e", flags: .option), isComposing: true))
+        let rebound = BrowserShortcut(key: "e", modifiers: [.command, .control, .option])
+        try preferences.setShortcut(rebound, for: .toggleAssistant, definitions: registry.defaultDefinitions)
+        #expect(registry.resolve(rebound) == .toggleAssistant)
+        #expect(registry.resolve(BrowserShortcut(key: "e", modifiers: .option)) == nil)
+        #expect(registry.resolve(try event("e")) == .cycleExtensions)
+        let restored = BrowserShortcutPreferences(destination: destination)
+        #expect(!restored.isUnavailable)
+        #expect(restored.document.version == 1)
+        #expect(restored.bindings(for: try #require(registry.definition(.toggleAssistant))) == [rebound])
+    }
+
+    @Test("Option character shortcuts leave native editors free to type accents")
+    func optionShortcutDoesNotStealNativeTyping() throws {
+        _ = NSApplication.shared
+        let router = BrowserWindowRouter<Window>(create: { _ in Window() }, present: { _, _ in }, dispose: { _ in })
+        let registry = try BrowserCommandRegistry(router: router, state: { _ in .init() })
+        var calls = 0
+        try registry.registerApplication(.toggleAssistant) { calls += 1 }
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 200, height: 100),
+            styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        defer { window.close() }
+        let editor = NSTextView(frame: window.contentView!.bounds)
+        window.contentView = editor
+        #expect(window.makeFirstResponder(editor))
+        let menus = BrowserCommandMenus(registry: registry, keyWindow: { window })
+        let menu = menus.makeMenuBar()
+        #expect(!menu.performKeyEquivalent(with: try event("e", flags: .option)))
+        #expect(calls == 0)
+        #expect(window.makeFirstResponder(nil))
+        let optionE = try event("e", flags: .option)
+        #expect(menu.performKeyEquivalent(with: optionE))
+        #expect(calls == 1)
+    }
+
     @Test("Removing or remapping Copy URL frees its default character shortcut")
     func copyURLCanBeRemoved() throws {
         let preferences = BrowserShortcutPreferences()

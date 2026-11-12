@@ -1002,6 +1002,22 @@ public final class ChromiumSurface: BrowserEngineSurface {
         let receipt = keyReceipts.remove(at: index).receipt
         guard !isDisposed, let event = key.event, let delegate else { return false }
         let modifiers = event.modifierFlags.intersection([.command, .shift, .option, .control])
+        if modifiers.contains(.option), modifiers.intersection([.command, .control]).isEmpty {
+            // A raw Option key can be declined before its character reaches an editor.
+            // Inspect focus only; never transfer the field's value out of the renderer.
+            let generation = documentGeneration
+            Task { [weak self] in
+                guard let self else { return }
+                let (ok, data) = await self.devToolsCall("Runtime.evaluate", params: #"{"expression":"(()=>{let e=document.activeElement;while(e?.shadowRoot?.activeElement)e=e.shadowRoot.activeElement;return !!e&&(e.matches('input,textarea,select,iframe,frame')||e.isContentEditable)})()","returnByValue":true}"#, timeout: .milliseconds(250))
+                guard ok, !self.isDisposed, self.documentGeneration == generation,
+                      let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                      let result = object["result"] as? [String: Any], result["value"] as? Bool == false,
+                      let delegate = self.delegate else { return }
+                let handled = delegate.surface(self, pageDidNotHandleKey: event, receipt: receipt)
+                self.onEngineEvent?("unhandled-key", ["handled": String(handled)])
+            }
+            return true
+        }
         if modifiers == [.command], event.charactersIgnoringModifiers?.lowercased() == "z" {
             guard !key.isEditableFieldFocused else { return false }
             if delegate.surface(self, performNonEditingUndo: event, receipt: receipt) { return true }

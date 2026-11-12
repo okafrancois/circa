@@ -55,9 +55,11 @@ final class BrowserSettingsModel<Engine: BrowserEngine>: ObservableObject {
     var presentThemeEditor: ((SpaceID) -> Void)?
     var presentBrowserForProfile: ((ProfileID) async throws -> BrowserWindowController<Engine>)?
     var shortcutIsImplemented: ((BrowserCommandID) -> Bool)?
+    // Settings and its conflict checks share this editable universe, including actions without defaults.
     var settingsShortcuts: [BrowserCommandDefinition] {
         shortcuts.filter { $0.owner != "OUT-OF-SCOPE-AI" && !OrbitCommandCatalog.structuralIDs.contains($0.id)
-            && $0.scope == .browser && ($0.sources.contains(where: { $0.hasPrefix("menu.declaration.") }) || $0.owner == "ORG")
+            && !OrbitCommandCatalog.hiddenCommands.contains($0.id)
+            && [.browser, .responder].contains($0.scope)
             && (shortcutIsImplemented?($0.id) ?? true) }
             .sorted { $0.localizedTitle.localizedStandardCompare($1.localizedTitle) == .orderedAscending }
     }

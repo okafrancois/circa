@@ -1264,6 +1264,33 @@ extension NativeWebKitTests.NativeSettingsTests {
         #expect(model.settingsShortcuts.map(\.id) == [.preferences])
     }
 
+    @Test("Shortcut conflicts and resets use only visible editable commands")
+    func settingsShortcutConflictsAreVisible() throws {
+        let model = settingsModel(BrowserEnvironment(engine: SettingsFixtureEngine()))
+        let visible = model.settingsShortcuts
+        let ids = Set(visible.map(\.id))
+        #expect(ids.contains(.cycleExtensions))
+        #expect(ids.contains(.toggleAssistant))
+        #expect(ids.contains(.copy))
+        #expect(!ids.contains(.newChatGPTMessage))
+        #expect(ids.isDisjoint(with: OrbitCommandCatalog.structuralIDs))
+        let preferences = BrowserShortcutPreferences()
+        for command in visible where command.id != .toggleAssistant {
+            for shortcut in preferences.bindings(for: command) where BrowserShortcutPreferences.isValid(shortcut) {
+                do {
+                    try preferences.setShortcut(shortcut, for: .toggleAssistant, definitions: visible)
+                    Issue.record("Expected a conflict with a visible command")
+                } catch BrowserShortcutPreferenceError.conflict(let title) {
+                    #expect(visible.contains { $0.localizedTitle == title })
+                }
+            }
+        }
+        // Hidden workflows cannot block assigning or resetting a visible action.
+        try preferences.setShortcut(.init(key: "g", modifiers: [.command, .option]),
+            for: .toggleAssistant, definitions: visible)
+        try preferences.reset(.toggleAssistant, definitions: visible)
+    }
+
     @Test("Settings toolbar contains the public Orbit categories and resizing retains its top edge")
     func orbitSettingsCategoriesAndResize() async throws {
         NSApplication.shared.setActivationPolicy(.prohibited)

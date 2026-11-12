@@ -219,6 +219,11 @@ final class BrowserCommandMenus<Window: AnyObject>: NSObject, NSMenuItemValidati
         // the key-equivalent stage. Do not steal those keys for future browser commands.
         if normalized.shortcut.modifiers.intersection([.command, .control, .option]).isEmpty,
            BrowserCommandTextInput.isEditing(keyWindowProvider()?.firstResponder) { return false }
+        // Option characters and dead keys belong to native text input, which may only
+        // process them in keyDown after AppKit has asked the menu for equivalents.
+        if normalized.shortcut.modifiers.contains(.option),
+           normalized.shortcut.modifiers.intersection([.command, .control]).isEmpty,
+           BrowserCommandTextInput.isEditing(keyWindowProvider()?.firstResponder) { return false }
         let candidates = registry.matchingDefinitions(normalized)
         if candidates.contains(where: { BrowserStandardActions.selector(for: $0.id) != nil }) { return nil }
         if target == nil, nonBrowserKeyWindow() != nil,
