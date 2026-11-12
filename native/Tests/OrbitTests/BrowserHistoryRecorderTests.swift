@@ -5,11 +5,57 @@ import BrowserEngine
 import BrowserShell
 import Foundation
 import Testing
+import Darwin
 
 extension NativeWebKitTests {
 @Suite("History engine recording", .serialized)
 @MainActor
 struct BrowserHistoryRecorderTests {
+    @Test("Unchanged favicon metadata skips encoding and keeps its inline visit payload")
+    func faviconIdentityAndTiming() async throws {
+        let root = URL(fileURLWithPath: "/private/tmp/perf-history-recorder-\(UUID())")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let recorder = BrowserHistoryRecorder(directory: root, resolveProfile: { .init(profileID: $0, persistence: .persistent) })
+        let surface = HistoryTestSurface()
+        surface.navigationState.committedURL = URL(string: "https://synthetic.test/page")!
+        let source = URL(string: "https://synthetic.test/icon.png")!
+        let bitmap = try #require(NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 128, pixelsHigh: 128,
+            bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 512, bitsPerPixel: 32))
+        let pixels = try #require(bitmap.bitmapData)
+        for i in 0..<(512 * 128) { pixels[i] = UInt8(truncatingIfNeeded: (i * 73) ^ (i >> 5)) }
+        let png = try #require(bitmap.representation(using: .png, properties: [:]))
+        let image = try #require(BrowserFaviconImage(sourceURL: source, png: png))
+        surface.navigationState.faviconURL = source
+        surface.navigationState.faviconImage = image
+        recorder.committed(surface, profile: .init(profileID: surface.profileID, persistence: .persistent))
+        await recorder.flush()
+        let iterations = 10_000
+        func threadCPU() -> Double {
+            var time = timespec()
+            clock_gettime(CLOCK_THREAD_CPUTIME_ID, &time)
+            return Double(time.tv_sec) + Double(time.tv_nsec) / 1_000_000_000
+        }
+        let cpuBefore = threadCPU()
+        let before = Date()
+        var last: URL?
+        for _ in 0..<iterations { last = BrowserHistoryFavicon.reference(png: png) }
+        let oldCPU = (threadCPU() - cpuBefore) * 1_000_000 / Double(iterations)
+        let oldTime = Date().timeIntervalSince(before) * 1_000_000 / Double(iterations)
+        let cpuAfter = threadCPU()
+        let after = Date()
+        for _ in 0..<iterations { recorder.metadataChanged(surface) }
+        let newCPU = (threadCPU() - cpuAfter) * 1_000_000 / Double(iterations)
+        let newTime = Date().timeIntervalSince(after) * 1_000_000 / Double(iterations)
+        await recorder.flush()
+        #expect(try await recorder.visits(for: surface.profileID).first?.faviconReference == last)
+        surface.navigationState.faviconImage = nil
+        recorder.metadataChanged(surface)
+        await recorder.flush()
+        #expect(try await recorder.visits(for: surface.profileID).first?.faviconReference == source)
+        try await recorder.close()
+        print("FAVICON_STATE_BENCHMARK samples=\(iterations) pngBytes=\(png.count) beforeMainMicroseconds=\(oldTime) afterMainMicroseconds=\(newTime) beforeMainCPUMicroseconds=\(oldCPU) afterMainCPUMicroseconds=\(newCPU)")
+    }
+
     @Test("Deletion drains visits that are still queued for write before mutating the database")
     func queuedWriteThenDelete() async throws {
         let root = URL(fileURLWithPath: "/private/tmp", isDirectory: true).appendingPathComponent("orbit-library-r2-queued-\(UUID())")

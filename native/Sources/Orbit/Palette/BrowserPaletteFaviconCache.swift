@@ -2,7 +2,6 @@ import AppKit
 import BrowserCore
 import BrowserEngine
 import ImageIO
-import CryptoKit
 
 private struct PaletteDecodedImage: @unchecked Sendable { let image: CGImage }
 
@@ -19,8 +18,11 @@ final class BrowserPaletteFaviconCache {
     var onChange: (() -> Void)?
 
     func image(for image: BrowserFaviconImage) -> NSImage? {
-        guard let reference = BrowserHistoryFavicon.reference(png: image.png) else { return nil }
-        return self.image(for: reference)
+        cached(key: image.contentHash) {
+            await Task.detached(priority: .utility) {
+                BrowserHistoryFavicon.reference(png: image.png)
+            }.value
+        }
     }
 
     func waitForPendingImages() async {
@@ -28,14 +30,22 @@ final class BrowserPaletteFaviconCache {
         await notificationTask?.value
     }
 
-    func image(for url: URL) -> NSImage? {
-        guard url.scheme == "data", url.absoluteString.utf8.count <= 262_144 else { return nil }
-        let key = Data(SHA256.hash(data: Data(url.absoluteString.utf8))).base64EncodedString()
+    func image(for url: URL, resolve: (@MainActor () async -> URL?)? = nil) -> NSImage? {
+        guard BrowserHistoryFavicon.isStoredReference(url) ||
+              (url.scheme == "data" && url.absoluteString.utf8.count <= 262_144) else { return nil }
+        return cached(key: url.absoluteString) {
+            if BrowserHistoryFavicon.isStoredReference(url) { return await resolve?() }
+            return url
+        }
+    }
+
+    private func cached(key: String, reference: @escaping @MainActor () async -> URL?) -> NSImage? {
         if let image = images.value(for: key) { return image }
         guard rejected.value(for: key) == nil, pending[key] == nil, pending.count < 16 else { return nil }
         let pixels = Int(OrbitTokens.Metrics.CommandBar.iconTileSize * 2)
         pending[key] = Task { [weak self] in
-            let decoded = await Task.detached(priority: .utility) { Self.decode(url, pixels: pixels) }.value
+            let url = await reference()
+            let decoded = await Task.detached(priority: .utility) { url.flatMap { Self.decode($0, pixels: pixels) } }.value
             guard !Task.isCancelled, let self else { return }
             pending[key] = nil
             if let decoded {

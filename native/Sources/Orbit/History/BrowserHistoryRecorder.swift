@@ -80,11 +80,19 @@ final class BrowserHistoryRecorder {
         documents = documents.filter { $0.value.surface != nil }
         let intent = typedNavigations.removeValue(forKey: ObjectIdentifier(surface))
         let typed = intent?.surface.value === surface && intent?.url == url
+        let image = surface.navigationState.faviconImage.flatMap { $0.sourceURL == surface.navigationState.faviconURL ? $0 : nil }
+        let fallback = surface.navigationState.faviconURL
         let visit = BrowserHistoryVisit(url: url, title: surface.navigationState.title ?? "",
                                        transition: typed ? .typed : .unknown,
-                                       faviconReference: faviconReference(for: surface), typedCount: typed ? 1 : 0)
+                                       faviconReference: nil, typedCount: typed ? 1 : 0)
         documents[ObjectIdentifier(surface)] = Document(surface: surface, profileID: profile.profileID, visitID: visit.id, url: url, generation: surface.findDocumentGeneration)
+        if let document = documents[ObjectIdentifier(surface)] {
+            document.title = visit.title
+            document.faviconIdentity = image?.contentHash ?? fallback?.absoluteString
+        }
         enqueue(profileID: profile.profileID) { recorder in
+            var visit = visit
+            visit.faviconReference = await Self.encodeFavicon(image, fallback: fallback)
             let page = try await recorder.access(profileID: profile.profileID, disabled: nil as BrowserHistoryIndexedPage?) {
                 try await $0.recordReturningPage(visit)
             }
@@ -109,13 +117,16 @@ final class BrowserHistoryRecorder {
               isPersistent(document.profileID), surface.navigationState.committedURL == document.url,
               surface.findDocumentGeneration == document.generation else { return }
         let title = surface.navigationState.title ?? ""
-        let favicon = faviconReference(for: surface)
-        guard title != document.title || favicon != document.favicon else { return }
+        let image = surface.navigationState.faviconImage.flatMap { $0.sourceURL == surface.navigationState.faviconURL ? $0 : nil }
+        let fallback = surface.navigationState.faviconURL
+        let identity = image?.contentHash ?? fallback?.absoluteString
+        guard title != document.title || identity != document.faviconIdentity else { return }
         document.title = title
-        document.favicon = favicon
+        document.faviconIdentity = identity
         let profileID = document.profileID
         let visitID = document.visitID
         enqueue(profileID: profileID) { recorder in
+            let favicon = await Self.encodeFavicon(image, fallback: fallback)
             let page = try await recorder.access(profileID: profileID, disabled: nil as BrowserHistoryIndexedPage?) {
                 try await $0.updateMetadata(visitID: visitID, title: title, faviconReference: favicon)
             }
@@ -123,12 +134,15 @@ final class BrowserHistoryRecorder {
         }
     }
 
-    private func faviconReference<Surface: BrowserEngineSurface>(for surface: Surface) -> URL? {
-        if let image = surface.navigationState.faviconImage,
-           image.sourceURL == surface.navigationState.faviconURL {
-            return BrowserHistoryFavicon.reference(png: image.png)
-        }
-        return surface.navigationState.faviconURL.flatMap { BrowserHistoryFavicon.accepts($0) ? $0 : nil }
+    private static func encodeFavicon(_ image: BrowserFaviconImage?, fallback: URL?) async -> URL? {
+        await Task.detached(priority: .utility) {
+            if let image { return BrowserHistoryFavicon.reference(png: image.png) }
+            return fallback.flatMap { BrowserHistoryFavicon.accepts($0) ? $0 : nil }
+        }.value
+    }
+
+    func resolveFavicon(_ reference: URL, profileID: ProfileID) async -> URL? {
+        try? await access(profileID: profileID, disabled: nil as URL?) { try await $0.resolveFavicon(reference) }
     }
 
     /// Complete suggestions from the read-only connection. Each call is its own request:
@@ -507,7 +521,7 @@ final class BrowserHistoryRecorder {
         let url: URL
         let generation: UInt64
         var title = ""
-        var favicon: URL?
+        var faviconIdentity: String?
         init(surface: AnyObject, profileID: ProfileID, visitID: UUID, url: URL, generation: UInt64) {
             self.surface = surface
             self.profileID = profileID

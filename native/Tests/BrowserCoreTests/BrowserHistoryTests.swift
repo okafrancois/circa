@@ -399,6 +399,11 @@ private final class HistoryTestSQL {
     }
     func makeLegacy(version: Int) throws {
         try execute("""
+            UPDATE visits SET payload=json_set(payload,'$.faviconReference',COALESCE(
+                (SELECT payload FROM favicons WHERE 'orbit-favicon:' || hash=json_extract(visits.payload,'$.faviconReference')),
+                json_extract(payload,'$.faviconReference')));
+            UPDATE pages SET favicon=COALESCE((SELECT payload FROM favicons WHERE 'orbit-favicon:' || hash=pages.favicon),favicon);
+            DROP TABLE favicons;
             DROP INDEX IF EXISTS pages_weight_last;
             DROP TABLE historySyncEvents; DROP TABLE historySyncBatches;
             DROP TABLE historySyncState; DROP TABLE historySyncVersions;

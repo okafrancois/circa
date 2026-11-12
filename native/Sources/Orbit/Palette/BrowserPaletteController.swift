@@ -459,7 +459,10 @@ final class BrowserPaletteController<Engine: BrowserEngine> {
             }
             if icons[result.id] == nil,
                let reference = result.faviconReference ?? result.url.flatMap({ historyIcons[BrowserPaletteRanking.canonicalURL($0)] }) {
-                icons[result.id] = faviconCache.image(for: reference)
+                icons[result.id] = faviconCache.image(for: reference) { [weak owner] in
+                    guard let owner, let profileID else { return nil }
+                    return await owner.historyObserver.resolveFavicon(reference, profileID: profileID)
+                }
             }
             // Known profile-local pixels must survive a cold palette decode or LRU eviction.
             // The shared sidebar working set also restores disk-backed icons in this render.
