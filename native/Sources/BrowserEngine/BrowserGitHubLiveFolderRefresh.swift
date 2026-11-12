@@ -14,6 +14,7 @@ public final class BrowserGitHubLiveFolderRefresh {
     public private(set) var refreshNotBefore = Date.distantPast
     public private(set) var boundAccount: BrowserGitHubAccount?
     public private(set) var lastSuccessfulFetch: [FolderID: Date] = [:]
+    public private(set) var mutationRevision: UInt64 = 0
     private var epoch: UInt64 = 0
     private var task: Task<Void, Never>?
     private var activeFolder: FolderID?
@@ -61,6 +62,7 @@ public final class BrowserGitHubLiveFolderRefresh {
         epoch &+= 1
         task?.cancel(); task = nil
         account = nil; state = .disconnected; refreshNotBefore = .distantPast; folderDeadlines = [:]
+        mutationRevision &+= 1
         try? await store.resetLiveFolderConnection(for: .githubPullRequests, profileID: profileID)
     }
 
@@ -120,9 +122,11 @@ public final class BrowserGitHubLiveFolderRefresh {
                 }
                 try Task.checkCancellation()
                 guard self.epoch == epoch else { return }
-                let accepted = try await store.reconcileLiveFolder(folderID, profileID: profileID,
+                let changed = try await store.reconcileLiveFolderChanges(folderID, profileID: profileID,
                     fetched: .init(generation: generation, coverage: complete ? .complete : .partial, items: items))
                 guard self.epoch == epoch else { return }
+                let accepted = changed != nil
+                if changed == true { mutationRevision &+= 1 }
                 if accepted {
                     state = items.isEmpty ? .empty : .ready
                     lastSuccessfulFetch[folderID] = now

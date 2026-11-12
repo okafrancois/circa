@@ -391,7 +391,7 @@ public actor BrowserSettingsStore {
         var next = document
         next.lastActiveWindowID = windowID
         next.lastActiveSpaceID = spaceID
-        try publish(next)
+        try publish(next, fullSync: false)
     }
 
     public func setOpensExternalLinksInQuickWindow(_ enabled: Bool) throws {
@@ -502,19 +502,24 @@ public actor BrowserSettingsStore {
         try publish(next)
     }
 
-    func publish(_ next: BrowserSettingsDocument) throws {
+    private var needsDurabilityRetry = false
+
+    func publish(_ next: BrowserSettingsDocument, fullSync: Bool = true) throws {
         guard !isUnavailable else { throw BrowserSettingsError.unavailable }
+        guard next != document || needsDurabilityRetry else { return }
         try Self.validate(next)
         if let destination {
             let encoder = JSONEncoder()
             encoder.outputFormatting = [.sortedKeys]
-            do { try BrowserPermissionFile.save(encoder.encode(next), to: destination) }
+            do { try BrowserPermissionFile.save(encoder.encode(next), to: destination, fullSync: fullSync) }
             catch BrowserPermissionFile.Failure.committedButNotDurable {
                 document = next
+                needsDurabilityRetry = true
                 throw BrowserPermissionFile.Failure.committedButNotDurable
             }
         }
         document = next
+        needsDurabilityRetry = false
     }
 
     private static func validate(_ document: BrowserSettingsDocument) throws {

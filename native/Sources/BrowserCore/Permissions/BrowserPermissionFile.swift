@@ -33,6 +33,7 @@ enum BrowserPermissionFile {
     }
 
     static func save(_ data: Data, to url: URL, maximumBytes: Int = 4 * 1024 * 1024, access: Access = .standard,
+                     fullSync: Bool = true,
                      beforeReplace: () throws -> Void = {},
                      barrier: (WriteBarrier) throws -> Void = { _ in }) throws {
         guard maximumBytes > 0 else { throw Failure.tooLarge }
@@ -70,8 +71,10 @@ enum BrowserPermissionFile {
         try barrier(.written)
         guard fsync(file) == 0 else { throw Failure.io }
         try barrier(.fileSynced)
-        if fcntl(file, F_FULLFSYNC) != 0, ![EINVAL, ENOTSUP, ENOTTY].contains(errno) { throw Failure.io }
-        try barrier(.fullySynced)
+        if fullSync {
+            if fcntl(file, F_FULLFSYNC) != 0, ![EINVAL, ENOTSUP, ENOTTY].contains(errno) { throw Failure.io }
+            try barrier(.fullySynced)
+        }
         guard try identity(parent: parent, name: name) == original else { throw Failure.unsafeFile }
         try beforeReplace()
         guard renameat(parent, temporary, parent, name) == 0 else { throw Failure.io }

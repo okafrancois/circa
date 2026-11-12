@@ -86,9 +86,15 @@ extension BrowserStore {
     @discardableResult
     public func reconcileLiveFolder(_ id: FolderID, profileID: ProfileID,
                                     fetched: BrowserLiveFolderFetch) throws -> Bool {
+        try reconcileLiveFolderChanges(id, profileID: profileID, fetched: fetched) != nil
+    }
+
+    /// Nil rejects a stale response; false accepts an identical response without publishing.
+    public func reconcileLiveFolderChanges(_ id: FolderID, profileID: ProfileID,
+                                          fetched: BrowserLiveFolderFetch) throws -> Bool? {
         guard let folder = organization.folders[id], let config = folder.liveFolder,
               case let .pinned(space)? = organization.section(of: .folder(id)), spaces[space]?.profileID == profileID else {
-            return false
+            return nil
         }
         let result = try BrowserLiveFolderReconciler.reconcile(folder,
             children: folder.children.compactMap { $0.tabID.flatMap { organization.tabs[$0] } },
@@ -96,7 +102,9 @@ extension BrowserStore {
             preserving: Set(tabs.values.map(\.id)),
             occupiedTabIDs: Set(organization.tabs.keys).subtracting(folder.children.compactMap(\.tabID))
                 .union(organization.archive.map(\.id)), now: clock())
-        guard result.accepted else { return false }
+        guard result.accepted else { return nil }
+        let previous = folder.children.compactMap { $0.tabID.flatMap { organization.tabs[$0] } }
+        guard result.folder != folder || result.children != previous || !result.preserved.isEmpty else { return false }
         try commitOrganization { state in
             state.detach(all: folder.children)
             for child in folder.children.compactMap(\.tabID) { state.tabs[child] = nil }

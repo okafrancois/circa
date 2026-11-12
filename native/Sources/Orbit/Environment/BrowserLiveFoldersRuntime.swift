@@ -14,6 +14,8 @@ final class BrowserLiveFoldersRuntime {
     private var restored: Set<ProfileID> = []
     private var removed: Set<ProfileID> = []
     private var timer: Task<Void, Never>?
+    private let writer = BrowserLiveFolderFileWriter()
+    private var localObservation: Task<Void, Never>?
     private var stopped = false
     private var activationObserver: NSObjectProtocol?
     private var wakeObserver: NSObjectProtocol?
@@ -37,7 +39,7 @@ final class BrowserLiveFoldersRuntime {
         if let existing = connections[profileID] { return existing }
         let connection = BrowserGitHubLiveFolderRefresh(profileID: profileID, session: session, store: store)
         if !restored.contains(profileID), let file = file(profileID), FileManager.default.fileExists(atPath: file.path) {
-            let saved = try BrowserLiveFolderProfileFile.load(from: file, profileID: profileID)
+            let saved = try await writer.load(from: file, profileID: profileID)
             try await store.restoreLiveFolderLocalStore(saved.local)
             if let account = saved.account { try await connection.restore(account: account) }
         }
@@ -96,15 +98,17 @@ final class BrowserLiveFoldersRuntime {
             try await connection.connect(account: BrowserGitHubWebPage(html: response.body).account)
         }
         connection.invalidateRefreshDeadline()
+        let revision = connection.mutationRevision
         await connection.refresh(folderID: folderID, configuration: configuration)
         try await persist(context.profileID)
-        onMutation?()
+        if revision != connection.mutationRevision { onMutation?() }
         if case let .failed(error) = connection.state { throw error }
     }
 
     func configure(_ folderID: FolderID, configuration: BrowserLiveFolderConfiguration, context: BrowserContext) async throws {
         _ = try BrowserGitHubPullRequestsProvider.queries(configuration, login: "validation")
         try await store.configureLiveFolder(folderID, configuration: configuration, from: context)
+        onMutation?()
         try await refresh(folderID, configuration: configuration, context: context)
     }
 
@@ -114,7 +118,7 @@ final class BrowserLiveFoldersRuntime {
         let profiles = Set(document.profiles.map(\.id))
         for profile in Array(connections.keys) where !profiles.contains(profile) {
             connections.removeValue(forKey: profile)?.cancel()
-            if let file = file(profile) { try? FileManager.default.removeItem(at: file) }
+            if let file = file(profile) { try? await writer.remove(file) }
         }
         let folders = Dictionary(uniqueKeysWithValues: document.organization.folders.map { ($0.id, $0) })
         func visit(_ nodes: [BrowserOrganizationNode], profile: ProfileID) async {
@@ -123,9 +127,10 @@ final class BrowserLiveFoldersRuntime {
                 if let config = folder.liveFolder, config.isEnabled {
                     do {
                         let connection = try await connection(profile)
+                        let revision = connection.mutationRevision
                         await connection.refresh(folderID: id, configuration: config)
                         try await persist(profile)
-                        onMutation?()
+                        if revision != connection.mutationRevision { onMutation?() }
                     } catch { onError?(error) }
                 } else { await visit(folder.children, profile: profile) }
             }
@@ -141,7 +146,7 @@ final class BrowserLiveFoldersRuntime {
         removed.insert(profile)
         await connections.removeValue(forKey: profile)?.stop()
         if let file = file(profile), FileManager.default.fileExists(atPath: file.path) {
-            try FileManager.default.removeItem(at: file)
+            try await writer.remove(file)
         }
     }
 
@@ -153,12 +158,20 @@ final class BrowserLiveFoldersRuntime {
         guard !removed.contains(profile) else { return }
         guard let file = file(profile) else { return }
         let local = await store.liveFolderLocalStore(for: profile)
-        try BrowserLiveFolderProfileFile(local: local, account: connections[profile]?.boundAccount).save(to: file)
+        guard !removed.contains(profile) else { return }
+        try await writer.save(BrowserLiveFolderProfileFile(local: local, account: connections[profile]?.boundAccount), to: file)
     }
 
     func start() {
         guard timer == nil, session != nil else { return }
         stopped = false
+        localObservation = Task { [weak self, store] in
+            let changes = await store.organizationChanges()
+            for await _ in changes {
+                guard let self, !Task.isCancelled else { return }
+                do { try await persistAll() } catch { onError?(error) }
+            }
+        }
         activationObserver = NotificationCenter.default.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
             Task { @MainActor in await self?.refresh() }
         }
@@ -175,13 +188,14 @@ final class BrowserLiveFoldersRuntime {
 
     func stop() async {
         stopped = true
+        localObservation?.cancel(); localObservation = nil
         timer?.cancel(); timer = nil
         if let activationObserver { NotificationCenter.default.removeObserver(activationObserver) }
         if let wakeObserver { NSWorkspace.shared.notificationCenter.removeObserver(wakeObserver) }
         activationObserver = nil; wakeObserver = nil
         for (profile, connection) in connections {
-            do { try await persist(profile) } catch { onError?(error) }
             await connection.stop()
+            do { try await persist(profile) } catch { onError?(error) }
         }
     }
 }
