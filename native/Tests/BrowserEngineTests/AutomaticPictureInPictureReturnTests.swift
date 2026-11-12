@@ -51,7 +51,9 @@ struct AutomaticPictureInPictureReturnTests {
 
     @Test("Automatic video eligibility rejects unavailable, hidden, paused and opted-out players", arguments: [
         "document.pictureInPictureEnabled=false", "document.querySelectorAll=()=>[]",
-        "video.paused=true", "video.ended=true", "video.readyState=1", "video.videoWidth=0",
+        "video.muted=true; video.autoplay=true; video.loop=true",
+        "video.volume=0", "video.webkitAudioDecodedByteCount=0",
+        "navigator.userActivation.hasBeenActive=false", "video.paused=true", "video.ended=true", "video.readyState=1", "video.videoWidth=0",
         "video.disablePictureInPicture=true", "video.checkVisibility=()=>false",
         "video.getBoundingClientRect=()=>({width:640,height:360,bottom:-10,right:700,top:-370,left:60})"
     ])
@@ -61,13 +63,42 @@ struct AutomaticPictureInPictureReturnTests {
         #expect(try !run(BrowserAutomaticPiPScript.enter, in: page))
     }
 
+    @Test("Live meeting audio is eligible without decoded file audio", arguments: [true, false])
+    func liveAudioTrack(enabled: Bool) throws {
+        let page = try makePage()
+        page.evaluateScript("video.webkitAudioDecodedByteCount=0; video.srcObject={getAudioTracks:()=>[{enabled:\(enabled),readyState:'live'}]}")
+        #expect(try run(BrowserAutomaticPiPScript.enter, in: page) == enabled)
+    }
+
+    @Test("Eligibility preflight does not start a player or manufacture activation")
+    func preflight() throws {
+        let page = try makePage()
+        #expect(page.evaluateScript(BrowserAutomaticPiPScript.isEligible)!.toBool())
+        #expect(page.evaluateScript("document.pictureInPictureElement===null")!.toBool())
+        page.evaluateScript("navigator.userActivation.hasBeenActive=false")
+        #expect(!page.evaluateScript(BrowserAutomaticPiPScript.isEligible)!.toBool())
+    }
+
+    @Test("Ownership loss during pending entry closes the player when entry completes")
+    func pendingEntryEnds() throws {
+        let page = try makePage()
+        page.evaluateScript("let completeEntry; video.requestPictureInPicture=()=>new Promise(resolve=>{completeEntry=()=>{document.pictureInPictureElement=video;resolve()}})")
+        page.evaluateScript("globalThis.pendingResult=undefined; (\(BrowserAutomaticPiPScript.enter)).then(value=>globalThis.pendingResult=value)")
+        page.evaluateScript(BrowserAutomaticPiPScript.endSession)
+        page.evaluateScript("completeEntry()")
+        #expect(page.objectForKeyedSubscript("pendingResult")!.toObject() as? Bool == false)
+        #expect(page.evaluateScript("document.pictureInPictureElement===null && exits===1")!.toBool())
+    }
+
     private func makePage() throws -> JSContext {
         let page = try #require(JSContext())
         page.evaluateScript(#"""
         let listener;
         let exits = 0;
+        const navigator = {userActivation:{hasBeenActive:true}};
         const innerWidth = 1200, innerHeight = 800;
         const video = {
+          muted:false, volume:1, webkitAudioDecodedByteCount:1024,
           paused:false, ended:false, readyState:4, videoWidth:640, videoHeight:360,
           disablePictureInPicture:false, currentTime:9.25,
           checkVisibility:() => true,

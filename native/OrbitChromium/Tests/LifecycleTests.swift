@@ -422,6 +422,35 @@ struct LifecycleTests {
             engine = ChromiumBrowserEngine(persistence: .ephemeral)
         }
         precondition(result == 0 && engine != nil, "the stub must report readiness without starting CEF")
+        if CommandLine.arguments.contains("--pip-only") {
+            let delegate = LifecycleDelegate()
+            let page = engine!.makeSurface(profileID: ProfileID(), delegate: delegate)
+            emit(ACR_EVENT_CREATED, page.token, value: 2)
+            var count = ACRStubPiPEnds()
+            page.automaticPiPSession = (42, page.documentGeneration)
+            page.navigate(to: URL(string: "https://synthetic.test/next")!)
+            precondition(ACRStubPiPEnds() > count && page.automaticPiPSession == nil)
+            count = ACRStubPiPEnds()
+            page.automaticPiPSession = (43, page.documentGeneration)
+            emit(ACR_EVENT_DOCUMENT, page.token, url: "https://synthetic.test/committed")
+            precondition(ACRStubPiPEnds() > count && page.automaticPiPSession == nil)
+            ACRStubLifecycleMode(1)
+            page.audioContexts.ready = true
+            count = ACRStubPiPEnds()
+            page.automaticPiPSession = (44, page.documentGeneration)
+            precondition(page.setPageFrozen(true))
+            precondition(ACRStubPiPEnds() > count && page.automaticPiPSession == nil)
+            _ = page.setPageFrozen(false)
+            count = ACRStubPiPEnds()
+            page.automaticPiPSession = (45, page.documentGeneration)
+            precondition(page.suspendInPlace() == .suspended)
+            precondition(ACRStubPiPEnds() > count && page.automaticPiPSession == nil)
+            count = ACRStubPiPEnds()
+            page.dispose()
+            precondition(ACRStubPiPEnds() > count)
+            print("PiP close, navigation, freeze and discard lifecycle checks passed")
+            return
+        }
         if CommandLine.arguments.contains("--performance-only") {
             await performanceChecks(engine!)
             return

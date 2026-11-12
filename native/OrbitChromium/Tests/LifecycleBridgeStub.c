@@ -350,7 +350,10 @@ void ACRStubEmitFavicon(uint64_t surface, uint64_t profile, int32_t browser, uin
 int32_t ACRBrowserStateAvailable(void) { return 0; }
 int32_t ACRExtensionActionSnapshot(uint64_t token, char* json, uint32_t capacity) { return -1; }
 
-int32_t ACRDiscardTab(uint64_t token) { return 0; }
+static int lifecycle_enabled;
+void ACRStubLifecycleMode(int enabled) { lifecycle_enabled = enabled; }
+int32_t ACRFreezeTab(uint64_t token, int32_t freeze) { return lifecycle_enabled; }
+int32_t ACRDiscardTab(uint64_t token) { return lifecycle_enabled; }
 int32_t ACRRestoreDiscardedTab(uint64_t token) { return 0; }
 
 /* Optional engine services are absent in this source-only navigation fixture. */
@@ -379,8 +382,11 @@ static orbit_capture_callback_t capture_callback;
 static void *capture_context;
 void ACRStubCaptureMode(int32_t enabled) { capture_enabled = enabled; capture_count = 0; }
 int32_t ACRStubCaptureCount(void) { return capture_count; }
-int32_t ACRPagePerformanceAvailable(void) { return capture_enabled; }
-int32_t ACRPageLifecycle(uint64_t token, orbit_page_lifecycle_t *state) { return 0; }
+int32_t ACRPagePerformanceAvailable(void) { return capture_enabled || lifecycle_enabled; }
+int32_t ACRPageLifecycle(uint64_t token, orbit_page_lifecycle_t *state) {
+  if (!lifecycle_enabled) return 0;
+  memset(state, 0, sizeof(*state)); state->document_id = 1; return 1;
+}
 int32_t ACRPageLifecycleObserve(uint64_t token, orbit_lifecycle_callback_t cb, void *context) { return 0; }
 void ACRPagePerformanceClosing(uint64_t token) {}
 int32_t ACRActivationFrame(uint64_t token, uint64_t activation, orbit_activation_callback_t cb, void *context) { return 0; }
@@ -413,3 +419,23 @@ int32_t ACRNavigationGoIndex(uint64_t token, int32_t index) { return 0; }
 int32_t ACRMediaObserve(uint64_t token, orbit_json_changed_t callback, void *context) { return 0; }
 int32_t ACRMediaAction(uint64_t token, int32_t action, double seconds) { return 0; }
 void ACRNativePageServicesClosing(uint64_t token) {}
+
+static int pipEnds;
+int ACRStubPiPEnds(void) { return pipEnds; }
+void ACREndPictureInPicture(uint64_t surface) { ++pipEnds; }
+
+/* New optional production services remain absent in the lifecycle fixture. */
+int32_t ACRActivateSidebarSurface(uint64_t token, const char* uuid) { return 0; }
+int32_t ACRSetDevToolsHostViews(uint64_t token, void* root, void* document) { return 0; }
+void* ACRDevToolsContainer(uint64_t token) { return NULL; }
+int32_t ACRDevToolsPresentation(uint64_t token) { return 0; }
+int32_t ACRLayoutDevTools(uint64_t token) { return 0; }
+int32_t ACRFocusDevTools(uint64_t token) { return 0; }
+int32_t ACRDuplicateTab(uint64_t token) { return 0; }
+int32_t ACRExtensionImportPreferences(uint64_t profile, const char* json) { return 0; }
+uint32_t ACREngineDiagnosticCapabilities(void) { return 0; }
+int32_t ACRTaskManager(uint64_t token) { return 0; }
+int32_t ACRTraceBegin(uint64_t token, const char* categories, orbit_trace_callback_t cb, void* context) { return 0; }
+int32_t ACRTraceEnd(uint64_t token, const char* file, orbit_trace_callback_t cb, void* context) { return 0; }
+int32_t ACRExtensionOptionsOpen(uint64_t token, const char* id) { return 0; }
+int32_t ACRExtensionIncognitoSet(uint64_t profile, const char* id, int32_t allowed) { return 0; }

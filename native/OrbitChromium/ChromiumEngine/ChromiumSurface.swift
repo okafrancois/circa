@@ -174,7 +174,12 @@ public final class ChromiumSurface: BrowserEngineSurface {
     public var onDispose: (() -> Void)?
     public weak var delegate: (any BrowserEngineSurfaceDelegate<ChromiumSurface>)?
     public var placement: BrowserSurfacePlacement = .detached {
-        didSet { if placement != oldValue { cancelExtensionAction(); engine?.surfacePlacementDidChange(self) } }
+        didSet {
+            if placement != oldValue {
+                if placement.windowID != oldValue.windowID { endPictureInPicture() }
+                cancelExtensionAction(); engine?.surfacePlacementDidChange(self)
+            }
+        }
     }
     /// Hosted mode: the native tab waits for a shell window (`placement.windowID`).
     public internal(set) var awaitsHostedCreation = false
@@ -254,6 +259,7 @@ public final class ChromiumSurface: BrowserEngineSurface {
     weak var automaticPiPSourceWindow: NSWindow?
     var automaticPiPPresentation: ChromiumPictureInPicturePresentation?
     var developerToolsPresentation: ChromiumDeveloperToolsPresentation?
+    var automaticPiPContext: Int?
     var automaticPiPTask: Task<Void, Never>?
     var automaticPiPShouldEnter = false
     var automaticPiPIsSelected = true
@@ -388,6 +394,7 @@ public final class ChromiumSurface: BrowserEngineSurface {
     public func navigate(to url: URL) {
         guard !isDisposed else { return }
         setPageFrozen(false)
+        endPictureInPicture()
         requestedDestination = url
         pendingKind = nil
         if creationFailed { reportFailedNavigationLater(); return }
@@ -422,6 +429,7 @@ public final class ChromiumSurface: BrowserEngineSurface {
         guard !isDisposed else { return }
         guard isBrowserCreated else { pendingCommands.append(.reload); needBrowser(); return }
         setPageFrozen(false)
+        endPictureInPicture()
         pendingKind = .reload
         _ = ACRReload(token)
     }
@@ -430,6 +438,7 @@ public final class ChromiumSurface: BrowserEngineSurface {
         guard !isDisposed else { throw BrowserEngineError.surfaceDisposed }
         guard isBrowserCreated else { pendingCommands.append(.reloadIgnoringCache); needBrowser(); return }
         setPageFrozen(false)
+        endPictureInPicture()
         pendingKind = .reload
         guard ACRReloadIgnoringCache(token) == 1 else { throw BrowserEngineError.unsupportedOperation }
     }
@@ -838,8 +847,7 @@ public final class ChromiumSurface: BrowserEngineSurface {
         observePasswordPrompt(nil)
         pageTintTask?.cancel()
         pageTintTask = nil
-        automaticPiPPresentation?.finish()
-        automaticPiPPresentation = nil
+        endPictureInPicture()
         automaticPiPTask?.cancel()
         automaticPiPTask = nil
         cancelExtensionAction()
@@ -904,11 +912,13 @@ public final class ChromiumSurface: BrowserEngineSurface {
                 navigationIssued = true
             case .reload:
                 setPageFrozen(false)
+                endPictureInPicture()
                 pendingKind = .reload
                 _ = ACRReload(token)
                 navigationIssued = true
             case .reloadIgnoringCache:
                 setPageFrozen(false)
+                endPictureInPicture()
                 pendingKind = .reload
                 _ = ACRReloadIgnoringCache(token)
                 navigationIssued = true
@@ -1261,6 +1271,7 @@ public final class ChromiumSurface: BrowserEngineSurface {
             onChange?()
             if started { delegate?.surfaceDidStartNavigation(self) }
         case ACR_EVENT_DOCUMENT:
+            endPictureInPicture()
             secureInputDocumentWillChange()
             secureInputFocusChanged()
             if isConfirmingDownloadClose, event.url == "about:blank" {

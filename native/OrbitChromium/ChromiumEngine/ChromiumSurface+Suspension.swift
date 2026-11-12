@@ -14,6 +14,7 @@ extension ChromiumSurface {
         guard !isDisposed, isBrowserCreated else { return false }
         if frozen { guard allowsFreezing else { return false } }
         guard frozen != hasFreezeVote else { return true }
+        if frozen { endPictureInPicture() }
         guard ACRFreezeTab(token, frozen ? 1 : 0) == 1 else { return false }
         hasFreezeVote = frozen
         onEngineEvent?(frozen ? "freeze-vote-added" : "freeze-vote-removed", [:])
@@ -125,7 +126,10 @@ extension ChromiumSurface {
         lifecycleObservation = Task { [weak self] in
             for await change in changes {
                 guard !Task.isCancelled, let self, !self.isDisposed else { return }
-                if change.event == .closed { return }
+                if change.event == .closed { self.endPictureInPicture(); return }
+                if change.state?.state == .frozen || change.state?.state == .discarded {
+                    self.endPictureInPicture()
+                }
                 if change.event == .discarded || change.state?.state == .discarded {
                     // Buffered events may outlive a native activation. Read current state so
                     // a queued discard cannot put an already-restored document back to sleep.
@@ -144,6 +148,7 @@ extension ChromiumSurface {
 
     public func suspendInPlace() -> BrowserSurfaceSuspensionResult {
         guard canSuspendDocument else { return .refused }
+        endPictureInPicture()
         isSuspended = true
         guard ACRDiscardTab(token) == 1 else { isSuspended = false; return .refused }
         onEngineEvent?("suspension-discarded", [:])

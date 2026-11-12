@@ -112,8 +112,8 @@ extension OrbitSmokeDriver {
         await owner.boostTask?.value
         check("site-boost", owner.boostEditor != nil)
         owner.boostEditor?.close()
-        // A muted generated stream supplies moving video without media downloads or audio changes.
-        _ = await evaluate("globalThis.canvas=document.createElement('canvas'); canvas.width=640; canvas.height=360; globalThis.video=document.createElement('video'); video.muted=true; video.srcObject=canvas.captureStream(30); document.body.prepend(video); globalThis.paint=setInterval(()=>{let c=canvas.getContext('2d');c.fillStyle='teal';c.fillRect(0,0,640,360)},30); video.play(); 'ready'", tab)
+        // Generated audio and video tracks exercise an audible player without downloads.
+        _ = await evaluate("globalThis.canvas=document.createElement('canvas'); canvas.width=640; canvas.height=360; globalThis.video=document.createElement('video'); video.muted=false; video.srcObject=canvas.captureStream(30); globalThis.pipAudio=new AudioContext();globalThis.pipOsc=pipAudio.createOscillator();let out=pipAudio.createMediaStreamDestination();pipOsc.connect(out);pipOsc.start();pipAudio.resume();video.srcObject.addTrack(out.stream.getAudioTracks()[0]); document.body.prepend(video); globalThis.paint=setInterval(()=>{let c=canvas.getContext('2d');c.fillStyle='teal';c.fillRect(0,0,640,360)},30); video.play(); 'ready'", tab)
         let playing = await until(5) { tab.navigationState.isLoading == false }
         try? await Task.sleep(for: .seconds(1))
         let videoReady = await evaluate("String(!video.paused && video.videoWidth>0)", tab)
@@ -141,7 +141,7 @@ extension OrbitSmokeDriver {
         await owner.session.waitForPendingCommands()
         try? await Task.sleep(for: .seconds(0.5))
         check("pip-manual-retained", await evaluate("String(document.pictureInPictureElement===video)", tab) == "true")
-        _ = await evaluate("document.exitPictureInPicture();clearInterval(paint);video.srcObject.getTracks().forEach(t=>t.stop()); 'done'", tab)
+        _ = await evaluate("document.exitPictureInPicture();clearInterval(paint);pipOsc.stop();pipAudio.close();video.srcObject.getTracks().forEach(t=>t.stop()); 'done'", tab)
     }
 }
 

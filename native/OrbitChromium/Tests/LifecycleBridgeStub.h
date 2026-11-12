@@ -52,4 +52,6 @@ void ACRStubRetirementMode(int32_t result);
 void ACRStubCaptureMode(int32_t enabled);
 int32_t ACRStubCaptureCount(void);
 void ACRStubCaptureFinish(int32_t status);
+void ACRStubLifecycleMode(int enabled);
+int ACRStubPiPEnds(void);
 #endif

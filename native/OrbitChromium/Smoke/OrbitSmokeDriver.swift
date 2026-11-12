@@ -452,7 +452,9 @@ final class OrbitSmokeDriver: OrbitLaunchHooks {
             return
         }
         if arguments.contains(where: { $0.hasPrefix("--orbit-smoke-daily3") }) {
-            if arguments.contains("--orbit-smoke-daily3-space-conversion") {
+            if arguments.contains("--orbit-smoke-daily3-auto-pip") {
+                await automaticPiPRegression(first, engine)
+            } else if arguments.contains("--orbit-smoke-daily3-space-conversion") {
                 await spaceConversion(environment, first)
             } else if arguments.contains("--orbit-smoke-daily3-object-editing") {
                 await objectEditing(environment, first)
