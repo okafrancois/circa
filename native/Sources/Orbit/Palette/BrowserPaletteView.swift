@@ -465,8 +465,8 @@ final class BrowserPaletteView: NSView, NSTextFieldDelegate, NSTableViewDataSour
         scopeLabel.textColor = OrbitFloatingMaterial.accentText
         scopeLabel.layer?.backgroundColor = accent.resolvedCGColor(for: effectiveAppearance)
         divider.layer?.backgroundColor = OrbitTokens.Color.Line.commandBarHairline.resolvedCGColor(for: effectiveAppearance)
-        panel.layer?.borderWidth = 1 / (window?.backingScaleFactor ?? 2)
-        panel.layer?.borderColor = (usesMaterial ? OrbitTokens.Color.Line.commandBarMaterialOuterStroke : OrbitTokens.Color.Line.commandBarOuterStroke).resolvedCGColor(for: effectiveAppearance)
+        panel.layer?.borderWidth = 2
+        panel.layer?.borderColor = BrandPalette.ink.resolvedCGColor(for: effectiveAppearance)
     }
     func completeURL(for result: BrowserPaletteResult, draft: String) {
         guard !suppressCompletion, siteSearchHint == nil, !draft.isEmpty,
@@ -756,7 +756,7 @@ final class PaletteResultCell: NSTableCellView {
         if oldActionHidden != actionLabel.isHidden { needsLayout = true }
     }
     private func refreshBackground() {
-        background.layer?.backgroundColor = (isSelectedResult ? NSColor.controlAccentColor.withAlphaComponent(0.12) :
+        background.layer?.backgroundColor = (isSelectedResult ? BrandPalette.sky :
             (isHovered ? OrbitTokens.Color.State.commandBarRowHover : .clear)).resolvedCGColor(for: effectiveAppearance)
     }
     override func updateTrackingAreas() {

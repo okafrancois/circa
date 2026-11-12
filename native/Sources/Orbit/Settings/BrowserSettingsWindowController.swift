@@ -450,6 +450,7 @@ struct BrowserSettingsView<Engine: BrowserEngine>: View {
         .frame(minWidth: 640, minHeight: 400)
         .foregroundStyle(OrbitSettingsStyle.foreground)
         .toggleStyle(.switch)
+        .tint(Color(nsColor: BrandPalette.cobalt))
         .background(OrbitSettingsStyle.background)
         .task { await model.reload() }
         .sheet(isPresented: Binding(get: { deletingProfile != nil }, set: { if !$0 { deletingProfile = nil } })) {
@@ -522,9 +523,10 @@ struct BrowserSettingsView<Engine: BrowserEngine>: View {
             VStack(alignment: .leading, spacing: 4) {
                 ForEach(available, id: \.id) { space in
                     BrowserSettingsSpaceRow(space: space,
-                        theme: space.theme ?? runtime.document.space(space.id).palette.themeModel,
+                        theme: space.theme ?? BrandPalette.spaceGradients[(model.catalog.spaces.firstIndex(where: { $0.id == space.id }) ?? 0) % 4].theme(),
                         icon: runtime.document.space(space.id).iconSelection,
-                        isSelected: (selectedSpaceID ?? available.first?.id) == space.id) {
+                        isSelected: (selectedSpaceID ?? available.first?.id) == space.id,
+                        planetIndex: model.catalog.spaces.firstIndex(where: { $0.id == space.id }) ?? 0) {
                             selectedSpaceID = space.id
                         }
                 }
@@ -551,10 +553,10 @@ struct BrowserSettingsView<Engine: BrowserEngine>: View {
             if let space = available.first(where: { $0.id == selectedSpaceID }) ?? available.first {
                 VStack(alignment: .leading, spacing: 12) {
                     Text(space.name).font(Font(BrandTextStyle.title.font(size: 22)))
-                        .foregroundStyle(.white).padding(.horizontal, 12).padding(.vertical, 10)
+                        .foregroundStyle(OrbitSettingsStyle.foreground).padding(.horizontal, 12).padding(.vertical, 10)
                         .frame(maxWidth: .infinity, minHeight: 74, maxHeight: 74, alignment: .bottomLeading)
                         .background {
-                            BrowserSettingsThemeGradient(theme: space.theme ?? runtime.document.space(space.id).palette.themeModel)
+                            BrowserSettingsThemeGradient(theme: space.theme ?? BrandPalette.spaceGradients[(model.catalog.spaces.firstIndex(where: { $0.id == space.id }) ?? 0) % 4].theme())
                                 .clipShape(RoundedRectangle(cornerRadius: 12))
                         }
                     SettingsCard {

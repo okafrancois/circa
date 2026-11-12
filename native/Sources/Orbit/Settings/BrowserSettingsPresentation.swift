@@ -115,7 +115,7 @@ struct BrowserSettingsGradientPicker<Engine: BrowserEngine>: View {
     var body: some View {
         Button { isPresented.toggle() } label: {
             HStack(spacing: 6) {
-                BrowserSettingsThemeSwatch(theme: space.theme ?? model.runtime.document.space(space.id).palette.themeModel)
+                BrowserSettingsThemeSwatch(theme: space.theme ?? BrandPalette.spaceGradients[(model.catalog.spaces.firstIndex(where: { $0.id == space.id }) ?? 0) % 4].theme())
                 Text(settingsText("editThemeColor", "Edit Theme Color…"))
             }
         }

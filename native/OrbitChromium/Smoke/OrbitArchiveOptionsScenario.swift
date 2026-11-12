@@ -119,3 +119,74 @@ extension OrbitSmokeDriver {
         } catch { check("operation", false) }
     }
 }
+
+
+extension OrbitSmokeDriver {
+    /// Captures the real shell with inert onboarding services and invented Space data.
+    func brandSurfaces(_ environment: OrbitEnvironment, _ owner: OrbitWindowController) async {
+        guard let window = owner.window, let profile = owner.session.activeProfileID else {
+            check("brand.context", false); return
+        }
+        environment.autoArchive.scheduler.stop()
+        NSApp.appearance = NSAppearance(named: .aqua)
+        func capture(_ name: String, _ target: NSWindow) async {
+            target.setFrameOrigin(NSPoint(x: 60, y: 60))
+            target.orderFront(nil)
+            target.contentView?.layoutSubtreeIfNeeded()
+            try? await Task.sleep(for: .milliseconds(400))
+            let rows = CGWindowListCopyWindowInfo([.optionIncludingWindow], CGWindowID(target.windowNumber)) as? [[String: Any]]
+            guard rows?.contains(where: { ($0[kCGWindowOwnerPID as String] as? Int32) == getpid() }) == true else {
+                check("brand.capture-owner", false); return
+            }
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
+            process.arguments = ["-x", "-o", "-l", String(target.windowNumber), runRoot.appendingPathComponent(name + ".png").path]
+            do {
+                try process.run(); process.waitUntilExit()
+                if process.terminationStatus == 0 { check("brand." + name, true); return }
+            } catch {}
+            // WindowServer can refuse a window during an asynchronous settings resize.
+            guard let view = target.contentView, let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds) else {
+                check("brand." + name, false); return
+            }
+            view.cacheDisplay(in: view.bounds, to: bitmap)
+            do {
+                guard let png = bitmap.representation(using: .png, properties: [:]) else { check("brand." + name, false); return }
+                try png.write(to: runRoot.appendingPathComponent(name + ".png"))
+                check("brand." + name, true)
+            } catch { check("brand." + name, false) }
+        }
+        do {
+            owner.openTab(url: fixture)
+            await owner.session.waitForPendingCommands()
+            check("brand.chromium-page", await until(5) { owner.session.selectedSurface?.isReady == true })
+            window.appearance = NSAppearance(named: .aqua)
+            window.setContentSize(NSSize(width: 1200, height: 800))
+            await capture("main-work", window)
+            let home = try await environment.store.createSpace(name: "Home", profileID: profile)
+            owner.session.activateSpace(home)
+            await owner.session.waitForPendingCommands()
+            await capture("main-home", window)
+            window.appearance = NSAppearance(named: .darkAqua)
+            await capture("main-night", window)
+            window.appearance = NSAppearance(named: .aqua)
+            owner.palette.present(.newTab)
+            await capture("command-bar", window)
+            owner.palette.dismiss()
+            let model = BrowserSettingsModel(environment: environment, profileID: profile, shortcuts: [])
+            let settings = BrowserSettingsWindowController(model: model, appearanceOverride: .aqua)
+            defer { settings.window?.close() }
+            for (name, section) in [("general", BrowserSettingsSection.general), ("spaces", .spaces), ("about", .about)] {
+                _ = settings.selectSection(section)
+                if let target = settings.window { await capture("settings-" + name, target) }
+            }
+            for (name, step) in [("welcome", BrowserOnboardingRecord.Step.welcome), ("import", .importSource)] {
+                let flow = OrbitOnboardingFlow(step: step, sources: [], syncAvailability: .unavailable)
+                let onboarding = OrbitOnboardingWindowController(flow: flow, services: .init(), themeTarget: nil)
+                onboarding.present()
+                try? await Task.sleep(for: .seconds(2))
+                if let target = onboarding.window { await capture("onboarding-" + name, target); target.orderOut(nil) }
+            }
+        } catch { check("brand.scenario", false) }
+    }
+}

@@ -234,9 +234,7 @@ enum OrbitThemeForeground {
         return 0.2126 * c.redComponent + 0.7152 * c.greenComponent + 0.0722 * c.blueComponent < 128.0 / 255
     }
     static func color(on color: NSColor) -> NSColor {
-        NSColor(srgbRed: isLight(on: color) ? 244.0 / 255 : 32.0 / 255,
-                green: isLight(on: color) ? 244.0 / 255 : 32.0 / 255,
-                blue: isLight(on: color) ? 244.0 / 255 : 32.0 / 255, alpha: 1)
+        isLight(on: color) ? BrandPalette.paper : BrandPalette.ink
     }
 
     static func contrastRatio(_ foreground: NSColor, on background: NSColor) -> CGFloat {

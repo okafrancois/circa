@@ -12,6 +12,8 @@ struct TypeRevertTests {
         let sources = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
             .deletingLastPathComponent().appendingPathComponent("Sources/Orbit")
         let allowed: [String: [String]] = [
+            "ContentCard/BrowserContentCardView.swift": ["emptyTitle.font ="],
+            "PageInteraction/BrowserPageDialogView.swift": ["title.font ="],
             "Onboarding/OrbitOnboardingWelcome.swift": ["headline.attributedStringValue"],
             "Onboarding/OrbitOnboardingFinishView.swift": ["title.attributedStringValue"],
             "Onboarding/OrbitOnboardingCard.swift": [".font: OrbitOnboardingFonts.title"],
@@ -35,7 +37,7 @@ struct TypeRevertTests {
             }
             #expect(!source.contains("NSFont(name: \"Gloock"))
         }
-        #expect(headings == 10)
+        #expect(headings == 12)
     }
 
     @Test("Sidebar geometry and text metrics match the previous system-font rows")
@@ -59,9 +61,9 @@ struct TypeRevertTests {
         let history = BrowserLibraryHistoryView(frame: .zero)
         let historyFont = try #require(history.searchField.font)
         let nativeSearchFont = try #require(NSSearchField().font)
-        #expect(historyFont.fontName == nativeSearchFont.fontName)
+        #expect(historyFont.fontName == "DMSans-Regular")
         #expect(historyFont.pointSize == nativeSearchFont.pointSize)
-        #expect(historyFont.ascender == nativeSearchFont.ascender && historyFont.descender == nativeSearchFont.descender)
+        #expect(historyFont.ascender > 0 && historyFont.descender < 0)
         let card = SidebarUpdateCard(frame: NSRect(x: 0, y: 0, width: 212, height: SidebarUpdateCard.height))
         card.layoutSubtreeIfNeeded()
         #expect(card.title.font == NSFont.systemFont(ofSize: 13, weight: .semibold))

@@ -99,18 +99,18 @@ struct BrowserAssistantPaletteTests {
         #expect(light.isDark)
     }
 
-    @Test("The surface carries the Space instead of a system background")
+    @Test("The surface uses opaque paper or ink while retaining Space accents")
     func surfaceCarriesSpace() throws {
         let appearance = try #require(NSAppearance(named: .aqua))
         let surfaces = Self.themes.compactMap { _, theme -> String? in
             guard let color = BrowserAssistantPalette(theme: theme, appearance: appearance).surfaces.first?.usingColorSpace(.sRGB) else { return nil }
             return [color.redComponent, color.greenComponent, color.blueComponent].map { String(Int(($0 * 255).rounded())) }.joined(separator: ",")
         }
-        #expect(Set(surfaces).count > 30)
-        // Gradient Spaces differ along the dock because each point composites its own fill.
+        #expect(Set(surfaces).count == 2)
+        // Floating surfaces keep the same flat ink along their full height.
         let gradient = BrowserAssistantPalette(theme: .amberCoral, appearance: appearance)
         let top = try #require(gradient.surfaces.first), bottom = try #require(gradient.surfaces.last)
-        #expect(top != bottom)
+        #expect(top == bottom)
     }
 
     @Test("Send and accent ink keep the hue of the selected swatch")

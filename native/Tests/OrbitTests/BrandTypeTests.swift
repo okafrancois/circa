@@ -16,8 +16,8 @@ struct BrandTypeTests {
         row.layoutSubtreeIfNeeded()
         let shortcut = try #require(row.subviews.compactMap { $0 as? NSTextField }.first { $0.stringValue == "⌘⇧N" })
         let text = shortcut.attributedStringValue
-        #expect(text.attribute(.font, at: 0, effectiveRange: nil) as? NSFont == NSFont.systemFont(ofSize: 13))
-        #expect(text.attribute(.font, at: 2, effectiveRange: nil) as? NSFont == NSFont.systemFont(ofSize: 13))
+        #expect(text.attribute(.font, at: 0, effectiveRange: nil) as? NSFont == BrandFonts.mono(13))
+        #expect(text.attribute(.font, at: 2, effectiveRange: nil) as? NSFont == BrandFonts.mono(13))
         #expect(shortcut.frame.width == shortcut.intrinsicContentSize.width)
         #expect(shortcut.frame.origin.y == 11)
         #expect(shortcut.frame.height == 18)
@@ -35,7 +35,7 @@ struct BrandTypeTests {
         }
         let hint = try #require(labels(view).first { $0.stringValue == "⌘T" })
         #expect(hint.attributedStringValue.attribute(.font, at: 1, effectiveRange: nil) as? NSFont
-            == NSFont.systemFont(ofSize: 13, weight: .medium))
+            == BrandFonts.mono(13))
     }
 
     @Test("The editor exposes all 36 colors and keeps draft controls while paging")
@@ -96,7 +96,7 @@ struct BrandTypeTests {
     func roles() {
         #expect(OrbitTokens.Typography.sidebarTabTitle == NSFont.systemFont(ofSize: 14))
         #expect(OrbitTokens.Typography.sidebarTabTitle.pointSize == 14)
-        #expect(OrbitTokens.Typography.menuShortcut == NSFont.systemFont(ofSize: 13))
+        #expect(OrbitTokens.Typography.menuShortcut == BrandFonts.mono(13))
         #expect(OrbitTokens.Typography.emptyStateTitle == NSFont.systemFont(ofSize: 13, weight: .semibold))
         let editor = OrbitThemeEditorView(state: .init(theme: BrandPalette.spaceGradients[0].theme()))
         #expect(editor.field.frame == OrbitThemeEditorMetrics.field)
@@ -150,7 +150,7 @@ extension BrandTypeTests {
         let title = try #require(content.subviews.compactMap { $0 as? NSTextField }.first { $0.stringValue == alert.messageText })
         let detail = try #require(content.subviews.compactMap { $0 as? NSTextField }.first { $0.stringValue == alert.informativeText })
         #expect(title.font == NSFont.systemFont(ofSize: 13, weight: .semibold))
-        #expect(detail.font == NSFont.systemFont(ofSize: 13))
+        #expect(detail.font == BrandTextStyle.body.font(size: 13))
         #expect(content.bounds.contains(title.frame))
         #expect(title.frame.height >= title.intrinsicContentSize.height)
     }

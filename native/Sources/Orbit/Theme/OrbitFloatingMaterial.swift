@@ -13,12 +13,12 @@ enum OrbitFloatingMaterial {
         let reducesTransparency: Bool
         var selectedSidebarSurface = false
         var sidebarTintOpacity: CGFloat?
-        var tintOpacity: CGFloat { reducesTransparency ? 1 : (sidebarTintOpacity ?? (variant == .light ? (selectedSidebarSurface ? 0.72 : 0.64) : 0.76)) }
-        var tint: NSColor { variant == .light ? .white : NSColor(srgbRed: 14/255, green: 14/255, blue: 17/255, alpha: 1) }
-        var body: NSColor { variant == .light ? NSColor(srgbRed: 20/255, green: 19/255, blue: 23/255, alpha: 1) : NSColor(white: 0.97, alpha: 1) }
-        var secondary: NSColor { variant == .light ? NSColor(srgbRed: 55/255, green: 52/255, blue: 62/255, alpha: 1) : NSColor(srgbRed: 208/255, green: 205/255, blue: 214/255, alpha: 1) }
-        var edge: NSColor { NSColor.white.withAlphaComponent(variant == .light ? 0.75 : 0.18) }
-        var highlightOpacity: CGFloat { variant == .light ? 0.12 : 0.04 }
+        var tintOpacity: CGFloat { 1 }
+        var tint: NSColor { variant == .light ? BrandPalette.pageWhite : BrandPalette.ink }
+        var body: NSColor { variant == .light ? BrandPalette.ink : BrandPalette.paper }
+        var secondary: NSColor { variant == .light ? BrandPalette.ink2 : BrandPalette.sky }
+        var edge: NSColor { BrandPalette.ink }
+        var highlightOpacity: CGFloat { 0 }
 
         /// Conservative contrast: ignore any extra protection provided by the system blur.
         func background(over backdrop: NSColor, highlight: Bool = false) -> NSColor {
@@ -35,12 +35,12 @@ enum OrbitFloatingMaterial {
 
     static let body = NSColor(name: "Orbit.Floating.body") { appearance in
         appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-            ? NSColor(white: 0.97, alpha: 1) : NSColor(srgbRed: 20/255, green: 19/255, blue: 23/255, alpha: 1)
+            ? BrandPalette.paper : BrandPalette.ink
     }
     static let secondary = NSColor(name: "Orbit.Floating.secondary") { appearance in
         appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-            ? NSColor(srgbRed: 208/255, green: 205/255, blue: 214/255, alpha: 1)
-            : NSColor(srgbRed: 55/255, green: 52/255, blue: 62/255, alpha: 1)
+            ? BrandPalette.sky
+            : BrandPalette.ink2
     }
 
     static let accentText = NSColor(name: "Orbit.Floating.accentText") { _ in
@@ -140,7 +140,7 @@ final class OrbitFrostView: NSView {
         highlight.frame = bounds
         highlight.startPoint = CGPoint(x: 0, y: 0)
         highlight.endPoint = CGPoint(x: 0.65, y: 0.75)
-        layer?.borderWidth = 1
+        layer?.borderWidth = 2
         setAccessibilityElement(false)
         let center = NSWorkspace.shared.notificationCenter
         let token = center.addObserver(forName: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, object: nil, queue: .main) { [weak self] _ in

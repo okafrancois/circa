@@ -1,4 +1,5 @@
 import AppKit
+import BrowserShell
 import QuartzCore
 
 @MainActor
@@ -236,11 +237,19 @@ final class BrowserContentCardView: NSView {
         emptyState.orientation = .vertical
         emptyState.alignment = .centerX
         emptyState.spacing = 4
-        emptyTitle.font = OrbitTokens.Typography.emptyStateTitle
-        emptyTitle.textColor = OrbitTokens.Color.Text.secondary
+        emptyTitle.font = BrandTextStyle.title.font(size: 28)
+        emptyTitle.textColor = OrbitTokens.Color.Text.primary
         emptyTitle.lineBreakMode = .byTruncatingTail
         emptyDetail.font = OrbitTokens.Typography.emptyStateDetail
         emptyDetail.textColor = OrbitTokens.Color.Text.tertiary
+        if let url = BrowserText.secondaryBrandResource("empty-space", extension: "png"), let image = NSImage(contentsOf: url) {
+            let artwork = NSImageView(image: image)
+            artwork.imageScaling = .scaleProportionallyUpOrDown
+            artwork.translatesAutoresizingMaskIntoConstraints = false
+            artwork.widthAnchor.constraint(equalToConstant: 160).isActive = true
+            artwork.heightAnchor.constraint(equalToConstant: 110).isActive = true
+            emptyState.addArrangedSubview(artwork)
+        }
         emptyState.addArrangedSubview(emptyTitle)
         emptyState.addArrangedSubview(emptyDetail)
         splitBackdrop.autoresizingMask = [.width, .height]

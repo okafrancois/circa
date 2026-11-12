@@ -79,8 +79,9 @@ class CircaBrandingTests(unittest.TestCase):
         self.assertIn('"Open Little Circa from other apps"', table)
         self.assertIn('"New Little Circa Window"', table)
         self.assertNotIn('Little Orbit', table)
-        self.assertEqual({file.name for file in (resources / 'BrandFonts').iterdir()}, {'mark.pdf'})
-        self.assertFalse(any(file.suffix in {'.ttf', '.otf'} for file in resources.rglob('*')))
+        fonts = {file.name for file in (resources / 'BrandFonts').iterdir()}
+        self.assertTrue({'BricolageGrotesque-ExtraBold.ttf', 'DMSans-Regular.ttf', 'DMMono-Regular.ttf'} <= fonts)
+        self.assertTrue({'BricolageGrotesque-OFL.txt', 'DMSans-OFL.txt', 'DMMono-OFL.txt'} <= fonts)
 
 
 if __name__ == '__main__':

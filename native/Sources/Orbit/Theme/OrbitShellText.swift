@@ -33,6 +33,6 @@ enum OrbitShellText {
     static func closeTab(_ title: String) -> String { String(format: string("sidebar.closeTab", "Close %@"), title) }
 
     // Content card.
-    static var emptySpaceTitle: String { string("card.emptySpaceTitle", "New Space") }
+    static var emptySpaceTitle: String { string("card.emptySpaceTitle", "Nothing in orbit yet.") }
     static var emptySpaceDetail: String { string("card.emptySpaceDetail", "Open a tab to get started.") }
 }

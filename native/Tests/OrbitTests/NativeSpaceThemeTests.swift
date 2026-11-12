@@ -235,7 +235,7 @@ struct NativeSpaceThemeWindowTests {
         let profile = try #require(controller.session.activeProfileID)
         let other = try await environment.makeWindow(spaceID: space)
         defer { other.window?.close() }
-        #expect(controller.windowShell.theme == .default)
+        #expect(controller.windowShell.theme == OrbitSpaceThemes.defaultTheme(at: 0, preview: false))
         try await environment.settings.updateSpace(space) { $0.palette = .lavender }
         #expect(controller.windowShell.theme == .lavender, "a never-themed Space keeps its legacy palette")
         let model = BrowserSpaceTheme.composed(colors: [coral], mode: .light)
@@ -255,7 +255,7 @@ struct NativeSpaceThemeWindowTests {
         await controller.session.waitForPendingCommands()
         #expect(controller.windowShell.theme == .lavender)
         try await environment.settings.updateSpace(space) { $0.palette = .automatic }
-        #expect(controller.windowShell.theme == .default)
+        #expect(controller.windowShell.theme == OrbitSpaceThemes.defaultTheme(at: 0, preview: false))
         #expect(controller.window?.isVisible == false && other.window?.isVisible == false)
     }
 
@@ -342,7 +342,7 @@ struct NativeSpaceThemeWindowTests {
         #expect(try await eventually { try await environment.store.spaceTheme(space) == nil })
         controller.session.refreshCatalog()
         await controller.session.waitForPendingCommands()
-        #expect(controller.windowShell.theme == .default)
+        #expect(controller.windowShell.theme == OrbitSpaceThemes.defaultTheme(at: 0, preview: false))
         #expect(manager.canRedo)
         manager.redo()
         #expect(try await eventually { try await environment.store.spaceTheme(space) == final })
@@ -370,7 +370,7 @@ struct NativeSpaceThemeWindowTests {
         #expect(editor.isClosed)
         await editor.waitUntilFinished()
         #expect(try await environment.store.spaceTheme(first) == picked)
-        #expect(controller.windowShell.theme == .default, "the second Space shows its own theme")
+        #expect(controller.windowShell.theme == OrbitSpaceThemes.defaultTheme(at: 1, preview: false), "the second Space shows its own tint")
         controller.openThemeEditor(for: second, animated: false)
         #expect(controller.themeEditor?.draft == BrowserSpaceThemePresets.default)
         controller.themeEditor?.close(animated: false)

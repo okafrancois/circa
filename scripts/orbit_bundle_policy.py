@@ -10,6 +10,7 @@ HELPERS = ['Orbit Helper' + suffix + '.app' for suffix in ('', ' (GPU)', ' (Rend
 ORBIT_RESOURCE_FILES = frozenset({
     'README.md', 'sign-color.pdf', 'sign-color.svg',
     'vector-provenance.json', 'wordmark.pdf', 'wordmark.svg',
+    'planet-work.png', 'planet-home.png', 'planet-read.png', 'planet-side.png', 'empty-space.png',
 })
 ICON_CATALOG = json.loads((Path(__file__).resolve().parents[1] /
     'native/Sources/BrowserShell/Icons/catalog.json').read_text())
@@ -21,7 +22,11 @@ ICON_RESOURCE_FILES = frozenset({'catalog.json'} | {
   | {'provider-marks/LICENSE.txt'})
 ICON_RESOURCE_DIRECTORIES = frozenset(str(parent) for name in ICON_RESOURCE_FILES
     for parent in Path(name).parents if str(parent) != '.') | {'', 'template', 'color'}
-BRAND_FONT_FILES = frozenset({'mark.pdf'})
+BRAND_FONT_FILES = frozenset({
+    'mark.pdf', 'BricolageGrotesque-ExtraBold.ttf', 'BricolageGrotesque-OFL.txt',
+    'DMSans-Regular.ttf', 'DMSans-Medium.ttf', 'DMSans-SemiBold.ttf', 'DMSans-Bold.ttf',
+    'DMSans-OFL.txt', 'DMMono-Regular.ttf', 'DMMono-OFL.txt',
+})
 APP_ICON_IDS = ('stage', 'paper', 'sunset', 'afterglow', 'frost', 'riso', 'ink')
 APP_ICON_FILES = frozenset(f'{icon}.{ext}' for icon in APP_ICON_IDS for ext in ('icns', 'png'))
 BUILD_SUFFIXES = {'.d', '.o', '.a', '.swiftmodule', '.swiftdoc', '.swiftsourceinfo', '.dia', '.dsym'}
