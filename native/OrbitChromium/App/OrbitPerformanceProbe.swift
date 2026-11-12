@@ -297,6 +297,9 @@ enum OrbitPerformanceProbe {
                 } else if name == "tab-open", Bundle.main.bundleIdentifier == OrbitTabOpenProbe.bundleID {
                     application.confirmQuit = { .quit }
                     result["tabOpen"] = await OrbitTabOpenProbe.run(owner, store: environment.store, command: command)
+                } else if name == "tab-freeze", Bundle.main.bundleIdentifier == OrbitTabFreezeProbe.bundleID {
+                    application.confirmQuit = { .quit }
+                    result["tabFreeze"] = await OrbitTabFreezeProbe.run(owner, command: command, root: root)
                 } else if name == "resource-budget", Bundle.main.bundleIdentifier == OrbitResourceBudgetProbe.bundleID {
                     application.confirmQuit = { .quit }
                     result["resourceBudget"] = await OrbitResourceBudgetProbe.run(owner, store: environment.store, root: root, command: command)

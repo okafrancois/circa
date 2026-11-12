@@ -374,6 +374,8 @@ int32_t ACRCloseSurface(uint64_t surface_token);
 int32_t ACRHistoryURL(uint64_t surface_token, int32_t offset, char *buffer, size_t capacity);
 /* Native CEF navigation entries, JSON {currentIndex, entries:[URL]}. Returns required bytes;
  * writes a NUL-terminated result only when capacity exceeds that count. -1 unavailable. */
+// Returns 1 when the vote was accepted; Chromium decides actual freeze eligibility.
+int32_t ACRFreezeTab(uint64_t token, int32_t freeze);
 int32_t ACRDiscardTab(uint64_t token);
 int32_t ACRRestoreDiscardedTab(uint64_t token);
 int32_t ACRNavigationHistory(uint64_t surface_token, char *buffer, size_t capacity);

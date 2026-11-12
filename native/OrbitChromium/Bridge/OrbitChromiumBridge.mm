@@ -52,6 +52,7 @@
 
 
 #include <atomic>
+#include <memory>
 #include <chrono>
 #include <cstdlib>
 #include <cstring>
@@ -130,6 +131,7 @@ bool PostUI(std::function<void()> function) {
 }
 
 struct Host {
+  std::shared_ptr<std::atomic<int>> uploads;
   orbit_bridge::FaviconReceipt favicon;
   uint64_t token = 0;
   uint64_t profile = 0;
@@ -585,6 +587,42 @@ class ProfileHandler final : public CefRequestContextHandler {
   IMPLEMENT_REFCOUNTING(ProfileHandler);
 };
 
+// Observe body-bearing requests only. No body bytes or URLs leave the IO thread.
+class UploadHandler final : public CefResourceRequestHandler {
+ public:
+  UploadHandler(uint64_t token, std::shared_ptr<std::atomic<int>> count)
+      : token_(token), count_(std::move(count)) {
+    ++*count_;
+    Publish();
+  }
+  ~UploadHandler() override { Finish(); }
+  void OnResourceLoadComplete(CefRefPtr<CefBrowser>, CefRefPtr<CefFrame>,
+      CefRefPtr<CefRequest>, CefRefPtr<CefResponse>, URLRequestStatus, int64_t) override {
+    Finish();
+  }
+ private:
+  void Finish() {
+    if (finished_.exchange(true)) return;
+    --*count_;
+    Publish();
+  }
+  void Publish() {
+    const auto token = token_;
+    const auto count = count_;
+    PostUI([token, count] {
+      if (!g_state || !g_state->hosts.contains(token)) return;
+      auto event = g_state->Event(ACR_EVENT_MEDIA_ACTIVITY, token);
+      event.detail = "Orbit.uploadActivity";
+      event.value = count->load();
+      g_state->Send(event);
+    });
+  }
+  const uint64_t token_;
+  const std::shared_ptr<std::atomic<int>> count_;
+  std::atomic<bool> finished_{false};
+  IMPLEMENT_REFCOUNTING(UploadHandler);
+};
+
 // Main-frame navigations only. The decision is asynchronous: CEF waits on the
 // callback, the shell answers with ACRResolveNavigationPolicy on main.
 class PolicyHandler final : public CefResourceRequestHandler {
@@ -895,6 +933,7 @@ class Client final : public CefClient, public CefLifeSpanHandler, public CefDisp
                      public CefContextMenuHandler, public CefFocusHandler {
  public:
   Client(uint64_t token, uint64_t profile) : token_(token), profile_(profile) {}
+  const std::shared_ptr<std::atomic<int>> uploads_ = std::make_shared<std::atomic<int>>(0);
   // EXT-OUTCOME-R2: an adopted Chrome-created tab's client that the framework releases without
   // creating its browser (it refused the offer after the shell answered) aborts its own pending
   // surface once, in its own runtime, after the framework's call returned. AbortPending acts only
@@ -1242,6 +1281,7 @@ class Client final : public CefClient, public CefLifeSpanHandler, public CefDisp
     host.token = token_;
     host.profile = profile_;
     host.browser = browser;
+    host.uploads = uploads_;
     const auto pending_window = g_state->pending_windows.find(token_);
     if (pending_window != g_state->pending_windows.end()) {
       host.window = pending_window->second;
@@ -1498,8 +1538,9 @@ class Client final : public CefClient, public CefLifeSpanHandler, public CefDisp
     return policy != ACR_POLICY_ALLOW;
   }
   CefRefPtr<CefResourceRequestHandler> GetResourceRequestHandler(
-      CefRefPtr<CefBrowser>, CefRefPtr<CefFrame> frame, CefRefPtr<CefRequest>, bool is_navigation,
+      CefRefPtr<CefBrowser>, CefRefPtr<CefFrame> frame, CefRefPtr<CefRequest> request, bool is_navigation,
       bool is_download, const CefString&, bool&) override {
+    if (request && request->GetPostData()) return new UploadHandler(token_, uploads_);
     // Installing a resource handler routes requests through CEF's browser-bound
     // proxy; keep it to the explicit laboratory measurement.
     if (!g_state || !g_state->async_hold || !is_navigation || is_download || !frame || !frame->IsMain())
@@ -2657,8 +2698,16 @@ extern "C" int32_t ACRSetSitePermission(uint64_t profile, const char* origin, in
   return 1;
 }
 
+extern "C" int32_t ACRFreezeTab(uint64_t token, int32_t freeze) {
+  ACR_HOST(token);
+  if (freeze && host->uploads && host->uploads->load() > 0) return 0;
+  return g_state->orbit && g_state->orbit->version >= 17 && g_state->orbit->freeze_tab
+      ? g_state->orbit->freeze_tab(host->browser->GetIdentifier(), freeze) : 0;
+}
+
 extern "C" int32_t ACRDiscardTab(uint64_t token) {
   ACR_HOST(token);
+  if (host->uploads && host->uploads->load() > 0) return 0;
   return g_state->orbit && g_state->orbit->version >= 6 && g_state->orbit->discard_tab
       ? g_state->orbit->discard_tab(host->browser->GetIdentifier()) : 0;
 }

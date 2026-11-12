@@ -3,6 +3,29 @@ import Testing
 
 @Suite("Native suspension eligibility")
 struct NativeSuspensionPolicyTests {
+    @Test("Freeze requires a known document and no local or connected-page veto")
+    func freezeEligibility() {
+        #expect(!BrowserPageSuspensionPolicy.allowsFreezing(nil))
+        var state = BrowserPageLifecycle()
+        state.documentID = 1
+        #expect(!BrowserPageSuspensionPolicy.allowsFreezing(state))
+        state.cannotFreezeMask = 0
+        #expect(BrowserPageSuspensionPolicy.allowsFreezing(state))
+        for bit in 0..<64 {
+            state.cannotFreezeMask = UInt64(1) << bit
+            #expect(!BrowserPageSuspensionPolicy.allowsFreezing(state))
+        }
+        state.cannotFreezeMask = 0
+        state.playingMedia = true
+        #expect(!BrowserPageSuspensionPolicy.allowsFreezing(state))
+        state.playingMedia = false
+        state.capturing = 1
+        #expect(!BrowserPageSuspensionPolicy.allowsFreezing(state))
+        state.capturing = 0
+        state.webRTC = true
+        #expect(!BrowserPageSuspensionPolicy.allowsFreezing(state))
+    }
+
     @Test("Unknown state refuses and clean state ignores native age and tab-policy reasons")
     func admission() {
         #expect(BrowserPageSuspensionPolicy.refusal(nil) != nil)

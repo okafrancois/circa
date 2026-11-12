@@ -2,6 +2,11 @@ import Foundation
 
 /// Shell safety vetoes, separate from Chromium's age, visibility and pinning policy.
 public enum BrowserPageSuspensionPolicy {
+    public static func allowsFreezing(_ state: BrowserPageLifecycle?) -> Bool {
+        guard let state, state.cannotFreezeMask == 0 else { return false }
+        return refusal(state) == nil
+    }
+
     public static func refusal(_ state: BrowserPageLifecycle?) -> String? {
         guard let state, state.documentID != 0 else { return "unknown-lifecycle" }
         guard state.state != .discarded else { return "already-discarded" }

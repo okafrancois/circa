@@ -18,6 +18,8 @@ public struct BrowserPageLifecycle: Sendable, Equatable {
     public var state: State = .running
     /// Chromium CannotDiscardReason values, bits 0 through 29. The shell chooses its vetoes.
     public var cannotDiscardMask: UInt64 = 0
+    /// Includes connected-page reasons; zero is required for a freeze vote.
+    public var cannotFreezeMask: UInt64 = .max
     public var footprintKB: UInt64 = 0
     public var rendererPID: Int32 = 0
     /// Opaque native document identity; separate from the surface's document generation.

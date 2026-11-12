@@ -265,6 +265,9 @@ public protocol BrowserEngineSurface: BrowserFindSurface {
     /// Cheap final veto for native media/capture activity that arrived during an async check.
     var isSuspended: Bool { get }
     var allowsSuspension: Bool { get }
+    /// Freeze retains the live document. Acceptance is a vote, not a state acknowledgement.
+    var allowsFreezing: Bool { get }
+    @discardableResult func setPageFrozen(_ frozen: Bool) -> Bool
     /// Optional native paint acknowledgement for an in-place renderer restoration.
     var supportsSuspensionPaint: Bool { get }
     func prepareSuspensionPaint() async -> Bool
@@ -321,6 +324,8 @@ public extension BrowserEngineSurface {
     func captureStateForSuspension() async -> BrowserSuspensionState? { nil }
     var isSuspended: Bool { false }
     var allowsSuspension: Bool { false }
+    var allowsFreezing: Bool { false }
+    func setPageFrozen(_ frozen: Bool) -> Bool { false }
     var supportsSuspensionPaint: Bool { false }
     func prepareSuspensionPaint() async -> Bool { false }
     var suspensionPaintGeneration: UInt64? { nil }

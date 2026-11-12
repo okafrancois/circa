@@ -4,6 +4,22 @@ import OrbitChromiumBridge
 import Foundation
 
 extension ChromiumSurface {
+    public var allowsFreezing: Bool {
+        canSuspendDocument && BrowserPageSuspensionPolicy.allowsFreezing(pagePerformance?.lifecycle())
+            && (documentView.window == nil || documentView.isHiddenOrHasHiddenAncestor)
+    }
+
+    @discardableResult
+    public func setPageFrozen(_ frozen: Bool) -> Bool {
+        guard !isDisposed, isBrowserCreated else { return false }
+        if frozen { guard allowsFreezing else { return false } }
+        guard frozen != hasFreezeVote else { return true }
+        guard ACRFreezeTab(token, frozen ? 1 : 0) == 1 else { return false }
+        hasFreezeVote = frozen
+        onEngineEvent?(frozen ? "freeze-vote-added" : "freeze-vote-removed", [:])
+        return true
+    }
+
     public var allowsSuspension: Bool { canSuspendDocument }
     /// Native lifecycle vetoes run first. r11 cannot rule out script-modified form values,
     /// so eligible candidates still need a value-only check in each isolated frame at sweep
@@ -60,7 +76,7 @@ extension ChromiumSurface {
 
     private func suspensionDevToolsCall(_ method: String, params: String = "") async -> (Bool, Data) {
         onEngineEvent?("suspension-cdp-call", ["method": method])
-        return await devToolsCall(method, params: params)
+        return await devToolsCall(method, params: params, wakesPage: false)
     }
 
     private func suspensionWorld(frameID: String) async -> Int? {

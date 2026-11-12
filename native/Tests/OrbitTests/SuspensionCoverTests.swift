@@ -73,9 +73,9 @@ struct SuspensionCoverTests {
         surface.suspensionPaintGeneration = surface.documentGeneration
         surface.onChange?()
         #expect(owner.tabSuspension.activeCoverIDs == [id])
-        let nativeContent = NSView(frame: surface.hostView.bounds)
+        let nativeContent = NSView(frame: surface.documentView.bounds)
         nativeContent.wantsLayer = true
-        surface.hostView.addSubview(nativeContent, positioned: .below, relativeTo: nil)
+        surface.documentView.addSubview(nativeContent, positioned: .below, relativeTo: nil)
         nativeContent.layer?.add(CATransition(), forKey: kCATransition)
         switch end {
         case .paint:

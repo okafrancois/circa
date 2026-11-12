@@ -9,6 +9,47 @@ extension NativeWebKitTests {
 @Suite(.serialized)
 @MainActor
 struct MemorySuspensionPolicyTests {
+    @Test("Freeze admission waits five minutes, backs off refusals, and thaws before presentation")
+    func freezeLifecycle() async throws {
+        NSApplication.shared.setActivationPolicy(.prohibited)
+        let environment = BrowserEnvironment(engine: SiteSyntheticEngine())
+        let window = try await environment.makeWindow()
+        defer { window.tabSuspension.close(); window.session.close(); window.window?.close(); environment.autoArchive.scheduler.stop() }
+        window.openTab(url: URL(string: "https://memory.test/timers")!)
+        await window.session.waitForPendingCommands()
+        let surface = try #require(window.session.selectedSurface)
+        window.openTab(url: URL(string: "https://memory.test/anchor")!)
+        await window.session.waitForPendingCommands()
+        window.tabSuspension.close()
+        window.tabSuspension = BrowserTabSuspensionController(owner: window, store: environment.store)
+        window.tabSuspension.selectionDidChange(now: 0)
+        surface.freezeRequests = []
+        surface.allowsFreezing = true
+        surface.freezeAccepted = false
+        #expect(await window.tabSuspension.sweep(now: 299) == 0)
+        #expect(surface.freezeRequests.isEmpty)
+        #expect(await window.tabSuspension.sweep(now: 300) == 0)
+        #expect(surface.freezeRequests == [true])
+        surface.freezeAccepted = true
+        #expect(await window.tabSuspension.sweep(now: 330) == 0)
+        #expect(surface.freezeRequests == [true])
+        #expect(await window.tabSuspension.sweep(now: 600) == 0)
+        #expect(surface.freezeRequests == [true, true])
+        window.tabSuspension.prepareCover(for: surface)
+        #expect(surface.freezeRequests.last == false)
+        // A cheap native veto never invokes the expensive document seam.
+        var probes = 0
+        surface.suspensionCapture = { probes += 1; return nil }
+        surface.allowsSuspension = false
+        #expect(await window.tabSuspension.sweep(now: 3601) == 0)
+        #expect(probes == 0)
+        surface.allowsSuspension = true
+        #expect(await window.tabSuspension.sweep(now: 3901) == 0)
+        #expect(probes == 1)
+        #expect(await window.tabSuspension.sweep(now: 3931) == 0)
+        #expect(probes == 1)
+    }
+
     @Test("Native discard preserves the sleeping row through wake without manufacturing a cover")
     func nativeDiscard() async throws {
         NSApplication.shared.setActivationPolicy(.prohibited)
@@ -130,21 +171,21 @@ struct MemorySuspensionPolicyTests {
         #expect(await window.tabSuspension.sweep(now: 3601) == 0)
         surface.allowsSuspension = true
         surface.suspensionCapture = { nil }
-        #expect(await window.tabSuspension.sweep(now: 3601) == 0)
+        #expect(await window.tabSuspension.sweep(now: 3901) == 0)
         surface.suspensionCapture = {
             BrowserSuspensionState(url: surface.currentURL!, documentGeneration: surface.documentGeneration &+ 1, scrollX: 0, scrollY: 0)
         }
-        #expect(await window.tabSuspension.sweep(now: 3601) == 0)
+        #expect(await window.tabSuspension.sweep(now: 4201) == 0)
         surface.suspensionCapture = {
             BrowserSuspensionState(url: URL(string: "https://memory.test/stale")!, documentGeneration: surface.documentGeneration, scrollX: 0, scrollY: 0)
         }
-        #expect(await window.tabSuspension.sweep(now: 3601) == 0)
+        #expect(await window.tabSuspension.sweep(now: 4501) == 0)
         surface.suspensionCapture = {
             window.session.selectOccurrence(tab.occurrenceID)
             await window.session.waitForPendingCommands()
             return BrowserSuspensionState(url: surface.currentURL!, documentGeneration: surface.documentGeneration, scrollX: 0, scrollY: 0)
         }
-        #expect(await window.tabSuspension.sweep(now: 3601) == 0)
+        #expect(await window.tabSuspension.sweep(now: 4801) == 0)
         #expect(surface.suspensionCount == 0 && !surface.isDisposed)
     }
 }
