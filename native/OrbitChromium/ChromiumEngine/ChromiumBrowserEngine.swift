@@ -226,6 +226,23 @@ public final class ChromiumBrowserEngine: BrowserPrivateEngine {
 
     /// Profiles resolved by this engine (one CEF request context each), for diagnostics.
     public var profileCount: Int { profiles.count }
+    private var profilePreparation: (@MainActor (ProfileID) async -> Void)?
+    private var preparedProfiles = Set<ProfileID>()
+    private var preparingProfiles: [ProfileID: Task<Void, Never>] = [:]
+
+    public func setProfilePreparation(_ prepare: @escaping @MainActor (ProfileID) async -> Void) {
+        profilePreparation = prepare
+    }
+
+    private func prepareProfile(_ id: ProfileID) async {
+        if let pending = preparingProfiles[id] { await pending.value; return }
+        guard !preparedProfiles.contains(id), let prepare = profilePreparation else { return }
+        let task = Task { await prepare(id) }
+        preparingProfiles[id] = task
+        await task.value
+        preparedProfiles.insert(id)
+        preparingProfiles[id] = nil
+    }
 
     /// The bridge token of a profile, for laboratory introspection.
     public func profileToken(for profileID: ProfileID) -> UInt64 {
@@ -669,6 +686,14 @@ extension ChromiumBrowserEngine {
     /// command while no shell window shows it, in the holding window.
     func createHostedBrowserIfPossible(_ surface: ChromiumSurface, commanded: Bool) {
         guard surface.awaitsHostedCreation, !surface.isDisposed, !isShutDown else { return }
+        if profilePreparation != nil, !preparedProfiles.contains(surface.profileID) {
+            Task { [weak self, weak surface] in
+                guard let self, let surface else { return }
+                await prepareProfile(surface.profileID)
+                createHostedBrowserIfPossible(surface, commanded: commanded)
+            }
+            return
+        }
         let window: ChromiumEngineWindow
         if let windowID = surface.placement.windowID, surface.placement.container != .none {
             guard let registered = shellWindows[windowID], !registered.isClosed else { return }  // Waits for it.

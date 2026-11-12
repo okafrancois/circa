@@ -10,8 +10,8 @@ extension BrowserEnvironment {
             if boosts.hostOverride != nil || engine.capabilities.contains(.boosts) {
                 Task { [weak self] in
                     guard let self else { return }
-                    for profile in await store.catalogSnapshot().profiles {
-                        do { try await boosts.synchronize(profileID: profile.id,
+                    for profile in boosts.requestedProfileIDs {
+                        do { try await boosts.synchronize(profileID: profile,
                             enabled: settings.document.enablesBoostsOnWebsites, engine: engine) }
                         catch BrowserBoostError.staleRevision { /* A newer setting already won. */ }
                         catch { onPersistenceError?(error) }

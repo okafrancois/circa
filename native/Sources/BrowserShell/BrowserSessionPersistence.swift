@@ -161,7 +161,7 @@ private final class SessionFileIO: @unchecked Sendable {
     }
 
     func load(generation: UInt64) async throws -> BrowserSessionDocument? {
-        try await perform { io in
+        try await perform(qos: .userInitiated) { io in
             io.latestGeneration = max(io.latestGeneration, generation)
             do { return try io.access.load(io.destination, io.maximumBytes) }
             catch BrowserSessionFileError.notFound { return nil }
@@ -186,10 +186,11 @@ private final class SessionFileIO: @unchecked Sendable {
     }
 
     private func perform<Value: Sendable>(
+        qos: DispatchQoS = .unspecified,
         _ operation: @escaping @Sendable (SessionFileIO) throws -> Value
     ) async throws -> Value {
         try await withCheckedThrowingContinuation { continuation in
-            queue.async { [self] in
+            queue.async(qos: qos) { [self] in
                 do { continuation.resume(returning: try operation(self)) }
                 catch { continuation.resume(throwing: error) }
             }

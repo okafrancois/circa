@@ -246,6 +246,10 @@ public actor BrowserStore {
         }
     }
 
+    public func windowPlacement(for id: WindowID) -> BrowserWindowPlacement? {
+        windows[id]?.placement
+    }
+
     public func sessionDocument() -> BrowserSessionDocument {
         let perfStart = BrowserPerformance.begin()
         defer { BrowserPerformance.end(.sessionDocument, since: perfStart) }

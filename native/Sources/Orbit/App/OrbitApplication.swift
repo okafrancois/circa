@@ -34,6 +34,7 @@ final class OrbitApplication: NSObject, NSApplicationDelegate {
         present()
         afterWindowCommit { [weak self] in
             guard let self else { return }
+            environment?.startAfterWindowCommit()
             onUpdaterStart?()
             configureIdleUpdates()
             updater.start(synthetic: activeSyntheticDataGuard() != nil)
@@ -238,7 +239,8 @@ final class OrbitApplication: NSObject, NSApplicationDelegate {
             defer { isStartingUp = false }
             do {
                 let configuration = try PreviewLaunchConfiguration(arguments: ProcessInfo.processInfo.arguments)
-                environment = try await OrbitEnvironment.open(engine: makeActiveEngine(), sessionFile: configuration.sessionFile)
+                environment = try await OrbitEnvironment.open(engine: makeActiveEngine(), sessionFile: configuration.sessionFile,
+                    settingsStore: activeStartupSettingsStore())
             } catch {
                 let alert = OrbitFloatingMaterial.alert()
                 alert.messageText = uiText("Could Not Restore the Local Session")

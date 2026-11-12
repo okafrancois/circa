@@ -145,6 +145,9 @@ public protocol BrowserEngine: AnyObject {
     /// Resolves, creating on first use, the isolated store of a profile.
     func profile(for profileID: ProfileID) -> BrowserEngineProfile
 
+    /// Installs profile services before the first hosted page is created.
+    func setProfilePreparation(_ prepare: @escaping @MainActor (ProfileID) async -> Void)
+
     /// Persistent engine-owned directory for local diagnostics; nil for private/unsupported stores.
     func diagnosticDataRoot(for profileID: ProfileID) -> URL?
 
@@ -212,6 +215,7 @@ public protocol BrowserEngine: AnyObject {
 }
 
 public extension BrowserEngine {
+    func setProfilePreparation(_ prepare: @escaping @MainActor (ProfileID) async -> Void) {}
     func diagnosticDataRoot(for profileID: ProfileID) -> URL? { nil }
     var passwordStore: (any BrowserPasswordStore)? { nil }
     var boosts: (any BrowserBoostHost)? { nil }
