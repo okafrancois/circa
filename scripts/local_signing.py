@@ -293,10 +293,13 @@ def sign_chromium_bundle(bundle, identity_name='local', main_entitlements=None):
         }))
         host_entitlements = Path(temporary) / 'host.plist'
         host_values = plistlib.loads(entitlements.read_bytes())
-        # Hardened Runtime capture requires these capabilities in addition to site and OS consent.
+        # Hardened Runtime capture and CoreLocation require these capabilities in addition to
+        # site and OS consent. Without the location one, macOS never prompts and every
+        # navigator.geolocation request fails with POSITION_UNAVAILABLE.
         host_values.update({
             'com.apple.security.device.audio-input': True,
             'com.apple.security.device.camera': True,
+            'com.apple.security.personal-information.location': True,
         })
         host_values.update(main_entitlements or {})
         host_entitlements.write_bytes(plistlib.dumps(host_values))
