@@ -1,0 +1,33 @@
+--- a/libcef/browser/browser_info_manager.cc
++++ b/libcef/browser/browser_info_manager.cc
+@@ -26,6 +26,11 @@
+ #include "content/public/browser/web_ui.h"
+ #include "content/public/browser/web_ui_controller.h"
+ #include "content/public/common/url_constants.h"
++#include "extensions/buildflags/buildflags.h"
++#if BUILDFLAG(ENABLE_EXTENSIONS_CORE)
++#include "extensions/browser/view_type_utils.h"
++#include "extensions/common/mojom/view_type.mojom.h"
++#endif
+ 
+ namespace {
+ 
+@@ -623,6 +628,18 @@
+   }
+ 
+   auto* web_contents = content::WebContents::FromRenderFrameHost(rfh);
++#if BUILDFLAG(ENABLE_EXTENSIONS_CORE)
++  // Native action popups use an ExtensionViewHost, not a CefBrowserHost.
++  // Answer the synchronous renderer lookup immediately instead of waiting for
++  // a browser association that will never be created. Keep owned frames on
++  // their normal registration path, including extension tabs.
++  if (extensions::GetViewType(web_contents) ==
++          extensions::mojom::ViewType::kExtensionPopup &&
++      !CefBrowserHostBase::GetBrowserForHost(rfh)) {
++    return true;
++  }
++#endif
++
+   if (WebUIContentsPreloadState::FromWebContents(web_contents)) {
+     // WebUIContentsPreloadManager creates non-tab contents for Chrome UI
+     // (omnibox popups, side panels, etc). The marker is set before navigation,

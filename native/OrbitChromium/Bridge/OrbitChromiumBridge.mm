@@ -624,6 +624,15 @@ class DevToolsObserver final : public CefDevToolsMessageObserver {
                       const void* params, size_t params_size) override {
     CEF_REQUIRE_UI_THREAD();
     const std::string name = method;
+    if (g_state && g_state->secure_storage == ACR_SECURE_STORAGE_MOCK &&
+        std::getenv("ORBIT_EXTENSION_DIAGNOSTICS") && name == "Tracing.dataCollected") {
+      const std::string path = g_state->root + "/popup-trace.jsonl";
+      if (FILE* file = fopen(path.c_str(), "a")) {
+        fwrite(params, 1, params_size, file);
+        fputc('\n', file);
+        fclose(file);
+      }
+    }
     if (!g_state || (name != "WebAudio.contextCreated" && name != "WebAudio.contextChanged"
                      && name != "WebAudio.contextWillBeDestroyed" && name != "Media.playerEventsAdded"
                      && name != "Media.playerPropertiesChanged" && name != "Media.playersCreated"
@@ -3739,6 +3748,8 @@ class ExtensionActionAnchor {
 extern "C" int32_t ACRPerformExtensionAction(uint64_t token, const char* id, void* anchor) {
   ACR_HOST(token);
   const bool diagnostics = std::getenv("ORBIT_EXTENSION_DIAGNOSTICS") != nullptr;
+  const double action_start = NSProcessInfo.processInfo.systemUptime;
+  if (diagnostics) fprintf(stderr, "acr: popup stage=bridge-entry uptime=%.6f\n", action_start);
   auto unavailable = [diagnostics](const char* stage) {
     if (diagnostics) fprintf(stderr, "acr: extension action unavailable at %s\n", stage);
     return 0;
@@ -3775,6 +3786,7 @@ extern "C" int32_t ACRPerformExtensionAction(uint64_t token, const char* id, voi
   }
   const uint64_t invocation = g_state->next_request++;
   host->extension_invocation = invocation;
+  if (diagnostics) fprintf(stderr, "acr: popup stage=engine-entry uptime=%.6f\n", NSProcessInfo.processInfo.systemUptime);
   const auto result = g_state->orbit->extension_action(browser->GetIdentifier(), extension_id.c_str(),
       owned_anchor.get(), invocation, token, profile, epoch);
   if (result != 1 && g_state == runtime && g_state->extension_lifetime == lifetime) {
@@ -3784,7 +3796,8 @@ extern "C" int32_t ACRPerformExtensionAction(uint64_t token, const char* id, voi
     // Clear ownership before the external callback and do not access it afterward.
     if (g_state->HasExtensionLeases()) g_state->orbit->extension_cancel(invocation);
   }
-  if (diagnostics) fprintf(stderr, "acr: native extension dispatch returned %d\n", result);
+  if (diagnostics) fprintf(stderr, "acr: popup stage=engine-return uptime=%.6f elapsed-ms=%.3f result=%d\n",
+      NSProcessInfo.processInfo.systemUptime, (NSProcessInfo.processInfo.systemUptime - action_start) * 1000, result);
   return result;
 }
 
