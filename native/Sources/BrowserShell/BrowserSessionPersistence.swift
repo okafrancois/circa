@@ -160,6 +160,21 @@ private final class SessionFileIO: @unchecked Sendable {
     private var lastHash: SHA256.Digest?
     private var lastResult: BrowserSessionFileStore.SaveResult?
     private var fullySynchronized = false
+    /// Identity of the file this process last wrote; byte equality is only trusted while it holds.
+    private var lastIdentity: FileIdentity?
+
+    private struct FileIdentity: Equatable {
+        let device: dev_t, inode: ino_t, size: off_t, modified: timespec
+        static func == (a: Self, b: Self) -> Bool {
+            a.device == b.device && a.inode == b.inode && a.size == b.size
+                && a.modified.tv_sec == b.modified.tv_sec && a.modified.tv_nsec == b.modified.tv_nsec
+        }
+        init?(_ url: URL) {
+            var info = stat()
+            guard lstat(url.path, &info) == 0, info.st_mode & S_IFMT == S_IFREG else { return nil }
+            device = info.st_dev; inode = info.st_ino; size = info.st_size; modified = info.st_mtimespec
+        }
+    }
 
     init(destination: URL, maximumBytes: Int, access: BrowserSessionPersistence.FileAccess) {
         self.destination = destination
@@ -172,6 +187,7 @@ private final class SessionFileIO: @unchecked Sendable {
             io.latestGeneration = max(io.latestGeneration, generation)
             io.lastHash = nil
             io.lastResult = nil
+            io.lastIdentity = nil
             io.fullySynchronized = false
             do { return try io.access.load(io.destination, io.maximumBytes) }
             catch BrowserSessionFileError.notFound { return nil }
@@ -192,7 +208,8 @@ private final class SessionFileIO: @unchecked Sendable {
                 throw BrowserSessionError.limitExceeded
             }
             let hash = SHA256.hash(data: encoded.data)
-            if hash == io.lastHash, let result = io.lastResult {
+            if hash == io.lastHash, let result = io.lastResult,
+               let identity = io.lastIdentity, FileIdentity(io.destination) == identity {
                 if fullSync && !io.fullySynchronized {
                     try io.access.synchronize(io.destination)
                     io.fullySynchronized = true
@@ -203,6 +220,7 @@ private final class SessionFileIO: @unchecked Sendable {
             if fullSync { try io.access.synchronize(io.destination) }
             io.lastHash = hash
             io.lastResult = result
+            io.lastIdentity = FileIdentity(io.destination)
             io.fullySynchronized = fullSync
             return .saved(result)
         }

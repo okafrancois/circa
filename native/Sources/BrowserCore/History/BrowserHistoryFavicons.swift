@@ -54,7 +54,7 @@ extension HistoryDatabase {
     /// One transaction owns schema and content changes. Bounded keyset reads avoid retaining
     /// 100k decoded visits and allow a failed/interrupted migration to restart safely.
     func migrateToVersionEight() throws {
-        try execute("CREATE TABLE favicons(hash TEXT PRIMARY KEY,payload TEXT NOT NULL)")
+        try execute("CREATE TABLE IF NOT EXISTS favicons(hash TEXT PRIMARY KEY,payload TEXT NOT NULL)")
         var last: Int64 = 0
         while true {
             let rows = try prepare("SELECT rowid,payload FROM visits WHERE rowid>? ORDER BY rowid LIMIT 512")
