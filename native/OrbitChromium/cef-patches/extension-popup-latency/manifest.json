@@ -1,0 +1,12 @@
+{
+  "cef_head": "8aee21e658dea8d6fc2810307d504454352acf70",
+  "input_sha256": {
+    "libcef/browser/browser_info_manager.cc": "690e54f84d5fa08d57c2c6166d97298befbf2c7c434bf0c406c6e513208b8105"
+  },
+  "output_sha256": {
+    "libcef/browser/browser_info_manager.cc": "3c9f0162cd2d2fc40cbf6f60918fe560cc38d0fc238c28ec94da30492bb40cbf"
+  },
+  "patch_sha256": "cfe684b5ab34ad815c3fecc2078ec2dc451d34f5bf908cc3ee0eb0de39f980ce",
+  "compiled": false,
+  "runtime_validated": false
+}

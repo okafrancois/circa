@@ -2811,19 +2811,41 @@ extension OrbitPerformanceProbe {
                       button.window === window, !button.isHiddenOrHasHiddenAncestor else {
                     return ["inputGuardRefused": true]
                 }
+                if command["latency"] == "true" {
+                    let (ok, _) = await surface.devToolsCall("Tracing.start", params: "{\"categories\":\"*\",\"transferMode\":\"ReportEvents\"}")
+                    result["tracingStarted"] = ok
+                }
+                let clickUptime = ProcessInfo.processInfo.systemUptime
                 button.performClick(nil)
+                result["clickUptime"] = clickUptime
+                result["dispatchReturnedMs"] = (ProcessInfo.processInfo.systemUptime - clickUptime) * 1000
+                var firstVisibleMs: Double?
+                var firstWindowMs: Double?
                 var trace: [[String: Any]] = []
                 var popup: NSWindow?
-                for _ in 0..<50 {
+                let measureLatency = command["latency"] == "true"
+                for _ in 0..<(measureLatency ? 500 : 50) {
                     let created = NSApp.windows.filter { !before.contains(ObjectIdentifier($0)) }
-                    if let live = created.first(where: { $0.isVisible }) { popup = live }
-                    trace.append(["floating": owner.isSidebarFloating, "mainKey": window.isKeyWindow,
+                    let elapsedMs = (ProcessInfo.processInfo.systemUptime - clickUptime) * 1000
+                    if !created.isEmpty, firstWindowMs == nil { firstWindowMs = elapsedMs }
+                    if let live = created.first(where: { $0.isVisible }) {
+                        popup = live
+                        if firstVisibleMs == nil { firstVisibleMs = elapsedMs }
+                    }
+                    trace.append(["elapsedMs": elapsedMs, "floating": owner.isSidebarFloating, "mainKey": window.isKeyWindow,
                         "children": created.map { child in ["number": child.windowNumber,
                             "visible": child.isVisible, "key": child.isKeyWindow,
                             "parentIsSource": child.parent === window,
                             "class": String(describing: type(of: child))] as [String: Any] }])
-                    try? await Task.sleep(for: .milliseconds(100))
+                    if measureLatency, popup != nil { break }
+                    try? await Task.sleep(for: .milliseconds(measureLatency ? 10 : 100))
                 }
+                if measureLatency {
+                    _ = await surface.devToolsCall("Tracing.end")
+                    try? await Task.sleep(for: .milliseconds(300))
+                }
+                result["firstWindowMs"] = firstWindowMs
+                result["firstVisibleMs"] = firstVisibleMs
                 result["focusTrace"] = trace
                 result["popupVisibleAfterLoad"] = popup?.isVisible == true
                 result["popupParentIsSource"] = popup?.parent === window
