@@ -2786,6 +2786,21 @@ extern "C" int32_t ACRIsAudioMuted(uint64_t token) {
   return host->browser->GetHost()->IsAudioMuted() ? 1 : 0;
 }
 
+// Queue renderer teardown before freezing, discarding or closing the owning browser.
+extern "C" void ACREndPictureInPicture(uint64_t token) {
+  if (!NSThread.isMainThread || !g_state) return;
+  Host* host = g_state->Find(token);
+  if (!host || !host->browser) return;
+  std::vector<CefString> frames;
+  host->browser->GetFrameIdentifiers(frames);
+  for (const auto& id : frames) {
+    auto frame = host->browser->GetFrameByIdentifier(id);
+    if (frame) frame->ExecuteJavaScript(
+        "if(document.pictureInPictureElement)document.exitPictureInPicture().catch(()=>{});",
+        frame->GetURL(), 0);
+  }
+}
+
 extern "C" int32_t ACRSetAutomaticPiP(uint64_t token, int32_t automatic) {
   ACR_HOST(token);
   if (!g_state->orbit || g_state->orbit->version < 9u || !g_state->orbit->set_automatic_pip) return 0;

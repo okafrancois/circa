@@ -1,10 +1,14 @@
 /// Isolated-world video PiP operations. Session ownership is cleared by the native leave event,
 /// so a later manual request, even for the same element, cannot be closed on tab selection.
 package enum BrowserAutomaticPiPScript {
-    package static let enter = #"""
-    (async () => {
-      if (!document.pictureInPictureEnabled || document.pictureInPictureElement) return false;
+    private static let candidate = #"""
+    (() => {
+      if (!document.pictureInPictureEnabled || document.pictureInPictureElement ||
+          !navigator.userActivation.hasBeenActive) return null;
       const videos = [...document.querySelectorAll('video')].filter(v =>
+        !v.muted && v.volume > 0 &&
+        (v.webkitAudioDecodedByteCount > 0 ||
+         [...(v.srcObject?.getAudioTracks?.() ?? [])].some(t => t.enabled && t.readyState === "live")) &&
         !v.paused && !v.ended && v.readyState >= 2 && v.videoWidth > 0 && !v.disablePictureInPicture &&
         v.checkVisibility({checkOpacity:true, checkVisibilityCSS:true}) && (() => {
           const r = v.getBoundingClientRect();
@@ -12,7 +16,16 @@ package enum BrowserAutomaticPiPScript {
                  r.top < innerHeight && r.left < innerWidth;
         })());
       videos.sort((a,b) => b.videoWidth*b.videoHeight - a.videoWidth*a.videoHeight);
-      const video = videos[0];
+      return videos[0] ?? null;
+    })()
+    """#
+
+    /// Evaluate without a synthetic user gesture before requesting PiP.
+    package static let isEligible = "Boolean(\(candidate))"
+
+    package static let enter = """
+    (async () => {
+      const video = \(candidate);
       if (!video) return false;
       const session = {video};
       const clear = () => {
@@ -22,11 +35,24 @@ package enum BrowserAutomaticPiPScript {
       globalThis.orbitAutomaticPiP = session;
       try {
         await video.requestPictureInPicture();
+        if (session.cancelled && document.pictureInPictureElement === video) {
+          await document.exitPictureInPicture();
+          clear();
+          return false;
+        }
         if (document.pictureInPictureElement === video && globalThis.orbitAutomaticPiP === session) return true;
       } catch (_) {}
       clear();
       video.removeEventListener('leavepictureinpicture', clear);
       return false;
+    })()
+    """
+
+    package static let endSession = #"""
+    (() => {
+      const session = globalThis.orbitAutomaticPiP;
+      if (session) session.cancelled = true;
+      if (document.pictureInPictureElement) document.exitPictureInPicture().catch(() => {});
     })()
     """#
 

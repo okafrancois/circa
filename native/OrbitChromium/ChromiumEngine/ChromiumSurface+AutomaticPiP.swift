@@ -7,6 +7,23 @@ import OrbitChromiumBridge
 private func uiText(_ english: String) -> String { BrowserText.string(english) }
 
 extension ChromiumSurface {
+    /// Selection only returns automatic sessions; ownership loss ends every player.
+    func endPictureInPicture() {
+        automaticPiPShouldEnter = false
+        automaticPiPRevision &+= 1
+        automaticPiPSession = nil
+        if !isDisposed, let context = automaticPiPContext,
+           let data = try? JSONSerialization.data(withJSONObject: [
+            "expression": BrowserAutomaticPiPScript.endSession, "contextId": context
+           ]) {
+            _ = ACRExecuteDevToolsMethod(token, "Runtime.evaluate", String(decoding: data, as: UTF8.self))
+        }
+        automaticPiPContext = nil
+        automaticPiPPresentation?.close()
+        automaticPiPPresentation = nil
+        if !isDisposed, isBrowserCreated { ACREndPictureInPicture(token) }
+    }
+
     public func showDeveloperPanel(_ panel: BrowserDeveloperPanel) throws {
         guard !isDisposed else { throw BrowserEngineError.surfaceDisposed }
         if panel == .elements { try perform(.inspectElements); return }
@@ -29,7 +46,7 @@ extension ChromiumSurface {
                 let enter = automaticPiPShouldEnter
                 let generation = documentGeneration
                 let returning = automaticPiPIsSelected
-                await reconcileAutomaticPiP(enter: enter, returning: returning, generation: generation)
+                await reconcileAutomaticPiP(enter: enter, returning: returning, generation: generation, revision: revision)
                 guard !isDisposed, !Task.isCancelled else { return }
                 if revision == automaticPiPRevision { return }
             } while true
@@ -38,7 +55,7 @@ extension ChromiumSurface {
 
     /// Each frame gets an isolated world. Cross-origin players use their own native DOM and
     /// permissions policy; no Node/IPC is exposed and page replacements of DOM APIs do not run.
-    private func reconcileAutomaticPiP(enter: Bool, returning: Bool, generation: UInt64) async {
+    private func reconcileAutomaticPiP(enter: Bool, returning: Bool, generation: UInt64, revision: UInt64) async {
         if returning || !enter {
             guard let session = automaticPiPSession else { return }
             automaticPiPSession = nil
@@ -64,7 +81,11 @@ extension ChromiumSurface {
             guard created, let world = try? JSONSerialization.jsonObject(with: worldData) as? [String: Any],
                   let context = world["executionContextId"] as? Int,
                   documentGeneration == generation, !isDisposed else { continue }
-            guard enter, automaticPiPShouldEnter else { return }
+            guard enter, automaticPiPShouldEnter, revision == automaticPiPRevision else { return }
+            let (eligible, eligibilityData) = await evaluatePiP(BrowserAutomaticPiPScript.isEligible, context: context)
+            guard eligible, let eligibility = try? JSONSerialization.jsonObject(with: eligibilityData) as? [String: Any],
+                  (eligibility["result"] as? [String: Any])?["value"] as? Bool == true,
+                  !isDisposed, generation == documentGeneration, revision == automaticPiPRevision else { continue }
             let expression = BrowserAutomaticPiPScript.enter
             guard let evaluation = try? JSONSerialization.data(withJSONObject: [
                 "expression": expression, "contextId": context, "returnByValue": true,
@@ -72,7 +93,12 @@ extension ChromiumSurface {
             ]) else { continue }
             automaticPiPPresentation?.finish()
             automaticPiPPresentation = ChromiumPictureInPicturePresentation(sourceWindow: automaticPiPSourceWindow)
+            automaticPiPContext = context
             let (evaluated, resultData) = await evaluateAutomaticPiP(evaluation)
+            guard !isDisposed, generation == documentGeneration, revision == automaticPiPRevision else {
+                if !isDisposed { ACREndPictureInPicture(token) }
+                return
+            }
             guard evaluated, let result = try? JSONSerialization.jsonObject(with: resultData) as? [String: Any],
                   result["exceptionDetails"] == nil else { automaticPiPPresentation?.finish(); continue }
             if (result["result"] as? [String: Any])?["value"] as? Bool == true {

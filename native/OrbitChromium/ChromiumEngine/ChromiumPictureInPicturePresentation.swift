@@ -47,6 +47,15 @@ final class ChromiumPictureInPicturePresentation {
         animation = nil
     }
 
+    func close() {
+        prepareForReturn()
+        if let window {
+            window.parent?.removeChildWindow(window)
+            window.performClose(nil)
+        }
+        window = nil
+    }
+
     private func consider(_ candidate: NSWindow) {
         guard !isArranging, window == nil, !existingWindows.contains(ObjectIdentifier(candidate)),
               candidate.styleMask.contains(.fullSizeContentView), !candidate.styleMask.contains(.titled),
