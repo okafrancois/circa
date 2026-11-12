@@ -36,12 +36,12 @@ struct NativeCommandTests {
     func catalogCoverage() throws {
         #expect(OrbitCommandCatalog.declarations.count == 179)
         #expect(OrbitCommandCatalog.structuralIDs.count == 14)
-        #expect(OrbitCommandCatalog.actionDefinitions.count == 262) // Includes local page sharing and browser errands.
+        #expect(OrbitCommandCatalog.actionDefinitions.count == 263) // Includes local page sharing and browser errands.
         #expect(OrbitCommandCatalog.declarations.allSatisfy { $0.localizesKey })
         #expect(OrbitCommandCatalog.declarations.filter { !$0.key.isEmpty }.count == 85)
         #expect(OrbitCommandCatalog.declarations.filter { !$0.key.isEmpty && $0.modifierMask == nil }.map(\.source) == ["menu.declaration.25", "menu.declaration.117"])
         #expect(Set(OrbitCommandCatalog.declarations.map(\.source)).count == 179)
-        #expect(OrbitCommandCatalog.supplemental.count == 27)
+        #expect(OrbitCommandCatalog.supplemental.count == 28)
         #expect(Set(OrbitCommandCatalog.definitions.map(\.id)) == Set(BrowserCommandID.allCases))
         #expect(OrbitCommandCatalog.definitions.allSatisfy { !$0.sources.isEmpty && !$0.owner.isEmpty })
         let router = commandRouter()
@@ -298,10 +298,11 @@ struct NativeCommandTests {
         // + site-session/bookmark import and export (4), and private-window routing (1).
         // + local Share and page-context Share (2), sidebar tab navigation (4), Select Space 1–9 (9).
         let implemented = system.registry.definitions.filter { system.registry.isImplemented($0.id) }.map(\.id.rawValue)
-        // Includes 24 additional native responder actions, Network Inspector, Exit, Media and two support actions.
-        #expect(implemented.count == 232, "\(implemented.count): \(implemented.sorted())")
+        // Includes 24 additional native responder actions, Network Inspector, Exit, Media, Assistant and two support actions.
+        #expect(implemented.count == 233, "\(implemented.count): \(implemented.sorted())")
         #expect(system.registry.isImplemented(.startErrand))
         #expect(system.registry.isImplemented(.cycleExtensions))
+        #expect(system.registry.isImplemented(.toggleAssistant))
         #expect(system.registry.isImplemented(.checkForUpdates))
         #expect(system.registry.isImplemented(.toggleDeveloperMode))
         #expect(system.registry.isImplemented(.newIncognitoWindow))

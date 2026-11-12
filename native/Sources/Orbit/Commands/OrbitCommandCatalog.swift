@@ -271,6 +271,14 @@ enum OrbitCommandCatalog {
         .websitesEaselsAndNotesWillUse
     ]
 
+    /// Commands with a keyboard target independent of a captured context-menu request.
+    /// Keep this policy shared by Settings, preference validation and key routing.
+    static func isUserManageableShortcut(_ definition: BrowserCommandDefinition) -> Bool {
+        definition.owner != "OUT-OF-SCOPE-AI" && !structuralIDs.contains(definition.id)
+            && !hiddenCommands.contains(definition.id)
+            && definition.menu != BrowserPageContextCommands.menu
+    }
+
     static func isCommandBarAction(_ definition: BrowserCommandDefinition) -> Bool {
         definition.scope == .browser && !hiddenCommands.contains(definition.id) && !structuralIDs.contains(definition.id)
             && (definition.id == .sidebarCopyLinks || !["Sidebar", "FavoritesContext", "Page Context"].contains(definition.menu))

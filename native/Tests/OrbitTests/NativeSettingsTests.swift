@@ -1273,6 +1273,7 @@ extension NativeWebKitTests.NativeSettingsTests {
         #expect(ids.contains(.toggleAssistant))
         #expect(ids.contains(.copy))
         #expect(!ids.contains(.newChatGPTMessage))
+        #expect(ids.isDisjoint(with: Set(BrowserPageContextCommands.definitions.map(\.id))))
         #expect(ids.isDisjoint(with: OrbitCommandCatalog.structuralIDs))
         let preferences = BrowserShortcutPreferences()
         for command in visible where command.id != .toggleAssistant {

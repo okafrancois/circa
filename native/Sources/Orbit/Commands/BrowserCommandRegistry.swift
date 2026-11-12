@@ -375,7 +375,7 @@ final class BrowserCommandRegistry<Window: AnyObject> {
 
     func matchingDefinitions(_ input: BrowserShortcutEvent) -> [BrowserCommandDefinition] {
         definitions.filter { definition in
-            definition.shortcuts.contains { matches($0, input: input) }
+            OrbitCommandCatalog.isUserManageableShortcut(definition) && definition.shortcuts.contains { matches($0, input: input) }
         }
     }
 
@@ -383,7 +383,7 @@ final class BrowserCommandRegistry<Window: AnyObject> {
         guard input.shortcut.modifiers.contains(.shift),
               input.shortcut.key.unicodeScalars.first.map({ (0xF700...0xF8FF).contains($0.value) }) == true else { return false }
         return definitions.contains { definition in
-            definition.shortcuts.contains { binding in
+            OrbitCommandCatalog.isUserManageableShortcut(definition) && definition.shortcuts.contains { binding in
                 !binding.modifiers.contains(.shift)
                     && binding.key.unicodeScalars.first.map({ (0xF700...0xF8FF).contains($0.value) }) == true
                     && keyEquivalentMatcher.matches(binding, input: input, strictShift: false)
@@ -393,6 +393,7 @@ final class BrowserCommandRegistry<Window: AnyObject> {
 
     private func resolve(scope: BrowserCommandScope?, includingDisabled: Bool = false, matching: (BrowserShortcut) -> Bool) -> BrowserCommandID? {
         let scope = scope ?? activeScope
+        let definitions = definitions.filter(OrbitCommandCatalog.isUserManageableShortcut)
         let scoped = definitions.filter { $0.scope == scope && $0.shortcuts.contains(where: matching) }
         let candidates = scoped.isEmpty && scope != .browser
             ? definitions.filter { ($0.scope == .browser || $0.scope == .responder) && $0.shortcuts.contains(where: matching) }
