@@ -561,7 +561,7 @@ final class HistoryDatabase: @unchecked Sendable {
             if hasIdentity && initialVersion < 8 {
                 // Reclaim pages released by deduplication. A failed compaction is retryable and
                 // does not invalidate the already committed migration or its backup.
-                try execute("VACUUM")
+                try? execute("VACUUM")
                 try FileManager.default.removeItem(at: backup)
             }
             // A process may have stopped after committing version eight but before cleanup.

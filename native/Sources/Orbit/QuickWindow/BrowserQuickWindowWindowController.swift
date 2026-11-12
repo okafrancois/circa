@@ -292,7 +292,12 @@ final class BrowserQuickWindowWindowController<Engine: BrowserEngine>: NSWindowC
         }
         compactInput.render(results.compactMap { result in
             guard let url = result.url else { return nil }
-            let image = result.faviconReference.flatMap { inputFavicons.image(for: $0) }
+            let image = result.faviconReference.flatMap { reference in
+                inputFavicons.image(for: reference) { [weak self] in
+                    guard let self else { return nil }
+                    return await historyObserver.resolveFavicon(reference, profileID: profileID)
+                }
+            }
                 ?? OrbitIcon.image(sfName: result.symbol, pointSize: 20, accessibilityDescription: nil)
             return BrowserQuickWindowSearchRow(id: result.id, title: isEditingAddress && result.section == .address ? query : result.title,
                 detail: result.section == .address || result.section == .search ? "" : BrowserSuggestionText.displayURL(url), image: image) { [weak self] in
