@@ -504,16 +504,10 @@ final class BrowserSidebarView: NSView, SidebarListHost {
         return result
     }
 
-    /// Only plain tab rows use this path. Composite rows retain the full projection fallback.
+    /// Replace only affected rows, including composite rows, without rebuilding list content.
     func applyMetadata(_ ids: Set<TabID>, organization next: BrowserOrganizationSnapshot?) {
         guard let next, let current = organization, next.windowID == current.windowID,
               next.spaceID == current.spaceID, next.profileID == current.profileID else { return }
-        if ids.contains(where: { id in
-            metadataIndex?.requiresCompositeProjection(id) == true
-        }) {
-            render(catalog: renderedCatalog, activeSpaceID: activeSpaceID, organization: next)
-            return
-        }
         organization = next
         if let inputs = contentInputs {
             var titles = inputs.liveTitles
@@ -528,13 +522,19 @@ final class BrowserSidebarView: NSView, SidebarListHost {
         }
         var updates: [SidebarListEntry] = []
         let multi = selection.nodes.count >= 2 ? selection.nodes : []
-        for id in ids {
-            guard let index = contentIndices[.tab(id)], let tab = metadataIndex?.tab(id, in: next) else { continue }
+        for node in Set(ids.compactMap({ metadataIndex?.row(for: $0) })) {
+            guard let index = contentIndices[node] else { continue }
             let old = cachedContent.entries[index]
-            let row = SidebarListContent.tabItem(tab, multi: multi, section: old.section,
-                liveTitle: tab.occurrenceID == nil ? nil : liveTitle(tab),
-                activity: activity(for: tab))
-            let entry = SidebarListEntry(node: old.node, section: old.section, ancestors: old.ancestors, content: .tab(row))
+            let content: SidebarListEntry.Content
+            if let id = node.tabID, let tab = metadataIndex?.tab(id, in: next) {
+                content = .tab(SidebarListContent.tabItem(tab, multi: multi, section: old.section,
+                    liveTitle: tab.occurrenceID == nil ? nil : liveTitle(tab), activity: activity(for: tab)))
+            } else if case let .split(split)? = next.item(for: node, using: metadataIndex),
+                      let row = SidebarListContent.splitItem(split, multi: multi, section: old.section,
+                          liveTitle: liveTitle, liveActivity: { self.activity(for: $0) }) {
+                content = .split(row, split.group.tabIDs)
+            } else { continue }
+            let entry = SidebarListEntry(node: old.node, section: old.section, ancestors: old.ancestors, content: content)
             if entry != old { cachedContent.entries[index] = entry; updates.append(entry) }
         }
         if !updates.isEmpty { BrowserPerformance.count(.sidebarContentPasses) }
@@ -566,7 +566,7 @@ final class BrowserSidebarView: NSView, SidebarListHost {
                 content = .tab(SidebarListContent.tabItem(tab, multi: multi, section: old.section,
                     liveTitle: tab.occurrenceID == nil ? nil : liveTitle(tab),
                     activity: activity(for: tab)))
-            } else if case let .split(split)? = next.item(for: node),
+            } else if case let .split(split)? = next.item(for: node, using: metadataIndex),
                       let row = SidebarListContent.splitItem(split, multi: multi, section: old.section,
                           liveTitle: liveTitle, liveActivity: { self.activity(for: $0) }) {
                 content = .split(row, split.group.tabIDs)

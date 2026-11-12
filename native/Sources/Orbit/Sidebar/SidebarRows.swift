@@ -47,10 +47,15 @@ class SidebarListRow: NSView, NSTextFieldDelegate {
     private var errandMark: BrowserErrandRowMark?
     func setErrandMark(_ state: BrowserErrandRowMark.State?) {
         (self as? SidebarFolderRow)?.setErrandRole(state != nil)
-        guard let state else { errandMark?.removeFromSuperview(); errandMark = nil; needsLayout = true; return }
+        guard let state else {
+            guard let errandMark else { return }
+            errandMark.removeFromSuperview(); self.errandMark = nil; needsLayout = true; return
+        }
         let mark = errandMark ?? BrowserErrandRowMark(frame: .zero)
-        if errandMark == nil { addSubview(mark); errandMark = mark }
-        mark.state = state; mark.tint = effectiveAccent.icon; needsLayout = true
+        if errandMark == nil { addSubview(mark); errandMark = mark; needsLayout = true }
+        if mark.state != state { mark.state = state; needsLayout = true }
+        if mark.tint != effectiveAccent.icon { mark.tint = effectiveAccent.icon }
+
     }
     let background = OrbitSurfaceBackgroundView(cornerRadius: OrbitTokens.Radius.tabRow)
     let titleLabel = NSTextField(labelWithString: "")
@@ -787,6 +792,7 @@ final class SidebarFolderRow: SidebarListRow {
     let glyph = SidebarFolderGlyphView()
     private var errandGlyph: NSImageView?
     func setErrandRole(_ active: Bool) {
+        guard active != (errandGlyph != nil) else { return }
         glyph.isHidden = active
         if active {
             if errandGlyph == nil {

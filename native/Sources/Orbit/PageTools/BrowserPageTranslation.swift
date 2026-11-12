@@ -259,10 +259,11 @@ final class BrowserTranslationController<Engine: BrowserEngine> {
         default: nil
         }
     }
-    func render() {
+    func render(selectedOnly: Bool = false) {
         guard let owner else { return }
-        owner.translationPages.prune()
-        for surface in owner.session.ownedSurfaces {
+        if !selectedOnly { owner.translationPages.prune() }
+        let surfaces = selectedOnly ? owner.session.selectedSurface.map { [$0] } ?? [] : owner.session.ownedSurfaces
+        for surface in surfaces {
             guard let page = pages[ObjectIdentifier(surface)] else { continue }
             page.onChange = { [weak self] in self?.update() }
             if let host = page.host, let root = owner.window?.contentView, host.superview !== root {
@@ -277,7 +278,7 @@ final class BrowserTranslationController<Engine: BrowserEngine> {
             page.onChange = { [weak self] in self?.update() }
             page.detect(privateWindow: owner.isPrivateWindow)
         }
-        for surface in owner.session.ownedSurfaces {
+        for surface in surfaces {
             pages[ObjectIdentifier(surface)]?.state.suppressSite(preferences.preferences(
                 url: surface.navigationState.committedURL, profileID: surface.profileID).neverTranslate)
         }

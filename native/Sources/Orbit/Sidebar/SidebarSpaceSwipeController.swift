@@ -178,6 +178,9 @@ final class SidebarSpaceSwipeController {
         preparedDocument = nil
         preparationContext = (catalog, active)
         preparationTask = Task { [weak self] in
+            // Wait until the main run loop has drained input and display work before rasterizing.
+            await Self.waitForIdle()
+            guard !Task.isCancelled else { return }
             let document = await loadDocument()
             guard !Task.isCancelled, let self, !isActive, let sidebar,
                   sidebar.swipeContext?.0 == catalog, sidebar.swipeContext?.1 == active,
@@ -187,6 +190,15 @@ final class SidebarSpaceSwipeController {
                 sidebar.prepareSpaceSwipeNeighbors(document: document, active: active, resolveTheme: resolveTheme)
                 sidebar.prepareNewSpaceSwipePage()
             }
+        }
+    }
+
+    private static func waitForIdle() async {
+        await withCheckedContinuation { continuation in
+            let observer = CFRunLoopObserverCreateWithHandler(nil, CFRunLoopActivity.beforeWaiting.rawValue,
+                false, CFIndex.max) { _, _ in continuation.resume() }
+            CFRunLoopAddObserver(CFRunLoopGetMain(), observer, .defaultMode)
+            CFRunLoopWakeUp(CFRunLoopGetMain())
         }
     }
 

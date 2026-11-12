@@ -54,6 +54,10 @@ extension BrowserWindowController {
     }
 
     func flushSidebarMetadata() {
+        let chrome = sidebarChromeSurfaces
+        let media = sidebarMediaSurfaces
+        sidebarChromeSurfaces.removeAll(keepingCapacity: true)
+        sidebarMediaSurfaces.removeAll(keepingCapacity: true)
         let surfaces = sidebarMetadataSurfaces
         let ids = sidebarMetadataIDs
         sidebarMetadataSurfaces.removeAll(keepingCapacity: true)
@@ -72,5 +76,13 @@ extension BrowserWindowController {
             }
         }
         sidebar.applyMetadata(ids, organization: session.organization)
+        favorites.applyMetadata(ids)
+        refreshSplitMetadata(ids)
+        for surface in media.values where owns(surface) { siteControls.refreshMedia(surface) }
+        if let selected = session.selectedSurface, chrome.contains(ObjectIdentifier(selected)) {
+            palette.renderContext()
+            passwordPrompt.render()
+            translation.render(selectedOnly: true)
+        }
     }
 }

@@ -94,7 +94,7 @@ final class OrbitThemeFillView: NSView {
         let scale = window?.backingScaleFactor ?? 2
         host.contentsScale = scale
         grain.contentsScale = scale
-        grain.setNeedsDisplay()
+        grain.layoutTiles()
     }
 
     /// Colours of the current theme under the current appearance.
@@ -153,8 +153,8 @@ final class OrbitThemeFillView: NSView {
             mesh.contents = Self.meshImage(corners.map { $0.resolved(for: effectiveAppearance) })
         } else { mesh.contents = nil }
         applyEndpoints()
-        // The tiled grain does not depend on the colours: redrawing this full-window CPU layer
-        // on every swipe frame is wasted work. Bounds and backing-scale changes redraw it separately.
+        // Grain shares one tile independently of the colours. Bounds and backing-scale changes
+        // only update replica geometry; the strength dial changes composited opacity.
         let intensity = theme.texture == .none ? 0 : theme.textureIntensity
         if grain.intensity != intensity {
             grain.intensity = intensity
@@ -165,15 +165,49 @@ final class OrbitThemeFillView: NSView {
 }
 
 final class OrbitGrainLayer: CALayer {
-    /// Strength is composited by Core Animation; editing it must not redraw the tiled backing.
+    /// Strength is composited by Core Animation; the replicas share one immutable texture.
     var intensity: CGFloat = 0 {
-        didSet { opacity = Float(min(1, max(0, intensity)) * Self.maximumOpacity) }
+        didSet {
+            opacity = Float(min(1, max(0, intensity)) * Self.maximumOpacity)
+            tileLayer.setEnabled(intensity > 0)
+        }
     }
+
+    private let columns = CAReplicatorLayer()
+    private let rows = CAReplicatorLayer()
+    private let tileLayer = OrbitGrainTileLayer()
 
     override init() {
         super.init()
         opacity = 0
-        needsDisplayOnBoundsChange = true
+        addSublayer(rows)
+        rows.addSublayer(columns)
+        columns.addSublayer(tileLayer)
+        masksToBounds = true
+    }
+
+    override func layoutSublayers() {
+        super.layoutSublayers()
+        layoutTiles()
+    }
+
+    func layoutTiles() {
+        let side = CGFloat(Self.tileSide) / max(1, contentsScale)
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        rows.frame = bounds
+        columns.frame = CGRect(x: 0, y: 0, width: bounds.width, height: side)
+        if tileLayer.contentsScale != contentsScale {
+            tileLayer.contentsScale = contentsScale
+            if tileLayer.isEnabled { tileLayer.setNeedsDisplay() }
+        }
+        tileLayer.frame = CGRect(x: 0, y: 0, width: side, height: side)
+        columns.instanceCount = max(1, Int(ceil(bounds.width / side)))
+        columns.instanceTransform = CATransform3DMakeTranslation(side, 0, 0)
+        rows.instanceCount = max(1, Int(ceil(bounds.height / side)))
+        rows.instanceTransform = CATransform3DMakeTranslation(0, side, 0)
+        contents = nil
+        CATransaction.commit()
     }
 
     override init(layer: Any) {
@@ -182,12 +216,6 @@ final class OrbitGrainLayer: CALayer {
     }
 
     required init?(coder: NSCoder) { nil }
-
-    override func draw(in context: CGContext) {
-        guard let tile = Self.tile else { return }
-        let side = CGFloat(Self.tileSide) / max(1, contentsScale)
-        context.draw(tile, in: CGRect(x: 0, y: 0, width: side, height: side), byTiling: true)
-    }
 
     static let tileSide = 512
     static let maximumOpacity: CGFloat = 0.15
@@ -236,6 +264,33 @@ final class OrbitGrainLayer: CALayer {
                        space: space, bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue),
                        provider: provider, decode: nil, shouldInterpolate: false, intent: .defaultIntent)
     }()
+}
+
+/// A single physical tile retains the original drawing/color conversion path. Replication
+/// replaces view-sized backing stores without changing the on-screen RGB quantization.
+private final class OrbitGrainTileLayer: CALayer {
+    private(set) var isEnabled = false
+    override init() { super.init(); isHidden = true }
+    override init(layer: Any) {
+        isEnabled = (layer as? OrbitGrainTileLayer)?.isEnabled ?? false
+        super.init(layer: layer)
+    }
+    required init?(coder: NSCoder) { nil }
+    func setEnabled(_ enabled: Bool) {
+        guard enabled != isEnabled else { return }
+        isEnabled = enabled
+        isHidden = !enabled
+        if enabled { setNeedsDisplay() } else { contents = nil }
+    }
+    override func display() {
+        guard isEnabled else { contents = nil; return }
+        super.display()
+    }
+    override func draw(in context: CGContext) {
+        guard isEnabled, let image = OrbitGrainLayer.tile else { return }
+        let side = CGFloat(OrbitGrainLayer.tileSide) / max(1, contentsScale)
+        context.draw(image, in: CGRect(x: 0, y: 0, width: side, height: side), byTiling: true)
+    }
 }
 
 @MainActor

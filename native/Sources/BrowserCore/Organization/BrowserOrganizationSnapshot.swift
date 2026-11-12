@@ -183,23 +183,38 @@ public struct BrowserOrganizationSnapshot: Equatable, Sendable {
         }
     }
 
-    public func item(for node: BrowserOrganizationNode) -> BrowserOrganizationItem? {
-        var stack = (favorites + pinned + today).reversed().map { $0 }
-        while let item = stack.popLast() {
-            if item.node == node { return item }
-            if case let .folder(folder) = item { stack.append(contentsOf: folder.children.reversed()) }
-            if case let .split(split) = item { stack.append(contentsOf: split.tabs.reversed().map(BrowserOrganizationItem.tab)) }
+    public func item(for node: BrowserOrganizationNode, using index: BrowserOrganizationMetadataIndex? = nil) -> BrowserOrganizationItem? {
+        if let index { return index.item(for: node, in: self) }
+        func find(in items: [BrowserOrganizationItem]) -> BrowserOrganizationItem? {
+            for item in items {
+                if item.node == node { return item }
+                if case let .folder(folder) = item, let found = find(in: folder.children) { return found }
+                if case let .split(split) = item, let id = node.tabID,
+                   let tab = split.tabs.first(where: { $0.id == id }) { return .tab(tab) }
+            }
+            return nil
         }
-        return nil
+        return find(in: favorites) ?? find(in: pinned) ?? find(in: today)
     }
 
-    public func tab(_ id: TabID) -> BrowserOrganizationTabItem? {
+    public func tab(_ id: TabID, using index: BrowserOrganizationMetadataIndex? = nil) -> BrowserOrganizationTabItem? {
+        if let index { return index.tab(id, in: self) }
         guard case let .tab(item)? = item(for: .tab(id)) else { return nil }
         return item
     }
 
     public var selectedTab: BrowserOrganizationTabItem? {
-        allTabs.first { $0.isSelected }
+        func selected(in items: [BrowserOrganizationItem]) -> BrowserOrganizationTabItem? {
+            for item in items {
+                switch item {
+                case let .tab(tab): if tab.isSelected { return tab }
+                case let .folder(folder): if let tab = selected(in: folder.children) { return tab }
+                case let .split(split): if let tab = split.tabs.first(where: \.isSelected) { return tab }
+                }
+            }
+            return nil
+        }
+        return selected(in: favorites) ?? selected(in: pinned) ?? selected(in: today)
     }
 
     /// Every tab in sidebar order, including those inside collapsed folders.

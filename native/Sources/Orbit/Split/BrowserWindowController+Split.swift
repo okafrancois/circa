@@ -94,6 +94,20 @@ extension BrowserWindowController {
         }
     }
 
+    func refreshSplitMetadata(_ ids: Set<TabID>) {
+        guard let group = session.activeSplit, split.expandedGroup != group.group.id else { return }
+        let panes = group.tabs.filter { ids.contains($0.id) }.map { tab -> BrowserSplitView.Pane in
+            let surface = tab.occurrenceID.flatMap { session.surface(for: $0) }
+            return .init(id: tab.id, view: surface?.hostView,
+                address: surface?.navigationState.url?.absoluteString ?? tab.url.absoluteString,
+                title: tab.title ?? surface?.navigationState.title,
+                isOpenInAnotherWindow: surface == nil && tab.isOpenInAnotherWindow,
+                canGoBack: surface?.navigationState.canGoBack ?? false,
+                canGoForward: surface?.navigationState.canGoForward ?? false)
+        }
+        split.view.applyMetadata(panes, group: group.group)
+    }
+
     func renderSplit(retainingPreviousUntil capture: Task<Void, Never>? = nil, selectionOnly: Bool = false) {
         // Commit the destination wrapper, final geometry and native host together. An
         // intermediate commit can expose the card backdrop before the hosted layer arrives.

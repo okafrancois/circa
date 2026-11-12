@@ -448,7 +448,7 @@ final class BrowserPaletteController<Engine: BrowserEngine> {
         for result in results {
             if case .tab(let id, let windowID, _) = result.action,
                let controller = windowID.flatMap({ registry.router.windows[$0] }) ?? (windowID == nil ? owner : nil),
-               let occurrence = controller.session.organization?.tab(id)?.occurrenceID,
+               let occurrence = controller.session.organizationTab(id)?.occurrenceID,
                let surface = controller.session.surface(for: occurrence), surface.profileID == profileID {
                 let state = surface.navigationState
                 if let image = state.faviconImage, image.sourceURL == state.faviconURL {

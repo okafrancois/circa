@@ -62,11 +62,15 @@ public struct BrowserOrganizationMetadataIndex: Sendable {
         let row: BrowserOrganizationNode
     }
     var paths: [TabID: Path] = [:]
+    private var compositePaths: [BrowserOrganizationNode: Path] = [:]
 
     public init(_ snapshot: BrowserOrganizationSnapshot) {
         func walk(_ items: [BrowserOrganizationItem], section: Int, offsets: [Int]) {
             for (i, item) in items.enumerated() {
                 let path = offsets + [i]
+                if item.node.tabID == nil {
+                    compositePaths[item.node] = Path(section: section, offsets: path, pane: nil, row: item.node)
+                }
                 switch item {
                 case let .tab(tab): paths[tab.id] = Path(section: section, offsets: path, pane: nil, row: item.node)
                 case let .folder(folder): walk(folder.children, section: section, offsets: path)
@@ -99,10 +103,24 @@ public struct BrowserOrganizationMetadataIndex: Sendable {
         return nil
     }
 
+    public func item(for node: BrowserOrganizationNode, in snapshot: BrowserOrganizationSnapshot) -> BrowserOrganizationItem? {
+        if let id = node.tabID { return tab(id, in: snapshot).map(BrowserOrganizationItem.tab) }
+        guard let path = compositePaths[node] else { return nil }
+        var items = path.section == 0 ? snapshot.favorites : path.section == 1 ? snapshot.pinned : snapshot.today
+        for (depth, offset) in path.offsets.enumerated() {
+            guard items.indices.contains(offset) else { return nil }
+            let item = items[offset]
+            if depth == path.offsets.count - 1 { return item.node == node ? item : nil }
+            guard case let .folder(folder) = item else { return nil }
+            items = folder.children
+        }
+        return nil
+    }
+
     public func row(for id: TabID) -> BrowserOrganizationNode? { paths[id]?.row }
 
     public func requiresCompositeProjection(_ id: TabID) -> Bool {
-        paths[id].map { $0.section == 0 || $0.pane != nil } ?? false
+        paths[id].map { $0.pane != nil } ?? false
     }
 }
 
