@@ -1,11 +1,13 @@
 import AppKit
 import ImageIO
+import CryptoKit
 
 /// An owned, memory-only representation received from this surface's engine/profile.
 /// Metadata URL remains separate from bytes; consumers must preserve surface ownership checks.
 public struct BrowserFaviconImage: Equatable, Sendable {
     public let sourceURL: URL
     public let png: Data
+    public let contentHash: String
     public static let maximumBytes = 131_072
     public static let maximumDimension = 128
 
@@ -19,6 +21,7 @@ public struct BrowserFaviconImage: Equatable, Sendable {
               width > 0, height > 0, width <= Self.maximumDimension, height <= Self.maximumDimension else { return nil }
         self.sourceURL = sourceURL
         self.png = png
+        contentHash = SHA256.hash(data: png).map { String(format: "%02x", $0) }.joined()
     }
 
     /// Source identity validation only. This never loads the URL.

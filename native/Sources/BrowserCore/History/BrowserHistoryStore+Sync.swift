@@ -9,6 +9,8 @@ extension BrowserHistoryStore {
 
     func syncDeletions() throws -> [BrowserHistorySyncDeletion] {
         guard let database else { return [] }
+        let version = try database.scalarText("PRAGMA data_version")
+        if let cache = deletionCache, cache.revision == database.tombstoneRevision, cache.dataVersion == version { return cache.values }
         let rows = try database.prepare("SELECT payload FROM historySyncEvents WHERE kind=1")
         defer { sqlite3_finalize(rows) }
         var result: [BrowserHistorySyncDeletion] = []
@@ -16,11 +18,13 @@ extension BrowserHistoryStore {
             let event = try JSONDecoder().decode(BrowserHistorySyncEvent.self, from: Data(database.text(rows, 0).utf8))
             if let deletion = event.deletion { result.append(deletion) }
         }
+        deletionCache = (database.tombstoneRevision, version, result)
         return result
     }
 
     func appendSyncEvent(_ event: BrowserHistorySyncEvent) throws {
         guard let database else { return }
+        if event.deletion != nil { database.tombstoneRevision &+= 1 }
         let cutoff = BrowserHistorySyncSchema.cutoff(Date())
         if cutoff > lastHistoryJournalPrune {
             try database.execute("DELETE FROM historySyncEvents WHERE expires<?", [.number(cutoff.timeIntervalSince1970)])

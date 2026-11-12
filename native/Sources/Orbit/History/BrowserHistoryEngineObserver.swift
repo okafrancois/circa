@@ -38,6 +38,10 @@ final class BrowserHistoryEngineObserver<Surface: BrowserEngineSurface> {
         warmup = Task { [weak recorder] in await recorder?.prepareSuggestions(for: profileID) }
     }
 
+    func resolveFavicon(_ reference: URL, profileID: ProfileID) async -> URL? {
+        await recorder.resolveFavicon(reference, profileID: profileID)
+    }
+
     func suggestions(for profileID: ProfileID, query: String) async throws -> [BrowserHistorySuggestion] {
         try await recorder.suggestions(for: profileID, query: query)
     }

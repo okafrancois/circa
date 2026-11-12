@@ -50,6 +50,7 @@ public struct BrowserHistorySuggestion: Equatable, Sendable {
     public let profileID: ProfileID
     public let url: URL
     public let title: String
+    /// Profile-local content address for lazy display; use the owning store to resolve it.
     public let faviconReference: URL?
     public let visitCount: Int
     public let typedCount: Int

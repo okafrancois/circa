@@ -9,6 +9,7 @@ public actor BrowserHistoryStore {
     let database: HistoryDatabase?
     // Total SQLite changes invalidate this cache even after a rolled-back mutation.
     var syncBatchCache: (changes: Int64, dataVersion: String, cutoff: Date, batches: [BrowserHistorySyncBatch])?
+    var deletionCache: (revision: UInt64, dataVersion: String, values: [BrowserHistorySyncDeletion])?
     var applyingHistorySync = false
     var lastHistoryJournalPrune = Date.distantPast
     /// Separate read-only WAL connection: suggestions and index snapshots bypass this actor.
@@ -131,7 +132,7 @@ public actor BrowserHistoryStore {
         guard let database else { return 0 }
         // Validate the entire batch before starting a transaction, including redirect metadata.
         for visit in visits where !Self.accepts(visit) { throw BrowserHistoryError.invalidVisit }
-        return try database.transaction {
+        return try database.routineTransaction {
             let statement = try database.prepare("INSERT OR IGNORE INTO visits(id,url,site,time,title,typed,payload,searchTitle) VALUES(?,?,?,?,?,?,?,?)")
             defer { sqlite3_finalize(statement) }
             var inserted = 0
@@ -141,7 +142,9 @@ public actor BrowserHistoryStore {
                 guard visit.visitedAt >= cutoff, (!respectsBarriers || !barriers.contains(where: { $0.matches(visit) })) else { continue }
                 sqlite3_reset(statement)
                 sqlite3_clear_bindings(statement)
-                let data = try JSONEncoder().encode(visit)
+                var stored = visit
+                stored.faviconReference = try database.storeFavicon(visit.faviconReference)
+                let data = try JSONEncoder().encode(stored)
                 try database.bind(statement, [.text(visit.id.uuidString), .text(visit.url.absoluteString),
                     .text(visit.url.host!.lowercased()), .number(visit.visitedAt.timeIntervalSince1970),
                     .text(visit.title), .number(Double(visit.typedCount)), .text(String(decoding: data, as: UTF8.self)), .text(Self.fold(visit.title))])
@@ -156,7 +159,7 @@ public actor BrowserHistoryStore {
                     favicon=CASE WHEN excluded.last >= pages.last THEN excluded.favicon ELSE pages.favicon END,
                     last=MAX(last,excluded.last), visits=visits+1, typed=typed+excluded.typed,
                     searchTitle=CASE WHEN excluded.last >= pages.last THEN excluded.searchTitle ELSE pages.searchTitle END
-                    """, [.text(visit.url.absoluteString), .text(visit.title), .text(visit.faviconReference?.absoluteString ?? ""),
+                    """, [.text(visit.url.absoluteString), .text(visit.title), .text(stored.faviconReference?.absoluteString ?? ""),
                            .number(visit.visitedAt.timeIntervalSince1970), .number(Double(visit.typedCount)),
                            .text(Self.searchURL(visit.url)), .text(Self.fold(visit.title))])
             }
@@ -169,19 +172,21 @@ public actor BrowserHistoryStore {
     public func updateMetadata(visitID: UUID, title: String, faviconReference: URL? = nil) throws -> BrowserHistoryIndexedPage? {
         guard let database else { return nil }
         guard faviconReference.map(BrowserHistoryFavicon.accepts) ?? true else { throw BrowserHistoryError.invalidVisit }
-        return try database.transaction { () throws -> BrowserHistoryIndexedPage? in
+        return try database.routineTransaction { () throws -> BrowserHistoryIndexedPage? in
             guard var visit = try readVisits(whereSQL: "id=?", values: [.text(visitID.uuidString)], limit: 1, offset: 0).first else { return nil }
             let titleChanged = visit.title != title
             visit.title = title
             if !applyingHistorySync { visit.faviconReference = faviconReference }
-            let payload = String(decoding: try JSONEncoder().encode(visit), as: UTF8.self)
+            var stored = visit
+            stored.faviconReference = try database.storeFavicon(visit.faviconReference)
+            let payload = String(decoding: try JSONEncoder().encode(stored), as: UTF8.self)
             try database.execute("UPDATE visits SET title=?,payload=?,searchTitle=? WHERE id=?", [.text(title), .text(payload), .text(Self.fold(title)), .text(visitID.uuidString)])
             if !applyingHistorySync && titleChanged { try appendSyncEvent(BrowserHistorySyncEvent(visit: visit)) }
             // A late title callback must not overwrite the metadata of a newer visit.
             try database.execute("""
                 UPDATE pages SET title=?,searchTitle=?,favicon=? WHERE url=? AND
                 ?=(SELECT id FROM visits WHERE url=? ORDER BY time DESC,rowid DESC LIMIT 1)
-                """, [.text(title), .text(Self.fold(title)), .text(visit.faviconReference?.absoluteString ?? ""),
+                """, [.text(title), .text(Self.fold(title)), .text(stored.faviconReference?.absoluteString ?? ""),
                        .text(visit.url.absoluteString), .text(visitID.uuidString), .text(visit.url.absoluteString)])
             return try page(for: visit.url)
         }
@@ -444,6 +449,13 @@ public actor BrowserHistoryStore {
             for (url, title) in updates {
                 try database.execute("UPDATE pages SET searchURL=?,searchTitle=? WHERE url=?", [.text(Self.searchURL(URL(string: url)!)), .text(Self.fold(title)), .text(url)])
             }
+            database.faviconAddresses.removeAll()
+            try database.execute("""
+                DELETE FROM favicons WHERE ('orbit-favicon:' || hash) NOT IN (
+                    SELECT json_extract(payload,'$.faviconReference') FROM visits
+                    WHERE json_extract(payload,'$.faviconReference') IS NOT NULL
+                    UNION SELECT favicon FROM pages WHERE favicon IS NOT NULL)
+                """)
             return count
         }
         // The deletion has committed. Maintenance failure must not report that mutation as failed.
@@ -458,7 +470,9 @@ public actor BrowserHistoryStore {
         try database.bind(statement, values + [.number(Double(limit)), .number(Double(offset))])
         var records: [BrowserHistoryVisit] = []
         while try database.next(statement) {
-            records.append(try JSONDecoder().decode(BrowserHistoryVisit.self, from: Data(database.text(statement, 0).utf8)))
+            var visit = try JSONDecoder().decode(BrowserHistoryVisit.self, from: Data(database.text(statement, 0).utf8))
+            visit.faviconReference = try database.resolveFavicon(visit.faviconReference)
+            records.append(visit)
         }
         return records
     }
@@ -488,9 +502,11 @@ enum HistoryValue { case text(String), number(Double) }
 /// Confined to its owning actor after initialization; never shared between actors.
 final class HistoryDatabase: @unchecked Sendable {
     private var handle: OpaquePointer?
+    var faviconAddresses = BrowserCostCache<URL, URL>(budget: 256 * 1024, countLimit: 128)
+    var tombstoneRevision: UInt64 = 0
     var changes: Int { Int(sqlite3_changes(handle)) }
 
-    static let currentVersion = 7
+    static let currentVersion = 8
 
     init(openingURL url: URL, flags: Int32) throws {
         // Checked ancestors, single-link database/sidecars, and directory identity before/after open.
@@ -519,6 +535,8 @@ final class HistoryDatabase: @unchecked Sendable {
             // journal_mode persists in the file. Merely reopening an up-to-date store is read-only.
             if try scalarText("PRAGMA journal_mode").lowercased() != "wal" { try execute("PRAGMA journal_mode=WAL") }
             let initialVersion = hasIdentity && version == 0 ? 1 : version
+            let backup = url.deletingLastPathComponent().appendingPathComponent("history-before-favicons.sqlite")
+            if hasIdentity && initialVersion < 8 { try backupBeforeMigration(to: backup) }
             if initialVersion < Self.currentVersion {
                 try transaction {
                     var migratingVersion = initialVersion
@@ -531,6 +549,7 @@ final class HistoryDatabase: @unchecked Sendable {
                         case 4: try migrateToVersionFive()
                         case 5: try migrateToVersionSix(profileID)
                         case 6: try migrateToVersionSeven()
+                        case 7: try migrateToVersionEight()
                         default: throw BrowserHistoryError.unsupportedVersion
                         }
                         migratingVersion += 1
@@ -538,6 +557,16 @@ final class HistoryDatabase: @unchecked Sendable {
                         try execute("PRAGMA user_version=\(migratingVersion)")
                     }
                 }
+            }
+            if hasIdentity && initialVersion < 8 {
+                // Reclaim pages released by deduplication. A failed compaction is retryable and
+                // does not invalidate the already committed migration or its backup.
+                try? execute("VACUUM")
+                try FileManager.default.removeItem(at: backup)
+            }
+            // A process may have stopped after committing version eight but before cleanup.
+            if FileManager.default.fileExists(atPath: backup.path) {
+                try FileManager.default.removeItem(at: backup)
             }
             try removeRetiredSuggestionPostings()
         } catch { sqlite3_close(handle); handle = nil; throw error }
@@ -728,7 +757,7 @@ final class HistoryDatabase: @unchecked Sendable {
     deinit { sqlite3_close(handle) }
     /// Thread-safe while the connection is open; callers guarantee it cannot close concurrently.
     func interrupt() { if let handle { sqlite3_interrupt(handle) } }
-    func withHandle<T>(_ body: (OpaquePointer?) -> T) -> T { body(handle) }
+    func withHandle<T>(_ body: (OpaquePointer?) throws -> T) rethrows -> T { try body(handle) }
     func close() throws {
         guard let handle else { return }
         let result = sqlite3_close(handle)
@@ -766,6 +795,7 @@ final class HistoryDatabase: @unchecked Sendable {
         return String(decoding: UnsafeBufferPointer(start: bytes, count: Int(sqlite3_column_bytes(statement, column))), as: UTF8.self)
     }
     func execute(_ sql: String, _ values: [HistoryValue] = []) throws {
+        if sql.hasPrefix("DELETE FROM historySyncEvents") { tombstoneRevision &+= 1 }
         let statement = try prepare(sql)
         defer { sqlite3_finalize(statement) }
         try bind(statement, values)
@@ -775,7 +805,7 @@ final class HistoryDatabase: @unchecked Sendable {
         if withHandle({ sqlite3_get_autocommit($0) == 0 }) { return try operation() }
         try execute("BEGIN IMMEDIATE")
         do { let value = try operation(); try execute("COMMIT"); return value }
-        catch { try? execute("ROLLBACK"); throw error }
+        catch { tombstoneRevision &+= 1; try? execute("ROLLBACK"); throw error }
     }
 }
 

@@ -4,6 +4,7 @@ import Foundation
 public struct BrowserHistoryIndexedPage: Sendable, Equatable {
     public let url: URL
     public let title: String
+    /// Compact profile-local address; resolve only when an icon is displayed.
     public let faviconReference: URL?
     public let lastVisitedAt: Double
     public let visitCount: Int
