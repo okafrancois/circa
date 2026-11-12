@@ -46,14 +46,13 @@ struct OnboardingTests {
         }
     }
 
-    @Test("The single vector asset exposes its strokes for the entrance drawing")
+    @Test("The filled vector mark loads without the obsolete stroke entrance")
     func markAsset() throws {
-        let (_, strokes) = try #require(OrbitOnboardingMarkPaths.read())
-        #expect(strokes.count == 5)
-        let colors = strokes.compactMap { $0.color.usingColorSpace(.sRGB) }
-        #expect(colors.filter { min($0.redComponent, $0.greenComponent, $0.blueComponent) > 0.99 }.count == 2)
-        #expect(colors.contains { $0.redComponent > 0.9 && $0.greenComponent < 0.4 })
-        #expect(strokes.allSatisfy { !$0.path.isEmpty && $0.width > 0 })
+        let url = try #require(BrandFonts.markURL)
+        let document = try #require(CGPDFDocument(url as CFURL))
+        #expect(document.numberOfPages == 1)
+        #expect(BrandFonts.mark != nil)
+        #expect(OrbitOnboardingMarkPaths.read() == nil)
     }
 
     @Test("Seven steps, profile checkboxes and choices survive a saved record")

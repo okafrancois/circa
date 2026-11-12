@@ -12,19 +12,19 @@ struct AppIconTests {
         return (UserDefaults(suiteName: name)!, name)
     }
 
-    @Test("Catalogue ships exactly seven complete icon files and seven chooser previews")
+    @Test("Catalogue ships six selectable icons and a compatible legacy alias")
     func catalogue() throws {
         #expect(OrbitAppIcon.defaultIcon == .stage)
-        #expect(OrbitAppIcon.allCases.map(\.id) == ["stage", "paper", "sunset", "afterglow", "frost", "riso", "ink"])
-        #expect(OrbitAppIcon.stage.name == "Bow")
+        #expect(OrbitAppIcon.allCases.map(\.id) == ["stage", "frost", "sunset", "riso", "afterglow", "ink"])
+        #expect(OrbitAppIcon.stage.name == "Day")
         let directory = try #require(OrbitAppIcon.stage.iconURL).deletingLastPathComponent()
         let files = try FileManager.default.contentsOfDirectory(atPath: directory.path)
-        #expect(Set(files) == Set(OrbitAppIcon.allCases.flatMap { [$0.id + ".icns", $0.id + ".png"] }))
+        #expect(Set(files) == Set((OrbitAppIcon.allCases + [.paper]).flatMap { [$0.id + ".icns", $0.id + ".png"] }))
         for icon in OrbitAppIcon.allCases {
             let image = try #require(icon.image)
             let sizes = Set(image.representations.map(\.pixelsWide))
             #expect(sizes.isSuperset(of: [16, 32, 64, 128, 256, 512, 1024]))
-            #expect(icon.preview?.representations.first?.pixelsWide == 256)
+            #expect(icon.preview?.representations.first?.pixelsWide == 1024)
             #expect(!icon.name.isEmpty && !icon.description.isEmpty)
         }
         let package = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
@@ -77,7 +77,7 @@ struct AppIconTests {
         let icons = OrbitAppIconController(defaults: defaults, setDockIcon: { _ in calls += 1 }, setBundleIcon: { _ in true })
         let sheet = BrowserSettingsAppIconSheet(icons: icons)
         defer { sheet.window?.close() }
-        #expect(sheet.rows.count == 7 && !sheet.useButton.isEnabled && !sheet.restoreButton.isEnabled)
+        #expect(sheet.rows.count == 6 && !sheet.useButton.isEnabled && !sheet.restoreButton.isEnabled)
         for row in sheet.rows {
             #expect(row.radio.accessibilityLabel() == row.icon.name)
             #expect(row.artwork.image != nil && row.nameLabel.stringValue == row.icon.name)

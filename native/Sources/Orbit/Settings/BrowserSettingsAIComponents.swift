@@ -16,11 +16,11 @@ enum BrowserSettingsAIStyle {
     static let ready = Color(nsColor: BrandPalette.rgb(0x28C840))
     static let warning = Color(nsColor: BrandPalette.rgb(0xFF9F0A))
     static let full = Color(nsColor: BrandPalette.rgb(0xFF3B30))
-    static let tertiary = dynamic(light: 0x96929E, dark: 0x7D7884)
-    static let switchOff = dynamic(light: 0xDCD7DF, dark: 0x3C3A42)
-    static let track = dynamic(light: 0xE5E0D8, dark: 0x37353D)
-    static let meterInk = dynamic(light: 0x5E5A66, dark: 0xB4AFBA)
-    static let fill = dynamic(light: 0xEFEBE4, dark: 0x2C2B32)
+    static let tertiary = dynamic(light: 0x777B9C, dark: 0xCFDCFA)
+    static let switchOff = dynamic(light: 0xCFDCFA, dark: 0x292F6B)
+    static let track = dynamic(light: 0xCFDCFA, dark: 0x292F6B)
+    static let meterInk = dynamic(light: 0x1B2057, dark: 0xF6F1E7)
+    static let fill = dynamic(light: 0xFFFDF7, dark: 0x292F6B)
     static let tileBorder = Color.primary.opacity(0.09)
 
     private static func dynamic(light: Int, dark: Int) -> Color {
@@ -297,7 +297,7 @@ struct BrowserSettingsAISwitchStyle: ToggleStyle {
     func makeBody(configuration: Configuration) -> some View {
         Button { configuration.isOn.toggle() } label: {
             ZStack(alignment: .leading) {
-                Capsule().fill(configuration.isOn ? Color(nsColor: BrandPalette.rgb(0x0A7AFF)) : BrowserSettingsAIStyle.switchOff)
+                Capsule().fill(configuration.isOn ? Color(nsColor: BrandPalette.rgb(0x2F4FE3)) : BrowserSettingsAIStyle.switchOff)
                     .animation(OrbitMotionPreferences.prefersReducedMotion ? nil : .timingCurve(0.25, 0.1, 0.25, 1, duration: 0.2), value: configuration.isOn)
                 Circle().fill(.white).frame(width: 16, height: 16)
                     .shadow(color: .black.opacity(0.25), radius: 2, y: 1)

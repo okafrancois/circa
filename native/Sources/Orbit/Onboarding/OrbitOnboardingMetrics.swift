@@ -66,7 +66,7 @@ enum OrbitOnboardingMetrics {
     static let radioRing: CGFloat = 1.1
     static let radioSelectedRing: CGFloat = 1.4
     static let radioDotDiameter: CGFloat = 10
-    static let selectedBorder: CGFloat = 1.25
+    static let selectedBorder: CGFloat = 2
     static let hoverScale: CGFloat = 1
     static let profileListInset: CGFloat = 12
     static let profileListGap: CGFloat = 8
@@ -95,19 +95,19 @@ enum OrbitOnboardingMetrics {
 enum OrbitOnboardingColors {
     static let stage = BrandPalette.stage
     static var accent: NSColor { BrandPalette.controlAccent }
-    static let leftPanel = NSColor.white
+    static let leftPanel = BrandPalette.sky
     static let rightPanel = BrandPalette.paper
     static let rightPanelThemed = rightPanel
     static let title = BrandPalette.ink
     static let body = BrandPalette.ink2
     static let optionSurface = NSColor.white
-    static let optionBorder = BrandPalette.ink.withAlphaComponent(0.1)
+    static let optionBorder = BrandPalette.ink
     static let optionShadow = NSColor.clear
     static let radioRing = BrandPalette.controlBorder
     static let optionText = BrandPalette.ink
     static let browserLabel = BrandPalette.ink
     static let welcomeTitle = BrandPalette.stageText
-    static let welcomeButton = BrandPalette.paper
+    static let welcomeButton = BrandPalette.coral
     static let welcomeArrow = BrandPalette.stage
     static func accent(for theme: BrowserSpaceTheme?) -> NSColor { accent }
 }

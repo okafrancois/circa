@@ -6,15 +6,15 @@ import SwiftUI
 
 enum OrbitSettingsStyle {
     static let destructiveColor = NSColor.systemRed
-    static let foreground = color(light: 0x141317, dark: 0xF4F1EC)
+    static let foreground = color(light: 0x1B2057, dark: 0xF6F1E7)
     static let background = Color(nsColor: windowColor)
-    static let panel = color(light: 0xFFFFFF, dark: 0x222128)
-    static let border = Color.primary.opacity(0.09)
+    static let panel = color(light: 0xFFFDF7, dark: 0x292F6B)
+    static let border = Color(nsColor: BrandPalette.ink)
     static let windowColor = NSColor(name: nil) { appearance in
         appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? BrandPalette.stage2 : BrandPalette.paper
     }
     static let toolbarColor = NSColor(name: nil) { appearance in
-        appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? BrandPalette.rgb(0x1E1E24) : .white
+        appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? BrandPalette.rgb(0x1B2057) : BrandPalette.paper
     }
     static let selectionColor = NSColor(name: nil) { appearance in
         (appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? NSColor.white : NSColor.black).withAlphaComponent(0.07)
@@ -511,7 +511,7 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
         VStack(alignment: .leading, spacing: 0, content: content)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(OrbitSettingsStyle.panel, in: RoundedRectangle(cornerRadius: 12))
-            .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(OrbitSettingsStyle.border, lineWidth: 1))
+            .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(OrbitSettingsStyle.border, lineWidth: 2))
     }
     private func settingRow<Control: View>(_ title: String, icon: String? = nil, @ViewBuilder control: () -> Control) -> some View {
         HStack(spacing: 12) {
@@ -564,7 +564,7 @@ private struct BrowserSyncSettingsRow: View {
         }
         .padding(.horizontal, 14).padding(.vertical, 8).frame(minHeight: 50).frame(maxWidth: .infinity, alignment: .leading)
         .background(OrbitSettingsStyle.panel, in: RoundedRectangle(cornerRadius: 12))
-        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(OrbitSettingsStyle.border, lineWidth: 1))
+        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(OrbitSettingsStyle.border, lineWidth: 2))
         .alert(uiText("Use a different iCloud account?"), isPresented: $runtime.needsAccountDecision) {
             Button(uiText("Keep Sync Off"), role: .cancel) {}
             Button(uiText("Try Again")) { save(true) }

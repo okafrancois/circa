@@ -101,6 +101,8 @@ final class OrbitOnboardingCardView: NSView {
     override init(frame frameRect: NSRect) {
         super.init(frame: NSRect(origin: frameRect.origin, size: M.cardSize))
         wantsLayer = true
+        layer?.borderWidth = 2
+        layer?.borderColor = BrandPalette.ink.cgColor
         layer?.cornerRadius = M.cardCornerRadius
         layer?.cornerCurve = .continuous
         layer?.masksToBounds = true

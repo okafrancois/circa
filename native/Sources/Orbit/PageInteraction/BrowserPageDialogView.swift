@@ -97,7 +97,7 @@ final class BrowserPageDialogView: NSView {
     private func build() {
         card.wantsLayer = true
         card.layer?.cornerRadius = 12
-        card.layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
+        card.layer?.backgroundColor = BrandPalette.pageWhite.cgColor
         card.layer?.borderColor = NSColor.separatorColor.cgColor
         card.layer?.borderWidth = 0.5
         card.shadow = {
@@ -235,13 +235,13 @@ final class BrowserPageCrashedView: NSView {
         self.reload = reload
         super.init(frame: .zero)
         wantsLayer = true
-        layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
+        layer?.backgroundColor = BrandPalette.pageWhite.cgColor
         let icon = NSImageView(image: OrbitIcon.image(sfName: "exclamationmark.triangle", pointSize: 40,
                                               accessibilityDescription: nil) ?? NSImage())
         icon.symbolConfiguration = .init(pointSize: 40, weight: .regular)
         icon.contentTintColor = .secondaryLabelColor
         let title = NSTextField(labelWithString: uiText("Aw, Snap!"))
-        title.font = BrandTextStyle.ui.font(size: 20, weight: .semibold)
+        title.font = BrandTextStyle.title.font(size: 28)
         let message = NSTextField(wrappingLabelWithString: uiText("Something went wrong while displaying this webpage."))
         message.font = BrandTextStyle.body.font(size: 13)
         message.alignment = .center

@@ -76,7 +76,7 @@ struct LocalizationTests {
             "%@ · %@", "1 cookie", "%ld cookies", "Page", "%ld %%",
             "AA", "Boost", "Boosts", "CSS", "JS",
             "aa", "{}", "Options", "Cookies", "%@: %@",
-            "%@ — %@", "%d s · %@", "iCloud", "Cobalt", "Version %@ (%@)",
+            "%@ — %@", "%d s · %@", "iCloud", "Cobalt", "Mandarine", "Soleil", "Aurore", "Version %@ (%@)",
             "Riso", "⌘", "W", "URL", "Perplexity",
             "Chromium %@", "%@, %@", "Little Circa — %@", "example.com", "Codex",
             "Claude Code", "%ld min", "Max", "Ultra", "Assistant",

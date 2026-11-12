@@ -150,11 +150,9 @@ struct SettingsSwitchStyle: ToggleStyle {
 
 struct SettingsAppIcon: View {
     var body: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: 26).fill(Color(nsColor: BrandPalette.stage))
-            RadialGradient(colors: [Color(nsColor: BrandPalette.coral).opacity(0.4), Color(nsColor: BrandPalette.violet).opacity(0.25), .clear], center: .bottom, startRadius: 0, endRadius: 90)
-            if let mark = BrandFonts.mark { Image(nsImage: mark).resizable().scaledToFit().padding(22) }
-        }.clipShape(RoundedRectangle(cornerRadius: 26)).accessibilityLabel(uiText("App Icon"))
+        Group {
+            if let image = OrbitAppIcon.defaultIcon.image { Image(nsImage: image).resizable().scaledToFit() }
+        }.accessibilityLabel(uiText("App Icon"))
     }
 }
 

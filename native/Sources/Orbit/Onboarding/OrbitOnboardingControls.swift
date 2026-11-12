@@ -18,6 +18,12 @@ final class OrbitOnboardingPrimaryButton: NSButton {
         wantsLayer = true
         layer?.cornerRadius = M.buttonCornerRadius
         layer?.cornerCurve = .continuous
+        layer?.borderWidth = 2
+        layer?.borderColor = BrandPalette.ink.cgColor
+        layer?.shadowColor = BrandPalette.ink.cgColor
+        layer?.shadowOpacity = 1
+        layer?.shadowRadius = 0
+        layer?.shadowOffset = CGSize(width: 0, height: -3)
         target = self
         action = #selector(press)
         focusRingType = .exterior
@@ -140,7 +146,7 @@ class OrbitOnboardingOptionCard: NSView {
     func refresh() {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        surface.borderWidth = isSelected ? M.selectedBorder : 1
+        surface.borderWidth = M.selectedBorder
         surface.borderColor = (isSelected ? accent : OrbitOnboardingColors.optionBorder).cgColor
         surface.shadowColor = OrbitOnboardingColors.optionShadow.cgColor
         radio.strokeColor = (isSelected ? accent : OrbitOnboardingColors.radioRing).cgColor

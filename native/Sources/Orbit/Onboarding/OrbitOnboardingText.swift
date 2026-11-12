@@ -4,11 +4,11 @@ import Foundation
 @MainActor
 enum OrbitOnboardingText {
     static var windowTitle: String { uiText("Welcome to Circa") }
-    static var welcomeHeadline: String { uiText("Welcome home.") }
+    static var welcomeHeadline: String { uiText("Welcome to Circa") }
     static var getStarted: String { uiText("Open Circa") }
     static var start: String { uiText("Start") }
     static var bringOver: String { uiText("Bring it over") }
-    static var welcomeBody: String { uiText("Let’s set up your browser. A few short steps, about a minute, and nothing leaves your Mac.") }
+    static var welcomeBody: String { uiText("Space to think.") }
     static var welcomeSticker: String { uiText("Your Spaces come too →") }
     static var favouritesTitle: String { uiText("Pin your favourites.") }
     static var favouritesBody: String { uiText("Pick a few sites to keep at the top of the sidebar, in every Space. You can change them any time.") }

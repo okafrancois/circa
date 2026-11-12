@@ -24,7 +24,7 @@ final class OrbitOnboardingWelcomeView: NSView {
         button.title = OrbitOnboardingText.start
         button.accent = OrbitOnboardingColors.welcomeButton
         button.frame = NSRect(x: 540, y: 494, width: 120, height: 48)
-        button.labelColor = OrbitOnboardingColors.stage
+        button.labelColor = BrandPalette.pageWhite
         button.keyEquivalent = "\r"
         button.onPress = { [weak self] in self?.onContinue?() }
         sticker.frame = NSRect(x: 860, y: 120, width: 220, height: 38)
