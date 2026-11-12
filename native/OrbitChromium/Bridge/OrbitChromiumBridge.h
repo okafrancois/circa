@@ -89,7 +89,8 @@ typedef enum {
   ACR_EVENT_ACTIVATION_REQUEST, /* CefFocusHandler FOCUS_SOURCE_SYSTEM; exact surface_token */
   ACR_EVENT_MEDIA_ACTIVITY,     /* method in detail; CDP WebAudio/Media metadata in payload */
   ACR_EVENT_BROWSER_STATE,      /* orbit_browser_state_t payload: native audibility, mute and page colors */
-  ACR_EVENT_DEVTOOLS_PRESENTATION /* value 0 closed, 1 left, 2 bottom, 3 right, 4 undocked, 5 loading; flags bit0 focus */
+  ACR_EVENT_DEVTOOLS_PRESENTATION, /* value 0 closed, 1 left, 2 bottom, 3 right, 4 undocked, 5 loading; flags bit0 focus */
+  ACR_EVENT_INPUT_FOCUS        /* CefFocusHandler OnGotFocus; exact surface_token */
 } ACREventKind;
 
 typedef enum {
