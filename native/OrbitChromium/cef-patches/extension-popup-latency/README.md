@@ -1,7 +1,7 @@
-# Extension popup latency candidate
+# Extension popup latency
 
-Not compiled or runtime validated. This incremental patch is deliberately not
-wired into an engine build or the approved distribution list.
+Compiled and validated in the r19 distribution. The r19 builder composes this
+incremental patch after the preserved r18 union; r18 remains available.
 
 Native action popups are ExtensionViewHost WebContents without a CefBrowserHost.
 The renderer synchronously asks GetNewBrowserInfo for its main frame. Without
@@ -15,9 +15,9 @@ Validate without modifying the shared checkout:
 python3 scripts/check_popup_latency_patch.py --cef-source /path/to/chromium/src/cef
 ```
 
-The manifest pins the incremental working-file input and output. An engine owner
-must integrate the patch into the next distribution, compile, and rerun the
-synthetic popup latency and popup cancellation checks before admission. Do not
+The manifest pins the incremental working-file input and output. The r19 synthetic validation covers first/second opens of both fixtures, all four
+popup lifecycle smoke actions, and regular/extension tab registration. Use
+`--applied` to validate an already patched source checkout privately. Do not
 reduce the global timeout or show unloaded contents as a substitute.
 
 The product probe accepts `extension-controls` / `pinned-popup` with

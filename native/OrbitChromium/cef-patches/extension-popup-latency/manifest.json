@@ -7,6 +7,7 @@
     "libcef/browser/browser_info_manager.cc": "3c9f0162cd2d2fc40cbf6f60918fe560cc38d0fc238c28ec94da30492bb40cbf"
   },
   "patch_sha256": "cfe684b5ab34ad815c3fecc2078ec2dc451d34f5bf908cc3ee0eb0de39f980ce",
-  "compiled": false,
-  "runtime_validated": false
+  "compiled": true,
+  "runtime_validated": true,
+  "validated_flavor": "orbit-engine-extensions-r19"
 }

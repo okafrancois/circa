@@ -2764,7 +2764,7 @@ extension OrbitPerformanceProbe {
         let bundleID = "lab.orbit.orbit.p2-extensions"
         guard ownsWindow(owner, bundleID: bundleID), let window = owner.window,
               let host = owner.engine.extensions else { return ["refused": true] }
-        if owner.session.selectedSurface == nil || ["cancel-loading", "site-popup", "pinned-popup", "pinned-hover"].contains(command["action"] ?? ""), let base = command["base"].flatMap(URL.init(string:)),
+        if owner.session.selectedSurface == nil || ["cancel-loading", "site-popup", "pinned-popup", "pinned-hover", "tab-registration"].contains(command["action"] ?? ""), let base = command["base"].flatMap(URL.init(string:)),
            base.scheme == "http", base.host == "127.0.0.1", base.user == nil, base.password == nil {
             guard ownsWindow(owner, bundleID: bundleID) else { return ["refused": true] }
             owner.submitAddress(base.absoluteString)
@@ -2772,7 +2772,7 @@ extension OrbitPerformanceProbe {
         }
         guard let surface = owner.session.selectedSurface else { return ["missingSurface": true] }
         for _ in 0..<60 where !surface.isReady { try? await Task.sleep(for: .milliseconds(50)) }
-        if ["cancel-loading", "site-popup", "pinned-popup", "pinned-hover"].contains(command["action"] ?? "") {
+        if ["cancel-loading", "site-popup", "pinned-popup", "pinned-hover", "tab-registration"].contains(command["action"] ?? "") {
             for _ in 0..<100 where surface.navigationState.isLoading {
                 try? await Task.sleep(for: .milliseconds(25))
             }
@@ -2790,6 +2790,27 @@ extension OrbitPerformanceProbe {
                 try application.commands.registry.shortcutPreferences.setPriority(.browser, for: .cycleExtensions)
             }
             owner.extensionControls.render()
+            if command["action"] == "tab-registration" {
+                guard let item = items.first(where: { $0.id == command["extensionID"] }),
+                      ownsWindow(owner, bundleID: bundleID),
+                      let url = URL(string: "chrome-extension://\(item.id)/popup.html") else {
+                    return ["fixtureMissing": true]
+                }
+                result["regularBrowserID"] = surface.browserID
+                result["regularReady"] = surface.isReady && surface.browserID > 0
+                let (regularOK, _) = await surface.devToolsCall("Runtime.evaluate", params: #"{"expression":"location.href","returnByValue":true}"#)
+                result["regularRendererResponsive"] = regularOK
+                owner.openTab(url: url)
+                await owner.session.waitForPendingCommands()
+                guard let tab = owner.session.selectedSurface else { return ["missingSurface": true] }
+                await waitForLoad(tab)
+                let (extensionOK, reply) = await tab.devToolsCall("Runtime.evaluate", params: #"{"expression":"location.href","returnByValue":true}"#)
+                result["extensionBrowserID"] = tab.browserID
+                result["extensionReady"] = tab.isReady && tab.browserID > 0
+                result["extensionCommitted"] = tab.navigationState.committedURL == url
+                result["extensionRendererResponsive"] = extensionOK && String(decoding: reply, as: UTF8.self).contains(url.absoluteString)
+                return result
+            }
             if command["action"] == "pinned-popup" {
                 guard let item = items.first(where: { $0.id == command["extensionID"] || $0.name == "Popup Lifecycle Fixture" }) else { return ["fixtureMissing": true] }
                 try host.setPinned(true, extensionID: item.id, in: surface.profileID)
