@@ -335,7 +335,8 @@ final class BrowserExtensionsController<Engine: BrowserEngine> {
         for button in pinnedButtons { button.isHighlighted = button === selected }
         cyclingID = selected.accessibilityIdentifier()
         cyclingEpoch = selectionEpoch
-        if modifiers?.contains(.command) != true { finishCycle() }
+        // With a single enabled action there is nothing to cycle to: open it on the press.
+        if modifiers?.contains(.command) != true || buttons.count == 1 { finishCycle() }
     }
 
     func cancelCycle() {

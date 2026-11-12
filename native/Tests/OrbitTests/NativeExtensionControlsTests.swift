@@ -184,6 +184,11 @@ struct NativeExtensionControlsTests {
         let owner = try #require(router.selectedWindow)
         owner.submitAddress("https://extensions.example.invalid")
         await owner.session.waitForPendingCommands()
+        let profile = try #require(owner.session.selectedSurface).profileID
+        let second = String(repeating: "b", count: 32)
+        host.itemsByProfile[profile] = [host.item,
+            .init(id: second, name: "Second", version: "1", isEnabled: true, hasAction: true, isPinned: true)]
+        owner.extensionControls.render()
         let key = try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: .command,
             timestamp: 1, windowNumber: owner.window!.windowNumber, context: nil, characters: "e",
             charactersIgnoringModifiers: "e", isARepeat: false, keyCode: 14))
@@ -197,11 +202,29 @@ struct NativeExtensionControlsTests {
             timestamp: 2, windowNumber: owner.window!.windowNumber, context: nil, characters: "",
             charactersIgnoringModifiers: "", isARepeat: false, keyCode: 55))
         #expect(!keyboard.handle(release))
-        #expect(host.actionIDs == [host.item.id])
+        #expect(host.actionIDs == [second])
         try registry.shortcutPreferences.setPriority(.websites, for: .cycleExtensions)
         #expect(!keyboard.handle(key))
         #expect(host.actionIDs.count == 1)
         owner.session.close()
+        try await environment.finalize()
+    }
+
+    @Test("A single enabled pinned action opens on the press without waiting for the modifier release")
+    func singleActionOpensOnPress() async throws {
+        NSApplication.shared.setActivationPolicy(.prohibited)
+        let engine = SiteSyntheticEngine(), host = ExtensionControlProbe()
+        host.supportsActions = true; host.supportsPinning = true; host.item.isPinned = true
+        engine.extensions = host
+        let environment = BrowserEnvironment(engine: engine)
+        let owner = try await environment.makeWindow()
+        defer { owner.session.close(); owner.window?.close() }
+        owner.submitAddress("https://extensions.example.invalid")
+        await owner.session.waitForPendingCommands()
+        owner.extensionControls.cycle(holding: .command)
+        #expect(host.actionIDs == [host.item.id] && !owner.extensionControls.isCycling)
+        owner.extensionControls.finishCycle()
+        #expect(host.actionIDs.count == 1)
         try await environment.finalize()
     }
 
@@ -217,11 +240,18 @@ struct NativeExtensionControlsTests {
         defer { owner.session.close(); owner.window?.close() }
         owner.submitAddress("https://extensions.example.invalid")
         await owner.session.waitForPendingCommands()
+        let profile = try #require(owner.session.selectedSurface).profileID
+        host.itemsByProfile[profile] = [host.item, .init(id: String(repeating: "b", count: 32), name: "Second",
+            version: "1", isEnabled: true, hasAction: true, isPinned: true)]
+        owner.extensionControls.render()
         owner.extensionControls.cycle(holding: .command)
+        #expect(owner.extensionControls.isCycling)
         switch reason {
         case "navigation": owner.session.selectedSurface?.navigate(to: URL(string: "https://extensions.example.invalid/new")!)
         case "selection": owner.openTab(url: URL(string: "https://extensions.example.invalid/other")!)
-        case "removal": host.item.isPinned = false; host.changes.emit(owner.session.selectedSurface!.profileID)
+        case "removal":
+            host.itemsByProfile[profile] = host.itemsByProfile[profile]?.map { var item = $0; item.isPinned = false; return item }
+            host.changes.emit(profile)
         default: NotificationCenter.default.post(name: NSWindow.didResignKeyNotification, object: owner.window)
         }
         await owner.session.waitForPendingCommands()
