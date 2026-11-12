@@ -249,7 +249,8 @@ class CloudProfileTests(unittest.TestCase):
             self.assertTrue(all(observed[-1][1][key] == value for key, value in expected.items()))
             self.assertTrue(all('com.apple.developer.icloud-services' not in values for path, values in observed[:-1]))
             self.assertTrue(all(values['com.apple.security.cs.allow-jit'] for _, values in observed))
-            for capability in ('com.apple.security.device.audio-input', 'com.apple.security.device.camera'):
+            for capability in ('com.apple.security.device.audio-input', 'com.apple.security.device.camera',
+                               'com.apple.security.personal-information.location'):
                 self.assertIs(observed[-1][1][capability], True)
                 self.assertTrue(all(capability not in values for _, values in observed[:-1]))
 
@@ -272,6 +273,7 @@ class CloudProfileTests(unittest.TestCase):
             self.assertEqual(observed[-1][0], bundle)
             self.assertIs(observed[-1][1]['com.apple.security.device.audio-input'], True)
             self.assertIs(observed[-1][1]['com.apple.security.device.camera'], True)
+            self.assertIs(observed[-1][1]['com.apple.security.personal-information.location'], True)
             self.assertTrue(all('com.apple.developer.icloud-services' not in values for _, values in observed))
             self.assertTrue(all('com.apple.security.device.camera' not in values and
                                 'com.apple.security.device.audio-input' not in values for _, values in observed[:-1]))
