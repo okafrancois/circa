@@ -17,7 +17,7 @@ struct NativeShortcutCustomizationTests {
             charactersIgnoringModifiers: key, isARepeat: false, keyCode: code))
     }
 
-    @Test("Assistant defaults to Option-E, leaves Command-E to extensions and supports version-one overrides")
+    @Test("Assistant defaults to Option-Command-E, leaves Command-E to extensions and supports version-one overrides")
     func assistantShortcutRouting() throws {
         let router = BrowserWindowRouter<Window>(create: { _ in Window() }, present: { _, _ in }, dispose: { _ in })
         let registry = try BrowserCommandRegistry(router: router, state: { _ in .init() })
@@ -28,9 +28,10 @@ struct NativeShortcutCustomizationTests {
         let destination = root.appendingPathComponent("shortcuts.json")
         let preferences = BrowserShortcutPreferences(destination: destination)
         registry.useShortcutPreferences(preferences)
-        #expect(registry.definition(.toggleAssistant)?.shortcuts == [.init(key: "e", modifiers: .option)])
+        #expect(registry.definition(.toggleAssistant)?.shortcuts == [.init(key: "e", modifiers: [.command, .option])])
         #expect(registry.resolve(try event("e")) == .cycleExtensions)
-        #expect(registry.resolve(try event("e", flags: .option)) == .toggleAssistant)
+        #expect(registry.resolve(try event("e", flags: [.command, .option])) == .toggleAssistant)
+        #expect(registry.resolve(try event("e", flags: .option)) == nil)
         #expect(!registry.prefersBrowser(.toggleAssistant))
         let keyboard = BrowserCommandKeyboard(registry: registry, acceptsKeyboard: { true }, firstResponder: { nil })
         // The monitor leaves character/dead-key input to the page, including composition.
@@ -39,7 +40,7 @@ struct NativeShortcutCustomizationTests {
         let rebound = BrowserShortcut(key: "e", modifiers: [.command, .control, .option])
         try preferences.setShortcut(rebound, for: .toggleAssistant, definitions: registry.defaultDefinitions)
         #expect(registry.resolve(rebound) == .toggleAssistant)
-        #expect(registry.resolve(BrowserShortcut(key: "e", modifiers: .option)) == nil)
+        #expect(registry.resolve(BrowserShortcut(key: "e", modifiers: [.command, .option])) == nil)
         #expect(registry.resolve(try event("e")) == .cycleExtensions)
         let restored = BrowserShortcutPreferences(destination: destination)
         #expect(!restored.isUnavailable)
@@ -104,6 +105,11 @@ struct NativeShortcutCustomizationTests {
         let registry = try BrowserCommandRegistry(router: router, state: { _ in .init() })
         var calls = 0
         try registry.registerApplication(.toggleAssistant) { calls += 1 }
+        // Users may still choose an Option-only chord; it must not steal native typing.
+        let preferences = BrowserShortcutPreferences()
+        registry.useShortcutPreferences(preferences)
+        try preferences.setShortcut(.init(key: "e", modifiers: .option), for: .toggleAssistant,
+                                    definitions: registry.defaultDefinitions)
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 200, height: 100),
             styleMask: [.titled], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false

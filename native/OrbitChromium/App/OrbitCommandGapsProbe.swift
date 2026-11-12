@@ -73,7 +73,10 @@ enum OrbitCommandGapsProbe {
                 timestamp: 2, windowNumber: window.windowNumber, context: nil, characters: "e",
                 charactersIgnoringModifiers: "e", isARepeat: false, keyCode: 14)!
             checks["commandEReachesExtensions"] = !registry.handleInputEvent(commandE) && BrowserShortcutEvent(commandE).map { registry.resolveBinding($0) == .cycleExtensions } == true
-            checks["assistantDefault"] = registry.resolve(optionE) == .toggleAssistant && !registry.prefersBrowser(.toggleAssistant)
+            let optionCommandE = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [.command, .option],
+                timestamp: 2, windowNumber: window.windowNumber, context: nil, characters: "e",
+                charactersIgnoringModifiers: "e", isARepeat: false, keyCode: 14)!
+            checks["assistantDefault"] = registry.resolve(optionCommandE) == .toggleAssistant && registry.resolve(optionE) == nil && !registry.prefersBrowser(.toggleAssistant)
             checks["assistantOpens"] = registry.dispatch(.toggleAssistant, origin: .keyboard) && owner.assistantHost != nil
             checks["assistantCloses"] = registry.dispatch(.toggleAssistant, origin: .keyboard) && owner.assistantHost == nil
             if let surface = owner.session.selectedSurface,
