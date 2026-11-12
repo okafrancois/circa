@@ -185,6 +185,8 @@ public final class ChromiumSurface: BrowserEngineSurface {
 
     var secureInputReconciliation = BrowserSecureInputFocusReconciliation()
     var secureInputHostHidden = false
+    var secureInputNavigating = false
+    var secureInputNeedsFocusRestore = false
     public private(set) var isDisposed = false
     private var paintActivationID: UInt64 = 0
     private lazy var nativeServices = ChromiumNativePageServices(token: token, dataRoot: engine?.diagnosticDataRoot(for: profileID))
@@ -469,7 +471,9 @@ public final class ChromiumSurface: BrowserEngineSurface {
         if hostedWindowToken != 0 { engine?.activateHostedTab(self) }
         let browserView = Unmanaged<NSView>.fromOpaque(view).takeUnretainedValue()
         window.makeFirstResponder(browserView)
+        secureInputNavigating = false
         _ = ACRSetFocus(token, 1)
+        secureInputFocusChanged()
         return true
     }
 
@@ -520,6 +524,7 @@ public final class ChromiumSurface: BrowserEngineSurface {
         if !hidden { setPageFrozen(false); resumeDiscardedTab() }
         if hidden { releaseSecureInputFocus() }
         _ = ACRNotifyHostChanged(token, hidden ? 1 : 0)
+        secureInputFocusChanged()
     }
 
     // MARK: Page tools
@@ -918,6 +923,7 @@ public final class ChromiumSurface: BrowserEngineSurface {
             case .hostChanged(let hidden):
                 if !hidden { setPageFrozen(false); resumeDiscardedTab() }
                 _ = ACRNotifyHostChanged(token, hidden ? 1 : 0)
+                secureInputFocusChanged()
             case .mute(let muted):
                 _ = ACRSetAudioMuted(token, muted ? 1 : 0)
             }
@@ -1192,7 +1198,10 @@ public final class ChromiumSurface: BrowserEngineSurface {
                 return
             }
             if let method = event.detail, let payload = event.payload {
-                if method == "Runtime.bindingCalled" { receiveOptionLink(payload) }
+                if method == "Runtime.bindingCalled" {
+                    receiveOptionLink(payload)
+                    receiveSecureInputFocus(payload)
+                }
                 audioContexts.receive(method: method, payload: payload)
                 receiveSuspensionPaint(method: method, payload: payload)
                 onChange?()
@@ -1218,6 +1227,7 @@ public final class ChromiumSurface: BrowserEngineSurface {
             _ = ACRExecuteDevToolsMethod(token, "Page.enable", "")
             observePageLifecycle()
             installOptionLinks()
+            installSecureInputFocus()
             Task { [weak self] in
                 guard let self else { return }
                 let (ok, _) = await self.devToolsCall("WebAudio.enable")
@@ -1251,6 +1261,8 @@ public final class ChromiumSurface: BrowserEngineSurface {
             onChange?()
             if started { delegate?.surfaceDidStartNavigation(self) }
         case ACR_EVENT_DOCUMENT:
+            secureInputDocumentWillChange()
+            secureInputFocusChanged()
             if isConfirmingDownloadClose, event.url == "about:blank" {
                 _ = finishCloseConfirmation(closed: true)
                 return
@@ -1279,9 +1291,11 @@ public final class ChromiumSurface: BrowserEngineSurface {
             delegate?.surfaceDidCommitNavigation(self)
             flushZoomsAwaitingCommit()
         case ACR_EVENT_LOAD_END:
+            secureInputDocumentDidLoad()
             onEngineEvent?("load-end", ["status": String(event.value)])
             delegate?.surfaceDidFinishNavigation(self)
         case ACR_EVENT_LOAD_ERROR:
+            if event.value != -3 { secureInputDocumentDidLoad() }
             if event.value != -3 {
                 pageTintFailed = true
                 updatePageTint(nil)
@@ -1349,6 +1363,8 @@ public final class ChromiumSurface: BrowserEngineSurface {
                                           matchFound: count > 0, count: count, activeOrdinal: ordinal, final: final))
         case ACR_EVENT_PERMISSION:
             handlePermission(event)
+        case ACR_EVENT_INPUT_FOCUS:
+            secureInputFocusChanged()
         case ACR_EVENT_ACTIVATION_REQUEST:
             delegate?.surfaceDidRequestActivation(self)
         case ACR_EVENT_DEVTOOLS_PRESENTATION:
@@ -1358,6 +1374,8 @@ public final class ChromiumSurface: BrowserEngineSurface {
         case ACR_EVENT_DOWNLOAD:
             handleDownload(event)
         case ACR_EVENT_RENDER_TERMINATED:
+            releaseSecureInputFocus()
+            secureInputFocusChanged()
             guard !isSuspended, pagePerformance?.lifecycle()?.state != .discarded else { return }
             pageTintFailed = true
             updatePageTint(nil)

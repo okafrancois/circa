@@ -104,6 +104,8 @@ public final class ChromiumRuntime {
 
     private var secureInput: ChromiumSecureInput?
 
+    func secureInputFocusChanged(_ surface: ChromiumSurface) { secureInput?.focusChanged(surface) }
+
     private init() {}
 
     func makeToken() -> UInt64 {
@@ -271,6 +273,12 @@ public final class ChromiumRuntime {
     func cookieResult(_ request: UInt64) async -> (success: Bool, value: String?) {
         if let result = cookieResults.removeValue(forKey: request) { return result }
         return await withCheckedContinuation { cookieWaiters[request] = $0 }
+    }
+
+    public var syntheticSecureInputReconcileTicks: Int? {
+        guard Bundle.main.infoDictionary?["OrbitSyntheticBundle"] as? Bool == true,
+              ProcessInfo.processInfo.arguments.contains("--orbit-smoke-secure-input") else { return nil }
+        return secureInput?.reconcileTicks
     }
 
     /// Confined qualification isolates Chromium's owner from the shell safety net.

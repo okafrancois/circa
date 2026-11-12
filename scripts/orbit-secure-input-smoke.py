@@ -54,11 +54,18 @@ def phase(args):
                f'--orbit-data-root={root}/data', f'--orbit-smoke-run={directory}',
                f'--orbit-smoke-fixture=http://127.0.0.1:{args.port}/',
                '--orbit-smoke-phase=fresh', '--orbit-smoke-secure-input']
+    if args.idle:
+        command.append('--orbit-smoke-secure-input-idle')
     with lab.OwnedProcessRun() as owner:
         with (directory / 'stdout.log').open('w') as out, (directory / 'stderr.log').open('w') as err:
             process = owner.launch(command, stdout=out, stderr=err, stdin=subprocess.DEVNULL)
             try:
-                process.wait(timeout=35)
+                if args.idle:
+                    time.sleep(3)
+                    with (directory / 'top.txt').open('w') as metrics:
+                        subprocess.run(['top', '-l', '30', '-s', '1', '-pid', str(process.pid),
+                                        '-stats', 'pid,cpu,idlew'], stdout=metrics, check=True, timeout=40)
+                process.wait(timeout=max(0.1, 42 - (time.monotonic() - started)))
             except subprocess.TimeoutExpired:
                 pass
     elapsed = time.monotonic() - started
@@ -69,6 +76,10 @@ def phase(args):
     (root / 'verification.json').write_text(json.dumps(results, indent=2) + '\n')
     print(json.dumps(results, indent=2))
     assert not results['aborted'] and all(r['status'] != 'failed' for r in results['results'])
+    if args.maximum_idle_ticks is not None:
+        measurements = [r for r in results['results'] if r['id'] == 'secure-input.idle-measurement']
+        assert len(measurements) == 1
+        assert measurements[0]['evidence']['ticks'] <= args.maximum_idle_ticks
 
 
 def main():
@@ -76,6 +87,8 @@ def main():
     parser.add_argument('--app', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--phase', action='store_true')
+    parser.add_argument('--idle', action='store_true', help='Measure 30 seconds of regular-field idle')
+    parser.add_argument('--maximum-idle-ticks', type=int)
     parser.add_argument('--port', type=int)
     args = parser.parse_args()
     if args.phase:
@@ -90,7 +103,8 @@ def main():
     try:
         subprocess.run(['/usr/bin/lockf', '-k', '/tmp/orbit-gui-slot.lock', 'python3', __file__,
                         '--app', str(args.app.resolve()), '--output', str(root), '--phase',
-                        '--port', str(server.server_port)], check=True)
+                        '--port', str(server.server_port)] + (['--idle'] if args.idle else []) +
+                       (['--maximum-idle-ticks', str(args.maximum_idle_ticks)] if args.maximum_idle_ticks is not None else []), check=True)
     finally:
         server.shutdown(); server.server_close(); worker.join()
         with (args.app / 'Contents/Info.plist').open('rb') as stream:

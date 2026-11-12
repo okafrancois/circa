@@ -59,3 +59,28 @@ struct BrowserSecureInputFocusTests {
         #expect(enables == disables)
     }
 }
+
+@Suite("Secure input fallback scheduling")
+struct BrowserSecureInputPollingTests {
+    @Test("Inactive applications never schedule reconciliation ticks")
+    func inactive() {
+        for enabled in [false, true] {
+            #expect(!BrowserSecureInputPolling.shouldPoll(applicationActive: false,
+                hasFocusedSurface: true, secureInputEnabled: enabled))
+        }
+    }
+
+    @Test("Idle regular content schedules zero reconciliation ticks")
+    func idle() {
+        #expect(!BrowserSecureInputPolling.shouldPoll(applicationActive: true,
+            hasFocusedSurface: true, secureInputEnabled: false))
+    }
+
+    @Test("Only focused password ownership keeps the safety fallback alive")
+    func password() {
+        #expect(BrowserSecureInputPolling.shouldPoll(applicationActive: true,
+            hasFocusedSurface: true, secureInputEnabled: true))
+        #expect(!BrowserSecureInputPolling.shouldPoll(applicationActive: true,
+            hasFocusedSurface: false, secureInputEnabled: true))
+    }
+}

@@ -1187,6 +1187,11 @@ class Client final : public CefClient, public CefLifeSpanHandler, public CefDisp
     return false;
   }
 
+  void OnGotFocus(CefRefPtr<CefBrowser>) override {
+    if (g_state && !g_state->quitting && g_state->hosts.contains(token_))
+      g_state->Simple(ACR_EVENT_INPUT_FOCUS, token_);
+  }
+
   // Life span.
   bool OnBeforePopup(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, int popup_id,
                      const CefString& target_url, const CefString&, WindowOpenDisposition disposition,

@@ -37,3 +37,11 @@ public struct BrowserSecureInputFocusReconciliation: Sendable {
         return previouslyEligible == false ? true : nil
     }
 }
+
+/// The safety fallback has no work when the app is inactive or regular content is idle.
+public enum BrowserSecureInputPolling {
+    public static func shouldPoll(applicationActive: Bool, hasFocusedSurface: Bool,
+                                  secureInputEnabled: Bool) -> Bool {
+        applicationActive && hasFocusedSurface && secureInputEnabled
+    }
+}

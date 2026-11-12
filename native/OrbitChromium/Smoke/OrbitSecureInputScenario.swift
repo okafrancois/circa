@@ -57,7 +57,24 @@ enum OrbitSecureInputScenario {
         }
         await activate(native)
         await check("initial", false)
+        if ProcessInfo.processInfo.arguments.contains("--orbit-smoke-secure-input-idle") {
+            try? await Task.sleep(for: .seconds(2))
+            let before = ChromiumRuntime.shared.syntheticSecureInputReconcileTicks ?? -1
+            var start = rusage()
+            getrusage(RUSAGE_SELF, &start)
+            try? await Task.sleep(for: .seconds(30))
+            var end = rusage()
+            getrusage(RUSAGE_SELF, &end)
+            let ticks = (ChromiumRuntime.shared.syntheticSecureInputReconcileTicks ?? -1) - before
+            let cpu = Double(end.ru_utime.tv_sec - start.ru_utime.tv_sec + end.ru_stime.tv_sec - start.ru_stime.tv_sec)
+                + Double(end.ru_utime.tv_usec - start.ru_utime.tv_usec + end.ru_stime.tv_usec - start.ru_stime.tv_usec) / 1_000_000
+            record("secure-input.idle-measurement", "proven", ["ticks": ticks, "seconds": 30, "cpuSeconds": cpu])
+            return
+        }
         guard let first = await page() else { return }
+        _ = await first.devToolsCall("Runtime.evaluate", params: #"{"expression":"document.querySelector('#plain').focus()"}"#)
+        await check("field-blur", false)
+        await focus(first)
         let isolated = await ChromiumRuntime.shared.withSyntheticSecureInputOwnerProbe {
             let other = NSWindow(contentRect: NSRect(x: 50, y: 50, width: 260, height: 160),
                                  styleMask: [.titled], backing: .buffered, defer: false)
@@ -96,6 +113,10 @@ enum OrbitSecureInputScenario {
         // A background script changing its DOM focus must not reacquire keyboard ownership.
         _ = await first.devToolsCall("Runtime.evaluate", params: #"{"expression":"document.querySelector('#plain').focus(); document.querySelector('#password').focus()"}"#)
         await check("background-dom-focus", false)
+        let inactiveTicks = ChromiumRuntime.shared.syntheticSecureInputReconcileTicks
+        try? await Task.sleep(for: .milliseconds(500))
+        record("secure-input.inactive-no-ticks",
+               inactiveTicks == ChromiumRuntime.shared.syntheticSecureInputReconcileTicks ? "proven" : "failed", [:])
         record("secure-input.renderer-notifications", resignNotifications > 0 && deactivateNotifications > 0 ? "proven" : "failed",
                ["resignKey": resignNotifications, "deactivate": deactivateNotifications])
         await activate(native)
@@ -135,6 +156,7 @@ enum OrbitSecureInputScenario {
             await activate(littleWindow)
             await check("little-key-password", true)
             littleWindow.close()
+            await check("password-window-close", false)
             await activate(native)
             await focus(first)
         } else { record("secure-input.little-window", "failed", [:]) }
@@ -258,6 +280,15 @@ enum OrbitSecureInputScenario {
             } catch { record("secure-input.manager-reveal-completed", "failed", [:]) }
         } else { record("secure-input.manager-store", "failed", [:]) }
         guard let fourth = await page() else { return }
+        fourth.navigate(to: fixture.appendingPathComponent("plain"))
+        _ = await OrbitRelaunchScenarios.until { !fourth.navigationState.isLoading && fourth.navigationState.committedURL == fixture.appendingPathComponent("plain") }
+        await check("navigation", false)
+        fourth.navigate(to: fixture)
+        _ = await OrbitRelaunchScenarios.until { !fourth.navigationState.isLoading && fourth.navigationState.committedURL == fixture }
+        await focus(fourth)
+        Task { _ = await fourth.devToolsCall("Page.crash") }
+        try? await Task.sleep(for: .milliseconds(500))
+        await check("renderer-crash", false)
         fourth.hostView.removeFromSuperview()
         await check("view-removal", false)
         fourth.dispose()
