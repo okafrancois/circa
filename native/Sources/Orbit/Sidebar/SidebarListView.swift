@@ -589,7 +589,7 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
         for placement in placements {
             guard let entry = entriesByNode[placement.node] else { continue }
             if let row = rowViews[placement.node] {
-                configure(row, with: entry)
+                if row.leavingEntry != entry || (row as? SidebarSplitRow)?.splitAppearanceChanged == true { configure(row, with: entry) }
                 continue
             }
             let row = dequeue(for: entry)
@@ -652,8 +652,10 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
         tidyButton.frame = NSRect(x: Metrics.separatorInsetX, y: (separatorY - Metrics.clearButtonHeight / 2).rounded(),
                                   width: 62, height: Metrics.clearButtonHeight)
         let foreground = accent.foreground.resolved(for: effectiveAppearance)
-        tidyButton.contentTintColor = foreground
-        tidyButton.attributedTitle = NSAttributedString(string: uiText("Tidy"), attributes: [.font: BrandTextStyle.ui.font(size: 12), .foregroundColor: foreground])
+        if tidyButton.contentTintColor != foreground || tidyButton.attributedTitle.string != uiText("Tidy") {
+            tidyButton.contentTintColor = foreground
+            tidyButton.attributedTitle = NSAttributedString(string: uiText("Tidy"), attributes: [.font: BrandTextStyle.ui.font(size: 12), .foregroundColor: foreground])
+        }
         let lineStart = tidyButton.isHidden ? Metrics.separatorInsetX : tidyButton.frame.maxX + 6
         separator.frame = NSRect(x: lineStart, y: lineY, width: max(0, lineEnd - lineStart), height: line)
         separator.isHidden = isStandalone || !displayedLayout.isSeparatorVisible || pinnedMotion != nil
@@ -748,6 +750,7 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
         row.onPreviewInvalidated = { [weak self] row in self?.onPreviewInvalidated?(row) }
         row.leavingEntry = entry
         row.isLeaving = false
+        row.setErrandMark(errandMarks[entry.node])
         row.commandsEnabled = commandsEnabled
         row.isContextTarget = contextTargets.contains(entry.node) || dragGhostNodes.contains(entry.node)
         row.isDropTarget = entry.node.folderID != nil && entry.node.folderID == folderTarget
@@ -1216,6 +1219,10 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
         guard let session = desktopDragSession, let start = desktopPreviewStart,
               let row = desktopRowImage, let tile = desktopTileImage, let document = desktopPreview, let window else { return }
         let image = SidebarTearOffPreview.render(document: document, row: row, tile: tile, elapsed: CACurrentMediaTime() - start, sourceWidth: window.frame.width, background: desktopPreviewBackground)
+        if CACurrentMediaTime() - start >= SidebarTearOffPreview.duration {
+            desktopPreviewTimer?.invalidate()
+            desktopPreviewTimer = nil
+        }
         let point = convert(window.convertPoint(fromScreen: desktopDragPoint), from: nil)
         session.enumerateDraggingItems(options: [], for: self, classes: [NSPasteboardItem.self], searchOptions: [:]) { item, _, _ in
             item.setDraggingFrame(NSRect(x: point.x - 12, y: point.y - image.size.height / 2,

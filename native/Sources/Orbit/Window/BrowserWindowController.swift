@@ -328,18 +328,13 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
         }
         session.onMetadataChange = { [weak self] ids in
             guard let self else { return }
-            // Split headers and pane controls remain on the full feature projection path.
-            if session.activeSplit != nil {
-                renderSession()
-                self.onMetadataStateChange()
-                return
-            }
+            if session.activeSplit != nil { refreshSplitMetadata(ids) }
             sidebar.applyMetadata(ids, organization: session.organization)
             folderPreview.intent.reconcile(session.organization)
             richTabPreview.reconcile()
             palette.renderContext()
             if ids.contains(where: { session.organizationTab($0).map { if case .favorites = $0.section { return true }; return false } == true }) {
-                favorites.render()
+                favorites.applyMetadata(ids)
             }
             self.onMetadataStateChange()
         }
@@ -537,25 +532,33 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
     }
 
     let sidebarMetadataCoalescer = SidebarMetadataCoalescer()
+    var sidebarChromeSurfaces: Set<ObjectIdentifier> = []
+    var sidebarMediaSurfaces: [ObjectIdentifier: Surface] = [:]
     var sidebarMetadataIDs: Set<TabID> = []
+    var sidebarSurfaceValues: [TabOccurrenceID: SidebarEngineMetadata] = [:]
     var sidebarMetadataValues: [TabOccurrenceID: SidebarEngineMetadata] = [:]
     var sidebarMetadataSurfaces: [ObjectIdentifier: (Surface, UInt64)] = [:]
 
     func surfaceDidChange(_ surface: Surface) {
         if surface.isSuspended { OrbitUnsavedInputGuard.clear(surface) }
         guard !isPreparingForTermination, owns(surface) else { return }
-        if let url = surface.currentURL { session.updateDestination(for: surface, to: url) }
-        if session.selectedSurface === surface {
-            session.updatePageTitle(for: surface, to: surface.navigationState.title)
-            queueSidebarMetadata(for: surface)
-        } else {
-            queueSidebarMetadata(for: surface, persist: true)
+        if let occurrence = session.occurrenceID(for: surface) {
+            let value = SidebarEngineMetadata(generation: surface.documentGeneration,
+                url: surface.currentURL, title: surface.navigationState.title)
+            let previous = sidebarSurfaceValues[occurrence]
+            sidebarSurfaceValues[occurrence] = value
+            if let url = value.url, previous?.url != url || previous?.generation != value.generation {
+                session.updateDestination(for: surface, to: url)
+            }
+            if session.selectedSurface === surface,
+               previous?.title != value.title || previous?.generation != value.generation {
+                session.updatePageTitle(for: surface, to: value.title)
+            }
         }
+        sidebarChromeSurfaces.insert(ObjectIdentifier(surface))
+        queueSidebarMetadata(for: surface, persist: session.selectedSurface !== surface)
         refreshNavigation(for: surface)
         engineEventHooks.emit(.stateChanged, for: surface)
-        palette.renderContext()
-        passwordPrompt.render()
-        translation.render()
     }
 
     // MARK: Session projection
@@ -569,6 +572,7 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
 
     private func renderSessionProjection(selection: Set<TabID>?) {
         BrowserPerformance.count(.windowProjections, window: id)
+        sidebarSurfaceValues = sidebarSurfaceValues.filter { session.tabID(for: $0.key) != nil }
         sidebarMetadataValues = sidebarMetadataValues.filter { session.tabID(for: $0.key) != nil }
         historyObserver.activateProfile(session.activeProfileID)
         tabSuspension?.selectionDidChange()

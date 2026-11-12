@@ -84,12 +84,6 @@ final class BrowserFavoritesController<Engine: BrowserEngine> {
             if inside { self.gmailPreview.dismiss() }
             return owner.richTabPreview.hover(row, inside: inside)
         }
-        gmailRefreshTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated {
-                guard let self, self.owner?.window?.occlusionState.contains(.visible) == true else { return }
-                self.render()
-            }
-        }
         grid.dropTarget.onPreviewCountChange = { [weak self] count in self?.owner?.sidebar.favoritePreviewCount = count }
         grid.dropTarget.onEmptyZoneVisibilityChange = { [weak self] visible in
             guard let sidebar = self?.owner?.sidebar else { return }
@@ -183,6 +177,16 @@ final class BrowserFavoritesController<Engine: BrowserEngine> {
         gmail.reconcile(profile: owner.isPrivateWindow ? nil : snapshot?.profileID,
                         accounts: owner.isPrivateWindow ? [] : accounts,
                         session: owner.isPrivateWindow ? nil : gmailSession)
+        if accounts.isEmpty || owner.isPrivateWindow {
+            gmailRefreshTimer?.invalidate(); gmailRefreshTimer = nil
+        } else if gmailRefreshTimer == nil {
+            gmailRefreshTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
+                MainActor.assumeIsolated {
+                    guard let self, self.owner?.window?.occlusionState.contains(.visible) == true else { return }
+                    self.render()
+                }
+            }
+        }
         icons.retain(ids)
         surfacesByTab = surfacesByTab.filter { ids.contains($0.key) && $0.value.value.map(owner.owns) == true }
         let items = tabs.map { tab in
@@ -204,10 +208,25 @@ final class BrowserFavoritesController<Engine: BrowserEngine> {
         grid.render(items, profileID: snapshot?.profileID)
         let hidden = snapshot.flatMap { owner.settingsPreferences?.runtime.document.profile($0.profileID).hiddenGmailBadges } ?? []
         for row in owner.sidebar.page.list.tabRows {
-            let account = snapshot?.tab(row.item.id).flatMap { $0.section.keepsPinnedURL ? BrowserGmailAccount(url: $0.pinnedURL ?? $0.url) : nil }
+            let account = owner.session.organizationTab(row.item.id).flatMap { $0.section.keepsPinnedURL ? BrowserGmailAccount(url: $0.pinnedURL ?? $0.url) : nil }
             row.setGmailUnread(count: account.flatMap { gmail.states[$0]?.inbox?.unreadCount }, showsBadge: !hidden.contains(row.item.id))
         }
         gmailPreview.reconcile()
+    }
+
+    func applyMetadata(_ ids: Set<TabID>) {
+        guard let owner, let snapshot = owner.session.organization, profileID == snapshot.profileID else { render(); return }
+        let items = grid.items.compactMap { item -> FavoriteTileItem? in
+            guard ids.contains(item.tab.id), let tab = owner.session.organizationTab(item.tab.id) else { return nil }
+            let surface = tab.occurrenceID.flatMap { owner.session.surface(for: $0) }
+            let media = surface.flatMap { owner.siteControls.mediaStates[ObjectIdentifier($0)] }
+            return FavoriteTileItem(tab: tab,
+                favicon: icons.image(for: tab, surface: surface, isOwned: { [weak owner] in owner?.owns($0) == true }),
+                isLoading: surface?.navigationState.isLoading == true,
+                isAudible: media?.isAudible ?? media?.isAudioPlaying, isAudioMuted: media?.isAudioMuted,
+                gmailUnreadCount: item.gmailUnreadCount, showsGmailBadge: item.showsGmailBadge)
+        }
+        grid.applySelection(items)
     }
 
     func applySelection(_ ids: Set<TabID>) {

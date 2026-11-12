@@ -156,6 +156,22 @@ final class BrowserSplitView: NSView {
         needsLayout = true
     }
 
+    /// Headers can change without reparenting content or disturbing divider/focus motion.
+    func applyMetadata(_ updates: [Pane], group: BrowserSplitGroup) {
+        guard self.group == group else { return }
+        for update in updates {
+            guard let index = presentedPanes.firstIndex(where: { $0.id == update.id }),
+                  presentedPanes[index].view === update.view, let card = panes[update.id] else { continue }
+            guard presentedPanes[index] != update else { continue }
+            presentedPanes[index] = update
+            card.present(update.view, address: update.address, title: update.title,
+                isOpenInAnotherWindow: update.isOpenInAnotherWindow)
+            card.back.isEnabled = update.canGoBack
+            card.forward.isEnabled = update.canGoForward
+            card.reload.isEnabled = update.view != nil
+        }
+    }
+
     func present(_ group: BrowserSplitGroup, panes incoming: [Pane], active: TabID?, accent: OrbitTokens.ThemeAccent,
                  selectionOnly: Bool = false) {
         acceptsInteraction = true

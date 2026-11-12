@@ -72,7 +72,9 @@ extension BrowserWindowController {
         sidebarActivityObserver = engineEventHooks.observe { [weak self] surface, event in
             guard let self, owns(surface) else { return }
             queueSidebarMetadata(for: surface)
-            if event == .stateChanged || event == .navigationFinished { siteControls.refreshMedia(surface) }
+            if event == .stateChanged || event == .navigationFinished {
+                sidebarMediaSurfaces[ObjectIdentifier(surface)] = surface
+            }
         }
         sidebar.onToggleTabAudio = { [weak self] id in
             self?.submitInput { controller in

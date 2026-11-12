@@ -5,6 +5,7 @@ import Darwin
 
 /// Synthetic selection measurements; no destinations or page content enter the output.
 @MainActor enum OrbitSelectionPerformanceProbe {
+    private static var backdrop: NSWindow?
     static func run(_ owner: OrbitWindowController, command: [String: String]) async -> [String: Any] {
         func ownsWindow() -> Bool {
             guard Bundle.main.object(forInfoDictionaryKey: "OrbitSyntheticBundle") as? Bool == true,
@@ -16,6 +17,54 @@ import Darwin
         guard ownsWindow() else { return ["ownershipRefused": true] }
         owner.window?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+        if command["path"] == "metadata" {
+            if command["setup"] == "1" {
+                owner.window?.setFrame(NSRect(x: 100, y: 100, width: 1100, height: 800), display: true)
+                owner.window?.appearance = NSAppearance(named: .aqua)
+                if let window = owner.window {
+                    let background = NSWindow(contentRect: window.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+                    background.backgroundColor = .black
+                    background.order(.below, relativeTo: window.windowNumber)
+                    backdrop = background
+                }
+                for n in 0..<12 {
+                    guard ownsWindow() else { return ["ownershipRefused": true] }
+                    owner.session.openTab(url: URL(string: "data:text/html,<title>Page%20\(n)</title><body%20style='background:white'>Synthetic</body>")!)
+                    await owner.session.waitForPendingCommands()
+                }
+                let tabs = owner.session.organization!.allTabs
+                guard ownsWindow() else { return ["ownershipRefused": true] }
+                owner.session.addToFavorites([tabs[0].id])
+                await owner.session.waitForPendingCommands()
+                guard ownsWindow() else { return ["ownershipRefused": true] }
+                owner.session.selectTab(tabs[0].id)
+                await owner.session.waitForPendingCommands()
+            }
+            if command["split"] == "1" {
+                let tabs = owner.session.organization!.today.compactMap(\.node.tabID)
+                owner.session.createSplit(Array(tabs.prefix(2)))
+                await owner.session.waitForPendingCommands()
+            }
+            let theme = BrowserSpaceTheme.composed(colors: [.init(hex: 0x809090)], noise: command["grain"] == "0" ? 0 : 1)
+            if let space = owner.session.snapshot?.activeSpaceID, let profile = owner.session.activeProfileID {
+                guard ownsWindow() else { return ["ownershipRefused": true] }
+                _ = try? await owner.session.setSpaceTheme(theme, for: space, profileID: profile)
+            }
+            try? await Task.sleep(for: .milliseconds(800))
+            guard let surface = owner.session.selectedSurface else { return ["missingSurface": true] }
+            let (frameReady, _) = await surface.devToolsCall("Runtime.evaluate", params: #"{"expression":"new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(()=>r(true))))","awaitPromise":true,"returnByValue":true}"#, timeout: .seconds(2))
+            BrowserPerformance.resetCounters()
+            var issued = 0
+            for n in 0..<min(100, max(0, Int(command["count"] ?? "100") ?? 100)) {
+                guard ownsWindow() else { return ["ownershipRefused": true] }
+                if await OrbitPerformanceProbe.evaluate(surface, "(()=>{document.title='Title \(n)'; return {ok:true}})()")?["ok"] as? Bool == true { issued += 1 }
+                try? await Task.sleep(for: .milliseconds(25))
+                await owner.session.waitForPendingCommands()
+            }
+            try? await Task.sleep(for: .milliseconds(300))
+            return ["counters": BrowserPerformance.counters, "windowNumber": owner.window!.windowNumber,
+                "titleUpdates": issued, "frameReady": frameReady]
+        }
         let scoped = command["scoped"] != "0", path = command["path"] ?? "sidebar"
         owner.session.usesScopedSelectionUpdates = scoped
         if path == "favorite" {
