@@ -64,7 +64,6 @@ struct BrowserShortcutRecorder: NSViewRepresentable {
 struct BrowserShortcutSettingsPane: View {
     @ObservedObject var preferences: BrowserShortcutPreferences
     let definitions: [BrowserCommandDefinition]
-    let conflictDefinitions: [BrowserCommandDefinition]
     var openExtensionSettings: (() -> Void)? = nil
     var extensionSettingsAvailable = true
     @State private var query = ""
@@ -139,15 +138,15 @@ struct BrowserShortcutSettingsPane: View {
                         Text(command.localizedTitle).frame(maxWidth: .infinity, alignment: .leading)
                         BrowserShortcutRecorder(title: preferences.bindings(for: command).isEmpty ? "—" : preferences.bindings(for: command).map(shortcutLabel).joined(separator: " / "),
                             identifier: "settings-shortcut-" + command.id.rawValue) { shortcut in
-                                change { try preferences.setShortcut(shortcut, for: command.id, definitions: conflictDefinitions) }
+                                change { try preferences.setShortcut(shortcut, for: command.id, definitions: definitions) }
                             }.frame(width: 122, height: 26)
                         Menu {
                             ForEach(BrowserShortcutWebsitePriority.allCases, id: \.rawValue) { priority in
                                 Button(priority.title) { change { try preferences.setPriority(priority, for: command.id) } }
                             }
                             Divider()
-                            Button(uiText("Remove Shortcut")) { change { try preferences.setShortcut(nil, for: command.id, definitions: conflictDefinitions) } }
-                            Button(uiText("Reset to Default")) { change { try preferences.reset(command.id) } }
+                            Button(uiText("Remove Shortcut")) { change { try preferences.setShortcut(nil, for: command.id, definitions: definitions) } }
+                            Button(uiText("Reset to Default")) { change { try preferences.reset(command.id, definitions: definitions) } }
                         } label: { OrbitIcon.view(sfName: "ellipsis.circle", pointSize: 13).font(.system(size: 13)) }
                         .menuStyle(.borderlessButton).menuIndicator(.hidden).frame(width: 26)
                         .accessibilityLabel(command.localizedTitle + " " + uiText("Shortcut options"))

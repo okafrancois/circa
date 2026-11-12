@@ -87,6 +87,7 @@ final class BrowserShortcutPreferences: ObservableObject {
 
     func setShortcut(_ shortcut: BrowserShortcut?, for id: BrowserCommandID,
                      definitions: [BrowserCommandDefinition]) throws {
+        let definitions = definitions.filter(OrbitCommandCatalog.isUserManageableShortcut)
         guard let definition = definitions.first(where: { $0.id == id }) else { return }
         if let shortcut {
             guard Self.isValid(shortcut) else { throw BrowserShortcutPreferenceError.invalidShortcut }
@@ -118,6 +119,7 @@ final class BrowserShortcutPreferences: ObservableObject {
         lhs == rhs || ([.browser, .responder].contains(lhs) && [.browser, .responder].contains(rhs))
     }
     func reset(_ id: BrowserCommandID, definitions: [BrowserCommandDefinition] = OrbitCommandCatalog.definitions) throws {
+        let definitions = definitions.filter(OrbitCommandCatalog.isUserManageableShortcut)
         if let definition = definitions.first(where: { $0.id == id }) {
             let matcher = BrowserKeyEquivalentMatcher(bindings: definition.shortcuts)
             if let conflict = definitions.first(where: { other in

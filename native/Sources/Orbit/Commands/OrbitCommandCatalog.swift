@@ -201,6 +201,7 @@ enum BrowserCommandID: String, CaseIterable, Sendable {
     case chooseQuickWindowSpace
     case dismissPeek
     case cycleExtensions
+    case toggleAssistant
     case removeSuggestion
     case pasteAsNewTab
     case showSiteControls
@@ -269,6 +270,14 @@ enum OrbitCommandCatalog {
         .newChatGPTMessage, .signOut, .shareOrbit, .sendToDia, .boostGallery, .copyURLAsQuote,
         .websitesEaselsAndNotesWillUse
     ]
+
+    /// Commands with a keyboard target independent of a captured context-menu request.
+    /// Keep this policy shared by Settings, preference validation and key routing.
+    static func isUserManageableShortcut(_ definition: BrowserCommandDefinition) -> Bool {
+        definition.owner != "OUT-OF-SCOPE-AI" && !structuralIDs.contains(definition.id)
+            && !hiddenCommands.contains(definition.id)
+            && definition.menu != BrowserPageContextCommands.menu
+    }
 
     static func isCommandBarAction(_ definition: BrowserCommandDefinition) -> Bool {
         definition.scope == .browser && !hiddenCommands.contains(definition.id) && !structuralIDs.contains(definition.id)
@@ -486,6 +495,7 @@ enum OrbitCommandCatalog {
         .init(id: .promoteQuickWindow, title: "Open Little Circa in Last Space", menu: "Tabs", shortcuts: [.init(key: "o", modifiers: .init(rawValue: 1048576))], scope: .quickWindow, requirement: .window, owner: "LITTLE", sources: ["Browser command"]),
         .init(id: .chooseQuickWindowSpace, title: "Open Little Circa in Space…", menu: "Tabs", shortcuts: [.init(key: "o", modifiers: .init(rawValue: 1179648))], scope: .quickWindow, requirement: .window, owner: "LITTLE", sources: ["Browser command"]),
         .init(id: .dismissPeek, title: "Close Peek", menu: "Tabs", shortcuts: [.init(key: "\u{1b}", modifiers: .init(rawValue: 0))], scope: .peek, requirement: .window, owner: "PEEK", sources: ["Browser command"]),
+        .init(id: .toggleAssistant, title: "Show/Hide Assistant", menu: "Tabs", shortcuts: [.init(key: "e", modifiers: [.command, .option])], scope: .browser, requirement: .window, owner: "AI", sources: ["Browser command"]),
         .init(id: .cycleExtensions, title: "Cycle Pinned Extensions", menu: "Tabs", shortcuts: [.init(key: "e", modifiers: .init(rawValue: 1048576))], scope: .browser, requirement: .window, owner: "EXTENSIONS", sources: ["Browser command"]),
         .init(id: .removeSuggestion, title: "Remove Suggestion", menu: "Tabs", shortcuts: [.init(key: "\u{7f}", modifiers: .init(rawValue: 1572864))], scope: .palette, requirement: .window, owner: "PALETTE", sources: ["Browser command"]),
         .init(id: .pasteAsNewTab, title: "Paste as New Tab", menu: "Tabs", shortcuts: [.init(key: "v", modifiers: .init(rawValue: 1572864))], scope: .browser, requirement: .window, owner: "PALETTE", sources: ["Browser command"]),

@@ -979,6 +979,13 @@ public final class ChromiumSurface: BrowserEngineSurface {
         (documentView as? ChromiumHostView)?.linkActivation = nil
         guard Self.isShortcutCandidate(event), let delegate else { return (false, false) }
         let modifiers = event.modifierFlags.intersection([.command, .shift, .option, .control])
+        // CEF supplies the focused renderer's editable state with this key, including
+        // closed shadow trees and cross-origin frames. Keep Option character/dead keys
+        // untracked so native text input receives the complete composition sequence.
+        if key.isEditableFieldFocused, modifiers.contains(.option),
+           modifiers.intersection([.command, .control]).isEmpty {
+            return (false, false)
+        }
         if key.isEditableFieldFocused, modifiers == [.command] || modifiers == [.command, .shift],
            event.charactersIgnoringModifiers?.lowercased() == "z" {
             // A tracked shortcut is consumed after the renderer declines it. Native editing
@@ -1002,6 +1009,10 @@ public final class ChromiumSurface: BrowserEngineSurface {
         let receipt = keyReceipts.remove(at: index).receipt
         guard !isDisposed, let event = key.event, let delegate else { return false }
         let modifiers = event.modifierFlags.intersection([.command, .shift, .option, .control])
+        if modifiers.contains(.option), modifiers.intersection([.command, .control]).isEmpty {
+            // Use the renderer's event-associated state, never a later DOM focus query.
+            if key.isEditableFieldFocused { return false }
+        }
         if modifiers == [.command], event.charactersIgnoringModifiers?.lowercased() == "z" {
             guard !key.isEditableFieldFocused else { return false }
             if delegate.surface(self, performNonEditingUndo: event, receipt: receipt) { return true }

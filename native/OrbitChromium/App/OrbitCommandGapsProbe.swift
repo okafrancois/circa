@@ -18,7 +18,9 @@ enum OrbitCommandGapsProbe {
 
     static func run(_ owner: OrbitWindowController) async -> [String: Any] {
         guard owns(owner), let window = owner.window, let registry = owner.palette.registry else { return ["refused": true] }
-        owner.session.openTab(url: URL(string: "about:blank")!)
+        let fixtureURL = CommandLine.arguments.first { $0.hasPrefix("--shortcut-fixture-url=") }
+            .flatMap { URL(string: String($0.dropFirst("--shortcut-fixture-url=".count))) }
+        owner.session.openTab(url: fixtureURL ?? URL(string: "about:blank")!)
         await owner.session.waitForPendingCommands()
         let deadline = ProcessInfo.processInfo.systemUptime + 5
         while (owner.session.selectedSurface?.isReady != true || owner.session.selectedSurface?.navigationState.isLoading == true), ProcessInfo.processInfo.systemUptime < deadline {
@@ -31,7 +33,8 @@ enum OrbitCommandGapsProbe {
         NSApp.activate(ignoringOtherApps: true)
         try? await Task.sleep(for: .milliseconds(150))
         window.setFrameOrigin(NSPoint(x: -4000, y: 100))
-        guard window.frame.maxX < 0, window.isKeyWindow else { return ["refused": true, "offscreen": window.frame.maxX < 0, "key": window.isKeyWindow] }
+        let shortcutsOnly = CommandLine.arguments.contains("--shortcut-customization-probe")
+        guard owns(owner), window.frame.maxX < 0 || shortcutsOnly, window.isKeyWindow else { return ["refused": true, "offscreen": window.frame.maxX < 0, "key": window.isKeyWindow] }
         let editor = NSTextView(frame: NSRect(x: 20, y: 20, width: 320, height: 80))
         editor.isRichText = true
         window.contentView?.addSubview(editor)
@@ -39,6 +42,82 @@ enum OrbitCommandGapsProbe {
         guard owns(owner), window.makeFirstResponder(editor) else { return ["refused": true] }
         var checks: [String: Bool] = [:]
         var methods: [String: String] = [:]
+        var typingEvidence: [String: Any] = [:]
+        func pressOptionE() async -> Bool {
+            guard owns(owner), window.isKeyWindow, NSApp.isActive else { return false }
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+            process.arguments = ["-e", "tell application \"System Events\" to tell (first application process whose unix id is \(getpid())) to keystroke \"e\" using option down"]
+            let errors = Pipe()
+            process.standardOutput = FileHandle.nullDevice
+            process.standardError = errors
+            do { try process.run() } catch { return false }
+            let deadline = ProcessInfo.processInfo.systemUptime + 3
+            while process.isRunning, ProcessInfo.processInfo.systemUptime < deadline {
+                try? await Task.sleep(for: .milliseconds(20))
+            }
+            if process.isRunning { process.terminate(); return false }
+            if process.terminationStatus != 0 {
+                typingEvidence["deliveryError"] = String(decoding: errors.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+            }
+            return process.terminationStatus == 0
+        }
+        if shortcutsOnly, let settings = owner.settingsPreferences {
+            let enabled = settings.runtime.document.ai.isEnabled
+            try? await settings.runtime.updateAI { $0.isEnabled = true }
+            guard owns(owner) else { return ["refused": true] }
+            let commandE = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: .command,
+                timestamp: 1, windowNumber: window.windowNumber, context: nil, characters: "e",
+                charactersIgnoringModifiers: "e", isARepeat: false, keyCode: 14)!
+            let optionE = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: .option,
+                timestamp: 2, windowNumber: window.windowNumber, context: nil, characters: "e",
+                charactersIgnoringModifiers: "e", isARepeat: false, keyCode: 14)!
+            checks["commandEReachesExtensions"] = !registry.handleInputEvent(commandE) && BrowserShortcutEvent(commandE).map { registry.resolveBinding($0) == .cycleExtensions } == true
+            let optionCommandE = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [.command, .option],
+                timestamp: 2, windowNumber: window.windowNumber, context: nil, characters: "e",
+                charactersIgnoringModifiers: "e", isARepeat: false, keyCode: 14)!
+            checks["assistantDefault"] = registry.resolve(optionCommandE) == .toggleAssistant && registry.resolve(optionE) == nil && !registry.prefersBrowser(.toggleAssistant)
+            checks["assistantOpens"] = registry.dispatch(.toggleAssistant, origin: .keyboard) && owner.assistantHost != nil
+            checks["assistantCloses"] = registry.dispatch(.toggleAssistant, origin: .keyboard) && owner.assistantHost == nil
+            if let surface = owner.session.selectedSurface,
+               let glyph = optionE.characters(byApplyingModifiers: .option), !glyph.isEmpty {
+                guard owns(owner), surface.focusDocument() else { return ["refused": true] }
+                try? await Task.sleep(for: .milliseconds(200))
+                let ready = await OrbitPerformanceProbe.evaluate(surface,
+                    "document.querySelector('input').focus(); ({ready: document.activeElement === document.querySelector('input')})")
+                checks["typingFixtureReady"] = ready?["ready"] as? Bool == true
+                let point = surface.documentView.convert(NSPoint(x: 30, y: surface.documentView.bounds.maxY - 16), to: nil)
+                for type in [NSEvent.EventType.leftMouseDown, .leftMouseUp] {
+                    guard owns(owner), let click = NSEvent.mouseEvent(with: type, location: point,
+                        modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                        windowNumber: window.windowNumber, context: nil, eventNumber: 1,
+                        clickCount: 1, pressure: 1) else { return ["refused": true] }
+                    NSApp.sendEvent(click)
+                }
+                typingEvidence["responder"] = window.firstResponder.map { String(describing: type(of: $0)) } ?? "none"
+                try? await Task.sleep(for: .milliseconds(200))
+                guard owns(owner) else { return ["refused": true] }
+                checks["typingKeyDelivered"] = await pressOptionE()
+                try? await Task.sleep(for: .milliseconds(300))
+                let typed = await OrbitPerformanceProbe.evaluate(surface,
+                    "({value: document.querySelector('input').value})")
+                typingEvidence.merge(["expected": glyph, "actual": typed?["value"] ?? "missing", "assistantOpen": owner.assistantHost != nil]) { _, new in new }
+                checks["optionTextReachesPage"] = typed?["value"] as? String == glyph && owner.assistantHost == nil
+                if owner.assistantHost != nil { owner.closeAssistant() }
+                _ = await OrbitPerformanceProbe.evaluate(surface, "document.querySelector('input').blur(); ({ready:true})")
+                try? await Task.sleep(for: .milliseconds(200))
+                guard owns(owner) else { return ["refused": true] }
+                checks["shortcutKeyDelivered"] = await pressOptionE()
+                try? await Task.sleep(for: .milliseconds(300))
+                checks["optionShortcutOutsideEditor"] = owner.assistantHost != nil
+                owner.closeAssistant()
+                guard owns(owner), window.makeFirstResponder(editor) else { return ["refused": true] }
+            }
+            try? await settings.runtime.updateAI { $0.isEnabled = false }
+            checks["assistantDisabled"] = !registry.isEnabled(.toggleAssistant)
+            try? await settings.runtime.updateAI { $0.isEnabled = enabled }
+        }
+        if shortcutsOnly { return ["pid": getpid(), "checks": checks, "typing": typingEvidence] }
         func item(_ id: BrowserCommandID, in menu: NSMenu?) -> NSMenuItem? {
             guard let menu else { return nil }
             for row in menu.items {

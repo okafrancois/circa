@@ -10,11 +10,11 @@ enum BrowserDailyCommands {
             return false
         }
         registry.registerInputHandler("assistant") { controller, event in
-            if controller?.palette.handleAssistantKey(event) == true { return true }
-            guard let controller, event.type == .keyDown, event.modifierFlags.intersection([.command, .option, .control, .shift]) == .command,
-                  event.charactersIgnoringModifiers == "e", controller.assistantEnabled else { return false }
+            controller?.palette.handleAssistantKey(event) == true
+        }
+        // Keep character-producing Option shortcuts on the normal page-first command path.
+        try! registry.register(.toggleAssistant, validate: { $0.assistantEnabled }) { controller, _ in
             controller.toggleAssistant()
-            return true
         }
         try! registry.register(.startErrand, validate: { $0.canStartErrand }) { controller, _ in controller.prefillErrand() }
         BrowserPasswordCommands.install(in: registry)
