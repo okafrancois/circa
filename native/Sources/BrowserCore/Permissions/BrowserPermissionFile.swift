@@ -74,6 +74,9 @@ enum BrowserPermissionFile {
         if fullSync {
             if fcntl(file, F_FULLFSYNC) != 0, ![EINVAL, ENOTSUP, ENOTTY].contains(errno) { throw Failure.io }
             try barrier(.fullySynced)
+        } else {
+            // Order the data before the rename even when a full device flush is not required.
+            _ = fcntl(file, F_BARRIERFSYNC)
         }
         guard try identity(parent: parent, name: name) == original else { throw Failure.unsafeFile }
         try beforeReplace()

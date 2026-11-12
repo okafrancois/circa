@@ -107,6 +107,8 @@ public struct BrowserSessionFileStore: Sendable {
             throw Self.io(.synchronizeFile)
         }
         let fullSyncResult = fullSync ? Self.retryInterrupted { operations.fullSyncFile(file.value) } : -1
+        // Without a full flush, still order these bytes before the rename that publishes them.
+        if !fullSync { _ = Self.retryInterrupted { Darwin.fcntl(file.value, F_BARRIERFSYNC) } }
         let usedFullSync = fullSyncResult == 0
         if fullSync, !usedFullSync, !Self.isUnsupported(errno) { throw Self.io(.fullySynchronizeFile) }
         try file.closeBeforeReplacement()
