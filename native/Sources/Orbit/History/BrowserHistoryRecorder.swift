@@ -255,12 +255,12 @@ final class BrowserHistoryRecorder {
         return try await access(profileID: document.profileID, disabled: 0) { try await $0.importDocument(document) }
     }
 
-    func syncBatches(for profileID: ProfileID, now: Date = Date()) async throws -> [BrowserHistorySyncBatch] {
+    func syncBatches(for profileID: ProfileID, now: Date = Date(), forcePacking: Bool = false) async throws -> [BrowserHistorySyncBatch] {
         await flush()
         let maintenance = try await access(profileID: profileID, disabled: false) { try await $0.historySyncNeedsApply([], now: now) }
         let wasWarm = maintenance ? beginBulkMutation(for: profileID) : false
         defer { if maintenance { endBulkMutation(for: profileID, rebuild: wasWarm) } }
-        return try await access(profileID: profileID, disabled: []) { try await $0.historySyncBatches(now: now) }
+        return try await access(profileID: profileID, disabled: []) { try await $0.historySyncBatches(now: now, forcePacking: forcePacking) }
     }
 
     @discardableResult func applySync(_ batches: [BrowserHistorySyncBatch], for profileID: ProfileID, now: Date = Date()) async throws -> Bool {

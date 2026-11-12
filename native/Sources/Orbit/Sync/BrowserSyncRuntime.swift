@@ -24,6 +24,9 @@ final class BrowserSyncRuntime: ObservableObject {
     private var isTerminating = false
     private var interval = Duration.seconds(5)
     var hasScheduledCycle: Bool { task != nil }
+    private var flushHistory: (() async throws -> Void)?
+    private var historyRetryAfter = Date.distantPast
+    private var historyFailures = 0
     private var cycle: (() async throws -> Void)?
 
     init() {
@@ -68,6 +71,13 @@ final class BrowserSyncRuntime: ObservableObject {
             guard let self, let environment, !environment.isFinalizing, !environment.settingsRemovalIsRunning else { return }
             try await self.synchronize(environment)
         }
+        flushHistory = { [weak environment] in
+            guard let environment, !environment.isPrivate else { return }
+            let session = await environment.store.sessionDocument()
+            for profile in session.profiles {
+                _ = try await environment.historyRecorder.syncBatches(for: profile.id, forcePacking: true)
+            }
+        }
         if enabled { NSApp?.registerForRemoteNotifications() }
         start()
     }
@@ -88,6 +98,7 @@ final class BrowserSyncRuntime: ObservableObject {
         await historyTransport?.stop()
         await stopPasswords()
         await task?.value
+        if enabled { try? await flushHistory?() }
         task = nil; transport = nil; historyTransport = nil
     }
 
@@ -98,18 +109,20 @@ final class BrowserSyncRuntime: ObservableObject {
 
     private func start() {
         guard enabled, !isTerminating, task == nil else { return }
-        task = Task { [weak self] in
+        task = Task(priority: .utility) { [weak self] in
             guard let self else { return }
             defer {
                 task = nil
                 // An enable may arrive while the cancelled cycle is still unwinding.
                 start()
             }
+            var failures = 0
             while enabled && !Task.isCancelled {
                 if enabled {
-                    do { try await cycle?() }
+                    do { try await cycle?(); failures = 0 }
                     catch is CancellationError where Task.isCancelled { break }
                     catch BrowserSyncError.signedOut {
+                        failures = min(failures + 1, 6)
                         status = .signedOut; await stopPasswords(); await transport?.stop(); transport = nil
                         await historyTransport?.stop(); historyTransport = nil
                     }
@@ -123,10 +136,10 @@ final class BrowserSyncRuntime: ObservableObject {
                         status = .accountChanged
                     }
                     catch BrowserSyncError.localChange { status = .on }
-                    catch { status = .unavailable; await stopPasswords(); await transport?.stop(); transport = nil }
+                    catch { failures = min(failures + 1, 6); status = .unavailable; await stopPasswords(); await transport?.stop(); transport = nil }
                 }
                 guard enabled, !Task.isCancelled else { break }
-                do { try await Task.sleep(for: interval) } catch { break }
+                do { try await Task.sleep(for: min(interval * (1 << failures), .seconds(300))) } catch { break }
             }
         }
     }
@@ -146,13 +159,20 @@ final class BrowserSyncRuntime: ObservableObject {
         }
         guard let transport else { return }
         status = .syncing
-        do { try await synchronizeHistory(environment, identity: identity, destination: destination) }
+        do {
+            if Date() >= historyRetryAfter {
+                try await synchronizeHistory(environment, identity: identity, destination: destination)
+                historyFailures = 0; historyRetryAfter = .distantPast
+            }
+        }
         catch BrowserSyncError.signedOut { throw BrowserSyncError.signedOut }
         catch BrowserSyncError.accountChanged { throw BrowserSyncError.accountChanged }
         catch {
             // A missing Production history type (or corrupt/unsupported history payload) must
             // fail closed for this zone without interrupting organization synchronization.
             await historyTransport?.stop(); historyTransport = nil
+            historyFailures = min(historyFailures + 1, 6)
+            historyRetryAfter = Date().addingTimeInterval(min(300, 5 * pow(2, Double(historyFailures))))
         }
         do { try await synchronizePasswords(environment, identity: identity, destination: destination) }
         catch BrowserSyncError.signedOut { throw BrowserSyncError.signedOut }

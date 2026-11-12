@@ -8,6 +8,7 @@ public actor BrowserHistoryStore {
     public let policy: BrowserHistoryPolicy
     let database: HistoryDatabase?
     // Total SQLite changes invalidate this cache even after a rolled-back mutation.
+    var syncBatchCacheDeadline = Date.distantFuture
     var syncBatchCache: (changes: Int64, dataVersion: String, cutoff: Date, batches: [BrowserHistorySyncBatch])?
     var applyingHistorySync = false
     var lastHistoryJournalPrune = Date.distantPast
