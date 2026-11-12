@@ -12,6 +12,8 @@ final class BrowserTabSuspensionController<Engine: BrowserEngine> {
     private weak var owner: BrowserWindowController<Engine>?
     private let store: BrowserStore
     private var backgroundSince: [ObjectIdentifier: TimeInterval] = [:]
+    private var freezeRetry: [ObjectIdentifier: TimeInterval] = [:]
+    private var discardRetry: [ObjectIdentifier: TimeInterval] = [:]
     private var previouslyVisible: Set<ObjectIdentifier> = []
     private var suspended: [TabOccurrenceID: BrowserSuspensionState] = [:]
     private var nativeSleeping: [TabOccurrenceID: URL] = [:]
@@ -113,6 +115,9 @@ final class BrowserTabSuspensionController<Engine: BrowserEngine> {
 
     /// Called before reparenting makes the native host visible (and resumes its renderer).
     func prepareCover(for surface: Surface) {
+        surface.setPageFrozen(false)
+        freezeRetry[ObjectIdentifier(surface)] = nil
+        discardRetry[ObjectIdentifier(surface)] = nil
         owner?.resources?.willActivate(surface)
         guard let owner, let id = owner.session.occurrenceID(for: surface) else { return }
         if activeCovers[id] != nil { return }
@@ -190,9 +195,16 @@ final class BrowserTabSuspensionController<Engine: BrowserEngine> {
         presentationRevision &+= 1
         let owned = Set(owner.session.ownedSurfaces.map(ObjectIdentifier.init))
         backgroundSince = backgroundSince.filter { owned.contains($0.key) }
+        freezeRetry = freezeRetry.filter { owned.contains($0.key) }
+        discardRetry = discardRetry.filter { owned.contains($0.key) }
         let visible = Set(owner.session.visibleOccurrenceIDs.compactMap { owner.session.surface(for: $0) }.map(ObjectIdentifier.init))
         for id in owned where backgroundSince[id] == nil || visible.contains(id) || previouslyVisible.contains(id) {
             backgroundSince[id] = now
+        }
+        for surface in owner.session.ownedSurfaces where visible.contains(ObjectIdentifier(surface)) {
+            surface.setPageFrozen(false)
+            freezeRetry[ObjectIdentifier(surface)] = nil
+            discardRetry[ObjectIdentifier(surface)] = nil
         }
         previouslyVisible = visible
         let occurrences = Set(owner.session.ownedSurfaces.compactMap { owner.session.occurrenceID(for: $0) })
@@ -213,8 +225,8 @@ final class BrowserTabSuspensionController<Engine: BrowserEngine> {
     func sweep(now: TimeInterval? = nil) async -> Int {
         let now = now ?? clock()
         owner?.resources?.sweep()
-        guard !isSweeping, let owner, !owner.session.isClosed, !owner.isPreparingForTermination,
-              let interval = (owner.settingsPreferences?.runtime.document.memorySaver ?? .oneHour).interval else { return 0 }
+        guard !isSweeping, let owner, !owner.session.isClosed, !owner.isPreparingForTermination else { return 0 }
+        let interval = (owner.settingsPreferences?.runtime.document.memorySaver ?? .oneHour).interval
         isSweeping = true
         defer { isSweeping = false }
         var expectedRevision = presentationRevision
@@ -236,11 +248,20 @@ final class BrowserTabSuspensionController<Engine: BrowserEngine> {
                   logical.contains(tab.id),
                   !owner.session.visibleOccurrenceIDs.contains(id),
                   let since = backgroundSince[identity] else { continue }
+            if now - since >= 300, now >= freezeRetry[identity, default: 0] {
+                let accepted = surface.allowsFreezing && surface.setPageFrozen(true)
+                freezeRetry[identity] = now + (accepted ? 30 : 300)
+            }
+            guard let interval else { continue }
             let budgeted = now - since < interval
             guard !budgeted || budget?.admits(identity) == true else { continue }
             var discarded = false
             // A refused admitted candidate lets the next least recently shown tab in its group through.
             defer { if !discarded { budget?.refused(identity) } }
+            guard now >= discardRetry[identity, default: 0] else { continue }
+            // Refusals are retried after five minutes, or immediately after activation.
+            discardRetry[identity] = now + 300
+            guard surface.allowsSuspension else { continue }
             let icon = await surface.navigationState.faviconImage?.nativeImage()
             guard let candidate = await surface.captureStateForSuspension() else { continue }
             var cover: BrowserSuspensionCover?

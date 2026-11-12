@@ -15,6 +15,7 @@ extension ChromiumSurface {
     public func updateAutomaticPictureInPicture(isSelected: Bool, allowed: Bool) {
         let enter = !isSelected && allowed
         guard !isDisposed, isBrowserCreated, (enter != automaticPiPShouldEnter || isSelected != automaticPiPIsSelected) else { return }
+        if enter || isSelected { setPageFrozen(false) }
         if enter { automaticPiPSourceWindow = documentView.window }
         automaticPiPShouldEnter = enter
         automaticPiPIsSelected = isSelected

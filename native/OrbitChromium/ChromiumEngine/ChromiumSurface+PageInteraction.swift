@@ -400,6 +400,7 @@ extension ChromiumSurface {
     public var hasDevTools: Bool { !isDisposed && isBrowserCreated && ACRHasDevTools(token) == 1 }
 
     public func perform(_ command: BrowserPageCommand) throws {
+        setPageFrozen(false)
         guard !isDisposed else { throw BrowserEngineError.surfaceDisposed }
         guard isBrowserCreated else { throw BrowserEngineError.unsupportedOperation }
         let result: Int32 = switch command {

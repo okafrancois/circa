@@ -229,7 +229,7 @@ struct LiveTabBudgetSweepTests {
         #expect(await fixture.window.tabSuspension.sweep() == 0)
     }
 
-    @Test("Visible and Split tabs are neither counted nor discarded")
+    @Test("Visible and Split tabs are neither frozen nor discarded")
     func splitExclusion() async throws {
         let fixture = try await session(.init(limit: 0, minimumBackgroundAge: 0), count: 4)
         defer { fixture.close() }
@@ -240,9 +240,14 @@ struct LiveTabBudgetSweepTests {
         let split = try #require(fixture.window.session.activeSplit)
         let paneSurfaces = split.tabs.compactMap(\.occurrenceID).compactMap { fixture.window.session.surface(for: $0) }
         #expect(paneSurfaces.count == 2)
+        for surface in fixture.window.session.ownedSurfaces {
+            surface.allowsFreezing = true
+            surface.freezeRequests = []
+        }
         fixture.clock.now = 2000
         let discarded = await fixture.window.tabSuspension.sweep()
         #expect(paneSurfaces.allSatisfy { $0.suspensionCount == 0 })
+        #expect(paneSurfaces.allSatisfy { !$0.freezeRequests.contains(true) })
         #expect(discarded == fixture.window.session.ownedSurfaces.count - 2)
         #expect(fixture.window.session.ownedSurfaces.filter { surface in
             !paneSurfaces.contains { $0 === surface } }.allSatisfy { $0.suspensionCount == 1 })

@@ -257,6 +257,8 @@ public final class ChromiumSurface: BrowserEngineSurface {
     var automaticPiPIsSelected = true
     var automaticPiPSession: (context: Int, generation: UInt64)?
     var automaticPiPRevision: UInt64 = 0
+    var activeUploadCount = 0
+    var hasFreezeVote = false
     public internal(set) var isSuspended = false
     var suspensionPaintEnabled = false
     var suspensionMainFrame: String?
@@ -266,7 +268,7 @@ public final class ChromiumSurface: BrowserEngineSurface {
     var isProtectedFromSuspension: Bool {
         BrowserPageSuspensionPolicy.refusal(pagePerformance?.lifecycle()) != nil || !audioContexts.isSafe || isElementFullscreen
             || !pendingPermissions.isEmpty || !pendingDialogRequests.isEmpty || !pendingPageRequests.isEmpty
-            || capture.video || capture.audio || !downloads.isEmpty
+            || capture.video || capture.audio || !downloads.isEmpty || activeUploadCount > 0
     }
     private var downloads: [UInt32: ChromiumDownloadTransfer] = [:]
     var hasActiveDownloads: Bool { !downloads.isEmpty }
@@ -383,6 +385,7 @@ public final class ChromiumSurface: BrowserEngineSurface {
 
     public func navigate(to url: URL) {
         guard !isDisposed else { return }
+        setPageFrozen(false)
         requestedDestination = url
         pendingKind = nil
         if creationFailed { reportFailedNavigationLater(); return }
@@ -397,6 +400,7 @@ public final class ChromiumSurface: BrowserEngineSurface {
 
     private func history(_ offset: Int32) -> URL? {
         guard !isDisposed, isBrowserCreated else { return nil }
+        setPageFrozen(false)
         var buffer = [CChar](repeating: 0, count: 8192)
         guard ACRHistoryURL(token, offset, &buffer, buffer.count) >= 0,
               let url = URL(string: String(nulTerminated: buffer)) else { return nil }
@@ -415,6 +419,7 @@ public final class ChromiumSurface: BrowserEngineSurface {
     public func reload() {
         guard !isDisposed else { return }
         guard isBrowserCreated else { pendingCommands.append(.reload); needBrowser(); return }
+        setPageFrozen(false)
         pendingKind = .reload
         _ = ACRReload(token)
     }
@@ -422,6 +427,7 @@ public final class ChromiumSurface: BrowserEngineSurface {
     public func reloadIgnoringCache() throws {
         guard !isDisposed else { throw BrowserEngineError.surfaceDisposed }
         guard isBrowserCreated else { pendingCommands.append(.reloadIgnoringCache); needBrowser(); return }
+        setPageFrozen(false)
         pendingKind = .reload
         guard ACRReloadIgnoringCache(token) == 1 else { throw BrowserEngineError.unsupportedOperation }
     }
@@ -445,6 +451,7 @@ public final class ChromiumSurface: BrowserEngineSurface {
 
     @discardableResult
     public func focusDocument() -> Bool {
+        setPageFrozen(false)
         guard !isDisposed, let window = documentView.window else {
             BrowserSidebarInputDiagnostics.record("native-focus", tab: sidebarInputTabID,
                 reason: isDisposed ? "surface-disposed" : "host-detached")
@@ -493,6 +500,7 @@ public final class ChromiumSurface: BrowserEngineSurface {
     /// The shell showed `documentView` in a window, or the user clicked into it.
     func hostViewDidBecomeVisible() {
         guard !isDisposed, isBrowserCreated, hostedWindowToken != 0 else { return }
+        setPageFrozen(false)
         secureInputHostHidden = false
         resumeDiscardedTab()
         engine?.activateHostedTab(self)
@@ -509,7 +517,7 @@ public final class ChromiumSurface: BrowserEngineSurface {
         }
         guard !isDisposed else { return }
         guard isBrowserCreated else { pendingCommands.append(.hostChanged(hidden: hidden)); return }
-        if !hidden { resumeDiscardedTab() }
+        if !hidden { setPageFrozen(false); resumeDiscardedTab() }
         if hidden { releaseSecureInputFocus() }
         _ = ACRNotifyHostChanged(token, hidden ? 1 : 0)
     }
@@ -517,6 +525,7 @@ public final class ChromiumSurface: BrowserEngineSurface {
     // MARK: Page tools
 
     public func performZoom(_ command: BrowserPageZoomCommand) {
+        setPageFrozen(false)
         guard !isDisposed else { return }
         guard isBrowserCreated else { pendingCommands.append(.zoom(command)); return }
         let code: Int32 = switch command {
@@ -578,6 +587,7 @@ public final class ChromiumSurface: BrowserEngineSurface {
                                      matchFound: false, final: true, error: .unsupportedOperation))
             return
         }
+        setPageFrozen(false)
         find = (request.token, request.documentGeneration, update)
         // CEF 156 forwards findNext as find_match: false counts and highlights without selecting.
         if ACRFind(token, request.query, request.forward ? 1 : 0, request.matchCase ? 1 : 0,
@@ -729,7 +739,8 @@ public final class ChromiumSurface: BrowserEngineSurface {
     }
 
     /// Executes a DevTools protocol method on this browser. Native-side only; pages never see it.
-    public func devToolsCall(_ method: String, params: String = "", timeout: Duration = .seconds(8)) async -> (Bool, Data) {
+    public func devToolsCall(_ method: String, params: String = "", timeout: Duration = .seconds(8), wakesPage: Bool = true) async -> (Bool, Data) {
+        if wakesPage { setPageFrozen(false) }
         // A submitted screenshot cannot be cancelled in Chromium. Keep its native slot until
         // response/timeout even when its consumer is cancelled, and never overlap another one.
         if method == "Page.captureScreenshot" {
@@ -887,10 +898,12 @@ public final class ChromiumSurface: BrowserEngineSurface {
                 _ = ACRNavigate(token, url.absoluteString)
                 navigationIssued = true
             case .reload:
+                setPageFrozen(false)
                 pendingKind = .reload
                 _ = ACRReload(token)
                 navigationIssued = true
             case .reloadIgnoringCache:
+                setPageFrozen(false)
                 pendingKind = .reload
                 _ = ACRReloadIgnoringCache(token)
                 navigationIssued = true
@@ -903,7 +916,7 @@ public final class ChromiumSurface: BrowserEngineSurface {
             case .focus:
                 focusDocument()
             case .hostChanged(let hidden):
-                if !hidden { resumeDiscardedTab() }
+                if !hidden { setPageFrozen(false); resumeDiscardedTab() }
                 _ = ACRNotifyHostChanged(token, hidden ? 1 : 0)
             case .mute(let muted):
                 _ = ACRSetAudioMuted(token, muted ? 1 : 0)
@@ -1172,6 +1185,12 @@ public final class ChromiumSurface: BrowserEngineSurface {
         }
         switch event.kind {
         case ACR_EVENT_MEDIA_ACTIVITY:
+            if event.detail == "Orbit.uploadActivity" {
+                activeUploadCount = Int(event.value)
+                if activeUploadCount > 0 { setPageFrozen(false) }
+                onChange?()
+                return
+            }
             if let method = event.detail, let payload = event.payload {
                 if method == "Runtime.bindingCalled" { receiveOptionLink(payload) }
                 audioContexts.receive(method: method, payload: payload)

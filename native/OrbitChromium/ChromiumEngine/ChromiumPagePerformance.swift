@@ -113,6 +113,7 @@ final class ChromiumPagePerformance: BrowserPagePerformance {
         state.hadFormInteraction = s.had_form_interaction != 0; state.hadUserEdits = s.had_user_edits != 0
         state.webLock = s.web_lock != 0; state.indexedDBLock = s.idb_lock != 0; state.webRTC = s.webrtc != 0
         state.state = .init(rawValue: s.lifecycle) ?? .running
+        state.cannotFreezeMask = s.cannot_freeze_mask
         state.cannotDiscardMask = s.cannot_discard_mask; state.footprintKB = s.footprint_kb
         state.rendererPID = s.renderer_pid; state.documentID = s.document_id
         return state

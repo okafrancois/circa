@@ -157,6 +157,13 @@ final class SiteSyntheticSurface: BrowserEngineSurface {
 
     // Opt-in native-discard fixture; other suites retain the unsupported default.
     var isSuspended = false
+    var allowsFreezing = false
+    var freezeAccepted = true
+    var freezeRequests: [Bool] = []
+    @discardableResult func setPageFrozen(_ frozen: Bool) -> Bool {
+        freezeRequests.append(frozen)
+        return freezeAccepted
+    }
     var allowsSuspension = false
     var supportsSuspensionPaint = false
     var suspensionPaintGeneration: UInt64?
