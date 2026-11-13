@@ -33,8 +33,11 @@ struct BrandTypeTests {
         func labels(_ view: NSView) -> [NSTextField] {
             view.subviews.flatMap { ($0 as? NSTextField).map { [$0] } ?? labels($0) }
         }
+        func chips(_ view: NSView) -> [PaletteKeyChip] {
+            view.subviews.flatMap { ($0 as? PaletteKeyChip).map { [$0] } ?? chips($0) }
+        }
         let hints = labels(view).filter { $0.stringValue == "⌘T" }
-        #expect(hints.contains { $0.font == BrandFonts.mono(11) })
+        #expect(chips(view).contains { $0.stringValue == "⌘T" && $0.font == OrbitTokens.Typography.commandBarAccessory })
         #expect(hints.contains { $0.attributedStringValue.attribute(.font, at: 1, effectiveRange: nil) as? NSFont == BrandFonts.mono(13) })
     }
 
