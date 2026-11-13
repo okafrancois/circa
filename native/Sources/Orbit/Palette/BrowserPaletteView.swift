@@ -40,7 +40,6 @@ final class BrowserPaletteView: NSView, NSTextFieldDelegate, NSTableViewDataSour
         }
     }
     let panel = NSView()
-    private let veil = CALayer()
     let material = OrbitFrostView(radius: OrbitTokens.Radius.commandBar)
     private let materialObservers = OrbitWorkspaceObservers()
     private(set) var usesMaterial = !NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency
@@ -113,8 +112,6 @@ final class BrowserPaletteView: NSView, NSTextFieldDelegate, NSTableViewDataSour
         panel.wantsLayer = true
         panel.layer?.cornerRadius = OrbitTokens.Radius.commandBar
         panel.layer?.masksToBounds = false
-        veil.backgroundColor = BrandPalette.paper.withAlphaComponent(0.6).cgColor
-        layer?.addSublayer(veil)
         layer?.addSublayer(panelShadow)
         addSubview(panel)
         panel.addSubview(material)
@@ -220,7 +217,6 @@ final class BrowserPaletteView: NSView, NSTextFieldDelegate, NSTableViewDataSour
     override func layout() {
         super.layout()
         let m = OrbitTokens.Metrics.CommandBar.self
-        veil.frame = bounds
         panel.frame = Self.panelFrame(in: bounds.size, resultCount: results.count)
         if answerView != nil { panel.frame.size.height = answerHeight ?? 230 }
         panelShadow.frame = panel.frame
