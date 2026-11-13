@@ -258,7 +258,7 @@ extension OrbitTokens {
         public static let `default` = SpaceTheme(
             stops: [NSColor.orbitDynamic("Theme.default.0", light: .orbitSRGB(0xFBDFD5), dark: .orbitSRGB(0x1B2057)),
                     NSColor.orbitDynamic("Theme.default.1", light: .orbitSRGB(0xFBDFD5), dark: .orbitSRGB(0x1B2057))],
-            mode: .automatic, texture: .none, textureIntensity: 0,
+            mode: .automatic, texture: .grain, textureIntensity: 0.3,
             stopRange: StopRange(light: Gradient.startFraction.light...Gradient.endFraction.light,
                                  dark: Gradient.startFraction.dark...Gradient.endFraction.dark))
         public static let legacyFlat = SpaceTheme(stops: [.orbitSRGB(0xE6E6E8)], mode: .light, texture: .none, textureIntensity: 0)
