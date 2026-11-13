@@ -377,7 +377,7 @@ final class OrbitSmokeDriver: OrbitLaunchHooks {
         }
         check("app.window", true, ["windows": application.windows.windows.count, "restored": restored.count])
         if arguments.contains("--orbit-smoke-brand") {
-            await brandSurfaces(environment, first)
+            await brandSurfaces(application, environment, first)
             finish(aborted: false)
             return
         }
