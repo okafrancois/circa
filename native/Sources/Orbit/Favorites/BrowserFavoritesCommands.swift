@@ -2,11 +2,11 @@ import BrowserEngine
 
 enum BrowserFavoritesCommands {
     static let definitions: [BrowserCommandDefinition] = [
-        .init(id: .removeFavorite, title: "Remove from Favorites", menu: "FavoritesContext", shortcuts: [],
+        .init(id: .removeFavorite, title: "Remove Favorite", menu: "FavoritesContext", shortcuts: [],
               scope: .browser, requirement: .window, owner: "FAVORITES", sources: ["Browser command"]),
-        .init(id: .renameFavorite, title: "Rename", menu: "FavoritesContext", shortcuts: [],
+        .init(id: .renameFavorite, title: "Rename…", menu: "FavoritesContext", shortcuts: [],
               scope: .browser, requirement: .window, owner: "FAVORITES", sources: ["Browser command"]),
-        .init(id: .copyFavoriteLink, title: "Copy URL", menu: "FavoritesContext", shortcuts: [],
+        .init(id: .copyFavoriteLink, title: "Copy Link", menu: "FavoritesContext", shortcuts: [],
               scope: .browser, requirement: .window, owner: "FAVORITES", sources: ["Browser command"]),
         .init(id: .resetFavorite, title: "Reset Tab to Original URL", menu: "FavoritesContext", shortcuts: [],
               scope: .browser, requirement: .window, owner: "FAVORITES", sources: ["menu.declaration.context"])

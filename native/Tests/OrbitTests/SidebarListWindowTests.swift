@@ -596,20 +596,21 @@ struct SidebarListWindowTests {
         #expect(nodes == [.tab(t)] && (c.list.row(for: .tab(t)) as? SidebarTabRow)?.isContextTarget == true)
         let built = try #require(c.makeSidebarContextMenu(for: nodes))
         let titles = built.menu.items.map { $0.isSeparatorItem ? "—" : $0.title }
-        // The observed order leads; existing commands (Markdown copy, folder, pin, archive) stay available.
-        #expect(titles == ["Copy Link", "Copy Link as Markdown", "—", "Change Icon…", "Rename…", "Mute", "—",
-                           "Open in Split View", "Duplicate", "Move to", "New Folder with Selection", "—", "Pin Tab", "—",
-                           "Archive Tab", "Archive Other Tabs", "Archive Tabs Below"])
+        #expect(titles == ["Copy Link", "Share", "—", "Change Icon…", "Rename…", "Mute", "Customize Page…", "—",
+                           "Add Split View", "Duplicate", "Move to", "—", "Archive Tab", "Archive Tabs Below"])
+        let copy = try #require(built.menu.items.first { $0.title == "Copy Link" })
+        #expect(copy.keyEquivalent == "c" && copy.keyEquivalentModifierMask == [.command, .shift])
+        #expect(built.menu.items.first { $0.title == "Archive Tabs Below" }?.isEnabled == !c.sidebarRelativeTodayTabs(above: false).isEmpty)
         c.sidebar.endContextMenu()
         c.session.pinTabs([t])
         await harness.settle()
         let again = c.sidebar.prepareContextMenu(for: .tab(t))
         let menu = try #require(c.makeSidebarContextMenu(for: again))
         #expect(menu.menu.items.map { $0.isSeparatorItem ? "—" : $0.title } == [
-            "Copy Link", "Copy Link as Markdown", "—", "Change Icon…", "Rename…", "Mute", "Edit Pinned Page", "—",
-            "Add Split View", "Duplicate", "Move to", "New Folder with Selection", "—", "Remove Pin", "—", "Close Tab"])
+            "Copy Link", "Share", "—", "Change Icon…", "Rename…", "Mute", "Edit Pinned Page", "—",
+            "Open in Split View", "Duplicate", "Move to", "—", "Remove Pin"])
         let submenu = try #require(menu.menu.items.first { $0.title == "Edit Pinned Page" }?.submenu)
-        #expect(submenu.items.map(\.title) == ["Edit…"])
+        #expect(submenu.items.map(\.title) == ["Replace Pinned URL with Current", "Reset Tab to Original URL", "Edit Pinned URL…"])
         menu.menu.performActionForItem(at: menu.menu.indexOfItem(withTitle: "Remove Pin"))
         await harness.settle()
         c.sidebar.endContextMenu()

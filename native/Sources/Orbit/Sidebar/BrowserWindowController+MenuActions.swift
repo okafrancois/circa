@@ -22,6 +22,8 @@ extension BrowserWindowController {
     var sidebarMuteSurface: Surface? {
         guard engine.capabilities.contains(.audioMuting), sidebarTabTargets.count == 1,
               let id = sidebarTabTargets.first, let surface = liveSidebarSurface(of: id), !surface.isDisposed else { return nil }
+        let media = siteControls.mediaStates[ObjectIdentifier(surface)]
+        guard media?.isAudible == true || media?.isAudioMuted == true else { return nil }
         return surface
     }
 

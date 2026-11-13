@@ -128,15 +128,12 @@ enum SidebarListCommands {
         if nodes.count == 1, let id = nodes[0].tabID, let tab = organization.tab(id) {
             var editing: [BrowserCommandID] = [.sidebarChangeTabIcon, .renameCurrentItem, .sidebarMuteTab]
             if tab.pinnedURL != nil { editing.append(.sidebarEditPinnedURL) }
-            // The observed order leads; commands that already existed stay available after it.
-            var groups: [[BrowserCommandID]] = [[.sidebarCopyLinks, .sidebarCopyMarkdownLinks], editing,
-                                                [.addSplitView, .sidebarDuplicate, .newFolder]]
-            if tab.isAwayFromPinnedURL { groups.append([.resetTabToOriginalURL]) }
-            groups.append([.pinUnpinTab])
+            var groups: [[BrowserCommandID]] = [[.sidebarCopyLinks], editing,
+                                                [.addSplitView, .sidebarDuplicate]]
             if case .today = tab.section {
-                groups.append([.sidebarCloseItems, .sidebarArchiveOtherTabs, .sidebarArchiveTabsAbove, .sidebarArchiveTabsBelow])
+                groups.append([.sidebarCloseItems, .sidebarArchiveTabsBelow])
             } else {
-                groups.append([.sidebarCloseItems])
+                groups.append([.pinUnpinTab])
             }
             return groups
         }
@@ -170,7 +167,7 @@ enum SidebarListCommands {
         func text(_ key: String, _ english: String) -> String { SidebarListStrings.string("menu.\(key)", english) }
         switch id {
         case .renameCurrentItem: return nodes.count == 1 && nodes[0].tabID != nil ? uiText("Rename…") : text("rename", "Rename")
-        case .addSplitView: return tabs.first?.pinnedURL == nil ? uiText("Open in Split View") : uiText("Add Split View")
+        case .addSplitView: return tabs.first?.pinnedURL == nil ? uiText("Add Split View") : uiText("Open in Split View")
         case .sidebarMuteTab: return uiText("Mute")
         case .sidebarCopyLinks: return nodes.contains(where: { $0.folderID != nil }) ? uiText("Copy All Links") : uiText(plural ? "Copy URLs" : "Copy Link")
         case .sidebarCopyMarkdownLinks: return nodes.contains(where: { $0.folderID != nil }) ? uiText("Copy All Links as Markdown") : uiText(plural ? "Copy Links as Markdown" : "Copy Link as Markdown")

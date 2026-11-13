@@ -399,6 +399,10 @@ extension BrowserWindowController {
         for item in built.menu.items where [BrowserCommandID.sidebarArchiveTabsAbove.rawValue, BrowserCommandID.sidebarArchiveOtherTabs.rawValue].contains(item.identifier?.rawValue ?? "") {
             if let validator = item.target as? NSMenuItemValidation, !validator.validateMenuItem(item) { built.menu.removeItem(item) }
         }
+        if let below = built.menu.items.first(where: { $0.identifier?.rawValue == BrowserCommandID.sidebarArchiveTabsBelow.rawValue }),
+           let validator = below.target as? NSMenuItemValidation {
+            below.isEnabled = validator.validateMenuItem(below)
+        }
         for item in built.menu.items.reversed() where item.isSeparatorItem {
             guard let index = built.menu.items.firstIndex(of: item) else { continue }
             if index == 0 || index == built.menu.items.count - 1 || built.menu.items[index - 1].isSeparatorItem { built.menu.removeItem(item) }
@@ -428,17 +432,27 @@ extension BrowserWindowController {
                 : (built.menu.items.firstIndex { $0.identifier?.rawValue == BrowserCommandID.renameCurrentItem.rawValue } ?? 0)
             built.menu.insertItem(move.item, at: index)
         }
-        var editOwner: AnyObject?
-        if let parent = built.menu.items.first(where: { $0.identifier?.rawValue == BrowserCommandID.sidebarEditPinnedURL.rawValue }),
-           let submenu = SidebarCommandHub.contextMenu(for: self, commands: [[.sidebarEditPinnedURL]]) {
-            submenu.menu.items.last?.title = uiText("Edit…")
-            parent.action = nil
-            parent.submenu = submenu.menu
-            editOwner = submenu.owner
+        let editOwner: AnyObject? = nil
+        if nodes.count == 1, let id = nodes.first?.tabID, let tab = organization?.tab(id) {
+            if let parent = built.menu.items.first(where: { $0.identifier?.rawValue == BrowserCommandID.sidebarEditPinnedURL.rawValue }) {
+                parent.action = nil
+                parent.submenu = pinnedPageMenu(for: tab)
+            }
+            built.menu.insertItem(tabShareMenu(for: tab), at: 1)
+            if tab.pinnedURL == nil {
+                if let copy = built.menu.items.first(where: { $0.identifier?.rawValue == BrowserCommandID.sidebarCopyLinks.rawValue }) {
+                    copy.keyEquivalent = "c"
+                    copy.keyEquivalentModifierMask = [.command, .shift]
+                }
+                let customize = tabContextAction(uiText("Customize Page…"), tab: tab) { controller in
+                    controller.session.selectTab(tab.id)
+                    controller.session.performWindowAction { [weak controller] in controller?.createBoost() }
+                }
+                let index = built.menu.items.firstIndex { $0.identifier?.rawValue == BrowserCommandID.sidebarMuteTab.rawValue }
+                if let index { built.menu.insertItem(customize, at: index + 1) }
+            }
         }
-        let gmail = nodes.count == 1 ? nodes.first?.tabID.flatMap { favorites.gmailBadgeMenu(for: $0) } : nil
-        if let gmail { built.menu.insertItem(.separator(), at: 0); built.menu.insertItem(gmail.item, at: 0) }
-        return (built.menu, SidebarObjectMenuOwner(commands: built.owner, move: move, editing: editOwner, gmail: gmail))
+        return (built.menu, SidebarObjectMenuOwner(commands: built.owner, move: move, editing: editOwner, gmail: nil))
     }
 
     func showSidebarContextMenu(for nodes: [BrowserOrganizationNode], event: NSEvent, in view: NSView) {
