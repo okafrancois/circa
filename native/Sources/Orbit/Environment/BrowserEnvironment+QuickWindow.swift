@@ -49,7 +49,14 @@ extension BrowserEnvironment {
                 return (try? await controller.historyObserver.suggestions(for: space.profileID, query: query)) ?? []
             }
         }
-        controller.sourceSpaceBadge.image = (SpaceIconImages.view(settings.document.space(space.id).iconSelection, pointSize: 13) as? NSImageView)?.image
+        let icon = settings.document.space(space.id).iconSelection
+        let image = (SpaceIconImages.view(icon, pointSize: 13) as? NSImageView)?.image
+        if case .planet = icon, let compactImage = image?.copy() as? NSImage {
+            // NSButton draws at the image's logical size. Keep full-size shared artwork
+            // out of the compact badge without mutating other Space icon consumers.
+            compactImage.size = NSSize(width: 13, height: 13)
+            controller.sourceSpaceBadge.image = compactImage
+        } else { controller.sourceSpaceBadge.image = image }
         if startLoading { controller.load(url) }
         if url == nil { await controller.prepareCompactPresentation() }
         return controller
