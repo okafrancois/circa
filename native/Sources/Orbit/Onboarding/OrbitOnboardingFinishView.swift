@@ -6,7 +6,7 @@ import BrowserCore
 final class OrbitOnboardingFinishView: NSView {
     let mark = OrbitOnboardingMarkView(frame: NSRect(x: 552, y: 135, width: 96, height: 71))
     let title = OrbitOnboardingMomentTitle(labelWithString: OrbitOnboardingText.finishTitle)
-    let body = NSTextField(labelWithString: OrbitOnboardingText.finishBody)
+    let body = NSTextField(wrappingLabelWithString: OrbitOnboardingText.finishBody)
     let button = OrbitOnboardingPrimaryButton()
     let sticker = OrbitOnboardingSticker(text: "", color: BrandPalette.mint)
     let summary = NSStackView()
@@ -20,10 +20,11 @@ final class OrbitOnboardingFinishView: NSView {
         title.maximumNumberOfLines = 2
         title.alignment = .left; title.frame = NSRect(x: 54, y: 96, width: 650, height: 140)
         body.font = OrbitOnboardingFonts.ui(22); body.textColor = BrandPalette.ink2
-        body.alignment = .left; body.frame = NSRect(x: 54, y: 246, width: 620, height: 65)
-        body.maximumNumberOfLines = 2
+        body.alignment = .left
+        body.preferredMaxLayoutWidth = 440
+        body.maximumNumberOfLines = 0
         button.title = OrbitOnboardingText.getStarted; button.accent = BrandPalette.coral
-        button.frame = NSRect(origin: NSPoint(x: 54, y: 360), size: button.intrinsicContentSize)
+        layoutCopy()
         button.keyEquivalent = "\r"; button.onPress = { [weak self] in self?.onOpen?() }
         for v in [illustration, title, body, button] { v.wantsLayer = true; addSubview(v) }
         mark.isHidden = true; sticker.isHidden = true; summary.isHidden = true
@@ -32,6 +33,7 @@ final class OrbitOnboardingFinishView: NSView {
     override var isFlipped: Bool { true }
     func update(flow: OrbitOnboardingFlow) {
         body.stringValue = flow.importSummary == nil ? OrbitOnboardingText.finishBody : OrbitOnboardingText.finishImportBody
+        layoutCopy()
         sticker.stringValue = OrbitOnboardingText.sticker(duration: flow.importDuration, sync: flow.syncChoice == true)
         summary.arrangedSubviews.forEach { summary.removeArrangedSubview($0); $0.removeFromSuperview() }
         var chips: [String] = []
@@ -63,6 +65,12 @@ final class OrbitOnboardingFinishView: NSView {
         }
         let width = summary.fittingSize.width
         summary.frame = NSRect(x: (bounds.width - width) / 2, y: 441, width: width, height: 34)
+    }
+    private func layoutCopy() {
+        let titleHeight = ceil(title.sizeThatFits(NSSize(width: title.frame.width, height: 1000)).height)
+        let bodyHeight = ceil(body.sizeThatFits(NSSize(width: 440, height: 1000)).height)
+        body.frame = NSRect(x: 54, y: title.frame.minY + titleHeight + 12, width: 440, height: bodyHeight)
+        button.frame = NSRect(origin: NSPoint(x: 54, y: body.frame.maxY + 22), size: button.intrinsicContentSize)
     }
     func play() {
         title.play(delay: 0.38, stagger: 0.07)
