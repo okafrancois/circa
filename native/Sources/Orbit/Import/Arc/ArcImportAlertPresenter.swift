@@ -105,7 +105,7 @@ final class ArcImportAlertPresenter: ArcImportPresenting {
     static func phaseText(_ phase: ArcImportProgress.Phase) -> String { ArcImportText.phase(phase) }
 
     private func makePanel() {
-        let panel = OrbitDaylightPanel(contentRect: NSRect(x: 0, y: 0, width: 360, height: 104),
+        let panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 360, height: 104),
                             styleMask: [.titled, .utilityWindow], backing: .buffered, defer: false)
         panel.title = browserImport ? uiText("Import from Another Browser") : ArcImportText.progressTitle
         panel.isFloatingPanel = true

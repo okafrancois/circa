@@ -123,11 +123,10 @@ struct FloatingMaterialTests {
         #expect(tint.layer?.backgroundColor?.alpha == view.style.tintOpacity)
     }
 
-    @Test func compactTitleUsesFlatSkyInk() {
+    @Test func compactTitleMaterialCoversItsOpaqueThemeFill() {
         let toolbar = BrowserQuickWindowToolbarView(frame: NSRect(x: 0, y: 0, width: 680, height: 48))
         #expect(toolbar.subviews.first === toolbar.fill)
-        #expect(toolbar.fill.isHidden)
-        #expect(toolbar.layer?.backgroundColor?.alpha == 1)
+        #expect(toolbar.subviews.last is OrbitFrostView)
     }
 
     @Test func themeEditorIsOpaqueAndDoesNotInstallFrost() {
@@ -171,7 +170,7 @@ struct FloatingAlertMaterialTests {
 
 
 extension NativeWebKitTests.FloatingAlertMaterialTests {
-    @Test("Floating dialogs stay daylight when the system or parent appearance changes")
+    @Test("Floating dialogs follow automatic appearance and a live parent appearance change")
     func dialogAppearanceFollowsOwner() throws {
         NSApplication.shared.setActivationPolicy(.prohibited)
         let original = NSApp.appearance
@@ -182,9 +181,9 @@ extension NativeWebKitTests.FloatingAlertMaterialTests {
         modal.addButton(withTitle: "OK")
         let modalWindow = modal.preparedWindow()
         defer { modalWindow.close() }
-        #expect(modalWindow.appearance?.name == .aqua)
+        #expect(modalWindow.appearance == nil)
         NSApp.appearance = NSAppearance(named: .darkAqua)
-        #expect(!OrbitAppearance.isDark(modalWindow.effectiveAppearance))
+        #expect(OrbitAppearance.isDark(modalWindow.effectiveAppearance))
 
         let parent = NSWindow(contentRect: .zero, styleMask: [.titled], backing: .buffered, defer: true)
         parent.isReleasedWhenClosed = false
@@ -198,11 +197,11 @@ extension NativeWebKitTests.FloatingAlertMaterialTests {
         let frost = try #require(panel.contentView?.subviews.first as? OrbitFrostView)
         #expect(!OrbitAppearance.isDark(panel.effectiveAppearance))
         parent.appearance = NSAppearance(named: .darkAqua)
-        #expect(!OrbitAppearance.isDark(panel.effectiveAppearance))
+        #expect(OrbitAppearance.isDark(panel.effectiveAppearance))
         frost.refresh(reduceTransparency: false)
-        #expect(frost.style.variant == .light)
+        #expect(frost.style.variant == .dark)
         parent.appearance = nil
-        #expect(!OrbitAppearance.isDark(panel.effectiveAppearance))
+        #expect(OrbitAppearance.isDark(panel.effectiveAppearance))
     }
 }
 

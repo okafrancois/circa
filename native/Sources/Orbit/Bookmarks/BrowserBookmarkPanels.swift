@@ -41,7 +41,6 @@ final class BrowserBookmarkPanels: BrowserBookmarkPanelPresenting {
     func chooseImport(on window: NSWindow) async -> URL? {
         guard window.isVisible, window.attachedSheet == nil else { return nil }
         let panel = NSOpenPanel()
-        panel.appearance = NSAppearance(named: .aqua)
         panel.title = uiText("Import Bookmarks")
         panel.message = uiText("Choose UTF-8 bookmark HTML. Only HTTP and HTTPS links are supported; other links are counted and skipped.")
         panel.allowedContentTypes = [.html]
@@ -54,7 +53,6 @@ final class BrowserBookmarkPanels: BrowserBookmarkPanelPresenting {
     func chooseExport(preview: BrowserBookmarkTransferPreview, on window: NSWindow) async -> URL? {
         guard window.isVisible, window.attachedSheet == nil else { return nil }
         let panel = NSSavePanel()
-        panel.appearance = NSAppearance(named: .aqua)
         panel.title = uiText("Export Bookmarks")
         panel.allowedContentTypes = [.html]
         panel.nameFieldStringValue = uiText("Bookmarks.html")

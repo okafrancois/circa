@@ -44,7 +44,6 @@ final class BrowserFileChooserPresenter {
         switch request.mode {
         case .save:
             let save = NSSavePanel()
-            save.appearance = NSAppearance(named: .aqua)
             if let path = request.defaultPath {
                 let url = URL(fileURLWithPath: path)
                 if url.hasDirectoryPath { save.directoryURL = url } else {
@@ -55,7 +54,6 @@ final class BrowserFileChooserPresenter {
             panel = save
         case .open, .openMultiple, .openFolder, .openExistingFolder:
             let open = NSOpenPanel()
-            open.appearance = NSAppearance(named: .aqua)
             open.canChooseFiles = request.mode != .openFolder && request.mode != .openExistingFolder
             open.canChooseDirectories = request.mode == .openFolder || request.mode == .openExistingFolder
             open.allowsMultipleSelection = request.mode == .openMultiple

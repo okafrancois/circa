@@ -57,7 +57,7 @@ struct NativeOpaqueThemeTests {
         #expect(browser.windowShell.themeFill.theme.model == theme)
         #expect(editor.view.subviews.compactMap { $0 as? NSPopUpButton }.isEmpty)
         #expect(editor.view.subviews.compactMap { $0 as? NSSlider }.isEmpty)
-        #expect(editor.view.subviews.compactMap { $0 as? NSButton }.allSatisfy { $0.toolTip != "Dark Appearance" })
+        #expect(editor.view.subviews.compactMap { $0 as? NSButton }.contains { $0.toolTip == OrbitThemeEditorText.dark })
         var state = editor.view.state
         state.setIntensity(0.81)
         state.setNoise(0.75)

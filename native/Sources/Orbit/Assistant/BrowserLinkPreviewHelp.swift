@@ -177,7 +177,7 @@ final class BrowserLinkPreviewHelp: ObservableObject {
         }
         let host = NSHostingView(rootView: content)
         host.sizingOptions = [.intrinsicContentSize]
-        let panel = OrbitDaylightPanel(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
+        let panel = NSPanel(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         panel.identifier = NSUserInterfaceItemIdentifier("link-preview")
         panel.isReleasedWhenClosed = false
         panel.ignoresMouseEvents = true

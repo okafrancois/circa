@@ -188,12 +188,14 @@ extension NativeWebKitTests {
 @Suite("Appearance and Space themes")
 @MainActor
 struct ThemeAppearanceTests {
-    @Test("Stored modes and dark system input still resolve daylight windows")
+    @Test("Space modes follow the system unless explicitly overridden")
     func windowAppearance() {
         #expect(OrbitAppearance.windowAppearance(for: .light, override: nil)?.name == .aqua)
-        #expect(OrbitAppearance.windowAppearance(for: .dark, override: nil)?.name == .aqua)
-        #expect(OrbitAppearance.windowAppearance(for: .automatic, override: nil)?.name == .aqua)
-        #expect(OrbitAppearance.windowAppearance(for: .light, override: .darkAqua)?.name == .aqua)
+        #expect(OrbitAppearance.windowAppearance(for: .dark, override: nil)?.name == .darkAqua)
+        #expect(OrbitAppearance.windowAppearance(for: .automatic, override: nil) == nil)
+        #expect(OrbitAppearance.windowAppearance(for: .light, override: .darkAqua)?.name == .darkAqua)
+        #expect(OrbitAppearance.windowAppearance(for: .dark, override: .aqua)?.name == .aqua)
+        #expect(OrbitAppearance.windowAppearance(for: .automatic, override: .darkAqua)?.name == .darkAqua)
         #expect(OrbitAppearance.override(in: ["Orbit", "--appearance", "dark"]) == .darkAqua)
         #expect(OrbitAppearance.override(in: ["Orbit", "--appearance", "light"]) == .aqua)
         #expect(OrbitAppearance.override(in: ["Orbit", "--appearance"]) == nil)

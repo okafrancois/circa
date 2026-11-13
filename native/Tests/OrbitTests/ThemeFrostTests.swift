@@ -48,7 +48,7 @@ struct ThemeFrostTests {
         }
     }
 
-    @Test("Flat opaque Space ink covers the native backing material across theme edits")
+    @Test("Window glass follows the Space foreground across theme edits")
     func sidebarBackdrop() {
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 600, height: 500),
                               styleMask: [.titled], backing: .buffered, defer: true)
@@ -67,7 +67,7 @@ struct ThemeFrostTests {
             #expect(shell.sidebarMaterial.material == .sidebar)
             #expect(shell.sidebarMaterial.state == .active)
             let ink = OrbitSpaceThemes.accent(for: theme).foreground.resolved(for: window.effectiveAppearance)
-            let expected: NSAppearance.Name = .aqua
+            let expected: NSAppearance.Name = OrbitThemeForeground.isLight(on: ink) ? .aqua : .darkAqua
             #expect(shell.sidebarMaterial.appearance?.bestMatch(from: [.aqua, .darkAqua]) == expected)
             #expect(shell.floatingBackdrop.material.blendingMode == .withinWindow)
             #expect(shell.floatingBackdrop.material.material == .sidebar)

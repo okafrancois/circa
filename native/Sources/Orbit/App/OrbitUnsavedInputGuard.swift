@@ -116,7 +116,7 @@ final class OrbitUnsavedInputGuard: NSObject {
     }
 }
 
-final class OrbitBrowserWindow: OrbitDaylightWindow {
+final class OrbitBrowserWindow: NSWindow {
     override func sendEvent(_ event: NSEvent) {
         OrbitUnsavedInputGuard.keyDown(in: self, event: event)
         super.sendEvent(event)

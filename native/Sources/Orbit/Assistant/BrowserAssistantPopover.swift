@@ -236,7 +236,7 @@ final class BrowserAssistantPopover: NSObject, NSWindowDelegate {
 }
 
 @MainActor
-private final class AssistantMenuPanel: OrbitDaylightPanel {
+private final class AssistantMenuPanel: NSPanel {
     var onCancel: (() -> Void)?
     var onTyping: ((NSEvent) -> Bool)?
     override var canBecomeKey: Bool { true }

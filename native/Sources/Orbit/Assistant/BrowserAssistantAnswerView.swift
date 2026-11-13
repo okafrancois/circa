@@ -17,7 +17,8 @@ struct BrowserAssistantAnswerView: View {
 
     /// The bar's material follows the window appearance, so the accent is guarded against that polarity.
     private var palette: BrowserAssistantPalette {
-        return BrowserAssistantPalette(theme: theme, appearance: NSAppearance(named: .aqua)!, polarity: false)
+        let dark = colorScheme == .dark
+        return BrowserAssistantPalette(theme: theme, appearance: NSAppearance(named: dark ? .darkAqua : .aqua)!, polarity: dark)
     }
     private var message: BrowserAIMessage? { conversation.messages.last.flatMap { $0.role == .assistant ? $0 : nil } }
 
