@@ -123,10 +123,11 @@ struct FloatingMaterialTests {
         #expect(tint.layer?.backgroundColor?.alpha == view.style.tintOpacity)
     }
 
-    @Test func compactTitleMaterialCoversItsOpaqueThemeFill() {
+    @Test func compactTitleUsesFlatSkyInk() {
         let toolbar = BrowserQuickWindowToolbarView(frame: NSRect(x: 0, y: 0, width: 680, height: 48))
         #expect(toolbar.subviews.first === toolbar.fill)
-        #expect(toolbar.subviews.last is OrbitFrostView)
+        #expect(toolbar.fill.isHidden)
+        #expect(toolbar.layer?.backgroundColor?.alpha == 1)
     }
 
     @Test func themeEditorIsOpaqueAndDoesNotInstallFrost() {

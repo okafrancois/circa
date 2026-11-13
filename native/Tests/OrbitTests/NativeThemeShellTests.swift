@@ -302,29 +302,29 @@ struct ThemeAppearanceTests {
 
 @Suite("Window and sidebar geometry")
 struct ShellGeometryTests {
-    @Test("Pinned sidebar at 1024 × 640: column 228, card inset 10, radius 6, window buttons at x 20 + n × the system pitch, y 24")
+    @Test("Pinned sidebar at 1024 × 640: column 228, card inset 6, radius 6, window buttons at x 20 + n × the system pitch, y 24")
     func dockedReference() {
         let geometry = OrbitShellGeometry.resolve(.init(contentSize: reference))
         #expect(close(geometry.sidebarFrame, CGRect(x: 0, y: 0, width: 228, height: 640)))
-        #expect(close(geometry.cardFrame, CGRect(x: 228, y: 10, width: 786, height: 620)))
-        #expect(geometry.cardRadius == 6 && geometry.floatingChrome == 0)
+        #expect(close(geometry.cardFrame, CGRect(x: 228, y: 6, width: 790, height: 628)))
+        #expect(geometry.cardRadius == 8 && geometry.floatingChrome == 0)
         #expect(geometry.trafficLightCenters == [CGPoint(x: 20, y: 24), CGPoint(x: 43, y: 24), CGPoint(x: 66, y: 24)])
         let older = OrbitShellGeometry.resolve(.init(contentSize: reference, trafficLightPitch: 20))
         #expect(older.trafficLightCenters == [CGPoint(x: 20, y: 24), CGPoint(x: 40, y: 24), CGPoint(x: 60, y: 24)])
         #expect(geometry.trafficLightsVisible && geometry.isSidebarOnScreen)
     }
 
-    @Test("Hidden sidebar: card inset 10 on every side, window buttons hidden; full screen goes edge to edge")
+    @Test("Hidden sidebar: card inset 6 on every side, window buttons hidden; full screen goes edge to edge")
     func hidden() {
         let windowed = OrbitShellGeometry.resolve(.init(contentSize: reference, dockProgress: 0))
-        #expect(close(windowed.cardFrame, CGRect(x: 10, y: 10, width: 1004, height: 620)))
-        #expect(windowed.cardRadius == 6 && !windowed.trafficLightsVisible && !windowed.isSidebarOnScreen)
+        #expect(close(windowed.cardFrame, CGRect(x: 6, y: 6, width: 1012, height: 628)))
+        #expect(windowed.cardRadius == 8 && !windowed.trafficLightsVisible && !windowed.isSidebarOnScreen)
         #expect(windowed.sidebarFrame.maxX <= 0)
         let fullScreen = OrbitShellGeometry.resolve(.init(contentSize: reference, dockProgress: 0, isFullScreen: true))
         #expect(close(fullScreen.cardFrame, CGRect(origin: .zero, size: reference)))
         #expect(fullScreen.cardRadius == 0)
         let fullScreenDocked = OrbitShellGeometry.resolve(.init(contentSize: reference, isFullScreen: true))
-        #expect(close(fullScreenDocked.cardFrame, CGRect(x: 228, y: 10, width: 786, height: 620)))
+        #expect(close(fullScreenDocked.cardFrame, CGRect(x: 228, y: 6, width: 790, height: 628)))
     }
 
     @Test("Mid-toggle frames interpolate monotonically between pinned and hidden")
@@ -334,7 +334,7 @@ struct ShellGeometryTests {
             let current = OrbitShellGeometry.resolve(.init(contentSize: reference, dockProgress: CGFloat(step) / 10))
             #expect(current.sidebarFrame.minX > previous.sidebarFrame.minX)
             #expect(current.cardFrame.minX > previous.cardFrame.minX)
-            #expect(close(current.cardFrame.maxX, 1014))
+            #expect(close(current.cardFrame.maxX, 1018))
             #expect(close(current.cardFrame.minX, current.dockedColumnMinX + 228 + current.cardGap))
             previous = current
         }
@@ -585,10 +585,10 @@ struct NativeThemeShellTests {
         #expect(window.styleMask.contains(.fullSizeContentView) && window.titlebarAppearsTransparent)
         #expect(window.titleVisibility == .hidden && window.minSize == NSSize(width: 600, height: 400))
         #expect(controller.sidebar.frame.width == 228)
-        // Edge to edge by default: flush with the top, trailing and bottom edges.
+        // New windows use the inset paper page.
         let card = controller.contentCard.convert(controller.contentCard.bounds, to: root)
-        #expect(close(card, CGRect(x: 228, y: 0, width: 796, height: 640)))
-        #expect(controller.contentCard.cornerRadius == OrbitTokens.Metrics.Content.edgeCardLeadingRadius)
+        #expect(close(card, CGRect(x: 228, y: 6, width: 790, height: 628)))
+        #expect(controller.contentCard.cornerRadius == OrbitTokens.Radius.contentCard)
         let centers = try trafficLightCenters(window)
         #expect(centers.count == 3)
         let pitch = controller.windowShell.trafficLightPitch
@@ -616,6 +616,7 @@ struct NativeThemeShellTests {
         NSApplication.shared.setActivationPolicy(.prohibited)
         let controller = try await PreviewEnvironment().makeWindow()
         defer { controller.window?.close() }
+        controller.windowShell.showsSpaceAroundPages = false
         let window = try #require(controller.window)
         let root = try #require(window.contentView)
         window.setContentSize(reference)
@@ -640,6 +641,7 @@ struct NativeThemeShellTests {
         NSApplication.shared.setActivationPolicy(.prohibited)
         let controller = try await PreviewEnvironment().makeWindow()
         defer { controller.window?.close() }
+        controller.windowShell.showsSpaceAroundPages = false
         let window = try #require(controller.window)
         let root = try #require(window.contentView)
         window.setContentSize(reference)
@@ -717,8 +719,8 @@ struct NativeThemeShellTests {
         NotificationCenter.default.post(name: NSWindow.willExitFullScreenNotification, object: window)
         NotificationCenter.default.post(name: NSWindow.didExitFullScreenNotification, object: window)
         root.layoutSubtreeIfNeeded()
-        #expect(close(controller.contentCard.convert(controller.contentCard.bounds, to: root), CGRect(x: 10, y: 10, width: 1004, height: 620)))
-        #expect(controller.contentCard.cornerRadius == 6)
+        #expect(close(controller.contentCard.convert(controller.contentCard.bounds, to: root), CGRect(x: 6, y: 6, width: 1012, height: 628)))
+        #expect(controller.contentCard.cornerRadius == 8)
     }
 
     @Test("Switching Space swaps the sidebar page and the window theme, and keeps the page projection exact")
@@ -769,6 +771,7 @@ struct NativeThemeShellTests {
         let id = try #require(router.newWindow())
         await router.waitForPendingCommands()
         let controller = try #require(router.windows[id])
+        controller.windowShell.showsSpaceAroundPages = false
         await controller.session.waitForPendingCommands()
         #expect(registry.resolve(BrowserShortcut(key: "s", modifiers: [.command])) == .showHideSidebar)
         let window = try #require(controller.window)

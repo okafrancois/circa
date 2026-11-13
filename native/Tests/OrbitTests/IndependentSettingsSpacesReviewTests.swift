@@ -155,7 +155,7 @@ struct IndependentSettingsSpacesReviewTests {
         #expect(!window.isVisible)
     }
 
-    @Test("Every native overflow action restores selection while termination admission is suspended")
+    @Test("Every sidebar action retains selection while termination admission is suspended")
     func overflowDuringTermination() async throws {
         NSApplication.shared.setActivationPolicy(.prohibited)
         let environment = BrowserEnvironment(engine: SiteSyntheticEngine())
@@ -169,9 +169,9 @@ struct IndependentSettingsSpacesReviewTests {
         let window = try #require(controller.window)
         defer { window.close() }
         try await model.suspendForTermination(timeout: .seconds(2))
-        for item in try #require(window.toolbar).items {
-            let menu = try #require(item.menuFormRepresentation)
-            #expect(NSApplication.shared.sendAction(try #require(menu.action), to: menu.target, from: menu))
+        #expect(window.toolbar == nil)
+        for section in BrowserSettingsSection.navigationSections {
+            #expect(!controller.selectSection(section))
             #expect(model.settingsSection == .links)
             #expect(controller.selectedToolbarIdentifier == BrowserSettingsSection.links.toolbarIdentifier)
         }

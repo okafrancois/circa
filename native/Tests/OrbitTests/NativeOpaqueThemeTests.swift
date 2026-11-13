@@ -20,7 +20,7 @@ struct NativeOpaqueThemeTests {
             view.appearance = NSAppearance(named: .aqua)
             view.viewDidChangeEffectiveAppearance()
             view.layoutSubtreeIfNeeded()
-            #expect(view.subviews.isEmpty)
+            #expect(view.subviews.allSatisfy { $0 is OrbitPaperGrainView })
             let expected = try #require(NSColor(cgColor: view.resolvedStops[0])?.usingColorSpace(.sRGB))
             let context = try #require(CGContext(data: nil, width: 180, height: 220, bitsPerComponent: 8,
                 bytesPerRow: 180 * 4, space: CGColorSpace(name: CGColorSpace.sRGB)!,

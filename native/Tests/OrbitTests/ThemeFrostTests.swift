@@ -48,7 +48,7 @@ struct ThemeFrostTests {
         }
     }
 
-    @Test("Window glass samples behind the window and remains enabled across theme edits")
+    @Test("Flat opaque Space ink covers the native backing material across theme edits")
     func sidebarBackdrop() {
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 600, height: 500),
                               styleMask: [.titled], backing: .buffered, defer: true)
@@ -61,7 +61,7 @@ struct ThemeFrostTests {
         for theme in [OrbitTokens.SpaceTheme.default, .amberCoral, .lavender] {
             shell.apply(theme: theme, animated: false)
             #expect(!window.isOpaque)
-            #expect(shell.themeFill.tintOpacity > 0 && shell.themeFill.tintOpacity < 1)
+            #expect(shell.themeFill.tintOpacity == 1)
             #expect(window.backgroundColor == .clear)
             #expect(shell.sidebarMaterial.blendingMode == .behindWindow)
             #expect(shell.sidebarMaterial.material == .sidebar)

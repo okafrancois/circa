@@ -6,11 +6,11 @@ import BrowserEngineConformance
 @testable import Orbit
 
 struct SettingsPresentationTests {
-    @Test("Seven public categories retain hidden subpane routes and numbered shortcuts")
+    @Test("Ten sidebar categories retain the existing seven numbered shortcuts")
     func categories() {
         #expect(BrowserSettingsSection.allCases == [.general, .profiles, .shortcuts, .links, .ai, .advanced, .about])
-        #expect(!BrowserSettingsSection.allCases.contains(.spaces))
-        #expect(!BrowserSettingsSection.allCases.contains(.privacy))
+        #expect(BrowserSettingsSection.navigationSections.contains(.spaces))
+        #expect(BrowserSettingsSection.navigationSections.contains(.privacy))
         #expect(BrowserSettingsSection(rawValue: "icon") == nil)
         #expect(BrowserSettingsSection.about.symbol == "info.circle")
     }

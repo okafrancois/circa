@@ -105,7 +105,7 @@ struct BrandTypeTests {
         #expect(editor.themeName.frame.maxY < 522)
     }
 
-    @Test("Audited custom control fills have no fixed blue, purple, orange or coral selection")
+    @Test("Unbranded controls retain native accent roles; the command input may use the mandarine sparkle")
     func controlAudit() throws {
         #expect(OrbitTokens.Color.Accent.focusRing == NSColor.controlAccentColor)
         #expect(OrbitTokens.Color.Accent.primaryButton == NSColor.controlAccentColor)
@@ -116,7 +116,7 @@ struct BrandTypeTests {
                      "Palette/BrowserPaletteView.swift", "Sidebar/SidebarCreationMenu.swift"] {
             let source = try String(contentsOf: sources.appendingPathComponent(file), encoding: .utf8)
             for fixed in [".systemBlue", ".systemPurple", ".systemOrange", "BrandPalette.coral"] {
-                #expect(!source.contains(fixed), "Fixed control color in \(file)")
+                #expect(!source.contains(fixed) || (file == "Palette/BrowserPaletteView.swift" && fixed == "BrandPalette.coral"), "Fixed control color in \(file)")
             }
         }
     }

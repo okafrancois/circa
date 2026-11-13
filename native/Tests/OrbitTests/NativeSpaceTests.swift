@@ -244,10 +244,10 @@ struct NativeSpaceTests {
         defer { restored.window?.close() }
         #expect(restored.session.ownedSurfaces.isEmpty)
         #expect(restored.session.snapshot?.tabs.isEmpty == true)
-        #expect(restored.displayedEmptyTitle == "Synthetic empty Space")
+        #expect(restored.displayedEmptyTitle == OrbitShellText.emptySpaceTitle)
         restored.session.renameSpace(emptySpace, name: "Synthetic renamed empty Space")
         await restored.session.waitForPendingCommands()
-        #expect(restored.displayedEmptyTitle == "Synthetic renamed empty Space")
+        #expect(restored.displayedEmptyTitle == OrbitShellText.emptySpaceTitle)
         try await captureSyntheticWindow(restored)
         restored.focusAddress()
         await restored.session.waitForPendingCommands()

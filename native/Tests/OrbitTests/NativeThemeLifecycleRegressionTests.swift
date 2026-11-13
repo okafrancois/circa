@@ -251,10 +251,10 @@ struct NativeThemeLifecycleRegressionTests {
         #expect(little.window?.appearance?.name == .darkAqua)
         theme.mode = .light
         little.applyPreferences(searchEngine: .google, theme: OrbitSpaceThemes.rendered(theme))
-        #expect(little.window?.appearance?.name == .darkAqua)
+        #expect(little.window?.appearance?.name == .aqua)
         theme.mode = .automatic
         little.applyPreferences(searchEngine: .google, theme: OrbitSpaceThemes.rendered(theme))
-        #expect(little.window?.appearance?.name == .darkAqua)
+        #expect(little.window?.appearance == nil)
         #expect(little.window?.isVisible == false)
     }
 

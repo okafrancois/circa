@@ -41,7 +41,7 @@ struct SettingsAIPaneTests {
         ]
     }
 
-    @Test("AI is ⌘5, Advanced ⌘6 and About ⌘7, in the toolbar and its menu equivalents")
+    @Test("Sidebar navigation preserves AI ⌘5, Advanced ⌘6 and About ⌘7")
     func shortcuts() throws {
         #expect(BrowserSettingsSection.allCases.firstIndex(of: .ai) == 4)
         #expect(BrowserSettingsSection.allCases.firstIndex(of: .advanced) == 5)
@@ -52,10 +52,9 @@ struct SettingsAIPaneTests {
         let controller = BrowserSettingsWindowController(model: model)
         let window = try #require(controller.window)
         defer { window.close() }
-        let items = try #require(window.toolbar?.items)
+        #expect(window.toolbar == nil)
+        #expect(BrowserSettingsSection.navigationSections.count == 10)
         for (key, code, section) in [("5", UInt16(23), BrowserSettingsSection.ai), ("6", 22, .advanced), ("7", 26, .about)] {
-            let item = try #require(items.first { $0.itemIdentifier == section.toolbarIdentifier })
-            #expect(item.menuFormRepresentation?.keyEquivalent == key)
             let event = try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: .command, timestamp: 0,
                 windowNumber: window.windowNumber, context: nil, characters: key, charactersIgnoringModifiers: key,
                 isARepeat: false, keyCode: code))

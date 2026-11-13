@@ -25,7 +25,7 @@ struct PrivateWindowRoutingTests {
         first.window?.contentView?.layoutSubtreeIfNeeded()
         let indicator = try #require(first.sidebar.subviews.first { $0.accessibilityIdentifier() == "private-window-indicator" })
         #expect(!indicator.isHidden && first.sidebar.bounds.contains(indicator.frame))
-        #expect(first.contentCard.displayedEmptyTitle == "Private")
+        #expect(first.contentCard.displayedEmptyTitle == uiText("Private window."))
         #expect(first.window?.isOpaque == false)
         #expect(app.commands.registry.dispatch(.newIncognitoWindow, origin: .keyboard))
         await app.waitForPrivateWindowCommands()

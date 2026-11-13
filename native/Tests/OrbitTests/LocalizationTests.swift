@@ -65,7 +65,7 @@ struct LocalizationTests {
         // Every other entry must contain a translation, not a copied English default.
         let invariant = Set([
             "%@\n%@\n→ %@", "%@ %@", "%@ %ld", "%@ · %@\n%@", "%ld%%",
-            "%ld/%ld", "Aa", "Animations", "Circa", "Bing",
+            "%ld/%ld", "%d / %d", "Aa", "Animations", "Circa", "Bing",
             "Bookmarks.html", "DuckDuckGo", "Extensions", "Format", "Google",
             "Grain", "Little Circa", "MIDI", "MIDI SysEx", "Microphone",
             "Notifications", "OK", "Option", "Pastel", "Services",

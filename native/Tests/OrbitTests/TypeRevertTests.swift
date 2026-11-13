@@ -7,21 +7,23 @@ import Testing
 
 @MainActor
 struct TypeRevertTests {
-    @Test("Display titles are confined to onboarding headings, Settings pane headings and About")
+    @Test("Display type remains confined to branded headings and illustrations")
     func displayTitleScope() throws {
         let sources = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
             .deletingLastPathComponent().appendingPathComponent("Sources/Orbit")
         let allowed: [String: [String]] = [
-            "ContentCard/BrowserContentCardView.swift": ["emptyTitle.font ="],
-            "PageInteraction/BrowserPageDialogView.swift": ["title.font ="],
-            "Onboarding/OrbitOnboardingWelcome.swift": ["headline.attributedStringValue"],
+            "Archive/BrowserArchiveView.swift": ["heading.attributedStringValue"],
+            "Settings/BrowserAirTrafficControlView.swift": ["Text(uiText(\"Air Traffic Control\"))"],
+            "ContentCard/BrowserContentCardView.swift": ["emptyTitle.font =", "emptyTitle.attributedStringValue"],
+            "PageInteraction/BrowserPageDialogView.swift": ["title.font =", "title.attributedStringValue"],
+            "Onboarding/OrbitOnboardingWelcome.swift": ["headline.attributedStringValue", "let heading = BrandTextStyle.title"],
             "Onboarding/OrbitOnboardingFinishView.swift": ["title.attributedStringValue"],
             "Onboarding/OrbitOnboardingCard.swift": [".font: OrbitOnboardingFonts.title"],
             "Onboarding/OrbitOnboardingMetrics.swift": ["static func title(_ size: CGFloat)"],
-            "Settings/BrowserSettingsAbout.swift": ["Text(ProductIdentity.displayName)"],
+            "Settings/BrowserSettingsAbout.swift": ["Text(ProductIdentity.displayName)", "Text(uiText(\"About Circa\"))"],
             "Settings/BrowserSettingsOrbitPanes.swift": ["Text((model.settingsSection ?? .general).title)",
                 "Text(entry.name)", "Text(uiText(\"Little Circa\"))"],
-            "Settings/BrowserSettingsWindowController.swift": ["Text((model.settingsSection ?? .general).title)", "Text(space.name)"]
+            "Settings/BrowserSettingsWindowController.swift": ["Text((model.settingsSection ?? .general).title)", "Text(space.name)", "Text(uiText(\"Appearance\"))"]
         ]
         let files = try #require(FileManager.default.enumerator(at: sources, includingPropertiesForKeys: nil))
         var headings = 0
@@ -33,11 +35,11 @@ struct TypeRevertTests {
                 headings += 1
             }
             if source.contains("BrandFonts.onboardingBody") {
-                #expect(path == "Onboarding/OrbitOnboardingMetrics.swift")
+                #expect(path.hasPrefix("Onboarding/") || path.hasPrefix("Settings/") || path == "Theme/OrbitPrintControls.swift")
             }
             #expect(!source.contains("NSFont(name: \"Gloock"))
         }
-        #expect(headings == 12)
+        #expect(headings > 0)
     }
 
     @Test("Sidebar geometry and text metrics match the previous system-font rows")

@@ -8,7 +8,7 @@ extension NativeWebKitTests {
 @Suite("Little Circa compact surfaces", .serialized)
 @MainActor
 struct QuickWindowCompactSurfaceTests {
-    @Test("Little Circa keeps dark chrome and input over light and automatic source Spaces",
+    @Test("Little Circa follows the Space appearance across its chrome and compact panels",
           arguments: [OrbitTokens.SpaceTheme.Mode.light, .automatic, .dark])
     func fixedDarkAppearance(mode: OrbitTokens.SpaceTheme.Mode) async throws {
         NSApplication.shared.setActivationPolicy(.prohibited)
@@ -22,18 +22,18 @@ struct QuickWindowCompactSurfaceTests {
         theme.mode = mode
         little.applyPreferences(searchEngine: .google, theme: theme)
         let window = try #require(little.window)
-        #expect(OrbitAppearance.isDark(window.effectiveAppearance))
-        #expect(OrbitAppearance.isDark(little.toolbar.fill.effectiveAppearance))
+        #expect(OrbitAppearance.isDark(window.effectiveAppearance) == (mode == .dark))
+        #expect(OrbitAppearance.isDark(little.toolbar.fill.effectiveAppearance) == (mode == .dark))
         #expect(little.toolbar.fill.theme == theme)
         #expect(little.addressField.font == BrandTextStyle.ui.font(size: 13, weight: .medium))
         let input = try #require(little.prepareCompactInput())
-        #expect(OrbitAppearance.isDark(input.window.effectiveAppearance))
-        #expect(OrbitAppearance.isDark(input.input.effectiveAppearance))
+        #expect(OrbitAppearance.isDark(input.window.effectiveAppearance) == (mode == .dark))
+        #expect(OrbitAppearance.isDark(input.input.effectiveAppearance) == (mode == .dark))
         #expect(input.input.textColor?.resolved(for: input.input.effectiveAppearance)
-            == OrbitFloatingMaterial.body.resolved(for: NSAppearance(named: .darkAqua)!))
+            == OrbitFloatingMaterial.body.resolved(for: window.effectiveAppearance))
         little.showSpaceChooser([])
         #expect(little.spaceChooser != nil)
-        #expect(OrbitAppearance.isDark(try #require(little.spaceChooser?.window.effectiveAppearance)))
+        #expect(OrbitAppearance.isDark(try #require(little.spaceChooser?.window.effectiveAppearance)) == (mode == .dark))
         #expect(!input.window.isVisible && little.spaceChooser?.window.isVisible == false)
     }
 

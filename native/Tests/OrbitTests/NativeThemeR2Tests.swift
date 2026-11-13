@@ -106,15 +106,15 @@ struct ThemeR2TokenTests {
     @Test("Command bar, Little Circa, Peek, split and radii carry the round 2 measurements")
     func surfaceTokens() {
         typealias M = OrbitTokens.Metrics
-        #expect(M.CommandBar.width == 765 && M.CommandBar.top(windowHeight: 640) == 151.5)
-        #expect(M.CommandBar.top(windowHeight: 949) == 306)
+        #expect(M.CommandBar.width == 400 && M.CommandBar.top(windowHeight: 640) == 34)
+        #expect(M.CommandBar.top(windowHeight: 949) == 34)
         #expect(OrbitTokens.Radius.commandBar == 16 && OrbitTokens.Radius.commandBarRow == 8)
-        #expect(OrbitTokens.Shadow.commandBar.offsetY == 3 && OrbitTokens.Shadow.commandBar.blur == 0)
+        #expect(OrbitTokens.Shadow.commandBar.offsetY == 5 && OrbitTokens.Shadow.commandBar.blur == 0)
         #expect(M.QuickWindow.toolbarHeight == 47 && M.QuickWindow.pageIsEdgeToEdge)
-        #expect(M.Content.splitGap == 10 && M.Content.splitDividerHandle == NSSize(width: 2, height: 24))
+        #expect(M.Content.splitGap == 6 && M.Content.splitDividerHandle == NSSize(width: 2, height: 24))
         #expect(OrbitTokens.Shadow.splitActiveHalo.blur == 16)
         #expect(M.Peek.panelInsetFromCardX == 110 && M.Peek.panelTop == 12 && !M.Peek.hasInternalToolbar)
-        #expect(OrbitTokens.Radius.floatingSidebar == 12 && OrbitTokens.Radius.peek == 8 && OrbitTokens.Radius.toast == 11)
+        #expect(OrbitTokens.Radius.floatingSidebar == 12 && OrbitTokens.Radius.peek == 11 && OrbitTokens.Radius.toast == 12)
         #expect(OrbitTokens.Shadow.tabSelected.blur == 2 && OrbitTokens.Shadow.popover.offsetY == 1 && OrbitTokens.Shadow.popover.blur == 6)
         #expect(OrbitTokens.Shadow.floatingSidebar.blur == 8 && OrbitTokens.Shadow.floatingSidebar.offsetY == 0)
         #expect(M.Sidebar.widthMin == 164 && M.Sidebar.widthMax == 500 && M.Sidebar.collapsePointerX == 82)
@@ -169,7 +169,7 @@ struct ThemeR2BehaviourTests {
         let page = try #require(card.clipBackground.flatMap { NSColor(cgColor: $0) })
         #expect(close(page.alphaComponent, 1))
         let shadow = try #require(card.shadowSpec)
-        #expect(shadow.blur == 0 && shadow.offsetY == 3)
+        #expect(shadow.blur == 0 && shadow.offsetY == 0)
         #expect(card.layer?.shadowOpacity ?? 0 == 0)
     }
 
@@ -304,7 +304,9 @@ struct ThemeR2BehaviourTests {
         window.setContentSize(reference)
         root.layoutSubtreeIfNeeded()
         let capsule = controller.windowShell.loadingIndicator
-        // The edge-to-edge default leaves no top margin, so the capsule stays hidden.
+        controller.windowShell.showsSpaceAroundPages = false
+        root.layoutSubtreeIfNeeded()
+        // An explicit edge-to-edge layout has no top margin.
         controller.windowShell.setLoadingPhase(.waiting)
         #expect(capsule.isHidden)
         controller.windowShell.setLoadingPhase(.idle)
@@ -312,9 +314,9 @@ struct ThemeR2BehaviourTests {
         root.layoutSubtreeIfNeeded()
         controller.windowShell.setLoadingPhase(.waiting)
         // Spaced layout: card 228…1014 × 10…630: centre x 621, capsule 4 high centred in the 10 pt margin.
-        #expect(!capsule.isHidden && capsule.frame == NSRect(x: 621 - 23.5, y: 640 - 7, width: 47, height: 4))
+        #expect(!capsule.isHidden && capsule.frame == NSRect(x: 623 - 23.5, y: 640 - 5, width: 47, height: 4))
         controller.windowShell.setLoadingPhase(.progress)
-        #expect(!capsule.isHidden && capsule.frame.width == 127.5 && capsule.frame.midX == 621)
+        #expect(!capsule.isHidden && capsule.frame.width == 127.5 && capsule.frame.midX == 623)
         controller.windowShell.setLoadingPhase(.idle)
         #expect(capsule.isHidden)
         // Full screen with the sidebar hidden: the card reaches the top, no margin holds the capsule.

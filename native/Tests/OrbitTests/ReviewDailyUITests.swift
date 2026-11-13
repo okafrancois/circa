@@ -50,7 +50,7 @@ struct ReviewDailyUITests {
         #expect(released == nil)
     }
 
-    @Test("Reusing a compact row recomputes detail width when the result changes")
+    @Test("Reusing a compact row updates metadata within its bounded detail column")
     func reviewReusedCompactRowLayout() throws {
         NSApplication.shared.setActivationPolicy(.prohibited)
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1024, height: 640), styleMask: [.titled], backing: .buffered, defer: false)
@@ -71,13 +71,14 @@ struct ReviewDailyUITests {
         let cell = try #require(table.view(atColumn: 0, row: 0, makeIfNecessary: true) as? PaletteResultCell)
         cell.layoutSubtreeIfNeeded()
         #expect(cell.detailLabel.stringValue == "— x")
+        let shortDetailWidth = cell.detailLabel.frame.width
         view.render([result("Chrome Web Store: synthetic longer detail")], selected: 0)
         view.layoutSubtreeIfNeeded()
         cell.layoutSubtreeIfNeeded()
         #expect((table.view(atColumn: 0, row: 0, makeIfNecessary: false) as? PaletteResultCell) === cell)
         #expect(cell.detailLabel.stringValue == "— Chrome Web Store: synthetic longer detail")
-        let text = (cell.detailLabel.stringValue as NSString).size(withAttributes: [.font: cell.detailLabel.font!]).width
-        #expect(cell.detailLabel.frame.width >= ceil(text) + 2)
+        #expect(cell.detailLabel.frame.width == shortDetailWidth && shortDetailWidth > 0)
+        #expect(cell.detailLabel.frame.maxX <= cell.bounds.width)
         #expect(cell.titleLabel.frame.maxX < cell.detailLabel.frame.minX)
     }
 
