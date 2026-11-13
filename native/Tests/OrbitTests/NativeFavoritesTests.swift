@@ -250,14 +250,42 @@ struct NativeFavoritesTests {
         await h.settle()
         #expect(surface.currentURL == away)
         let menu = try #require(window.favorites.contextMenu(for: id))
-        #expect(menu.items.compactMap { $0.identifier?.rawValue } == ["copyFavoriteLink", "renameFavorite", "resetFavorite", "removeFavorite"])
+        #expect(menu.items.compactMap { $0.identifier?.rawValue }.filter { BrowserCommandID(rawValue: $0) != nil } == ["copyFavoriteLink", "renameFavorite", "removeFavorite"])
         #expect(menu.items.contains { $0.title == "Move to" && $0.submenu != nil })
         #expect(h.registry.isEnabled(.resetFavorite))
-        menu.performActionForItem(at: menu.items.firstIndex { $0.identifier?.rawValue == "resetFavorite" }!)
+        let pinned = try #require(menu.items.first { $0.title == "Edit Pinned Page" }?.submenu)
+        #expect(pinned.items.map(\.title) == ["Replace Pinned URL with Current", "Reset Tab to Original URL", "Edit Pinned URL…"])
+        pinned.performActionForItem(at: 1)
         await h.settle()
         #expect(window.session.selectedSurface === surface)
         #expect(surface.currentURL == home)
         #expect(!window.favorites.grid.items[0].tab.isAwayFromPinnedURL)
+    }
+
+    @Test("Favorite menu exposes native tab actions and replaces only its captured saved URL")
+    func replaceMenuURL() async throws {
+        let h = try await FavoritesHarness(); defer { h.close() }
+        let id = try await h.add("https://alpha.example.test/")
+        let surface = try #require(h.window.session.selectedSurface)
+        let current = URL(string: "https://alpha.example.test/current")!
+        surface.media = .init(playback: .paused, isAudible: false, isAudioMuted: false)
+        surface.navigate(to: current)
+        h.window.siteControls.refreshMedia(surface)
+        await h.settle()
+        for _ in 0..<30 where h.window.siteControls.mediaStates[ObjectIdentifier(surface)]?.isAudible != false { await Task.yield() }
+        let menu = try #require(h.window.favorites.contextMenu(for: id))
+        #expect(menu.items.map { $0.isSeparatorItem ? "—" : $0.title } == [
+            "Copy Link", "Share", "—", "Change Icon…", "Rename…", "Mute", "Edit Pinned Page", "—",
+            "Open in Split View", "Duplicate", "Move to", "—", "Remove Favorite"])
+        #expect(menu.items.first { $0.title == "Mute" }?.isEnabled == false)
+        let submenu = try #require(menu.items.first { $0.title == "Edit Pinned Page" }?.submenu)
+        #expect(submenu.items[0].isEnabled)
+        submenu.performActionForItem(at: 0)
+        await h.settle()
+        #expect(h.window.session.organization?.tab(id)?.pinnedURL == current)
+        #expect(surface.currentURL == current)
+        let refreshed = try #require(h.window.favorites.contextMenu(for: id))
+        #expect(refreshed.items.first { $0.title == "Edit Pinned Page" }?.submenu?.items[0].isEnabled == false)
     }
 
     @Test("Context menu removes its unselected favorite without selecting or removing a different object")

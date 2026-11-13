@@ -267,7 +267,7 @@ final class BrowserFavoritesController<Engine: BrowserEngine> {
               let target = registry.captureTarget(windowID: owner.id) else { return nil }
         let captured = MenuSelection(tab: tab, spaceID: snapshot.spaceID, profileID: snapshot.profileID, context: target.context)
         menuSelection = captured
-        let ids: [BrowserCommandID] = [.copyFavoriteLink, .renameFavorite] + (tab.isAwayFromPinnedURL ? [.resetFavorite] : []) + [.removeFavorite]
+        let ids: [BrowserCommandID] = [.copyFavoriteLink, .renameFavorite, .removeFavorite]
         let controller = FavoritesContextMenu(definitions: ids.compactMap { registry.definition($0) })
         controller.isEnabled = { [weak self, weak registry] id in
             self?.menuSelection?.token == captured.token && registry?.isEnabled(id, target: target) == true
@@ -291,17 +291,38 @@ final class BrowserFavoritesController<Engine: BrowserEngine> {
                 menuSelection = nil
             }
         }
-        if let move = SidebarMoveMenu(owner: owner, nodes: [.tab(id)]) {
-            controller.menu.insertItem(move.item, at: 1)
-            controller.retainedOwners.append(move)
-        }
-        menuController = controller
-        for item in controller.menu.items where !item.isSeparatorItem && item.submenu == nil { item.isEnabled = controller.validateMenuItem(item) }
+        let original = controller.menu.items.filter { !$0.isSeparatorItem }
+        controller.menu.removeAllItems()
+        controller.menu.autoenablesItems = false
+        controller.menu.addItem(original[0])
+        controller.menu.addItem(owner.tabShareMenu(for: tab))
+        controller.menu.addItem(.separator())
         if let badge = gmailBadgeMenu(for: id) {
             controller.retainedOwners.append(badge)
-            controller.menu.insertItem(.separator(), at: 0)
-            controller.menu.insertItem(badge.item, at: 0)
+            controller.menu.addItem(badge.item)
+            controller.menu.addItem(.separator())
         }
+        controller.menu.addItem(owner.tabContextAction(uiText("Change Icon…"), tab: tab) { $0.presentTabIconPicker(tab) })
+        controller.menu.addItem(original[1])
+        controller.menu.addItem(owner.tabMuteMenuItem(for: tab))
+        let pinned = NSMenuItem(title: uiText("Edit Pinned Page"), action: nil, keyEquivalent: "")
+        pinned.submenu = owner.pinnedPageMenu(for: tab)
+        controller.menu.addItem(pinned)
+        controller.menu.addItem(.separator())
+        controller.menu.addItem(owner.tabContextAction(uiText("Open in Split View"), tab: tab) { controller in
+            // Favorites remain profile-wide; a Space owns the split's new occurrence.
+            controller.session.openTab(url: tab.url)
+            controller.session.performWindowAction { [weak controller] in controller?.addSplitFromSelection() }
+        })
+        controller.menu.addItem(owner.tabContextAction(uiText("Duplicate"), tab: tab) { $0.duplicateSidebarTab(tab.id) })
+        if let move = SidebarMoveMenu(owner: owner, nodes: [.tab(id)]) {
+            controller.menu.addItem(move.item)
+            controller.retainedOwners.append(move)
+        }
+        controller.menu.addItem(.separator())
+        controller.menu.addItem(original[2])
+        menuController = controller
+        for item in original { item.isEnabled = controller.validateMenuItem(item) }
         return controller.menu
     }
 
