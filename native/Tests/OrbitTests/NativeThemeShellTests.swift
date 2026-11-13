@@ -188,19 +188,19 @@ extension NativeWebKitTests {
 @Suite("Appearance and Space themes")
 @MainActor
 struct ThemeAppearanceTests {
-    @Test("Theme modes and the validation override resolve the window appearance")
+    @Test("Stored modes and dark system input still resolve daylight windows")
     func windowAppearance() {
         #expect(OrbitAppearance.windowAppearance(for: .light, override: nil)?.name == .aqua)
-        #expect(OrbitAppearance.windowAppearance(for: .dark, override: nil)?.name == .darkAqua)
-        #expect(OrbitAppearance.windowAppearance(for: .automatic, override: nil) == nil)
-        #expect(OrbitAppearance.windowAppearance(for: .light, override: .darkAqua)?.name == .darkAqua)
+        #expect(OrbitAppearance.windowAppearance(for: .dark, override: nil)?.name == .aqua)
+        #expect(OrbitAppearance.windowAppearance(for: .automatic, override: nil)?.name == .aqua)
+        #expect(OrbitAppearance.windowAppearance(for: .light, override: .darkAqua)?.name == .aqua)
         #expect(OrbitAppearance.override(in: ["Orbit", "--appearance", "dark"]) == .darkAqua)
         #expect(OrbitAppearance.override(in: ["Orbit", "--appearance", "light"]) == .aqua)
         #expect(OrbitAppearance.override(in: ["Orbit", "--appearance"]) == nil)
         #expect(OrbitAppearance.override(in: ["Orbit", "--appearance", "sepia"]) == nil)
     }
 
-    @Test("Dynamic tokens resolve to their exact light and dark values")
+    @Test("Tokens resolve to daylight under both system appearances")
     func dynamicColours() throws {
         let light = try #require(NSAppearance(named: .aqua))
         let dark = try #require(NSAppearance(named: .darkAqua))
@@ -213,26 +213,26 @@ struct ThemeAppearanceTests {
         }
         // : round 2 values.
         #expect(matches(rgb(OrbitTokens.Color.Surface.windowDefault, light), 0xFBDFD5))
-        #expect(matches(rgb(OrbitTokens.Color.Surface.windowDefault, dark), 0x1B2057))
+        #expect(matches(rgb(OrbitTokens.Color.Surface.windowDefault, dark), 0xFBDFD5))
         #expect(matches(rgb(OrbitTokens.Color.Surface.commandBar, light), 0xFFFDF7))
-        #expect(matches(rgb(OrbitTokens.Color.Surface.commandBar, dark), 0x1B2057))
+        #expect(matches(rgb(OrbitTokens.Color.Surface.commandBar, dark), 0xFFFDF7))
         #expect(close(OrbitTokens.Color.Surface.contentEmptyPage.resolved(for: light).alphaComponent, 0.70))
-        #expect(close(OrbitTokens.Color.Surface.contentEmptyPage.resolved(for: dark).alphaComponent, 0.10))
+        #expect(close(OrbitTokens.Color.Surface.contentEmptyPage.resolved(for: dark).alphaComponent, 0.70))
         #expect(matches(rgb(OrbitTokens.Color.State.tabCurrent, light), 0xFFFDF7))
         #expect(close(OrbitTokens.Color.State.tabCurrent.resolved(for: light).alphaComponent, 0.88))
-        #expect(close(OrbitTokens.Color.State.tabCurrent.resolved(for: dark).alphaComponent, 0.20))
+        #expect(close(OrbitTokens.Color.State.tabCurrent.resolved(for: dark).alphaComponent, 0.88))
         #expect(close(OrbitTokens.Color.State.tabPressed.resolved(for: light).alphaComponent, 0.10))
         #expect(close(OrbitTokens.Color.State.tabPressed.resolved(for: dark).alphaComponent, 0.10))
         #expect(close(OrbitTokens.Color.State.rowCloseButtonHover.resolved(for: light).alphaComponent, 0.07))
-        #expect(close(OrbitTokens.Color.State.rowCloseButtonHover.resolved(for: dark).alphaComponent, 0.075))
-        #expect(close(OrbitTokens.Color.ShadowColor.tabSelected.resolved(for: dark).alphaComponent, 0))
+        #expect(close(OrbitTokens.Color.State.rowCloseButtonHover.resolved(for: dark).alphaComponent, 0.07))
+        #expect(close(OrbitTokens.Color.ShadowColor.tabSelected.resolved(for: dark).alphaComponent, 0.20))
         #expect(close(OrbitTokens.Color.ShadowColor.contentCard.resolved(for: dark).alphaComponent, 0.24))
         #expect(close(OrbitTokens.Color.ShadowColor.commandBar.resolved(for: light).alphaComponent, 0.50))
         #expect(close(OrbitTokens.Color.Text.sidebarLabel.resolved(for: light).alphaComponent, 0.50))
         #expect(close(OrbitTokens.Color.Text.sidebarLabel.resolved(for: dark).alphaComponent, 0.50))
         #expect(close(OrbitTokens.Color.Text.sidebarNewTab.resolved(for: light).alphaComponent, 0.45))
         #expect(matches(rgb(OrbitTokens.Color.Text.sidebarTitle, light), 0x080C4E))
-        #expect(matches(rgb(OrbitTokens.Color.Text.sidebarTitle, dark), 0xDEDFFF))
+        #expect(matches(rgb(OrbitTokens.Color.Text.sidebarTitle, dark), 0x080C4E))
         #expect(close(OrbitTokens.Color.Text.sidebarTitle.resolved(for: light).alphaComponent, 1))
     }
 
@@ -256,7 +256,7 @@ struct ThemeAppearanceTests {
         let selection = OrbitTokens.ThemeAccent.defaultSpace.selection.resolved(for: light)
         #expect(close(selection.redComponent * 255, 0x8F, 0.6) && close(selection.blueComponent * 255, 0xFF, 0.6))
         let menuDark = OrbitTokens.ThemeAccent.defaultSpace.menuSurface.resolved(for: dark)
-        #expect(close(menuDark.blueComponent * 255, 0x27, 0.6))
+        #expect(close(menuDark.blueComponent * 255, 0xFF, 0.6))
         let lime = OrbitSpaceThemes.accent(for: .limeCitrus)
         #expect(lime != .defaultSpace && lime != .defaultPurple)
         let derivedText = try #require(lime.sidebarText.resolved(for: light).usingColorSpace(.sRGB))

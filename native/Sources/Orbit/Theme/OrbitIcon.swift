@@ -58,7 +58,7 @@ enum OrbitIcon {
                 source.size = NSSize(width: pointSize, height: pointSize)
                 source.isTemplate = variant == .template
                 if variant == .color, let data = try? String(contentsOf: url, encoding: .utf8) {
-                    // SVG ink follows the current appearance; the accent stays embedded in the asset.
+                    // SVG ink stays daylight; the accent stays embedded in the asset.
                     func coloredInk(_ appearance: NSAppearance.Name, ink: String) -> NSImage? {
                         var alpha: CGFloat = 1
                         NSAppearance(named: appearance)?.performAsCurrentDrawingAppearance {
@@ -71,10 +71,8 @@ enum OrbitIcon {
                         return NSImage(data: Data(svg.utf8))
                     }
                     let light = coloredInk(.aqua, ink: "#000000")
-                    let dark = coloredInk(.darkAqua, ink: "#FFFFFF")
                     let image = NSImage(size: source.size, flipped: false) { rect in
-                        let isDark = NSAppearance.currentDrawing().bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-                        (isDark ? dark : light)?.draw(in: rect)
+                        light?.draw(in: rect)
                         return true
                     }
                     image.cacheMode = .never

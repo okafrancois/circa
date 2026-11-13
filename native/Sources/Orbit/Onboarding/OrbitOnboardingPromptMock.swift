@@ -73,16 +73,15 @@ final class OrbitOnboardingPromptMock: NSView {
         refreshMaterial()
     }
     func refreshMaterial(reduceTransparency: Bool = NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency) {
-        let dark = effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         material.isHidden = reduceTransparency
         material.state = reduceTransparency ? .inactive : .active
-        tint.backgroundColor = (dark ? NSColor.black : NSColor.white).withAlphaComponent(reduceTransparency ? 1 : BrandPalette.Frost.tint).cgColor
-        tint.borderColor = NSColor.white.withAlphaComponent(BrandPalette.Frost.edge(dark: dark)).cgColor
-        highlight.colors = [NSColor.white.withAlphaComponent(BrandPalette.Frost.highlight(dark: dark)).cgColor, NSColor.clear.cgColor]
+        tint.backgroundColor = NSColor.white.withAlphaComponent(reduceTransparency ? 1 : BrandPalette.Frost.tint).cgColor
+        tint.borderColor = NSColor.white.withAlphaComponent(BrandPalette.Frost.edge(dark: false)).cgColor
+        highlight.colors = [NSColor.white.withAlphaComponent(BrandPalette.Frost.highlight(dark: false)).cgColor, NSColor.clear.cgColor]
         highlight.isHidden = reduceTransparency
-        top.backgroundColor = NSColor.white.withAlphaComponent(BrandPalette.Frost.top(dark: dark)).cgColor
+        top.backgroundColor = NSColor.white.withAlphaComponent(BrandPalette.Frost.top(dark: false)).cgColor
         CATransaction.commit()
     }
     override var isFlipped: Bool { true }

@@ -542,8 +542,7 @@ final class OrbitWindowShell {
     }
 
     private func paintSpaceTheme(_ blend: SpaceSwipeThemeBlend?) {
-        // A mixed-mode transition resolves each endpoint in its own appearance. Automatic
-        // endpoints follow the system throughout, including before/after selection publication.
+        // Space transitions preserve the same daylight appearance throughout.
         if let window {
             let appearance = OrbitAppearance.windowAppearance(for: blend == nil ? theme.mode : .automatic)
             if window.appearance != appearance { window.appearance = appearance }
@@ -562,9 +561,7 @@ final class OrbitWindowShell {
 
     private func updateWindowBackground() {
         guard let window else { return }
-        let accent = OrbitSpaceThemes.accent(for: spaceSwipePaintedTheme ?? theme)
-        let ink = accent.foreground.resolved(for: window.effectiveAppearance)
-        sidebarMaterial.appearance = NSAppearance(named: OrbitThemeForeground.isLight(on: ink) ? .aqua : .darkAqua)
+        sidebarMaterial.appearance = NSAppearance(named: .aqua)
         if window.isOpaque { window.isOpaque = false }
         if window.backgroundColor != .clear { window.backgroundColor = .clear }
     }

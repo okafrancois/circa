@@ -547,9 +547,9 @@ final class SidebarSpaceTooltip: NSView {
         layer?.shadowOpacity = 0.22
         layer?.shadowRadius = 8
         layer?.shadowOffset = NSSize(width: 0, height: -2)
-        material.fixedVariant = .dark
+        material.fixedVariant = .light
         label.font = BrandTextStyle.ui.font(size: 12, weight: .semibold)
-        label.textColor = NSColor(white: 0.96, alpha: 1)
+        label.textColor = OrbitFloatingMaterial.body
         label.maximumNumberOfLines = 1
         label.lineBreakMode = .byTruncatingTail
         for view in [material, label] { addSubview(view) }

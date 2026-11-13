@@ -67,7 +67,7 @@ struct ThemeFrostTests {
             #expect(shell.sidebarMaterial.material == .sidebar)
             #expect(shell.sidebarMaterial.state == .active)
             let ink = OrbitSpaceThemes.accent(for: theme).foreground.resolved(for: window.effectiveAppearance)
-            let expected: NSAppearance.Name = OrbitThemeForeground.isLight(on: ink) ? .aqua : .darkAqua
+            let expected: NSAppearance.Name = .aqua
             #expect(shell.sidebarMaterial.appearance?.bestMatch(from: [.aqua, .darkAqua]) == expected)
             #expect(shell.floatingBackdrop.material.blendingMode == .withinWindow)
             #expect(shell.floatingBackdrop.material.material == .sidebar)
@@ -131,7 +131,7 @@ struct ThemeFrostTests {
         view.refresh(reduceTransparency: true)
         #expect(view.effect.isHidden)
         #expect(view.style.tintOpacity == 1)
-        #expect(view.style.variant == .dark)
+        #expect(view.style.variant == .light)
         #expect(view.style.background(over: .yellow) == view.style.tint)
         view.sidebarForeground = .black
         view.refresh(reduceTransparency: true)

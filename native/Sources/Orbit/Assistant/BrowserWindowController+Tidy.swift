@@ -8,7 +8,7 @@ extension BrowserWindowController {
     func showTidyDownload(_ lease: BrowserDownloadCoordinator.RenameLease, original: String) {
         guard let window else { return }
         if let old = tidyDownloadPanel { window.removeChildWindow(old); old.orderOut(nil) }
-        let panel = NSPanel(contentRect: NSRect(x: 0, y: 0, width: 380, height: 76),
+        let panel = OrbitDaylightPanel(contentRect: NSRect(x: 0, y: 0, width: 380, height: 76),
                             styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
         panel.collectionBehavior = [.transient, .fullScreenAuxiliary]
         panel.acceptsMouseMovedEvents = true

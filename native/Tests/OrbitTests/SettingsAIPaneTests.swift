@@ -141,7 +141,7 @@ struct SettingsAIPaneTests {
             // Monochrome OpenAI mark: black on light surfaces, white on dark ones.
             let openAI = try pixels(.codex, isDark: isDark)
             #expect(openAI.count > 40)
-            #expect(openAI.allSatisfy { isDark ? $0.redComponent > 0.8 && $0.blueComponent > 0.8 : $0.redComponent < 0.2 && $0.blueComponent < 0.2 })
+            #expect(openAI.allSatisfy { $0.redComponent < 0.2 && $0.blueComponent < 0.2 })
             // The Claude mark keeps its own colour regardless of the surface.
             let claude = try pixels(.claudeCode, isDark: isDark)
             #expect(claude.count > 40)

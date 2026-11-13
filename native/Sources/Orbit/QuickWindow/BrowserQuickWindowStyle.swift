@@ -15,7 +15,7 @@ extension OrbitTokens.Metrics.QuickWindow {
 /// makeKeyAndOrderFront: . AppKit owns the window animation; there is
 /// no additional content-layer zoom or alpha animation on this path.
 @MainActor
-final class BrowserQuickWindowPanel: NSPanel {
+final class BrowserQuickWindowPanel: OrbitDaylightPanel {
     override func sendEvent(_ event: NSEvent) {
         OrbitUnsavedInputGuard.keyDown(in: self, event: event)
         super.sendEvent(event)
@@ -102,7 +102,7 @@ final class BrowserQuickWindowToolbarView: NSView {
     required init?(coder: NSCoder) { nil }
     override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); refreshInk() }
     private func refreshInk() {
-        layer?.backgroundColor = (OrbitAppearance.isDark(effectiveAppearance) ? BrandPalette.ink : BrandPalette.rgb(0xDCE3FB)).cgColor
+        layer?.backgroundColor = BrandPalette.rgb(0xDCE3FB).cgColor
     }
     override func resetCursorRects() { addCursorRect(bounds, cursor: .arrow) }
     override func layout() {

@@ -550,22 +550,22 @@ extension NativeWebKitTests.NativeSettingsTests {
         }
     }
 
-    @Test("Settings resolves forced light and dark and otherwise inherits system appearance")
+    @Test("Settings remains daylight for dark, light and inherited system input")
     func settingsAppearance() throws {
         NSApplication.shared.setActivationPolicy(.prohibited)
         let model = settingsModel(BrowserEnvironment(engine: SettingsFixtureEngine()))
         for appearance in [NSAppearance.Name.aqua, .darkAqua] {
             let controller = BrowserSettingsWindowController(model: model, appearanceOverride: appearance)
             let window = try #require(controller.window)
-            #expect(window.appearance?.name == appearance)
-            #expect(window.contentView?.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == appearance)
+            #expect(window.appearance?.name == .aqua)
+            #expect(window.contentView?.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .aqua)
             #expect(!window.isVisible)
             window.close()
         }
         let system = BrowserSettingsWindowController(model: model, appearanceOverride: nil)
         defer { system.window?.close() }
-        #expect(system.window?.appearance == nil)
-        #expect(system.window?.effectiveAppearance.name == NSApplication.shared.effectiveAppearance.name)
+        #expect(system.window?.appearance?.name == .aqua)
+        #expect(system.window?.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .aqua)
         #expect(system.window?.isVisible == false)
     }
 

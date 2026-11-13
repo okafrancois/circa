@@ -83,8 +83,7 @@ private struct BrowserFindAnswerView: View {
     @Environment(\.colorScheme) private var colorScheme
     @State private var unavailable = false
     private var palette: BrowserAssistantPalette {
-        let dark = colorScheme == .dark
-        return BrowserAssistantPalette(theme: theme, appearance: NSAppearance(named: dark ? .darkAqua : .aqua)!, polarity: dark)
+        return BrowserAssistantPalette(theme: theme, appearance: NSAppearance(named: .aqua)!, polarity: false)
     }
     private func textHeight(_ text: String, width: CGFloat) -> CGFloat {
         guard !text.isEmpty else { return 0 }

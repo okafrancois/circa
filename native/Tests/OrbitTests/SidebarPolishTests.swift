@@ -126,7 +126,7 @@ struct SidebarPolishTests {
         let output = try #require(icon.bitmapImageRepForCachingDisplay(in: icon.bounds))
         icon.cacheDisplay(in: icon.bounds, to: output)
         let center = try #require(output.colorAt(x: output.pixelsWide / 2, y: output.pixelsHigh / 2)?.usingColorSpace(.sRGB))
-        #expect(center.redComponent > 0.85 && center.greenComponent > 0.85 && center.blueComponent > 0.85)
+        #expect(center.redComponent < 0.2 && center.greenComponent < 0.2 && center.blueComponent < 0.4)
     }
 }
 }

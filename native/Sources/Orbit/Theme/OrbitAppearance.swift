@@ -1,11 +1,9 @@
 import AppKit
 
-/// Light/dark resolution for Orbit windows. A Space theme's sun/moon/automatic mode decides the
-/// window appearance (); automatic follows the system.
+/// Daylight chrome, independent of the system appearance used by web content.
 @MainActor
 enum OrbitAppearance {
-    /// `--appearance light|dark` forces Space windows, so visible validation can cover both
-    /// appearances without changing System Settings. Fixed-appearance panels remain independent.
+    /// Synthetic probes use this input to exercise both system appearances.
     static let launchOverride: NSAppearance.Name? = override(in: ProcessInfo.processInfo.arguments)
 
     static func override(in arguments: [String]) -> NSAppearance.Name? {
@@ -17,15 +15,11 @@ enum OrbitAppearance {
         }
     }
 
-    /// Appearance to assign to a window showing a Space with `mode`; nil follows the system.
+    /// Circa-owned windows always use daylight. Stored mode and test input never alter chrome.
+    /// Keep NSApp's appearance inherited: Chromium reads it for website colour-scheme preferences.
     static func windowAppearance(for mode: OrbitTokens.SpaceTheme.Mode,
                                  override: NSAppearance.Name? = launchOverride) -> NSAppearance? {
-        if let override { return NSAppearance(named: override) }
-        switch mode {
-        case .light: return NSAppearance(named: .aqua)
-        case .dark: return NSAppearance(named: .darkAqua)
-        case .automatic: return nil
-        }
+        NSAppearance(named: .aqua)
     }
 
     static func isDark(_ appearance: NSAppearance) -> Bool {
@@ -47,5 +41,33 @@ extension NSColor {
     @MainActor
     func resolved(for appearance: NSAppearance) -> NSColor {
         NSColor(cgColor: resolvedCGColor(for: appearance))?.usingColorSpace(.sRGB) ?? self
+    }
+}
+
+/// App-owned windows cannot inherit a dark system appearance. Web content retains its engine's
+/// system preference; this deliberately does not set NSApplication.appearance.
+@MainActor
+class OrbitDaylightWindow: NSWindow {
+    override init(contentRect: NSRect, styleMask: NSWindow.StyleMask, backing: NSWindow.BackingStoreType, defer flag: Bool) {
+        super.init(contentRect: contentRect, styleMask: styleMask, backing: backing, defer: flag)
+        super.appearance = NSAppearance(named: .aqua)
+    }
+
+    override var appearance: NSAppearance? {
+        get { NSAppearance(named: .aqua) }
+        set { super.appearance = NSAppearance(named: .aqua) }
+    }
+}
+
+@MainActor
+class OrbitDaylightPanel: NSPanel {
+    override init(contentRect: NSRect, styleMask: NSWindow.StyleMask, backing: NSWindow.BackingStoreType, defer flag: Bool) {
+        super.init(contentRect: contentRect, styleMask: styleMask, backing: backing, defer: flag)
+        super.appearance = NSAppearance(named: .aqua)
+    }
+
+    override var appearance: NSAppearance? {
+        get { NSAppearance(named: .aqua) }
+        set { super.appearance = NSAppearance(named: .aqua) }
     }
 }

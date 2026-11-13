@@ -10,15 +10,6 @@ final class OrbitPaperGrainView: NSView {
         image?.size = NSSize(width: 220, height: 220)
         return image
     }()
-    /// The same alpha texture in a light ink keeps the grain visible over night navy.
-    private static let lightTile: NSImage? = tile.map { tile in
-        NSImage(size: tile.size, flipped: false) { rect in
-            tile.draw(in: rect)
-            NSColor.white.setFill()
-            rect.fill(using: .sourceAtop)
-            return true
-        }
-    }
     /// Existing stored strengths stay untouched. The standard 0.3 dial value reproduces
     /// the onboarding's 50% multiply tile; zero removes the texture completely.
     static func opacity(for strength: CGFloat) -> CGFloat {
@@ -26,11 +17,6 @@ final class OrbitPaperGrainView: NSView {
         return value <= 0.3 ? value / 0.3 * 0.5 : 0.5 + (value - 0.3) / 0.7 * 0.5
     }
     var strength: CGFloat = 0.3 { didSet { alphaValue = Self.opacity(for: strength) } }
-    var isDark = false { didSet {
-        guard oldValue != isDark else { return }
-        layer?.compositingFilter = isDark ? "softLightBlendMode" : "multiplyBlendMode"
-        needsDisplay = true
-    } }
     var patternOffset: CGPoint = .zero { didSet { if oldValue != patternOffset { needsDisplay = true } } }
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -43,7 +29,7 @@ final class OrbitPaperGrainView: NSView {
     override var isOpaque: Bool { false }
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
     override func draw(_ dirtyRect: NSRect) {
-        guard let tile = isDark ? Self.lightTile : Self.tile else { return }
+        guard let tile = Self.tile else { return }
         NSGraphicsContext.current?.patternPhase = NSPoint(x: -patternOffset.x, y: patternOffset.y)
         NSColor(patternImage: tile).setFill()
         dirtyRect.fill()

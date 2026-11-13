@@ -48,14 +48,14 @@ struct ThemeR2GradientTests {
             return [c.redComponent * 255, c.greenComponent * 255, c.blueComponent * 255]
         }
         for (colour, appearance, hex) in [(stops[0], light, UInt32(0xFBDFD5)), (stops[1], light, 0xFBDFD5),
-                                          (stops[0], dark, 0x1B2057), (stops[1], dark, 0x1B2057)] {
+                                          (stops[0], dark, 0xFBDFD5), (stops[1], dark, 0xFBDFD5)] {
             #expect(zip(rgb(colour, appearance), components(hex)).allSatisfy { close($0, $1, 0.6) })
         }
         #expect(zip(rgb(OrbitTokens.SpaceTheme.legacyFlat.stops[0], light), components(0xE6E6E8)).allSatisfy { close($0, $1, 0.6) })
         // Stops at d 20 / 1300 (light) and 160 / 1380 (dark) of a 1512 × 949 window along the 43° axis.
         let fractions = OrbitTokens.SpaceTheme.default.stopRange
         #expect(close(fractions.light.lowerBound, 20 / 1753.02, 1e-4) && close(fractions.light.upperBound, 1300 / 1753.02, 1e-4))
-        #expect(close(fractions.dark.lowerBound, 160 / 1753.02, 1e-4) && close(fractions.dark.upperBound, 1380 / 1753.02, 1e-4))
+        #expect(close(fractions.dark.lowerBound, 20 / 1753.02, 1e-4) && close(fractions.dark.upperBound, 1300 / 1753.02, 1e-4))
     }
 
     @Test("The fill reproduces the measured 43° axis and its flat ends at 1512 × 949, in light and dark",
@@ -66,7 +66,7 @@ struct ThemeR2GradientTests {
         view.appearance = NSAppearance(named: isDark ? .darkAqua : .aqua)
         view.layoutSubtreeIfNeeded()
         let pixel = try render(view)
-        let start = components(isDark ? 0x1B2057 : 0xFBDFD5), end = components(isDark ? 0x1B2057 : 0xFBDFD5)
+        let start = components(0xFBDFD5), end = components(0xFBDFD5)
         let range = OrbitTokens.SpaceTheme.default.stopRange.range(isDark: isDark)
         func expected(_ point: CGPoint) -> [CGFloat] {
             let f = OrbitThemeGradient.axisFraction(of: point, in: size)

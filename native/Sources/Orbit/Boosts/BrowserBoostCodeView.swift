@@ -208,7 +208,7 @@ final class BrowserBoostCodeView: NSView, NSTextViewDelegate, NSTextFieldDelegat
         scroll.verticalRulerView?.needsDisplay = true
     }
     private func color(light: UInt32, dark: UInt32) -> NSColor {
-        let value = effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? dark : light
+        let value = light
         return NSColor(srgbRed: CGFloat((value >> 16) & 255) / 255, green: CGFloat((value >> 8) & 255) / 255, blue: CGFloat(value & 255) / 255, alpha: 1)
     }
     required init?(coder: NSCoder) { nil }

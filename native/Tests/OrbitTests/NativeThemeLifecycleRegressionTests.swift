@@ -248,13 +248,13 @@ struct NativeThemeLifecycleRegressionTests {
         try await environment.store.setSpaceTheme(theme, for: space, profileID: profile)
         let little = try await environment.makeQuickWindow(spaceID: space, startLoading: false)
         defer { environment.retireQuickWindows() }
-        #expect(little.window?.appearance?.name == .darkAqua)
+        #expect(little.window?.appearance?.name == .aqua)
         theme.mode = .light
         little.applyPreferences(searchEngine: .google, theme: OrbitSpaceThemes.rendered(theme))
         #expect(little.window?.appearance?.name == .aqua)
         theme.mode = .automatic
         little.applyPreferences(searchEngine: .google, theme: OrbitSpaceThemes.rendered(theme))
-        #expect(little.window?.appearance == nil)
+        #expect(little.window?.appearance?.name == .aqua)
         #expect(little.window?.isVisible == false)
     }
 
@@ -272,14 +272,13 @@ struct NativeThemeLifecycleRegressionTests {
         settings.openThemeEditor(for: space, animated: false)
         let editor = try #require(settings.themeEditor)
         editor.view.swatches[3].performClick(nil)
-        editor.view.modeButtons[2].performClick(nil)
         let draft = editor.draft
         editor.close(animated: false)
         await editor.waitUntilFinished()
         try await waitForNativeState("Settings theme reaches Little Circa") {
             little.toolbar.fill.theme == OrbitSpaceThemes.rendered(draft)
         }
-        #expect(little.window?.appearance?.name == .darkAqua)
+        #expect(little.window?.appearance?.name == .aqua)
         #expect(environment.liveControllers.isEmpty)
     }
 

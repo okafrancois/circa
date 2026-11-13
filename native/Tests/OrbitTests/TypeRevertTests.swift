@@ -17,6 +17,7 @@ struct TypeRevertTests {
             "ContentCard/BrowserContentCardView.swift": ["emptyTitle.font =", "emptyTitle.attributedStringValue"],
             "PageInteraction/BrowserPageDialogView.swift": ["title.font =", "title.attributedStringValue"],
             "Onboarding/OrbitOnboardingWelcome.swift": ["headline.attributedStringValue", "let heading = BrandTextStyle.title"],
+            "Onboarding/OrbitOnboardingImportProgress.swift": ["heading.attributedStringValue"],
             "Onboarding/OrbitOnboardingFinishView.swift": ["title.attributedStringValue"],
             "Onboarding/OrbitOnboardingCard.swift": [".font: OrbitOnboardingFonts.title"],
             "Onboarding/OrbitOnboardingMetrics.swift": ["static func title(_ size: CGFloat)"],
@@ -63,7 +64,7 @@ struct TypeRevertTests {
         let history = BrowserLibraryHistoryView(frame: .zero)
         let historyFont = try #require(history.searchField.font)
         let nativeSearchFont = try #require(NSSearchField().font)
-        #expect(historyFont.fontName == "DMSans-Regular")
+        #expect(historyFont.familyName == "DM Sans")
         #expect(historyFont.pointSize == nativeSearchFont.pointSize)
         #expect(historyFont.ascender > 0 && historyFont.descender < 0)
         let card = SidebarUpdateCard(frame: NSRect(x: 0, y: 0, width: 212, height: SidebarUpdateCard.height))

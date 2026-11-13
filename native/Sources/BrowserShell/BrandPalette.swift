@@ -29,7 +29,7 @@ public enum BrandPalette {
         public func theme(mode: BrowserSpaceTheme.Mode = .automatic) -> BrowserSpaceTheme {
             let gradient = BrowserSpaceTheme.Gradient(stops: stops, angleDegrees: angleDegrees, locations: locations)
             return BrowserSpaceTheme(presetID: "brand." + id, mode: mode, colors: [stops[0], stops[2]],
-                intensity: BrowserSpaceTheme.defaultIntensity, noise: 0.3, light: gradient, dark: .init(stops: Array(repeating: .init(hex: 0x1B2057), count: 3), angleDegrees: angleDegrees, locations: locations))
+                intensity: BrowserSpaceTheme.defaultIntensity, noise: 0.3, light: gradient, dark: gradient)
         }
     }
     public static let spaceGradients: [SpaceGradient] = [

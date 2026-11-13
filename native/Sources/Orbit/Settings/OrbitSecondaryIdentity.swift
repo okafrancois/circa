@@ -10,24 +10,11 @@ enum OrbitSecondaryIdentity {
     static let outremer = Color(nsColor: BrandPalette.cobalt)
     static let clay = Color(nsColor: BrandPalette.coral)
 
-    static let surface = Color(nsColor: NSColor(name: nil) { appearance in
-        appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-            ? BrandPalette.ink
-            : BrandPalette.paper
-    })
-    static let foreground = Color(nsColor: NSColor(name: nil) { appearance in
-        appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-            ? BrandPalette.paper
-            : BrandPalette.ink
-    })
-    static let selection = Color(nsColor: NSColor(name: nil) { appearance in
-        appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-            ? BrandPalette.paper
-            : NSColor(srgbRed: 48 / 255, green: 75 / 255, blue: 206 / 255, alpha: 1)
-    })
+    static let surface = ivory
+    static let foreground = ink
+    static let selection = outremer
 
-    /// Secondary controls only: ivory on ink in dark mode, outremer on ivory in light mode.
-    /// Native controls retain their own glyph, focus-ring and disabled-state semantics.
+    /// Native controls retain their focus-ring and disabled-state semantics.
     static let controlTint = selection
     static let categorySelectionBackground = outremer.opacity(0.09)
 

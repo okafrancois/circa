@@ -203,7 +203,7 @@ class SidebarListRow: NSView, NSTextFieldDelegate {
     /// The opaque pinned card was measured on a light Space; dark Spaces keep the shared selected style.
     private var usesPinnedSelectedCard: Bool {
         guard let row = self as? SidebarTabRow, row.item.isPinned && isSelected else { return false }
-        return !OrbitAppearance.isDark(effectiveAppearance)
+        return true
     }
 
     override func viewDidChangeEffectiveAppearance() {

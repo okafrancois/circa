@@ -12,19 +12,15 @@ struct SpaceSwipeThemeBlend {
     let progress: CGFloat
 
     var theme: OrbitTokens.SpaceTheme {
-        // Each endpoint owns its appearance. In particular a fixed dark destination must
-        // never borrow the outgoing window's light variant before selection publication.
+        // Resolve both endpoints as daylight paint before interpolation.
         let source = Self.endpoint(source)
         let destination = Self.endpoint(destination)
         let p = min(1, max(0, progress))
         if p == 0 { return source }
         if p == 1 { return destination }
         let light = NSAppearance(named: .aqua)!
-        let dark = NSAppearance(named: .darkAqua)!
         let sourceLight = OrbitThemeGradient.normalizedStops(source.stops, appearance: light)
         let targetLight = OrbitThemeGradient.normalizedStops(destination.stops, appearance: light)
-        let sourceDark = OrbitThemeGradient.normalizedStops(source.stops, appearance: dark)
-        let targetDark = OrbitThemeGradient.normalizedStops(destination.stops, appearance: dark)
         func blend(_ a: CGColor, _ b: CGColor) -> NSColor {
             let a = NSColor(cgColor: a)!.usingColorSpace(.sRGB)!
             let b = NSColor(cgColor: b)!.usingColorSpace(.sRGB)!
@@ -36,13 +32,7 @@ struct SpaceSwipeThemeBlend {
         var result = source
         result.model = nil
         result.frostAmount = source.frostAmount + (destination.frostAmount - source.frostAmount) * p
-        result.stops = (0..<3).map { index in
-            let light = blend(sourceLight[index], targetLight[index])
-            let dark = blend(sourceDark[index], targetDark[index])
-            return NSColor(name: nil) { appearance in
-                appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? dark : light
-            }
-        }
+        result.stops = (0..<3).map { blend(sourceLight[$0], targetLight[$0]) }
         // Decide polarity from this frame's fill. Fading opposing foregrounds through grey
         // makes both endpoints unreadable around the middle of a transition.
         result.foregroundOverride = nil
@@ -51,18 +41,14 @@ struct SpaceSwipeThemeBlend {
             result.meshCorners = points.map { point in
                 let l = blend(OrbitThemeGradient.color(source, at: point, appearance: light).cgColor,
                               OrbitThemeGradient.color(destination, at: point, appearance: light).cgColor)
-                let d = blend(OrbitThemeGradient.color(source, at: point, appearance: dark).cgColor,
-                              OrbitThemeGradient.color(destination, at: point, appearance: dark).cgColor)
-                return NSColor(name: nil) { appearance in
-                    appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? d : l
-                }
+                return l
             }
         }
         func interpolate(_ a: CGFloat, _ b: CGFloat) -> CGFloat { a + (b - a) * p }
         result.stopRange.light = interpolate(source.stopRange.light.lowerBound, destination.stopRange.light.lowerBound)...interpolate(source.stopRange.light.upperBound, destination.stopRange.light.upperBound)
-        result.stopRange.dark = interpolate(source.stopRange.dark.lowerBound, destination.stopRange.dark.lowerBound)...interpolate(source.stopRange.dark.upperBound, destination.stopRange.dark.upperBound)
+        result.stopRange.dark = result.stopRange.light
         result.angle.light = interpolate(source.angle.light, destination.angle.light)
-        result.angle.dark = interpolate(source.angle.dark, destination.angle.dark)
+        result.angle.dark = result.angle.light
         let sourceIntensity = source.texture == .none ? 0 : source.textureIntensity
         let targetIntensity = destination.texture == .none ? 0 : destination.textureIntensity
         result.texture = .grain
@@ -84,12 +70,12 @@ struct SpaceSwipeThemeBlend {
         result.stops = theme.stops.map { $0.resolved(for: appearance) }
         result.meshCorners = theme.meshCorners?.map { $0.resolved(for: appearance) }
         result.foregroundOverride = OrbitSpaceThemes.accent(for: theme).foreground.resolved(for: appearance)
-        let dark = OrbitAppearance.isDark(appearance)
+        let dark = false
         let range = theme.stopRange.range(isDark: dark)
         let angle = theme.angle.degrees(isDark: dark)
         result.stopRange = .init(light: range, dark: range)
         result.angle = .init(light: angle, dark: angle)
-        result.mode = .automatic
+        result.mode = .light
         result.model = nil
         return result
     }

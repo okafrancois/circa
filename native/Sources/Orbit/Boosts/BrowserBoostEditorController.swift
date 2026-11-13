@@ -161,7 +161,7 @@ final class BrowserBoostEditorController: NSWindowController {
 }
 
 @MainActor
-private final class BrowserBoostPanel: NSPanel {
+private final class BrowserBoostPanel: OrbitDaylightPanel {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
 }

@@ -16,18 +16,14 @@ enum BrowserSettingsAIStyle {
     static let ready = Color(nsColor: BrandPalette.rgb(0x28C840))
     static let warning = Color(nsColor: BrandPalette.rgb(0xFF9F0A))
     static let full = Color(nsColor: BrandPalette.rgb(0xFF3B30))
-    static let tertiary = dynamic(light: 0x777B9C, dark: 0xCFDCFA)
-    static let switchOff = dynamic(light: 0xCFDCFA, dark: 0x292F6B)
-    static let track = dynamic(light: 0xCFDCFA, dark: 0x292F6B)
-    static let meterInk = dynamic(light: 0x1B2057, dark: 0xF6F1E7)
-    static let fill = dynamic(light: 0xFFFDF7, dark: 0x292F6B)
+    static let tertiary = Color(nsColor: BrandPalette.rgb(0x777B9C))
+    static let switchOff = Color(nsColor: BrandPalette.rgb(0xCFDCFA))
+    static let track = Color(nsColor: BrandPalette.rgb(0xCFDCFA))
+    static let meterInk = Color(nsColor: BrandPalette.rgb(0x1B2057))
+    static let fill = Color(nsColor: BrandPalette.rgb(0xFFFDF7))
     static let tileBorder = Color.primary.opacity(0.09)
 
-    private static func dynamic(light: Int, dark: Int) -> Color {
-        Color(nsColor: NSColor(name: nil) { appearance in
-            BrandPalette.rgb(appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? dark : light)
-        })
-    }
+
 }
 
 /// A program's mark from `Icons/ai-marks/<provider>.svg` (listed under `aiMarks` in the icon
@@ -36,14 +32,14 @@ enum BrowserSettingsAIMark {
     @MainActor private static var cache: [String: NSImage] = [:]
 
     @MainActor static func image(_ provider: BrowserAIProviderID, isDark: Bool = false) -> NSImage? {
-        let key = provider.rawValue + (isDark ? "-dark" : "-light")
+        let key = provider.rawValue
         if let cached = cache[key] { return cached }
         guard let url = BrowserText.iconResource("ai-marks/" + provider.rawValue, extension: "svg"),
               let source = try? String(contentsOf: url, encoding: .utf8) else { return nil }
         // The OpenAI mark (openai.com/brand) is monochrome, so its ink is resolved here, before SwiftUI
         // rasterizes the image outside AppKit's drawing appearance. The Claude mark (claude.ai/favicon.svg)
         // keeps its own colour on both polarities. `isDark` is the polarity of the surface behind the mark.
-        let ink = isDark ? "#FFFFFF" : "#000000"
+        let ink = "#000000"
         guard let image = NSImage(data: Data(source.replacingOccurrences(of: "currentColor", with: ink).utf8)) else { return nil }
         image.isTemplate = false
         cache[key] = image
@@ -53,7 +49,6 @@ enum BrowserSettingsAIMark {
 
 /// The 32 pt tile in front of a program row.
 struct BrowserSettingsAIProgramTile: View {
-    @Environment(\.colorScheme) private var colorScheme
     let provider: BrowserAIProviderID
     var body: some View {
         ZStack {
@@ -63,7 +58,7 @@ struct BrowserSettingsAIProgramTile: View {
             } else {
                 RoundedRectangle(cornerRadius: 8).fill(OrbitSettingsStyle.panel)
                 RoundedRectangle(cornerRadius: 8).strokeBorder(BrowserSettingsAIStyle.tileBorder, lineWidth: 1)
-                if let mark = BrowserSettingsAIMark.image(provider, isDark: colorScheme == .dark) {
+                if let mark = BrowserSettingsAIMark.image(provider, isDark: false) {
                     Image(nsImage: mark).resizable().aspectRatio(contentMode: .fit).frame(width: 19, height: 19)
                 }
             }

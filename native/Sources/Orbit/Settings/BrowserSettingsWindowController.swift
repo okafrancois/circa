@@ -8,7 +8,7 @@ import SwiftUI
 /// CMD deliberately leaves standard shortcuts to auxiliary key windows. Handle native Close
 /// here, before the browser menu's Archive Tab equivalent, without a second event monitor.
 @MainActor
-final class BrowserSettingsWindow: NSWindow {
+final class BrowserSettingsWindow: OrbitDaylightWindow {
     var selectCategory: ((BrowserSettingsSection) -> Bool)?
 
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
@@ -46,6 +46,7 @@ final class BrowserSettingsWindowController<Engine: BrowserEngine>: NSWindowCont
     private func chooseDownloadFolder() {
         guard let window, window.attachedSheet == nil else { return }
         let panel = NSOpenPanel()
+        panel.appearance = NSAppearance(named: .aqua)
         panel.title = uiText("Save downloads to")
         panel.prompt = uiText("Choose")
         panel.canChooseFiles = false

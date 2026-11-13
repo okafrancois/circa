@@ -154,9 +154,8 @@ final class BrowserLibraryCategoryButton: NSButton {
     override func mouseEntered(with event: NSEvent) { hovered = true; needsDisplay = true }
     override func mouseExited(with event: NSEvent) { hovered = false; needsDisplay = true }
     override func draw(_ dirtyRect: NSRect) {
-        let dark = effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-        let alpha: CGFloat = state == .on ? (dark ? 0.15 : 0.12) : hovered ? (dark ? 0.10 : 0.07) : 0
-        let ink = dark ? NSColor.white : NSColor(srgbRed: 0, green: 0, blue: 0.092, alpha: 1)
+        let alpha: CGFloat = state == .on ? 0.12 : hovered ? 0.07 : 0
+        let ink = NSColor(srgbRed: 0, green: 0, blue: 0.092, alpha: 1)
         ink.withAlphaComponent(alpha).setFill()
         NSBezierPath(roundedRect: bounds, xRadius: 12, yRadius: 12).fill()
         let foreground = ink.withAlphaComponent(state == .on ? 1 : 0.65)

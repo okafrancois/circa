@@ -86,9 +86,7 @@ final class BrowserBoostRenameView: NSView, NSTextFieldDelegate {
         refreshScrim()
     }
     private func refreshScrim() {
-        let color = OrbitAppearance.isDark(effectiveAppearance)
-            ? NSColor.black.withAlphaComponent(0.4)
-            : NSColor(srgbRed: 0.82, green: 0.82, blue: 0.86, alpha: 0.4)
+        let color = NSColor(srgbRed: 0.82, green: 0.82, blue: 0.86, alpha: 0.4)
         dim.layer?.backgroundColor = color.cgColor
     }
     func present() {

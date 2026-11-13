@@ -7,18 +7,12 @@ private typealias M = OrbitThemeEditorMetrics
 
 @MainActor
 private enum OrbitThemeEditorColors {
-    static func dynamic(_ name: String, light: NSColor, dark: NSColor) -> NSColor {
-        NSColor(name: NSColor.Name("Orbit.ThemeEditor." + name)) { appearance in
-            appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? dark : light
-        }
-    }
-    static let field = dynamic("field", light: NSColor(white: 0, alpha: 0.05), dark: NSColor(white: 0, alpha: 0.04))
-    static let dot = dynamic("dot", light: NSColor(white: 0, alpha: 0.12), dark: NSColor(white: 1, alpha: 0.16))
-    static let modeHighlight = dynamic("modeHighlight", light: NSColor(white: 0, alpha: 0.10), dark: NSColor(white: 1, alpha: 0.15))
-    static let track = dynamic("track", light: NSColor(white: 0, alpha: 0.05), dark: NSColor(white: 1, alpha: 0.07))
-    static let waveActive = dynamic("waveActive", light: NSColor(white: 0, alpha: 0.30), dark: NSColor(white: 1, alpha: 0.75))
+    static let field = NSColor(white: 0, alpha: 0.05)
+    static let dot = NSColor(white: 0, alpha: 0.12)
+    static let track = NSColor(white: 0, alpha: 0.05)
+    static let waveActive = NSColor(white: 0, alpha: 0.30)
     static let control = OrbitTokens.Color.Text.secondary
-    static let inactive = dynamic("inactive", light: NSColor(white: 0, alpha: 0.16), dark: NSColor(white: 1, alpha: 0.16))
+    static let inactive = NSColor(white: 0, alpha: 0.16)
     static let swatchRing = OrbitTokens.Color.Text.primary
 }
 
@@ -36,8 +30,6 @@ final class OrbitThemeEditorView: NSView {
     let material = NSView()
     let field = OrbitThemeFieldView()
     let placeholder = NSTextField(labelWithString: "")
-    let modeHighlight = CALayer()
-    private(set) var modeButtons: [OrbitThemeEditorButton] = []
     let removeButton = OrbitThemeEditorButton(symbol: "minus")
     let addButton = OrbitThemeEditorButton(symbol: "plus")
     let previousButton = OrbitThemeEditorButton(symbol: "chevron.left")
@@ -46,7 +38,6 @@ final class OrbitThemeEditorView: NSView {
     let intensitySlider = OrbitThemeWaveSlider()
     let grainDial = OrbitThemeGrainDial()
     private(set) var handles: [OrbitThemeHandleView] = []
-    static let modes: [BrowserSpaceTheme.Mode] = [.automatic, .light, .dark]
 
     init(state: OrbitThemeEditorState) {
         self.state = state
@@ -76,20 +67,6 @@ final class OrbitThemeEditorView: NSView {
         placeholder.alignment = .center
         placeholder.textColor = OrbitTokens.Color.Text.primary
         addSubview(placeholder)
-
-        modeHighlight.cornerRadius = M.modeHighlightRadius
-        layer?.addSublayer(modeHighlight)
-        let symbols = ["sparkles", "sun.max.fill", "moon.stars"]
-        modeButtons = Self.modes.indices.map { index in
-            let button = OrbitThemeEditorButton(symbol: symbols[index], pointSize: M.modeGlyphPointSize)
-            button.onPress = { [weak self] in self?.edit { $0.setMode(Self.modes[index]) } }
-            return button
-        }
-        for (button, label) in zip(modeButtons, [OrbitThemeEditorText.automatic, OrbitThemeEditorText.light, OrbitThemeEditorText.dark]) {
-            button.setAccessibilityLabel(label)
-            button.toolTip = label
-            addSubview(button)
-        }
 
         removeButton.setAccessibilityLabel(OrbitThemeEditorText.removeColor)
         removeButton.onPress = { [weak self] in self?.edit { $0.removeColor() } }
@@ -130,6 +107,7 @@ final class OrbitThemeEditorView: NSView {
         setAccessibilityLabel(OrbitThemeEditorText.title)
         layoutControls()
         render()
+        appearance = NSAppearance(named: .aqua)
     }
 
     /// The compact picker opens at the color controls; the scope label remains scrollable.
@@ -166,9 +144,6 @@ final class OrbitThemeEditorView: NSView {
         func centered(_ size: NSSize, at center: CGPoint) -> NSRect {
             NSRect(x: center.x - size.width / 2, y: center.y - size.height / 2, width: size.width, height: size.height)
         }
-        for (button, x) in zip(modeButtons, M.modeCenterXs) {
-            button.frame = centered(M.modeHighlight, at: CGPoint(x: x, y: M.modeCenterY))
-        }
         removeButton.frame = centered(M.stepperSize, at: CGPoint(x: M.stepperCenterXs[0], y: M.stepperCenterY))
         addButton.frame = centered(M.stepperSize, at: CGPoint(x: M.stepperCenterXs[1], y: M.stepperCenterY))
         previousButton.frame = centered(M.stepperSize, at: CGPoint(x: M.chevronCenterXs[0], y: M.swatchRowCenterY))
@@ -195,18 +170,6 @@ final class OrbitThemeEditorView: NSView {
         surfaceScope.toolTip = surfaceScope.stringValue
         themeName.textColor = OrbitTokens.Color.Text.primary
         surfaceScope.textColor = OrbitTokens.Color.Text.secondary
-        let appearance = effectiveAppearance
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
-        let modeIndex = Self.modes.firstIndex(of: state.theme.mode) ?? 0
-        let selected = modeButtons[modeIndex].frame
-        modeHighlight.frame = selected
-        modeHighlight.backgroundColor = OrbitThemeEditorColors.modeHighlight.resolvedCGColor(for: appearance)
-        CATransaction.commit()
-        for (index, button) in modeButtons.enumerated() {
-            button.state = index == modeIndex ? .on : .off
-            button.tint = OrbitThemeEditorColors.control
-        }
         placeholder.stringValue = OrbitThemeEditorText.placeholder
         placeholder.isHidden = state.hasColor
         removeButton.isEnabled = state.canRemoveColor

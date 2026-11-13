@@ -75,6 +75,11 @@ public final class WebKitSurface: BrowserEngineSurface {
             webView.observe(\.cameraCaptureState) { [weak self] _, _ in self?.scheduleRefresh() },
             webView.observe(\.microphoneCaptureState) { [weak self] _, _ in self?.scheduleRefresh() }
         ]
+        // Web content follows macOS independently of the shell window's daylight appearance.
+        webView.appearance = NSApplication.shared.effectiveAppearance
+        observations.append(NSApplication.shared.observe(\.effectiveAppearance) { [weak self] _, _ in
+            self?.scheduleAppearanceRefresh()
+        })
         zoomStore.register(self)
         engine?.registerPermissionSurface(self)
     }
@@ -92,6 +97,13 @@ public final class WebKitSurface: BrowserEngineSurface {
               requestedNavigation == nil || url != requestedDestination else { return }
         self.documentURL = url
         delegate?.surface(self, didNavigateWithinDocument: BrowserSameDocumentNavigation(url: url, previous: documentURL))
+    }
+
+    nonisolated private func scheduleAppearanceRefresh() {
+        Task { @MainActor [weak self] in
+            guard let self, !isDisposed else { return }
+            webView.appearance = NSApplication.shared.effectiveAppearance
+        }
     }
 
     nonisolated private func scheduleRefresh() {

@@ -8,12 +8,12 @@ extension NativeWebKitTests {
 @Suite("Little Circa compact surfaces", .serialized)
 @MainActor
 struct QuickWindowCompactSurfaceTests {
-    @Test("Little Circa follows the Space appearance across its chrome and compact panels",
+    @Test("Little Circa keeps daylight chrome and compact panels regardless of stored mode",
           arguments: [OrbitTokens.SpaceTheme.Mode.light, .automatic, .dark])
     func fixedDarkAppearance(mode: OrbitTokens.SpaceTheme.Mode) async throws {
         NSApplication.shared.setActivationPolicy(.prohibited)
         let applicationAppearance = NSApp.appearance
-        NSApp.appearance = NSAppearance(named: .aqua)
+        NSApp.appearance = NSAppearance(named: .darkAqua)
         defer { NSApp.appearance = applicationAppearance }
         let environment = BrowserEnvironment(engine: PeekSyntheticEngine())
         let little = try await environment.makeQuickWindow()
@@ -22,18 +22,18 @@ struct QuickWindowCompactSurfaceTests {
         theme.mode = mode
         little.applyPreferences(searchEngine: .google, theme: theme)
         let window = try #require(little.window)
-        #expect(OrbitAppearance.isDark(window.effectiveAppearance) == (mode == .dark))
-        #expect(OrbitAppearance.isDark(little.toolbar.fill.effectiveAppearance) == (mode == .dark))
+        #expect(OrbitAppearance.isDark(window.effectiveAppearance) == false)
+        #expect(OrbitAppearance.isDark(little.toolbar.fill.effectiveAppearance) == false)
         #expect(little.toolbar.fill.theme == theme)
         #expect(little.addressField.font == BrandTextStyle.ui.font(size: 13, weight: .medium))
         let input = try #require(little.prepareCompactInput())
-        #expect(OrbitAppearance.isDark(input.window.effectiveAppearance) == (mode == .dark))
-        #expect(OrbitAppearance.isDark(input.input.effectiveAppearance) == (mode == .dark))
+        #expect(OrbitAppearance.isDark(input.window.effectiveAppearance) == false)
+        #expect(OrbitAppearance.isDark(input.input.effectiveAppearance) == false)
         #expect(input.input.textColor?.resolved(for: input.input.effectiveAppearance)
             == OrbitFloatingMaterial.body.resolved(for: window.effectiveAppearance))
         little.showSpaceChooser([])
         #expect(little.spaceChooser != nil)
-        #expect(OrbitAppearance.isDark(try #require(little.spaceChooser?.window.effectiveAppearance)) == (mode == .dark))
+        #expect(OrbitAppearance.isDark(try #require(little.spaceChooser?.window.effectiveAppearance)) == false)
         #expect(!input.window.isVisible && little.spaceChooser?.window.isVisible == false)
     }
 

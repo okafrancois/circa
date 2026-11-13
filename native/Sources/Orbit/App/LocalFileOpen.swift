@@ -11,6 +11,7 @@ enum LocalFileOpen {
 
     @MainActor static func choose(in window: NSWindow?, completion: @escaping @MainActor ([URL]) -> Void) {
         let panel = NSOpenPanel()
+        panel.appearance = NSAppearance(named: .aqua)
         panel.title = uiText("Open File…")
         panel.directoryURL = activeSyntheticDataGuard()?.syntheticRoot
         panel.canChooseDirectories = false

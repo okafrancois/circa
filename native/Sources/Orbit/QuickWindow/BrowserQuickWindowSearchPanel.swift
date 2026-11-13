@@ -114,18 +114,16 @@ final class BrowserQuickWindowSearchPanel: NSObject, NSWindowDelegate, NSTextFie
 
     private func applyAppearance() {
         root.effectiveAppearance.performAsCurrentDrawingAppearance {
-            let dark = root.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
             root.layer?.backgroundColor = NSColor.clear.cgColor
             OrbitFloatingMaterial.install(in: root, blending: .behindWindow, radius: BrowserQuickWindowMetrics.inputRadius)
             divider.layer?.backgroundColor = NSColor.labelColor.withAlphaComponent(0.12).cgColor
-            closeButton.layer?.backgroundColor = (kind == .address ? (dark ? NSColor.labelColor.withAlphaComponent(0.07) : OrbitTokens.Color.State.commandBarAccessory) : NSColor.clear).cgColor
+            closeButton.layer?.backgroundColor = (kind == .address ? OrbitTokens.Color.State.commandBarAccessory : NSColor.clear).cgColor
         }
         input.textColor = OrbitFloatingMaterial.body
         searchIcon.contentTintColor = kind == .address ? .labelColor : .secondaryLabelColor
         closeButton.contentTintColor = .secondaryLabelColor
         input.placeholderAttributedString = NSAttributedString(string: input.placeholderString ?? "", attributes: [
             .font: input.font!, .foregroundColor: placeholder.textColor ?? NSColor.secondaryLabelColor])
-        let dark = root.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
         placeholder.textColor = OrbitFloatingMaterial.secondary
         for view in rowViews.values { view.needsDisplay = true }
     }
@@ -245,7 +243,7 @@ final class BrowserQuickWindowSearchPanel: NSObject, NSWindowDelegate, NSTextFie
 }
 
 @MainActor
-final class BrowserQuickWindowSearchWindow: NSPanel {
+final class BrowserQuickWindowSearchWindow: OrbitDaylightPanel {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { true }
 }

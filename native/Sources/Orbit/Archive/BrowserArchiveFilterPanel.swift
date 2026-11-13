@@ -179,7 +179,7 @@ final class ArchiveFilterChip: NSButton {
         foreground.withAlphaComponent(isSelected ? 0.6 : 0.065).setFill()
         NSBezierPath(roundedRect: bounds, xRadius: ArchiveFilterStyle.chipRadius, yRadius: ArchiveFilterStyle.chipRadius).fill()
         let ink: NSColor = isSelected
-            ? NSColor(name: nil) { $0.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? .black : .white }
+            ? NSColor.white
             : ArchiveFilterStyle.ink
         let text = NSAttributedString(string: label, attributes: [.font: chipFont, .foregroundColor: ink])
         let size = text.size()

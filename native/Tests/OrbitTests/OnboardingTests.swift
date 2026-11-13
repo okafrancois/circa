@@ -275,7 +275,7 @@ extension NativeWebKitTests.OnboardingTests {
         NSApp.appearance = NSAppearance(named: .darkAqua)
         preview.viewDidChangeEffectiveAppearance()
         let color = try #require(tint.backgroundColor.flatMap(NSColor.init(cgColor:))?.usingColorSpace(.sRGB))
-        #expect(color.redComponent == 0 && color.greenComponent == 0 && color.blueComponent == 0)
+        #expect(color.redComponent == 1 && color.greenComponent == 1 && color.blueComponent == 1)
         #expect(color.alphaComponent == BrandPalette.Frost.tint)
         preview.refreshMaterial(reduceTransparency: true)
         #expect(material.isHidden)

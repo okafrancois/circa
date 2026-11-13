@@ -85,28 +85,28 @@ struct BrowserAssistantPaletteTests {
         }
     }
 
-    @Test("Polarity follows the Space ink, not the window appearance", arguments: [false, true])
+    @Test("The assistant stays daylight for every Space and system appearance", arguments: [false, true])
     func polarity(isDark: Bool) throws {
         let appearance = try #require(NSAppearance(named: isDark ? .darkAqua : .aqua))
         for (name, theme) in Self.themes {
             let palette = BrowserAssistantPalette(theme: theme, appearance: appearance)
             let ink = OrbitSpaceThemes.accent(for: theme).foreground.resolved(for: appearance)
-            #expect(palette.isDark == !OrbitThemeForeground.isLight(on: ink), "\(name)")
+            #expect(!palette.isDark, "\(name)")
         }
         // The swatch with the darkest fill must produce a dark dock even in a light window.
         let black = try #require(BrowserSpaceThemePresets.theme(family: BrowserSpaceThemePresets.greyscale, index: 8))
         let light = BrowserAssistantPalette(theme: OrbitSpaceThemes.rendered(black), appearance: NSAppearance(named: .aqua)!)
-        #expect(light.isDark)
+        #expect(!light.isDark)
     }
 
-    @Test("The surface uses opaque paper or ink while retaining Space accents")
+    @Test("The surface uses opaque daylight paper while retaining Space accents")
     func surfaceCarriesSpace() throws {
         let appearance = try #require(NSAppearance(named: .aqua))
         let surfaces = Self.themes.compactMap { _, theme -> String? in
             guard let color = BrowserAssistantPalette(theme: theme, appearance: appearance).surfaces.first?.usingColorSpace(.sRGB) else { return nil }
             return [color.redComponent, color.greenComponent, color.blueComponent].map { String(Int(($0 * 255).rounded())) }.joined(separator: ",")
         }
-        #expect(Set(surfaces).count == 2)
+        #expect(Set(surfaces).count == 1)
         // Floating surfaces keep the same flat ink along their full height.
         let gradient = BrowserAssistantPalette(theme: .amberCoral, appearance: appearance)
         let top = try #require(gradient.surfaces.first), bottom = try #require(gradient.surfaces.last)

@@ -9,7 +9,6 @@ struct BrowserAssistantPalette: Equatable {
     static let dockSamples = [CGPoint(x: 0.72, y: 0), CGPoint(x: 1, y: 0), CGPoint(x: 0.72, y: 0.5),
                               CGPoint(x: 1, y: 0.5), CGPoint(x: 0.72, y: 1), CGPoint(x: 1, y: 1)]
     static let lightTintOpacity: CGFloat = 0.72
-    static let darkTintOpacity: CGFloat = 0.66
 
     let isDark: Bool
     /// The opaque tint painted over the Space fill, and the resulting surface at each sample.
@@ -33,47 +32,43 @@ struct BrowserAssistantPalette: Equatable {
     let popoverEdge: NSColor
     var warning: NSColor { NSColor(srgbRed: 1, green: 159.0 / 255, blue: 10.0 / 255, alpha: 1) }
     var critical: NSColor { NSColor(srgbRed: 1, green: 59.0 / 255, blue: 48.0 / 255, alpha: 1) }
-    var appearance: NSAppearance { NSAppearance(named: isDark ? .darkAqua : .aqua)! }
+    var appearance: NSAppearance { NSAppearance(named: .aqua)! }
 
     /// `polarity` overrides the Space ink for a surface that already follows the window appearance.
     @MainActor
     init(theme: OrbitTokens.SpaceTheme, appearance: NSAppearance, polarity: Bool? = nil,
          samples: [CGPoint] = BrowserAssistantPalette.dockSamples) {
-        let spaceInk = OrbitSpaceThemes.accent(for: theme).foreground.resolved(for: appearance)
-        let dark = polarity ?? !OrbitThemeForeground.isLight(on: spaceInk)
-        let style = OrbitFloatingMaterial.Style(variant: dark ? .dark : .light, reducesTransparency: false,
-                                                sidebarTintOpacity: dark ? Self.darkTintOpacity : Self.lightTintOpacity)
-        let polar = NSAppearance(named: dark ? .darkAqua : .aqua)!
+        let style = OrbitFloatingMaterial.Style(variant: .light, reducesTransparency: false,
+                                                sidebarTintOpacity: Self.lightTintOpacity)
+        let polar = NSAppearance(named: .aqua)!
         let surfaces = samples.map { style.background(over: OrbitThemeGradient.color(theme, at: $0, appearance: appearance)) }
         let family = OrbitSpaceThemes.baseAccent(for: theme)
         func mix(_ color: NSColor, _ opacity: CGFloat, _ surface: NSColor) -> NSColor {
             OrbitFloatingMaterial.composite(color, opacity: opacity, over: surface)
         }
         let soft = family.soft.resolved(for: polar)
-        let washOpacity: CGFloat = dark ? 0.32 : 0.46
-        let reading = dark ? NSColor.white : style.body
+        let washOpacity: CGFloat = 0.46
+        let reading = style.body
 
-        self.isDark = dark
+        self.isDark = false
         self.surfaces = surfaces
         tint = style.tint.withAlphaComponent(style.tintOpacity)
         ink = style.body
         secondary = style.secondary
         tertiary = style.secondary.withAlphaComponent(0.72)
         line = reading.withAlphaComponent(0.10)
-        hover = reading.withAlphaComponent(dark ? 0.09 : 0.06)
-        press = reading.withAlphaComponent(dark ? 0.14 : 0.10)
+        hover = reading.withAlphaComponent(0.06)
+        press = reading.withAlphaComponent(0.10)
         wash = soft.withAlphaComponent(washOpacity)
-        composer = NSColor.white.withAlphaComponent(dark ? 0.055 : 0.92)
+        composer = NSColor.white.withAlphaComponent(0.92)
         composerLine = reading.withAlphaComponent(0.10)
         composerFocusLine = reading.withAlphaComponent(0.24)
-        popover = dark ? NSColor(srgbRed: 20.0 / 255, green: 18.0 / 255, blue: 24.0 / 255, alpha: 0.90)
-            : NSColor.white.withAlphaComponent(0.84)
-        popoverSolid = dark ? NSColor(srgbRed: 23.0 / 255, green: 22.0 / 255, blue: 26.0 / 255, alpha: 1)
-            : NSColor(srgbRed: 250.0 / 255, green: 250.0 / 255, blue: 251.0 / 255, alpha: 1)
-        popoverEdge = NSColor.white.withAlphaComponent(dark ? 0.18 : 0.75)
+        popover = NSColor.white.withAlphaComponent(0.84)
+        popoverSolid = NSColor(srgbRed: 250.0 / 255, green: 250.0 / 255, blue: 251.0 / 255, alpha: 1)
+        popoverEdge = NSColor.white.withAlphaComponent(0.75)
 
         let backgrounds = surfaces + surfaces.map { mix(soft, washOpacity, $0) }
-        accentInk = Self.guardedAccentInk(family.icon.resolved(for: polar), on: backgrounds, dark: dark)
+        accentInk = Self.guardedAccentInk(family.icon.resolved(for: polar), on: backgrounds)
         // A pale or very dark swatch must never produce an invisible send button.
         let derived: NSColor
         if case let .derived(hue, saturation, _)? = theme.model?.accentFamily {
@@ -88,18 +83,13 @@ struct BrowserAssistantPalette: Equatable {
     }
 
     /// Keeps the hue and moves brightness until accent text passes 4.5:1 on every background.
-    private static func guardedAccentInk(_ base: NSColor, on backgrounds: [NSColor], dark: Bool) -> NSColor {
+    private static func guardedAccentInk(_ base: NSColor, on backgrounds: [NSColor]) -> NSColor {
         let start = base.usingColorSpace(.sRGB)!
         let hue = start.hueComponent
         var saturation = start.saturationComponent, brightness = start.brightnessComponent
         var color = start
         for _ in 0..<26 where backgrounds.contains(where: { OrbitFloatingMaterial.contrast(color, $0) < 4.5 }) {
-            if dark {
-                saturation = max(0, saturation - 0.04)
-                brightness = min(1, brightness + 0.04)
-            } else {
-                brightness = max(0, brightness - 0.04)
-            }
+            brightness = max(0, brightness - 0.04)
             color = NSColor(colorSpace: .sRGB, hue: hue, saturation: saturation, brightness: brightness, alpha: 1)
         }
         return color

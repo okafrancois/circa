@@ -6,27 +6,14 @@ import SwiftUI
 
 enum OrbitSettingsStyle {
     static let destructiveColor = NSColor.systemRed
-    static let foreground = color(light: 0x1B2057, dark: 0xF6F1E7)
-    static let background = Color(nsColor: windowColor)
-    static let panel = color(light: 0xFFFDF7, dark: 0x292F6B)
+    static let foreground = Color(nsColor: BrandPalette.ink)
+    static let background = Color(nsColor: BrandPalette.paper)
+    static let panel = Color(nsColor: BrandPalette.pageWhite)
     static let border = Color(nsColor: BrandPalette.ink.withAlphaComponent(0.13))
-    static let windowColor = NSColor(name: nil) { appearance in
-        appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? BrandPalette.stage2 : BrandPalette.paper
-    }
-    static let toolbarColor = NSColor(name: nil) { appearance in
-        appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? BrandPalette.rgb(0x1B2057) : BrandPalette.paper
-    }
-    static let selectionColor = NSColor(name: nil) { appearance in
-        (appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? NSColor.white : NSColor.black).withAlphaComponent(0.07)
-    }
+    static let windowColor = BrandPalette.paper
+    static let toolbarColor = BrandPalette.paper
+    static let selectionColor = BrandPalette.ink.withAlphaComponent(0.07)
 
-    private static func color(light: UInt32, dark: UInt32) -> Color {
-        Color(nsColor: NSColor(name: nil) { appearance in
-            let hex = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? dark : light
-            return NSColor(srgbRed: Double((hex >> 16) & 255) / 255,
-                           green: Double((hex >> 8) & 255) / 255, blue: Double(hex & 255) / 255, alpha: 1)
-        })
-    }
 }
 
 @MainActor

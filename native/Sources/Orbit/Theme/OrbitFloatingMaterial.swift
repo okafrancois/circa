@@ -14,9 +14,9 @@ enum OrbitFloatingMaterial {
         var selectedSidebarSurface = false
         var sidebarTintOpacity: CGFloat?
         var tintOpacity: CGFloat { 1 }
-        var tint: NSColor { variant == .light ? BrandPalette.pageWhite : BrandPalette.ink }
-        var body: NSColor { variant == .light ? BrandPalette.ink : BrandPalette.paper }
-        var secondary: NSColor { variant == .light ? BrandPalette.ink2 : BrandPalette.sky }
+        var tint: NSColor { BrandPalette.pageWhite }
+        var body: NSColor { BrandPalette.ink }
+        var secondary: NSColor { BrandPalette.ink2 }
         var edge: NSColor { BrandPalette.ink }
         var highlightOpacity: CGFloat { 0 }
 
@@ -29,19 +29,12 @@ enum OrbitFloatingMaterial {
     }
 
     static func style(for appearance: NSAppearance, reduceTransparency: Bool = NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency) -> Style {
-        Style(variant: appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? .dark : .light,
+        Style(variant: .light,
               reducesTransparency: reduceTransparency)
     }
 
-    static let body = NSColor(name: "Orbit.Floating.body") { appearance in
-        appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-            ? BrandPalette.paper : BrandPalette.ink
-    }
-    static let secondary = NSColor(name: "Orbit.Floating.secondary") { appearance in
-        appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-            ? BrandPalette.sky
-            : BrandPalette.ink2
-    }
+    static let body = BrandPalette.ink
+    static let secondary = BrandPalette.ink2
 
     static let accentText = NSColor(name: "Orbit.Floating.accentText") { _ in
         contrastingInk(on: .controlAccentColor)
@@ -161,20 +154,15 @@ final class OrbitFrostView: NSView {
         CATransaction.commit()
     }
     func refresh(reduceTransparency: Bool = NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency) {
-        let appearance = fixedVariant.map { NSAppearance(named: $0 == .dark ? .darkAqua : .aqua)! } ?? effectiveAppearance
+        let appearance = NSAppearance(named: .aqua)!
         style = OrbitFloatingMaterial.style(for: appearance, reduceTransparency: reduceTransparency)
-        if let sidebarForeground {
-            style = .init(variant: OrbitThemeForeground.isLight(on: sidebarForeground.resolved(for: appearance)) ? .light : .dark,
-                          reducesTransparency: reduceTransparency, selectedSidebarSurface: selectedSidebarSurface)
-        }
         if let sidebarTheme {
             style.sidebarTintOpacity = OrbitSidebarFrost.opacity(theme: sidebarTheme, appearance: appearance, style: style)
         }
         CATransaction.begin(); CATransaction.setDisableActions(true)
         // A Space can choose light ink in a light window (or the reverse). The blur must
         // reinforce that ink polarity before the minimal per-gradient tint is applied.
-        effect.appearance = sidebarTheme == nil ? appearance
-            : NSAppearance(named: style.variant == .dark ? .darkAqua : .aqua)
+        effect.appearance = appearance
         effect.state = reduceTransparency ? .inactive : .active
         effect.isHidden = reduceTransparency
         tint.layer?.backgroundColor = style.tint.withAlphaComponent(style.tintOpacity).cgColor
@@ -191,6 +179,8 @@ final class OrbitFrostView: NSView {
 final class OrbitFrostPopover: NSPopover {
     var usesFrost = true
     override func show(relativeTo positioningRect: NSRect, of positioningView: NSView, preferredEdge: NSRectEdge) {
+        appearance = NSAppearance(named: .aqua)
+        contentViewController?.view.appearance = appearance
         if usesFrost, let content = contentViewController?.view {
             OrbitFloatingMaterial.install(in: content, blending: .behindWindow, radius: 0)
         }
@@ -309,7 +299,7 @@ final class OrbitFrostAlert: NSAlert {
 }
 
 @MainActor
-private final class OrbitFloatingAlertPanel: NSPanel {
+private final class OrbitFloatingAlertPanel: OrbitDaylightPanel {
     private var appearanceObservation: NSKeyValueObservation?
 
     func followAppearance(of parent: NSWindow?, fallback: NSAppearance?) {
