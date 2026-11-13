@@ -40,9 +40,10 @@ final class OrbitOnboardingWelcomeView: NSView {
     override var isFlipped: Bool { true }
     func play() {
         mark.land(delay: 0.2, drawBands: false)
-        headline.play(delay: 0.38, stagger: 0.07)
-        OrbitOnboardingMotion.entrance(body, y: 32, duration: 0.5, delay: 0.45)
-        OrbitOnboardingMotion.entrance(button, y: 32, duration: 0.5, delay: 0.52)
+        OrbitOnboardingMotion.animate(mark.layer, key: "opacity", from: 0, to: 1, duration: 0.5, delay: 0.38)
+        headline.play(delay: 0.45, stagger: 0.07)
+        OrbitOnboardingMotion.entrance(body, y: 32, duration: 0.5, delay: 0.52)
+        OrbitOnboardingMotion.entrance(button, y: 32, duration: 0.5, delay: 0.59)
         illustration.play()
     }
 }

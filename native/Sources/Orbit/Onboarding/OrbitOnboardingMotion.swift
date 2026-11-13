@@ -91,7 +91,9 @@ final class OrbitOnboardingMarkView: NSView {
         reveal.values = (0...90).map { i -> NSValue in
             let t = Double(i) / 90 - 1
             let value = 1 + t * t * (2.6 * t + 1.6)
-            var transform = CATransform3DMakeTranslation(center.x, center.y, 0)
+            let revealProgress = min(1, max(0, (delay + Double(i) / 90 - 0.38) / 0.5))
+            let rise = drawBands ? 0 : 32 * pow(1 - revealProgress, 4)
+            var transform = CATransform3DMakeTranslation(center.x, center.y + rise, 0)
             transform = CATransform3DScale(transform, value, value, 1)
             transform = CATransform3DRotate(transform, -.pi * (1 - value), 0, 0, 1)
             transform = CATransform3DTranslate(transform, -center.x, -center.y, 0)

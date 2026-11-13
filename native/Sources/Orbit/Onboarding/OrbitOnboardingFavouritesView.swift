@@ -11,6 +11,7 @@ final class OrbitOnboardingFavouritesView: NSView {
     init(sites: [BrowserOnboardingFavourite]) {
         super.init(frame: NSRect(x: 0, y: 0, width: 590, height: 220))
         wantsLayer = true
+        clipsToBounds = false
         pins.wantsLayer = true
         let gradient = CAGradientLayer()
         gradient.frame = pins.bounds
@@ -29,8 +30,10 @@ final class OrbitOnboardingFavouritesView: NSView {
             button.isBordered = false
             button.wantsLayer = true
             button.layer?.cornerRadius = 14
+            button.clipsToBounds = false
+            button.layer?.masksToBounds = false
             button.layer?.backgroundColor = BrandPalette.pageWhite.withAlphaComponent(0.6).cgColor
-            let check = CALayer(); check.frame = CGRect(x: 94.5, y: 8, width: 18, height: 18)
+            let check = CALayer(); check.frame = CGRect(x: button.bounds.width - 12, y: -5, width: 18, height: 18)
             check.cornerRadius = 9
             button.layer?.addSublayer(check); checks.append(check)
             button.imagePosition = .noImage

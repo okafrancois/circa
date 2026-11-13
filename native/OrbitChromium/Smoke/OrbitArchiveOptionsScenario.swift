@@ -227,6 +227,7 @@ extension OrbitSmokeDriver {
                 for step in OrbitOnboardingFlow.steps {
                     var flow = OrbitOnboardingFlow(step: step, sources: sources, syncAvailability: .available)
                     flow.syncChoice = true
+                    flow.defaultBrowserChoice = true
                     if step == .importSource { flow.select(source: sources[0]) }
                     let target = spaces.first.map { OrbitOnboardingThemeTarget(spaceID: $0.id, profileID: profile, stored: nil, commit: { _ in }, registry: nil) }
                     let onboarding = OrbitOnboardingWindowController(flow: flow, services: .init(), themeTarget: target)

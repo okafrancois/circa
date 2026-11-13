@@ -159,6 +159,11 @@ final class OrbitOnboardingWindowController: NSWindowController {
             window.makeKeyAndOrderFront(nil)
         }
         if flow.step == .welcome { welcome.play() }
+        if intro == nil, flow.step == .welcome || flow.step == .finish {
+            let stage: NSView = flow.step == .welcome ? welcome : finishStage
+            OrbitOnboardingMotion.animate(stage.layer, key: "opacity", from: 0, to: 1, duration: 0.5)
+            OrbitOnboardingMotion.animate(stage.layer, key: "transform.translation.x", from: 79, to: 0, duration: 0.5)
+        }
         if let cover = OrbitOnboardingStartup.cover, cover !== self {
             cover.close()
             OrbitOnboardingStartup.cover = nil
@@ -258,12 +263,17 @@ final class OrbitOnboardingWindowController: NSWindowController {
         services.persist(flow.record(.started))
         if flow.step == .welcome {
             welcomeTransitions += 1
-            OrbitOnboardingMotion.animate(card.layer, key: "opacity", from: 1, to: 0, duration: 0.55, outgoing: true)
-            OrbitOnboardingMotion.animate(card.layer, key: "transform.translation.y", from: 0, to: 40, duration: 0.55, outgoing: true)
-            DispatchQueue.main.asyncAfter(deadline: .now() + (OrbitMotionPreferences.prefersReducedMotion ? 0.25 : 0.55)) { [weak self] in
+            render(direction: .backward, animated: false)
+            welcome.play()
+            card.isHidden = false
+            OrbitOnboardingMotion.animate(card.layer, key: "opacity", from: 1, to: 0, duration: 0.3, outgoing: true)
+            OrbitOnboardingMotion.animate(card.layer, key: "transform.translation.x", from: 0, to: 79, duration: 0.3, outgoing: true)
+            OrbitOnboardingMotion.animate(welcome.layer, key: "opacity", from: 0, to: 1, duration: 0.5, delay: 0.28)
+            OrbitOnboardingMotion.animate(welcome.layer, key: "transform.translation.x", from: -79, to: 0, duration: 0.5, delay: 0.28)
+            DispatchQueue.main.asyncAfter(deadline: .now() + (OrbitMotionPreferences.prefersReducedMotion ? 0.25 : 0.8)) { [weak self] in
                 guard let self else { return }
+                card.isHidden = true
                 card.layer?.removeAllAnimations()
-                render(direction: .backward, animated: false); welcome.play()
                 welcomeTransitions -= 1
             }
         } else { render(direction: .backward, animated: true) }

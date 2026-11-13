@@ -116,21 +116,29 @@ final class OrbitOnboardingSyncArt: OrbitOnboardingSpaceArt {
 final class OrbitOnboardingHorizonArt: OrbitOnboardingSpaceArt {
     private let moon = OrbitOnboardingIllustrationView("onboarding-horizon-moon")
     private let flag = OrbitOnboardingIllustrationView("onboarding-horizon-flag")
+    private let flagRise = NSView()
     private let satellite = OrbitOnboardingIllustrationView("onboarding-horizon-satellite")
     private let stars = (0..<5).map { OrbitOnboardingIllustrationView("onboarding-horizon-star-" + String($0)) }
     private static let centers = [CGPoint(x: 140, y: 60), CGPoint(x: 660, y: 30), CGPoint(x: 90, y: 130),
                                   CGPoint(x: 470, y: 40), CGPoint(x: 300, y: 70)]
     override init(frame: NSRect) {
         super.init(frame: frame)
-        for view in [moon, flag, satellite] + stars { addSubview(view) }
+        flagRise.wantsLayer = true
+        flagRise.addSubview(flag)
+        for view in [moon, flagRise, satellite] + stars { addSubview(view) }
     }
     required init?(coder: NSCoder) { nil }
-    override func layout() { super.layout(); for view in [moon, flag, satellite] + stars { view.frame = bounds } }
+    override func layout() {
+        super.layout()
+        for view in [moon, flagRise, satellite] + stars { view.frame = bounds }
+        flag.frame = flagRise.bounds
+    }
     func play() {
         layoutSubtreeIfNeeded()
         let scale = min(bounds.width / 760, bounds.height / 200)
         let offset = CGPoint(x: (bounds.width - 760 * scale) / 2, y: (bounds.height - 200 * scale) / 2)
         OrbitOnboardingMotion.animate(moon.layer, key: "transform.translation.y", from: 170 * scale, to: 0, duration: 1.3, delay: 0.2)
+        OrbitOnboardingMotion.animate(flagRise.layer, key: "transform.translation.y", from: 170 * scale, to: 0, duration: 1.3, delay: 0.2)
         func pivot(_ point: CGPoint, in view: NSView) -> CGPoint {
             let top = point.y * scale + offset.y
             return CGPoint(x: point.x * scale + offset.x, y: view.isFlipped ? top : bounds.height - top)

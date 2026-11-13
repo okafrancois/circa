@@ -140,7 +140,7 @@ final class BrowserPaletteView: NSView, NSTextFieldDelegate, NSTableViewDataSour
         panel.setAccessibilityRole(.group)
         panel.setAccessibilityLabel(uiText("Command Bar"))
         panel.addSubview(input)
-        searchIcon.image = OrbitIcon.image(sfName: "magnifyingglass", pointSize: 16, accessibilityDescription: nil)
+        searchIcon.image = Self.sparkleImage
         searchIcon.setAccessibilityElement(false)
         panel.addSubview(searchIcon)
         infoButton.image = OrbitIcon.image(sfName: "info.circle", pointSize: 16, accessibilityDescription: uiText("About suggestions"))
