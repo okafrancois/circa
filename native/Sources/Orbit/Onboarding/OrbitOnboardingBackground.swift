@@ -23,7 +23,17 @@ final class OrbitOnboardingBackgroundView: NSView {
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
     override func layout() {
         super.layout()
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        defer { CATransaction.commit() }
         glow.frame = bounds
+        guard bounds.width > 0, bounds.height > 0 else { return }
+        let angle = CGFloat.pi * 4 / 180
+        let dx = sin(angle), dy = cos(angle)
+        let length = bounds.width * dx + bounds.height * dy
+        let x = dx * length / (2 * bounds.width)
+        let y = dy * length / (2 * bounds.height)
+        glow.startPoint = CGPoint(x: 0.5 - x, y: 0.5 - y)
+        glow.endPoint = CGPoint(x: 0.5 + x, y: 0.5 + y)
     }
     func apply(theme: BrowserSpaceTheme?) {
         self.theme = theme

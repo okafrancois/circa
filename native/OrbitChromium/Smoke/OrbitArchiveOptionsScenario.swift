@@ -213,49 +213,169 @@ extension OrbitSmokeDriver {
                 atc.contentViewController = NSHostingController(rootView: BrowserAirTrafficControlView(model: model, runtime: model.runtime))
                 await capture("settings-air-traffic-control", atc); atc.orderOut(nil)
             } else if part == "motion" {
-                for step in [BrowserOnboardingRecord.Step.welcome, .finish] {
-                    let flow = OrbitOnboardingFlow(step: step, sources: [], syncAvailability: .available)
-                    let onboarding = OrbitOnboardingWindowController(flow: flow, services: .init(), themeTarget: nil)
+                if let store = environment.favoriteIcons {
+                    await withTaskGroup(of: Void.self) { group in
+                        for site in BrowserOnboardingFavourite.starter { group.addTask { _ = await store.image(profile: profile, home: site.url) } }
+                        await group.waitForAll()
+                    }
+                }
+                for step in [BrowserOnboardingRecord.Step.welcome, .finish, .favourites, .theme] {
+                    let initialStep: BrowserOnboardingRecord.Step = step == .finish ? .defaultBrowser : step == .favourites ? .importSource : step == .theme ? .sync : step
+                    let motionSources = step == .favourites ? OrbitOnboardingSource.captureSources : []
+                    var flow = OrbitOnboardingFlow(step: initialStep, sources: motionSources, syncAvailability: .available)
+                    if let source = motionSources.first { flow.select(source: source) }
+                    else { flow.importChoice = BrowserOnboardingRecord.ImportChoice.none }
+                    flow.defaultBrowserChoice = true
+                    flow.syncChoice = true
+                    for index in flow.favourites.indices { flow.favourites[index].selected = [2, 3, 4, 5].contains(index) }
+                    var services = OrbitOnboardingServices()
+                    services.cachedFavicon = { environment.sidebarIconMemory.image(profile: profile, home: $0) }
+                    services.favicon = { url in
+                        guard let pixels = await environment.favoriteIcons?.image(profile: profile, home: url) else { return nil }
+                        return await pixels.nativeImage()
+                    }
+                    let themeTarget = spaces.first.map { OrbitOnboardingThemeTarget(spaceID: $0.id, profileID: profile, stored: nil, commit: { _ in }, registry: nil) }
+                    let onboarding = OrbitOnboardingWindowController(flow: flow, services: services, themeTarget: themeTarget)
                     guard let target = onboarding.window else { continue }
                     target.setFrameOrigin(NSPoint(x: 60, y: 60))
                     let folder = runRoot.appendingPathComponent("motion-" + step.rawValue)
                     try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+                    let presentedAt = CACurrentMediaTime()
                     onboarding.present()
                     target.setFrameOrigin(NSPoint(x: 60, y: 60))
-                    let start = CACurrentMediaTime()
+                    if step == .welcome {
+                        check("brand.motion-registration", await until(0.35) {
+                            let rows = CGWindowListCopyWindowInfo([.optionIncludingWindow], CGWindowID(target.windowNumber)) as? [[String: Any]]
+                            return rows?.contains(where: { ($0[kCGWindowOwnerPID as String] as? Int32) == getpid() }) == true
+                        })
+                    }
+                    let interactive = step == .favourites || step == .theme
+                    if interactive || step == .finish {
+                        try? await Task.sleep(for: .seconds(1.4))
+                        NSApp.activate(ignoringOtherApps: true)
+                        target.makeKeyAndOrderFront(nil)
+                        try? await Task.sleep(for: .milliseconds(150))
+                    }
+                    let duration: Double = interactive ? 2.6 : 3.6
+                    var transitionAt: CFTimeInterval?
+                    if step != .welcome {
+                        NSApp.activate(ignoringOtherApps: true)
+                        target.makeKeyAndOrderFront(nil)
+                        try? await Task.sleep(for: .milliseconds(150))
+                        let rows = CGWindowListCopyWindowInfo([.optionIncludingWindow], CGWindowID(target.windowNumber)) as? [[String: Any]]
+                        guard target.isKeyWindow, rows?.contains(where: { ($0[kCGWindowOwnerPID as String] as? Int32) == getpid() }) == true else { check("brand.motion-input-owner", false); continue }
+                        transitionAt = CACurrentMediaTime()
+                        if step == .favourites { onboarding.card.skipButton.performClick(nil) }
+                        else { onboarding.card.primaryButton.performClick(nil) }
+                        check("brand.entry-transition-" + step.rawValue, await until(0.5) { onboarding.step == step })
+                    }
+                    let start = step == .welcome ? presentedAt : transitionAt ?? CACurrentMediaTime()
                     var times: [Double] = []
-                    while CACurrentMediaTime() - start < 3.6 {
+                    var actionAt: Double?
+                    while CACurrentMediaTime() - start < duration {
                         let rows = CGWindowListCopyWindowInfo([.optionIncludingWindow], CGWindowID(target.windowNumber)) as? [[String: Any]]
                         guard rows?.contains(where: { ($0[kCGWindowOwnerPID as String] as? Int32) == getpid() }) == true else {
-                            try? await Task.sleep(for: .milliseconds(35))
-                            continue
+                            check("brand.motion-owner", false); break
                         }
                         let elapsed = CACurrentMediaTime() - start
+                        if interactive, elapsed >= 1.4, actionAt == nil {
+                            NSApp.activate(ignoringOtherApps: true)
+                            target.makeKeyAndOrderFront(nil)
+                            guard target.isKeyWindow else { check("brand.motion-input-owner", false); break }
+                            if step == .favourites, let grid = onboarding.card.rightView?.subviews.compactMap({ $0 as? OrbitOnboardingFavouritesView }).first,
+                               let tile = grid.subviews.compactMap({ $0 as? NSButton }).first(where: { $0.tag == 7 }), tile.window === target { tile.performClick(nil) }
+                            if step == .theme, let planet = onboarding.card.rightView?.subviews.compactMap({ $0 as? OrbitOnboardingPlanetButton }).first(where: { $0.planetIndex == 1 }) { planet.performClick(nil) }
+                            actionAt = CACurrentMediaTime() - start
+                        }
+                        let before = CACurrentMediaTime() - start
                         let process = Process()
                         process.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
-                        process.arguments = ["-x", "-o", "-l", String(target.windowNumber), folder.appendingPathComponent(String(format: "%04d.png", times.count)).path]
+                        process.arguments = ["-x", "-o", "-t", "jpg", "-l", String(target.windowNumber), folder.appendingPathComponent(String(format: "%04d.jpg", times.count)).path]
                         try process.run(); process.waitUntilExit()
-                        times.append(elapsed)
-                        try? await Task.sleep(for: .milliseconds(35))
+                        times.append((before + CACurrentMediaTime() - start) / 2)
+                        try? await Task.sleep(for: .milliseconds(10))
                     }
                     try JSONEncoder().encode(times).write(to: folder.appendingPathComponent("times.json"))
+                    if let actionAt { try JSONEncoder().encode(actionAt).write(to: folder.appendingPathComponent("action.json")) }
                     check("brand.motion-" + step.rawValue,
-                          times.count >= 10 && (times.first ?? 1) < 0.5 && (times.last ?? 0) >= 3)
+                          times.count >= (interactive ? 4 : 10) && (!interactive || actionAt != nil) && (times.first ?? 1) < 0.5 && (times.last ?? 0) >= duration - 0.3)
                     target.orderOut(nil)
                 }
+                window.makeKeyAndOrderFront(nil)
             } else if part == "onboarding" {
                 let sources = OrbitOnboardingSource.captureSources
-                for step in OrbitOnboardingFlow.steps {
+                if let store = environment.favoriteIcons {
+                    await withTaskGroup(of: Void.self) { group in
+                        for site in BrowserOnboardingFavourite.starter {
+                            group.addTask { _ = await store.image(profile: profile, home: site.url) }
+                        }
+                        await group.waitForAll()
+                    }
+                }
+                let requestedStep = arguments.first { $0.hasPrefix("--orbit-brand-onboarding-step=") }?.split(separator: "=", maxSplits: 1).last.map(String.init)
+                for step in OrbitOnboardingFlow.steps where requestedStep == nil || step.rawValue == requestedStep {
                     var flow = OrbitOnboardingFlow(step: step, sources: sources, syncAvailability: .available)
+                    for index in flow.favourites.indices { flow.favourites[index].selected = [2, 3, 4, 5].contains(index) }
                     flow.syncChoice = true
                     flow.defaultBrowserChoice = true
                     if step == .importSource { flow.select(source: sources[0]) }
                     let target = spaces.first.map { OrbitOnboardingThemeTarget(spaceID: $0.id, profileID: profile, stored: nil, commit: { _ in }, registry: nil) }
-                    let onboarding = OrbitOnboardingWindowController(flow: flow, services: .init(), themeTarget: target)
+                    var services = OrbitOnboardingServices()
+                    services.cachedFavicon = { environment.sidebarIconMemory.image(profile: profile, home: $0) }
+                    services.favicon = { url in
+                        guard let pixels = await environment.favoriteIcons?.image(profile: profile, home: url) else { return nil }
+                        return await pixels.nativeImage()
+                    }
+                    let onboarding = OrbitOnboardingWindowController(flow: flow, services: services, themeTarget: target)
                     onboarding.present()
+                    if step == .defaultBrowser {
+                        var importFlow = flow
+                        importFlow.select(source: sources[0])
+                        let progress = OrbitOnboardingWindowController(flow: importFlow, services: services, themeTarget: target)
+                        progress.present()
+                        progress.showImportProgress(.init(source: sources[0].name, counts: [4, 23, 4, 6, 118], fraction: 0.65, completedRows: [0, 1, 2]))
+                        if let window = progress.window { await capture("onboarding-import-progress", window); window.orderOut(nil) }
+                        onboarding.window?.makeKeyAndOrderFront(nil)
+                    }
                     try? await Task.sleep(for: .seconds(2))
-                    if let target = onboarding.window { await capture("onboarding-" + step.rawValue, target); target.orderOut(nil) }
+                    if flow.isCardStep {
+                        let button = onboarding.card.primaryButton
+                        check("brand.footer-" + step.rawValue, button.frame.width > 0 && button.alphaValue > 0 && button.superview?.isHidden == false,
+                            ["painted": button.layer?.contents != nil, "width": button.frame.width])
+                    }
+                    if let target = onboarding.window {
+                        await capture("onboarding-" + step.rawValue, target)
+                        func ownsInput() -> Bool {
+                            let rows = CGWindowListCopyWindowInfo([.optionIncludingWindow], CGWindowID(target.windowNumber)) as? [[String: Any]]
+                            return target.isKeyWindow && rows?.contains { ($0[kCGWindowOwnerPID as String] as? Int32) == getpid() } == true
+                        }
+                        if step == .favourites, ownsInput(), let grid = onboarding.card.rightView?.subviews.compactMap({ $0 as? OrbitOnboardingFavouritesView }).first,
+                           let tile = grid.subviews.compactMap({ $0 as? NSButton }).first(where: { $0.tag == 6 }), tile.window === target {
+                            tile.performClick(nil)
+                            await capture("onboarding-favourites-live", target)
+                            check("brand.favourite-preview-live", onboarding.flow.selectedFavourites.count == 5)
+                            if ownsInput() {
+                                onboarding.card.primaryButton.performClick(nil)
+                                check("brand.onboarding-primary-click", onboarding.step == .sync)
+                                try? await Task.sleep(for: .milliseconds(1400))
+                            }
+                            if ownsInput(), let event = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                                windowNumber: target.windowNumber, context: nil, characters: "\r", charactersIgnoringModifiers: "\r", isARepeat: false, keyCode: 0) {
+                                target.makeFirstResponder(nil)
+                                NSApp.sendEvent(event)
+                                check("brand.onboarding-return", onboarding.step == .theme)
+                            }
+                        }
+                        if step == .theme, ownsInput(), let planet = onboarding.card.rightView?.subviews.compactMap({ $0 as? OrbitOnboardingPlanetButton }).first(where: { $0.planetIndex == 1 }) {
+                            planet.performClick(nil)
+                            try? await Task.sleep(for: .milliseconds(500))
+                            await capture("onboarding-theme-cobalt", target)
+                            check("brand.planet-preview-live", onboarding.theme?.presetID == "brand.cobalt")
+                        }
+                        target.orderOut(nil)
+                    }
                 }
+                window.makeKeyAndOrderFront(nil)
             } else {
                 for (index, space) in spaces.prefix(4).enumerated() {
                     owner.session.activateSpace(space.id)

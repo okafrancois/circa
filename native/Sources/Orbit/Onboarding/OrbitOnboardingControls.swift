@@ -107,7 +107,7 @@ private final class OrbitOnboardingPillFace: NSView {
     override func draw(_ dirtyRect: NSRect) { owner?.drawFace(in: bounds) }
 }
 
-/// "← Back" and "Skip for now": borderless accent text.
+/// Secondary footer actions use branded text and optional underlining.
 @MainActor
 final class OrbitOnboardingLinkButton: NSButton {
     var accent: NSColor = OrbitOnboardingColors.accent { didSet { refresh() } }
@@ -225,7 +225,7 @@ class OrbitOnboardingOptionCard: NSView {
         surface.borderColor = BrandPalette.ink.cgColor
         surface.shadowColor = BrandPalette.ink.cgColor
         surface.shadowOpacity = isSelected ? 1 : 0
-        surface.backgroundColor = (isSelected ? BrandPalette.pageWhite : OrbitOnboardingColors.optionSurface).cgColor
+        surface.backgroundColor = (isSelected || isHovered ? BrandPalette.pageWhite : OrbitOnboardingColors.optionSurface).cgColor
         radio.strokeColor = BrandPalette.ink.cgColor
         radio.fillColor = isSelected ? NSColor.white.cgColor : nil
         radio.lineWidth = M.radioRing
@@ -256,8 +256,17 @@ class OrbitOnboardingOptionCard: NSView {
         tracking = area
     }
 
-    override func mouseEntered(with event: NSEvent) { isHovered = true; refresh() }
-    override func mouseExited(with event: NSEvent) { isHovered = false; refresh() }
+    private func hover(_ value: Bool) {
+        let previous = surface.presentation()?.backgroundColor ?? surface.backgroundColor
+        isHovered = value; refresh()
+        guard !OrbitMotionPreferences.prefersReducedMotion else { return }
+        let fade = CABasicAnimation(keyPath: "backgroundColor")
+        fade.fromValue = previous; fade.toValue = surface.backgroundColor
+        fade.duration = 0.15; fade.timingFunction = CAMediaTimingFunction(controlPoints: 0.25, 0.1, 0.25, 1)
+        surface.add(fade, forKey: "orbit.optionHover")
+    }
+    override func mouseEntered(with event: NSEvent) { hover(true) }
+    override func mouseExited(with event: NSEvent) { hover(false) }
 
     func setHovered(_ hovered: Bool) { isHovered = hovered; refresh() }
 
@@ -313,7 +322,7 @@ final class OrbitOnboardingChoiceCard: OrbitOnboardingOptionCard {
     override func refresh() {
         super.refresh()
         let color = isSelected ? BrandPalette.rgb(0xFFF8E6) : OrbitOnboardingColors.optionText
-        surface.backgroundColor = (isSelected ? BrandPalette.cobalt : OrbitOnboardingColors.optionSurface).cgColor
+        surface.backgroundColor = (isSelected ? BrandPalette.cobalt : isHovered ? BrandPalette.pageWhite : OrbitOnboardingColors.optionSurface).cgColor
         radio.isHidden = true; dot.isHidden = true
         let text = NSMutableAttributedString(string: strong, attributes: [.font: OrbitOnboardingFonts.choiceStrong, .foregroundColor: color])
         text.append(NSAttributedString(string: " ", attributes: [.font: OrbitOnboardingFonts.choice, .foregroundColor: color, .kern: 6.316]))

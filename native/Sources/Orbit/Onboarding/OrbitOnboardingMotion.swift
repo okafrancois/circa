@@ -23,7 +23,7 @@ enum OrbitOnboardingMotion {
 
     static let curve = CAMediaTimingFunction(controlPoints: 0.19, 1, 0.22, 1)
     static func animate(_ layer: CALayer?, key: String, from: CGFloat, to: CGFloat, duration: Double,
-                        delay: Double = 0, stick: Bool = false, outgoing: Bool = false) {
+                        delay: Double = 0, stick: Bool = false, outgoing: Bool = false, removesAtEnd: Bool = false) {
         guard let layer else { return }
         let reduced = OrbitMotionPreferences.prefersReducedMotion
         guard !reduced || key == "opacity" else { return }
@@ -57,12 +57,13 @@ enum OrbitOnboardingMotion {
         animation.duration = reduced ? 0.25 : duration
         animation.beginTime = CACurrentMediaTime() + (reduced ? 0 : delay)
         animation.fillMode = .both
-        animation.isRemovedOnCompletion = false
+        animation.isRemovedOnCompletion = removesAtEnd
         layer.add(animation, forKey: "orbit.onboarding." + key)
     }
     static func entrance(_ view: NSView, y: CGFloat = 18, duration: Double = 1, delay: Double = 0) {
+        view.wantsLayer = true
         animate(view.layer, key: "transform.translation.y", from: view.superview?.isFlipped == true ? y : -y, to: 0, duration: duration, delay: delay)
-        animate(view.layer, key: "opacity", from: 0, to: 1, duration: duration, delay: delay)
+        animate(view.layer, key: "opacity", from: 0, to: view.alphaValue, duration: duration, delay: delay, removesAtEnd: true)
     }
 }
 

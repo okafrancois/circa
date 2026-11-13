@@ -1,5 +1,6 @@
 import AppKit
 import CoreText
+import QuartzCore
 import BrowserCore
 import BrowserShell
 import Testing
@@ -55,6 +56,12 @@ extension OnboardingPresentationTests {
             #expect(button.frame.minY >= 600 && button.frame.maxY <= 714)
             #expect(button.acceptsFirstResponder == button.isEnabled)
             #expect(button.accessibilityRole() == .button)
+            #expect(controller.card.backButton.alphaValue == 0.6)
+            controller.card.playContents()
+            let entry = try #require(controller.card.backButton.layer?.animation(forKey: "orbit.onboarding.opacity"))
+            let finalOpacity = (entry as? CAKeyframeAnimation)?.values?.last ?? (entry as? CABasicAnimation)?.toValue
+            #expect((finalOpacity as? NSNumber)?.doubleValue == 0.6)
+            #expect(entry.isRemovedOnCompletion)
         }
     }
 }

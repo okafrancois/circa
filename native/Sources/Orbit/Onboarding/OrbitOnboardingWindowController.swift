@@ -36,7 +36,7 @@ struct OrbitOnboardingServices {
 /// Non-closable first-run window with disabled traffic lights.
 @MainActor
 final class OrbitOnboardingWindow: NSWindow {
-    /// Centre of the first window button, from the window's top-left (measured 19.8, 23.7).
+    /// Centre of the first window button, from the window's top-left.
     static let firstButtonCenter = CGPoint(x: 34, y: 29.2)
 
     var onPrimaryAction: (() -> Void)?
@@ -371,6 +371,7 @@ final class OrbitOnboardingWindowController: NSWindowController {
 
     /// Projects `flow` onto the window.
     func render(direction: OrbitOnboardingDirection, animated: Bool) {
+        if animated { window?.makeFirstResponder(nil) }
         importProgressView?.removeFromSuperview(); importProgressView = nil
         card.textClip.isHidden = false; card.rightContent.isHidden = false
         updateTopBar()
@@ -413,6 +414,7 @@ final class OrbitOnboardingWindowController: NSWindowController {
         card.skipButton.refresh()
         card.layoutControls(hasBack: flow.hasBack && flow.step != .importSource, hasSkip: flow.hasSkip && flow.step != .theme, animated: false)
         let right = makeRightPanel()
+        card.footerEntranceDelay = [.favourites, .defaultBrowser].contains(flow.step) ? 0.52 : 0.59
         card.show(page: page, right: right, direction: direction, animated: animated)
         refreshSelection()
         window?.recalculateKeyViewLoop()
@@ -499,7 +501,8 @@ final class OrbitOnboardingWindowController: NSWindowController {
             note.font = OrbitOnboardingFonts.mono(16.58)
             note.textColor = BrandPalette.ink.withAlphaComponent(0.7)
             note.frame = NSRect(x: 54, y: choicesTop + 2 * M.choiceCardSize.height + M.optionGap + 19, width: 590, height: 26)
-            panel.addSubview(note); selectionNote = note
+            panel.addSubview(note); note.identifier = NSUserInterfaceItemIdentifier("orbit.onboarding.secondary-copy")
+            selectionNote = note
         case .favourites:
             let grid = OrbitOnboardingFavouritesView(sites: flow.favourites)
             grid.frame.origin = NSPoint(x: 54, y: choicesTop - 3.16)
@@ -565,6 +568,7 @@ final class OrbitOnboardingWindowController: NSWindowController {
 
     private func miniPreview(in panel: NSView, label: String) -> OrbitOnboardingMiniPreview {
         let heading = NSTextField(labelWithString: label)
+        heading.identifier = NSUserInterfaceItemIdentifier("orbit.onboarding.preview-heading")
         heading.attributedStringValue = BrandTextStyle.mono.attributedString(label, size: 16.58, attributes: [.foregroundColor: BrandPalette.cobalt, .kern: 1.99])
         heading.frame = NSRect(x: 780, y: 132.63, width: 366.32, height: 25)
         panel.addSubview(heading)
@@ -636,6 +640,7 @@ final class OrbitOnboardingWindowController: NSWindowController {
             y += list.frame.height + 14
         }
         let scope = NSTextField(wrappingLabelWithString: uiText("Spaces · pinned tabs · themes\nBoosts · passwords (encrypted)"))
+        scope.identifier = NSUserInterfaceItemIdentifier("orbit.onboarding.secondary-copy")
         let style = NSMutableParagraphStyle()
         style.minimumLineHeight = 26.53; style.maximumLineHeight = 26.53
         scope.attributedStringValue = BrandTextStyle.mono.attributedString(scope.stringValue, size: 16.58, attributes: [.foregroundColor: BrandPalette.ink.withAlphaComponent(0.75), .kern: 0.663, .paragraphStyle: style])
@@ -696,6 +701,7 @@ final class OrbitOnboardingWindowController: NSWindowController {
             }
         }
         let colorName = NSTextField(labelWithString: uiText("Mandarine").uppercased())
+        colorName.identifier = NSUserInterfaceItemIdentifier("orbit.onboarding.secondary-copy")
         colorName.font = OrbitOnboardingFonts.mono(16.58); colorName.textColor = BrandPalette.ink
         colorName.frame = NSRect(x: 54, y: choicesTop + 104.21, width: 530, height: 22)
         colorName.attributedStringValue = BrandTextStyle.mono.attributedString(colorName.stringValue, size: 16.58, attributes: [.foregroundColor: BrandPalette.ink, .kern: 1.658])

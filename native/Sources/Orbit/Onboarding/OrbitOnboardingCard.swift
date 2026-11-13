@@ -164,14 +164,14 @@ final class OrbitOnboardingCardView: NSView {
         if hasBack != wasShown {
             if animated, !OrbitMotionPreferences.prefersReducedMotion, let layer = backButton.layer {
                 let fade = CABasicAnimation(keyPath: "opacity")
-                fade.fromValue = hasBack ? 0 : 1
-                fade.toValue = hasBack ? 1 : 0
+                fade.fromValue = hasBack ? 0 : 0.6
+                fade.toValue = hasBack ? 0.6 : 0
                 fade.duration = M.crossFadeDuration
                 fade.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
                 layer.add(fade, forKey: Self.fadeKey)
             }
-            backButton.alphaValue = hasBack ? 0.6 : 0
         }
+        backButton.alphaValue = hasBack ? 0.6 : 0
         backButton.isEnabled = hasBack
         backButton.setAccessibilityElement(hasBack)
     }
@@ -207,6 +207,7 @@ final class OrbitOnboardingCardView: NSView {
             completion?()
         }
     }
+    var footerEntranceDelay: Double = 0.59
     func playContents() {
         guard let page else { return }
         for (view, delay) in [(page.title, 0.38), (page.body, 0.45), (page.note, 0.52)] {
@@ -214,10 +215,15 @@ final class OrbitOnboardingCardView: NSView {
             OrbitOnboardingMotion.entrance(view, y: 31.58, duration: 0.5, delay: delay)
         }
         for button in [primaryButton, skipButton, backButton] as [NSView] {
-            OrbitOnboardingMotion.entrance(button, y: 31.58, duration: 0.5, delay: 0.59)
+            OrbitOnboardingMotion.entrance(button, y: 31.58, duration: 0.5, delay: footerEntranceDelay)
         }
-        for view in rightView?.subviews ?? [] where !(view is OrbitOnboardingSpaceArt) && !(view is OrbitOnboardingIllustrationView) && !(view is OrbitOnboardingMiniPreview) {
-            OrbitOnboardingMotion.entrance(view, y: 31.58, duration: 0.5, delay: page.body.stringValue.isEmpty ? 0.45 : 0.52)
+        var entries = rightView?.subviews ?? []
+        for scroll in entries.compactMap({ $0 as? NSScrollView }) {
+            entries.removeAll { $0 === scroll }
+            entries.append(contentsOf: scroll.documentView?.subviews ?? [])
+        }
+        for view in entries where view.identifier?.rawValue != "orbit.onboarding.preview-heading" && !(view is OrbitOnboardingSpaceArt) && !(view is OrbitOnboardingIllustrationView) && !(view is OrbitOnboardingMiniPreview) {
+            OrbitOnboardingMotion.entrance(view, y: 31.58, duration: 0.5, delay: view.identifier?.rawValue == "orbit.onboarding.secondary-copy" ? 0.52 : 0.45)
         }
     }
 

@@ -148,7 +148,20 @@ final class OrbitOnboardingSyncArt: OrbitOnboardingSpaceArt {
             animate(view.layer, key: "transform.translation.y", values: values, duration: duration * 2, repeats: true)
         }
     }
-    func select(_ enabled: Bool) { second.alphaValue = enabled ? 1 : 0.25; secondLabel.alphaValue = enabled ? 1 : 0.25; link.alphaValue = enabled ? 1 : 0 }
+    func select(_ enabled: Bool) {
+        for (view, target) in [(second, enabled ? 1.0 : 0.25), (secondLabel, enabled ? 1.0 : 0.25), (link, enabled ? 1.0 : 0.0)] {
+            guard view.alphaValue != target else { continue }
+            let previous = Double(view.layer?.presentation()?.opacity ?? Float(view.alphaValue))
+            CATransaction.begin(); CATransaction.setDisableActions(true)
+            view.alphaValue = target
+            CATransaction.commit()
+            guard !OrbitMotionPreferences.prefersReducedMotion else { continue }
+            let fade = CAKeyframeAnimation(keyPath: "opacity")
+            fade.values = (0...60).map { previous + (target - previous) * (1 - pow(1 - Double($0) / 60, 2)) }
+            fade.duration = 0.4; fade.timingFunction = CAMediaTimingFunction(name: .linear)
+            view.layer?.add(fade, forKey: "orbit.syncSelection")
+        }
+    }
 }
 
 @MainActor

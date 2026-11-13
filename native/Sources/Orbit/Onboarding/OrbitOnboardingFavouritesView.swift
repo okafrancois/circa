@@ -42,6 +42,7 @@ final class OrbitOnboardingFavouritesView: NSView {
             button.layer?.backgroundColor = BrandPalette.pageWhite.withAlphaComponent(0.6).cgColor
             let check = CALayer(); check.frame = CGRect(x: button.bounds.width - 18.95, y: -7.89, width: 26.84, height: 26.84)
             check.cornerRadius = 13.42
+            check.transform = CATransform3DMakeScale(0, 0, 1)
             button.layer?.addSublayer(check); checks.append(check)
             button.imagePosition = .noImage
             button.imageScaling = .scaleNone
@@ -74,24 +75,28 @@ final class OrbitOnboardingFavouritesView: NSView {
             button.outline.path = CGPath(roundedRect: button.bounds.insetBy(dx: -1.58, dy: -1.58), cornerWidth: 22.11, cornerHeight: 22.11, transform: nil)
             button.outline.opacity = site.selected ? 1 : 0
             button.layer?.borderColor = BrandPalette.ink.cgColor
-            button.layer?.backgroundColor = BrandPalette.pageWhite.withAlphaComponent(site.selected ? 1 : 0.6).cgColor
-            let newlySelected = site.selected && checks[index].isHidden
-            checks[index].isHidden = !site.selected
-            if newlySelected, !OrbitMotionPreferences.prefersReducedMotion {
+            button.isSelectedTile = site.selected
+            let check = checks[index]
+            let wasSelected = check.transform.m11 > 0.5
+            CATransaction.begin(); CATransaction.setDisableActions(true)
+            check.transform = CATransform3DMakeScale(site.selected ? 1 : 0, site.selected ? 1 : 0, 1)
+            CATransaction.commit()
+            if wasSelected != site.selected, !OrbitMotionPreferences.prefersReducedMotion {
                 let pop = CAKeyframeAnimation(keyPath: "transform.scale")
-                pop.values = (0...60).map { frame in let t = Double(frame) / 60 - 1; return 1 + 4 * t * t * t + 3 * t * t }
+                let from = wasSelected ? 1.0 : 0.0, to = site.selected ? 1.0 : 0.0
+                pop.values = (0...60).map { frame in
+                    let t = Double(frame) / 60 - 1
+                    return from + (to - from) * (1 + 4 * t * t * t + 3 * t * t)
+                }
                 pop.timingFunction = CAMediaTimingFunction(name: .linear)
-                pop.duration = 0.3; checks[index].add(pop, forKey: "orbit.checkPop")
+                pop.duration = 0.3; check.add(pop, forKey: "orbit.checkPop")
             }
-            checks[index].backgroundColor = (site.selected ? BrandPalette.controlAccent : .white).cgColor
-            checks[index].borderWidth = site.selected ? 0 : 1.5
-            checks[index].borderColor = BrandPalette.controlBorder.cgColor
-            checks[index].sublayers?.forEach { $0.removeFromSuperlayer() }
-            if site.selected {
+            check.backgroundColor = BrandPalette.controlAccent.cgColor
+            if check.sublayers?.isEmpty != false {
                 let tick = CAShapeLayer(); let path = CGMutablePath()
                 path.move(to: CGPoint(x: 6, y: 13.5)); path.addLine(to: CGPoint(x: 12, y: 19.5)); path.addLine(to: CGPoint(x: 21, y: 9))
                 tick.path = path; tick.strokeColor = NSColor.white.cgColor; tick.fillColor = nil; tick.lineWidth = 1.8
-                checks[index].addSublayer(tick)
+                check.addSublayer(tick)
             }
             button.setAccessibilityLabel(site.title + ", " + hint)
             button.setAccessibilityValue(site.selected ? 1 : 0)
@@ -117,6 +122,9 @@ final class OrbitOnboardingFavouritesView: NSView {
 
 @MainActor
 private final class OrbitOnboardingFavouriteButton: NSButton {
+    var isSelectedTile = false { didSet { refreshSurface() } }
+    private var isHovered = false
+    private var tracking: NSTrackingArea?
     let outline = CAShapeLayer()
     let artwork = NSImageView()
     let nameField = NSTextField(labelWithString: "")
@@ -145,4 +153,26 @@ private final class OrbitOnboardingFavouriteButton: NSButton {
     }
     required init?(coder: NSCoder) { nil }
     override var isFlipped: Bool { true }
+    private func refreshSurface() {
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        layer?.backgroundColor = BrandPalette.pageWhite.withAlphaComponent(isSelectedTile || isHovered ? 1 : 0.6).cgColor
+        CATransaction.commit()
+    }
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let tracking { removeTrackingArea(tracking) }
+        let area = NSTrackingArea(rect: bounds, options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect], owner: self)
+        addTrackingArea(area); tracking = area
+    }
+    private func hover(_ value: Bool) {
+        let previous = layer?.presentation()?.backgroundColor ?? layer?.backgroundColor
+        isHovered = value; refreshSurface()
+        guard !OrbitMotionPreferences.prefersReducedMotion else { return }
+        let fade = CABasicAnimation(keyPath: "backgroundColor")
+        fade.fromValue = previous; fade.toValue = layer?.backgroundColor
+        fade.duration = 0.15; fade.timingFunction = CAMediaTimingFunction(controlPoints: 0.25, 0.1, 0.25, 1)
+        layer?.add(fade, forKey: "orbit.favouriteHover")
+    }
+    override func mouseEntered(with event: NSEvent) { hover(true) }
+    override func mouseExited(with event: NSEvent) { hover(false) }
 }
