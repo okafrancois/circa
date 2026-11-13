@@ -40,7 +40,7 @@ struct BrowserOverlayScrollbarsSettingsRow<Engine: BrowserEngine>: View {
                 Spacer(minLength: 8)
                 Toggle(uiText(BrowserOverlayScrollbars.title), isOn: Binding(get: { runtime.document.overlayScrollbars }, set: { next in
                     model.perform { try await model.setOverlayScrollbars(next) }
-                })).labelsHidden().toggleStyle(.switch).controlSize(.small)
+                })).labelsHidden().toggleStyle(SettingsSwitchControlStyle()).controlSize(.small)
                     .accessibilityIdentifier("settings-overlay-scrollbars")
                     .disabled(model.environment.engine.kind != .chromium)
             }

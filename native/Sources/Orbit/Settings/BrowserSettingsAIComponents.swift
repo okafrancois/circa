@@ -307,7 +307,7 @@ struct BrowserSettingsAISwitchStyle: ToggleStyle {
         }
         .buttonStyle(.plain)
         .accessibilityRepresentation {
-            Toggle(isOn: configuration.$isOn) { configuration.label }.toggleStyle(.switch)
+            Toggle(isOn: configuration.$isOn) { configuration.label }.toggleStyle(SettingsSwitchStyle())
         }
     }
 }

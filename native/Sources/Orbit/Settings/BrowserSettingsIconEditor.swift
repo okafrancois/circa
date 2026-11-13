@@ -154,3 +154,56 @@ final class BrowserSettingsNameDraft: ObservableObject {
         save(text)
     }
 }
+
+/// Canonical planets are one click away; the same picker exposes emoji and Dots.
+@MainActor
+struct BrowserSettingsSpaceIconChoices: View {
+    let choice: BrowserSpaceIcon
+    let save: (BrowserSpaceIcon) -> Void
+    var body: some View {
+        HStack(spacing: 7) {
+            ForEach(BrowserSpacePlanet.selectable, id: \.self) { planet in
+                Button { save(.planet(planet)) } label: {
+                    BrowserSettingsIconPreview(choice: .planet(planet)).frame(width: 24, height: 24).padding(4)
+                        .overlay(Circle().strokeBorder(choice == .planet(planet) ? Color(nsColor: BrandPalette.ink) : .clear, lineWidth: 1.5))
+                }.buttonStyle(.plain).help(SpaceIconImages.planetName(planet))
+                    .accessibilityLabel(SpaceIconImages.planetName(planet))
+                    .accessibilityIdentifier("settings-space-planet-" + planet.rawValue)
+            }
+            SettingsSpaceIconPickerButton(choice: choice, save: save).frame(width: 28, height: 28)
+        }.fixedSize()
+    }
+}
+
+@MainActor
+private struct SettingsSpaceIconPickerButton: NSViewRepresentable {
+    let choice: BrowserSpaceIcon
+    let save: (BrowserSpaceIcon) -> Void
+    func makeCoordinator() -> Coordinator { Coordinator() }
+    func makeNSView(context: Context) -> NSButton {
+        let button = NSButton(title: "", target: context.coordinator, action: #selector(Coordinator.show(_:)))
+        button.isBordered = false
+        button.setAccessibilityLabel(uiText("Change Space Icon or Emoji"))
+        button.setAccessibilityIdentifier("settings-space-icon")
+        return button
+    }
+    func updateNSView(_ button: NSButton, context: Context) {
+        context.coordinator.choice = choice
+        context.coordinator.save = save
+        button.image = SpaceIconImages.tabImage(choice) ?? OrbitIcon.image(sfName: "ellipsis", pointSize: 15)
+        if case .planet = choice { button.image = OrbitIcon.image(sfName: "ellipsis", pointSize: 15) }
+        button.toolTip = uiText("Change Space Icon or Emoji")
+    }
+    @MainActor final class Coordinator: NSObject {
+        var choice: BrowserSpaceIcon = .none
+        var save: ((BrowserSpaceIcon) -> Void)?
+        var picker: SpaceIconPicker?
+        @objc func show(_ sender: NSButton) {
+            let picker = SpaceIconPicker(currentChoice: choice, accent: .defaultSpace)
+            picker.onChooseIcon = { [weak self] in self?.save?($0) }
+            picker.onClose = { [weak self] in self?.picker = nil }
+            self.picker = picker
+            if !picker.show(relativeTo: sender) { self.picker = nil }
+        }
+    }
+}

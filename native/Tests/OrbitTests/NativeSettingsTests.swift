@@ -569,7 +569,7 @@ extension NativeWebKitTests.NativeSettingsTests {
         #expect(system.window?.isVisible == false)
     }
 
-    @Test("Offscreen Space form keeps two independent fields and a marked-text editor across refreshes")
+    @Test("Offscreen Space name keeps marked text while icon choices refresh")
     func distinctSpaceEditors() async throws {
         NSApplication.shared.setActivationPolicy(.prohibited)
         let environment = BrowserEnvironment(engine: SettingsFixtureEngine())
@@ -592,7 +592,7 @@ extension NativeWebKitTests.NativeSettingsTests {
             func collect(_ view: NSView) -> [NSTextField] {
                 ((view as? NSTextField).map { [$0] } ?? []) + view.subviews.flatMap(collect)
             }
-            return Array(collect(view).suffix(2))
+            return collect(view).filter { $0 is BrowserSettingsNameTextField }
         }
         for iteration in 0..<3 {
             await Task.yield()
@@ -600,13 +600,12 @@ extension NativeWebKitTests.NativeSettingsTests {
             try await withNativeTestDeadline("Space editor fields reconcile after Settings publication", timeout: 5) {
                 while true {
                     fields = editorFields()
-                    let expected = [model.catalog.spaces.first(where: { $0.profileID == model.selectedProfileID })!.name,
-                                    model.runtime.document.space(space.id).icon]
-                    if fields.count == 2 && fields.map(\.stringValue) == expected { break }
+                    let expected = model.catalog.spaces.first(where: { $0.profileID == model.selectedProfileID })!.name
+                    if fields.count == 1 && fields.first?.stringValue == expected { break }
                     try await Task.sleep(for: .milliseconds(20))
                 }
             }
-            #expect(fields.count == 2)
+            #expect(fields.count == 1)
             if iteration == 0 {
                 let nameField = try #require(fields.first)
                 nameField.selectText(nil)

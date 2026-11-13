@@ -92,7 +92,7 @@ private struct SettingsFrost: NSViewRepresentable {
 }
 
 extension View {
-    func settingsFrost() -> some View { background(SettingsFrost()).foregroundStyle(Color(nsColor: OrbitFloatingMaterial.body)) }
+    func settingsFrost() -> some View { settingsPopupChrome().background(SettingsFrost()).foregroundStyle(Color(nsColor: OrbitFloatingMaterial.body)) }
 }
 
 @MainActor
@@ -133,7 +133,7 @@ struct SettingsSwitchStyle: ToggleStyle {
         HStack(spacing: 12) {
             configuration.label
             Spacer(minLength: 12)
-            Toggle(isOn: configuration.$isOn) { EmptyView() }.labelsHidden().toggleStyle(.switch).controlSize(.small)
+            Toggle(isOn: configuration.$isOn) { EmptyView() }.labelsHidden().toggleStyle(SettingsSwitchControlStyle()).controlSize(.small)
         }.frame(maxWidth: .infinity)
     }
 }
@@ -219,7 +219,103 @@ struct OrbitPrintButtonStyle: ButtonStyle {
             .foregroundStyle(Color(nsColor: primary ? BrandPalette.pageWhite : BrandPalette.ink))
             .background(primary ? Color(nsColor: BrandPalette.coral) : Color(nsColor: BrandPalette.paper), in: RoundedRectangle(cornerRadius: 7))
             .overlay(RoundedRectangle(cornerRadius: 7).strokeBorder(Color(nsColor: BrandPalette.ink), lineWidth: 1.5))
+            .compositingGroup()
             .shadow(color: Color(nsColor: BrandPalette.ink), radius: 0, x: 0, y: configuration.isPressed ? 0 : 2)
             .offset(y: configuration.isPressed ? 2 : 0)
+    }
+}
+
+/// Painted track with native Toggle binding, focus, disabled state and accessibility semantics.
+struct SettingsSwitchControlStyle: ToggleStyle {
+    @Environment(\.isEnabled) private var isEnabled
+    func makeBody(configuration: Configuration) -> some View {
+        Button { configuration.isOn.toggle() } label: {
+            RoundedRectangle(cornerRadius: 10)
+                .fill(Color(nsColor: configuration.isOn ? BrandPalette.cobalt : BrandPalette.ink.withAlphaComponent(0.18)))
+                .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(
+                    Color(nsColor: BrandPalette.ink.withAlphaComponent(configuration.isOn ? 1 : 0.13)), lineWidth: 1.5))
+                .overlay(alignment: configuration.isOn ? .trailing : .leading) {
+                    Circle().fill(Color(nsColor: BrandPalette.paper)).frame(width: 15, height: 15).padding(2)
+                }.frame(width: 32, height: 19)
+        }.buttonStyle(.plain).opacity(isEnabled ? 1 : 0.45)
+            .accessibilityRepresentation {
+                Toggle(isOn: configuration.$isOn) { configuration.label }.toggleStyle(.switch)
+            }
+    }
+}
+
+struct SettingsGroupLabel: View {
+    let title: String
+    var body: some View {
+        Text(title.uppercased()).font(Font(BrandFonts.mono(9.5))).tracking(1.14)
+            .foregroundStyle(Color(nsColor: BrandPalette.cobalt.withAlphaComponent(0.6)))
+            .padding(.horizontal, 2).padding(.top, 4)
+    }
+}
+
+/// Menu-based pickers retain their native menu interaction with an ink-tinted pill label.
+struct SettingsPopupStyle: MenuStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        Menu(configuration).menuStyle(.borderlessButton).menuIndicator(.hidden).buttonStyle(.plain)
+            .font(Font(BrandFonts.ui(12, weight: .medium)))
+            .foregroundStyle(OrbitSettingsStyle.foreground)
+            .padding(.leading, 8).padding(.trailing, 23).padding(.vertical, 4)
+            .background(OrbitSettingsStyle.foreground.opacity(0.063), in: RoundedRectangle(cornerRadius: 7))
+            .overlay(alignment: .trailing) {
+                Image(systemName: "chevron.up.chevron.down").font(.system(size: 8, weight: .semibold))
+                    .foregroundStyle(OrbitSettingsStyle.foreground).padding(.trailing, 8).allowsHitTesting(false)
+            }
+    }
+}
+
+/// A menu label can be painted independently while its Picker retains native tags and binding.
+struct SettingsPopupPicker<Selection: Hashable, Options: View>: View {
+    let title: String
+    let selectedTitle: String
+    @Binding var selection: Selection
+    let options: Options
+    init(_ title: String, selectedTitle: String, selection: Binding<Selection>, @ViewBuilder content: () -> Options) {
+        self.title = title; self.selectedTitle = selectedTitle; self._selection = selection; self.options = content()
+    }
+    var body: some View {
+        Menu {
+            Picker(title, selection: $selection) { options }.labelsHidden().pickerStyle(.inline)
+        } label: { Text(selectedTitle).lineLimit(1).foregroundStyle(OrbitSettingsStyle.foreground) }
+        .menuStyle(SettingsPopupStyle()).tint(OrbitSettingsStyle.foreground).accessibilityLabel(title).accessibilityValue(selectedTitle)
+    }
+}
+
+extension View {
+    func settingsPopupChrome() -> some View { menuStyle(SettingsPopupStyle()) }
+}
+
+/// Labels use the same options and localized copy as the existing selectors.
+enum SettingsPopupLabels {
+    static func search(_ value: SearchEngine) -> String {
+        switch value {
+        case .google: uiText("Google")
+        case .duckDuckGo: uiText("DuckDuckGo")
+        case .bing: uiText("Bing")
+        case .perplexity: uiText("Perplexity")
+        }
+    }
+    static func memory(_ value: BrowserMemorySaverSetting) -> String {
+        switch value {
+        case .fiveMinutes: uiText("5 minutes")
+        case .fifteenMinutes: uiText("15 minutes")
+        case .thirtyMinutes: uiText("30 minutes")
+        case .oneHour: uiText("1 hour")
+        case .twoHours: uiText("2 hours")
+        case .fourHours: uiText("4 hours")
+        case .sixHours: uiText("6 hours")
+        case .never: uiText("Never")
+        }
+    }
+    static func motion(_ value: BrowserReducedMotionSetting) -> String {
+        switch value {
+        case .system: uiText("Follow System")
+        case .reduce: uiText("Reduce Motion")
+        case .full: uiText("Full Motion")
+        }
     }
 }

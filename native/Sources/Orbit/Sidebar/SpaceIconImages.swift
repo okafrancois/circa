@@ -5,11 +5,11 @@ import BrowserShell
 /// Shared bounded caches: swipe redraws reuse symbol images instead of rasterizing them again.
 @MainActor
 enum SpaceIconImages {
-    private static let planets: [NSImage?] = ["work", "home", "read", "side"].map {
+    private static let planets: [NSImage?] = ["work", "home", "read", "side", "sky", "night"].map {
         BrowserText.secondaryBrandResource("planet-" + $0, extension: "png").flatMap { NSImage(contentsOf: $0) }
     }
     static func planet(at index: Int) -> NSImage? { planets[((index % 4) + 4) % 4] }
-    static func planet(_ variant: BrowserSpacePlanet, defaultIndex: Int = 0) -> NSImage? { planet(at: variant.index(defaultIndex: defaultIndex)) }
+    static func planet(_ variant: BrowserSpacePlanet, defaultIndex: Int = 0) -> NSImage? { planets[variant.index(defaultIndex: defaultIndex)] }
     static func planetName(_ variant: BrowserSpacePlanet) -> String {
         switch variant {
         case .automatic: uiText("Planet")
@@ -17,6 +17,8 @@ enum SpaceIconImages {
         case .home: uiText("Home")
         case .reading: uiText("Reading")
         case .sideProject: uiText("Side project")
+        case .sky: uiText("Sky")
+        case .night: uiText("Night")
         }
     }
 

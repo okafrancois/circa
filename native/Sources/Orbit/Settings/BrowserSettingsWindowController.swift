@@ -439,9 +439,9 @@ struct BrowserSettingsView<Engine: BrowserEngine>: View {
                           HStack {
                             Text((model.settingsSection ?? .general).title).font(Font(BrandTextStyle.title.font(size: 25))).kerning(BrandTextStyle.title.tracking(size: 25))
                             Spacer()
-                            Picker(text("selectedProfile", "Profile"), selection: Binding(get: { profile }, set: { model.selectProfile($0) })) {
+                            SettingsPopupPicker(text("selectedProfile", "Profile"), selectedTitle: model.catalog.profiles.first(where: { $0.id == profile })?.name ?? "", selection: Binding(get: { profile }, set: { model.selectProfile($0) })) {
                                 ForEach(model.catalog.profiles, id: \.id) { Text($0.name).tag($0.id) }
-                            }.labelsHidden().pickerStyle(.menu).frame(width: 160).accessibilityIdentifier("settings-profile")
+                            }.labelsHidden().frame(width: 160).accessibilityIdentifier("settings-profile")
                           }
                         }
                         switch model.settingsSection ?? .general {
@@ -462,7 +462,8 @@ struct BrowserSettingsView<Engine: BrowserEngine>: View {
         .controlSize(.small)
         .frame(minWidth: 900, minHeight: 400)
         .foregroundStyle(OrbitSettingsStyle.foreground)
-        .toggleStyle(.switch)
+        .toggleStyle(SettingsSwitchStyle())
+        .settingsPopupChrome()
         .tint(Color(nsColor: BrandPalette.cobalt))
         .background(OrbitSettingsStyle.background)
         .overlay(OrbitPaperGrainSurface().allowsHitTesting(false))
@@ -564,7 +565,7 @@ struct BrowserSettingsView<Engine: BrowserEngine>: View {
         let choice = runtime.document.space(space.id).iconSelection
         guard choice == .planet(.automatic) else { return choice }
         let index = model.catalog.spaces.firstIndex(where: { $0.id == space.id }) ?? 0
-        return .planet(BrowserSpacePlanet.selectable[index % BrowserSpacePlanet.selectable.count])
+        return .planet(BrowserSpacePlanet.selectable[index % 4])
     }
 
     @ViewBuilder private func spaces(_ profile: ProfileID) -> some View {
@@ -610,8 +611,8 @@ struct BrowserSettingsView<Engine: BrowserEngine>: View {
                         }
                         SettingsRule()
                         SettingsDetailRow(title: uiText("Icon")) {
-                            BrowserSettingsIconEditor(choice: displayedSpaceIcon(space), compact: true) { value in
-                                model.queueSpaceIconEdit(spaceID: space.id, profileID: space.profileID, icon: BrowserSpaceIcon(legacyIcon: value))
+                            BrowserSettingsSpaceIconChoices(choice: displayedSpaceIcon(space)) { value in
+                                model.queueSpaceIconEdit(spaceID: space.id, profileID: space.profileID, icon: value)
                             }.disabled(runtime.isUnavailable)
                         }
                         SettingsRule()
@@ -621,18 +622,22 @@ struct BrowserSettingsView<Engine: BrowserEngine>: View {
                         }
                         SettingsRule()
                         SettingsDetailRow(title: text("spaceProfile", "Profile")) {
-                            Picker(text("spaceProfile", "Profile"), selection: Binding(get: { space.profileID }, set: { target in
+                            SettingsPopupPicker(text("spaceProfile", "Profile"), selectedTitle: model.catalog.profiles.first(where: { $0.id == space.profileID })?.name ?? "", selection: Binding(get: { space.profileID }, set: { target in
                                 model.perform { try await model.assignSpace(space.id, profile: target) }
                             })) {
                                 ForEach(model.catalog.profiles, id: \.id) { Text($0.name).tag($0.id) }
-                            }.labelsHidden().pickerStyle(.menu).frame(width: 160)
+                            }.labelsHidden().frame(width: 160)
                                 .accessibilityIdentifier("settings-space-profile")
                         }
                     }.id(space.id)
-                    Button(uiText("Delete Space…"), role: .destructive) { deletionSpaceName = ""; deletingSpace = space }
-                        .settingsDestructive()
-                        .disabled(model.catalog.spaces.count < 2 || runtime.isUnavailable)
-                        .accessibilityIdentifier("settings-delete-space")
+                    SettingsCard {
+                        SettingsDetailRow(title: uiText("Delete this Space")) {
+                            Button(uiText("Delete…")) { deletionSpaceName = ""; deletingSpace = space }
+                                .buttonStyle(OrbitPrintButtonStyle())
+                                .disabled(model.catalog.spaces.count < 2 || runtime.isUnavailable)
+                                .accessibilityIdentifier("settings-delete-space")
+                        }
+                    }
                     Text(text("spaceProfileNote", "Changing a profile requires an empty Space that is not open in a window."))
                         .font(Font(BrandFonts.ui(12))).foregroundStyle(.secondary)
                 }.frame(maxWidth: .infinity, alignment: .leading)
@@ -681,13 +686,13 @@ struct BrowserSettingsView<Engine: BrowserEngine>: View {
                            ForEach(model.permissionRows.filter { $0.origin == origin }) { row in
                             VStack(spacing: 4) {
                                 Text(row.permission.displayTitle).font(Font(BrandFonts.ui(11))).foregroundStyle(.secondary)
-                                Picker(row.permission.displayTitle, selection: Binding(get: { row.setting }, set: { value in
+                                SettingsPopupPicker(row.permission.displayTitle, selectedTitle: permissionName(row.setting), selection: Binding(get: { row.setting }, set: { value in
                                     model.perform { try await model.changePermission(row, setting: value, profile: profile) }
                                 })) {
                                     ForEach(BrowserSitePermissionSetting.allCases.filter { $0 != .allow || row.permission.supportsPersistentAllow }, id: \.self) { value in
                                         Text(permissionName(value)).tag(value)
                                     }
-                                }.labelsHidden().pickerStyle(.menu).frame(width: 85)
+                                }.labelsHidden().frame(width: 85)
                             }
                            }
                           }
@@ -709,11 +714,11 @@ struct BrowserSettingsView<Engine: BrowserEngine>: View {
 
     @ViewBuilder private var appearance: some View {
         if let profile = model.selectedProfileID {
-            Text(uiText("Space appearance").uppercased()).font(Font(BrandFonts.mono(9.5))).tracking(1.14).foregroundStyle(.secondary)
+            SettingsGroupLabel(title: uiText("Space appearance"))
             SettingsCard {
                 if model.catalog.profiles.count > 1 {
                     SettingsDetailRow(title: uiText("Profile")) {
-                        Picker(uiText("Profile"), selection: Binding(get: { profile }, set: { model.selectProfile($0) })) {
+                        SettingsPopupPicker(uiText("Profile"), selectedTitle: model.catalog.profiles.first(where: { $0.id == profile })?.name ?? "", selection: Binding(get: { profile }, set: { model.selectProfile($0) })) {
                             ForEach(model.catalog.profiles, id: \.id) { Text($0.name).tag($0.id) }
                         }.labelsHidden().frame(width: 160).accessibilityIdentifier("settings-appearance-profile")
                     }
@@ -721,7 +726,7 @@ struct BrowserSettingsView<Engine: BrowserEngine>: View {
                 }
                 if let id = model.appearanceSpaceID, let space = model.catalog.spaces.first(where: { $0.id == id && $0.profileID == profile }) {
                     SettingsDetailRow(title: uiText("Space")) {
-                        Picker(uiText("Space"), selection: Binding(get: { id }, set: { model.selectAppearanceSpace($0) })) {
+                        SettingsPopupPicker(uiText("Space"), selectedTitle: space.name, selection: Binding(get: { id }, set: { model.selectAppearanceSpace($0) })) {
                             ForEach(model.catalog.spaces.filter { $0.profileID == profile }, id: \.id) { Text($0.name).tag($0.id) }
                         }.labelsHidden().frame(width: 160).accessibilityIdentifier("settings-appearance-space")
                     }
@@ -730,7 +735,7 @@ struct BrowserSettingsView<Engine: BrowserEngine>: View {
                 }
                 SettingsRule()
                 SettingsDetailRow(title: uiText("Animations")) {
-                    Picker(uiText("Animations"), selection: Binding(get: { runtime.document.reducedMotion }, set: { value in
+                    SettingsPopupPicker(uiText("Animations"), selectedTitle: SettingsPopupLabels.motion(runtime.document.reducedMotion), selection: Binding(get: { runtime.document.reducedMotion }, set: { value in
                         model.perform { try await model.setReducedMotion(value) }
                     })) {
                         Text(uiText("Follow System")).tag(BrowserReducedMotionSetting.system)

@@ -304,10 +304,10 @@ final class SpaceIconPicker: NSViewController, NSSearchFieldDelegate {
                 }
                 grid.setSections([(nil, planets), (nil, emojis)], selecting: currentChoice)
             } else {
-                let aliases = ["work briefcase globe", "home house", "reading book bookmark", "side project star heart paintbrush"]
+                let aliases: [BrowserSpacePlanet: String] = [.work: "work briefcase globe", .home: "home house", .reading: "reading book bookmark", .sideProject: "side project star heart paintbrush"]
                 var results = planets.filter { item in
                     guard case .planet(let variant) = item.choice else { return false }
-                    return item.name.localizedCaseInsensitiveContains(trimmed) || trimmed.lowercased().split(whereSeparator: \.isWhitespace).allSatisfy { query in aliases[variant.index()].split(separator: " ").contains { $0.hasPrefix(query) } }
+                    return item.name.localizedCaseInsensitiveContains(trimmed) || trimmed.lowercased().split(whereSeparator: \.isWhitespace).allSatisfy { query in (aliases[variant] ?? variant.rawValue).split(separator: " ").contains { $0.hasPrefix(query) } }
                 } + catalog.search(trimmed)
                 if let typed = SpaceIconPickerCatalog.typedEmoji(trimmed), !results.contains(where: { $0.emoji == typed }) {
                     results.insert(.init(emoji: typed, name: uiText("Use typed emoji"), category: .symbols), at: 0)

@@ -115,13 +115,13 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
                 if let profile = model.selectedProfileID {
                     rule
                     settingRow("Search engine") {
-                        Picker(uiText("Search engine"), selection: Binding(get: { runtime.document.profile(profile).searchEngine }, set: { value in
+                        SettingsPopupPicker(uiText("Search engine"), selectedTitle: SettingsPopupLabels.search(runtime.document.profile(profile).searchEngine), selection: Binding(get: { runtime.document.profile(profile).searchEngine }, set: { value in
                             model.perform { try await model.updateProfile(profile) { $0.searchEngine = value } }
                         })) {
                             Text("Google").tag(SearchEngine.google)
                             Text("DuckDuckGo").tag(SearchEngine.duckDuckGo)
                             Text("Bing").tag(SearchEngine.bing)
-                        }.labelsHidden().pickerStyle(.menu).frame(width: 135).accessibilityIdentifier("settings-search-engine")
+                        }.labelsHidden().frame(width: 135).accessibilityIdentifier("settings-search-engine")
                     }
                     rule
                     liveToggle("Show search suggestions", value: runtime.document.profile(profile).showSearchSuggestions,
@@ -142,10 +142,11 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
                     try await runtime.updateDownloads { $0.asksWhereToSave = value }
                 }
             }
+            SettingsGroupLabel(title: uiText("Archive"))
             panel {
                 if let profile = model.selectedProfileID {
                     settingRow("Archive tabs after") {
-                        Picker(uiText("Archive tabs after"), selection: Binding(get: { model.archiveThreshold }, set: { value in
+                        SettingsPopupPicker(uiText("Archive tabs after"), selectedTitle: model.archiveThreshold.map(BrowserArchiveSettingsChange.label) ?? "", selection: Binding(get: { model.archiveThreshold }, set: { value in
                             guard let value else { return }
                             if model.catalog.profiles.count > 1 {
                                 archiveChange = .init(profile: profile, profileName: model.catalog.profiles.first(where: { $0.id == profile })?.name ?? "", threshold: value)
@@ -154,21 +155,22 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
                             ForEach(BrowserArchiveSettingsChange.options(current: model.archiveThreshold), id: \.self) { threshold in
                                 Text(BrowserArchiveSettingsChange.label(threshold)).tag(Optional(threshold))
                             }
-                        }.labelsHidden().pickerStyle(.menu).frame(width: 135).accessibilityIdentifier("settings-auto-archive")
+                        }.labelsHidden().frame(width: 135).accessibilityIdentifier("settings-auto-archive")
                     }
                     rule
                 }
                 settingRow("Archive Little Circas after") {
-                    Picker(uiText("Archive Little Circas after"), selection: Binding(get: { runtime.document.quickWindowArchiveThreshold }, set: { value in
+                    SettingsPopupPicker(uiText("Archive Little Circas after"), selectedTitle: BrowserQuickWindowArchiveSettings.title(runtime.document.quickWindowArchiveThreshold), selection: Binding(get: { runtime.document.quickWindowArchiveThreshold }, set: { value in
                         model.perform { try await runtime.setQuickWindowArchiveThreshold(value) }
                     })) {
                         ForEach(BrowserQuickWindowArchiveSettings.choices, id: \.self) { choice in
                             Text(BrowserQuickWindowArchiveSettings.title(choice)).tag(choice)
                         }
-                    }.labelsHidden().pickerStyle(.menu).frame(width: 135).accessibilityIdentifier("settings-little-archive")
+                    }.labelsHidden().frame(width: 135).accessibilityIdentifier("settings-little-archive")
                 }
             }
             Text(uiText("Pinned tabs and Favorites are never auto-archived.")).font(Font(BrandFonts.ui(10.5))).foregroundStyle(.secondary)
+            SettingsGroupLabel(title: uiText("Little Circa & Peek"))
             panel {
                 Toggle(uiText("Links from other apps open in Little Circa"), isOn: Binding(get: { runtime.document.opensExternalLinksInQuickWindow }, set: { value in
                     model.perform { try await runtime.setOpensExternalLinksInQuickWindow(value) }
@@ -254,13 +256,13 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
                     }
                     panel {
                         settingRow("Search engine") {
-                            Picker(uiText("Search engine"), selection: Binding(get: { runtime.document.profile(profile).searchEngine }, set: { value in
+                            SettingsPopupPicker(uiText("Search engine"), selectedTitle: SettingsPopupLabels.search(runtime.document.profile(profile).searchEngine), selection: Binding(get: { runtime.document.profile(profile).searchEngine }, set: { value in
                                 model.perform { try await model.updateProfile(profile) { $0.searchEngine = value } }
                             })) {
                                 Text("Google").tag(SearchEngine.google)
                                 Text("DuckDuckGo").tag(SearchEngine.duckDuckGo)
                                 Text("Bing").tag(SearchEngine.bing)
-                            }.labelsHidden().pickerStyle(.menu).frame(width: 135).accessibilityIdentifier("settings-search-engine")
+                            }.labelsHidden().frame(width: 135).accessibilityIdentifier("settings-search-engine")
                         }
                         rule
                         liveToggle("Show search suggestions", value: runtime.document.profile(profile).showSearchSuggestions,
@@ -269,7 +271,7 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
                         }
                         rule
                         settingRow("Archive tabs after") {
-                            Picker(uiText("Archive tabs after"), selection: Binding(get: { model.archiveThreshold }, set: { value in
+                            SettingsPopupPicker(uiText("Archive tabs after"), selectedTitle: model.archiveThreshold.map(BrowserArchiveSettingsChange.label) ?? "", selection: Binding(get: { model.archiveThreshold }, set: { value in
                                 guard let value else { return }
                                 if model.catalog.profiles.count > 1 {
                                     archiveChange = .init(profile: profile, profileName: entry.name, threshold: value)
@@ -280,7 +282,7 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
                                 ForEach(BrowserArchiveSettingsChange.options(current: model.archiveThreshold), id: \.self) { threshold in
                                     Text(BrowserArchiveSettingsChange.label(threshold)).tag(Optional(threshold))
                                 }
-                            }.labelsHidden().pickerStyle(.menu).frame(width: 110).accessibilityIdentifier("settings-auto-archive")
+                            }.labelsHidden().frame(width: 110).accessibilityIdentifier("settings-auto-archive")
                         }
                     }
                     Text(uiText("Pinned tabs and Favorites are never auto-archived.")).font(Font(BrandFonts.ui(12))).foregroundStyle(.secondary)
@@ -426,7 +428,7 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
             }
             panel {
                 settingRow("Put inactive tabs to sleep after", icon: "moon.stars") {
-                    Picker(uiText("Memory Saver"), selection: Binding(get: { runtime.document.memorySaver }, set: { value in
+                    SettingsPopupPicker(uiText("Memory Saver"), selectedTitle: SettingsPopupLabels.memory(runtime.document.memorySaver), selection: Binding(get: { runtime.document.memorySaver }, set: { value in
                         model.perform { try await model.setMemorySaver(value) }
                     })) {
                         Text(uiText("5 minutes")).tag(BrowserMemorySaverSetting.fiveMinutes)
@@ -437,7 +439,7 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
                         Text(uiText("4 hours")).tag(BrowserMemorySaverSetting.fourHours)
                         Text(uiText("6 hours")).tag(BrowserMemorySaverSetting.sixHours)
                         Text(uiText("Never")).tag(BrowserMemorySaverSetting.never)
-                    }.labelsHidden().pickerStyle(.menu).frame(width: 140).accessibilityIdentifier("settings-memory-saver")
+                    }.labelsHidden().frame(width: 140).accessibilityIdentifier("settings-memory-saver")
                         .help(uiText("Keeps pinned tabs, edited forms and active media awake. Sleeping tabs reload when selected."))
                 }
                 rule
@@ -506,9 +508,9 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
     private var profilePicker: some View {
         Group {
             if let profile = model.selectedProfileID {
-                Picker(uiText("Profile"), selection: Binding(get: { profile }, set: { model.selectProfile($0) })) {
+                SettingsPopupPicker(uiText("Profile"), selectedTitle: model.catalog.profiles.first(where: { $0.id == profile })?.name ?? "", selection: Binding(get: { profile }, set: { model.selectProfile($0) })) {
                     ForEach(model.catalog.profiles, id: \.id) { Text($0.name).tag($0.id) }
-                }.labelsHidden().pickerStyle(.menu).frame(maxWidth: 190).accessibilityIdentifier("settings-profile")
+                }.labelsHidden().frame(maxWidth: 190).accessibilityIdentifier("settings-profile")
             }
         }
     }
@@ -541,7 +543,7 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
         settingRow(title, icon: icon) {
             Toggle(uiText(title), isOn: Binding(get: { value }, set: { next in
                 model.perform { try await save(next) }
-            })).labelsHidden().toggleStyle(.switch).controlSize(.small).accessibilityIdentifier(identifier)
+            })).labelsHidden().toggleStyle(SettingsSwitchControlStyle()).controlSize(.small).accessibilityIdentifier(identifier)
         }
     }
     private func open(_ page: BrowserSettingsPage, profile: ProfileID) {
@@ -555,7 +557,7 @@ private struct BrowserAutomaticUpdateToggle: View {
     var body: some View {
         Toggle(uiText("Automatically update"), isOn: Binding(get: { updater.automaticallyUpdates },
             set: { updater.setAutomaticallyUpdates($0) }))
-            .labelsHidden().toggleStyle(.switch).controlSize(.small)
+            .labelsHidden().toggleStyle(SettingsSwitchControlStyle()).controlSize(.small)
             .accessibilityIdentifier("settings-automatic-updates")
     }
 }
@@ -574,7 +576,7 @@ private struct BrowserSyncSettingsRow: View {
             }
                 Spacer()
                 Toggle(uiText("Sync with iCloud"), isOn: Binding(get: { runtime.enabled }, set: save))
-                    .labelsHidden().toggleStyle(.switch).controlSize(.small)
+                    .labelsHidden().toggleStyle(SettingsSwitchControlStyle()).controlSize(.small)
                     .disabled(!runtime.available).accessibilityIdentifier("settings-icloud-sync")
         }
         .padding(.horizontal, 14).padding(.vertical, 8).frame(minHeight: 50).frame(maxWidth: .infinity, alignment: .leading)

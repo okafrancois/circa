@@ -52,8 +52,8 @@ public enum BrowserSpacePalette: String, Codable, CaseIterable, Sendable {
 
 /// Stable artwork identifiers; automatic follows the Space's default tint.
 public enum BrowserSpacePlanet: String, Codable, CaseIterable, Sendable {
-    case automatic, work, home, reading, sideProject
-    public static let selectable: [Self] = [.work, .home, .reading, .sideProject]
+    case automatic, work, home, reading, sideProject, sky, night
+    public static let selectable: [Self] = [.work, .home, .reading, .sideProject, .sky, .night]
     public func index(defaultIndex: Int = 0) -> Int {
         switch self {
         case .automatic: ((defaultIndex % 4) + 4) % 4
@@ -61,6 +61,8 @@ public enum BrowserSpacePlanet: String, Codable, CaseIterable, Sendable {
         case .home: 1
         case .reading: 2
         case .sideProject: 3
+        case .sky: 4
+        case .night: 5
         }
     }
     public static func closest(to symbol: String) -> Self {

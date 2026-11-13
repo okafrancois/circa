@@ -10,7 +10,7 @@ HELPERS = ['Orbit Helper' + suffix + '.app' for suffix in ('', ' (GPU)', ' (Rend
 ORBIT_RESOURCE_FILES = frozenset({
     'README.md', 'sign-color.pdf', 'sign-color.svg',
     'vector-provenance.json', 'wordmark.pdf', 'wordmark.svg',
-    'planet-work.png', 'planet-home.png', 'planet-read.png', 'planet-side.png', 'empty-space.png',
+    'planet-work.png', 'planet-home.png', 'planet-read.png', 'planet-side.png', 'planet-sky.png', 'planet-night.png', 'empty-space.png',
     'onboarding-trajectory.png',
     'onboarding-moon-body.png', 'onboarding-moon-frame.png', 'onboarding-moon-front.png', 'paper-grain.png',
     'settings-nav-general.png', 'settings-nav-profiles.png', 'settings-nav-spaces.png', 'settings-nav-shortcuts.png', 'settings-nav-links.png', 'settings-nav-ai.png', 'settings-nav-privacy.png', 'settings-nav-advanced.png', 'settings-nav-appearance.png', 'settings-nav-about.png', 'onboarding-sync-first.png', 'onboarding-sync-second.png', 'onboarding-sync-link.png', 'onboarding-horizon-moon.png', 'onboarding-horizon-flag.png', 'onboarding-horizon-satellite.png', 'onboarding-horizon-star-0.png', 'onboarding-horizon-star-1.png', 'onboarding-horizon-star-2.png', 'onboarding-horizon-star-3.png', 'onboarding-horizon-star-4.png', 'sputnik.png',
