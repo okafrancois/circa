@@ -6,11 +6,11 @@ import BrowserEngineConformance
 @testable import Orbit
 
 struct SettingsPresentationTests {
-    @Test("Seven public categories retain hidden subpane routes and numbered shortcuts")
+    @Test("Ten sidebar categories retain the existing seven numbered shortcuts")
     func categories() {
         #expect(BrowserSettingsSection.allCases == [.general, .profiles, .shortcuts, .links, .ai, .advanced, .about])
-        #expect(!BrowserSettingsSection.allCases.contains(.spaces))
-        #expect(!BrowserSettingsSection.allCases.contains(.privacy))
+        #expect(BrowserSettingsSection.navigationSections.contains(.spaces))
+        #expect(BrowserSettingsSection.navigationSections.contains(.privacy))
         #expect(BrowserSettingsSection(rawValue: "icon") == nil)
         #expect(BrowserSettingsSection.about.symbol == "info.circle")
     }
@@ -46,10 +46,7 @@ struct SettingsPresentationTests {
     @Test("Window and pane transitions use the approved timing and displacement")
     func motion() {
         #expect(BrowserSettingsMotion.resizeDuration == 0.38)
-        #expect(BrowserSettingsMotion.exitDuration == 0.09)
-        #expect(BrowserSettingsMotion.enterDuration == 0.32)
-        #expect(BrowserSettingsMotion.enterDelay == 0.10)
-        #expect(BrowserSettingsMotion.rise == 6)
+        #expect(BrowserSettingsMotion.crossfadeDuration == 0.14)
         #expect(BrowserSettingsMotion.pillDuration == 0.42)
         #expect(BrowserSettingsMotion.controlPoints == [0.19, 1, 0.22, 1])
         var first: [Float] = [0, 0], second: [Float] = [0, 0]
@@ -85,7 +82,7 @@ extension SettingsPresentationTests {
         model.queueSpaceIconEdit(spaceID: second, profileID: profile, icon: .grapheme("🌿"))
         try await model.waitForPendingActions()
         #expect(environment.settings.document.space(second).iconSelection == .grapheme("🌿"))
-        #expect(environment.settings.document.space(first).iconSelection == .none)
+        #expect(environment.settings.document.space(first).iconSelection == .planet(.automatic))
         var selected = first
         let space = try #require(model.catalog.spaces.first { $0.id == second })
         let row = BrowserSettingsSpaceRow(space: space, theme: space.theme, icon: .grapheme("🌿"), isSelected: false) { selected = second }

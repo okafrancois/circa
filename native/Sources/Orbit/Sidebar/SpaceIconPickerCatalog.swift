@@ -44,6 +44,9 @@ struct SpaceIconPickerCatalog: Sendable {
         init(emoji: String, name: String, category: Category) {
             choice = .grapheme(emoji); self.name = name; self.category = category
         }
+        init(planet: BrowserSpacePlanet, name: String) {
+            choice = .planet(planet); self.name = name; category = .symbols
+        }
         init(symbol: String, name: String) {
             choice = .systemSymbol(symbol); self.name = name; category = .symbols
         }

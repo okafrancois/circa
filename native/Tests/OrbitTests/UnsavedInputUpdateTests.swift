@@ -35,7 +35,7 @@ struct UnsavedInputUpdateTests {
         defer { window.close(); surface.dispose() }
         window.contentView = surface.hostView
         let document = UpdateInputDocument()
-        surface.hostView.addSubview(document)
+        surface.documentView.addSubview(document)
         OrbitUnsavedInputGuard.register(surface)
         #expect(window.makeFirstResponder(document))
         #expect(!OrbitUnsavedInputGuard.preventsInstallation([surface]))

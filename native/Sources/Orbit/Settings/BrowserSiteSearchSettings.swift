@@ -30,7 +30,7 @@ struct BrowserSiteSearchSettings<Engine: BrowserEngine>: View {
                                     try await runtime.store.setSiteSearchEnabled(entry.id, value)
                                     await runtime.refresh()
                                 }
-                            })).labelsHidden().toggleStyle(.switch).controlSize(.small)
+                            })).labelsHidden().toggleStyle(SettingsSwitchControlStyle()).controlSize(.small)
                                 .accessibilityIdentifier("settings-site-search-enabled-" + entry.id)
                             Button(uiText("Edit")) { draft = entry }
                                 .accessibilityIdentifier("settings-site-search-edit-" + entry.id)

@@ -228,8 +228,8 @@ struct BrowserSpaceThemeCompositionTests {
         expected.mode = .dark
         #expect(none == expected)
         let preset = BrowserSpaceThemePresets.default
-        #expect(preset.light.stops == [BrowserThemeColor(hex: 0xD9DBF5), BrowserThemeColor(hex: 0xF3E5E5)])
-        #expect(preset.dark.stops == [BrowserThemeColor(hex: 0x252538), BrowserThemeColor(hex: 0x352337)])
+        #expect(preset.light.stops == [BrowserThemeColor(hex: 0xFBDFD5), BrowserThemeColor(hex: 0xFBDFD5)])
+        #expect(preset.dark.stops == [BrowserThemeColor(hex: 0x1B2057), BrowserThemeColor(hex: 0x1B2057)])
         #expect(close(preset.light.start, 20 / 1753.02, 1e-4) && close(preset.dark.end, 1380 / 1753.02, 1e-4))
         #expect(preset.recomposed(mode: .light).light == preset.light)
         #expect(preset.recomposed(colors: [mauve]).colors == [mauve])

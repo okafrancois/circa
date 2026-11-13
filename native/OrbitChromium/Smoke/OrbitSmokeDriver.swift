@@ -56,6 +56,7 @@ final class OrbitSmokeDriver: OrbitLaunchHooks {
             (arguments.contains("--orbit-smoke-site-data") ? ["--use-fake-device-for-media-stream"] : [])
     }
     private var visibleSmoke: Bool {
+        if arguments.contains("--orbit-smoke-brand") { return true }
         if arguments.contains("--orbit-smoke-live-folders-visible") { return true }
         if arguments.contains("--orbit-smoke-secure-input") || arguments.contains("--orbit-smoke-little") || (arguments.contains("--orbit-smoke-archive-options") || arguments.contains("--orbit-smoke-ai-settings")) || arguments.contains("--orbit-smoke-little-archive") || arguments.contains("--orbit-smoke-little-archive-stress") { return true }
         return arguments.contains(where: { $0.hasPrefix("--orbit-smoke-daily3") }) || (arguments.contains("--orbit-smoke-boost-menu-code") || arguments.contains("--orbit-smoke-boost-rename")) || arguments.contains("--orbit-smoke-translation") || arguments.contains("--orbit-smoke-library-boost") || arguments.contains("--orbit-smoke-password-prompt") || arguments.contains("--orbit-smoke-password-generation") ||
@@ -318,7 +319,7 @@ final class OrbitSmokeDriver: OrbitLaunchHooks {
             finish(aborted: false)
             return
         }
-        if phase == .fresh && !arguments.contains("--orbit-smoke-persistence") && !arguments.contains("--orbit-smoke-secure-input") && !arguments.contains(where: { $0.hasPrefix("--orbit-smoke-daily3") }) && !(arguments.contains("--orbit-smoke-boost-menu-code") || arguments.contains("--orbit-smoke-boost-rename")) && !arguments.contains("--orbit-smoke-translation") && !arguments.contains("--orbit-smoke-password-store") && !arguments.contains(where: { $0.hasPrefix("--orbit-smoke-daily-qa=") }) && !arguments.contains("--orbit-smoke-library-boost") && !arguments.contains("--orbit-smoke-password-prompt") && !arguments.contains("--orbit-smoke-boosts") && !arguments.contains("--orbit-smoke-password-generation") && !arguments.contains("--orbit-smoke-passwords") && !arguments.contains("--orbit-smoke-engine-r5") && !arguments.contains("--orbit-smoke-extension-only")
+        if phase == .fresh && !arguments.contains("--orbit-smoke-brand") && !arguments.contains("--orbit-smoke-persistence") && !arguments.contains("--orbit-smoke-secure-input") && !arguments.contains(where: { $0.hasPrefix("--orbit-smoke-daily3") }) && !(arguments.contains("--orbit-smoke-boost-menu-code") || arguments.contains("--orbit-smoke-boost-rename")) && !arguments.contains("--orbit-smoke-translation") && !arguments.contains("--orbit-smoke-password-store") && !arguments.contains(where: { $0.hasPrefix("--orbit-smoke-daily-qa=") }) && !arguments.contains("--orbit-smoke-library-boost") && !arguments.contains("--orbit-smoke-password-prompt") && !arguments.contains("--orbit-smoke-boosts") && !arguments.contains("--orbit-smoke-password-generation") && !arguments.contains("--orbit-smoke-passwords") && !arguments.contains("--orbit-smoke-engine-r5") && !arguments.contains("--orbit-smoke-extension-only")
             && !arguments.contains("--orbit-smoke-relaunch") && !arguments.contains("--orbit-smoke-private-domain")
             && !arguments.contains("--orbit-smoke-live-folders") && !arguments.contains("--orbit-smoke-profiles") && !arguments.contains("--orbit-smoke-site-data")
             && !arguments.contains("--orbit-smoke-space-profile") && !arguments.contains("--orbit-smoke-archive-auto") && !arguments.contains("--orbit-smoke-little") && !(arguments.contains("--orbit-smoke-archive-options") || arguments.contains("--orbit-smoke-ai-settings")) && !arguments.contains("--orbit-smoke-little-archive") && !arguments.contains("--orbit-smoke-little-archive-stress")
@@ -375,6 +376,11 @@ final class OrbitSmokeDriver: OrbitLaunchHooks {
             return
         }
         check("app.window", true, ["windows": application.windows.windows.count, "restored": restored.count])
+        if arguments.contains("--orbit-smoke-brand") {
+            await brandSurfaces(application, environment, first)
+            finish(aborted: false)
+            return
+        }
         if arguments.contains("--orbit-smoke-persistence") {
             application.configurePersistenceReporting()
             let before = NSApp.windows.count

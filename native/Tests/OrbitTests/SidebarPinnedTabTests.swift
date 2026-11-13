@@ -89,7 +89,7 @@ struct SidebarPinnedTabTests {
         #expect(row.background.fillColor == OrbitTokens.Color.State.pinnedHover)
         row.mouseExited(with: NSEvent())
         #expect(row.background.fillColor == nil)
-        #expect(row.background.cornerRadius == 11)
+        #expect(row.background.cornerRadius == 8)
         row.frame = NSRect(x: 0, y: 0, width: 300, height: 36)
         row.layoutSubtreeIfNeeded()
         #expect(row.background.frame == NSRect(x: 13, y: 0, width: 288, height: 36))
@@ -101,7 +101,7 @@ struct SidebarPinnedTabTests {
 }
 
 extension NativeWebKitTests.SidebarPinnedTabTests {
-    @Test("Selected pin card is opaque in light Spaces and keeps the shared style in dark Spaces")
+    @Test("Selected pin cards keep the daylight style under both system appearances")
     func selectedPinGeometry() {
         let row = SidebarTabRow(item: .init(id: TabID(), title: "Illustrated Atlas — Field Notes", selected: true,
             isPinned: true, isLoadedInThisWindow: true), depth: 1)
@@ -113,14 +113,14 @@ extension NativeWebKitTests.SidebarPinnedTabTests {
         #expect(row.favicon.frame == NSRect(x: 23, y: 10, width: 16, height: 16))
         #expect(row.titleLabel.frame.minX == 47 && row.titleLabel.frame.minY == 9.5)
         #expect(row.closeButton.frame.midX == 463)
-        #expect(row.background.cornerRadius == 11)
+        #expect(row.background.cornerRadius == 8)
         row.appearance = NSAppearance(named: .aqua)
         #expect(row.background.outerShadow?.blur == 2 && row.background.outerShadow?.offsetY == 1)
         #expect(row.background.fillColor == OrbitTokens.Color.State.pinnedSelected)
         #expect(row.titleLabel.textColor == OrbitTokens.Color.State.pinnedSelectedText)
         row.appearance = NSAppearance(named: .darkAqua)
-        #expect(row.background.fillColor != OrbitTokens.Color.State.pinnedSelected)
+        #expect(row.background.fillColor == OrbitTokens.Color.State.pinnedSelected)
         #expect(row.background.outerShadow?.color == OrbitTokens.Color.ShadowColor.tabSelected)
-        #expect(row.titleLabel.textColor != OrbitTokens.Color.State.pinnedSelectedText)
+        #expect(row.titleLabel.textColor == OrbitTokens.Color.State.pinnedSelectedText)
     }
 }

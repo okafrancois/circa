@@ -25,10 +25,10 @@ struct SpaceSymbolTraversalIndependentTests {
             picker.modes.selectedSegment = mode.rawValue
             #expect(picker.modes.sendAction(picker.modes.action, to: picker.modes.target))
             #expect(picker.search.isEnabled)
-            #expect(picker.modes.nextKeyView === picker.search)
-            #expect(picker.modes.nextValidKeyView === picker.search)
-            #expect(window.makeFirstResponder(picker.modes))
-            window.selectNextKeyView(picker.modes)
+            #expect(picker.removeButton.nextKeyView === picker.search)
+            #expect(picker.removeButton.nextValidKeyView === picker.search)
+            #expect(window.makeFirstResponder(picker.removeButton))
+            window.selectNextKeyView(picker.removeButton)
             let editor = try #require(picker.search.currentEditor() as? NSTextView)
             #expect(window.firstResponder === editor)
             #expect(!picker.control(picker.search, textView: editor, doCommandBy: #selector(NSResponder.insertTab(_:))))
@@ -53,8 +53,8 @@ struct SpaceSymbolTraversalIndependentTests {
         #expect(picker.modes.sendAction(picker.modes.action, to: picker.modes.target))
         picker.setSearch("briefcase")
         #expect(picker.search.isEnabled)
-        #expect(picker.visibleItems.count == 1)
-        #expect(picker.visibleItems.allSatisfy { $0.emoji.isEmpty })
+        #expect(picker.visibleItems.contains { if case .planet(.work) = $0.choice { true } else { false } })
+        #expect(picker.visibleItems.contains { !$0.emoji.isEmpty })
         picker.setSearch("unfindablezzzz")
         var graphemes: [String] = []
         picker.onChoose = { graphemes.append($0) }

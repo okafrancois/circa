@@ -46,14 +46,13 @@ struct OnboardingTests {
         }
     }
 
-    @Test("The single vector asset exposes its strokes for the entrance drawing")
+    @Test("The filled vector mark loads without the obsolete stroke entrance")
     func markAsset() throws {
-        let (_, strokes) = try #require(OrbitOnboardingMarkPaths.read())
-        #expect(strokes.count == 5)
-        let colors = strokes.compactMap { $0.color.usingColorSpace(.sRGB) }
-        #expect(colors.filter { min($0.redComponent, $0.greenComponent, $0.blueComponent) > 0.99 }.count == 2)
-        #expect(colors.contains { $0.redComponent > 0.9 && $0.greenComponent < 0.4 })
-        #expect(strokes.allSatisfy { !$0.path.isEmpty && $0.width > 0 })
+        let url = try #require(BrandFonts.markURL)
+        let document = try #require(CGPDFDocument(url as CFURL))
+        #expect(document.numberOfPages == 1)
+        #expect(BrandFonts.mark != nil)
+        #expect(OrbitOnboardingMarkPaths.read() == nil)
     }
 
     @Test("Seven steps, profile checkboxes and choices survive a saved record")
@@ -77,11 +76,14 @@ struct OnboardingTests {
     @Test("Opaque card uses the specified geometry, shared title style and native theme editor")
     func layout() throws {
         let (controller, _) = controller(step: .theme)
-        #expect(controller.card.frame == NSRect(x: 120, y: 95, width: 960, height: 560))
-        #expect(controller.card.leftPanel.path?.boundingBox.width == 380)
-        #expect(controller.card.layer?.cornerRadius == 22)
-        #expect(controller.card.layer?.backgroundColor == OrbitOnboardingColors.rightPanel.cgColor)
-        #expect(controller.card.primaryButton.frame.size == NSSize(width: 308, height: 48))
+        #expect(controller.card.frame == NSRect(x: 0, y: 0, width: 1200, height: 714))
+        #expect(controller.card.leftPanel.path?.boundingBox.width == 1200)
+        #expect(controller.card.layer?.cornerRadius == 14)
+        #expect(controller.card.layer?.backgroundColor == NSColor.clear.cgColor)
+        #expect(controller.card.primaryButton.frame.size == controller.card.primaryButton.intrinsicContentSize)
+        #expect(controller.card.primaryButton.frame.height == 69)
+        #expect(OrbitOnboardingText.counter(1) == "1 / 7")
+        #expect(OrbitOnboardingText.counter(7) == "7 / 7")
         #expect(controller.themeEditor != nil)
         #expect(controller.themeEditor?.view.surfaceScope.isHidden == true)
         #expect(controller.card.page?.counter.stringValue == OrbitOnboardingText.counter(5))
@@ -273,7 +275,7 @@ extension NativeWebKitTests.OnboardingTests {
         NSApp.appearance = NSAppearance(named: .darkAqua)
         preview.viewDidChangeEffectiveAppearance()
         let color = try #require(tint.backgroundColor.flatMap(NSColor.init(cgColor:))?.usingColorSpace(.sRGB))
-        #expect(color.redComponent == 0 && color.greenComponent == 0 && color.blueComponent == 0)
+        #expect(color.redComponent == 1 && color.greenComponent == 1 && color.blueComponent == 1)
         #expect(color.alphaComponent == BrandPalette.Frost.tint)
         preview.refreshMaterial(reduceTransparency: true)
         #expect(material.isHidden)

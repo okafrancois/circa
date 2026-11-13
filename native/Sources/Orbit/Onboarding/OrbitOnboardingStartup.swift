@@ -54,12 +54,13 @@ enum OrbitOnboardingStartup {
                 var catalog = await store.catalogSnapshot()
                 if catalog.profiles.isEmpty {
                     let profile = await store.createProfile(name: uiText("Personal"))
-                    _ = try await store.createSpace(name: uiText("Space"), profileID: profile)
+                    _ = try await store.createSpace(name: OrbitOnboardingFirstSpace.name, profileID: profile)
                     catalog = await store.catalogSnapshot()
                 }
                 guard let space = catalog.spaces.first else { throw BrowserSessionError.spaceMissing }
+                let settings = try BrowserSettingsStore(destination: configuration.sessionFile.appendingPathExtension("settings.json"))
                 let themeTarget = OrbitOnboardingThemeTarget(spaceID: space.id, profileID: space.profileID, stored: space.theme, commit: { theme in
-                    try await store.setSpaceTheme(theme, for: space.id, profileID: space.profileID)
+                    try await OrbitOnboardingFirstSpace.apply(theme, spaceID: space.id, profileID: space.profileID, store: store, settings: settings)
                     try BrowserSessionFileStore().save(await store.sessionDocument(), to: configuration.sessionFile)
                 }, registry: nil)
                 let preparation = OrbitOnboardingImportPreparation()
@@ -67,6 +68,13 @@ enum OrbitOnboardingStartup {
                 services.waitsForBrowserPreview = true
                 services.persist = { record in try? BrowserOnboardingFiles.save(record, dataDirectory: configuration.dataRoot) }
                 services.sourceArtwork = { OrbitOnboardingArtwork.artwork(for: $0, synthetic: configuration.usesMockKeychain) }
+                let icons = FavoriteIconStore(directory: configuration.dataRoot.appendingPathComponent("Favorite Icons", isDirectory: true))
+                let memory = SidebarIconMemoryCache(store: icons)
+                services.cachedFavicon = { memory.image(profile: space.profileID, home: $0) }
+                services.favicon = { url in
+                    guard let pixels = await icons.image(profile: space.profileID, home: url) else { return nil }
+                    return await pixels.nativeImage()
+                }
                 services.loadFavourites = { try await preparation.favourites($0, configuration: configuration) }
                 services.prepareFinish = { flow in
                     // Persist the initial theme before the importer opens its exclusive target.
@@ -86,7 +94,7 @@ enum OrbitOnboardingStartup {
                     if let firstSpace {
                         if !flow.skippedSteps.contains(.theme), flow.selectedSource != nil {
                             let chosen = await store.catalogSnapshot().spaces.first(where: { $0.id == space.id })?.theme
-                            try await imported.setSpaceTheme(chosen, for: firstSpace.id, profileID: firstSpace.profileID)
+                            try await OrbitOnboardingFirstSpace.apply(chosen, spaceID: firstSpace.id, profileID: firstSpace.profileID, store: imported, settings: settings)
                         }
                         if await imported.sessionDocument().windows.isEmpty {
                             _ = try await imported.createWindow(activeSpaceID: firstSpace.id)
@@ -95,6 +103,7 @@ enum OrbitOnboardingStartup {
                     try BrowserSessionFileStore().save(await imported.sessionDocument(), to: configuration.sessionFile)
                     return duration
                 }
+                services.observeImportProgress = { preparation.onProgress = $0 }
                 services.importSummary = { (try? BrowserOnboardingFiles.load(dataDirectory: configuration.dataRoot))?.importSummary }
                 services.isDefaultBrowser = { configuration.usesMockKeychain ? nil : BrowserDefaultBrowserService().status().isOrbit }
                 services.requestDefaultBrowser = {
@@ -114,6 +123,7 @@ enum OrbitOnboardingStartup {
                 let controller = OrbitOnboardingWindowController(flow: flow, services: services, themeTarget: themeTarget)
                 cover = controller
                 controller.present()
+                OrbitOnboardingProof.start(controller, configuration: configuration, icons: icons, profileID: space.profileID)
             } catch { failure = error; ready = true }
         }
         while !ready {

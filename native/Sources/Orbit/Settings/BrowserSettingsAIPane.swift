@@ -23,6 +23,7 @@ struct BrowserSettingsAIPane<Engine: BrowserEngine>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
+            Text(uiText("Bring your own AI. Off until you ask.")).font(Font(BrandFonts.onboardingBody(11.5))).foregroundStyle(.secondary).padding(.bottom, 10)
             card { masterRow }
             if enabled {
                 VStack(alignment: .leading, spacing: 0) {
@@ -324,11 +325,11 @@ struct BrowserSettingsAIPane<Engine: BrowserEngine>: View {
 
     private func header<Accessory: View>(_ title: String, @ViewBuilder accessory: () -> Accessory) -> some View {
         HStack(spacing: 8) {
-            Text(title).font(Font(BrandFonts.ui(14, weight: .semibold)))
+            SettingsGroupLabel(title: title)
             Spacer(minLength: 8)
             accessory()
         }
-        .padding(.top, 20).padding(.bottom, 8).frame(minHeight: 26)
+        .padding(.top, 12).padding(.bottom, 6).frame(minHeight: 26)
     }
 
     private func card<Content: View>(@ViewBuilder _ content: () -> Content) -> some View { SettingsCard { content() } }

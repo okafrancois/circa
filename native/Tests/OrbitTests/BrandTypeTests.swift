@@ -16,15 +16,15 @@ struct BrandTypeTests {
         row.layoutSubtreeIfNeeded()
         let shortcut = try #require(row.subviews.compactMap { $0 as? NSTextField }.first { $0.stringValue == "⌘⇧N" })
         let text = shortcut.attributedStringValue
-        #expect(text.attribute(.font, at: 0, effectiveRange: nil) as? NSFont == NSFont.systemFont(ofSize: 13))
-        #expect(text.attribute(.font, at: 2, effectiveRange: nil) as? NSFont == NSFont.systemFont(ofSize: 13))
+        #expect(text.attribute(.font, at: 0, effectiveRange: nil) as? NSFont == BrandFonts.mono(13))
+        #expect(text.attribute(.font, at: 2, effectiveRange: nil) as? NSFont == BrandFonts.mono(13))
         #expect(shortcut.frame.width == shortcut.intrinsicContentSize.width)
         #expect(shortcut.frame.origin.y == 11)
         #expect(shortcut.frame.height == 18)
         #expect(row.bounds.contains(shortcut.frame))
     }
 
-    @Test("Command Bar shortcut runs retain the previous medium system weight")
+    @Test("Command Bar row shortcuts and the input chip use their respective mono sizes")
     func commandShortcutFont() throws {
         let view = BrowserPaletteView(frame: NSRect(x: 0, y: 0, width: 800, height: 520))
         view.isHidden = false
@@ -33,9 +33,9 @@ struct BrandTypeTests {
         func labels(_ view: NSView) -> [NSTextField] {
             view.subviews.flatMap { ($0 as? NSTextField).map { [$0] } ?? labels($0) }
         }
-        let hint = try #require(labels(view).first { $0.stringValue == "⌘T" })
-        #expect(hint.attributedStringValue.attribute(.font, at: 1, effectiveRange: nil) as? NSFont
-            == NSFont.systemFont(ofSize: 13, weight: .medium))
+        let hints = labels(view).filter { $0.stringValue == "⌘T" }
+        #expect(hints.contains { $0.font == BrandFonts.mono(11) })
+        #expect(hints.contains { $0.attributedStringValue.attribute(.font, at: 1, effectiveRange: nil) as? NSFont == BrandFonts.mono(13) })
     }
 
     @Test("The editor exposes all 36 colors and keeps draft controls while paging")
@@ -96,7 +96,7 @@ struct BrandTypeTests {
     func roles() {
         #expect(OrbitTokens.Typography.sidebarTabTitle == NSFont.systemFont(ofSize: 14))
         #expect(OrbitTokens.Typography.sidebarTabTitle.pointSize == 14)
-        #expect(OrbitTokens.Typography.menuShortcut == NSFont.systemFont(ofSize: 13))
+        #expect(OrbitTokens.Typography.menuShortcut == BrandFonts.mono(13))
         #expect(OrbitTokens.Typography.emptyStateTitle == NSFont.systemFont(ofSize: 13, weight: .semibold))
         let editor = OrbitThemeEditorView(state: .init(theme: BrandPalette.spaceGradients[0].theme()))
         #expect(editor.field.frame == OrbitThemeEditorMetrics.field)
@@ -105,7 +105,7 @@ struct BrandTypeTests {
         #expect(editor.themeName.frame.maxY < 522)
     }
 
-    @Test("Audited custom control fills have no fixed blue, purple, orange or coral selection")
+    @Test("Native accent roles remain available and painted controls use brand inks")
     func controlAudit() throws {
         #expect(OrbitTokens.Color.Accent.focusRing == NSColor.controlAccentColor)
         #expect(OrbitTokens.Color.Accent.primaryButton == NSColor.controlAccentColor)
@@ -115,7 +115,7 @@ struct BrandTypeTests {
                      "Boosts/BrowserBoostZapView.swift", "SiteControls/NotificationSettingsPromptView.swift",
                      "Palette/BrowserPaletteView.swift", "Sidebar/SidebarCreationMenu.swift"] {
             let source = try String(contentsOf: sources.appendingPathComponent(file), encoding: .utf8)
-            for fixed in [".systemBlue", ".systemPurple", ".systemOrange", "BrandPalette.coral"] {
+            for fixed in [".systemBlue", ".systemPurple", ".systemOrange"] {
                 #expect(!source.contains(fixed), "Fixed control color in \(file)")
             }
         }
@@ -150,7 +150,7 @@ extension BrandTypeTests {
         let title = try #require(content.subviews.compactMap { $0 as? NSTextField }.first { $0.stringValue == alert.messageText })
         let detail = try #require(content.subviews.compactMap { $0 as? NSTextField }.first { $0.stringValue == alert.informativeText })
         #expect(title.font == NSFont.systemFont(ofSize: 13, weight: .semibold))
-        #expect(detail.font == NSFont.systemFont(ofSize: 13))
+        #expect(detail.font == BrandTextStyle.body.font(size: 13))
         #expect(content.bounds.contains(title.frame))
         #expect(title.frame.height >= title.intrinsicContentSize.height)
     }

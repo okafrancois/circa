@@ -1,6 +1,6 @@
 {
-  "markSource": "native/OrbitChromium/App/Branding/Orbit.svg",
-  "direction": "docs/brand/orbit/orbit-da.html#logo",
-  "pdfRenderer": "macOS AppKit SVG vector export",
-  "wordmark": "Retained historical asset; current UI renders Orbit as text."
+  "identity": "Space to think",
+  "markSource": "native/Sources/BrowserShell/Resources/Orbit/sign-color.svg",
+  "pdfRenderer": "Cairo SVG vector export",
+  "wordmark": "Outlined Bricolage Grotesque 800; -4.5% tracking"
 }

@@ -112,12 +112,19 @@ extension OrbitApplication {
         let stored = await environment.store.catalogSnapshot().spaces.first { $0.id == spaceID }?.theme
         let target = OrbitOnboardingThemeTarget(spaceID: spaceID, profileID: profileID, stored: stored, commit: { [weak environment] theme in
             guard let environment else { return }
-            try await environment.store.setSpaceTheme(theme, for: spaceID, profileID: profileID)
+            try await OrbitOnboardingFirstSpace.apply(theme, spaceID: spaceID, profileID: profileID, store: environment.store, settings: environment.settings.store)
             environment.scheduleSave()
+            await environment.settings.refresh()
+            await environment.refreshSettingsCatalog()
         }, registry: environment.themeEditors)
         let flow = OrbitOnboardingFlow(step: step, sources: await onboardingSources(synthetic: synthetic),
                                        syncAvailability: onboardingSyncAvailability(), restoring: record)
         var services = OrbitOnboardingServices()
+        services.cachedFavicon = { [weak environment] url in environment?.sidebarIconMemory.image(profile: profileID, home: url) }
+        services.favicon = { [weak environment] url in
+            guard let pixels = await environment?.favoriteIcons?.image(profile: profileID, home: url) else { return nil }
+            return await pixels.nativeImage()
+        }
         services.waitsForBrowserPreview = true
         services.persist = { record in try? BrowserOnboardingFiles.save(record, dataDirectory: dataDirectory) }
         services.setSync = { [weak environment] enabled in

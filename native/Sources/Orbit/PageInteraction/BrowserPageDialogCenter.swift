@@ -154,10 +154,13 @@ final class BrowserPageDialogCenter {
     // MARK: Crashed page
 
     func showCrashedPage(on hostView: NSView, surface: ObjectIdentifier, termination: BrowserRendererTermination,
-                         reload: @escaping () -> Void) {
+                         close: (() -> Void)? = nil, reload: @escaping () -> Void) {
         hideCrashedPage(for: surface)
         dismissAll(for: surface)
-        let view = BrowserPageCrashedView(termination: termination.rawValue) { [weak self] in
+        let closeAction: (() -> Void)? = close.map { action in
+            { [weak self] in self?.hideCrashedPage(for: surface); action() }
+        }
+        let view = BrowserPageCrashedView(termination: termination.rawValue, close: closeAction) { [weak self] in
             self?.hideCrashedPage(for: surface)
             reload()
         }

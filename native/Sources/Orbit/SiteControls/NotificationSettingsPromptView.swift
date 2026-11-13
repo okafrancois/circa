@@ -22,13 +22,13 @@ final class NotificationSettingsPromptView: NSView {
         wantsLayer = true
         card.wantsLayer = true
         card.layer?.cornerRadius = 16
-        card.layer?.backgroundColor = NSColor(srgbRed: 22/255, green: 25/255, blue: 42/255, alpha: 1).cgColor
-        card.layer?.borderWidth = 0.5
-        card.layer?.borderColor = NSColor.white.withAlphaComponent(0.18).cgColor
+        card.layer?.backgroundColor = BrandPalette.pageWhite.cgColor
+        card.layer?.borderWidth = 2
+        card.layer?.borderColor = BrandPalette.ink.cgColor
         let shadow = NSShadow()
-        shadow.shadowBlurRadius = 24
-        shadow.shadowOffset = NSSize(width: 0, height: -10)
-        shadow.shadowColor = NSColor.black.withAlphaComponent(0.4)
+        shadow.shadowBlurRadius = 0
+        shadow.shadowOffset = NSSize(width: 0, height: -3)
+        shadow.shadowColor = BrandPalette.ink
         card.shadow = shadow
         addSubview(card)
         card.setAccessibilityElement(true)
@@ -40,12 +40,12 @@ final class NotificationSettingsPromptView: NSView {
         card.addSubview(icon)
         let title = NSTextField(labelWithString: uiText("Circa Needs Notifications Permission"))
         title.font = BrandTextStyle.ui.font(size: 18, weight: .semibold)
-        title.textColor = .white
+        title.textColor = BrandPalette.ink
         title.frame = NSRect(x: 38, y: 118, width: 380, height: 30)
         card.addSubview(title)
         let message = NSTextField(wrappingLabelWithString: uiText("You need to open System Preferences to give Circa permission to show you Notifications."))
         message.font = BrandTextStyle.ui.font(size: 14)
-        message.textColor = NSColor(srgbRed: 181/255, green: 186/255, blue: 202/255, alpha: 1)
+        message.textColor = BrandPalette.ink2
         message.frame = NSRect(x: 38, y: 156, width: 366, height: 42)
         card.addSubview(message)
         dismissButton.title = uiText("Never Mind")
@@ -119,7 +119,7 @@ final class NotificationSettingsButton: NSButton {
     private var hintLine: CTLine {
         CTLineCreateWithAttributedString(NSAttributedString(string: hint, attributes: [
             .font: hint == "↩" ? NSFont.systemFont(ofSize: 12, weight: .semibold) : BrandTextStyle.mono.font(size: 12, weight: .semibold),
-            .foregroundColor: NSColor.white.withAlphaComponent(0.7)
+            .foregroundColor: (primary ? BrandPalette.pageWhite : BrandPalette.ink).withAlphaComponent(0.7)
         ]))
     }
     var keycapLayout: (cap: NSRect, glyph: NSRect) {
@@ -131,15 +131,15 @@ final class NotificationSettingsButton: NSButton {
                             width: size.width, height: size.height))
     }
     override func draw(_ dirtyRect: NSRect) {
-        let fill = primary ? NSColor.controlAccentColor : NSColor.white.withAlphaComponent(0.1)
+        let fill = primary ? BrandPalette.coral : BrandPalette.paper
         fill.withAlphaComponent(isHighlighted ? 0.8 : 1).setFill()
         let path = NSBezierPath(roundedRect: bounds.insetBy(dx: 0.5, dy: 0.5), xRadius: 6, yRadius: 6)
         path.fill()
-        NSColor.white.withAlphaComponent(0.25).setStroke(); path.lineWidth = 1; path.stroke()
-        let text = NSAttributedString(string: title, attributes: [.font: BrandTextStyle.ui.font(size: 13, weight: .medium), .foregroundColor: NSColor.white])
+        BrandPalette.ink.setStroke(); path.lineWidth = 2; path.stroke()
+        let text = NSAttributedString(string: title, attributes: [.font: BrandTextStyle.ui.font(size: 13, weight: .medium), .foregroundColor: primary ? BrandPalette.pageWhite : BrandPalette.ink])
         text.draw(at: NSPoint(x: 11, y: (bounds.height - text.size().height) / 2))
         let (badge, glyph) = keycapLayout
-        NSColor.white.withAlphaComponent(0.15).setFill()
+        (primary ? BrandPalette.pageWhite : BrandPalette.ink).withAlphaComponent(0.15).setFill()
         NSBezierPath(roundedRect: badge, xRadius: 3, yRadius: 3).fill()
         let line = hintLine
         let ink = CTLineGetImageBounds(line, nil)

@@ -1,9 +1,27 @@
 import AppKit
 import BrowserCore
+import BrowserShell
 
 /// Shared bounded caches: swipe redraws reuse symbol images instead of rasterizing them again.
 @MainActor
 enum SpaceIconImages {
+    private static let planets: [NSImage?] = ["work", "home", "read", "side", "sky", "night"].map {
+        BrowserText.secondaryBrandResource("planet-" + $0, extension: "png").flatMap { NSImage(contentsOf: $0) }
+    }
+    static func planet(at index: Int) -> NSImage? { planets[((index % 4) + 4) % 4] }
+    static func planet(_ variant: BrowserSpacePlanet, defaultIndex: Int = 0) -> NSImage? { planets[variant.index(defaultIndex: defaultIndex)] }
+    static func planetName(_ variant: BrowserSpacePlanet) -> String {
+        switch variant {
+        case .automatic: uiText("Planet")
+        case .work: uiText("Work")
+        case .home: uiText("Home")
+        case .reading: uiText("Reading")
+        case .sideProject: uiText("Side project")
+        case .sky: uiText("Sky")
+        case .night: uiText("Night")
+        }
+    }
+
     private static let templates = NSCache<NSString, NSImage>()
     private static let tinted = NSCache<NSString, NSImage>()
     private static let graphemes = NSCache<NSString, NSImage>()
@@ -22,6 +40,12 @@ enum SpaceIconImages {
                 source?.draw(in: rect.insetBy(dx: 8, dy: 8))
                 return true
             }
+        case .planet(let variant):
+            let source = planet(variant)
+            return NSImage(size: size, flipped: false) { rect in
+                source?.draw(in: rect.insetBy(dx: 8, dy: 8))
+                return true
+            }
         case .none:
             // An empty image deliberately suppresses the system/application fallback.
             return NSImage(size: size)
@@ -30,6 +54,7 @@ enum SpaceIconImages {
 
     static func tabImage(_ choice: BrowserSpaceIcon?) -> NSImage? {
         guard let choice, choice != .none else { return nil }
+        if case .planet(let variant) = choice { return planet(variant) }
         if case .systemSymbol(let name) = choice {
             return OrbitIcon.image(sfName: name, pointSize: 16, accessibilityDescription: nil)
         }
@@ -87,7 +112,8 @@ enum SpaceIconImages {
 
     static func label(_ choice: BrowserSpaceIcon) -> String {
         switch choice {
-        case .none: uiText("No Icon")
+        case .none: uiText("Dots")
+        case .planet(let variant): planetName(variant)
         case .grapheme(let value): value
         case .systemSymbol(let identifier): SpaceSymbolCatalog.title(for: identifier)
         }
@@ -96,7 +122,9 @@ enum SpaceIconImages {
     /// Library and Settings use the same native projection; no emoji can accompany a symbol.
     static func view(_ choice: BrowserSpaceIcon, pointSize: CGFloat = 22) -> NSView {
         let view: NSImageView
-        if case .systemSymbol(let name) = choice, let image = template(name, pointSize: pointSize) {
+        if case .planet(let variant) = choice, let image = planet(variant) {
+            view = NSImageView(image: image)
+        } else if case .systemSymbol(let name) = choice, let image = template(name, pointSize: pointSize) {
             view = NSImageView(image: image)
             view.contentTintColor = OrbitTokens.Color.Text.primary
         } else if case .grapheme(let value) = choice {
@@ -111,7 +139,7 @@ enum SpaceIconImages {
             }
             view = NSImageView(image: image)
         } else {
-            view = NSImageView(image: template("circle", pointSize: pointSize) ?? NSImage())
+            view = NSImageView(image: template("circle.fill", pointSize: pointSize) ?? NSImage())
             view.contentTintColor = OrbitTokens.Color.Text.primary
         }
         view.setAccessibilityLabel(label(choice))

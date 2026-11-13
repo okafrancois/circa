@@ -41,7 +41,7 @@ struct SettingsAIPaneTests {
         ]
     }
 
-    @Test("AI is ⌘5, Advanced ⌘6 and About ⌘7, in the toolbar and its menu equivalents")
+    @Test("Sidebar navigation preserves AI ⌘5, Advanced ⌘6 and About ⌘7")
     func shortcuts() throws {
         #expect(BrowserSettingsSection.allCases.firstIndex(of: .ai) == 4)
         #expect(BrowserSettingsSection.allCases.firstIndex(of: .advanced) == 5)
@@ -52,10 +52,9 @@ struct SettingsAIPaneTests {
         let controller = BrowserSettingsWindowController(model: model)
         let window = try #require(controller.window)
         defer { window.close() }
-        let items = try #require(window.toolbar?.items)
+        #expect(window.toolbar == nil)
+        #expect(BrowserSettingsSection.navigationSections.count == 10)
         for (key, code, section) in [("5", UInt16(23), BrowserSettingsSection.ai), ("6", 22, .advanced), ("7", 26, .about)] {
-            let item = try #require(items.first { $0.itemIdentifier == section.toolbarIdentifier })
-            #expect(item.menuFormRepresentation?.keyEquivalent == key)
             let event = try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: .command, timestamp: 0,
                 windowNumber: window.windowNumber, context: nil, characters: key, charactersIgnoringModifiers: key,
                 isARepeat: false, keyCode: code))
@@ -142,7 +141,7 @@ struct SettingsAIPaneTests {
             // Monochrome OpenAI mark: black on light surfaces, white on dark ones.
             let openAI = try pixels(.codex, isDark: isDark)
             #expect(openAI.count > 40)
-            #expect(openAI.allSatisfy { isDark ? $0.redComponent > 0.8 && $0.blueComponent > 0.8 : $0.redComponent < 0.2 && $0.blueComponent < 0.2 })
+            #expect(openAI.allSatisfy { $0.redComponent < 0.2 && $0.blueComponent < 0.2 })
             // The Claude mark keeps its own colour regardless of the surface.
             let claude = try pixels(.claudeCode, isDark: isDark)
             #expect(claude.count > 40)

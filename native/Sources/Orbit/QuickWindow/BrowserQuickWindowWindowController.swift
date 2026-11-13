@@ -91,7 +91,7 @@ final class BrowserQuickWindowWindowController<Engine: BrowserEngine>: NSWindowC
                               backing: .buffered, defer: true)
         window.isReleasedWhenClosed = false
         // Little Circa keeps its dark chrome independently of the source Space's appearance.
-        window.appearance = NSAppearance(named: .darkAqua)
+        window.appearance = OrbitAppearance.windowAppearance(for: .automatic)
         window.titleVisibility = .hidden
         window.titlebarAppearsTransparent = true
         window.title = Self.windowTitle(nil)
@@ -237,6 +237,7 @@ final class BrowserQuickWindowWindowController<Engine: BrowserEngine>: NSWindowC
         guard acceptsCommands, !isClosed else { return nil }
         if compactInput == nil {
             let input = BrowserQuickWindowSearchPanel(kind: .address)
+            input.window.appearance = window?.appearance
             compactInput = input
             input.onCancel = { [weak self] in
                 guard let self else { return }
@@ -528,20 +529,22 @@ final class BrowserQuickWindowWindowController<Engine: BrowserEngine>: NSWindowC
 
     func applyPreferences(searchEngine: SearchEngine, theme: OrbitTokens.SpaceTheme) {
         resolver.searchEngine = searchEngine
-        window?.appearance = NSAppearance(named: .darkAqua)
+        window?.appearance = OrbitAppearance.windowAppearance(for: theme.mode)
+        compactInput?.window.appearance = window?.appearance
+        spaceChooser?.window.appearance = window?.appearance
         toolbar.fill.apply(theme)
         let font = BrandTextStyle.ui.font(size: 13, weight: .medium)
         addressField.font = font
         openButton.font = font
         let accent = OrbitSpaceThemes.accent(for: theme)
         openGroup.accent = accent
-        openButton.contentTintColor = OrbitFloatingMaterial.body
-        spaceButton.contentTintColor = OrbitFloatingMaterial.body
+        openButton.contentTintColor = BrandPalette.paper
+        spaceButton.contentTintColor = BrandPalette.paper
         addressField.textColor = OrbitFloatingMaterial.body
         copyAddressButton.contentTintColor = OrbitFloatingMaterial.secondary
         extensionsButton.contentTintColor = OrbitFloatingMaterial.secondary
         sourceSpaceBadge.contentTintColor = OrbitFloatingMaterial.body
-        sourceSpaceBadge.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.08).cgColor
+        sourceSpaceBadge.layer?.backgroundColor = BrandPalette.ink.withAlphaComponent(0.08).cgColor
     }
 
     func updateDestinationName(_ name: String, sourceName: String) {
@@ -589,6 +592,7 @@ final class BrowserQuickWindowWindowController<Engine: BrowserEngine>: NSWindowC
     func showSpaceChooser(_ rows: [BrowserQuickWindowSearchRow]) {
         guard acceptsCommands, let window else { return }
         let chooser = spaceChooser ?? BrowserQuickWindowSearchPanel(kind: .spaces)
+        chooser.window.appearance = window.appearance
         spaceChooser = chooser
         chooser.onCancel = { [weak chooser] in chooser?.hide() }
         chooser.onQuery = { [weak chooser] query in
@@ -723,7 +727,10 @@ final class BrowserQuickWindowWindowController<Engine: BrowserEngine>: NSWindowC
     func surface(_ surface: Surface, rendererDidTerminate termination: BrowserRendererTermination) {
         guard showsPage(surface) else { return }
         BrowserPageDialogCenter.shared.showCrashedPage(on: surface.documentView, surface: ObjectIdentifier(surface),
-                                                       termination: termination) { [weak surface] in
+                                                       termination: termination, close: { [weak self, weak surface] in
+            guard let self, let surface, acceptsCommands, showsPage(surface) else { return }
+            window?.performClose(nil)
+        }) { [weak surface] in
             guard let surface, !surface.isDisposed else { return }
             surface.reload()
         }

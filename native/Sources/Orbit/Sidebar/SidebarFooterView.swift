@@ -375,6 +375,14 @@ final class SidebarSpaceButton: OrbitGlyphButton {
         iconEmphasis = isActive ? 1 : 0
         setAccessibilityValue(isActive ? OrbitShellText.selected : "")
         customDrawing = { button, bounds in
+            if let button = button as? SidebarSpaceButton, button.presentation == .icons, case .planet(let variant) = button.iconSelection,
+               let image = SpaceIconImages.planet(variant, defaultIndex: button.index) {
+                let diameter: CGFloat = button.presentation == .dots ? button.dotDiameter : (button.isActive ? 26 : 19)
+                image.draw(in: NSRect(x: bounds.midX - diameter / 2, y: bounds.midY - diameter / 2,
+                                      width: diameter, height: diameter), from: .zero, operation: .sourceOver,
+                           fraction: button.isActive ? 1 : 0.5, respectFlipped: true, hints: nil)
+                return
+            }
             if let button = button as? SidebarSpaceButton, button.presentation == .icons,
                case .systemSymbol(let name) = button.iconSelection,
                let image = SpaceIconImages.symbol(name, pointSize: 15, tint: button.tint,
@@ -417,7 +425,12 @@ final class SidebarSpaceButton: OrbitGlyphButton {
                 let inactive = space.inactiveOpacity(space.effectiveAppearance)
                 context.setAlpha(space.isActive ? 1 : min(1, inactive * (1 + 0.5 * space.hoverAmount)))
             }
-            button.tint.setFill()
+            if let space = button as? SidebarSpaceButton {
+                let colors = [BrandPalette.coral, BrandPalette.cobalt, BrandPalette.sun, BrandPalette.violet]
+                let color = space.space.theme.map { OrbitSpaceThemes.baseAccent(for: OrbitSpaceThemes.rendered($0)).strong }
+                    ?? colors[((space.index % 4) + 4) % 4]
+                color.setFill()
+            } else { button.tint.setFill() }
             NSBezierPath(ovalIn: dot).fill()
             context.restoreGState()
         }
@@ -534,9 +547,9 @@ final class SidebarSpaceTooltip: NSView {
         layer?.shadowOpacity = 0.22
         layer?.shadowRadius = 8
         layer?.shadowOffset = NSSize(width: 0, height: -2)
-        material.fixedVariant = .dark
+        material.fixedVariant = .light
         label.font = BrandTextStyle.ui.font(size: 12, weight: .semibold)
-        label.textColor = NSColor(white: 0.96, alpha: 1)
+        label.textColor = OrbitFloatingMaterial.body
         label.maximumNumberOfLines = 1
         label.lineBreakMode = .byTruncatingTail
         for view in [material, label] { addSubview(view) }

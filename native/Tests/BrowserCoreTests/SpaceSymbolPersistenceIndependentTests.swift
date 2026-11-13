@@ -64,7 +64,7 @@ struct SpaceSymbolPersistenceIndependentTests {
         #expect(BrowserSpaceIcon.systemSymbol(future).isValid)
         try await store.updateSpace(id) { $0.iconSelection = .systemSymbol(future) }
         let reopened = try BrowserSettingsStore(destination: url)
-        #expect(await reopened.snapshot().space(id).iconSelection == .systemSymbol(future))
+        #expect(await reopened.snapshot().space(id).iconSelection == .planet(.closest(to: future)))
         #expect(await reopened.snapshot().space(id).palette == .limeCitrus)
     }
 
@@ -80,7 +80,7 @@ struct SpaceSymbolPersistenceIndependentTests {
             try await group.waitForAll()
         }
         let value = await store.snapshot()
-        #expect(value.space(one).iconSelection == .systemSymbol("future.unknown.9"))
+        #expect(value.space(one).iconSelection == .planet(.closest(to: "future.unknown.9")))
         #expect(value.space(one).palette == .rosePlum && value.space(two).iconSelection == .grapheme("👨‍👩‍👧‍👦"))
         #expect(value.profile(profile).searchEngine == .duckDuckGo && value.reducedMotion == .reduce)
     }

@@ -1,22 +1,20 @@
 import AppKit
 import BrowserCore
+import BrowserShell
 
 @MainActor
 enum OrbitSpaceThemes {
     typealias Resolver = @MainActor (_ space: BrowserSpace, _ index: Int) -> OrbitTokens.SpaceTheme
 
     static var resolver: Resolver = { _, index in defaultTheme(at: index) }
-    /// Dedicated charcoal appearance, independent of the selected normal Space or system mode.
-    static let privateWindow = OrbitTokens.SpaceTheme(stops: [
-        NSColor(srgbRed: 0.16, green: 0.17, blue: 0.19, alpha: 1),
-        NSColor(srgbRed: 0.12, green: 0.13, blue: 0.15, alpha: 1)
-    ], mode: .dark, texture: .none, textureIntensity: 0)
+    /// Private chrome uses the same daylight paper as other app-owned surfaces.
+    static let privateWindow = OrbitTokens.SpaceTheme(stops: [BrandPalette.paper, BrandPalette.paper], mode: .light, texture: .none, textureIntensity: 0)
 
     static let previewFlag = ProcessInfo.processInfo.arguments.contains("--theme-preview")
     static let previewThemes: [OrbitTokens.SpaceTheme] = [.default, .amberCoral, .lavender, .rosePlum, .limeCitrus]
 
     static func defaultTheme(at index: Int, preview: Bool = previewFlag) -> OrbitTokens.SpaceTheme {
-        preview ? previewThemes[index % previewThemes.count] : .default
+        preview ? previewThemes[index % previewThemes.count] : rendered(BrandPalette.spaceGradients[((index % 4) + 4) % 4].theme())
     }
 
     /// Theme of a Space: stored theme, else `legacy` (the Settings palette), else the resolver; the
@@ -33,37 +31,15 @@ enum OrbitSpaceThemes {
 
     private static var renderedThemes: [BrowserSpaceTheme: OrbitTokens.SpaceTheme] = [:]
 
-    /// Fill of a stored theme. Each stop is one dynamic colour (light variant under aqua, dark under
-    /// darkAqua); its name encodes both components exactly, because `NSColor` compares dynamic colours
-    /// by name. Cached so an unchanged model always yields an equal fill (no needless repaint).
+    /// Render only the stored daylight variant. Legacy mode/dark fields remain decodable.
     static func rendered(_ model: BrowserSpaceTheme) -> OrbitTokens.SpaceTheme {
         if let cached = renderedThemes[model] { return cached }
-        var lightStops = model.light.stops.map(color)
-        var darkStops = model.dark.stops.map(color)
-        if lightStops.count != darkStops.count {
-            // Normalize each gradient independently before pairing dynamic stops. Padding a shorter
-            // variant with its last stop would move that endpoint to the middle of the painted fill.
-            let appearance = NSAppearance(named: .aqua)!
-            lightStops = OrbitThemeGradient.normalizedStops(lightStops, appearance: appearance).map { NSColor(cgColor: $0)! }
-            darkStops = OrbitThemeGradient.normalizedStops(darkStops, appearance: appearance).map { NSColor(cgColor: $0)! }
-        }
-        let stops = zip(lightStops, darkStops).map { lightColor, darkColor -> NSColor in
-            let light = colorKey(lightColor), dark = colorKey(darkColor)
-            let name = "Orbit.Theme.space.\(light).\(dark)"
-            return NSColor(name: NSColor.Name(name)) { appearance in
-                appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? darkColor : lightColor
-            }
-        }
-        let mode: OrbitTokens.SpaceTheme.Mode = switch model.mode {
-        case .automatic: .automatic
-        case .light: .light
-        case .dark: .dark
-        }
+        let stops = model.light.stops.map(color)
         var theme = OrbitTokens.SpaceTheme(
-            stops: stops, mode: mode, texture: model.noise > 0 ? .grain : .none, textureIntensity: CGFloat(model.noise),
+            stops: stops, mode: .light, texture: model.noise > 0 ? .grain : .none, textureIntensity: CGFloat(model.noise),
             stopRange: .init(light: CGFloat(model.light.start)...CGFloat(model.light.end),
-                             dark: CGFloat(model.dark.start)...CGFloat(model.dark.end)),
-            angle: .init(light: CGFloat(model.light.angleDegrees), dark: CGFloat(model.dark.angleDegrees)),
+                             dark: CGFloat(model.light.start)...CGFloat(model.light.end)),
+            angle: .init(light: CGFloat(model.light.angleDegrees), dark: CGFloat(model.light.angleDegrees)),
             model: model)
         // Retain the legacy stored field for decoding, but never apply material to controls.
         theme.frostAmount = 0
@@ -158,7 +134,7 @@ enum OrbitThemeGradient {
             return mix(mix(c[0], c[1], point.x), mix(c[2], c[3], point.x), point.y)
         }
         let stops = normalizedStops(theme.stops, appearance: appearance).map { NSColor(cgColor: $0)!.usingColorSpace(.sRGB)! }
-        let dark = OrbitAppearance.isDark(appearance), range = theme.stopRange.range(isDark: dark)
+        let dark = false, range = theme.stopRange.range(isDark: dark)
         let f = axisFraction(of: CGPoint(x: point.x * 1512, y: point.y * 949), in: CGSize(width: 1512, height: 949),
                              angleDegrees: theme.angle.degrees(isDark: dark))
         let t = min(1, max(0, (f - range.lowerBound) / (range.upperBound - range.lowerBound)))
@@ -236,9 +212,7 @@ enum OrbitThemeForeground {
         return 0.2126 * c.redComponent + 0.7152 * c.greenComponent + 0.0722 * c.blueComponent < 128.0 / 255
     }
     static func color(on color: NSColor) -> NSColor {
-        NSColor(srgbRed: isLight(on: color) ? 244.0 / 255 : 32.0 / 255,
-                green: isLight(on: color) ? 244.0 / 255 : 32.0 / 255,
-                blue: isLight(on: color) ? 244.0 / 255 : 32.0 / 255, alpha: 1)
+        isLight(on: color) ? BrandPalette.paper : BrandPalette.ink
     }
 
     static func contrastRatio(_ foreground: NSColor, on background: NSColor) -> CGFloat {
@@ -298,7 +272,7 @@ enum OrbitThemeMesh {
             let w = weights(at: point)
             func channel(_ component: (BrowserThemeColor) -> Double) -> Double {
                 let value = zip(w, colors).reduce(0) { $0 + $1.0 * component($1.1) }
-                return min(1, max(0, value - 8.0 / 255 + (model.mode == .light ? 15.0 / 255 : 0)))
+                return min(1, max(0, value - 8.0 / 255 + 15.0 / 255))
             }
             return BrowserThemeColor(red: channel { $0.red }, green: channel { $0.green }, blue: channel { $0.blue })
         }

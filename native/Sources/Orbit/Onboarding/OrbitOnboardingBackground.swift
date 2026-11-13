@@ -11,10 +11,10 @@ final class OrbitOnboardingBackgroundView: NSView {
         super.init(frame: frame)
         wantsLayer = true
         layer?.backgroundColor = OrbitOnboardingColors.stage.cgColor
-        glow.type = .radial
-        glow.startPoint = CGPoint(x: 0.5, y: 0.5)
-        glow.endPoint = CGPoint(x: 1, y: 1)
-        glow.locations = BrandPalette.glowStops
+        glow.type = .axial
+        glow.startPoint = CGPoint(x: 0.5, y: 0)
+        glow.endPoint = CGPoint(x: 0.5, y: 1)
+        glow.locations = [0, 0.55, 0.92]
         layer?.addSublayer(glow)
         apply(theme: nil)
     }
@@ -23,10 +23,20 @@ final class OrbitOnboardingBackgroundView: NSView {
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
     override func layout() {
         super.layout()
-        glow.frame = CGRect(x: bounds.midX - 900, y: bounds.height - 380, width: 1800, height: 900)
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        defer { CATransaction.commit() }
+        glow.frame = bounds
+        guard bounds.width > 0, bounds.height > 0 else { return }
+        let angle = CGFloat.pi * 4 / 180
+        let dx = sin(angle), dy = cos(angle)
+        let length = bounds.width * dx + bounds.height * dy
+        let x = dx * length / (2 * bounds.width)
+        let y = dy * length / (2 * bounds.height)
+        glow.startPoint = CGPoint(x: 0.5 - x, y: 0.5 - y)
+        glow.endPoint = CGPoint(x: 0.5 + x, y: 0.5 + y)
     }
     func apply(theme: BrowserSpaceTheme?) {
         self.theme = theme
-        glow.colors = BrandPalette.glowColors
+        glow.colors = [BrandPalette.rgb(0xC9D8FA).cgColor, BrandPalette.rgb(0xE4E6F1).cgColor, BrandPalette.paper.cgColor]
     }
 }

@@ -550,26 +550,26 @@ extension NativeWebKitTests.NativeSettingsTests {
         }
     }
 
-    @Test("Settings resolves forced light and dark and otherwise inherits system appearance")
+    @Test("Settings remains daylight for dark, light and inherited system input")
     func settingsAppearance() throws {
         NSApplication.shared.setActivationPolicy(.prohibited)
         let model = settingsModel(BrowserEnvironment(engine: SettingsFixtureEngine()))
         for appearance in [NSAppearance.Name.aqua, .darkAqua] {
             let controller = BrowserSettingsWindowController(model: model, appearanceOverride: appearance)
             let window = try #require(controller.window)
-            #expect(window.appearance?.name == appearance)
-            #expect(window.contentView?.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == appearance)
+            #expect(window.appearance?.name == .aqua)
+            #expect(window.contentView?.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .aqua)
             #expect(!window.isVisible)
             window.close()
         }
         let system = BrowserSettingsWindowController(model: model, appearanceOverride: nil)
         defer { system.window?.close() }
-        #expect(system.window?.appearance == nil)
-        #expect(system.window?.effectiveAppearance.name == NSApplication.shared.effectiveAppearance.name)
+        #expect(system.window?.appearance?.name == .aqua)
+        #expect(system.window?.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .aqua)
         #expect(system.window?.isVisible == false)
     }
 
-    @Test("Offscreen Space form keeps two independent fields and a marked-text editor across refreshes")
+    @Test("Offscreen Space name keeps marked text while icon choices refresh")
     func distinctSpaceEditors() async throws {
         NSApplication.shared.setActivationPolicy(.prohibited)
         let environment = BrowserEnvironment(engine: SettingsFixtureEngine())
@@ -592,7 +592,7 @@ extension NativeWebKitTests.NativeSettingsTests {
             func collect(_ view: NSView) -> [NSTextField] {
                 ((view as? NSTextField).map { [$0] } ?? []) + view.subviews.flatMap(collect)
             }
-            return Array(collect(view).suffix(2))
+            return collect(view).filter { $0 is BrowserSettingsNameTextField }
         }
         for iteration in 0..<3 {
             await Task.yield()
@@ -600,13 +600,12 @@ extension NativeWebKitTests.NativeSettingsTests {
             try await withNativeTestDeadline("Space editor fields reconcile after Settings publication", timeout: 5) {
                 while true {
                     fields = editorFields()
-                    let expected = [model.catalog.spaces.first(where: { $0.profileID == model.selectedProfileID })!.name,
-                                    model.runtime.document.space(space.id).icon]
-                    if fields.count == 2 && fields.map(\.stringValue) == expected { break }
+                    let expected = model.catalog.spaces.first(where: { $0.profileID == model.selectedProfileID })!.name
+                    if fields.count == 1 && fields.first?.stringValue == expected { break }
                     try await Task.sleep(for: .milliseconds(20))
                 }
             }
-            #expect(fields.count == 2)
+            #expect(fields.count == 1)
             if iteration == 0 {
                 let nameField = try #require(fields.first)
                 nameField.selectText(nil)
@@ -964,7 +963,7 @@ extension NativeWebKitTests.NativeSettingsTests {
         #expect(!window.isVisible)
     }
 
-    @Test("Preferences toolbar owns selectable native categories and follows model routes without replacing content")
+    @Test("Preferences sidebar owns selectable native categories and follows model routes without replacing content")
     func nativePreferencesToolbar() async throws {
         NSApplication.shared.setActivationPolicy(.prohibited)
         let model = settingsModel(BrowserEnvironment(engine: SettingsFixtureEngine()))
@@ -973,24 +972,13 @@ extension NativeWebKitTests.NativeSettingsTests {
         let window = try #require(controller.window)
         defer { window.close() }
         let hosting = try #require(window.contentViewController)
-        let toolbar = try #require(window.toolbar)
-        #expect(window.toolbarStyle == .preference)
+        #expect(window.toolbar == nil)
         #expect(window.titleVisibility == .hidden && window.isOpaque)
-        #expect(window.titlebarSeparatorStyle == .line)
-        #expect(toolbar.displayMode == .iconOnly)
-        #expect(!toolbar.allowsUserCustomization && !toolbar.autosavesConfiguration)
-        let identifiers = BrowserSettingsSection.allCases.map(\.toolbarIdentifier)
-        #expect(toolbar.items.map(\.itemIdentifier) == identifiers)
-        #expect(controller.toolbarSelectableItemIdentifiers(toolbar).isEmpty)
-        for (section, item) in zip(BrowserSettingsSection.allCases, toolbar.items) {
-            #expect(item.view is BrowserSettingsToolbarButton)
-            #expect(item.label == section.toolbarTitle && item.image != nil)
-            #expect(item.image?.accessibilityDescription == section.title)
-            #expect(item.itemIdentifier.rawValue == "settings-category-" + section.rawValue)
-            #expect(NSApplication.shared.sendAction(try #require(item.action), to: item.target, from: item))
+        #expect(window.titlebarSeparatorStyle == .none)
+        for section in BrowserSettingsSection.navigationSections {
+            #expect(controller.selectSection(section))
             #expect(model.settingsSection == section)
-            #expect(controller.selectedToolbarIdentifier == section.toolbarIdentifier)
-            #expect(item.menuFormRepresentation?.state == .on)
+            #expect(controller.selectedToolbarIdentifier == (BrowserSettingsSection.allCases.contains(section) ? section.toolbarIdentifier : nil))
             #expect(window.contentViewController === hosting)
         }
         model.settingsSection = .profiles
@@ -1006,7 +994,7 @@ extension NativeWebKitTests.NativeSettingsTests {
         #expect(!window.isVisible)
     }
 
-    @Test("Small preferences windows retain every category through native overflow menu actions and keyboard equivalents")
+    @Test("Minimum preferences windows retain every sidebar category and numbered keyboard equivalents")
     func nativePreferencesMinimumLayout() async throws {
         NSApplication.shared.setActivationPolicy(.prohibited)
         let model = settingsModel(BrowserEnvironment(engine: SettingsFixtureEngine()))
@@ -1014,18 +1002,13 @@ extension NativeWebKitTests.NativeSettingsTests {
         let controller = BrowserSettingsWindowController(model: model)
         let window = try #require(controller.window)
         defer { window.close() }
-        let toolbar = try #require(window.toolbar)
         let hosting = try #require(window.contentViewController)
-        #expect(window.contentMinSize == NSSize(width: 684, height: 400))
-        for size in [NSSize(width: 684, height: 400), NSSize(width: 860, height: 640)] {
+        #expect(window.contentMinSize == NSSize(width: 900, height: 400))
+        for size in [NSSize(width: 900, height: 400), NSSize(width: 1000, height: 700)] {
             window.setContentSize(size)
-            for (index, item) in toolbar.items.enumerated() {
-                let section = BrowserSettingsSection.allCases[index]
-                let menu = try #require(item.menuFormRepresentation)
-                #expect(menu.title == section.title)
-                #expect(menu.keyEquivalent == String(index + 1) && menu.keyEquivalentModifierMask == .command)
-                #expect(NSApplication.shared.sendAction(try #require(menu.action), to: menu.target, from: menu))
-                #expect(model.settingsSection == section && controller.selectedToolbarIdentifier == section.toolbarIdentifier)
+            for section in BrowserSettingsSection.navigationSections {
+                #expect(controller.selectSection(section))
+                #expect(model.settingsSection == section)
                 window.contentView?.layoutSubtreeIfNeeded()
                 #expect(window.contentViewController === hosting)
                 #expect(try #require(window.contentView).bounds.width <= size.width + 1)
@@ -1073,8 +1056,7 @@ extension NativeWebKitTests.NativeSettingsTests {
         let editor = try #require(field.currentEditor() as? NSTextView)
         editor.setMarkedText("に", selectedRange: .init(location: 1, length: 0),
                              replacementRange: .init(location: NSNotFound, length: 0))
-        let general = try #require(window.toolbar?.items.first)
-        #expect(NSApplication.shared.sendAction(try #require(general.action), to: general.target, from: general))
+        #expect(!controller.selectSection(.general))
         #expect(model.settingsSection == .spaces)
         #expect(controller.selectedToolbarIdentifier == nil)
         try await model.updateSpace(space.id) { $0.icon = "🌿" }

@@ -7,11 +7,8 @@ import SwiftUI
 /// Timing shared by the window, content, and category indicator.
 enum BrowserSettingsMotion {
     static let resizeDuration = 0.38
-    static let exitDuration = 0.09
-    static let enterDelay = 0.10
-    static let enterDuration = 0.32
+    static let crossfadeDuration = 0.14
     static let pillDuration = 0.42
-    static let rise: CGFloat = 6
     static let controlPoints: [Float] = [0.19, 1, 0.22, 1]
     static var timingFunction: CAMediaTimingFunction { .init(controlPoints: 0.19, 1, 0.22, 1) }
 }
@@ -74,8 +71,8 @@ struct SettingsCard<Content: View>: View {
 private final class SettingsFrostHost: NSView {
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
-        window?.isOpaque = false
-        window?.backgroundColor = .clear
+        window?.isOpaque = true
+        window?.backgroundColor = OrbitSettingsStyle.windowColor
     }
 }
 
@@ -86,13 +83,13 @@ private struct SettingsFrost: NSViewRepresentable {
         return view
     }
     func updateNSView(_ view: NSView, context: Context) {
-        view.window?.isOpaque = false
-        view.window?.backgroundColor = .clear
+        view.window?.isOpaque = true
+        view.window?.backgroundColor = OrbitSettingsStyle.windowColor
     }
 }
 
 extension View {
-    func settingsFrost() -> some View { background(SettingsFrost()).foregroundStyle(Color(nsColor: OrbitFloatingMaterial.body)) }
+    func settingsFrost() -> some View { settingsPopupChrome().background(SettingsFrost()).foregroundStyle(Color(nsColor: OrbitFloatingMaterial.body)) }
 }
 
 @MainActor
@@ -113,28 +110,18 @@ struct BrowserSettingsGradientPicker<Engine: BrowserEngine>: View {
     }
 
     var body: some View {
-        Button { isPresented.toggle() } label: {
-            HStack(spacing: 6) {
-                BrowserSettingsThemeSwatch(theme: space.theme ?? model.runtime.document.space(space.id).palette.themeModel)
-                Text(settingsText("editThemeColor", "Edit Theme Color…"))
+        HStack(spacing: 6) {
+            ForEach(Array(BrandPalette.spaceGradients.enumerated()), id: \.element.id) { index, gradient in
+                Button { select(gradient) } label: {
+                    Circle().fill(Color(nsColor: [BrandPalette.coral, BrandPalette.cobalt, BrandPalette.sun, BrandPalette.violet][index]))
+                        .frame(width: 20, height: 20).padding(3)
+                        .overlay(Circle().strokeBorder(space.theme?.presetID == "brand." + gradient.id ? Color(nsColor: BrandPalette.ink) : .clear, lineWidth: 2))
+                }.buttonStyle(.plain).accessibilityLabel(uiText(gradient.name))
             }
+            Button { model.presentThemeEditor?(space.id) } label: {
+                Image(systemName: "slider.horizontal.3")
+            }.buttonStyle(.plain).accessibilityLabel(uiText("Edit Theme Color…"))
         }
-            .popover(isPresented: $isPresented, arrowEdge: .bottom) {
-                HStack(spacing: 8) {
-                    ForEach(BrandPalette.spaceGradients, id: \.id) { gradient in
-                        Button {
-                            select(gradient)
-                        } label: {
-                            Circle().fill(LinearGradient(stops: zip(gradient.stops, gradient.locations).map {
-                                .init(color: Color(nsColor: OrbitSpaceThemes.color($0.0)), location: $0.1)
-                            }, startPoint: .top, endPoint: .bottomTrailing))
-                            .frame(width: 30, height: 30)
-                            .padding(3)
-                            .overlay(Circle().strokeBorder(space.theme?.presetID == "brand." + gradient.id ? Color.accentColor : .clear, lineWidth: 2))
-                        }.buttonStyle(.plain).accessibilityLabel(uiText(gradient.name))
-                    }
-                }.padding(12).settingsFrost()
-            }
     }
 }
 
@@ -143,18 +130,16 @@ struct SettingsSwitchStyle: ToggleStyle {
         HStack(spacing: 12) {
             configuration.label
             Spacer(minLength: 12)
-            Toggle(isOn: configuration.$isOn) { EmptyView() }.labelsHidden().toggleStyle(.switch).controlSize(.small)
+            Toggle(isOn: configuration.$isOn) { EmptyView() }.labelsHidden().toggleStyle(SettingsSwitchControlStyle()).controlSize(.small)
         }.frame(maxWidth: .infinity)
     }
 }
 
 struct SettingsAppIcon: View {
     var body: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: 26).fill(Color(nsColor: BrandPalette.stage))
-            RadialGradient(colors: [Color(nsColor: BrandPalette.coral).opacity(0.4), Color(nsColor: BrandPalette.violet).opacity(0.25), .clear], center: .bottom, startRadius: 0, endRadius: 90)
-            if let mark = BrandFonts.mark { Image(nsImage: mark).resizable().scaledToFit().padding(22) }
-        }.clipShape(RoundedRectangle(cornerRadius: 26)).accessibilityLabel(uiText("App Icon"))
+        Group {
+            if let image = OrbitAppIcon.defaultIcon.image { Image(nsImage: image).resizable().scaledToFit() }
+        }.accessibilityLabel(uiText("App Icon"))
     }
 }
 
@@ -175,10 +160,189 @@ struct SettingsDetailRow<Content: View>: View {
             Text(title).fontWeight(.medium)
             Spacer(minLength: 8)
             content
-        }.padding(.horizontal, 14).padding(.vertical, 8).frame(minHeight: 44)
+        }.padding(.horizontal, 13).padding(.vertical, 9).frame(minHeight: 38)
     }
 }
 
 struct SettingsRule: View {
     var body: some View { Rectangle().fill(OrbitSettingsStyle.border).frame(height: 1) }
+}
+
+/// Compact app-icon choices share the same persistent selection as the icon sheet.
+struct BrowserSettingsIconGrid: View {
+    @ObservedObject var icons = OrbitAppIconController.shared
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            SettingsGroupLabel(title: uiText("App Icon"))
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 6), spacing: 6) {
+                ForEach(OrbitAppIcon.allCases) { icon in
+                    Button { _ = icons.apply(icon) } label: {
+                        VStack(spacing: 3) {
+                            if let image = icon.preview {
+                                Image(nsImage: image).resizable().scaledToFit().aspectRatio(1, contentMode: .fit)
+                                    .overlay(RoundedRectangle(cornerRadius: 22).strokeBorder(
+                                        icons.current == icon || (icons.current == .paper && icon == .stage)
+                                        ? Color(nsColor: BrandPalette.ink) : .clear, lineWidth: 2))
+                            }
+                            Text(icon.name).font(Font(BrandFonts.ui(8.5, weight: .medium))).opacity(0.8)
+                        }.padding(3)
+                    }.buttonStyle(.plain).accessibilityIdentifier("settings-icon-" + icon.id)
+                }
+            }
+            .padding(.horizontal, 12).padding(.vertical, 11)
+            .background(OrbitSettingsStyle.panel, in: RoundedRectangle(cornerRadius: 12))
+            .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(OrbitSettingsStyle.border, lineWidth: 1))
+            Text(uiText("Choose how Circa looks in the Dock and the Finder.")).font(Font(BrandFonts.ui(10.5))).foregroundStyle(.secondary)
+        }.padding(.top, 8)
+    }
+}
+
+/// Coloured printed navigation marks share the pane's heading artwork.
+struct SettingsPaneIcon: View {
+    let section: BrowserSettingsSection
+    var body: some View {
+        if let url = BrowserText.secondaryBrandResource("settings-nav-" + section.rawValue, extension: "png"),
+           let image = NSImage(contentsOf: url) {
+            Image(nsImage: image).resizable().scaledToFit().accessibilityHidden(true)
+        }
+    }
+}
+
+struct OrbitPrintButtonStyle: ButtonStyle {
+    var primary = false
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label.font(Font(BrandFonts.ui(12, weight: .semibold)))
+            .padding(.horizontal, 12).padding(.vertical, 7)
+            .foregroundStyle(Color(nsColor: primary ? BrandPalette.pageWhite : BrandPalette.ink))
+            .background(primary ? Color(nsColor: BrandPalette.coral) : Color(nsColor: BrandPalette.paper), in: RoundedRectangle(cornerRadius: 7))
+            .overlay(RoundedRectangle(cornerRadius: 7).strokeBorder(Color(nsColor: BrandPalette.ink), lineWidth: 1.5))
+            .compositingGroup()
+            .shadow(color: Color(nsColor: BrandPalette.ink), radius: 0, x: 0, y: configuration.isPressed ? 0 : 2)
+            .offset(y: configuration.isPressed ? 2 : 0)
+    }
+}
+
+/// Painted track with native Toggle binding, focus, disabled state and accessibility semantics.
+struct SettingsSwitchControlStyle: ToggleStyle {
+    @Environment(\.isEnabled) private var isEnabled
+    func makeBody(configuration: Configuration) -> some View {
+        Button { configuration.isOn.toggle() } label: {
+            RoundedRectangle(cornerRadius: 10)
+                .fill(Color(nsColor: configuration.isOn ? BrandPalette.cobalt : BrandPalette.ink.withAlphaComponent(0.18)))
+                .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(
+                    Color(nsColor: BrandPalette.ink.withAlphaComponent(configuration.isOn ? 1 : 0.13)), lineWidth: 1.5))
+                .overlay(alignment: configuration.isOn ? .trailing : .leading) {
+                    Circle().fill(Color(nsColor: BrandPalette.paper)).frame(width: 15, height: 15).padding(2)
+                }.frame(width: 32, height: 19)
+        }.buttonStyle(.plain).opacity(isEnabled ? 1 : 0.45)
+            .accessibilityRepresentation {
+                Toggle(isOn: configuration.$isOn) { configuration.label }.toggleStyle(.switch)
+            }
+    }
+}
+
+struct SettingsGroupLabel: View {
+    let title: String
+    var body: some View {
+        Text(title.uppercased()).font(Font(BrandFonts.mono(9.5))).tracking(1.14)
+            .foregroundStyle(Color(nsColor: BrandPalette.cobalt.withAlphaComponent(0.6)))
+            .padding(.horizontal, 2).padding(.top, 4)
+    }
+}
+
+/// Menu-based pickers retain their native menu interaction with an ink-tinted pill label.
+struct SettingsPopupStyle: MenuStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        Menu(configuration).menuStyle(.borderlessButton).menuIndicator(.hidden).buttonStyle(.plain)
+            .font(Font(BrandFonts.ui(12, weight: .medium)))
+            .foregroundStyle(OrbitSettingsStyle.foreground)
+            .padding(.leading, 8).padding(.trailing, 23).padding(.vertical, 4)
+            .background(OrbitSettingsStyle.foreground.opacity(0.063), in: RoundedRectangle(cornerRadius: 7))
+            .overlay(alignment: .trailing) {
+                Image(systemName: "chevron.up.chevron.down").font(.system(size: 8, weight: .semibold))
+                    .foregroundStyle(OrbitSettingsStyle.foreground).padding(.trailing, 8).allowsHitTesting(false)
+            }
+    }
+}
+
+/// A menu label can be painted independently while its Picker retains native tags and binding.
+struct SettingsPopupPicker<Selection: Hashable, Options: View>: View {
+    let title: String
+    let selectedTitle: String
+    @Binding var selection: Selection
+    let options: Options
+    init(_ title: String, selectedTitle: String, selection: Binding<Selection>, @ViewBuilder content: () -> Options) {
+        self.title = title; self.selectedTitle = selectedTitle; self._selection = selection; self.options = content()
+    }
+    var body: some View {
+        Menu {
+            Picker(title, selection: $selection) { options }.labelsHidden().pickerStyle(.inline)
+        } label: { Text(selectedTitle).lineLimit(1).foregroundStyle(OrbitSettingsStyle.foreground) }
+        .menuStyle(SettingsPopupStyle()).tint(OrbitSettingsStyle.foreground).accessibilityLabel(title).accessibilityValue(selectedTitle)
+    }
+}
+
+extension View {
+    func settingsPopupChrome() -> some View { menuStyle(SettingsPopupStyle()) }
+}
+
+/// Labels use the same options and localized copy as the existing selectors.
+enum SettingsPopupLabels {
+    static func search(_ value: SearchEngine) -> String {
+        switch value {
+        case .google: uiText("Google")
+        case .duckDuckGo: uiText("DuckDuckGo")
+        case .bing: uiText("Bing")
+        case .perplexity: uiText("Perplexity")
+        }
+    }
+    static func memory(_ value: BrowserMemorySaverSetting) -> String {
+        switch value {
+        case .fiveMinutes: uiText("5 minutes")
+        case .fifteenMinutes: uiText("15 minutes")
+        case .thirtyMinutes: uiText("30 minutes")
+        case .oneHour: uiText("1 hour")
+        case .twoHours: uiText("2 hours")
+        case .fourHours: uiText("4 hours")
+        case .sixHours: uiText("6 hours")
+        case .never: uiText("Never")
+        }
+    }
+    static func motion(_ value: BrowserReducedMotionSetting) -> String {
+        switch value {
+        case .system: uiText("Follow System")
+        case .reduce: uiText("Reduce Motion")
+        case .full: uiText("Full Motion")
+        }
+    }
+}
+
+/// Descriptions stay with their setting, so the control is centred on the complete label.
+struct SettingsRowLabel: View {
+    let title: String
+    var subtitle: String? = nil
+    var body: some View {
+        VStack(alignment: .leading, spacing: 1) {
+            Text(title).fontWeight(.medium).fixedSize(horizontal: false, vertical: true)
+            if let subtitle {
+                Text(subtitle).font(Font(BrandFonts.ui(10.5))).opacity(0.6)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+}
+
+/// A stable native boundary for detail-only transitions; navigation lives outside it.
+struct BrowserSettingsDetailHost<Content: View>: NSViewRepresentable {
+    @ViewBuilder var content: Content
+    func makeNSView(context: Context) -> NSHostingView<AnyView> {
+        let view = NSHostingView(rootView: AnyView(content.environment(\.self, context.environment)))
+        view.sizingOptions = []
+        view.identifier = NSUserInterfaceItemIdentifier("settings-detail-pane")
+        view.wantsLayer = true
+        return view
+    }
+    func updateNSView(_ view: NSHostingView<AnyView>, context: Context) {
+        view.rootView = AnyView(content.environment(\.self, context.environment))
+    }
 }

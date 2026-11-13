@@ -17,13 +17,13 @@ struct SpaceIconPickerTests {
         #expect(picker.search.placeholderString == uiText("Search"))
         #expect(picker.modes.label(forSegment: 1) == uiText("Icon"))
         #expect(picker.popup.popover.behavior == .transient)
-        #expect(Array(picker.visibleItems.prefix(8)).map(\.emoji) == Array("😀😃😄😁😆😅🤣😂").map(String.init))
-        #expect(Set(picker.visibleItems.map(\.choice)) == Set(SpaceIconPickerCatalog.shared.items.map(\.choice)))
+        #expect(Array(picker.visibleItems.dropFirst(BrowserSpacePlanet.selectable.count).prefix(8)).map(\.emoji) == Array("😀😃😄😁😆😅🤣😂").map(String.init))
+        #expect(Set(picker.visibleItems.map(\.choice)) == Set(SpaceIconPickerCatalog.shared.items.map(\.choice) + BrowserSpacePlanet.selectable.map { .planet($0) }))
         picker.handle(#selector(NSResponder.moveDown(_:)))
-        #expect(picker.grid.selectedIndex == 8, "grid width: \(picker.grid.frame.width), scroll width: \(picker.grid.enclosingScrollView?.contentSize.width ?? 0), choice: \(picker.grid.selectedItem?.emoji ?? "")")
+        #expect(picker.grid.selectedIndex == BrowserSpacePlanet.selectable.count, "grid width: \(picker.grid.frame.width), scroll width: \(picker.grid.enclosingScrollView?.contentSize.width ?? 0), choice: \(picker.grid.selectedItem?.emoji ?? "")")
         let gridScroll = try #require(picker.grid.enclosingScrollView)
         #expect(gridScroll.frame == NSRect(x: 10, y: 74, width: 250, height: 154))
-        #expect(picker.grid.menu?.items.map(\.title) == [uiText("Emoji & Symbols…"), uiText("Remove Icon")])
+        #expect(picker.grid.menu?.items.map(\.title) == [uiText("Emoji & Symbols…"), uiText("Dots")])
     }
 
     @Test("Theme viewport retains color controls and scope without the retired material row")
@@ -70,8 +70,12 @@ struct SpaceIconPickerTests {
         picker.setSearch("👩🏽‍💻")
         #expect(picker.visibleItems.first?.emoji == "👩🏽‍💻")
         #expect(picker.grid.selectedItem?.emoji == "👩🏽‍💻")
+        picker.setSearch("sky")
+        #expect(picker.visibleItems.contains { $0.choice == .planet(.sky) })
+        picker.setSearch("night")
+        #expect(picker.visibleItems.contains { $0.choice == .planet(.night) })
         picker.setSearch("")
-        #expect(picker.visibleItems.count == SpaceIconPickerCatalog.shared.items.count)
+        #expect(picker.visibleItems.count == SpaceIconPickerCatalog.shared.items.count + BrowserSpacePlanet.selectable.count)
     }
 
     @Test("Choosing applies once, Remove is only offered with an icon, Escape clears the query then closes without a choice")

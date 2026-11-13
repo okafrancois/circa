@@ -33,6 +33,7 @@ extension BrowserWindowController {
         sidebar.onShowLibrary = { [weak self] in self?.submitInput { $0.showLibrary() } }
 
         for view in [contentCard, sidebar] { view.translatesAutoresizingMaskIntoConstraints = false }
+        contentCard.onPrivateStart = { [weak self] in self?.palette.present(.newTab) }
         root.addSubview(contentCard)
         windowShell.installLoadingIndicator(in: root)
         installSplit()

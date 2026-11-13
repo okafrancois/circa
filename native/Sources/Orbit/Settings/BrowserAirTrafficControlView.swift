@@ -1,3 +1,4 @@
+import AppKit
 import BrowserCore
 import BrowserEngine
 import BrowserShell
@@ -19,12 +20,16 @@ struct BrowserAirTrafficControlView<Engine: BrowserEngine>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             HStack {
-                Text(uiText("Air Traffic Control")).font(Font(BrandTextStyle.ui.font(size: 21, weight: .semibold)))
+                SettingsPaneIcon(section: .links).frame(width: 22, height: 22)
+                Text(uiText("Air Traffic Control")).font(Font(BrandTextStyle.title.font(size: 25))).kerning(-1.125)
                 Spacer()
-
+                if let url = BrowserText.secondaryBrandResource("air-traffic-control", extension: "png"), let image = NSImage(contentsOf: url) {
+                    Image(nsImage: image).resizable().scaledToFit().frame(width: 120, height: 60)
+                }
             }
-            Text(uiFormat("Routes let you choose where specific sites open inside %@. For example, you can route Spotify links to always open inside your Personal space.", BrowserCommandMenus<BrowserWindowController<Engine>>.applicationDisplayName))
-                .foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            Text(uiText("Create a route to send links to a Space automatically."))
+                .font(Font(BrandFonts.onboardingBody(13))).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+
             ScrollView {
                 VStack(spacing: 10) {
                     ForEach(editor.routes) { route in
@@ -43,10 +48,10 @@ struct BrowserAirTrafficControlView<Engine: BrowserEngine>: View {
                 Button(uiText("New Route"), systemImage: "plus") {
                     editor.add()
                 }.disabled(model.catalog.spaces.isEmpty || editor.routes.contains { !$0.isValid })
-                    .accessibilityIdentifier("routing-new-route")
+                    .buttonStyle(OrbitPrintButtonStyle(primary: true)).accessibilityIdentifier("routing-new-route")
                 Spacer()
                 Text(uiText("Default")).fontWeight(.medium)
-                Picker(uiText("Default destination"), selection: Binding(get: { runtime.document.linkRouting.defaultDestination }, set: { destination in
+                SettingsPopupPicker(uiText("Default destination"), selectedTitle: defaultDestinationTitle, selection: Binding(get: { runtime.document.linkRouting.defaultDestination }, set: { destination in
                     model.perform {
                         try await runtime.store.setLinkDefaultDestination(destination)
                         await runtime.refresh()
@@ -77,9 +82,20 @@ struct BrowserAirTrafficControlView<Engine: BrowserEngine>: View {
         .onAppear { editor.load() }
     }
 
+    private var defaultDestinationTitle: String {
+        switch runtime.document.linkRouting.defaultDestination {
+        case .quickWindow: uiText("Little Circa")
+        case .mostRecentSpace: uiText("Most Recent Space")
+        case .space(let id): model.catalog.spaces.first(where: { $0.id == id }).map(spaceLabel) ?? ""
+        }
+    }
+    private func matchTitle(_ match: BrowserLinkMatch) -> String {
+        switch match { case .contains: uiText("contains"); case .equals: uiText("is equal to"); case .host: uiText("host is") }
+    }
+
     private func routeRow(_ route: BrowserLinkRoute) -> some View {
         HStack(alignment: .center, spacing: 8) {
-            Picker(uiText("URL match"), selection: routeBinding(route, \.match)) {
+            SettingsPopupPicker(uiText("URL match"), selectedTitle: matchTitle(route.match), selection: routeBinding(route, \.match)) {
                 Text(uiText("contains")).tag(BrowserLinkMatch.contains)
                 Text(uiText("is equal to")).tag(BrowserLinkMatch.equals)
                 Text(uiText("host is")).tag(BrowserLinkMatch.host)
@@ -87,7 +103,7 @@ struct BrowserAirTrafficControlView<Engine: BrowserEngine>: View {
                 .help(uiText("If URL"))
             TextField(uiText("example.org"), text: routeBinding(route, \.value))
                 .textFieldStyle(.roundedBorder).accessibilityIdentifier("routing-value-" + route.id.uuidString)
-            Picker(uiText("Destination Space"), selection: routeBinding(route, \.spaceID)) {
+            SettingsPopupPicker(uiText("Destination Space"), selectedTitle: model.catalog.spaces.first(where: { $0.id == route.spaceID }).map(spaceLabel) ?? "", selection: routeBinding(route, \.spaceID)) {
                 ForEach(model.catalog.spaces, id: \.id) { space in Text(spaceLabel(space)).tag(space.id) }
             }.labelsHidden().frame(width: 140).accessibilityIdentifier("routing-space-" + route.id.uuidString)
                 .help(uiText("Open in"))

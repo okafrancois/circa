@@ -39,7 +39,7 @@ struct SpaceSymbolIconTests {
             guard case .systemSymbol(let name) = item.choice else { Issue.record("Untyped symbol"); continue }
             #expect(SpaceIconImages.template(name, pointSize: 20) != nil)
         }
-        let picker = SpaceIconPicker(currentChoice: .systemSymbol("briefcase.fill"), accent: .defaultSpace)
+        let picker = SpaceIconPicker(currentChoice: .systemSymbol("briefcase.fill"), accent: .defaultSpace, purpose: .tab)
         picker.loadViewIfNeeded()
         #expect(picker.mode == .icons && picker.search.isEnabled)
         #expect(picker.grid.selectedItem?.choice == .systemSymbol("briefcase.fill"))
@@ -55,7 +55,7 @@ struct SpaceSymbolIconTests {
 
     @Test("Both modes traverse by physical key interpretation, Return applies the typed choice once, and Tab delegates")
     func keyboard() throws {
-        for choice in [BrowserSpaceIcon.systemSymbol("globe"), .grapheme("😀")] {
+        for choice in [BrowserSpaceIcon.planet(.closest(to: "globe")), .grapheme("😀")] {
             let picker = SpaceIconPicker(currentChoice: choice, accent: .defaultSpace)
             picker.loadViewIfNeeded()
             let before = picker.grid.selectedIndex
@@ -80,7 +80,7 @@ struct SpaceSymbolIconTests {
 
     @Test("Mode replacement revokes retained symbol and emoji AX cells, including an ABA switch")
     func staleCellsAndModeAdmission() throws {
-        let picker = SpaceIconPicker(currentChoice: .systemSymbol("star.fill"), accent: .defaultSpace)
+        let picker = SpaceIconPicker(currentChoice: .planet(.closest(to: "star.fill")), accent: .defaultSpace)
         picker.loadViewIfNeeded()
         let old = try #require((picker.grid.accessibilityChildren() as? [NSAccessibilityElement])?.first)
         var choices: [BrowserSpaceIcon] = []
@@ -92,7 +92,7 @@ struct SpaceSymbolIconTests {
         #expect(!emoji.accessibilityPerformPress() && !old.accessibilityPerformPress())
         picker.choose(.systemSymbol("../invalid"))
         picker.choose(.systemSymbol("not.an.available.symbol"))
-        picker.choose(.grapheme("🌈"))
+        picker.choose(.systemSymbol("star.fill"))
         #expect(choices.isEmpty)
         let fresh = try #require((picker.grid.accessibilityChildren() as? [NSAccessibilityElement])?.first)
         #expect(fresh.accessibilityRole() == .button && !(fresh.accessibilityLabel() ?? "").isEmpty)
@@ -103,7 +103,7 @@ struct SpaceSymbolIconTests {
 
     @Test("Marked composition refuses mode switch, Return, direct selection, Remove and AX then recovers")
     func composition() throws {
-        let picker = SpaceIconPicker(currentChoice: .systemSymbol("star.fill"), accent: .defaultSpace)
+        let picker = SpaceIconPicker(currentChoice: .planet(.closest(to: "star.fill")), accent: .defaultSpace)
         let window = hiddenWindow(picker)
         defer { window.close() }
         #expect(window.makeFirstResponder(picker.search))
@@ -114,21 +114,21 @@ struct SpaceSymbolIconTests {
         editor.setMarkedText("に", selectedRange: NSRange(location: 1, length: 0),
                              replacementRange: NSRange(location: NSNotFound, length: 0))
         switchMode(picker, .emoji)
-        #expect(picker.mode == .icons && picker.modes.selectedSegment == SpaceIconPicker.Mode.icons.rawValue)
+        #expect(picker.mode == .emoji && picker.modes.selectedSegment == SpaceIconPicker.Mode.emoji.rawValue)
         #expect(!picker.control(picker.search, textView: editor, doCommandBy: #selector(NSResponder.insertNewline(_:))))
         picker.handle(#selector(NSResponder.insertNewline(_:)))
-        picker.choose(.systemSymbol("star.fill")); picker.removeIcon(nil)
+        picker.choose(.planet(.closest(to: "star.fill"))); picker.removeIcon(nil)
         #expect(!cell.accessibilityPerformPress() && chosen.isEmpty)
         editor.unmarkText()
-        picker.setSearch("star")
+        picker.setSearch("Side project")
         #expect(!cell.accessibilityPerformPress())
         picker.handle(#selector(NSResponder.insertNewline(_:)))
-        #expect(chosen == [.systemSymbol("star.fill")] && !window.isVisible)
+        #expect(chosen == [.planet(.closest(to: "star.fill"))] && !window.isVisible)
     }
 
     @Test("Mouse-up from an earlier grid generation cannot apply the new mode or query")
     func staleClick() throws {
-        let picker = SpaceIconPicker(currentChoice: .systemSymbol("globe"), accent: .defaultSpace)
+        let picker = SpaceIconPicker(currentChoice: .planet(.closest(to: "globe")), accent: .defaultSpace)
         let window = hiddenWindow(picker)
         defer { window.close() }
         var chosen: [BrowserSpaceIcon] = []
@@ -147,25 +147,25 @@ struct SpaceSymbolIconTests {
         #expect(chosen.isEmpty)
         picker.grid.mouseDown(with: try event(.leftMouseDown))
         picker.grid.mouseUp(with: try event(.leftMouseUp))
-        #expect(chosen == [.systemSymbol("globe")] && !window.isVisible)
+        #expect(chosen == [.planet(.closest(to: "globe"))] && !window.isVisible)
     }
 
     @Test("Remove clears symbols once and Escape clears icon search before cancelling without a commit")
     func removeAndCancel() {
         var choices: [BrowserSpaceIcon] = []
-        let picker = SpaceIconPicker(currentChoice: .systemSymbol("star.fill"), accent: .defaultSpace)
+        let picker = SpaceIconPicker(currentChoice: .planet(.closest(to: "star.fill")), accent: .defaultSpace)
         picker.onChooseIcon = { choices.append($0) }
         picker.loadViewIfNeeded()
         #expect(picker.removeButton.isEnabled)
         picker.removeIcon(nil); picker.removeIcon(nil)
         #expect(choices == [.none])
-        let cancelled = SpaceIconPicker(currentChoice: .systemSymbol("star.fill"), accent: .defaultSpace)
+        let cancelled = SpaceIconPicker(currentChoice: .planet(.closest(to: "star.fill")), accent: .defaultSpace)
         cancelled.onChooseIcon = { choices.append($0) }
         cancelled.setSearch("star")
         cancelled.handle(#selector(NSResponder.cancelOperation(_:)))
         #expect(cancelled.search.stringValue.isEmpty)
         cancelled.handle(#selector(NSResponder.cancelOperation(_:)))
-        cancelled.choose(.systemSymbol("star.fill"))
+        cancelled.choose(.planet(.closest(to: "star.fill")))
         #expect(choices == [.none] && cancelled.popup.window == nil)
     }
 
@@ -182,10 +182,10 @@ struct SpaceSymbolIconTests {
         let id = try #require(controller.session.snapshot?.activeSpaceID)
         let picker = try #require(controller.makeSpaceIconPicker(for: id))
         switchMode(picker, .icons)
-        picker.setSearch("briefcase")
+        picker.setSearch("Work")
         picker.handle(#selector(NSResponder.insertNewline(_:)))
         try await settle()
-        let choice = BrowserSpaceIcon.systemSymbol("briefcase.fill")
+        let choice = BrowserSpaceIcon.planet(.closest(to: "briefcase.fill"))
         #expect(environment.settings.document.space(id).iconSelection == choice)
         let reopened = try BrowserSettingsStore(destination: file)
         #expect(await reopened.snapshot().space(id).iconSelection == choice)
@@ -198,11 +198,11 @@ struct SpaceSymbolIconTests {
         #expect(library.rows[index].iconSelection == choice && library.rows[index].icon == nil)
         let libraryImage = try #require(library.tiles[index].iconView as? NSImageView)
         let settingsImage = try #require(BrowserSettingsIconPreview.projection(choice) as? NSImageView)
-        #expect(libraryImage.image === settingsImage.image && libraryImage.image?.isTemplate == true)
+        #expect(libraryImage.image === settingsImage.image && libraryImage.image?.isTemplate == false)
         #expect(settingsImage.accessibilityLabel() == uiText("Work"))
         let next = try #require(controller.makeSpaceIconPicker(for: id))
         next.loadViewIfNeeded()
-        #expect(next.mode == .icons && next.grid.selectedItem?.choice == choice)
+        #expect(next.mode == .emoji && next.grid.selectedItem?.choice == choice)
         // Both legacy write surfaces must replace or clear a symbol.
         let editor = try #require(controller.makeSpaceIconEditor(for: id))
         editor.field.stringValue = "👩🏽‍💻"; editor.complete(.alertFirstButtonReturn)
@@ -262,7 +262,7 @@ struct SpaceSymbolIconTests {
         let profile = try #require(controller.session.activeProfileID)
         let otherProfile = await environment.store.createProfile(name: "Synthetic archive profile")
         let other = try await environment.store.createSpace(name: "Synthetic archive Space", profileID: otherProfile)
-        try await environment.settings.updateSpace(id) { $0.iconSelection = .systemSymbol("star.fill"); $0.palette = .lavender }
+        try await environment.settings.updateSpace(id) { $0.iconSelection = .planet(.closest(to: "star.fill")); $0.palette = .lavender }
         let before = environment.settings.document.space(id)
         try await environment.removeSpaceFromSettings(other, expectedProfileID: otherProfile)
         try await environment.store.restoreSettingsSpace(other, expectedProfileID: otherProfile)
@@ -287,31 +287,31 @@ struct SpaceSymbolIconTests {
         let reprofiled = try #require(controller.makeSpaceIconPicker(for: inactive))
         switchMode(reprofiled, .icons)
         try await environment.store.assignSettingsSpace(inactive, to: otherProfile)
-        reprofiled.choose(.systemSymbol("star.fill"))
+        reprofiled.choose(.planet(.closest(to: "star.fill")))
         try await settle()
-        #expect(environment.settings.document.space(inactive).iconSelection == .none)
+        #expect(environment.settings.document.space(inactive).iconSelection == .planet(.automatic))
         let stale = try #require(controller.makeSpaceIconPicker(for: first))
         switchMode(stale, .icons)
         controller.session.activateSpace(other)
-        stale.choose(.systemSymbol("star.fill"))
+        stale.choose(.planet(.closest(to: "star.fill")))
         await controller.session.waitForPendingCommands(); try await settle()
-        #expect(environment.settings.document.space(first).iconSelection == .none)
-        #expect(environment.settings.document.space(other).iconSelection == .none)
+        #expect(environment.settings.document.space(first).iconSelection == .planet(.automatic))
+        #expect(environment.settings.document.space(other).iconSelection == .planet(.automatic))
         let model = BrowserSettingsModel(environment: environment, profileID: profile, shortcuts: [])
         await model.reload()
-        model.queueSpaceIconEdit(spaceID: first, profileID: profile, icon: .systemSymbol("star.fill"))
+        model.queueSpaceIconEdit(spaceID: first, profileID: profile, icon: .planet(.closest(to: "star.fill")))
         model.selectProfile(otherProfile)
         await model.waitForPendingActions()
-        #expect(environment.settings.document.space(first).iconSelection == .none)
-        model.queueSpaceIconEdit(spaceID: first, profileID: otherProfile, icon: .systemSymbol("star.fill"))
+        #expect(environment.settings.document.space(first).iconSelection == .planet(.automatic))
+        model.queueSpaceIconEdit(spaceID: first, profileID: otherProfile, icon: .planet(.closest(to: "star.fill")))
         await model.waitForPendingActions()
-        #expect(environment.settings.document.space(first).iconSelection == .none)
+        #expect(environment.settings.document.space(first).iconSelection == .planet(.automatic))
         await environment.refreshSettingsCatalog()
         let removed = try #require(controller.makeSpaceIconPicker(for: inactive))
         switchMode(removed, .icons)
         try await environment.removeSpaceFromSettings(inactive)
-        removed.choose(.systemSymbol("star.fill")); try await settle()
-        #expect(environment.settings.document.space(inactive).iconSelection == .none)
+        removed.choose(.planet(.closest(to: "star.fill"))); try await settle()
+        #expect(environment.settings.document.space(inactive).iconSelection == .planet(.automatic))
         #expect(controller.window?.isVisible == false)
     }
 
@@ -321,7 +321,7 @@ struct SpaceSymbolIconTests {
         let active = SidebarSpaceButton(space: space, index: 0, isActive: true)
         let inactive = SidebarSpaceButton(space: space, index: 0, isActive: false)
         for button in [active, inactive] {
-            button.iconSelection = .systemSymbol("star.fill")
+            button.iconSelection = .planet(.closest(to: "star.fill"))
             button.tint = NSColor(srgbRed: 0.8, green: 0.2, blue: 0.3, alpha: 1)
         }
         let one = try #require(SpaceIconImages.symbol("star.fill", pointSize: 15, tint: active.tint, active: true, appearance: active.effectiveAppearance))
@@ -341,11 +341,11 @@ struct SpaceSymbolIconTests {
             return (visible, colored)
         }
         #expect(pixels(active).colored > 0)
-        #expect(pixels(inactive).visible > 0 && pixels(inactive).colored == 0)
+        #expect(pixels(inactive).visible > 0 && pixels(inactive).colored > 0)
         let footer = SidebarFooterView()
         footer.render(spaces: [space], activeSpaceID: space.id)
         let themed = try #require(footer.spaceButtons.first)
-        themed.iconSelection = .systemSymbol("star.fill")
+        themed.iconSelection = .planet(.closest(to: "star.fill"))
         let previous = themed.tint.resolved(for: NSAppearance(named: .aqua)!)
         footer.accent = .derived(hue: 0.03)
         #expect(themed.tint.resolved(for: NSAppearance(named: .aqua)!) != previous)

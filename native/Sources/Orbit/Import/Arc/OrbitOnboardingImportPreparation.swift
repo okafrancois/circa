@@ -4,6 +4,24 @@ import BrowserCore
 /// The same adapters and closed-runtime transaction used by the explicit import command.
 @MainActor
 final class OrbitOnboardingImportPreparation {
+    var onProgress: (@MainActor (OrbitOnboardingImportStatus) -> Void)?
+    private var progressStatus = OrbitOnboardingImportStatus()
+    private func updateProgress(_ progress: ArcImportProgress) {
+        let phases: [ArcImportProgress.Phase] = [.copying, .reading, .countingHistory, .backingUp, .applying, .saving, .importingHistory, .finished]
+        let index = phases.firstIndex(of: progress.phase) ?? 0
+        progressStatus.fraction = (Double(index) + (progress.fraction ?? 0)) / Double(phases.count)
+        if [.saving, .importingHistory, .finished].contains(progress.phase) { progressStatus.completedRows = [0, 1, 2] }
+        progressStatus.finished = progress.phase == .finished
+        if progressStatus.finished { progressStatus.fraction = 1 }
+        onProgress?(progressStatus)
+    }
+    private func updateCounts(_ report: ArcImportReport) {
+        progressStatus.counts = [report.source.spaces, report.source.pinnedTabs,
+            report.sourceCounts?["themes"], report.sourceCounts?["boosts"],
+            report.passwordProfiles.map { $0.reduce(0) { $0 + $1.count } }]
+        onProgress?(progressStatus)
+    }
+
     func summary(configuration: OrbitProductConfiguration) throws -> BrowserOnboardingRecord.ImportSummary? {
         let location = ArcImportDataLocation(sessionFile: configuration.sessionFile)
         guard let bytes = try? Data(contentsOf: location.ledgerFile) else { return nil }
@@ -117,6 +135,11 @@ final class OrbitOnboardingImportPreparation {
 
     func apply(_ flow: OrbitOnboardingFlow, configuration: OrbitProductConfiguration) async throws -> Double? {
         guard let source = flow.selectedSource else { return nil }
+        progressStatus = .init(source: source.name)
+        onProgress?(progressStatus)
+        let receive: @Sendable (ArcImportProgress) -> Void = { [weak self] progress in
+            Task { @MainActor in self?.updateProgress(progress) }
+        }
         let started = ContinuousClock.now
         if source.id == OrbitApplication.onboardingArcSourceID {
             let sourceRoot = OrbitImportLaunchOptions.source(CommandLine.arguments)
@@ -127,9 +150,10 @@ final class OrbitOnboardingImportPreparation {
             }))
             let target = try ArcOfflineImportTarget(sessionFile: configuration.sessionFile, usage: ImportRecoveryAlert.OfflineUsage(), separatedFrom: sourceRoot)
             do {
-                let preparation = try await Task.detached { try await importer.prepare(for: target) }.value
+                let preparation = try await Task.detached { try await importer.prepare(for: target, progress: receive) }.value
+                updateCounts(preparation.report)
                 defer { preparation.discard() }
-                _ = try await Task.detached { try await importer.apply(preparation, to: target) }.value
+                _ = try await Task.detached { try await importer.apply(preparation, to: target, progress: receive) }.value
                 await target.close()
             } catch { await target.close(); throw error }
             let ledger = try JSONDecoder().decode(BrowserImportLedger.self, from: Data(contentsOf: ArcImportDataLocation(sessionFile: configuration.sessionFile).ledgerFile))
@@ -192,7 +216,8 @@ final class OrbitOnboardingImportPreparation {
                     var reader = BrowserImportOrchestrator(source: choice.root, probe: probe)
                     reader.adapter = adapter
                     let worker = reader
-                    let preparation = try await Task.detached { try await worker.prepare(for: target) }.value
+                    let preparation = try await Task.detached { try await worker.prepare(for: target, progress: receive) }.value
+                    updateCounts(preparation.report)
                     do {
                         let authentication = try await Task.detached { try BrowserImportOfflineJob.authenticate(configuration: configuration, source: choice.root, adapter: adapter, probe: probe) }.value
                         inputs.append(.init(preparation: preparation, adapter: adapter, consent: true,

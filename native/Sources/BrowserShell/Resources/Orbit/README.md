@@ -1,8 +1,8 @@
-# Secondary-screen brand resources
+# Brand resources
 
-`sign-color.svg` and `sign-color.pdf` now contain the Orbit application mark from
-`native/OrbitChromium/App/Branding/Orbit.svg`, following the App icon section of
-`docs/brand/orbit/orbit-da.html`. The PDF is an AppKit vector export of that SVG.
+The crescent and disc in `sign-color.svg` and `sign-color.pdf` are the Circa mark.
+The wordmark uses outlined Bricolage Grotesque 800 with -4.5% tracking.
+The PDFs preserve vector geometry. Planet PNGs share the Space inks and halftone shading, with optional Sky and Night variants.
 
-The Orbit directory, resource filenames and historical wordmark are internal compatibility
-names. Current UI renders the Orbit wordmark as text and never loads the historical wordmark.
+Resource directory names and filenames remain internal compatibility names.
+Typeface licenses are bundled in the adjacent `BrandFonts` directory.

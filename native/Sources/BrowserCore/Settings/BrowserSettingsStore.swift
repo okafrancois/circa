@@ -50,15 +50,40 @@ public enum BrowserSpacePalette: String, Codable, CaseIterable, Sendable {
     case automatic, amberCoral, lavender, rosePlum, limeCitrus
 }
 
-/// A Space has exactly one icon. SF Symbol identifiers are data, never grapheme strings.
+/// Stable artwork identifiers; automatic follows the Space's default tint.
+public enum BrowserSpacePlanet: String, Codable, CaseIterable, Sendable {
+    case automatic, work, home, reading, sideProject, sky, night
+    public static let selectable: [Self] = [.work, .home, .reading, .sideProject, .sky, .night]
+    public func index(defaultIndex: Int = 0) -> Int {
+        switch self {
+        case .automatic: ((defaultIndex % 4) + 4) % 4
+        case .work: 0
+        case .home: 1
+        case .reading: 2
+        case .sideProject: 3
+        case .sky: 4
+        case .night: 5
+        }
+    }
+    public static func closest(to symbol: String) -> Self {
+        let words = symbol.split(separator: ".").map(String.init)
+        if words.contains(where: { ["house", "home", "bed", "building"].contains($0) }) { return .home }
+        if words.contains(where: { ["book", "books", "text", "doc", "newspaper", "bookmark"].contains($0) }) { return .reading }
+        if words.contains(where: { ["heart", "paintbrush", "sparkles", "star", "pencil", "gamecontroller"].contains($0) }) { return .sideProject }
+        return .work
+    }
+}
+
+/// A Space has one icon choice. Native symbols remain a compatibility value and a tab icon kind.
 public enum BrowserSpaceIcon: Codable, Equatable, Hashable, Sendable {
     case none
     case grapheme(String)
     case systemSymbol(String)
+    case planet(BrowserSpacePlanet)
 
     public var isValid: Bool {
         switch self {
-        case .none: true
+        case .none, .planet: true
         case .grapheme(let value): !value.isEmpty && BrowserSpaceSettings.isValidIcon(value)
         case .systemSymbol(let name): Self.isValidSymbolIdentifier(name)
         }
@@ -79,42 +104,48 @@ public enum BrowserSpaceIcon: Codable, Equatable, Hashable, Sendable {
 public struct BrowserSpaceSettings: Codable, Equatable, Sendable {
     private var grapheme = ""
     private var systemSymbol: String?
+    private var planet: BrowserSpacePlanet? = .automatic
     private var invalidIconSelection: BrowserSpaceIcon?
     /// Compatibility field edits replace the whole choice, including when clearing an emoji.
     public var icon: String {
         get { grapheme }
-        set { grapheme = newValue; systemSymbol = nil; invalidIconSelection = nil }
+        set { grapheme = newValue; systemSymbol = nil; planet = nil; invalidIconSelection = nil }
     }
     public var iconSelection: BrowserSpaceIcon {
-        get { invalidIconSelection ?? systemSymbol.map(BrowserSpaceIcon.systemSymbol) ?? BrowserSpaceIcon(legacyIcon: grapheme) }
+        get { invalidIconSelection ?? planet.map(BrowserSpaceIcon.planet) ?? systemSymbol.map(BrowserSpaceIcon.systemSymbol) ?? BrowserSpaceIcon(legacyIcon: grapheme) }
         set {
             invalidIconSelection = newValue.isValid ? nil : newValue
             switch newValue {
-            case .none: grapheme = ""; systemSymbol = nil
-            case .grapheme(let value): grapheme = value; systemSymbol = nil
-            case .systemSymbol(let name): grapheme = ""; systemSymbol = name
+            case .none: grapheme = ""; systemSymbol = nil; planet = nil
+            case .grapheme(let value): grapheme = value; systemSymbol = nil; planet = nil
+            case .systemSymbol(let name): grapheme = ""; systemSymbol = nil; planet = .closest(to: name)
+            case .planet(let value): grapheme = ""; systemSymbol = nil; planet = value
             }
         }
     }
     public var palette: BrowserSpacePalette = .automatic
     public init() {}
-    private enum CodingKeys: String, CodingKey { case icon, systemSymbol, palette }
+    private enum CodingKeys: String, CodingKey { case icon, systemSymbol, planet, palette }
     public init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
+        planet = nil // An explicitly saved legacy empty icon means dots, never a default planet.
         grapheme = try values.decode(String.self, forKey: .icon)
         palette = try values.decode(BrowserSpacePalette.self, forKey: .palette)
         // Optional future/malformed metadata must not quarantine otherwise usable preferences.
-        // A recognized symbol takes precedence; load never writes the source file.
+        // Recognized legacy symbols migrate to planets; load never writes the source file.
         if let name = try? values.decode(String.self, forKey: .systemSymbol),
            BrowserSpaceIcon.isValidSymbolIdentifier(name) {
-            systemSymbol = name
+            planet = .closest(to: name)
             grapheme = ""
+        }
+        if let value = try? values.decode(BrowserSpacePlanet.self, forKey: .planet) {
+            planet = value; grapheme = ""; systemSymbol = nil
         }
     }
     public func encode(to encoder: Encoder) throws {
         var values = encoder.container(keyedBy: CodingKeys.self)
         try values.encode(grapheme, forKey: .icon)
-        try values.encodeIfPresent(systemSymbol, forKey: .systemSymbol)
+        try values.encodeIfPresent(planet, forKey: .planet)
         try values.encode(palette, forKey: .palette)
     }
     public static func isValidIcon(_ icon: String) -> Bool {
@@ -158,9 +189,8 @@ public struct BrowserSettingsDocument: Codable, Equatable, Sendable {
     public var automaticPictureInPicture = true
     /// Device-local opt-in for cached sidebar tab hover cards.
     public var showsTabHoverPreviews = false
-    /// Pages fill the window edge to edge unless the user keeps the spaced layout. Absent keys
-    /// decode as false, so existing installations get the edge-to-edge layout.
-    public var showsSpaceAroundPages = false
+    /// New installations use an inset page. Existing documents retain their saved edge layout.
+    public var showsSpaceAroundPages = true
     public var quickWindowArchiveThreshold: BrowserAutoArchiveThreshold = .sixHours
     /// Device-local domain/account choices, excluded from the sync projection.
     public var quickWindowProfilesByDomain: [String: ProfileID] = [:]

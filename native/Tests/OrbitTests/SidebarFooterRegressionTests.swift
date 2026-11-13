@@ -93,9 +93,9 @@ struct SidebarFooterRegressionTests {
             return (count, colored, maxAlpha)
         }
         let a = opaqueStats(raster(active)), i = opaqueStats(raster(inactive))
-        // An 8 pt dot covers about 50 px; an emoji glyph covers far more and is coloured.
-        #expect(a.count > 0 && a.count < 70 && a.colored == 0)
-        #expect(i.count > 0 && i.count < 70 && i.colored == 0)
+        // A coloured 8 pt dot covers about 50 px; a full emoji covers far more.
+        #expect(a.count > 0 && a.count < 70 && a.colored > 0)
+        #expect(i.count > 0 && i.count < 70 && i.colored > 0)
         #expect(a.maxAlpha > 0.95 && i.maxAlpha < 0.8)
         inactive.hoverAmount = 1
         let hovered = opaqueStats(raster(inactive))

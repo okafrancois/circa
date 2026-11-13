@@ -1,39 +1,52 @@
 import AppKit
 import BrowserShell
+import CoreText
 
-/// Word-sized clipping keeps the display title's reveal independent of its typeface.
+/// Display titles use cap-aligned lines with a fixed 0.95 em baseline advance.
 @MainActor
 final class OrbitOnboardingMomentTitle: NSTextField {
-    private var words: [NSView] = []
-    override func draw(_ dirtyRect: NSRect) {
-        if words.isEmpty { super.draw(dirtyRect) }
+    override var isFlipped: Bool { true }
+    private var displayFont: NSFont {
+        attributedStringValue.length > 0
+            ? attributedStringValue.attribute(.font, at: 0, effectiveRange: nil) as? NSFont ?? font ?? OrbitOnboardingFonts.title
+            : font ?? OrbitOnboardingFonts.title
     }
+    private var lineAdvance: CGFloat { (displayFont.pointSize * 0.95).rounded() }
+    override var firstBaselineOffsetFromTop: CGFloat { displayFont.ascender }
+
+    private func lines(width: CGFloat) -> [CTLine] {
+        let text = attributedStringValue
+        let typesetter = CTTypesetterCreateWithAttributedString(text)
+        var result: [CTLine] = []
+        var offset = 0
+        while offset < text.length, maximumNumberOfLines == 0 || result.count < maximumNumberOfLines {
+            let count = max(1, CTTypesetterSuggestLineBreak(typesetter, offset, Double(max(1, width))))
+            result.append(CTTypesetterCreateLine(typesetter, CFRange(location: offset, length: count)))
+            offset += count
+        }
+        return result
+    }
+
+    override func sizeThatFits(_ size: NSSize) -> NSSize {
+        let lines = lines(width: size.width)
+        let width = lines.map { CGFloat(CTLineGetTypographicBounds($0, nil, nil, nil)) }.max() ?? 0
+        return NSSize(width: ceil(width), height: ceil(CGFloat(lines.count) * lineAdvance))
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        guard let context = NSGraphicsContext.current?.cgContext else { return }
+        for (index, line) in lines(width: bounds.width).enumerated() {
+            context.saveGState()
+            context.translateBy(x: 0, y: (lineAdvance - displayFont.ascender + displayFont.descender) / 2 + displayFont.ascender + CGFloat(index) * lineAdvance)
+            context.scaleBy(x: 1, y: -1)
+            context.textPosition = .zero
+            CTLineDraw(line, context)
+            context.restoreGState()
+        }
+    }
+
     func play(delay: Double, stagger: Double) {
-        words.forEach { $0.removeFromSuperview() }; words = []
-        guard !OrbitMotionPreferences.prefersReducedMotion, let font else {
-            OrbitOnboardingMotion.entrance(self, delay: delay); return
-        }
-        clipsToBounds = false; layer?.masksToBounds = false
-        let components = stringValue.split(separator: " ").map(String.init)
-        let attributes: [NSAttributedString.Key: Any] = [.font: font, .kern: -font.pointSize * 0.02]
-        let widths = components.map { ceil(($0 as NSString).size(withAttributes: attributes).width) }
-        let space = (" " as NSString).size(withAttributes: attributes).width
-        var x = (bounds.width - widths.reduce(0, +) - CGFloat(max(0, components.count - 1)) * space) / 2
-        for (index, word) in components.enumerated() {
-            let horizontal = font.pointSize * 0.08, top = font.pointSize * 0.06, bottom = font.pointSize * 0.16
-            let clip = OrbitOnboardingFlippedView(frame: NSRect(x: x - horizontal, y: -top,
-                width: widths[index] + horizontal * 2, height: bounds.height + top + bottom))
-            clip.wantsLayer = true; clip.layer?.masksToBounds = true
-            let label = NSTextField(labelWithString: word)
-            label.font = font; label.textColor = textColor
-            var styled = attributes; styled[.foregroundColor] = textColor
-            label.attributedStringValue = NSAttributedString(string: word, attributes: styled)
-            label.frame = NSRect(x: horizontal - 2, y: top, width: widths[index] + 8, height: bounds.height)
-            label.wantsLayer = true; clip.addSubview(label); addSubview(clip); words.append(clip)
-            OrbitOnboardingMotion.animate(label.layer, key: "transform.translation.y", from: font.pointSize * 0.95 * 1.1, to: 0,
-                duration: 1.1, delay: delay + Double(index) * stagger)
-            x += widths[index] + space
-        }
-        needsDisplay = true
+        wantsLayer = true
+        OrbitOnboardingMotion.entrance(self, y: 32, duration: 0.5, delay: delay)
     }
 }

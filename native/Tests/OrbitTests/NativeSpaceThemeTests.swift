@@ -85,19 +85,19 @@ extension NativeWebKitTests {
 @Suite("Space themes — rendering and accent", .serialized)
 @MainActor
 struct NativeSpaceThemeRenderingTests {
-    @Test("A stored theme renders as dynamic stops with its mode, range, angle and grain; equal models share a fill")
+    @Test("A stored theme renders daylight stops regardless of its legacy mode; equal models share a fill")
     func conversion() {
         let model = BrowserSpaceTheme.composed(colors: [mauve, coral], intensity: 0.7, noise: 0.4)
         let theme = OrbitSpaceThemes.rendered(model)
-        #expect(theme.model == model && theme.mode == .automatic && theme.texture == .grain && close(theme.textureIntensity, 0.4, 1e-9))
+        #expect(theme.model == model && theme.mode == .light && theme.texture == .grain && close(theme.textureIntensity, 0.4, 1e-9))
         #expect(theme.stops.count == 2 && theme.angle == .init(light: 43, dark: 43) && theme.stopRange == .fullDiagonal)
         for (index, stop) in theme.stops.enumerated() {
             #expect(near(rgb(stop, light), components(model.light.stops[index]), 0.6))
-            #expect(near(rgb(stop, dark), components(model.dark.stops[index]), 0.6))
+            #expect(near(rgb(stop, dark), components(model.light.stops[index]), 0.6))
         }
         #expect(theme == OrbitSpaceThemes.rendered(model))
         #expect(theme != OrbitSpaceThemes.rendered(model.recomposed(intensity: 0.71)))
-        #expect(OrbitSpaceThemes.rendered(model.recomposed(mode: .dark)).mode == .dark)
+        #expect(OrbitSpaceThemes.rendered(model.recomposed(mode: .dark)).mode == .light)
         #expect(OrbitSpaceThemes.rendered(model.recomposed(noise: 0)).texture == .none)
         // The default preset paints exactly the measured default gradient.
         let preset = OrbitSpaceThemes.rendered(BrowserSpaceThemePresets.default)
@@ -118,7 +118,7 @@ struct NativeSpaceThemeRenderingTests {
         view.apply(OrbitSpaceThemes.rendered(model))
         view.layoutSubtreeIfNeeded()
         var pixel = try render(view)
-        let stops = (isDark ? model.dark : model.light).stops.map(components)
+        let stops = model.light.stops.map(components)
         #expect(near(pixel(1, 1), stops[0], 3), "top-left is the first stop")
         #expect(near(pixel(size.intWidth - 2, size.intHeight - 2), stops[1], 3), "bottom-right is the last stop")
         let middle = zip(stops[0], stops[1]).map { ($0 + $1) / 2 }
@@ -235,7 +235,7 @@ struct NativeSpaceThemeWindowTests {
         let profile = try #require(controller.session.activeProfileID)
         let other = try await environment.makeWindow(spaceID: space)
         defer { other.window?.close() }
-        #expect(controller.windowShell.theme == .default)
+        #expect(controller.windowShell.theme == OrbitSpaceThemes.defaultTheme(at: 0, preview: false))
         try await environment.settings.updateSpace(space) { $0.palette = .lavender }
         #expect(controller.windowShell.theme == .lavender, "a never-themed Space keeps its legacy palette")
         let model = BrowserSpaceTheme.composed(colors: [coral], mode: .light)
@@ -255,7 +255,7 @@ struct NativeSpaceThemeWindowTests {
         await controller.session.waitForPendingCommands()
         #expect(controller.windowShell.theme == .lavender)
         try await environment.settings.updateSpace(space) { $0.palette = .automatic }
-        #expect(controller.windowShell.theme == .default)
+        #expect(controller.windowShell.theme == OrbitSpaceThemes.defaultTheme(at: 0, preview: false))
         #expect(controller.window?.isVisible == false && other.window?.isVisible == false)
     }
 
@@ -296,8 +296,6 @@ struct NativeSpaceThemeWindowTests {
         let expected = window.convertToScreen(NSRect(x: card.minX + 13, y: content.frame.maxY - 13 - 522, width: 356, height: 522))
         #expect(frame == expected)
         #expect(view.field.frame == NSRect(x: 8, y: 8, width: 340, height: 339))
-        #expect(view.modeButtons.map { $0.frame.midX } == [138, 178, 218] && view.modeButtons.allSatisfy { $0.frame.midY == 48 })
-        #expect(view.modeHighlight.frame == view.modeButtons[0].frame, "a never-themed Space is automatic")
         let swatchCenters = view.swatches.filter { !$0.isHidden }.map { $0.frame.midX }
         let expectedCenters = (0..<9).map { 60.0 + CGFloat($0) * 29.5 }
         #expect(swatchCenters == expectedCenters)
@@ -321,10 +319,9 @@ struct NativeSpaceThemeWindowTests {
 
         // More edits in the same session; the mode switch repaints the panel appearance instantly.
         view.swatches[3].performClick(nil)
-        view.modeButtons[2].performClick(nil)
         view.grainDial.onChange?(0.5)
-        #expect(editor.draft.presetID == "brand.4" && editor.draft.mode == .dark && editor.draft.noise == 0.5)
-        #expect(editor.panel?.appearance?.name == .darkAqua && controller.window?.appearance?.name == .darkAqua)
+        #expect(editor.draft.presetID == "brand.4" && editor.draft.mode == .automatic && editor.draft.noise == 0.5)
+        #expect(editor.panel?.appearance?.name == .aqua && controller.window?.appearance?.name == .aqua)
         let final = editor.draft
 
         // Closing writes the final draft and registers a single "Change Theme" step.
@@ -342,7 +339,7 @@ struct NativeSpaceThemeWindowTests {
         #expect(try await eventually { try await environment.store.spaceTheme(space) == nil })
         controller.session.refreshCatalog()
         await controller.session.waitForPendingCommands()
-        #expect(controller.windowShell.theme == .default)
+        #expect(controller.windowShell.theme == OrbitSpaceThemes.defaultTheme(at: 0, preview: false))
         #expect(manager.canRedo)
         manager.redo()
         #expect(try await eventually { try await environment.store.spaceTheme(space) == final })
@@ -370,7 +367,7 @@ struct NativeSpaceThemeWindowTests {
         #expect(editor.isClosed)
         await editor.waitUntilFinished()
         #expect(try await environment.store.spaceTheme(first) == picked)
-        #expect(controller.windowShell.theme == .default, "the second Space shows its own theme")
+        #expect(controller.windowShell.theme == OrbitSpaceThemes.defaultTheme(at: 1, preview: false), "the second Space shows its own tint")
         controller.openThemeEditor(for: second, animated: false)
         #expect(controller.themeEditor?.draft == BrowserSpaceThemePresets.default)
         controller.themeEditor?.close(animated: false)
@@ -430,11 +427,8 @@ struct NativeSpaceThemeWindowTests {
         let handle = try #require(view.handles.first)
         #expect(near(pixel(Int(handle.frame.midX), Int(handle.frame.midY)), components(mauve), 3))
         #expect(near(pixel(Int(handle.frame.midX), Int(handle.frame.minY + 1.5)), [255, 255, 255], 6), "white ring")
-        #expect(view.modeHighlight.frame == view.modeButtons[1].frame)
         // Accessibility: labelled controls, adjustable sliders, labelled swatches.
         #expect(view.accessibilityRole() == .popover && view.accessibilityLabel() == "Edit Theme Color")
-        #expect(view.modeButtons.map { $0.accessibilityLabel() } == ["Automatic Appearance", "Light Appearance", "Dark Appearance"])
-        #expect(view.modeButtons[2].toolTip == "Dark Appearance")
         #expect(view.swatches.first?.accessibilityLabel() == "Brand 1" && view.swatches.last?.accessibilityLabel() == "Brand 9")
         #expect(handle.accessibilityRole() == .slider && handle.accessibilityLabel() == "Color 1")
         #expect(handle.accessibilityValue() as? String == mauve.hexString)
@@ -452,7 +446,6 @@ struct NativeSpaceThemeWindowTests {
         // Dark appearance resolves the control colours again.
         view.appearance = dark
         view.layoutSubtreeIfNeeded()
-        #expect(view.modeHighlight.backgroundColor != nil)
         #expect(close(view.grainDial.value(at: CGPoint(x: view.grainDial.bounds.midX, y: 0)), 0, 1e-9))
     }
 }

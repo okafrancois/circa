@@ -290,7 +290,7 @@ final class SidebarCreationPopup: NSObject, NSWindowDelegate {
 }
 
 @MainActor
-private final class CreationMenuPanel: NSPanel {
+private final class CreationMenuPanel: OrbitDaylightPanel {
     override var canBecomeKey: Bool { true }
     override var canBecomeMain: Bool { false }
 }

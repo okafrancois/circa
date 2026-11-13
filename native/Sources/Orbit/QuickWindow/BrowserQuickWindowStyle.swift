@@ -15,7 +15,7 @@ extension OrbitTokens.Metrics.QuickWindow {
 /// makeKeyAndOrderFront: . AppKit owns the window animation; there is
 /// no additional content-layer zoom or alpha animation on this path.
 @MainActor
-final class BrowserQuickWindowPanel: NSPanel {
+final class BrowserQuickWindowPanel: OrbitDaylightPanel {
     override func sendEvent(_ event: NSEvent) {
         OrbitUnsavedInputGuard.keyDown(in: self, event: event)
         super.sendEvent(event)
@@ -78,7 +78,7 @@ final class BrowserQuickWindowAddressField: NSTextField {
 
     override func updateLayer() {
         layer?.cornerRadius = OrbitTokens.Radius.quickWindowAddress
-        layer?.backgroundColor = NSColor.white.withAlphaComponent(0.10).cgColor
+        layer?.backgroundColor = BrandPalette.ink.withAlphaComponent(0.07).cgColor
     }
 }
 
@@ -95,10 +95,15 @@ final class BrowserQuickWindowToolbarView: NSView {
         wantsLayer = true
         layer?.masksToBounds = true
         addSubview(fill)
-        let frost = OrbitFloatingMaterial.install(in: self, radius: 0)
-        addSubview(frost, positioned: .above, relativeTo: fill)
+        fill.isHidden = true
+        refreshInk()
+
     }
     required init?(coder: NSCoder) { nil }
+    override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); refreshInk() }
+    private func refreshInk() {
+        layer?.backgroundColor = BrandPalette.rgb(0xDCE3FB).cgColor
+    }
     override func resetCursorRects() { addCursorRect(bounds, cursor: .arrow) }
     override func layout() {
         super.layout()
@@ -114,7 +119,7 @@ final class BrowserQuickWindowOpenGroup: NSView {
     override var wantsUpdateLayer: Bool { true }
     override func updateLayer() {
         layer?.cornerRadius = OrbitTokens.Metrics.QuickWindow.openInCornerRadius
-        layer?.backgroundColor = NSColor.controlAccentColor.withAlphaComponent(0.12).cgColor
+        layer?.backgroundColor = BrandPalette.ink.cgColor
     }
 }
 

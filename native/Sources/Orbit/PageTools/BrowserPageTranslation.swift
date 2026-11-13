@@ -423,33 +423,16 @@ private final class TranslationActionButton: NSButton {
     }
     @objc private func press() { if isEnabled { onPress?() } }
     override func draw(_ dirtyRect: NSRect) {
-        let dark = OrbitAppearance.isDark(effectiveAppearance)
-        guard dark || secondary else { super.draw(dirtyRect); return }
+        guard secondary else { super.draw(dirtyRect); return }
         let path = NSBezierPath(roundedRect: bounds.insetBy(dx: 0.5, dy: 0.5), xRadius: 6, yRadius: 6)
-        if secondary {
-            NSColor.labelColor.withAlphaComponent(0.08).setFill()
-            path.fill()
-        } else if isEnabled {
-            let bottom = NSColor(srgbRed: 100/255, green: 99/255, blue: 120/255, alpha: 1)
-            let top = NSColor(srgbRed: 108/255, green: 107/255, blue: 125/255, alpha: 1)
-            NSGradient(starting: bottom, ending: top)?.draw(in: path, angle: 90)
-            NSColor.black.withAlphaComponent(0.5).setStroke()
-            path.lineWidth = 0.5
-            path.stroke()
-            let highlight = NSBezierPath(roundedRect: bounds.insetBy(dx: 1, dy: 1), xRadius: 5.5, yRadius: 5.5)
-            NSColor.white.withAlphaComponent(0.14).setStroke()
-            highlight.lineWidth = 0.5
-            highlight.stroke()
-        } else {
-            NSColor.labelColor.withAlphaComponent(0.06).setFill()
-            path.fill()
-        }
+        NSColor.labelColor.withAlphaComponent(0.08).setFill()
+        path.fill()
         let style = NSMutableParagraphStyle()
         style.alignment = .center
         style.lineBreakMode = .byTruncatingTail
         let attributes: [NSAttributedString.Key: Any] = [
             .font: font ?? BrandTextStyle.ui.font(size: 14, weight: .semibold),
-            .foregroundColor: dark ? NSColor(srgbRed: 202/255, green: 201/255, blue: 224/255, alpha: 1) : NSColor.secondaryLabelColor,
+            .foregroundColor: NSColor.secondaryLabelColor,
             .paragraphStyle: style
         ]
         let height = (title as NSString).size(withAttributes: attributes).height

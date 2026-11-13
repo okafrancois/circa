@@ -75,7 +75,7 @@ struct SidebarBrandFixTests {
     @Test("Saved material flags leave controls unchanged while floating materials retain accessibility fallback")
     func retiredControlMaterial() {
         let surface = OrbitSurfaceBackgroundView(cornerRadius: 8)
-        for preset in [BrandPalette.spaceGradients[0], BrandPalette.spaceGradients[4], BrandPalette.spaceGradients[2]] {
+        for preset in [BrandPalette.spaceGradients[0], BrandPalette.spaceGradients[1], BrandPalette.spaceGradients[2]] {
             var model = preset.theme(); model.frost = true
             let theme = OrbitSpaceThemes.rendered(model)
             surface.applyFrost(OrbitSpaceThemes.accent(for: theme))
@@ -88,40 +88,31 @@ struct SidebarBrandFixTests {
         #expect(floating.effect.isHidden)
     }
 
-    @Test("Coral retains its violet end through storage and native gradient rendering")
+    @Test("Work retains its flat mandarine tint through storage and native rendering")
     func coralGradient() throws {
         let model = BrandPalette.spaceGradients[0].theme()
         let decoded = try JSONDecoder().decode(BrowserSpaceTheme.self, from: JSONEncoder().encode(model))
-        #expect(decoded.light.stops.last == BrowserThemeColor(hex: 0x7B4DFF))
+        #expect(decoded.light.stops.last == BrowserThemeColor(hex: 0xFBDFD5))
         #expect(decoded.light.angleDegrees == 80)
         let theme = OrbitSpaceThemes.rendered(decoded)
         let appearance = try #require(NSAppearance(named: .aqua))
         let fill = OrbitThemeFillView(frame: NSRect(x: 0, y: 0, width: 1000, height: 700))
         fill.appearance = appearance
         fill.apply(theme)
-        #expect(fill.resolvedStops.last == OrbitSpaceThemes.color(.init(hex: 0x7B4DFF)).cgColor)
+        #expect(fill.resolvedStops.last == OrbitSpaceThemes.color(.init(hex: 0xFBDFD5)).cgColor)
         let bottom = OrbitThemeGradient.color(theme, at: CGPoint(x: 0, y: 1), appearance: appearance).usingColorSpace(.sRGB)!
-        #expect(bottom.blueComponent > bottom.redComponent)
+        #expect(bottom.redComponent > bottom.blueComponent)
         #expect(theme.angle.light == 80)
     }
 
-    @Test("Welcome copy is independent of the number of steps and colour bands start fully drawn")
+    @Test("The filled crescent is available immediately and welcome uses the approved tagline")
     func welcomeFirstFrame() throws {
-        #expect(OrbitOnboardingText.welcomeBody == uiText("Let’s set up your browser. A few short steps, about a minute, and nothing leaves your Mac."))
+        #expect(OrbitOnboardingText.welcomeBody == uiText("Space to think."))
         let welcome = OrbitOnboardingWelcomeView(frame: NSRect(x: 0, y: 0, width: 1200, height: 800))
         welcome.play()
-        let vector = try #require(welcome.mark.subviews.last)
-        let strokes = try #require(vector.layer?.sublayers?.compactMap { $0 as? CAShapeLayer })
-        #expect(!strokes.isEmpty)
-        for stroke in strokes {
-            #expect(stroke.strokeEnd == 1)
-            #expect(stroke.animation(forKey: "orbit.band.draw") == nil)
-        }
-        let colors = strokes.compactMap { $0.strokeColor }.compactMap(NSColor.init(cgColor:))
-        #expect(colors.contains { color in
-            let c = color.usingColorSpace(.sRGB)!
-            return abs(c.redComponent - c.blueComponent) > 0.2
-        })
+        let image = try #require(welcome.mark.subviews.compactMap { $0 as? NSImageView }.first?.image)
+        #expect(!image.representations.isEmpty)
+        #expect(OrbitOnboardingMarkPaths.read() == nil)
     }
 
     @Test("Settings editor passes the actual Space name, including punctuation")
@@ -152,7 +143,7 @@ struct SidebarBrandFixTests {
         }
     }
 
-    @Test("Removal symbols use readable ink in the presenting window's appearance")
+    @Test("Removal symbols keep daylight ink in either system appearance")
     func removalSymbolInk() throws {
         for name in [NSAppearance.Name.aqua, .darkAqua] {
             let appearance = try #require(NSAppearance(named: name))
@@ -161,7 +152,7 @@ struct SidebarBrandFixTests {
             let bitmap = try #require(NSBitmapImageRep(data: data))
             let center = try #require(bitmap.colorAt(x: bitmap.pixelsWide / 2, y: bitmap.pixelsHigh / 2)?.usingColorSpace(.sRGB))
             #expect(center.alphaComponent > 0.9)
-            #expect(name == .darkAqua ? center.redComponent > 0.8 : center.redComponent < 0.2)
+            #expect(center.redComponent < 0.2)
         }
     }
 

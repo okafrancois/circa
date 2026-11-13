@@ -6,9 +6,9 @@ import Testing
 @Suite(.serialized)
 @MainActor
 struct FloatingMaterialTests {
-    @Test func appearanceSelectsVariant() throws {
+    @Test func bothAppearancesSelectDaylight() throws {
         #expect(OrbitFloatingMaterial.style(for: try #require(NSAppearance(named: .aqua)), reduceTransparency: false).variant == .light)
-        #expect(OrbitFloatingMaterial.style(for: try #require(NSAppearance(named: .darkAqua)), reduceTransparency: false).variant == .dark)
+        #expect(OrbitFloatingMaterial.style(for: try #require(NSAppearance(named: .darkAqua)), reduceTransparency: false).variant == .light)
     }
 
     @Test func opaqueFallbackPreservesTextTokens() {
@@ -123,10 +123,11 @@ struct FloatingMaterialTests {
         #expect(tint.layer?.backgroundColor?.alpha == view.style.tintOpacity)
     }
 
-    @Test func compactTitleMaterialCoversItsOpaqueThemeFill() {
+    @Test func compactTitleUsesFlatSkyInk() {
         let toolbar = BrowserQuickWindowToolbarView(frame: NSRect(x: 0, y: 0, width: 680, height: 48))
         #expect(toolbar.subviews.first === toolbar.fill)
-        #expect(toolbar.subviews.last is OrbitFrostView)
+        #expect(toolbar.fill.isHidden)
+        #expect(toolbar.layer?.backgroundColor?.alpha == 1)
     }
 
     @Test func themeEditorIsOpaqueAndDoesNotInstallFrost() {
@@ -170,7 +171,7 @@ struct FloatingAlertMaterialTests {
 
 
 extension NativeWebKitTests.FloatingAlertMaterialTests {
-    @Test("Floating dialogs follow automatic appearance and a live parent appearance change")
+    @Test("Floating dialogs stay daylight when the system or parent appearance changes")
     func dialogAppearanceFollowsOwner() throws {
         NSApplication.shared.setActivationPolicy(.prohibited)
         let original = NSApp.appearance
@@ -181,9 +182,9 @@ extension NativeWebKitTests.FloatingAlertMaterialTests {
         modal.addButton(withTitle: "OK")
         let modalWindow = modal.preparedWindow()
         defer { modalWindow.close() }
-        #expect(modalWindow.appearance == nil)
+        #expect(modalWindow.appearance?.name == .aqua)
         NSApp.appearance = NSAppearance(named: .darkAqua)
-        #expect(OrbitAppearance.isDark(modalWindow.effectiveAppearance))
+        #expect(!OrbitAppearance.isDark(modalWindow.effectiveAppearance))
 
         let parent = NSWindow(contentRect: .zero, styleMask: [.titled], backing: .buffered, defer: true)
         parent.isReleasedWhenClosed = false
@@ -197,17 +198,17 @@ extension NativeWebKitTests.FloatingAlertMaterialTests {
         let frost = try #require(panel.contentView?.subviews.first as? OrbitFrostView)
         #expect(!OrbitAppearance.isDark(panel.effectiveAppearance))
         parent.appearance = NSAppearance(named: .darkAqua)
-        #expect(OrbitAppearance.isDark(panel.effectiveAppearance))
+        #expect(!OrbitAppearance.isDark(panel.effectiveAppearance))
         frost.refresh(reduceTransparency: false)
-        #expect(frost.style.variant == .dark)
+        #expect(frost.style.variant == .light)
         parent.appearance = nil
-        #expect(OrbitAppearance.isDark(panel.effectiveAppearance))
+        #expect(!OrbitAppearance.isDark(panel.effectiveAppearance))
     }
 }
 
 
 extension FloatingMaterialTests {
-    @Test("Rename dialog tint and scrim follow automatic appearance and live switches")
+    @Test("Rename dialog tint and scrim stay daylight across system switches")
     func renameAppearance() throws {
         let original = NSApp.appearance
         defer { NSApp.appearance = original }
@@ -221,16 +222,16 @@ extension FloatingMaterialTests {
         let scrim = try #require(rename.subviews.first)
         let frost = try #require(rename.subviews.flatMap(\.subviews).compactMap { $0 as? OrbitFrostView }.first)
         #expect(rename.appearance == nil)
-        #expect(frost.style.variant == (OrbitAppearance.isDark(window.effectiveAppearance) ? .dark : .light))
+        #expect(frost.style.variant == .light)
         for name in [NSAppearance.Name.aqua, .darkAqua, .aqua] {
             window.appearance = NSAppearance(named: name)
             rename.viewDidChangeEffectiveAppearance()
             frost.refresh(reduceTransparency: false)
             let dark = name == .darkAqua
-            #expect(frost.style.variant == (dark ? .dark : .light))
+            #expect(frost.style.variant == .light)
             let scrimColor = try #require(scrim.layer?.backgroundColor.flatMap { NSColor(cgColor: $0)?.usingColorSpace(.sRGB) })
             #expect(abs(scrimColor.alphaComponent - 0.4) < 0.001)
-            #expect(dark ? scrimColor.redComponent == 0 : scrimColor.redComponent > 0.8)
+            #expect(scrimColor.redComponent > 0.8)
         }
     }
 }

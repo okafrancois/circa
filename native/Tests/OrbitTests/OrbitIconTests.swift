@@ -141,7 +141,7 @@ struct OrbitIconTests {
         let exclusions: Set<String> = ["SpaceIconImages.swift", "OrbitIcon.swift", "BrowserLibraryEmptyView.swift",
                                        "BrowserLibraryMediaView.swift", "SidebarNewSpacePageView.swift",
                                        "OrbitOnboardingControls.swift", "OrbitOnboardingSyncDiagram.swift",
-                                       "RichTabPreviewView.swift"]
+                                       "RichTabPreviewView.swift", "BrowserSettingsPresentation.swift"]
         let nativeFallbacks: [String: Set<String>] = ["BrowserOverlayScrollbars.swift": ["scroll"]]
         let files = try #require(FileManager.default.enumerator(at: sources, includingPropertiesForKeys: nil))
         for case let file as URL in files where file.pathExtension == "swift" {

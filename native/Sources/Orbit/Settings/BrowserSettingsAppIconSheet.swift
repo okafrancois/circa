@@ -64,7 +64,7 @@ final class BrowserSettingsAppIconSheet: NSWindowController {
 
     init(icons: OrbitAppIconController) {
         self.icons = icons; selection = icons.current
-        let window = NSWindow(contentRect: NSRect(origin: .zero, size: Self.size),
+        let window = OrbitDaylightWindow(contentRect: NSRect(origin: .zero, size: Self.size),
                               styleMask: [.titled, .fullSizeContentView], backing: .buffered, defer: true)
         window.titleVisibility = .hidden; window.titlebarAppearsTransparent = true
         window.backgroundColor = OrbitSettingsStyle.windowColor

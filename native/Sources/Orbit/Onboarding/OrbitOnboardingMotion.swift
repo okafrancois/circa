@@ -4,9 +4,26 @@ import BrowserShell
 
 @MainActor
 enum OrbitOnboardingMotion {
+    static func pop(_ view: NSView, from: CGFloat, duration: Double) {
+        guard !OrbitMotionPreferences.prefersReducedMotion, let layer = view.layer else { return }
+        let animation = CAKeyframeAnimation(keyPath: "transform")
+        animation.values = (0...60).map { frame -> NSValue in
+            let t = Double(frame) / 60 - 1
+            let progress = 1 + 4 * t * t * t + 3 * t * t
+            let scale = from + (1 - from) * progress
+            var transform = CATransform3DMakeTranslation(view.bounds.midX, view.bounds.midY, 0)
+            transform = CATransform3DScale(transform, scale, scale, 1)
+            transform = CATransform3DTranslate(transform, -view.bounds.midX, -view.bounds.midY, 0)
+            return NSValue(caTransform3D: transform)
+        }
+        animation.duration = duration
+        animation.timingFunction = CAMediaTimingFunction(name: .linear)
+        layer.add(animation, forKey: "orbit.choicePop")
+    }
+
     static let curve = CAMediaTimingFunction(controlPoints: 0.19, 1, 0.22, 1)
     static func animate(_ layer: CALayer?, key: String, from: CGFloat, to: CGFloat, duration: Double,
-                        delay: Double = 0, stick: Bool = false, outgoing: Bool = false) {
+                        delay: Double = 0, stick: Bool = false, outgoing: Bool = false, removesAtEnd: Bool = false) {
         guard let layer else { return }
         let reduced = OrbitMotionPreferences.prefersReducedMotion
         guard !reduced || key == "opacity" else { return }
@@ -17,35 +34,36 @@ enum OrbitOnboardingMotion {
             animation = frames
         } else if stick && !reduced {
             let frames = CAKeyframeAnimation(keyPath: key)
-            // Invert x(t) to sample the overshooting cubic path at uniform times.
             frames.values = (0...90).map { i -> CGFloat in
-                let x = Double(i) / 90
-                var low = 0.0, high = 1.0
-                for _ in 0..<20 {
-                    let t = (low + high) / 2
-                    let v = 0.9 * t * pow(1-t, 2) + 1.5 * t*t*(1-t) + t*t*t
-                    if v < x { low = t } else { high = t }
-                }
-                let t = (low + high) / 2
-                let y = 4.8*t*pow(1-t, 2) + 3*t*t*(1-t) + t*t*t
-                return from + (to-from) * y
+                let t = Double(i) / 90 - 1
+                let y = 1 + t * t * (2.6 * t + 1.6)
+                return from + (to - from) * CGFloat(y)
+            }
+            animation = frames
+        } else if !reduced {
+            let frames = CAKeyframeAnimation(keyPath: key)
+            frames.values = (0...90).map { i -> CGFloat in
+                let t = Double(i) / 90
+                return from + (to - from) * CGFloat(1 - pow(1 - t, 4))
             }
             animation = frames
         } else {
             let basic = CABasicAnimation(keyPath: key)
             basic.fromValue = from; basic.toValue = to
-            basic.timingFunction = reduced ? CAMediaTimingFunction(name: .linear) : outgoing ? CAMediaTimingFunction(controlPoints: 0.55, 0.085, 0.68, 0.53) : curve
+            basic.timingFunction = CAMediaTimingFunction(name: .linear)
             animation = basic
         }
+        animation.timingFunction = CAMediaTimingFunction(name: .linear)
         animation.duration = reduced ? 0.25 : duration
         animation.beginTime = CACurrentMediaTime() + (reduced ? 0 : delay)
         animation.fillMode = .both
-        animation.isRemovedOnCompletion = false
+        animation.isRemovedOnCompletion = removesAtEnd
         layer.add(animation, forKey: "orbit.onboarding." + key)
     }
     static func entrance(_ view: NSView, y: CGFloat = 18, duration: Double = 1, delay: Double = 0) {
+        view.wantsLayer = true
         animate(view.layer, key: "transform.translation.y", from: view.superview?.isFlipped == true ? y : -y, to: 0, duration: duration, delay: delay)
-        animate(view.layer, key: "opacity", from: 0, to: 1, duration: duration, delay: delay)
+        animate(view.layer, key: "opacity", from: 0, to: view.alphaValue, duration: duration, delay: delay, removesAtEnd: true)
     }
 }
 
@@ -86,8 +104,23 @@ final class OrbitOnboardingMarkView: NSView {
             draw.fillMode = .both
             if !OrbitMotionPreferences.prefersReducedMotion { band.add(draw, forKey: "orbit.band.draw") }
         }
-        OrbitOnboardingMotion.animate(layer, key: "transform.scale", from: 0.6, to: 1, duration: 0.9, delay: delay, stick: true)
-        OrbitOnboardingMotion.animate(layer, key: "transform.rotation.z", from: -.pi * 14 / 180, to: 0, duration: 0.9, delay: delay, stick: true)
-        OrbitOnboardingMotion.animate(layer, key: "opacity", from: 0, to: 1, duration: 0.9, delay: delay)
+        guard !OrbitMotionPreferences.prefersReducedMotion else { return }
+        let reveal = CAKeyframeAnimation(keyPath: "transform")
+        let center = CGPoint(x: bounds.midX, y: bounds.midY)
+        reveal.values = (0...90).map { i -> NSValue in
+            let t = Double(i) / 90 - 1
+            let value = 1 + t * t * (2.6 * t + 1.6)
+            let revealProgress = min(1, max(0, (delay + Double(i) / 90 - 0.38) / 0.5))
+            let rise = drawBands ? 0 : 31.58 * pow(1 - revealProgress, 4)
+            var transform = CATransform3DMakeTranslation(center.x, center.y + rise, 0)
+            transform = CATransform3DScale(transform, value, value, 1)
+            transform = CATransform3DRotate(transform, -.pi * (1 - value), 0, 0, 1)
+            transform = CATransform3DTranslate(transform, -center.x, -center.y, 0)
+            return NSValue(caTransform3D: transform)
+        }
+        reveal.timingFunction = CAMediaTimingFunction(name: .linear)
+        reveal.duration = 1; reveal.beginTime = CACurrentMediaTime() + delay
+        reveal.fillMode = .both; reveal.isRemovedOnCompletion = false
+        layer?.add(reveal, forKey: "orbit.mark.entry")
     }
 }

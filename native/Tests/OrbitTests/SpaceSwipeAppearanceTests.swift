@@ -70,7 +70,7 @@ private final class BackgroundCountingWindow: NSWindow {
 }
 
 extension NativeWebKitTests {
-@Test("Swipe theme frames only repaint the gradient: no grain redraw or equal window background")
+@Test("Swipe theme frames retain paper strength and avoid equal window background writes")
 @MainActor
 func spaceSwipeThemeFramesAreIncremental() {
     let window = BackgroundCountingWindow(contentRect: NSRect(x: 0, y: 0, width: 400, height: 300),
@@ -90,12 +90,12 @@ func spaceSwipeThemeFramesAreIncremental() {
     shell.apply(theme: source, animated: false)
     func flush(_ layer: CALayer?) { layer?.displayIfNeeded(); layer?.sublayers?.forEach(flush) }
     flush(shell.themeFill.layer)
-    #expect(!shell.themeFill.grainNeedsDisplay)
+    #expect(shell.themeFill.paperGrain.strength == 0.5)
     shell.applySpaceSwipeBlend(.init(source: source, destination: target, progress: 0.2))
     let assignments = window.backgroundAssignments
     for step in 3...9 {
         shell.applySpaceSwipeBlend(.init(source: source, destination: target, progress: CGFloat(step) / 10))
-        #expect(!shell.themeFill.grainNeedsDisplay)
+        #expect(shell.themeFill.paperGrain.strength == 0.5)
     }
     #expect(!window.isOpaque)
     #expect(window.backgroundAssignments - assignments <= 7)

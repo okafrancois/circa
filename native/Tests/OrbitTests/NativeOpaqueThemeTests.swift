@@ -20,7 +20,7 @@ struct NativeOpaqueThemeTests {
             view.appearance = NSAppearance(named: .aqua)
             view.viewDidChangeEffectiveAppearance()
             view.layoutSubtreeIfNeeded()
-            #expect(view.subviews.isEmpty)
+            #expect(view.subviews.allSatisfy { $0 is OrbitPaperGrainView })
             let expected = try #require(NSColor(cgColor: view.resolvedStops[0])?.usingColorSpace(.sRGB))
             let context = try #require(CGContext(data: nil, width: 180, height: 220, bitsPerComponent: 8,
                 bytesPerRow: 180 * 4, space: CGColorSpace(name: CGColorSpace.sRGB)!,
@@ -57,7 +57,7 @@ struct NativeOpaqueThemeTests {
         #expect(browser.windowShell.themeFill.theme.model == theme)
         #expect(editor.view.subviews.compactMap { $0 as? NSPopUpButton }.isEmpty)
         #expect(editor.view.subviews.compactMap { $0 as? NSSlider }.isEmpty)
-        #expect(editor.view.modeButtons.count == 3)
+        #expect(editor.view.subviews.compactMap { $0 as? NSButton }.allSatisfy { $0.toolTip != "Dark Appearance" })
         var state = editor.view.state
         state.setIntensity(0.81)
         state.setNoise(0.75)

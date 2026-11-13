@@ -11,7 +11,7 @@ public struct BrowserOnboardingFavourite: Codable, Equatable, Sendable {
     }
 
     public static var starter: [Self] {
-        let sites = [("Gmail", "https://gmail.com"), ("Google Calendar", "https://calendar.google.com"),
+        let sites = [("Gmail", "https://mail.google.com/"), ("Google Calendar", "https://calendar.google.com"),
                      ("YouTube", "https://youtube.com"), ("Notion", "https://notion.so"),
                      ("GitHub", "https://github.com"), ("Figma", "https://figma.com"),
                      ("X", "https://x.com"), ("Wikipedia", "https://wikipedia.org")]

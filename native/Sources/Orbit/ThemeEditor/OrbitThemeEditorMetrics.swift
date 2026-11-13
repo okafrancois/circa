@@ -14,12 +14,6 @@ enum OrbitThemeEditorMetrics {
     static let dotPitch: CGFloat = 4.25
     static let dotDiameter: CGFloat = 1.2
 
-    static let modeCenterY: CGFloat = 48
-    static let modeCenterXs: [CGFloat] = [138, 178, 218]
-    static let modeHighlight = NSSize(width: 32, height: 32)
-    static let modeHighlightRadius: CGFloat = 7
-    static let modeGlyphPointSize: CGFloat = 15
-
     static let placeholderCenterY: CGFloat = 178
     static let placeholderFont = BrandTextStyle.ui.font(size: 13, weight: .semibold)
 
@@ -68,9 +62,6 @@ enum OrbitThemeEditorText {
     static var menuItem: String { uiText("Edit Theme Color…") }
     static var title: String { uiText("Edit Theme Color") }
     static var placeholder: String { uiText("Tap to pick a color for this space") }
-    static var automatic: String { uiText("Automatic Appearance") }
-    static var light: String { uiText("Light Appearance") }
-    static var dark: String { uiText("Dark Appearance") }
     static var colorField: String { uiText("Theme Colors") }
     static var addColor: String { uiText("Add Color") }
     static var removeColor: String { uiText("Remove Color") }

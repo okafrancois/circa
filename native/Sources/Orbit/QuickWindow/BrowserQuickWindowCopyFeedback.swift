@@ -24,9 +24,9 @@ final class BrowserQuickWindowCopyFeedback: NSView {
         wantsLayer = true
         OrbitFloatingMaterial.install(in: self, radius: 12)
         shadow = NSShadow()
-        shadow?.shadowColor = NSColor.black.withAlphaComponent(0.25)
-        shadow?.shadowBlurRadius = 16
-        shadow?.shadowOffset = NSSize(width: 0, height: -8)
+        shadow?.shadowColor = BrandPalette.ink
+        shadow?.shadowBlurRadius = 0
+        shadow?.shadowOffset = NSSize(width: 0, height: -3)
         label.font = BrandTextStyle.ui.font(size: 14, weight: .semibold)
         label.textColor = OrbitFloatingMaterial.body
         shareButton.image = OrbitIcon.image(sfName: "square.and.arrow.up", pointSize: 18,

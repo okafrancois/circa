@@ -30,28 +30,28 @@ struct SpaceSymbolAuthorityIndependentTests {
             }
         }
         try await holdQueue()
-        model.queueSpaceIconEdit(spaceID: target, profileID: profile, icon: .systemSymbol("star.fill"))
+        model.queueSpaceIconEdit(spaceID: target, profileID: profile, icon: .planet(.closest(to: "star.fill")))
         model.selectProfile(other); model.selectProfile(profile)
         release?.resume(); release = nil
         await model.waitForPendingActions()
-        #expect(environment.settings.document.space(target).iconSelection == .none)
+        #expect(environment.settings.document.space(target).iconSelection == .planet(.automatic))
         try await holdQueue()
-        model.queueSpaceIconEdit(spaceID: target, profileID: profile, icon: .systemSymbol("star.fill"))
+        model.queueSpaceIconEdit(spaceID: target, profileID: profile, icon: .planet(.closest(to: "star.fill")))
         try await environment.store.assignSettingsSpace(target, to: other)
         release?.resume(); release = nil
         await model.waitForPendingActions()
-        #expect(environment.settings.document.space(target).iconSelection == .none)
+        #expect(environment.settings.document.space(target).iconSelection == .planet(.automatic))
         try await environment.store.assignSettingsSpace(target, to: profile)
         try await holdQueue()
-        model.queueSpaceIconEdit(spaceID: target, profileID: profile, icon: .systemSymbol("star.fill"))
+        model.queueSpaceIconEdit(spaceID: target, profileID: profile, icon: .planet(.closest(to: "star.fill")))
         try await environment.removeSpaceFromSettings(target, expectedProfileID: profile)
         release?.resume(); release = nil
         await model.waitForPendingActions()
         #expect(environment.settings.document.spaces[target] == nil)
         try await environment.store.restoreSettingsSpace(target, expectedProfileID: profile)
-        model.queueSpaceIconEdit(spaceID: target, profileID: profile, icon: .systemSymbol("star.fill"))
+        model.queueSpaceIconEdit(spaceID: target, profileID: profile, icon: .planet(.closest(to: "star.fill")))
         await model.waitForPendingActions()
-        #expect(environment.settings.document.space(target).iconSelection == .systemSymbol("star.fill"))
+        #expect(environment.settings.document.space(target).iconSelection == .planet(.closest(to: "star.fill")))
         #expect(controller.window?.isVisible == false)
     }
 
@@ -68,14 +68,14 @@ struct SpaceSymbolAuthorityIndependentTests {
         first.showLibrary(.spaces); second.showLibrary(.spaces)
         await first.session.waitForPendingCommands(); await second.session.waitForPendingCommands()
         let presentation = first.library.presentationID
-        try await environment.settings.updateSpace(other) { $0.iconSelection = .systemSymbol("heart.fill"); $0.palette = .lavender }
+        try await environment.settings.updateSpace(other) { $0.iconSelection = .planet(.closest(to: "heart.fill")); $0.palette = .lavender }
         let untouched = environment.settings.document.space(other)
-        for choice in [BrowserSpaceIcon.systemSymbol("star.fill"), .grapheme("🇯🇵"), .none] {
+        for choice in [BrowserSpaceIcon.planet(.closest(to: "star.fill")), .grapheme("🇯🇵"), .none] {
             let model = BrowserSettingsModel(environment: environment, profileID: firstProfile, shortcuts: [])
             model.queueSpaceIconEdit(spaceID: id, profileID: firstProfile, icon: choice)
             await model.waitForPendingActions()
             #expect(first.sidebar.footer.spaceButtons.first { $0.space.id == id }?.iconSelection == choice)
-            #expect(second.sidebar.footer.spaceButtons.first { $0.space.id == other }?.iconSelection == .systemSymbol("heart.fill"))
+            #expect(second.sidebar.footer.spaceButtons.first { $0.space.id == other }?.iconSelection == .planet(.closest(to: "heart.fill")))
             for controller in [first, second] {
                 let library = controller.library.spacesView
                 let index = try #require(library.rows.firstIndex { $0.space.id == id })
@@ -93,7 +93,7 @@ struct SpaceSymbolAuthorityIndependentTests {
 
     @Test("Search ABA and disabled mouse authority cannot select a replacement typed grid")
     func mouseAndAccessibilityGenerations() throws {
-        let picker = SpaceIconPicker(currentChoice: .systemSymbol("star.fill"), accent: .defaultSpace)
+        let picker = SpaceIconPicker(currentChoice: .planet(.closest(to: "star.fill")), accent: .defaultSpace)
         picker.setSearch("star")
         let window = SymbolReviewHiddenWindow(contentRect: NSRect(x: 0, y: 0, width: 400, height: 500),
             styleMask: [.titled], backing: .buffered, defer: true)
@@ -117,7 +117,7 @@ struct SpaceSymbolAuthorityIndependentTests {
         #expect(choices.isEmpty)
         let fresh = try #require((picker.grid.accessibilityChildren() as? [NSAccessibilityElement])?.first)
         #expect(fresh.accessibilityPerformPress())
-        #expect(choices == [.systemSymbol("star.fill")])
+        #expect(choices == [.planet(.closest(to: "star.fill"))])
         #expect(!fresh.accessibilityPerformPress())
     }
 
@@ -126,7 +126,7 @@ struct SpaceSymbolAuthorityIndependentTests {
         let unknown = BrowserSpaceIcon.systemSymbol("future.unavailable.symbol.922337")
         #expect(unknown.isValid)
         let view = try #require(SpaceIconImages.view(unknown) as? NSImageView)
-        #expect(view.image === SpaceIconImages.template("circle", pointSize: 22))
+        #expect(view.image === SpaceIconImages.template("circle.fill", pointSize: 22))
         for invalid in ["../star", "star/../../file", "star\0fill", "star..fill", "Star.fill"] {
             #expect(SpaceIconImages.template(invalid, pointSize: 22) == nil)
         }
@@ -175,7 +175,7 @@ struct SpaceSymbolAuthorityAdverseTests {
         try await withNativeTestDeadline("Synthetic settings actor entered", timeout: 3) {
             while !gate.entered { try await Task.sleep(for: .milliseconds(2)) }
         }
-        model.queueSpaceIconEdit(spaceID: target, profileID: profile, icon: .systemSymbol("star.fill"))
+        model.queueSpaceIconEdit(spaceID: target, profileID: profile, icon: .planet(.closest(to: "star.fill")))
         // Give the free MainActor/catalog actor time to pass both guards and suspend on settings.
         // The adverse mutation itself is awaited, not a racing fire-and-forget operation.
         try await Task.sleep(for: .milliseconds(100))
@@ -184,7 +184,7 @@ struct SpaceSymbolAuthorityAdverseTests {
         await model.waitForPendingActions()
         let catalog = await environment.store.catalogSnapshot()
         #expect(catalog.spaces.first { $0.id == target }?.profileID == other)
-        #expect(environment.settings.document.space(target).iconSelection == .none,
+        #expect(environment.settings.document.space(target).iconSelection == .planet(.automatic),
             "Captured old-profile action must not mutate the reassigned Space")
         #expect(controller.window?.isVisible == false)
     }

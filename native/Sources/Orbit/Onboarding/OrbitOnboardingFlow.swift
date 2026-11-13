@@ -81,7 +81,7 @@ struct OrbitOnboardingFlow: Equatable {
     var effectiveSteps: [Step] { Self.steps.filter { !skippedSteps.contains($0) } }
     var hasBack: Bool { step != .welcome && step != .finish && !importApplied }
     var selectedFavourites: [BrowserOnboardingFavourite] { favourites.filter(\.selected) }
-    var hasSkip: Bool { [.importSource, .favourites, .theme].contains(step) }
+    var hasSkip: Bool { step == .importSource ? !sources.isEmpty : [.favourites, .theme].contains(step) }
     var isCardStep: Bool { step != .welcome && step != .finish }
 
     var canAdvance: Bool {
@@ -94,7 +94,7 @@ struct OrbitOnboardingFlow: Equatable {
     }
 
     @MainActor var primaryTitle: String {
-        step == .finish ? OrbitOnboardingText.getStarted : step == .importSource ? OrbitOnboardingText.bringOver : OrbitOnboardingText.next
+        step == .finish ? OrbitOnboardingText.getStarted : step == .importSource && !sources.isEmpty ? OrbitOnboardingText.bringOver : OrbitOnboardingText.next
     }
 
     /// The source currently selected on the import step, if any.

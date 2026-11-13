@@ -165,7 +165,7 @@ struct NativeSplitAccessibilityTests {
         #expect(abs(view.panes[group.tabIDs[0]]!.frame.width - (width - 10)) < 0.001)
         divider.keyUp(with: key(123, .keyUp, shift: true))
         #expect(commits.count == 1)
-        #expect(abs(commits[0][0] * 1000 - (500 - 10)) < 0.001)
+        #expect(abs(commits[0][0] - (width - 10) / (view.bounds.width - OrbitTokens.Metrics.Content.splitGap)) < 0.001)
         #expect(abs(commits[0].reduce(0, +) - 1) < 0.000_001)
         // Up/down do nothing for side-by-side panes.
         divider.keyDown(with: key(125))
@@ -188,7 +188,7 @@ struct NativeSplitAccessibilityTests {
         #expect(commits == [[0.5, 0.5]])
         #expect(divider.accessibilityPerformIncrement())
         #expect(commits.count == 2)
-        #expect(abs(commits[1][0] - (0.7 + 10.0 / 1000)) < 0.000_001)
+        #expect(abs(commits[1][0] - (0.7 + 10.0 / Double(view.bounds.width - OrbitTokens.Metrics.Content.splitGap))) < 0.000_001)
         #expect(divider.accessibilityPerformDecrement())
         #expect(commits.count == 3)
     }

@@ -17,7 +17,11 @@ final class BrowserArchiveView: NSView, NSTableViewDataSource, NSTableViewDelega
     private var standaloneControls: [NSView] = []
     private var contentStack: NSStackView?
     func setLibraryEmbedded() {
+        guard !embedded else { return }
         embedded = true
+        let heading = NSTextField(labelWithString: uiText("Drifted off."))
+        heading.attributedStringValue = BrandTextStyle.title.attributedString(heading.stringValue, size: 25, attributes: [.foregroundColor: BrandPalette.ink])
+        contentStack?.insertArrangedSubview(heading, at: 0)
         contentStack?.spacing = 8
         standaloneControls.forEach { $0.isHidden = true }
         layer?.backgroundColor = NSColor.clear.cgColor
