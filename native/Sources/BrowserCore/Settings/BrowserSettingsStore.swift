@@ -104,7 +104,7 @@ public enum BrowserSpaceIcon: Codable, Equatable, Hashable, Sendable {
 public struct BrowserSpaceSettings: Codable, Equatable, Sendable {
     private var grapheme = ""
     private var systemSymbol: String?
-    private var planet: BrowserSpacePlanet? = .automatic
+    private var planet: BrowserSpacePlanet?
     private var invalidIconSelection: BrowserSpaceIcon?
     /// Compatibility field edits replace the whole choice, including when clearing an emoji.
     public var icon: String {
@@ -118,7 +118,7 @@ public struct BrowserSpaceSettings: Codable, Equatable, Sendable {
             switch newValue {
             case .none: grapheme = ""; systemSymbol = nil; planet = nil
             case .grapheme(let value): grapheme = value; systemSymbol = nil; planet = nil
-            case .systemSymbol(let name): grapheme = ""; systemSymbol = nil; planet = .closest(to: name)
+            case .systemSymbol(let name): grapheme = ""; systemSymbol = name; planet = nil
             case .planet(let value): grapheme = ""; systemSymbol = nil; planet = value
             }
         }
@@ -132,10 +132,10 @@ public struct BrowserSpaceSettings: Codable, Equatable, Sendable {
         grapheme = try values.decode(String.self, forKey: .icon)
         palette = try values.decode(BrowserSpacePalette.self, forKey: .palette)
         // Optional future/malformed metadata must not quarantine otherwise usable preferences.
-        // Recognized legacy symbols migrate to planets; load never writes the source file.
+        // Recognized symbols retain their identity; load never writes the source file.
         if let name = try? values.decode(String.self, forKey: .systemSymbol),
            BrowserSpaceIcon.isValidSymbolIdentifier(name) {
-            planet = .closest(to: name)
+            systemSymbol = name
             grapheme = ""
         }
         if let value = try? values.decode(BrowserSpacePlanet.self, forKey: .planet) {
@@ -145,6 +145,7 @@ public struct BrowserSpaceSettings: Codable, Equatable, Sendable {
     public func encode(to encoder: Encoder) throws {
         var values = encoder.container(keyedBy: CodingKeys.self)
         try values.encode(grapheme, forKey: .icon)
+        try values.encodeIfPresent(systemSymbol, forKey: .systemSymbol)
         try values.encodeIfPresent(planet, forKey: .planet)
         try values.encode(palette, forKey: .palette)
     }
@@ -189,8 +190,8 @@ public struct BrowserSettingsDocument: Codable, Equatable, Sendable {
     public var automaticPictureInPicture = true
     /// Device-local opt-in for cached sidebar tab hover cards.
     public var showsTabHoverPreviews = false
-    /// New installations use an inset page. Existing documents retain their saved edge layout.
-    public var showsSpaceAroundPages = true
+    /// Pages fill the window edge to edge unless the user keeps the spaced layout.
+    public var showsSpaceAroundPages = false
     public var quickWindowArchiveThreshold: BrowserAutoArchiveThreshold = .sixHours
     /// Device-local domain/account choices, excluded from the sync projection.
     public var quickWindowProfilesByDomain: [String: ProfileID] = [:]

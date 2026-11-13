@@ -22,21 +22,19 @@ final class SidebarUpdateCard: NSView {
         layer?.masksToBounds = false
         layer?.addSublayer(paper)
         paper.cornerRadius = 14
-        paper.backgroundColor = BrandPalette.pageWhite.cgColor
-        paper.borderColor = BrandPalette.ink.cgColor
-        paper.borderWidth = 2
-        paper.shadowColor = BrandPalette.ink.cgColor
-        paper.shadowOpacity = 1
-        paper.shadowRadius = 0
-        paper.shadowOffset = CGSize(width: 0, height: -3)
+        paper.backgroundColor = NSColor.white.withAlphaComponent(0.94).cgColor
+        paper.shadowColor = NSColor.black.cgColor
+        paper.shadowOpacity = 0.4
+        paper.shadowRadius = 15
+        paper.shadowOffset = CGSize(width: 0, height: -8)
         icon.image = BrandFonts.mark
         icon.imageScaling = .scaleProportionallyUpOrDown
         title.font = BrandTextStyle.ui.font(size: 13, weight: .semibold)
-        body.font = BrandTextStyle.body.font(size: 12)
-        title.textColor = BrandPalette.ink
+        body.font = OrbitChromeTextStyle.body.font(size: 12)
+        title.textColor = BrandPalette.rgb(0x141317)
         body.isBordered = false
         body.attributedTitle = NSAttributedString(string: uiText("Release Notes"), attributes: [
-            .font: BrandTextStyle.body.font(size: 12), .foregroundColor: BrandPalette.ink2,
+            .font: OrbitChromeTextStyle.body.font(size: 12), .foregroundColor: BrandPalette.rgb(0x5E5A66),
             .underlineStyle: NSUnderlineStyle.single.rawValue])
         body.target = self; body.action = #selector(openReleaseNotes)
         body.setAccessibilityIdentifier("sidebar-update-release-notes")
@@ -72,7 +70,7 @@ final class SidebarUpdateCard: NSView {
 @MainActor
 final class SidebarUpdateRestartButton: NSButton {
     override func draw(_ dirtyRect: NSRect) {
-        BrandPalette.coral.setFill()
+        BrandPalette.rgb(0x141317).setFill()
         NSBezierPath(roundedRect: bounds, xRadius: bounds.height / 2, yRadius: bounds.height / 2).fill()
         let text = NSAttributedString(string: title, attributes: [.font: font ?? NSFont.systemFont(ofSize: 12), .foregroundColor: NSColor.white])
         let size = text.size()
@@ -87,9 +85,9 @@ final class SidebarUpdateSticker: NSView {
     required init?(coder: NSCoder) { nil }
     override func draw(_ dirtyRect: NSRect) {
         let shape = NSBezierPath(roundedRect: bounds.insetBy(dx: 2, dy: 2), xRadius: 12, yRadius: 12)
-        BrandPalette.mint.setFill(); shape.fill()
-        BrandPalette.ink.setStroke(); shape.lineWidth = 2; shape.stroke()
-        let text = NSAttributedString(string: stringValue, attributes: [.font: BrandTextStyle.ui.font(size: 10, weight: .bold), .foregroundColor: BrandPalette.ink])
+        BrandPalette.rgb(0x3DCCA0).setFill(); shape.fill()
+        NSColor.white.setStroke(); shape.lineWidth = 4; shape.stroke()
+        let text = NSAttributedString(string: stringValue, attributes: [.font: BrandTextStyle.ui.font(size: 10, weight: .bold), .foregroundColor: BrandPalette.rgb(0x141317)])
         let size = text.size()
         text.draw(at: NSPoint(x: (bounds.width - size.width) / 2, y: (bounds.height - size.height) / 2))
     }

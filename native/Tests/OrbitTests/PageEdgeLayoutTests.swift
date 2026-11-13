@@ -49,7 +49,7 @@ struct PageEdgeGeometryTests {
             }
         }
         let docked = OrbitShellGeometry.resolve(.init(contentSize: window, spaceAroundPages: true))
-        #expect(docked.cardFrame == CGRect(x: 228, y: 6, width: 790, height: 628) && docked.cardRadius == 8)
+        #expect(docked.cardFrame == CGRect(x: 228, y: 10, width: 786, height: 620) && docked.cardRadius == 6)
     }
 
     @Test("A selective corner path squares the corners that are not masked")
@@ -83,7 +83,7 @@ struct PageEdgeCardTests {
 
 @Suite("Space around pages preference")
 struct PageSpacingPreferenceTests {
-    @Test("New installs use an inset page; existing edge choices persist and malformed values retain the legacy fallback")
+    @Test("Absent means edge to edge; the choice persists and a malformed value falls back without rewriting")
     func persistence() async throws {
         let physical = try #require(realpath(FileManager.default.temporaryDirectory.path, nil))
         defer { free(physical) }
@@ -92,9 +92,7 @@ struct PageSpacingPreferenceTests {
         defer { try? FileManager.default.removeItem(at: root) }
         let file = root.appendingPathComponent("settings.json")
         let store = try BrowserSettingsStore(destination: file)
-        #expect(await store.snapshot().showsSpaceAroundPages)
-        try await store.setShowsSpaceAroundPages(false)
-        #expect(try await BrowserSettingsStore(destination: file).snapshot().showsSpaceAroundPages == false)
+        #expect(await store.snapshot().showsSpaceAroundPages == false)
         try await store.setShowsSpaceAroundPages(true)
         let reopened = try BrowserSettingsStore(destination: file)
         #expect(await reopened.snapshot().showsSpaceAroundPages)
@@ -125,8 +123,6 @@ struct PageSpacingLiveTests {
     func liveToggle() async throws {
         NSApplication.shared.setActivationPolicy(.prohibited)
         let environment = BrowserEnvironment(engine: SyntheticEngine())
-        try await environment.settings.store.setShowsSpaceAroundPages(false)
-        await environment.settings.refresh()
         let controller = try await environment.makeWindow()
         defer { controller.window?.close(); environment.autoArchive.scheduler.stop() }
         let root = try #require(controller.window?.contentView)
@@ -140,7 +136,7 @@ struct PageSpacingLiveTests {
         let model = BrowserSettingsModel(environment: environment, profileID: nil, shortcuts: [])
         try await model.setShowsSpaceAroundPages(true)
         settle()
-        #expect(controller.contentCard.frame.minY == 6 && controller.contentCard.frame.maxX == size.width - 6)
+        #expect(controller.contentCard.frame.minY == 10 && controller.contentCard.frame.maxX == size.width - 10)
         #expect(controller.contentCard.cornerRadius == OrbitTokens.Radius.contentCard && !controller.contentCard.isFlushWithWindow)
 
         try await model.setShowsSpaceAroundPages(false)

@@ -32,16 +32,16 @@ struct UIUXR2FollowupTests {
         #expect(!picker.handle(#selector(NSResponder.insertBacktab(_:))))
         #expect(picker.grid.selectedIndex == selected)
         var controls: [NSView] = []
-        var next: NSView? = picker.removeButton
+        var next: NSView? = picker.modes
         for _ in 0..<20 {
             guard let control = next, !controls.contains(where: { $0 === control }) else { break }
             controls.append(control)
             next = control.nextKeyView
         }
-        for required in [picker.removeButton, picker.search] as [NSView] {
+        for required in [picker.modes, picker.search] as [NSView] {
             #expect(controls.contains(where: { $0 === required }))
         }
-        // Character Palette remains in the context menu; Dots is also a visible keyboard control.
+        // Emoji & Symbols and Remove Icon live in the grid's context menu, not in the key-view loop.
         let menuTitles = picker.grid.menu?.items.map(\.title) ?? []
         #expect(menuTitles.contains(picker.paletteButton.title))
         #expect(menuTitles.contains(picker.removeButton.title))
@@ -77,8 +77,8 @@ struct UIUXR2FollowupTests {
         #expect(window.makeFirstResponder(picker.search))
         let fieldEditor = try #require(picker.search.currentEditor() as? NSTextView)
         let element = try #require((picker.grid.accessibilityChildren() as? [NSAccessibilityElement])?.first)
-        var chosen: [String] = []
-        picker.onChoose = { chosen.append($0) }
+        var chosen: [BrowserSpaceIcon] = []
+        picker.onChooseIcon = { chosen.append($0) }
         fieldEditor.setMarkedText("に", selectedRange: NSRange(location: 1, length: 0),
                                   replacementRange: NSRange(location: NSNotFound, length: 0))
         #expect(fieldEditor.hasMarkedText())

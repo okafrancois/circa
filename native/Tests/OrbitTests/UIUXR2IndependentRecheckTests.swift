@@ -139,8 +139,8 @@ struct UIUXR2IndependentRecheckTests {
         picker.modes.selectedSegment = SpaceIconPicker.Mode.icons.rawValue
         _ = picker.modes.sendAction(picker.modes.action, to: picker.modes.target)
         #expect(picker.search.isEnabled)
-        #expect(window.makeFirstResponder(picker.removeButton))
-        window.selectNextKeyView(picker.removeButton)
+        #expect(window.makeFirstResponder(picker.modes))
+        window.selectNextKeyView(picker.modes)
         #expect(picker.search.currentEditor() != nil && !window.isVisible)
     }
 

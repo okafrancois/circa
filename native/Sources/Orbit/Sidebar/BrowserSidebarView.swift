@@ -1207,8 +1207,8 @@ final class SidebarSpacePageView: NSView, NSTextFieldDelegate, NSMenuDelegate {
     let moreButton = OrbitGlyphButton(glyph: OrbitGlyph.symbol("ellipsis", pointSize: 12, weight: .semibold), label: uiText("Space Settings"))
     var onSetPinnedSectionCollapsed: ((Bool) -> Void)?
     let iconButton = OrbitGlyphButton(glyph: nil, label: uiText("Change Icon or Emoji…"))
-    var planetIndex = 0 { didSet { refreshSpaceIcon() } }
-    var iconSelection: BrowserSpaceIcon = .none { didSet { refreshSpaceIcon() } }
+    var planetIndex = 0 { didSet { if planetIndex != oldValue { refreshSpaceIcon() } } }
+    var iconSelection: BrowserSpaceIcon = .none { didSet { if iconSelection != oldValue { refreshSpaceIcon() } } }
     private func refreshSpaceIcon() {
         iconButton.subviews.forEach { $0.removeFromSuperview() }
         iconButton.isHidden = iconSelection == .none
@@ -1217,7 +1217,7 @@ final class SidebarSpacePageView: NSView, NSTextFieldDelegate, NSMenuDelegate {
         if case .planet(let variant) = iconSelection {
             image = NSImageView(image: SpaceIconImages.planet(variant, defaultIndex: planetIndex) ?? NSImage())
         } else { image = SpaceIconImages.view(iconSelection, pointSize: Metrics.spaceIconSize) }
-        image.frame = iconButton.bounds.insetBy(dx: 2, dy: 2)
+        image.frame = iconButton.bounds.insetBy(dx: 4, dy: 4)
         image.autoresizingMask = [.width, .height]
         iconButton.addSubview(image)
         needsLayout = true

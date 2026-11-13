@@ -8,7 +8,9 @@ enum FavoritesPresentationTokens {
     static let dragThreshold: CGFloat = 4
     /// Hairline outline of an unselected tile, composited over its fill: one device pixel wide.
     static let restingOutline = NSColor(name: nil) { appearance in
-        NSColor(srgbRed: 14 / 255, green: 15 / 255, blue: 16 / 255, alpha: 0.10)
+        appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+            ? NSColor(srgbRed: 1, green: 1, blue: 1, alpha: 0.17)
+            : NSColor(srgbRed: 14 / 255, green: 15 / 255, blue: 16 / 255, alpha: 0.10)
     }
 }
 
@@ -208,6 +210,12 @@ final class FavoriteTileView: NSView {
         } else {
             background.borderWidth = 1 / max(1, window?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 2)
             background.borderColor = FavoritesPresentationTokens.restingOutline
+        }
+        if item.tab.isSelected, !isPressed, let selectionTint {
+            let darkFill = selectionTint.withAlphaComponent(isHovering ? 0.32 : 0.24)
+            background.fillColor = NSColor(name: nil) { appearance in
+                appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua ? darkFill : state.tabCurrent.resolved(for: appearance)
+            }
         }
     }
 

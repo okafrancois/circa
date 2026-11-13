@@ -197,7 +197,8 @@ final class SidebarNewSpacePageView: NSView, NSTextFieldDelegate {
     override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); updateColors() }
     private func updateColors() {
         effectiveAppearance.performAsCurrentDrawingAppearance {
-            for row in [nameRow, profileRow] { row.layer?.backgroundColor = OrbitTokens.Color.State.sidebarItem.cgColor }
+            let dark = effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+            for row in [nameRow, profileRow] { row.layer?.backgroundColor = (dark ? NSColor.white.withAlphaComponent(0.10) : OrbitTokens.Color.State.sidebarItem).cgColor }
         }
     }
 
@@ -249,10 +250,11 @@ final class SpaceCreationButton: NSButton {
     var link = false
     var symbol: String?
     override func draw(_ dirtyRect: NSRect) {
+        let dark = effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
         if !link {
             // Blue accent in the Display P3 color space.
             let fill = primary ? NSColor(displayP3Red: 49 / 255, green: 57 / 255, blue: 251 / 255, alpha: isEnabled ? 1 : 0.4)
-                : OrbitTokens.Color.State.sidebarItem
+                : (dark ? NSColor.white.withAlphaComponent(0.12) : OrbitTokens.Color.State.sidebarItem)
             fill.withAlphaComponent(fill.alphaComponent * (isHighlighted ? 0.8 : 1)).setFill()
             NSBezierPath(roundedRect: bounds, xRadius: primary ? 8 : 6, yRadius: primary ? 8 : 6).fill()
         }

@@ -42,7 +42,7 @@ struct SpaceIconPublicationLifecycleTests {
         }
         switch reason {
         case .settingsSelectionABA, .settingsTargetABA:
-            model.queueSpaceIconEdit(spaceID: target, profileID: profile, icon: .planet(.closest(to: "star.fill")))
+            model.queueSpaceIconEdit(spaceID: target, profileID: profile, icon: .systemSymbol("star.fill"))
         case .controllerSourceABA, .controllerClose:
             editor.field.stringValue = "🧪"; editor.complete(.alertFirstButtonReturn)
         }
@@ -64,7 +64,7 @@ struct SpaceIconPublicationLifecycleTests {
         gate.resume(); try await holder.value
         await model.waitForPendingActions(); await editor.waitForSave()
         await controller.session.waitForPendingCommands()
-        #expect(await settings.snapshot().space(target).iconSelection == .planet(.automatic))
+        #expect(await settings.snapshot().space(target).iconSelection == .none)
         #expect(controller.window?.isVisible == false)
     }
 

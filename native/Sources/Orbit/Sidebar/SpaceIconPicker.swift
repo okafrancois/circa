@@ -36,9 +36,7 @@ final class SpaceIconPicker: NSViewController, NSSearchFieldDelegate {
 
     init(currentChoice: BrowserSpaceIcon, accent: OrbitTokens.ThemeAccent, catalog: SpaceIconPickerCatalog = .shared, purpose: Purpose = .space) {
         self.purpose = purpose
-        if purpose == .space, case .systemSymbol(let symbol) = currentChoice {
-            self.currentChoice = .planet(.closest(to: symbol))
-        } else { self.currentChoice = currentChoice }
+        self.currentChoice = currentChoice
         if case .systemSymbol = currentChoice { mode = .icons }
         self.accent = accent
         self.catalog = catalog
@@ -64,18 +62,6 @@ final class SpaceIconPicker: NSViewController, NSSearchFieldDelegate {
         content.onKey = { [weak self] in self?.handle($0) ?? false }
         let width = Self.size.width, inset: CGFloat = 10
 
-        if purpose == .space {
-            mode = .emoji
-            modes.isHidden = true
-            let heading = NSTextField(labelWithString: uiText("Planets & Emoji"))
-            heading.font = BrandFonts.ui(12, weight: .semibold)
-            heading.textColor = BrandPalette.ink
-            heading.frame = NSRect(x: 12, y: 15, width: 180, height: 20)
-            content.addSubview(heading)
-            removeButton.title = uiText("Dots")
-            removeButton.frame = NSRect(x: 208, y: 12, width: 52, height: 24)
-            content.addSubview(removeButton)
-        }
         modes.selectedSegment = mode.rawValue
         modes.segmentStyle = .rounded
         modes.setWidth(57, forSegment: 0)
@@ -184,9 +170,9 @@ final class SpaceIconPicker: NSViewController, NSSearchFieldDelegate {
         guard !finished, choice.isValid, !isComposing else { return }
         switch choice {
         case .none: break
-        case .grapheme: guard purpose == .space || mode == .emoji else { return }
-        case .systemSymbol: guard purpose == .tab, mode == .icons, SpaceSymbolCatalog.contains(choice) else { return }
         case .planet: guard purpose == .space else { return }
+        case .grapheme: guard mode == .emoji else { return }
+        case .systemSymbol: guard mode == .icons, SpaceSymbolCatalog.contains(choice) else { return }
         }
         if purpose == .space {
             finished = true
@@ -272,7 +258,7 @@ final class SpaceIconPicker: NSViewController, NSSearchFieldDelegate {
         for button in categoryButtons { button.isHidden = icons }
         paletteButton.isHidden = icons
         grid.menu?.items.first?.isHidden = icons
-        let keyViews: [NSView] = (purpose == .space ? [removeButton, search] : [modes, search]) + (icons ? [] : categoryButtons)
+        let keyViews: [NSView] = [modes, search] + (icons ? [] : categoryButtons)
         for (index, control) in keyViews.enumerated() {
             control.nextKeyView = keyViews[(index + 1) % keyViews.count]
         }
@@ -292,29 +278,10 @@ final class SpaceIconPicker: NSViewController, NSSearchFieldDelegate {
 
     private func reload() {
         let query = search.stringValue
-        if purpose == .space {
-            let planets = BrowserSpacePlanet.selectable.map {
-                SpaceIconPickerCatalog.Item(planet: $0, name: SpaceIconImages.planetName($0))
-            }
-            let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
-            if trimmed.isEmpty {
-                var emojis = SpaceIconPickerCatalog.Category.allCases.flatMap { orderedItems(in: $0) }
-                if case .grapheme(let value) = currentChoice, !emojis.contains(where: { $0.choice == currentChoice }) {
-                    emojis.insert(.init(emoji: value, name: uiText("Current Icon"), category: .symbols), at: 0)
-                }
-                grid.setSections([(nil, planets), (nil, emojis)], selecting: currentChoice)
-            } else {
-                let aliases: [BrowserSpacePlanet: String] = [.work: "work briefcase globe", .home: "home house", .reading: "reading book bookmark", .sideProject: "side project star heart paintbrush"]
-                var results = planets.filter { item in
-                    guard case .planet(let variant) = item.choice else { return false }
-                    return item.name.localizedCaseInsensitiveContains(trimmed) || trimmed.lowercased().split(whereSeparator: \.isWhitespace).allSatisfy { query in (aliases[variant] ?? variant.rawValue).split(separator: " ").contains { $0.hasPrefix(query) } }
-                } + catalog.search(trimmed)
-                if let typed = SpaceIconPickerCatalog.typedEmoji(trimmed), !results.contains(where: { $0.emoji == typed }) {
-                    results.insert(.init(emoji: typed, name: uiText("Use typed emoji"), category: .symbols), at: 0)
-                }
-                grid.setSections([(nil, results)], selecting: results.first?.choice)
-            }
-        } else if mode == .icons {
+        let planets = purpose == .space ? BrowserSpacePlanet.selectable.map {
+            SpaceIconPickerCatalog.Item(planet: $0, name: SpaceIconImages.planetName($0))
+        } : []
+        if mode == .icons {
             let results = SpaceSymbolCatalog.search(query)
             grid.setSections([(nil, results)], selecting: query.isEmpty ? currentChoice : results.first?.choice)
         } else if query.trimmingCharacters(in: .whitespaces).isEmpty {
@@ -323,9 +290,10 @@ final class SpaceIconPicker: NSViewController, NSSearchFieldDelegate {
             if case .grapheme(let value) = currentChoice, !catalog.items.contains(where: { $0.choice == currentChoice }) {
                 sections.insert((nil, [.init(emoji: value, name: uiText("Current Icon"), category: .symbols)]), at: 0)
             }
+            if !planets.isEmpty { sections.insert((nil, planets), at: 0) }
             grid.setSections(sections, selecting: currentChoice)
         } else {
-            var results = catalog.search(query)
+            var results = planets.filter { $0.name.localizedCaseInsensitiveContains(query) } + catalog.search(query)
             if let typed = SpaceIconPickerCatalog.typedEmoji(query) {
                 results.removeAll { $0.emoji == typed }
                 results.insert(.init(emoji: typed, name: uiText("Use typed emoji"), category: .symbols), at: 0)
@@ -525,7 +493,7 @@ final class SpaceIconGridView: NSView {
     override func draw(_ dirtyRect: NSRect) {
         let font = NSFont.systemFont(ofSize: 20)
         let headerAttributes: [NSAttributedString.Key: Any] = [
-            .font: BrandTextStyle.caption.font(size: 11, weight: .semibold), .foregroundColor: OrbitFloatingMaterial.secondary
+            .font: OrbitChromeTextStyle.caption.font(size: 11, weight: .semibold), .foregroundColor: OrbitFloatingMaterial.secondary
         ]
         for header in headers where header.frame.intersects(dirtyRect) {
             NSAttributedString(string: header.title, attributes: headerAttributes).draw(in: header.frame)
@@ -546,8 +514,7 @@ final class SpaceIconGridView: NSView {
                                           width: image.size.width, height: image.size.height))
                 }
             case .planet(let variant):
-                SpaceIconImages.planet(variant)?.draw(in: frame.insetBy(dx: 4, dy: 4), from: .zero,
-                    operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
+                SpaceIconImages.planet(variant)?.draw(in: frame.insetBy(dx: 4, dy: 4), from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
             case .none: break
             }
         }

@@ -26,7 +26,7 @@ struct SpaceSettingsPublicationTests {
         #expect(await settings.snapshot().spaces[space] == nil)
         let fresh = try #require(browser.captureSpaceSettingsAuthority(for: space, profileID: profile))
         try await settings.updateSpace(space, authority: fresh) { $0.iconSelection = .systemSymbol("heart.fill") }
-        #expect(await settings.snapshot().space(space).iconSelection == .planet(.closest(to: "heart.fill")))
+        #expect(await settings.snapshot().space(space).iconSelection == .systemSymbol("heart.fill"))
     }
 
     @Test("The source window rejects profile ABA and close while same-profile navigation preserves authority")
@@ -84,7 +84,7 @@ struct SpaceSettingsPublicationTests {
                 value.iconSelection = .none
             }
         }
-        #expect(await settings.snapshot().space(space).iconSelection == .planet(.closest(to: "star.fill")))
+        #expect(await settings.snapshot().space(space).iconSelection == .systemSymbol("star.fill"))
     }
 
     @Test("Restoration initializes ownership and typed invalid intent cannot be hidden by another field edit")

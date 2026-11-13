@@ -1,6 +1,5 @@
 import AppKit
 import BrowserShell
-import CoreText
 
 /// Transparent hit shield: outside clicks dismiss without reaching the underlying document.
 @MainActor
@@ -28,17 +27,6 @@ final class BrowserPaletteView: NSView, NSTextFieldDelegate, NSTableViewDataSour
         }
     }
     let input: NSTextField = PaletteInputField()
-    private static var sparkleImage: NSImage {
-        NSImage(size: NSSize(width: 16, height: 16), flipped: false) { rect in
-            let path = NSBezierPath()
-            path.move(to: NSPoint(x: 8, y: 1))
-            path.curve(to: NSPoint(x: 15, y: 8), controlPoint1: NSPoint(x: 9.1, y: 6.9), controlPoint2: NSPoint(x: 9.1, y: 6.9))
-            path.curve(to: NSPoint(x: 8, y: 15), controlPoint1: NSPoint(x: 9.1, y: 9.1), controlPoint2: NSPoint(x: 9.1, y: 9.1))
-            path.curve(to: NSPoint(x: 1, y: 8), controlPoint1: NSPoint(x: 6.9, y: 9.1), controlPoint2: NSPoint(x: 6.9, y: 9.1))
-            path.curve(to: NSPoint(x: 8, y: 1), controlPoint1: NSPoint(x: 6.9, y: 6.9), controlPoint2: NSPoint(x: 6.9, y: 6.9))
-            BrandPalette.coral.setFill(); path.fill(); return true
-        }
-    }
     let panel = NSView()
     let material = OrbitFrostView(radius: OrbitTokens.Radius.commandBar)
     private let materialObservers = OrbitWorkspaceObservers()
@@ -48,7 +36,6 @@ final class BrowserPaletteView: NSView, NSTextFieldDelegate, NSTableViewDataSour
     let searchIcon = NSImageView()
     let divider = NSView()
     let infoButton = NSButton()
-    let inputShortcut = PaletteKeyChip()
     let scopeLabel = NSTextField(labelWithString: "")
     let siteHint = NSTextField(labelWithString: "")
     private let infoPopover = OrbitFrostPopover()
@@ -135,7 +122,7 @@ final class BrowserPaletteView: NSView, NSTextFieldDelegate, NSTableViewDataSour
         panel.setAccessibilityRole(.group)
         panel.setAccessibilityLabel(uiText("Command Bar"))
         panel.addSubview(input)
-        searchIcon.image = Self.sparkleImage
+        searchIcon.image = OrbitIcon.image(sfName: "magnifyingglass", pointSize: 16, accessibilityDescription: nil)
         searchIcon.setAccessibilityElement(false)
         panel.addSubview(searchIcon)
         infoButton.image = OrbitIcon.image(sfName: "info.circle", pointSize: 16, accessibilityDescription: uiText("About suggestions"))
@@ -145,14 +132,7 @@ final class BrowserPaletteView: NSView, NSTextFieldDelegate, NSTableViewDataSour
         infoButton.action = #selector(showSuggestionInfo(_:))
         infoButton.setAccessibilityLabel(uiText("About suggestions"))
         infoButton.setAccessibilityIdentifier("palette-suggestion-info")
-        infoButton.isHidden = true
         panel.addSubview(infoButton)
-        panel.addSubview(inputShortcut)
-        let helpMenu = NSMenu()
-        let helpItem = NSMenuItem(title: uiText("About suggestions"), action: #selector(showSuggestionInfo(_:)), keyEquivalent: "")
-        helpItem.target = self
-        helpMenu.addItem(helpItem)
-        input.menu = helpMenu
         scopeLabel.font = OrbitTokens.Typography.commandBarRowTitle
         scopeLabel.wantsLayer = true
         scopeLabel.layer?.cornerRadius = OrbitTokens.Radius.commandBarRow
@@ -231,10 +211,9 @@ final class BrowserPaletteView: NSView, NSTextFieldDelegate, NSTableViewDataSour
         let trailing: CGFloat = siteHint.isHidden ? 48 : 144
         input.frame = NSRect(x: inputX, y: panel.bounds.height - m.searchRowHeight / 2 - inputHeight / 2,
                              width: max(0, panel.bounds.width - inputX - trailing), height: inputHeight)
-        let textCenterY = PaletteTextAlignment.inkCenterY(input)
-        inputShortcut.frame = NSRect(x: panel.bounds.width - 46, y: textCenterY - 12, width: 24, height: 24)
+        infoButton.frame = NSRect(x: panel.bounds.width - 46, y: panel.bounds.height - 44, width: 24, height: 24)
         siteHint.frame = NSRect(x: panel.bounds.width - 144, y: panel.bounds.height - 43, width: 96, height: 20)
-        searchIcon.frame = NSRect(x: 23, y: textCenterY - 8, width: 16, height: 16)
+        searchIcon.frame = NSRect(x: 23, y: panel.bounds.height - m.searchRowHeight / 2 - 8, width: 16, height: 16)
         divider.frame = NSRect(x: m.rowInsetX, y: panel.bounds.height - m.searchRowHeight,
                                width: max(0, panel.bounds.width - 2 * m.rowInsetX), height: 1 / (window?.backingScaleFactor ?? 2))
         scroll.frame = NSRect(x: m.rowInsetX, y: m.bottomPadding, width: max(0, panel.bounds.width - 2 * m.rowInsetX),
@@ -309,11 +288,16 @@ final class BrowserPaletteView: NSView, NSTextFieldDelegate, NSTableViewDataSour
         selectedIndex = results.indices.contains(selected) ? selected : -1
         selectedResult = selectedIndex >= 0 ? results[selectedIndex] : nil
         announcedResultCount = results.count
-        inputSymbol = selectedResult?.inputSymbol ?? "magnifyingglass"
-        searchIcon.image = Self.sparkleImage
-        searchIcon.contentTintColor = nil
-        infoButton.isHidden = true
-        inputShortcut.isHidden = siteSearch != nil
+        let symbol = selectedResult?.inputSymbol ?? "magnifyingglass"
+        inputSymbol = symbol
+        if symbolImages[symbol] == nil { symbolImages[symbol] = OrbitIcon.image(sfName: symbol, pointSize: 16, accessibilityDescription: nil) }
+        let image = selectedResult.flatMap { result in
+            result.section == .tabs || result.section == .pinned ? favicons[result.id] : nil
+        }
+        let inputImage = image ?? symbolImages[symbol]
+        if searchIcon.image !== inputImage { searchIcon.image = inputImage }
+        searchIcon.contentTintColor = image == nil ? OrbitFloatingMaterial.body : nil
+        infoButton.isHidden = siteSearch != nil
         let row = selectedIndex >= 0 ? resultRows[selectedIndex] : -1
         list.selectRowIndexes(row >= 0 ? IndexSet(integer: row) : [], byExtendingSelection: false)
         if oldIndex != selectedIndex { refreshSelection(at: oldIndex) }
@@ -476,13 +460,13 @@ final class BrowserPaletteView: NSView, NSTextFieldDelegate, NSTableViewDataSour
         panel.layer?.backgroundColor = NSColor.clear.cgColor
         OrbitTokens.Shadow.commandBar.apply(to: panelShadow, isFlipped: true, appearance: effectiveAppearance)
         input.textColor = OrbitFloatingMaterial.body
-        searchIcon.contentTintColor = nil
+        searchIcon.contentTintColor = OrbitFloatingMaterial.body
         infoButton.contentTintColor = OrbitFloatingMaterial.secondary
         scopeLabel.textColor = OrbitFloatingMaterial.accentText
         scopeLabel.layer?.backgroundColor = accent.resolvedCGColor(for: effectiveAppearance)
         divider.layer?.backgroundColor = OrbitTokens.Color.Line.commandBarHairline.resolvedCGColor(for: effectiveAppearance)
-        panel.layer?.borderWidth = 2
-        panel.layer?.borderColor = BrandPalette.ink.resolvedCGColor(for: effectiveAppearance)
+        panel.layer?.borderWidth = 1 / (window?.backingScaleFactor ?? 2)
+        panel.layer?.borderColor = (usesMaterial ? OrbitTokens.Color.Line.commandBarMaterialOuterStroke : OrbitTokens.Color.Line.commandBarOuterStroke).resolvedCGColor(for: effectiveAppearance)
     }
     func completeURL(for result: BrowserPaletteResult, draft: String) {
         guard !suppressCompletion, siteSearchHint == nil, !draft.isEmpty,
@@ -536,16 +520,16 @@ final class BrowserPaletteView: NSView, NSTextFieldDelegate, NSTableViewDataSour
         }
     }
 
-    @objc private func showSuggestionInfo(_ sender: Any?) {
+    @objc private func showSuggestionInfo(_ sender: NSButton) {
         let controller = NSViewController()
         let label = NSTextField(wrappingLabelWithString: uiText("Suggestions come from your open tabs, bookmarks, and history. Web searches use your selected search engine."))
-        label.font = BrandTextStyle.body.font(size: 13)
+        label.font = OrbitChromeTextStyle.body.font(size: 13)
         label.frame = NSRect(x: 16, y: 16, width: 280, height: 72)
         controller.view = NSView(frame: NSRect(x: 0, y: 0, width: 312, height: 104))
         controller.view.addSubview(label)
         infoPopover.contentViewController = controller
         infoPopover.behavior = .transient
-        infoPopover.show(relativeTo: input.bounds, of: input, preferredEdge: .maxY)
+        infoPopover.show(relativeTo: sender.bounds, of: sender, preferredEdge: .maxY)
     }
 
     override func mouseDown(with event: NSEvent) {
@@ -741,7 +725,7 @@ final class PaletteResultCell: NSTableCellView {
             needsLayout = true
         }
         if shortcutLabel.stringValue != result.shortcut {
-            shortcutLabel.attributedStringValue = BrandTextStyle.mono.attributedString(result.shortcut, size: 13, weight: .medium)
+            shortcutLabel.attributedStringValue = OrbitChromeTextStyle.mono.attributedString(result.shortcut, size: 13, weight: .medium)
             needsLayout = true
         }
         if icon.image !== image { icon.image = image }
@@ -772,7 +756,7 @@ final class PaletteResultCell: NSTableCellView {
         if oldActionHidden != actionLabel.isHidden { needsLayout = true }
     }
     private func refreshBackground() {
-        background.layer?.backgroundColor = (isSelectedResult ? BrandPalette.sky :
+        background.layer?.backgroundColor = (isSelectedResult ? NSColor.controlAccentColor.withAlphaComponent(0.12) :
             (isHovered ? OrbitTokens.Color.State.commandBarRowHover : .clear)).resolvedCGColor(for: effectiveAppearance)
     }
     override func updateTrackingAreas() {
@@ -810,57 +794,11 @@ final class PaletteResultCell: NSTableCellView {
         let actionRight = shortcutLabel.frame.minX - (shortcutWidth > 0 ? 14 : 0)
         let actionWidth = !actionLabel.isHidden ? min(textWidth(actionLabel), max(0, (actionRight - x) * 0.33)) : 0
         actionLabel.frame = NSRect(x: actionRight - actionWidth, y: (m.rowHeight - 18) / 2, width: actionWidth, height: 18)
-        actionLabel.frame.origin.y += m.rowHeight / 2 - PaletteTextAlignment.inkCenterY(actionLabel)
         let usableWidth = max(0, actionLabel.frame.minX - (actionWidth > 0 ? 16 : 0) - x)
         let hasDetail = !detailLabel.stringValue.isEmpty
         let titleWidth = hasDetail ? min(textWidth(titleLabel), usableWidth * 0.62) : usableWidth
         titleLabel.frame = NSRect(x: x, y: (m.rowHeight - 18) / 2, width: titleWidth, height: 18)
         let detailX = titleLabel.frame.maxX + (hasDetail ? 4 : 0)
         detailLabel.frame = NSRect(x: detailX, y: (m.rowHeight - 18) / 2, width: hasDetail ? max(0, x + usableWidth - detailX) : 0, height: 18)
-    }
-}
-
-/// One optical centre for native text fields and custom ink controls.
-@MainActor
-enum PaletteTextAlignment {
-    static func inkBounds(_ text: String, font: NSFont) -> CGRect {
-        let line = CTLineCreateWithAttributedString(NSAttributedString(string: text, attributes: [.font: font]))
-        return CTLineGetImageBounds(line, nil)
-    }
-    static func inkCenterY(_ field: NSTextField) -> CGFloat {
-        let text = field.stringValue.isEmpty ? field.placeholderString ?? "" : field.stringValue
-        let font = field.font ?? OrbitTokens.Typography.commandBarInput
-        let ink = inkBounds(text, font: font)
-        guard !ink.isNull, !ink.isEmpty else { return field.frame.midY }
-        return field.superview?.isFlipped == true
-            ? field.frame.minY + field.firstBaselineOffsetFromTop - ink.midY
-            : field.frame.maxY - field.firstBaselineOffsetFromTop + ink.midY
-    }
-}
-
-/// The shortcut is one glyph run on one baseline, centred by its painted bounds.
-@MainActor
-final class PaletteKeyChip: NSView {
-    let stringValue = uiText("⌘T")
-    let font = OrbitTokens.Typography.commandBarAccessory
-    override init(frame: NSRect) {
-        super.init(frame: frame)
-        wantsLayer = true
-        layer?.backgroundColor = BrandPalette.ink.withAlphaComponent(0.06).cgColor
-        layer?.cornerRadius = 4
-        layer?.borderWidth = 1
-        layer?.borderColor = BrandPalette.ink.withAlphaComponent(0.15).cgColor
-        setAccessibilityElement(false)
-    }
-    convenience init() { self.init(frame: .zero) }
-    required init?(coder: NSCoder) { nil }
-    override func draw(_ dirtyRect: NSRect) {
-        guard let context = NSGraphicsContext.current?.cgContext else { return }
-        let line = CTLineCreateWithAttributedString(NSAttributedString(string: stringValue, attributes: [
-            .font: font, .foregroundColor: BrandPalette.ink.withAlphaComponent(0.6)]))
-        let ink = CTLineGetImageBounds(line, nil)
-        context.textMatrix = .identity
-        context.textPosition = CGPoint(x: bounds.midX - ink.midX, y: bounds.midY - ink.midY)
-        CTLineDraw(line, context)
     }
 }

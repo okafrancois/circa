@@ -3,7 +3,7 @@ import QuartzCore
 
 @MainActor
 final class OrbitThemeFillView: NSView {
-    static let sidebarTintOpacity: Float = 1
+    static let sidebarTintOpacity: Float = 0.76
     private let host = CALayer()
     /// Opacity of the Space tint over native window glass; standalone gradient sources stay opaque.
     var tintOpacity: Float = 1 { didSet { host.opacity = tintOpacity } }

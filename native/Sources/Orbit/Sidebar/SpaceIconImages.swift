@@ -112,7 +112,7 @@ enum SpaceIconImages {
 
     static func label(_ choice: BrowserSpaceIcon) -> String {
         switch choice {
-        case .none: uiText("Dots")
+        case .none: uiText("No Icon")
         case .planet(let variant): planetName(variant)
         case .grapheme(let value): value
         case .systemSymbol(let identifier): SpaceSymbolCatalog.title(for: identifier)
@@ -139,7 +139,7 @@ enum SpaceIconImages {
             }
             view = NSImageView(image: image)
         } else {
-            view = NSImageView(image: template("circle.fill", pointSize: pointSize) ?? NSImage())
+            view = NSImageView(image: template("circle", pointSize: pointSize) ?? NSImage())
             view.contentTintColor = OrbitTokens.Color.Text.primary
         }
         view.setAccessibilityLabel(label(choice))

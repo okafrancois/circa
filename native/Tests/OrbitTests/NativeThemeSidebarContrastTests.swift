@@ -1,5 +1,4 @@
 import AppKit
-import BrowserShell
 @testable import BrowserCore
 import Testing
 @testable import Orbit
@@ -92,7 +91,7 @@ struct NativeThemeSidebarContrastTests {
 
         let tooltip = try #require(descendants(sidebar, of: SidebarSpaceTooltip.self).first)
         for label in tooltip.subviews.compactMap({ $0 as? NSTextField }) {
-            #expect(label.textColor == OrbitFloatingMaterial.body, "The Space capsule keeps daylight reading ink")
+            #expect(label.textColor == NSColor(white: 0.96, alpha: 1), "The Space capsule keeps its observed dark material palette")
         }
         #expect(sidebar.window == nil, "The synthetic view never belongs to a visible window")
     }
@@ -260,7 +259,7 @@ struct NativeThemeSidebarContrastTests {
             }
             NSGraphicsContext.restoreGraphicsState()
             let center = try #require(bitmap.colorAt(x: 14, y: 14)?.usingColorSpace(.sRGB))
-            let expected = [BrandPalette.coral, BrandPalette.cobalt][button.index].resolved(for: appearance)
+            let expected = footer.accent.icon.resolved(for: appearance)
             #expect(abs(center.redComponent - expected.redComponent) < 0.02)
             #expect(abs(center.greenComponent - expected.greenComponent) < 0.02)
             #expect(abs(center.blueComponent - expected.blueComponent) < 0.02)

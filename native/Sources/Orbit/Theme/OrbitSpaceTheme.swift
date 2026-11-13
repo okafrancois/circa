@@ -14,7 +14,7 @@ enum OrbitSpaceThemes {
     static let previewThemes: [OrbitTokens.SpaceTheme] = [.default, .amberCoral, .lavender, .rosePlum, .limeCitrus]
 
     static func defaultTheme(at index: Int, preview: Bool = previewFlag) -> OrbitTokens.SpaceTheme {
-        preview ? previewThemes[index % previewThemes.count] : rendered(BrandPalette.spaceGradients[((index % 4) + 4) % 4].theme())
+        preview ? previewThemes[index % previewThemes.count] : .default
     }
 
     /// Theme of a Space: stored theme, else `legacy` (the Settings palette), else the resolver; the
@@ -212,7 +212,7 @@ enum OrbitThemeForeground {
         return 0.2126 * c.redComponent + 0.7152 * c.greenComponent + 0.0722 * c.blueComponent < 128.0 / 255
     }
     static func color(on color: NSColor) -> NSColor {
-        isLight(on: color) ? BrandPalette.paper : BrandPalette.ink
+        NSColor(srgbRed: isLight(on: color) ? 244.0 / 255 : 32.0 / 255, green: isLight(on: color) ? 244.0 / 255 : 32.0 / 255, blue: isLight(on: color) ? 244.0 / 255 : 32.0 / 255, alpha: 1)
     }
 
     static func contrastRatio(_ foreground: NSColor, on background: NSColor) -> CGFloat {

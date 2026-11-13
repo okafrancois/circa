@@ -48,7 +48,7 @@ struct SpaceIconOwnershipUIRecheckTests {
         model.selectAppearanceSpace(target)
         let editor = try #require(controller.makeSpaceIconEditor(for: target))
         let blocker = SpaceID()
-        try await settings.updateSpace(target) { $0.iconSelection = .planet(.closest(to: "heart.fill")); $0.palette = .lavender }
+        try await settings.updateSpace(target) { $0.iconSelection = .systemSymbol("heart.fill"); $0.palette = .lavender }
         try await settings.updateSpace(foreign) { $0.iconSelection = .grapheme("🇯🇵") }
         try await settings.updateSpace(blocker) { _ in }
         await environment.settings.refresh()
@@ -61,7 +61,7 @@ struct SpaceIconOwnershipUIRecheckTests {
         }
         switch entry {
         case .settings:
-            model.queueSpaceIconEdit(spaceID: target, profileID: profile, icon: .planet(.closest(to: "star.fill")))
+            model.queueSpaceIconEdit(spaceID: target, profileID: profile, icon: .systemSymbol("star.fill"))
         case .controller:
             editor.field.stringValue = "🧪"
             editor.complete(.alertFirstButtonReturn)
@@ -104,7 +104,7 @@ struct SpaceIconOwnershipUIRecheckTests {
             #expect(after == before)
             #expect(try Data(contentsOf: file) == bytes)
         } else {
-            let expected: BrowserSpaceIcon = entry == .settings ? .planet(.closest(to: "star.fill")) : .grapheme("🧪")
+            let expected: BrowserSpaceIcon = entry == .settings ? .systemSymbol("star.fill") : .grapheme("🧪")
             #expect(after.space(target).iconSelection == expected)
             #expect(after.space(target).palette == .lavender)
             #expect(after.space(foreign) == before.space(foreign))
@@ -142,7 +142,7 @@ struct SpaceIconOwnershipUIRecheckTests {
         try await withNativeTestDeadline("Independent picker settings actor", timeout: 3) {
             while !gate.entered { try await Task.sleep(for: .milliseconds(2)) }
         }
-        picker.choose(.planet(.closest(to: "star.fill")))
+        picker.choose(.systemSymbol("star.fill"))
         try await withNativeTestDeadline("Independent picker command joins drain", timeout: 3) {
             while !controller.session.hasPendingCommands { await Task.yield() }
         }
@@ -150,10 +150,10 @@ struct SpaceIconOwnershipUIRecheckTests {
         gate.resume(); try await holder.value
         await controller.session.waitForPendingCommands()
         let reopened = try BrowserSettingsStore(destination: file)
-        #expect(await reopened.snapshot().space(target).iconSelection == .planet(.closest(to: "star.fill")))
-        picker.choose(.planet(.closest(to: "heart.fill")))
+        #expect(await reopened.snapshot().space(target).iconSelection == .systemSymbol("star.fill"))
+        picker.choose(.systemSymbol("heart.fill"))
         await controller.session.waitForPendingCommands()
-        #expect(await settings.snapshot().space(target).iconSelection == .planet(.closest(to: "star.fill")))
+        #expect(await settings.snapshot().space(target).iconSelection == .systemSymbol("star.fill"))
         #expect(controller.window?.isVisible == false && !NSApplication.shared.isActive)
     }
 }

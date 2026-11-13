@@ -425,12 +425,7 @@ final class SidebarSpaceButton: OrbitGlyphButton {
                 let inactive = space.inactiveOpacity(space.effectiveAppearance)
                 context.setAlpha(space.isActive ? 1 : min(1, inactive * (1 + 0.5 * space.hoverAmount)))
             }
-            if let space = button as? SidebarSpaceButton {
-                let colors = [BrandPalette.coral, BrandPalette.cobalt, BrandPalette.sun, BrandPalette.violet]
-                let color = space.space.theme.map { OrbitSpaceThemes.baseAccent(for: OrbitSpaceThemes.rendered($0)).strong }
-                    ?? colors[((space.index % 4) + 4) % 4]
-                color.setFill()
-            } else { button.tint.setFill() }
+            button.tint.setFill()
             NSBezierPath(ovalIn: dot).fill()
             context.restoreGState()
         }
@@ -547,9 +542,9 @@ final class SidebarSpaceTooltip: NSView {
         layer?.shadowOpacity = 0.22
         layer?.shadowRadius = 8
         layer?.shadowOffset = NSSize(width: 0, height: -2)
-        material.fixedVariant = .light
+        material.fixedVariant = .dark
         label.font = BrandTextStyle.ui.font(size: 12, weight: .semibold)
-        label.textColor = OrbitFloatingMaterial.body
+        label.textColor = NSColor(white: 0.96, alpha: 1)
         label.maximumNumberOfLines = 1
         label.lineBreakMode = .byTruncatingTail
         for view in [material, label] { addSubview(view) }
@@ -570,7 +565,7 @@ final class SidebarSpaceTooltip: NSView {
         keycaps.forEach { $0.removeFromSuperview() }
         keycaps = (shortcut ?? "").map { character in
             let key = NSTextField(labelWithString: String(character))
-            key.attributedStringValue = BrandTextStyle.mono.attributedString(String(character), size: 11, weight: .semibold)
+            key.attributedStringValue = OrbitChromeTextStyle.mono.attributedString(String(character), size: 11, weight: .semibold)
             key.textColor = NSColor(white: 0.27, alpha: 1)
             key.alignment = .center
             key.wantsLayer = true
