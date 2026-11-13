@@ -370,11 +370,11 @@ extension OrbitTokens {
         ///  13 regular
         public static let addressField = BrandTextStyle.ui.font(size: 13, weight: .regular)
         public static let sidebarClear = BrandTextStyle.ui.font(size: 11, weight: .semibold)
-        public static let commandBarInput = BrandTextStyle.ui.font(size: 16, weight: .medium)
+        public static let commandBarInput = BrandTextStyle.ui.font(size: 18, weight: .medium)
         ///  13 medium
         public static let commandBarRowTitle = BrandTextStyle.ui.font(size: 13, weight: .medium)
         ///  13 medium
-        public static let commandBarAccessory = BrandTextStyle.mono.font(size: 10, weight: .regular)
+        public static let commandBarAccessory = BrandTextStyle.mono.font(size: 13, weight: .medium)
         ///  13 medium — sidebar "+" menu
         public static let menuItem = BrandTextStyle.ui.font(size: 13, weight: .medium)
         public static let menuShortcut = BrandTextStyle.mono.font(size: 13, weight: .regular)
@@ -551,18 +551,18 @@ extension OrbitTokens {
         }
 
         public enum CommandBar {
-            public static let width: CGFloat = 400                    //  fixed at windows 1024 and 1512
+            public static let width: CGFloat = 765                    //  fixed at windows 1024 and 1512
             /// : fixed offset above the vertical centre (152 @640, 305.75 @949).
             public static let topOffsetAboveCenter: CGFloat = 168.5
-            public static func top(windowHeight: CGFloat) -> CGFloat { 34 }
+            public static func top(windowHeight: CGFloat) -> CGFloat { windowHeight / 2 - topOffsetAboveCenter }
             /// The top at the reference height 640 (round 1 value 152); use `top(windowHeight:)`.
             public static var top: CGFloat { top(windowHeight: 640) }
-            public static let searchRowHeight: CGFloat = 48
-            public static let rowHeight: CGFloat = 34
-            public static let rowPitch: CGFloat = 38
+            public static let searchRowHeight: CGFloat = 64
+            public static let rowHeight: CGFloat = 46
+            public static let rowPitch: CGFloat = 50
             public static let rowInsetX: CGFloat = 10
             public static let firstRowGap: CGFloat = 6
-            public static let bottomPadding: CGFloat = 34
+            public static let bottomPadding: CGFloat = 12
             public static let iconTileSize: CGFloat = 24
             public static let iconTileInsetX: CGFloat = 10
             public static let titleOriginX: CGFloat = 52
@@ -614,7 +614,7 @@ extension OrbitTokens {
         public static let addressField: CGFloat = 8
         public static let favoriteTile: CGFloat = 8
         public static let tabRow: CGFloat = 8
-        public static let commandBar: CGFloat = 16
+        public static let commandBar: CGFloat = 27
         public static let commandBarRow: CGFloat = 8
         public static let commandBarIconTile: CGFloat = 6
         public static let plusMenu: CGFloat = 12

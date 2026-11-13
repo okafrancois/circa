@@ -167,10 +167,6 @@ final class BrowserPaletteController<Engine: BrowserEngine> {
                   searchAliases: BrowserDailyCommands.aliases($0.id), shortcut: $0.shortcuts.first?.displayLabel ?? "")
         }
         view.input.stringValue = mode == .currentTab && !emptyAddress ? owner.session.selectedSurface?.navigationState.url?.absoluteString ?? "" : ""
-        view.contentFrame = { [weak owner, weak view] in
-            guard let owner, let view else { return .zero }
-            return owner.contentCard.convert(owner.contentCard.bounds, to: view)
-        }
         view.isHidden = false
         view.superview?.addSubview(view, positioned: .above, relativeTo: nil)
         view.needsLayout = true

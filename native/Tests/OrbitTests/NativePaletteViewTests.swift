@@ -82,7 +82,7 @@ struct NativePaletteViewTests {
         #expect(h.view.input.frame.minX == 52)
         #expect(h.view.searchIcon.frame.midX == 31)
         #expect(h.view.divider.frame.minX == 10)
-        #expect(h.view.panel.bounds.height - h.view.divider.frame.minY == 48)
+        #expect(h.view.panel.bounds.height - h.view.divider.frame.minY == 64)
         #expect(cell.iconTile.frame.size == NSSize(width: 24, height: 24))
         #expect(cell.icon.frame.size == NSSize(width: 16, height: 16))
         #expect(cell.titleLabel.frame.midY == cell.detailLabel.frame.midY)
@@ -92,10 +92,23 @@ struct NativePaletteViewTests {
         #expect(cell.titleLabel.textColor == cell.actionLabel.textColor)
         #expect(cell.background.layer?.backgroundColor == BrandPalette.sky.resolvedCGColor(for: cell.effectiveAppearance))
         #expect(cell.icon.contentTintColor == nil)
+        #expect(h.view.input.font?.pointSize == 18)
+        #expect(cell.titleLabel.font?.pointSize == 13)
+        #expect(cell.actionLabel.font?.pointSize == 13)
+        #expect(abs(h.view.searchIcon.frame.midY - PaletteTextAlignment.inkCenterY(h.view.input)) < 0.01)
+        #expect(abs(h.view.inputShortcut.frame.midY - PaletteTextAlignment.inkCenterY(h.view.input)) < 0.01)
+        #expect(abs(PaletteTextAlignment.inkCenterY(cell.actionLabel) - cell.accessory.frame.midY) < 0.01)
+        #expect(cell.actionIcon.frame.midY == cell.accessory.frame.midY)
+        #expect(cell.actionIcon.frame.midX == cell.accessory.frame.midX)
+        h.render((0..<7).map { paletteViewResult($0) })
+        #expect(h.view.panel.frame.height == 328)
+        #expect(h.view.scroll.hasVerticalScroller)
+        #expect(h.table.rect(ofRow: 0).height == 50)
+
         for size in [NSSize(width: 1024, height: 640), NSSize(width: 1512, height: 949)] {
             let panel = BrowserPaletteView.panelFrame(in: size)
-            #expect(panel.width == 400 && panel.midX == size.width / 2)
-            #expect(panel.minY == 34)
+            #expect(panel.width == 765 && panel.midX == size.width / 2)
+            #expect(panel.minY == size.height / 2 - 168.5)
         }
     }
 
@@ -142,7 +155,7 @@ struct NativePaletteViewTests {
         #expect(page.detailLabel.stringValue == "— result-2.test")
         #expect(page.actionLabel.isHidden && page.accessory.isHidden)
         #expect(page.titleLabel.frame.maxX < page.detailLabel.frame.minX)
-        #expect(page.background.frame.height == 34)
+        #expect(page.background.frame.height == 46)
         // Returning to the empty draft updates existing cells synchronously.
         h.view.input.stringValue = ""
         h.render(rows)

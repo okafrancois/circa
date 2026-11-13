@@ -1,5 +1,6 @@
 import AppKit
 import BrowserShell
+import CoreText
 
 /// Transparent hit shield: outside clicks dismiss without reaching the underlying document.
 @MainActor
@@ -39,9 +40,7 @@ final class BrowserPaletteView: NSView, NSTextFieldDelegate, NSTableViewDataSour
         }
     }
     let panel = NSView()
-    var contentFrame: (() -> NSRect)?
     private let veil = CALayer()
-    private let footer = NSTextField(labelWithString: uiText("↑↓ move    ↵ open    ⇥ actions"))
     let material = OrbitFrostView(radius: OrbitTokens.Radius.commandBar)
     private let materialObservers = OrbitWorkspaceObservers()
     private(set) var usesMaterial = !NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency
@@ -50,7 +49,7 @@ final class BrowserPaletteView: NSView, NSTextFieldDelegate, NSTableViewDataSour
     let searchIcon = NSImageView()
     let divider = NSView()
     let infoButton = NSButton()
-    let inputShortcut = NSTextField(labelWithString: uiText("⌘T"))
+    let inputShortcut = PaletteKeyChip()
     let scopeLabel = NSTextField(labelWithString: "")
     let siteHint = NSTextField(labelWithString: "")
     private let infoPopover = OrbitFrostPopover()
@@ -119,8 +118,6 @@ final class BrowserPaletteView: NSView, NSTextFieldDelegate, NSTableViewDataSour
         layer?.addSublayer(panelShadow)
         addSubview(panel)
         panel.addSubview(material)
-        footer.font = BrandFonts.mono(9.5); footer.textColor = BrandPalette.ink.withAlphaComponent(0.55)
-        panel.addSubview(footer)
         input.isBordered = false
         input.isBezeled = false
         input.drawsBackground = false
@@ -153,14 +150,6 @@ final class BrowserPaletteView: NSView, NSTextFieldDelegate, NSTableViewDataSour
         infoButton.setAccessibilityIdentifier("palette-suggestion-info")
         infoButton.isHidden = true
         panel.addSubview(infoButton)
-        inputShortcut.font = BrandFonts.mono(11)
-        inputShortcut.alignment = .center
-        inputShortcut.textColor = BrandPalette.ink.withAlphaComponent(0.6)
-        inputShortcut.wantsLayer = true
-        inputShortcut.layer?.backgroundColor = BrandPalette.ink.withAlphaComponent(0.06).cgColor
-        inputShortcut.layer?.cornerRadius = 4
-        inputShortcut.layer?.borderWidth = 1
-        inputShortcut.layer?.borderColor = BrandPalette.ink.withAlphaComponent(0.15).cgColor
         panel.addSubview(inputShortcut)
         let helpMenu = NSMenu()
         let helpItem = NSMenuItem(title: uiText("About suggestions"), action: #selector(showSuggestionInfo(_:)), keyEquivalent: "")
@@ -231,10 +220,8 @@ final class BrowserPaletteView: NSView, NSTextFieldDelegate, NSTableViewDataSour
     override func layout() {
         super.layout()
         let m = OrbitTokens.Metrics.CommandBar.self
-        let page = contentFrame?() ?? bounds
-        veil.frame = page
-        panel.frame = Self.panelFrame(in: page.size, resultCount: results.count).offsetBy(dx: page.minX, dy: page.minY)
-        footer.frame = NSRect(x: 16, y: 8, width: panel.bounds.width - 32, height: 14)
+        veil.frame = bounds
+        panel.frame = Self.panelFrame(in: bounds.size, resultCount: results.count)
         if answerView != nil { panel.frame.size.height = answerHeight ?? 230 }
         panelShadow.frame = panel.frame
         panelShadow.shadowPath = CGPath(roundedRect: panelShadow.bounds, cornerWidth: OrbitTokens.Radius.commandBar,
@@ -245,12 +232,13 @@ final class BrowserPaletteView: NSView, NSTextFieldDelegate, NSTableViewDataSour
         let scopeWidth = siteSearch == nil ? 0 : min(180, ceil(scopeLabel.intrinsicContentSize.width) + 20)
         scopeLabel.frame = NSRect(x: m.titleOriginX, y: panel.bounds.height - 45, width: scopeWidth, height: 26)
         let inputX = m.titleOriginX + (scopeWidth > 0 ? scopeWidth + 10 : 0)
-        let trailing: CGFloat = siteHint.isHidden ? 68 : 144
+        let trailing: CGFloat = siteHint.isHidden ? 48 : 144
         input.frame = NSRect(x: inputX, y: panel.bounds.height - m.searchRowHeight / 2 - inputHeight / 2,
                              width: max(0, panel.bounds.width - inputX - trailing), height: inputHeight)
-        inputShortcut.frame = NSRect(x: panel.bounds.width - 54, y: panel.bounds.height - 42, width: 34, height: 21)
+        let textCenterY = PaletteTextAlignment.inkCenterY(input)
+        inputShortcut.frame = NSRect(x: panel.bounds.width - 46, y: textCenterY - 12, width: 24, height: 24)
         siteHint.frame = NSRect(x: panel.bounds.width - 144, y: panel.bounds.height - 43, width: 96, height: 20)
-        searchIcon.frame = NSRect(x: 23, y: panel.bounds.height - m.searchRowHeight / 2 - 8, width: 16, height: 16)
+        searchIcon.frame = NSRect(x: 23, y: textCenterY - 8, width: 16, height: 16)
         divider.frame = NSRect(x: m.rowInsetX, y: panel.bounds.height - m.searchRowHeight,
                                width: max(0, panel.bounds.width - 2 * m.rowInsetX), height: 1 / (window?.backingScaleFactor ?? 2))
         scroll.frame = NSRect(x: m.rowInsetX, y: m.bottomPadding, width: max(0, panel.bounds.width - 2 * m.rowInsetX),
@@ -826,11 +814,57 @@ final class PaletteResultCell: NSTableCellView {
         let actionRight = shortcutLabel.frame.minX - (shortcutWidth > 0 ? 14 : 0)
         let actionWidth = !actionLabel.isHidden ? min(textWidth(actionLabel), max(0, (actionRight - x) * 0.33)) : 0
         actionLabel.frame = NSRect(x: actionRight - actionWidth, y: (m.rowHeight - 18) / 2, width: actionWidth, height: 18)
+        actionLabel.frame.origin.y += m.rowHeight / 2 - PaletteTextAlignment.inkCenterY(actionLabel)
         let usableWidth = max(0, actionLabel.frame.minX - (actionWidth > 0 ? 16 : 0) - x)
         let hasDetail = !detailLabel.stringValue.isEmpty
         let titleWidth = hasDetail ? min(textWidth(titleLabel), usableWidth * 0.62) : usableWidth
         titleLabel.frame = NSRect(x: x, y: (m.rowHeight - 18) / 2, width: titleWidth, height: 18)
         let detailX = titleLabel.frame.maxX + (hasDetail ? 4 : 0)
         detailLabel.frame = NSRect(x: detailX, y: (m.rowHeight - 18) / 2, width: hasDetail ? max(0, x + usableWidth - detailX) : 0, height: 18)
+    }
+}
+
+/// One optical centre for native text fields and custom ink controls.
+@MainActor
+enum PaletteTextAlignment {
+    static func inkBounds(_ text: String, font: NSFont) -> CGRect {
+        let line = CTLineCreateWithAttributedString(NSAttributedString(string: text, attributes: [.font: font]))
+        return CTLineGetImageBounds(line, nil)
+    }
+    static func inkCenterY(_ field: NSTextField) -> CGFloat {
+        let text = field.stringValue.isEmpty ? field.placeholderString ?? "" : field.stringValue
+        let font = field.font ?? OrbitTokens.Typography.commandBarInput
+        let ink = inkBounds(text, font: font)
+        guard !ink.isNull, !ink.isEmpty else { return field.frame.midY }
+        return field.superview?.isFlipped == true
+            ? field.frame.minY + field.firstBaselineOffsetFromTop - ink.midY
+            : field.frame.maxY - field.firstBaselineOffsetFromTop + ink.midY
+    }
+}
+
+/// The shortcut is one glyph run on one baseline, centred by its painted bounds.
+@MainActor
+final class PaletteKeyChip: NSView {
+    let stringValue = uiText("⌘T")
+    let font = OrbitTokens.Typography.commandBarAccessory
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        wantsLayer = true
+        layer?.backgroundColor = BrandPalette.ink.withAlphaComponent(0.06).cgColor
+        layer?.cornerRadius = 4
+        layer?.borderWidth = 1
+        layer?.borderColor = BrandPalette.ink.withAlphaComponent(0.15).cgColor
+        setAccessibilityElement(false)
+    }
+    convenience init() { self.init(frame: .zero) }
+    required init?(coder: NSCoder) { nil }
+    override func draw(_ dirtyRect: NSRect) {
+        guard let context = NSGraphicsContext.current?.cgContext else { return }
+        let line = CTLineCreateWithAttributedString(NSAttributedString(string: stringValue, attributes: [
+            .font: font, .foregroundColor: BrandPalette.ink.withAlphaComponent(0.6)]))
+        let ink = CTLineGetImageBounds(line, nil)
+        context.textMatrix = .identity
+        context.textPosition = CGPoint(x: bounds.midX - ink.midX, y: bounds.midY - ink.midY)
+        CTLineDraw(line, context)
     }
 }

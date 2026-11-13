@@ -303,7 +303,7 @@ struct NativePaletteTests {
         #expect(dismisses == 1)
         #expect(view.input.accessibilityLabel() == "Search or Enter URL")
         let rect = BrowserPaletteView.panelFrame(in: NSSize(width: 1024, height: 640))
-        #expect(rect == NSRect(x: 312, y: 34, width: 400, height: 274))
+        #expect(rect == NSRect(x: 129.5, y: 151.5, width: 765, height: 328))
         let small = BrowserPaletteView.panelFrame(in: NSSize(width: 600, height: 400))
         #expect(small.maxX <= 600 && small.maxY <= 400)
     }
