@@ -1674,3 +1674,7 @@
 "Passwords (encrypted)" = "Mots de passe (chiffrés)";
 
 "No other browser found on this Mac." = "Aucun autre navigateur trouvé sur ce Mac.";
+
+"Links from other apps open in Circa" = "Les liens des autres apps s’ouvrent dans Circa";
+
+"Warn before opening dangerous sites" = "Avertir avant d’ouvrir des sites dangereux";

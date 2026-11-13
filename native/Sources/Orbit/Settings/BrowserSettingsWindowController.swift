@@ -139,14 +139,8 @@ final class BrowserSettingsWindowController<Engine: BrowserEngine>: NSWindowCont
         let top = window.frame.maxY
         let frame = NSRect(x: window.frame.minX, y: top - size.height, width: size.width, height: size.height)
         guard frame != window.frame else { return }
-        guard window.isVisible && !OrbitMotionPreferences.prefersReducedMotion else {
-            window.setFrame(frame, display: true); return
-        }
-        NSAnimationContext.runAnimationGroup { context in
-            context.duration = BrowserSettingsMotion.resizeDuration
-            context.timingFunction = BrowserSettingsMotion.timingFunction
-            window.animator().setFrame(frame, display: true)
-        }
+        // Keep the top edge and navigation fixed while only the lower window edge changes.
+        window.setFrame(frame, display: true)
     }
 
     func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
@@ -247,7 +241,7 @@ final class BrowserSettingsWindowController<Engine: BrowserEngine>: NSWindowCont
 
     private func prepareOutgoingPane() {
         guard let window, window.isVisible, !OrbitMotionPreferences.prefersReducedMotion,
-              let view = window.contentView, let root = view.superview,
+              let view = detailView, let root = view.superview,
               let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return }
         view.cacheDisplay(in: view.bounds, to: bitmap)
         outgoingPane?.removeFromSuperlayer()
@@ -263,52 +257,46 @@ final class BrowserSettingsWindowController<Engine: BrowserEngine>: NSWindowCont
         view.alphaValue = 0
     }
 
+    var detailView: NSView? {
+        func find(_ view: NSView) -> NSView? {
+            if view.identifier?.rawValue == "settings-detail-pane" { return view }
+            return view.subviews.lazy.compactMap(find).first
+        }
+        return window?.contentView.flatMap(find)
+    }
+
     private func animatePane() {
         paneTransitionGeneration += 1
         let generation = paneTransitionGeneration
+        guard let view = detailView else { outgoingPane?.removeFromSuperlayer(); outgoingPane = nil; return }
+        view.layer?.removeAnimation(forKey: "pane-entry")
+        view.alphaValue = 1
+        guard window?.isVisible == true, !OrbitMotionPreferences.prefersReducedMotion else {
+            outgoingPane?.removeFromSuperlayer(); outgoingPane = nil
+            return
+        }
         if let outgoing = outgoingPane {
             outgoingPane = nil
             CATransaction.begin()
             CATransaction.setCompletionBlock { outgoing.removeFromSuperlayer() }
             let exit = CABasicAnimation(keyPath: "opacity")
-            exit.fromValue = 1; exit.toValue = 0; exit.duration = BrowserSettingsMotion.exitDuration
-            exit.timingFunction = CAMediaTimingFunction(controlPoints: 1 / 3, 0, 2 / 3, 1 / 3)
+            exit.fromValue = 1; exit.toValue = 0
+            exit.duration = BrowserSettingsMotion.crossfadeDuration
+            exit.timingFunction = BrowserSettingsMotion.timingFunction
             outgoing.opacity = 0
             outgoing.add(exit, forKey: "exit")
             CATransaction.commit()
         }
-        guard let view = window?.contentView else { return }
-        view.layer?.removeAnimation(forKey: "pane-entry")
-        guard window?.isVisible == true, !OrbitMotionPreferences.prefersReducedMotion else {
-            view.alphaValue = 1
-            return
-        }
-        view.wantsLayer = true
-        view.alphaValue = 0
         let fade = CABasicAnimation(keyPath: "opacity")
         fade.fromValue = 0; fade.toValue = 1
-        fade.beginTime = BrowserSettingsMotion.enterDelay
-        fade.duration = BrowserSettingsMotion.enterDuration
-        fade.fillMode = .both
-        fade.isRemovedOnCompletion = false
+        fade.duration = BrowserSettingsMotion.crossfadeDuration
         fade.timingFunction = BrowserSettingsMotion.timingFunction
-        let rise = CABasicAnimation(keyPath: "transform.translation.y")
-        rise.fromValue = view.layer?.superlayer?.isGeometryFlipped == true ? BrowserSettingsMotion.rise : -BrowserSettingsMotion.rise
-        rise.toValue = 0
-        rise.beginTime = fade.beginTime; rise.duration = fade.duration
-        rise.fillMode = .backwards; rise.timingFunction = BrowserSettingsMotion.timingFunction
-        let entry = CAAnimationGroup()
-        entry.animations = [fade, rise]
-        entry.duration = BrowserSettingsMotion.enterDelay + BrowserSettingsMotion.enterDuration
-        entry.fillMode = .both
-        entry.isRemovedOnCompletion = false
         CATransaction.begin()
         CATransaction.setCompletionBlock { [weak self, weak view] in
             guard self?.paneTransitionGeneration == generation else { return }
-            view?.alphaValue = 1
             view?.layer?.removeAnimation(forKey: "pane-entry")
         }
-        view.layer?.add(entry, forKey: "pane-entry")
+        view.layer?.add(fade, forKey: "pane-entry")
         CATransaction.commit()
     }
 
@@ -400,7 +388,8 @@ struct BrowserSettingsView<Engine: BrowserEngine>: View {
     var body: some View {
         HStack(spacing: 0) {
             navigation
-            VStack(alignment: .leading, spacing: 0) {
+            BrowserSettingsDetailHost {
+              VStack(alignment: .leading, spacing: 0) {
                 if runtime.isUnavailable {
                     Text(text("unavailable", "Saved settings could not be opened. Defaults are in use and changes cannot be saved. The existing file is kept."))
                         .foregroundStyle(.secondary).padding(.horizontal, 24).padding(.bottom, 12)
@@ -436,7 +425,7 @@ struct BrowserSettingsView<Engine: BrowserEngine>: View {
                 } else if let profile = model.selectedProfileID {
                     ScrollView {
                       VStack(alignment: .leading, spacing: 16) {
-                        if true {
+                        if model.settingsSection != .spaces {
                           HStack {
                             Text((model.settingsSection ?? .general).title).font(Font(BrandTextStyle.title.font(size: 25))).kerning(BrandTextStyle.title.tracking(size: 25))
                             Spacer()
@@ -457,6 +446,7 @@ struct BrowserSettingsView<Engine: BrowserEngine>: View {
                     Text(text("loading", "Choose an available profile.")).padding(24)
                     Spacer()
                 }
+              }.frame(maxWidth: .infinity, maxHeight: .infinity)
             }.frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .font(Font(BrandFonts.ui(12)))
@@ -718,7 +708,7 @@ struct BrowserSettingsView<Engine: BrowserEngine>: View {
         if let profile = model.selectedProfileID {
             SettingsGroupLabel(title: uiText("Space appearance"))
             SettingsCard {
-                if model.catalog.profiles.count > 1 {
+                Group {
                     SettingsDetailRow(title: uiText("Profile")) {
                         SettingsPopupPicker(uiText("Profile"), selectedTitle: model.catalog.profiles.first(where: { $0.id == profile })?.name ?? "", selection: Binding(get: { profile }, set: { model.selectProfile($0) })) {
                             ForEach(model.catalog.profiles, id: \.id) { Text($0.name).tag($0.id) }
@@ -734,6 +724,11 @@ struct BrowserSettingsView<Engine: BrowserEngine>: View {
                     }
                     SettingsRule()
                     SettingsDetailRow(title: uiText("Theme Color")) { BrowserSettingsGradientPicker(model: model, space: space) }
+                    Text(uiText("Applies to this Space in every window. Other Spaces keep their own themes."))
+                        .font(Font(BrandFonts.ui(10.5))).foregroundStyle(.secondary).padding(13)
+                        .accessibilityIdentifier("settings-appearance-scope")
+                } else {
+                    Text(uiText("Choose a profile with an available Space.")).padding(13)
                 }
                 SettingsRule()
                 SettingsDetailRow(title: uiText("Animations")) {

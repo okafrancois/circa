@@ -19,9 +19,11 @@ struct BrowserSafeBrowsingSettingsRow<Engine: BrowserEngine>: View {
     }
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Toggle(uiText("Safe Browsing"), isOn: Binding(get: { runtime.document.safeBrowsingEnabled }, set: { enabled in
+            Toggle(isOn: Binding(get: { runtime.document.safeBrowsingEnabled }, set: { enabled in
                 model.perform { try await model.setSafeBrowsingEnabled(enabled) }
-            })).toggleStyle(.checkbox).fontWeight(.medium)
+            })) {
+                SettingsRowLabel(title: uiText("Safe Browsing"), subtitle: uiText("Warn before opening dangerous sites"))
+            }.toggleStyle(.checkbox)
                 .accessibilityIdentifier("settings-safe-browsing")
                 .disabled(model.environment.engine.kind != .chromium)
             Text(BrowserSafeBrowsing.requirement).font(Font(BrandFonts.ui(12))).foregroundStyle(.secondary)

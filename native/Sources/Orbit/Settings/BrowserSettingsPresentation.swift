@@ -7,11 +7,8 @@ import SwiftUI
 /// Timing shared by the window, content, and category indicator.
 enum BrowserSettingsMotion {
     static let resizeDuration = 0.38
-    static let exitDuration = 0.09
-    static let enterDelay = 0.10
-    static let enterDuration = 0.32
+    static let crossfadeDuration = 0.14
     static let pillDuration = 0.42
-    static let rise: CGFloat = 6
     static let controlPoints: [Float] = [0.19, 1, 0.22, 1]
     static var timingFunction: CAMediaTimingFunction { .init(controlPoints: 0.19, 1, 0.22, 1) }
 }
@@ -317,5 +314,35 @@ enum SettingsPopupLabels {
         case .reduce: uiText("Reduce Motion")
         case .full: uiText("Full Motion")
         }
+    }
+}
+
+/// Descriptions stay with their setting, so the control is centred on the complete label.
+struct SettingsRowLabel: View {
+    let title: String
+    var subtitle: String? = nil
+    var body: some View {
+        VStack(alignment: .leading, spacing: 1) {
+            Text(title).fontWeight(.medium).fixedSize(horizontal: false, vertical: true)
+            if let subtitle {
+                Text(subtitle).font(Font(BrandFonts.ui(10.5))).opacity(0.6)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+}
+
+/// A stable native boundary for detail-only transitions; navigation lives outside it.
+struct BrowserSettingsDetailHost<Content: View>: NSViewRepresentable {
+    @ViewBuilder var content: Content
+    func makeNSView(context: Context) -> NSHostingView<AnyView> {
+        let view = NSHostingView(rootView: AnyView(content.environment(\.self, context.environment)))
+        view.sizingOptions = []
+        view.identifier = NSUserInterfaceItemIdentifier("settings-detail-pane")
+        view.wantsLayer = true
+        return view
+    }
+    func updateNSView(_ view: NSHostingView<AnyView>, context: Context) {
+        view.rootView = AnyView(content.environment(\.self, context.environment))
     }
 }

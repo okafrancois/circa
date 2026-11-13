@@ -46,10 +46,7 @@ struct SettingsPresentationTests {
     @Test("Window and pane transitions use the approved timing and displacement")
     func motion() {
         #expect(BrowserSettingsMotion.resizeDuration == 0.38)
-        #expect(BrowserSettingsMotion.exitDuration == 0.09)
-        #expect(BrowserSettingsMotion.enterDuration == 0.32)
-        #expect(BrowserSettingsMotion.enterDelay == 0.10)
-        #expect(BrowserSettingsMotion.rise == 6)
+        #expect(BrowserSettingsMotion.crossfadeDuration == 0.14)
         #expect(BrowserSettingsMotion.pillDuration == 0.42)
         #expect(BrowserSettingsMotion.controlPoints == [0.19, 1, 0.22, 1])
         var first: [Float] = [0, 0], second: [Float] = [0, 0]

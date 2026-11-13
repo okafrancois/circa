@@ -15,10 +15,10 @@ struct BrowserSettingsAbout: View {
                 Text(version.uppercased()).font(Font(BrandFonts.mono(10))).foregroundStyle(.secondary).textSelection(.enabled)
                 Text(uiText("Space to think.")).font(Font(BrandFonts.onboardingBody(13))).padding(.bottom, 8)
                 HStack(spacing: 10) {
-                    Button(uiText("Check for Updates…")) { updater.checkForUpdates() }
-                        .keyboardShortcut(.defaultAction)
-                        .buttonStyle(OrbitPrintButtonStyle(primary: true)).disabled(!updater.canCheckForUpdates)
-                        .accessibilityIdentifier("settings-check-updates")
+                    Group {
+                        if updater.canCheckForUpdates { updateButton.keyboardShortcut(.defaultAction) }
+                        else { updateButton.disabled(true) }
+                    }
                     Button(uiText("Copy Version")) {
                         NSPasteboard.general.clearContents(); NSPasteboard.general.setString(version, forType: .string)
                     }.buttonStyle(OrbitPrintButtonStyle()).accessibilityIdentifier("settings-copy-version")
@@ -32,6 +32,11 @@ struct BrowserSettingsAbout: View {
             Text(uiText("Free and open source, MIT license. Built with Swift, AppKit and Chromium."))
                 .font(Font(BrandFonts.ui(10.5))).foregroundStyle(.secondary)
         }.frame(maxWidth: .infinity, alignment: .leading).accessibilityElement(children: .contain).accessibilityIdentifier("settings-about-orbit")
+    }
+    private var updateButton: some View {
+        Button(uiText("Check for Updates…")) { updater.checkForUpdates() }
+            .buttonStyle(OrbitPrintButtonStyle(primary: true))
+            .accessibilityIdentifier("settings-check-updates")
     }
     private var version: String { Self.versionDescription(info: Bundle.main.infoDictionary ?? [:]) }
 

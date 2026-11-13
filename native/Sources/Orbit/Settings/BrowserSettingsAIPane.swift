@@ -25,7 +25,7 @@ struct BrowserSettingsAIPane<Engine: BrowserEngine>: View {
         VStack(alignment: .leading, spacing: 0) {
             Text(uiText("Bring your own AI. Off until you ask.")).font(Font(BrandFonts.onboardingBody(11.5))).foregroundStyle(.secondary).padding(.bottom, 10)
             card { masterRow }
-            Group {
+            if enabled {
                 VStack(alignment: .leading, spacing: 0) {
                     header(uiText("Programs")) {
                         Button(ai.isChecking ? uiText("Checking…") : uiText("Check Again")) { check(explicit: true) }
@@ -60,7 +60,7 @@ struct BrowserSettingsAIPane<Engine: BrowserEngine>: View {
                     }
                     header(uiText("Privacy")) { EmptyView() }
                     card { privacy }
-                }.disabled(!enabled)
+                }
             }
         }
         .background(BrowserSettingsAIScrollOverlay().accessibilityHidden(true))

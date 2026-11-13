@@ -92,8 +92,13 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
 
     private var general: some View {
         Group {
+            if model.environment.sync.showsSettings {
+                BrowserSyncSettingsRow(runtime: model.environment.sync) { value in
+                    model.perform { try await model.environment.sync.setEnabled(value) }
+                }
+            }
             panel {
-                settingRow("Default browser") {
+                settingRow("Default browser", subtitle: "Links from other apps open in Circa") {
                     BrowserDefaultBrowserAction(isDefault: model.defaultStatus?.isOrbit == true,
                         canRequest: model.canRequestDefaultBrowser && !model.isRequestingDefaultBrowser) {
                             model.perform { try await model.requestDefaultBrowser() }
@@ -118,6 +123,16 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
                 }
             }
             panel {
+                Button { model.navigate(to: .profiles) } label: {
+                    HStack(spacing: 12) {
+                        SettingsRowLabel(title: uiText("Profile Settings"),
+                            subtitle: uiText("Manage your default search engine and Auto-Archive in Profile Settings."))
+                        Spacer()
+                        OrbitIcon.view(sfName: "chevron.right", pointSize: 14).frame(width: 14, height: 14)
+                    }.padding(.horizontal, 13).padding(.vertical, 9).contentShape(Rectangle())
+                }.buttonStyle(.plain).accessibilityIdentifier("settings-open-profiles")
+            }
+            panel {
                 settingRow("Save downloads to") {
                     Button { model.chooseDownloadFolder?() } label: {
                         Text(runtime.document.downloads.folderURL.lastPathComponent).lineLimit(1)
@@ -132,7 +147,7 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
             SettingsGroupLabel(title: uiText("Archive"))
             panel {
                 if let profile = model.selectedProfileID {
-                    settingRow("Archive tabs after") {
+                    settingRow("Archive tabs after", subtitle: "Pinned tabs and Favorites are never auto-archived.") {
                         SettingsPopupPicker(uiText("Archive tabs after"), selectedTitle: model.archiveThreshold.map(BrowserArchiveSettingsChange.label) ?? "", selection: Binding(get: { model.archiveThreshold }, set: { value in
                             guard let value else { return }
                             if model.catalog.profiles.count > 1 {
@@ -156,7 +171,6 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
                     }.labelsHidden().frame(width: 135).accessibilityIdentifier("settings-little-archive")
                 }
             }
-            Text(uiText("Pinned tabs and Favorites are never auto-archived.")).font(Font(BrandFonts.ui(10.5))).foregroundStyle(.secondary)
             SettingsGroupLabel(title: uiText("Little Circa & Peek"))
             panel {
                 Toggle(uiText("Links from other apps open in Little Circa"), isOn: Binding(get: { runtime.document.opensExternalLinksInQuickWindow }, set: { value in
@@ -164,9 +178,12 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
                 })).toggleStyle(SettingsSwitchStyle()).padding(.horizontal, 13).padding(.vertical, 9).accessibilityIdentifier("settings-external-little-orbit")
                 if let profile = model.selectedProfileID {
                     rule
-                    Toggle(uiText("Open a Peek window when clicking on links to other sites"), isOn: Binding(get: { runtime.document.profile(profile).opensPinnedLinksInPeek }, set: { value in
+                    Toggle(isOn: Binding(get: { runtime.document.profile(profile).opensPinnedLinksInPeek }, set: { value in
                         model.perform { try await model.updateProfile(profile) { $0.opensPinnedLinksInPeek = value } }
-                    })).toggleStyle(SettingsSwitchStyle()).padding(.horizontal, 13).padding(.vertical, 9).accessibilityIdentifier("settings-pinned-peek")
+                    })) {
+                        SettingsRowLabel(title: uiText("Open a Peek window when clicking on links to other sites"),
+                            subtitle: uiText("Note: This only affects Favorites and Pinned tabs"))
+                    }.toggleStyle(SettingsSwitchStyle()).padding(.horizontal, 13).padding(.vertical, 9).accessibilityIdentifier("settings-pinned-peek")
                     rule
                     Toggle(uiText("Open a Peek window when clicking on links with Shift held"), isOn: Binding(get: { runtime.document.profile(profile).shiftClickOpensPeek }, set: { value in
                         model.perform { try await model.updateProfile(profile) { $0.shiftClickOpensPeek = value } }
@@ -174,6 +191,10 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
                 }
             }
             panel {
+                settingRow(uiFormat("Automatically update my %@", applicationName)) {
+                    BrowserAutomaticUpdateToggle(updater: runtime.updater)
+                }
+                rule
                 liveToggle("Warn before quitting", value: runtime.document.interaction.warnBeforeQuitting,
                            identifier: "settings-warn-before-quitting", save: model.setWarnBeforeQuitting)
             }
@@ -257,7 +278,7 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
                             try await model.updateProfile(profile) { $0.showSearchSuggestions = value }
                         }
                         rule
-                        settingRow("Archive tabs after") {
+                        settingRow("Archive tabs after", subtitle: "Pinned tabs and Favorites are never auto-archived.") {
                             SettingsPopupPicker(uiText("Archive tabs after"), selectedTitle: model.archiveThreshold.map(BrowserArchiveSettingsChange.label) ?? "", selection: Binding(get: { model.archiveThreshold }, set: { value in
                                 guard let value else { return }
                                 if model.catalog.profiles.count > 1 {
@@ -272,7 +293,6 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
                             }.labelsHidden().frame(width: 110).accessibilityIdentifier("settings-auto-archive")
                         }
                     }
-                    Text(uiText("Pinned tabs and Favorites are never auto-archived.")).font(Font(BrandFonts.ui(12))).foregroundStyle(.secondary)
                     panel {
                         HStack(spacing: 12) {
                             VStack(alignment: .leading, spacing: 7) {
@@ -348,12 +368,12 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
             }
             if let profile = model.selectedProfileID {
                 panel {
-                    VStack(alignment: .leading, spacing: 5) {
-                        Toggle(uiText("Open a Peek window when clicking on links to other sites"), isOn: Binding(get: { runtime.document.profile(profile).opensPinnedLinksInPeek }, set: { value in
-                            model.perform { try await model.updateProfile(profile) { $0.opensPinnedLinksInPeek = value } }
-                        })).accessibilityIdentifier("settings-pinned-peek")
-                        Text(uiText("Note: This only affects Favorites and Pinned tabs")).font(Font(BrandFonts.ui(12))).foregroundStyle(.secondary)
-                    }.padding(12)
+                    Toggle(isOn: Binding(get: { runtime.document.profile(profile).opensPinnedLinksInPeek }, set: { value in
+                        model.perform { try await model.updateProfile(profile) { $0.opensPinnedLinksInPeek = value } }
+                    })) {
+                        SettingsRowLabel(title: uiText("Open a Peek window when clicking on links to other sites"),
+                            subtitle: uiText("Note: This only affects Favorites and Pinned tabs"))
+                    }.padding(12).accessibilityIdentifier("settings-pinned-peek")
                     rule
                     Toggle(uiText("Open a Peek window when clicking on links with Shift held"), isOn: Binding(get: { runtime.document.profile(profile).shiftClickOpensPeek }, set: { value in
                         model.perform { try await model.updateProfile(profile) { $0.shiftClickOpensPeek = value } }
@@ -517,10 +537,10 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
             .background(OrbitSettingsStyle.panel, in: RoundedRectangle(cornerRadius: 12))
             .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(OrbitSettingsStyle.border, lineWidth: 1))
     }
-    private func settingRow<Control: View>(_ title: String, icon: String? = nil, @ViewBuilder control: () -> Control) -> some View {
+    private func settingRow<Control: View>(_ title: String, icon: String? = nil, subtitle: String? = nil, @ViewBuilder control: () -> Control) -> some View {
         HStack(spacing: 12) {
             if let icon { OrbitIcon.view(sfName: icon, pointSize: 20).font(.system(size: 20)).frame(width: 20, height: 20) }
-            Text(uiText(title)).fontWeight(.medium).fixedSize(horizontal: false, vertical: true)
+            SettingsRowLabel(title: uiText(title), subtitle: subtitle.map { uiText($0) })
             Spacer(minLength: 8); control()
         }
             .padding(.horizontal, 13).padding(.vertical, 9).frame(minHeight: 38)
