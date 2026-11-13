@@ -18,12 +18,12 @@ final class OrbitOnboardingFinishView: NSView {
         illustration.frame = NSRect(x: 0, y: 435, width: 1200, height: 315)
         title.attributedStringValue = BrandTextStyle.title.attributedString(OrbitOnboardingText.finishTitle, size: 63, attributes: [.foregroundColor: BrandPalette.ink])
         title.maximumNumberOfLines = 2
-        title.alignment = .left; title.frame = NSRect(x: 50, y: 96, width: 650, height: 140)
+        title.alignment = .left; title.frame = NSRect(x: 54, y: 96, width: 650, height: 140)
         body.font = OrbitOnboardingFonts.ui(22); body.textColor = BrandPalette.ink2
         body.alignment = .left; body.frame = NSRect(x: 54, y: 246, width: 620, height: 65)
         body.maximumNumberOfLines = 2
         button.title = OrbitOnboardingText.getStarted; button.accent = BrandPalette.coral
-        button.frame = NSRect(x: 54, y: 360, width: 185, height: 52)
+        button.frame = NSRect(origin: NSPoint(x: 54, y: 360), size: button.intrinsicContentSize)
         button.keyEquivalent = "\r"; button.onPress = { [weak self] in self?.onOpen?() }
         for v in [illustration, title, body, button] { v.wantsLayer = true; addSubview(v) }
         mark.isHidden = true; sticker.isHidden = true; summary.isHidden = true

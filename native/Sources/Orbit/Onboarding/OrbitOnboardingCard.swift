@@ -11,7 +11,7 @@ enum OrbitOnboardingDirection: Equatable { case forward, backward }
 /// during a step change.
 @MainActor
 final class OrbitOnboardingTextPage: NSView {
-    let title = NSTextField(wrappingLabelWithString: "")
+    let title = OrbitOnboardingMomentTitle(wrappingLabelWithString: "")
     let note = NSTextField(wrappingLabelWithString: "")
     let counter = NSTextField(labelWithString: "")
     let body = NSTextField(wrappingLabelWithString: "")
@@ -48,6 +48,7 @@ final class OrbitOnboardingTextPage: NSView {
         counter.font = OrbitOnboardingFonts.mono(11)
         counter.textColor = BrandPalette.cobalt
         counter.frame = NSRect(x: 1030, y: 26, width: 150, height: 16)
+        counter.isHidden = true
         addSubview(counter)
         setAccessibilityElement(false)
         layoutText(hasBack: hasBack)
@@ -159,7 +160,7 @@ final class OrbitOnboardingCardView: NSView {
             }
         }
         let buttonY = M.cardSize.height - M.buttonBottomInset - M.buttonSize.height - (hasSkip ? M.buttonRaiseForSkip : 0)
-        primaryButton.frame = NSRect(x: M.contentX, y: buttonY, width: M.buttonSize.width, height: M.buttonSize.height)
+        primaryButton.frame = NSRect(x: M.contentX, y: buttonY, width: primaryButton.intrinsicContentSize.width, height: primaryButton.intrinsicContentSize.height)
         skipButton.isHidden = !hasSkip
         skipButton.frame.origin = NSPoint(x: primaryButton.frame.maxX + 22, y: buttonY + 16)
         backButton.frame.origin = NSPoint(x: hasSkip ? skipButton.frame.maxX + 22 : primaryButton.frame.maxX + 22, y: buttonY + 16)
@@ -187,7 +188,8 @@ final class OrbitOnboardingCardView: NSView {
         newPage.frame.origin = .zero
         textClip.addSubview(newPage)
         fixedCounter?.removeFromSuperview()
-        addSubview(newPage.counter); fixedCounter = newPage.counter
+        newPage.counter.isHidden = true
+        fixedCounter = newPage.counter
         for control in [backButton, skipButton, primaryButton] as [NSView] { newPage.addSubview(control) }
         if let newRight { rightContent.addSubview(newRight) }
         guard animated, oldPage != nil else {
@@ -228,26 +230,9 @@ final class OrbitOnboardingCardView: NSView {
 
 extension OrbitOnboardingCardView {
     func updateDots(index: Int, skipped: [Int]) {
-        let animated = !dots.isEmpty && !OrbitMotionPreferences.prefersReducedMotion
-        if dots.isEmpty {
-            dots = (0..<7).map { _ in
-                let dot = CALayer(); dot.name = "orbit.onboarding.dot"; dot.cornerRadius = 3
-                layer?.addSublayer(dot); return dot
-            }
-        }
-        CATransaction.begin()
-        CATransaction.setDisableActions(!animated)
-        CATransaction.setAnimationDuration(0.4)
-        CATransaction.setAnimationTimingFunction(OrbitOnboardingMotion.curve)
-        var x: CGFloat = 180
-        for (i, dot) in dots.enumerated() {
-            let width: CGFloat = i == index ? 18 : 6
-            dot.frame = CGRect(x: x, y: 30, width: width, height: 6)
-            dot.backgroundColor = (i == index ? OrbitOnboardingColors.accent : i < index ? OrbitOnboardingColors.title : BrandPalette.inactiveDot).cgColor
-            dot.opacity = skipped.contains(i) ? 0.35 : 1
-            x += width + 6
-        }
-        CATransaction.commit()
+        // Progress is shown by the persistent six-stage label above the title.
+        dots.forEach { $0.removeFromSuperlayer() }
+        dots.removeAll()
     }
 }
 

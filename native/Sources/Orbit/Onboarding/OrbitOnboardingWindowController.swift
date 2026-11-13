@@ -99,6 +99,7 @@ final class OrbitOnboardingWindowController: NSWindowController {
     private var systemColors: AnyCancellable?
     private weak var previewWindow: NSWindow?
     private var previewContent: NSView?
+    private let stageCounter = NSTextField(labelWithString: "")
     private var busy = false
     private var favouritesView: OrbitOnboardingFavouritesView?
     private var promptMock: NSView?
@@ -128,6 +129,10 @@ final class OrbitOnboardingWindowController: NSWindowController {
         finishStage.onOpen = { [weak self] in self?.primaryAction() }
         content.addSubview(finishStage)
         content.addSubview(card)
+        stageCounter.frame = NSRect(x: 54, y: M.windowSize.height - 48 - 24, width: 220, height: 24)
+        stageCounter.font = OrbitOnboardingFonts.mono(16)
+        stageCounter.textColor = BrandPalette.cobalt
+        content.addSubview(stageCounter)
         let grain = OrbitPaperGrainView(frame: content.bounds)
         grain.autoresizingMask = [.width, .height]
         content.addSubview(grain)
@@ -323,6 +328,7 @@ final class OrbitOnboardingWindowController: NSWindowController {
 
     /// Projects `flow` onto the window.
     func render(direction: OrbitOnboardingDirection, animated: Bool) {
+        stageCounter.attributedStringValue = BrandTextStyle.mono.attributedString(OrbitOnboardingText.counter(flow.index + 1), size: 16, attributes: [.foregroundColor: BrandPalette.cobalt])
         let isCard = flow.isCardStep
         welcome.isHidden = flow.step != .welcome
         finishStage.isHidden = flow.step != .finish
@@ -349,8 +355,8 @@ final class OrbitOnboardingWindowController: NSWindowController {
             } else { start() }
         }
         guard isCard else { return }
-        card.layoutControls(hasBack: flow.hasBack, hasSkip: flow.hasSkip, animated: animated)
         card.primaryButton.title = flow.primaryTitle
+        card.layoutControls(hasBack: flow.hasBack, hasSkip: flow.hasSkip, animated: animated)
         let (title, body, note) = text(for: flow.step)
         let page = OrbitOnboardingTextPage(title: title, body: body, note: note, hasBack: flow.hasBack)
         page.counter.stringValue = OrbitOnboardingText.counter(flow.index + 1)

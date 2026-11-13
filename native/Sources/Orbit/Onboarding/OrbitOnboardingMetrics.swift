@@ -32,13 +32,13 @@ enum OrbitOnboardingMetrics {
     static let backPointSize: CGFloat = 13
 
     // Primary button and skip link.
-    static let buttonSize = NSSize(width: 185, height: 52)
-    static let buttonCornerRadius: CGFloat = 26
+    static let buttonSize = NSSize(width: 210, height: 64)
+    static let buttonCornerRadius: CGFloat = 32
     static let buttonBottomInset: CGFloat = 42
     static let buttonRaiseForSkip: CGFloat = 0
     static let skipBaselineBelowButton: CGFloat = 29
     static let skipPointSize: CGFloat = 13
-    static let buttonPointSize: CGFloat = 15
+    static let buttonPointSize: CGFloat = 22
     static let disabledLabelAlpha: CGFloat = 0.75
 
     // Right panel.
@@ -122,7 +122,7 @@ enum OrbitOnboardingFonts {
     static var body: NSFont { ui(22) }
     static var emphasis: NSFont { ui(13) }
     static var back: NSFont { ui(13, weight: .medium) }
-    static var button: NSFont { ui(15, weight: .semibold) }
+    static var button: NSFont { ui(22, weight: .bold) }
     static var skip: NSFont { ui(14) }
     static var browser: NSFont { ui(15, weight: .medium) }
     static var choiceStrong: NSFont { title(30) }

@@ -22,14 +22,14 @@ final class OrbitOnboardingWelcomeView: NSView {
         headline.lineBreakMode = .byWordWrapping
         headline.alignment = .left
         headline.maximumNumberOfLines = 2
-        headline.frame = NSRect(x: 50, y: 242, width: 650, height: 205)
+        headline.frame = NSRect(x: 54, y: 242, width: 650, height: 182)
         body.font = OrbitOnboardingFonts.ui(22)
         body.textColor = BrandPalette.ink2
         body.alignment = .left
-        body.frame = NSRect(x: 54, y: 438, width: 510, height: 40)
+        body.frame = NSRect(x: 54, y: 427, width: 510, height: 40)
         button.title = OrbitOnboardingText.start
         button.accent = OrbitOnboardingColors.welcomeButton
-        button.frame = NSRect(x: 54, y: 656, width: 126, height: 52)
+        button.frame = NSRect(origin: NSPoint(x: 54, y: 644), size: button.intrinsicContentSize)
         button.labelColor = BrandPalette.pageWhite
         button.keyEquivalent = "\r"
         button.onPress = { [weak self] in self?.onContinue?() }

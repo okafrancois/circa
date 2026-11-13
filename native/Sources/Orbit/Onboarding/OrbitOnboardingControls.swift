@@ -34,10 +34,34 @@ final class OrbitOnboardingPrimaryButton: NSButton {
 
     override var title: String { didSet { refresh() } }
     override var isEnabled: Bool { didSet { refresh() } }
-    override var wantsUpdateLayer: Bool { true }
+    override var wantsUpdateLayer: Bool { false }
+
+    override func draw(_ dirtyRect: NSRect) {
+        let shadow: CGFloat = isHighlighted ? 0 : 3
+        let face = NSRect(x: 1, y: isFlipped ? 1 : 1 + shadow, width: bounds.width - 2, height: bounds.height - 5)
+        let shadowRect = face.offsetBy(dx: 0, dy: isFlipped ? shadow : -shadow)
+        BrandPalette.ink.setFill()
+        NSBezierPath(roundedRect: shadowRect, xRadius: face.height / 2, yRadius: face.height / 2).fill()
+        accent.setFill()
+        let outline = NSBezierPath(roundedRect: face, xRadius: face.height / 2, yRadius: face.height / 2)
+        outline.fill()
+        BrandPalette.ink.setStroke(); outline.lineWidth = 2; outline.stroke()
+        let text = attributedTitle
+        let size = text.size()
+        text.draw(at: NSPoint(x: (bounds.width - size.width) / 2, y: face.midY - size.height / 2))
+    }
+
+    override var intrinsicContentSize: NSSize {
+        let label = (title as NSString).size(withAttributes: [.font: OrbitOnboardingFonts.button])
+        return NSSize(width: ceil(label.width) + 56, height: 64)
+    }
 
     func refresh() {
-        layer?.backgroundColor = accent.cgColor
+        invalidateIntrinsicContentSize()
+        layer?.backgroundColor = NSColor.clear.cgColor
+        layer?.borderWidth = 0
+        layer?.shadowOpacity = 0
+        needsDisplay = true
         let alpha = isEnabled ? 1 : M.disabledLabelAlpha
         let paragraph = NSMutableParagraphStyle()
         paragraph.alignment = .center
