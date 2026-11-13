@@ -67,6 +67,13 @@ enum OrbitOnboardingStartup {
                 services.waitsForBrowserPreview = true
                 services.persist = { record in try? BrowserOnboardingFiles.save(record, dataDirectory: configuration.dataRoot) }
                 services.sourceArtwork = { OrbitOnboardingArtwork.artwork(for: $0, synthetic: configuration.usesMockKeychain) }
+                let icons = FavoriteIconStore(directory: configuration.dataRoot.appendingPathComponent("Favorite Icons", isDirectory: true))
+                let memory = SidebarIconMemoryCache(store: icons)
+                services.cachedFavicon = { memory.image(profile: space.profileID, home: $0) }
+                services.favicon = { url in
+                    guard let pixels = await icons.image(profile: space.profileID, home: url) else { return nil }
+                    return await pixels.nativeImage()
+                }
                 services.loadFavourites = { try await preparation.favourites($0, configuration: configuration) }
                 services.prepareFinish = { flow in
                     // Persist the initial theme before the importer opens its exclusive target.
@@ -95,6 +102,7 @@ enum OrbitOnboardingStartup {
                     try BrowserSessionFileStore().save(await imported.sessionDocument(), to: configuration.sessionFile)
                     return duration
                 }
+                services.observeImportProgress = { preparation.onProgress = $0 }
                 services.importSummary = { (try? BrowserOnboardingFiles.load(dataDirectory: configuration.dataRoot))?.importSummary }
                 services.isDefaultBrowser = { configuration.usesMockKeychain ? nil : BrowserDefaultBrowserService().status().isOrbit }
                 services.requestDefaultBrowser = {

@@ -12,7 +12,7 @@ ORBIT_RESOURCE_FILES = frozenset({
     'vector-provenance.json', 'wordmark.pdf', 'wordmark.svg',
     'planet-work.png', 'planet-home.png', 'planet-read.png', 'planet-side.png', 'planet-sky.png', 'planet-night.png', 'empty-space.png',
     'onboarding-trajectory.png',
-    'onboarding-moon-body.png', 'onboarding-moon-frame.png', 'onboarding-moon-front.png', 'paper-grain.png',
+    'onboarding-sync-label-first.png', 'onboarding-sync-label-second.png', 'onboarding-sync-star-0.png', 'onboarding-sync-star-1.png', 'onboarding-trajectory-star-0.png', 'onboarding-trajectory-star-1.png', 'onboarding-trajectory-star-2.png', 'onboarding-default-star-0.png', 'onboarding-default-star-1.png', 'onboarding-default.png', 'onboarding-planet-0.png', 'onboarding-planet-1.png', 'onboarding-planet-2.png', 'onboarding-planet-3.png', 'onboarding-moon-body.png', 'onboarding-moon-frame.png', 'onboarding-moon-front.png', 'paper-grain.png',
     'settings-nav-general.png', 'settings-nav-profiles.png', 'settings-nav-spaces.png', 'settings-nav-shortcuts.png', 'settings-nav-links.png', 'settings-nav-ai.png', 'settings-nav-privacy.png', 'settings-nav-advanced.png', 'settings-nav-appearance.png', 'settings-nav-about.png', 'onboarding-sync-first.png', 'onboarding-sync-second.png', 'onboarding-sync-link.png', 'onboarding-horizon-moon.png', 'onboarding-horizon-flag.png', 'onboarding-horizon-satellite.png', 'onboarding-horizon-star-0.png', 'onboarding-horizon-star-1.png', 'onboarding-horizon-star-2.png', 'onboarding-horizon-star-3.png', 'onboarding-horizon-star-4.png', 'sputnik.png',
     'page-crashed.png', 'page-private.png', 'air-traffic-control.png',
 })
@@ -27,8 +27,8 @@ ICON_RESOURCE_FILES = frozenset({'catalog.json'} | {
 ICON_RESOURCE_DIRECTORIES = frozenset(str(parent) for name in ICON_RESOURCE_FILES
     for parent in Path(name).parents if str(parent) != '.') | {'', 'template', 'color'}
 BRAND_FONT_FILES = frozenset({
-    'mark.pdf', 'BricolageGrotesque-ExtraBold.ttf', 'BricolageGrotesque-OFL.txt',
-    'DMSans-Regular.ttf', 'DMSans-Medium.ttf', 'DMSans-SemiBold.ttf', 'DMSans-Bold.ttf',
+    'mark.pdf', 'BricolageGrotesque-Variable.ttf', 'BricolageGrotesque-ExtraBold.ttf', 'BricolageGrotesque-OFL.txt',
+    'DMSans-Variable.ttf', 'DMSans-Regular.ttf', 'DMSans-Medium.ttf', 'DMSans-SemiBold.ttf', 'DMSans-Bold.ttf',
     'DMSans-OFL.txt', 'DMMono-Regular.ttf', 'DMMono-OFL.txt',
 })
 APP_ICON_IDS = ('stage', 'paper', 'sunset', 'afterglow', 'frost', 'riso', 'ink')

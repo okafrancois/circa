@@ -118,6 +118,11 @@ extension OrbitApplication {
         let flow = OrbitOnboardingFlow(step: step, sources: await onboardingSources(synthetic: synthetic),
                                        syncAvailability: onboardingSyncAvailability(), restoring: record)
         var services = OrbitOnboardingServices()
+        services.cachedFavicon = { [weak environment] url in environment?.sidebarIconMemory.image(profile: profileID, home: url) }
+        services.favicon = { [weak environment] url in
+            guard let pixels = await environment?.favoriteIcons?.image(profile: profileID, home: url) else { return nil }
+            return await pixels.nativeImage()
+        }
         services.waitsForBrowserPreview = true
         services.persist = { record in try? BrowserOnboardingFiles.save(record, dataDirectory: dataDirectory) }
         services.setSync = { [weak environment] enabled in

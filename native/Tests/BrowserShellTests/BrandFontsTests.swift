@@ -1,4 +1,5 @@
 import AppKit
+import CoreText
 import BrowserCore
 import Testing
 @testable import BrowserShell
@@ -15,9 +16,12 @@ struct BrandFontsTests {
     @Test("Bundled roles resolve without a system fallback")
     func brandedRoles() {
         for size: CGFloat in [11, 15, 40, 84] {
-            #expect(BrandTextStyle.title.font(size: size).fontName == "BricolageGrotesque-ExtraBold")
-            #expect(BrandFonts.onboardingBody(size).fontName == "DMSans-Regular")
-            #expect(BrandFonts.onboardingBody(size, weight: .bold).fontName == "DMSans-Bold")
+            let displayName = BrandTextStyle.title.font(size: size).fontName
+            #expect(displayName.hasPrefix("BricolageGrotesque") && displayName.contains("ExtraBold"))
+            #expect(BrandFonts.onboardingBody(size).fontName.hasPrefix("DMSans"))
+            let bold = BrandFonts.onboardingBody(size, weight: .bold)
+            #expect(bold.fontName.hasPrefix("DMSans"))
+            #expect((CTFontCopyVariation(bold as CTFont) as? [NSNumber: NSNumber])?[NSNumber(value: 2_003_265_652)]?.intValue == 700)
             #expect(BrandFonts.mono(size).fontName == "DMMono-Regular")
             #expect(BrandTextStyle.title.tracking(size: size) == -0.045 * size)
         }

@@ -65,15 +65,9 @@ final class OrbitOnboardingTextPage: NSView {
         let width = M.contentWidth
         let titleHeight = ceil(title.sizeThatFits(NSSize(width: width, height: 1000)).height)
         title.frame = NSRect(x: M.contentX, y: 0, width: width, height: titleHeight)
-        let font = OrbitOnboardingFonts.title
-        let capTop = hasBack ? M.titleCapTopWithBack : M.titleCapTop
-        let titleFirstBaseline = Self.firstBaseline(of: title)
-        title.frame.origin.y = capTop + font.capHeight - titleFirstBaseline
-        let lines = max(1, Int((titleHeight / M.titleLineHeight).rounded()))
-        let titleLastBaseline = capTop + font.capHeight + CGFloat(lines - 1) * M.titleLineHeight
-        let bodyHeight = ceil(body.sizeThatFits(NSSize(width: width, height: 1000)).height)
-        body.frame = NSRect(x: M.contentX, y: 0, width: width, height: bodyHeight)
-        body.frame.origin.y = titleLastBaseline + M.titleToBodyBaseline - Self.firstBaseline(of: body)
+        title.frame.origin.y = M.titleCapTop
+        let bodyHeight = body.stringValue.isEmpty ? 0 : ceil(body.sizeThatFits(NSSize(width: 490.32, height: 1000)).height)
+        body.frame = NSRect(x: M.contentX - 2, y: title.frame.maxY + 15.79, width: 490.32, height: bodyHeight)
     }
 
     override func hitTest(_ point: NSPoint) -> NSView? {
@@ -96,7 +90,7 @@ final class OrbitOnboardingCardView: NSView {
     let leftPanel = CAShapeLayer()
     let textClip = OrbitOnboardingPassthroughView()
     let rightContent = NSView()
-    let backButton = OrbitOnboardingLinkButton(title: OrbitOnboardingText.back, arrow: true, font: OrbitOnboardingFonts.back)
+    let backButton = OrbitOnboardingLinkButton(title: OrbitOnboardingText.back, arrow: false, font: OrbitOnboardingFonts.back)
     let skipButton = OrbitOnboardingLinkButton(title: OrbitOnboardingText.skip, arrow: false, font: OrbitOnboardingFonts.skip)
     let primaryButton = OrbitOnboardingPrimaryButton()
     private(set) var page: OrbitOnboardingTextPage?
@@ -128,6 +122,7 @@ final class OrbitOnboardingCardView: NSView {
         for control in [backButton, skipButton, primaryButton] as [NSView] { addSubview(control) }
         backButton.frame.origin = NSPoint(x: M.contentX - 2, y: M.backCapTop - (backButton.frame.height - OrbitOnboardingFonts.back.capHeight) / 2)
         primaryButton.keyEquivalent = "\r"
+        backButton.isUnderlined = false
     }
 
     required init?(coder: NSCoder) { nil }
@@ -144,8 +139,8 @@ final class OrbitOnboardingCardView: NSView {
         layer?.backgroundColor = NSColor.clear.cgColor
         CATransaction.commit()
         primaryButton.accent = BrandPalette.coral
-        backButton.accent = OrbitOnboardingColors.body
-        skipButton.accent = OrbitOnboardingColors.body
+        backButton.accent = BrandPalette.ink
+        skipButton.accent = BrandPalette.ink
     }
 
     /// Fixed left-panel controls change at once (measured: before the push starts).
@@ -162,8 +157,8 @@ final class OrbitOnboardingCardView: NSView {
         let buttonY = M.cardSize.height - M.buttonBottomInset - M.buttonSize.height - (hasSkip ? M.buttonRaiseForSkip : 0)
         primaryButton.frame = NSRect(x: M.contentX, y: buttonY, width: primaryButton.intrinsicContentSize.width, height: primaryButton.intrinsicContentSize.height)
         skipButton.isHidden = !hasSkip
-        skipButton.frame.origin = NSPoint(x: primaryButton.frame.maxX + 22, y: buttonY + 16)
-        backButton.frame.origin = NSPoint(x: hasSkip ? skipButton.frame.maxX + 22 : primaryButton.frame.maxX + 22, y: buttonY + 16)
+        skipButton.frame.origin = NSPoint(x: primaryButton.frame.maxX + 22.11, y: primaryButton.frame.minY + 32 - skipButton.frame.height / 2)
+        backButton.frame.origin = NSPoint(x: hasSkip ? skipButton.frame.maxX + 22.11 : primaryButton.frame.maxX + 22.11, y: primaryButton.frame.minY + 32 - backButton.frame.height / 2)
         let wasShown = !backButton.isHidden && backButton.alphaValue > 0
         backButton.isHidden = false
         if hasBack != wasShown {
@@ -175,7 +170,7 @@ final class OrbitOnboardingCardView: NSView {
                 fade.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
                 layer.add(fade, forKey: Self.fadeKey)
             }
-            backButton.alphaValue = hasBack ? 1 : 0
+            backButton.alphaValue = hasBack ? 0.6 : 0
         }
         backButton.isEnabled = hasBack
         backButton.setAccessibilityElement(hasBack)
@@ -216,13 +211,13 @@ final class OrbitOnboardingCardView: NSView {
         guard let page else { return }
         for (view, delay) in [(page.title, 0.38), (page.body, 0.45), (page.note, 0.52)] {
             view.wantsLayer = true
-            OrbitOnboardingMotion.entrance(view, y: 32, duration: 0.5, delay: delay)
+            OrbitOnboardingMotion.entrance(view, y: 31.58, duration: 0.5, delay: delay)
         }
         for button in [primaryButton, skipButton, backButton] as [NSView] {
-            OrbitOnboardingMotion.entrance(button, y: 32, duration: 0.5, delay: 0.59)
+            OrbitOnboardingMotion.entrance(button, y: 31.58, duration: 0.5, delay: 0.59)
         }
         for view in rightView?.subviews ?? [] where !(view is OrbitOnboardingSpaceArt) && !(view is OrbitOnboardingIllustrationView) && !(view is OrbitOnboardingMiniPreview) {
-            OrbitOnboardingMotion.entrance(view, y: 32, duration: 0.5, delay: page.body.stringValue.isEmpty ? 0.45 : 0.52)
+            OrbitOnboardingMotion.entrance(view, y: 31.58, duration: 0.5, delay: page.body.stringValue.isEmpty ? 0.45 : 0.52)
         }
     }
 
@@ -230,7 +225,7 @@ final class OrbitOnboardingCardView: NSView {
 
 extension OrbitOnboardingCardView {
     func updateDots(index: Int, skipped: [Int]) {
-        // Progress is shown by the persistent six-stage label above the title.
+        // Progress is shown by the persistent progress bar and step label.
         dots.forEach { $0.removeFromSuperlayer() }
         dots.removeAll()
     }

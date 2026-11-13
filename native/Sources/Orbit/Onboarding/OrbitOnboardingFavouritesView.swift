@@ -5,11 +5,18 @@ import BrowserShell
 @MainActor
 final class OrbitOnboardingFavouritesView: NSView {
     var onToggle: ((Int) -> Void)?
+    var icons: [URL: NSImage] = [:] { didSet { update(sites: currentSites) } }
+    var resolvedIcons: [URL: NSImage] {
+        Dictionary(uniqueKeysWithValues: zip(currentSites, buttons).compactMap { site, button in
+            button.artwork.image.map { (site.url, $0) }
+        })
+    }
+    private var currentSites: [BrowserOnboardingFavourite] = []
     private var checks: [CALayer] = []
     private var buttons: [OrbitOnboardingFavouriteButton] = []
     private let pins = OrbitOnboardingFlippedView(frame: NSRect(x: 0, y: 210, width: 216, height: 88))
     init(sites: [BrowserOnboardingFavourite]) {
-        super.init(frame: NSRect(x: 0, y: 0, width: 590, height: 220))
+        super.init(frame: NSRect(x: 0, y: 0, width: 474, height: 220))
         wantsLayer = true
         clipsToBounds = false
         pins.wantsLayer = true
@@ -26,15 +33,15 @@ final class OrbitOnboardingFavouritesView: NSView {
         hint.font = OrbitOnboardingFonts.mono(12); hint.textColor = BrandPalette.ink3
         hint.isHidden = true; addSubview(hint)
         for index in sites.indices {
-            let button = OrbitOnboardingFavouriteButton(frame: NSRect(x: CGFloat(index % 6) * 100, y: CGFloat(index / 6) * 100, width: 86, height: 86))
+            let button = OrbitOnboardingFavouriteButton(frame: NSRect(x: CGFloat(index % 4) * 120.39, y: CGFloat(index / 4) * 99.08, width: 106.18, height: 84.94))
             button.isBordered = false
             button.wantsLayer = true
-            button.layer?.cornerRadius = 14
+            button.layer?.cornerRadius = 20.53
             button.clipsToBounds = false
             button.layer?.masksToBounds = false
             button.layer?.backgroundColor = BrandPalette.pageWhite.withAlphaComponent(0.6).cgColor
-            let check = CALayer(); check.frame = CGRect(x: button.bounds.width - 12, y: -5, width: 18, height: 18)
-            check.cornerRadius = 9
+            let check = CALayer(); check.frame = CGRect(x: button.bounds.width - 18.95, y: -7.89, width: 26.84, height: 26.84)
+            check.cornerRadius = 13.42
             button.layer?.addSublayer(check); checks.append(check)
             button.imagePosition = .noImage
             button.imageScaling = .scaleNone
@@ -47,10 +54,11 @@ final class OrbitOnboardingFavouritesView: NSView {
     required init?(coder: NSCoder) { nil }
     override var isFlipped: Bool { true }
     func update(sites: [BrowserOnboardingFavourite]) {
+        currentSites = sites
         for (index, site) in sites.enumerated() where buttons.indices.contains(index) {
             let button = buttons[index]
             let color = BrandPalette.siteColors[index % BrandPalette.siteColors.count]
-            button.artwork.image = NSImage(size: NSSize(width: 30, height: 30), flipped: false) { rect in
+            button.artwork.image = icons[site.url] ?? NSImage(size: NSSize(width: 30, height: 30), flipped: false) { rect in
                 color.setFill(); NSBezierPath(roundedRect: rect, xRadius: 9, yRadius: 9).fill()
                 let letter = String(site.title.prefix(1))
                 let attributes: [NSAttributedString.Key: Any] = [.font: OrbitOnboardingFonts.ui(13, weight: .bold), .foregroundColor: NSColor.white]
@@ -61,17 +69,27 @@ final class OrbitOnboardingFavouritesView: NSView {
             let hint = site.visits.map { uiFormat("%d visits", $0) } ?? site.url.host ?? ""
             button.nameField.stringValue = site.title
             button.hintField.stringValue = hint
-            button.layer?.borderWidth = site.selected ? 2 : 0
+            button.layer?.borderWidth = 0
+            button.outline.frame = button.bounds
+            button.outline.path = CGPath(roundedRect: button.bounds.insetBy(dx: -1.58, dy: -1.58), cornerWidth: 22.11, cornerHeight: 22.11, transform: nil)
+            button.outline.opacity = site.selected ? 1 : 0
             button.layer?.borderColor = BrandPalette.ink.cgColor
             button.layer?.backgroundColor = BrandPalette.pageWhite.withAlphaComponent(site.selected ? 1 : 0.6).cgColor
+            let newlySelected = site.selected && checks[index].isHidden
             checks[index].isHidden = !site.selected
+            if newlySelected, !OrbitMotionPreferences.prefersReducedMotion {
+                let pop = CAKeyframeAnimation(keyPath: "transform.scale")
+                pop.values = (0...60).map { frame in let t = Double(frame) / 60 - 1; return 1 + 4 * t * t * t + 3 * t * t }
+                pop.timingFunction = CAMediaTimingFunction(name: .linear)
+                pop.duration = 0.3; checks[index].add(pop, forKey: "orbit.checkPop")
+            }
             checks[index].backgroundColor = (site.selected ? BrandPalette.controlAccent : .white).cgColor
             checks[index].borderWidth = site.selected ? 0 : 1.5
             checks[index].borderColor = BrandPalette.controlBorder.cgColor
             checks[index].sublayers?.forEach { $0.removeFromSuperlayer() }
             if site.selected {
                 let tick = CAShapeLayer(); let path = CGMutablePath()
-                path.move(to: CGPoint(x: 4, y: 9)); path.addLine(to: CGPoint(x: 8, y: 13)); path.addLine(to: CGPoint(x: 14, y: 6))
+                path.move(to: CGPoint(x: 6, y: 13.5)); path.addLine(to: CGPoint(x: 12, y: 19.5)); path.addLine(to: CGPoint(x: 21, y: 9))
                 tick.path = path; tick.strokeColor = NSColor.white.cgColor; tick.fillColor = nil; tick.lineWidth = 1.8
                 checks[index].addSublayer(tick)
             }
@@ -83,7 +101,7 @@ final class OrbitOnboardingFavouritesView: NSView {
         let rows = max(2, Int(ceil(Double(selected.count) / 3)))
         pins.setFrameSize(NSSize(width: 216, height: CGFloat(rows) * 40 + 8))
         pins.layer?.sublayers?.first?.frame = pins.bounds
-        setFrameSize(NSSize(width: 590, height: max(200, CGFloat((sites.count + 5) / 6) * 100)))
+        setFrameSize(NSSize(width: 474, height: max(200, CGFloat((sites.count + 3) / 4) * 99.08)))
         for i in 0..<max(6, Int(ceil(Double(selected.count) / 3)) * 3) {
             let pin = NSTextField(labelWithString: i < selected.count ? String(selected[i].title.prefix(1)) : "")
             pin.alignment = .center; pin.font = OrbitOnboardingFonts.ui(14, weight: .bold)
@@ -94,18 +112,22 @@ final class OrbitOnboardingFavouritesView: NSView {
             pins.addSubview(pin)
         }
     }
-    @objc private func toggle(_ sender: NSButton) { onToggle?(sender.tag) }
+    @objc private func toggle(_ sender: NSButton) { onToggle?(sender.tag); OrbitOnboardingMotion.pop(sender, from: 0.88, duration: 0.35) }
 }
 
 @MainActor
 private final class OrbitOnboardingFavouriteButton: NSButton {
+    let outline = CAShapeLayer()
     let artwork = NSImageView()
     let nameField = NSTextField(labelWithString: "")
     let hintField = NSTextField(labelWithString: "")
     override init(frame: NSRect) {
         super.init(frame: frame)
         title = ""
-        artwork.frame = NSRect(x: (frame.width - 30) / 2, y: (frame.height - 30) / 2, width: 30, height: 30)
+        wantsLayer = true
+        outline.fillColor = nil; outline.strokeColor = BrandPalette.ink.cgColor; outline.lineWidth = 3.16
+        layer?.addSublayer(outline)
+        artwork.frame = NSRect(x: (frame.width - 37.9) / 2, y: (frame.height - 37.9) / 2, width: 37.9, height: 37.9)
         nameField.frame = NSRect(x: 8, y: 49, width: frame.width - 16, height: 17)
         nameField.font = OrbitOnboardingFonts.ui(12)
         nameField.textColor = BrandPalette.ink

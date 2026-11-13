@@ -14,7 +14,7 @@ enum OrbitOnboardingText {
     static var favouritesBody: String { uiText("They sit at the top of the sidebar, in every Space.") }
     static var favouritesImportedBody: String { uiText("These are the sites you visited most. Pick the ones you want at the top of the sidebar, in every Space.") }
     static func favouriteHint(_ count: Int) -> String { uiFormat("%d selected · add more from the sidebar menu", count) }
-    static func counter(_ step: Int) -> String { uiFormat("%d / %d", min(step, 6), 6) }
+    static func counter(_ step: Int) -> String { uiFormat("%d / %d", step, OrbitOnboardingFlow.steps.count) }
     static func sticker(duration: Double?, sync: Bool) -> String {
         let privacy = sync ? uiText("synced to your iCloud") : uiText("nothing uploaded")
         // A sub-second import still reads as one second, never "0 s".

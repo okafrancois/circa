@@ -4,7 +4,7 @@ import CoreText
 /// Bundled brand typography and vector mark.
 public enum BrandFonts {
     private static let registration: Void = {
-        for name in ["BricolageGrotesque-ExtraBold", "DMSans-Regular", "DMSans-Medium", "DMSans-SemiBold", "DMSans-Bold", "DMMono-Regular"] {
+        for name in ["BricolageGrotesque-ExtraBold", "BricolageGrotesque-Variable", "DMSans-Variable", "DMSans-Regular", "DMSans-Medium", "DMSans-SemiBold", "DMSans-Bold", "DMMono-Regular"] {
             if let url = BrowserText.resourceBundle?.url(forResource: name, withExtension: "ttf", subdirectory: "BrandFonts")
                 ?? BrowserText.resourceBundle?.url(forResource: name, withExtension: "ttf") {
                 CTFontManagerRegisterFontsForURL(url as CFURL, .process, nil)
@@ -17,12 +17,25 @@ public enum BrandFonts {
         return NSFont(name: name, size: size)
     }
 
+    /// Display optical size follows the unscaled type, independently of window magnification.
+    public static func display(_ size: CGFloat, opticalSize: CGFloat) -> NSFont {
+        guard let base = registered("BricolageGrotesque-96ptExtraBold", size: size) else { return .boldSystemFont(ofSize: size) }
+        let variation: [NSNumber: CGFloat] = [NSNumber(value: 1_869_640_570): opticalSize,
+            NSNumber(value: 2_003_265_652): 800, NSNumber(value: 2_003_072_104): 100]
+        let key = NSFontDescriptor.AttributeName(rawValue: kCTFontVariationAttribute as String)
+        return NSFont(descriptor: base.fontDescriptor.addingAttributes([key: variation]), size: size) ?? base
+    }
+
     public static func ui(_ size: CGFloat, weight: NSFont.Weight = .regular) -> NSFont {
         BrandTextStyle.ui.font(size: size, weight: weight)
     }
     /// Branded copy uses the bundled text family.
     public static func onboardingBody(_ size: CGFloat, weight: NSFont.Weight = .regular) -> NSFont {
-        BrandTextStyle.body.font(size: size, weight: weight)
+        guard let base = registered("DMSans-9ptRegular", size: size) else { return BrandTextStyle.body.font(size: size, weight: weight) }
+        let value: CGFloat = weight >= .bold ? 700 : weight >= .semibold ? 600 : weight >= .medium ? 500 : 400
+        let variation: [NSNumber: CGFloat] = [NSNumber(value: 1_869_640_570): 14, NSNumber(value: 2_003_265_652): value]
+        let key = NSFontDescriptor.AttributeName(rawValue: kCTFontVariationAttribute as String)
+        return NSFont(descriptor: base.fontDescriptor.addingAttributes([key: variation]), size: size) ?? base
     }
     public static func mono(_ size: CGFloat) -> NSFont {
         BrandTextStyle.mono.font(size: size)
@@ -58,9 +71,9 @@ public enum BrandTextStyle: CaseIterable {
 
     /// Shortcut letters, digits and modifier symbols share the system face.
     public func attributedString(_ text: String, size: CGFloat, weight: NSFont.Weight = .regular,
-                                 attributes: [NSAttributedString.Key: Any] = [:]) -> NSAttributedString {
+                                 opticalSize: CGFloat? = nil, attributes: [NSAttributedString.Key: Any] = [:]) -> NSAttributedString {
         var attributes = attributes
-        attributes[.font] = font(size: size, weight: weight)
+        attributes[.font] = self == .title && opticalSize != nil ? BrandFonts.display(size, opticalSize: opticalSize!) : font(size: size, weight: weight)
         if self == .title { attributes[.kern] = tracking(size: size) }
         return NSAttributedString(string: text, attributes: attributes)
     }

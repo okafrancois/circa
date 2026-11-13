@@ -31,7 +31,7 @@ CEF/Chromium builds with optional proprietary media codecs need a separate redis
 
 ## Bundled typefaces
 
-Bricolage Grotesque (800), DM Sans (400–700), and DM Mono (400) are distributed under the SIL Open Font License 1.1. Static instances of the variable fonts are bundled for predictable AppKit registration.
+Bricolage Grotesque (800), DM Sans (400–700), and DM Mono (400) are distributed under the SIL Open Font License 1.1. Static instances are bundled for predictable AppKit registration. The Bricolage Grotesque and DM Sans variable TTFs are also bundled to set optical sizes for onboarding.
 
 - Bricolage Grotesque: https://github.com/google/fonts/tree/main/ofl/bricolagegrotesque
 - DM Sans: https://github.com/google/fonts/tree/main/ofl/dmsans

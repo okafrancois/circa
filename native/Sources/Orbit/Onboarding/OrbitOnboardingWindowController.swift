@@ -17,6 +17,9 @@ struct OrbitOnboardingThemeTarget {
 
 /// What the onboarding asks of the application. Tests and capture tools supply inert versions.
 struct OrbitOnboardingServices {
+    var cachedFavicon: @MainActor (URL) -> NSImage? = { _ in nil }
+    var favicon: @MainActor (URL) async -> NSImage? = { _ in nil }
+    var observeImportProgress: @MainActor (@escaping @MainActor (OrbitOnboardingImportStatus) -> Void) -> Void = { _ in }
     var waitsForBrowserPreview = false
     var persist: @MainActor (BrowserOnboardingRecord) -> Void = { _ in }
     var setSync: @MainActor (Bool) async -> Void = { _ in }
@@ -34,7 +37,21 @@ struct OrbitOnboardingServices {
 @MainActor
 final class OrbitOnboardingWindow: NSWindow {
     /// Centre of the first window button, from the window's top-left (measured 19.8, 23.7).
-    static let firstButtonCenter = CGPoint(x: 19.8, y: 23.7)
+    static let firstButtonCenter = CGPoint(x: 34, y: 29.2)
+
+    var onPrimaryAction: (() -> Void)?
+
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        if ["\r", "\n"].contains(event.charactersIgnoringModifiers ?? ""), event.modifierFlags.intersection([.command, .option, .control]).isEmpty {
+            onPrimaryAction?(); return true
+        }
+        return super.performKeyEquivalent(with: event)
+    }
+
+    override func keyDown(with event: NSEvent) {
+        if ["\r", "\n"].contains(event.charactersIgnoringModifiers ?? "") { onPrimaryAction?() }
+        else { super.keyDown(with: event) }
+    }
 
     init() {
         super.init(contentRect: NSRect(origin: .zero, size: M.windowSize),
@@ -69,7 +86,7 @@ final class OrbitOnboardingWindow: NSWindow {
         for (index, type) in buttons.enumerated() {
             guard let button = standardWindowButton(type), let container = button.superview else { continue }
             button.isEnabled = false
-            let center = CGPoint(x: Self.firstButtonCenter.x + CGFloat(index) * 19.8, y: Self.firstButtonCenter.y)
+            let center = CGPoint(x: Self.firstButtonCenter.x + CGFloat(index) * 26.84, y: Self.firstButtonCenter.y)
             // Container coordinates: its top edge is the window's top edge.
             let top = container.isFlipped ? center.y : container.bounds.height - center.y
             let origin = NSPoint(x: center.x - button.frame.width / 2, y: top - button.frame.height / 2)
@@ -100,6 +117,12 @@ final class OrbitOnboardingWindowController: NSWindowController {
     private weak var previewWindow: NSWindow?
     private var previewContent: NSView?
     private let stageCounter = NSTextField(labelWithString: "")
+    private let progressTrack = CALayer()
+    private let progressFill = CALayer()
+    private var lastProgressValue: CGFloat?
+    private var choicesTop: CGFloat = 240
+    private var selectionNote: NSTextField?
+    private var importProgressView: OrbitOnboardingImportProgressView?
     private var busy = false
     private var favouritesView: OrbitOnboardingFavouritesView?
     private var promptMock: NSView?
@@ -114,6 +137,7 @@ final class OrbitOnboardingWindowController: NSWindowController {
         theme = themeTarget?.stored
         let window = OrbitOnboardingWindow()
         super.init(window: window)
+        window.onPrimaryAction = { [weak self] in self?.primaryAction() }
         let content = NSView(frame: NSRect(origin: .zero, size: M.windowSize))
         content.wantsLayer = true
         content.layer?.borderWidth = 2
@@ -129,10 +153,23 @@ final class OrbitOnboardingWindowController: NSWindowController {
         finishStage.onOpen = { [weak self] in self?.primaryAction() }
         content.addSubview(finishStage)
         content.addSubview(card)
-        stageCounter.frame = NSRect(x: 54, y: M.windowSize.height - 48 - 24, width: 220, height: 24)
-        stageCounter.font = OrbitOnboardingFonts.mono(16)
+        stageCounter.frame = NSRect(x: 1107, y: M.windowSize.height - 44, width: 67, height: 26)
+        stageCounter.font = OrbitOnboardingFonts.mono(16.58)
+        stageCounter.alignment = .right
         stageCounter.textColor = BrandPalette.cobalt
         content.addSubview(stageCounter)
+        progressTrack.frame = CGRect(x: 134, y: M.windowSize.height - 35, width: 943, height: 6.32)
+        progressTrack.cornerRadius = 3.16
+        progressTrack.backgroundColor = BrandPalette.ink.withAlphaComponent(0.13).cgColor
+        progressFill.anchorPoint = CGPoint(x: 0, y: 0.5)
+        progressFill.backgroundColor = BrandPalette.cobalt.cgColor
+        progressFill.cornerRadius = 3.16
+        progressTrack.addSublayer(progressFill)
+        let progressHost = NSView(frame: progressTrack.frame)
+        progressTrack.frame = progressHost.bounds
+        progressHost.wantsLayer = true
+        progressHost.layer?.addSublayer(progressTrack)
+        content.addSubview(progressHost)
         let grain = OrbitPaperGrainView(frame: content.bounds)
         grain.autoresizingMask = [.width, .height]
         content.addSubview(grain)
@@ -164,10 +201,11 @@ final class OrbitOnboardingWindowController: NSWindowController {
             window.makeKeyAndOrderFront(nil)
         }
         if flow.step == .welcome { welcome.play() }
-        if intro == nil, flow.step == .welcome || flow.step == .finish {
-            let stage: NSView = flow.step == .welcome ? welcome : finishStage
-            OrbitOnboardingMotion.animate(stage.layer, key: "opacity", from: 0, to: 1, duration: 0.5)
-            OrbitOnboardingMotion.animate(stage.layer, key: "transform.translation.x", from: 79, to: 0, duration: 0.5)
+        if intro == nil, flow.step == .finish {
+            finishStage.play()
+            let stage: NSView = finishStage
+            OrbitOnboardingMotion.animate(stage.layer, key: "opacity", from: 0, to: 1, duration: 0.5, delay: 0.28)
+            OrbitOnboardingMotion.animate(stage.layer, key: "transform.translation.x", from: 79, to: 0, duration: 0.5, delay: 0.28)
         }
         if let cover = OrbitOnboardingStartup.cover, cover !== self {
             cover.close()
@@ -197,6 +235,10 @@ final class OrbitOnboardingWindowController: NSWindowController {
         }
         if flow.step == .defaultBrowser {
             busy = true
+            if let source = flow.selectedSource {
+                showImportProgress(.init(source: source.name))
+                services.observeImportProgress { [weak self] in self?.showImportProgress($0) }
+            }
             Task { @MainActor in
                 defer { busy = false }
                 if flow.defaultBrowserChoice == true {
@@ -244,6 +286,7 @@ final class OrbitOnboardingWindowController: NSWindowController {
     }
 
     private func showFailure(_ error: Error) {
+        render(direction: .forward, animated: false)
         if let configuration = activeSiteSessionConfiguration(), configuration.usesMockKeychain {
             BrowserImportUISynthetic.recordFailure(error, configuration: configuration)
         }
@@ -328,7 +371,9 @@ final class OrbitOnboardingWindowController: NSWindowController {
 
     /// Projects `flow` onto the window.
     func render(direction: OrbitOnboardingDirection, animated: Bool) {
-        stageCounter.attributedStringValue = BrandTextStyle.mono.attributedString(OrbitOnboardingText.counter(flow.index + 1), size: 16, attributes: [.foregroundColor: BrandPalette.cobalt])
+        importProgressView?.removeFromSuperview(); importProgressView = nil
+        card.textClip.isHidden = false; card.rightContent.isHidden = false
+        updateTopBar()
         let isCard = flow.isCardStep
         welcome.isHidden = flow.step != .welcome
         finishStage.isHidden = flow.step != .finish
@@ -338,7 +383,7 @@ final class OrbitOnboardingWindowController: NSWindowController {
             finishStage.button.isEnabled = !services.waitsForBrowserPreview
             let start = { [weak self] in
                 guard let self else { return }
-                card.isHidden = true; finishStage.isHidden = false
+                finishStage.isHidden = false
                 finishStartedAt = CACurrentMediaTime(); finishStage.play()
             }
             if animated {
@@ -361,10 +406,39 @@ final class OrbitOnboardingWindowController: NSWindowController {
         let page = OrbitOnboardingTextPage(title: title, body: body, note: note, hasBack: flow.hasBack)
         page.counter.stringValue = OrbitOnboardingText.counter(flow.index + 1)
         card.updateDots(index: flow.index, skipped: flow.skippedSteps.compactMap { OrbitOnboardingFlow.steps.firstIndex(of: $0) })
+        choicesTop = (page.body.stringValue.isEmpty ? page.title.frame.maxY : page.body.frame.maxY) + 28.42
+        if flow.step == .importSource {
+            card.skipButton.title = OrbitOnboardingText.importNone
+        } else { card.skipButton.title = OrbitOnboardingText.skip }
+        card.skipButton.refresh()
+        card.layoutControls(hasBack: flow.hasBack && flow.step != .importSource, hasSkip: flow.hasSkip && flow.step != .theme, animated: false)
         let right = makeRightPanel()
         card.show(page: page, right: right, direction: direction, animated: animated)
         refreshSelection()
         window?.recalculateKeyViewLoop()
+    }
+
+    private func updateTopBar() {
+        let steps = flow.effectiveSteps
+        let index = steps.firstIndex(of: flow.step) ?? flow.index
+        stageCounter.attributedStringValue = BrandTextStyle.mono.attributedString(uiFormat("%d / %d", index + 1, steps.count), size: 16.58, attributes: [.foregroundColor: BrandPalette.cobalt, .kern: 1.658])
+        stageCounter.isHidden = flow.step == .welcome
+        progressTrack.isHidden = flow.step == .welcome
+        let value = CGFloat(index) / CGFloat(max(1, steps.count - 1))
+        guard lastProgressValue != value else { return }
+        let previous = (progressFill.presentation() ?? progressFill).bounds.width
+        let animated = lastProgressValue != nil && !OrbitMotionPreferences.prefersReducedMotion
+        lastProgressValue = value
+        let width = progressTrack.bounds.width * value
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        progressFill.frame = CGRect(x: 0, y: 0, width: width, height: progressTrack.bounds.height)
+        CATransaction.commit()
+        if animated {
+            let animation = CAKeyframeAnimation(keyPath: "bounds.size.width")
+            animation.values = (0...60).map { previous + (width - previous) * (1 - pow(1 - Double($0) / 60, 2)) }
+            animation.duration = 0.5; animation.timingFunction = CAMediaTimingFunction(name: .linear)
+            progressFill.add(animation, forKey: "orbit.onboarding.progress")
+        }
     }
 
     private func text(for step: BrowserOnboardingRecord.Step) -> (String, String, String?) {
@@ -379,13 +453,23 @@ final class OrbitOnboardingWindowController: NSWindowController {
             }
             return (OrbitOnboardingText.syncTitle, flow.syncAvailability == .available ? "" : body, nil)
         case .favourites:
-            return (OrbitOnboardingText.favouritesTitle, flow.selectedSource == nil ? OrbitOnboardingText.favouritesBody : OrbitOnboardingText.favouritesImportedBody, OrbitOnboardingText.favouriteHint(flow.selectedFavourites.count))
+            return (OrbitOnboardingText.favouritesTitle, "", nil)
         case .theme: return (OrbitOnboardingText.themeTitle, "", nil)
-        case .defaultBrowser: return (OrbitOnboardingText.defaultTitle, OrbitOnboardingText.defaultBody, nil)
+        case .defaultBrowser: return (OrbitOnboardingText.defaultTitle, "", nil)
         case .finish:
             let importing = flow.importChoice.map { $0 != BrowserOnboardingRecord.ImportChoice.none } ?? false
             return (OrbitOnboardingText.finishTitle, importing ? OrbitOnboardingText.finishImportBody : OrbitOnboardingText.finishBody, nil)
         }
+    }
+
+    func showImportProgress(_ status: OrbitOnboardingImportStatus) {
+        card.textClip.isHidden = true; card.rightContent.isHidden = true
+        if importProgressView == nil {
+            let view = OrbitOnboardingImportProgressView(frame: NSRect(origin: .zero, size: M.cardSize))
+            card.addSubview(view)
+            importProgressView = view
+        }
+        importProgressView?.update(status)
     }
 
     // MARK: Right panel
@@ -399,6 +483,7 @@ final class OrbitOnboardingWindowController: NSWindowController {
         optionCards = []
         profileList = nil
         importDocument = nil
+        selectionNote = nil
         switch flow.step {
         case .importSource: buildImportPanel(in: panel)
         case .sync:
@@ -407,17 +492,34 @@ final class OrbitOnboardingWindowController: NSWindowController {
                          yesEnabled: flow.syncAvailability == .available,
                          select: { [weak self] value in self?.flow.selectSync(value) })
             let diagram = OrbitOnboardingSyncArt(frame: .zero)
-            diagram.frame = NSRect(x: 810, y: 124, width: 348, height: 377)
+            diagram.frame = NSRect(x: 811.58, y: 123.16, width: 347.37, height: 350.53)
             panel.addSubview(diagram)
             diagram.play()
+            let note = NSTextField(labelWithString: "")
+            note.font = OrbitOnboardingFonts.mono(16.58)
+            note.textColor = BrandPalette.ink.withAlphaComponent(0.7)
+            note.frame = NSRect(x: 54, y: choicesTop + 2 * M.choiceCardSize.height + M.optionGap + 19, width: 590, height: 26)
+            panel.addSubview(note); selectionNote = note
         case .favourites:
             let grid = OrbitOnboardingFavouritesView(sites: flow.favourites)
-            grid.frame.origin = NSPoint(x: 54, y: 270)
+            grid.frame.origin = NSPoint(x: 54, y: choicesTop - 3.16)
+            let preview = miniPreview(in: panel, label: uiText("HOW IT LOOKS IN THE SIDEBAR"))
+            grid.icons = Dictionary(uniqueKeysWithValues: flow.favourites.compactMap { site in services.cachedFavicon(site.url).map { (site.url, $0) } })
+            preview.sites = flow.favourites
+            preview.icons = grid.resolvedIcons
+            for site in flow.favourites where grid.icons[site.url] == nil {
+                Task { @MainActor [weak grid, weak preview, services] in
+                    guard let icon = await services.favicon(site.url) else { return }
+                    grid?.icons[site.url] = icon
+                    preview?.icons[site.url] = icon
+                }
+            }
             grid.onToggle = { [weak self] index in
                 guard let self, !isTransitioning else { return }
                 flow.favouritesSkipped = false
                 flow.favourites[index].selected.toggle()
                 favouritesView?.update(sites: flow.favourites)
+                preview.sites = flow.favourites
                 card.page?.note.stringValue = OrbitOnboardingText.favouriteHint(flow.selectedFavourites.count)
                 services.persist(flow.record(.started))
             }
@@ -428,10 +530,9 @@ final class OrbitOnboardingWindowController: NSWindowController {
             buildChoices(in: panel, yes: (OrbitOnboardingText.defaultYesStrong, OrbitOnboardingText.defaultYes),
                          no: (OrbitOnboardingText.defaultNoStrong, OrbitOnboardingText.defaultNo), yesEnabled: true,
                          select: { [weak self] value in self?.flow.defaultBrowserChoice = value; self?.refreshPromptOpacity() })
-            let mock = OrbitOnboardingPromptMock(frame: NSRect(x: 815, y: 180, width: 300, height: 220))
-            mock.alphaValue = flow.defaultBrowserChoice == false ? 0.25 : 0.55
-            promptMock = mock
-            panel.addSubview(mock)
+            let art = OrbitOnboardingDefaultArt(frame: NSRect(x: 868.42, y: 173.68, width: 268.42, height: 249.47))
+            panel.addSubview(art); art.play()
+
         case .welcome, .finish: break
         }
         return panel
@@ -447,7 +548,7 @@ final class OrbitOnboardingWindowController: NSWindowController {
     private func buildChoices(in panel: NSView, yes: (String, String), no: (String, String), yesEnabled: Bool,
                               select: @escaping (Bool) -> Void) {
         let size = M.choiceCardSize
-        let top: CGFloat = 290
+        let top = choicesTop
         for (index, (strong, detail)) in [yes, no].enumerated() {
             let card = OrbitOnboardingChoiceCard(strong: strong, detail: detail)
             card.setFrameOrigin(NSPoint(x: 54, y: top + CGFloat(index) * (size.height + M.optionGap)))
@@ -460,6 +561,22 @@ final class OrbitOnboardingWindowController: NSWindowController {
             panel.addSubview(card)
             optionCards.append(card)
         }
+    }
+
+    private func miniPreview(in panel: NSView, label: String) -> OrbitOnboardingMiniPreview {
+        let heading = NSTextField(labelWithString: label)
+        heading.attributedStringValue = BrandTextStyle.mono.attributedString(label, size: 16.58, attributes: [.foregroundColor: BrandPalette.cobalt, .kern: 1.99])
+        heading.frame = NSRect(x: 780, y: 132.63, width: 366.32, height: 25)
+        panel.addSubview(heading)
+        let preview = OrbitOnboardingMiniPreview(frame: NSRect(x: 780, y: 166.26, width: 366.32, height: 236.84))
+        preview.wantsLayer = true
+        preview.layer?.shadowColor = BrandPalette.ink.cgColor
+        preview.layer?.shadowOpacity = 0.67
+        preview.layer?.shadowRadius = 17.37
+        preview.layer?.shadowOffset = CGSize(width: 0, height: 22.11)
+        preview.layer?.shadowPath = CGPath(roundedRect: preview.bounds.insetBy(dx: 25.26, dy: 25.26), cornerWidth: 17.37, cornerHeight: 17.37, transform: nil)
+        panel.addSubview(preview)
+        return preview
     }
 
     private func buildImportPanel(in panel: NSView) {
@@ -477,7 +594,7 @@ final class OrbitOnboardingWindowController: NSWindowController {
         panel.addSubview(scroll)
         importDocument = document
         let art = OrbitOnboardingTrajectoryArt(frame: .zero)
-        art.frame = NSRect(x: 750, y: 140, width: 425, height: 304)
+        art.frame = NSRect(x: 751.58, y: 135.79, width: 426.32, height: 309.02)
         panel.addSubview(art)
         art.play()
         layoutImportRows()
@@ -492,12 +609,12 @@ final class OrbitOnboardingWindowController: NSWindowController {
         profileList = nil
         let rowSize = M.browserRowSize
         let x: CGFloat = 54
-        var y = M.importFirstRowTop
+        var y = choicesTop - 3.16
         var cards: [OrbitOnboardingOptionCard] = []
         for (index, source) in flow.sources.enumerated() {
             let (icon, tint) = services.sourceArtwork(source)
             let row = OrbitOnboardingBrowserRow(title: source.profiles.isEmpty ? source.name : source.name + "\n" + uiFormat("%d profiles", source.profiles.count), icon: icon, tint: tint)
-            row.setFrameOrigin(NSPoint(x: x + CGFloat(index % 2) * (rowSize.width + 14), y: M.importFirstRowTop + CGFloat(index / 2) * (rowSize.height + 14)))
+            row.setFrameOrigin(NSPoint(x: x + CGFloat(index % 2) * (rowSize.width + 12.63), y: choicesTop - 3.16 + CGFloat(index / 2) * (rowSize.height + 12.63)))
             row.onSelect = { [weak self] in
                 guard let self, !isTransitioning, flow.selectedSource != source else { return }
                 flow.select(source: source)
@@ -507,7 +624,7 @@ final class OrbitOnboardingWindowController: NSWindowController {
             document.addSubview(row)
             cards.append(row)
         }
-        y = M.importFirstRowTop + CGFloat((flow.sources.count + 1) / 2) * (rowSize.height + 14)
+        y = choicesTop - 3.16 + CGFloat((flow.sources.count + 1) / 2) * (rowSize.height + 12.63)
         if let source = flow.selectedSource, !source.profiles.isEmpty {
             let list = OrbitOnboardingProfileList(profiles: source.profiles, width: 554)
             list.setFrameOrigin(NSPoint(x: x, y: y))
@@ -518,21 +635,11 @@ final class OrbitOnboardingWindowController: NSWindowController {
             document.addSubview(list); profileList = list
             y += list.frame.height + 14
         }
-        let none = OrbitOnboardingBrowserRow(title: flow.sources.isEmpty ? OrbitOnboardingText.importNoneEmpty : OrbitOnboardingText.importNone,
-                                             icon: nil, tint: .clear, multiline: true)
-        none.setFrameOrigin(NSPoint(x: x, y: y))
-        none.onSelect = { [weak self] in
-            guard let self, !isTransitioning else { return }
-            flow.importChoice = BrowserOnboardingRecord.ImportChoice.none
-            layoutImportRows()
-            refreshSelection()
-        }
-        document.addSubview(none)
-        cards.append(none)
-        y += rowSize.height + M.optionGap
         let scope = NSTextField(wrappingLabelWithString: uiText("Spaces · pinned tabs · themes\nBoosts · passwords (encrypted)"))
-        scope.font = OrbitOnboardingFonts.mono(15); scope.textColor = BrandPalette.ink.withAlphaComponent(0.75)
-        scope.frame = NSRect(x: x, y: y + 8, width: 590, height: 50); document.addSubview(scope)
+        let style = NSMutableParagraphStyle()
+        style.minimumLineHeight = 26.53; style.maximumLineHeight = 26.53
+        scope.attributedStringValue = BrandTextStyle.mono.attributedString(scope.stringValue, size: 16.58, attributes: [.foregroundColor: BrandPalette.ink.withAlphaComponent(0.75), .kern: 0.663, .paragraphStyle: style])
+        scope.frame = NSRect(x: x - 2, y: y + 9.48, width: 591.37, height: 56); document.addSubview(scope)
         y += 66
         optionCards = cards
         document.setFrameSize(NSSize(width: document.frame.width, height: max(y, M.importViewportBottom)))
@@ -580,33 +687,40 @@ final class OrbitOnboardingWindowController: NSWindowController {
         scaled.addSubview(clip)
         scaled.isHidden = true
         panel.addSubview(scaled)
-        let preview = OrbitOnboardingMiniPreview(frame: NSRect(x: 760, y: 134, width: 365, height: 238))
-        panel.addSubview(preview)
+        let preview = miniPreview(in: panel, label: uiText("YOUR FIRST SPACE"))
+        preview.sites = flow.favourites
+        preview.icons = Dictionary(uniqueKeysWithValues: flow.favourites.compactMap { site in services.cachedFavicon(site.url).map { (site.url, $0) } })
+        for site in flow.favourites where preview.icons[site.url] == nil {
+            Task { @MainActor [weak preview, services] in
+                if let icon = await services.favicon(site.url) { preview?.icons[site.url] = icon }
+            }
+        }
         let colorName = NSTextField(labelWithString: uiText("Mandarine").uppercased())
-        colorName.font = OrbitOnboardingFonts.mono(16); colorName.textColor = BrandPalette.ink
-        colorName.frame = NSRect(x: 54, y: 390, width: 530, height: 22)
+        colorName.font = OrbitOnboardingFonts.mono(16.58); colorName.textColor = BrandPalette.ink
+        colorName.frame = NSRect(x: 54, y: choicesTop + 104.21, width: 530, height: 22)
+        colorName.attributedStringValue = BrandTextStyle.mono.attributedString(colorName.stringValue, size: 16.58, attributes: [.foregroundColor: BrandPalette.ink, .kern: 1.658])
         panel.addSubview(colorName)
         for (index, preset) in BrandPalette.spaceGradients.enumerated() {
             let button = OrbitOnboardingPlanetButton(index: index)
-            button.frame = NSRect(x: 54 + CGFloat(index) * 105, y: 290, width: 80, height: 80)
+            button.frame = NSRect(x: 42.95 + CGFloat(index) * 104.21, y: choicesTop - 7.89, width: 101.05, height: 101.05)
             button.isSelectedPlanet = (theme?.presetID ?? "brand.coral") == "brand." + preset.id
             button.onPress = { [weak self, weak editor, weak preview, weak panel] in
                 guard let self, let editor else { return }
                 let state = OrbitThemeEditorState(theme: preset.theme())
                 editor.view.state = state; editor.view.onChange?(state)
                 preview?.planetIndex = index
-                colorName.stringValue = uiText(["Mandarine", "Cobalt", "Soleil", "Aurore"][index]).uppercased()
+                colorName.attributedStringValue = BrandTextStyle.mono.attributedString(uiText(["Mandarine", "Cobalt", "Soleil", "Aurore"][index]).uppercased(), size: 16.58, attributes: [.foregroundColor: BrandPalette.ink, .kern: 1.658])
                 panel?.subviews.compactMap { $0 as? OrbitOnboardingPlanetButton }.forEach { $0.isSelectedPlanet = $0.planetIndex == index }
                 self.applyTheme(preset.theme())
             }
             panel.addSubview(button)
         }
-        let customize = OrbitOnboardingLinkButton(title: uiText("Edit Theme Color…"), arrow: false, font: OrbitOnboardingFonts.ui(15))
-        customize.frame.origin = NSPoint(x: 54, y: 414)
-        customize.onPress = { [weak scaled, weak preview] in
-            scaled?.isHidden.toggle(); preview?.isHidden = scaled?.isHidden == false
+        for button in panel.subviews.compactMap({ $0 as? OrbitOnboardingPlanetButton }) {
+            button.onCustomize = { [weak scaled, weak preview] in
+                scaled?.isHidden.toggle(); preview?.isHidden = scaled?.isHidden == false
+            }
         }
-        panel.addSubview(customize)
+
     }
 
     private func closeThemeEditor() {
@@ -630,6 +744,7 @@ final class OrbitOnboardingWindowController: NSWindowController {
             }
             profileList?.selectedProfiles = flow.selectedProfiles
         case .sync:
+            selectionNote?.attributedStringValue = BrandTextStyle.mono.attributedString((flow.syncChoice == true ? uiText("synced to your iCloud") : uiText("nothing uploaded")).uppercased(), size: 16.58, attributes: [.foregroundColor: BrandPalette.ink.withAlphaComponent(0.7), .kern: 0.995])
             for (index, card) in optionCards.enumerated() { card.isSelected = flow.syncChoice == (index == 0) }
             card.rightView?.subviews.compactMap { $0 as? OrbitOnboardingSyncArt }.first?.select(flow.syncChoice == true)
         case .defaultBrowser:
@@ -639,6 +754,7 @@ final class OrbitOnboardingWindowController: NSWindowController {
         for card in optionCards { card.accent = flow.step == .importSource ? BrandPalette.coral : accent }
         profileList?.accent = accent
         card.primaryButton.isEnabled = flow.canAdvance
+        updateTopBar()
     }
 
     /// Instant recolour of the backdrop, panel tint and accent controls (one frame).
