@@ -124,6 +124,9 @@ final class OrbitOnboardingWindowController: NSWindowController {
     private var selectionNote: NSTextField?
     private var importProgressView: OrbitOnboardingImportProgressView?
     private var busy = false
+    private var hasPresented = false
+    private var renderedStep: BrowserOnboardingRecord.Step?
+    private var finishEntryStarted = false
     private var favouritesView: OrbitOnboardingFavouritesView?
     private var promptMock: NSView?
     private var importDocument: NSView?
@@ -200,9 +203,10 @@ final class OrbitOnboardingWindowController: NSWindowController {
         } else {
             window.makeKeyAndOrderFront(nil)
         }
-        if flow.step == .welcome { welcome.play() }
-        if intro == nil, flow.step == .finish {
-            finishStage.play()
+        let firstPresentation = !hasPresented
+        hasPresented = true
+        if firstPresentation, flow.step == .welcome { welcome.play() }
+        if intro == nil, flow.step == .finish, playFinishEntryIfNeeded() {
             let stage: NSView = finishStage
             OrbitOnboardingMotion.animate(stage.layer, key: "opacity", from: 0, to: 1, duration: 0.5, delay: 0.28)
             OrbitOnboardingMotion.animate(stage.layer, key: "transform.translation.x", from: 79, to: 0, duration: 0.5, delay: 0.28)
@@ -218,7 +222,14 @@ final class OrbitOnboardingWindowController: NSWindowController {
 
     var isTransitioning: Bool { busy || card.runningTransitions > 0 || welcomeTransitions > 0 }
     private var welcomeTransitions = 0
-    private var finishStartedAt: CFTimeInterval?
+    /// Startup may present this controller again after the engine adopts it. That is not an arrival.
+    @discardableResult
+    private func playFinishEntryIfNeeded() -> Bool {
+        guard !finishEntryStarted else { return false }
+        finishEntryStarted = true
+        finishStage.play()
+        return true
+    }
 
     func primaryAction() {
         guard !isFinished, !isTransitioning, flow.canAdvance else { return }
@@ -276,6 +287,7 @@ final class OrbitOnboardingWindowController: NSWindowController {
         case .defaultBrowser:
             if flow.defaultBrowserChoice == true { Task { await services.requestDefaultBrowser() } }
         case .finish:
+            guard finishStage.button.isEnabled else { return }
             isFinished = true
             closeThemeEditor()
             openBrowserPreview { [self] in services.finish(flow.record(.completed), self) }
@@ -372,6 +384,17 @@ final class OrbitOnboardingWindowController: NSWindowController {
 
     /// Projects `flow` onto the window.
     func render(direction: OrbitOnboardingDirection, animated: Bool) {
+        // Selection and asynchronous readiness updates do not rebuild an already displayed step.
+        if renderedStep == flow.step, importProgressView == nil {
+            updateTopBar()
+            if flow.step == .finish {
+                finishStage.update(flow: flow)
+                finishStage.button.isEnabled = !services.waitsForBrowserPreview || previewContent != nil
+            } else { refreshSelection() }
+            return
+        }
+        renderedStep = flow.step
+        if flow.step != .finish { finishEntryStarted = false }
         if animated { window?.makeFirstResponder(nil) }
         importProgressView?.removeFromSuperview(); importProgressView = nil
         card.textClip.isHidden = false; card.rightContent.isHidden = false
@@ -382,11 +405,11 @@ final class OrbitOnboardingWindowController: NSWindowController {
         card.isHidden = !isCard
         if flow.step == .finish {
             finishStage.update(flow: flow)
-            finishStage.button.isEnabled = !services.waitsForBrowserPreview
+            finishStage.button.isEnabled = !services.waitsForBrowserPreview || previewContent != nil
             let start = { [weak self] in
                 guard let self else { return }
                 finishStage.isHidden = false
-                finishStartedAt = CACurrentMediaTime(); finishStage.play()
+                playFinishEntryIfNeeded()
             }
             if animated {
                 card.isHidden = false
@@ -399,7 +422,7 @@ final class OrbitOnboardingWindowController: NSWindowController {
                     self?.card.isHidden = true
                     self?.card.layer?.removeAllAnimations()
                 }
-            } else { start() }
+            } else if hasPresented { start() }
         }
         guard isCard else { return }
         card.primaryButton.title = flow.primaryTitle
@@ -795,14 +818,16 @@ final class OrbitOnboardingWindowController: NSWindowController {
         root.layer?.masksToBounds = true
         content.autoresizingMask = []
         content.frame = NSRect(x: 110, y: -680, width: 980, height: 750)
+        // Prepare layout offscreen; the browser is revealed only after Open Circa is pressed.
+        content.isHidden = true
         root.addSubview(content)
         content.layoutSubtreeIfNeeded()
-        OrbitOnboardingMotion.entrance(content, y: 220, duration: 1.6, delay: max(0, 0.9 - (CACurrentMediaTime() - (finishStartedAt ?? CACurrentMediaTime()))))
     }
 
     private func openBrowserPreview(completion: @escaping @MainActor () -> Void) {
         guard let content = previewContent, let root = window?.contentView else { completion(); return }
         let reduced = OrbitMotionPreferences.prefersReducedMotion
+        content.isHidden = false
         OrbitOnboardingMotion.animate(finishStage.layer, key: "opacity", from: 1, to: 0, duration: 0.45, outgoing: true)
         OrbitOnboardingMotion.animate(finishStage.layer, key: "transform.translation.y", from: 0, to: 24, duration: 0.45, outgoing: true)
         finishStage.layer?.opacity = 0
@@ -824,6 +849,7 @@ final class OrbitOnboardingWindowController: NSWindowController {
     func releaseBrowserPreview() {
         guard let content = previewContent, let browser = previewWindow else { return }
         content.removeFromSuperview()
+        content.isHidden = false
         browser.contentView = content
         content.frame = browser.contentView?.superview?.bounds ?? content.frame
         content.autoresizingMask = [.width, .height]

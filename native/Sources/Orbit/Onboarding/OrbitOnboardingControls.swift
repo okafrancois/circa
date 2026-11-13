@@ -134,12 +134,15 @@ final class OrbitOnboardingLinkButton: NSButton {
 
     required init?(coder: NSCoder) { nil }
 
+    override var isEnabled: Bool { didSet { needsDisplay = true } }
+    var textInk: NSColor { accent.withAlphaComponent(isEnabled ? 1 : 0.35) }
+
     override func draw(_ dirtyRect: NSRect) {
-        let text = NSAttributedString(string: title, attributes: [.font: titleFont, .foregroundColor: accent])
+        let text = NSAttributedString(string: title, attributes: [.font: titleFont, .foregroundColor: textInk])
         let size = text.size()
         text.draw(at: NSPoint(x: 0, y: (bounds.height - size.height) / 2))
         if isUnderlined {
-            accent.setFill()
+            textInk.setFill()
             NSRect(x: 0, y: isFlipped ? bounds.height - 2.37 : 0, width: size.width, height: 2.37).fill()
         }
     }
@@ -150,7 +153,7 @@ final class OrbitOnboardingLinkButton: NSButton {
         needsDisplay = true
     }
 
-    @objc private func press() { onPress?() }
+    @objc private func press() { guard isEnabled else { return }; onPress?() }
 }
 
 /// A selectable card of the right panel: radio choice rows and browser rows share selection,
