@@ -50,6 +50,7 @@ final class BrowserPaletteView: NSView, NSTextFieldDelegate, NSTableViewDataSour
     let searchIcon = NSImageView()
     let divider = NSView()
     let infoButton = NSButton()
+    let inputShortcut = NSTextField(labelWithString: uiText("⌘T"))
     let scopeLabel = NSTextField(labelWithString: "")
     let siteHint = NSTextField(labelWithString: "")
     private let infoPopover = OrbitFrostPopover()
@@ -150,7 +151,22 @@ final class BrowserPaletteView: NSView, NSTextFieldDelegate, NSTableViewDataSour
         infoButton.action = #selector(showSuggestionInfo(_:))
         infoButton.setAccessibilityLabel(uiText("About suggestions"))
         infoButton.setAccessibilityIdentifier("palette-suggestion-info")
+        infoButton.isHidden = true
         panel.addSubview(infoButton)
+        inputShortcut.font = BrandFonts.mono(11)
+        inputShortcut.alignment = .center
+        inputShortcut.textColor = BrandPalette.ink.withAlphaComponent(0.6)
+        inputShortcut.wantsLayer = true
+        inputShortcut.layer?.backgroundColor = BrandPalette.ink.withAlphaComponent(0.06).cgColor
+        inputShortcut.layer?.cornerRadius = 4
+        inputShortcut.layer?.borderWidth = 1
+        inputShortcut.layer?.borderColor = BrandPalette.ink.withAlphaComponent(0.15).cgColor
+        panel.addSubview(inputShortcut)
+        let helpMenu = NSMenu()
+        let helpItem = NSMenuItem(title: uiText("About suggestions"), action: #selector(showSuggestionInfo(_:)), keyEquivalent: "")
+        helpItem.target = self
+        helpMenu.addItem(helpItem)
+        input.menu = helpMenu
         scopeLabel.font = OrbitTokens.Typography.commandBarRowTitle
         scopeLabel.wantsLayer = true
         scopeLabel.layer?.cornerRadius = OrbitTokens.Radius.commandBarRow
@@ -229,10 +245,10 @@ final class BrowserPaletteView: NSView, NSTextFieldDelegate, NSTableViewDataSour
         let scopeWidth = siteSearch == nil ? 0 : min(180, ceil(scopeLabel.intrinsicContentSize.width) + 20)
         scopeLabel.frame = NSRect(x: m.titleOriginX, y: panel.bounds.height - 45, width: scopeWidth, height: 26)
         let inputX = m.titleOriginX + (scopeWidth > 0 ? scopeWidth + 10 : 0)
-        let trailing: CGFloat = siteHint.isHidden ? 48 : 144
+        let trailing: CGFloat = siteHint.isHidden ? 68 : 144
         input.frame = NSRect(x: inputX, y: panel.bounds.height - m.searchRowHeight / 2 - inputHeight / 2,
                              width: max(0, panel.bounds.width - inputX - trailing), height: inputHeight)
-        infoButton.frame = NSRect(x: panel.bounds.width - 46, y: panel.bounds.height - 44, width: 24, height: 24)
+        inputShortcut.frame = NSRect(x: panel.bounds.width - 54, y: panel.bounds.height - 42, width: 34, height: 21)
         siteHint.frame = NSRect(x: panel.bounds.width - 144, y: panel.bounds.height - 43, width: 96, height: 20)
         searchIcon.frame = NSRect(x: 23, y: panel.bounds.height - m.searchRowHeight / 2 - 8, width: 16, height: 16)
         divider.frame = NSRect(x: m.rowInsetX, y: panel.bounds.height - m.searchRowHeight,
@@ -309,16 +325,11 @@ final class BrowserPaletteView: NSView, NSTextFieldDelegate, NSTableViewDataSour
         selectedIndex = results.indices.contains(selected) ? selected : -1
         selectedResult = selectedIndex >= 0 ? results[selectedIndex] : nil
         announcedResultCount = results.count
-        let symbol = selectedResult?.inputSymbol ?? "magnifyingglass"
-        inputSymbol = symbol
-        if symbolImages[symbol] == nil { symbolImages[symbol] = symbol == "magnifyingglass" ? Self.sparkleImage : OrbitIcon.image(sfName: symbol, pointSize: 16, accessibilityDescription: nil) }
-        let image = selectedResult.flatMap { result in
-            result.section == .tabs || result.section == .pinned ? favicons[result.id] : nil
-        }
-        let inputImage = image ?? symbolImages[symbol]
-        if searchIcon.image !== inputImage { searchIcon.image = inputImage }
-        searchIcon.contentTintColor = image == nil && symbol != "magnifyingglass" ? OrbitFloatingMaterial.body : nil
-        infoButton.isHidden = siteSearch != nil
+        inputSymbol = selectedResult?.inputSymbol ?? "magnifyingglass"
+        searchIcon.image = Self.sparkleImage
+        searchIcon.contentTintColor = nil
+        infoButton.isHidden = true
+        inputShortcut.isHidden = siteSearch != nil
         let row = selectedIndex >= 0 ? resultRows[selectedIndex] : -1
         list.selectRowIndexes(row >= 0 ? IndexSet(integer: row) : [], byExtendingSelection: false)
         if oldIndex != selectedIndex { refreshSelection(at: oldIndex) }
@@ -481,7 +492,7 @@ final class BrowserPaletteView: NSView, NSTextFieldDelegate, NSTableViewDataSour
         panel.layer?.backgroundColor = NSColor.clear.cgColor
         OrbitTokens.Shadow.commandBar.apply(to: panelShadow, isFlipped: true, appearance: effectiveAppearance)
         input.textColor = OrbitFloatingMaterial.body
-        searchIcon.contentTintColor = OrbitFloatingMaterial.body
+        searchIcon.contentTintColor = nil
         infoButton.contentTintColor = OrbitFloatingMaterial.secondary
         scopeLabel.textColor = OrbitFloatingMaterial.accentText
         scopeLabel.layer?.backgroundColor = accent.resolvedCGColor(for: effectiveAppearance)
@@ -541,7 +552,7 @@ final class BrowserPaletteView: NSView, NSTextFieldDelegate, NSTableViewDataSour
         }
     }
 
-    @objc private func showSuggestionInfo(_ sender: NSButton) {
+    @objc private func showSuggestionInfo(_ sender: Any?) {
         let controller = NSViewController()
         let label = NSTextField(wrappingLabelWithString: uiText("Suggestions come from your open tabs, bookmarks, and history. Web searches use your selected search engine."))
         label.font = BrandTextStyle.body.font(size: 13)
@@ -550,7 +561,7 @@ final class BrowserPaletteView: NSView, NSTextFieldDelegate, NSTableViewDataSour
         controller.view.addSubview(label)
         infoPopover.contentViewController = controller
         infoPopover.behavior = .transient
-        infoPopover.show(relativeTo: sender.bounds, of: sender, preferredEdge: .maxY)
+        infoPopover.show(relativeTo: input.bounds, of: input, preferredEdge: .maxY)
     }
 
     override func mouseDown(with event: NSEvent) {

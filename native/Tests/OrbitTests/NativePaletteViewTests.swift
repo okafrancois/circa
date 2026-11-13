@@ -379,7 +379,7 @@ struct NativePaletteViewTests {
         defer { h.close() }
         h.view.input.stringValue = "result"
         h.render([paletteViewResult(0, section: .history), paletteViewResult(1, section: .search)])
-        #expect(h.view.inputSymbol == "clock" && !h.view.infoButton.isHidden)
+        #expect(h.view.inputSymbol == "clock" && !h.view.inputShortcut.isHidden)
         h.view.updateSelection(1)
         #expect(h.view.inputSymbol == "magnifyingglass")
         let search = BrowserPaletteResult(id: "search", title: "result", detail: "", section: .search,
@@ -392,7 +392,7 @@ struct NativePaletteViewTests {
         h.render([])
         #expect(h.view.scopeLabel.stringValue == "YouTube" && !h.view.scopeLabel.isHidden)
         #expect(h.view.input.frame.minX > h.view.scopeLabel.frame.maxX)
-        #expect(h.view.infoButton.isHidden)
+        #expect(h.view.inputShortcut.isHidden)
         #expect(h.view.input.placeholderAttributedString?.string == "Search YouTube")
         let spring = BrowserPaletteView.scopedSearchSpring
         #expect(spring.response == 0.7 && spring.dampingFraction == 0.9)

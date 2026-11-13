@@ -110,18 +110,30 @@ final class BrowserContentCardView: NSView {
     private let emptyStart = OrbitNativePrintButton(frame: .zero)
     var onPrivateStart: (() -> Void)?
     private let emptyArtwork = NSImageView()
+    private var privateBodyWidth: NSLayoutConstraint?
     private var emptyArtworkWidth: NSLayoutConstraint?
     private var emptyArtworkHeight: NSLayoutConstraint?
     private var emptyPlacement: [NSLayoutConstraint] = []
     var emptyStateIsPrivate = false {
         didSet {
             let name = emptyStateIsPrivate ? "page-private" : "empty-space"
-            emptyArtworkWidth?.constant = emptyStateIsPrivate ? 132 : 150
-            emptyArtworkHeight?.constant = emptyStateIsPrivate ? 67 : 90
+            emptyArtworkWidth?.constant = emptyStateIsPrivate ? 240 : 150
+            emptyArtworkHeight?.constant = emptyStateIsPrivate ? 122 : 90
             emptyArtwork.image = BrowserText.secondaryBrandResource(name, extension: "png").flatMap { NSImage(contentsOf: $0) }
             emptyTitle.textColor = emptyStateIsPrivate ? BrandPalette.paper : OrbitTokens.Color.Text.primary
             emptyDetail.textColor = emptyStateIsPrivate ? BrandPalette.paper.withAlphaComponent(0.8) : OrbitTokens.Color.Text.tertiary
             emptyState.alignment = emptyStateIsPrivate ? .leading : .centerX
+            emptyTitle.attributedStringValue = BrandTextStyle.title.attributedString(emptyTitle.stringValue,
+                size: emptyStateIsPrivate ? 25 : 20, attributes: [.foregroundColor: emptyStateIsPrivate ? BrandPalette.paper : OrbitTokens.Color.Text.primary])
+            emptyDetail.font = BrandTextStyle.body.font(size: emptyStateIsPrivate ? 14 : 12)
+            emptyDetail.maximumNumberOfLines = emptyStateIsPrivate ? 0 : 1
+            emptyDetail.cell?.wraps = emptyStateIsPrivate
+            emptyDetail.cell?.isScrollable = false
+            privateBodyWidth?.isActive = emptyStateIsPrivate
+            emptyState.setCustomSpacing(emptyStateIsPrivate ? 18 : 4, after: emptyArtwork)
+            emptyState.setCustomSpacing(emptyStateIsPrivate ? 10 : 4, after: emptyTitle)
+            emptyState.setCustomSpacing(emptyStateIsPrivate ? 62 : 4, after: emptyDetail)
+            emptyStart.shadowInk = emptyStateIsPrivate ? BrandPalette.rgb(0x0B0E33) : BrandPalette.ink
             emptyStart.isHidden = !emptyStateIsPrivate
             emptyDetail.stringValue = emptyStateIsPrivate ? uiText("Nothing here is kept: no history, no cookies, no AI.") : OrbitShellText.emptySpaceDetail
             refreshCaptureShield()
@@ -275,6 +287,7 @@ final class BrowserContentCardView: NSView {
         }
         emptyState.addArrangedSubview(emptyTitle)
         emptyState.addArrangedSubview(emptyDetail)
+        privateBodyWidth = emptyDetail.widthAnchor.constraint(equalToConstant: 240)
         emptyStart.title = uiText("Start browsing"); emptyStart.target = self
         emptyStart.action = #selector(startEmptyPage)
         emptyStart.isHidden = true
@@ -431,8 +444,8 @@ final class BrowserContentCardView: NSView {
         NSLayoutConstraint.deactivate(emptyPlacement)
         if emptyStateIsPrivate {
             emptyPlacement = [
-                emptyState.leadingAnchor.constraint(equalTo: clip.leadingAnchor, constant: 18),
-                emptyState.topAnchor.constraint(equalTo: clip.topAnchor, constant: 14),
+                emptyState.leadingAnchor.constraint(equalTo: clip.leadingAnchor, constant: 48),
+                emptyState.topAnchor.constraint(equalTo: clip.topAnchor, constant: 54),
                 emptyState.widthAnchor.constraint(lessThanOrEqualTo: clip.widthAnchor, constant: -72)
             ]
         } else {

@@ -24,7 +24,7 @@ struct BrandTypeTests {
         #expect(row.bounds.contains(shortcut.frame))
     }
 
-    @Test("Command Bar shortcut runs retain the previous medium system weight")
+    @Test("Command Bar row shortcuts and the input chip use their respective mono sizes")
     func commandShortcutFont() throws {
         let view = BrowserPaletteView(frame: NSRect(x: 0, y: 0, width: 800, height: 520))
         view.isHidden = false
@@ -33,9 +33,9 @@ struct BrandTypeTests {
         func labels(_ view: NSView) -> [NSTextField] {
             view.subviews.flatMap { ($0 as? NSTextField).map { [$0] } ?? labels($0) }
         }
-        let hint = try #require(labels(view).first { $0.stringValue == "⌘T" })
-        #expect(hint.attributedStringValue.attribute(.font, at: 1, effectiveRange: nil) as? NSFont
-            == BrandFonts.mono(13))
+        let hints = labels(view).filter { $0.stringValue == "⌘T" }
+        #expect(hints.contains { $0.font == BrandFonts.mono(11) })
+        #expect(hints.contains { $0.attributedStringValue.attribute(.font, at: 1, effectiveRange: nil) as? NSFont == BrandFonts.mono(13) })
     }
 
     @Test("The editor exposes all 36 colors and keeps draft controls while paging")
@@ -105,7 +105,7 @@ struct BrandTypeTests {
         #expect(editor.themeName.frame.maxY < 522)
     }
 
-    @Test("Unbranded controls retain native accent roles; the command input may use the mandarine sparkle")
+    @Test("Native accent roles remain available and painted controls use brand inks")
     func controlAudit() throws {
         #expect(OrbitTokens.Color.Accent.focusRing == NSColor.controlAccentColor)
         #expect(OrbitTokens.Color.Accent.primaryButton == NSColor.controlAccentColor)
@@ -115,8 +115,8 @@ struct BrandTypeTests {
                      "Boosts/BrowserBoostZapView.swift", "SiteControls/NotificationSettingsPromptView.swift",
                      "Palette/BrowserPaletteView.swift", "Sidebar/SidebarCreationMenu.swift"] {
             let source = try String(contentsOf: sources.appendingPathComponent(file), encoding: .utf8)
-            for fixed in [".systemBlue", ".systemPurple", ".systemOrange", "BrandPalette.coral"] {
-                #expect(!source.contains(fixed) || (file == "Palette/BrowserPaletteView.swift" && fixed == "BrandPalette.coral"), "Fixed control color in \(file)")
+            for fixed in [".systemBlue", ".systemPurple", ".systemOrange"] {
+                #expect(!source.contains(fixed), "Fixed control color in \(file)")
             }
         }
     }
