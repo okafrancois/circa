@@ -154,22 +154,20 @@ final class SidebarTabActionPill: NSView {
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
         wantsLayer = true
-        layer?.backgroundColor = BrandPalette.pageWhite.cgColor
-        layer?.cornerRadius = 8
-        layer?.borderWidth = 2
-        layer?.borderColor = BrandPalette.ink.cgColor
-        layer?.shadowColor = BrandPalette.ink.cgColor
-        layer?.shadowOpacity = 1
-        layer?.shadowRadius = 0
+        layer?.backgroundColor = NSColor(srgbRed: 28/255, green: 22/255, blue: 28/255, alpha: 1).cgColor
+        layer?.cornerRadius = Self.height / 2
+        layer?.shadowColor = NSColor.black.cgColor
+        layer?.shadowOpacity = 0.25
+        layer?.shadowRadius = 8
         layer?.shadowOffset = NSSize(width: 0, height: -3)
         label.font = .systemFont(ofSize: 12, weight: .semibold)
-        label.textColor = BrandPalette.ink
+        label.textColor = NSColor(srgbRed: 226/255, green: 220/255, blue: 226/255, alpha: 1)
         for field in [command, key] {
             field.font = .systemFont(ofSize: 12, weight: .semibold)
             field.alignment = .center
-            field.textColor = BrandPalette.ink
+            field.textColor = NSColor(srgbRed: 86/255, green: 76/255, blue: 89/255, alpha: 1)
             field.wantsLayer = true
-            field.layer?.backgroundColor = BrandPalette.sky.cgColor
+            field.layer?.backgroundColor = NSColor(srgbRed: 219/255, green: 209/255, blue: 222/255, alpha: 1).cgColor
             field.layer?.cornerRadius = 3
         }
         for field in [label, command, key] { field.setAccessibilityElement(false); addSubview(field) }

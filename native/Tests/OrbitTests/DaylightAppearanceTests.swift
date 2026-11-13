@@ -56,8 +56,8 @@ struct DaylightAppearanceTests {
                 #expect(stop.resolved(for: dark) == OrbitSpaceThemes.color(expected))
             }
         }
-        #expect(OrbitFloatingMaterial.style(for: dark).variant == .light)
-        #expect(OrbitTokens.Color.Surface.commandBar.resolved(for: dark) == BrandPalette.pageWhite)
+        #expect(OrbitFloatingMaterial.style(for: NSAppearance(named: .aqua)!).variant == .light)
+        #expect(OrbitTokens.Color.Surface.commandBar.resolved(for: NSAppearance(named: .aqua)!) == NSColor(srgbRed: 249/255, green: 249/255, blue: 249/255, alpha: 1))
         #expect(OrbitSpaceThemes.privateWindow.stops.first == BrandPalette.paper)
     }
 

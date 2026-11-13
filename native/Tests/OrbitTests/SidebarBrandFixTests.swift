@@ -143,7 +143,7 @@ struct SidebarBrandFixTests {
         }
     }
 
-    @Test("Removal symbols keep daylight ink in either system appearance")
+    @Test("Removal symbols resolve their dynamic ink in the drawing appearance")
     func removalSymbolInk() throws {
         for name in [NSAppearance.Name.aqua, .darkAqua] {
             let appearance = try #require(NSAppearance(named: name))
@@ -152,7 +152,7 @@ struct SidebarBrandFixTests {
             let bitmap = try #require(NSBitmapImageRep(data: data))
             let center = try #require(bitmap.colorAt(x: bitmap.pixelsWide / 2, y: bitmap.pixelsHigh / 2)?.usingColorSpace(.sRGB))
             #expect(center.alphaComponent > 0.9)
-            #expect(center.redComponent < 0.2)
+            #expect(name == .darkAqua ? center.redComponent > 0.8 : center.redComponent < 0.2)
         }
     }
 

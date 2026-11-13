@@ -6,9 +6,9 @@ import Testing
 @Suite(.serialized)
 @MainActor
 struct FloatingMaterialTests {
-    @Test func bothAppearancesSelectDaylight() throws {
+    @Test func appearanceSelectsVariant() throws {
         #expect(OrbitFloatingMaterial.style(for: try #require(NSAppearance(named: .aqua)), reduceTransparency: false).variant == .light)
-        #expect(OrbitFloatingMaterial.style(for: try #require(NSAppearance(named: .darkAqua)), reduceTransparency: false).variant == .light)
+        #expect(OrbitFloatingMaterial.style(for: try #require(NSAppearance(named: .darkAqua)), reduceTransparency: false).variant == .dark)
     }
 
     @Test func opaqueFallbackPreservesTextTokens() {
@@ -208,7 +208,7 @@ extension NativeWebKitTests.FloatingAlertMaterialTests {
 
 
 extension FloatingMaterialTests {
-    @Test("Rename dialog tint and scrim stay daylight across system switches")
+    @Test("Rename dialog tint and scrim follow automatic appearance and live switches")
     func renameAppearance() throws {
         let original = NSApp.appearance
         defer { NSApp.appearance = original }
@@ -222,13 +222,13 @@ extension FloatingMaterialTests {
         let scrim = try #require(rename.subviews.first)
         let frost = try #require(rename.subviews.flatMap(\.subviews).compactMap { $0 as? OrbitFrostView }.first)
         #expect(rename.appearance == nil)
-        #expect(frost.style.variant == .light)
+        #expect(frost.style.variant == (OrbitAppearance.isDark(window.effectiveAppearance) ? .dark : .light))
         for name in [NSAppearance.Name.aqua, .darkAqua, .aqua] {
             window.appearance = NSAppearance(named: name)
             rename.viewDidChangeEffectiveAppearance()
             frost.refresh(reduceTransparency: false)
             let dark = name == .darkAqua
-            #expect(frost.style.variant == .light)
+            #expect(frost.style.variant == (dark ? .dark : .light))
             let scrimColor = try #require(scrim.layer?.backgroundColor.flatMap { NSColor(cgColor: $0)?.usingColorSpace(.sRGB) })
             #expect(abs(scrimColor.alphaComponent - 0.4) < 0.001)
             #expect(scrimColor.redComponent > 0.8)

@@ -23,7 +23,7 @@ struct SpaceIconPickerTests {
         #expect(picker.grid.selectedIndex == BrowserSpacePlanet.selectable.count, "grid width: \(picker.grid.frame.width), scroll width: \(picker.grid.enclosingScrollView?.contentSize.width ?? 0), choice: \(picker.grid.selectedItem?.emoji ?? "")")
         let gridScroll = try #require(picker.grid.enclosingScrollView)
         #expect(gridScroll.frame == NSRect(x: 10, y: 74, width: 250, height: 154))
-        #expect(picker.grid.menu?.items.map(\.title) == [uiText("Emoji & Symbols…"), uiText("Dots")])
+        #expect(picker.grid.menu?.items.map(\.title) == [uiText("Emoji & Symbols…"), uiText("Remove Icon")])
     }
 
     @Test("Theme viewport retains color controls and scope without the retired material row")

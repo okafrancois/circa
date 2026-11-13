@@ -75,7 +75,7 @@ struct SpaceIconOwnershipRecheckTests {
         try await browser.closeWindow(otherWindow)
         try await settings.updateSpace(target, authority: authority) { $0.iconSelection = .systemSymbol("heart.fill") }
         let reopened = try BrowserSettingsStore(destination: url)
-        #expect(await reopened.snapshot().space(target).iconSelection == .planet(.closest(to: "heart.fill")))
+        #expect(await reopened.snapshot().space(target).iconSelection == .systemSymbol("heart.fill"))
         #expect(await reopened.snapshot().space(target).palette == .lavender)
     }
 

@@ -42,7 +42,7 @@ final class PinnedURLEditor: NSViewController, NSTextFieldDelegate {
         title.textColor = OrbitFloatingMaterial.body
         title.frame = NSRect(x: 38, y: 188, width: 317, height: 24)
         let detail = NSTextField(wrappingLabelWithString: uiText("This is what opens first when you click this tab or its favicon."))
-        detail.font = BrandTextStyle.body.font(size: 14)
+        detail.font = OrbitChromeTextStyle.body.font(size: 14)
         detail.textColor = OrbitFloatingMaterial.secondary
         detail.frame = NSRect(x: 38, y: 134, width: 317, height: 40)
         field.frame = NSRect(x: 38, y: 86, width: 317, height: 36)

@@ -15,7 +15,7 @@ struct SpaceSymbolControlAvailabilityTests {
         picker.modes.selectedSegment = SpaceIconPicker.Mode.icons.rawValue
         _ = picker.modes.sendAction(picker.modes.action, to: picker.modes.target)
         #expect(picker.search.isEnabled)
-        #expect(picker.visibleItems.contains { !$0.emoji.isEmpty } && picker.visibleItems.contains { if case .planet = $0.choice { true } else { false } })
+        #expect(!picker.visibleItems.isEmpty && picker.visibleItems.allSatisfy { $0.emoji.isEmpty })
     }
 }
 }

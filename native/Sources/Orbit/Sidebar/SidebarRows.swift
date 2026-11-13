@@ -203,7 +203,7 @@ class SidebarListRow: NSView, NSTextFieldDelegate {
     /// The opaque pinned card was measured on a light Space; dark Spaces keep the shared selected style.
     private var usesPinnedSelectedCard: Bool {
         guard let row = self as? SidebarTabRow, row.item.isPinned && isSelected else { return false }
-        return true
+        return !OrbitAppearance.isDark(effectiveAppearance)
     }
 
     override func viewDidChangeEffectiveAppearance() {
@@ -1008,7 +1008,7 @@ final class SidebarNewTabRow: NSButton {
         label.font = OrbitTokens.Typography.sidebarNewTab
         // : hint typography (13 regular, label colour).
         shortcut.font = OrbitTokens.Typography.menuShortcut
-        shortcut.attributedStringValue = BrandTextStyle.mono.attributedString(shortcut.stringValue, size: 13)
+        shortcut.attributedStringValue = OrbitChromeTextStyle.mono.attributedString(shortcut.stringValue, size: 13)
         refreshAccent()
         shortcut.alignment = .right
         shortcut.isHidden = true

@@ -24,7 +24,7 @@ struct ThemeGrainParityTests {
     @Test("Both appearances use daylight multiply without changing the stored strength")
     func appearance() throws {
         let fill = OrbitThemeFillView()
-        fill.apply(.default)
+        fill.apply(.init(stops: [.gray], mode: .automatic, texture: .grain, textureIntensity: 0.3))
         fill.appearance = NSAppearance(named: .darkAqua)
         fill.viewDidChangeEffectiveAppearance()
         #expect(fill.paperGrain.layer?.compositingFilter as? String == "multiplyBlendMode")

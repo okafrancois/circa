@@ -1,5 +1,4 @@
 import AppKit
-import BrowserShell
 @testable import BrowserCore
 import Testing
 @testable import Orbit
@@ -48,7 +47,7 @@ struct ThemeParityTests {
                 .urlText: try #require(field.textColor), .urlIcons: urlIcon.tint,
                 .newTab: try #require(newTab.label.textColor), .footer: sidebar.footer.libraryButton.tint,
                 .spaceTitle: try #require(sidebar.page.titleLabel.textColor), .buttons: sidebar.footer.plusButton.tint,
-                .scrollIndicators: sidebar.page.scrollView.scrollerKnobStyle == .dark ? BrandPalette.ink : BrandPalette.paper,
+                .scrollIndicators: sidebar.page.scrollView.scrollerKnobStyle == .dark ? NSColor(srgbRed: 32.0/255, green: 32.0/255, blue: 32.0/255, alpha: 1) : NSColor(srgbRed: 244.0/255, green: 244.0/255, blue: 244.0/255, alpha: 1),
                 .frameEdges: try #require(card.frameEdgeColor).withAlphaComponent(1)
             ]
             #expect(actual.count == OrbitThemeForeground.Consumer.allCases.count)

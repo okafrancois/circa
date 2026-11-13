@@ -145,7 +145,7 @@ final class CreationMenuRow: NSView {
         title.font = OrbitTokens.Typography.menuItem
         title.lineBreakMode = .byTruncatingTail
         shortcut.font = OrbitTokens.Typography.menuShortcut
-        shortcut.attributedStringValue = BrandTextStyle.mono.attributedString(keys, size: 13)
+        shortcut.attributedStringValue = OrbitChromeTextStyle.mono.attributedString(keys, size: 13)
         shortcut.usesSingleLineMode = true
         shortcut.lineBreakMode = .byClipping
         applyInk(selected: false)

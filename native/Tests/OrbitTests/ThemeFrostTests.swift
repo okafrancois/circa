@@ -61,7 +61,7 @@ struct ThemeFrostTests {
         for theme in [OrbitTokens.SpaceTheme.default, .amberCoral, .lavender] {
             shell.apply(theme: theme, animated: false)
             #expect(!window.isOpaque)
-            #expect(shell.themeFill.tintOpacity == 1)
+            #expect(shell.themeFill.tintOpacity > 0 && shell.themeFill.tintOpacity < 1)
             #expect(window.backgroundColor == .clear)
             #expect(shell.sidebarMaterial.blendingMode == .behindWindow)
             #expect(shell.sidebarMaterial.material == .sidebar)
@@ -131,12 +131,12 @@ struct ThemeFrostTests {
         view.refresh(reduceTransparency: true)
         #expect(view.effect.isHidden)
         #expect(view.style.tintOpacity == 1)
-        #expect(view.style.variant == .light)
+        #expect(view.style.variant == .dark)
         #expect(view.style.background(over: .yellow) == view.style.tint)
         view.sidebarForeground = .black
         view.refresh(reduceTransparency: true)
         #expect(view.style.variant == .light)
-        #expect(OrbitFloatingMaterial.contrast(view.style.background(over: .black), BrandPalette.pageWhite) == 1)
+        #expect(OrbitFloatingMaterial.contrast(view.style.background(over: .black), .white) == 1)
     }
 
     @Test("Legacy material choices stay inert throughout a Space transition")

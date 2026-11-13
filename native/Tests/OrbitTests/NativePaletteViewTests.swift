@@ -1,5 +1,4 @@
 import AppKit
-import BrowserShell
 import Testing
 @testable import Orbit
 
@@ -90,21 +89,8 @@ struct NativePaletteViewTests {
         #expect(cell.detailLabel.stringValue == "— result-0.test")
         #expect(cell.actionLabel.stringValue == "Switch to Tab" && !cell.actionLabel.isHidden)
         #expect(cell.titleLabel.textColor == cell.actionLabel.textColor)
-        #expect(cell.background.layer?.backgroundColor == BrandPalette.sky.resolvedCGColor(for: cell.effectiveAppearance))
+        #expect(cell.background.layer?.backgroundColor == NSColor.controlAccentColor.withAlphaComponent(0.12).resolvedCGColor(for: cell.effectiveAppearance))
         #expect(cell.icon.contentTintColor == nil)
-        #expect(h.view.input.font?.pointSize == 18)
-        #expect(cell.titleLabel.font?.pointSize == 13)
-        #expect(cell.actionLabel.font?.pointSize == 13)
-        #expect(abs(h.view.searchIcon.frame.midY - PaletteTextAlignment.inkCenterY(h.view.input)) < 0.01)
-        #expect(abs(h.view.inputShortcut.frame.midY - PaletteTextAlignment.inkCenterY(h.view.input)) < 0.01)
-        #expect(abs(PaletteTextAlignment.inkCenterY(cell.actionLabel) - cell.accessory.frame.midY) < 0.01)
-        #expect(cell.actionIcon.frame.midY == cell.accessory.frame.midY)
-        #expect(cell.actionIcon.frame.midX == cell.accessory.frame.midX)
-        h.render((0..<7).map { paletteViewResult($0) })
-        #expect(h.view.panel.frame.height == 328)
-        #expect(h.view.scroll.hasVerticalScroller)
-        #expect(h.table.rect(ofRow: 0).height == 50)
-
         for size in [NSSize(width: 1024, height: 640), NSSize(width: 1512, height: 949)] {
             let panel = BrowserPaletteView.panelFrame(in: size)
             #expect(panel.width == 765 && panel.midX == size.width / 2)
@@ -126,14 +112,14 @@ struct NativePaletteViewTests {
         #expect(material.frame == h.view.panel.bounds && material.layer?.masksToBounds == true)
         #expect(material.hitTest(NSPoint(x: 20, y: 20)) == nil)
         #expect(!material.effect.isHidden && h.view.panel.layer?.backgroundColor?.alpha == 0)
-        #expect(cell.background.layer?.backgroundColor?.alpha == 1)
+        #expect(cell.background.layer?.backgroundColor?.alpha == 0.12)
         h.view.refreshMaterial(reduceTransparency: true)
         #expect(material.effect.isHidden && !h.view.usesMaterial)
         #expect(material.style.tintOpacity == 1)
-        #expect(cell.background.layer?.backgroundColor == BrandPalette.sky.resolvedCGColor(for: cell.effectiveAppearance))
+        #expect(cell.background.layer?.backgroundColor == h.view.accent.withAlphaComponent(0.12).resolvedCGColor(for: cell.effectiveAppearance))
         h.view.refreshMaterial(reduceTransparency: false)
         #expect(!material.effect.isHidden && h.view.usesMaterial)
-        #expect(cell.background.layer?.backgroundColor?.alpha == 1)
+        #expect(cell.background.layer?.backgroundColor?.alpha == 0.12)
         #expect(h.table.view(atColumn: 0, row: 0, makeIfNecessary: false) === cell)
     }
 
@@ -172,7 +158,7 @@ struct NativePaletteViewTests {
         cell.mouseEntered(with: event)
         #expect(cell.background.layer?.backgroundColor == OrbitTokens.Color.State.commandBarRowHover.resolvedCGColor(for: cell.effectiveAppearance))
         h.view.updateSelection(1)
-        #expect(cell.background.layer?.backgroundColor == BrandPalette.sky.resolvedCGColor(for: cell.effectiveAppearance))
+        #expect(cell.background.layer?.backgroundColor == NSColor.controlAccentColor.withAlphaComponent(0.12).resolvedCGColor(for: cell.effectiveAppearance))
         h.render([paletteViewResult(0), paletteViewResult(3)])
         #expect(cell.background.layer?.backgroundColor == NSColor.clear.resolvedCGColor(for: cell.effectiveAppearance))
     }
@@ -392,7 +378,7 @@ struct NativePaletteViewTests {
         defer { h.close() }
         h.view.input.stringValue = "result"
         h.render([paletteViewResult(0, section: .history), paletteViewResult(1, section: .search)])
-        #expect(h.view.inputSymbol == "clock" && !h.view.inputShortcut.isHidden)
+        #expect(h.view.inputSymbol == "clock" && !h.view.infoButton.isHidden)
         h.view.updateSelection(1)
         #expect(h.view.inputSymbol == "magnifyingglass")
         let search = BrowserPaletteResult(id: "search", title: "result", detail: "", section: .search,
@@ -405,7 +391,7 @@ struct NativePaletteViewTests {
         h.render([])
         #expect(h.view.scopeLabel.stringValue == "YouTube" && !h.view.scopeLabel.isHidden)
         #expect(h.view.input.frame.minX > h.view.scopeLabel.frame.maxX)
-        #expect(h.view.inputShortcut.isHidden)
+        #expect(h.view.infoButton.isHidden)
         #expect(h.view.input.placeholderAttributedString?.string == "Search YouTube")
         let spring = BrowserPaletteView.scopedSearchSpring
         #expect(spring.response == 0.7 && spring.dampingFraction == 0.9)

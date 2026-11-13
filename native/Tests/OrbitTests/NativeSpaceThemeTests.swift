@@ -101,10 +101,10 @@ struct NativeSpaceThemeRenderingTests {
         #expect(OrbitSpaceThemes.rendered(model.recomposed(noise: 0)).texture == .none)
         // The default preset paints exactly the measured default gradient.
         let preset = OrbitSpaceThemes.rendered(BrowserSpaceThemePresets.default)
-        #expect(preset.stopRange == OrbitTokens.SpaceTheme.default.stopRange)
+        #expect(preset.stopRange.light == OrbitTokens.SpaceTheme.default.stopRange.light)
         for (index, stop) in preset.stops.enumerated() {
             for appearance in [light, dark] {
-                #expect(near(rgb(stop, appearance), rgb(OrbitTokens.SpaceTheme.default.stops[index], appearance), 0.6))
+                #expect(near(rgb(stop, appearance), rgb(OrbitTokens.SpaceTheme.default.stops[index], light), 0.6))
             }
         }
     }

@@ -49,7 +49,7 @@ struct SpaceSymbolSettingsTests {
         let reopened = try BrowserSettingsStore(destination: url)
         let symbol = await reopened.snapshot()
         #expect(symbol.space(one).icon.isEmpty)
-        #expect(symbol.space(one).iconSelection == .planet(.closest(to: "briefcase.fill")))
+        #expect(symbol.space(one).iconSelection == .systemSymbol("briefcase.fill"))
         #expect(symbol.space(one).palette == .lavender)
         #expect(symbol.space(other) == before.space(other) && symbol.profiles == before.profiles)
         try await reopened.updateSpace(one) { $0.icon = "👩🏽‍💻" }
@@ -84,12 +84,12 @@ struct SpaceSymbolSettingsTests {
             with: #""icon":"🌈","systemSymbol":"future.symbol.2""#).utf8)
         try future.write(to: url)
         let store = try BrowserSettingsStore(destination: url)
-        #expect(await store.snapshot().space(id).iconSelection == .planet(.closest(to: "future.symbol.2")))
+        #expect(await store.snapshot().space(id).iconSelection == .systemSymbol("future.symbol.2"))
         #expect(await store.snapshot().space(id).icon.isEmpty)
         #expect(try Data(contentsOf: url) == future)
         try await store.updateSpace(id) { $0.palette = .lavender }
         let reopened = try BrowserSettingsStore(destination: url)
-        #expect(await reopened.snapshot().space(id).iconSelection == .planet(.closest(to: "future.symbol.2")))
+        #expect(await reopened.snapshot().space(id).iconSelection == .systemSymbol("future.symbol.2"))
     }
 
     @Test("Symbol identifiers are bounded data and invalid writes leave disk and memory unchanged")
@@ -105,7 +105,7 @@ struct SpaceSymbolSettingsTests {
                 try await store.updateSpace(id) { $0.iconSelection = .systemSymbol(invalid) }
             }
             #expect(try Data(contentsOf: url) == bytes)
-            #expect(await store.snapshot().space(id).iconSelection == .planet(.closest(to: "star.fill")))
+            #expect(await store.snapshot().space(id).iconSelection == .systemSymbol("star.fill"))
         }
         #expect(BrowserSpaceIcon.isValidSymbolIdentifier("person.2.fill"))
     }
