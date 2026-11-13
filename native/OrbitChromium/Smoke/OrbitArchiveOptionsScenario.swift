@@ -179,7 +179,27 @@ extension OrbitSmokeDriver {
             owner.session.refreshCatalog()
             await owner.session.waitForPendingCommands()
             spaces = owner.session.catalog?.spaces ?? []
+            if part != "onboarding", part != "motion" {
+                for name in ["Mail", "Calendar", "Notes", "Design", "Code", "Music"] {
+                    owner.openTab(url: fixture.appendingPathComponent("favorite/" + name.lowercased()))
+                    await owner.session.waitForPendingCommands()
+                    _ = await until(5) { owner.session.selectedSurface?.navigationState.isLoading == false }
+                    if let tab = owner.session.organization?.selectedTab {
+                        owner.session.renameTab(tab.id, to: name)
+                        owner.session.addToFavorites([tab.id])
+                        await owner.session.waitForPendingCommands()
+                    }
+                }
+                check("brand.favorite-tiles", owner.favorites.grid.items.count >= 6)
+            }
             if part == "settings" {
+                if let work = spaces.first, let side = spaces.last {
+                    try await environment.settings.store.saveLinkRoute(.init(value: "github.com", spaceID: work.id))
+                    try await environment.settings.store.saveLinkRoute(.init(value: "figma.com", spaceID: side.id))
+                }
+                try await environment.settings.store.setOpensExternalLinksInQuickWindow(true)
+                try await environment.settings.store.updateProfile(profile) { $0.opensPinnedLinksInPeek = true }
+                await environment.settings.refresh()
                 let model = BrowserSettingsModel(environment: environment, profileID: profile, shortcuts: application.commands.registry.defaultDefinitions)
                 await model.reload()
                 let settings = BrowserSettingsWindowController(model: model, appearanceOverride: .aqua)
@@ -260,9 +280,32 @@ extension OrbitSmokeDriver {
                     await owner.session.waitForPendingCommands()
                     owner.renderSession()
                 }
+                owner.openTab(url: fixture.appendingPathComponent("new-space"))
+                await owner.session.waitForPendingCommands()
+                _ = await until(5) { owner.session.selectedSurface?.navigationState.isLoading == false }
+                if let tab = owner.session.organization?.selectedTab {
+                    owner.session.renameTab(tab.id, to: "New Space — Project notes")
+                    await owner.session.waitForPendingCommands()
+                }
+                owner.palette.registry = application.commands.registry
                 owner.palette.present(.newTab)
-                owner.palette.query("stri")
-                await capture("command-bar", window); owner.palette.dismiss()
+                owner.palette.query("new space")
+                try? await Task.sleep(for: .milliseconds(700))
+                check("brand.command-results-tabs", owner.palette.results.contains { $0.section == .tabs })
+                check("brand.command-results-action", owner.palette.results.contains { $0.action == .command(.newSpace) })
+                (owner.palette.view.input.currentEditor() as? NSTextView)?.setSelectedRange(NSRange(location: owner.palette.view.input.stringValue.utf16.count, length: 0))
+                await capture("command-bar", window)
+                owner.palette.query(fixture.appendingPathComponent("roadmap").absoluteString)
+                try? await Task.sleep(for: .milliseconds(400))
+                check("brand.command-results-url", owner.palette.results.contains { $0.section == .address })
+                (owner.palette.view.input.currentEditor() as? NSTextView)?.setSelectedRange(NSRange(location: owner.palette.view.input.stringValue.utf16.count, length: 0))
+                await capture("command-bar-url", window)
+                owner.palette.query("split")
+                try? await Task.sleep(for: .milliseconds(400))
+                await capture("command-bar-actions", window)
+                owner.palette.dismiss()
+                owner.session.closeSelectedTab()
+                await owner.session.waitForPendingCommands()
                 if let id = owner.session.snapshot?.activeSpaceID,
                    let button = owner.sidebar.footer.spaceButtons.first(where: { $0.space.id == id }),
                    let picker = owner.makeSpaceIconPicker(for: id), picker.show(relativeTo: button) {
@@ -273,6 +316,11 @@ extension OrbitSmokeDriver {
                         owner.session.activateSpace(side.id)
                         await owner.session.waitForPendingCommands()
                     }
+                    let favoriteIDs = owner.favorites.grid.items.map { $0.tab.id }
+                    owner.session.removeFromFavorites(favoriteIDs)
+                    await owner.session.waitForPendingCommands()
+                    owner.session.closeTabs(favoriteIDs)
+                    await owner.session.waitForPendingCommands()
                     owner.session.closeSelectedTab(); await owner.session.waitForPendingCommands()
                     check("brand.empty-space-state", owner.session.selectedSurface == nil)
                     await capture("empty-space", window)
@@ -305,6 +353,7 @@ extension OrbitSmokeDriver {
                     application.createPrivateCommandWindow(); await application.waitForPrivateWindowCommands()
                     if let id = application.privateWindows.keys.first, let controller = application.windows.windows[id], let target = controller.window {
                         controller.palette.dismiss()
+                        target.makeFirstResponder(nil)
                         await capture("private-window", target); target.orderOut(nil)
                     }
                 }
