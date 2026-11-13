@@ -98,7 +98,9 @@ final class OrbitOnboardingFavouritesView: NSView {
                 tick.path = path; tick.strokeColor = NSColor.white.cgColor; tick.fillColor = nil; tick.lineWidth = 1.8
                 check.addSublayer(tick)
             }
-            button.setAccessibilityLabel(site.title + ", " + hint)
+            button.toolTip = site.title
+            button.setAccessibilityLabel(site.title)
+            button.setAccessibilityHelp(hint)
             button.setAccessibilityValue(site.selected ? 1 : 0)
         }
         pins.subviews.forEach { $0.removeFromSuperview() }

@@ -15,9 +15,8 @@ actor FavoriteIconStore {
     private var failures = BrowserCostCache<String, Date>(budget: 128 * 1024, countLimit: 512)
     private var removedProfiles = Set<ProfileID>()
 
-    init(directory: URL? = nil) {
+    init(directory: URL? = nil, configuration: URLSessionConfiguration = .ephemeral) {
         self.directory = directory
-        let configuration = URLSessionConfiguration.ephemeral
         configuration.httpCookieStorage = nil
         configuration.httpShouldSetCookies = false
         configuration.urlCredentialStorage = nil
@@ -115,19 +114,38 @@ actor FavoriteIconStore {
         return parts.url
     }
 
+    /// Product endpoints stay identifiable even when the home page redirects to sign-in.
+    static func productIconURLs(for home: URL) -> [URL] {
+        switch home.host?.lowercased() {
+        case "gmail.com", "www.gmail.com", "mail.google.com":
+            [URL(string: "https://mail.google.com/favicon.ico")!]
+        case "calendar.google.com":
+            [URL(string: "https://calendar.google.com/googlecalendar/images/favicons_2020q4/calendar_31.ico")!]
+        default: []
+        }
+    }
+
     private static func discover(home: URL, session: URLSession) async -> BrowserFaviconImage? {
+        let product = productIconURLs(for: home)
+        var seen = Set<URL>()
+        func fetch(_ urls: [URL]) async -> BrowserFaviconImage? {
+            for url in urls.prefix(12) where seen.insert(url).inserted {
+                guard !Task.isCancelled else { return nil }
+                if let (data, final) = await bytes(url, session: session),
+                   product.isEmpty || final.host?.lowercased() != "accounts.google.com",
+                   let image = decode(data, source: final) { return image }
+            }
+            return nil
+        }
+        if let image = await fetch(product) { return image }
         var candidates: [URL] = []
         if let (data, finalURL) = await bytes(home, session: session),
+           product.isEmpty || finalURL.host?.lowercased() == home.host?.lowercased(),
            let html = String(data: data, encoding: .utf8) {
             candidates = iconURLs(html: html, base: finalURL)
         }
         candidates.append(home.appendingPathComponent("favicon.ico"))
-        var seen = Set<URL>()
-        for url in candidates.prefix(12) where seen.insert(url).inserted {
-            guard !Task.isCancelled else { return nil }
-            if let (data, _) = await bytes(url, session: session), let image = decode(data, source: url) { return image }
-        }
-        return nil
+        return await fetch(candidates)
     }
 
     /// HTML discovery keeps declared CDN icons and relative paths, ignoring non-web schemes.

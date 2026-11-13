@@ -25,7 +25,7 @@ final class OrbitOnboardingFinishView: NSView {
         body.preferredMaxLayoutWidth = 486.32
         body.maximumNumberOfLines = 0
         button.title = OrbitOnboardingText.getStarted; button.accent = BrandPalette.coral
-        back.isUnderlined = false; back.isEnabled = false; back.alphaValue = 0.6
+        back.isUnderlined = true; back.isEnabled = false; back.alphaValue = 1
         back.accent = BrandPalette.ink
         layoutCopy()
         button.keyEquivalent = "\r"; button.onPress = { [weak self] in self?.onOpen?() }

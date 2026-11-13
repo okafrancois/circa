@@ -222,7 +222,7 @@ final class OrbitOnboardingMiniPreview: NSView {
         }
         let nameY = 22 + CGFloat(max(1, (selected.count + 2) / 3)) * 19 + 3
 
-        uiText("Personal").draw(at: NSPoint(x: 28, y: nameY), withAttributes: [.font: BrandFonts.ui(10, weight: .bold), .foregroundColor: BrandPalette.ink])
+        OrbitOnboardingFirstSpace.name.draw(at: NSPoint(x: 28, y: nameY), withAttributes: [.font: BrandFonts.ui(10, weight: .bold), .foregroundColor: BrandPalette.ink])
         for (i, width) in [74, 55, 64].enumerated() { box(NSRect(x: 9, y: nameY + 20 + CGFloat(i) * 11, width: CGFloat(width), height: 5), BrandPalette.ink.withAlphaComponent(0.14)) }
         let heading = BrandTextStyle.title.attributedString(uiText("Welcome home."), size: 15, opticalSize: 15, attributes: [.foregroundColor: BrandPalette.ink])
         let typesetter = CTTypesetterCreateWithAttributedString(heading)

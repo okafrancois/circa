@@ -53,7 +53,7 @@ final class OrbitOnboardingImportProgressView: NSView {
         next.frame = NSRect(origin: NSPoint(x: 54, y: 608), size: next.intrinsicContentSize)
         addSubview(next)
         let back = OrbitOnboardingLinkButton(title: OrbitOnboardingText.back, arrow: false, font: OrbitOnboardingFonts.back)
-        back.isUnderlined = false; back.isEnabled = false; back.alphaValue = 0.6; back.accent = BrandPalette.ink
+        back.isUnderlined = true; back.isEnabled = false; back.alphaValue = 1; back.accent = BrandPalette.ink
         back.frame.origin = NSPoint(x: next.frame.maxX + 22.11, y: next.frame.minY + 32 - back.frame.height / 2)
         addSubview(back)
     }

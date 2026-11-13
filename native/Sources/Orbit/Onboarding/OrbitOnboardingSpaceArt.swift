@@ -253,18 +253,28 @@ final class OrbitOnboardingHorizonArt: OrbitOnboardingSpaceArt {
 
 @MainActor
 final class OrbitOnboardingTrajectoryArt: OrbitOnboardingSpaceArt {
+    var sourceName: String? { didSet { needsLayout = true } }
+    let sourceLabel = NSTextField(labelWithString: "")
     private let pathArt = OrbitOnboardingIllustrationView("onboarding-trajectory")
     private let stars = (0..<3).map { OrbitOnboardingIllustrationView("onboarding-trajectory-star-" + String($0)) }
     private let satellite = CALayer()
     override init(frame: NSRect) {
         super.init(frame: frame)
         addSubview(pathArt)
+        addSubview(sourceLabel)
         for star in stars { addSubview(star) }
         artwork("sputnik", on: satellite)
     }
     required init?(coder: NSCoder) { nil }
     override func layout() {
         super.layout(); pathArt.frame = artworkBounds
+        let scale = artworkBounds.width / 280
+        sourceLabel.isHidden = sourceName?.isEmpty != false
+        sourceLabel.attributedStringValue = BrandTextStyle.mono.attributedString(sourceName?.uppercased() ?? "", size: 9 * scale,
+            attributes: [.foregroundColor: BrandPalette.ink, .kern: scale])
+        sourceLabel.sizeToFit()
+        sourceLabel.frame.origin = NSPoint(x: artworkBounds.minX + 38 * scale - sourceLabel.frame.width / 2,
+            y: artworkBounds.minY + 194 * scale - sourceLabel.firstBaselineOffsetFromTop)
         for star in stars { star.frame = artworkBounds }
         let side = 64 * artworkBounds.width / 280
         CATransaction.begin(); CATransaction.setDisableActions(true)

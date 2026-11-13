@@ -179,7 +179,7 @@ extension OrbitSmokeDriver {
             owner.session.refreshCatalog()
             await owner.session.waitForPendingCommands()
             spaces = owner.session.catalog?.spaces ?? []
-            if part != "onboarding", part != "motion" {
+            if !["onboarding", "onboarding-corrections", "motion"].contains(part) {
                 for name in ["Mail", "Calendar", "Notes", "Design", "Code", "Music"] {
                     owner.openTab(url: fixture.appendingPathComponent("favorite/" + name.lowercased()))
                     await owner.session.waitForPendingCommands()
@@ -192,7 +192,59 @@ extension OrbitSmokeDriver {
                 }
                 check("brand.favorite-tiles", owner.favorites.grid.items.count >= 6)
             }
-            if part == "settings" {
+            if part == "daylight" {
+                NSApp.appearance = NSAppearance(named: .darkAqua)
+                check("brand.system-dark", OrbitAppearance.isDark(NSApp.effectiveAppearance))
+                for (index, space) in spaces.prefix(2).enumerated() {
+                    try await environment.store.setSpaceTheme(BrandPalette.spaceGradients[index].theme(mode: .dark), for: space.id)
+                    owner.session.activateSpace(space.id)
+                    await owner.session.waitForPendingCommands()
+                    owner.openTab(url: fixture)
+                    await owner.session.waitForPendingCommands()
+                    _ = await until(5) { owner.session.selectedSurface?.isReady == true && owner.session.selectedSurface?.navigationState.isLoading == false }
+                    owner.renderSession()
+                    check("brand.daylight-window", !OrbitAppearance.isDark(window.effectiveAppearance))
+                    if let surface = owner.session.selectedSurface {
+                        let scheme = try? await environment.engine.conformanceProbe?.evaluateScript("String(matchMedia('(prefers-color-scheme: dark)').matches)", in: surface)
+                        check("brand.website-system-dark-" + String(index), scheme == "true", ["value": scheme ?? "missing"])
+                    }
+                    await capture(index == 0 ? "daylight-dark-system-work" : "daylight-dark-system-home", window)
+                }
+                let model = BrowserSettingsModel(environment: environment, profileID: profile, shortcuts: application.commands.registry.defaultDefinitions)
+                await model.reload()
+                let settings = BrowserSettingsWindowController(model: model, appearanceOverride: .darkAqua)
+                _ = settings.selectSection(.general)
+                if let target = settings.window { await capture("daylight-dark-system-settings", target) }
+                settings.window?.close()
+                owner.palette.registry = application.commands.registry
+                owner.palette.present(.newTab)
+                owner.palette.query("new space")
+                try? await Task.sleep(for: .milliseconds(600))
+                await capture("daylight-dark-system-command-bar", window)
+                owner.palette.dismiss()
+                let welcome = OrbitOnboardingWindowController(flow: .init(step: .welcome, sources: [], syncAvailability: .available), services: .init(), themeTarget: nil)
+                welcome.present()
+                try? await Task.sleep(for: .seconds(2))
+                if let target = welcome.window { await capture("daylight-dark-system-onboarding", target); target.orderOut(nil) }
+            } else if part == "onboarding-corrections" {
+                NSApp.appearance = NSAppearance(named: .darkAqua)
+                for empty in [false, true] {
+                    let sources = empty ? [] : OrbitOnboardingSource.captureSources
+                    var flow = OrbitOnboardingFlow(step: .importSource, sources: sources, syncAvailability: .available)
+                    if let first = sources.first { flow.select(source: first) }
+                    let onboarding = OrbitOnboardingWindowController(flow: flow, services: .init(), themeTarget: nil)
+                    onboarding.present()
+                    try? await Task.sleep(for: .seconds(1))
+                    if let target = onboarding.window { await capture(empty ? "onboarding-import-empty" : "onboarding-importSource", target); target.orderOut(nil) }
+                }
+                var syncFlow = OrbitOnboardingFlow(step: .sync, sources: [], syncAvailability: .available)
+                syncFlow.syncChoice = true
+                let sync = OrbitOnboardingWindowController(flow: syncFlow, services: .init(), themeTarget: nil)
+                sync.present()
+                try? await Task.sleep(for: .seconds(1))
+                if let target = sync.window { await capture("onboarding-sync", target); target.orderOut(nil) }
+                window.makeKeyAndOrderFront(nil)
+            } else if part == "settings" {
                 if let work = spaces.first, let side = spaces.last {
                     try await environment.settings.store.saveLinkRoute(.init(value: "github.com", spaceID: work.id))
                     try await environment.settings.store.saveLinkRoute(.init(value: "figma.com", spaceID: side.id))
@@ -394,7 +446,7 @@ extension OrbitSmokeDriver {
                     owner.session.refreshCatalog()
                     await owner.session.waitForPendingCommands()
                     owner.renderSession()
-                    await capture("main-night", window)
+                    await capture("main-daylight-stored-dark-mode", window)
                     try await environment.store.setSpaceTheme(home.theme, for: home.id)
                     owner.session.refreshCatalog()
                     await owner.session.waitForPendingCommands()

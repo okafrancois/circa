@@ -99,6 +99,7 @@ final class OrbitOnboardingCardView: NSView {
     private(set) var runningTransitions = 0
     private var dots: [CALayer] = []
     private weak var fixedCounter: NSView?
+    var backOpacity: CGFloat = 1
 
     override init(frame frameRect: NSRect) {
         super.init(frame: NSRect(origin: frameRect.origin, size: M.cardSize))
@@ -122,7 +123,6 @@ final class OrbitOnboardingCardView: NSView {
         for control in [backButton, skipButton, primaryButton] as [NSView] { addSubview(control) }
         backButton.frame.origin = NSPoint(x: M.contentX - 2, y: M.backCapTop - (backButton.frame.height - OrbitOnboardingFonts.back.capHeight) / 2)
         primaryButton.keyEquivalent = "\r"
-        backButton.isUnderlined = false
     }
 
     required init?(coder: NSCoder) { nil }
@@ -164,14 +164,14 @@ final class OrbitOnboardingCardView: NSView {
         if hasBack != wasShown {
             if animated, !OrbitMotionPreferences.prefersReducedMotion, let layer = backButton.layer {
                 let fade = CABasicAnimation(keyPath: "opacity")
-                fade.fromValue = hasBack ? 0 : 0.6
-                fade.toValue = hasBack ? 0.6 : 0
+                fade.fromValue = hasBack ? 0 : backOpacity
+                fade.toValue = hasBack ? backOpacity : 0
                 fade.duration = M.crossFadeDuration
                 fade.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
                 layer.add(fade, forKey: Self.fadeKey)
             }
         }
-        backButton.alphaValue = hasBack ? 0.6 : 0
+        backButton.alphaValue = hasBack ? backOpacity : 0
         backButton.isEnabled = hasBack
         backButton.setAccessibilityElement(hasBack)
     }

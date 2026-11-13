@@ -112,8 +112,10 @@ extension OrbitApplication {
         let stored = await environment.store.catalogSnapshot().spaces.first { $0.id == spaceID }?.theme
         let target = OrbitOnboardingThemeTarget(spaceID: spaceID, profileID: profileID, stored: stored, commit: { [weak environment] theme in
             guard let environment else { return }
-            try await environment.store.setSpaceTheme(theme, for: spaceID, profileID: profileID)
+            try await OrbitOnboardingFirstSpace.apply(theme, spaceID: spaceID, profileID: profileID, store: environment.store, settings: environment.settings.store)
             environment.scheduleSave()
+            await environment.settings.refresh()
+            await environment.refreshSettingsCatalog()
         }, registry: environment.themeEditors)
         let flow = OrbitOnboardingFlow(step: step, sources: await onboardingSources(synthetic: synthetic),
                                        syncAvailability: onboardingSyncAvailability(), restoring: record)

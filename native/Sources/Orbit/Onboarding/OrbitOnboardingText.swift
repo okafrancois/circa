@@ -28,6 +28,7 @@ enum OrbitOnboardingText {
     static var importBody: String { uiText("Tabs, Spaces, bookmarks, history and passwords move into Circa. Nothing is uploaded, and the other browser stays exactly as it is.") }
     static var importNote: String { uiText("macOS may ask to unlock the other browser’s passwords when the import starts.") }
     static var importNone: String { uiText("No thanks, I’ll start fresh.") }
+    static var noBrowsers: String { uiText("No other browser found on this Mac.") }
     static var importNoneEmpty: String { uiText("No other browser was found. Start fresh.") }
     static var importListLabel: String { uiText("Browsers to import from") }
     static var profileListLabel: String { uiText("Profile to import") }

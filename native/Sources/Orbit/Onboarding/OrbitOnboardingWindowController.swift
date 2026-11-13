@@ -35,7 +35,7 @@ struct OrbitOnboardingServices {
 
 /// Non-closable first-run window with disabled traffic lights.
 @MainActor
-final class OrbitOnboardingWindow: NSWindow {
+final class OrbitOnboardingWindow: OrbitDaylightWindow {
     /// Centre of the first window button, from the window's top-left.
     static let firstButtonCenter = CGPoint(x: 34, y: 29.2)
 
@@ -291,6 +291,7 @@ final class OrbitOnboardingWindowController: NSWindowController {
             BrowserImportUISynthetic.recordFailure(error, configuration: configuration)
         }
         let alert = NSAlert()
+        alert.window.appearance = NSAppearance(named: .aqua)
         alert.messageText = uiText("Could Not Complete Setup")
         alert.informativeText = uiText("Your data is kept. You can try again, or go back and skip the import.")
         alert.addButton(withTitle: uiText("OK"))
@@ -403,6 +404,8 @@ final class OrbitOnboardingWindowController: NSWindowController {
         guard isCard else { return }
         card.primaryButton.title = flow.primaryTitle
         card.layoutControls(hasBack: flow.hasBack, hasSkip: flow.hasSkip, animated: animated)
+        card.backButton.isUnderlined = flow.step != .favourites
+        card.backOpacity = flow.step == .favourites ? 0.6 : 1
         let (title, body, note) = text(for: flow.step)
         let page = OrbitOnboardingTextPage(title: title, body: body, note: note, hasBack: flow.hasBack)
         page.counter.stringValue = OrbitOnboardingText.counter(flow.index + 1)
@@ -446,7 +449,7 @@ final class OrbitOnboardingWindowController: NSWindowController {
     private func text(for step: BrowserOnboardingRecord.Step) -> (String, String, String?) {
         switch step {
         case .welcome, .importSource:
-            return (OrbitOnboardingText.importTitle, "", nil)
+            return (OrbitOnboardingText.importTitle, flow.sources.isEmpty ? OrbitOnboardingText.noBrowsers : "", nil)
         case .sync:
             let body = switch flow.syncAvailability {
             case .available: OrbitOnboardingText.syncBody
@@ -601,7 +604,8 @@ final class OrbitOnboardingWindowController: NSWindowController {
         art.frame = NSRect(x: 751.58, y: 135.79, width: 426.32, height: 309.02)
         panel.addSubview(art)
         art.play()
-        layoutImportRows()
+        art.sourceName = flow.selectedSource?.name
+        if !flow.sources.isEmpty { layoutImportRows() }
     }
 
     /// Rows top to bottom: detected sources in discovery order, the selected source's profiles below it,
@@ -641,6 +645,8 @@ final class OrbitOnboardingWindowController: NSWindowController {
         }
         let scope = NSTextField(wrappingLabelWithString: uiText("Spaces · pinned tabs · themes\nBoosts · passwords (encrypted)"))
         scope.identifier = NSUserInterfaceItemIdentifier("orbit.onboarding.secondary-copy")
+        scope.font = OrbitOnboardingFonts.mono(16.58)
+        scope.textColor = BrandPalette.ink.withAlphaComponent(0.75)
         let style = NSMutableParagraphStyle()
         style.minimumLineHeight = 26.53; style.maximumLineHeight = 26.53
         scope.attributedStringValue = BrandTextStyle.mono.attributedString(scope.stringValue, size: 16.58, attributes: [.foregroundColor: BrandPalette.ink.withAlphaComponent(0.75), .kern: 0.663, .paragraphStyle: style])
@@ -700,7 +706,9 @@ final class OrbitOnboardingWindowController: NSWindowController {
                 if let icon = await services.favicon(site.url) { preview?.icons[site.url] = icon }
             }
         }
-        let colorName = NSTextField(labelWithString: uiText("Mandarine").uppercased())
+        let initialPlanet = OrbitOnboardingFirstSpace.planet(for: theme)?.index() ?? 0
+        preview.planetIndex = initialPlanet
+        let colorName = NSTextField(labelWithString: uiText(["Mandarine", "Cobalt", "Soleil", "Aurore"][initialPlanet]).uppercased())
         colorName.identifier = NSUserInterfaceItemIdentifier("orbit.onboarding.secondary-copy")
         colorName.font = OrbitOnboardingFonts.mono(16.58); colorName.textColor = BrandPalette.ink
         colorName.frame = NSRect(x: 54, y: choicesTop + 104.21, width: 530, height: 22)
@@ -741,6 +749,7 @@ final class OrbitOnboardingWindowController: NSWindowController {
     private func refreshSelection() {
         switch flow.step {
         case .importSource:
+            card.rightView?.subviews.compactMap { $0 as? OrbitOnboardingTrajectoryArt }.first?.sourceName = flow.selectedSource?.name
             for (index, card) in optionCards.enumerated() {
                 if index < flow.sources.count {
                     card.isSelected = flow.selectedSource == flow.sources[index]

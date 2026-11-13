@@ -56,11 +56,13 @@ extension OnboardingPresentationTests {
             #expect(button.frame.minY >= 600 && button.frame.maxY <= 714)
             #expect(button.acceptsFirstResponder == button.isEnabled)
             #expect(button.accessibilityRole() == .button)
-            #expect(controller.card.backButton.alphaValue == 0.6)
+            let opacity = step == .favourites ? 0.6 : 1.0
+            #expect(abs(controller.card.backButton.alphaValue - opacity) < 0.0001)
+            #expect(controller.card.backButton.isUnderlined == (step != .favourites))
             controller.card.playContents()
             let entry = try #require(controller.card.backButton.layer?.animation(forKey: "orbit.onboarding.opacity"))
             let finalOpacity = (entry as? CAKeyframeAnimation)?.values?.last ?? (entry as? CABasicAnimation)?.toValue
-            #expect((finalOpacity as? NSNumber)?.doubleValue == 0.6)
+            #expect(abs(((finalOpacity as? NSNumber)?.doubleValue ?? -1) - opacity) < 0.0001)
             #expect(entry.isRemovedOnCompletion)
         }
     }

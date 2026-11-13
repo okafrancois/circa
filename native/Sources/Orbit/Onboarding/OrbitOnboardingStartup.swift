@@ -54,12 +54,13 @@ enum OrbitOnboardingStartup {
                 var catalog = await store.catalogSnapshot()
                 if catalog.profiles.isEmpty {
                     let profile = await store.createProfile(name: uiText("Personal"))
-                    _ = try await store.createSpace(name: uiText("Space"), profileID: profile)
+                    _ = try await store.createSpace(name: OrbitOnboardingFirstSpace.name, profileID: profile)
                     catalog = await store.catalogSnapshot()
                 }
                 guard let space = catalog.spaces.first else { throw BrowserSessionError.spaceMissing }
+                let settings = try BrowserSettingsStore(destination: configuration.sessionFile.appendingPathExtension("settings.json"))
                 let themeTarget = OrbitOnboardingThemeTarget(spaceID: space.id, profileID: space.profileID, stored: space.theme, commit: { theme in
-                    try await store.setSpaceTheme(theme, for: space.id, profileID: space.profileID)
+                    try await OrbitOnboardingFirstSpace.apply(theme, spaceID: space.id, profileID: space.profileID, store: store, settings: settings)
                     try BrowserSessionFileStore().save(await store.sessionDocument(), to: configuration.sessionFile)
                 }, registry: nil)
                 let preparation = OrbitOnboardingImportPreparation()
@@ -93,7 +94,7 @@ enum OrbitOnboardingStartup {
                     if let firstSpace {
                         if !flow.skippedSteps.contains(.theme), flow.selectedSource != nil {
                             let chosen = await store.catalogSnapshot().spaces.first(where: { $0.id == space.id })?.theme
-                            try await imported.setSpaceTheme(chosen, for: firstSpace.id, profileID: firstSpace.profileID)
+                            try await OrbitOnboardingFirstSpace.apply(chosen, spaceID: firstSpace.id, profileID: firstSpace.profileID, store: imported, settings: settings)
                         }
                         if await imported.sessionDocument().windows.isEmpty {
                             _ = try await imported.createWindow(activeSpaceID: firstSpace.id)
@@ -122,6 +123,7 @@ enum OrbitOnboardingStartup {
                 let controller = OrbitOnboardingWindowController(flow: flow, services: services, themeTarget: themeTarget)
                 cover = controller
                 controller.present()
+                OrbitOnboardingProof.start(controller, configuration: configuration, icons: icons, profileID: space.profileID)
             } catch { failure = error; ready = true }
         }
         while !ready {
