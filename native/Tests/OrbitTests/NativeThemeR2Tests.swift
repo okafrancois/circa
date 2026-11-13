@@ -103,12 +103,12 @@ extension NativeWebKitTests {
 @Suite("Theme R2 — tokens for other surfaces")
 @MainActor
 struct ThemeR2TokenTests {
-    @Test("Command bar, Little Circa, Peek, split and radii carry the round 2 measurements")
+    @Test("Shared surface geometry retains the wide centred Command Bar")
     func surfaceTokens() {
         typealias M = OrbitTokens.Metrics
-        #expect(M.CommandBar.width == 400 && M.CommandBar.top(windowHeight: 640) == 34)
-        #expect(M.CommandBar.top(windowHeight: 949) == 34)
-        #expect(OrbitTokens.Radius.commandBar == 16 && OrbitTokens.Radius.commandBarRow == 8)
+        #expect(M.CommandBar.width == 765 && M.CommandBar.top(windowHeight: 640) == 151.5)
+        #expect(M.CommandBar.top(windowHeight: 949) == 306)
+        #expect(OrbitTokens.Radius.commandBar == 27 && OrbitTokens.Radius.commandBarRow == 8)
         #expect(OrbitTokens.Shadow.commandBar.offsetY == 5 && OrbitTokens.Shadow.commandBar.blur == 0)
         #expect(M.QuickWindow.toolbarHeight == 47 && M.QuickWindow.pageIsEdgeToEdge)
         #expect(M.Content.splitGap == 6 && M.Content.splitDividerHandle == NSSize(width: 2, height: 24))
