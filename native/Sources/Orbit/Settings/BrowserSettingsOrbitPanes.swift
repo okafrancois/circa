@@ -355,7 +355,7 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
                 })).toggleStyle(SettingsSwitchStyle()).padding(12).accessibilityIdentifier("settings-external-little-orbit")
             }
             HStack {
-                Text(uiText("Peek")).font(Font(BrandFonts.ui(14, weight: .semibold)))
+                SettingsGroupLabel(title: uiText("Peek"))
                 Spacer()
                 profilePicker
             }

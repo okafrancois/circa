@@ -590,7 +590,7 @@ struct BrowserSettingsView<Engine: BrowserEngine>: View {
                         Spacer(minLength: 0)
                     }.padding(.horizontal, 10).padding(.vertical, 9).contentShape(Rectangle())
                 }.buttonStyle(.plain).foregroundStyle(.secondary).accessibilityIdentifier("settings-create-space")
-                DisclosureGroup(uiText("Archived Spaces")) {
+                DisclosureGroup {
                     ForEach(model.archivedSpaces.filter { $0.space.profileID == profile }) { saved in
                         VStack(alignment: .leading, spacing: 6) {
                             Text(saved.space.name)
@@ -599,7 +599,8 @@ struct BrowserSettingsView<Engine: BrowserEngine>: View {
                             }.accessibilityIdentifier("settings-restore-space")
                         }.padding(.vertical, 4)
                     }
-                }.foregroundStyle(.secondary).padding(.top, 12)
+                } label: { SettingsGroupLabel(title: uiText("Archived Spaces")) }
+                .foregroundStyle(.secondary).padding(.top, 12)
             }.frame(width: 150)
             if let space = available.first(where: { $0.id == selectedSpaceID }) ?? available.first {
                 VStack(alignment: .leading, spacing: 12) {
@@ -663,7 +664,7 @@ struct BrowserSettingsView<Engine: BrowserEngine>: View {
                 }.disabled(!model.supportsSiteData)
             }.padding(.horizontal, 14).padding(.vertical, 8)
         }
-        Text(text("sitePermissions", "Site Permissions")).font(Font(BrandFonts.ui(14, weight: .semibold))).padding(.top, 4)
+        SettingsGroupLabel(title: text("sitePermissions", "Site Permissions"))
         SettingsCard {
             VStack(alignment: .leading, spacing: 0) {
                 if model.permissionsUnavailable {

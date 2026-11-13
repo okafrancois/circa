@@ -176,7 +176,7 @@ struct BrowserSettingsIconGrid: View {
     @ObservedObject var icons = OrbitAppIconController.shared
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(uiText("App Icon").uppercased()).font(Font(BrandFonts.mono(9.5))).tracking(1.14).foregroundStyle(.secondary)
+            SettingsGroupLabel(title: uiText("App Icon"))
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 6), spacing: 6) {
                 ForEach(OrbitAppIcon.allCases) { icon in
                     Button { _ = icons.apply(icon) } label: {

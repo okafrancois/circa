@@ -119,7 +119,7 @@ struct BrowserShortcutSettingsPane: View {
                     }.padding(.horizontal, 14).padding(.vertical, 8)
             }
             HStack {
-                Text(uiText("Keyboard Shortcuts")).font(Font(BrandFonts.ui(14, weight: .semibold)))
+                SettingsGroupLabel(title: uiText("Keyboard Shortcuts"))
                 Spacer()
                 Button(uiText("Reset All")) { change { try preferences.resetAll() } }
                     .accessibilityIdentifier("settings-reset-shortcuts")
@@ -131,7 +131,7 @@ struct BrowserShortcutSettingsPane: View {
             ScrollView {
               LazyVStack(spacing: 0) {
                 ForEach(Array(Set(filtered.map(\.menu))).sorted(), id: \.self) { menu in
-                  Text(uiText(menu)).font(Font(BrandFonts.ui(11, weight: .semibold))).foregroundStyle(.secondary)
+                  SettingsGroupLabel(title: uiText(menu))
                     .frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 14).padding(.top, 14).padding(.bottom, 6)
                   ForEach(filtered.filter { $0.menu == menu }, id: \.id) { command in
                     HStack(spacing: 8) {
