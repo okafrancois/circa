@@ -1,8 +1,39 @@
 import Foundation
+import Darwin
 import Testing
 @testable import BrowserCore
 
 struct ObjectEditingTests {
+    @Test("Replacing the saved URL with current navigation survives disk restore for pins and favorites")
+    func replaceCurrentAndRestore() async throws {
+        for favorite in [false, true] {
+            let f = try await OrganizationFixture.make()
+            let id = try await f.open("home")
+            if favorite { _ = try await f.store.addToFavorites([id], from: f.context()) }
+            else { _ = try await f.store.pinTabs([id], from: f.context()) }
+            let occurrence = try #require(await f.occurrences(of: id).first)
+            let destination = organizationURL("current")
+            try await f.store.updateDestination(for: occurrence.occurrenceID, to: destination, from: f.context())
+            let tab = try #require(await f.organization().tab(id))
+            _ = try await f.store.editPinnedURL(id, to: tab.url, from: f.context())
+            #expect(try await f.organization().tab(id)?.isAwayFromPinnedURL == false)
+            guard let canonical = realpath(FileManager.default.temporaryDirectory.path, nil) else { throw POSIXError(.ENOENT) }
+            let directory = URL(fileURLWithPath: String(cString: canonical), isDirectory: true).appendingPathComponent(UUID().uuidString)
+            free(canonical)
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            defer { try? FileManager.default.removeItem(at: directory) }
+            let file = directory.appendingPathComponent("session.json")
+            let persistence = BrowserSessionFileStore()
+            try persistence.save(await f.store.sessionDocument(), to: file)
+            let restored = try BrowserStore(restoring: persistence.load(from: file))
+            let context = try await restored.captureContext(in: f.window)
+            #expect(try await restored.organizationSnapshot(from: context).tab(id)?.pinnedURL == destination)
+            let (reset, state) = try await restored.resetTabToPinnedURL(id, from: context)
+            #expect(reset.url == destination && state.organization.tab(id)?.url == destination)
+            try await restored.sessionDocument().validate()
+        }
+    }
+
     @Test("Custom tab icons apply, reset, undo, redo and round trip without changing the title or destination")
     func icons() async throws {
         let f = try await OrganizationFixture.make()

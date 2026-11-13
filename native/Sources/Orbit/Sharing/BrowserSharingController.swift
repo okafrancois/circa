@@ -10,6 +10,15 @@ final class BrowserSharingController<Engine: BrowserEngine>: NSObject, NSSharing
     private weak var owner: BrowserWindowController<Engine>?
     let button = SiteControlButton("", identifier: "share-page", onPress: {})
     private var picker: NSSharingServicePicker?
+
+    func menuItem(for url: URL) -> NSMenuItem {
+        let picker = NSSharingServicePicker(items: [url])
+        self.picker = picker
+        let item = picker.standardShareMenuItem
+        item.title = uiText("Share")
+        return item
+    }
+
     private let toast = BrowserCopiedToast()
 
     init(owner: BrowserWindowController<Engine>) {

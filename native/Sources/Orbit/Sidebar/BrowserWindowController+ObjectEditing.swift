@@ -8,9 +8,9 @@ extension BrowserWindowController {
         return session.organization?.tab(id)
     }
 
-    func presentTabIconPicker() {
-        guard acceptsCommands, let tab = sidebarSingleTab, let snapshot = session.organization,
-              let y = sidebar.page.list.displayedCenterY(of: .node(.tab(tab.id))) else { return }
+    func presentTabIconPicker(_ requestedTab: BrowserOrganizationTabItem? = nil) {
+        guard acceptsCommands, let tab = requestedTab ?? sidebarSingleTab, let snapshot = session.organization else { return }
+        let y = sidebar.page.list.displayedCenterY(of: .node(.tab(tab.id)))
         let picker = SpaceIconPicker(currentChoice: tab.customIcon ?? .none, accent: sidebar.footer.accent, purpose: .tab)
         tabIconPicker?.cancel()
         tabIconPicker = picker
@@ -23,12 +23,13 @@ extension BrowserWindowController {
             if self?.tabIconPicker === picker { self?.tabIconPicker = nil }
         }
         let list = sidebar.page.list
-        let anchor = NSRect(x: 8, y: y - 12, width: 20, height: 24)
-        if !picker.show(relativeTo: list, anchor: anchor) { tabIconPicker = nil }
+        let anchor = NSRect(x: 8, y: (y ?? 12) - 12, width: 20, height: 24)
+        let host = y == nil ? sidebar : list
+        if !picker.show(relativeTo: host, anchor: anchor) { tabIconPicker = nil }
     }
 
-    func presentPinnedURLEditor() {
-        guard acceptsCommands, let tab = sidebarSingleTab, let url = tab.pinnedURL,
+    func presentPinnedURLEditor(_ requestedTab: BrowserOrganizationTabItem? = nil) {
+        guard acceptsCommands, let tab = requestedTab ?? sidebarSingleTab, let url = tab.pinnedURL,
               let snapshot = session.organization, let host = window?.contentView else { return }
         pinnedURLEditor?.complete(save: false)
         let editor = PinnedURLEditor(url: url) { [weak self] value in
