@@ -106,7 +106,7 @@ struct OnboardingCorrectionsTests {
         let theme = try #require(saved.theme)
         let appearance = NSAppearance(named: night ? .darkAqua : .aqua)!
         let rendered = OrbitSpaceThemes.rendered(theme)
-        #expect(rendered.mode == .light)
+        #expect(rendered.mode == .automatic)
         for (stop, value) in zip(rendered.stops, BrandPalette.spaceGradients[index].stops) {
             #expect(stop.resolved(for: appearance) == OrbitSpaceThemes.color(value))
         }

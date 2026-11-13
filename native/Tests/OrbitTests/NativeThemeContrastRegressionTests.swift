@@ -37,7 +37,7 @@ struct NativeThemeContrastRegressionTests {
         }
     }
 
-    @Test("Unequal legacy variants always preserve the daylight gradient midpoint", arguments: [false, true])
+    @Test("Unequal light and dark stop counts preserve each variant's independent midpoint", arguments: [false, true])
     func unequalVariantStops(shortDarkVariant: Bool) throws {
         let short = BrowserSpaceTheme.Gradient(stops: [.init(hex: 0x204060), .init(hex: 0xA0C0E0)])
         let long = BrowserSpaceTheme.Gradient(stops: [.init(hex: 0x102030), .init(hex: 0x709050), .init(hex: 0xD0E0F0)])
@@ -47,7 +47,7 @@ struct NativeThemeContrastRegressionTests {
         for isDark in [false, true] {
             let appearance = try #require(NSAppearance(named: isDark ? .darkAqua : .aqua))
             let painted = OrbitThemeGradient.normalizedStops(theme.stops, appearance: appearance)
-            let independent = OrbitThemeGradient.normalizedStops(model.light.stops.map(OrbitSpaceThemes.color),
+            let independent = OrbitThemeGradient.normalizedStops(model.gradient(isDark: isDark).stops.map(OrbitSpaceThemes.color),
                                                                appearance: appearance)
             #expect(painted.count == independent.count)
             for (actual, expected) in zip(painted, independent) {

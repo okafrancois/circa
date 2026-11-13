@@ -10,7 +10,6 @@ final class BrowserPageSaveController<Engine: BrowserEngine> {
     var isBusy: Bool { task != nil }
     var chooseDestination: @MainActor (NSWindow, String) async -> URL? = { window, title in
         let panel = NSSavePanel()
-        panel.appearance = NSAppearance(named: .aqua)
         panel.title = uiText("Save Page As…")
         panel.allowedContentTypes = [UTType(filenameExtension: "mhtml") ?? .data]
         panel.nameFieldStringValue = title.replacingOccurrences(of: "/", with: "-") + ".mhtml"

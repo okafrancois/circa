@@ -7,6 +7,7 @@ struct ThemeGrainParityTests {
     @Test("The dial controls the same paper tile independently of tint opacity")
     func strength() throws {
         let fill = OrbitThemeFillView(frame: NSRect(x: 0, y: 0, width: 400, height: 400))
+        fill.appearance = NSAppearance(named: .aqua)
         for tint: Float in [0.12, 1] {
             fill.tintOpacity = tint
             for strength: CGFloat in [0, 0.3, 0.5, 1] {
@@ -21,16 +22,20 @@ struct ThemeGrainParityTests {
         fill.apply(.init(stops: [.gray], mode: .automatic, texture: .none, textureIntensity: 1))
         #expect(fill.paperGrain.alphaValue == 0)
     }
-    @Test("Both appearances use daylight multiply without changing the stored strength")
+    @Test("Paper grain retains calibrated dark noise strength and light multiply")
     func appearance() throws {
         let fill = OrbitThemeFillView()
         fill.apply(.init(stops: [.gray], mode: .automatic, texture: .grain, textureIntensity: 0.3))
         fill.appearance = NSAppearance(named: .darkAqua)
         fill.viewDidChangeEffectiveAppearance()
-        #expect(fill.paperGrain.layer?.compositingFilter as? String == "multiplyBlendMode")
+        fill.paperGrain.viewDidChangeEffectiveAppearance()
+        #expect(fill.paperGrain.layer?.compositingFilter == nil)
+        #expect(abs(fill.paperGrain.alphaValue - 0.045) < 0.00001)
+        #expect(OrbitPaperGrainView.darkTile != nil)
         #expect(fill.paperGrain.strength == 0.3)
         fill.appearance = NSAppearance(named: .aqua)
         fill.viewDidChangeEffectiveAppearance()
+        fill.paperGrain.viewDidChangeEffectiveAppearance()
         #expect(fill.paperGrain.layer?.compositingFilter as? String == "multiplyBlendMode")
     }
 }

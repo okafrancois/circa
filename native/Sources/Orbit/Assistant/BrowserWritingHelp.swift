@@ -273,7 +273,7 @@ final class BrowserWritingHelp: ObservableObject {
     }
 }
 
-private final class WritingPanel: OrbitDaylightPanel {
+private final class WritingPanel: NSPanel {
     var onEscape: (() -> Void)?
     override var canBecomeKey: Bool { true }
     override func cancelOperation(_ sender: Any?) { onEscape?() }

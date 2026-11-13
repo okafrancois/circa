@@ -24,7 +24,7 @@ final class OrbitThemeUndoManager: UndoManager {
 /// Borderless key panel hosting the editor over its parent window (Orbit shows an arrowless popover at
 /// card + 13, y 13). Losing key status — a click elsewhere — dismisses it, like a transient popover.
 @MainActor
-final class OrbitThemeEditorPanel: OrbitDaylightPanel {
+final class OrbitThemeEditorPanel: NSPanel {
     var onResignKey: (() -> Void)?
     var onCancel: (() -> Void)?
 

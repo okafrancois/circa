@@ -91,7 +91,7 @@ final class BrowserQuickWindowWindowController<Engine: BrowserEngine>: NSWindowC
                               backing: .buffered, defer: true)
         window.isReleasedWhenClosed = false
         // Little Circa keeps its dark chrome independently of the source Space's appearance.
-        window.appearance = OrbitAppearance.windowAppearance(for: .automatic)
+        window.appearance = NSAppearance(named: .darkAqua)
         window.titleVisibility = .hidden
         window.titlebarAppearsTransparent = true
         window.title = Self.windowTitle(nil)
@@ -529,7 +529,7 @@ final class BrowserQuickWindowWindowController<Engine: BrowserEngine>: NSWindowC
 
     func applyPreferences(searchEngine: SearchEngine, theme: OrbitTokens.SpaceTheme) {
         resolver.searchEngine = searchEngine
-        window?.appearance = OrbitAppearance.windowAppearance(for: theme.mode)
+        window?.appearance = NSAppearance(named: .darkAqua)
         compactInput?.window.appearance = window?.appearance
         spaceChooser?.window.appearance = window?.appearance
         toolbar.fill.apply(theme)
@@ -538,13 +538,13 @@ final class BrowserQuickWindowWindowController<Engine: BrowserEngine>: NSWindowC
         openButton.font = font
         let accent = OrbitSpaceThemes.accent(for: theme)
         openGroup.accent = accent
-        openButton.contentTintColor = BrandPalette.paper
-        spaceButton.contentTintColor = BrandPalette.paper
+        openButton.contentTintColor = OrbitFloatingMaterial.body
+        spaceButton.contentTintColor = OrbitFloatingMaterial.body
         addressField.textColor = OrbitFloatingMaterial.body
         copyAddressButton.contentTintColor = OrbitFloatingMaterial.secondary
         extensionsButton.contentTintColor = OrbitFloatingMaterial.secondary
         sourceSpaceBadge.contentTintColor = OrbitFloatingMaterial.body
-        sourceSpaceBadge.layer?.backgroundColor = BrandPalette.ink.withAlphaComponent(0.08).cgColor
+        sourceSpaceBadge.layer?.backgroundColor = NSColor.black.withAlphaComponent(0.08).cgColor
     }
 
     func updateDestinationName(_ name: String, sourceName: String) {

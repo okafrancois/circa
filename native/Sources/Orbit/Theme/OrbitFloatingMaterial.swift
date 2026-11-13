@@ -191,8 +191,6 @@ final class OrbitFrostView: NSView {
 final class OrbitFrostPopover: NSPopover {
     var usesFrost = true
     override func show(relativeTo positioningRect: NSRect, of positioningView: NSView, preferredEdge: NSRectEdge) {
-        appearance = NSAppearance(named: .aqua)
-        contentViewController?.view.appearance = appearance
         if usesFrost, let content = contentViewController?.view {
             OrbitFloatingMaterial.install(in: content, blending: .behindWindow, radius: 0)
         }
@@ -311,7 +309,7 @@ final class OrbitFrostAlert: NSAlert {
 }
 
 @MainActor
-private final class OrbitFloatingAlertPanel: OrbitDaylightPanel {
+private final class OrbitFloatingAlertPanel: NSPanel {
     private var appearanceObservation: NSKeyValueObservation?
 
     func followAppearance(of parent: NSWindow?, fallback: NSAppearance?) {

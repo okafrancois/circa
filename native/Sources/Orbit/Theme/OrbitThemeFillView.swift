@@ -19,7 +19,6 @@ final class OrbitThemeFillView: NSView {
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
-        appearance = NSAppearance(named: .aqua)
         host.addSublayer(gradient)
         host.addSublayer(mesh)
         wantsLayer = true
@@ -66,7 +65,7 @@ final class OrbitThemeFillView: NSView {
     /// start differs in light and dark).
     private func applyEndpoints() {
         let size = windowFillSize ?? bounds.size
-        let isDark = false
+        let isDark = OrbitAppearance.isDark(effectiveAppearance)
         if let positions = theme.model?.gradient(isDark: isDark).locations, positions.count == 3 {
             gradient.locations = positions.map { NSNumber(value: $0) }
         } else { gradient.locations = [0, 0.5, 1] }
@@ -170,7 +169,6 @@ final class OrbitFloatingSidebarBackdrop: NSView {
 
     override init(frame frameRect: NSRect) {
         super.init(frame: frameRect)
-        appearance = NSAppearance(named: .aqua)
         wantsLayer = true
         layer?.masksToBounds = false
         fill.translatesAutoresizingMaskIntoConstraints = true
@@ -232,7 +230,7 @@ final class OrbitFloatingSidebarBackdrop: NSView {
 
     private func refreshColors() {
         guard let layer else { return }
-        material.appearance = NSAppearance(named: .aqua)
+        material.appearance = NSAppearance(named: OrbitThemeForeground.isLight(on: foreground.resolved(for: effectiveAppearance)) ? .aqua : .darkAqua)
         OrbitTokens.Shadow.floatingSidebar.apply(to: layer, appearance: effectiveAppearance)
         edge.strokeColor = foreground.withAlphaComponent(0.12)
             .resolvedCGColor(for: effectiveAppearance)

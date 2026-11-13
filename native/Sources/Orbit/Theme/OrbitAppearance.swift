@@ -1,9 +1,11 @@
 import AppKit
 
-/// Daylight chrome, independent of the system appearance used by web content.
+/// Light/dark resolution for Orbit windows. A Space theme's sun/moon/automatic mode decides the
+/// window appearance (); automatic follows the system.
 @MainActor
 enum OrbitAppearance {
-    /// Synthetic probes use this input to exercise both system appearances.
+    /// `--appearance light|dark` forces Space windows, so visible validation can cover both
+    /// appearances without changing System Settings. Fixed-appearance panels remain independent.
     static let launchOverride: NSAppearance.Name? = override(in: ProcessInfo.processInfo.arguments)
 
     static func override(in arguments: [String]) -> NSAppearance.Name? {
@@ -15,11 +17,15 @@ enum OrbitAppearance {
         }
     }
 
-    /// Circa-owned windows always use daylight. Stored mode and test input never alter chrome.
-    /// Keep NSApp's appearance inherited: Chromium reads it for website colour-scheme preferences.
+    /// Appearance to assign to a window showing a Space with `mode`; nil follows the system.
     static func windowAppearance(for mode: OrbitTokens.SpaceTheme.Mode,
                                  override: NSAppearance.Name? = launchOverride) -> NSAppearance? {
-        NSAppearance(named: .aqua)
+        if let override { return NSAppearance(named: override) }
+        switch mode {
+        case .light: return NSAppearance(named: .aqua)
+        case .dark: return NSAppearance(named: .darkAqua)
+        case .automatic: return nil
+        }
     }
 
     static func isDark(_ appearance: NSAppearance) -> Bool {
@@ -43,8 +49,7 @@ extension NSColor {
         NSColor(cgColor: resolvedCGColor(for: appearance))?.usingColorSpace(.sRGB) ?? self
     }
 }
-
-/// App-owned windows cannot inherit a dark system appearance. Web content retains its engine's
+/// Daylight-only settings and onboarding windows cannot inherit a dark system appearance. Web content retains its engine's
 /// system preference; this deliberately does not set NSApplication.appearance.
 @MainActor
 class OrbitDaylightWindow: NSWindow {

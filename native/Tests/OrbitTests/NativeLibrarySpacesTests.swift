@@ -174,7 +174,7 @@ struct NativeLibrarySpacesTests {
         #expect(controller.engine.surfaces.count == created)
     }
 
-    @Test("Every Space tile stays daylight despite legacy theme modes")
+    @Test("Each tile resolves its own light or dark theme and clears an inherited override")
     func tileAppearance() async throws {
         let (controller, _, _, _, _, _, _) = try await fixture()
         defer { controller.session.close(); controller.window?.close() }
@@ -187,10 +187,10 @@ struct NativeLibrarySpacesTests {
         #expect(tile.appearance?.name == .aqua)
         theme.mode = .dark
         tile.configure(item: tile.item, theme: theme, content: .empty)
-        #expect(tile.appearance?.name == .aqua)
+        #expect(tile.appearance?.name == .darkAqua)
         theme.mode = .automatic
         tile.configure(item: tile.item, theme: theme, content: .empty)
-        #expect(tile.appearance?.name == .aqua)
+        #expect(tile.appearance == nil)
     }
 
     @Test("Inventory exposes the saved composed emoji and fits the retained minimum drawer geometry")

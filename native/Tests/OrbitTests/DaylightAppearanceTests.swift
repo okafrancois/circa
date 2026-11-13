@@ -8,7 +8,7 @@ import WebKitEngine
 
 @Suite(.serialized) @MainActor
 struct DaylightAppearanceTests {
-    @Test("Owned windows remain Aqua while the application's website preference remains dark")
+    @Test("Settings and onboarding window classes remain Aqua while the application's website preference remains dark")
     func windowIsolation() throws {
         let app = NSApplication.shared
         let previous = app.appearance
@@ -44,28 +44,45 @@ struct DaylightAppearanceTests {
         window.contentView = nil
     }
 
-    @Test("Every planet keeps its daylight tint despite stored dark mode and dark system appearance")
+    @Test("Browser windows inherit automatic system appearance and accept fixed Space modes")
+    func browserWindowAppearance() {
+        let window = OrbitBrowserWindow(contentRect: .zero, styleMask: [], backing: .buffered, defer: true)
+        window.appearance = OrbitAppearance.windowAppearance(for: .automatic, override: nil)
+        #expect(window.appearance == nil)
+        window.appearance = OrbitAppearance.windowAppearance(for: .light, override: nil)
+        #expect(!OrbitAppearance.isDark(window.effectiveAppearance))
+        window.appearance = OrbitAppearance.windowAppearance(for: .dark, override: nil)
+        #expect(OrbitAppearance.isDark(window.effectiveAppearance))
+        #expect(BrowserSpaceThemePresets.default.mode == .automatic)
+        #expect(BrandPalette.spaceGradients[0].theme().mode == .automatic)
+    }
+
+    @Test("Space gradients resolve their stored dark variant")
     func spaceTints() {
         let dark = NSAppearance(named: .darkAqua)!
         for preset in BrandPalette.spaceGradients {
             var model = preset.theme(mode: .dark)
             model.dark.stops = Array(repeating: BrowserThemeColor(hex: 0x010101), count: 3)
             let theme = OrbitSpaceThemes.rendered(model)
-            #expect(theme.mode == .light)
-            for (stop, expected) in zip(theme.stops, model.light.stops) {
+            #expect(theme.mode == .dark)
+            for (stop, expected) in zip(theme.stops, model.dark.stops) {
                 #expect(stop.resolved(for: dark) == OrbitSpaceThemes.color(expected))
             }
         }
         #expect(OrbitFloatingMaterial.style(for: NSAppearance(named: .aqua)!).variant == .light)
         #expect(OrbitTokens.Color.Surface.commandBar.resolved(for: NSAppearance(named: .aqua)!) == NSColor(srgbRed: 249/255, green: 249/255, blue: 249/255, alpha: 1))
-        #expect(OrbitSpaceThemes.privateWindow.stops.first == BrandPalette.paper)
+        #expect(OrbitSpaceThemes.privateWindow.mode == .dark)
+        #expect(OrbitFloatingMaterial.style(for: dark).variant == .dark)
     }
 
-    @Test("The theme editor offers colour and grain controls without an appearance choice")
+    @Test("The theme editor offers automatic, light and dark appearance controls")
     func editor() {
         let view = OrbitThemeEditorView(state: .init(theme: BrandPalette.spaceGradients[3].theme(mode: .dark)))
         let labels = view.subviews.compactMap { $0.accessibilityLabel() }
-        #expect(!labels.contains("Dark Appearance") && !labels.contains("Light Appearance") && !labels.contains("Automatic Appearance"))
+        #expect(labels.contains(OrbitThemeEditorText.dark))
+        #expect(labels.contains(OrbitThemeEditorText.light))
+        #expect(labels.contains(OrbitThemeEditorText.automatic))
+        #expect(view.modeButtons.count == 3)
         #expect(view.swatches.count == 9)
         #expect(view.grainDial.accessibilityLabel() == OrbitThemeEditorText.grain)
     }

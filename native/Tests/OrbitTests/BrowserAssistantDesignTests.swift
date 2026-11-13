@@ -85,18 +85,18 @@ struct BrowserAssistantPaletteTests {
         }
     }
 
-    @Test("The assistant stays daylight for every Space and system appearance", arguments: [false, true])
+    @Test("Polarity follows the Space ink, not the window appearance", arguments: [false, true])
     func polarity(isDark: Bool) throws {
         let appearance = try #require(NSAppearance(named: isDark ? .darkAqua : .aqua))
         for (name, theme) in Self.themes {
             let palette = BrowserAssistantPalette(theme: theme, appearance: appearance)
             let ink = OrbitSpaceThemes.accent(for: theme).foreground.resolved(for: appearance)
-            #expect(!palette.isDark, "\(name)")
+            #expect(palette.isDark == !OrbitThemeForeground.isLight(on: ink), "\(name)")
         }
         // The swatch with the darkest fill must produce a dark dock even in a light window.
         let black = try #require(BrowserSpaceThemePresets.theme(family: BrowserSpaceThemePresets.greyscale, index: 8))
         let light = BrowserAssistantPalette(theme: OrbitSpaceThemes.rendered(black), appearance: NSAppearance(named: .aqua)!)
-        #expect(!light.isDark)
+        #expect(light.isDark)
     }
 
     @Test("The surface carries the Space instead of a system background")

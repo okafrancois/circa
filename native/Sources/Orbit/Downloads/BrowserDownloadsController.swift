@@ -283,7 +283,6 @@ private final class DownloadDestinationPicker: NSObject, NSOpenSavePanelDelegate
 
     func choose(request: BrowserDownloadsController.SaveRequest, window: NSWindow) async -> URL? {
         let panel = NSSavePanel()
-        panel.appearance = NSAppearance(named: .aqua)
         panel.title = uiText("Save Download")
         panel.nameFieldStringValue = request.filename
         panel.directoryURL = request.directory

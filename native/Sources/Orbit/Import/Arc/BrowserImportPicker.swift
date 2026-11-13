@@ -126,7 +126,6 @@ final class BrowserImportPicker {
 
     func chooseFile(zip: Bool) -> URL? {
         let panel = NSOpenPanel()
-        panel.appearance = NSAppearance(named: .aqua)
         if let configuration = activeSiteSessionConfiguration(), configuration.usesMockKeychain {
             panel.directoryURL = BrowserImportUISynthetic.sourceRoot(configuration)
         }
@@ -141,7 +140,6 @@ final class BrowserImportPicker {
 
     func chooseExternalProfile(_ profile: BrowserImportSourceProfile) -> URL? {
         let panel = NSOpenPanel()
-        panel.appearance = NSAppearance(named: .aqua)
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
         panel.allowsMultipleSelection = false
