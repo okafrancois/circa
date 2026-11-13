@@ -59,7 +59,7 @@ final class BrowserQuickWindowSearchPanel: NSObject, NSWindowDelegate, NSTextFie
         window = BrowserQuickWindowSearchWindow(contentRect: .zero, styleMask: .borderless, backing: .buffered, defer: true)
         super.init()
         window.isReleasedWhenClosed = false
-        window.appearance = NSAppearance(named: .darkAqua)
+        window.appearance = nil
         window.delegate = self
         window.backgroundColor = .clear
         window.isOpaque = false
@@ -69,7 +69,7 @@ final class BrowserQuickWindowSearchPanel: NSObject, NSWindowDelegate, NSTextFie
         window.identifier = .init(kind == .address ? "little-orbit-input-panel" : "little-orbit-space-chooser")
         root.wantsLayer = true
         root.layer?.cornerRadius = kind == .address ? BrowserQuickWindowMetrics.inputRadius : 10
-        root.layer?.borderWidth = 0.5
+        root.layer?.borderWidth = 2
         root.onLayout = { [weak self] in self?.layout() }
         root.onAppearance = { [weak self] in self?.applyAppearance() }
         for view in [searchIcon, input, closeButton, divider, scroll] { root.addSubview(view) }
@@ -140,6 +140,7 @@ final class BrowserQuickWindowSearchPanel: NSObject, NSWindowDelegate, NSTextFie
         let size = preferredSize
         let frame = NSRect(x: parent.frame.midX - size.width / 2,
                            y: parent.frame.midY - size.height / 2 + 20, width: size.width, height: size.height)
+        window.appearance = parent.appearance
         show(anchor: NSRect(x: frame.maxX - 3, y: frame.maxY - 4.5, width: 0, height: 0), screen: parent.screen)
         input.selectText(nil)
     }

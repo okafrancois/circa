@@ -7,57 +7,57 @@ import BrowserShell
 @MainActor
 enum OrbitOnboardingMetrics {
     static let windowSize = NSSize(width: 1200, height: 750)
-    static let cardSize = NSSize(width: 960, height: 560)
-    static let cardCornerRadius: CGFloat = 22
+    static let cardSize = NSSize(width: 1200, height: 750)
+    static let cardCornerRadius: CGFloat = 14
 
     // Left panel and its perforated edge (scallops 4.4 pt deep, 17.22 pt period, first lobe at 25 pt).
-    static let leftPanelWidth: CGFloat = 380
+    static let leftPanelWidth: CGFloat = 1200
     static let perforationCenterX: CGFloat = 380
     static let perforationAmplitude: CGFloat = 0
     static let perforationPeriod: CGFloat = 17.22
     static let perforationPhaseY: CGFloat = 25
-    static let contentX: CGFloat = 36
-    static let contentWidth: CGFloat = 308
+    static let contentX: CGFloat = 54
+    static let contentWidth: CGFloat = 590
 
     // Left panel text.
-    static let titleCapTop: CGFloat = 94
-    static let titleCapTopWithBack: CGFloat = 94
-    static let titlePointSize: CGFloat = 40
-    static let titleLineHeight: CGFloat = 40.8
+    static let titleCapTop: CGFloat = 96
+    static let titleCapTopWithBack: CGFloat = 96
+    static let titlePointSize: CGFloat = 63
+    static let titleLineHeight: CGFloat = 60
     /// Baseline of the title's last line to the first body baseline.
-    static let titleToBodyBaseline: CGFloat = 35
-    static let bodyPointSize: CGFloat = 15
-    static let bodyLineHeight: CGFloat = 22.5
+    static let titleToBodyBaseline: CGFloat = 48
+    static let bodyPointSize: CGFloat = 22
+    static let bodyLineHeight: CGFloat = 32
     static let backCapTop: CGFloat = 36
     static let backPointSize: CGFloat = 13
 
     // Primary button and skip link.
-    static let buttonSize = NSSize(width: 308, height: 48)
-    static let buttonCornerRadius: CGFloat = 24
-    static let buttonBottomInset: CGFloat = 54
-    static let buttonRaiseForSkip: CGFloat = 32
+    static let buttonSize = NSSize(width: 185, height: 52)
+    static let buttonCornerRadius: CGFloat = 26
+    static let buttonBottomInset: CGFloat = 42
+    static let buttonRaiseForSkip: CGFloat = 0
     static let skipBaselineBelowButton: CGFloat = 29
     static let skipPointSize: CGFloat = 13
     static let buttonPointSize: CGFloat = 15
     static let disabledLabelAlpha: CGFloat = 0.75
 
     // Right panel.
-    static let rightPanelX: CGFloat = 380
+    static let rightPanelX: CGFloat = 0
     static var rightPanelCenterX: CGFloat { (rightPanelX + cardSize.width) / 2 }
     /// Scroll viewport of the import list; the footer below it stays empty.
-    static let importViewportBottom: CGFloat = 530
-    static let importFirstRowTop: CGFloat = 70
+    static let importViewportBottom: CGFloat = 630
+    static let importFirstRowTop: CGFloat = 290
 
     // Option cards.
-    static let browserRowSize = NSSize(width: 512, height: 60)
+    static let browserRowSize = NSSize(width: 270, height: 65)
     static let browserRowRadius: CGFloat = 13.6
     static let browserTileWidth: CGFloat = 52
     static let browserIconSize: CGFloat = 28
     static let browserRadioCenterX: CGFloat = 25
     static let browserLabelX: CGFloat = 50
     static let browserLabelPointSize: CGFloat = 15
-    static let optionGap: CGFloat = 10
-    static let choiceCardSize = NSSize(width: 512, height: 56)
+    static let optionGap: CGFloat = 14
+    static let choiceCardSize = NSSize(width: 525, height: 70)
     static let choiceCardRadius: CGFloat = 13
     static let choiceRadioCenterX: CGFloat = 25
     static let choiceLabelX: CGFloat = 46
@@ -100,9 +100,9 @@ enum OrbitOnboardingColors {
     static let rightPanelThemed = rightPanel
     static let title = BrandPalette.ink
     static let body = BrandPalette.ink2
-    static let optionSurface = NSColor.white
+    static let optionSurface = BrandPalette.pageWhite.withAlphaComponent(0.6)
     static let optionBorder = BrandPalette.ink
-    static let optionShadow = NSColor.clear
+    static let optionShadow = BrandPalette.ink
     static let radioRing = BrandPalette.controlBorder
     static let optionText = BrandPalette.ink
     static let browserLabel = BrandPalette.ink
@@ -117,15 +117,15 @@ enum OrbitOnboardingFonts {
     static func ui(_ size: CGFloat, weight: NSFont.Weight = .regular) -> NSFont { BrandFonts.onboardingBody(size, weight: weight) }
     static func title(_ size: CGFloat) -> NSFont { BrandTextStyle.title.font(size: size) }
     static func mono(_ size: CGFloat) -> NSFont { BrandTextStyle.mono.font(size: size) }
-    static var title: NSFont { title(40) }
+    static var title: NSFont { title(63) }
     static var welcome: NSFont { title(84) }
-    static var body: NSFont { ui(15) }
+    static var body: NSFont { ui(22) }
     static var emphasis: NSFont { ui(13) }
     static var back: NSFont { ui(13, weight: .medium) }
     static var button: NSFont { ui(15, weight: .semibold) }
     static var skip: NSFont { ui(14) }
     static var browser: NSFont { ui(15, weight: .medium) }
-    static var choiceStrong: NSFont { ui(15, weight: .semibold) }
-    static var choice: NSFont { ui(15) }
+    static var choiceStrong: NSFont { title(30) }
+    static var choice: NSFont { ui(23) }
     static var profile: NSFont { ui(15) }
 }

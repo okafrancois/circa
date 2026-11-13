@@ -620,9 +620,8 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
             }
         }
         if selected == nil {
-            contentCard.emptyStateTitle = isPrivateWindow ? uiText("Private") : session.catalog?.spaces.first {
-                $0.id == session.snapshot?.activeSpaceID
-            }?.name ?? OrbitShellText.emptySpaceTitle
+            contentCard.emptyStateIsPrivate = isPrivateWindow
+            contentCard.emptyStateTitle = isPrivateWindow ? uiText("Private window.") : OrbitShellText.emptySpaceTitle
         }
         let outgoingCapture = SpaceSwipeTrace.interval("RenderOutgoingCaptureRequest") { tabSwitcher.prepareForPresentation(selected) }
         SpaceSwipeTrace.interval("RenderSplitReparent") { renderSplit(retainingPreviousUntil: outgoingCapture, selectionOnly: selection != nil) }

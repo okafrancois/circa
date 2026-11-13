@@ -187,9 +187,8 @@ public struct BrowserSettingsDocument: Codable, Equatable, Sendable {
     public var automaticPictureInPicture = true
     /// Device-local opt-in for cached sidebar tab hover cards.
     public var showsTabHoverPreviews = false
-    /// Pages fill the window edge to edge unless the user keeps the spaced layout. Absent keys
-    /// decode as false, so existing installations get the edge-to-edge layout.
-    public var showsSpaceAroundPages = false
+    /// New installations use an inset page. Existing documents retain their saved edge layout.
+    public var showsSpaceAroundPages = true
     public var quickWindowArchiveThreshold: BrowserAutoArchiveThreshold = .sixHours
     /// Device-local domain/account choices, excluded from the sync projection.
     public var quickWindowProfilesByDomain: [String: ProfileID] = [:]

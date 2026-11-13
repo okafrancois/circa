@@ -1,3 +1,4 @@
+import AppKit
 import BrowserCore
 import BrowserEngine
 import BrowserShell
@@ -19,12 +20,16 @@ struct BrowserAirTrafficControlView<Engine: BrowserEngine>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             HStack {
-                Text(uiText("Air Traffic Control")).font(Font(BrandTextStyle.ui.font(size: 21, weight: .semibold)))
+                SettingsPaneIcon(section: .links).frame(width: 22, height: 22)
+                Text(uiText("Air Traffic Control")).font(Font(BrandTextStyle.title.font(size: 25))).kerning(-1.125)
                 Spacer()
-
+                if let url = BrowserText.secondaryBrandResource("air-traffic-control", extension: "png"), let image = NSImage(contentsOf: url) {
+                    Image(nsImage: image).resizable().scaledToFit().frame(width: 120, height: 60)
+                }
             }
-            Text(uiFormat("Routes let you choose where specific sites open inside %@. For example, you can route Spotify links to always open inside your Personal space.", BrowserCommandMenus<BrowserWindowController<Engine>>.applicationDisplayName))
-                .foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            Text(uiText("Create a route to send links to a Space automatically."))
+                .font(Font(BrandFonts.onboardingBody(13))).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+
             ScrollView {
                 VStack(spacing: 10) {
                     ForEach(editor.routes) { route in
@@ -43,7 +48,7 @@ struct BrowserAirTrafficControlView<Engine: BrowserEngine>: View {
                 Button(uiText("New Route"), systemImage: "plus") {
                     editor.add()
                 }.disabled(model.catalog.spaces.isEmpty || editor.routes.contains { !$0.isValid })
-                    .accessibilityIdentifier("routing-new-route")
+                    .buttonStyle(OrbitPrintButtonStyle(primary: true)).accessibilityIdentifier("routing-new-route")
                 Spacer()
                 Text(uiText("Default")).fontWeight(.medium)
                 Picker(uiText("Default destination"), selection: Binding(get: { runtime.document.linkRouting.defaultDestination }, set: { destination in

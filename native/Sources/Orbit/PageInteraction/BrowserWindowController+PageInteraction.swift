@@ -53,7 +53,11 @@ extension BrowserWindowController {
         pageInteraction.unresponsive.remove(key)
         if pageInteraction.fullscreen?.surfaceKey == key { leaveElementFullscreenLayout() }
         guard showsPageSurface(surface) else { return }
-        BrowserPageDialogCenter.shared.showCrashedPage(on: surface.documentView, surface: key, termination: termination) {
+        BrowserPageDialogCenter.shared.showCrashedPage(on: surface.documentView, surface: key, termination: termination, close: { [weak self, weak surface] in
+            guard let self, let surface, acceptsCommands, showsPageSurface(surface) else { return }
+            if peek.owns(surface) { peek.surfaceDidRequestClose(surface) }
+            else { surfaceDidRequestClose(surface) }
+        }) {
             [weak self, weak surface] in
             guard let self, let surface, self.showsPageSurface(surface) else { return }
             surface.reload()

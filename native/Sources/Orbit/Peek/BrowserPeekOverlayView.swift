@@ -664,7 +664,9 @@ final class BrowserPeekToolbarButton: NSButton {
 
     override func draw(_ dirtyRect: NSRect) {
         (isHovered && isEnabled && feedback == .fill ? BrowserPeekStyle.buttonHover : BrowserPeekStyle.buttonBackground).setFill()
-        NSBezierPath(ovalIn: bounds).fill()
+        NSBezierPath(ovalIn: bounds.insetBy(dx: 1, dy: 1)).fill()
+        BrandPalette.ink.setStroke()
+        let edge = NSBezierPath(ovalIn: bounds.insetBy(dx: 1, dy: 1)); edge.lineWidth = 1.5; edge.stroke()
         super.draw(dirtyRect)
     }
 

@@ -9,7 +9,7 @@ final class OrbitOnboardingFavouritesView: NSView {
     private var buttons: [OrbitOnboardingFavouriteButton] = []
     private let pins = OrbitOnboardingFlippedView(frame: NSRect(x: 0, y: 210, width: 216, height: 88))
     init(sites: [BrowserOnboardingFavourite]) {
-        super.init(frame: NSRect(x: 0, y: 0, width: 512, height: 300))
+        super.init(frame: NSRect(x: 0, y: 0, width: 590, height: 220))
         wantsLayer = true
         pins.wantsLayer = true
         let gradient = CAGradientLayer()
@@ -19,16 +19,17 @@ final class OrbitOnboardingFavouritesView: NSView {
         gradient.cornerRadius = 12
         pins.layer?.addSublayer(gradient)
         pins.layer?.cornerRadius = 12
+        pins.isHidden = true
         addSubview(pins)
         let hint = NSTextField(wrappingLabelWithString: uiText("how it looks in the sidebar"))
         hint.font = OrbitOnboardingFonts.mono(12); hint.textColor = BrandPalette.ink3
-        hint.frame = NSRect(x: 230, y: 238, width: 250, height: 36); addSubview(hint)
+        hint.isHidden = true; addSubview(hint)
         for index in sites.indices {
-            let button = OrbitOnboardingFavouriteButton(frame: NSRect(x: CGFloat(index % 4) * 130.5, y: CGFloat(index / 4) * 102, width: 120.5, height: 92))
+            let button = OrbitOnboardingFavouriteButton(frame: NSRect(x: CGFloat(index % 6) * 100, y: CGFloat(index / 6) * 100, width: 86, height: 86))
             button.isBordered = false
             button.wantsLayer = true
             button.layer?.cornerRadius = 14
-            button.layer?.backgroundColor = NSColor.white.cgColor
+            button.layer?.backgroundColor = BrandPalette.pageWhite.withAlphaComponent(0.6).cgColor
             let check = CALayer(); check.frame = CGRect(x: 94.5, y: 8, width: 18, height: 18)
             check.cornerRadius = 9
             button.layer?.addSublayer(check); checks.append(check)
@@ -57,8 +58,10 @@ final class OrbitOnboardingFavouritesView: NSView {
             let hint = site.visits.map { uiFormat("%d visits", $0) } ?? site.url.host ?? ""
             button.nameField.stringValue = site.title
             button.hintField.stringValue = hint
-            button.layer?.borderWidth = site.selected ? 1.5 : 1
-            button.layer?.borderColor = (site.selected ? OrbitOnboardingColors.accent : OrbitOnboardingColors.optionBorder).cgColor
+            button.layer?.borderWidth = site.selected ? 2 : 0
+            button.layer?.borderColor = BrandPalette.ink.cgColor
+            button.layer?.backgroundColor = BrandPalette.pageWhite.withAlphaComponent(site.selected ? 1 : 0.6).cgColor
+            checks[index].isHidden = !site.selected
             checks[index].backgroundColor = (site.selected ? BrandPalette.controlAccent : .white).cgColor
             checks[index].borderWidth = site.selected ? 0 : 1.5
             checks[index].borderColor = BrandPalette.controlBorder.cgColor
@@ -77,7 +80,7 @@ final class OrbitOnboardingFavouritesView: NSView {
         let rows = max(2, Int(ceil(Double(selected.count) / 3)))
         pins.setFrameSize(NSSize(width: 216, height: CGFloat(rows) * 40 + 8))
         pins.layer?.sublayers?.first?.frame = pins.bounds
-        setFrameSize(NSSize(width: 512, height: max(300, pins.frame.maxY)))
+        setFrameSize(NSSize(width: 590, height: max(200, CGFloat((sites.count + 5) / 6) * 100)))
         for i in 0..<max(6, Int(ceil(Double(selected.count) / 3)) * 3) {
             let pin = NSTextField(labelWithString: i < selected.count ? String(selected[i].title.prefix(1)) : "")
             pin.alignment = .center; pin.font = OrbitOnboardingFonts.ui(14, weight: .bold)
@@ -99,7 +102,7 @@ private final class OrbitOnboardingFavouriteButton: NSButton {
     override init(frame: NSRect) {
         super.init(frame: frame)
         title = ""
-        artwork.frame = NSRect(x: (frame.width - 30) / 2, y: 10, width: 30, height: 30)
+        artwork.frame = NSRect(x: (frame.width - 30) / 2, y: (frame.height - 30) / 2, width: 30, height: 30)
         nameField.frame = NSRect(x: 8, y: 49, width: frame.width - 16, height: 17)
         nameField.font = OrbitOnboardingFonts.ui(12)
         nameField.textColor = BrandPalette.ink
@@ -107,6 +110,7 @@ private final class OrbitOnboardingFavouriteButton: NSButton {
         hintField.font = OrbitOnboardingFonts.mono(10)
         hintField.textColor = BrandPalette.ink3
         for field in [nameField, hintField] {
+            field.isHidden = true
             field.alignment = .center
             field.lineBreakMode = .byTruncatingMiddle
             field.setAccessibilityElement(false)

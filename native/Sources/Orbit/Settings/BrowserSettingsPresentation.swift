@@ -74,8 +74,8 @@ struct SettingsCard<Content: View>: View {
 private final class SettingsFrostHost: NSView {
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
-        window?.isOpaque = false
-        window?.backgroundColor = .clear
+        window?.isOpaque = true
+        window?.backgroundColor = OrbitSettingsStyle.windowColor
     }
 }
 
@@ -86,8 +86,8 @@ private struct SettingsFrost: NSViewRepresentable {
         return view
     }
     func updateNSView(_ view: NSView, context: Context) {
-        view.window?.isOpaque = false
-        view.window?.backgroundColor = .clear
+        view.window?.isOpaque = true
+        view.window?.backgroundColor = OrbitSettingsStyle.windowColor
     }
 }
 
@@ -113,28 +113,18 @@ struct BrowserSettingsGradientPicker<Engine: BrowserEngine>: View {
     }
 
     var body: some View {
-        Button { isPresented.toggle() } label: {
-            HStack(spacing: 6) {
-                BrowserSettingsThemeSwatch(theme: space.theme ?? BrandPalette.spaceGradients[(model.catalog.spaces.firstIndex(where: { $0.id == space.id }) ?? 0) % 4].theme())
-                Text(settingsText("editThemeColor", "Edit Theme Color…"))
+        HStack(spacing: 6) {
+            ForEach(Array(BrandPalette.spaceGradients.enumerated()), id: \.element.id) { index, gradient in
+                Button { select(gradient) } label: {
+                    Circle().fill(Color(nsColor: [BrandPalette.coral, BrandPalette.cobalt, BrandPalette.sun, BrandPalette.violet][index]))
+                        .frame(width: 20, height: 20).padding(3)
+                        .overlay(Circle().strokeBorder(space.theme?.presetID == "brand." + gradient.id ? Color(nsColor: BrandPalette.ink) : .clear, lineWidth: 2))
+                }.buttonStyle(.plain).accessibilityLabel(uiText(gradient.name))
             }
+            Button { model.presentThemeEditor?(space.id) } label: {
+                Image(systemName: "slider.horizontal.3")
+            }.buttonStyle(.plain).accessibilityLabel(uiText("Edit Theme Color…"))
         }
-            .popover(isPresented: $isPresented, arrowEdge: .bottom) {
-                HStack(spacing: 8) {
-                    ForEach(BrandPalette.spaceGradients, id: \.id) { gradient in
-                        Button {
-                            select(gradient)
-                        } label: {
-                            Circle().fill(LinearGradient(stops: zip(gradient.stops, gradient.locations).map {
-                                .init(color: Color(nsColor: OrbitSpaceThemes.color($0.0)), location: $0.1)
-                            }, startPoint: .top, endPoint: .bottomTrailing))
-                            .frame(width: 30, height: 30)
-                            .padding(3)
-                            .overlay(Circle().strokeBorder(space.theme?.presetID == "brand." + gradient.id ? Color.accentColor : .clear, lineWidth: 2))
-                        }.buttonStyle(.plain).accessibilityLabel(uiText(gradient.name))
-                    }
-                }.padding(12).settingsFrost()
-            }
     }
 }
 
@@ -173,10 +163,63 @@ struct SettingsDetailRow<Content: View>: View {
             Text(title).fontWeight(.medium)
             Spacer(minLength: 8)
             content
-        }.padding(.horizontal, 14).padding(.vertical, 8).frame(minHeight: 44)
+        }.padding(.horizontal, 13).padding(.vertical, 9).frame(minHeight: 38)
     }
 }
 
 struct SettingsRule: View {
     var body: some View { Rectangle().fill(OrbitSettingsStyle.border).frame(height: 1) }
+}
+
+/// Compact app-icon choices share the same persistent selection as the icon sheet.
+struct BrowserSettingsIconGrid: View {
+    @ObservedObject var icons = OrbitAppIconController.shared
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(uiText("App Icon").uppercased()).font(Font(BrandFonts.mono(9.5))).tracking(1.14).foregroundStyle(.secondary)
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: 6), spacing: 6) {
+                ForEach(OrbitAppIcon.allCases) { icon in
+                    Button { _ = icons.apply(icon) } label: {
+                        VStack(spacing: 3) {
+                            if let image = icon.preview {
+                                Image(nsImage: image).resizable().scaledToFit().aspectRatio(1, contentMode: .fit)
+                                    .overlay(RoundedRectangle(cornerRadius: 22).strokeBorder(
+                                        icons.current == icon || (icons.current == .paper && icon == .stage)
+                                        ? Color(nsColor: BrandPalette.ink) : .clear, lineWidth: 2))
+                            }
+                            Text(icon.name).font(Font(BrandFonts.ui(8.5, weight: .medium))).opacity(0.8)
+                        }.padding(3)
+                    }.buttonStyle(.plain).accessibilityIdentifier("settings-icon-" + icon.id)
+                }
+            }
+            .padding(.horizontal, 12).padding(.vertical, 11)
+            .background(OrbitSettingsStyle.panel, in: RoundedRectangle(cornerRadius: 12))
+            .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(OrbitSettingsStyle.border, lineWidth: 1))
+            Text(uiText("Choose how Circa looks in the Dock and the Finder.")).font(Font(BrandFonts.ui(10.5))).foregroundStyle(.secondary)
+        }.padding(.top, 8)
+    }
+}
+
+/// Coloured printed navigation marks share the pane's heading artwork.
+struct SettingsPaneIcon: View {
+    let section: BrowserSettingsSection
+    var body: some View {
+        if let url = BrowserText.secondaryBrandResource("settings-nav-" + section.rawValue, extension: "png"),
+           let image = NSImage(contentsOf: url) {
+            Image(nsImage: image).resizable().scaledToFit().accessibilityHidden(true)
+        }
+    }
+}
+
+struct OrbitPrintButtonStyle: ButtonStyle {
+    var primary = false
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label.font(Font(BrandFonts.ui(12, weight: .semibold)))
+            .padding(.horizontal, 12).padding(.vertical, 7)
+            .foregroundStyle(Color(nsColor: primary ? BrandPalette.pageWhite : BrandPalette.ink))
+            .background(primary ? Color(nsColor: BrandPalette.coral) : Color(nsColor: BrandPalette.paper), in: RoundedRectangle(cornerRadius: 7))
+            .overlay(RoundedRectangle(cornerRadius: 7).strokeBorder(Color(nsColor: BrandPalette.ink), lineWidth: 1.5))
+            .shadow(color: Color(nsColor: BrandPalette.ink), radius: 0, x: 0, y: configuration.isPressed ? 0 : 2)
+            .offset(y: configuration.isPressed ? 2 : 0)
+    }
 }

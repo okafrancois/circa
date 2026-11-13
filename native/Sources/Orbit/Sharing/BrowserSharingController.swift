@@ -111,14 +111,17 @@ final class BrowserCopiedToast: NSView {
     init() {
         super.init(frame: NSRect(x: 0, y: 0, width: 104, height: 36))
         wantsLayer = true
-        layer?.backgroundColor = NSColor(srgbRed: 0.12, green: 0.13, blue: 0.17, alpha: 0.96).cgColor
+        layer?.backgroundColor = BrandPalette.pageWhite.cgColor
         layer?.cornerRadius = 12
-        layer?.masksToBounds = true
+        layer?.masksToBounds = false
+        layer?.borderColor = BrandPalette.ink.cgColor; layer?.borderWidth = 2
+        layer?.shadowColor = BrandPalette.ink.cgColor; layer?.shadowOpacity = 1
+        layer?.shadowOffset = CGSize(width: 0, height: -3); layer?.shadowRadius = 0
         let icon = NSImageView(image: OrbitIcon.image(sfName: "checkmark", pointSize: 16, accessibilityDescription: nil)!)
-        icon.contentTintColor = .white
+        icon.contentTintColor = BrandPalette.cobalt
         let label = NSTextField(labelWithString: uiText("Copied"))
         label.font = BrandTextStyle.ui.font(size: 13, weight: .medium)
-        label.textColor = .white
+        label.textColor = BrandPalette.ink
         let row = NSStackView(views: [icon, label])
         row.spacing = 7
         row.alignment = .centerY

@@ -37,7 +37,7 @@ final class BrowserSettingsWindowController<Engine: BrowserEngine>: NSWindowCont
     private let selectionPill = BrowserSettingsSelectionPill()
     private var outgoingPane: CALayer?
     private var paneTransitionGeneration = 0
-    static var minimumContentSize: NSSize { NSSize(width: 684, height: 400) }
+    static var minimumContentSize: NSSize { NSSize(width: 900, height: 400) }
 
     /// The theme editor opened from the Spaces section.
     var themeEditor: OrbitThemeEditorController?
@@ -63,7 +63,7 @@ final class BrowserSettingsWindowController<Engine: BrowserEngine>: NSWindowCont
 
     init(model: BrowserSettingsModel<Engine>, appearanceOverride: NSAppearance.Name? = OrbitAppearance.launchOverride) {
         self.model = model
-        let window = BrowserSettingsWindow(contentRect: NSRect(x: 0, y: 0, width: 684, height: 400),
+        let window = BrowserSettingsWindow(contentRect: NSRect(x: 0, y: 0, width: 900, height: 400),
                               styleMask: [.titled, .closable], backing: .buffered, defer: true)
         window.title = (model.settingsSection ?? .general).title
         window.titleVisibility = .hidden
@@ -72,7 +72,7 @@ final class BrowserSettingsWindowController<Engine: BrowserEngine>: NSWindowCont
         window.isReleasedWhenClosed = false
         window.contentMinSize = Self.minimumContentSize
         window.toolbarStyle = .preference
-        window.titlebarSeparatorStyle = .line
+        window.titlebarSeparatorStyle = .none
         window.titlebarAppearsTransparent = true
         window.backgroundColor = OrbitSettingsStyle.toolbarColor
         window.isOpaque = true
@@ -87,7 +87,8 @@ final class BrowserSettingsWindowController<Engine: BrowserEngine>: NSWindowCont
         toolbar.displayMode = .iconOnly
         toolbar.allowsUserCustomization = false
         toolbar.autosavesConfiguration = false
-        window.toolbar = toolbar
+        // Categories live in the persistent sidebar. Keep the toolbar delegate for menu routing.
+        window.toolbar = nil
         window.selectCategory = { [weak self] section in self?.selectSection(section) ?? false }
         model.selectSettingsSection = { [weak self] section in self?.selectSection(section) ?? false }
         // Keep the hosting view alive: catalog publications must not recreate drafts or IME editors.
@@ -101,6 +102,11 @@ final class BrowserSettingsWindowController<Engine: BrowserEngine>: NSWindowCont
             }
         }
         applySection(model.settingsSection ?? .general)
+        if let frame = window.contentView?.superview {
+            frame.wantsLayer = true
+            frame.layer?.borderWidth = 2; frame.layer?.borderColor = BrandPalette.ink.cgColor
+            frame.layer?.cornerRadius = 13
+        }
         window.center()
         model.presentThemeEditor = { [weak self] spaceID in self?.openThemeEditor(for: spaceID) }
     }
@@ -127,7 +133,7 @@ final class BrowserSettingsWindowController<Engine: BrowserEngine>: NSWindowCont
 
     private func resize(for section: BrowserSettingsSection) {
         guard let window else { return }
-        let contentSize = NSSize(width: max(684, window.contentLayoutRect.width), height: section.contentHeight)
+        let contentSize = NSSize(width: max(900, window.contentLayoutRect.width), height: max(400, section.contentHeight))
         let size = window.frameRect(forContentRect: NSRect(origin: .zero, size: contentSize)).size
         let top = window.frame.maxY
         let frame = NSRect(x: window.frame.minX, y: top - size.height, width: size.width, height: size.height)
@@ -315,6 +321,7 @@ enum BrowserSettingsSection: String, CaseIterable, Identifiable {
     // Auxiliary panes retain their deep links outside the seven toolbar categories.
     // The order is also the ⌘1…⌘7 order: AI is ⌘5, Advanced ⌘6, About ⌘7.
     static let allCases: [Self] = [.general, .profiles, .shortcuts, .links, .ai, .advanced, .about]
+    static let navigationSections: [Self] = [.general, .profiles, .spaces, .shortcuts, .links, .ai, .privacy, .advanced, .appearance, .about]
     var id: String { rawValue }
     var toolbarIdentifier: NSToolbarItem.Identifier { .init("settings-category-" + rawValue) }
     var title: String {
@@ -348,7 +355,7 @@ enum BrowserSettingsSection: String, CaseIterable, Identifiable {
     }
     var contentHeight: CGFloat {
         switch self {
-        case .general: 400
+        case .general: 560
         case .profiles: 500
         case .shortcuts: 590
         case .links: 410
@@ -390,7 +397,8 @@ struct BrowserSettingsView<Engine: BrowserEngine>: View {
     private func text(_ key: String, _ value: String) -> String { settingsText(key, value) }
 
     var body: some View {
-        VStack(spacing: 0) {
+        HStack(spacing: 0) {
+            navigation
             VStack(alignment: .leading, spacing: 0) {
                 if runtime.isUnavailable {
                     Text(text("unavailable", "Saved settings could not be opened. Defaults are in use and changes cannot be saved. The existing file is kept."))
@@ -415,16 +423,21 @@ struct BrowserSettingsView<Engine: BrowserEngine>: View {
                         deletingProfile = profile
                     }.disabled(!model.acceptsActions)
                 } else if model.settingsSection == .appearance {
-                    Form { appearance }.formStyle(.grouped).scrollContentBackground(.hidden)
-                        .disabled(!model.acceptsActions)
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 12) {
+                            HStack(spacing: 8) { SettingsPaneIcon(section: .appearance).frame(width: 22, height: 22); Text(uiText("Appearance")).font(Font(BrandTextStyle.title.font(size: 21))).kerning(-0.945) }
+                            appearance
+                            BrowserSettingsIconGrid()
+                        }.padding(.horizontal, 20).padding(.top, 18).padding(.bottom, 16)
+                    }.disabled(!model.acceptsActions)
                 } else if model.settingsSection == .about {
                     ScrollView { OrbitSecondaryAbout().padding(24) }
                 } else if let profile = model.selectedProfileID {
                     ScrollView {
                       VStack(alignment: .leading, spacing: 16) {
-                        if model.settingsSection != .spaces {
+                        if true {
                           HStack {
-                            Text((model.settingsSection ?? .general).title).font(Font(BrandTextStyle.title.font(size: 28))).kerning(BrandTextStyle.title.tracking(size: 28))
+                            Text((model.settingsSection ?? .general).title).font(Font(BrandTextStyle.title.font(size: 25))).kerning(BrandTextStyle.title.tracking(size: 25))
                             Spacer()
                             Picker(text("selectedProfile", "Profile"), selection: Binding(get: { profile }, set: { model.selectProfile($0) })) {
                                 ForEach(model.catalog.profiles, id: \.id) { Text($0.name).tag($0.id) }
@@ -436,7 +449,7 @@ struct BrowserSettingsView<Engine: BrowserEngine>: View {
                         case .privacy: privacy(profile)
                         default: EmptyView()
                         }
-                      }.padding(.horizontal, 28).padding(.top, 22).padding(.bottom, 26)
+                      }.padding(.horizontal, 20).padding(.top, 18).padding(.bottom, 16)
                     }
                     .disabled(!model.acceptsActions)
                 } else {
@@ -445,13 +458,14 @@ struct BrowserSettingsView<Engine: BrowserEngine>: View {
                 }
             }.frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .font(Font(BrandFonts.ui(13)))
+        .font(Font(BrandFonts.ui(12)))
         .controlSize(.small)
-        .frame(minWidth: 640, minHeight: 400)
+        .frame(minWidth: 900, minHeight: 400)
         .foregroundStyle(OrbitSettingsStyle.foreground)
         .toggleStyle(.switch)
         .tint(Color(nsColor: BrandPalette.cobalt))
         .background(OrbitSettingsStyle.background)
+        .overlay(OrbitPaperGrainSurface().allowsHitTesting(false))
         .task { await model.reload() }
         .sheet(isPresented: Binding(get: { deletingProfile != nil }, set: { if !$0 { deletingProfile = nil } })) {
             if let profile = deletingProfile {
@@ -513,13 +527,49 @@ struct BrowserSettingsView<Engine: BrowserEngine>: View {
                         }.settingsDestructive()
                     }
                 }
-            }.padding(22).frame(width: 420).font(Font(BrandFonts.ui(13))).settingsFrost()
+            }.padding(22).frame(width: 420).font(Font(BrandFonts.ui(12))).settingsFrost()
         }
+    }
+
+    private var navigation: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            ForEach(BrowserSettingsSection.navigationSections) { section in
+                Button { model.navigate(to: section) } label: {
+                    HStack(spacing: 8) {
+                        navigationIcon(section).frame(width: 18, height: 18)
+                        Text(section.title).font(Font(BrandFonts.ui(11.5, weight: model.settingsSection == section ? .semibold : .regular)))
+                            .lineLimit(2)
+                        Spacer(minLength: 0)
+                    }
+                    .padding(.horizontal, 7).padding(.vertical, 6)
+                    .background(model.settingsSection == section ? Color(nsColor: BrandPalette.paper) : .clear,
+                                in: RoundedRectangle(cornerRadius: 8))
+                    .contentShape(Rectangle())
+                }.buttonStyle(.plain)
+                    .accessibilityIdentifier(section.toolbarIdentifier.rawValue)
+                    .accessibilityAddTraits(model.settingsSection == section ? .isSelected : [])
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 8).padding(.top, 11).padding(.bottom, 11)
+        .frame(width: 186).frame(maxHeight: .infinity)
+        .background(Color(nsColor: BrandPalette.rgb(0xDCE3FB)))
+    }
+
+    private func navigationIcon(_ section: BrowserSettingsSection) -> some View {
+        SettingsPaneIcon(section: section)
+    }
+
+    private func displayedSpaceIcon(_ space: BrowserSpace) -> BrowserSpaceIcon {
+        let choice = runtime.document.space(space.id).iconSelection
+        guard choice == .planet(.automatic) else { return choice }
+        let index = model.catalog.spaces.firstIndex(where: { $0.id == space.id }) ?? 0
+        return .planet(BrowserSpacePlanet.selectable[index % BrowserSpacePlanet.selectable.count])
     }
 
     @ViewBuilder private func spaces(_ profile: ProfileID) -> some View {
         let available = model.catalog.spaces.filter { $0.profileID == profile }
-        HStack(alignment: .top, spacing: 20) {
+        HStack(alignment: .top, spacing: 12) {
             VStack(alignment: .leading, spacing: 4) {
                 ForEach(available, id: \.id) { space in
                     BrowserSettingsSpaceRow(space: space,
@@ -549,16 +599,9 @@ struct BrowserSettingsView<Engine: BrowserEngine>: View {
                         }.padding(.vertical, 4)
                     }
                 }.foregroundStyle(.secondary).padding(.top, 12)
-            }.frame(width: 164)
+            }.frame(width: 150)
             if let space = available.first(where: { $0.id == selectedSpaceID }) ?? available.first {
                 VStack(alignment: .leading, spacing: 12) {
-                    Text(space.name).font(Font(BrandTextStyle.title.font(size: 22)))
-                        .foregroundStyle(OrbitSettingsStyle.foreground).padding(.horizontal, 12).padding(.vertical, 10)
-                        .frame(maxWidth: .infinity, minHeight: 74, maxHeight: 74, alignment: .bottomLeading)
-                        .background {
-                            BrowserSettingsThemeGradient(theme: space.theme ?? BrandPalette.spaceGradients[(model.catalog.spaces.firstIndex(where: { $0.id == space.id }) ?? 0) % 4].theme())
-                                .clipShape(RoundedRectangle(cornerRadius: 12))
-                        }
                     SettingsCard {
                         SettingsDetailRow(title: text("name", "Name")) {
                             BrowserSettingsNameEditor(name: space.name, compact: true) { name in
@@ -567,7 +610,7 @@ struct BrowserSettingsView<Engine: BrowserEngine>: View {
                         }
                         SettingsRule()
                         SettingsDetailRow(title: uiText("Icon")) {
-                            BrowserSettingsIconEditor(choice: runtime.document.space(space.id).iconSelection, compact: true) { value in
+                            BrowserSettingsIconEditor(choice: displayedSpaceIcon(space), compact: true) { value in
                                 model.queueSpaceIconEdit(spaceID: space.id, profileID: space.profileID, icon: BrowserSpaceIcon(legacyIcon: value))
                             }.disabled(runtime.isUnavailable)
                         }
@@ -598,6 +641,9 @@ struct BrowserSettingsView<Engine: BrowserEngine>: View {
     }
 
     @ViewBuilder private func privacy(_ profile: ProfileID) -> some View {
+        SettingsCard {
+            BrowserSafeBrowsingSettingsRow(model: model).padding(14)
+        }
         SettingsCard {
             HStack(spacing: 12) {
                 OrbitIcon.view(sfName: "trash", pointSize: 20).font(.system(size: 20)).frame(width: 20, height: 20)
@@ -653,9 +699,6 @@ struct BrowserSettingsView<Engine: BrowserEngine>: View {
         }
         Text(text("permissionLimits", "Only permissions supported by the current engine are editable. Some changes require reloading the website."))
             .font(Font(BrandFonts.ui(12))).foregroundStyle(.secondary)
-        SettingsCard {
-            BrowserSafeBrowsingSettingsRow(model: model).padding(14)
-        }
     }
 
     private var permissionOrigins: [BrowserSiteOrigin] {
@@ -666,20 +709,34 @@ struct BrowserSettingsView<Engine: BrowserEngine>: View {
 
     @ViewBuilder private var appearance: some View {
         if let profile = model.selectedProfileID {
-            Section(uiText("Space appearance")) {
-                Picker(uiText("Profile"), selection: Binding(get: { profile }, set: { model.selectProfile($0) })) {
-                    ForEach(model.catalog.profiles, id: \.id) { Text($0.name).tag($0.id) }
-                }.accessibilityIdentifier("settings-appearance-profile")
-                if let id = model.appearanceSpaceID,
-                   model.catalog.spaces.contains(where: { $0.id == id && $0.profileID == profile }) {
-                    Picker(uiText("Space"), selection: Binding(get: { id }, set: { model.selectAppearanceSpace($0) })) {
-                        ForEach(model.catalog.spaces.filter { $0.profileID == profile }, id: \.id) { Text($0.name).tag($0.id) }
-                    }.accessibilityIdentifier("settings-appearance-space")
-                    Text(uiText("Applies to this Space in every window. Other Spaces keep their own themes."))
-                        .foregroundStyle(.secondary).accessibilityIdentifier("settings-appearance-scope")
-                    Button(uiText("Edit Theme Color…")) { model.presentThemeEditor?(id) }
-                } else {
-                    Text(uiText("Choose a profile with an available Space."))
+            Text(uiText("Space appearance").uppercased()).font(Font(BrandFonts.mono(9.5))).tracking(1.14).foregroundStyle(.secondary)
+            SettingsCard {
+                if model.catalog.profiles.count > 1 {
+                    SettingsDetailRow(title: uiText("Profile")) {
+                        Picker(uiText("Profile"), selection: Binding(get: { profile }, set: { model.selectProfile($0) })) {
+                            ForEach(model.catalog.profiles, id: \.id) { Text($0.name).tag($0.id) }
+                        }.labelsHidden().frame(width: 160).accessibilityIdentifier("settings-appearance-profile")
+                    }
+                    SettingsRule()
+                }
+                if let id = model.appearanceSpaceID, let space = model.catalog.spaces.first(where: { $0.id == id && $0.profileID == profile }) {
+                    SettingsDetailRow(title: uiText("Space")) {
+                        Picker(uiText("Space"), selection: Binding(get: { id }, set: { model.selectAppearanceSpace($0) })) {
+                            ForEach(model.catalog.spaces.filter { $0.profileID == profile }, id: \.id) { Text($0.name).tag($0.id) }
+                        }.labelsHidden().frame(width: 160).accessibilityIdentifier("settings-appearance-space")
+                    }
+                    SettingsRule()
+                    SettingsDetailRow(title: uiText("Theme Color")) { BrowserSettingsGradientPicker(model: model, space: space) }
+                }
+                SettingsRule()
+                SettingsDetailRow(title: uiText("Animations")) {
+                    Picker(uiText("Animations"), selection: Binding(get: { runtime.document.reducedMotion }, set: { value in
+                        model.perform { try await model.setReducedMotion(value) }
+                    })) {
+                        Text(uiText("Follow System")).tag(BrowserReducedMotionSetting.system)
+                        Text(uiText("Reduce Motion")).tag(BrowserReducedMotionSetting.reduce)
+                        Text(uiText("Full Motion")).tag(BrowserReducedMotionSetting.full)
+                    }.labelsHidden().frame(width: 160)
                 }
             }.disabled(runtime.isUnavailable)
         }

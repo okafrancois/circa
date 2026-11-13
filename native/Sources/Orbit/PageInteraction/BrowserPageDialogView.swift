@@ -230,43 +230,52 @@ final class BrowserPageDialogView: NSView {
 @MainActor
 final class BrowserPageCrashedView: NSView {
     private let reload: () -> Void
+    private let closePage: (() -> Void)?
 
-    init(termination: String, reload: @escaping () -> Void) {
+    init(termination: String, close: (() -> Void)? = nil, reload: @escaping () -> Void) {
         self.reload = reload
+        closePage = close
         super.init(frame: .zero)
         wantsLayer = true
         layer?.backgroundColor = BrandPalette.pageWhite.cgColor
-        let icon = NSImageView(image: OrbitIcon.image(sfName: "exclamationmark.triangle", pointSize: 40,
-                                              accessibilityDescription: nil) ?? NSImage())
-        icon.symbolConfiguration = .init(pointSize: 40, weight: .regular)
-        icon.contentTintColor = .secondaryLabelColor
-        let title = NSTextField(labelWithString: uiText("Aw, Snap!"))
-        title.font = BrandTextStyle.title.font(size: 28)
-        let message = NSTextField(wrappingLabelWithString: uiText("Something went wrong while displaying this webpage."))
-        message.font = BrandTextStyle.body.font(size: 13)
-        message.alignment = .center
-        message.textColor = .secondaryLabelColor
-        let button = NSButton(title: uiText("Reload"), target: nil, action: nil)
-        button.font = BrandTextStyle.ui.font(size: 13)
-            button.bezelStyle = .rounded
+        let icon = NSImageView(image: BrowserText.secondaryBrandResource("page-crashed", extension: "png").flatMap { NSImage(contentsOf: $0) } ?? NSImage())
+        icon.imageScaling = .scaleProportionallyUpOrDown
+        icon.translatesAutoresizingMaskIntoConstraints = false
+        let title = NSTextField(wrappingLabelWithString: uiText("This tab drifted off."))
+        title.attributedStringValue = BrandTextStyle.title.attributedString(title.stringValue, size: 25, attributes: [.foregroundColor: BrandPalette.ink])
+        let message = NSTextField(wrappingLabelWithString: uiText("It stopped responding. Nothing else was affected."))
+        message.font = BrandTextStyle.body.font(size: 12)
+        message.textColor = BrandPalette.ink2
+        let button = OrbitNativePrintButton(title: uiText("Reload"), target: self, action: #selector(reloadAction(_:)))
         button.keyEquivalent = "\r"
-        button.target = self
-        button.action = #selector(reloadAction(_:))
-        let stack = NSStackView(views: [icon, title, message, button])
+        var actions: [NSView] = [button]
+        if close != nil {
+            let closeButton = NSButton(title: uiText("Close tab"), target: self, action: #selector(closeAction(_:)))
+            closeButton.isBordered = false
+            closeButton.attributedTitle = NSAttributedString(string: closeButton.title, attributes: [
+                .font: BrandFonts.ui(11, weight: .semibold), .foregroundColor: BrandPalette.ink,
+                .underlineStyle: NSUnderlineStyle.single.rawValue
+            ])
+            actions.append(closeButton)
+        }
+        let row = NSStackView(views: actions); row.spacing = 12
+        let stack = NSStackView(views: [icon, title, message, row])
         stack.orientation = .vertical
-        stack.alignment = .centerX
-        stack.spacing = 12
+        stack.alignment = .leading
+        stack.spacing = 8
         stack.translatesAutoresizingMaskIntoConstraints = false
         addSubview(stack)
         NSLayoutConstraint.activate([
-            stack.centerXAnchor.constraint(equalTo: centerXAnchor),
-            stack.centerYAnchor.constraint(equalTo: centerYAnchor),
-            stack.widthAnchor.constraint(lessThanOrEqualToConstant: 420),
-            message.widthAnchor.constraint(lessThanOrEqualToConstant: 420)
+            stack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 18),
+            stack.topAnchor.constraint(equalTo: topAnchor, constant: 14),
+            stack.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -18),
+            stack.widthAnchor.constraint(lessThanOrEqualToConstant: 560),
+            icon.widthAnchor.constraint(equalToConstant: 132),
+            icon.heightAnchor.constraint(equalToConstant: 67)
         ])
         setAccessibilityElement(true)
         setAccessibilityRole(.group)
-        setAccessibilityLabel(uiText("Aw, Snap!"))
+        setAccessibilityLabel(uiText("This tab drifted off."))
         identifier = NSUserInterfaceItemIdentifier("orbit.page-crashed.\(termination)")
     }
 
@@ -281,6 +290,7 @@ final class BrowserPageCrashedView: NSView {
 
     @objc private func reloadAction(_ sender: Any?) { reload() }
     func performReload() { reload() }
+    @objc private func closeAction(_ sender: Any?) { closePage?() }
 }
 
 private extension NSLayoutConstraint {

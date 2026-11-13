@@ -71,7 +71,7 @@ final class BrowserContentCardView: NSView {
         guard assistantClip.superview == nil else { return }
         assistantEdge.borderWidth = OrbitTokens.Metrics.Content.cardHairlineWidth
         assistantEdge.outerShadow = cardShadow
-        assistantEdge.borderColor = themeForeground?.withAlphaComponent(0.12) ?? OrbitTokens.Color.Line.floatingScrimBorder
+        assistantEdge.borderColor = BrandPalette.ink
         addSubview(assistantClip)
         addSubview(assistantEdge)
         assistantClip.addSubview(assistantSurface)
@@ -107,6 +107,27 @@ final class BrowserContentCardView: NSView {
     private let emptyTitle = NSTextField(labelWithString: OrbitShellText.emptySpaceTitle)
     private let emptyDetail = NSTextField(labelWithString: OrbitShellText.emptySpaceDetail)
     private let emptyState = NSStackView()
+    private let emptyStart = OrbitNativePrintButton(frame: .zero)
+    var onPrivateStart: (() -> Void)?
+    private let emptyArtwork = NSImageView()
+    private var emptyArtworkWidth: NSLayoutConstraint?
+    private var emptyArtworkHeight: NSLayoutConstraint?
+    private var emptyPlacement: [NSLayoutConstraint] = []
+    var emptyStateIsPrivate = false {
+        didSet {
+            let name = emptyStateIsPrivate ? "page-private" : "empty-space"
+            emptyArtworkWidth?.constant = emptyStateIsPrivate ? 132 : 150
+            emptyArtworkHeight?.constant = emptyStateIsPrivate ? 67 : 90
+            emptyArtwork.image = BrowserText.secondaryBrandResource(name, extension: "png").flatMap { NSImage(contentsOf: $0) }
+            emptyTitle.textColor = emptyStateIsPrivate ? BrandPalette.paper : OrbitTokens.Color.Text.primary
+            emptyDetail.textColor = emptyStateIsPrivate ? BrandPalette.paper.withAlphaComponent(0.8) : OrbitTokens.Color.Text.tertiary
+            emptyState.alignment = emptyStateIsPrivate ? .leading : .centerX
+            emptyStart.isHidden = !emptyStateIsPrivate
+            emptyDetail.stringValue = emptyStateIsPrivate ? uiText("Nothing here is kept: no history, no cookies, no AI.") : OrbitShellText.emptySpaceDetail
+            refreshCaptureShield()
+            if presentedView === emptyState { placeEmptyState() }
+        }
+    }
     private weak var presentedView: NSView?
     private let captureShield = NSView()
     private let splitBackdrop = OrbitThemeFillView()
@@ -173,7 +194,7 @@ final class BrowserContentCardView: NSView {
     var frameEdgeColor: NSColor? { hairline.borderColor }
     var themeForeground: NSColor? {
         didSet {
-            hairline.borderColor = themeForeground?.withAlphaComponent(0.12) ?? OrbitTokens.Color.Line.floatingScrimBorder
+            hairline.borderColor = themeForeground?.withAlphaComponent(0.15) ?? OrbitTokens.Color.Line.floatingScrimBorder
             assistantEdge.borderColor = hairline.borderColor
         }
     }
@@ -237,21 +258,27 @@ final class BrowserContentCardView: NSView {
         emptyState.orientation = .vertical
         emptyState.alignment = .centerX
         emptyState.spacing = 4
-        emptyTitle.font = BrandTextStyle.title.font(size: 28)
+        emptyTitle.font = BrandTextStyle.title.font(size: 20)
         emptyTitle.textColor = OrbitTokens.Color.Text.primary
         emptyTitle.lineBreakMode = .byTruncatingTail
         emptyDetail.font = OrbitTokens.Typography.emptyStateDetail
         emptyDetail.textColor = OrbitTokens.Color.Text.tertiary
         if let url = BrowserText.secondaryBrandResource("empty-space", extension: "png"), let image = NSImage(contentsOf: url) {
-            let artwork = NSImageView(image: image)
+            let artwork = emptyArtwork
+            artwork.image = image
             artwork.imageScaling = .scaleProportionallyUpOrDown
             artwork.translatesAutoresizingMaskIntoConstraints = false
-            artwork.widthAnchor.constraint(equalToConstant: 160).isActive = true
-            artwork.heightAnchor.constraint(equalToConstant: 110).isActive = true
+            emptyArtworkWidth = artwork.widthAnchor.constraint(equalToConstant: 150)
+            emptyArtworkHeight = artwork.heightAnchor.constraint(equalToConstant: 90)
+            emptyArtworkWidth?.isActive = true; emptyArtworkHeight?.isActive = true
             emptyState.addArrangedSubview(artwork)
         }
         emptyState.addArrangedSubview(emptyTitle)
         emptyState.addArrangedSubview(emptyDetail)
+        emptyStart.title = uiText("Start browsing"); emptyStart.target = self
+        emptyStart.action = #selector(startEmptyPage)
+        emptyStart.isHidden = true
+        emptyState.addArrangedSubview(emptyStart)
         splitBackdrop.autoresizingMask = [.width, .height]
         captureShield.addSubview(splitBackdrop)
     }
@@ -309,7 +336,7 @@ final class BrowserContentCardView: NSView {
 
     var emptyStateTitle: String {
         get { emptyTitle.stringValue }
-        set { emptyTitle.stringValue = newValue }
+        set { emptyTitle.attributedStringValue = BrandTextStyle.title.attributedString(newValue, size: emptyStateIsPrivate ? 25 : 20, attributes: [.foregroundColor: emptyStateIsPrivate ? BrandPalette.paper : OrbitTokens.Color.Text.primary]) }
     }
     var emptyStateDetail: String {
         get { emptyDetail.stringValue }
@@ -394,12 +421,28 @@ final class BrowserContentCardView: NSView {
             ])
         } else {
             contentTopConstraint = nil
-            NSLayoutConstraint.activate([
-                presentation.centerXAnchor.constraint(equalTo: clip.centerXAnchor),
-                presentation.centerYAnchor.constraint(equalTo: clip.centerYAnchor),
-                presentation.widthAnchor.constraint(lessThanOrEqualTo: clip.widthAnchor, constant: -40)
-            ])
+            placeEmptyState()
         }
+    }
+
+    @objc private func startEmptyPage() { onPrivateStart?() }
+
+    private func placeEmptyState() {
+        NSLayoutConstraint.deactivate(emptyPlacement)
+        if emptyStateIsPrivate {
+            emptyPlacement = [
+                emptyState.leadingAnchor.constraint(equalTo: clip.leadingAnchor, constant: 18),
+                emptyState.topAnchor.constraint(equalTo: clip.topAnchor, constant: 14),
+                emptyState.widthAnchor.constraint(lessThanOrEqualTo: clip.widthAnchor, constant: -72)
+            ]
+        } else {
+            emptyPlacement = [
+                emptyState.centerXAnchor.constraint(equalTo: clip.centerXAnchor),
+                emptyState.centerYAnchor.constraint(equalTo: clip.centerYAnchor),
+                emptyState.widthAnchor.constraint(lessThanOrEqualTo: clip.widthAnchor, constant: -40)
+            ]
+        }
+        NSLayoutConstraint.activate(emptyPlacement)
     }
 
     /// A document returning before its outgoing capture finished has one native parent only.
@@ -432,7 +475,7 @@ final class BrowserContentCardView: NSView {
 
     private func refreshCaptureShield() {
         splitBackdrop.isHidden = !isPresentingSplit
-        captureShield.layer?.backgroundColor = isPresentingSplit ? NSColor.clear.cgColor
+        captureShield.layer?.backgroundColor = presentedView === emptyState && emptyStateIsPrivate ? BrandPalette.ink.cgColor : isPresentingSplit ? NSColor.clear.cgColor
             : (presentedView === emptyState ? OrbitTokens.Color.Surface.contentEmptyPage : OrbitTokens.Color.Surface.preview)
                 .resolvedCGColor(for: effectiveAppearance)
     }

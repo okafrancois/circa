@@ -27,7 +27,21 @@ final class BrowserPaletteView: NSView, NSTextFieldDelegate, NSTableViewDataSour
         }
     }
     let input: NSTextField = PaletteInputField()
+    private static var sparkleImage: NSImage {
+        NSImage(size: NSSize(width: 16, height: 16), flipped: false) { rect in
+            let path = NSBezierPath()
+            path.move(to: NSPoint(x: 8, y: 1))
+            path.curve(to: NSPoint(x: 15, y: 8), controlPoint1: NSPoint(x: 9.1, y: 6.9), controlPoint2: NSPoint(x: 9.1, y: 6.9))
+            path.curve(to: NSPoint(x: 8, y: 15), controlPoint1: NSPoint(x: 9.1, y: 9.1), controlPoint2: NSPoint(x: 9.1, y: 9.1))
+            path.curve(to: NSPoint(x: 1, y: 8), controlPoint1: NSPoint(x: 6.9, y: 9.1), controlPoint2: NSPoint(x: 6.9, y: 9.1))
+            path.curve(to: NSPoint(x: 8, y: 1), controlPoint1: NSPoint(x: 6.9, y: 6.9), controlPoint2: NSPoint(x: 6.9, y: 6.9))
+            BrandPalette.coral.setFill(); path.fill(); return true
+        }
+    }
     let panel = NSView()
+    var contentFrame: (() -> NSRect)?
+    private let veil = CALayer()
+    private let footer = NSTextField(labelWithString: uiText("↑↓ move    ↵ open    ⇥ actions"))
     let material = OrbitFrostView(radius: OrbitTokens.Radius.commandBar)
     private let materialObservers = OrbitWorkspaceObservers()
     private(set) var usesMaterial = !NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency
@@ -99,9 +113,13 @@ final class BrowserPaletteView: NSView, NSTextFieldDelegate, NSTableViewDataSour
         panel.wantsLayer = true
         panel.layer?.cornerRadius = OrbitTokens.Radius.commandBar
         panel.layer?.masksToBounds = false
+        veil.backgroundColor = BrandPalette.paper.withAlphaComponent(0.6).cgColor
+        layer?.addSublayer(veil)
         layer?.addSublayer(panelShadow)
         addSubview(panel)
         panel.addSubview(material)
+        footer.font = BrandFonts.mono(9.5); footer.textColor = BrandPalette.ink.withAlphaComponent(0.55)
+        panel.addSubview(footer)
         input.isBordered = false
         input.isBezeled = false
         input.drawsBackground = false
@@ -197,7 +215,10 @@ final class BrowserPaletteView: NSView, NSTextFieldDelegate, NSTableViewDataSour
     override func layout() {
         super.layout()
         let m = OrbitTokens.Metrics.CommandBar.self
-        panel.frame = Self.panelFrame(in: bounds.size, resultCount: results.count)
+        let page = contentFrame?() ?? bounds
+        veil.frame = page
+        panel.frame = Self.panelFrame(in: page.size, resultCount: results.count).offsetBy(dx: page.minX, dy: page.minY)
+        footer.frame = NSRect(x: 16, y: 8, width: panel.bounds.width - 32, height: 14)
         if answerView != nil { panel.frame.size.height = answerHeight ?? 230 }
         panelShadow.frame = panel.frame
         panelShadow.shadowPath = CGPath(roundedRect: panelShadow.bounds, cornerWidth: OrbitTokens.Radius.commandBar,
@@ -290,13 +311,13 @@ final class BrowserPaletteView: NSView, NSTextFieldDelegate, NSTableViewDataSour
         announcedResultCount = results.count
         let symbol = selectedResult?.inputSymbol ?? "magnifyingglass"
         inputSymbol = symbol
-        if symbolImages[symbol] == nil { symbolImages[symbol] = OrbitIcon.image(sfName: symbol, pointSize: 16, accessibilityDescription: nil) }
+        if symbolImages[symbol] == nil { symbolImages[symbol] = symbol == "magnifyingglass" ? Self.sparkleImage : OrbitIcon.image(sfName: symbol, pointSize: 16, accessibilityDescription: nil) }
         let image = selectedResult.flatMap { result in
             result.section == .tabs || result.section == .pinned ? favicons[result.id] : nil
         }
         let inputImage = image ?? symbolImages[symbol]
         if searchIcon.image !== inputImage { searchIcon.image = inputImage }
-        searchIcon.contentTintColor = image == nil ? OrbitFloatingMaterial.body : nil
+        searchIcon.contentTintColor = image == nil && symbol != "magnifyingglass" ? OrbitFloatingMaterial.body : nil
         infoButton.isHidden = siteSearch != nil
         let row = selectedIndex >= 0 ? resultRows[selectedIndex] : -1
         list.selectRowIndexes(row >= 0 ? IndexSet(integer: row) : [], byExtendingSelection: false)

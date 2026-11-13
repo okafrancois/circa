@@ -23,7 +23,7 @@ final class OrbitOnboardingPrimaryButton: NSButton {
         layer?.shadowColor = BrandPalette.ink.cgColor
         layer?.shadowOpacity = 1
         layer?.shadowRadius = 0
-        layer?.shadowOffset = CGSize(width: 0, height: -3)
+        layer?.shadowOffset = CGSize(width: 0, height: isFlipped ? 3 : -3)
         target = self
         action = #selector(press)
         focusRingType = .exterior
@@ -41,9 +41,8 @@ final class OrbitOnboardingPrimaryButton: NSButton {
         let alpha = isEnabled ? 1 : M.disabledLabelAlpha
         let paragraph = NSMutableParagraphStyle()
         paragraph.alignment = .center
-        image = NSImage(systemSymbolName: "arrow.right", accessibilityDescription: nil)?.withSymbolConfiguration(
-            NSImage.SymbolConfiguration(pointSize: 13, weight: .semibold).applying(.init(paletteColors: [labelColor])))
-        imagePosition = .imageTrailing; imageHugsTitle = true
+        image = nil
+        imagePosition = .noImage
         attributedTitle = NSAttributedString(string: title, attributes: [
             .font: OrbitOnboardingFonts.button, .foregroundColor: labelColor.withAlphaComponent(alpha), .paragraphStyle: paragraph
         ])
@@ -116,8 +115,8 @@ class OrbitOnboardingOptionCard: NSView {
         surface.backgroundColor = OrbitOnboardingColors.optionSurface.cgColor
         surface.shadowColor = NSColor.black.cgColor
         surface.shadowOpacity = 1
-        surface.shadowRadius = 6
-        surface.shadowOffset = CGSize(width: 0, height: -2)
+        surface.shadowRadius = 0
+        surface.shadowOffset = CGSize(width: 0, height: isFlipped ? 3 : -3)
         surface.masksToBounds = false
         layer?.addSublayer(surface)
         radio.fillColor = nil
@@ -146,9 +145,11 @@ class OrbitOnboardingOptionCard: NSView {
     func refresh() {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        surface.borderWidth = M.selectedBorder
-        surface.borderColor = (isSelected ? accent : OrbitOnboardingColors.optionBorder).cgColor
-        surface.shadowColor = OrbitOnboardingColors.optionShadow.cgColor
+        surface.borderWidth = isSelected ? M.selectedBorder : 0
+        surface.borderColor = BrandPalette.ink.cgColor
+        surface.shadowColor = BrandPalette.ink.cgColor
+        surface.shadowOpacity = isSelected ? 1 : 0
+        surface.backgroundColor = (isSelected ? BrandPalette.pageWhite : OrbitOnboardingColors.optionSurface).cgColor
         radio.strokeColor = (isSelected ? accent : OrbitOnboardingColors.radioRing).cgColor
         radio.lineWidth = isSelected ? M.radioSelectedRing : M.radioRing
         dot.fillColor = isSelected ? accent.cgColor : nil
@@ -229,7 +230,9 @@ final class OrbitOnboardingChoiceCard: OrbitOnboardingOptionCard {
 
     override func refresh() {
         super.refresh()
-        let color = isSelected ? accent : OrbitOnboardingColors.optionText
+        let color = isSelected ? BrandPalette.pageWhite : OrbitOnboardingColors.optionText
+        surface.backgroundColor = (isSelected ? BrandPalette.cobalt : OrbitOnboardingColors.optionSurface).cgColor
+        radio.isHidden = true; dot.isHidden = true
         let text = NSMutableAttributedString(string: strong, attributes: [.font: OrbitOnboardingFonts.choiceStrong, .foregroundColor: color])
         text.append(NSAttributedString(string: " " + detail, attributes: [.font: OrbitOnboardingFonts.choice, .foregroundColor: color]))
         label.attributedStringValue = text

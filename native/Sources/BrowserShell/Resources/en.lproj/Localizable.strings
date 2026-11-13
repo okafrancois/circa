@@ -2034,3 +2034,33 @@
 "Reading" = "Reading";
 
 "Side project" = "Side project";
+
+"Free and open source, MIT license. Built with Swift, AppKit and Chromium." = "Free and open source, MIT license. Built with Swift, AppKit and Chromium.";
+
+"Welcome\nto Circa." = "Welcome\nto Circa.";
+
+"They sit at the top of the sidebar, in every Space." = "They sit at the top of the sidebar, in every Space.";
+
+"This tab drifted off." = "This tab drifted off.";
+
+"It stopped responding. Nothing else was affected." = "It stopped responding. Nothing else was affected.";
+
+"Private window." = "Private window.";
+
+"Nothing here is kept: no history, no cookies, no AI." = "Nothing here is kept: no history, no cookies, no AI.";
+
+"↑↓ move    ↵ open    ⇥ actions" = "↑↓ move    ↵ open    ⇥ actions";
+
+"Drifted off." = "Drifted off.";
+
+"⌘T opens your first tab." = "⌘T opens your first tab.";
+
+"%d / %d" = "%d / %d";
+
+"Bring your own AI. Off until you ask." = "Bring your own AI. Off until you ask.";
+
+"Spaces · pinned tabs · themes\nBoosts · passwords (encrypted)" = "Spaces · pinned tabs · themes\nBoosts · passwords (encrypted)";
+
+"Close tab" = "Close tab";
+
+"Start browsing" = "Start browsing";

@@ -1,5 +1,6 @@
 import AppKit
 import QuartzCore
+import BrowserShell
 
 @MainActor
 enum BrowserPeekStyle {
@@ -7,10 +8,10 @@ enum BrowserPeekStyle {
     static let buttonSize = OrbitTokens.Metrics.Peek.controlDiameter
     static let buttonRadius = buttonSize / 2
     static let toolbarFontSize: CGFloat = 11
-    static let toolbarForeground = NSColor.white.withAlphaComponent(0.88)
-    static let toolbarDisabled = NSColor.white.withAlphaComponent(0.30)
-    static let buttonBackground = NSColor(srgbRed: 0.04, green: 0.04, blue: 0.05, alpha: 0.96)
-    static let buttonHover = NSColor(srgbRed: 0.15, green: 0.15, blue: 0.17, alpha: 1)
+    static let toolbarForeground = BrandPalette.ink
+    static let toolbarDisabled = BrandPalette.ink.withAlphaComponent(0.3)
+    static let buttonBackground = BrandPalette.pageWhite
+    static let buttonHover = BrandPalette.sky
     /// Split button: the fill never changes; hover lifts the disc and a press shrinks it.
     static let splitButtonHoverLift: CGFloat = 1
     static let splitButtonHoverDuration: CFTimeInterval = 0.05

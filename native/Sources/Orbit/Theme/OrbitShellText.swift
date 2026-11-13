@@ -34,5 +34,5 @@ enum OrbitShellText {
 
     // Content card.
     static var emptySpaceTitle: String { string("card.emptySpaceTitle", "Nothing in orbit yet.") }
-    static var emptySpaceDetail: String { string("card.emptySpaceDetail", "Open a tab to get started.") }
+    static var emptySpaceDetail: String { string("card.emptySpaceDetail", "⌘T opens your first tab.") }
 }

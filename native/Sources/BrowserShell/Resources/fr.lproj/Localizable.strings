@@ -1622,3 +1622,33 @@
 "Reading" = "Lecture";
 
 "Side project" = "Projet perso";
+
+"Free and open source, MIT license. Built with Swift, AppKit and Chromium." = "Gratuit et open source, sous licence MIT. Conçu avec Swift, AppKit et Chromium.";
+
+"Welcome\nto Circa." = "Bienvenue\ndans Circa.";
+
+"They sit at the top of the sidebar, in every Space." = "Ils restent en haut de la barre latérale, dans chaque Espace.";
+
+"This tab drifted off." = "Cet onglet a dérivé.";
+
+"It stopped responding. Nothing else was affected." = "Il ne répondait plus. Rien d’autre n’a été affecté.";
+
+"Private window." = "Fenêtre privée.";
+
+"Nothing here is kept: no history, no cookies, no AI." = "Rien n’est conservé ici : ni historique, ni cookies, ni IA.";
+
+"↑↓ move    ↵ open    ⇥ actions" = "↑↓ choisir    ↵ ouvrir    ⇥ actions";
+
+"Drifted off." = "À la dérive.";
+
+"⌘T opens your first tab." = "⌘T ouvre votre premier onglet.";
+
+"%d / %d" = "%d / %d";
+
+"Bring your own AI. Off until you ask." = "Utilisez votre propre IA. Inactive tant que vous ne la sollicitez pas.";
+
+"Spaces · pinned tabs · themes\nBoosts · passwords (encrypted)" = "Espaces · onglets épinglés · thèmes\nBoosts · mots de passe (chiffrés)";
+
+"Close tab" = "Fermer l’onglet";
+
+"Start browsing" = "Commencer à naviguer";

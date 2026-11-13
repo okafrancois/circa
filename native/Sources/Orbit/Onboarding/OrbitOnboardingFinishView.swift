@@ -11,22 +11,22 @@ final class OrbitOnboardingFinishView: NSView {
     let sticker = OrbitOnboardingSticker(text: "", color: BrandPalette.mint)
     let summary = NSStackView()
     var onOpen: (() -> Void)?
+    let illustration = OrbitOnboardingHorizonArt(frame: .zero)
     override init(frame: NSRect) {
         super.init(frame: frame)
         wantsLayer = true
-        title.font = OrbitOnboardingFonts.title(72); title.textColor = OrbitOnboardingColors.welcomeTitle
-        title.attributedStringValue = BrandTextStyle.title.attributedString(title.stringValue, size: 72, attributes: [.foregroundColor: OrbitOnboardingColors.welcomeTitle])
-        title.alignment = .center; title.frame = NSRect(x: 70, y: 201, width: 1060, height: 90)
-        body.font = OrbitOnboardingFonts.ui(15); body.textColor = BrandPalette.stageMuted
-        body.alignment = .center; body.frame = NSRect(x: 200, y: 309, width: 800, height: 32)
-        button.title = OrbitOnboardingText.getStarted; button.accent = OrbitOnboardingColors.accent
-        button.frame = NSRect(x: 520, y: 367, width: 160, height: 48)
+        illustration.frame = NSRect(x: 0, y: 435, width: 1200, height: 315)
+        title.attributedStringValue = BrandTextStyle.title.attributedString(OrbitOnboardingText.finishTitle, size: 63, attributes: [.foregroundColor: BrandPalette.ink])
+        title.maximumNumberOfLines = 2
+        title.alignment = .left; title.frame = NSRect(x: 50, y: 96, width: 650, height: 140)
+        body.font = OrbitOnboardingFonts.ui(22); body.textColor = BrandPalette.ink2
+        body.alignment = .left; body.frame = NSRect(x: 54, y: 246, width: 620, height: 65)
+        body.maximumNumberOfLines = 2
+        button.title = OrbitOnboardingText.getStarted; button.accent = BrandPalette.coral
+        button.frame = NSRect(x: 54, y: 360, width: 185, height: 52)
         button.keyEquivalent = "\r"; button.onPress = { [weak self] in self?.onOpen?() }
-        summary.orientation = .horizontal; summary.spacing = 8; summary.alignment = .centerY
-        summary.frame = NSRect(x: 150, y: 441, width: 900, height: 34)
-        sticker.frame = NSRect(x: 830, y: 110, width: 290, height: 38)
-        for v in [mark, title, body, button, summary, sticker] { v.wantsLayer = true; addSubview(v) }
-        sticker.frameRotation = 7
+        for v in [illustration, title, body, button] { v.wantsLayer = true; addSubview(v) }
+        mark.isHidden = true; sticker.isHidden = true; summary.isHidden = true
     }
     required init?(coder: NSCoder) { nil }
     override var isFlipped: Bool { true }
@@ -65,15 +65,9 @@ final class OrbitOnboardingFinishView: NSView {
         summary.frame = NSRect(x: (bounds.width - width) / 2, y: 441, width: width, height: 34)
     }
     func play() {
-        mark.land(delay: 0, drawBands: false)
-        title.play(delay: 0.3, stagger: 0.07)
-        OrbitOnboardingMotion.entrance(body, delay: 0.7)
-        OrbitOnboardingMotion.entrance(button, delay: 0.8)
-        for (i, chip) in summary.arrangedSubviews.enumerated() {
-            OrbitOnboardingMotion.entrance(chip, y: 14, duration: 0.7, delay: 1 + Double(i)*0.07)
-        }
-        OrbitOnboardingMotion.animate(sticker.layer, key: "opacity", from: 0, to: 1, duration: 0.7, delay: 1.4)
-        OrbitOnboardingMotion.animate(sticker.layer, key: "transform.rotation.z", from: -.pi * 27 / 180, to: 0, duration: 0.7, delay: 1.4, stick: true)
-        OrbitOnboardingMotion.animate(sticker.layer, key: "transform.scale", from: 0, to: 1, duration: 0.7, delay: 1.4, stick: true)
+        title.play(delay: 0.38, stagger: 0.07)
+        OrbitOnboardingMotion.entrance(body, y: 32, duration: 0.5, delay: 0.45)
+        OrbitOnboardingMotion.entrance(button, y: 32, duration: 0.5, delay: 0.52)
+        illustration.play()
     }
 }

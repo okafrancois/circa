@@ -9,7 +9,7 @@ enum OrbitSettingsStyle {
     static let foreground = color(light: 0x1B2057, dark: 0xF6F1E7)
     static let background = Color(nsColor: windowColor)
     static let panel = color(light: 0xFFFDF7, dark: 0x292F6B)
-    static let border = Color(nsColor: BrandPalette.ink)
+    static let border = Color(nsColor: BrandPalette.ink.withAlphaComponent(0.13))
     static let windowColor = NSColor(name: nil) { appearance in
         appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? BrandPalette.stage2 : BrandPalette.paper
     }
@@ -47,7 +47,12 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 10) {
                 if model.settingsSection != .profiles && model.settingsSection != .links && model.settingsSection != .about {
-                    Text((model.settingsSection ?? .general).title).font(Font(BrandTextStyle.title.font(size: 28))).kerning(BrandTextStyle.title.tracking(size: 28)).padding(.bottom, 6)
+                    HStack(spacing: 8) {
+                        if let section = model.settingsSection, section != .general {
+                            SettingsPaneIcon(section: section).frame(width: 22, height: 22)
+                        }
+                        Text((model.settingsSection ?? .general).title).font(Font(BrandTextStyle.title.font(size: model.settingsSection == .general ? 25 : 21))).kerning(BrandTextStyle.title.tracking(size: model.settingsSection == .general ? 25 : 21))
+                    }.padding(.bottom, 6)
                 }
                 switch model.settingsSection ?? .general {
                 case .general: general
@@ -61,11 +66,11 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
                 }
             }
             .frame(maxWidth: .infinity, alignment: .topLeading)
-            .padding(.horizontal, 28)
-            .padding(.top, 22).padding(.bottom, 26)
+            .padding(.horizontal, 20)
+            .padding(.top, 18).padding(.bottom, 16)
         }
         .scrollIndicators(.automatic)
-        .font(Font(BrandFonts.ui(13)))
+        .font(Font(BrandFonts.ui(12)))
         .buttonStyle(.bordered)
         .controlSize(.small)
         .disabled(runtime.isUnavailable)
@@ -100,57 +105,36 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
 
     private var general: some View {
         Group {
-            if model.environment.sync.showsSettings {
-                BrowserSyncSettingsRow(runtime: model.environment.sync) { value in
-                    model.perform { try await model.environment.sync.setEnabled(value) }
-                }
-            }
             panel {
-                settingRow(uiFormat("Automatically update my %@", applicationName)) {
-                    BrowserAutomaticUpdateToggle(updater: runtime.updater)
-                }
-                rule
-                liveToggle("Warn before quitting", value: runtime.document.interaction.warnBeforeQuitting,
-                           identifier: "settings-warn-before-quitting", save: model.setWarnBeforeQuitting)
-            }
-            panel {
-                Button { model.navigate(to: .profiles) } label: {
-                    HStack(spacing: 12) {
-                        OrbitIcon.view(sfName: "person.crop.circle", pointSize: 20).font(.system(size: 20)).frame(width: 20, height: 20)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(uiText("Profile Settings")).fontWeight(.medium)
-                            Text(uiText("Manage your default search engine and Auto-Archive in Profile Settings."))
-                                .font(Font(BrandFonts.ui(12))).foregroundStyle(.secondary)
+                settingRow("Default browser") {
+                    BrowserDefaultBrowserAction(isDefault: model.defaultStatus?.isOrbit == true,
+                        canRequest: model.canRequestDefaultBrowser && !model.isRequestingDefaultBrowser) {
+                            model.perform { try await model.requestDefaultBrowser() }
                         }
-                        Spacer()
-                        OrbitIcon.view(sfName: "chevron.right", pointSize: 14).font(.system(size: 14)).frame(width: 14, height: 14).foregroundStyle(.secondary)
-                    }.padding(14).contentShape(Rectangle())
-                }.buttonStyle(.plain).accessibilityIdentifier("settings-open-profiles")
-            }
-
-            panel {
-                settingRow("Archive Little Circas after", icon: "archivebox") {
-                    Picker(uiText("Archive Little Circas after"), selection: Binding(
-                        get: { runtime.document.quickWindowArchiveThreshold },
-                        set: { value in model.perform { try await runtime.setQuickWindowArchiveThreshold(value) } }
-                    )) {
-                        ForEach(BrowserQuickWindowArchiveSettings.choices, id: \.self) { choice in
-                            Text(BrowserQuickWindowArchiveSettings.title(choice)).tag(choice)
-                        }
-                    }.labelsHidden().pickerStyle(.menu).frame(width: 140)
-                        .accessibilityIdentifier("settings-little-archive")
                 }
-            }
-
-            panel {
-                settingRow("Save downloads to", icon: "folder") {
-                    Button { model.chooseDownloadFolder?() } label: {
-                        Text(runtime.document.downloads.folderURL.path.replacingOccurrences(
-                            of: FileManager.default.homeDirectoryForCurrentUser.path + "/", with: "~/"))
-                            .lineLimit(1).truncationMode(.middle)
+                if let profile = model.selectedProfileID {
+                    rule
+                    settingRow("Search engine") {
+                        Picker(uiText("Search engine"), selection: Binding(get: { runtime.document.profile(profile).searchEngine }, set: { value in
+                            model.perform { try await model.updateProfile(profile) { $0.searchEngine = value } }
+                        })) {
+                            Text("Google").tag(SearchEngine.google)
+                            Text("DuckDuckGo").tag(SearchEngine.duckDuckGo)
+                            Text("Bing").tag(SearchEngine.bing)
+                        }.labelsHidden().pickerStyle(.menu).frame(width: 135).accessibilityIdentifier("settings-search-engine")
                     }
-                    .help(runtime.document.downloads.folderURL.path)
-                    .accessibilityIdentifier("settings-download-folder")
+                    rule
+                    liveToggle("Show search suggestions", value: runtime.document.profile(profile).showSearchSuggestions,
+                               identifier: "settings-search-suggestions") { value in
+                        try await model.updateProfile(profile) { $0.showSearchSuggestions = value }
+                    }
+                }
+            }
+            panel {
+                settingRow("Save downloads to") {
+                    Button { model.chooseDownloadFolder?() } label: {
+                        Text(runtime.document.downloads.folderURL.lastPathComponent).lineLimit(1)
+                    }.help(runtime.document.downloads.folderURL.path).accessibilityIdentifier("settings-download-folder")
                 }
                 rule
                 liveToggle("Ask where to save each file", value: runtime.document.downloads.asksWhereToSave,
@@ -158,20 +142,51 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
                     try await runtime.updateDownloads { $0.asksWhereToSave = value }
                 }
             }
-
             panel {
-                HStack(spacing: 14) {
-                    Image(nsImage: BrandFonts.mark ?? NSImage()).resizable().scaledToFit().frame(width: 44, height: 44)
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(model.defaultStatus?.isOrbit == true
-                             ? uiFormat("%@ is your default web browser.", applicationName) : uiFormat("%@ is not your default web browser.", applicationName))
+                if let profile = model.selectedProfileID {
+                    settingRow("Archive tabs after") {
+                        Picker(uiText("Archive tabs after"), selection: Binding(get: { model.archiveThreshold }, set: { value in
+                            guard let value else { return }
+                            if model.catalog.profiles.count > 1 {
+                                archiveChange = .init(profile: profile, profileName: model.catalog.profiles.first(where: { $0.id == profile })?.name ?? "", threshold: value)
+                            } else { model.perform { try await model.setArchiveThreshold(value, profile: profile) } }
+                        })) {
+                            ForEach(BrowserArchiveSettingsChange.options(current: model.archiveThreshold), id: \.self) { threshold in
+                                Text(BrowserArchiveSettingsChange.label(threshold)).tag(Optional(threshold))
+                            }
+                        }.labelsHidden().pickerStyle(.menu).frame(width: 135).accessibilityIdentifier("settings-auto-archive")
                     }
-                    Spacer(minLength: 0)
-                    BrowserDefaultBrowserAction(isDefault: model.defaultStatus?.isOrbit == true,
-                        canRequest: model.canRequestDefaultBrowser && !model.isRequestingDefaultBrowser) {
-                            model.perform { try await model.requestDefaultBrowser() }
+                    rule
+                }
+                settingRow("Archive Little Circas after") {
+                    Picker(uiText("Archive Little Circas after"), selection: Binding(get: { runtime.document.quickWindowArchiveThreshold }, set: { value in
+                        model.perform { try await runtime.setQuickWindowArchiveThreshold(value) }
+                    })) {
+                        ForEach(BrowserQuickWindowArchiveSettings.choices, id: \.self) { choice in
+                            Text(BrowserQuickWindowArchiveSettings.title(choice)).tag(choice)
                         }
-                }.padding(8)
+                    }.labelsHidden().pickerStyle(.menu).frame(width: 135).accessibilityIdentifier("settings-little-archive")
+                }
+            }
+            Text(uiText("Pinned tabs and Favorites are never auto-archived.")).font(Font(BrandFonts.ui(10.5))).foregroundStyle(.secondary)
+            panel {
+                Toggle(uiText("Links from other apps open in Little Circa"), isOn: Binding(get: { runtime.document.opensExternalLinksInQuickWindow }, set: { value in
+                    model.perform { try await runtime.setOpensExternalLinksInQuickWindow(value) }
+                })).toggleStyle(SettingsSwitchStyle()).padding(.horizontal, 13).padding(.vertical, 9).accessibilityIdentifier("settings-external-little-orbit")
+                if let profile = model.selectedProfileID {
+                    rule
+                    Toggle(uiText("Open a Peek window when clicking on links to other sites"), isOn: Binding(get: { runtime.document.profile(profile).opensPinnedLinksInPeek }, set: { value in
+                        model.perform { try await model.updateProfile(profile) { $0.opensPinnedLinksInPeek = value } }
+                    })).toggleStyle(SettingsSwitchStyle()).padding(.horizontal, 13).padding(.vertical, 9).accessibilityIdentifier("settings-pinned-peek")
+                    rule
+                    Toggle(uiText("Open a Peek window when clicking on links with Shift held"), isOn: Binding(get: { runtime.document.profile(profile).shiftClickOpensPeek }, set: { value in
+                        model.perform { try await model.updateProfile(profile) { $0.shiftClickOpensPeek = value } }
+                    })).toggleStyle(SettingsSwitchStyle()).padding(.horizontal, 13).padding(.vertical, 9).accessibilityIdentifier("settings-shift-peek")
+                }
+            }
+            panel {
+                liveToggle("Warn before quitting", value: runtime.document.interaction.warnBeforeQuitting,
+                           identifier: "settings-warn-before-quitting", save: model.setWarnBeforeQuitting)
             }
         }
     }
@@ -233,7 +248,7 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
                    let entry = model.catalog.profiles.first(where: { $0.id == profile }) {
                     HStack(spacing: 10) {
                         BrowserSettingsThemeSwatch(theme: profileTheme(profile)).scaleEffect(1.65).frame(width: 30, height: 30)
-                        Text(entry.name).font(Font(BrandTextStyle.title.font(size: 28))).kerning(BrandTextStyle.title.tracking(size: 28))
+                        Text(entry.name).font(Font(BrandTextStyle.title.font(size: 25))).kerning(BrandTextStyle.title.tracking(size: 25))
                         Spacer()
                         Button(uiText("Rename")) { renamingProfile = entry }.accessibilityIdentifier("settings-rename-profile")
                     }
@@ -327,7 +342,7 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
             HStack(spacing: 15) {
                 OrbitIcon.view(sfName: "macwindow.on.rectangle", pointSize: 38, weight: .ultraLight).font(.system(size: 38, weight: .ultraLight)).foregroundStyle(OrbitSettingsStyle.foreground)
                 VStack(alignment: .leading, spacing: 5) {
-                    Text(uiText("Little Circa")).font(Font(BrandTextStyle.title.font(size: 28))).kerning(BrandTextStyle.title.tracking(size: 28))
+                    Text(uiText("Little Circa")).font(Font(BrandTextStyle.title.font(size: 25))).kerning(BrandTextStyle.title.tracking(size: 25))
                     Text(uiText("A smaller, simpler window for quick lookups and links from other apps."))
                         .foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 }
@@ -407,7 +422,7 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
                     get: { runtime.document.enablesBoostsOnWebsites },
                     set: { value in model.perform { try await runtime.setEnablesBoostsOnWebsites(value) } }
                 )).toggleStyle(SettingsSwitchStyle()).accessibilityIdentifier("settings-enables-boosts")
-                }.padding(.horizontal, 14).padding(.vertical, 8).frame(minHeight: 44)
+                }.padding(.horizontal, 13).padding(.vertical, 9).frame(minHeight: 38)
             }
             panel {
                 settingRow("Put inactive tabs to sleep after", icon: "moon.stars") {
@@ -511,7 +526,7 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
         VStack(alignment: .leading, spacing: 0, content: content)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(OrbitSettingsStyle.panel, in: RoundedRectangle(cornerRadius: 12))
-            .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(OrbitSettingsStyle.border, lineWidth: 2))
+            .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(OrbitSettingsStyle.border, lineWidth: 1))
     }
     private func settingRow<Control: View>(_ title: String, icon: String? = nil, @ViewBuilder control: () -> Control) -> some View {
         HStack(spacing: 12) {
@@ -519,7 +534,7 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
             Text(uiText(title)).fontWeight(.medium).fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 8); control()
         }
-            .padding(.horizontal, 14).padding(.vertical, 8).frame(minHeight: 44)
+            .padding(.horizontal, 13).padding(.vertical, 9).frame(minHeight: 38)
     }
     private func liveToggle(_ title: String, value: Bool, identifier: String, icon: String? = nil,
                             save: @escaping (Bool) async throws -> Void) -> some View {
@@ -564,7 +579,7 @@ private struct BrowserSyncSettingsRow: View {
         }
         .padding(.horizontal, 14).padding(.vertical, 8).frame(minHeight: 50).frame(maxWidth: .infinity, alignment: .leading)
         .background(OrbitSettingsStyle.panel, in: RoundedRectangle(cornerRadius: 12))
-        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(OrbitSettingsStyle.border, lineWidth: 2))
+        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(OrbitSettingsStyle.border, lineWidth: 1))
         .alert(uiText("Use a different iCloud account?"), isPresented: $runtime.needsAccountDecision) {
             Button(uiText("Keep Sync Off"), role: .cancel) {}
             Button(uiText("Try Again")) { save(true) }

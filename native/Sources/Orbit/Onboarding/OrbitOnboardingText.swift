@@ -4,17 +4,17 @@ import Foundation
 @MainActor
 enum OrbitOnboardingText {
     static var windowTitle: String { uiText("Welcome to Circa") }
-    static var welcomeHeadline: String { uiText("Welcome to Circa") }
+    static var welcomeHeadline: String { uiText("Welcome\nto Circa.") }
     static var getStarted: String { uiText("Open Circa") }
     static var start: String { uiText("Start") }
     static var bringOver: String { uiText("Bring it over") }
     static var welcomeBody: String { uiText("Space to think.") }
     static var welcomeSticker: String { uiText("Your Spaces come too →") }
     static var favouritesTitle: String { uiText("Pin your favourites.") }
-    static var favouritesBody: String { uiText("Pick a few sites to keep at the top of the sidebar, in every Space. You can change them any time.") }
+    static var favouritesBody: String { uiText("They sit at the top of the sidebar, in every Space.") }
     static var favouritesImportedBody: String { uiText("These are the sites you visited most. Pick the ones you want at the top of the sidebar, in every Space.") }
     static func favouriteHint(_ count: Int) -> String { uiFormat("%d selected · add more from the sidebar menu", count) }
-    static func counter(_ step: Int) -> String { uiFormat("STEP %d OF 7", step) }
+    static func counter(_ step: Int) -> String { uiFormat("%d / %d", step, 7) }
     static func sticker(duration: Double?, sync: Bool) -> String {
         let privacy = sync ? uiText("synced to your iCloud") : uiText("nothing uploaded")
         // A sub-second import still reads as one second, never "0 s".

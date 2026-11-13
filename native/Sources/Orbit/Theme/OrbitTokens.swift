@@ -396,11 +396,11 @@ extension OrbitTokens {
         ///  13 regular
         public static let addressField = BrandTextStyle.ui.font(size: 13, weight: .regular)
         public static let sidebarClear = BrandTextStyle.ui.font(size: 11, weight: .semibold)
-        public static let commandBarInput = BrandTextStyle.ui.font(size: 18, weight: .medium)
+        public static let commandBarInput = BrandTextStyle.ui.font(size: 16, weight: .medium)
         ///  13 medium
         public static let commandBarRowTitle = BrandTextStyle.ui.font(size: 13, weight: .medium)
         ///  13 medium
-        public static let commandBarAccessory = BrandTextStyle.ui.font(size: 13, weight: .medium)
+        public static let commandBarAccessory = BrandTextStyle.mono.font(size: 10, weight: .regular)
         ///  13 medium — sidebar "+" menu
         public static let menuItem = BrandTextStyle.ui.font(size: 13, weight: .medium)
         public static let menuShortcut = BrandTextStyle.mono.font(size: 13, weight: .regular)
@@ -555,17 +555,17 @@ extension OrbitTokens {
         }
 
         public enum Content {
-            public static let cardInset: CGFloat = 10
-            public static let cardInsetSidebarHidden: CGFloat = 10
+            public static let cardInset: CGFloat = 6
+            public static let cardInsetSidebarHidden: CGFloat = 6
             public static let fullscreenHiddenSidebarInset: CGFloat = 0 // , radius 0
-            public static let splitGap: CGFloat = 10                  //  (round 1 video: 8)
+            public static let splitGap: CGFloat = 6                  //  (round 1 video: 8)
             public static let splitFocusBorderWidth: CGFloat = 2      // , inside the pane
             public static let splitDividerHandle = NSSize(width: 2, height: 24)
             public static let splitPaneToolbarHeight: CGFloat = 32    // , 0.5 pt hairline
             // THEME lot additions
             /// User report (2026-10-28): Orbit draws no border around the page card, in windowed or full
             /// screen; the earlier 0.5 pt reading (S-NT) was the shadow's edge. The card keeps its shadow only.
-            public static let cardHairlineWidth: CGFloat = 2
+            public static let cardHairlineWidth: CGFloat = 1
             ///  — the card corners follow the inset to 0 in full screen with the sidebar hidden.
             public static let cardRadiusFullscreenHidden: CGFloat = 0
             /// Edge-to-edge layout (default): the card is flush with the window's top, trailing and
@@ -577,18 +577,18 @@ extension OrbitTokens {
         }
 
         public enum CommandBar {
-            public static let width: CGFloat = 765                    //  fixed at windows 1024 and 1512
+            public static let width: CGFloat = 400                    //  fixed at windows 1024 and 1512
             /// : fixed offset above the vertical centre (152 @640, 305.75 @949).
             public static let topOffsetAboveCenter: CGFloat = 168.5
-            public static func top(windowHeight: CGFloat) -> CGFloat { windowHeight / 2 - topOffsetAboveCenter }
+            public static func top(windowHeight: CGFloat) -> CGFloat { 34 }
             /// The top at the reference height 640 (round 1 value 152); use `top(windowHeight:)`.
             public static var top: CGFloat { top(windowHeight: 640) }
-            public static let searchRowHeight: CGFloat = 64
-            public static let rowHeight: CGFloat = 46
-            public static let rowPitch: CGFloat = 50
+            public static let searchRowHeight: CGFloat = 48
+            public static let rowHeight: CGFloat = 34
+            public static let rowPitch: CGFloat = 38
             public static let rowInsetX: CGFloat = 10
             public static let firstRowGap: CGFloat = 6
-            public static let bottomPadding: CGFloat = 12
+            public static let bottomPadding: CGFloat = 34
             public static let iconTileSize: CGFloat = 24
             public static let iconTileInsetX: CGFloat = 10
             public static let titleOriginX: CGFloat = 52
@@ -635,10 +635,10 @@ extension OrbitTokens {
 
 extension OrbitTokens {
     public enum Radius {
-        public static let contentCard: CGFloat = 6
-        public static let splitPane: CGFloat = 6
+        public static let contentCard: CGFloat = 8
+        public static let splitPane: CGFloat = 8
         public static let addressField: CGFloat = 8
-        public static let favoriteTile: CGFloat = 12
+        public static let favoriteTile: CGFloat = 8
         public static let tabRow: CGFloat = 8
         public static let commandBar: CGFloat = 16
         public static let commandBarRow: CGFloat = 8
@@ -646,12 +646,12 @@ extension OrbitTokens {
         public static let plusMenu: CGFloat = 12
         public static let plusMenuRow: CGFloat = 8
         public static let floatingSidebar: CGFloat = 12
-        public static let peek: CGFloat = 8
+        public static let peek: CGFloat = 11
         public static let findBar: CGFloat = 6
         public static let zoomHud: CGFloat = 9.5
-        public static let toast: CGFloat = 11
+        public static let toast: CGFloat = 12
         public static let themeEditor: CGFloat = 20
-        public static let quickWindowAddress: CGFloat = 5
+        public static let quickWindowAddress: CGFloat = 6
         public static let toolbarButtonHover: CGFloat = 6
         public static let closeButton: CGFloat = 6
         public static let tooltip: CGFloat = 7
@@ -683,11 +683,11 @@ extension OrbitTokens {
         ///  black 20 %, y 1, σ 1; none in dark.
         public static let tabSelected = ShadowSpec(color: Color.ShadowColor.tabSelected, offsetY: 1, blur: 2)
         ///  black 24 %; pair with Color.Line.floatingScrimBorder hairline.
-        public static let contentCard = ShadowSpec(color: .orbitSRGB(0x1B2057), offsetY: 3, blur: 0)
+        public static let contentCard = ShadowSpec(color: .clear, offsetY: 0, blur: 0)
         /// Soft leading shadow of the edge-to-edge page card: black 12 %, no offset, blur 4.
         public static let contentCardEdge = ShadowSpec(color: .orbitSRGB(0x1B2057, 0.12), offsetY: 0, blur: 4)
         ///  black 50 %, σ 48, RMS 0.54/255; no scrim behind the command bar.
-        public static let commandBar = ShadowSpec(color: .orbitSRGB(0x1B2057), offsetY: 3, blur: 0)
+        public static let commandBar = ShadowSpec(color: .orbitSRGB(0x1B2057), offsetY: 5, blur: 0)
         ///  — sidebar "+" menu.
         public static let popover = ShadowSpec(color: .orbitSRGB(0x1B2057, 0.20), offsetY: 1, blur: 6)
         /// , RMS 0.18

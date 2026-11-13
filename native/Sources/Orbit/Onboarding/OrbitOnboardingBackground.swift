@@ -14,7 +14,7 @@ final class OrbitOnboardingBackgroundView: NSView {
         glow.type = .axial
         glow.startPoint = CGPoint(x: 0.5, y: 0)
         glow.endPoint = CGPoint(x: 0.5, y: 1)
-        glow.locations = BrandPalette.glowStops
+        glow.locations = [0, 0.55, 0.92]
         layer?.addSublayer(glow)
         apply(theme: nil)
     }
@@ -27,6 +27,6 @@ final class OrbitOnboardingBackgroundView: NSView {
     }
     func apply(theme: BrowserSpaceTheme?) {
         self.theme = theme
-        glow.colors = BrandPalette.glowColors
+        glow.colors = [BrandPalette.rgb(0xC9D8FA).cgColor, BrandPalette.rgb(0xE4E6F1).cgColor, BrandPalette.paper.cgColor]
     }
 }
