@@ -171,6 +171,28 @@ final class OrbitOnboardingHorizonArt: OrbitOnboardingSpaceArt {
                 return NSValue(caTransform3D: transform)
             }
             animate(star.layer, key: "transform", values: transforms, duration: 0.5, delay: 0.9 + Double(index) * 0.1)
+            if !OrbitMotionPreferences.prefersReducedMotion {
+                let pulse = CAKeyframeAnimation(keyPath: "transform")
+                let twinkleDuration = [1.0, 1.4, 1.6, 0.9, 1.2][index] * 2
+                let loopStart = 1.4 + Double(index) * 0.1
+                pulse.values = (0...120).map { frame -> NSValue in
+                    let phase = Double(frame) / 120 + loopStart / twinkleDuration
+                    let value = 0.55 + 0.45 * (1 + cos(phase * 2 * .pi)) / 2
+                    var transform = CATransform3DMakeTranslation(center.x, center.y, 0)
+                    transform = CATransform3DScale(transform, value, value, 1)
+                    transform = CATransform3DTranslate(transform, -center.x, -center.y, 0)
+                    return NSValue(caTransform3D: transform)
+                }
+                pulse.duration = twinkleDuration
+                pulse.beginTime = CACurrentMediaTime() + loopStart
+                pulse.repeatCount = .infinity
+                pulse.fillMode = .forwards
+                pulse.isRemovedOnCompletion = false
+                star.layer?.add(pulse, forKey: "space-art.twinkle")
+                animate(star.layer, key: "opacity", values: (0...120).map {
+                    0.45 + 0.55 * (1 + cos(Double($0) / 120 * 2 * .pi)) / 2
+                }, duration: pulse.duration, repeats: true)
+            }
         }
         let drift = (0...120).map { (1 - cos(Double($0) / 120 * 2 * .pi)) / 2 }
         animate(satellite.layer, key: "transform.translation.x", values: drift.map { $0 * 30 * scale }, duration: 10, repeats: true)
