@@ -15,6 +15,14 @@ class OrbitOnboardingSpaceArt: NSView {
     }
     override var isFlipped: Bool { true }
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
+    func artwork(_ name: String, on artworkLayer: CALayer) {
+        if let url = BrowserText.secondaryBrandResource(name, extension: "png"), let image = NSImage(contentsOf: url) {
+            var rect = NSRect(origin: .zero, size: image.size)
+            artworkLayer.contents = image.cgImage(forProposedRect: &rect, context: nil, hints: nil)
+        }
+        artworkLayer.contentsGravity = .resizeAspect
+        layer?.addSublayer(artworkLayer)
+    }
     func animate(_ layer: CALayer?, key: String, values: [Any], duration: Double, delay: Double = 0, repeats: Bool = false) {
         guard !OrbitMotionPreferences.prefersReducedMotion else { return }
         let motion = CAKeyframeAnimation(keyPath: key)
@@ -31,23 +39,24 @@ final class OrbitOnboardingMoonArt: OrbitOnboardingSpaceArt {
     private let moon: NSImageView
     private let frameArt: NSImageView
     private let front: NSImageView
-    private let satellite: NSImageView
+    private let satellite = CALayer()
     override init(frame: NSRect) {
         moon = OrbitOnboardingIllustrationView("onboarding-moon-body")
         frameArt = OrbitOnboardingIllustrationView("onboarding-moon-frame")
         front = OrbitOnboardingIllustrationView("onboarding-moon-front")
-        satellite = OrbitOnboardingIllustrationView("sputnik")
         super.init(frame: frame)
-        for view in [frameArt, moon, front, satellite] { addSubview(view) }
+        for view in [frameArt, moon, front] { addSubview(view) }
+        artwork("sputnik", on: satellite)
     }
     required init?(coder: NSCoder) { nil }
     override func layout() {
         super.layout()
         frameArt.frame = bounds; moon.frame = bounds; front.frame = bounds
         let s = bounds.width / 300
-        satellite.frame = NSRect(x: 0, y: 0, width: 80 * s * 0.95, height: 80 * s * 0.95)
-        satellite.layer?.anchorPoint = CGPoint(x: 0.5, y: 0.5)
-        satellite.layer?.position = CGPoint(x: satellite.bounds.midX, y: satellite.bounds.midY)
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        satellite.bounds = NSRect(x: 0, y: 0, width: 80 * s * 0.95, height: 80 * s * 0.95)
+        satellite.position = CGPoint(x: 150 * s, y: 150 * s)
+        CATransaction.commit()
     }
     func play() {
         layoutSubtreeIfNeeded()
@@ -59,9 +68,9 @@ final class OrbitOnboardingMoonArt: OrbitOnboardingSpaceArt {
             return NSValue(point: NSPoint(x: (150 + x * cos(rotation) - y * sin(rotation)) * s,
                                          y: (150 + x * sin(rotation) + y * cos(rotation)) * s))
         }
-        animate(satellite.layer, key: "position", values: points, duration: 4 * .pi, repeats: true)
-        animate(satellite.layer, key: "opacity", values: (0...360).map { sin(1 + Double($0) / 360 * 2 * .pi) > -0.2 ? 1.0 : 0.0 }, duration: 4 * .pi, repeats: true)
-        satellite.layer?.setAffineTransform(CGAffineTransform(rotationAngle: -.pi * 24 / 180))
+        animate(satellite, key: "position", values: points, duration: 4 * .pi, repeats: true)
+        animate(satellite, key: "opacity", values: (0...360).map { sin(1 + Double($0) / 360 * 2 * .pi) > -0.2 ? 1.0 : 0.0 }, duration: 4 * .pi, repeats: true)
+        satellite.setAffineTransform(CGAffineTransform(rotationAngle: -.pi * 24 / 180))
         layer?.sublayers?.filter { $0.name == "space-art.sparkle" }.forEach { $0.removeFromSuperlayer() }
         for (index, item) in [(30.0, 40.0, 10.0, BrandPalette.ink), (270, 250, 7, BrandPalette.coral), (250, 30, 5, BrandPalette.cobalt)].enumerated() {
             let (x, y, radius, color) = item
@@ -172,18 +181,20 @@ final class OrbitOnboardingHorizonArt: OrbitOnboardingSpaceArt {
 @MainActor
 final class OrbitOnboardingTrajectoryArt: OrbitOnboardingSpaceArt {
     private let pathArt = OrbitOnboardingIllustrationView("onboarding-trajectory")
-    private let satellite = OrbitOnboardingIllustrationView("sputnik")
+    private let satellite = CALayer()
     override init(frame: NSRect) {
         super.init(frame: frame)
-        addSubview(pathArt); addSubview(satellite)
+        addSubview(pathArt)
+        artwork("sputnik", on: satellite)
     }
     required init?(coder: NSCoder) { nil }
     override func layout() {
         super.layout(); pathArt.frame = bounds
         let side = 64 * bounds.width / 280
-        satellite.frame = NSRect(x: 0, y: 0, width: side, height: side)
-        satellite.layer?.anchorPoint = CGPoint(x: 0.5, y: 0.5)
-        satellite.layer?.position = CGPoint(x: side / 2, y: side / 2)
+        CATransaction.begin(); CATransaction.setDisableActions(true)
+        satellite.bounds = NSRect(x: 0, y: 0, width: side, height: side)
+        satellite.position = CGPoint(x: side / 2, y: side / 2)
+        CATransaction.commit()
     }
     func play() {
         layoutSubtreeIfNeeded()
@@ -212,8 +223,8 @@ final class OrbitOnboardingTrajectoryArt: OrbitOnboardingSpaceArt {
             angles.append(atan2(b.y - a.y, b.x - a.x) + .pi)
             opacity.append(progress > 0.03 && progress < 0.93 ? 1 : 0)
         }
-        animate(satellite.layer, key: "position", values: points, duration: 3.7, repeats: true)
-        animate(satellite.layer, key: "transform.rotation.z", values: angles, duration: 3.7, repeats: true)
-        animate(satellite.layer, key: "opacity", values: opacity, duration: 3.7, repeats: true)
+        animate(satellite, key: "position", values: points, duration: 3.7, repeats: true)
+        animate(satellite, key: "transform.rotation.z", values: angles, duration: 3.7, repeats: true)
+        animate(satellite, key: "opacity", values: opacity, duration: 3.7, repeats: true)
     }
 }
