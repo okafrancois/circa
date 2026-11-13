@@ -269,7 +269,12 @@ extension OrbitSmokeDriver {
                     if let panel = picker.popup.window { await capture("space-icon-picker", panel) }; picker.cancel()
                 }
                 if part == "chrome" {
+                    if let side = spaces.first(where: { $0.name == "Side project" }) {
+                        owner.session.activateSpace(side.id)
+                        await owner.session.waitForPendingCommands()
+                    }
                     owner.session.closeSelectedTab(); await owner.session.waitForPendingCommands()
+                    check("brand.empty-space-state", owner.session.selectedSurface == nil)
                     await capture("empty-space", window)
                 } else {
                     if let surface = owner.session.selectedSurface {
