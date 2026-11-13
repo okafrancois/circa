@@ -7,6 +7,28 @@ extension NativeWebKitTests {
 @Suite("Little toolbar cursor and copy", .serialized)
 @MainActor
 struct QuickWindowToolbarTests {
+    @Test("Planet artwork stays within the compact source badge without resizing the shared image",
+          arguments: BrowserSpacePlanet.selectable)
+    func compactPlanetBadge(planet: BrowserSpacePlanet) async throws {
+        NSApplication.shared.setActivationPolicy(.prohibited)
+        let environment = BrowserEnvironment(engine: PeekSyntheticEngine())
+        let (space, _) = try await environment.initialContext.value
+        try await environment.settings.updateSpace(space) { $0.iconSelection = .planet(planet) }
+        let artwork = try #require(SpaceIconImages.planet(planet))
+        let originalSize = artwork.size
+        let little = try await environment.makeQuickWindow(spaceID: space, url: URL(string: "https://synthetic.invalid/path")!)
+        defer { environment.retireQuickWindows() }
+        let image = try #require(little.sourceSpaceBadge.image)
+        #expect(image.size == NSSize(width: 13, height: 13))
+        #expect(image !== artwork)
+        #expect(artwork.size == originalSize)
+        little.window?.contentView?.layoutSubtreeIfNeeded()
+        let cell = try #require(little.sourceSpaceBadge.cell as? NSButtonCell)
+        let imageRect = cell.imageRect(forBounds: little.sourceSpaceBadge.bounds)
+        #expect(imageRect.width <= 13 && imageRect.height <= 13)
+        #expect(little.addressField.stringValue == "https://synthetic.invalid/path")
+    }
+
     @Test("Only the uncovered address area registers a text cursor after resizing")
     func cursorGeometry() async throws {
         NSApplication.shared.setActivationPolicy(.prohibited)
