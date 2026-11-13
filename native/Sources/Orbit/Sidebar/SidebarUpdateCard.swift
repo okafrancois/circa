@@ -22,11 +22,13 @@ final class SidebarUpdateCard: NSView {
         layer?.masksToBounds = false
         layer?.addSublayer(paper)
         paper.cornerRadius = 14
-        paper.backgroundColor = NSColor.white.withAlphaComponent(0.94).cgColor
-        paper.shadowColor = NSColor.black.cgColor
-        paper.shadowOpacity = 0.4
-        paper.shadowRadius = 15
-        paper.shadowOffset = CGSize(width: 0, height: -8)
+        paper.backgroundColor = BrandPalette.pageWhite.cgColor
+        paper.borderColor = BrandPalette.ink.cgColor
+        paper.borderWidth = 2
+        paper.shadowColor = BrandPalette.ink.cgColor
+        paper.shadowOpacity = 1
+        paper.shadowRadius = 0
+        paper.shadowOffset = CGSize(width: 0, height: -3)
         icon.image = BrandFonts.mark
         icon.imageScaling = .scaleProportionallyUpOrDown
         title.font = BrandTextStyle.ui.font(size: 13, weight: .semibold)
@@ -70,7 +72,7 @@ final class SidebarUpdateCard: NSView {
 @MainActor
 final class SidebarUpdateRestartButton: NSButton {
     override func draw(_ dirtyRect: NSRect) {
-        BrandPalette.ink.setFill()
+        BrandPalette.coral.setFill()
         NSBezierPath(roundedRect: bounds, xRadius: bounds.height / 2, yRadius: bounds.height / 2).fill()
         let text = NSAttributedString(string: title, attributes: [.font: font ?? NSFont.systemFont(ofSize: 12), .foregroundColor: NSColor.white])
         let size = text.size()
@@ -86,7 +88,7 @@ final class SidebarUpdateSticker: NSView {
     override func draw(_ dirtyRect: NSRect) {
         let shape = NSBezierPath(roundedRect: bounds.insetBy(dx: 2, dy: 2), xRadius: 12, yRadius: 12)
         BrandPalette.mint.setFill(); shape.fill()
-        NSColor.white.setStroke(); shape.lineWidth = 4; shape.stroke()
+        BrandPalette.ink.setStroke(); shape.lineWidth = 2; shape.stroke()
         let text = NSAttributedString(string: stringValue, attributes: [.font: BrandTextStyle.ui.font(size: 10, weight: .bold), .foregroundColor: BrandPalette.ink])
         let size = text.size()
         text.draw(at: NSPoint(x: (bounds.width - size.width) / 2, y: (bounds.height - size.height) / 2))
