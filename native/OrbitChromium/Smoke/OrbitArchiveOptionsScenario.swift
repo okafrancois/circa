@@ -219,7 +219,8 @@ extension OrbitSmokeDriver {
                         try? await Task.sleep(for: .milliseconds(35))
                     }
                     try JSONEncoder().encode(times).write(to: folder.appendingPathComponent("times.json"))
-                    check("brand.motion-" + step.rawValue, times.count >= 15)
+                    check("brand.motion-" + step.rawValue,
+                          times.count >= 10 && (times.first ?? 1) < 0.5 && (times.last ?? 0) >= 3)
                     target.orderOut(nil)
                 }
             } else if part == "onboarding" {
