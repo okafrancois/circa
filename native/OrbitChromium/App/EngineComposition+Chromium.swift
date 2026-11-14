@@ -141,6 +141,7 @@ enum OrbitLauncher {
                 try prepareAuthenticationRun(configuration)
             }) {
                 BrowserPerformance.mark(.authentication)
+                prepareEngineMigrationBackup(configuration)
                 processSiteSessionImport(configuration)
                 runtimeStatus = startRuntime(configuration)
             }
@@ -192,6 +193,20 @@ enum OrbitLauncher {
         // Mark the startup attempt before CEF can mutate Local State or open a profile.
         if beginPasswords, try startupExtensionStages(configuration).isEmpty, run.status.phase == .passwordsPending { try run.beginPasswordApplication() }
         authenticationRun = run
+    }
+
+    /// Before the first launch of a different build, and before anything opens a profile, keep
+    /// a private copy of the state an engine update can invalidate (site sign-ins, extension
+    /// records). A failure keeps the browser usable; the next launch tries again.
+    private static func prepareEngineMigrationBackup(_ configuration: OrbitProductConfiguration) {
+        let info = Bundle.main.infoDictionary ?? [:]
+        let build = "\(info["CFBundleShortVersionString"] as? String ?? "unknown") (\(info["CFBundleVersion"] as? String ?? "unknown"))"
+        do {
+            try BrowserEngineMigrationBackup.prepareLaunch(dataRoot: configuration.dataRoot,
+                                                          engineRoot: configuration.engineRoot, build: build)
+        } catch {
+            FileHandle.standardError.write(Data("orbit: engine migration backup failed; launching without a new copy\n".utf8))
+        }
     }
 
     private static func processSiteSessionImport(_ configuration: OrbitProductConfiguration) {

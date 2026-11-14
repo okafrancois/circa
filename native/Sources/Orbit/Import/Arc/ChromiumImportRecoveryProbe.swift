@@ -16,7 +16,7 @@ enum ChromiumImportRecoveryProbe {
         if point == "recovered" {
             for case let file as URL in FileManager.default.enumerator(at: root, includingPropertiesForKeys: [.isRegularFileKey])! {
                 let relative = String(file.path.dropFirst(root.path.count + 1))
-                if relative.hasPrefix("ImportRecovery") || relative.hasPrefix("Import/Backups") || relative.hasPrefix("AuthenticationImport") || relative.hasPrefix(".orbit") || relative == "import-recovery-startup.json" { continue }
+                if relative.hasPrefix("ImportRecovery") || relative.hasPrefix("Import/Backups") || relative.hasPrefix("AuthenticationImport") || relative.hasPrefix("EngineMigrationBackups") || relative.hasPrefix(".orbit") || relative == "import-recovery-startup.json" { continue }
                 if try file.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile == true {
                     inventory[relative] = SHA256.hash(data: try Data(contentsOf: file)).map { String(format: "%02x", $0) }.joined()
                 }
