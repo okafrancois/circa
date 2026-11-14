@@ -96,7 +96,8 @@
   (0700/0600, last three build changes, at most 30 days). Copies are never logged, uploaded or
   restored automatically. Restoring is a deliberate action on a stopped browser
   (`BrowserEngineMigrationBackup.restore`), which first saves the current files. Data deleted
-  before this feature shipped cannot be recovered by it.
+  before this feature shipped cannot be recovered by it. A failed snapshot refuses startup before
+  the engine can change profile files; the next launch retries.
   A rollback uses a newer build number; preserve user data and never downgrade the schema blindly.
 
 ## GitHub-hosted macOS runners

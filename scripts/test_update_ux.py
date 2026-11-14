@@ -643,6 +643,20 @@ def input_identity(app):
             for block in iter(lambda: handle.read(1 << 20), b''):
                 digest.update(block)
         identity[key] = digest.hexdigest()
+    tree = hashlib.sha256()
+    for path in sorted(app.rglob('*')):
+        relative = path.relative_to(app).as_posix().encode()
+        tree.update(len(relative).to_bytes(8, 'big') + relative)
+        if path.is_symlink():
+            tree.update(b'L' + os.readlink(path).encode() + b'\0')
+        elif path.is_file():
+            tree.update(b'F' + path.stat().st_size.to_bytes(8, 'big'))
+            with path.open('rb') as handle:
+                for block in iter(lambda: handle.read(1 << 20), b''):
+                    tree.update(block)
+        else:
+            tree.update(b'D')
+    identity['bundle'] = tree.hexdigest()
     return identity
 
 

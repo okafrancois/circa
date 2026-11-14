@@ -125,4 +125,27 @@ struct BrowserEngineMigrationBackupTests {
         #expect(read("profile-a/Secure Preferences") == "current")
         #expect(BrowserEngineMigrationBackup.snapshots(dataRoot: root).count == 1)
     }
+    @Test("Symlinked backup directories and cookie parents are refused without touching their targets")
+    func refusesSymlinks() throws {
+        defer { try? FileManager.default.removeItem(at: root) }
+        try seedProfiles()
+        let outside = root.appendingPathComponent("outside")
+        try FileManager.default.createDirectory(at: outside, withIntermediateDirectories: true)
+        let backup = root.appendingPathComponent("EngineMigrationBackups")
+        try FileManager.default.createSymbolicLink(at: backup, withDestinationURL: outside)
+        #expect(throws: BrowserEngineMigrationBackup.Failure.unsafePath) {
+            try BrowserEngineMigrationBackup.prepareLaunch(dataRoot: root, engineRoot: engine, build: "new")
+        }
+        try FileManager.default.removeItem(at: backup)
+        let network = engine.appendingPathComponent("profile-a/Network")
+        try FileManager.default.removeItem(at: network)
+        try Data("untouched".utf8).write(to: outside.appendingPathComponent("Cookies"))
+        try FileManager.default.createSymbolicLink(at: network, withDestinationURL: outside)
+        #expect(throws: BrowserEngineMigrationBackup.Failure.unsafePath) {
+            try BrowserEngineMigrationBackup.prepareLaunch(dataRoot: root, engineRoot: engine, build: "new")
+        }
+        #expect(!FileManager.default.fileExists(atPath: root.appendingPathComponent(".orbit-last-launched-build").path))
+        #expect(try String(contentsOf: outside.appendingPathComponent("Cookies"), encoding: .utf8) == "untouched")
+    }
+
 }

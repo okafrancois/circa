@@ -274,7 +274,7 @@ REQUIRED_PRESERVATION_CHECKS = (
     'ext_updated_reports_same_storage', 'ext_updated_store_preserved', 'ext_updated_inventory',
     'ext_new_restart_reports_same_storage', 'ext_new_restart_store_preserved', 'ext_new_restart_inventory',
     'ext_next_update_reports_same_storage', 'ext_next_update_store_preserved', 'ext_next_update_inventory',
-    'migration_backup_restorable')
+    'migration_backup_verified')
 
 
 def latest_feed_item(feed_path):
@@ -380,6 +380,8 @@ def qualify_preservation(config, candidate, build, output):
             raise RuntimeError('Preservation qualification did not pass (exit %d); see %s' % (result.returncode, evidence))
         summary = json.loads(summary_file.read_text())
         check_preservation_summary(summary, run_id, previous_identity, candidate_identity)
+        if bundle_identity(previous) != previous_identity or bundle_identity(candidate) != candidate_identity:
+            raise RuntimeError('Application bundles changed during preservation qualification')
     (evidence / 'gate.json').write_text(json.dumps({'published': published, 'candidateBuild': build, 'runID': run_id,
                                                     'checks': len(summary['checks'])}, indent=2) + '\n')
     print('preservation gate: passed %d checks' % len(summary['checks']), flush=True)

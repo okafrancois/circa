@@ -44,6 +44,7 @@ public enum BrowserEngineMigrationBackup {
     /// root has no profile yet. On failure nothing is recorded, so the next launch retries.
     @discardableResult
     public static func prepareLaunch(dataRoot: URL, engineRoot: URL, build: String, now: Date = Date()) throws -> Manifest? {
+        try validateRoots(dataRoot: dataRoot, engineRoot: engineRoot)
         let marker = dataRoot.appendingPathComponent(markerName)
         let previous = (try? String(contentsOf: marker, encoding: .utf8))?.trimmingCharacters(in: .whitespacesAndNewlines)
         prune(dataRoot.appendingPathComponent(directoryName, isDirectory: true), now: now)
@@ -74,17 +75,42 @@ public enum BrowserEngineMigrationBackup {
         return lstat(url.path, &info) == 0 && info.st_mode & S_IFMT == S_IFREG
     }
 
-    static func candidates(in engineRoot: URL) -> [String] {
-        var paths = engineFiles.filter { isRegularFile(engineRoot.appendingPathComponent($0)) }
-        for profile in profiles(in: engineRoot) {
-            paths += profileFiles.map { profile + "/" + $0 }.filter { isRegularFile(engineRoot.appendingPathComponent($0)) }
+    static func candidates(in engineRoot: URL) throws -> [String] {
+        let possible = engineFiles + profiles(in: engineRoot).flatMap { profile in profileFiles.map { profile + "/" + $0 } }
+        return try possible.filter { relative in
+            let file = engineRoot.appendingPathComponent(relative)
+            try requireConfined(file, under: engineRoot)
+            return isRegularFile(file)
         }
-        return paths
     }
 
     static func digest(_ url: URL) throws -> (Int, String) {
         let data = try Data(contentsOf: url, options: .mappedIfSafe)
         return (data.count, SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined())
+    }
+
+    /// Refuse symlinks below an owned root, including intermediate directories. The caller
+    /// holds the root lock, so no other browser process can replace these paths during a copy.
+    static func requireConfined(_ url: URL, under root: URL) throws {
+        let base = root.standardizedFileURL
+        let target = url.standardizedFileURL
+        guard target.path == base.path || target.path.hasPrefix(base.path + "/") else { throw Failure.unsafePath }
+        let parts = target.pathComponents.dropFirst(base.pathComponents.count)
+        var current = base
+        for part in parts {
+            current.appendPathComponent(part)
+            var info = stat()
+            if lstat(current.path, &info) == 0 {
+                guard info.st_mode & S_IFMT != S_IFLNK else { throw Failure.unsafePath }
+            } else if errno != ENOENT { throw Failure.unsafePath }
+        }
+    }
+
+    static func validateRoots(dataRoot: URL, engineRoot: URL) throws {
+        guard engineRoot.standardizedFileURL != dataRoot.standardizedFileURL else { throw Failure.unsafePath }
+        try requireConfined(engineRoot, under: dataRoot)
+        try requireConfined(dataRoot.appendingPathComponent(directoryName), under: dataRoot)
+        try requireConfined(dataRoot.appendingPathComponent(markerName), under: dataRoot)
     }
 
     static func makePrivateDirectory(_ url: URL) throws {
@@ -95,6 +121,7 @@ public enum BrowserEngineMigrationBackup {
 
     /// Copies the candidates into a new snapshot, published atomically once complete.
     static func snapshot(dataRoot: URL, engineRoot: URL, from: String?, to: String, reason: String, now: Date) throws -> Manifest {
+        try validateRoots(dataRoot: dataRoot, engineRoot: engineRoot)
         let directory = dataRoot.appendingPathComponent(directoryName, isDirectory: true)
         try makePrivateDirectory(directory)
         let formatter = DateFormatter()
@@ -107,8 +134,9 @@ public enum BrowserEngineMigrationBackup {
         try makePrivateDirectory(partial)
         do {
             var entries: [Entry] = []
-            for relative in candidates(in: engineRoot) {
+            for relative in try candidates(in: engineRoot) {
                 let source = engineRoot.appendingPathComponent(relative)
+                try requireConfined(source, under: engineRoot)
                 let target = partial.appendingPathComponent("Chromium").appendingPathComponent(relative)
                 try makePrivateDirectory(target.deletingLastPathComponent())
                 try FileManager.default.copyItem(at: source, to: target)
@@ -149,7 +177,9 @@ public enum BrowserEngineMigrationBackup {
         let decoder = JSONDecoder()
         let names = (try? FileManager.default.contentsOfDirectory(atPath: directory.path)) ?? []
         return names.filter { !$0.hasPrefix(".") }.compactMap { name in
-            guard let data = try? Data(contentsOf: directory.appendingPathComponent(name).appendingPathComponent("manifest.json")),
+            let file = directory.appendingPathComponent(name).appendingPathComponent("manifest.json")
+            guard (try? requireConfined(file, under: directory)) != nil,
+                  let data = try? Data(contentsOf: file),
                   let manifest = try? decoder.decode(Manifest.self, from: data), manifest.id == name else { return nil }
             return manifest
         }.sorted { $0.created == $1.created ? $0.id < $1.id : $0.created < $1.created }
@@ -165,12 +195,19 @@ public enum BrowserEngineMigrationBackup {
     /// the snapshot does not contain are moved into that safety copy, never deleted.
     @discardableResult
     public static func restore(id: String, dataRoot: URL, engineRoot: URL, now: Date = Date()) throws -> Manifest {
+        try validateRoots(dataRoot: dataRoot, engineRoot: engineRoot)
         guard !id.isEmpty, !id.contains("/"), !id.hasPrefix(".") else { throw Failure.unsafePath }
         let directory = dataRoot.appendingPathComponent(directoryName, isDirectory: true)
         guard let manifest = snapshots(in: directory).first(where: { $0.id == id }) else { throw Failure.missingSnapshot }
         let source = directory.appendingPathComponent(id).appendingPathComponent("Chromium")
         for entry in manifest.files {
             guard !entry.path.hasPrefix("/"), !entry.path.split(separator: "/").contains("..") else { throw Failure.unsafePath }
+            let parts = entry.path.split(separator: "/").map(String.init)
+            guard engineFiles.contains(entry.path) || (parts.count >= 2 && profileFiles.contains(parts.dropFirst().joined(separator: "/"))) else {
+                throw Failure.unsafePath
+            }
+            try requireConfined(source.appendingPathComponent(entry.path), under: directory)
+            try requireConfined(engineRoot.appendingPathComponent(entry.path), under: engineRoot)
             let (size, hash) = try digest(source.appendingPathComponent(entry.path))
             guard size == entry.size, hash == entry.sha256 else { throw Failure.damagedSnapshot }
         }

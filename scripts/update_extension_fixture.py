@@ -332,6 +332,12 @@ def backup_summary(root, work, second):
         mode = snapshot.parent.stat().st_mode & 0o777
         entry = {'from': manifest_value.get('fromBuild'), 'to': manifest_value.get('toBuild'), 'mode': oct(mode),
                  'files': len(manifest_value.get('files', []))}
+        entry['verified'] = bool(manifest_value.get('files')) and all(
+            (snapshot.parent / 'Chromium' / item['path']).is_file()
+            and (snapshot.parent / 'Chromium' / item['path']).stat().st_mode & 0o777 == 0o600
+            and (snapshot.parent / 'Chromium' / item['path']).stat().st_size == item['size']
+            and hashlib.sha256((snapshot.parent / 'Chromium' / item['path']).read_bytes()).hexdigest() == item['sha256']
+            for item in manifest_value.get('files', [])) and snapshot.stat().st_mode & 0o777 == 0o600
         for label, profile in profiles.items():
             copy = snapshot.parent / 'Chromium' / profile.name / 'Secure Preferences'
             if copy.is_file():
@@ -389,8 +395,9 @@ def checks(results, expect):
             and any(item.get('name') == NAMES['Y'] and item.get('enabled') is False for item in listed.get(label, []))
             for label in ('A', 'B'))
     backups = results.get('backups', {}).get('auth-next', [])
-    out['migration_backup_restorable'] = any(
-        entry.get('mode') == '0o700' and all(entry.get(label, {}).get('X') and entry.get(label, {}).get('Y')
+    out['migration_backup_verified'] = any(
+        entry.get('mode') == '0o700' and entry.get('verified') is True
+        and all(entry.get(label, {}).get('cookies') and entry.get(label, {}).get('X') and entry.get(label, {}).get('Y')
                                              for label in ('A', 'B')) for entry in backups)
     return out
 

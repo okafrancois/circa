@@ -129,7 +129,7 @@ def kept_results():
                report('ext-installed', 'B', marker='first')]
     for phase in ('ext-restart', 'updated', 'new-restart', 'next-update'):
         reports += [report(phase, 'A'), report(phase, 'B')]
-    backup = {'mode': '0o700', 'A': {'X': True, 'Y': True, 'cookies': True}, 'B': {'X': True, 'Y': True, 'cookies': True}}
+    backup = {'mode': '0o700', 'verified': True, 'A': {'X': True, 'Y': True, 'cookies': True}, 'B': {'X': True, 'Y': True, 'cookies': True}}
     return {'extension_stores': {stage: json.loads(json.dumps(store)) for stage in update_ux.AUTH_STAGES[1:]},
             'inventory': {phase: listed for phase in ('updated', 'new-restart', 'next-update')},
             'ext_reports': reports, 'backups': {'auth-next': [backup]}}
@@ -140,7 +140,7 @@ class ChecksTests(unittest.TestCase):
         checks = fixture.checks(kept_results(), 'kept')
         self.assertTrue(all(checks.values()), checks)
         self.assertIn('ext_next_update_inventory', checks)
-        self.assertIn('migration_backup_restorable', checks)
+        self.assertIn('migration_backup_verified', checks)
 
     def test_each_regression_fails_its_check(self):
         cases = {
@@ -149,7 +149,7 @@ class ChecksTests(unittest.TestCase):
             'ext_next_update_reports_same_storage': lambda r: r['ext_reports'].append(report('next-update', 'A', marker='changed')),
             'ext_disabled_never_runs': lambda r: r['ext_reports'].append(report('updated', 'A', ext='Y')),
             'ext_markers_isolated': lambda r: r['ext_reports'].append(report('updated', 'B', marker='foreign')),
-            'migration_backup_restorable': lambda r: r['backups'].update({'auth-next': []}),
+            'migration_backup_verified': lambda r: r['backups'].update({'auth-next': []}),
             'ext_installed_by_previous_engine': lambda r: r['extension_stores']['ext-old']['B']['X'].update(encrypted_hash=None),
         }
         for name, damage in cases.items():
@@ -164,6 +164,12 @@ class ChecksTests(unittest.TestCase):
         results = kept_results()
         results['extension_stores']['auth-next']['B']['Y']['reset'] = True
         self.assertFalse(fixture.checks(results, 'kept')['ext_next_update_store_preserved'])
+
+    def test_unverified_or_cookie_incomplete_backup_fails(self):
+        for damage in (lambda b: b.update(verified=False), lambda b: b['B'].update(cookies=False)):
+            results = kept_results()
+            damage(results['backups']['auth-next'][0])
+            self.assertFalse(fixture.checks(results, 'kept')['migration_backup_verified'])
 
     def test_lost_and_record_modes(self):
         results = kept_results()

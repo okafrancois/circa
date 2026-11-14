@@ -357,7 +357,7 @@ class PreservationGateTests(unittest.TestCase):
     def test_required_checks_cover_sign_ins_extensions_and_backup(self):
         names = set(release.REQUIRED_PRESERVATION_CHECKS)
         for name in ('next_update_keeps_old_and_new', 'ext_installed_by_previous_engine', 'ext_next_update_inventory',
-                     'ext_next_update_store_preserved', 'ext_disabled_never_runs', 'migration_backup_restorable'):
+                     'ext_next_update_store_preserved', 'ext_disabled_never_runs', 'migration_backup_verified'):
             self.assertIn(name, names)
 
     def feed(self, directory, *items):

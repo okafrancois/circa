@@ -141,7 +141,7 @@ enum OrbitLauncher {
                 try prepareAuthenticationRun(configuration)
             }) {
                 BrowserPerformance.mark(.authentication)
-                prepareEngineMigrationBackup(configuration)
+                try prepareEngineMigrationBackup(configuration)
                 processSiteSessionImport(configuration)
                 runtimeStatus = startRuntime(configuration)
             }
@@ -195,18 +195,13 @@ enum OrbitLauncher {
         authenticationRun = run
     }
 
-    /// Before the first launch of a different build, and before anything opens a profile, keep
-    /// a private copy of the state an engine update can invalidate (site sign-ins, extension
-    /// records). A failure keeps the browser usable; the next launch tries again.
-    private static func prepareEngineMigrationBackup(_ configuration: OrbitProductConfiguration) {
+    /// Keep a private copy before the engine can mutate profiles. A failed copy refuses startup
+    /// so an update cannot silently proceed without its recovery snapshot; a later launch retries.
+    private static func prepareEngineMigrationBackup(_ configuration: OrbitProductConfiguration) throws {
         let info = Bundle.main.infoDictionary ?? [:]
         let build = "\(info["CFBundleShortVersionString"] as? String ?? "unknown") (\(info["CFBundleVersion"] as? String ?? "unknown"))"
-        do {
-            try BrowserEngineMigrationBackup.prepareLaunch(dataRoot: configuration.dataRoot,
-                                                          engineRoot: configuration.engineRoot, build: build)
-        } catch {
-            FileHandle.standardError.write(Data("orbit: engine migration backup failed; launching without a new copy\n".utf8))
-        }
+        try BrowserEngineMigrationBackup.prepareLaunch(dataRoot: configuration.dataRoot,
+                                                      engineRoot: configuration.engineRoot, build: build)
     }
 
     private static func processSiteSessionImport(_ configuration: OrbitProductConfiguration) {
