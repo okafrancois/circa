@@ -3,7 +3,7 @@ import BrowserEngine
 import OrbitChromiumBridge
 
 extension ChromiumSurface: BrowserPasswordPromptSource {
-    public var passwordPrompts: (any BrowserPasswordPromptSource)? { self }
+    public var passwordPrompts: (any BrowserPasswordPromptSource)? { webContent == nil ? self : nil }
 
     public func observePasswordPrompt(_ observer: (@MainActor (BrowserPasswordPromptEvent, BrowserPasswordPrompt) -> Void)?) {
         passwordPromptObserver = observer

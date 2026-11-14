@@ -26,10 +26,13 @@ extension ChromiumSurface {
 
     public func showDeveloperPanel(_ panel: BrowserDeveloperPanel) throws {
         guard !isDisposed else { throw BrowserEngineError.surfaceDisposed }
+        guard webContent == nil else { throw BrowserEngineError.unsupportedOperation }
         if panel == .elements { try perform(.inspectElements); return }
         guard ACRShowDevToolsPanel(token, panel.rawValue) == 1 else { throw BrowserEngineError.unsupportedOperation }
     }
     public func updateAutomaticPictureInPicture(isSelected: Bool, allowed: Bool) {
+        // WebKit content keeps only WebKit's own Picture in Picture button.
+        guard webContent == nil else { return }
         let enter = !isSelected && allowed
         guard !isDisposed, isBrowserCreated, (enter != automaticPiPShouldEnter || isSelected != automaticPiPIsSelected) else { return }
         if enter || isSelected { setPageFrozen(false) }

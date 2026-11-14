@@ -400,8 +400,9 @@ extension ChromiumSurface {
     public var hasDevTools: Bool { !isDisposed && isBrowserCreated && ACRHasDevTools(token) == 1 }
 
     public func perform(_ command: BrowserPageCommand) throws {
-        setPageFrozen(false)
         guard !isDisposed else { throw BrowserEngineError.surfaceDisposed }
+        if let webContent { try webContent.surface.perform(command); return }
+        setPageFrozen(false)
         guard isBrowserCreated else { throw BrowserEngineError.unsupportedOperation }
         let result: Int32 = switch command {
         case .print: ACRPrint(token)
@@ -424,6 +425,8 @@ extension ChromiumSurface {
     /// the tab natively and the shell then disposes the surface. Without an answer and without a
     /// dialog for `confirmationGrace`, the close proceeds (a hung handler never traps the tab).
     public func confirmClose() async -> Bool {
+        // WebKit has no public beforeunload hook; its content closes with the tab.
+        if webContent != nil { return true }
         guard !isDisposed, isBrowserCreated, hostedWindowToken != 0, closeConfirmation == nil else {
             return closeConfirmation == nil
         }

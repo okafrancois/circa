@@ -123,7 +123,10 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
     private var dataDirectoryLock: OrbitDataDirectoryLock?
     var historyRecorder: BrowserHistoryRecorder { history }
     var permissions = BrowserSitePermissionStore.ephemeral()
-    var sitePreferences = try! BrowserSitePreferenceStore()
+    var sitePreferences = try! BrowserSitePreferenceStore() {
+        // Per-host engine choices ("Reload with WebKit/Chromium") route new navigations.
+        didSet { engine.useSiteEnginePreferences(sitePreferences) }
+    }
     private(set) var permissionsUnavailable = false
 
     /// Tests and explicitly temporary sessions never access a default file.
@@ -314,6 +317,7 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
         self.store = store
         self.persistence = persistence
         rescue = BrowserSurfaceContainer()
+        engine.useSiteEnginePreferences(sitePreferences)
         restoredWindowIDs = document?.windows.map(\.id) ?? []
         lastUsedSpaceID = document?.windows.last?.activeSpaceID
         restoredSpaces = Dictionary(uniqueKeysWithValues: document?.windows.map { ($0.id.rawValue, $0.activeSpaceID) } ?? [])

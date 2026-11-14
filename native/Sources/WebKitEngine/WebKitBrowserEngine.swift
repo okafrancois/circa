@@ -3,13 +3,19 @@ import BrowserEngine
 import Foundation
 import WebKit
 
-/// WebKit backend for development and fallback. Site data is ephemeral: one non-persistent
-/// `WKWebsiteDataStore` per profile, shared by every window of the engine.
+/// WebKit backend for development and fallback, and the protected-streaming engine of the
+/// Chromium product. One `WKWebsiteDataStore` per profile, shared by every window of the engine:
+/// non-persistent by default; `.persistent` uses `WKWebsiteDataStore(forIdentifier:)` with the
+/// profile's UUID, so each profile keeps its own cookies across launches.
 @MainActor
 public final class WebKitBrowserEngine: BrowserPrivateEngine {
-    public let persistence = BrowserWebsiteDataPersistence.ephemeral
+    public let persistence: BrowserWebsiteDataPersistence
     public let kind = BrowserEngineKind.webKit
-    public let capabilities: BrowserEngineCapabilities = [.cacheBypassingReload,
+    /// Appended to WebKit's user agent by new surfaces (`applicationNameForUserAgent`). Nil keeps
+    /// WebKit's default, which streaming services reject as an unknown browser.
+    public var applicationNameForUserAgent: String?
+    public let capabilities: BrowserEngineCapabilities
+    private static let baseCapabilities: BrowserEngineCapabilities = [.cacheBypassingReload,
         .downloadResume, .snapshots, .mediaPlaybackState, .mediaCaptureState,
         .mediaCapturePermissions, .liveSurfaceTransfer, .suspendablePolicyDecisions,
         .navigationResponsePolicy, .navigationDownloadConversion, .profileRemoval,
@@ -26,18 +32,32 @@ public final class WebKitBrowserEngine: BrowserPrivateEngine {
     var permissionSurfaces: [WeakPermissionSurface] = []
     private var dataStores: [ProfileID: WKWebsiteDataStore] = [:]
 
-    public init() {}
+    public init(persistence: BrowserWebsiteDataPersistence = .ephemeral) {
+        self.persistence = persistence
+        capabilities = persistence == .persistent ? Self.baseCapabilities.union(.persistentProfiles) : Self.baseCapabilities
+    }
 
     public func profile(for profileID: ProfileID) -> BrowserEngineProfile {
         _ = websiteDataStore(for: profileID)
-        return BrowserEngineProfile(profileID: profileID, persistence: .ephemeral)
+        return BrowserEngineProfile(profileID: profileID, persistence: persistence)
     }
 
     public func websiteDataStore(for profileID: ProfileID) -> WKWebsiteDataStore {
         if let existing = dataStores[profileID] { return existing }
-        let dataStore = WKWebsiteDataStore.nonPersistent()
+        let dataStore = persistence == .persistent
+            ? WKWebsiteDataStore(forIdentifier: profileID.rawValue) : WKWebsiteDataStore.nonPersistent()
         dataStores[profileID] = dataStore
         return dataStore
+    }
+
+    /// `Version/<installed Safari> Safari/605.1.15`, the suffix Safari itself sends. Services that
+    /// gate playback on a known browser accept WebKit with it.
+    public static func safariApplicationName(safariInfo: URL = URL(fileURLWithPath: "/Applications/Safari.app/Contents/Info.plist")) -> String {
+        let info = NSDictionary(contentsOf: safariInfo)
+        let version = (info?["CFBundleShortVersionString"] as? String).flatMap { value in
+            value.allSatisfy { $0.isNumber || $0 == "." } && value.first?.isNumber == true ? value : nil
+        } ?? "26.0"
+        return "Version/\(version) Safari/605.1.15"
     }
 
     /// WebKit creates its view synchronously, so surfaces are ready on return and load nothing
@@ -47,6 +67,7 @@ public final class WebKitBrowserEngine: BrowserPrivateEngine {
     ) -> WebKitSurface {
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = websiteDataStore(for: profileID)
+        if let applicationNameForUserAgent { configuration.applicationNameForUserAgent = applicationNameForUserAgent }
         // CH-ESSENTIALS: element fullscreen in WebKit's own fullscreen window.
         configuration.preferences.isElementFullscreenEnabled = true
         let surface = WebKitSurface(profileID: profileID, configuration: configuration, engine: self, zoomStore: pageZoom)
@@ -58,7 +79,14 @@ public final class WebKitBrowserEngine: BrowserPrivateEngine {
         guard !permissionSurfaces.contains(where: { $0.surface.map { $0.profileID == profileID && !$0.isDisposed } == true }) else {
             throw BrowserEngineError.profileInUse
         }
-        guard let dataStore = dataStores[profileID] else { return }
+        guard let dataStore = dataStores[profileID] else {
+            // A persistent store this run never opened still exists on disk.
+            if persistence == .persistent, await WKWebsiteDataStore.allDataStoreIdentifiers.contains(profileID.rawValue) {
+                try await WKWebsiteDataStore.remove(forIdentifier: profileID.rawValue)
+            }
+            pageZoom.removeProfile(profileID)
+            return
+        }
         if let identifier = dataStore.identifier {
             // The persistent-store API reports failure (including retained WKWebViews). The
             // current development backend creates ephemeral stores; this branch also supports

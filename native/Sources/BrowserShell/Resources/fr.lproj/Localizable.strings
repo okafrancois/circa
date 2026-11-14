@@ -1688,3 +1688,7 @@
 
 "Ads & Trackers" = "Pubs et traceurs";
 "Block ads and trackers" = "Bloquer les publicités et les traceurs";
+
+"Reload with WebKit" = "Recharger avec WebKit";
+
+"Reload with Chromium" = "Recharger avec Chromium";

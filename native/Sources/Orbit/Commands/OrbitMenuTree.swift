@@ -162,6 +162,8 @@ enum OrbitMenuTree {
             .item(.init(command: .forceRefreshThePage, title: "Force Refresh the Page", key: "R", modifierMask: 1048576, isAlternate: true)),
             .item(.init(command: .clearCookiesAndRefresh, title: "Clear Cookies and Refresh")),
             .item(.init(command: .clearCacheAndRefresh, title: "Clear Cache and Refresh")),
+            .item(.init(command: .reloadWithWebKit, title: "Reload with WebKit")),
+            .item(.init(command: .reloadWithChromium, title: "Reload with Chromium")),
             .separator,
             .item(.init(command: .addSplitView, title: "Add Split View", key: "=", modifierMask: 393216)),
             .item(.init(command: .closeThisSplitPane, title: "Close this Split Pane", key: "-", modifierMask: 393216)),

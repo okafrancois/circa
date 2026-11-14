@@ -196,18 +196,30 @@ public final class ChromiumSurface: BrowserEngineSurface {
     private var paintActivationID: UInt64 = 0
     private lazy var nativeServices = ChromiumNativePageServices(token: token, dataRoot: engine?.diagnosticDataRoot(for: profileID))
     public var nativePageServices: (any BrowserNativePageServices)? {
-        guard !isDisposed, ACRNativePageServicesVersion() >= 14 else { return nil }
+        guard !isDisposed, webContent == nil, ACRNativePageServicesVersion() >= 14 else { return nil }
         return nativeServices
     }
     private lazy var nativePerformance = ChromiumPagePerformance(token: token)
     public var pagePerformance: (any BrowserPagePerformance)? {
-        guard !isDisposed, ACRPagePerformanceAvailable() == 1 else { return nil }
+        guard !isDisposed, webContent == nil, ACRPagePerformanceAvailable() == 1 else { return nil }
         return nativePerformance
     }
     /// True after `OnBeforeClose` (or when no browser was ever created).
     public private(set) var isTeardownComplete = false
-    public private(set) var findDocumentGeneration: UInt64 = 0
-    public private(set) var pageZoom: Double = 1
+    /// Documents committed by the Chromium browser; the bridge counts the same commits and tags
+    /// its favicon receipts with it.
+    private var nativeDocumentGeneration: UInt64 = 0
+    /// Documents shown by the WebKit content (`ChromiumSurface+WebContent.swift`): entering it,
+    /// each of its commits, and leaving it.
+    var webContentGeneration: UInt64 = 0
+    /// Both counters only grow, so the sum changes with every displayed document.
+    public var findDocumentGeneration: UInt64 { nativeDocumentGeneration &+ webContentGeneration }
+    var chromiumPageZoom: Double = 1
+    public var pageZoom: Double { webContent?.surface.pageZoom ?? chromiumPageZoom }
+    /// The WebKit document shown instead of the Chromium one for protected-streaming sites.
+    var webContent: ChromiumWebContent?
+    /// "Reload with WebKit/Chromium" for one host, kept by this tab even when it cannot be saved.
+    var siteEngineOverride: (host: String, engine: BrowserSiteEngine)?
     public private(set) var isBrowserCreated = false
     /// False between `CreateBrowser` and `OnAfterCreated`; commands are queued meanwhile.
     public var isReady: Bool { isBrowserCreated }
@@ -276,7 +288,7 @@ public final class ChromiumSurface: BrowserEngineSurface {
     var isProtectedFromSuspension: Bool {
         BrowserPageSuspensionPolicy.refusal(pagePerformance?.lifecycle()) != nil || !audioContexts.isSafe || isElementFullscreen
             || !pendingPermissions.isEmpty || !pendingDialogRequests.isEmpty || !pendingPageRequests.isEmpty
-            || capture.video || capture.audio || !downloads.isEmpty || activeUploadCount > 0
+            || capture.video || capture.audio || !downloads.isEmpty || activeUploadCount > 0 || webContent != nil
     }
     private var downloads: [UInt32: ChromiumDownloadTransfer] = [:]
     var hasActiveDownloads: Bool { !downloads.isEmpty }
@@ -325,8 +337,11 @@ public final class ChromiumSurface: BrowserEngineSurface {
 
     public var currentURL: URL? { requestedDestination ?? state.url }
     public var navigationState: BrowserNavigationState {
-        state
+        webContent?.navigationState(behind: state) ?? state
     }
+
+    /// The Chromium document's own state, also while WebKit content covers it.
+    var chromiumNavigationState: BrowserNavigationState { state }
 
     /// True while CEF creates the browser of a surface that was not disposed before creation.
     public private(set) var isCreationPending = false
@@ -393,6 +408,7 @@ public final class ChromiumSurface: BrowserEngineSurface {
 
     public func navigate(to url: URL) {
         guard !isDisposed else { return }
+        if routeNavigationToWebKit(url) { return }
         setPageFrozen(false)
         endPictureInPicture()
         requestedDestination = url
@@ -403,9 +419,9 @@ public final class ChromiumSurface: BrowserEngineSurface {
     }
 
     @discardableResult
-    public func goBack() -> URL? { history(-1) }
+    public func goBack() -> URL? { webContent == nil ? history(-1) : webContentGoBack() }
     @discardableResult
-    public func goForward() -> URL? { history(1) }
+    public func goForward() -> URL? { webContent == nil ? history(1) : webContent?.surface.goForward() }
 
     private func history(_ offset: Int32) -> URL? {
         guard !isDisposed, isBrowserCreated else { return nil }
@@ -427,6 +443,7 @@ public final class ChromiumSurface: BrowserEngineSurface {
 
     public func reload() {
         guard !isDisposed else { return }
+        if let webContent { webContent.surface.reload(); return }
         guard isBrowserCreated else { pendingCommands.append(.reload); needBrowser(); return }
         setPageFrozen(false)
         endPictureInPicture()
@@ -436,6 +453,7 @@ public final class ChromiumSurface: BrowserEngineSurface {
 
     public func reloadIgnoringCache() throws {
         guard !isDisposed else { throw BrowserEngineError.surfaceDisposed }
+        if let webContent { try webContent.surface.reloadIgnoringCache(); return }
         guard isBrowserCreated else { pendingCommands.append(.reloadIgnoringCache); needBrowser(); return }
         setPageFrozen(false)
         endPictureInPicture()
@@ -444,15 +462,19 @@ public final class ChromiumSurface: BrowserEngineSurface {
     }
 
     public func duplicateWithHistory() -> Bool {
-        !isDisposed && isReady && ACRDuplicateTab(token) == 1
+        !isDisposed && webContent == nil && isReady && ACRDuplicateTab(token) == 1
     }
 
     public func stopLoading() {
         guard !isDisposed else { return }
+        if let webContent { webContent.surface.stopLoading(); return }
         guard isBrowserCreated else { pendingCommands.append(.stop); return }
         _ = ACRStopLoad(token)
     }
-    public func cancelStoppedNavigationTracking() { requestedDestination = nil }
+    public func cancelStoppedNavigationTracking() {
+        requestedDestination = nil
+        webContent?.surface.cancelStoppedNavigationTracking()
+    }
 
     /// First responder on CEF's child browser view, then `SetFocus(true)` on the host. A hosted
     /// tab also becomes the active tab of its logical Browser (the focused Split pane is the
@@ -462,6 +484,7 @@ public final class ChromiumSurface: BrowserEngineSurface {
 
     @discardableResult
     public func focusDocument() -> Bool {
+        if let webContent { return !isDisposed && webContent.surface.focusDocument() }
         setPageFrozen(false)
         guard !isDisposed, let window = documentView.window else {
             BrowserSidebarInputDiagnostics.record("native-focus", tab: sidebarInputTabID,
@@ -539,8 +562,9 @@ public final class ChromiumSurface: BrowserEngineSurface {
     // MARK: Page tools
 
     public func performZoom(_ command: BrowserPageZoomCommand) {
-        setPageFrozen(false)
         guard !isDisposed else { return }
+        if let webContent { webContent.surface.performZoom(command); onChange?(); return }
+        setPageFrozen(false)
         guard isBrowserCreated else { pendingCommands.append(.zoom(command)); return }
         let code: Int32 = switch command {
         case .increase: 1
@@ -562,16 +586,16 @@ public final class ChromiumSurface: BrowserEngineSurface {
             result = ACRZoom(token, 0, &level) == 1 ? -2 : -1
         }
         onEngineEvent?("zoom", ["command": "\(command)", "result": String(result), "level": String(level)])
-        pageZoom = pow(1.2, level)
+        chromiumPageZoom = pow(1.2, level)
         onChange?()
         // Zoom may apply asynchronously (renderer/host zoom map); confirm with a later readback.
         Task { @MainActor [weak self] in
             try? await Task.sleep(for: .milliseconds(150))
             guard let self, !self.isDisposed, self.isBrowserCreated else { return }
-            let previous = self.pageZoom
+            let previous = self.chromiumPageZoom
             self.refreshZoom()
-            self.onEngineEvent?("zoom-readback", ["level": String(log(self.pageZoom) / log(1.2))])
-            if self.pageZoom != previous { self.onChange?() }
+            self.onEngineEvent?("zoom-readback", ["level": String(log(self.chromiumPageZoom) / log(1.2))])
+            if self.chromiumPageZoom != previous { self.onChange?() }
         }
     }
 
@@ -589,12 +613,13 @@ public final class ChromiumSurface: BrowserEngineSurface {
 
     private func refreshZoom() {
         var level = 0.0
-        if ACRZoom(token, 0, &level) == 1 { pageZoom = pow(1.2, level) }
+        if ACRZoom(token, 0, &level) == 1 { chromiumPageZoom = pow(1.2, level) }
     }
 
     public func performFind(_ request: BrowserFindRequest,
                             update: @escaping @MainActor (BrowserFindUpdate) -> Void) {
         guard !isDisposed, request.documentGeneration == findDocumentGeneration else { return }
+        if let webContent { webContent.performFind(request, update: update); return }
         guard isBrowserCreated else {
             // No document to search before OnAfterCreated: end the query instead of leaving it open.
             update(BrowserFindUpdate(token: request.token, documentGeneration: request.documentGeneration,
@@ -614,6 +639,7 @@ public final class ChromiumSurface: BrowserEngineSurface {
 
     public func stopFinding(clearSelection: Bool) {
         find = nil
+        if let webContent { webContent.surface.stopFinding(clearSelection: clearSelection); return }
         if !isDisposed, isBrowserCreated { _ = ACRStopFinding(token, clearSelection ? 1 : 0) }
     }
 
@@ -621,6 +647,7 @@ public final class ChromiumSurface: BrowserEngineSurface {
 
     public func captureSnapshot(_ request: BrowserSnapshotRequest) async throws -> BrowserSurfaceSnapshot {
         try Task.checkCancellation()
+        if let webContent { return try await webContent.captureSnapshot(request) }
         // ImageIO cannot interrupt a decode already in progress. Keep the admission slot through
         // its completion, including cancellation, so another capture cannot overlap that worker.
         try await beginSnapshotCapture()
@@ -736,7 +763,7 @@ public final class ChromiumSurface: BrowserEngineSurface {
 
     /// Runs Chromium's native save pipeline. The shell may continue using archivePage for MHTML.
     public func savePageWithNativeDialog() throws {
-        guard !isDisposed, isReady, ACRExecuteChromeCommand(token, "IDC_SAVE_PAGE") == 1 else {
+        guard !isDisposed, webContent == nil, isReady, ACRExecuteChromeCommand(token, "IDC_SAVE_PAGE") == 1 else {
             throw BrowserEngineError.unsupportedOperation
         }
     }
@@ -754,6 +781,9 @@ public final class ChromiumSurface: BrowserEngineSurface {
 
     /// Executes a DevTools protocol method on this browser. Native-side only; pages never see it.
     public func devToolsCall(_ method: String, params: String = "", timeout: Duration = .seconds(8), wakesPage: Bool = true) async -> (Bool, Data) {
+        // Page-reading features (assistant, translation, link previews, archives) never read the
+        // hidden Chromium document while WebKit content is shown.
+        guard webContent == nil || method.hasPrefix("WebAudio.") else { return (false, Data()) }
         if wakesPage { setPageFrozen(false) }
         // A submitted screenshot cannot be cancelled in Chromium. Keep its native slot until
         // response/timeout even when its consumer is cancelled, and never overlap another one.
@@ -795,6 +825,7 @@ public final class ChromiumSurface: BrowserEngineSurface {
 
     public func requestMediaState() async -> BrowserMediaState {
         guard !isDisposed else { return BrowserMediaState() }
+        if let webContent { return await webContent.requestMediaState() }
         let muted = isBrowserCreated ? ACRIsAudioMuted(token) : pendingMute.map { $0 ? 1 : 0 } ?? -1
         let lifecycle = pagePerformance?.lifecycle()
         let playing: Bool? = audioContexts.isRunning ? true : lifecycle.flatMap {
@@ -815,6 +846,7 @@ public final class ChromiumSurface: BrowserEngineSurface {
 
     public func setAudioMuted(_ muted: Bool) throws {
         guard !isDisposed else { throw BrowserEngineError.surfaceDisposed }
+        if let webContent { webContent.setAudioMuted(muted); onChange?(); return }
         guard isBrowserCreated else {
             pendingMute = muted
             pendingCommands.append(.mute(muted))
@@ -852,6 +884,8 @@ public final class ChromiumSurface: BrowserEngineSurface {
         automaticPiPTask = nil
         cancelExtensionAction()
         guard !isDisposed else { return }
+        webContent?.dispose()
+        webContent = nil
         developerToolsPresentation?.close()
         developerToolsPresentation = nil
         if isBrowserCreated { releaseSecureInputFocus() }
@@ -1101,6 +1135,13 @@ public final class ChromiumSurface: BrowserEngineSurface {
         let shellStarted = destination != nil && destination == requestedDestination
         let kind = Self.navigationKind(request, shellStarted: shellStarted, pendingKind: pendingKind)
         if request.isMainFrame, kind == .backForward || kind == .reload { pendingKind = nil }
+        if request.isMainFrame, let destination, shouldMoveChromiumNavigationToWebKit(destination) {
+            // Stock CEF cannot hand the request over: WebKit loads the address again (GET).
+            onEngineEvent?("before-browse-webkit", ["url": request.url ?? "", "kind": kind.rawValue])
+            enterWebContent(destination, kind: kind)
+            return ACR_POLICY_CANCEL
+        }
+        if request.isMainFrame, webContent != nil { return ACR_POLICY_CANCEL }
         let action = BrowserNavigationAction(url: destination, isMainFrame: request.isMainFrame,
                                              modifiers: kind == .linkActivation ? recentLinkModifiers ?? [] : [], kind: kind,
                                              httpMethod: request.method, hasBody: request.hasBody,
@@ -1199,6 +1240,11 @@ public final class ChromiumSurface: BrowserEngineSurface {
             Self.refuseUnanswered(event)
             return
         }
+        if webContent != nil, Self.webContentMasksEvent(event.kind) {
+            onEngineEvent?("masked-by-webkit", ["kind": String(event.kind.rawValue)])
+            if event.kind == ACR_EVENT_DOCUMENT { nativeDocumentGeneration &+= 1 }
+            return
+        }
         switch event.kind {
         case ACR_EVENT_MEDIA_ACTIVITY:
             if event.detail == "Orbit.uploadActivity" {
@@ -1280,7 +1326,7 @@ public final class ChromiumSurface: BrowserEngineSurface {
             }
             // A native activation or extension may navigate a discarded background tab.
             isSuspended = false
-            findDocumentGeneration &+= 1
+            nativeDocumentGeneration &+= 1
             find = nil
             state.faviconURL = nil
             state.faviconImage = nil
@@ -1326,7 +1372,7 @@ public final class ChromiumSurface: BrowserEngineSurface {
             flushZoomsAwaitingCommit()
         case ACR_EVENT_FAVICON:
             guard event.surfaceToken == token, event.profileToken == profileToken,
-                  event.browserID == browserID, event.documentGeneration == findDocumentGeneration,
+                  event.browserID == browserID, event.documentGeneration == nativeDocumentGeneration,
                   event.requestID >= faviconRevision else { return }
             let url = event.url.flatMap(URL.init(string:))
             // A newer receipt announces its candidate (and may coalesce bytes for ABI
