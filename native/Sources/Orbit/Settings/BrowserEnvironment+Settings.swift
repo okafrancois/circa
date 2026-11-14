@@ -19,6 +19,9 @@ extension BrowserEnvironment {
                 }
             }
         }
+        if let contentBlocking {
+            Task { await contentBlocking.synchronizePrepared() }
+        }
         for little in quickWindows.values {
             little.applyPreferences(searchEngine: settings.document.profile(little.profileID).searchEngine,
                 theme: spaceTheme(for: little.sourceSpaceID))

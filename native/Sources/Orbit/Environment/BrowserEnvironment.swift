@@ -110,6 +110,8 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
         return service
     }
     var lastBoostsEnabled = true
+    /// Built-in ad and tracker blocking; nil for engines without it and for private windows.
+    var contentBlocking: BrowserContentBlockingCoordinator?
     private var history = BrowserHistoryRecorder()
     var favoriteIcons: FavoriteIconStore?
     private var cachePressure: BrowserMemoryPressure?
@@ -242,8 +244,13 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
         // Failure remains a visible, retryable cleanup job; it never resurrects the retired model.
         if !pendingRemovals.isEmpty { try? await environment.retrySettingsProfileRemovals() }
         environment.lastBoostsEnabled = environment.settings.document.enablesBoostsOnWebsites
+        if let blocker = engine.contentBlocking {
+            environment.contentBlocking = BrowserContentBlockingCoordinator(blocker: blocker,
+                isEnabled: { [weak environment] in environment?.settings.document.profile($0).blocksAdsAndTrackers ?? false },
+                exceptions: { [weak environment] in environment?.sitePreferences.contentBlockingExceptions(profileID: $0) ?? [] })
+        }
         BrowserPerformance.mark(.profilesBegin)
-        if environment.boosts.hostOverride != nil || engine.capabilities.contains(.boosts) {
+        if environment.boosts.hostOverride != nil || engine.capabilities.contains(.boosts) || environment.contentBlocking != nil {
             _ = try await environment.initialContext.value
             let catalog = await store.catalogSnapshot()
             var visibleSpaces = Set(effectiveDocument?.windows.map(\.activeSpaceID) ?? [])
@@ -252,10 +259,10 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
                 visibleSpaces.insert(environment.lastUsedSpaceID ?? initialSpace)
             }
             for profile in Set(catalog.spaces.filter { visibleSpaces.contains($0.id) }.map(\.profileID)) {
-                await environment.prepareStartupProfile(profile)
+                await environment.prepareProfileServices(profile)
             }
             engine.setProfilePreparation { [weak environment] profile in
-                await environment?.prepareStartupProfile(profile)
+                await environment?.prepareProfileServices(profile)
             }
         }
         BrowserPerformance.mark(.profilesReady)
@@ -266,6 +273,14 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
 
     private var startupIconDocument: BrowserSessionDocument?
     private var didCommitStartup = false
+
+    /// Profile services installed before the profile's first page: content blocking, then Boosts.
+    private func prepareProfileServices(_ profile: ProfileID) async {
+        await contentBlocking?.synchronize(profile)
+        if boosts.hostOverride != nil || engine.capabilities.contains(.boosts) {
+            await prepareStartupProfile(profile)
+        }
+    }
 
     private func prepareStartupProfile(_ profile: ProfileID) async {
         guard boosts.acknowledgements[profile] == nil else { return }
@@ -490,6 +505,7 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
         controller.translation.preferences = sitePreferences
         controller.translation.onPreferenceError = { [weak self] in self?.onPersistenceError?($0) }
         controller.siteControls.preferences = sitePreferences
+        controller.siteControls.contentBlocking = contentBlocking
         controller.siteControls.onPreferencesChange = { [weak self] in
             guard let self else { return }
             for controller in liveControllers { controller.renderDeveloperToolbar() }
@@ -785,6 +801,7 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
         try await skills.removeProfile(profile)
         try await permissions.clear(profileID: profile)
         try sitePreferences.clear(profileID: profile)
+        contentBlocking?.forget(profile)
     }
     func removeSettingsHistory(profile: ProfileID) async throws { try await history.removeProfileHistory(for: profile) }
     func cancelSettingsHistoryRemoval(profile: ProfileID) { history.cancelProfileRemoval(for: profile) }

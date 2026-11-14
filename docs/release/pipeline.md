@@ -58,6 +58,18 @@
 - Feed: `https://github.com/<repository>/releases/download/update-feed/appcast.xml`.
   A rollback uses a newer build number; preserve user data and never downgrade the schema blindly.
 
+## Content blocking rulesets
+- The built-in blocker ships declarativeNetRequest rulesets generated from EasyList and
+  EasyPrivacy at the commit pinned in `release/content-blocking.json`. The data lives in
+  `native/ThirdParty/easylist/` under its own license; the list texts are never committed.
+- Refresh before tagging a release: `python3 -I scripts/content-blocking-rules.py update`
+  pins the latest `gh-pages` commit, regenerates and keeps the previous pin. Review the diff
+  and commit it with the release.
+- Roll back: `python3 -I scripts/content-blocking-rules.py rollback` restores the previous pin and
+  its rulesets (or revert the refresh commit).
+- `release.py` runs `content-blocking-rules.py check`: the committed rulesets must match the
+  pin's hashes and stay within the 30,000 guaranteed static rules.
+
 ## GitHub-hosted macOS runners
 
 - `hosted-build.yml` compiles the product and smoke application on an Apple Silicon

@@ -14,6 +14,7 @@ final class ChromiumExtensionHost: BrowserExtensionHost {
     var supportsOptionsPages: Bool { ACREngineDiagnosticCapabilities() & 4 != 0 }
     var supportsIncognitoPreference: Bool { ACREngineDiagnosticCapabilities() & 8 != 0 }
     func openOptions(extensionID: String, on surface: any BrowserEngineSurface) throws {
+        try refuseInternal(extensionID)
         guard supportsOptionsPages, let engine, let surface = surface as? ChromiumSurface,
               surface.engine === engine, !surface.isDisposed, surface.isReady,
               surface.hostedWindowToken != 0 else { throw BrowserEngineError.unsupportedOperation }
@@ -21,6 +22,7 @@ final class ChromiumExtensionHost: BrowserExtensionHost {
         guard ACRExtensionOptionsOpen(surface.token, extensionID) == 1 else { throw BrowserEngineError.unsupportedOperation }
     }
     func setAllowedInIncognito(_ allowed: Bool, extensionID: String, in profileID: ProfileID) throws {
+        try refuseInternal(extensionID)
         guard supportsIncognitoPreference,
               ACRExtensionIncognitoSet(try profileToken(profileID), extensionID, allowed ? 1 : 0) == 1 else {
             throw BrowserEngineError.unsupportedOperation
@@ -76,6 +78,7 @@ final class ChromiumExtensionHost: BrowserExtensionHost {
         }
         let data = Data(buffer.dropLast().map { UInt8(bitPattern: $0) })
         return try JSONDecoder().decode([BrowserExtensionSummary].self, from: data)
+            .filter { !Self.isInternal($0.id) }
             .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
     }
 
@@ -90,16 +93,24 @@ final class ChromiumExtensionHost: BrowserExtensionHost {
             throw BrowserEngineError.unsupportedOperation
         }
         return try JSONDecoder().decode([BrowserExtensionSummary].self,
-            from: Data(buffer.dropLast().map { UInt8(bitPattern: $0) }))
+            from: Data(buffer.dropLast().map { UInt8(bitPattern: $0) })).filter { !Self.isInternal($0.id) }
+    }
+
+    /// The built-in content blocker is part of the browser, not a user extension.
+    static func isInternal(_ extensionID: String) -> Bool { extensionID == ChromiumContentBlocking.extensionID }
+    private func refuseInternal(_ extensionID: String) throws {
+        if Self.isInternal(extensionID) { throw BrowserEngineError.unsupportedOperation }
     }
 
     func setEnabled(_ enabled: Bool, extensionID: String, in profileID: ProfileID) throws {
+        try refuseInternal(extensionID)
         guard ACRExtensionSetEnabled(try profileToken(profileID), extensionID, enabled ? 1 : 0) == 1 else {
             throw BrowserEngineError.unsupportedOperation
         }
     }
 
     func setPinned(_ pinned: Bool, extensionID: String, in profileID: ProfileID) throws {
+        try refuseInternal(extensionID)
         guard ACRExtensionSetPinned(try profileToken(profileID), extensionID, pinned ? 1 : 0) == 1 else {
             throw BrowserEngineError.unsupportedOperation
         }
@@ -111,6 +122,7 @@ final class ChromiumExtensionHost: BrowserExtensionHost {
     }
 
     func remove(extensionID: String, in profileID: ProfileID) throws {
+        try refuseInternal(extensionID)
         guard ACRExtensionRemove(try profileToken(profileID), extensionID) == 1 else {
             throw BrowserEngineError.unsupportedOperation
         }
@@ -122,6 +134,7 @@ final class ChromiumExtensionHost: BrowserExtensionHost {
     }
 
     func performAction(extensionID: String, on surface: any BrowserEngineSurface, anchor: NSView) throws {
+        try refuseInternal(extensionID)
         guard let engine, let surface = surface as? ChromiumSurface, surface.engine === engine,
               !surface.isDisposed, surface.isReady, surface.hostedWindowToken != 0,
               let window = surface.documentView.window, anchor.window === window,
@@ -161,6 +174,7 @@ final class ChromiumExtensionManagement: BrowserExtensionManagement {
     }
 
     func openDetails(extensionID: String, on surface: any BrowserEngineSurface) throws {
+        if ChromiumExtensionHost.isInternal(extensionID) { throw BrowserEngineError.unsupportedOperation }
         try open(page: 1, extensionID: extensionID, on: surface)
     }
 

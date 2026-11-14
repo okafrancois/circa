@@ -4,14 +4,17 @@ public struct BrowserSitePreferences: Codable, Equatable, Sendable {
     public var developerMode = false
     public var automaticPictureInPicture = true
     public var neverTranslate = false
+    /// False adds the host, with its subdomains, to the profile's content blocking allow-list.
+    public var blocksAdsAndTrackers = true
     public init() {}
 
-    private enum CodingKeys: String, CodingKey { case developerMode, automaticPictureInPicture, neverTranslate }
+    private enum CodingKeys: String, CodingKey { case developerMode, automaticPictureInPicture, neverTranslate, blocksAdsAndTrackers }
     public init(from decoder: any Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
         developerMode = try values.decodeIfPresent(Bool.self, forKey: .developerMode) ?? false
         automaticPictureInPicture = try values.decodeIfPresent(Bool.self, forKey: .automaticPictureInPicture) ?? true
         neverTranslate = try values.decodeIfPresent(Bool.self, forKey: .neverTranslate) ?? false
+        blocksAdsAndTrackers = try values.decodeIfPresent(Bool.self, forKey: .blocksAdsAndTrackers) ?? true
     }
 }
 
@@ -55,6 +58,11 @@ public final class BrowserSitePreferenceStore {
         next.entries.removeAll { $0.profileID == profileID && $0.host == host }
         next.entries.append(Entry(profileID: profileID, host: host, preferences: preferences))
         try publish(next)
+    }
+
+    /// Hosts of the profile where the user turned ad and tracker blocking off, sorted.
+    public func contentBlockingExceptions(profileID: ProfileID) -> [String] {
+        document.entries.filter { $0.profileID == profileID && !$0.preferences.blocksAdsAndTrackers }.map(\.host).sorted()
     }
 
     public func clear(profileID: ProfileID) throws {

@@ -11,6 +11,7 @@ Orbit's original code is licensed under the MIT License, Copyright (c) 2026 Okat
 | Bricolage Grotesque, DM Sans, DM Mono | SIL Open Font License 1.1; latin `woff2` subsets served by the website from `web/assets/fonts/` | Keep the files unmodified; see https://openfontlicense.org. Website only for now. |
 | Public Suffix List data and generated `BrowserPublicSuffixData.swift` | Mozilla Public License 2.0 | Preserve `native/ThirdParty/publicsuffix/LICENSE`, source notices and attribution. Changes to covered files remain under MPL 2.0; Orbit's separate original files remain MIT. |
 
+| EasyList and EasyPrivacy, as generated rulesets in `native/ThirdParty/easylist/` | GPLv3 or later, or CC BY-SA 3.0, at the licensee's choice; separate data shipped in the app bundle's `ContentBlocker/rulesets/` | Keep `native/ThirdParty/easylist/LICENSE.md` with the rulesets in source and in the bundle; credit the EasyList authors; generated rulesets stay under the lists' license, never relicensed as MIT. Circa's extension code that loads them stays MIT. |
 | Public Suffix List test vectors and generated `BrowserPublicSuffixVectors.swift` | CC0 / public domain, as stated by the upstream test vectors | Preserve the existing source/provenance headers; the separate MPL data-file license does not relicense these vectors. |
 
 Complete upstream texts are retained in `docs/release/licenses/CEF-BSD.txt`, `Chromium-BSD.txt` and `Sparkle-LICENSE.txt`. The last includes Sparkle’s bundled external-license notices. These source notices must accompany the upstream context retained in the engine patches.
@@ -20,6 +21,7 @@ Complete upstream texts are retained in `docs/release/licenses/CEF-BSD.txt`, `Ch
 - [CEF license](https://github.com/chromiumembedded/cef/blob/master/LICENSE.txt): copyright Marshall A. Greenblatt, with portions copyright Google Inc.; BSD redistribution conditions.
 - [Chromium license](https://chromium.googlesource.com/chromium/src/+/main/LICENSE): copyright The Chromium Authors; BSD redistribution conditions.
 - [Sparkle license and external licenses](https://github.com/sparkle-project/Sparkle/blob/2.x/LICENSE): the framework's MIT notice, BSD notices for binary-diff/signature components, MIT sais-lite and the bundled Ed25519 license.
+- [EasyList licence](https://easylist.to/pages/licence.html): EasyList and EasyPrivacy are dual licensed GPLv3+ or CC BY-SA 3.0; the pinned source commit is recorded in `release/content-blocking.json`.
 - Public Suffix List: its vendored README, data-file headers and MPL 2.0 license in `native/ThirdParty/publicsuffix/`.
 
 The permissive BSD and MIT grants permit combining these components with Orbit's MIT code while retaining their own notices and conditions. They do not relicense upstream code as Okatech's work. The Public Suffix List has file-level MPL requirements rather than a requirement to license the entire application under MPL.

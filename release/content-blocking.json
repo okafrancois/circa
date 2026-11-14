@@ -1,0 +1,29 @@
+{
+  "generated": {
+    "easylist": {
+      "rules": 3737,
+      "sha256": "66ab93eff0be6892a5ebb5d97263b611e88fd84ec768fd2fd10739196652d877",
+      "version": "202611142043"
+    },
+    "easyprivacy": {
+      "rules": 9205,
+      "sha256": "7cf73e623dfd6933698e7a333ef60a3e4c1264bf26b9e97ef4612e1cddef8dba",
+      "version": "202611142043"
+    }
+  },
+  "source": {
+    "branch": "gh-pages",
+    "commit": "48ee7c0bbd2bc16e49e192e4e54bf9ed9ee0c177",
+    "lists": {
+      "easylist": {
+        "path": "easylist.txt",
+        "sha256": "1af964fed2119e41c976eca6b70b510189197afafe3d806dfd3ee1a011f31669"
+      },
+      "easyprivacy": {
+        "path": "easyprivacy.txt",
+        "sha256": "c6e91542f1b3f536d6bdc15fb28004411b10aa98d504054854258937299bbb49"
+      }
+    },
+    "repository": "easylist/easylist"
+  }
+}

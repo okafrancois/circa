@@ -13,6 +13,8 @@ final class BrowserSiteControls<Engine: BrowserEngine> {
     var preferences = try! BrowserSitePreferenceStore()
     private weak var lastSelectedSurface: Surface?
     var onPreferencesChange: (() -> Void)?
+    /// Built-in blocking of the window's environment; nil without it (private windows).
+    var contentBlocking: BrowserContentBlockingCoordinator?
     private(set) var mediaStates: [ObjectIdentifier: BrowserMediaState] = [:]
     /// Sidebar integration hook. Unknown audibility/mute remain nil; playing is not audible.
     var onMediaStateChange: ((Surface, BrowserMediaState) -> Void)?
@@ -642,6 +644,26 @@ extension BrowserSiteControls {
                 do { try self.preferences.set(next, url: url, profileID: surface.profileID); onPreferencesChange?(); show() }
                 catch { showMessage(uiText("The site preference could not be saved.")) }
             })
+            if let blocking = contentBlocking, blocking.blocks(in: surface.profileID),
+               let host = BrowserSitePreferenceStore.host(url) {
+                settings.append(ControlCenterSettingButton(title: uiText("Ads & Trackers"),
+                    subtitle: preferences.blocksAdsAndTrackers ? uiText("Blocked") : uiText("Allowed"), symbol: "hand.raised.fill",
+                    identifier: "site-content-blocking", active: preferences.blocksAdsAndTrackers) { [weak self, weak surface] in
+                    guard valid(), let self, let surface else { return }
+                    let profile = surface.profileID
+                    var next = self.preferences.preferences(url: url, profileID: profile)
+                    next.blocksAdsAndTrackers.toggle()
+                    do { try self.preferences.set(next, url: url, profileID: profile) }
+                    catch { showMessage(uiText("The site preference could not be saved.")); return }
+                    show()
+                    // The page reloads once the blocker applied the exception, still on this site.
+                    Task { [weak surface] in
+                        await blocking.synchronize(profile, waitsForAcknowledgement: true)
+                        guard let surface, BrowserSitePreferenceStore.host(surface.navigationState.committedURL) == host else { return }
+                        surface.reload()
+                    }
+                })
+            }
             if model.connection == .https {
               settings.append(ControlCenterSettingButton(title: uiText("Automatic Picture-In-Picture"),
                 subtitle: preferences.automaticPictureInPicture ? uiText("Allowed") : uiText("Blocked"),
