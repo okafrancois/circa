@@ -34,6 +34,11 @@ IMPORT_ROOTS = tuple(expand(path) for path in (
     "web/copy/reference.json",
 ))
 
+# Generated third-party filter lists hold real ad/tracker domains, some of which contain the
+# source-browser name as a substring. Only the generated JSON rulesets are exempt from the
+# mention check; address and provenance checks still apply.
+THIRD_PARTY_RULESETS = ("native/ThirdParty/easylist/",)
+
 # Mixed-purpose files allow only these exact import identifiers/strings. Shared locks keep their names
 # across worktrees until all callers migrate together.
 ALLOWED_TEXT = {path: tuple(expand(value) for value in values) for path, values in {'web/vendor/gsap-3.13.0/CustomEase.min.js': ['{lower}ToSegment'],
@@ -181,7 +186,7 @@ def mask_literals(line, literals):
 
 def check_text(path, text):
     findings = []
-    imported = path.startswith(IMPORT_ROOTS)
+    imported = path.startswith(IMPORT_ROOTS) or (path.startswith(THIRD_PARTY_RULESETS) and path.endswith(".json"))
     for number, line in enumerate(text.splitlines(), 1):
         for match in ADDRESS.finditer(line):
             if match[0][2:].upper() not in ALLOWED_HEX.get(path, ()):

@@ -26,6 +26,12 @@ class PublicHygieneTests(unittest.TestCase):
         self.assertFalse(policy.check_path(policy.IMPORT_ROOTS[0] + f"{name}Importer.swift"))
         self.assertFalse(policy.check_text("example.swift", "Archive arch arc4random() search hierarchy"))
 
+    def test_generated_rulesets_only_exempt_json_domains(self):
+        domain = '"||' + policy.SOURCE_NAME.lower() + '.io/widget.min.js"'
+        self.assertFalse(policy.check_text("native/ThirdParty/easylist/easyprivacy.json", domain))
+        self.assertTrue(policy.check_text("native/ThirdParty/easylist/README.md", domain))
+        self.assertTrue(policy.check_text("native/ThirdParty/other/rules.json", domain))
+
     def test_import_exceptions_are_exact(self):
         name = policy.SOURCE_NAME
         path = "native/Sources/Orbit/App/EngineComposition.swift"
