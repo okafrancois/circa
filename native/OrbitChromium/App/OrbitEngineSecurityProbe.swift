@@ -63,6 +63,12 @@ enum OrbitEngineSecurityProbe {
         var fullscreen: [BrowserPageFullscreenChange] = []
         let fullscreenStream = api.fullscreenChanges()
         let fullscreenTask = Task { for await event in fullscreenStream { fullscreen.append(event) } }
+        // Chromium 158 refuses page fullscreen from a view without focus; give the owned
+        // synthetic window and its document focus first, as a user click would.
+        NSApp.activate(ignoringOtherApps: true)
+        owner.window?.makeKeyAndOrderFront(nil)
+        _ = tab.focusDocument()
+        try? await Task.sleep(for: .milliseconds(300))
         _ = await evaluate("(()=>{document.documentElement.requestFullscreen();return {requested:true}})()")
         try? await Task.sleep(for: .milliseconds(300))
         _ = await evaluate("(()=>{if(document.fullscreenElement)document.exitFullscreen();return {requested:true}})()")
