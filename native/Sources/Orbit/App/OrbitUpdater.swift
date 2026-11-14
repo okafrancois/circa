@@ -297,7 +297,7 @@ final class OrbitUpdater: NSObject, ObservableObject {
             request.setValue("no-cache", forHTTPHeaderField: "Cache-Control")
             let (data, response) = try await URLSession.shared.data(for: request)
             guard (response as? HTTPURLResponse)?.statusCode == 200 else { throw URLError(.badServerResponse) }
-            return try OrbitUpdateFeed.latestVersion(data: data)
+            return try OrbitUpdateFeed.latestVersion(data: data, info: Bundle.main.infoDictionary ?? [:])
         }
         downloadLatestUpdate = { [weak self] in
             self?.replacing = true

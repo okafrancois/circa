@@ -1,8 +1,38 @@
+import CryptoKit
 import Foundation
 
 /// A freshness hint only. Sparkle still selects compatible updates, verifies signatures,
 /// downloads archives and installs them. Nested delta versions must never become candidates.
 enum OrbitUpdateFeed {
+    /// Returns the signed feed bytes when the embedded Sparkle feed signature matches `publicKey`.
+    /// The trailer is the one written by sign_update and generate_appcast; nothing may follow it.
+    static func verifiedContent(_ data: Data, publicKey: String) throws -> Data {
+        guard let keyData = Data(base64Encoded: publicKey), keyData.count == 32,
+              let key = try? Curve25519.Signing.PublicKey(rawRepresentation: keyData),
+              let start = data.range(of: Data("<!-- sparkle-signatures:\n".utf8), options: .backwards)?.lowerBound,
+              let trailer = String(data: data[start...], encoding: .utf8) else {
+            throw URLError(.cannotParseResponse)
+        }
+        let lines = trailer.trimmingCharacters(in: .whitespacesAndNewlines).components(separatedBy: "\n")
+        guard lines.count == 4, lines[0] == "<!-- sparkle-signatures:", lines[3] == "-->",
+              lines[1].hasPrefix("edSignature: "), lines[2].hasPrefix("length: "),
+              let signature = Data(base64Encoded: String(lines[1].dropFirst("edSignature: ".count))),
+              signature.count == 64,
+              Int(lines[2].dropFirst("length: ".count)) == start - data.startIndex else {
+            throw URLError(.cannotParseResponse)
+        }
+        let signed = data[data.startIndex..<start]
+        guard key.isValidSignature(signature, for: signed) else { throw URLError(.secureConnectionFailed) }
+        return Data(signed)
+    }
+
+    /// The bundle's own policy: when it requires signed feeds, the hint reads only verified bytes.
+    static func latestVersion(data: Data, info: [String: Any]) throws -> String {
+        guard info["SURequireSignedFeed"] as? Bool == true else { return try latestVersion(data: data) }
+        guard let key = info["SUPublicEDKey"] as? String else { throw URLError(.cannotParseResponse) }
+        return try latestVersion(data: verifiedContent(data, publicKey: key))
+    }
+
     static func latestVersion(data: Data) throws -> String {
         let reader = Reader()
         let parser = XMLParser(data: data)

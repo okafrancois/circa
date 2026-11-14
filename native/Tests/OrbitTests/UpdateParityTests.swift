@@ -1,4 +1,5 @@
 import AppKit
+import CryptoKit
 import Foundation
 import Testing
 @testable import Orbit
@@ -45,6 +46,31 @@ struct UpdateParityTests {
         """
         #expect(try OrbitUpdateFeed.latestVersion(data: Data(xml.utf8)) == "27")
         #expect(throws: (any Error).self) { try OrbitUpdateFeed.latestVersion(data: Data("broken".utf8)) }
+    }
+
+    @Test("A bundle requiring signed feeds reads only feeds whose embedded signature matches its key")
+    func signedAppcast() throws {
+        let key = Curve25519.Signing.PrivateKey()
+        let publicKey = key.publicKey.rawRepresentation.base64EncodedString()
+        func signed(_ content: String, with signer: Curve25519.Signing.PrivateKey = key) throws -> Data {
+            let body = Data(content.utf8)
+            let signature = try signer.signature(for: body).base64EncodedString()
+            return body + Data("<!-- sparkle-signatures:\nedSignature: \(signature)\nlength: \(body.count)\n-->\n".utf8)
+        }
+        let xml = """
+        <rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle"><channel>\
+        <item><sparkle:version>27</sparkle:version></item></channel></rss>
+        """
+        let info: [String: Any] = ["SURequireSignedFeed": true, "SUPublicEDKey": publicKey]
+        #expect(try OrbitUpdateFeed.latestVersion(data: signed(xml), info: info) == "27")
+        #expect(try OrbitUpdateFeed.verifiedContent(signed(xml), publicKey: publicKey) == Data(xml.utf8))
+        let tampered = String(decoding: try signed(xml), as: UTF8.self).replacingOccurrences(of: ">27<", with: ">28<")
+        let forged = try signed(xml, with: Curve25519.Signing.PrivateKey())
+        for data in [Data(xml.utf8), Data(tampered.utf8), forged, try signed(xml) + Data("<item/>".utf8)] {
+            #expect(throws: (any Error).self) { try OrbitUpdateFeed.latestVersion(data: data, info: info) }
+        }
+        // Bundles from before the requirement keep reading the unsigned hint.
+        #expect(try OrbitUpdateFeed.latestVersion(data: Data(xml.utf8), info: [:]) == "27")
     }
 
     @Test("A pending intermediate update is cancelled before downloading the latest and never offered")
