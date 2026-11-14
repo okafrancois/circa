@@ -1981,7 +1981,8 @@ class App final : public CefApp, public CefBrowserProcessHandler {
     // unless the run asked for the product policy.
     const auto policy = g_state && g_state->network_policy == ACR_NETWORK_PRODUCT
         ? orbit_bridge::NetworkPolicy::kProduct : orbit_bridge::NetworkPolicy::kHermetic;
-    for (const auto& item : orbit_bridge::BrowserSwitches(policy)) {
+    const bool mock_keychain = !g_state || g_state->secure_storage != ACR_SECURE_STORAGE_KEYCHAIN;
+    for (const auto& item : orbit_bridge::BrowserSwitches(policy, mock_keychain)) {
       if (item.value.empty()) command->AppendSwitch(item.name);
       else command->AppendSwitchWithValue(item.name, item.value);
     }

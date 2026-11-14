@@ -293,11 +293,16 @@ inline std::vector<BrowserSwitch> EssentialSurfaceSwitches() {
   return {{"disable-chrome-login-prompt", ""}, {"disable-print-preview", ""}};
 }
 
-inline std::vector<BrowserSwitch> BrowserSwitches(NetworkPolicy policy) {
+// `mock_keychain`: a synthetic run (mock Keychain). A synthetic run with the product policy is a
+// test bundle exercising the component updater (Widevine CDM): its first check runs after 10 s
+// instead of 60 s. The signed product never gets this switch.
+inline std::vector<BrowserSwitch> BrowserSwitches(NetworkPolicy policy, bool mock_keychain = false) {
   std::vector<BrowserSwitch> switches;
   if (policy == NetworkPolicy::kHermetic) {
     switches.push_back({"disable-background-networking", ""});
     switches.push_back({"disable-component-update", ""});
+  } else if (mock_keychain) {
+    switches.push_back({"component-updater", "fast-update"});
   }
   for (const char* name : {"no-first-run", "no-default-browser-check", "disable-sync", "disable-breakpad"})
     switches.push_back({name, ""});
