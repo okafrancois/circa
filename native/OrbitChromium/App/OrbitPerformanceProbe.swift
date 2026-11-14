@@ -247,6 +247,12 @@ enum OrbitPerformanceProbe {
                     case "seed":
                         owner.session.openTab(url: URL(string: "about:blank#update-session")!)
                         await owner.session.waitForPendingCommands()
+                    case "auth":
+                        result["auth"] = await OrbitAuthCookieProbe.run(environment: environment, command: command)
+                    case "extensions":
+                        var inventory = await OrbitAuthCookieProbe.extensions(environment: environment, command: command)
+                        inventory["phase"] = command["phase"] ?? ""
+                        result["extensions"] = inventory
                     default: break
                     }
                 } else if name == "daily-qa9" {

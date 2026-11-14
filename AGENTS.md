@@ -1,6 +1,6 @@
 # Orbit — working agreement for agents
 
-Orbit is a native macOS browser: Swift/AppKit shell (`native/Sources/Orbit`) on a maintained CEF/Chromium 156 engine (`native/OrbitChromium`). Releases ship through GitHub with Sparkle automatic updates (`docs/release/pipeline.md`).
+Orbit is a native macOS browser: Swift/AppKit shell (`native/Sources/Orbit`) on a maintained CEF/Chromium 158 engine (`native/OrbitChromium`). Releases ship through GitHub with Sparkle automatic updates (`docs/release/pipeline.md`).
 
 ## Roles and definition of done
 - The PM (Claude) splits work, writes briefs, decides and merges into `main`. Implementation agents work in their own worktree and branch; only the PM merges and pushes.

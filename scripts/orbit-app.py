@@ -50,7 +50,7 @@ def bundle_info(version, bundle_id=BUNDLE_ID, principal='ACRApplication'):
         'OrbitRepository': release_config['repository'],
         'SUPublicEDKey': release_config['public_ed_key'],
         'SUEnableAutomaticChecks': True, 'SUAllowsAutomaticUpdates': True,
-        'SUVerifyUpdateBeforeExtraction': True, 'SUAutomaticallyUpdate': True,
+        'SUVerifyUpdateBeforeExtraction': True, 'SURequireSignedFeed': True, 'SUAutomaticallyUpdate': True,
         'SUScheduledCheckInterval': 3600,
         'CFBundleIdentifier': bundle_id,
         'CFBundleName': DISPLAY_NAME,

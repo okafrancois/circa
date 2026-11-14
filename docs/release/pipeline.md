@@ -2,14 +2,14 @@
 
 ## Configuration and prerequisites
 - `release/config.json` is the single release configuration; initial version is **0.1.0**, bundle ID `io.github.okatech.orbit`.
-- The Chromium product uses the maintained CEF/Chromium 156 fork (8078 branch). The
+- The Chromium product uses the maintained CEF/Chromium 158 fork (8127 branch). The
   `cef_flavor` in `release/config.json` and the descriptor in `release/engine.json` are
   the source of truth for the shipped engine; each engine's sources and patch union are
   recorded under `native/OrbitChromium/cef-patches/engine-r*/`.
 - Keep the engine distribution under the repository's `.tools/chromium-fork/distrib/`.
   Worktrees reuse the main checkout's distribution; the pipeline does not build CEF.
 - Security updates on the maintained branch: `scripts/cef-engine-security-update.py`
-  moves the shared sources to a newer `156.0.8078.x` tag while preserving the patch union,
+  moves the shared sources to a newer `158.0.8127.x` tag while preserving the patch union,
   a versioned `scripts/cef-engine-r*-build.py` exports a new flavor, and
   `scripts/package_ci_engine.py` produces the archive and descriptor for `release/engine.json`.
 - Install Xcode/CLT, Python 3, CMake, Ninja, and `gh`; authenticate `gh` for the public
@@ -56,6 +56,48 @@
   The automatic-install switch persists under Sparkle's `SUAutomaticallyUpdate` key; availability
   checks stay enabled under `SUEnableAutomaticChecks`. Manual checks use the application menu's "Check for Updates…" item.
 - Feed: `https://github.com/<repository>/releases/download/update-feed/appcast.xml`.
+  The feed is signed: builds set `SURequireSignedFeed`, `generate_appcast` embeds the EdDSA
+  feed signature, `release.py` re-signs idempotently with `sign_update`, requires the trailer and
+  verifies it against `public_ed_key` before publishing. Builds without the key still read the
+  signed feed, so the first signed release is also the transition. Editing a published feed by
+  hand invalidates it for every current build: regenerate or re-sign it instead.
+  `scripts/test_update_ux.py` covers the transition, the next signed feed and tampered or
+  unsigned feeds (`signed-*` cases).
+  For an engine migration, also run `--cases engine-transition --previous-app <verified-previous-app>`
+  with the new product as `--source-app`. This re-signs a temporary copy of the previous
+  product as a confined mock fixture and checks installation, relaunch and session restoration
+  across the engine change; it never launches the supplied production bundle directly.
+- **Update preservation gate (mandatory, automatic).** `release.py` runs it before anything is
+  signed, notarized or published, for every publishing run and every build that is not an
+  isolated `--local-test-root` E2E. It downloads the latest release from the public feed,
+  verifies the feed and archive EdDSA signatures, the Developer ID team and that its build is
+  older than the candidate, then runs `scripts/test_update_ux.py --cases auth-transition` from
+  that release to the candidate. In two synthetic profiles:
+  - sign-ins: persistent, session and HttpOnly cookies set on a loopback fixture stay
+    authenticated after a restart, the signed update, a new login, another restart and the next
+    update, without crossing profiles;
+  - installed extensions: the previous engine installs a signed CRX3 through its extension
+    updater (loopback only); identity, version, enabled and disabled states, pinning, granted
+    permissions, the extension's `chrome.storage` data and its background and content-script
+    operation must survive the same sequence, as seen by the fixture server, the engine's
+    inventory and the profile files;
+  - the candidate keeps a private pre-update copy of these records (see below).
+  The gate accepts only this run's complete result (a fixed list of required checks, a run
+  nonce, digests of the exact previous and candidate bundles). A failure, missing evidence,
+  mismatched input, unreachable feed or unavailable GUI session stops the release; there is no
+  skip option. Evidence: `dist/release/preservation-<build>/` (synthetic data only).
+  `hosted-build.yml` runs the same gate with `--qualify-only` (no credentials) on every main
+  push and pull request. Locally: `python3 scripts/release.py --qualify-only --skip-build`
+  (GUI runs take `/tmp/orbit-gui-slot.lock`, at most 55 s per stage).
+  `--auth-expect lost --extensions-expect record` documents an engine that drops data.
+- **Engine migration backup.** Before the first launch of a different build, and before the
+  engine opens any profile, the app copies `Local State` and each profile's `Secure
+  Preferences`, `Preferences` and cookie database to `<data root>/EngineMigrationBackups/`
+  (0700/0600, last three build changes, at most 30 days). Copies are never logged, uploaded or
+  restored automatically. Restoring is a deliberate action on a stopped browser
+  (`BrowserEngineMigrationBackup.restore`), which first saves the current files. Data deleted
+  before this feature shipped cannot be recovered by it. A failed snapshot refuses startup before
+  the engine can change profile files; the next launch retries.
   A rollback uses a newer build number; preserve user data and never downgrade the schema blindly.
 
 ## GitHub-hosted macOS runners

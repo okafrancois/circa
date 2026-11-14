@@ -12,7 +12,7 @@ SwiftPM builds the shared modules, import tools and a WebKit development executa
 
 ## Chromium product
 
-Obtain a prebuilt macOS ARM64 CEF 156 distribution from the maintained engine fork, including CEF's CMake files, headers, framework, sandbox archive and the matching `libcef_dll_wrapper.a`. A stock CEF SDK does not supply the product's patched extension and hosted-tab APIs. The source patches and pins are under `native/OrbitChromium/cef-patches/`; `scripts/cef-engine-extensions-build.py` and `scripts/orbit-chromium-x2.py` preserve the engine-build workflow.
+Obtain a prebuilt macOS ARM64 CEF 158 distribution from the maintained engine fork, including CEF's CMake files, headers, framework, sandbox archive and the matching `libcef_dll_wrapper.a`. A stock CEF SDK does not supply the product's patched extension and hosted-tab APIs. The source patches and pins are under `native/OrbitChromium/cef-patches/`; `scripts/cef-engine-extensions-build.py` and `scripts/orbit-chromium-x2.py` preserve the engine-build workflow.
 
 There is no public engine download attached to this initial snapshot. Do not substitute a random CEF build or disable input checks. The engine producer must supply the matching hashes and source revision. With those inputs, configure from the repository root:
 

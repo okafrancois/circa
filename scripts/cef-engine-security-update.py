@@ -33,10 +33,12 @@ def main():
     parser.add_argument('--logs', type=Path, required=True, help='Fresh directory for source backups and update log')
     parser.add_argument('--dependency-baseline', help='Original source revision when resuming interrupted dependency rolls')
     args = parser.parse_args()
-    if not re.fullmatch(r'156\.0\.8078\.[0-9]+', args.version):
-        parser.error('Only the maintained 156.0.8078 security branch is supported')
     args.logs.mkdir(parents=True, exist_ok=False)
     with x2.source_tree_lock():
+        current = output(x2.SRC, 'git', 'show', 'HEAD:chrome/VERSION').split()
+        branch = '.'.join(line.split('=', 1)[1] for line in current[:3])
+        if not re.fullmatch(re.escape(branch) + r'\.[0-9]+', args.version):
+            parser.error('Security updates stay on the checked-out %s branch; migrate milestones separately' % branch)
         x2.guard()
         if build.chromium_build_active():
             raise SystemExit('Another Chromium build is active')

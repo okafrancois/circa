@@ -163,6 +163,11 @@ inline bool IsFeatureName(const std::string& name) {
   return true;
 }
 
+// The user data directory the run owns (CefSettings root_cache_path), set by the bridge only.
+// The engine keeps data encrypted there before Chromium 158's per-directory key ("v10")
+// readable in that directory alone; it is never admitted from process or shell arguments.
+constexpr char kOwnedUserDataDirSwitch[] = "orbit-owned-user-data-dir";
+
 struct ArgumentFilter {
   std::vector<std::string> kept;               // Normalized "--name[=value]".
   std::vector<std::string> disabled_features;  // Validated names, merged by the bridge.

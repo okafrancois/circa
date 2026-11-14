@@ -1,0 +1,27 @@
+{
+  "chromium_tag": "158.0.8127.37",
+  "chromium_commit": "b8c2be851f62f6a394ec57955d7f31335d7cb6d4",
+  "cef_branch": "8127",
+  "cef_base": "8c29be240971eebee960ac92114d3efccb5780ff",
+  "cef_tree": "3458780009fafc59717e4621b38c64952df9e078",
+  "previous_flavor": "orbit-engine-extensions-r20",
+  "flavor": "orbit-engine-extensions-r21",
+  "side_api_version": 18,
+  "patch_composition": "Port the complete r20 union to the supported CEF 8127 / Chromium 158 branch: the CEF fork (side API v18, native hooks, extension hosts, popup lookup, startup and permission fixes) on 8127, its Chromium patches rebased onto 158.0.8127.37, and the direct Chromium union (devtools hosting, popup cancellation, AppKit modal parents, navigation intent, notifications, overlay and password changes).",
+  "dependencies": {
+    "third_party/angle": "1f6526a566c27c7c33aa73a78517450a4a2a1714",
+    "third_party/dawn": "6e24542436a3ef58d4a1110f01712da9afbff3e3",
+    "third_party/devtools-frontend/src": "047c90eca37c7170d826d72245d5df9281989cf3",
+    "third_party/icu": "c670d124c9b6aa92c0b492cf543808300e0e6103",
+    "third_party/libaom/source/libaom": "8f126544519961bb3d5afe83455f4caf5d312d05",
+    "third_party/libvpx/source/libvpx": "fb1279dcc6db0cbfb0b6015d0ba7587759c5625a",
+    "third_party/pdfium": "b23fee3ac22360878efaa8aa533dac892fe777ab",
+    "third_party/skia": "3279352fdf1fbbd01a6dd024a52d3f178a6d5f07",
+    "third_party/webrtc": "fb1c41a93d92d4188f068f437d80ef2c4b50c3a9",
+    "v8": "b601a2347f005e8bfadd32f285df97ffba5cf1bd"
+  },
+  "depot_tools": "132599ebbd8d22d1b1bd5ea703a6d3bc493edd71",
+  "cef_patch_sha256": "2a582b1205830fa84e942735f23ec063404a7940c8632b47a0a81f03ac94e9be",
+  "chromium_patch_sha256": "76d92c0839c1afed0d151edde1c023aec911a9c597ecfe967489cc1f44dda1f2",
+  "rebuild": "python3 scripts/cef-engine-milestone-migrate.py --version 158.0.8127.37 --cef-source <fork git> --cef-ref orbit/8127 --cef-commit <commit> --logs <fresh>, apply chromium.patch, then python3 scripts/cef-engine-r21-build.py --jobs 8"
+}

@@ -46,6 +46,7 @@ class ReleaseTests(unittest.TestCase):
         self.assertEqual(info['SUScheduledCheckInterval'], 3600)
         self.assertTrue(info['SUAllowsAutomaticUpdates'])
         self.assertTrue(info['SUVerifyUpdateBeforeExtraction'])
+        self.assertIs(info['SURequireSignedFeed'], True)
         self.assertTrue(info['SUAutomaticallyUpdate'])
         self.assertEqual(info['SUFeedURL'], release.update_feed_url(self.config['repository']))
 
@@ -103,19 +104,54 @@ class ReleaseTests(unittest.TestCase):
                                    'http://127.0.0.1:12345/appcast.xml')
         self.assertIs(info.get('LSFileQuarantineEnabled'), True)
 
+    @staticmethod
+    def signed(content):
+        # Same trailer layout as sign_update and generate_appcast; the signature bytes are synthetic.
+        data = content.encode()
+        signature = __import__('base64').b64encode(bytes(range(64))).decode()
+        return data + ('<!-- sparkle-signatures:\nedSignature: %s\nlength: %d\n-->\n' % (signature, len(data))).encode()
+
     def test_feed_requires_the_newest_release_and_a_full_signed_archive(self):
+        content = ('<rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle"><channel>'
+                   '<item><sparkle:version>27</sparkle:version><enclosure url="https://example.test/latest.zip" '
+                   'sparkle:edSignature="test"/><sparkle:deltas><enclosure sparkle:version="999"/></sparkle:deltas></item>'
+                   '<item><sparkle:version>25</sparkle:version></item></channel></rss>')
         with tempfile.TemporaryDirectory() as temporary:
             feed = Path(temporary) / 'appcast.xml'
-            feed.write_text('<rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle"><channel>'
-                '<item><sparkle:version>27</sparkle:version><enclosure url="https://example.test/latest.zip" '
-                'sparkle:edSignature="test"/><sparkle:deltas><enclosure sparkle:version="999"/></sparkle:deltas></item>'
-                '<item><sparkle:version>25</sparkle:version></item></channel></rss>')
+            feed.write_bytes(self.signed(content))
             release.validate_appcast(feed, 27)
             with self.assertRaises(ValueError):
                 release.validate_appcast(feed, 25)
-            feed.write_text(feed.read_text().replace('sparkle:edSignature="test"', ''))
+            feed.write_bytes(self.signed(content.replace('sparkle:edSignature="test"', '')))
             with self.assertRaises(ValueError):
                 release.validate_appcast(feed, 27)
+
+    def test_feed_signature_is_required_and_covers_the_whole_feed(self):
+        content = ('<rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle"><channel>'
+                   '<item><sparkle:version>27</sparkle:version><enclosure url="https://example.test/latest.zip" '
+                   'sparkle:edSignature="test"/></item></channel></rss>')
+        signed, signature = release.feed_signature(self.signed(content))
+        self.assertEqual(signed, content.encode())
+        self.assertEqual(len(__import__('base64').b64decode(signature)), 64)
+        with tempfile.TemporaryDirectory() as temporary:
+            feed = Path(temporary) / 'appcast.xml'
+            feed.write_text(content)
+            with self.assertRaisesRegex(ValueError, 'feed signature'):
+                release.validate_appcast(feed, 27)
+        tampered = self.signed(content).replace(b'<sparkle:version>27', b'<sparkle:version>28')
+        release.feed_signature(tampered)  # Same length: only the cryptographic check can reject it.
+        for data in [self.signed(content).replace(b'</rss>', b'</rss>\n'), self.signed(content) + b'<extra/>',
+                     content.encode() + self.signed('<rss/>')[len(b'<rss/>'):]]:
+            with self.assertRaises(ValueError):
+                release.feed_signature(data)
+
+    def test_every_product_plist_requires_a_signed_feed(self):
+        spec = importlib.util.spec_from_file_location('orbit_app_info', Path(__file__).parent / 'orbit-app.py')
+        packaging = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(packaging)
+        self.assertIs(packaging.bundle_info('0.1.0')['SURequireSignedFeed'], True)
+        template = (Path(__file__).parents[1] / 'native/OrbitChromium/App/Info.plist.in').read_text()
+        self.assertIn('<key>SURequireSignedFeed</key><true/>', template)
 
     def test_synthetic_roots_do_not_leak_into_product(self):
         info = release.update_info({'OrbitDataRoot': '/tmp/test', 'OrbitSyntheticBundle': True,
@@ -283,6 +319,93 @@ class CloudProfileTests(unittest.TestCase):
         self.assertIsNone(release.embed_cloud_profile(Path('/unused'), dict(self.config, provisioning_profile='/missing'), Path('/tmp/synthetic')))
         with self.assertRaises(ValueError):
             local_signing.sign_chromium_bundle(Path('/unused'), 'local', {'com.apple.developer.icloud-services': ['CloudKit']})
+
+
+class PreservationGateTests(unittest.TestCase):
+    """The update preservation gate cannot be passed by a partial, foreign or mismatched run."""
+    config = {'name': 'Circa', 'bundle_id': 'io.github.okatech.orbit', 'repository': 'example/browser',
+              'public_ed_key': 'A' * 43 + '=', 'team_id': 'TEAM123456'}
+    identity = {'previous': {'build': '820', 'executable': 'a', 'framework': 'b'},
+                'candidate': {'build': '830', 'executable': 'c', 'framework': 'd'}}
+
+    def summary(self, **changes):
+        value = {'case': 'auth-transition', 'run_id': 'run', 'expect': 'kept', 'extensions_expect': 'kept',
+                 'inputs': dict(self.identity), 'passed': True,
+                 'checks': {name: True for name in release.REQUIRED_PRESERVATION_CHECKS}}
+        value.update(changes)
+        return value
+
+    def check(self, summary):
+        release.check_preservation_summary(summary, 'run', self.identity['previous'], self.identity['candidate'])
+
+    def test_complete_passing_run_is_accepted(self):
+        self.check(self.summary())
+
+    def test_every_gap_is_refused(self):
+        partial = self.summary()
+        del partial['checks']['ext_next_update_inventory']
+        failing = self.summary()
+        failing['checks']['ext_updated_store_preserved'] = False
+        truthy = self.summary()
+        truthy['checks']['update_keeps_persistent'] = 'yes'
+        swapped = self.summary(inputs={'previous': self.identity['candidate'], 'candidate': self.identity['candidate']})
+        for summary in (partial, failing, truthy, swapped, self.summary(run_id='other'), self.summary(passed=False),
+                        self.summary(extensions_expect='record'), self.summary(expect='lost'), self.summary(case='x')):
+            with self.assertRaises(RuntimeError):
+                self.check(summary)
+
+    def test_required_checks_cover_sign_ins_extensions_and_backup(self):
+        names = set(release.REQUIRED_PRESERVATION_CHECKS)
+        for name in ('next_update_keeps_old_and_new', 'ext_installed_by_previous_engine', 'ext_next_update_inventory',
+                     'ext_next_update_store_preserved', 'ext_disabled_never_runs', 'migration_backup_verified'):
+            self.assertIn(name, names)
+
+    def feed(self, directory, *items):
+        entries = ''.join(
+            '<item><sparkle:version>%d</sparkle:version><sparkle:shortVersionString>%s</sparkle:shortVersionString>'
+            '<enclosure url="%s" length="4" sparkle:edSignature="sig%d"/></item>' % (build, short, url, build)
+            for build, short, url in items)
+        path = directory / 'appcast.xml'
+        path.write_text('<rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle"><channel>'
+                        + entries + '</channel></rss>')
+        return path
+
+    def test_latest_feed_item_is_the_newest_signed_archive(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path = self.feed(Path(temporary), (811, '0.68.5', 'https://x/a.zip'), (820, '0.69.1', 'https://x/b.zip'))
+            self.assertEqual(release.latest_feed_item(path), (820, '0.69.1', 'https://x/b.zip', 4, 'sig820'))
+            Path(temporary, 'empty.xml').write_text('<rss><channel/></rss>')
+            with self.assertRaises(ValueError):
+                release.latest_feed_item(Path(temporary, 'empty.xml'))
+
+    def test_previous_release_refuses_unverified_or_foreign_inputs(self):
+        prefix = 'https://github.com/example/browser/releases/download/v0.69.1/'
+        cases = [((820, '0.69.1', 'https://elsewhere.example/Circa-0.69.1.zip'), 830, 'outside'),
+                 ((830, '0.69.2', prefix + 'Circa-0.69.2.zip'), 830, 'newer'),
+                 ((820, '0.69.1', prefix + 'Circa-0.69.1.zip'), 830, 'length')]
+        for item, candidate, reason in cases:
+            with tempfile.TemporaryDirectory() as temporary:
+                work = Path(temporary)
+                def fetch(url, destination):
+                    if url.endswith('appcast.xml'):
+                        self.feed(work, item)
+                        if destination != work / 'appcast.xml':
+                            Path(destination).write_bytes((work / 'appcast.xml').read_bytes())
+                    else:
+                        Path(destination).write_bytes(b'too long for the feed')
+                with patch.object(release, 'verify_feed_signature') as verify, patch.object(release, 'run') as runner:
+                    with self.assertRaises(ValueError, msg=reason):
+                        release.previous_release(self.config, work, candidate, fetch=fetch)
+                    verify.assert_called_once()
+                    self.assertFalse(any('ditto' in map(str, call.args) for call in runner.call_args_list), reason)
+
+    def test_gate_runs_before_signing_for_every_non_isolated_release(self):
+        source = Path(release.__file__).read_text()
+        gate = source.index('qualify_preservation(config, source, build, output)')
+        self.assertLess(gate, source.index('prepare_bundle(source, app, config'))
+        self.assertLess(gate, source.index("publish_release(config, version, archive, dmg, archives"))
+        self.assertIn('if args.publish or args.qualify_only or not args.local_test_root:', source)
+        self.assertNotIn('skip-preservation', source)
 
 
 if __name__ == '__main__':

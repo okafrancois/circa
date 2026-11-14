@@ -96,7 +96,7 @@ Use an Apple Silicon Mac with Xcode 27 (Swift 6.4 and the macOS 27 SDK), Git and
 swift build --package-path native
 ```
 
-The Chromium product is built separately with CMake 3.26+, Ninja and a matching patched CEF 156 distribution. Engine binaries and signing credentials are not included. See the [build guide](docs/release/building.md), [architecture](docs/native-port/orbit-architecture.md) and [release pipeline](docs/release/pipeline.md).
+The Chromium product is built separately with CMake 3.26+, Ninja and a matching patched CEF 158 distribution. Engine binaries and signing credentials are not included. See the [build guide](docs/release/building.md), [architecture](docs/native-port/orbit-architecture.md) and [release pipeline](docs/release/pipeline.md).
 
 Tests use synthetic data and a mock Keychain. Internal modules, tooling paths and bundle identifiers retain the Orbit name. Browser code lives in `native/`, release tools in `scripts/` and `release/`, and the static website in `web/`.
 

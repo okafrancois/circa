@@ -80,10 +80,29 @@ def sha256(path):
     return digest.hexdigest()
 
 
+INCREMENTAL_FREE_GIB_FLOOR = 45
+
+
+def free_gib_guard():
+    """Return the start guard; an incremental roll may lower it, never below the floor.
+
+    The incremental CEF build loop independently stops at 40 GiB, so a security roll
+    that rebuilds the existing output in place does not need the full-build margin.
+    """
+    override = os.environ.get("ORBIT_ENGINE_FREE_GIB_GUARD")
+    if not override:
+        return FREE_GIB_GUARD
+    value = int(override)
+    if value < INCREMENTAL_FREE_GIB_FLOOR:
+        raise SystemExit("ORBIT_ENGINE_FREE_GIB_GUARD may not go below %d GiB" % INCREMENTAL_FREE_GIB_FLOOR)
+    return min(value, FREE_GIB_GUARD)
+
+
 def guard():
+    minimum = free_gib_guard()
     free = shutil.disk_usage(FORK).free / 2**30
-    if free < FREE_GIB_GUARD:
-        raise SystemExit("Free space %.1f GiB below the %d GiB guard" % (free, FREE_GIB_GUARD))
+    if free < minimum:
+        raise SystemExit("Free space %.1f GiB below the %d GiB guard" % (free, minimum))
     return round(free, 1)
 
 
@@ -150,7 +169,7 @@ PATCHED_FLAVORS += ("orbit-engine-extensions-hosted",)
 PATCHED_FLAVORS += ("orbit-engine-extensions-sidebar",)
 PATCHED_FLAVORS += ("orbit-engine-extensions",)
 PATCHED_FLAVORS += ("orbit-engine-extensions-r2",)
-PATCHED_FLAVORS += ("orbit-engine-extensions-r3", "orbit-engine-extensions-r4", "orbit-engine-extensions-r5", "orbit-engine-extensions-r6", "orbit-engine-extensions-r7", "orbit-engine-extensions-r8", "orbit-engine-extensions-r9", "orbit-engine-extensions-r10", "orbit-engine-extensions-r11", "orbit-engine-extensions-r12", "orbit-engine-extensions-r13", "orbit-engine-extensions-r14", "orbit-engine-extensions-r15", "orbit-engine-extensions-r16", "orbit-engine-extensions-r17", "orbit-engine-extensions-r18", "orbit-engine-extensions-r19")
+PATCHED_FLAVORS += ("orbit-engine-extensions-r3", "orbit-engine-extensions-r4", "orbit-engine-extensions-r5", "orbit-engine-extensions-r6", "orbit-engine-extensions-r7", "orbit-engine-extensions-r8", "orbit-engine-extensions-r9", "orbit-engine-extensions-r10", "orbit-engine-extensions-r11", "orbit-engine-extensions-r12", "orbit-engine-extensions-r13", "orbit-engine-extensions-r14", "orbit-engine-extensions-r15", "orbit-engine-extensions-r16", "orbit-engine-extensions-r17", "orbit-engine-extensions-r18", "orbit-engine-extensions-r19", "orbit-engine-extensions-r20", "orbit-engine-extensions-r21", "orbit-engine-extensions-r22")
 FLAVORS = ("sdk", "stock") + PATCHED_FLAVORS
 
 
@@ -479,8 +498,12 @@ def distrib(args):
     subprocess.run(command, cwd=CEF_REPO, env=source_lab.ENV, check=True)
     root = sorted(target.glob("cef_binary_*_macosarm64_minimal"))[-1]
     wrapper_dir = target / "wrapper"
+    # The wrapper's C++/C translation must use the embedder's API version; the default
+    # (experimental) can expose newer client slots the application never implements.
+    api_version = getattr(args, "wrapper_api_version", None)
     subprocess.run(["cmake", "-S", str(root), "-B", str(wrapper_dir), "-G", "Ninja",
-                    "-DCMAKE_BUILD_TYPE=Release", "-DPROJECT_ARCH=arm64"], check=True,
+                    "-DCMAKE_BUILD_TYPE=Release", "-DPROJECT_ARCH=arm64",
+                    *(["-Dapi_version=" + api_version] if api_version else [])], check=True,
                    stdout=subprocess.DEVNULL)
     subprocess.run(["nice", "-n", "10", "cmake", "--build", str(wrapper_dir), "--target", "libcef_dll_wrapper"],
                    check=True)
@@ -488,6 +511,7 @@ def distrib(args):
     manifest = {"flavor": args.flavor, "root": str(root), "seconds": round(time.time() - started, 1),
                 "framework_sha256": sha256(framework), "framework_bytes": framework.stat().st_size,
                 "wrapper_sha256": sha256(wrapper_dir / "libcef_dll_wrapper/libcef_dll_wrapper.a"),
+                "wrapper_api_version": api_version,
                 "cef_head": subprocess.run(["git", "-C", str(CEF_REPO), "rev-parse", "HEAD"], capture_output=True,
                                            text=True).stdout.strip(),
                 "exports_orbit_cef_get_api": "orbit_cef_get_api" in subprocess.run(
