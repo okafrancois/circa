@@ -97,8 +97,10 @@ add_custom_target(orbit_localization_resources ALL
   VERBATIM)
 orbit_swift_module(BrowserEngine "${ORBIT_SOURCES}/BrowserEngine" BrowserCore BrowserShell)
 orbit_swift_module(BrowserEngineConformance "${ORBIT_SOURCES}/BrowserEngineConformance" BrowserCore BrowserShell BrowserEngine)
+# The system WebKit renders protected-streaming sites inside Chromium tabs (FairPlay).
+orbit_swift_module(WebKitEngine "${ORBIT_SOURCES}/WebKitEngine" BrowserCore BrowserShell BrowserEngine)
 orbit_swift_module(ChromiumEngine "${CMAKE_CURRENT_SOURCE_DIR}/ChromiumEngine"
-  BrowserCore BrowserShell BrowserEngine OrbitChromiumBridge)
+  BrowserCore BrowserShell BrowserEngine WebKitEngine OrbitChromiumBridge)
 target_include_directories(ChromiumEngine PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/Bridge")
 
 # Independent hidden-mode witness run by the laboratory runner (not packaged in the bundle).
@@ -112,7 +114,7 @@ add_executable(OrbitChromium MACOSX_BUNDLE ${LAB_SOURCES})
 target_compile_options(OrbitChromium PRIVATE ${ORBIT_SWIFT_FLAGS})
 target_include_directories(OrbitChromium PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/swift-modules"
   "${CMAKE_CURRENT_SOURCE_DIR}/Bridge")
-target_link_libraries(OrbitChromium PRIVATE ChromiumEngine BrowserEngineConformance BrowserEngine
+target_link_libraries(OrbitChromium PRIVATE ChromiumEngine WebKitEngine BrowserEngineConformance BrowserEngine
   BrowserShell BrowserCore OrbitChromiumBridge)
 target_link_options(OrbitChromium PRIVATE "LINKER:-ObjC")
 set_target_properties(OrbitChromium PROPERTIES Swift_LANGUAGE_VERSION 6
@@ -234,7 +236,9 @@ function(orbit_app_executable TARGET DIRECTORY PLIST)
   target_compile_options(${TARGET} PRIVATE ${ORBIT_SWIFT_FLAGS} -parse-as-library)
   target_include_directories(${TARGET} PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/swift-modules"
     "${CMAKE_CURRENT_SOURCE_DIR}/Bridge")
-  set(ORBIT_APP_LIBRARIES ChromiumEngine BrowserEngine BrowserShell BrowserCore OrbitChromiumBridge)
+  # Each archive once, dependencies after their users: with -ObjC a repeated archive is loaded
+  # twice (duplicate symbols). WebKitEngine is ChromiumEngine's protected-streaming content.
+  set(ORBIT_APP_LIBRARIES ChromiumEngine WebKitEngine BrowserEngine BrowserShell BrowserCore OrbitChromiumBridge)
   if(DIRECTORY STREQUAL "smoke")
     # Test code: smoke build only. First, so that its dependencies are not listed twice: with
     # -ObjC a repeated archive is loaded twice (duplicate symbols).

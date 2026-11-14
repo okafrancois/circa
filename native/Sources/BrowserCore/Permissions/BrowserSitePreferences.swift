@@ -4,14 +4,19 @@ public struct BrowserSitePreferences: Codable, Equatable, Sendable {
     public var developerMode = false
     public var automaticPictureInPicture = true
     public var neverTranslate = false
+    /// The engine chosen for this host with "Reload with WebKit/Chromium"; nil follows the
+    /// built-in protected-streaming list (`BrowserProtectedStreamingSites`).
+    public var siteEngine: BrowserSiteEngine?
     public init() {}
 
-    private enum CodingKeys: String, CodingKey { case developerMode, automaticPictureInPicture, neverTranslate }
+    private enum CodingKeys: String, CodingKey { case developerMode, automaticPictureInPicture, neverTranslate, siteEngine }
     public init(from decoder: any Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
         developerMode = try values.decodeIfPresent(Bool.self, forKey: .developerMode) ?? false
         automaticPictureInPicture = try values.decodeIfPresent(Bool.self, forKey: .automaticPictureInPicture) ?? true
         neverTranslate = try values.decodeIfPresent(Bool.self, forKey: .neverTranslate) ?? false
+        // An unknown future engine name reads as "follow the default" instead of failing the file.
+        siteEngine = (try? values.decodeIfPresent(String.self, forKey: .siteEngine)).flatMap(BrowserSiteEngine.init(rawValue:))
     }
 }
 
@@ -76,7 +81,7 @@ public final class BrowserSitePreferenceStore {
         document = next
     }
 
-    public static func host(_ url: URL?) -> String? {
+    nonisolated public static func host(_ url: URL?) -> String? {
         guard let url, ["http", "https"].contains(url.scheme?.lowercased()), let host = url.host,
               !host.isEmpty else { return nil }
         return host.lowercased()

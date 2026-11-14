@@ -205,6 +205,7 @@ enum BrowserCommandID: String, CaseIterable, Sendable {
     case removeSuggestion
     case pasteAsNewTab
     case showSiteControls
+    case reloadWithWebKit, reloadWithChromium
     case removeFavorite
     case renameFavorite
     case copyFavoriteLink

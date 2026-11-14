@@ -1,6 +1,7 @@
 import BrowserCore
 import BrowserEngine
 import Foundation
+import WebKitEngine
 
 /// DevTools commands execute on a browser of the captured profile, never the global context.
 extension ChromiumBrowserEngine: BrowserSiteOriginDataAccess {
@@ -10,6 +11,15 @@ extension ChromiumBrowserEngine: BrowserSiteOriginDataAccess {
                 $0.navigationState.committedURL.flatMap(BrowserSiteOrigin.init(url:)) == origin
         }) else { throw BrowserSiteDataError.removalIncomplete }
         return surface
+    }
+
+    /// A tab showing `origin` in WebKit content: its site data lives in the WebKit store.
+    private func webContentSiteData(_ origin: BrowserSiteOrigin, profileID: ProfileID) -> WebKitBrowserEngine? {
+        guard !isShutDown, runtime.registeredSurfaces.contains(where: {
+            $0.engine === self && $0.profileID == profileID && !$0.isDisposed && $0.webContent != nil &&
+                $0.navigationState.committedURL.flatMap(BrowserSiteOrigin.init(url:)) == origin
+        }) else { return nil }
+        return webContentEngine
     }
 
     private func siteDataCommand(_ method: String, parameters: [String: Any] = [:],
@@ -34,6 +44,9 @@ extension ChromiumBrowserEngine: BrowserSiteOriginDataAccess {
     }
 
     public func siteData(origin: BrowserSiteOrigin, profileID: ProfileID) async -> BrowserSiteDataSummary {
+        if let webKit = webContentSiteData(origin, profileID: profileID) {
+            return await webKit.siteData(origin: origin, profileID: profileID)
+        }
         guard let url = URL(string: origin.value), let domain = BrowserPublicSuffixList.shared.site(of: url) else {
             return BrowserSiteDataSummary(domains: [], recordCount: 0, isAvailable: false)
         }
@@ -61,6 +74,10 @@ extension ChromiumBrowserEngine: BrowserSiteOriginDataAccess {
     }
 
     public func clearSiteData(origin: BrowserSiteOrigin, profileID: ProfileID, expectedDomains: [String]) async throws {
+        if let webKit = webContentSiteData(origin, profileID: profileID) {
+            try await webKit.clearSiteData(origin: origin, profileID: profileID, expectedDomains: expectedDomains)
+            return
+        }
         guard let url = URL(string: origin.value), let domain = BrowserPublicSuffixList.shared.site(of: url),
               expectedDomains == [domain] else { throw BrowserSiteDataError.scopeChanged }
         let surface = try siteDataSurface(origin, profileID: profileID)

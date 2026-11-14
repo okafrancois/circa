@@ -14,7 +14,11 @@ typealias OrbitWindowController = BrowserWindowController<ActiveEngine>
 /// Hosted Chrome-style tabs (D-chrome) on the patched CEF; Alloy on the stock SDK.
 @MainActor
 func makeActiveEngine() -> ActiveEngine {
-    ChromiumBrowserEngine(persistence: .persistent, hostedWhenAvailable: true)
+    let engine = ChromiumBrowserEngine(persistence: .persistent, hostedWhenAvailable: true)
+    // Protected-streaming tabs (WebKit) keep their cookies per profile in the product. WebKit
+    // stores them in its own container, outside the data root: confined runs stay memory-only.
+    engine.webContentPersistence = activeSyntheticDataGuard() == nil ? .persistent : .ephemeral
+    return engine
 }
 
 /// A separate engine instance uses the already-running runtime; it never starts or stops CEF.

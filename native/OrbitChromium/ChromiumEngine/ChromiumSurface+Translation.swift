@@ -5,10 +5,10 @@ import BrowserEngine
 extension ChromiumSurface {
     /// Chromium validates its own service configuration before accepting this command.
     public func requestBuiltInTranslation() -> Bool {
-        !isDisposed && isReady && ACRExecuteChromeCommand(token, "IDC_SHOW_TRANSLATE") == 1
+        !isDisposed && webContent == nil && isReady && ACRExecuteChromeCommand(token, "IDC_SHOW_TRANSLATE") == 1
     }
 
-    public var supportsPageTranslation: Bool { true }
+    public var supportsPageTranslation: Bool { webContent == nil }
 
     public func translationSample() async throws -> BrowserTranslationSample {
         let value = try await translationEvaluate(#"({text:document.body?.innerText.slice(0,16000) || '',language:document.documentElement.lang})"#)

@@ -140,6 +140,11 @@ public protocol BrowserEngine: AnyObject {
     associatedtype Surface: BrowserEngineSurface
 
     var kind: BrowserEngineKind { get }
+    /// Surfaces can show a site with a second engine (`BrowserSiteEngineSwitching`). Default false.
+    static var hostsSiteEngineSwitching: Bool { get }
+    /// Hands the shell's saved per-host engine choices to an engine that switches sites. Default:
+    /// nothing.
+    func useSiteEnginePreferences(_ preferences: BrowserSitePreferenceStore)
     var capabilities: BrowserEngineCapabilities { get }
 
     /// Resolves, creating on first use, the isolated store of a profile.

@@ -5,6 +5,7 @@ import BrowserEngine
 import BrowserShell
 import Foundation
 import OSLog
+import WebKitEngine
 
 @MainActor
 public final class ChromiumBrowserEngine: BrowserPrivateEngine {
@@ -68,6 +69,20 @@ public final class ChromiumBrowserEngine: BrowserPrivateEngine {
 
     public let persistence: BrowserWebsiteDataPersistence
     let runtime = ChromiumRuntime.shared
+
+    // Protected-streaming WebKit content (`ChromiumBrowserEngine+WebContent.swift`).
+    /// Saved per-host engine choices; set by the shell (`useSiteEnginePreferences`).
+    public var siteEnginePreferences: BrowserSitePreferenceStore?
+    /// False keeps every site on Chromium (laboratory runs that must not create WebKit views).
+    public var webContentEnabled = true
+    /// WebKit site data of this engine's tabs. Set before the first WebKit tab: confined
+    /// (synthetic) runs use `.ephemeral` because WebKit writes outside the Orbit data root.
+    public lazy var webContentPersistence: BrowserWebsiteDataPersistence = persistence
+    lazy var webContentEngine: WebKitBrowserEngine = {
+        let engine = WebKitBrowserEngine(persistence: webContentPersistence)
+        engine.applicationNameForUserAgent = WebKitBrowserEngine.safariApplicationName()
+        return engine
+    }()
     private var removingProfiles: Set<ProfileID> {
         get { runtime.removingProfiles }
         set { runtime.removingProfiles = newValue }
@@ -142,6 +157,8 @@ public final class ChromiumBrowserEngine: BrowserPrivateEngine {
         }
         guard removingProfiles.insert(profileID).inserted else { throw BrowserEngineError.profileInUse }
         defer { removingProfiles.remove(profileID) }
+        // The profile's protected-streaming store (WebKit) goes with it.
+        try await webContentEngine.removeProfile(profileID)
         let deadline = ContinuousClock.now + .seconds(12)
         var released = false
         if let entry = profiles[profileID] {

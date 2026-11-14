@@ -36,7 +36,7 @@ struct NativeCommandTests {
     func catalogCoverage() throws {
         #expect(OrbitCommandCatalog.declarations.count == 179)
         #expect(OrbitCommandCatalog.structuralIDs.count == 14)
-        #expect(OrbitCommandCatalog.actionDefinitions.count == 263) // Includes local page sharing and browser errands.
+        #expect(OrbitCommandCatalog.actionDefinitions.count == 265) // Includes local page sharing, browser errands and site engine switching.
         #expect(OrbitCommandCatalog.declarations.allSatisfy { $0.localizesKey })
         #expect(OrbitCommandCatalog.declarations.filter { !$0.key.isEmpty }.count == 85)
         #expect(OrbitCommandCatalog.declarations.filter { !$0.key.isEmpty && $0.modifierMask == nil }.map(\.source) == ["menu.declaration.25", "menu.declaration.117"])
@@ -316,6 +316,9 @@ struct NativeCommandTests {
         #expect(system.registry.isImplemented(.dismissPeek))
         #expect(system.registry.isImplemented(.copyURL))
         #expect(system.registry.isImplemented(.showSiteControls))
+        // WebKit tabs cannot switch engines: the Chromium product's "Reload with" commands stay absent.
+        #expect(!system.registry.isImplemented(.reloadWithWebKit) && !system.registry.isImplemented(.reloadWithChromium))
+        #expect(system.registry.definition(.reloadWithWebKit)?.menu == "View")
         #expect(system.registry.isImplemented(.showHideSidebar))
         #expect(system.registry.isImplemented(.forceRefreshThePage))
         #expect(system.registry.isImplemented(.javascriptConsole))
@@ -564,6 +567,8 @@ struct NativeCommandTests {
           Force Refresh the Page [forceRefreshThePage] ⇧⌘R (alternate)
           Clear Cookies and Refresh [clearCookiesAndRefresh]
           Clear Cache and Refresh [clearCacheAndRefresh]
+          Reload with WebKit [reloadWithWebKit]
+          Reload with Chromium [reloadWithChromium]
           ---
           Add Split View [addSplitView] ⌃⇧=
           Close this Split Pane [closeThisSplitPane] ⌃⇧-

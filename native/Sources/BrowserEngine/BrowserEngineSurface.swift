@@ -180,6 +180,8 @@ public protocol BrowserEngineSurface: BrowserFindSurface, BrowserMediaSessionCon
     var profileID: ProfileID { get }
     /// Dedicated opt-in metadata channel, absent on engines without a native manager.
     var passwordPrompts: (any BrowserPasswordPromptSource)? { get }
+    /// Engine switching of the displayed site (`BrowserSiteEngineSwitching.swift`); nil by default.
+    var siteEngineSwitching: (any BrowserSiteEngineSwitching)? { get }
     var hostView: NSView { get }
     /// The actual page viewport for document coordinates, overlays and responder ownership.
     /// It may be inset within hostView when native developer tools share the presentation.
