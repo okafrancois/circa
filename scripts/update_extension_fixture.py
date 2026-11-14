@@ -177,6 +177,12 @@ def record_report(work, query):
     return True
 
 
+def crx_downloads(work):
+    """Signed 2.0 CRX downloads served so far (the log appears with the first request)."""
+    path = work / 'ext-requests.log'
+    return path.read_text().count('/ext/x-2.crx\n') if path.exists() else 0
+
+
 def reports(work, phase=None):
     path = work / 'ext.log'
     entries = [json.loads(line) for line in path.read_text().splitlines()] if path.exists() else []
