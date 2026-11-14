@@ -691,6 +691,19 @@ int32_t ACRTraceEnd(uint64_t token, const char* file, orbit_trace_callback_t, vo
 int32_t ACRExtensionOptionsOpen(uint64_t token, const char* extension_id);
 int32_t ACRExtensionIncognitoSet(uint64_t profile, const char* extension_id, int32_t allowed);
 
+/* Built-in content blocking: the app bundle's ContentBlocker extension, added to --load-extension
+ * at startup (never for synthetic authentication runs). Its declarativeNetRequest rulesets start
+ * disabled. Persistent profiles only; all calls on UI.
+ * Configure writes one profile's state: enabled 0/1, allowed hosts ("|"-joined lowercase ASCII
+ * hosts, ignored when disabled) and a revision > 0, and disables the extension while off.
+ * The acknowledgement callback (UI, exactly once for accepted calls) receives the extension's last
+ * applied "<revision>.<enabled>", or NULL when it has not applied any yet. */
+typedef void (*orbit_content_blocking_ack_t)(void* context, const char* acknowledgement);
+const char* ACRContentBlockingExtensionID(void);
+int32_t ACRContentBlockingAvailable(void);
+int32_t ACRContentBlockingConfigure(uint64_t profile_token, int32_t enabled, const char* hosts, uint64_t revision);
+int32_t ACRContentBlockingAcknowledgement(uint64_t profile_token, orbit_content_blocking_ack_t callback, void* context);
+
 #ifdef __cplusplus
 }
 #endif

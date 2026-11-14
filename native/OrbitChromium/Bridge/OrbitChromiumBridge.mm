@@ -234,6 +234,8 @@ struct State {
   int32_t secure_storage = ACR_SECURE_STORAGE_MOCK;
   bool safe_browsing_enabled = false;
   bool overlay_scrollbars = false;
+  // The bundled content blocker directory added to --load-extension, empty when absent.
+  std::string content_blocking_path;
   int32_t network_policy = ACR_NETWORK_HERMETIC;
   // CHROMIUM-APP-R3: the engine root, opened once (descriptor-anchored profile operations), and
   // the allow-listed browser arguments actually given to Chromium.
@@ -2008,6 +2010,13 @@ class App final : public CefApp, public CefBrowserProcessHandler {
         else command->AppendSwitchWithValue(name, value.substr(separator + 1));
       }
     }
+    // Built-in content blocking: the app's bundled extension joins any laboratory extensions.
+    // Its rulesets start disabled; the shell enables them per profile (ACRContentBlockingConfigure).
+    if (g_state && !g_state->content_blocking_path.empty()) {
+      const auto loaded = command->GetSwitchValue("load-extension").ToString();
+      command->AppendSwitchWithValue("load-extension",
+          (loaded.empty() ? "" : loaded + ",") + g_state->content_blocking_path);
+    }
     // Apply the style choice to this renderer lifetime without changing a profile's saved
     // accessibility preference. Blink reapplies these command-line settings after WebPreferences.
     if (g_state && g_state->overlay_scrollbars) {
@@ -2048,6 +2057,16 @@ class App final : public CefApp, public CefBrowserProcessHandler {
       command->RemoveSwitch("disable-background-networking");
       command->AppendSwitch("safebrowsing-fast-initial-lists-update");
       command->AppendSwitchWithValue("log-net-log", g_state->root + "/safe-browsing-netlog.json");
+    }
+    // Confined content blocking fixture: known ad and tracker hosts and two fixture sites resolve to
+    // the loopback fixture server; nothing else resolves.
+    if (g_state && g_state->secure_storage == ACR_SECURE_STORAGE_MOCK &&
+        [[NSBundle mainBundle].bundleIdentifier isEqualToString:@"lab.orbit.orbit.content-blocking"] &&
+        [[NSBundle mainBundle].infoDictionary[@"OrbitSyntheticBundle"] boolValue] &&
+        [[NSProcessInfo processInfo].arguments containsObject:@"--orbit-content-blocking-fixture"]) {
+      command->AppendSwitchWithValue("host-resolver-rules",
+          "MAP *.fixture.test 127.0.0.1, MAP *.doubleclick.net 127.0.0.1, MAP *.scorecardresearch.com 127.0.0.1, "
+          "MAP *.googlesyndication.com 127.0.0.1, MAP * ~NOTFOUND, EXCLUDE 127.0.0.1");
     }
     // Fixed fake devices only in the confined permission fixture; no real TCC services.
     if (g_state && g_state->secure_storage == ACR_SECURE_STORAGE_MOCK &&
@@ -2267,6 +2286,11 @@ extern "C" int32_t ACRRun(int argc, char* argv[], const ACRRunOptions* options,
     const char* api_key = getenv("GOOGLE_API_KEY");
     state.safe_browsing_enabled = options->safe_browsing_enabled == 1 && api_key && *api_key;
     state.overlay_scrollbars = options->overlay_scrollbars == 1;
+    if (NSString* blocker = [[NSBundle mainBundle] pathForResource:@"ContentBlocker" ofType:nil];
+        blocker && [[NSFileManager defaultManager] fileExistsAtPath:[blocker stringByAppendingPathComponent:@"manifest.json"]] &&
+        [blocker rangeOfString:@","].location == NSNotFound) {
+      state.content_blocking_path = blocker.stringByResolvingSymlinksInPath.fileSystemRepresentation;
+    }
     if (state.secure_storage == ACR_SECURE_STORAGE_KEYCHAIN) {
       if (!options->keychain_service_name || !*options->keychain_service_name
           || !options->keychain_account_name || !*options->keychain_account_name) return 64;
@@ -4117,4 +4141,110 @@ extern "C" int32_t ACRExtensionIncognitoSet(uint64_t profile, const char* id, in
   const char* path = ExtensionProfilePath(profile);
   return !path || !(ACREngineDiagnosticCapabilities() & 8) || !orbit_bridge::ValidExtensionID(id)
       ? 0 : g_state->orbit->extension_incognito_set(path, id, allowed);
+}
+
+// Built-in content blocking. The shell owns the bundled extension: its configuration travels as
+// cookies of a reserved host that never resolves (the extension also blocks it while enabled),
+// in the profile's own cookie store, so profiles and private contexts never share it.
+namespace {
+constexpr char kContentBlockingURL[] = "https://content-blocking.circa.invalid/";
+constexpr size_t kContentBlockingChunk = 3800;
+constexpr size_t kContentBlockingHostsLimit = 512 * 1024;
+
+bool ContentBlockingProfile(uint64_t token, CefRefPtr<CefRequestContext>* context, const char** path) {
+  if (ACRContentBlockingAvailable() != 1) return false;
+  *path = ExtensionProfilePath(token);
+  const auto found = g_state->profiles.find(token);
+  if (!*path || found == g_state->profiles.end() || !found->second) return false;
+  *context = found->second;
+  return true;
+}
+
+CefCookie ContentBlockingCookie(const std::string& name, const std::string& value) {
+  CefCookie cookie;
+  CefString(&cookie.name) = name;
+  CefString(&cookie.value) = value;
+  CefString(&cookie.path) = "/";
+  cookie.secure = 1;
+  cookie.same_site = CEF_COOKIE_SAME_SITE_STRICT_MODE;
+  // Persistent, so the extension finds the last configuration at its next start.
+  cookie.has_expires = 1;
+  cookie.expires.val = AuthenticationClock() + 365LL * 24 * 3600 * 1000000;
+  return cookie;
+}
+
+class ContentBlockingAckReader final : public CefCookieVisitor {
+ public:
+  ContentBlockingAckReader(orbit_content_blocking_ack_t callback, void* context)
+      : callback_(callback), context_(context) {}
+  ~ContentBlockingAckReader() override {
+    const auto callback = callback_;
+    void* context = context_;
+    const bool found = found_;
+    const std::string value = value_;
+    PostUI([callback, context, found, value] { callback(context, found ? value.c_str() : nullptr); });
+  }
+  bool Visit(const CefCookie& cookie, int, int, bool&) override {
+    if (CefString(&cookie.name).ToString() == "ack") {
+      found_ = true;
+      value_ = CefString(&cookie.value).ToString();
+    }
+    return true;
+  }
+ private:
+  const orbit_content_blocking_ack_t callback_;
+  void* const context_;
+  bool found_ = false;
+  std::string value_;
+  IMPLEMENT_REFCOUNTING(ContentBlockingAckReader);
+};
+}  // namespace
+
+extern "C" const char* ACRContentBlockingExtensionID(void) { return "ohenphhpjnbnlpodjanpadehdopomjnc"; }
+
+extern "C" int32_t ACRContentBlockingAvailable(void) {
+  return NSThread.isMainThread && g_state && g_state->initialized && !g_state->quitting &&
+      !g_state->content_blocking_path.empty() && !g_state->auth_synthetic ? 1 : 0;
+}
+
+extern "C" int32_t ACRContentBlockingConfigure(uint64_t token, int32_t enabled, const char* hosts, uint64_t revision) {
+  CefRefPtr<CefRequestContext> context;
+  const char* path = nullptr;
+  if ((enabled != 0 && enabled != 1) || !hosts || !revision || !ContentBlockingProfile(token, &context, &path)) return 0;
+  const std::string list = hosts;
+  if (list.size() > kContentBlockingHostsLimit) return 0;
+  for (const char c : list)
+    if (!((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '.' || c == '-' || c == '|')) return 0;
+  auto manager = context->GetCookieManager(nullptr);
+  if (!manager) return 0;
+  // Host chunks first, the header last: the extension reacts to the header only.
+  std::vector<std::string> chunks;
+  size_t start = 0;
+  while (enabled && start < list.size()) {
+    size_t end = std::min(list.size(), start + kContentBlockingChunk);
+    if (end < list.size()) {
+      const size_t separator = list.rfind('|', end);
+      if (separator == std::string::npos || separator <= start) return 0;
+      end = separator;
+    }
+    chunks.push_back(list.substr(start, end - start));
+    start = end + 1;
+  }
+  for (size_t index = 0; index < chunks.size(); ++index)
+    if (!manager->SetCookie(kContentBlockingURL, ContentBlockingCookie("h" + std::to_string(index), chunks[index]), nullptr)) return 0;
+  const std::string header = std::to_string(revision) + "." + std::to_string(enabled) + "." + std::to_string(chunks.size());
+  if (!manager->SetCookie(kContentBlockingURL, ContentBlockingCookie("c", header), nullptr)) return 0;
+  // Disabled while off, as a second guard; refused until the extension finished loading, which
+  // the cookie configuration covers.
+  if (g_state->orbit->extension_set_enabled)
+    g_state->orbit->extension_set_enabled(path, ACRContentBlockingExtensionID(), enabled);
+  return 1;
+}
+
+extern "C" int32_t ACRContentBlockingAcknowledgement(uint64_t token, orbit_content_blocking_ack_t callback, void* context) {
+  CefRefPtr<CefRequestContext> request_context;
+  const char* path = nullptr;
+  if (!callback || !ContentBlockingProfile(token, &request_context, &path)) return 0;
+  auto manager = request_context->GetCookieManager(nullptr);
+  return manager && manager->VisitUrlCookies(kContentBlockingURL, true, new ContentBlockingAckReader(callback, context)) ? 1 : 0;
 }

@@ -164,6 +164,8 @@ public protocol BrowserEngine: AnyObject {
     var extensionManagement: (any BrowserExtensionManagement)? { get }
     /// Nil without native document-start registration support. The shell must gate on both.
     var boosts: (any BrowserBoostHost)? { get }
+    /// Built-in ad and tracker blocking of persistent profiles. Nil when unavailable or private.
+    var contentBlocking: (any BrowserContentBlocking)? { get }
 
     /// Built-in credential store. Nil for unsupported or private engines.
     var passwordStore: (any BrowserPasswordStore)? { get }
@@ -219,6 +221,7 @@ public extension BrowserEngine {
     func diagnosticDataRoot(for profileID: ProfileID) -> URL? { nil }
     var passwordStore: (any BrowserPasswordStore)? { nil }
     var boosts: (any BrowserBoostHost)? { nil }
+    var contentBlocking: (any BrowserContentBlocking)? { nil }
     var extensionManagement: (any BrowserExtensionManagement)? { nil }
     var conformanceProbe: (any BrowserEngineConformanceProbe<Surface>)? { nil }
     /// Source-compatible migration only; absence is never treated as successful cleanup.

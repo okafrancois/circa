@@ -505,6 +505,8 @@ def main():
         raise ValueError('Build number must be positive and increase for every published version')
     if args.publish and (args.local_test_root or args.feed_url or not config['public_ed_key']):
         raise ValueError('Publishing requires the production feed and configured public key')
+    # The bundled content blocker rulesets must match their pinned EasyList source and limits.
+    run('python3', '-I', ROOT / 'scripts/content-blocking-rules.py', 'check')
     sparkle = ensure_sparkle(config)
     if not args.skip_build:
         run('python3', ROOT / 'scripts/orbit-chromium-app.py', 'build', '--flavor', config['cef_flavor'])

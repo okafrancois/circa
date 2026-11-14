@@ -1,0 +1,32 @@
+{
+  "manifest_version": 3,
+  "name": "Circa Content Blocking",
+  "description": "Built-in ad and tracker blocking.",
+  "version": "1.2611.1420.43",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAtDMg1I8Ajo4oxUnfUAiGlAl868eHuOK8NCjKMMyops3/Tpb/0xOBT68KLyYrqynsf7bWhaKq8eqeJCF3gbb7xyMLNNjzDLPzDYx63OLvbSlT7US2Hbm4Fke+qH6tdt986cu+lPAyrjlpqK6aIu9wgik2L/xNqcorROoItlm0f9IaX69MK7DflHpBm7LTnnJxhpYQD+2vduGurctH1oaALXcSkzUFLqHU4HNSQl44Hl4tYOygdJ9mjJrJ0PQO6P7Ib+HMA+59iL2bNJqzrPmEj5QJWduWC0HWjuXXyrGuze4rsvNdumDmAxlkcpsBb49d5R0gjY/28+2/JA1KPwt63QIDAQAB",
+  "minimum_chrome_version": "128",
+  "permissions": [
+    "declarativeNetRequest",
+    "cookies"
+  ],
+  "host_permissions": [
+    "https://content-blocking.circa.invalid/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "declarative_net_request": {
+    "rule_resources": [
+      {
+        "id": "easylist",
+        "enabled": false,
+        "path": "rulesets/easylist.json"
+      },
+      {
+        "id": "easyprivacy",
+        "enabled": false,
+        "path": "rulesets/easyprivacy.json"
+      }
+    ]
+  }
+}

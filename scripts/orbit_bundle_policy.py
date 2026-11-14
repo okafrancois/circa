@@ -36,6 +36,10 @@ APP_ICON_FILES = frozenset(f'{icon}.{ext}' for icon in APP_ICON_IDS for ext in (
 BUILD_SUFFIXES = {'.d', '.o', '.a', '.swiftmodule', '.swiftdoc', '.swiftsourceinfo', '.dia', '.dsym'}
 
 
+# Built-in content blocking (native/OrbitChromium/ContentBlocker and native/ThirdParty/easylist).
+CONTENT_BLOCKER_FILES = {('manifest.json',), ('background.js',), ('rulesets', 'easylist.json'),
+                         ('rulesets', 'easyprivacy.json'), ('rulesets', 'LICENSE.md')}
+
 def helper_bundle_identifier(bundle_id, suffix='', synthetic=False):
     """Keep synthetic helper crash reports outside the product's identifier namespace."""
     if synthetic and (bundle_id == 'io.github.okatech.orbit.test.orbit' or bundle_id.startswith('io.github.okatech.orbit.test.orbit.')):
@@ -93,6 +97,12 @@ def validate_bundle_contents(bundle):
             allowed = len(tail) == 1 and tail[0] in {'LICENSE.txt', 'Orbit.icns', 'Circa.sdef', 'OrbitLabNative_BrowserShell.bundle'}
             if tail == ('Circa.sdef',) and (entry.is_symlink() or not entry.is_file()):
                 raise RuntimeError('Invalid scripting dictionary resource: ' + str(relative))
+            if tail[0] == 'ContentBlocker':
+                resource = tail[1:]
+                directory = resource in {(), ('rulesets',)}
+                allowed = directory or resource in CONTENT_BLOCKER_FILES
+                if entry.is_symlink() or (directory and not entry.is_dir()) or (not directory and not entry.is_file()):
+                    raise RuntimeError('Invalid content blocker resource type refused: ' + str(relative))
             if tail[0] in {'en.lproj', 'fr.lproj'}:
                 allowed = len(tail) == 1 or (len(tail) == 2 and tail[1] == 'InfoPlist.strings')
                 if entry.is_symlink() or (len(tail) == 1 and not entry.is_dir()) or (len(tail) == 2 and not entry.is_file()):

@@ -643,6 +643,9 @@ enum OrbitPerformanceProbe {
                     result["historyLibrary"] = await OrbitHistoryLibraryProbe.run(owner, environment: environment, command: command, root: root)
                 } else if name == "navigation-history" {
                     result["navigationHistory"] = await OrbitNavigationHistoryProbe.run(owner, command: command, root: root)
+                } else if name == "content-blocking" {
+                    result["contentBlocking"] = await OrbitContentBlockingProbe.run(owner, environment: environment,
+                        application: application, command: command, root: root)
                 } else if name == "security-pill" {
                     result["securityPill"] = await OrbitSecurityPillProbe.run(owner, command: command, root: root)
                 } else if name == "r14-shell" {

@@ -120,6 +120,13 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
                                identifier: "settings-search-suggestions") { value in
                         try await model.updateProfile(profile) { $0.showSearchSuggestions = value }
                     }
+                    if model.environment.contentBlocking != nil {
+                        rule
+                        liveToggle("Block ads and trackers", value: runtime.document.profile(profile).blocksAdsAndTrackers,
+                                   identifier: "settings-content-blocking") { value in
+                            try await model.updateProfile(profile) { $0.blocksAdsAndTrackers = value }
+                        }
+                    }
                 }
             }
             panel {

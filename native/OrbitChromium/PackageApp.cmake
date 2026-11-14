@@ -35,6 +35,14 @@ file(COPY "${CMAKE_CURRENT_LIST_DIR}/App/Branding/Orbit.icns"
     "${CMAKE_CURRENT_LIST_DIR}/App/Branding/fr.lproj" DESTINATION "${APP}/Contents/Resources")
 file(CHMOD "${APP}/Contents/Resources/Orbit.icns"
     PERMISSIONS OWNER_READ OWNER_WRITE GROUP_READ WORLD_READ)
+# Built-in content blocking: the shell's extension and the separately licensed EasyList rulesets.
+set(CONTENT_BLOCKER "${APP}/Contents/Resources/ContentBlocker")
+file(MAKE_DIRECTORY "${CONTENT_BLOCKER}/rulesets")
+file(COPY "${CMAKE_CURRENT_LIST_DIR}/ContentBlocker/manifest.json"
+    "${CMAKE_CURRENT_LIST_DIR}/ContentBlocker/background.js" DESTINATION "${CONTENT_BLOCKER}")
+file(COPY "${CMAKE_CURRENT_LIST_DIR}/../ThirdParty/easylist/easylist.json"
+    "${CMAKE_CURRENT_LIST_DIR}/../ThirdParty/easylist/easyprivacy.json"
+    "${CMAKE_CURRENT_LIST_DIR}/../ThirdParty/easylist/LICENSE.md" DESTINATION "${CONTENT_BLOCKER}/rulesets")
 set(FRAMEWORKS "${APP}/Contents/Frameworks")
 set(FRAMEWORK "${FRAMEWORKS}/Chromium Embedded Framework.framework")
 foreach(PATH "${APP}" "${APP}/Contents" "${FRAMEWORKS}" "${FRAMEWORK}"

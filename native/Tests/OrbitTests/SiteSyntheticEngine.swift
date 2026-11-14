@@ -26,6 +26,7 @@ final class SiteSyntheticEngine: BrowserEngine, BrowserSitePermissionAvailabilit
     var diagnosticRoot: URL?
     func diagnosticDataRoot(for profileID: ProfileID) -> URL? { diagnosticRoot }
     var extensions: (any BrowserExtensionHost)?
+    var contentBlocking: (any BrowserContentBlocking)?
     var conformanceProbe: (any BrowserEngineConformanceProbe<SiteSyntheticSurface>)? { SiteSyntheticConformanceProbe() }
     private(set) var profiles: [ProfileID: BrowserEngineProfile] = [:]
     private(set) var surfaces: [SiteSyntheticSurface] = []

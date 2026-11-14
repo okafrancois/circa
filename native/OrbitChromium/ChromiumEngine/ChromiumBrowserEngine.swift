@@ -33,6 +33,12 @@ public final class ChromiumBrowserEngine: BrowserPrivateEngine {
         guard !isShutDown, persistence == .persistent, ACRBoostsAvailable() == 1 else { return nil }
         return boostHost
     }
+    private lazy var contentBlockingHost = ChromiumContentBlocking(engine: self)
+    public var contentBlocking: (any BrowserContentBlocking)? {
+        guard !isShutDown, persistence == .persistent, surfaceMode == .hosted,
+              ACRContentBlockingAvailable() == 1 else { return nil }
+        return contentBlockingHost
+    }
     /// Claimed only for implemented paths. `chromeWebStoreExtensions` is absent;
     /// `liveSurfaceTransfer` only in `.hosted` mode on side API v2 (`move_tab`, CHROMIUM-APP-R2),
     /// never on the stock SDK.
