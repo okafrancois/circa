@@ -174,7 +174,7 @@ public struct BrowserMediaState: Sendable, Equatable {
 /// suspended policy decisions with their fallback); the engine may finish closing the document
 /// later and then reports `isTeardownComplete`; `BrowserEngine.shutdown()` waits for that.
 @MainActor
-public protocol BrowserEngineSurface: BrowserFindSurface {
+public protocol BrowserEngineSurface: BrowserFindSurface, BrowserMediaSessionControlling {
     var pagePerformance: (any BrowserPagePerformance)? { get }
     var nativePageServices: (any BrowserNativePageServices)? { get }
     var profileID: ProfileID { get }
@@ -306,6 +306,15 @@ public extension BrowserEngineSurface {
 
     var pagePerformance: (any BrowserPagePerformance)? { nil }
     var nativePageServices: (any BrowserNativePageServices)? { nil }
+    /// Media session control routes through native page services; without them it is unsupported.
+    func mediaSessionState() -> BrowserMediaSessionState? { nativePageServices?.mediaState() }
+    func mediaSessionChanges() -> AsyncStream<BrowserMediaSessionState> {
+        nativePageServices?.mediaChanges() ?? AsyncStream { $0.finish() }
+    }
+    func performMediaSessionAction(_ action: BrowserMediaAction, seconds: Double) throws -> Bool {
+        guard let services = nativePageServices else { throw BrowserEngineError.unsupportedOperation }
+        return services.mediaAction(action, seconds: seconds)
+    }
     func activationPaintBarrier() -> Task<Bool, Never>? { nil }
     var passwordPrompts: (any BrowserPasswordPromptSource)? { nil }
     func setPageTintObservationEnabled(_ enabled: Bool) {}

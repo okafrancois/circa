@@ -57,6 +57,7 @@ extension BrowserWindowController: BrowserEngineSurfaceDelegate {
         if membership == nil { passwordPrompt.surfaceDidLeave(surface) }
         if let membership { announceEngineWindow(membership.windowID) }
         surface.placement = membership.map { .tab(windowID: $0.windowID, occurrenceID: $0.occurrenceID) } ?? .detached
+        reconcileBackgroundMedia()
     }
 
     /// Tells the engine which NSWindow shows the surfaces of `windowID` (idempotent).
