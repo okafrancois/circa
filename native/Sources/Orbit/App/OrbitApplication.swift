@@ -217,6 +217,7 @@ final class OrbitApplication: NSObject, NSApplicationDelegate {
     static func main() {
         BrowserPerformance.mark(.main)
         if let result = BrowserSyncLaunchVerification.run(arguments: CommandLine.arguments) { exit(result) }
+        if let result = PasskeyLaunchVerification.run(arguments: CommandLine.arguments) { exit(result) }
         OrbitLauncher.run()
     }
 

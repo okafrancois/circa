@@ -5,15 +5,8 @@ import Security
 public enum BrowserSyncEntitlement {
     /// Inspect this process's verified signature, never a plist assertion or a build flag.
     public static func isAvailable() -> Bool {
-        guard Bundle.main.object(forInfoDictionaryKey: "OrbitSyntheticBundle") as? Bool != true else { return false }
-        var code: SecCode?
-        guard SecCodeCopySelf([], &code) == errSecSuccess, let code,
-              SecCodeCheckValidity(code, [], nil) == errSecSuccess else { return false }
-        var staticCode: SecStaticCode?
-        guard SecCodeCopyStaticCode(code, [], &staticCode) == errSecSuccess, let staticCode else { return false }
-        var info: CFDictionary?
-        guard SecCodeCopySigningInformation(staticCode, SecCSFlags(rawValue: kSecCSSigningInformation), &info) == errSecSuccess,
-              let values = (info as? [String: Any])?[kSecCodeInfoEntitlementsDict as String] as? [String: Any] else { return false }
+        guard Bundle.main.object(forInfoDictionaryKey: "OrbitSyntheticBundle") as? Bool != true,
+              let values = BrowserSignedEntitlements.current() else { return false }
         return matches(values)
     }
 
