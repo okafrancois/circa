@@ -67,6 +67,11 @@
   with the new product as `--source-app`. This re-signs a temporary copy of the previous
   product as a confined mock fixture and checks installation, relaunch and session restoration
   across the engine change; it never launches the supplied production bundle directly.
+  Also run `--cases auth-transition --previous-app <previous-app>`: two synthetic profiles sign
+  in to a loopback fixture with the previous engine, and real Chromium requests must stay
+  authenticated (persistent and HttpOnly cookies, isolated profiles) after a restart, the update,
+  a new login, another restart and the next update. Restoring tabs alone does not prove that
+  existing sign-ins survive an engine change.
   A rollback uses a newer build number; preserve user data and never downgrade the schema blindly.
 
 ## GitHub-hosted macOS runners

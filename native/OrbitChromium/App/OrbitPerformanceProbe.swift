@@ -247,6 +247,8 @@ enum OrbitPerformanceProbe {
                     case "seed":
                         owner.session.openTab(url: URL(string: "about:blank#update-session")!)
                         await owner.session.waitForPendingCommands()
+                    case "auth":
+                        result["auth"] = await OrbitAuthCookieProbe.run(environment: environment, command: command)
                     default: break
                     }
                 } else if name == "daily-qa9" {

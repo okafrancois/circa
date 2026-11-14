@@ -233,6 +233,17 @@ void ArgumentsAreAllowListed() {
   }
 }
 
+void OwnedUserDataDirIsBridgeOnly() {
+  const std::string name = orbit_bridge::kOwnedUserDataDirSwitch;
+  for (const std::string& argument : {"--" + name + "=/private/tmp/copied-root", "-" + name + "=/private/tmp/x", "--" + name}) {
+    for (int product : {0, 1}) {
+      const auto filtered = orbit_bridge::FilterBrowserArguments({argument}, product, ExtensionOk);
+      Check(filtered.kept.empty() && filtered.dropped == 1 && !filtered.refused,
+            "the owned user data directory never comes from process or shell arguments");
+    }
+  }
+}
+
 void ExtensionUpdateSmokeIsConfined() {
   for (const char* port : {"1024", "65535", "32145"}) {
     const std::string flag = "--orbit-test-extension-updates=" + std::string(port);
@@ -336,6 +347,7 @@ int main() {
   EssentialSurfacePolicies();
   ArgumentsAreAllowListed();
   ExtensionUpdateSmokeIsConfined();
+  OwnedUserDataDirIsBridgeOnly();
   AnchoredRootRemovesOnlyItsOwnChildren();
   if (failures) return EXIT_FAILURE;
   std::printf("BridgePolicyTests: PASS\n");
