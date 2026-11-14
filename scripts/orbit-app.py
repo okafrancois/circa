@@ -243,7 +243,8 @@ def clean_stale(repo):
     return {'disabled': disabled, 'runningPreserved': running, 'warnings': warnings}
 
 
-def assemble(source_app, executable, framework, helpers_dir, output, bundle_id, version, synthetic=False, synthetic_root=None):
+def assemble(source_app, executable, framework, helpers_dir, output, bundle_id, version, synthetic=False, synthetic_root=None,
+             product_network=False):
     if bundle_id not in PRODUCT_IDS and not re.fullmatch(r'lab\.orbit\.orbit(?:\.[a-z0-9-]+)+', bundle_id):
         raise RuntimeError('Bundle identifier must be the product ID or an explicit laboratory test ID')
     if synthetic and bundle_id in PRODUCT_IDS:
@@ -252,6 +253,8 @@ def assemble(source_app, executable, framework, helpers_dir, output, bundle_id, 
         raise RuntimeError('Test bundle identifiers require --synthetic')
     if not synthetic and synthetic_root is not None:
         raise RuntimeError('Synthetic root requires --synthetic')
+    if not synthetic and product_network:
+        raise RuntimeError('Product network for a test bundle requires --synthetic')
     if not synthetic and output.suffix == '.app':
         raise RuntimeError('Product build outputs must use a non-.app staging name')
     if output.exists() or output.is_symlink():
@@ -262,7 +265,7 @@ def assemble(source_app, executable, framework, helpers_dir, output, bundle_id, 
     if source_app:
         if not synthetic and (source_app / 'Contents/Info.plist').is_file() and 'synthetic' in read_info(source_app).get('CFBundleIdentifier', ''):
             raise RuntimeError('A laboratory app may only be packaged with --synthetic')
-        if not synthetic and (source_app / 'Contents/Info.plist').is_file() and any(read_info(source_app).get(key) for key in ('OrbitUseMockKeychain', 'OrbitSyntheticBundle')):
+        if not synthetic and (source_app / 'Contents/Info.plist').is_file() and any(read_info(source_app).get(key) for key in ('OrbitUseMockKeychain', 'OrbitSyntheticBundle', 'OrbitSyntheticProductNetwork')):
             raise RuntimeError('A laboratory app may only be packaged with --synthetic')
         if not synthetic and not (source_app / 'Contents/Resources/OrbitLabNative_BrowserShell.bundle').is_dir():
             raise RuntimeError('BrowserShell localization resource bundle missing')
@@ -306,7 +309,7 @@ def assemble(source_app, executable, framework, helpers_dir, output, bundle_id, 
         localized.mkdir(exist_ok=True)
         (localized / 'InfoPlist.strings').write_bytes(plistlib.dumps({
             'CFBundleName': displayed_name, 'CFBundleDisplayName': displayed_name}))
-    for key in ('OrbitDataRoot', 'OrbitUseMockKeychain', 'OrbitSyntheticBundle'):
+    for key in ('OrbitDataRoot', 'OrbitUseMockKeychain', 'OrbitSyntheticBundle', 'OrbitSyntheticProductNetwork'):
         metadata.pop(key, None)
     if synthetic:
         # Test bundles never claim web URLs or documents: they would otherwise pile up in
@@ -314,6 +317,9 @@ def assemble(source_app, executable, framework, helpers_dir, output, bundle_id, 
         for key in ('CFBundleURLTypes', 'CFBundleDocumentTypes'):
             metadata.pop(key, None)
         metadata.update(OrbitDataRoot=str(confined_root), OrbitUseMockKeychain=True, OrbitSyntheticBundle=True)
+        if product_network:
+            # Component updater and extension updates on (Widevine CDM checks); still mock Keychain.
+            metadata['OrbitSyntheticProductNetwork'] = True
         metadata['LSUIElement'] = True  # Hidden guard used by X1-R2; not part of the real product.
     frameworks = output / 'Contents/Frameworks'
     frameworks.mkdir(parents=True, exist_ok=True)
@@ -538,6 +544,8 @@ def main():
     build.add_argument('--bundle-id')
     build.add_argument('--synthetic-root', type=Path, help='Absolute synthetic root baked into the test plist')
     build.add_argument('--synthetic', action='store_true', help='Hidden test agent; requires a test bundle id')
+    build.add_argument('--product-network', action='store_true',
+                       help='With --synthetic: run Chromium\'s component updater (Widevine CDM) in the confined root')
     installer = sub.add_parser('install')
     installer.add_argument('--app', type=Path, required=True)
     installer.add_argument('--destination', type=Path, default=Path.home() / 'Applications/Circa.app')
@@ -567,7 +575,7 @@ def main():
         flavor = json.loads((ROOT / 'release/config.json').read_text())['cef_flavor']
         args.source_app = ROOT / 'native/OrbitChromium/build' / ('app-' + flavor) / 'product/Orbit.app'
     signatures = assemble(args.source_app, args.executable, args.framework, args.helpers_dir,
-                          output, args.bundle_id, version, args.synthetic, args.synthetic_root)
+                          output, args.bundle_id, version, args.synthetic, args.synthetic_root, args.product_network)
     report = {'bundle': str(output), 'version': version, 'signatures': signatures,
               'verification': 'codesign --verify --deep --strict passed', 'hardenedRuntime': False}
     (output.parent / 'package.json').write_text(json.dumps(report, indent=2) + '\n')

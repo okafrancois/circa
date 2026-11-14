@@ -115,6 +115,17 @@ void NetworkSwitchesPerPolicy() {
   Check(!HasSwitch(NetworkPolicy::kProduct, "disable-component-update"), "product: component updater (CRLSet, Widevine)");
   Check(!HasSwitch(NetworkPolicy::kProduct, "disable-background-networking"), "product: extension updates");
   Check(!DisablesFeature(NetworkPolicy::kProduct, "NetworkTimeServiceQuerying"), "product: Chrome's network time");
+  Check(!HasSwitch(NetworkPolicy::kProduct, "component-updater"), "product: default component update schedule");
+  // A synthetic test bundle that opts into the product policy checks components quickly.
+  const auto synthetic = orbit_bridge::BrowserSwitches(NetworkPolicy::kProduct, true);
+  Check(std::any_of(synthetic.begin(), synthetic.end(), [](const auto& item) {
+          return item.name == "component-updater" && item.value == "fast-update"; }),
+        "synthetic product network: fast component updates");
+  Check(std::none_of(synthetic.begin(), synthetic.end(), [](const auto& item) {
+          return item.name == "disable-component-update"; }), "synthetic product network: component updater on");
+  const auto hermetic = orbit_bridge::BrowserSwitches(NetworkPolicy::kHermetic, true);
+  Check(std::none_of(hermetic.begin(), hermetic.end(), [](const auto& item) { return item.name == "component-updater"; }),
+        "hermetic synthetic runs never schedule component updates");
   for (const auto policy : {NetworkPolicy::kHermetic, NetworkPolicy::kProduct}) {
     Check(HasSwitch(policy, "disable-sync"), "sync stays off in every mode");
     Check(HasSwitch(policy, "no-first-run") && HasSwitch(policy, "no-default-browser-check"), "no first-run prompt");

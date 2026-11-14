@@ -69,9 +69,15 @@ struct OrbitProductConfiguration: Equatable {
     /// CEF `root_cache_path`.
     var engineRoot: URL { dataRoot.appendingPathComponent("Chromium", isDirectory: true) }
     var usesMockKeychain: Bool { secureStorage == .mockKeychain }
+    /// Opt-in of a packaged synthetic test bundle (`OrbitSyntheticProductNetwork` in its
+    /// Info.plist, baked by `orbit-app.py build --synthetic --product-network`): the run keeps its
+    /// mock Keychain and confined root but turns on Chromium's product network services, so the
+    /// component updater (Widevine CDM, CRLSet) can be exercised without personal data.
+    private(set) var syntheticProductNetwork = false
     /// Chromium's product network services (component updater, extension updates) for the signed
-    /// daily build only; every synthetic run stays hermetic (CHROMIUM-APP-R2, PM decision).
-    var usesProductNetwork: Bool { !usesMockKeychain }
+    /// daily build; synthetic runs stay hermetic (CHROMIUM-APP-R2, PM decision) unless their test
+    /// bundle opts in with `syntheticProductNetwork`.
+    var usesProductNetwork: Bool { !usesMockKeychain || syntheticProductNetwork }
 
     static func personalDataRoot(applicationSupport: URL) -> URL {
         applicationSupport.appendingPathComponent(ProductIdentity.dataDirectoryName, isDirectory: true)
@@ -103,6 +109,7 @@ struct OrbitProductConfiguration: Equatable {
 
     static let dataRootInfoKey = "OrbitDataRoot"
     static let mockKeychainInfoKey = "OrbitUseMockKeychain"
+    static let syntheticProductNetworkInfoKey = "OrbitSyntheticProductNetwork"
 
     /// Arguments first, then the bundle's Info.plist settings expressed as the same options.
     init(arguments: [String], infoDictionary: [String: Any], applicationSupport: URL, build: OrbitBuildIdentity) throws {
@@ -119,7 +126,8 @@ struct OrbitProductConfiguration: Equatable {
                 throw Failure.mockKeychainOnPersonalRoot
             }
         } else if isProduct &&
-                    (infoDictionary[Self.dataRootInfoKey] != nil || infoDictionary[Self.mockKeychainInfoKey] != nil || infoDictionary["OrbitSyntheticBundle"] != nil) {
+                    (infoDictionary[Self.dataRootInfoKey] != nil || infoDictionary[Self.mockKeychainInfoKey] != nil || infoDictionary["OrbitSyntheticBundle"] != nil
+                     || infoDictionary[Self.syntheticProductNetworkInfoKey] != nil) {
             throw Failure.productBundleHasSyntheticSettings
         }
         // Baked test defaults remain safe when a lab runner supplies its own synthetic run root.
@@ -135,6 +143,9 @@ struct OrbitProductConfiguration: Equatable {
             effective.append(Self.mockKeychainOption)
         }
         try self.init(arguments: effective, applicationSupport: applicationSupport, build: build)
+        // Only a baked synthetic test bundle may opt in; the run is still mock Keychain and confined.
+        syntheticProductNetwork = bakedTest && usesMockKeychain
+            && infoDictionary[Self.syntheticProductNetworkInfoKey] as? Bool == true
     }
 
     init(arguments: [String], applicationSupport: URL, build: OrbitBuildIdentity) throws {

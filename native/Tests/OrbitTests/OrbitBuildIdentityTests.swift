@@ -128,6 +128,31 @@ struct OrbitBuildIdentityTests {
         #expect(!baked.usesProductNetwork)
     }
 
+    @Test("A baked synthetic test bundle may opt into the component updater; nothing else can")
+    func syntheticProductNetworkOptIn() throws {
+        let bare = OrbitBuildIdentity(bundleIdentifier: nil, signature: nil)
+        let baked: [String: Any] = [
+            "CFBundleIdentifier": "io.github.okatech.orbit.test.orbit.widevine", "OrbitDataRoot": "/private/tmp/orbit-net/widevine",
+            "OrbitUseMockKeychain": true, "OrbitSyntheticBundle": true, "OrbitSyntheticProductNetwork": true]
+        let optedIn = try OrbitProductConfiguration(arguments: ["Orbit"], infoDictionary: baked, applicationSupport: support, build: bare)
+        #expect(optedIn.usesProductNetwork && optedIn.usesMockKeychain && optedIn.syntheticGuard != nil)
+        // Without the baked synthetic marker the key is ignored.
+        var unmarked = baked
+        unmarked["OrbitSyntheticBundle"] = nil
+        #expect(!(try OrbitProductConfiguration(arguments: ["Orbit"], infoDictionary: unmarked, applicationSupport: support,
+                                                build: bare)).usesProductNetwork)
+        var off = baked
+        off["OrbitSyntheticProductNetwork"] = false
+        #expect(!(try OrbitProductConfiguration(arguments: ["Orbit"], infoDictionary: off, applicationSupport: support,
+                                                build: bare)).usesProductNetwork)
+        // A product bundle refuses the test key.
+        #expect(throws: OrbitProductConfiguration.Failure.productBundleHasSyntheticSettings) {
+            try OrbitProductConfiguration(arguments: ["Orbit"], infoDictionary: [
+                "CFBundleIdentifier": "io.github.okatech.orbit", "OrbitSyntheticProductNetwork": true],
+                applicationSupport: support, build: .stableProductForTests)
+        }
+    }
+
     @Test("Synthetic runs do not depend on the bundle; the test process itself is not the product")
     func syntheticRunsAndRealReader() throws {
         let bare = OrbitBuildIdentity(bundleIdentifier: nil, signature: nil)
