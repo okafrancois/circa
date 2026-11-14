@@ -151,7 +151,8 @@ public enum BrowserEngineMigrationBackup {
             try encoder.encode(manifest).write(to: file, options: .atomic)
             guard chmod(file.path, 0o600) == 0 else { throw Failure.unsafePath }
             try FileManager.default.moveItem(at: partial, to: directory.appendingPathComponent(id, isDirectory: true))
-            prune(directory, now: now)
+            // A restore safety copy must not prune the verified source before it is consumed.
+            if reason == "build-change" { prune(directory, now: now) }
             return manifest
         } catch {
             try? FileManager.default.removeItem(at: partial)
@@ -236,6 +237,7 @@ public enum BrowserEngineMigrationBackup {
                 throw Failure.unsafePath
             }
         }
+        prune(directory, now: now)
         return manifest
     }
 }

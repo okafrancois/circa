@@ -148,4 +148,21 @@ struct BrowserEngineMigrationBackupTests {
         #expect(try String(contentsOf: outside.appendingPathComponent("Cookies"), encoding: .utf8) == "untouched")
     }
 
+    @Test("Restore consumes an old verified source before retention removes it")
+    func restoresBeforePruning() throws {
+        defer { try? FileManager.default.removeItem(at: root) }
+        try seedProfiles()
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        let saved = try #require(try BrowserEngineMigrationBackup.prepareLaunch(dataRoot: root, engineRoot: engine,
+            build: "old", now: now.addingTimeInterval(-31 * 24 * 3600)))
+        try write("profile-a/Network/Cookies", "current")
+        try BrowserEngineMigrationBackup.restore(id: saved.id, dataRoot: root, engineRoot: engine, now: now)
+        #expect(read("profile-a/Network/Cookies") == "cookies-a-1")
+        let remaining = BrowserEngineMigrationBackup.snapshots(dataRoot: root)
+        #expect(remaining.count == 1 && remaining.first?.reason == "before-restore")
+        let safety = try #require(remaining.first)
+        let file = root.appendingPathComponent("EngineMigrationBackups/\(safety.id)/Chromium/profile-a/Network/Cookies")
+        #expect(try String(contentsOf: file, encoding: .utf8) == "current")
+    }
+
 }
