@@ -308,13 +308,6 @@ enum SettingsPopupLabels {
         case .never: uiText("Never")
         }
     }
-    static func motion(_ value: BrowserReducedMotionSetting) -> String {
-        switch value {
-        case .system: uiText("Follow System")
-        case .reduce: uiText("Reduce Motion")
-        case .full: uiText("Full Motion")
-        }
-    }
 }
 
 /// Descriptions stay with their setting, so the control is centred on the complete label.

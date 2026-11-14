@@ -307,10 +307,10 @@ final class BrowserSettingsWindowController<Engine: BrowserEngine>: NSWindowCont
 
 enum BrowserSettingsSection: String, CaseIterable, Identifiable {
     case general, profiles, spaces, shortcuts, links, ai, privacy, advanced, appearance, about
-    // Auxiliary panes retain their deep links outside the seven toolbar categories.
-    // The order is also the ⌘1…⌘7 order: AI is ⌘5, Advanced ⌘6, About ⌘7.
-    static let allCases: [Self] = [.general, .profiles, .shortcuts, .links, .ai, .advanced, .about]
-    static let navigationSections: [Self] = [.general, .profiles, .spaces, .shortcuts, .links, .ai, .privacy, .advanced, .appearance, .about]
+    // Auxiliary panes (Spaces, Privacy) retain their deep links outside the eight toolbar categories.
+    // The order is also the ⌘1…⌘8 order: Appearance is ⌘2, AI ⌘6, Advanced ⌘7, About ⌘8.
+    static let allCases: [Self] = [.general, .appearance, .profiles, .shortcuts, .links, .ai, .advanced, .about]
+    static let navigationSections: [Self] = [.general, .appearance, .profiles, .spaces, .shortcuts, .links, .ai, .privacy, .advanced, .about]
     var id: String { rawValue }
     var toolbarIdentifier: NSToolbarItem.Identifier { .init("settings-category-" + rawValue) }
     var title: String {
@@ -411,14 +411,6 @@ struct BrowserSettingsView<Engine: BrowserEngine>: View {
                     BrowserOrbitSettingsPanes(model: model, runtime: runtime) { profile in
                         deletionProfileName = ""
                         deletingProfile = profile
-                    }.disabled(!model.acceptsActions)
-                } else if model.settingsSection == .appearance {
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: 12) {
-                            HStack(spacing: 8) { SettingsPaneIcon(section: .appearance).frame(width: 22, height: 22); Text(uiText("Appearance")).font(Font(BrandTextStyle.title.font(size: 21))).kerning(-0.945) }
-                            appearance
-                            BrowserSettingsIconGrid()
-                        }.padding(.horizontal, 20).padding(.top, 18).padding(.bottom, 16)
                     }.disabled(!model.acceptsActions)
                 } else if model.settingsSection == .about {
                     ScrollView { OrbitSecondaryAbout().padding(24) }
@@ -701,46 +693,6 @@ struct BrowserSettingsView<Engine: BrowserEngine>: View {
     private var permissionOrigins: [BrowserSiteOrigin] {
         model.permissionRows.reduce(into: []) { origins, row in
             if !origins.contains(row.origin) { origins.append(row.origin) }
-        }
-    }
-
-    @ViewBuilder private var appearance: some View {
-        if let profile = model.selectedProfileID {
-            SettingsGroupLabel(title: uiText("Space appearance"))
-            SettingsCard {
-                Group {
-                    SettingsDetailRow(title: uiText("Profile")) {
-                        SettingsPopupPicker(uiText("Profile"), selectedTitle: model.catalog.profiles.first(where: { $0.id == profile })?.name ?? "", selection: Binding(get: { profile }, set: { model.selectProfile($0) })) {
-                            ForEach(model.catalog.profiles, id: \.id) { Text($0.name).tag($0.id) }
-                        }.labelsHidden().frame(width: 160).accessibilityIdentifier("settings-appearance-profile")
-                    }
-                    SettingsRule()
-                }
-                if let id = model.appearanceSpaceID, let space = model.catalog.spaces.first(where: { $0.id == id && $0.profileID == profile }) {
-                    SettingsDetailRow(title: uiText("Space")) {
-                        SettingsPopupPicker(uiText("Space"), selectedTitle: space.name, selection: Binding(get: { id }, set: { model.selectAppearanceSpace($0) })) {
-                            ForEach(model.catalog.spaces.filter { $0.profileID == profile }, id: \.id) { Text($0.name).tag($0.id) }
-                        }.labelsHidden().frame(width: 160).accessibilityIdentifier("settings-appearance-space")
-                    }
-                    SettingsRule()
-                    SettingsDetailRow(title: uiText("Theme Color")) { BrowserSettingsGradientPicker(model: model, space: space) }
-                    Text(uiText("Applies to this Space in every window. Other Spaces keep their own themes."))
-                        .font(Font(BrandFonts.ui(10.5))).foregroundStyle(.secondary).padding(13)
-                        .accessibilityIdentifier("settings-appearance-scope")
-                } else {
-                    Text(uiText("Choose a profile with an available Space.")).padding(13)
-                }
-                SettingsRule()
-                SettingsDetailRow(title: uiText("Animations")) {
-                    SettingsPopupPicker(uiText("Animations"), selectedTitle: SettingsPopupLabels.motion(runtime.document.reducedMotion), selection: Binding(get: { runtime.document.reducedMotion }, set: { value in
-                        model.perform { try await model.setReducedMotion(value) }
-                    })) {
-                        Text(uiText("Follow System")).tag(BrowserReducedMotionSetting.system)
-                        Text(uiText("Reduce Motion")).tag(BrowserReducedMotionSetting.reduce)
-                        Text(uiText("Full Motion")).tag(BrowserReducedMotionSetting.full)
-                    }.labelsHidden().frame(width: 160)
-                }
-            }.disabled(runtime.isUnavailable)
         }
     }
 

@@ -6,9 +6,10 @@ import BrowserEngineConformance
 @testable import Orbit
 
 struct SettingsPresentationTests {
-    @Test("Ten sidebar categories retain the existing seven numbered shortcuts")
+    @Test("Ten sidebar categories expose eight numbered shortcuts with Appearance after General")
     func categories() {
-        #expect(BrowserSettingsSection.allCases == [.general, .profiles, .shortcuts, .links, .ai, .advanced, .about])
+        #expect(BrowserSettingsSection.allCases == [.general, .appearance, .profiles, .shortcuts, .links, .ai, .advanced, .about])
+        #expect(BrowserSettingsSection.navigationSections.prefix(2) == [.general, .appearance])
         #expect(BrowserSettingsSection.navigationSections.contains(.spaces))
         #expect(BrowserSettingsSection.navigationSections.contains(.privacy))
         #expect(BrowserSettingsSection(rawValue: "icon") == nil)
