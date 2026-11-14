@@ -131,8 +131,22 @@ def case(work, name, evidence):
             run('defaults', 'write', TEST_ID, 'SUAutomaticallyUpdate', '-bool', 'false')
         with log.open('w') as handle:
             initial = launch(handle)
-            command('seed')
-            wait(lambda s: 'about:blank#update-session' in s.get('update', {}).get('tabs', []), 'seed')
+            seed_nonce = command('seed')
+            seed_sent = time.monotonic()
+
+            def seeded(value):
+                nonlocal seed_nonce, seed_sent
+                if 'about:blank#update-session' in value.get('update', {}).get('tabs', []):
+                    return True
+                # Startup can publish state before CGWindowList contains the owned window.
+                # Retry only an acknowledged command after a fresh state publication;
+                # the in-app probe still checks window ownership before every action.
+                if value.get('commandNonce') == seed_nonce and time.monotonic() - seed_sent > 1:
+                    seed_nonce = command('seed')
+                    seed_sent = time.monotonic()
+                return False
+
+            wait(seeded, 'seed')
             if name == 'manual':
                 shutil.copyfile(valid, work / 'feed/appcast.xml')
                 time.sleep(.5)  # Let Sparkle finish scheduling after the previous cycle.
