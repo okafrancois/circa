@@ -223,17 +223,20 @@ def case(work, name, evidence):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--source-app', type=Path, default=ROOT / 'native/OrbitChromium/build/app-orbit-engine-extensions-r13/product/Orbit.app')
+    parser.add_argument('--previous-app', type=Path, help='Previous engine product for engine-transition only; never launched directly')
     parser.add_argument('--evidence', type=Path, default=Path('/tmp/update-ux'))
     parser.add_argument('--case')
     names = ['background', 'manual', 'quit', 'off', 'toggle-off', 'broken',
              'signed-transition', *SIGNED_NEXT_CASES]
-    parser.add_argument('--cases', nargs='+', default=names, choices=names)
+    parser.add_argument('--cases', nargs='+', default=names, choices=names + ['engine-transition'])
     parser.add_argument('--work', type=Path)
     args = parser.parse_args()
     args.evidence.mkdir(parents=True, exist_ok=True)
     if args.case:
         case(args.work, args.case, args.evidence)
         return
+    if 'engine-transition' in args.cases and args.previous_app is None:
+        parser.error('engine-transition requires --previous-app')
     if (args.evidence / 'STOP-CRASH').exists():
         raise RuntimeError('Previous crash: GUI qualification stopped')
     with tempfile.TemporaryDirectory(prefix='update-ux-') as temp:
@@ -283,6 +286,24 @@ try key.publicKey.rawRepresentation.base64EncodedData().write(to: URL(fileURLWit
             legacy_info.pop('SURequireSignedFeed')
             (legacy / 'Contents/Info.plist').write_bytes(plistlib.dumps(legacy_info))
             sign_chromium_bundle(legacy)
+            previous = None
+            if 'engine-transition' in args.cases:
+                # Strip release signing artifacts only from a disposable copy. The fixture
+                # is re-signed for its confined mock identity by the normal packager.
+                previous_source = work / 'previous-source/Orbit.app'
+                previous_source.parent.mkdir()
+                copy(args.previous_app, previous_source)
+                for name in ('CodeResources', 'embedded.provisionprofile'):
+                    (previous_source / 'Contents' / name).unlink(missing_ok=True)
+                shutil.rmtree(previous_source / 'Contents/_CodeSignature', ignore_errors=True)
+                previous = work / 'previous/Orbit.app'
+                run(sys.executable, ROOT / 'scripts/orbit-app.py', 'build', '--synthetic',
+                    '--source-app', previous_source, '--output', previous, '--synthetic-root', root,
+                    '--bundle-id', 'lab.orbit.orbit.update-ux', stdout=subprocess.DEVNULL)
+                previous_info = plistlib.loads((previous / 'Contents/Info.plist').read_bytes())
+                previous_info.update(info)
+                (previous / 'Contents/Info.plist').write_bytes(plistlib.dumps(previous_info))
+                sign_chromium_bundle(previous)
             sparkle = ROOT / '.tools/sparkle-2.10.1/bin/sign_update'
             builds = {}
             for version in ('2', '3'):
@@ -326,7 +347,8 @@ try key.publicKey.rawRepresentation.base64EncodedData().write(to: URL(fileURLWit
                     shutil.rmtree(root)
                 (work / 'requests.log').unlink(missing_ok=True)
                 packaging.prepare_synthetic_root(root, TEST_ID)
-                source = legacy if name == 'signed-transition' else builds['2'] if name in SIGNED_NEXT_CASES else base
+                source = (previous if name == 'engine-transition' else legacy if name == 'signed-transition'
+                          else builds['2'] if name in SIGNED_NEXT_CASES else base)
                 copy(source, installed)
                 content = (work / ('valid-%s.xml' % case_versions(name)[1])).read_bytes()
                 if name == 'manual':
