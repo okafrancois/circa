@@ -30,7 +30,7 @@ jobs:
       github.repository_owner == 'okafrancois' && github.actor == 'okafrancois' &&
       (github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v'))
     runs-on: ${{ (vars.CIRCA_HOSTED_RELEASES == 'true' || (github.event_name == 'workflow_dispatch' && inputs.hosted)) && 'xcode-27' || fromJSON('["self-hosted", "macOS", "ARM64", "orbit-release"]') }}
-    timeout-minutes: 60
+    timeout-minutes: 90
     steps:
       - name: Require a browser version tag
         env:
@@ -73,7 +73,9 @@ jobs:
         run: |
           if [ ! -e .tools ]; then ln -s "${ORBIT_TOOLS_DIR:?Set ORBIT_TOOLS_DIR in the runner .env}" .tools; fi
           test -d .tools/chromium-fork/distrib
-      - name: Build, sign, notarize when configured, and publish
+      - name: Build, qualify update preservation, sign, notarize when configured, and publish
+        # release.py first updates the current public release to this build in a synthetic root
+        # (sign-ins and installed extensions); any failure stops before signing or publishing.
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
@@ -82,6 +84,14 @@ jobs:
           args=(--config "${CIRCA_RELEASE_CONFIG:-release/config.json}" --tag "$RELEASE_TAG")
           if test "$PUBLISH" = true; then args+=(--publish); fi
           python3 scripts/release.py "${args[@]}"
+      - name: Retain preservation evidence
+        if: always() && runner.environment == 'github-hosted'
+        uses: actions/upload-artifact@v7
+        with:
+          name: Circa-preservation-${{ github.run_id }}
+          path: dist/release/preservation-*/*.json
+          if-no-files-found: ignore
+          retention-days: 14
       - name: Retain verification results
         if: runner.environment == 'github-hosted' && github.event_name == 'workflow_dispatch' && !inputs.publish
         uses: actions/upload-artifact@v7
@@ -89,6 +99,7 @@ jobs:
           name: Circa-signed-ci-verification
           path: |
             dist/release/*.json
+            dist/release/preservation-*/*.json
             dist/release/archives/*.zip
             dist/release/*.dmg
           retention-days: 3

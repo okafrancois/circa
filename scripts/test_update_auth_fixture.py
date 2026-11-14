@@ -1,12 +1,15 @@
 """Offline checks of the auth-transition fixture and assertions in test_update_ux.py (no GUI)."""
 import importlib.util
 import json
+import plistlib
 from pathlib import Path
 import sys
 import tempfile
 import threading
 import unittest
 import urllib.request
+import subprocess
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'scripts'))
@@ -95,6 +98,49 @@ class AuthChecksTests(unittest.TestCase):
         results = self.results(RESTARTED)
         results['phases']['login']['page']['A'] = 'A js=auth,pref'
         self.assertFalse(update_ux.auth_checks(results, 'kept')['httponly_hidden_from_page'])
+
+
+
+
+class OwnedStateTests(unittest.TestCase):
+    def test_dead_or_reused_pid_never_keeps_a_previously_valid_state(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            state = Path(temporary) / 'state.json'
+            executable = Path(temporary) / 'Orbit'
+            state.write_text(json.dumps({'pid': 42, 'update': {'version': '1'}}))
+            with patch.object(update_ux.subprocess, 'check_output', return_value=str(executable)):
+                self.assertEqual(update_ux.owned_application_state(state, executable)['pid'], 42)
+            with patch.object(update_ux.subprocess, 'check_output', side_effect=subprocess.CalledProcessError(1, 'ps')):
+                self.assertEqual(update_ux.owned_application_state(state, executable), {})
+            with patch.object(update_ux.subprocess, 'check_output', return_value='/another/Orbit'):
+                self.assertEqual(update_ux.owned_application_state(state, executable), {})
+
+
+class InputIdentityTests(unittest.TestCase):
+    def test_bundle_digest_covers_bridge_resources_and_symlink_targets(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            app = Path(temporary) / 'Orbit.app'
+            contents = app / 'Contents'
+            (contents / 'MacOS').mkdir(parents=True)
+            framework = contents / 'Frameworks/Chromium Embedded Framework.framework'
+            framework.mkdir(parents=True)
+            (contents / 'Info.plist').write_bytes(plistlib.dumps({'CFBundleVersion': '1'}))
+            (contents / 'MacOS/Orbit').write_bytes(b'executable')
+            (framework / 'Chromium Embedded Framework').write_bytes(b'engine')
+            bridge = contents / 'Frameworks/OrbitCEFBridge.dylib'
+            bridge.write_bytes(b'bridge-v1')
+            before = update_ux.input_identity(app)
+            bridge.write_bytes(b'bridge-v2')
+            after = update_ux.input_identity(app)
+            self.assertEqual(before['executable'], after['executable'])
+            self.assertEqual(before['framework'], after['framework'])
+            self.assertNotEqual(before['bundle'], after['bundle'])
+            link = contents / 'link'
+            link.symlink_to('MacOS/Orbit')
+            linked = update_ux.input_identity(app)
+            link.unlink()
+            link.symlink_to('Frameworks/OrbitCEFBridge.dylib')
+            self.assertNotEqual(linked['bundle'], update_ux.input_identity(app)['bundle'])
 
 
 if __name__ == '__main__':

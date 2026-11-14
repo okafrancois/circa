@@ -44,6 +44,38 @@ enum OrbitAuthCookieProbe {
         return report
     }
 
+    /// Installed-extension inventory of the same two profiles, as the engine reports it (id,
+    /// version, enabled, pinned). Only the update harness's synthetic fixtures are listed, by
+    /// name; a profile that is not loaded yet is opened by a disposable blank surface first.
+    static func extensions(environment: OrbitEnvironment, command: [String: String]) async -> [String: Any] {
+        guard let host = environment.engine.extensions else { return ["error": "unsupported"] }
+        let catalog = await environment.store.catalogSnapshot()
+        guard let first = catalog.spaces.first?.profileID else { return ["error": "space"] }
+        var profiles = [("A", first)]
+        if let second = command["second"].flatMap(UUID.init(uuidString:)), second != first.rawValue {
+            profiles.append(("B", ProfileID(second)))
+        }
+        let names = Set(["Circa Preservation Fixture", "Circa Preservation Disabled Fixture"])
+        var report: [String: Any] = [:]
+        for (label, profileID) in profiles {
+            let delegate = Delegate()
+            let surface = environment.engine.makeSurface(profileID: profileID, delegate: delegate)
+            defer { surface.dispose() }
+            var listed: [BrowserExtensionSummary]?
+            let deadline = ContinuousClock.now + .seconds(6)
+            while ContinuousClock.now < deadline {
+                if let value = try? host.installedExtensions(in: profileID) { listed = value; break }
+                try? await Task.sleep(for: .milliseconds(50))
+            }
+            guard let listed else { report[label] = ["error": "inventory"]; continue }
+            report[label] = listed.filter { names.contains($0.name) }.map { item -> [String: Any] in
+                ["id": item.id, "name": item.name, "version": item.version, "enabled": item.isEnabled,
+                 "pinned": item.isPinned.map { $0 as Any } ?? NSNull()]
+            }
+        }
+        return report
+    }
+
     private static func loaded(_ surface: ChromiumSurface, _ url: URL) async -> Bool {
         let deadline = ContinuousClock.now + .seconds(6)
         while ContinuousClock.now < deadline {

@@ -141,6 +141,7 @@ enum OrbitLauncher {
                 try prepareAuthenticationRun(configuration)
             }) {
                 BrowserPerformance.mark(.authentication)
+                try prepareEngineMigrationBackup(configuration)
                 processSiteSessionImport(configuration)
                 runtimeStatus = startRuntime(configuration)
             }
@@ -192,6 +193,23 @@ enum OrbitLauncher {
         // Mark the startup attempt before CEF can mutate Local State or open a profile.
         if beginPasswords, try startupExtensionStages(configuration).isEmpty, run.status.phase == .passwordsPending { try run.beginPasswordApplication() }
         authenticationRun = run
+    }
+
+    /// Keep a private copy before the engine can mutate profiles. A failed copy refuses startup
+    /// so an update cannot silently proceed without its recovery snapshot; a later launch retries.
+    private static func prepareEngineMigrationBackup(_ configuration: OrbitProductConfiguration) throws {
+        let info = Bundle.main.infoDictionary ?? [:]
+        let build = "\(info["CFBundleShortVersionString"] as? String ?? "unknown") (\(info["CFBundleVersion"] as? String ?? "unknown"))"
+        do {
+            try BrowserEngineMigrationBackup.prepareLaunch(dataRoot: configuration.dataRoot,
+                                                          engineRoot: configuration.engineRoot, build: build)
+        } catch {
+            // Fixed categories and numeric codes only; paths and profile contents stay private.
+            let failure = error as NSError
+            let category = error is BrowserEngineMigrationBackup.Failure ? "unsafe-snapshot-path" : "copy-or-write"
+            FileHandle.standardError.write(Data("orbit: engine migration backup refused category=\(category) code=\(failure.code)\n".utf8))
+            throw error
+        }
     }
 
     private static func processSiteSessionImport(_ configuration: OrbitProductConfiguration) {
