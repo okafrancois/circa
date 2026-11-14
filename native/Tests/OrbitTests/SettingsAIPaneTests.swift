@@ -41,11 +41,11 @@ struct SettingsAIPaneTests {
         ]
     }
 
-    @Test("Sidebar navigation preserves AI ⌘5, Advanced ⌘6 and About ⌘7")
+    @Test("Sidebar navigation maps AI to ⌘6, Advanced to ⌘7 and About to ⌘8")
     func shortcuts() throws {
-        #expect(BrowserSettingsSection.allCases.firstIndex(of: .ai) == 4)
-        #expect(BrowserSettingsSection.allCases.firstIndex(of: .advanced) == 5)
-        #expect(BrowserSettingsSection.allCases.firstIndex(of: .about) == 6)
+        #expect(BrowserSettingsSection.allCases.firstIndex(of: .ai) == 5)
+        #expect(BrowserSettingsSection.allCases.firstIndex(of: .advanced) == 6)
+        #expect(BrowserSettingsSection.allCases.firstIndex(of: .about) == 7)
         #expect(BrowserSettingsSection.ai.title == "AI" && BrowserSettingsSection.ai.symbol == "sparkles")
         NSApplication.shared.setActivationPolicy(.prohibited)
         let model = model()
@@ -54,7 +54,7 @@ struct SettingsAIPaneTests {
         defer { window.close() }
         #expect(window.toolbar == nil)
         #expect(BrowserSettingsSection.navigationSections.count == 10)
-        for (key, code, section) in [("5", UInt16(23), BrowserSettingsSection.ai), ("6", 22, .advanced), ("7", 26, .about)] {
+        for (key, code, section) in [("6", UInt16(22), BrowserSettingsSection.ai), ("7", 26, .advanced), ("8", 28, .about)] {
             let event = try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: .command, timestamp: 0,
                 windowNumber: window.windowNumber, context: nil, characters: key, charactersIgnoringModifiers: key,
                 isARepeat: false, keyCode: code))

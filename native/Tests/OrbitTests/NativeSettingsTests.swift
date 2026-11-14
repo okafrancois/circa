@@ -1019,10 +1019,10 @@ extension NativeWebKitTests.NativeSettingsTests {
             timestamp: 0, windowNumber: window.windowNumber, context: nil,
             characters: "3", charactersIgnoringModifiers: "3", isARepeat: false, keyCode: 20))
         #expect(window.performKeyEquivalent(with: event))
-        #expect(model.settingsSection == .shortcuts)
+        #expect(model.settingsSection == .profiles)
         try await model.suspendForTermination(timeout: .seconds(2))
         #expect(!controller.selectSection(.general))
-        #expect(model.settingsSection == .shortcuts)
+        #expect(model.settingsSection == .profiles)
         model.resumeAfterCancelledTermination()
         #expect(controller.selectSection(.general))
     }
@@ -1277,7 +1277,7 @@ extension NativeWebKitTests.NativeSettingsTests {
     @Test("Settings toolbar contains the public Orbit categories and resizing retains its top edge")
     func orbitSettingsCategoriesAndResize() async throws {
         NSApplication.shared.setActivationPolicy(.prohibited)
-        #expect(BrowserSettingsSection.allCases == [.general, .profiles, .shortcuts, .links, .ai, .advanced, .about])
+        #expect(BrowserSettingsSection.allCases == [.general, .appearance, .profiles, .shortcuts, .links, .ai, .advanced, .about])
         let model = settingsModel(BrowserEnvironment(engine: SettingsFixtureEngine()))
         await model.reload()
         let controller = BrowserSettingsWindowController(model: model)
@@ -1294,6 +1294,6 @@ extension NativeWebKitTests.NativeSettingsTests {
             timestamp: 0, windowNumber: window.windowNumber, context: nil,
             characters: "é", charactersIgnoringModifiers: "é", isARepeat: false, keyCode: 19))
         #expect(window.performKeyEquivalent(with: azerty))
-        #expect(model.settingsSection == .profiles && window.title == BrowserSettingsSection.profiles.title)
+        #expect(model.settingsSection == .appearance && window.title == BrowserSettingsSection.appearance.title)
     }
 }

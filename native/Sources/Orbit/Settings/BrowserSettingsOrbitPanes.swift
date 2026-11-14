@@ -43,6 +43,7 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
                 }
                 switch model.settingsSection ?? .general {
                 case .general: general
+                case .appearance: appearance
                 case .profiles: profiles
                 case .shortcuts: shortcuts
                 case .links: links
@@ -421,6 +422,62 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
         BrowserSettingsAbout(updater: runtime.updater)
     }
 
+    private var appearance: some View {
+        Group {
+            if let profile = model.selectedProfileID {
+                panel {
+                    settingRow("Profile") {
+                        SettingsPopupPicker(uiText("Profile"), selectedTitle: model.catalog.profiles.first(where: { $0.id == profile })?.name ?? "", selection: Binding(get: { profile }, set: { model.selectProfile($0) })) {
+                            ForEach(model.catalog.profiles, id: \.id) { Text($0.name).tag($0.id) }
+                        }.labelsHidden().frame(width: 160).accessibilityIdentifier("settings-appearance-profile")
+                    }
+                    rule
+                    if let id = model.appearanceSpaceID, let space = model.catalog.spaces.first(where: { $0.id == id && $0.profileID == profile }) {
+                        settingRow("Space") {
+                            SettingsPopupPicker(uiText("Space"), selectedTitle: space.name, selection: Binding(get: { id }, set: { model.selectAppearanceSpace($0) })) {
+                                ForEach(model.catalog.spaces.filter { $0.profileID == profile }, id: \.id) { Text($0.name).tag($0.id) }
+                            }.labelsHidden().frame(width: 160).accessibilityIdentifier("settings-appearance-space")
+                        }
+                        rule
+                        settingRow("Theme Color") { BrowserSettingsGradientPicker(model: model, space: space) }
+                        Text(uiText("Applies to this Space in every window. Other Spaces keep their own themes."))
+                            .font(Font(BrandFonts.ui(10.5))).foregroundStyle(.secondary).padding(13)
+                            .accessibilityIdentifier("settings-appearance-scope")
+                    } else {
+                        Text(uiText("Choose a profile with an available Space.")).padding(13)
+                    }
+                }
+            }
+            panel {
+                settingRow("Animations", icon: "sparkles") {
+                    Picker(uiText("Animations"), selection: Binding(get: { runtime.document.reducedMotion }, set: { value in
+                        model.perform { try await model.setReducedMotion(value) }
+                    })) {
+                        Text(uiText("Follow System")).tag(BrowserReducedMotionSetting.system)
+                        Text(uiText("Reduce Motion")).tag(BrowserReducedMotionSetting.reduce)
+                        Text(uiText("Full Motion")).tag(BrowserReducedMotionSetting.full)
+                    }.labelsHidden().pickerStyle(.segmented)
+                        .tint(Color(nsColor: .controlColor)).foregroundStyle(OrbitSettingsStyle.foreground)
+                        .frame(width: 300).accessibilityIdentifier("settings-reduced-motion")
+                }
+                rule
+                liveToggle("Show tab hover previews", value: runtime.document.showsTabHoverPreviews,
+                           identifier: "settings-tab-hover-previews", icon: "rectangle.on.rectangle",
+                           save: runtime.setShowsTabHoverPreviews)
+                rule
+                liveToggle("Space around pages", value: runtime.document.showsSpaceAroundPages,
+                           identifier: "settings-space-around-pages", icon: "rectangle.inset.filled",
+                           save: model.setShowsSpaceAroundPages)
+            }
+            panel { BrowserOverlayScrollbarsSettingsRow(model: model) }
+            panel {
+                liveToggle("Use dots for Space icons", value: runtime.document.usesDotsForSpaceIcons,
+                           identifier: "settings-space-icon-dots", save: runtime.setUsesDotsForSpaceIcons)
+            }
+            BrowserSettingsIconGrid()
+        }
+    }
+
     private var advanced: some View {
         Group {
             panel {
@@ -457,36 +514,11 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
                         .help(uiText("Keeps pinned tabs, edited forms and active media awake. Sleeping tabs reload when selected."))
                 }
                 rule
-                settingRow("Animations", icon: "sparkles") {
-                    Picker(uiText("Animations"), selection: Binding(get: { runtime.document.reducedMotion }, set: { value in
-                        model.perform { try await model.setReducedMotion(value) }
-                    })) {
-                        Text(uiText("Follow System")).tag(BrowserReducedMotionSetting.system)
-                        Text(uiText("Reduce Motion")).tag(BrowserReducedMotionSetting.reduce)
-                        Text(uiText("Full Motion")).tag(BrowserReducedMotionSetting.full)
-                    }.labelsHidden().pickerStyle(.segmented)
-                        .tint(Color(nsColor: .controlColor)).foregroundStyle(OrbitSettingsStyle.foreground)
-                        .frame(width: 300).accessibilityIdentifier("settings-reduced-motion")
-                }
-                rule
-                liveToggle("Show tab hover previews", value: runtime.document.showsTabHoverPreviews,
-                           identifier: "settings-tab-hover-previews", icon: "rectangle.on.rectangle",
-                           save: runtime.setShowsTabHoverPreviews)
-                rule
-                liveToggle("Space around pages", value: runtime.document.showsSpaceAroundPages,
-                           identifier: "settings-space-around-pages", icon: "rectangle.inset.filled",
-                           save: model.setShowsSpaceAroundPages)
-                rule
                 liveToggle(uiFormat("Play %@ sound effects", applicationName), value: runtime.document.interaction.playSoundEffects,
                            identifier: "settings-sound-effects", icon: "speaker.wave.2", save: model.setPlaySoundEffects)
                 rule
                 liveToggle("Haptic feedback for tab organization and resizing", value: runtime.document.interaction.hapticFeedback,
                            identifier: "settings-reorder-haptics", icon: "hand.raised", save: model.setHapticFeedback)
-            }
-            panel { BrowserOverlayScrollbarsSettingsRow(model: model) }
-            panel {
-                liveToggle("Use dots for Space icons", value: runtime.document.usesDotsForSpaceIcons,
-                           identifier: "settings-space-icon-dots", save: runtime.setUsesDotsForSpaceIcons)
             }
             panel {
                 settingRow("Website data and permissions", icon: "lock") {

@@ -126,7 +126,8 @@
     "macwindow.on.rectangle",
     "info.circle",
     "slider.horizontal.3",
-    "sparkles"
+    "sparkles",
+    "paintpalette"
   ],
   "aiMarks": [
     "claudeCode",
