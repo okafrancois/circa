@@ -14,7 +14,7 @@ concurrency:
 jobs:
   build:
     runs-on: xcode-27
-    timeout-minutes: 45
+    timeout-minutes: 75
     env:
       CMAKE_BUILD_PARALLEL_LEVEL: '2'
     steps:
@@ -39,9 +39,23 @@ jobs:
         run: |
           python3 -m unittest discover -s scripts -p 'test_ci_engine.py'
           python3 -m unittest discover -s scripts -p 'test_orbit_app.py'
+          python3 -m unittest discover -s scripts -p 'test_release.py'
+          python3 -m unittest discover -s scripts -p 'test_update_*.py'
           python3 scripts/check-public-hygiene.py
       - name: Compile the Chromium product and smoke application
         run: python3 scripts/orbit-chromium-app.py build
+      - name: Update preservation gate (published release to this build)
+        # The same mandatory gate as release.py: sign-ins and installed extensions survive the
+        # update from the current public release. No credentials; fails if the GUI is unavailable.
+        run: python3 scripts/release.py --qualify-only --skip-build --output "$RUNNER_TEMP/preservation"
+      - name: Retain the preservation evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: Circa-preservation-${{ github.sha }}
+          path: ${{ runner.temp }}/preservation/preservation-*/*.json
+          if-no-files-found: ignore
+          retention-days: 7
       - name: Archive the unsigned build
         run: |
           ENGINE_FLAVOR=$(python3 -c 'import json; print(json.load(open("release/config.json"))["cef_flavor"])')

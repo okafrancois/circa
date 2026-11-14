@@ -1,5 +1,14 @@
 #!/usr/bin/env python3
-"""Build signed Orbit releases locally; remote mutations require --publish."""
+"""Build signed Orbit releases locally; remote mutations require --publish.
+
+Every publishing run, and every non-isolated build, first passes the update preservation gate:
+the latest public release, downloaded from the public feed and verified (feed and archive
+EdDSA signatures, Developer ID team, older build), is installed in a synthetic data root and
+updated to the candidate through the signed loopback update qualification of
+scripts/test_update_ux.py (auth-transition: site sign-ins and installed extensions, two
+profiles, restart, update and next update). Any failure, missing evidence, mismatched input or
+unavailable GUI session stops the release before anything is signed, notarized or published.
+"""
 import argparse
 import base64
 import importlib.util
@@ -8,9 +17,12 @@ import os
 from pathlib import Path
 import plistlib
 import re
+import secrets
 import shutil
 import subprocess
+import sys
 import tempfile
+import urllib.request
 import xml.etree.ElementTree as ET
 from urllib.parse import urlsplit
 
@@ -253,6 +265,127 @@ def validate_appcast(path, build):
         raise ValueError('Latest release requires a signed full archive, independent of delta coverage')
 
 
+SPARKLE = '{http://www.andymatuschak.org/xml-namespaces/sparkle}'
+# The gate fails unless every one of these ran and passed (a narrower harness cannot pass).
+REQUIRED_PRESERVATION_CHECKS = (
+    'profiles_isolated', 'login_sets_persistent_session_and_httponly', 'old_engine_restart_keeps_persistent',
+    'update_keeps_persistent', 'new_login_after_update', 'restart_keeps_old_and_new', 'next_update_keeps_old_and_new',
+    'ext_installed_by_previous_engine', 'ext_old_engine_restart_keeps', 'ext_markers_isolated', 'ext_disabled_never_runs',
+    'ext_updated_reports_same_storage', 'ext_updated_store_preserved', 'ext_updated_inventory',
+    'ext_new_restart_reports_same_storage', 'ext_new_restart_store_preserved', 'ext_new_restart_inventory',
+    'ext_next_update_reports_same_storage', 'ext_next_update_store_preserved', 'ext_next_update_inventory',
+    'migration_backup_restorable')
+
+
+def latest_feed_item(feed_path):
+    """The newest full archive offered by a signed feed: (build, short version, url, length, signature)."""
+    items = []
+    for item in ET.parse(feed_path).findall('./channel/item'):
+        enclosure = item.find('enclosure')
+        if enclosure is None:
+            continue
+        build = item.findtext(SPARKLE + 'version') or enclosure.get(SPARKLE + 'version')
+        short = item.findtext(SPARKLE + 'shortVersionString') or enclosure.get(SPARKLE + 'shortVersionString')
+        if build and build.isdigit() and enclosure.get('url') and enclosure.get(SPARKLE + 'edSignature'):
+            items.append((int(build), short or '', enclosure.get('url'), int(enclosure.get('length') or 0),
+                          enclosure.get(SPARKLE + 'edSignature')))
+    if not items:
+        raise ValueError('The public feed offers no signed full archive')
+    return max(items)
+
+
+def download(url, destination):
+    if urlsplit(url).scheme != 'https':
+        raise ValueError('Release downloads must use HTTPS')
+    with urllib.request.urlopen(url, timeout=120) as response, open(destination, 'wb') as output:
+        shutil.copyfileobj(response, output)
+
+
+def previous_release(config, work, candidate_build, fetch=download):
+    """Downloads and verifies the release that installed copies run today."""
+    feed = work / 'appcast.xml'
+    fetch(update_feed_url(config['repository']), feed)
+    verify_feed_signature(feed, config['public_ed_key'])
+    build, short, url, length, signature = latest_feed_item(feed)
+    expected_prefix = 'https://github.com/%s/releases/download/' % config['repository']
+    if not url.startswith(expected_prefix) or not url.endswith('.zip'):
+        raise ValueError('The public feed points outside this repository\'s releases')
+    if build >= candidate_build:
+        raise ValueError('The candidate build must be newer than the published build %d' % build)
+    archive = work / 'previous.zip'
+    fetch(url, archive)
+    if length and archive.stat().st_size != length:
+        raise ValueError('The published archive does not have the length its feed declares')
+    run('swift', ROOT / 'scripts/sparkle_verify.swift', config['public_ed_key'], signature, archive)
+    extracted = work / 'previous'
+    extracted.mkdir()
+    run('ditto', '-x', '-k', archive, extracted)
+    apps = sorted(extracted.glob('*.app'))
+    if len(apps) != 1:
+        raise ValueError('The published archive must contain exactly one application')
+    run('codesign', '--verify', '--strict', '--deep', apps[0])
+    if config.get('team_id'):
+        details = run('codesign', '-dv', '--verbose=4', apps[0], capture_output=True, text=True).stderr
+        if 'TeamIdentifier=' + config['team_id'] not in details.splitlines():
+            raise ValueError('The published application is not signed by the configured team')
+    info = plistlib.loads((apps[0] / 'Contents/Info.plist').read_bytes())
+    if str(info.get('CFBundleVersion')) != str(build):
+        raise ValueError('The published application does not match its feed entry')
+    return apps[0], {'build': build, 'version': short, 'url': url}
+
+
+def bundle_identity(app):
+    spec = importlib.util.spec_from_file_location('update_ux', ROOT / 'scripts/test_update_ux.py')
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.input_identity(Path(app))
+
+
+def check_preservation_summary(summary, run_id, previous, candidate):
+    """Accepts only this run's complete, passing result for exactly these inputs."""
+    checks = summary.get('checks') or {}
+    missing = [name for name in REQUIRED_PRESERVATION_CHECKS if name not in checks]
+    failed = sorted(name for name, value in checks.items() if value is not True)
+    if summary.get('run_id') != run_id or summary.get('case') != 'auth-transition':
+        raise RuntimeError('Preservation evidence does not belong to this release run')
+    if summary.get('expect') != 'kept' or summary.get('extensions_expect') != 'kept':
+        raise RuntimeError('Preservation qualification did not require kept data')
+    if missing or failed or summary.get('passed') is not True:
+        raise RuntimeError('Preservation qualification failed: missing %s, failed %s' % (missing, failed))
+    inputs = summary.get('inputs') or {}
+    if inputs.get('previous') != previous or inputs.get('candidate') != candidate:
+        raise RuntimeError('Preservation qualification ran on different application bundles')
+
+
+def qualify_preservation(config, candidate, build, output):
+    """Mandatory gate: the published build updates to the candidate without losing sign-ins or
+    installed extensions. Raises on any failure; there is no skip or degraded mode."""
+    evidence = output / ('preservation-' + str(build))
+    if evidence.exists():
+        shutil.rmtree(evidence)
+    evidence.mkdir(parents=True)
+    with tempfile.TemporaryDirectory(prefix='circa-preservation-') as temporary:
+        work = Path(temporary)
+        previous, published = previous_release(config, work, build)
+        print('preservation gate: published build %d (%s) -> candidate build %d' % (
+            published['build'], published['version'], build), flush=True)
+        run_id = secrets.token_hex(16)
+        previous_identity, candidate_identity = bundle_identity(previous), bundle_identity(candidate)
+        result = subprocess.run([sys.executable, str(ROOT / 'scripts/test_update_ux.py'), '--cases', 'auth-transition',
+                                 '--previous-app', str(previous), '--source-app', str(candidate),
+                                 '--evidence', str(evidence), '--run-id', run_id, '--auth-expect', 'kept',
+                                 '--extensions-expect', 'kept'])
+        summary_file = evidence / 'preservation-summary.json'
+        if result.returncode or not summary_file.is_file():
+            raise RuntimeError('Preservation qualification did not pass (exit %d); see %s' % (result.returncode, evidence))
+        summary = json.loads(summary_file.read_text())
+        check_preservation_summary(summary, run_id, previous_identity, candidate_identity)
+    (evidence / 'gate.json').write_text(json.dumps({'published': published, 'candidateBuild': build, 'runID': run_id,
+                                                    'checks': len(summary['checks'])}, indent=2) + '\n')
+    print('preservation gate: passed %d checks' % len(summary['checks']), flush=True)
+    return summary
+
+
 def release_notes_path(version):
     release_version('v' + version)
     path = ROOT / 'release' / 'notes' / (version + '.md')
@@ -296,6 +429,8 @@ def main():
     parser.add_argument('--source-app', type=Path)
     parser.add_argument('--local-test-root', type=Path)
     parser.add_argument('--feed-url')
+    parser.add_argument('--qualify-only', action='store_true',
+                        help='Run only the update preservation gate against the compiled product')
     args = parser.parse_args()
     config = json.loads(args.config.read_text())
     if config.get('provisioning_profile'):
@@ -304,8 +439,12 @@ def main():
         raise ValueError('--test-notarize-app-only requires an isolated test bundle')
     if not args.local_test_root and (config['name'] != DISPLAY_NAME or config['bundle_id'] != BUNDLE_ID):
         raise ValueError('Release name and bundle_id must match BrowserCore/ProductIdentity.swift')
-    version = release_version(args.tag)
-    require_notary_profile(config)
+    # A qualification-only run publishes nothing; outside a tag it carries no version.
+    version = release_version(args.tag) if args.tag or not args.qualify_only else '0.0.0'
+    if args.qualify_only and (args.publish or args.local_test_root):
+        raise ValueError('--qualify-only neither publishes nor uses an isolated test root')
+    if not args.qualify_only:
+        require_notary_profile(config)
     if not config['public_ed_key']:
         raise ValueError('Configure public_ed_key before preparing signed update releases')
     build = args.build_number or int(run('git', '-C', ROOT, 'rev-list', '--count', 'HEAD', capture_output=True, text=True).stdout)
@@ -325,6 +464,13 @@ def main():
             raise ValueError('Expected one compiled product bundle; pass --source-app explicitly')
         source = candidates[0]
     output = args.output.resolve()
+    output.mkdir(parents=True, exist_ok=True)
+    # Isolated updater E2E builds (--local-test-root, never published) are the only exemption.
+    if args.publish or args.qualify_only or not args.local_test_root:
+        qualify_preservation(config, source, build, output)
+    if args.qualify_only:
+        print(json.dumps({'version': version, 'build': build, 'qualified': True, 'published': False}))
+        return
     archives = output / 'archives'
     archives.mkdir(parents=True, exist_ok=True)
     archive = archives / f"{config['name']}-{version}.zip"

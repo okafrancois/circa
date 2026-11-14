@@ -67,11 +67,36 @@
   with the new product as `--source-app`. This re-signs a temporary copy of the previous
   product as a confined mock fixture and checks installation, relaunch and session restoration
   across the engine change; it never launches the supplied production bundle directly.
-  Also run `--cases auth-transition --previous-app <previous-app>`: two synthetic profiles sign
-  in to a loopback fixture with the previous engine, and real Chromium requests must stay
-  authenticated (persistent and HttpOnly cookies, isolated profiles) after a restart, the update,
-  a new login, another restart and the next update. Restoring tabs alone does not prove that
-  existing sign-ins survive an engine change.
+- **Update preservation gate (mandatory, automatic).** `release.py` runs it before anything is
+  signed, notarized or published, for every publishing run and every build that is not an
+  isolated `--local-test-root` E2E. It downloads the latest release from the public feed,
+  verifies the feed and archive EdDSA signatures, the Developer ID team and that its build is
+  older than the candidate, then runs `scripts/test_update_ux.py --cases auth-transition` from
+  that release to the candidate. In two synthetic profiles:
+  - sign-ins: persistent, session and HttpOnly cookies set on a loopback fixture stay
+    authenticated after a restart, the signed update, a new login, another restart and the next
+    update, without crossing profiles;
+  - installed extensions: the previous engine installs a signed CRX3 through its extension
+    updater (loopback only); identity, version, enabled and disabled states, pinning, granted
+    permissions, the extension's `chrome.storage` data and its background and content-script
+    operation must survive the same sequence, as seen by the fixture server, the engine's
+    inventory and the profile files;
+  - the candidate keeps a private pre-update copy of these records (see below).
+  The gate accepts only this run's complete result (a fixed list of required checks, a run
+  nonce, digests of the exact previous and candidate bundles). A failure, missing evidence,
+  mismatched input, unreachable feed or unavailable GUI session stops the release; there is no
+  skip option. Evidence: `dist/release/preservation-<build>/` (synthetic data only).
+  `hosted-build.yml` runs the same gate with `--qualify-only` (no credentials) on every main
+  push and pull request. Locally: `python3 scripts/release.py --qualify-only --skip-build`
+  (GUI runs take `/tmp/orbit-gui-slot.lock`, at most 55 s per stage).
+  `--auth-expect lost --extensions-expect record` documents an engine that drops data.
+- **Engine migration backup.** Before the first launch of a different build, and before the
+  engine opens any profile, the app copies `Local State` and each profile's `Secure
+  Preferences`, `Preferences` and cookie database to `<data root>/EngineMigrationBackups/`
+  (0700/0600, last three build changes, at most 30 days). Copies are never logged, uploaded or
+  restored automatically. Restoring is a deliberate action on a stopped browser
+  (`BrowserEngineMigrationBackup.restore`), which first saves the current files. Data deleted
+  before this feature shipped cannot be recovered by it.
   A rollback uses a newer build number; preserve user data and never downgrade the schema blindly.
 
 ## GitHub-hosted macOS runners
