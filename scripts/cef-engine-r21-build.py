@@ -47,7 +47,7 @@ def check_pins(pins):
         raise SystemExit('CEF checkout does not descend from the pinned branch head')
     if git(x2.CEF_REPO, 'rev-parse', 'HEAD^{tree}') != pins['cef_tree']:
         raise SystemExit('CEF checkout is not the ported fork union')
-    if git(x2.CEF_REPO, 'status', '--porcelain', '--untracked-files=no', '--', 'libcef', 'include', 'patch'):
+    if git(x2.CEF_REPO, 'status', '--porcelain', '--untracked-files=no'):
         raise SystemExit('Uncommitted CEF source changes; commit them to the fork branch first')
     chromium = PATCHES / 'chromium.patch'
     if hashlib.sha256(chromium.read_bytes()).hexdigest() != pins['chromium_patch_sha256']:

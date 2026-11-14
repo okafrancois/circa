@@ -2,14 +2,14 @@
 
 ## Configuration and prerequisites
 - `release/config.json` is the single release configuration; initial version is **0.1.0**, bundle ID `io.github.okatech.orbit`.
-- The Chromium product uses the maintained CEF/Chromium 156 fork (8078 branch). The
+- The Chromium product uses the maintained CEF/Chromium 158 fork (8127 branch). The
   `cef_flavor` in `release/config.json` and the descriptor in `release/engine.json` are
   the source of truth for the shipped engine; each engine's sources and patch union are
   recorded under `native/OrbitChromium/cef-patches/engine-r*/`.
 - Keep the engine distribution under the repository's `.tools/chromium-fork/distrib/`.
   Worktrees reuse the main checkout's distribution; the pipeline does not build CEF.
 - Security updates on the maintained branch: `scripts/cef-engine-security-update.py`
-  moves the shared sources to a newer `156.0.8078.x` tag while preserving the patch union,
+  moves the shared sources to a newer `158.0.8127.x` tag while preserving the patch union,
   a versioned `scripts/cef-engine-r*-build.py` exports a new flavor, and
   `scripts/package_ci_engine.py` produces the archive and descriptor for `release/engine.json`.
 - Install Xcode/CLT, Python 3, CMake, Ninja, and `gh`; authenticate `gh` for the public
@@ -63,6 +63,10 @@
   hand invalidates it for every current build: regenerate or re-sign it instead.
   `scripts/test_update_ux.py` covers the transition, the next signed feed and tampered or
   unsigned feeds (`signed-*` cases).
+  For an engine migration, also run `--cases engine-transition --previous-app <verified-previous-app>`
+  with the new product as `--source-app`. This re-signs a temporary copy of the previous
+  product as a confined mock fixture and checks installation, relaunch and session restoration
+  across the engine change; it never launches the supplied production bundle directly.
   A rollback uses a newer build number; preserve user data and never downgrade the schema blindly.
 
 ## GitHub-hosted macOS runners

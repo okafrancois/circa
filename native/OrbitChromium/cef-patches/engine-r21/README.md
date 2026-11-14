@@ -29,7 +29,7 @@ Reproduce:
 ```sh
 python3 scripts/cef-engine-milestone-migrate.py --version 158.0.8127.37 \
   --cef-source <fork git> --cef-ref orbit/8127 --cef-commit <commit> --logs <fresh>
-git -C .tools/chromium-fork/chromium/src apply native/OrbitChromium/cef-patches/engine-r21/chromium.patch
+git -C .tools/chromium-fork/chromium/src apply "$PWD/native/OrbitChromium/cef-patches/engine-r21/chromium.patch"
 python3 scripts/cef-engine-r21-build.py --jobs 8
 ```
 

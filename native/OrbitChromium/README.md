@@ -1,6 +1,6 @@
 # OrbitChromium — Chromium engine adapter, laboratory and product build
 
-`ChromiumEngine`, an adapter of the `BrowserEngine` contract on the maintained CEF/Chromium 156
+`ChromiumEngine`, an adapter of the `BrowserEngine` contract on the maintained CEF/Chromium 158
 fork, with browsers parented to shell-owned AppKit views. It is built by CMake into the shipped
 product, not linked into the SwiftPM package. The engine flavor comes from `release/config.json`;
 its sources and patch union are recorded under `cef-patches/`.
