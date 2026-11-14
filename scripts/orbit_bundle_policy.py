@@ -18,14 +18,31 @@ ORBIT_RESOURCE_FILES = frozenset({
 })
 ICON_CATALOG = json.loads((Path(__file__).resolve().parents[1] /
     'native/Sources/BrowserShell/Icons/catalog.json').read_text())
-ICON_RESOURCE_FILES = frozenset({'catalog.json'} | {
-    f'template/{size}/{name}.pdf' for size in (16, 20, 24) for name in ICON_CATALOG['template']
-} | {f'color/24/{name}.svg' for name in ICON_CATALOG['color']}
-  | {f'ai-marks/{name}.svg' for name in ICON_CATALOG.get('aiMarks', [])}
-  | {f'provider-marks/{name}.svg' for name in ICON_CATALOG.get('providerMarks', [])}
-  | {'provider-marks/LICENSE.txt'})
-ICON_RESOURCE_DIRECTORIES = frozenset(str(parent) for name in ICON_RESOURCE_FILES
-    for parent in Path(name).parents if str(parent) != '.') | {'', 'template', 'color'}
+
+
+def icon_resource_sets(catalog):
+    files = frozenset({'catalog.json'} | {
+        f'template/{size}/{name}.pdf' for size in (16, 20, 24) for name in catalog['template']
+    } | {f'color/24/{name}.svg' for name in catalog['color']}
+      | {f'ai-marks/{name}.svg' for name in catalog.get('aiMarks', [])}
+      | {f'provider-marks/{name}.svg' for name in catalog.get('providerMarks', [])}
+      | {'provider-marks/LICENSE.txt'})
+    directories = frozenset(str(parent) for name in files
+        for parent in Path(name).parents if str(parent) != '.') | {'', 'template', 'color'}
+    return files, directories
+
+
+ICON_RESOURCE_FILES, ICON_RESOURCE_DIRECTORIES = icon_resource_sets(ICON_CATALOG)
+
+
+def bundled_icon_catalog(bundle):
+    """The icon catalog an already-built bundle shipped with (an older release repackaged for tests)."""
+    matches = sorted(Path(bundle).glob('Contents/Resources/OrbitLabNative_BrowserShell.bundle/**/Icons/catalog.json'))
+    if len(matches) != 1 or matches[0].is_symlink():
+        raise RuntimeError('Bundled interface icon catalog missing or ambiguous')
+    return json.loads(matches[0].read_text())
+
+
 BRAND_FONT_FILES = frozenset({
     'mark.pdf', 'BricolageGrotesque-Variable.ttf', 'BricolageGrotesque-ExtraBold.ttf', 'BricolageGrotesque-OFL.txt',
     'DMSans-Variable.ttf', 'DMSans-Regular.ttf', 'DMSans-Medium.ttf', 'DMSans-SemiBold.ttf', 'DMSans-Bold.ttf',
@@ -74,9 +91,16 @@ def reject_build_artifacts(bundle):
             raise RuntimeError('Build artifact refused in bundle: ' + str(entry.relative_to(bundle)))
 
 
-def validate_bundle_contents(bundle):
-    """Reject unknown paths before codesign; vendor runtime resources have a bounded allow-list."""
+def validate_bundle_contents(bundle, own_icon_catalog=False):
+    """Reject unknown paths before codesign; vendor runtime resources have a bounded allow-list.
+
+    `own_icon_catalog`: synthetic test bundles repackaged from an older release are checked against
+    the icon catalog that release shipped, not the current source tree's. Product builds always use
+    the source catalog.
+    """
     bundle = Path(bundle)
+    icon_files, icon_resource_directories = (icon_resource_sets(bundled_icon_catalog(bundle)) if own_icon_catalog
+                                             else (ICON_RESOURCE_FILES, ICON_RESOURCE_DIRECTORIES))
     reject_build_artifacts(bundle)
     orbit_directories = set()
     icon_directories = set()
@@ -125,8 +149,8 @@ def validate_bundle_contents(bundle):
                         app_icon_directories.add(entry if len(resource) == 1 else entry.parent)
                 if resource[:1] == ('Icons',):
                     icon = '/'.join(resource[1:])
-                    icon_file = icon in ICON_RESOURCE_FILES
-                    icon_directory = icon in ICON_RESOURCE_DIRECTORIES
+                    icon_file = icon in icon_files
+                    icon_directory = icon in icon_resource_directories
                     allowed = icon_file or icon_directory
                     if entry.is_symlink() or (icon_file and not entry.is_file()) or (icon_directory and not entry.is_dir()):
                         raise RuntimeError('Invalid interface icon resource type refused: ' + str(relative))
@@ -200,7 +224,7 @@ def validate_bundle_contents(bundle):
     if len(icon_directories) > 1:
         raise RuntimeError('Ambiguous interface icon resource layouts refused')
     for directory in icon_directories:
-        for name in sorted(ICON_RESOURCE_FILES):
+        for name in sorted(icon_files):
             resource = directory / name
             if resource.is_symlink() or not resource.is_file():
                 raise RuntimeError('Missing or invalid required interface icon resource: ' + str(resource.relative_to(bundle)))

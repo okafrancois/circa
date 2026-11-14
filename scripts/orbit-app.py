@@ -133,8 +133,8 @@ def verify(bundle, expected_id=None):
     return [line for line in details.splitlines() if line.startswith(('Authority=', 'Identifier='))]
 
 
-def sign(bundle, identity_name="local"):
-    validate_bundle_contents(bundle)
+def sign(bundle, identity_name="local", own_icon_catalog=False):
+    validate_bundle_contents(bundle, own_icon_catalog=own_icon_catalog)
     sign_chromium_bundle(bundle, identity_name)
     return verify(bundle) if identity_name == "local" else []
 
@@ -364,8 +364,9 @@ def assemble(source_app, executable, framework, helpers_dir, output, bundle_id, 
     write_info(output, metadata)
     set_helper_bundle_identifiers(output)
     ensure_private_links(output)
-    validate_bundle_contents(output)
-    signatures = sign(output)
+    # A synthetic bundle may repackage an older release: check it against the icons it shipped.
+    validate_bundle_contents(output, own_icon_catalog=synthetic)
+    signatures = sign(output, own_icon_catalog=synthetic)
     for suffix, identifier_suffix in HELPERS:
         signatures.extend(verify(frameworks / (PRODUCT_NAME + ' Helper' + suffix + '.app'),
                                  helper_bundle_identifier(bundle_id, identifier_suffix, synthetic)))

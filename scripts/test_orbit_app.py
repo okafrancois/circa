@@ -4,6 +4,7 @@ from pathlib import Path
 import sys
 import plistlib
 import tempfile
+import json
 import shutil
 import subprocess
 import unittest
@@ -173,6 +174,19 @@ class SyntheticDefaultTests(unittest.TestCase):
                 required.unlink()
                 required.write_bytes(saved)
                 validate_bundle_contents(bundle)
+                # An older release repackaged as a synthetic bundle predates newer icons: it is checked
+                # against the catalog it shipped; product checks keep using the source catalog.
+                catalog_path = icons / 'catalog.json'
+                catalog = json.loads(catalog_path.read_text())
+                newest = catalog['color'].pop()
+                catalog_path.write_text(json.dumps(catalog))
+                (icons / 'color/24' / (newest + '.svg')).unlink()
+                validate_bundle_contents(bundle, own_icon_catalog=True)
+                with self.assertRaisesRegex(RuntimeError, 'Missing or invalid required interface icon'):
+                    validate_bundle_contents(bundle)
+                catalog_path.unlink()
+                with self.assertRaisesRegex(RuntimeError, 'catalog missing'):
+                    validate_bundle_contents(bundle, own_icon_catalog=True)
 
     def test_app_icon_choices_are_complete_bounded_and_not_symlinks(self):
         source = Path(__file__).resolve().parents[1] / 'native/Sources/BrowserShell/AppIcons'
