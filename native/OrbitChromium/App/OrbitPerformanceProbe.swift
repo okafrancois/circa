@@ -34,7 +34,7 @@ enum OrbitPerformanceProbe {
                 controller.window?.makeKey()
             }
         }
-        if [OrbitCommandGapsProbe.bundleID, OrbitNavigationHistoryProbe.bundleID, OrbitTabErgonomicsProbe.bundleID, "lab.orbit.orbit.pinned-tabs", "lab.orbit.orbit.search-suggestions", "lab.orbit.orbit.circa-rename", "lab.orbit.orbit.local-files-pdf", "lab.orbit.orbit.local-files-restore", "lab.orbit.orbit.p2-split", "lab.orbit.orbit.p2-extensions", "lab.orbit.orbit.site-search", "lab.orbit.orbit.updater-input", "io.github.okatech.orbit.test.update"].contains(Bundle.main.bundleIdentifier ?? "") {
+        if [OrbitCommandGapsProbe.bundleID, OrbitNavigationHistoryProbe.bundleID, OrbitMediaSessionProbe.bundleID, OrbitTabErgonomicsProbe.bundleID, "lab.orbit.orbit.pinned-tabs", "lab.orbit.orbit.search-suggestions", "lab.orbit.orbit.circa-rename", "lab.orbit.orbit.local-files-pdf", "lab.orbit.orbit.local-files-restore", "lab.orbit.orbit.p2-split", "lab.orbit.orbit.p2-extensions", "lab.orbit.orbit.site-search", "lab.orbit.orbit.updater-input", "io.github.okatech.orbit.test.update"].contains(Bundle.main.bundleIdentifier ?? "") {
             application.confirmQuit = { .quit }
             application.windowPresenter = { controller, _ in
                 let origin = Bundle.main.bundleIdentifier == OrbitCommandGapsProbe.bundleID
@@ -645,6 +645,8 @@ enum OrbitPerformanceProbe {
                     result["nativeSecurity"] = await OrbitEngineSecurityProbe.run(owner, command: command)
                 } else if name == "native-performance" {
                     result["nativePerformance"] = await OrbitEnginePerformanceProbe.run(owner, command: command, root: root)
+                } else if name == "media-session" {
+                    result["mediaSession"] = await OrbitMediaSessionProbe.run(owner, command: command)
                 } else if name == "download-audio" {
                     result["downloadAudio"] = await OrbitDownloadAudioProbe.run(owner, command: command, root: root)
                 } else if name == "safe-browsing", ownsWindow(owner, bundleID: "lab.orbit.orbit.sec-safebrowsing") {

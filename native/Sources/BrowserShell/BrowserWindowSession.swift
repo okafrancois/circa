@@ -348,6 +348,12 @@ public final class BrowserWindowSession<Surface: BrowserSurface> {
 
     public func surface(for occurrenceID: TabOccurrenceID) -> Surface? { surfaces[occurrenceID] }
 
+    /// The Space of an occurrence of this window, including inactive Spaces.
+    public func spaceID(for occurrenceID: TabOccurrenceID) -> SpaceID? {
+        guard !isClosed else { return nil }
+        return (modelOccurrenceAuthorities[occurrenceID] ?? authorities[occurrenceID])?.spaceID
+    }
+
     public func occurrenceID(for surface: Surface) -> TabOccurrenceID? {
         guard !isClosed, let id = occurrencesBySurface[ObjectIdentifier(surface)],
               surfaces[id] === surface else { return nil }

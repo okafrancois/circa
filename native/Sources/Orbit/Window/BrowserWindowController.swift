@@ -127,6 +127,11 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
     var zoomDocumentGeneration: UInt64 = 0
 
     var siteControls: BrowserSiteControls<Engine>!
+    /// Tabs of this window with controllable media; see BrowserWindowController+BackgroundMedia.
+    let backgroundMedia = BrowserBackgroundMediaSessions<Engine.Surface>()
+    var backgroundMediaObserver: BrowserHookRegistration?
+    /// Future sidebar player binding: called when `backgroundMediaSessions` may have changed.
+    var onBackgroundMediaChange: (() -> Void)?
     let developerToolbar = BrowserDeveloperToolbar()
     var developerToolbarProfile: ProfileID?
     weak var developerTintSurface: Surface?
@@ -323,6 +328,7 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
             defer { BrowserPerformance.end(.windowRender, since: perfStart) }
             self?.bookmarkTransfer?.contextDidChange()
             self?.renderSession(selection: self?.session.selectionChangeTabIDs)
+            self?.reconcileBackgroundMedia()
             if self?.session.selectionChangeTabIDs != nil { self?.onMetadataStateChange() }
             else { self?.onStateChange() }
         }
@@ -350,6 +356,7 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
                 self?.renderLibraryMedia()
             }
         }
+        installBackgroundMedia()
         if restoringWindowID == nil && opensInitialTab { openTab() }
     }
 
@@ -421,6 +428,9 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
         favorites.shutdown()
         sidebarActivityObserver?.cancel()
         sidebarActivityObserver = nil
+        backgroundMediaObserver?.cancel()
+        backgroundMediaObserver = nil
+        backgroundMedia.removeAll()
         sidebarIcons.clear()
         downloads.sourceWindowClosed(session.snapshot?.id)
         siteControls.cancelPermission()
