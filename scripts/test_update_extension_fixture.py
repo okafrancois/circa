@@ -101,6 +101,11 @@ class FixtureTests(unittest.TestCase):
     def test_mac_canonicalization_drops_empty_containers(self):
         self.assertEqual(fixture.legacy_mac(DEVICE, 'p', {'a': [], 'b': {}, 'c': 1}), fixture.legacy_mac(DEVICE, 'p', {'c': 1}))
 
+    def test_crx_downloads_before_and_after_the_first_request(self):
+        self.assertEqual(fixture.crx_downloads(self.work), 0)
+        (self.work / 'ext-requests.log').write_text('/ext/update.xml\n/ext/x-2.crx\n/ext/x-2.crx\n')
+        self.assertEqual(fixture.crx_downloads(self.work), 2)
+
     def test_profiles_must_be_exactly_the_two_synthetic_ones(self):
         with self.assertRaises(RuntimeError):
             fixture.profile_directories(self.root, SECOND)

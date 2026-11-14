@@ -519,7 +519,7 @@ def auth_stage(work, stage, evidence, expect):
                 authenticate('ext-install', 'whoami')
                 # Both profiles' updaters fetch the signed 2.0 CRX. An extension whose worker is
                 # running gets it as a delayed install, which Chromium finishes at the next start.
-                while (work / 'ext-requests.log').read_text().count('/ext/x-2.crx\n') < 2:
+                while extensions_fixture.crx_downloads(work) < 2:
                     if time.monotonic() > deadline - 30:
                         raise RuntimeError('Deadline: previous engine extension download (%s)' % stage)
                     time.sleep(.2)
