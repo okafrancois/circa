@@ -46,6 +46,7 @@ class ReleaseTests(unittest.TestCase):
         self.assertEqual(info['SUScheduledCheckInterval'], 3600)
         self.assertTrue(info['SUAllowsAutomaticUpdates'])
         self.assertTrue(info['SUVerifyUpdateBeforeExtraction'])
+        self.assertIs(info['SURequireSignedFeed'], True)
         self.assertTrue(info['SUAutomaticallyUpdate'])
         self.assertEqual(info['SUFeedURL'], release.update_feed_url(self.config['repository']))
 
@@ -103,19 +104,54 @@ class ReleaseTests(unittest.TestCase):
                                    'http://127.0.0.1:12345/appcast.xml')
         self.assertIs(info.get('LSFileQuarantineEnabled'), True)
 
+    @staticmethod
+    def signed(content):
+        # Same trailer layout as sign_update and generate_appcast; the signature bytes are synthetic.
+        data = content.encode()
+        signature = __import__('base64').b64encode(bytes(range(64))).decode()
+        return data + ('<!-- sparkle-signatures:\nedSignature: %s\nlength: %d\n-->\n' % (signature, len(data))).encode()
+
     def test_feed_requires_the_newest_release_and_a_full_signed_archive(self):
+        content = ('<rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle"><channel>'
+                   '<item><sparkle:version>27</sparkle:version><enclosure url="https://example.test/latest.zip" '
+                   'sparkle:edSignature="test"/><sparkle:deltas><enclosure sparkle:version="999"/></sparkle:deltas></item>'
+                   '<item><sparkle:version>25</sparkle:version></item></channel></rss>')
         with tempfile.TemporaryDirectory() as temporary:
             feed = Path(temporary) / 'appcast.xml'
-            feed.write_text('<rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle"><channel>'
-                '<item><sparkle:version>27</sparkle:version><enclosure url="https://example.test/latest.zip" '
-                'sparkle:edSignature="test"/><sparkle:deltas><enclosure sparkle:version="999"/></sparkle:deltas></item>'
-                '<item><sparkle:version>25</sparkle:version></item></channel></rss>')
+            feed.write_bytes(self.signed(content))
             release.validate_appcast(feed, 27)
             with self.assertRaises(ValueError):
                 release.validate_appcast(feed, 25)
-            feed.write_text(feed.read_text().replace('sparkle:edSignature="test"', ''))
+            feed.write_bytes(self.signed(content.replace('sparkle:edSignature="test"', '')))
             with self.assertRaises(ValueError):
                 release.validate_appcast(feed, 27)
+
+    def test_feed_signature_is_required_and_covers_the_whole_feed(self):
+        content = ('<rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle"><channel>'
+                   '<item><sparkle:version>27</sparkle:version><enclosure url="https://example.test/latest.zip" '
+                   'sparkle:edSignature="test"/></item></channel></rss>')
+        signed, signature = release.feed_signature(self.signed(content))
+        self.assertEqual(signed, content.encode())
+        self.assertEqual(len(__import__('base64').b64decode(signature)), 64)
+        with tempfile.TemporaryDirectory() as temporary:
+            feed = Path(temporary) / 'appcast.xml'
+            feed.write_text(content)
+            with self.assertRaisesRegex(ValueError, 'feed signature'):
+                release.validate_appcast(feed, 27)
+        tampered = self.signed(content).replace(b'<sparkle:version>27', b'<sparkle:version>28')
+        release.feed_signature(tampered)  # Same length: only the cryptographic check can reject it.
+        for data in [self.signed(content).replace(b'</rss>', b'</rss>\n'), self.signed(content) + b'<extra/>',
+                     content.encode() + self.signed('<rss/>')[len(b'<rss/>'):]]:
+            with self.assertRaises(ValueError):
+                release.feed_signature(data)
+
+    def test_every_product_plist_requires_a_signed_feed(self):
+        spec = importlib.util.spec_from_file_location('orbit_app_info', Path(__file__).parent / 'orbit-app.py')
+        packaging = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(packaging)
+        self.assertIs(packaging.bundle_info('0.1.0')['SURequireSignedFeed'], True)
+        template = (Path(__file__).parents[1] / 'native/OrbitChromium/App/Info.plist.in').read_text()
+        self.assertIn('<key>SURequireSignedFeed</key><true/>', template)
 
     def test_synthetic_roots_do_not_leak_into_product(self):
         info = release.update_info({'OrbitDataRoot': '/tmp/test', 'OrbitSyntheticBundle': True,

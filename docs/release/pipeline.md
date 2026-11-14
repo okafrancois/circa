@@ -56,6 +56,13 @@
   The automatic-install switch persists under Sparkle's `SUAutomaticallyUpdate` key; availability
   checks stay enabled under `SUEnableAutomaticChecks`. Manual checks use the application menu's "Check for Updates…" item.
 - Feed: `https://github.com/<repository>/releases/download/update-feed/appcast.xml`.
+  The feed is signed: builds set `SURequireSignedFeed`, `generate_appcast` embeds the EdDSA
+  feed signature, `release.py` re-signs idempotently with `sign_update`, requires the trailer and
+  verifies it against `public_ed_key` before publishing. Builds without the key still read the
+  signed feed, so the first signed release is also the transition. Editing a published feed by
+  hand invalidates it for every current build: regenerate or re-sign it instead.
+  `scripts/test_update_ux.py` covers the transition, the next signed feed and tampered or
+  unsigned feeds (`signed-*` cases).
   A rollback uses a newer build number; preserve user data and never downgrade the schema blindly.
 
 ## GitHub-hosted macOS runners

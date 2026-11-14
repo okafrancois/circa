@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 """Signed loopback update qualification. Builds must already exist; never uses the real feed/key.
 
+Every feed is signed with the test key (sign_update embeds the feed signature). The signed-*
+cases cover the transition from a build without SURequireSignedFeed, acceptance of the next
+signed feed by a build that requires it, and rejection of a tampered or unsigned feed.
+
 Each GUI case owns the shared slot for at most 55 seconds. All archives, keys, bundles,
 preferences and synthetic data are removed. Only fixed events and result summaries survive.
 """
@@ -13,6 +17,7 @@ import json
 import os
 from pathlib import Path
 import plistlib
+import re
 import shutil
 import subprocess
 import sys
@@ -46,9 +51,18 @@ def clean_preferences():
         shutil.rmtree(cache, onerror=ignore_disappeared)
 
 
+SIGNED_NEXT_CASES = ('signed-next', 'signed-tampered', 'signed-unsigned')
+
+
+def case_versions(name):
+    return ('2', '3') if name in SIGNED_NEXT_CASES else ('1', '2')
+
+
 def case(work, name, evidence):
     """Invoked only under lockf by main; commands are consumed inside the PID-checked app."""
     deadline = time.monotonic() + 52
+    old_version, new_version = case_versions(name)
+    valid = work / ('valid-%s.xml' % new_version)
     root, app = work / 'data', work / 'installed/Orbit.app'
     info = plistlib.loads((app / 'Contents/Info.plist').read_bytes())
     feed = urlsplit(info.get('SUFeedURL', ''))
@@ -117,22 +131,38 @@ def case(work, name, evidence):
             run('defaults', 'write', TEST_ID, 'SUAutomaticallyUpdate', '-bool', 'false')
         with log.open('w') as handle:
             initial = launch(handle)
-            command('seed')
-            wait(lambda s: 'about:blank#update-session' in s.get('update', {}).get('tabs', []), 'seed')
+            seed_nonce = command('seed')
+            seed_sent = time.monotonic()
+
+            def seeded(value):
+                nonlocal seed_nonce, seed_sent
+                if 'about:blank#update-session' in value.get('update', {}).get('tabs', []):
+                    return True
+                # Startup can publish state before CGWindowList contains the owned window.
+                # Retry only an acknowledged command after a fresh state publication;
+                # the in-app probe still checks window ownership before every action.
+                if value.get('commandNonce') == seed_nonce and time.monotonic() - seed_sent > 1:
+                    seed_nonce = command('seed')
+                    seed_sent = time.monotonic()
+                return False
+
+            wait(seeded, 'seed')
             if name == 'manual':
-                shutil.copyfile(work / 'valid.xml', work / 'feed/appcast.xml')
+                shutil.copyfile(valid, work / 'feed/appcast.xml')
                 time.sleep(.5)  # Let Sparkle finish scheduling after the previous cycle.
                 command('check')
-            if name == 'broken':
+            if name in ('broken', 'signed-tampered', 'signed-unsigned'):
                 wait(lambda _: 'aborted-code-' in log.read_text(), 'signature rejection')
-                checks['broken_has_no_card'] = not state()['update']['card']
-                shutil.copyfile(work / 'valid.xml', work / 'feed/appcast.xml')
+                checks[name.replace('-', '_') + '_has_no_card'] = not state()['update']['card']
+                checks['rejected_before_archive_download'] = name == 'broken' or archive_requests() == 0
+                shutil.copyfile(valid, work / 'feed/appcast.xml')
                 time.sleep(.5)  # Let Sparkle finish scheduling after the previous cycle.
                 command('check')
             ready = wait(lambda s: s.get('update', {}).get('card') is True, 'prepared card')
             requests_before_click = archive_requests()
             checks['extracted_before_card'] = 'event=extracting ' in log.read_text()
-            checks['staged_before_card'] = ready['update']['pending'] == '2' and ready['update']['version'] == '1'
+            checks['staged_before_card'] = (ready['update']['pending'] == new_version
+                                            and ready['update']['version'] == old_version)
             checks['no_standard_windows'] = not any('SU' in c or 'SPU' in c for c in ready['update']['windowClasses'])
             before = ready['update']['tabs']
             if name in ('off', 'toggle-off'):
@@ -141,20 +171,22 @@ def case(work, name, evidence):
                     ready = wait(lambda s: s.get('update', {}).get('automatic') is False, 'disable staged installation')
                 checks['off_preference'] = ready['update']['automatic'] is False
                 quit_app()
-                checks['off_quit_preserves_old'] = plistlib.loads((app / 'Contents/Info.plist').read_bytes())['CFBundleVersion'] == '1'
+                checks['off_quit_preserves_old'] = plistlib.loads((app / 'Contents/Info.plist').read_bytes())['CFBundleVersion'] == old_version
                 launch(handle)
                 wait(lambda s: s.get('update', {}).get('card') is True, 'restaged card')
             requests_before_click = archive_requests()
             if name == 'quit':
                 quit_app()
-                wait(lambda _: plistlib.loads((app / 'Contents/Info.plist').read_bytes())['CFBundleVersion'] == '2', 'install on quit')
+                wait(lambda _: plistlib.loads((app / 'Contents/Info.plist').read_bytes())['CFBundleVersion'] == new_version, 'install on quit')
                 after = launch(handle)
             else:
                 pid = state()['pid']
                 command('click')
-                after = wait(lambda s: s.get('pid') != pid and s.get('update', {}).get('version') == '2', 'relaunch')
+                after = wait(lambda s: s.get('pid') != pid and s.get('update', {}).get('version') == new_version, 'relaunch')
             checks['no_download_on_click_or_quit'] = archive_requests() == requests_before_click
-            checks['new_version'] = after['update']['version'] == '2'
+            checks['new_version'] = after['update']['version'] == new_version
+            installed_info = plistlib.loads((app / 'Contents/Info.plist').read_bytes())
+            checks['installed_requires_signed_feed'] = installed_info.get('SURequireSignedFeed') is True
             checks['session_restored'] = after['update']['tabs'] == before
             checks['no_standard_windows_after'] = not any('SU' in c or 'SPU' in c for c in after['update']['windowClasses'])
             quit_app()
@@ -193,8 +225,9 @@ def main():
     parser.add_argument('--source-app', type=Path, default=ROOT / 'native/OrbitChromium/build/app-orbit-engine-extensions-r13/product/Orbit.app')
     parser.add_argument('--evidence', type=Path, default=Path('/tmp/update-ux'))
     parser.add_argument('--case')
-    parser.add_argument('--cases', nargs='+', default=['background', 'manual', 'quit', 'off', 'toggle-off', 'broken'],
-                        choices=['background', 'manual', 'quit', 'off', 'toggle-off', 'broken'])
+    names = ['background', 'manual', 'quit', 'off', 'toggle-off', 'broken',
+             'signed-transition', *SIGNED_NEXT_CASES]
+    parser.add_argument('--cases', nargs='+', default=names, choices=names)
     parser.add_argument('--work', type=Path)
     args = parser.parse_args()
     args.evidence.mkdir(parents=True, exist_ok=True)
@@ -214,7 +247,7 @@ def main():
 
             def do_GET(self):
                 with (work / 'requests.log').open('a') as handle:
-                    handle.write('archive\n' if self.path == '/update.zip' else 'feed\n')
+                    handle.write('archive\n' if self.path.endswith('.zip') else 'feed\n')
                 super().do_GET()
         server = ThreadingHTTPServer(('127.0.0.1', 0), functools.partial(Handler, directory=feed))
         threading.Thread(target=server.serve_forever, daemon=True).start()
@@ -239,23 +272,49 @@ try key.publicKey.rawRepresentation.base64EncodedData().write(to: URL(fileURLWit
                         OrbitUpdaterLocalTest=True, SUPublicEDKey=public.read_text(),
                         SUFeedURL='http://127.0.0.1:%d/appcast.xml' % server.server_port,
                         NSAppTransportSecurity={'NSAllowsLocalNetworking': True})
+            info['SURequireSignedFeed'] = True
             infofile.write_bytes(plistlib.dumps(info))
             sign_chromium_bundle(base)
-            target = work / 'target/Orbit.app'
-            target.parent.mkdir()
-            copy(base, target)
-            info.update(CFBundleVersion='2', CFBundleShortVersionString='0.0.2')
-            (target / 'Contents/Info.plist').write_bytes(plistlib.dumps(info))
-            sign_chromium_bundle(target)
-            archive = feed / 'update.zip'
-            run('/usr/bin/ditto', '-c', '-k', '--keepParent', target, archive)
+            # The transition source predates SURequireSignedFeed; every other build requires it.
+            legacy = work / 'legacy/Orbit.app'
+            legacy.parent.mkdir()
+            copy(base, legacy)
+            legacy_info = dict(info)
+            legacy_info.pop('SURequireSignedFeed')
+            (legacy / 'Contents/Info.plist').write_bytes(plistlib.dumps(legacy_info))
+            sign_chromium_bundle(legacy)
             sparkle = ROOT / '.tools/sparkle-2.10.1/bin/sign_update'
-            signature = subprocess.check_output([str(sparkle), '--ed-key-file', str(key), str(archive)], text=True).strip()
-            xml = ('<rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle"><channel><item>'
-                   '<sparkle:version>2</sparkle:version><sparkle:shortVersionString>0.0.2</sparkle:shortVersionString>'
-                   '<enclosure url="http://127.0.0.1:%d/update.zip" type="application/octet-stream" %s/>'
-                   '</item></channel></rss>') % (server.server_port, signature)
-            (work / 'valid.xml').write_text(xml)
+            builds = {}
+            for version in ('2', '3'):
+                target = work / ('target-%s/Orbit.app' % version)
+                target.parent.mkdir()
+                copy(base, target)
+                info.update(CFBundleVersion=version, CFBundleShortVersionString='0.0.' + version)
+                (target / 'Contents/Info.plist').write_bytes(plistlib.dumps(info))
+                sign_chromium_bundle(target)
+                builds[version] = target
+                archive = feed / ('update-%s.zip' % version)
+                run('/usr/bin/ditto', '-c', '-k', '--keepParent', target, archive)
+                signature = subprocess.check_output([str(sparkle), '--ed-key-file', str(key), str(archive)], text=True).strip()
+                xml = ('<rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle"><channel><item>'
+                       '<sparkle:version>%s</sparkle:version><sparkle:shortVersionString>0.0.%s</sparkle:shortVersionString>'
+                       '<enclosure url="http://127.0.0.1:%d/update-%s.zip" type="application/octet-stream" %s/>'
+                       '</item></channel></rss>') % (version, version, server.server_port, version, signature)
+                (work / ('unsigned-%s.xml' % version)).write_text(xml)
+                (work / ('valid-%s.xml' % version)).write_text(xml)
+                run(sparkle, '--ed-key-file', key, work / ('valid-%s.xml' % version), stdout=subprocess.DEVNULL)
+            def signed_feed(path, content):
+                path.write_text(content)
+                run(sparkle, '--ed-key-file', key, path, stdout=subprocess.DEVNULL)
+                return path.read_bytes()
+            empty = signed_feed(work / 'empty.xml', '<rss><channel/></rss>')
+            broken = signed_feed(work / 'broken.xml', re.sub(
+                r'sparkle:edSignature="[^"]+"', 'sparkle:edSignature="' + base64.b64encode(bytes(64)).decode() + '"',
+                (work / 'unsigned-2.xml').read_text()))
+            # Same length, valid signature trailer: only the feed signature check can reject it.
+            tampered = (work / 'valid-3.xml').read_bytes().replace(b'0.0.3</sparkle:short', b'0.0.9</sparkle:short')
+            if tampered == (work / 'valid-3.xml').read_bytes():
+                raise RuntimeError('Tampered feed fixture did not change')
             installed = work / 'installed/Orbit.app'
             installed.parent.mkdir()
             for name in args.cases:
@@ -265,15 +324,20 @@ try key.publicKey.rawRepresentation.base64EncodedData().write(to: URL(fileURLWit
                     shutil.rmtree(installed)
                 if root.exists():
                     shutil.rmtree(root)
+                (work / 'requests.log').unlink(missing_ok=True)
                 packaging.prepare_synthetic_root(root, TEST_ID)
-                copy(base, installed)
-                content = xml
+                source = legacy if name == 'signed-transition' else builds['2'] if name in SIGNED_NEXT_CASES else base
+                copy(source, installed)
+                content = (work / ('valid-%s.xml' % case_versions(name)[1])).read_bytes()
                 if name == 'manual':
-                    content = '<rss><channel/></rss>'
+                    content = empty
                 if name == 'broken':
-                    import re
-                    content = re.sub(r'sparkle:edSignature="[^"]+"', 'sparkle:edSignature="' + base64.b64encode(bytes(64)).decode() + '"', xml)
-                (feed / 'appcast.xml').write_text(content)
+                    content = broken
+                if name == 'signed-tampered':
+                    content = tampered
+                if name == 'signed-unsigned':
+                    content = (work / 'unsigned-3.xml').read_bytes()
+                (feed / 'appcast.xml').write_bytes(content)
                 run('/usr/bin/lockf', '-k', '/tmp/orbit-gui-slot.lock', sys.executable, __file__, '--case', name,
                     '--work', work, '--evidence', args.evidence)
         finally:

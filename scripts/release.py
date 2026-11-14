@@ -52,7 +52,7 @@ def update_info(info, config, version, build, local_test_root=None, feed_url=Non
                 CFBundleVersion=str(build), OrbitDeveloperTeamID=config.get('team_id', ''),
                 OrbitRepository=config['repository'], SUFeedURL=feed_url or update_feed_url(config['repository']),
                 SUPublicEDKey=key, SUEnableAutomaticChecks=True, SUAllowsAutomaticUpdates=True,
-                SUVerifyUpdateBeforeExtraction=True, SUAutomaticallyUpdate=True,
+                SUVerifyUpdateBeforeExtraction=True, SURequireSignedFeed=True, SUAutomaticallyUpdate=True,
                 SUScheduledCheckInterval=3600, LSFileQuarantineEnabled=True)
     for name in ('OrbitSyntheticBundle', 'OrbitDataRoot', 'OrbitUseMockKeychain', 'OrbitUpdaterLocalTest',
                  'LSUIElement', 'LSBackgroundOnly'):
@@ -217,8 +217,31 @@ def notarize_archive(archive, profile, evidence):
         raise RuntimeError('Notarization rejected; inspect submission ' + submission.get('id', 'unknown'))
 
 
+FEED_SIGNATURE = re.compile(rb'<!-- sparkle-signatures:\nedSignature: ([A-Za-z0-9+/=]+)\nlength: ([0-9]+)\n-->\s*\Z')
+
+
+def feed_signature(data):
+    """Return (signed bytes, base64 signature) for a feed signed by sign_update or generate_appcast."""
+    match = FEED_SIGNATURE.search(data)
+    if not match:
+        raise ValueError('Appcast requires an embedded Sparkle feed signature')
+    signed = data[:match.start()]
+    if int(match[2]) != len(signed) or len(base64.b64decode(match[1], validate=True)) != 64:
+        raise ValueError('Appcast feed signature does not cover the published feed')
+    return signed, match[1].decode()
+
+
+def verify_feed_signature(path, public_key):
+    signed, signature = feed_signature(Path(path).read_bytes())
+    with tempfile.NamedTemporaryFile(prefix='appcast-signed-', suffix='.xml') as content:
+        content.write(signed)
+        content.flush()
+        run('swift', ROOT / 'scripts/sparkle_verify.swift', public_key, signature, content.name)
+
+
 def validate_appcast(path, build):
-    """A publishable feed must offer this build as a full update, regardless of deltas."""
+    """A publishable feed must offer this build as a full update, regardless of deltas, and be signed."""
+    feed_signature(Path(path).read_bytes())
     namespace = '{http://www.andymatuschak.org/xml-namespaces/sparkle}'
     items = ET.parse(path).findall('./channel/item')
     versions = [int(item.findtext(namespace + 'version') or
@@ -344,7 +367,12 @@ def main():
     run(sparkle / 'bin/generate_appcast', *signing, '--versions', str(build), '--download-url-prefix', prefix,
         '--full-release-notes-url', 'https://circabrowser.com/changelog',
         '--delta-compression', 'lzfse', '--maximum-versions', '3', '--maximum-deltas', '5', archives)
-    validate_appcast(archives / 'appcast.xml', build)
+    feed = archives / 'appcast.xml'
+    # generate_appcast signs the feed when the new archive requires it; signing again is idempotent
+    # and also covers an older feed in the archive directory.
+    run(sparkle / 'bin/sign_update', *signing, feed, capture_output=True)
+    validate_appcast(feed, build)
+    verify_feed_signature(feed, config['public_ed_key'])
     if args.publish:
         stable_dmg = Path(dmg).with_name(config['name'] + '.dmg')
         shutil.copyfile(dmg, stable_dmg)
