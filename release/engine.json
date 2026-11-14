@@ -1,7 +1,7 @@
 {
-  "flavor": "orbit-engine-extensions-r22",
-  "url": "https://github.com/okafrancois/circa/releases/download/engine-r22/orbit-engine-extensions-r22.tar.gz",
-  "archive_sha256": "a603f0df79e90efbff307d5e7646ebace3a74cb822a538d197170caae68ba62f",
-  "framework_sha256": "89efcb5d3914c7c7d3b1ebc9088f57ab135ad5aff70ad5499366e91b87b0d2be",
-  "wrapper_sha256": "a57ad1b4bf007282d910fea9c309ea9e7568d5205b7dad655cd29cbabf12aa2b"
+  "flavor": "orbit-engine-extensions-r23",
+  "url": "https://github.com/okafrancois/circa/releases/download/engine-r23/orbit-engine-extensions-r23.tar.gz",
+  "archive_sha256": "80d92036eeebd4be8a27dfd1a6c02d46218283c64cf397dec1e7dcbecbcb92e8",
+  "framework_sha256": "e113a5aa18dc2c886cb966367b26521e1a3972210f5b84c83d9952e7df7e349e",
+  "wrapper_sha256": "9937ddbf0b026b3e42bc87ea170e8daa1d0c8d399fb7b7c5574402db1e52a46c"
 }
