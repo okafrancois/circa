@@ -2083,6 +2083,10 @@ class App final : public CefApp, public CefBrowserProcessHandler {
     // launch the global context then owned that directory and ACRCreateProfile refused it
     // (DAILY-1 restore SIGTRAP, `ChromiumBrowserEngine.profile(for:)` precondition).
     command->AppendSwitchWithValue("profile-directory", kInitialProfileDirectory);
+    // The anchored root is the user data directory this run owns. Cookies and other data that
+    // Chromium encrypted there before its 158 per-directory key stay readable in it alone
+    // (never admitted from arguments: FilterBrowserArguments drops it).
+    command->AppendSwitchWithValue(orbit_bridge::kOwnedUserDataDirSwitch, g_state->root);
   }
   void OnBeforeChildProcessLaunch(CefRefPtr<CefCommandLine> command) override {
     for (const auto& item : orbit_bridge::ChildProcessSwitches(command->GetSwitchValue("type").ToString()))

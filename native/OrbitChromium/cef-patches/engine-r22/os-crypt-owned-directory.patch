@@ -1,0 +1,51 @@
+diff --git a/chrome/browser/browser_process_impl.cc b/chrome/browser/browser_process_impl.cc
+index 3c239c7..1f87b0c 100644
+--- a/chrome/browser/browser_process_impl.cc
++++ b/chrome/browser/browser_process_impl.cc
+@@ -341,6 +341,27 @@ class UnavailableKeyProvider : public os_crypt_async::KeyProvider {
+   const std::string tag_;
+ };
+ 
++// Orbit: the embedder passes the user data directory it owns (CefSettings
++// root_cache_path, never a command-line choice) in this switch. Data written
++// there before the non-default directory protection used the legacy "v10" key,
++// so that directory alone keeps it readable; new data is still written as
++// "v11". Any other directory keeps the upstream protection.
++constexpr char kOrbitOwnedUserDataDir[] = "orbit-owned-user-data-dir";
++
++bool IsOrbitOwnedUserDataDir() {
++  const base::FilePath owned =
++      base::CommandLine::ForCurrentProcess()->GetSwitchValuePath(
++          kOrbitOwnedUserDataDir);
++  base::FilePath user_data_dir;
++  if (owned.empty() || !owned.IsAbsolute() ||
++      owned.ReferencesParent() ||
++      !base::PathService::Get(chrome::DIR_USER_DATA, &user_data_dir)) {
++    return false;
++  }
++  return owned.StripTrailingSeparators() ==
++         user_data_dir.StripTrailingSeparators();
++}
++
+ }  // namespace
+ #endif  // BUILDFLAG(IS_MAC)
+ 
+@@ -1701,8 +1722,16 @@ void BrowserProcessImpl::PreMainMessageLoopRun() {
+     } else {
+       constexpr auto kCustomUserDataSalt =
+           std::to_array<uint8_t>({'p', 'e', 'p', 'p', 'e', 'r'});
+-      providers.emplace_back(
+-          /*precedence=*/10u, std::make_unique<UnavailableKeyProvider>("v10"));
++      if (IsOrbitOwnedUserDataDir()) {
++        // Lower precedence than "v11": it only decrypts existing "v10" data.
++        providers.emplace_back(
++            /*precedence=*/10u,
++            std::make_unique<os_crypt_async::KeychainKeyProvider>());
++      } else {
++        providers.emplace_back(
++            /*precedence=*/10u,
++            std::make_unique<UnavailableKeyProvider>("v10"));
++      }
+       providers.emplace_back(
+           /*precedence=*/15u,
+           std::make_unique<os_crypt_async::KeychainKeyProvider>(

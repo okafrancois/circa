@@ -5,6 +5,13 @@ Every feed is signed with the test key (sign_update embeds the feed signature). 
 cases cover the transition from a build without SURequireSignedFeed, acceptance of the next
 signed feed by a build that requires it, and rejection of a tampered or unsigned feed.
 
+The auth-transition case (with --previous-app) signs two synthetic profiles in to a loopback
+authentication fixture with the previous engine, then checks that real Chromium requests stay
+authenticated after a normal restart, the signed update to the new engine, a new login, another
+restart and the next update. The fixture judges the persistent, session and HttpOnly cookies
+it receives; isolated profiles must never present each other's tokens. --auth-expect lost
+documents an engine that drops them instead.
+
 Each GUI case owns the shared slot for at most 55 seconds. All archives, keys, bundles,
 preferences and synthetic data are removed. Only fixed events and result summaries survive.
 """
@@ -18,13 +25,16 @@ import os
 from pathlib import Path
 import plistlib
 import re
+import secrets
 import shutil
+import sqlite3
 import subprocess
 import sys
 import tempfile
 import threading
 import time
 from urllib.parse import urlsplit
+import uuid
 
 from local_signing import sign_chromium_bundle
 
@@ -220,6 +230,315 @@ def case(work, name, evidence):
         clean_preferences()
 
 
+AUTH_COOKIES = ('auth', 'pref', 'sid', 'auth2')
+AUTH_PERSISTENT = ('auth', 'pref')
+AUTH_HTTP_ONLY = ('auth', 'sid', 'auth2')
+AUTH_STAGES = ('auth-old', 'auth-update', 'auth-restart', 'auth-next')
+
+
+def auth_server(work):
+    """Loopback fixture: /login and /login2 set the cookies, /whoami reports what it received.
+    Only statuses are logged (ok, foreign, stale, missing), never cookie values."""
+    tokens = {label: {name: secrets.token_hex(12) for name in AUTH_COOKIES} for label in ('A', 'B')}
+    log = work / 'auth.log'
+
+    class Handler(SimpleHTTPRequestHandler):
+        def log_message(self, *unused):
+            pass
+
+        def do_GET(self):
+            url = urlsplit(self.path)
+            query = dict(item.split('=', 1) for item in url.query.split('&') if '=' in item)
+            label, phase = query.get('profile', ''), query.get('phase', '')
+            if label not in tokens or url.path not in ('/login', '/login2', '/whoami'):
+                self.send_error(404)
+                return
+            received = {}
+            for part in (self.headers.get('Cookie') or '').split(';'):
+                if '=' in part:
+                    name, value = part.strip().split('=', 1)
+                    received.setdefault(name, []).append(value)
+            statuses = {}
+            for name in AUTH_COOKIES:
+                values = received.get(name, [])
+                if not values:
+                    statuses[name] = 'missing'
+                elif any(value == tokens[other][name] for other in tokens if other != label for value in values):
+                    statuses[name] = 'foreign'
+                elif values == [tokens[label][name]]:
+                    statuses[name] = 'ok'
+                else:
+                    statuses[name] = 'stale'
+            with log.open('a') as handle:
+                handle.write(json.dumps({'path': url.path, 'profile': label, 'phase': phase, 'cookies': statuses}) + '\n')
+            body = ('%s %s' % (label, ' '.join('%s=%s' % item for item in statuses.items()))).encode()
+            self.send_response(200)
+            self.send_header('Content-Type', 'text/plain; charset=utf-8')
+            self.send_header('Cache-Control', 'no-store')
+            attributes = '; Path=/; SameSite=Lax'
+            year = '; Max-Age=31536000'
+            if url.path == '/login':
+                self.send_header('Set-Cookie', 'auth=' + tokens[label]['auth'] + year + attributes + '; HttpOnly')
+                self.send_header('Set-Cookie', 'pref=' + tokens[label]['pref'] + year + attributes)
+                self.send_header('Set-Cookie', 'sid=' + tokens[label]['sid'] + attributes + '; HttpOnly')
+            if url.path == '/login2':
+                self.send_header('Set-Cookie', 'auth2=' + tokens[label]['auth2'] + year + attributes + '; HttpOnly')
+            self.send_header('Content-Length', str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+    return ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+
+
+def cookie_store_summary(root):
+    """Synthetic profiles only, after the app quit: rows per encryption prefix, no values."""
+    summary = {}
+    engine = root / 'Chromium'
+    for database in sorted([*engine.glob('*/Cookies'), *engine.glob('*/Network/Cookies')]):
+        with tempfile.TemporaryDirectory(prefix='cookie-summary-') as temp:
+            for sidecar in ('', '-wal', '-journal'):
+                source = Path(str(database) + sidecar)
+                if source.exists():
+                    shutil.copyfile(source, Path(temp) / ('Cookies' + sidecar))
+            connection = sqlite3.connect(Path(temp) / 'Cookies')
+            rows = connection.execute("SELECT name, substr(encrypted_value, 1, 3), length(value) > 0, is_persistent "
+                                      "FROM cookies WHERE host_key = '127.0.0.1'").fetchall()
+            connection.close()
+        counts = {}
+        for name, prefix, plain, persistent in rows:
+            kind = 'plain' if plain else prefix.decode(errors='replace') if isinstance(prefix, bytes) else str(prefix)
+            counts.setdefault(name, []).append(kind + ('' if persistent else '-session'))
+        summary[str(database.parent.relative_to(engine))] = {name: sorted(kinds) for name, kinds in sorted(counts.items())}
+    return summary
+
+
+def auth_stage(work, stage, evidence, expect):
+    """One GUI session under lockf (at most 55 s including quit); see main for the sequence."""
+    deadline = time.monotonic() + 52
+    root, app = work / 'data', work / 'installed/Orbit.app'
+    fixture = json.loads((work / 'auth-fixture.json').read_text())
+    info = plistlib.loads((app / 'Contents/Info.plist').read_bytes())
+    feed = urlsplit(info.get('SUFeedURL', ''))
+    if not (info.get('CFBundleIdentifier') == TEST_ID and info.get('OrbitUpdaterLocalTest') is True
+            and info.get('OrbitSyntheticBundle') is True and info.get('OrbitUseMockKeychain') is True
+            and Path(info.get('OrbitDataRoot', '')).resolve() == root.resolve()
+            and feed.scheme == 'http' and feed.hostname == '127.0.0.1'
+            and urlsplit(fixture['base']).hostname == '127.0.0.1'
+            and json.loads((root / '.orbit-synthetic-root').read_text())['bundleID'] == TEST_ID):
+        raise RuntimeError('Refusing an unconfined authentication fixture')
+    log = work / ('run-' + stage + '.log')
+    processes, seen, results = [], [], json.loads((work / 'auth-results.json').read_text())
+    started, timeline = time.monotonic(), results.setdefault('timeline', {}).setdefault(stage, [])
+
+    def mark(label):
+        timeline.append('%.1f %s' % (time.monotonic() - started, label))
+
+    def state():
+        try:
+            result = json.loads((root / 'perf-state.json').read_text())
+            if result['pid'] not in seen:
+                command = subprocess.check_output(['ps', '-p', str(result['pid']), '-o', 'comm='], text=True).strip()
+                if Path(command).resolve() != (app / 'Contents/MacOS/Orbit').resolve():
+                    return {}
+                seen.append(result['pid'])
+            return result
+        except (OSError, ValueError, KeyError, subprocess.CalledProcessError):
+            return {}
+
+    def wait(predicate, label):
+        while time.monotonic() < deadline:
+            for proc in processes:
+                if proc.poll() is not None and proc.returncode < 0:
+                    raise RuntimeError('Crash: stop all GUI qualification')
+            value = state()
+            if predicate(value):
+                return value
+            time.sleep(.05)
+        mark('deadline ' + label)
+        raise RuntimeError('Deadline: %s (%s)' % (label, stage))
+
+    def command(action, **fields):
+        # The in-app probe checks window ownership (CGWindowList owner PID) before any action.
+        nonce = str(time.monotonic_ns())
+        tmp = root / 'command.tmp'
+        tmp.write_text(json.dumps(dict(command='update-test', action=action, nonce=nonce, **fields)))
+        tmp.replace(root / 'perf-command.json')
+        return nonce
+
+    def launch(handle):
+        (root / 'perf-state.json').unlink(missing_ok=True)
+        processes.append(subprocess.Popen([str(app / 'Contents/MacOS/Orbit')], stdout=handle, stderr=handle))
+        wait(lambda s: bool(s.get('update')), 'launch')
+        nonce, sent = command('seed'), time.monotonic()
+
+        def seeded(value):
+            nonlocal nonce, sent
+            if 'about:blank#update-session' in value.get('update', {}).get('tabs', []):
+                return True
+            if value.get('commandNonce') == nonce and time.monotonic() - sent > 1:
+                nonce, sent = command('seed'), time.monotonic()
+            return False
+        value = wait(seeded, 'seed')
+        mark('launched')
+        return value
+
+    def quit_app():
+        pid = state()['pid']
+        (root / 'perf-command.json').write_text(json.dumps({'command': 'quit'}))
+        wait(lambda _: subprocess.run(['kill', '-0', str(pid)], capture_output=True).returncode != 0, 'quit')
+
+    def authenticate(phase, steps):
+        mark('auth ' + phase)
+        fields = dict(base=fixture['base'], phase=phase, steps=steps, second=fixture['second'])
+        nonce, sent = command('auth', **fields), time.monotonic()
+
+        def answered(value):
+            nonlocal nonce, sent
+            if value.get('auth', {}).get('phase') == phase:
+                return True
+            # As for seed: a command consumed before CGWindowList lists the owned window is
+            # ignored by the ownership check; resend only an acknowledged, unanswered command.
+            if value.get('commandNonce') == nonce and time.monotonic() - sent > 1:
+                nonce, sent = command('auth', **fields), time.monotonic()
+            return False
+        report = wait(answered, 'auth ' + phase)['auth']
+        seen_by_fixture = {}
+        for line in (work / 'auth.log').read_text().splitlines():
+            entry = json.loads(line)
+            if entry['phase'] == phase and entry['path'] == '/whoami':
+                seen_by_fixture[entry['profile']] = entry['cookies']
+        page = {label: report.get(label, {}).get('whoami', '') for label in ('A', 'B')}
+        results['phases'][phase] = {'fixture': seen_by_fixture, 'page': page, 'version': state()['update']['version']}
+        return seen_by_fixture, page
+
+    def update(handle):
+        before = wait(lambda s: s.get('update', {}).get('card') is True, 'prepared card')
+        mark('card')
+        pid = before['pid']
+        command('click')
+        after = wait(lambda s: s.get('pid') != pid and s.get('update', {}).get('version') == case_versions_auth(stage), 'relaunch')
+        mark('relaunched')
+        results['checks'][stage + '_session_restored'] = after['update']['tabs'] == before['update']['tabs']
+
+    try:
+        clean_preferences()
+        with log.open('w') as handle:
+            launch(handle)
+            if stage == 'auth-old':
+                authenticate('login', 'login,whoami')
+                quit_app()
+                launch(handle)
+                authenticate('old-restart', 'whoami')
+            elif stage == 'auth-update':
+                update(handle)
+                authenticate('updated', 'whoami')
+                if expect == 'kept':
+                    authenticate('new-login', 'login2,whoami')
+            elif stage == 'auth-restart':
+                authenticate('new-restart', 'whoami')
+            elif stage == 'auth-next':
+                update(handle)
+                authenticate('next-update', 'whoami')
+            quit_app()
+        results['stores'][stage] = cookie_store_summary(root)
+    finally:
+        mark('end')
+        (work / 'auth-results.json').write_text(json.dumps(results, indent=2) + '\n')
+        if log.exists():
+            events = [line for line in log.read_text().splitlines() if line.startswith('orbit-updater event=')]
+            (evidence / (stage + '-events.log')).write_text('\n'.join(events) + '\n')
+        last = state()
+        (evidence / (stage + '-last-state.json')).write_text(json.dumps(
+            {key: last.get(key) for key in ('pid', 'update', 'auth', 'commandNonce')}, indent=2) + '\n')
+        for pid in set(seen + [proc.pid for proc in processes]):
+            command_line = subprocess.run(['ps', '-p', str(pid), '-o', 'comm='], capture_output=True, text=True).stdout.strip()
+            if command_line and Path(command_line).resolve() == (app / 'Contents/MacOS/Orbit').resolve():
+                (root / 'perf-command.json').write_text(json.dumps({'command': 'quit'}))
+                for _ in range(10):
+                    if subprocess.run(['kill', '-0', str(pid)], capture_output=True).returncode != 0:
+                        break
+                    time.sleep(.1)
+                else:
+                    os.kill(pid, 9)
+        for proc in processes:
+            if proc.poll() is not None and proc.returncode < 0:
+                (evidence / 'STOP-CRASH').write_text('Synthetic process exited by signal. No more GUI runs.\n')
+        subprocess.run([LSREGISTER, '-u', str(app)], capture_output=True)
+        subprocess.run(['tccutil', 'reset', 'All', TEST_ID], capture_output=True)
+        clean_preferences()
+
+
+def case_versions_auth(stage):
+    return {'auth-update': '2', 'auth-next': '3'}[stage]
+
+
+def auth_checks(results, expect):
+    """Assertions over the fixture's view; the page view proves HttpOnly cookies stay hidden."""
+    phases, checks = results['phases'], results['checks']
+
+    def statuses(phase, label):
+        return phases.get(phase, {}).get('fixture', {}).get(label, {})
+
+    def has(phase, names):
+        return all(all(statuses(phase, label).get(name) == 'ok' for name in names) for label in ('A', 'B'))
+
+    every = [statuses(phase, label) for phase in phases for label in ('A', 'B')]
+    checks['profiles_isolated'] = bool(every) and not any('foreign' in s.values() for s in every)
+    checks['login_sets_persistent_session_and_httponly'] = has('login', ('auth', 'pref', 'sid'))
+    def page_cookies(phase, label):
+        page = phases[phase]['page'].get(label, '')
+        return set(page.rsplit(' js=', 1)[1].split(',')) if ' js=' in page else set()
+
+    checks['httponly_hidden_from_page'] = all(
+        not page_cookies(phase, label) & set(AUTH_HTTP_ONLY)
+        and (statuses(phase, label).get('pref') != 'ok' or 'pref' in page_cookies(phase, label))
+        for phase in phases for label in ('A', 'B'))
+    checks['old_engine_restart_keeps_persistent'] = has('old-restart', AUTH_PERSISTENT)
+    baseline_session = [statuses('old-restart', label).get('sid') for label in ('A', 'B')]
+    results['session_cookie_after_restart'] = baseline_session
+    if expect == 'lost':
+        checks['update_lost_authentication'] = all(statuses('updated', label).get(name) == 'missing'
+                                                    for label in ('A', 'B') for name in AUTH_PERSISTENT)
+        return checks
+    checks['update_keeps_persistent'] = has('updated', AUTH_PERSISTENT)
+    checks['update_session_cookie_like_restart'] = [statuses('updated', label).get('sid') for label in ('A', 'B')] == baseline_session
+    checks['new_login_after_update'] = has('new-login', ('auth', 'pref', 'sid', 'auth2'))
+    checks['restart_keeps_old_and_new'] = has('new-restart', ('auth', 'pref', 'auth2'))
+    checks['next_update_keeps_old_and_new'] = has('next-update', ('auth', 'pref', 'auth2'))
+    return checks
+
+
+def run_auth_transition(work, root, evidence, expect, previous, builds, feed, empty, packaging):
+    installed = work / 'installed/Orbit.app'
+    if installed.exists():
+        shutil.rmtree(installed)
+    if root.exists():
+        shutil.rmtree(root)
+    packaging.prepare_synthetic_root(root, TEST_ID)
+    copy(previous, installed)
+    (work / 'auth.log').write_text('')
+    (work / 'auth-results.json').write_text(json.dumps({'phases': {}, 'checks': {}, 'stores': {}}))
+    stages = AUTH_STAGES if expect == 'kept' else AUTH_STAGES[:2]
+    for stage in stages:
+        if (evidence / 'STOP-CRASH').exists():
+            raise RuntimeError('Crash: stop all GUI qualification')
+        content = {'auth-old': empty, 'auth-update': (work / 'valid-2.xml').read_bytes(),
+                   'auth-restart': empty, 'auth-next': (work / 'valid-3.xml').read_bytes()}[stage]
+        (feed / 'appcast.xml').write_bytes(content)
+        try:
+            run('/usr/bin/lockf', '-k', '/tmp/orbit-gui-slot.lock', sys.executable, __file__, '--auth-stage', stage,
+                '--work', work, '--evidence', evidence, '--auth-expect', expect)
+        finally:
+            results = json.loads((work / 'auth-results.json').read_text())
+            (evidence / ('auth-transition-%s.json' % expect)).write_text(json.dumps(results, indent=2) + '\n')
+    results = json.loads((work / 'auth-results.json').read_text())
+    checks = auth_checks(results, expect)
+    (evidence / ('auth-transition-%s.json' % expect)).write_text(json.dumps(results, indent=2) + '\n')
+    print(json.dumps({'case': 'auth-transition', 'expect': expect, 'checks': checks}), flush=True)
+    if not all(checks.values()):
+        raise AssertionError(checks)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--source-app', type=Path, default=ROOT / 'native/OrbitChromium/build/app-orbit-engine-extensions-r13/product/Orbit.app')
@@ -228,15 +547,22 @@ def main():
     parser.add_argument('--case')
     names = ['background', 'manual', 'quit', 'off', 'toggle-off', 'broken',
              'signed-transition', *SIGNED_NEXT_CASES]
-    parser.add_argument('--cases', nargs='+', default=names, choices=names + ['engine-transition'])
+    parser.add_argument('--cases', nargs='+', default=names, choices=names + ['engine-transition', 'auth-transition'])
+    parser.add_argument('--auth-expect', choices=('kept', 'lost'), default='kept',
+                        help='auth-transition: the new engine keeps (default) or drops existing authentication')
+    parser.add_argument('--auth-stage', choices=AUTH_STAGES)
     parser.add_argument('--work', type=Path)
     args = parser.parse_args()
     args.evidence.mkdir(parents=True, exist_ok=True)
     if args.case:
         case(args.work, args.case, args.evidence)
         return
-    if 'engine-transition' in args.cases and args.previous_app is None:
-        parser.error('engine-transition requires --previous-app')
+    if args.auth_stage:
+        auth_stage(args.work, args.auth_stage, args.evidence, args.auth_expect)
+        return
+    transitions = [name for name in ('engine-transition', 'auth-transition') if name in args.cases]
+    if transitions and args.previous_app is None:
+        parser.error('%s requires --previous-app' % transitions[0])
     if (args.evidence / 'STOP-CRASH').exists():
         raise RuntimeError('Previous crash: GUI qualification stopped')
     with tempfile.TemporaryDirectory(prefix='update-ux-') as temp:
@@ -254,6 +580,10 @@ def main():
                 super().do_GET()
         server = ThreadingHTTPServer(('127.0.0.1', 0), functools.partial(Handler, directory=feed))
         threading.Thread(target=server.serve_forever, daemon=True).start()
+        authentication = auth_server(work)
+        threading.Thread(target=authentication.serve_forever, daemon=True).start()
+        (work / 'auth-fixture.json').write_text(json.dumps({
+            'base': 'http://127.0.0.1:%d' % authentication.server_port, 'second': str(uuid.uuid4()).upper()}))
         try:
             spec = importlib.util.spec_from_file_location('orbit_app', ROOT / 'scripts/orbit-app.py')
             packaging = importlib.util.module_from_spec(spec)
@@ -287,7 +617,7 @@ try key.publicKey.rawRepresentation.base64EncodedData().write(to: URL(fileURLWit
             (legacy / 'Contents/Info.plist').write_bytes(plistlib.dumps(legacy_info))
             sign_chromium_bundle(legacy)
             previous = None
-            if 'engine-transition' in args.cases:
+            if transitions:
                 # Strip release signing artifacts only from a disposable copy. The fixture
                 # is re-signed for its confined mock identity by the normal packager.
                 previous_source = work / 'previous-source/Orbit.app'
@@ -339,6 +669,10 @@ try key.publicKey.rawRepresentation.base64EncodedData().write(to: URL(fileURLWit
             installed = work / 'installed/Orbit.app'
             installed.parent.mkdir()
             for name in args.cases:
+                if name == 'auth-transition':
+                    run_auth_transition(work, root, args.evidence, args.auth_expect, previous, builds, feed,
+                                        empty, packaging)
+                    continue
                 if (args.evidence / 'STOP-CRASH').exists():
                     raise RuntimeError('Crash: stop all GUI qualification')
                 if installed.exists():
@@ -365,6 +699,8 @@ try key.publicKey.rawRepresentation.base64EncodedData().write(to: URL(fileURLWit
         finally:
             server.shutdown()
             server.server_close()
+            authentication.shutdown()
+            authentication.server_close()
 
 
 if __name__ == '__main__':
