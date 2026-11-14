@@ -55,6 +55,20 @@ def run(*args, **kw):
     return subprocess.run(list(map(str, args)), check=True, **kw)
 
 
+def owned_application_state(path, executable):
+    """Reject stale state even for a PID seen earlier: an updater can replace its process."""
+    try:
+        value = json.loads(path.read_text())
+        pid = value['pid']
+        if type(pid) is not int or pid <= 1:
+            return {}
+        command = subprocess.check_output(['ps', '-p', str(pid), '-o', 'comm='], text=True,
+                                          stderr=subprocess.DEVNULL).strip()
+        return value if Path(command).resolve() == executable.resolve() else {}
+    except (OSError, ValueError, KeyError, subprocess.CalledProcessError):
+        return {}
+
+
 def copy(source, destination):
     run('/bin/cp', '-cR', source, destination)
 
@@ -100,17 +114,10 @@ def case(work, name, evidence):
         return path.read_text().count('archive\n') if path.exists() else 0
 
     def state():
-        try:
-            result = json.loads((root / 'perf-state.json').read_text())
-            if result['pid'] not in seen:
-                # A replacement PID is accepted only for our exact bundle executable.
-                command = subprocess.check_output(['ps', '-p', str(result['pid']), '-o', 'comm='], text=True).strip()
-                if Path(command).resolve() != (app / 'Contents/MacOS/Orbit').resolve():
-                    return {}
-                seen.append(result['pid'])
-            return result
-        except (OSError, ValueError, KeyError):
-            return {}
+        result = owned_application_state(root / 'perf-state.json', app / 'Contents/MacOS/Orbit')
+        if result.get('pid') and result['pid'] not in seen:
+            seen.append(result['pid'])
+        return result
 
     def wait(predicate, label):
         while time.monotonic() < deadline:
@@ -377,16 +384,10 @@ def auth_stage(work, stage, evidence, expect):
         timeline.append('%.1f %s' % (time.monotonic() - started, label))
 
     def state():
-        try:
-            result = json.loads((root / 'perf-state.json').read_text())
-            if result['pid'] not in seen:
-                command = subprocess.check_output(['ps', '-p', str(result['pid']), '-o', 'comm='], text=True).strip()
-                if Path(command).resolve() != (app / 'Contents/MacOS/Orbit').resolve():
-                    return {}
-                seen.append(result['pid'])
-            return result
-        except (OSError, ValueError, KeyError, subprocess.CalledProcessError):
-            return {}
+        result = owned_application_state(root / 'perf-state.json', app / 'Contents/MacOS/Orbit')
+        if result.get('pid') and result['pid'] not in seen:
+            seen.append(result['pid'])
+        return result
 
     def wait(predicate, label):
         while time.monotonic() < deadline:
@@ -561,6 +562,13 @@ def auth_stage(work, stage, evidence, expect):
         if log.exists():
             lines = log.read_text(errors='replace').splitlines()
             events = [line for line in lines if line.startswith('orbit-updater event=')]
+            results['diagnostics'] = results.get('diagnostics', {})
+            results['diagnostics'][stage] = {
+                'updater_events': events,
+                'startup_refusals': [line for line in lines if line.startswith('orbit: ')],
+                'launched_exit_codes': [proc.poll() for proc in processes],
+                'installed_build': plistlib.loads((app / 'Contents/Info.plist').read_bytes()).get('CFBundleVersion')}
+            (work / 'auth-results.json').write_text(json.dumps(results, indent=2) + '\n')
             (evidence / (stage + '-events.log')).write_text('\n'.join(events) + '\n')
             # Engine diagnostics of the synthetic run (extension loading/updates), bounded.
             notes = [line[:300] for line in lines if any(word in line for word in ('acr:', 'xtension', 'rx', 'CRX'))]

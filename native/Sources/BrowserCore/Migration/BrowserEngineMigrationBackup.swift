@@ -91,23 +91,35 @@ public enum BrowserEngineMigrationBackup {
 
     /// Refuse symlinks below an owned root, including intermediate directories. The caller
     /// holds the root lock, so no other browser process can replace these paths during a copy.
+    static func refuseUnsafePath(_ operation: String, code: Int32 = 0) throws -> Never {
+        // Fixed operation names and numeric codes only, never file paths or profile data.
+        FileHandle.standardError.write(Data("orbit: migration backup guard=\(operation) code=\(code)\n".utf8))
+        throw Failure.unsafePath
+    }
+
     static func requireConfined(_ url: URL, under root: URL) throws {
-        let base = root.standardizedFileURL
-        let target = url.standardizedFileURL
-        guard target.path == base.path || target.path.hasPrefix(base.path + "/") else { throw Failure.unsafePath }
-        let parts = target.pathComponents.dropFirst(base.pathComponents.count)
-        var current = base
+        // Do not standardize here: Foundation can shorten an existing /private/var or
+        // /private/tmp root but retain that prefix for a missing child. Compare lexical path
+        // components, then lstat each descendant so normalization cannot hide a symlink.
+        let rootParts = root.pathComponents
+        let targetParts = url.pathComponents
+        guard root.isFileURL, url.isFileURL, rootParts.first == "/", targetParts.first == "/",
+              !rootParts.contains(".."), !rootParts.contains("."),
+              !targetParts.contains(".."), !targetParts.contains("."),
+              targetParts.starts(with: rootParts) else { try refuseUnsafePath("outside-root") }
+        let parts = targetParts.dropFirst(rootParts.count)
+        var current = root
         for part in parts {
             current.appendPathComponent(part)
             var info = stat()
             if lstat(current.path, &info) == 0 {
-                guard info.st_mode & S_IFMT != S_IFLNK else { throw Failure.unsafePath }
-            } else if errno != ENOENT { throw Failure.unsafePath }
+                guard info.st_mode & S_IFMT != S_IFLNK else { try refuseUnsafePath("symbolic-link") }
+            } else if errno != ENOENT { try refuseUnsafePath("metadata", code: errno) }
         }
     }
 
     static func validateRoots(dataRoot: URL, engineRoot: URL) throws {
-        guard engineRoot.standardizedFileURL != dataRoot.standardizedFileURL else { throw Failure.unsafePath }
+        guard engineRoot.pathComponents != dataRoot.pathComponents else { try refuseUnsafePath("same-root") }
         try requireConfined(engineRoot, under: dataRoot)
         try requireConfined(dataRoot.appendingPathComponent(directoryName), under: dataRoot)
         try requireConfined(dataRoot.appendingPathComponent(markerName), under: dataRoot)
@@ -116,7 +128,7 @@ public enum BrowserEngineMigrationBackup {
     static func makePrivateDirectory(_ url: URL) throws {
         try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true,
                                                 attributes: [.posixPermissions: 0o700])
-        guard chmod(url.path, 0o700) == 0 else { throw Failure.unsafePath }
+        guard chmod(url.path, 0o700) == 0 else { try refuseUnsafePath("directory-mode", code: errno) }
     }
 
     /// Copies the candidates into a new snapshot, published atomically once complete.
@@ -140,7 +152,7 @@ public enum BrowserEngineMigrationBackup {
                 let target = partial.appendingPathComponent("Chromium").appendingPathComponent(relative)
                 try makePrivateDirectory(target.deletingLastPathComponent())
                 try FileManager.default.copyItem(at: source, to: target)
-                guard chmod(target.path, 0o600) == 0 else { throw Failure.unsafePath }
+                guard chmod(target.path, 0o600) == 0 else { try refuseUnsafePath("snapshot-file-mode", code: errno) }
                 let (size, hash) = try digest(target)
                 entries.append(Entry(path: relative, size: size, sha256: hash))
             }
@@ -149,7 +161,7 @@ public enum BrowserEngineMigrationBackup {
             encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
             let file = partial.appendingPathComponent("manifest.json")
             try encoder.encode(manifest).write(to: file, options: .atomic)
-            guard chmod(file.path, 0o600) == 0 else { throw Failure.unsafePath }
+            guard chmod(file.path, 0o600) == 0 else { try refuseUnsafePath("manifest-mode", code: errno) }
             try FileManager.default.moveItem(at: partial, to: directory.appendingPathComponent(id, isDirectory: true))
             // A restore safety copy must not prune the verified source before it is consumed.
             if reason == "build-change" { prune(directory, now: now) }

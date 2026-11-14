@@ -8,6 +8,8 @@ import tempfile
 import threading
 import unittest
 import urllib.request
+import subprocess
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'scripts'))
@@ -98,6 +100,20 @@ class AuthChecksTests(unittest.TestCase):
         self.assertFalse(update_ux.auth_checks(results, 'kept')['httponly_hidden_from_page'])
 
 
+
+
+class OwnedStateTests(unittest.TestCase):
+    def test_dead_or_reused_pid_never_keeps_a_previously_valid_state(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            state = Path(temporary) / 'state.json'
+            executable = Path(temporary) / 'Orbit'
+            state.write_text(json.dumps({'pid': 42, 'update': {'version': '1'}}))
+            with patch.object(update_ux.subprocess, 'check_output', return_value=str(executable)):
+                self.assertEqual(update_ux.owned_application_state(state, executable)['pid'], 42)
+            with patch.object(update_ux.subprocess, 'check_output', side_effect=subprocess.CalledProcessError(1, 'ps')):
+                self.assertEqual(update_ux.owned_application_state(state, executable), {})
+            with patch.object(update_ux.subprocess, 'check_output', return_value='/another/Orbit'):
+                self.assertEqual(update_ux.owned_application_state(state, executable), {})
 
 
 class InputIdentityTests(unittest.TestCase):

@@ -165,4 +165,16 @@ struct BrowserEngineMigrationBackupTests {
         #expect(try String(contentsOf: file, encoding: .utf8) == "current")
     }
 
+    @Test("A physical macOS root can create its missing backup directory and marker")
+    func physicalRootWithMissingChildren() throws {
+        defer { try? FileManager.default.removeItem(at: root) }
+        try seedProfiles()
+        let physical = root.resolvingSymlinksInPath()
+        let saved = try #require(try BrowserEngineMigrationBackup.prepareLaunch(dataRoot: physical,
+            engineRoot: physical.appendingPathComponent("Chromium", isDirectory: true), build: "new"))
+        #expect(saved.files.count == 6)
+        #expect(try BrowserEngineMigrationBackup.prepareLaunch(dataRoot: physical,
+            engineRoot: physical.appendingPathComponent("Chromium", isDirectory: true), build: "new") == nil)
+    }
+
 }
