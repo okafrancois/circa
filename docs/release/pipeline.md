@@ -226,11 +226,17 @@ ORBIT-RENAME is merged: packaging uses the Orbit executable, icon and product id
   `{"browserPasskeys":true,"authorization":"…"}` (exit 0). That path reads the provider's
   authorization state without requesting it, so it never shows a prompt. The engine asks the
   user for authorization during the first ceremony.
-- `webauthn_keychain_access_group` (optional, unset) adds one `keychain-access-groups` value for
-  the engine's own Touch ID authenticator. It must start with the team ID, be admitted by the
-  profile, and appear verbatim in the engine binary; otherwise the release aborts. The current
-  engine compiles in a group without the team prefix, so leave this unset until an engine build
-  compiles in `<team>.<bundle id>.webauthn`.
+- `webauthn_keychain_access_group` (optional) adds one `keychain-access-groups` value for the
+  engine's own Touch ID authenticator. It must start with the team ID, be admitted by the
+  profile, and appear verbatim in the engine binary; otherwise the release aborts. Engines from
+  r23 compile in `5Y39TTNCM7.io.github.okatech.orbit.webauthn`, which the current profile admits
+  (`5Y39TTNCM7.*`); earlier engines compile in a group without the team prefix, so the key must
+  stay unset with them. The Touch ID check runs in the browser (host) process, so the group is
+  signed on the host only. macOS refuses to launch a host that claims the group without a
+  profile that admits it, so only the Developer ID release can carry it; test bundles never do.
+- From r23, a page hosted directly in the browser's AppKit views (no Views widget) gives the
+  system passkey provider the window that contains it. It only takes effect once the browser
+  entitlement above is granted.
 - After Apple approves the request: enable the capability on the App ID, regenerate the Developer
   ID profile with every existing capability, back up the old file, then replace it as described in
   *Renewing or replacing the profile*. Update the `CIRCA_PROVISIONING_PROFILE` secret as well

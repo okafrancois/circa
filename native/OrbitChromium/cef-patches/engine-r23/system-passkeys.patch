@@ -1,0 +1,41 @@
+diff --git a/chrome/browser/webauthn/chrome_authenticator_request_delegate.cc b/chrome/browser/webauthn/chrome_authenticator_request_delegate.cc
+index 6c8b888..85fbd6f 100644
+--- a/chrome/browser/webauthn/chrome_authenticator_request_delegate.cc
++++ b/chrome/browser/webauthn/chrome_authenticator_request_delegate.cc
+@@ -1423,6 +1423,17 @@ void ChromeAuthenticatorRequestDelegate::ConfigureNSWindow(
+     if (window) {
+       discovery_factory->set_nswindow(window);
+     }
++    return;
++  }
++
++  // Orbit: a WebContents hosted directly in the embedder's AppKit view
++  // hierarchy has no Views widget. Use the NSWindow that contains its view
++  // ([native_view window]) so the system passkey provider can present its
++  // sheet. Nothing is set while the view is not in a window.
++  const gfx::NativeWindow hosted_window =
++      web_contents->GetTopLevelNativeWindow();
++  if (hosted_window) {
++    discovery_factory->set_nswindow(hosted_window);
+   }
+ }
+ void ChromeAuthenticatorRequestDelegate::ConfigureICloudKeychain(
+diff --git a/chrome/browser/webauthn/chrome_web_authentication_delegate.cc b/chrome/browser/webauthn/chrome_web_authentication_delegate.cc
+index 0f9b546..6702961 100644
+--- a/chrome/browser/webauthn/chrome_web_authentication_delegate.cc
++++ b/chrome/browser/webauthn/chrome_web_authentication_delegate.cc
+@@ -391,8 +391,13 @@ void ChromeWebAuthenticationDelegate::UpdateUserPasskeys(
+ ChromeWebAuthenticationDelegate::TouchIdAuthenticatorConfig
+ ChromeWebAuthenticationDelegate::TouchIdAuthenticatorConfigForProfile(
+     Profile* profile) {
++  // Orbit: the keychain access group of the signed browser. It carries the
++  // Developer ID team prefix and is admitted by the browser's provisioning
++  // profile; release signing requests it only when this exact value is present
++  // in the engine binary. Without the entitlement, the platform authenticator
++  // stays unavailable, as before.
+   constexpr char kKeychainAccessGroup[] =
+-      MAC_TEAM_IDENTIFIER_STRING "." MAC_BUNDLE_IDENTIFIER_STRING ".webauthn";
++      "5Y39TTNCM7.io.github.okatech.orbit.webauthn";
+ 
+   std::string metadata_secret = profile->GetPrefs()->GetString(
+       webauthn::pref_names::kWebAuthnTouchIdMetadataSecretPrefName);
