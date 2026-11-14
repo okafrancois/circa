@@ -5,12 +5,19 @@ Every feed is signed with the test key (sign_update embeds the feed signature). 
 cases cover the transition from a build without SURequireSignedFeed, acceptance of the next
 signed feed by a build that requires it, and rejection of a tampered or unsigned feed.
 
-The auth-transition case (with --previous-app) signs two synthetic profiles in to a loopback
-authentication fixture with the previous engine, then checks that real Chromium requests stay
-authenticated after a normal restart, the signed update to the new engine, a new login, another
-restart and the next update. The fixture judges the persistent, session and HttpOnly cookies
-it receives; isolated profiles must never present each other's tokens. --auth-expect lost
-documents an engine that drops them instead.
+The auth-transition case (with --previous-app) is the update preservation qualification. It
+signs two synthetic profiles in to a loopback authentication fixture with the previous engine,
+then checks that real Chromium requests stay authenticated after a normal restart, the signed
+update to the new engine, a new login, another restart and the next update. The fixture judges
+the persistent, session and HttpOnly cookies it receives; isolated profiles must never present
+each other's tokens. --auth-expect lost documents an engine that drops them instead.
+
+The same run covers installed extensions (scripts/update_extension_fixture.py): the previous
+engine installs a signed CRX3 through its extension updater in both profiles, then the run
+checks the extension's identity, version, enabled/disabled state, pinning, granted permissions,
+chrome.storage marker and background/content-script operation after an ordinary restart, the
+update and the next update, plus the candidate's private migration backup. --extensions-expect
+lost or record documents an engine that drops installed extensions.
 
 Each GUI case owns the shared slot for at most 55 seconds. All archives, keys, bundles,
 preferences and synthetic data are removed. Only fixed events and result summaries survive.
@@ -33,10 +40,11 @@ import sys
 import tempfile
 import threading
 import time
-from urllib.parse import urlsplit
+from urllib.parse import parse_qsl, urlsplit
 import uuid
 
 from local_signing import sign_chromium_bundle
+import update_extension_fixture as extensions_fixture
 
 ROOT = Path(__file__).resolve().parents[1]
 TEST_ID = 'io.github.okatech.orbit.test.update'
@@ -233,7 +241,8 @@ def case(work, name, evidence):
 AUTH_COOKIES = ('auth', 'pref', 'sid', 'auth2')
 AUTH_PERSISTENT = ('auth', 'pref')
 AUTH_HTTP_ONLY = ('auth', 'sid', 'auth2')
-AUTH_STAGES = ('auth-old', 'auth-update', 'auth-restart', 'auth-next')
+AUTH_STAGES = ('auth-old', 'ext-old', 'auth-update', 'auth-restart', 'auth-next')
+PREVIOUS_STAGES = ('auth-old', 'ext-old')
 
 
 def auth_server(work):
@@ -246,8 +255,42 @@ def auth_server(work):
         def log_message(self, *unused):
             pass
 
+        def do_CONNECT(self):
+            self.send_error(403)
+
+        def reply(self, body, content_type):
+            self.send_response(200)
+            self.send_header('Content-Type', content_type)
+            self.send_header('Cache-Control', 'no-store')
+            self.send_header('Content-Length', str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def extension(self, url):
+            # The extension updater and the fixture extension's worker; loopback only.
+            with (work / 'ext-requests.log').open('a') as handle:
+                handle.write(url.path + '\n')
+            if url.path == '/ext/update.xml':
+                fixture = json.loads((work / 'ext-fixture.json').read_text())
+                origin = 'http://127.0.0.1:%d' % self.server.server_port
+                return self.reply(extensions_fixture.update_response(fixture, origin), 'application/xml')
+            if url.path == '/ext/x-2.crx':
+                return self.reply((work / 'ext/x-2.crx').read_bytes(), 'application/x-chrome-extension')
+            if url.path == '/ext-report' and extensions_fixture.record_report(work, dict(parse_qsl(url.query))):
+                return self.reply(b'ok', 'text/plain; charset=utf-8')
+            self.send_error(404)
+
         def do_GET(self):
             url = urlsplit(self.path)
+            if url.scheme or url.netloc:
+                # A proxied request for another host (the updater's rejecting proxy).
+                self.send_error(403)
+                return
+            if url.path.startswith('/ext'):
+                return self.extension(url)
+            if url.path == '/startup':
+                return self.reply(b'<!doctype html><title>Circa fixture</title><p>Synthetic loopback fixture.</p>',
+                                  'text/html; charset=utf-8')
             query = dict(item.split('=', 1) for item in url.query.split('&') if '=' in item)
             label, phase = query.get('profile', ''), query.get('phase', '')
             if label not in tokens or url.path not in ('/login', '/login2', '/whoami'):
@@ -365,9 +408,9 @@ def auth_stage(work, stage, evidence, expect):
         tmp.replace(root / 'perf-command.json')
         return nonce
 
-    def launch(handle):
+    def launch(handle, extra=()):
         (root / 'perf-state.json').unlink(missing_ok=True)
-        processes.append(subprocess.Popen([str(app / 'Contents/MacOS/Orbit')], stdout=handle, stderr=handle))
+        processes.append(subprocess.Popen([str(app / 'Contents/MacOS/Orbit'), *extra], stdout=handle, stderr=handle))
         wait(lambda s: bool(s.get('update')), 'launch')
         nonce, sent = command('seed'), time.monotonic()
 
@@ -411,6 +454,38 @@ def auth_stage(work, stage, evidence, expect):
         results['phases'][phase] = {'fixture': seen_by_fixture, 'page': page, 'version': state()['update']['version']}
         return seen_by_fixture, page
 
+    def extension_reports(phase, seconds):
+        """Waits (bounded) for X's reports from both profiles; absence is judged afterwards."""
+        limit = min(deadline - 8, time.monotonic() + seconds)
+        while time.monotonic() < limit:
+            if extensions_fixture.reported(work, phase):
+                return True
+            time.sleep(.1)
+        return extensions_fixture.reported(work, phase)
+
+    def inventory(phase):
+        mark('extensions ' + phase)
+        fields = dict(phase=phase, second=fixture['second'])
+        nonce, sent = command('extensions', **fields), time.monotonic()
+
+        def answered(value):
+            nonlocal nonce, sent
+            if value.get('extensions', {}).get('phase') == phase:
+                return True
+            if value.get('commandNonce') == nonce and time.monotonic() - sent > 1:
+                nonce, sent = command('extensions', **fields), time.monotonic()
+            return False
+        report = wait(answered, 'extensions ' + phase)['extensions']
+        results['inventory'][phase] = {label: report.get(label) for label in ('A', 'B')}
+
+    def candidate_phase(phase, steps):
+        # A lazily loaded profile may start its extensions after its first page: ask twice.
+        authenticate(phase, steps)
+        if not extension_reports(phase, 4):
+            authenticate(phase, 'whoami')
+            extension_reports(phase, 4)
+        inventory(phase)
+
     def update(handle):
         before = wait(lambda s: s.get('update', {}).get('card') is True, 'prepared card')
         mark('card')
@@ -423,30 +498,74 @@ def auth_stage(work, stage, evidence, expect):
     try:
         clean_preferences()
         with log.open('w') as handle:
-            launch(handle)
+            port = urlsplit(fixture['base']).port
+            launch(handle, ['--orbit-test-extension-updates=%d' % port] if stage == 'ext-old' else ())
             if stage == 'auth-old':
                 authenticate('login', 'login,whoami')
                 quit_app()
                 launch(handle)
                 authenticate('old-restart', 'whoami')
+            elif stage == 'ext-old':
+                # Launched with the updater's loopback switch: the previous engine installs the
+                # signed 2.0 CRX in both profiles (B loads when its first surface opens). Chromium
+                # runs the updater's check as a best-effort task, held until startup completes
+                # (a painted page in a window, as in real use): open a loopback page in the
+                # window through the app's URL handler, addressed to this exact bundle.
+                pid = state()['pid']
+                run('/usr/bin/open', '-g', '-a', app, fixture['base'] + '/startup')
+                time.sleep(.5)
+                if state().get('pid') != pid:
+                    raise RuntimeError('The fixture page reached another process')
+                authenticate('ext-install', 'whoami')
+                # Both profiles' updaters fetch the signed 2.0 CRX. An extension whose worker is
+                # running gets it as a delayed install, which Chromium finishes at the next start.
+                while (work / 'ext-requests.log').read_text().count('/ext/x-2.crx\n') < 2:
+                    if time.monotonic() > deadline - 30:
+                        raise RuntimeError('Deadline: previous engine extension download (%s)' % stage)
+                    time.sleep(.2)
+                time.sleep(1.5)  # Let CrxInstaller verify and unpack before the normal quit.
+                mark('downloaded')
+                quit_app()
+                launch(handle, ())
+                # B's extensions load with its profile, at its first surface: ask again if needed.
+                for _ in range(4):
+                    authenticate('ext-installed', 'whoami')
+                    if extension_reports('ext-installed', 3):
+                        break
+                else:
+                    raise RuntimeError('Previous engine did not install the signed 2.0 CRX (%s)' % stage)
+                quit_app()
+                launch(handle, ())
+                for _ in range(3):
+                    authenticate('ext-restart', 'whoami')
+                    if extension_reports('ext-restart', 3):
+                        break
             elif stage == 'auth-update':
                 update(handle)
-                authenticate('updated', 'whoami')
+                candidate_phase('updated', 'whoami')
                 if expect == 'kept':
                     authenticate('new-login', 'login2,whoami')
             elif stage == 'auth-restart':
-                authenticate('new-restart', 'whoami')
+                candidate_phase('new-restart', 'whoami')
             elif stage == 'auth-next':
                 update(handle)
-                authenticate('next-update', 'whoami')
+                candidate_phase('next-update', 'whoami')
             quit_app()
         results['stores'][stage] = cookie_store_summary(root)
+        results['extension_stores'][stage] = extensions_fixture.store_summary(root, work, fixture['second'])
+        results['backups'][stage] = extensions_fixture.backup_summary(root, work, fixture['second'])
     finally:
         mark('end')
+        results['ext_reports'] = extensions_fixture.reports(work)
         (work / 'auth-results.json').write_text(json.dumps(results, indent=2) + '\n')
         if log.exists():
-            events = [line for line in log.read_text().splitlines() if line.startswith('orbit-updater event=')]
+            lines = log.read_text(errors='replace').splitlines()
+            events = [line for line in lines if line.startswith('orbit-updater event=')]
             (evidence / (stage + '-events.log')).write_text('\n'.join(events) + '\n')
+            # Engine diagnostics of the synthetic run (extension loading/updates), bounded.
+            notes = [line[:300] for line in lines if any(word in line for word in ('acr:', 'xtension', 'rx', 'CRX'))]
+            requests = (work / 'ext-requests.log').read_text().splitlines() if (work / 'ext-requests.log').exists() else []
+            (evidence / (stage + '-diagnostics.log')).write_text('\n'.join(notes[-200:] + ['requests:'] + requests[-100:]) + '\n')
         last = state()
         (evidence / (stage + '-last-state.json')).write_text(json.dumps(
             {key: last.get(key) for key in ('pid', 'update', 'auth', 'commandNonce')}, indent=2) + '\n')
@@ -508,7 +627,27 @@ def auth_checks(results, expect):
     return checks
 
 
-def run_auth_transition(work, root, evidence, expect, previous, builds, feed, empty, packaging):
+LOST_STAGES = ('auth-old', 'ext-old', 'auth-update', 'auth-restart')
+
+
+def input_identity(app):
+    """Version and digests of an input bundle, so the gate can match its own inputs."""
+    import hashlib
+    info = plistlib.loads((app / 'Contents/Info.plist').read_bytes())
+    identity = {'version': info.get('CFBundleShortVersionString'), 'build': info.get('CFBundleVersion')}
+    for key, relative in (('executable', 'Contents/MacOS/' + info.get('CFBundleExecutable', 'Orbit')),
+                          ('framework', 'Contents/Frameworks/Chromium Embedded Framework.framework/'
+                                        'Chromium Embedded Framework')):
+        digest = hashlib.sha256()
+        with (app / relative).open('rb') as handle:
+            for block in iter(lambda: handle.read(1 << 20), b''):
+                digest.update(block)
+        identity[key] = digest.hexdigest()
+    return identity
+
+
+def run_auth_transition(work, root, evidence, expect, previous, builds, feed, empty, packaging,
+                        extensions_expect='kept', run_id='', inputs=None):
     installed = work / 'installed/Orbit.app'
     if installed.exists():
         shutil.rmtree(installed)
@@ -517,12 +656,15 @@ def run_auth_transition(work, root, evidence, expect, previous, builds, feed, em
     packaging.prepare_synthetic_root(root, TEST_ID)
     copy(previous, installed)
     (work / 'auth.log').write_text('')
-    (work / 'auth-results.json').write_text(json.dumps({'phases': {}, 'checks': {}, 'stores': {}}))
-    stages = AUTH_STAGES if expect == 'kept' else AUTH_STAGES[:2]
+    (work / 'auth-results.json').write_text(json.dumps({'phases': {}, 'checks': {}, 'stores': {}, 'inventory': {},
+                                                        'extension_stores': {}, 'backups': {}, 'ext_reports': []}))
+    second = json.loads((work / 'auth-fixture.json').read_text())['second']
+    name = 'auth-transition-%s' % expect
+    stages = AUTH_STAGES if expect == 'kept' else LOST_STAGES
     for stage in stages:
         if (evidence / 'STOP-CRASH').exists():
             raise RuntimeError('Crash: stop all GUI qualification')
-        content = {'auth-old': empty, 'auth-update': (work / 'valid-2.xml').read_bytes(),
+        content = {'auth-old': empty, 'ext-old': empty, 'auth-update': (work / 'valid-2.xml').read_bytes(),
                    'auth-restart': empty, 'auth-next': (work / 'valid-3.xml').read_bytes()}[stage]
         (feed / 'appcast.xml').write_bytes(content)
         try:
@@ -530,12 +672,21 @@ def run_auth_transition(work, root, evidence, expect, previous, builds, feed, em
                 '--work', work, '--evidence', evidence, '--auth-expect', expect)
         finally:
             results = json.loads((work / 'auth-results.json').read_text())
-            (evidence / ('auth-transition-%s.json' % expect)).write_text(json.dumps(results, indent=2) + '\n')
+            (evidence / (name + '.json')).write_text(json.dumps(results, indent=2) + '\n')
+        if stage == 'auth-old':
+            # The previous app is stopped: write the minimal 1.0 records it will authenticate.
+            extensions_fixture.seed(root, work, second)
     results = json.loads((work / 'auth-results.json').read_text())
     checks = auth_checks(results, expect)
-    (evidence / ('auth-transition-%s.json' % expect)).write_text(json.dumps(results, indent=2) + '\n')
-    print(json.dumps({'case': 'auth-transition', 'expect': expect, 'checks': checks}), flush=True)
-    if not all(checks.values()):
+    checks.update(extensions_fixture.checks(results, extensions_expect))
+    (evidence / (name + '.json')).write_text(json.dumps(results, indent=2) + '\n')
+    passed = bool(checks) and all(checks.values())
+    summary = {'case': 'auth-transition', 'run_id': run_id, 'expect': expect, 'extensions_expect': extensions_expect,
+               'inputs': inputs or {}, 'stages': list(stages), 'checks': checks, 'passed': passed}
+    (evidence / 'preservation-summary.json').write_text(json.dumps(summary, indent=2) + '\n')
+    print(json.dumps({'case': 'auth-transition', 'expect': expect, 'extensions_expect': extensions_expect,
+                      'checks': checks}), flush=True)
+    if not passed:
         raise AssertionError(checks)
 
 
@@ -550,6 +701,10 @@ def main():
     parser.add_argument('--cases', nargs='+', default=names, choices=names + ['engine-transition', 'auth-transition'])
     parser.add_argument('--auth-expect', choices=('kept', 'lost'), default='kept',
                         help='auth-transition: the new engine keeps (default) or drops existing authentication')
+    parser.add_argument('--extensions-expect', choices=('kept', 'lost', 'record'),
+                        help='auth-transition: installed extensions are kept (default with kept '
+                             'authentication), dropped, or only recorded (default otherwise)')
+    parser.add_argument('--run-id', default='', help='Echoed in preservation-summary.json for the release gate')
     parser.add_argument('--auth-stage', choices=AUTH_STAGES)
     parser.add_argument('--work', type=Path)
     args = parser.parse_args()
@@ -563,6 +718,10 @@ def main():
     transitions = [name for name in ('engine-transition', 'auth-transition') if name in args.cases]
     if transitions and args.previous_app is None:
         parser.error('%s requires --previous-app' % transitions[0])
+    extensions_expect = args.extensions_expect or ('kept' if args.auth_expect == 'kept' else 'record')
+    inputs = {}
+    if 'auth-transition' in args.cases:
+        inputs = {'previous': input_identity(args.previous_app), 'candidate': input_identity(args.source_app)}
     if (args.evidence / 'STOP-CRASH').exists():
         raise RuntimeError('Previous crash: GUI qualification stopped')
     with tempfile.TemporaryDirectory(prefix='update-ux-') as temp:
@@ -584,6 +743,7 @@ def main():
         threading.Thread(target=authentication.serve_forever, daemon=True).start()
         (work / 'auth-fixture.json').write_text(json.dumps({
             'base': 'http://127.0.0.1:%d' % authentication.server_port, 'second': str(uuid.uuid4()).upper()}))
+        extensions_fixture.build(work, 'http://127.0.0.1:%d' % authentication.server_port)
         try:
             spec = importlib.util.spec_from_file_location('orbit_app', ROOT / 'scripts/orbit-app.py')
             packaging = importlib.util.module_from_spec(spec)
@@ -634,7 +794,8 @@ try key.publicKey.rawRepresentation.base64EncodedData().write(to: URL(fileURLWit
                 previous_info.update(info)
                 (previous / 'Contents/Info.plist').write_bytes(plistlib.dumps(previous_info))
                 sign_chromium_bundle(previous)
-            sparkle = ROOT / '.tools/sparkle-2.10.1/bin/sign_update'
+            from sparkle_setup import ensure_sparkle
+            sparkle = ensure_sparkle(json.loads((ROOT / 'release/config.json').read_text())) / 'bin/sign_update'
             builds = {}
             for version in ('2', '3'):
                 target = work / ('target-%s/Orbit.app' % version)
@@ -671,7 +832,7 @@ try key.publicKey.rawRepresentation.base64EncodedData().write(to: URL(fileURLWit
             for name in args.cases:
                 if name == 'auth-transition':
                     run_auth_transition(work, root, args.evidence, args.auth_expect, previous, builds, feed,
-                                        empty, packaging)
+                                        empty, packaging, extensions_expect, args.run_id, inputs)
                     continue
                 if (args.evidence / 'STOP-CRASH').exists():
                     raise RuntimeError('Crash: stop all GUI qualification')
