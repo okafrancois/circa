@@ -285,5 +285,93 @@ class CloudProfileTests(unittest.TestCase):
             local_signing.sign_chromium_bundle(Path('/unused'), 'local', {'com.apple.developer.icloud-services': ['CloudKit']})
 
 
+class PasskeyProfileTests(unittest.TestCase):
+    config = CloudProfileTests.config
+    profile = CloudProfileTests.profile
+
+    def test_current_profile_requests_no_passkey_capability(self):
+        profile = self.profile()
+        profile['Entitlements']['keychain-access-groups'] = ['5Y39TTNCM7.*']
+        self.assertEqual(release.passkey_entitlements(profile, self.config), {})
+        for value in (False, 'true', 1, ['*']):
+            profile['Entitlements'][release.BROWSER_PASSKEY_ENTITLEMENT] = value
+            with self.subTest(value=value):
+                self.assertEqual(release.passkey_entitlements(profile, self.config), {})
+
+    def test_granted_browser_entitlement_is_requested(self):
+        profile = self.profile()
+        profile['Entitlements'][release.BROWSER_PASSKEY_ENTITLEMENT] = True
+        self.assertEqual(release.passkey_entitlements(profile, self.config),
+                         {release.BROWSER_PASSKEY_ENTITLEMENT: True})
+
+    def test_keychain_group_requires_configuration_and_profile_admission(self):
+        group = '5Y39TTNCM7.io.github.okatech.orbit.webauthn'
+        config = dict(self.config, webauthn_keychain_access_group=group)
+        for allowed in (['5Y39TTNCM7.*'], [group], ['OTHER.*', '5Y39TTNCM7.io.github.okatech.*']):
+            profile = self.profile(); profile['Entitlements']['keychain-access-groups'] = allowed
+            with self.subTest(allowed=allowed):
+                self.assertEqual(release.passkey_entitlements(profile, config), {'keychain-access-groups': [group]})
+        for configured, allowed in [(group, None), (group, ['OTHER.*']), (group, ['5Y39TTNCM7.com.*']),
+                                    ('.org.chromium.Chromium.webauthn', ['5Y39TTNCM7.*']),
+                                    ('OTHER.io.github.okatech.orbit.webauthn', ['*']),
+                                    ('5Y39TTNCM7.*', ['5Y39TTNCM7.*'])]:
+            profile = self.profile()
+            if allowed is not None:
+                profile['Entitlements']['keychain-access-groups'] = allowed
+            with self.subTest(configured=configured, allowed=allowed), self.assertRaises(ValueError):
+                release.passkey_entitlements(profile, dict(self.config, webauthn_keychain_access_group=configured))
+
+    def test_keychain_group_must_be_compiled_into_the_engine(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            bundle = Path(temporary) / 'Orbit.app'
+            engine = bundle / release.ENGINE_BINARY
+            engine.parent.mkdir(parents=True)
+            engine.write_bytes(b'\0.org.chromium.Chromium.webauthn\0.org.chromium.Chromium.webauthn-uvk\0')
+            release.require_engine_keychain_group(bundle, '.org.chromium.Chromium.webauthn')
+            for group in ('5Y39TTNCM7.io.github.okatech.orbit.webauthn', '.org.chromium.Chromium.webauth'):
+                with self.subTest(group=group), self.assertRaises(ValueError):
+                    release.require_engine_keychain_group(bundle, group)
+
+    def test_embedded_profile_adds_granted_passkeys_to_the_main_app_request(self):
+        import plistlib
+        with tempfile.TemporaryDirectory() as temporary:
+            bundle = Path(temporary) / 'Orbit.app'
+            (bundle / 'Contents').mkdir(parents=True)
+            source = Path(temporary) / 'profile.provisionprofile'
+            source.write_bytes(b'signed-profile')
+            for granted in (False, True):
+                profile = self.profile()
+                profile['DeveloperCertificates'] = [b'certificate']
+                if granted:
+                    profile['Entitlements'][release.BROWSER_PASSKEY_ENTITLEMENT] = True
+                with self.subTest(granted=granted), patch.object(
+                        release, 'run', return_value=SimpleNamespace(stdout=plistlib.dumps(profile))):
+                    entitlements = release.embed_cloud_profile(bundle, dict(self.config, provisioning_profile=str(source)))
+                    self.assertEqual(release.BROWSER_PASSKEY_ENTITLEMENT in entitlements, granted)
+                    self.assertEqual(entitlements['com.apple.developer.icloud-services'], ['CloudKit'])
+                    self.assertEqual((bundle / 'Contents/embedded.provisionprofile').read_bytes(), b'signed-profile')
+
+    def test_release_requires_the_executed_signature_to_admit_passkeys(self):
+        import plistlib
+        import subprocess
+        with tempfile.TemporaryDirectory() as temporary:
+            bundle = Path(temporary) / 'Orbit.app'
+            (bundle / 'Contents').mkdir(parents=True)
+            (bundle / 'Contents/Info.plist').write_bytes(plistlib.dumps({'CFBundleExecutable': 'Orbit'}))
+            for state in ('authorized', 'denied', 'notDetermined'):
+                output = json.dumps({'browserPasskeys': True, 'authorization': state})
+                with patch.object(release, 'run', return_value=SimpleNamespace(stdout=output)) as run:
+                    release.verify_passkey_launch(bundle)
+                    run.assert_called_once_with(bundle / 'Contents/MacOS/Orbit', '--orbit-verify-passkeys',
+                                                capture_output=True, text=True, timeout=30)
+            for output in ('{"browserPasskeys":false,"authorization":"unavailable"}',
+                           '{"browserPasskeys":true,"authorization":"unknown"}', '{}'):
+                with patch.object(release, 'run', return_value=SimpleNamespace(stdout=output)):
+                    with self.assertRaises(RuntimeError): release.verify_passkey_launch(bundle)
+            for error in (subprocess.CalledProcessError(-9, 'Orbit'), subprocess.TimeoutExpired('Orbit', 30)):
+                with patch.object(release, 'run', side_effect=error):
+                    with self.assertRaises(type(error)): release.verify_passkey_launch(bundle)
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -114,6 +114,38 @@ def cloud_entitlements(profile, config, now=None):
     return expected
 
 
+BROWSER_PASSKEY_ENTITLEMENT = 'com.apple.developer.web-browser.public-key-credential'
+ENGINE_BINARY = 'Contents/Frameworks/Chromium Embedded Framework.framework/Chromium Embedded Framework'
+
+
+def passkey_entitlements(profile, config):
+    """Request the managed passkey capabilities only when the admitted profile grants them.
+
+    The browser entitlement lets the engine use the system passkey provider (iCloud Keychain,
+    Passwords and Touch ID). The optional keychain group serves the engine's own Touch ID
+    authenticator and is requested only when configured, because the engine compiles it in.
+    """
+    values = profile.get('Entitlements', {})
+    signed = {}
+    if values.get(BROWSER_PASSKEY_ENTITLEMENT) is True:
+        signed[BROWSER_PASSKEY_ENTITLEMENT] = True
+    group = config.get('webauthn_keychain_access_group')
+    if group:
+        team = config['team_id']
+        allowed = values.get('keychain-access-groups') or []
+        admitted = any(item == group or (item.endswith('.*') and group.startswith(item[:-1])) for item in allowed)
+        if not group.startswith(team + '.') or group.endswith('*') or not admitted:
+            raise ValueError('Provisioning profile does not authorize the passkey keychain group')
+        signed['keychain-access-groups'] = [group]
+    return signed
+
+
+def require_engine_keychain_group(bundle, group):
+    """A signed group the engine never uses would only widen Keychain access."""
+    if b'\0' + group.encode() + b'\0' not in (bundle / ENGINE_BINARY).read_bytes():
+        raise ValueError('The engine does not use the configured passkey keychain group')
+
+
 def embed_cloud_profile(bundle, config, local_test_root=None):
     path = config.get('provisioning_profile')
     if not path or local_test_root:
@@ -123,6 +155,10 @@ def embed_cloud_profile(bundle, config, local_test_root=None):
     decoded = run('security', 'cms', '-D', '-i', path, capture_output=True).stdout
     profile = plistlib.loads(decoded)
     entitlements = cloud_entitlements(profile, config)
+    passkeys = passkey_entitlements(profile, config)
+    if 'keychain-access-groups' in passkeys:
+        require_engine_keychain_group(bundle, passkeys['keychain-access-groups'][0])
+    entitlements.update(passkeys)
     if not profile.get('DeveloperCertificates'):
         raise ValueError('Provisioning profile has no signing certificates')
     shutil.copyfile(path, bundle / 'Contents/embedded.provisionprofile')
@@ -133,7 +169,7 @@ def verify_cloud_signature(bundle, expected):
     signed = run('codesign', '-d', '--entitlements', ':-', bundle, capture_output=True).stdout
     actual = plistlib.loads(signed)
     if any(actual.get(key) != value for key, value in expected.items()):
-        raise RuntimeError('Signed iCloud entitlements do not match the profile')
+        raise RuntimeError('Signed entitlements do not match the profile')
     decoded = run('security', 'cms', '-D', '-i', bundle / 'Contents/embedded.provisionprofile', capture_output=True).stdout
     profile = plistlib.loads(decoded)
     with tempfile.TemporaryDirectory(prefix='orbit-profile-verify-') as temporary:
@@ -151,6 +187,19 @@ def verify_cloud_launch(bundle):
     result = run(executable, '--orbit-verify-icloud', capture_output=True, text=True, timeout=30)
     if json.loads(result.stdout) != {'icloudAvailable': True, 'storageInitialized': False}:
         raise RuntimeError('Release launch verification did not admit iCloud capabilities')
+
+
+PASSKEY_AUTHORIZATION_STATES = {'authorized', 'denied', 'notDetermined'}
+
+
+def verify_passkey_launch(bundle):
+    """The executed signature must expose the browser entitlement to the engine."""
+    info = plistlib.loads((bundle / 'Contents/Info.plist').read_bytes())
+    executable = bundle / 'Contents/MacOS' / info['CFBundleExecutable']
+    result = run(executable, '--orbit-verify-passkeys', capture_output=True, text=True, timeout=30)
+    report = json.loads(result.stdout)
+    if report.get('browserPasskeys') is not True or report.get('authorization') not in PASSKEY_AUTHORIZATION_STATES:
+        raise RuntimeError('Release launch verification did not admit system passkeys')
 
 
 def prepare_bundle(source, destination, config, version, build, local_test_root=None, feed_url=None):
@@ -185,6 +234,8 @@ def prepare_bundle(source, destination, config, version, build, local_test_root=
         sign_chromium_bundle(destination, identity, main_entitlements=entitlements)
         verify_cloud_signature(destination, entitlements)
         verify_cloud_launch(destination)
+        if BROWSER_PASSKEY_ENTITLEMENT in entitlements:
+            verify_passkey_launch(destination)
     else:
         packager.sign(destination, identity)
     if identity != 'local':

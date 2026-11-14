@@ -25,7 +25,7 @@ enum OrbitPerformanceProbe {
               CommandLine.arguments.contains("--perf-probe") ||
                 (Bundle.main.bundleIdentifier == "io.github.okatech.orbit.test.update" &&
                  Bundle.main.object(forInfoDictionaryKey: "OrbitUpdaterLocalTest") as? Bool == true) else { return }
-        if ["lab.orbit.orbit.engine-r11", "lab.orbit.orbit.engine-r12", "lab.orbit.orbit.engine-r13", "lab.orbit.orbit.engine-r14", "lab.orbit.orbit.sec-permissions", "lab.orbit.orbit.sec-pill", "lab.orbit.orbit.sec-safebrowsing"].contains(Bundle.main.bundleIdentifier ?? "") { application.confirmQuit = { .quit } }
+        if ["lab.orbit.orbit.engine-r11", "lab.orbit.orbit.engine-r12", "lab.orbit.orbit.engine-r13", "lab.orbit.orbit.engine-r14", "lab.orbit.orbit.sec-permissions", "lab.orbit.orbit.sec-pill", "lab.orbit.orbit.sec-safebrowsing", OrbitPasskeyProbe.bundleID].contains(Bundle.main.bundleIdentifier ?? "") { application.confirmQuit = { .quit } }
         if ["lab.orbit.orbit.engine-r13", "lab.orbit.orbit.engine-r14", "lab.orbit.orbit.sec-permissions", "lab.orbit.orbit.sec-pill", "lab.orbit.orbit.sec-safebrowsing"].contains(Bundle.main.bundleIdentifier ?? ""),
            CommandLine.arguments.contains("--orbit-security-fixture") || CommandLine.arguments.contains("--orbit-permissions-fixture") || CommandLine.arguments.contains("--orbit-safe-browsing-fixture") {
             application.windowPresenter = { controller, _ in
@@ -297,6 +297,8 @@ enum OrbitPerformanceProbe {
                 } else if name == "tab-open", Bundle.main.bundleIdentifier == OrbitTabOpenProbe.bundleID {
                     application.confirmQuit = { .quit }
                     result["tabOpen"] = await OrbitTabOpenProbe.run(owner, store: environment.store, command: command)
+                } else if name == "passkeys", Bundle.main.bundleIdentifier == OrbitPasskeyProbe.bundleID {
+                    result["passkeys"] = await OrbitPasskeyProbe.run(owner, command: command, root: root)
                 } else if name == "tab-freeze", Bundle.main.bundleIdentifier == OrbitTabFreezeProbe.bundleID {
                     application.confirmQuit = { .quit }
                     result["tabFreeze"] = await OrbitTabFreezeProbe.run(owner, command: command, root: root)

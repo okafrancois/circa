@@ -161,6 +161,33 @@ ORBIT-RENAME is merged: packaging uses the Orbit executable, icon and product id
    Never open the production-ID bundle normally alongside a personal Orbit for this check.
    Retain verification evidence, then remove the local artifacts. The PM tags and publishes.
 
+## System passkeys
+- The engine uses the macOS passkey provider (iCloud Keychain, the Passwords app and Touch ID)
+  only when the host is signed with Apple's managed browser entitlement
+  `com.apple.developer.web-browser.public-key-credential`. Apple grants it on request; it then
+  appears in the regenerated Developer ID profile above.
+- The release requests that entitlement for the host only when the embedded profile grants it
+  (`true`). With the current profile nothing changes. When it is signed in, the pipeline also
+  executes `<app>/Contents/MacOS/Orbit --orbit-verify-passkeys` before archiving and requires
+  `{"browserPasskeys":true,"authorization":"…"}` (exit 0). That path reads the provider's
+  authorization state without requesting it, so it never shows a prompt. The engine asks the
+  user for authorization during the first ceremony.
+- `webauthn_keychain_access_group` (optional, unset) adds one `keychain-access-groups` value for
+  the engine's own Touch ID authenticator. It must start with the team ID, be admitted by the
+  profile, and appear verbatim in the engine binary; otherwise the release aborts. The current
+  engine compiles in a group without the team prefix, so leave this unset until an engine build
+  compiles in `<team>.<bundle id>.webauthn`.
+- After Apple approves the request: enable the capability on the App ID, regenerate the Developer
+  ID profile with every existing capability, back up the old file, then replace it as described in
+  *Renewing or replacing the profile*. Update the `CIRCA_PROVISIONING_PROFILE` secret as well
+  if hosted releases are enabled. Check `security cms -D -i <profile>` shows the entitlement, then
+  run the local release without `--publish`.
+- Security keys and phones (hybrid) need no entitlement. Bluetooth access uses the existing
+  `NSBluetoothAlwaysUsageDescription`.
+- `scripts/orbit-passkeys-smoke.py` qualifies ceremonies in a synthetic bundle
+  (`lab.orbit.orbit.passkeys-system`) with the engine's DevTools virtual authenticator, and
+  captures and cancels the engine's authenticator dialog.
+
 
 ## Public release notes
 
