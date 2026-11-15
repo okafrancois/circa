@@ -191,12 +191,15 @@ struct NativeWindowTests {
         try await waitForNativeState("firstView.title == \"Second\"",
             observed: { nativeWebViewState(firstView) }
         ) { firstView.title == "Second" }
+        let dynamicURL = secondURL.deletingLastPathComponent().appendingPathComponent("dynamic")
         _ = try await firstView.evaluateJavaScript("document.title='Updated title'; history.pushState({}, '', '/dynamic');")
-        try await waitForNativeState("committed address and dynamic tab title publication", observed: { "address=\(first.displayedAddress), titles=\(first.displayedTabTitles)" }) {
-            firstView.url?.path == "/dynamic" && first.displayedTabTitles.contains("Updated title")
+        // Same-document navigation updates the committed address, as in Chromium.
+        try await waitForNativeState("committed History API address and dynamic tab title publication", observed: { "address=\(first.displayedAddress), titles=\(first.displayedTabTitles)" }) {
+            firstView.url == dynamicURL && first.displayedAddress == dynamicURL.absoluteString
+                && first.displayedTabTitles.contains("Updated title")
         }
-        // This adapter has not published a new committed identity for the History API change.
-        #expect(first.displayedAddress == secondURL.absoluteString)
+        #expect(first.session.selectedSurface?.navigationState.committedURL == dynamicURL)
+        #expect(second.displayedAddress == otherURL.absoluteString)
         first.navigateBack()
         await first.session.waitForPendingCommands()
         try await waitForNativeState("firstView.url == secondURL",
