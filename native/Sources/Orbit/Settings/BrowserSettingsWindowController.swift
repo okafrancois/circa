@@ -9,11 +9,28 @@ import SwiftUI
 /// here, before the browser menu's Archive Tab equivalent, without a second event monitor.
 @MainActor
 final class BrowserSettingsWindow: OrbitDaylightWindow {
+    weak var search: BrowserSettingsSearch?
+    override func sendEvent(_ event: NSEvent) {
+        if attachedSheet == nil, [.leftMouseDown, .keyDown].contains(event.type), search?.targetID != nil {
+            search?.targetID = nil
+        }
+        super.sendEvent(event)
+    }
+    override func cancelOperation(_ sender: Any?) {
+        guard attachedSheet == nil else { super.cancelOperation(sender); return }
+        if search?.query.isEmpty == false { search?.clear(); search?.focus() }
+        else { makeFirstResponder(nil) }
+    }
+
     var selectCategory: ((BrowserSettingsSection) -> Bool)?
 
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
         if let recorder = firstResponder as? BrowserShortcutRecorderView, recorder.isRecording { return recorder.record(event) }
         let composing = (firstResponder as? NSTextInputClient)?.hasMarkedText() == true
+        if attachedSheet == nil, !composing,
+           BrowserShortcut.input(event, isComposing: composing) == BrowserShortcut(key: "f", modifiers: .command) {
+            search?.focus(); return true
+        }
         if attachedSheet == nil,
            BrowserShortcut.input(event, isComposing: composing) == BrowserShortcut(key: "w", modifiers: .command) {
             performClose(nil)
@@ -37,6 +54,7 @@ final class BrowserSettingsWindowController<Engine: BrowserEngine>: NSWindowCont
     private let selectionPill = BrowserSettingsSelectionPill()
     private var outgoingPane: CALayer?
     private var paneTransitionGeneration = 0
+    private var pendingSearchJump = false
     static var minimumContentSize: NSSize { NSSize(width: 900, height: 400) }
 
     /// The theme editor opened from the Spaces section.
@@ -78,9 +96,15 @@ final class BrowserSettingsWindowController<Engine: BrowserEngine>: NSWindowCont
         window.backgroundColor = OrbitSettingsStyle.toolbarColor
         window.isOpaque = true
         window.isMovableByWindowBackground = false
-        window.contentViewController = NSHostingController(rootView: BrowserSettingsView(model: model, runtime: model.runtime))
+        window.contentViewController = NSHostingController(rootView: BrowserSettingsView(model: model, runtime: model.runtime).environment(\.settingsSearch, model.search))
+        window.search = model.search
         super.init(window: window)
         themeUndoManager.registry = model.environment.themeEditors
+        model.search.entries = { [weak model] in
+            guard let model else { return [] }
+            return model.searchEntries
+        }
+        model.search.navigate = { [weak self] entry in self?.selectSection(entry.section, preservingSearch: true) ?? false }
         model.chooseDownloadFolder = { [weak self] in self?.chooseDownloadFolder() }
         window.delegate = self
         let toolbar = NSToolbar(identifier: "orbit-settings-categories")
@@ -125,7 +149,8 @@ final class BrowserSettingsWindowController<Engine: BrowserEngine>: NSWindowCont
         let changed = displayedSection != nil && displayedSection != section
         resize(for: section)
         updateSelectionPill(animated: changed)
-        if changed { animatePane() }
+        if changed || pendingSearchJump { animatePane(searchJump: pendingSearchJump) }
+        pendingSearchJump = false
         displayedSection = section
         for item in window.toolbar?.items ?? [] {
             item.menuFormRepresentation?.state = item.itemIdentifier == identifier ? .on : .off
@@ -198,15 +223,18 @@ final class BrowserSettingsWindowController<Engine: BrowserEngine>: NSWindowCont
     }
 
     @discardableResult
-    func selectSection(_ section: BrowserSettingsSection) -> Bool {
+    func selectSection(_ section: BrowserSettingsSection, preservingSearch: Bool = false) -> Bool {
         guard let window, window.attachedSheet == nil, model.acceptsActions,
               (window.firstResponder as? NSTextInputClient)?.hasMarkedText() != true else { return false }
+        if !preservingSearch { model.search.clear() }
+        pendingSearchJump = preservingSearch
+        if preservingSearch { prepareOutgoingPane() }
         if model.settingsSection != section {
             guard window.makeFirstResponder(nil) else { return false }
-            prepareOutgoingPane()
+            if !preservingSearch { prepareOutgoingPane() }
             model.settingsSection = section
         }
-        if displayedSection != section { applySection(section) }
+        if displayedSection != section || preservingSearch { applySection(section) }
         return true
     }
 
@@ -265,7 +293,7 @@ final class BrowserSettingsWindowController<Engine: BrowserEngine>: NSWindowCont
         return window?.contentView.flatMap(find)
     }
 
-    private func animatePane() {
+    private func animatePane(searchJump: Bool = false) {
         paneTransitionGeneration += 1
         let generation = paneTransitionGeneration
         guard let view = detailView else { outgoingPane?.removeFromSuperlayer(); outgoingPane = nil; return }
@@ -281,7 +309,7 @@ final class BrowserSettingsWindowController<Engine: BrowserEngine>: NSWindowCont
             CATransaction.setCompletionBlock { outgoing.removeFromSuperlayer() }
             let exit = CABasicAnimation(keyPath: "opacity")
             exit.fromValue = 1; exit.toValue = 0
-            exit.duration = BrowserSettingsMotion.crossfadeDuration
+            exit.duration = searchJump ? 0.09 : BrowserSettingsMotion.crossfadeDuration
             exit.timingFunction = BrowserSettingsMotion.timingFunction
             outgoing.opacity = 0
             outgoing.add(exit, forKey: "exit")
@@ -289,7 +317,16 @@ final class BrowserSettingsWindowController<Engine: BrowserEngine>: NSWindowCont
         }
         let fade = CABasicAnimation(keyPath: "opacity")
         fade.fromValue = 0; fade.toValue = 1
-        fade.duration = BrowserSettingsMotion.crossfadeDuration
+        fade.duration = searchJump ? 0.32 : BrowserSettingsMotion.crossfadeDuration
+        if searchJump {
+            fade.beginTime = CACurrentMediaTime() + 0.1
+            fade.fillMode = .backwards
+            let rise = CABasicAnimation(keyPath: "transform.translation.y")
+            rise.fromValue = view.isFlipped ? 6 : -6; rise.toValue = 0
+            rise.beginTime = fade.beginTime; rise.duration = fade.duration; rise.fillMode = .backwards
+            rise.timingFunction = BrowserSettingsMotion.timingFunction
+            view.layer?.add(rise, forKey: "search-rise")
+        }
         fade.timingFunction = BrowserSettingsMotion.timingFunction
         CATransaction.begin()
         CATransaction.setCompletionBlock { [weak self, weak view] in
@@ -299,6 +336,8 @@ final class BrowserSettingsWindowController<Engine: BrowserEngine>: NSWindowCont
         view.layer?.add(fade, forKey: "pane-entry")
         CATransaction.commit()
     }
+
+    func windowWillClose(_ notification: Notification) { model.search.clear() }
 
     func windowDidBecomeKey(_ notification: Notification) { updateSelectionPill(animated: false); model.perform { [model] in await model.reload() } }
 
@@ -371,6 +410,7 @@ private enum BrowserSettingsConfirmation: Identifiable {
 struct BrowserSettingsView<Engine: BrowserEngine>: View {
     @ObservedObject var model: BrowserSettingsModel<Engine>
     @ObservedObject var runtime: BrowserSettingsRuntime
+    @ObservedObject var search: BrowserSettingsSearch
     @State private var selectedSpaceID: SpaceID?
     @State private var deletingSpace: BrowserSpace?
     @State private var deletionSpaceName = ""
@@ -380,6 +420,7 @@ struct BrowserSettingsView<Engine: BrowserEngine>: View {
     init(model: BrowserSettingsModel<Engine>, runtime: BrowserSettingsRuntime, initialSection: BrowserSettingsSection? = nil) {
         self.model = model
         self.runtime = runtime
+        self.search = model.search
         if let initialSection { model.settingsSection = initialSection }
     }
 
@@ -390,6 +431,12 @@ struct BrowserSettingsView<Engine: BrowserEngine>: View {
             navigation
             BrowserSettingsDetailHost {
               VStack(alignment: .leading, spacing: 0) {
+                if search.jumped {
+                    Button { search.back() } label: { Label(uiText("Back to results"), systemImage: "arrow.left") }
+                        .buttonStyle(.plain).font(.system(size: 13)).foregroundStyle(Color(nsColor: .controlAccentColor))
+                        .padding(.horizontal, 28).padding(.top, 12).padding(.bottom, 2)
+                        .accessibilityIdentifier("settings-back-to-results")
+                }
                 if runtime.isUnavailable {
                     Text(text("unavailable", "Saved settings could not be opened. Defaults are in use and changes cannot be saved. The existing file is kept."))
                         .foregroundStyle(.secondary).padding(.horizontal, 24).padding(.bottom, 12)
@@ -407,7 +454,9 @@ struct BrowserSettingsView<Engine: BrowserEngine>: View {
                         .padding(.horizontal, 24).padding(.bottom, 12)
                         .accessibilityIdentifier("settings-error")
                 }
-                if BrowserSettingsSection.allCases.contains(model.settingsSection ?? .general) {
+                if search.showsResults {
+                    BrowserSettingsSearchResults(search: search)
+                } else if BrowserSettingsSection.allCases.contains(model.settingsSection ?? .general) {
                     BrowserOrbitSettingsPanes(model: model, runtime: runtime) { profile in
                         deletionProfileName = ""
                         deletingProfile = profile
@@ -415,7 +464,7 @@ struct BrowserSettingsView<Engine: BrowserEngine>: View {
                 } else if model.settingsSection == .about {
                     ScrollView { OrbitSecondaryAbout().padding(24) }
                 } else if let profile = model.selectedProfileID {
-                    ScrollView {
+                    BrowserSettingsSearchScroll {
                       VStack(alignment: .leading, spacing: 16) {
                         if model.settingsSection != .spaces {
                           HStack {
@@ -450,6 +499,7 @@ struct BrowserSettingsView<Engine: BrowserEngine>: View {
         .tint(Color(nsColor: BrandPalette.cobalt))
         .background(OrbitSettingsStyle.background)
         .overlay(OrbitPaperGrainSurface().allowsHitTesting(false))
+        .environment(\.settingsSearch, search)
         .task { await model.reload() }
         .sheet(isPresented: Binding(get: { deletingProfile != nil }, set: { if !$0 { deletingProfile = nil } })) {
             if let profile = deletingProfile {
@@ -517,6 +567,7 @@ struct BrowserSettingsView<Engine: BrowserEngine>: View {
 
     private var navigation: some View {
         VStack(alignment: .leading, spacing: 2) {
+            BrowserSettingsSearchBar(search: search).padding(.bottom, 9)
             ForEach(BrowserSettingsSection.navigationSections) { section in
                 Button { model.navigate(to: section) } label: {
                     HStack(spacing: 8) {
@@ -572,7 +623,7 @@ struct BrowserSettingsView<Engine: BrowserEngine>: View {
                         Text(uiText("New Space"))
                         Spacer(minLength: 0)
                     }.padding(.horizontal, 10).padding(.vertical, 9).contentShape(Rectangle())
-                }.buttonStyle(.plain).foregroundStyle(.secondary).accessibilityIdentifier("settings-create-space")
+                }.buttonStyle(.plain).foregroundStyle(.secondary).accessibilityIdentifier("settings-create-space").settingsSearchItem(uiText("New Space"), section: .spaces, id: "settings-create-space")
                 DisclosureGroup {
                     ForEach(model.archivedSpaces.filter { $0.space.profileID == profile }) { saved in
                         VStack(alignment: .leading, spacing: 6) {
@@ -582,7 +633,7 @@ struct BrowserSettingsView<Engine: BrowserEngine>: View {
                             }.accessibilityIdentifier("settings-restore-space")
                         }.padding(.vertical, 4)
                     }
-                } label: { SettingsGroupLabel(title: uiText("Archived Spaces")) }
+                } label: { SettingsGroupLabel(title: uiText("Archived Spaces")).settingsSearchItem(uiText("Archived Spaces"), section: .spaces, id: "settings-archived-spaces") }
                 .foregroundStyle(.secondary).padding(.top, 12)
             }.frame(width: 150)
             if let space = available.first(where: { $0.id == selectedSpaceID }) ?? available.first {
@@ -591,18 +642,18 @@ struct BrowserSettingsView<Engine: BrowserEngine>: View {
                         SettingsDetailRow(title: text("name", "Name")) {
                             BrowserSettingsNameEditor(name: space.name, compact: true) { name in
                                 model.perform { try await model.renameSpace(space.id, name: name) }
-                            }.frame(width: 180).accessibilityIdentifier("settings-space-name")
+                            }.frame(width: 180).accessibilityIdentifier("settings-space-name").settingsSearchItem(uiText("Name"), section: .spaces, id: "settings-space-name")
                         }
                         SettingsRule()
                         SettingsDetailRow(title: uiText("Icon")) {
                             BrowserSettingsSpaceIconChoices(choice: displayedSpaceIcon(space)) { value in
                                 model.queueSpaceIconEdit(spaceID: space.id, profileID: space.profileID, icon: value)
                             }.disabled(runtime.isUnavailable)
-                        }
+                        }.settingsSearchItem(uiText("Icon"), section: .spaces, id: "settings-space-icon")
                         SettingsRule()
                         SettingsDetailRow(title: text("spaceColor", "Theme Color")) {
                             BrowserSettingsGradientPicker(model: model, space: space)
-                                .accessibilityIdentifier("settings-space-theme")
+                                .accessibilityIdentifier("settings-space-theme").settingsSearchItem(uiText("Theme Color"), section: .spaces, id: "settings-space-theme")
                         }
                         SettingsRule()
                         SettingsDetailRow(title: text("spaceProfile", "Profile")) {
@@ -611,7 +662,7 @@ struct BrowserSettingsView<Engine: BrowserEngine>: View {
                             })) {
                                 ForEach(model.catalog.profiles, id: \.id) { Text($0.name).tag($0.id) }
                             }.labelsHidden().frame(width: 160)
-                                .accessibilityIdentifier("settings-space-profile")
+                                .accessibilityIdentifier("settings-space-profile").settingsSearchItem(uiText("Profile"), section: .spaces, id: "settings-space-profile")
                         }
                     }.id(space.id)
                     SettingsCard {
@@ -619,7 +670,7 @@ struct BrowserSettingsView<Engine: BrowserEngine>: View {
                             Button(uiText("Delete…")) { deletionSpaceName = ""; deletingSpace = space }
                                 .buttonStyle(OrbitPrintButtonStyle())
                                 .disabled(model.catalog.spaces.count < 2 || runtime.isUnavailable)
-                                .accessibilityIdentifier("settings-delete-space")
+                                .accessibilityIdentifier("settings-delete-space").settingsSearchItem(uiText("Delete this Space"), section: .spaces, id: "settings-delete-space")
                         }
                     }
                     Text(text("spaceProfileNote", "Changing a profile requires an empty Space that is not open in a window."))
@@ -646,8 +697,9 @@ struct BrowserSettingsView<Engine: BrowserEngine>: View {
                     model.perform { try await model.reviewSiteData(origin: nil, profile: profile) }
                 }.disabled(!model.supportsSiteData)
             }.padding(.horizontal, 14).padding(.vertical, 8)
+            .settingsSearchItem(uiText("Website Data"), section: .privacy, id: "settings-website-data")
         }
-        SettingsGroupLabel(title: text("sitePermissions", "Site Permissions"))
+        SettingsGroupLabel(title: text("sitePermissions", "Site Permissions")).settingsSearchItem(uiText("Site Permissions"), section: .privacy, id: "settings-permissions")
         SettingsCard {
             VStack(alignment: .leading, spacing: 0) {
                 if model.permissionsUnavailable {

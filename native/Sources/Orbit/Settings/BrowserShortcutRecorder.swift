@@ -94,19 +94,19 @@ struct BrowserShortcutSettingsPane: View {
                     Button(action: openExtensionSettings) {
                         Label { Text(uiText("Extension Shortcuts…")) } icon: { OrbitIcon.view(sfName: "puzzlepiece.extension", pointSize: 14).font(.system(size: 14)) }
                     }
-                        .disabled(!extensionSettingsAvailable).accessibilityIdentifier("settings-extension-shortcuts")
+                        .disabled(!extensionSettingsAvailable).accessibilityIdentifier("settings-extension-shortcuts").settingsSearchItem(uiText("Extension Shortcuts…"), section: .shortcuts, id: "settings-extension-shortcuts")
                 }
             }
             SettingsCard {
                 Toggle(uiText("Include Favorites in Ordering"), isOn: Binding(
                     get: { preferences.document.includeFavorites },
                     set: { value in change { try preferences.setOrdering(includeFavorites: value) } }))
-                    .padding(.horizontal, 14).padding(.vertical, 8)
+                    .padding(.horizontal, 14).padding(.vertical, 8).settingsSearchItem(uiText("Include Favorites in Ordering"), section: .shortcuts, id: "settings-order-favorites")
                 Divider()
                 Toggle(uiText("⌘9 selects the last tab"), isOn: Binding(
                     get: { preferences.document.nineSelectsLast },
                     set: { value in change { try preferences.setOrdering(nineSelectsLast: value) } }))
-                    .padding(.horizontal, 14).padding(.vertical, 8)
+                    .padding(.horizontal, 14).padding(.vertical, 8).settingsSearchItem(uiText("⌘9 selects the last tab"), section: .shortcuts, id: "settings-last-tab")
                 Divider()
                 Toggle(isOn: Binding(
                     get: { preferences.document.globalQuickWindowEnabled },
@@ -116,19 +116,19 @@ struct BrowserShortcutSettingsPane: View {
                             Text(uiText("Uses the New Little Circa Window shortcut, even when Circa is in the background."))
                                 .font(Font(BrandFonts.ui(12))).foregroundStyle(.secondary)
                         }
-                    }.padding(.horizontal, 14).padding(.vertical, 8)
+                    }.padding(.horizontal, 14).padding(.vertical, 8).settingsSearchItem(uiText("Open Little Circa from other apps"), section: .shortcuts, id: "settings-global-little")
             }
             HStack {
                 SettingsGroupLabel(title: uiText("Keyboard Shortcuts"))
                 Spacer()
                 Button(uiText("Reset All")) { change { try preferences.resetAll() } }
-                    .accessibilityIdentifier("settings-reset-shortcuts")
+                    .accessibilityIdentifier("settings-reset-shortcuts").settingsSearchItem(uiText("Reset All"), section: .shortcuts, id: "settings-reset-shortcuts")
             }.padding(.top, 8)
             if let error = preferences.errorMessage {
                 Text(error).foregroundStyle(.red).font(Font(BrandFonts.ui(12)))
                     .accessibilityIdentifier("settings-shortcut-error")
             }
-            ScrollView {
+            BrowserSettingsSearchScroll {
               LazyVStack(spacing: 0) {
                 ForEach(Array(Set(filtered.map(\.menu))).sorted(), id: \.self) { menu in
                   SettingsGroupLabel(title: uiText(menu))
@@ -151,6 +151,7 @@ struct BrowserShortcutSettingsPane: View {
                         .menuStyle(.borderlessButton).menuIndicator(.hidden).frame(width: 26)
                         .accessibilityLabel(command.localizedTitle + " " + uiText("Shortcut options"))
                     }.padding(.horizontal, 10).padding(.vertical, 5)
+                    .settingsSearchTarget("settings-shortcut-" + command.id.rawValue)
                     SettingsRule()
                   }
                 }

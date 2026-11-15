@@ -31,7 +31,7 @@ struct BrowserSettingsAIPane<Engine: BrowserEngine>: View {
                         Button(ai.isChecking ? uiText("Checking…") : uiText("Check Again")) { check(explicit: true) }
                             .disabled(ai.isChecking).accessibilityIdentifier("settings-ai-check-again")
                     }
-                    card { programs }.accessibilityIdentifier("settings-ai-programs")
+                    card { programs }.accessibilityIdentifier("settings-ai-programs").settingsSearchItem(uiText("Programs"), section: .ai, id: "settings-ai-programs")
                     header(uiText("Default models")) { EmptyView() }
                     card { defaultModels }
                     if !Self.shippedHelpers.isEmpty {
@@ -39,27 +39,27 @@ struct BrowserSettingsAIPane<Engine: BrowserEngine>: View {
                         card {
                             Toggle(uiText("Ask in Find"), isOn: Binding(get: { preferences.helpers.askInFind }, set: { value in
                                 model.perform { try await runtime.updateAI { $0.helpers.askInFind = value } }
-                            })).padding(14)
+                            })).padding(14).settingsSearchItem(uiText("Ask in Find"), section: .ai, id: "settings-helper-ask-in-find")
                             SettingsRule()
                             Toggle(uiText("Writing help"), isOn: Binding(get: { preferences.helpers.writingHelp }, set: { value in
                                 model.perform { try await runtime.updateAI { $0.helpers.writingHelp = value } }
-                            })).padding(14)
+                            })).padding(14).settingsSearchItem(uiText("Writing help"), section: .ai, id: "settings-helper-writing-help")
                             SettingsRule()
                             Toggle(uiText("Tidy titles and downloads"), isOn: Binding(get: { preferences.helpers.tidyTitlesAndDownloads }, set: { value in
                                 model.perform { try await runtime.updateAI { $0.helpers.tidyTitlesAndDownloads = value } }
-                            })).padding(14)
+                            })).padding(14).settingsSearchItem(uiText("Tidy titles and downloads"), section: .ai, id: "settings-helper-tidy-titles-and-downloads")
                             SettingsRule()
                             Toggle(uiText("Tidy Today"), isOn: Binding(get: { preferences.helpers.tidyToday }, set: { value in
                                 model.perform { try await runtime.updateAI { $0.helpers.tidyToday = value } }
-                            })).padding(14)
+                            })).padding(14).settingsSearchItem(uiText("Tidy Today"), section: .ai, id: "settings-helper-tidy-today")
                             SettingsRule()
                             Toggle(uiText("Link preview summaries"), isOn: Binding(get: { preferences.helpers.linkPreviewSummaries }, set: { value in
                                 model.perform { try await runtime.updateAI { $0.helpers.linkPreviewSummaries = value } }
-                            })).padding(14)
+                            })).padding(14).settingsSearchItem(uiText("Link preview summaries"), section: .ai, id: "settings-helper-link-preview-summaries")
                         }
                     }
                     header(uiText("Privacy")) { EmptyView() }
-                    card { privacy }
+                    card { privacy }.settingsSearchItem(uiText("Privacy"), section: .ai, id: "settings-ai-privacy")
                 }
             }
         }
@@ -88,7 +88,7 @@ struct BrowserSettingsAIPane<Engine: BrowserEngine>: View {
                     try await runtime.updateAI { $0.isEnabled = value }
                     if value { ai.refresh(keepRunning: true) } else { ai.stopPrograms() }
                 }
-            })).labelsHidden().toggleStyle(BrowserSettingsAISwitchStyle()).accessibilityIdentifier("settings-ai-enabled")
+            })).labelsHidden().toggleStyle(BrowserSettingsAISwitchStyle()).accessibilityIdentifier("settings-ai-enabled").settingsSearchItem(uiText("Use AI in Circa"), section: .ai, id: "settings-ai-enabled")
         }
         .padding(.horizontal, 14).padding(.vertical, 8).frame(minHeight: 50)
     }
@@ -148,6 +148,7 @@ struct BrowserSettingsAIPane<Engine: BrowserEngine>: View {
         .padding(.horizontal, 14).padding(.vertical, 8).frame(minHeight: 44)
         .accessibilityElement(children: .contain)
         .accessibilityIdentifier("settings-ai-program-" + id.rawValue)
+        .settingsSearchTarget("settings-ai-program-" + id.rawValue)
     }
 
     @ViewBuilder private func programDetails(_ id: BrowserAIProviderID, state: BrowserAIProviderState?) -> some View {
@@ -234,11 +235,11 @@ struct BrowserSettingsAIPane<Engine: BrowserEngine>: View {
 
     private var defaultModels: some View {
         VStack(spacing: 0) {
-            modelRow(.quick, title: uiText("Quick tasks"))
+            modelRow(.quick, title: uiText("Quick tasks")).settingsSearchItem(uiText("Quick tasks"), section: .ai, id: "settings-model-quick")
             SettingsRule()
-            modelRow(.chat, title: uiText("Chat and questions"))
+            modelRow(.chat, title: uiText("Chat and questions")).settingsSearchItem(uiText("Chat and questions"), section: .ai, id: "settings-model-chat")
             SettingsRule()
-            modelRow(.errands, title: uiText("Errands"))
+            modelRow(.errands, title: uiText("Errands")).settingsSearchItem(uiText("Errands"), section: .ai, id: "settings-model-errands")
         }
     }
 
@@ -285,7 +286,7 @@ struct BrowserSettingsAIPane<Engine: BrowserEngine>: View {
                 Spacer(minLength: 8)
                 Toggle(uiText("Read the current tab when I ask"), isOn: Binding(get: { preferences.readsCurrentTabOnRequest }, set: { value in
                     model.perform { try await runtime.updateAI { $0.readsCurrentTabOnRequest = value } }
-                })).labelsHidden().toggleStyle(BrowserSettingsAISwitchStyle()).accessibilityIdentifier("settings-ai-read-tab")
+                })).labelsHidden().toggleStyle(BrowserSettingsAISwitchStyle()).accessibilityIdentifier("settings-ai-read-tab").settingsSearchItem(uiText("Read the current tab when I ask"), section: .ai, id: "settings-ai-read-tab")
             }
             .padding(.horizontal, 14).padding(.vertical, 8).frame(minHeight: 44)
             SettingsRule()
@@ -302,7 +303,7 @@ struct BrowserSettingsAIPane<Engine: BrowserEngine>: View {
                 .font(Font(BrandFonts.ui(12))).foregroundStyle(BrowserSettingsAIStyle.tertiary)
                 .accessibilityElement(children: .combine)
             }
-            .padding(.horizontal, 14).padding(.vertical, 8).frame(minHeight: 44)
+            .padding(.horizontal, 14).padding(.vertical, 8).frame(minHeight: 44).settingsSearchItem(uiText("Private windows"), section: .ai, id: "settings-ai-private-windows")
             SettingsRule()
             HStack(spacing: 12) {
                 OrbitIcon.view(sfName: "nosign", pointSize: 20).font(.system(size: 20)).frame(width: 20, height: 20)
@@ -311,7 +312,7 @@ struct BrowserSettingsAIPane<Engine: BrowserEngine>: View {
                     detail(preferences.disabledSites.isEmpty ? uiText("None") : preferences.disabledSites.joined(separator: ", "))
                 }
                 Spacer(minLength: 8)
-                Button(uiText("Edit…")) { editsSites = true }.accessibilityIdentifier("settings-ai-sites")
+                Button(uiText("Edit…")) { editsSites = true }.accessibilityIdentifier("settings-ai-sites").settingsSearchItem(uiText("Sites where AI is off"), section: .ai, id: "settings-ai-sites")
             }
             .padding(.horizontal, 14).padding(.vertical, 8).frame(minHeight: 44)
         }

@@ -1710,3 +1710,27 @@
 "New features first, with less stability. Turning this off keeps your build until a newer stable release." = "Les nouveautés en premier, avec moins de stabilité. Désactiver conserve votre version jusqu’à une version stable plus récente.";
 
 "Toolbar" = "Barre d’outils";
+
+"Search Settings" = "Rechercher dans les réglages";
+
+"Clear search" = "Effacer la recherche";
+
+"No settings found" = "Aucun réglage trouvé";
+
+"Closest matches for “%@”" = "Résultats les plus proches de « %@ »";
+
+"%ld results across Settings" = "%ld résultats dans les réglages";
+
+"No matches for “%@”." = "Aucun résultat pour « %@ ».";
+
+"Try a shorter word, like “downloads” or “memory”." = "Essayez un mot plus court, comme « téléchargements » ou « mémoire ».";
+
+"Back to results" = "Retour aux résultats";
+
+"Turn on AI to use this setting." = "Activez l’IA pour utiliser ce réglage.";
+
+"Turn on Safe Browsing to use this setting." = "Activez la navigation sécurisée pour utiliser ce réglage.";
+
+"Use AI in Circa" = "Utiliser l’IA dans Circa";
+
+"Enable Boosts on websites" = "Activer les boosts sur les sites web";

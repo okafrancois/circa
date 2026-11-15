@@ -24,7 +24,7 @@ struct BrowserSafeBrowsingSettingsRow<Engine: BrowserEngine>: View {
             })) {
                 SettingsRowLabel(title: uiText("Safe Browsing"), subtitle: uiText("Warn before opening dangerous sites"))
             }.toggleStyle(.checkbox)
-                .accessibilityIdentifier("settings-safe-browsing")
+                .accessibilityIdentifier("settings-safe-browsing").settingsSearchItem(uiText("Safe Browsing"), section: .advanced, id: "settings-safe-browsing")
                 .disabled(model.environment.engine.kind != .chromium)
             Text(BrowserSafeBrowsing.requirement).font(Font(BrandFonts.ui(12))).foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -37,7 +37,7 @@ struct BrowserSafeBrowsingSettingsRow<Engine: BrowserEngine>: View {
                     SecureField(browsing.hasKey ? uiText("Saved key: ••••••••") : uiText("Paste your Google API key"), text: $key)
                         .textFieldStyle(.roundedBorder)
                         .accessibilityLabel(uiText("Google API key"))
-                        .accessibilityIdentifier("settings-safe-browsing-key")
+                        .accessibilityIdentifier("settings-safe-browsing-key").settingsSearchItem(uiText("Google API key"), section: .advanced, id: "settings-safe-browsing-key")
                     Button(uiText("Save Key")) {
                         do { try browsing.saveKey(key); key = ""; keyError = nil }
                         catch { keyError = uiText("Could not save the API key. Check the key and Keychain access.") }

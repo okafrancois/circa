@@ -21,7 +21,7 @@ struct BrowserSettingsAbout: View {
                     }
                     Button(uiText("Copy Version")) {
                         NSPasteboard.general.clearContents(); NSPasteboard.general.setString(version, forType: .string)
-                    }.buttonStyle(OrbitPrintButtonStyle()).accessibilityIdentifier("settings-copy-version")
+                    }.buttonStyle(OrbitPrintButtonStyle()).accessibilityIdentifier("settings-copy-version").settingsSearchItem(uiText("Copy Version"), section: .about, id: "settings-copy-version")
                 }
             }
             .frame(maxWidth: .infinity).padding(.top, 6).padding(.bottom, 12)
@@ -36,7 +36,7 @@ struct BrowserSettingsAbout: View {
     private var updateButton: some View {
         Button(uiText("Check for Updates…")) { updater.checkForUpdates() }
             .buttonStyle(OrbitPrintButtonStyle(primary: true))
-            .accessibilityIdentifier("settings-check-updates")
+            .accessibilityIdentifier("settings-check-updates").settingsSearchItem(uiText("Check for Updates…"), section: .about, id: "settings-check-updates")
     }
     private var version: String { Self.versionDescription(info: Bundle.main.infoDictionary ?? [:]) }
 
