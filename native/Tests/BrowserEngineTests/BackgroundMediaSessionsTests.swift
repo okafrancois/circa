@@ -33,6 +33,14 @@ private final class FakeMediaSource: BrowserMediaSessionControlling {
     }
     func tabAudioMuted() -> Bool? { muted }
     var mediaDocumentIdentity: UInt64? { document }
+    var elementControl = false
+    var elementAnswers: [BrowserMediaElementState?] = []
+    var elementActions: [(BrowserMediaAction, Double)] = []
+    var supportsMediaElementControl: Bool { elementControl }
+    func performMediaElementAction(_ action: BrowserMediaAction, seconds: Double) async -> BrowserMediaElementState? {
+        elementActions.append((action, seconds))
+        return elementAnswers.isEmpty ? nil : elementAnswers.removeFirst()
+    }
     func send(_ value: BrowserMediaSessionState) {
         state = value
         for continuation in continuations { continuation.yield(value) }
@@ -146,6 +154,57 @@ struct BackgroundMediaSessionsTests {
         source.send(native(session: 3))
         await settle()
         #expect(list.session(for: id) == nil)
+    }
+
+    @Test("A kept muted session plays, pauses and seeks through its media element and stays in sync")
+    func keptSessionDrivesElement() async throws {
+        let list = BrowserBackgroundMediaSessions<FakeMediaSource>()
+        let source = FakeMediaSource(), id = TabOccurrenceID()
+        source.state = native(); source.muted = false; source.elementControl = true
+        list.reconcile([.init(source: source, occurrenceID: id, tabID: TabID(), spaceID: SpaceID())])
+        await settle()
+        source.muted = true
+        source.send(native(session: 3))
+        await settle()
+        let kept = try #require(list.session(for: id))
+        #expect(kept.actions == [.play, .pause, .seek] && kept.toggleAction == .pause)
+        #expect(list.perform(.next, on: id) == .unavailable && source.elementActions.isEmpty)
+
+        // Pause: the card shows it at once, then the element's answer settles position.
+        source.elementAnswers = [BrowserMediaElementState(paused: true, position: 4, duration: 10, playbackRate: 1)]
+        #expect(list.perform(.pause, on: id) == .performed)
+        #expect(list.session(for: id)?.playback == .paused)
+        await settle()
+        #expect(source.elementActions.map(\.0) == [.pause])
+        #expect(list.session(for: id)?.playback == .paused && list.session(for: id)?.position == 4)
+        // A pause from the card keeps the card although the engine now reports paused media.
+        list.updateAudio(BrowserMediaState(playback: .paused, isAudible: false, isAudioMuted: true), for: id)
+        #expect(list.session(for: id)?.toggleAction == .play)
+
+        // Seek, then a play the element refuses: the card returns to the last known state.
+        source.elementAnswers = [BrowserMediaElementState(paused: true, position: 7.5, duration: 10, playbackRate: 1)]
+        #expect(list.perform(.seek, on: id, seconds: 7.5) == .performed)
+        await settle()
+        #expect(source.elementActions.last?.1 == 7.5 && list.session(for: id)?.position == 7.5)
+        source.elementAnswers = [nil]
+        #expect(list.perform(.play, on: id) == .performed)
+        #expect(list.session(for: id)?.playback == .playing)
+        await settle()
+        #expect(list.session(for: id)?.playback == .paused && list.session(for: id)?.position == 7.5)
+        // The page plays again on its own: the engine's report wins over the last answer.
+        list.updateAudio(BrowserMediaState(playback: .playing, isAudible: false, isAudioMuted: true), for: id)
+        #expect(list.session(for: id)?.playback == .playing && list.session(for: id)?.toggleAction == .pause)
+
+        // Unmuting: the card stays, unmuted and controllable, until the engine session returns,
+        // which then takes control back.
+        source.muted = false
+        source.send(native(session: 3))
+        await settle()
+        #expect(list.session(for: id)?.isAudioMuted == false && list.session(for: id)?.toggleAction == .pause)
+        source.send(native())
+        await settle()
+        #expect(list.perform(.pause, on: id) == .performed && source.performed == [.pause])
+        #expect(source.elementActions.count == 3)
     }
 
     @Test("Changes stream into the model; ended sessions disappear and removed tabs stop")

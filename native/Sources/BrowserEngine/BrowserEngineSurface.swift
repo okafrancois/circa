@@ -319,6 +319,11 @@ public extension BrowserEngineSurface {
         return services.mediaAction(action, seconds: seconds)
     }
     var mediaDocumentIdentity: UInt64? { documentGeneration }
+    /// Direct media element control shares the manual Picture in Picture isolated world.
+    var supportsMediaElementControl: Bool { manualPictureInPicture != nil }
+    func performMediaElementAction(_ action: BrowserMediaAction, seconds: Double) async -> BrowserMediaElementState? {
+        await manualPictureInPicture?.controlMedia(action, seconds: seconds)
+    }
     func activationPaintBarrier() -> Task<Bool, Never>? { nil }
     var passwordPrompts: (any BrowserPasswordPromptSource)? { nil }
     func setPageTintObservationEnabled(_ enabled: Bool) {}

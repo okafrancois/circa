@@ -2,6 +2,8 @@ import Foundation
 
 /// Manual PiP owns no automatic-return session. The target is scoped to a document and an
 /// isolated execution context; navigation or a replaced element invalidates the request.
+/// The same isolated world drives the media element directly (`controlMedia`) for players the
+/// engine leaves out of its media session, such as a muted tab's.
 @MainActor
 public final class BrowserManualPiP {
     public enum State: Equatable, Sendable {
@@ -18,6 +20,7 @@ public final class BrowserManualPiP {
     private var target: (context: Int, generation: UInt64)?
     private var querying = false
     private var revision = 0
+    private var world: (context: Int, generation: UInt64)?
 
     public init(transport: @escaping Transport, generation: @escaping @MainActor () -> UInt64?,
                 exit: @escaping @MainActor () -> Void) {
@@ -36,18 +39,17 @@ public final class BrowserManualPiP {
         defer { querying = false }
         let revision = self.revision
         guard let document = generation(),
-              let tree = await call("Page.getFrameTree"),
-              let frame = (tree["frameTree"] as? [String: Any])?["frame"] as? [String: Any],
-              let frameID = frame["id"] as? String,
-              let world = await call("Page.createIsolatedWorld", ["frameId": frameID, "worldName": "OrbitManualPiP"]),
-              let context = world["executionContextId"] as? Int,
+              let context = await isolatedContext(document: document, fresh: true),
               let result = await call("Runtime.evaluate", ["expression": Self.query, "contextId": context, "returnByValue": true]),
               generation() == document, revision == self.revision,
               result["exceptionDetails"] == nil,
               (result["result"] as? [String: Any])?["value"] as? Bool == true else {
-            if revision == self.revision { target = nil; state = .unavailable }
+            // A cancelled query (a click on the PiP control cancels the pending one) learned
+            // nothing: the last known target stays usable.
+            if revision == self.revision, !Task.isCancelled { target = nil; state = .unavailable }
             return
         }
+        guard !Task.isCancelled else { return }
         target = (context, document)
         if state != .failed { state = .ready }
     }
@@ -80,6 +82,44 @@ public final class BrowserManualPiP {
         await timeout.value
     }
 
+    /// The main frame's isolated world for `document`, created when missing, stale or `fresh`.
+    private func isolatedContext(document: UInt64, fresh: Bool) async -> Int? {
+        if !fresh, let world, world.generation == document { return world.context }
+        guard let tree = await call("Page.getFrameTree"),
+              let frame = (tree["frameTree"] as? [String: Any])?["frame"] as? [String: Any],
+              let frameID = frame["id"] as? String,
+              let created = await call("Page.createIsolatedWorld", ["frameId": frameID, "worldName": "OrbitManualPiP"]),
+              let context = created["executionContextId"] as? Int,
+              generation() == document else { return nil }
+        world = (context, document)
+        return context
+    }
+
+    /// Plays, pauses or seeks the main frame's media element and returns its state afterwards.
+    /// Retries once in a fresh isolated world when the cached one no longer answers.
+    public func controlMedia(_ action: BrowserMediaAction, seconds: Double) async -> BrowserMediaElementState? {
+        let name: String
+        switch action {
+        case .play: name = "play"
+        case .pause: name = "pause"
+        case .seek where seconds.isFinite: name = "seek"
+        default: return nil
+        }
+        guard let document = generation() else { return nil }
+        for attempt in 0..<2 {
+            guard let context = await isolatedContext(document: document, fresh: attempt > 0) else { return nil }
+            let result = await call("Runtime.evaluate", ["expression": "(\(Self.control))('\(name)', \(seconds))",
+                "contextId": context, "returnByValue": true, "awaitPromise": true, "userGesture": true])
+            guard generation() == document else { return nil }
+            guard let result, result["exceptionDetails"] == nil else { world = nil; continue }
+            guard let value = (result["result"] as? [String: Any])?["value"] as? [String: Any],
+                  let paused = value["paused"] as? Bool else { return nil }
+            return BrowserMediaElementState(paused: paused, position: value["position"] as? Double,
+                duration: value["duration"] as? Double, playbackRate: value["rate"] as? Double)
+        }
+        return nil
+    }
+
     public func acknowledge(active: Bool) {
         if active { state = .active }
         else if state == .active { revision += 1; target = nil; state = .unavailable }
@@ -106,6 +146,39 @@ public final class BrowserManualPiP {
       globalThis[key] = videos[0];
       return !!videos[0];
     })()
+    """#
+    // Pause targets the element that plays; play and seek keep the element the card drove last,
+    // so a pause from the card resumes the same player.
+    package static let control = #"""
+    async (action, seconds) => {
+      const key = 'orbitMediaControlTarget';
+      const history = globalThis.orbitManualPiPHistory ??= new WeakMap();
+      const media = [...document.querySelectorAll('video, audio')].filter(m => m.readyState >= 1);
+      for (const m of media) {
+        if (!history.has(m)) {
+          history.set(m, 0);
+          m.addEventListener('play', () => history.set(m, performance.now()));
+        }
+      }
+      const previous = globalThis[key];
+      const playing = m => Number(!m.paused && !m.ended);
+      const chosen = m => Number(m === previous);
+      media.sort((a, b) => action === 'pause'
+        ? playing(b) - playing(a) || chosen(b) - chosen(a) || history.get(b) - history.get(a)
+        : chosen(b) - chosen(a) || playing(b) - playing(a) || history.get(b) - history.get(a));
+      const element = media[0];
+      if (!element) { delete globalThis[key]; return null; }
+      globalThis[key] = element;
+      try {
+        if (action === 'play') await element.play();
+        else if (action === 'pause') element.pause();
+        else if (Number.isFinite(element.duration)) element.currentTime = Math.min(element.duration, Math.max(0, seconds));
+        else return null;
+      } catch (_) { return null; }
+      const finite = v => Number.isFinite(v) ? v : null;
+      return { paused: element.paused, position: finite(element.currentTime),
+               duration: finite(element.duration), rate: finite(element.playbackRate) };
+    }
     """#
     package static let enter = #"""
     (async () => {
