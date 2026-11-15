@@ -153,6 +153,13 @@ int32_t ACRCreateWindow(uint64_t window, void *nswindow, ACRWindowType type) { r
 int32_t ACRCloseWindow(uint64_t window) { return 0; }
 int32_t ACRWindowKeyChanged(uint64_t window, int32_t is_key) { return 0; }
 int32_t ACRWindowBoundsChanged(uint64_t window) { return 0; }
+int32_t stub_replayed_new_surfaces = 0;
+int32_t ACRReplayNewSurface(uint64_t source, const char *url, int32_t disposition, int32_t user_gesture) {
+  (void)source; (void)url; (void)disposition; (void)user_gesture;
+  ++stub_replayed_new_surfaces;
+  return 1;
+}
+
 int32_t ACRCreateTabSurface(uint64_t token, uint64_t profile, uint64_t window, int32_t index,
                             void *parent, const char *url) {
   if (!hosted_mode || tab_count >= 256) return 0;

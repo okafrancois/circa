@@ -70,7 +70,7 @@ struct NavigationMetadataTests {
             isRedirect: false, transitionType: 7, method: "POST", hasBody: true))
         precondition(delegate.actions.last!.kind == .formSubmission && delegate.actions.last!.hasBody == true)
         precondition(ChromiumSurface.modifiers(7) == [.option])
-        let host = source.hostView as! ChromiumHostView
+        let host = source.documentView as! ChromiumHostView
         host.linkActivation = (.zero, ProcessInfo.processInfo.systemUptime, source.documentGeneration)
         host.linkActivationModifiers = [.option]
         _ = source.decideNavigation(.init(url: target, isMainFrame: true, userGesture: true,
@@ -90,7 +90,27 @@ struct NavigationMetadataTests {
         source.receiveOptionLink(try! JSONSerialization.data(withJSONObject: ["name": "other", "payload": target]))
         source.receiveOptionLink(try! JSONSerialization.data(withJSONObject: ["name": "__orbitOptionLink", "payload": "javascript:void(0)"]))
         precondition(delegate.actions.count == before)
+        // NAV-INITIATOR: the isolated world announces its context without a policy question.
+        source.receiveOptionLink(try! JSONSerialization.data(withJSONObject: [
+            "name": "__orbitOptionLink", "payload": "orbit:document", "executionContextId": 41]))
+        precondition(source.linkDocumentContext == 41 && delegate.actions.count == before)
+        // The popup a reopen caused carries the link's modifiers, gesture and disposition.
+        _ = source.linkReopens.begin(url: URL(string: "HTTPS://Navigation.test/target")!, modifiers: [.option],
+                                     disposition: .newBackgroundTab)
+        ACRStubPopupMetadata(1, 7, "POST", 1)
+        let reopened = source.decideNewSurface(url: target, disposition: 3, userGesture: false, keepsOpener: true)!
+        let reopenRequest = delegate.requests.last!
+        precondition(reopenRequest.modifiers == [.option] && reopenRequest.kind == .linkActivation)
+        precondition(reopenRequest.httpMethod == "GET" && reopenRequest.hasBody == false)
+        precondition(reopenRequest.isUserGesture == true && reopenRequest.disposition == .newBackgroundTab)
+        precondition(source.linkReopens.pendingCount == 0)
+        ACRStubAbortCreation(reopened.token)
+        // Without a created browser the reopen is impossible: the bridge keeps its own route.
+        let replayed = source.decideNewSurface(url: target, disposition: 6, userGesture: true, keepsOpener: false,
+                                               reopenable: true)!
+        precondition(delegate.requests.last!.disposition == .newWindow && source.linkReopens.pendingCount == 0)
+        ACRStubAbortCreation(replayed.token)
         source.dispose()
-        print("PASS: popup metadata, gesture independence, history/reload, Option modifiers and isolated link routing")
+        print("PASS: popup metadata, gesture independence, history/reload, Option modifiers, isolated link routing and link reopens")
     }
 }

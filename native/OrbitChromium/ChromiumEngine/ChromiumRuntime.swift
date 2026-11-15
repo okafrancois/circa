@@ -156,7 +156,8 @@ public final class ChromiumRuntime {
                 let runtime = Unmanaged<ChromiumRuntime>.fromOpaque(UnsafeRawPointer(bitPattern: runtimeAddress)!)
                     .takeUnretainedValue()
                 guard let created = runtime.surface(source)?.decideNewSurface(
-                    url: target, disposition: disposition, userGesture: gesture != 0, keepsOpener: kind == 1) else { return (0, 0) }
+                    url: target, disposition: disposition, userGesture: gesture != 0, keepsOpener: kind == 1,
+                    reopenable: kind == 4, engineTab: kind == 3) else { return (0, 0) }
                 return (created.token, UInt(bitPattern: Unmanaged.passUnretained(created.documentView).toOpaque()))
             }
             guard decision.0 != 0 else { return nil }

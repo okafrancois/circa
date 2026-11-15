@@ -15,6 +15,7 @@
 #include "OrbitFaviconPolicy.h"
 #include "OrbitAuthenticationFiles.h"
 #include "OrbitAuthenticationCEF.h"
+#include <optional>
 #include <thread>
 #include "include/cef_image.h"
 
@@ -310,6 +311,11 @@ struct State {
   std::map<uint64_t, void*> shell_window_handles;  // Borrowed until ACRCloseWindow.
   std::map<uint64_t, uint64_t> pending_windows;
   std::map<uint64_t, QueuedHostedCreation> queued_hosted_creations;
+  // NAV-INITIATOR: the shell surface waiting for the tab Chrome creates in this very
+  // OnOpenURLFromTab call (OrbitBridgePolicy.h, RouteOpenURLFromTab). Its token is already in the
+  // pending maps; an unclaimed one is aborted on the next UI turn.
+  struct EngineTabClaim { uint64_t token = 0, profile = 0, window = 0; std::string url; };
+  std::optional<EngineTabClaim> engine_tab_claim;
 
   struct ExtensionSelection {
     uint64_t surface = 0, profile = 0, epoch = 0;
@@ -1496,19 +1502,48 @@ class Client final : public CefClient, public CefLifeSpanHandler, public CefDisp
   }
 
   // Requests.
-  bool OnOpenURLFromTab(CefRefPtr<CefBrowser>, CefRefPtr<CefFrame>, const CefString& target_url,
+  // NAV-INITIATOR (OrbitBridgePolicy.h): the shell chooses the target first. A tab of a hosted source
+  // is then created by Chrome itself (returning false), so the original navigation keeps its
+  // initiator, Referer and body; AdoptUnownedTab gives that tab to the shell's surface. A main-frame
+  // gesture may instead be reopened by the shell from the document (no surface returned here).
+  bool OnOpenURLFromTab(CefRefPtr<CefBrowser>, CefRefPtr<CefFrame> frame, const CefString& target_url,
                         WindowOpenDisposition disposition, bool user_gesture) override {
     CEF_REQUIRE_UI_THREAD();
     if (disposition == CEF_WOD_CURRENT_TAB) return false;
     if (!g_state || g_state->quitting || !g_state->callbacks.decide_new_surface) return true;
     const std::string url = target_url;
+    const uint64_t window = SurfaceWindow(token_);
+    const bool hosted = window && g_state->windows.contains(window) && g_state->shell_window_handles.contains(window);
+    const auto route = orbit_bridge::RouteOpenURLFromTab(
+        disposition, hosted, g_state->set_unowned_tab_handler && !g_state->engine_tab_claim,
+        frame && frame->IsMain(), user_gesture);
     uint64_t token = 0;
-    void* parent = g_state->callbacks.decide_new_surface(g_state->context, token_, url.c_str(),
-                                                         disposition, user_gesture, 2, &token);
-    // Stock CEF cannot hand over the pending navigation here: the new browser
-    // issues a fresh request without opener or POST body.
-    if (parent && token && CreateBrowserIn(token, profile_, parent, url, SurfaceWindow(token_), -1) == 0)
+    void* parent = g_state->callbacks.decide_new_surface(g_state->context, token_, url.c_str(), disposition,
+                                                         user_gesture, static_cast<int32_t>(route), &token);
+    if (!parent || !token) return true;
+    if (route == orbit_bridge::OpenURLRoute::kEngineTab && ClaimEngineTab(token, window, parent, url))
+      return false;
+    // Replay: the new browser issues a fresh browser-initiated request without opener or POST body.
+    if (CreateBrowserIn(token, profile_, parent, url, window, -1) == 0)
       g_state->NotifyAborted(token, profile_, "create-failed");  // The shell made a surface already.
+    return true;
+  }
+
+  // The tab Chrome creates when OnOpenURLFromTab returns false is offered synchronously to
+  // AdoptUnownedTab (Navigate -> CreateTargetContents -> OnWebContentsCreated), before this call
+  // unwinds. Anything left unclaimed afterwards was refused by Chrome: abort the shell surface.
+  bool ClaimEngineTab(uint64_t token, uint64_t window, void* parent, const std::string& url) {
+    if (g_state->hosts.contains(token) || g_state->pending_profiles.contains(token) ||
+        g_state->auth_targets.contains(profile_) || !g_state->profiles.contains(profile_)) return false;
+    g_state->pending_profiles[token] = profile_;
+    g_state->pending_parents[token] = (__bridge NSView*)parent;
+    g_state->pending_windows[token] = window;
+    g_state->engine_tab_claim = State::EngineTabClaim{token, profile_, window, url};
+    PostUI([token] {
+      if (!g_state || !g_state->engine_tab_claim || g_state->engine_tab_claim->token != token) return;
+      g_state->engine_tab_claim.reset();
+      g_state->AbortPending(token, "engine-tab-not-offered");
+    });
     return true;
   }
   bool OnBeforeBrowse(CefRefPtr<CefBrowser> browser, CefRefPtr<CefFrame> frame, CefRefPtr<CefRequest> request,
@@ -1758,6 +1793,22 @@ struct _cef_client_t* AdoptUnownedTab(void*, const orbit_unowned_tab_t* tab, voi
   const std::string path = tab->profile_path ? tab->profile_path : "";
   const uint64_t profile = UnownedTabProfile(path.c_str());
   if (!profile) return nullptr;
+  if (runtime->engine_tab_claim &&
+      orbit_bridge::MatchesEngineTabClaim(runtime->engine_tab_claim->window, runtime->engine_tab_claim->profile,
+                                          window, profile)) {
+    // NAV-INITIATOR: a link the shell already placed (OnOpenURLFromTab). Its surface is pending
+    // with this window and profile; Chrome navigates the tab with the original request.
+    const auto claim = *runtime->engine_tab_claim;
+    runtime->engine_tab_claim.reset();
+    const auto view = runtime->pending_parents.find(claim.token);
+    if (view == runtime->pending_parents.end() || !runtime->pending_profiles.contains(claim.token)) return nullptr;
+    if (tab->url && claim.url != tab->url)
+      fprintf(stderr, "acr: engine tab url differs from the claimed link token=%llu\n", claim.token);
+    CefRefPtr<Client> client = new Client(claim.token, profile);
+    client->MarkAdopted(lifetime);
+    *parent_nsview = (__bridge void*)view->second;
+    return orbit_bridge::WrapClientForFramework(client);
+  }
   const CefRefPtr<CefRequestContext> context = runtime->profiles.at(profile);
   uint64_t token = 0;
   void* parent = adopt(runtime->context, window, profile, tab->url ? tab->url : "",
@@ -3205,6 +3256,23 @@ extern "C" int32_t ACRCreateTabSurface(uint64_t token, uint64_t profile, uint64_
                                        void* parent, const char* url) {
   if (!NSThread.isMainThread || !g_state || !g_state->initialized || !g_state->orbit || !window) return 0;
   return CreateBrowserIn(token, profile, parent, url ? url : "", window, index < 0 ? -1 : index);
+}
+
+extern "C" int32_t ACRReplayNewSurface(uint64_t source, const char* url, int32_t disposition,
+                                       int32_t user_gesture) {
+  if (!NSThread.isMainThread || !g_state || !g_state->initialized || g_state->quitting || !url ||
+      !g_state->callbacks.decide_new_surface) return 0;
+  const auto host = g_state->hosts.find(source);
+  if (host == g_state->hosts.end() || host->second.closing_by_shell) return 0;
+  const uint64_t profile = host->second.profile;
+  uint64_t token = 0;
+  void* parent = g_state->callbacks.decide_new_surface(
+      g_state->context, source, url, disposition, user_gesture ? 1 : 0,
+      static_cast<int32_t>(orbit_bridge::OpenURLRoute::kReplay), &token);
+  if (!parent || !token) return 0;
+  if (CreateBrowserIn(token, profile, parent, url, SurfaceWindow(source), -1) != 0) return 1;
+  g_state->NotifyAborted(token, profile, "create-failed");
+  return 0;
 }
 
 extern "C" int32_t ACRAttachSurfaceView(uint64_t token, void* nsview) {

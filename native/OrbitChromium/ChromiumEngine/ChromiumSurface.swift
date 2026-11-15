@@ -301,6 +301,10 @@ public final class ChromiumSurface: BrowserEngineSurface {
     private var downloadSourceWaiters: [UUID: CheckedContinuation<Bool, Never>] = [:]
     /// Page-first keys sent to the page with a shell receipt, by bridge key id (ABI 7).
     private var keyReceipts: [(id: UInt64, receipt: BrowserKeyReceipt)] = []
+    /// NAV-INITIATOR: the OrbitOptionLinks world of the current main document, as it announced
+    /// itself, and the links reopened from it that wait for their new-target request.
+    var linkDocumentContext: Int?
+    var linkReopens = BrowserLinkReopenLedger()
 
     // ABI 9 page surfaces (CH-ESSENTIALS, `ChromiumSurface+PageInteraction.swift`).
     /// JavaScript dialogs, credentials and choosers handed to the delegate, by bridge request id.
@@ -1019,22 +1023,39 @@ public final class ChromiumSurface: BrowserEngineSurface {
 
     // MARK: Engine events
 
-    func decideNewSurface(url: String?, disposition: Int32, userGesture: Bool, keepsOpener: Bool) -> ChromiumSurface? {
+    /// `reopenable` (bridge source kind 4): a main-frame gesture that the bridge would load again by
+    /// URL. It is reopened from the document instead (renderer-initiated, initiator kept); nil tells
+    /// the bridge to cancel it, and a reopen that does not happen replays it (ACRReplayNewSurface).
+    func decideNewSurface(url: String?, disposition: Int32, userGesture: Bool, keepsOpener: Bool,
+                          reopenable: Bool = false, engineTab: Bool = false) -> ChromiumSurface? {
         guard !isDisposed, let delegate, let engine else { return nil }
+        let modifiers = userGesture ? recentLinkModifiers ?? Self.modifiers(disposition) : Self.modifiers(disposition)
+        if reopenable, let url, let target = URL(string: url),
+           reopenLinkFromDocument(target, modifiers: modifiers, disposition: Self.disposition(disposition), fallback: { [weak self] in
+               guard let self, !self.isDisposed else { return }
+               _ = ACRReplayNewSurface(self.token, url, disposition, userGesture ? 1 : 0)
+           }) {
+            onEngineEvent?("new-surface", ["disposition": String(disposition), "path": "OnOpenURLFromTab-reopen",
+                                           "gesture": String(userGesture)])
+            return nil
+        }
+        // The popup a reopen caused carries that link's gesture, modifiers and disposition.
+        let reopened = keepsOpener ? linkReopens.take(url: url) : nil
         var metadata = orbit_navigation_metadata_t()
         metadata.struct_size = UInt32(MemoryLayout<orbit_navigation_metadata_t>.size)
-        let known = keepsOpener && ACRPopupNavigationMetadata(token, &metadata) == 1
-        let method = known ? metadata.method.map { String(cString: $0) } : nil
-        let kind = known ? Self.navigationKind(.init(url: url, isMainFrame: true, userGesture: userGesture,
-            isRedirect: false, transitionType: metadata.transition_type), shellStarted: false, pendingKind: nil)
+        let known = reopened == nil && keepsOpener && ACRPopupNavigationMetadata(token, &metadata) == 1
+        let method = reopened != nil ? "GET" : known ? metadata.method.map { String(cString: $0) } : nil
+        let kind: BrowserNavigationKind = reopened != nil ? .linkActivation
+            : known ? Self.navigationKind(.init(url: url, isMainFrame: true, userGesture: userGesture,
+                isRedirect: false, transitionType: metadata.transition_type), shellStarted: false, pendingKind: nil)
             : (userGesture ? .linkActivation : .other)
         // The new browser is created by CEF after OnBeforePopup returns; it is not ready yet.
         let request = BrowserNewSurfaceRequest(url: url.flatMap(URL.init(string:)),
-                                               modifiers: userGesture ? recentLinkModifiers ?? Self.modifiers(disposition) : Self.modifiers(disposition),
+                                               modifiers: reopened?.modifiers ?? modifiers,
                                                kind: kind, httpMethod: method,
-                                               hasBody: known ? metadata.has_body != 0 : nil,
-                                               isUserGesture: userGesture,
-                                               disposition: Self.disposition(disposition))
+                                               hasBody: reopened != nil ? false : known ? metadata.has_body != 0 : nil,
+                                               isUserGesture: reopened != nil || userGesture,
+                                               disposition: reopened?.disposition ?? Self.disposition(disposition))
         var created: ChromiumSurface?
         let accepted = delegate.surface(self, createSurfaceFor: request) {
             precondition(created == nil, "A new target surface can be created only once")
@@ -1051,7 +1072,9 @@ public final class ChromiumSurface: BrowserEngineSurface {
         // CEF owns the creation from here: OnAfterCreated or ACR_EVENT_CREATE_ABORTED follows.
         engine.nativeCreationStarted(accepted.token)
         if accepted.onEngineEvent == nil { accepted.onEngineEvent = onEngineEvent }
-        onEngineEvent?("new-surface", ["disposition": String(disposition), "path": keepsOpener ? "OnBeforePopup" : "OnOpenURLFromTab",
+        onEngineEvent?("new-surface", ["disposition": String(disposition),
+                                       "path": reopened != nil ? "OnBeforePopup-reopened" : keepsOpener ? "OnBeforePopup"
+                                           : engineTab ? "OnOpenURLFromTab-engine-tab" : "OnOpenURLFromTab",
                                        "gesture": String(userGesture)])
         return accepted
     }

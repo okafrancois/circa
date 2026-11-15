@@ -160,7 +160,12 @@ typedef struct {
  * pointer) that will parent the new browser and set *surface_token, or return
  * NULL to refuse. The popup keeps its opener and its source request context. */
 /* source_kind: 1 = OnBeforePopup (CEF creates the browser, opener kept),
- * 2 = OnOpenURLFromTab (the bridge creates a new browser: fresh request, no opener). */
+ * 2 = OnOpenURLFromTab (the bridge creates a new browser: fresh request, no opener),
+ * 3 = OnOpenURLFromTab of a hosted tab: Chrome creates the tab with the original request
+ *     (initiator, Referer, body kept, no opener) and the bridge places it in this surface,
+ * 4 = OnOpenURLFromTab of a main-frame user gesture that would otherwise be case 2: the shell may
+ *     refuse (NULL) and reopen the link from the source document instead (NAV-INITIATOR),
+ *     falling back to ACRReplayNewSurface. */
 typedef void *(*ACRDecideNewSurface)(void *context, uint64_t source_surface_token,
                                      const char *url, int32_t disposition,
                                      int32_t user_gesture, int32_t source_kind,
@@ -487,6 +492,11 @@ int32_t ACRWindowBoundsChanged(uint64_t window_token);
  * value = 2 (Chrome style) and detail_code = extension tabId. */
 int32_t ACRCreateTabSurface(uint64_t surface_token, uint64_t profile_token, uint64_t window_token,
                             int32_t index, void *parent_nsview, const char *url);
+/* NAV-INITIATOR: the historical OnOpenURLFromTab replay, asked by the shell when a reopen from
+ * the source document did not happen: decide_new_surface (source_kind 2), then a new browser that
+ * loads url by itself. 1 when a surface was created or is being created, 0 otherwise. */
+int32_t ACRReplayNewSurface(uint64_t source_surface_token, const char *url, int32_t disposition,
+                            int32_t user_gesture);
 /* Moves a tab surface's content NSView under nsview (same window). */
 int32_t ACRAttachSurfaceView(uint64_t surface_token, void *nsview);
 /* Makes the tab surface the active tab of its logical Browser (tabs.onActivated). */
