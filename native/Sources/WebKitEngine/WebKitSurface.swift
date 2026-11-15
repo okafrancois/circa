@@ -85,6 +85,7 @@ public final class WebKitSurface: BrowserEngineSurface {
                 self?.scheduleRefresh()
                 self?.scheduleSameDocumentCheck()
             },
+            webView.observe(\.isLoading) { [weak self] _, _ in self?.scheduleSettledRequestCheck() },
             webView.observe(\.canGoBack) { [weak self] _, _ in self?.scheduleRefresh() },
             webView.observe(\.canGoForward) { [weak self] _, _ in self?.scheduleRefresh() },
             webView.observe(\.cameraCaptureState) { [weak self] _, _ in self?.scheduleRefresh() },
@@ -114,6 +115,23 @@ public final class WebKitSurface: BrowserEngineSurface {
         // The committed entry follows a History API or fragment navigation, as in Chromium.
         committedURL = url
         delegate?.surface(self, didNavigateWithinDocument: BrowserSameDocumentNavigation(url: url, previous: documentURL))
+    }
+
+    nonisolated private func scheduleSettledRequestCheck() {
+        Task { @MainActor [weak self] in self?.settleRequestWithoutProvisionalNavigation() }
+    }
+
+    /// WebKit keeps loading while a shell request is pending, until its provisional navigation
+    /// starts. A back/forward traversal to an entry of the same document never starts one and
+    /// commits nothing: WebKit stops loading once the document is at that entry. The request no
+    /// longer owns the address, and the entry it reached is the committed one, as in Chromium.
+    /// A cross-document request is still loading here and keeps waiting for its commit.
+    private func settleRequestWithoutProvisionalNavigation() {
+        guard !isDisposed, requestedNavigation != nil, !isProvisionalNavigationInFlight, !webView.isLoading else { return }
+        requestedNavigation = nil
+        requestedDestination = nil
+        guard let url = webView.url, webView.backForwardList.currentItem?.url == url else { return }
+        reportSameDocumentNavigation()
     }
 
     nonisolated private func scheduleAppearanceRefresh() {

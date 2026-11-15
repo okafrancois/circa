@@ -63,7 +63,10 @@ final class LocalFixtureServer: @unchecked Sendable {
             let title = path == "/first" ? "First" : path == "/second" ? "Second" : "Other"
             let body = "<!doctype html><title>\(title)</title><h1>\(title)</h1><input id='draft'><a href='/second'>Next</a>"
             let response = "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: \(body.utf8.count)\r\nConnection: close\r\n\r\n\(body)"
-            connection.send(content: Data(response.utf8), completion: .contentProcessed { _ in connection.cancel() })
+            // "/held" answers late, keeping its navigation provisional for a moment.
+            queue.asyncAfter(deadline: .now() + (path == "/held" ? 1 : 0)) {
+                connection.send(content: Data(response.utf8), completion: .contentProcessed { _ in connection.cancel() })
+            }
         }
     }
 }
@@ -205,6 +208,35 @@ struct NativeWindowTests {
         try await waitForNativeState("firstView.url == secondURL",
             observed: { nativeWebViewState(firstView) }
         ) { firstView.url == secondURL }
+        // Same-document traversal moves the committed entry back and forth across pushState.
+        try await waitForNativeState("History API back traversal address", observed: {
+            "address=\(first.displayedAddress), committed=\(String(describing: first.session.selectedSurface?.navigationState.committedURL)), " + nativeWebViewState(firstView)
+        }) { first.displayedAddress == secondURL.absoluteString }
+        #expect(first.session.selectedSurface?.navigationState.committedURL == secondURL)
+        #expect(second.displayedAddress == otherURL.absoluteString)
+        first.navigateForward()
+        await first.session.waitForPendingCommands()
+        try await waitForNativeState("History API forward traversal address", observed: {
+            "address=\(first.displayedAddress), committed=\(String(describing: first.session.selectedSurface?.navigationState.committedURL)), " + nativeWebViewState(firstView)
+        }) { firstView.url == dynamicURL && first.displayedAddress == dynamicURL.absoluteString }
+        #expect(first.session.selectedSurface?.navigationState.committedURL == dynamicURL)
+        #expect(second.displayedAddress == otherURL.absoluteString)
+        // A cross-document request publishes its destination only once it commits.
+        let heldURL = secondURL.deletingLastPathComponent().appendingPathComponent("held")
+        first.submitAddress(heldURL.absoluteString)
+        await first.session.waitForPendingCommands()
+        #expect(firstView.isLoading)
+        #expect(first.session.selectedSurface?.navigationState.committedURL == dynamicURL)
+        try await waitForNativeState("held document commits", observed: { nativeWebViewState(firstView) }) {
+            firstView.title == "Other" && first.session.selectedSurface?.navigationState.committedURL == heldURL
+        }
+        #expect(first.displayedAddress == heldURL.absoluteString)
+        first.navigateBack()
+        await first.session.waitForPendingCommands()
+        try await waitForNativeState("cross-document back to the History API entry", observed: {
+            "address=\(first.displayedAddress), " + nativeWebViewState(firstView)
+        }) { firstView.url == dynamicURL && first.displayedAddress == dynamicURL.absoluteString }
+        #expect(first.session.selectedSurface?.navigationState.committedURL == dynamicURL)
         let isolatedEnvironment = PreviewEnvironment()
         let isolated = try await isolatedEnvironment.makeWindow()
         defer { isolated.window?.close() }
