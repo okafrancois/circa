@@ -1808,3 +1808,5 @@
 
 "Extension" = "Extension";
 "Extension · %@" = "Extension · %@";
+
+"Volume %ld%%" = "Volume : %ld%%";

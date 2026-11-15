@@ -207,6 +207,28 @@ struct BackgroundMediaSessionsTests {
         #expect(source.elementActions.count == 3)
     }
 
+    @Test("An inactive native sample after unmute does not drop media that still plays")
+    func delayedInactiveAfterUnmute() async {
+        let list = BrowserBackgroundMediaSessions<FakeMediaSource>()
+        let source = FakeMediaSource(), id = TabOccurrenceID()
+        source.state = native(); source.muted = false; source.elementControl = true
+        list.reconcile([.init(source: source, occurrenceID: id, tabID: TabID(), spaceID: SpaceID())])
+        await settle()
+        list.updateAudio(BrowserMediaState(playback: .playing, isAudible: true, isAudioMuted: false), for: id)
+        source.muted = true
+        source.send(native(session: 3))
+        await settle()
+        source.muted = false
+        source.send(native())
+        await settle()
+        source.send(native(session: 3))
+        await settle()
+        #expect(list.session(for: id)?.isAudioMuted == false)
+        #expect(list.session(for: id)?.toggleAction == .pause)
+        list.updateAudio(BrowserMediaState(playback: .paused, isAudible: false, isAudioMuted: false), for: id)
+        #expect(list.session(for: id) == nil)
+    }
+
     @Test("Changes stream into the model; ended sessions disappear and removed tabs stop")
     func streaming() async {
         let list = BrowserBackgroundMediaSessions<FakeMediaSource>()

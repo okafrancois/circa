@@ -22,6 +22,10 @@ extension BrowserWindowController {
         player.onSeek = { [weak self] id, seconds in
             self?.submitInput { owner in _ = owner.backgroundMedia.perform(.seek, on: id, seconds: seconds) }
         }
+        player.onVolume = { [weak self] id, level in
+            // Live gain writes must not queue behind an asynchronous media refresh.
+            self?.setBackgroundMediaVolume(level, on: id)
+        }
         player.onMute = { [weak self] id in
             self?.submitInput { owner in
                 guard let surface = owner.session.surface(for: id), owner.owns(surface),
@@ -71,6 +75,9 @@ extension BrowserWindowController {
             item.playbackRate = entry.session.playback == .playing ? entry.session.playbackRate : nil
             item.canSeek = entry.session.actions.contains(.seek)
             item.isMuted = entry.session.isAudioMuted
+            if engine.capabilities.contains(.audioVolume), let surface = session.surface(for: id) {
+                item.volume = surface.audioVolume
+            }
             item.pipFailure = session.surface(for: id)?.manualPictureInPicture?.failure ?? .rejected
             item.pip = session.surface(for: id)?.manualPictureInPicture?.state ?? .unavailable
             return item
@@ -148,6 +155,17 @@ extension BrowserWindowController {
             session.activateSpace(spaceID)
         }
         session.selectOccurrence(id)
+    }
+
+    func setBackgroundMediaVolume(_ level: Double, on id: TabOccurrenceID) {
+        guard acceptsCommands, engine.capabilities.contains(.audioVolume), level.isFinite,
+              let surface = session.surface(for: id), owns(surface), !surface.isDisposed else { return }
+        do {
+            try surface.setAudioVolume(min(1, max(0, level)))
+            if level > 0, surface.tabAudioMuted() == true { try surface.setAudioMuted(false) }
+        } catch { session.onError?(error) }
+        siteControls.refreshMedia(surface)
+        renderSidebarMediaPlayer()
     }
 
     func toggleBackgroundMedia(_ id: TabOccurrenceID) {
