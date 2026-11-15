@@ -86,6 +86,9 @@ class SidebarListRow: NSView, NSTextFieldDelegate {
     /// there while another row slides into the same slot. AppKit still asks hidden subviews
     /// with a custom `hitTest` for hits, so only rows the list currently shows take pointer input.
     var acceptsPointerInput: Bool { !isHidden && !isLeaving }
+    private var middleClickPress: (node: BrowserOrganizationNode, tab: TabID)?
+    /// Opt-in seam for row kinds whose existing trailing action supports middle-click close.
+    var middleClickCloseTarget: SidebarTabRow? { nil }
 
     init(node: BrowserOrganizationNode) {
         self.node = node
@@ -110,6 +113,7 @@ class SidebarListRow: NSView, NSTextFieldDelegate {
 
     func rebind(node: BrowserOrganizationNode, depth: Int) {
         if self.node != node || self.depth != depth {
+            middleClickPress = nil
             onPreviewInvalidated?(self)
             cancelRename()
             isPressed = false
@@ -125,6 +129,7 @@ class SidebarListRow: NSView, NSTextFieldDelegate {
 
     /// Clears state that must not survive into another row's content.
     func resetForReuse() {
+        middleClickPress = nil
         setErrandMark(nil)
         onPreviewInvalidated?(self)
         isHovering = false
@@ -184,11 +189,12 @@ class SidebarListRow: NSView, NSTextFieldDelegate {
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
-        if window == nil { onPreviewInvalidated?(self); isHovering = false }
+        if window == nil { middleClickPress = nil; onPreviewInvalidated?(self); isHovering = false }
     }
 
     override func viewDidHide() {
         super.viewDidHide()
+        middleClickPress = nil
         onPreviewInvalidated?(self)
         isHovering = false
         isPressed = false
@@ -247,7 +253,7 @@ class SidebarListRow: NSView, NSTextFieldDelegate {
     func controlTextDidBeginEditing(_ notification: Notification) { refreshFieldEditor() }
 
     func commandsDidChange() {
-        if !commandsEnabled { onPreviewInvalidated?(self); isPressed = false }
+        if !commandsEnabled { middleClickPress = nil; onPreviewInvalidated?(self); isPressed = false }
     }
 
     // MARK: Pointer
@@ -261,6 +267,32 @@ class SidebarListRow: NSView, NSTextFieldDelegate {
     override func mouseUp(with event: NSEvent) { events?.rowMouseUp(self, with: event) }
     override func rightMouseDown(with event: NSEvent) {
         if commandsEnabled { events?.rowRightMouseDown(self, with: event) } else { super.rightMouseDown(with: event) }
+    }
+
+    override func otherMouseDown(with event: NSEvent) {
+        guard event.buttonNumber == 2 else { super.otherMouseDown(with: event); return }
+        middleClickPress = nil
+        guard commandsEnabled, acceptsPointerInput, event.window === window,
+              bounds.contains(convert(event.locationInWindow, from: nil)),
+              visibleRect.contains(convert(event.locationInWindow, from: nil)),
+              let target = middleClickCloseTarget else { return }
+        middleClickPress = (node, target.item.id)
+    }
+
+    override func otherMouseDragged(with event: NSEvent) {
+        // Middle-button movement never enters the list's selection or drag machinery.
+        if event.buttonNumber != 2 { super.otherMouseDragged(with: event) }
+    }
+
+    override func otherMouseUp(with event: NSEvent) {
+        guard event.buttonNumber == 2 else { super.otherMouseUp(with: event); return }
+        let press = middleClickPress
+        middleClickPress = nil
+        guard let press, press.node == node, commandsEnabled, acceptsPointerInput,
+              event.window === window, let target = middleClickCloseTarget, press.tab == target.item.id,
+              bounds.contains(convert(event.locationInWindow, from: nil)),
+              visibleRect.contains(convert(event.locationInWindow, from: nil)) else { return }
+        events?.rowClose(target)
     }
 
     override func accessibilityPerformPress() -> Bool {
@@ -438,6 +470,10 @@ class SidebarTabRow: SidebarListRow {
     override var backgroundTrailingOutset: CGFloat { item.isPinned ? Metrics.pinnedTrailingOutset : 0 }
     override var hoverFill: NSColor { item.isPinned ? OrbitTokens.Color.State.pinnedHover : super.hoverFill }
     var isCloseButtonVisible: Bool { closeButton.alphaValue > 0 }
+    override var middleClickCloseTarget: SidebarTabRow? {
+        !item.isPinned && !item.isErrandSummary && !isRenaming && !closeButton.isHidden
+            && closeButton.isEnabled ? self : nil
+    }
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()

@@ -114,6 +114,48 @@ struct TabErgonomicsTests {
         #expect(owner.session.snapshot?.activeSpaceID == first)
     }
 
+    @Test("Middle close archives background and selected tabs in either Space and restores through the existing command")
+    func middleCloseArchiveAndRestore() async throws {
+        let owner = try await fixture()
+        defer { owner.session.close(); owner.window?.close() }
+        for _ in 0..<2 {
+            owner.session.openTab(url: URL(string: "http://127.0.0.1/background")!, activate: true)
+            await owner.session.waitForPendingCommands()
+            let background = try #require(owner.session.organization?.selectedTab?.id)
+            owner.session.openTab(url: URL(string: "http://127.0.0.1/selected")!, activate: true)
+            await owner.session.waitForPendingCommands()
+            let selected = try #require(owner.session.organization?.selectedTab?.id)
+            for id in [background, selected] {
+                owner.window?.contentView?.layoutSubtreeIfNeeded()
+                let row = try #require(owner.sidebar.page.list.row(for: .tab(id)))
+                let point = row.convert(NSPoint(x: 80, y: row.bounds.midY), to: nil)
+                for type in [NSEvent.EventType.otherMouseDown, .otherMouseUp] {
+                    let native = try #require(NSEvent.mouseEvent(with: type, location: point, modifierFlags: [],
+                        timestamp: 0, windowNumber: owner.window!.windowNumber, context: nil,
+                        eventNumber: 0, clickCount: 1, pressure: 1))
+                    let cg = try #require(native.cgEvent)
+                    cg.setIntegerValueField(.mouseEventButtonNumber, value: 2)
+                    let event = try #require(NSEvent(cgEvent: cg))
+                    #expect(event.buttonNumber == 2)
+                    if type == .otherMouseDown {
+                        owner.window?.sendEvent(event)
+                        #expect(owner.session.organization?.selectedTab?.id == selected)
+                        #expect(owner.session.organization?.tab(id) != nil)
+                    } else { owner.window?.sendEvent(event) }
+                }
+                await owner.session.waitForPendingCommands()
+                #expect(owner.session.organization?.tab(id) == nil)
+                if id == background { #expect(owner.session.organization?.selectedTab?.id == selected) }
+                #expect(await owner.session.archivedTabs().value.contains { $0.id == id })
+            }
+            owner.session.restoreMostRecentArchivedTab()
+            await owner.session.waitForPendingCommands()
+            #expect(owner.session.organization?.tab(selected) != nil)
+            owner.activateAdjacentSpace(offset: 1)
+            await owner.session.waitForPendingCommands()
+        }
+    }
+
     @Test("Option copies a sidebar tab into a folder without moving its original")
     func copyDrop() async throws {
         let owner = try await fixture()
