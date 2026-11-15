@@ -1,3 +1,4 @@
+import AppKit
 import BrowserCore
 import BrowserEngine
 import BrowserShell
@@ -18,6 +19,45 @@ struct DownloadHistoryTests {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("orbit-download-history-" + UUID().uuidString)
         try FileManager.default.createDirectory(at: url, withIntermediateDirectories: false)
         return url
+    }
+
+    @Test("Unicode filenames survive sanitizing, durable history and destination display")
+    func unicodeFilename() throws {
+        let root = try directory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let coordinator = BrowserDownloadCoordinator()
+        let names = ["Pokémon — 日本語.rar", "éèà ç ñ.zip", "PokÃ©mon.rar"]
+        for name in names {
+            let sanitized = BrowserDownloadPaths.suggestedFilename(name)
+            #expect(sanitized == name)
+            let registration = try coordinator.register(owner: .init(profileID: ProfileID()),
+                transfer: HistoryTransfer(), suggestedFilename: sanitized)
+            registration.report(.init(key: registration.key, sequence: 1, state: .complete,
+                receivedBytes: 1_100_000, destinationURL: root.appendingPathComponent(name)))
+        }
+        let file = root.appendingPathComponent("history.json")
+        try BrowserDownloadHistoryStore(destination: file).save(coordinator.allSnapshots.map(BrowserDownloadHistoryRecord.init))
+        let history = try BrowserDownloadHistoryStore(destination: file)
+        #expect(history.records.map(\.filename) == names)
+        let restored = BrowserDownloadCoordinator()
+        try restored.restore(history.records)
+        #expect(restored.allSnapshots.map(DownloadRowPresentation.title) == names)
+        #expect(restored.allSnapshots.map(\.suggestedFilename) == names)
+    }
+
+    @Test("Completed download status puts size before tail-truncated availability")
+    func completionDetail() throws {
+        let coordinator = BrowserDownloadCoordinator()
+        let registration = try coordinator.register(owner: .init(profileID: ProfileID()), transfer: HistoryTransfer())
+        registration.report(.init(key: registration.key, sequence: 1, state: .complete,
+            receivedBytes: 1_100_000, fileAvailability: .missing))
+        let row = DownloadRowPresentation(try #require(coordinator.snapshot(for: registration.key)))
+        let size = ByteCountFormatter.string(fromByteCount: 1_100_000, countStyle: .file)
+        #expect(row.detail == uiFormat("%@ · %@", uiText("Complete"), size) + " · " + uiText("File Unavailable"))
+        let view = BrowserDownloadRowView(id: row.id, lifetime: row.lifetime)
+        view.render(row)
+        #expect(view.detailLabel.lineBreakMode == .byTruncatingTail)
+        #expect(view.detailLabel.toolTip == row.detail)
     }
 
     @Test("Terminal history restores in order with fresh lifetimes, profile isolation and working removal")

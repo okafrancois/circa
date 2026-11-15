@@ -180,7 +180,7 @@ final class BrowserLibrarySpaceTile: NSButton {
         self.item = item; self.content = content
         appearance = OrbitAppearance.windowAppearance(for: theme.mode, override: nil)
         fill.apply(theme)
-        ink = BrowserLibraryStyle.foreground
+        ink = OrbitSpaceThemes.accent(for: theme).sidebarText
         setAccessibilityLabel(item.space.name + ", " + item.profileName)
         setAccessibilityHelp(content.entries.map(\.title).joined(separator: ", "))
         overlay.needsDisplay = true

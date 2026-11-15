@@ -382,7 +382,7 @@ private final class BrowserLibraryMediaTile: NSButton {
         return menu
     }
     override func draw(_ dirtyRect: NSRect) {
-        BrowserLibraryStyle.foreground.withAlphaComponent(0.04).setFill()
+        BrowserLibraryStyle.foreground(in: self).withAlphaComponent(0.04).setFill()
         NSBezierPath(roundedRect: bounds, xRadius: 14, yRadius: 14).fill()
         guard let thumbnail, thumbnail.size.width > 0, thumbnail.size.height > 0 else { return }
         let available = bounds.insetBy(dx: 13, dy: 13)
@@ -425,8 +425,8 @@ private final class BrowserLibraryMediaEmptyView: NSView {
     }
     override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); updateColors() }
     private func updateColors() {
-        icon.contentTintColor = BrowserLibraryStyle.foreground.withAlphaComponent(0.3)
-        title.textColor = BrowserLibraryStyle.foreground
-        detail.textColor = BrowserLibraryStyle.foreground.withAlphaComponent(0.65)
+        icon.contentTintColor = BrowserLibraryStyle.foreground(in: self, secondary: true).withAlphaComponent(0.3)
+        title.textColor = BrowserLibraryStyle.foreground(in: self)
+        detail.textColor = BrowserLibraryStyle.foreground(in: self, secondary: true).withAlphaComponent(0.65)
     }
 }

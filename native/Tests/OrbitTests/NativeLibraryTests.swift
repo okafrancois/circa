@@ -32,6 +32,45 @@ struct NativeLibraryTests {
         return (controller, a, b, other)
     }
 
+    @Test("An open Library follows stored theme edits, Space selection and interactive paint")
+    func liveSpaceInk() async throws {
+        let (controller, a, b, other) = try await fixture()
+        defer { controller.session.close(); controller.window?.close() }
+        let space = try #require(controller.session.snapshot?.activeSpaceID)
+        func model(_ hex: UInt32) -> BrowserSpaceTheme {
+            let colors = [BrowserThemeColor(hex: hex)]
+            return .init(mode: .light, colors: [], intensity: 0.78, noise: 0,
+                         light: .init(stops: colors), dark: .init(stops: colors))
+        }
+        let dark = model(0x241536), light = model(0xF3E5FA)
+        _ = try await controller.session.setSpaceTheme(dark, for: space, profileID: a)
+        _ = try await controller.session.setSpaceTheme(light, for: other, profileID: b)
+        controller.showDownloads()
+        await controller.session.waitForPendingCommands()
+        let appearance = try #require(NSAppearance(named: .aqua))
+        let ink = BrowserLibraryStyle.foreground(in: controller.downloadsPane.searchField)
+        func expected(_ theme: OrbitTokens.SpaceTheme) -> NSColor {
+            OrbitSpaceThemes.accent(for: theme).sidebarText.resolved(for: appearance)
+        }
+        #expect(ink.resolved(for: appearance) == expected(OrbitSpaceThemes.rendered(dark)))
+        _ = try await controller.session.setSpaceTheme(light, for: space, profileID: a)
+        await controller.session.waitForPendingCommands()
+        #expect(controller.library.isPresented)
+        #expect(ink.resolved(for: appearance) == expected(OrbitSpaceThemes.rendered(light)))
+        _ = try await controller.session.setSpaceTheme(dark, for: space, profileID: a)
+        controller.session.activateSpace(other)
+        await controller.session.waitForPendingCommands()
+        #expect(controller.library.isPresented)
+        #expect(controller.session.snapshot?.activeSpaceID == other)
+        #expect(ink.resolved(for: appearance) == expected(OrbitSpaceThemes.rendered(light)))
+        let blend = SpaceSwipeThemeBlend(source: OrbitSpaceThemes.rendered(light),
+            destination: OrbitSpaceThemes.rendered(dark), progress: 0.9)
+        controller.windowShell.applySpaceSwipeBlend(blend)
+        #expect(ink.resolved(for: appearance) == expected(blend.theme))
+        controller.windowShell.applySpaceSwipeBlend(nil)
+        #expect(ink.resolved(for: appearance) == expected(OrbitSpaceThemes.rendered(light)))
+    }
+
     @Test("Startup leaves hidden controls unbuilt and first Library use retains its controls")
     func deferredStartupControls() async throws {
         let (controller, _, _, _) = try await fixture()

@@ -558,7 +558,7 @@ final class OrbitWindowShell {
     }
 
     /// The blend is resolved once per swipe frame, not again for the window background.
-    private var spaceSwipePaintedTheme: OrbitTokens.SpaceTheme?
+    private(set) var spaceSwipePaintedTheme: OrbitTokens.SpaceTheme?
 
     private func updateWindowBackground() {
         guard let window else { return }

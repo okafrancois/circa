@@ -59,9 +59,9 @@ final class BrowserArchiveView: NSView, NSTableViewDataSource, NSTableViewDelega
         layer?.backgroundColor = OrbitTokens.Color.Surface.libraryBackground.cgColor
         let title = NSTextField(labelWithString: archiveText("title", "Archived Tabs"))
         title.font = OrbitTokens.Typography.commandBarInput
-        title.textColor = OrbitTokens.Color.Text.primary
+        title.textColor = BrowserLibraryStyle.foreground(in: self)
         profileLabel.font = BrandTextStyle.caption.font(size: 13)
-        profileLabel.textColor = OrbitTokens.Color.Text.secondary
+        profileLabel.textColor = BrowserLibraryStyle.foreground(in: self, secondary: true).withAlphaComponent(0.65)
         searchField.placeholderString = archiveText("search", "Search Archive…")
         searchField.maximumRecents = 0
         searchField.recentsAutosaveName = nil
@@ -220,7 +220,7 @@ final class BrowserArchiveView: NSView, NSTableViewDataSource, NSTableViewDelega
             label.stringValue = Calendar.current.isDateInToday(day) ? uiText("Today")
                 : Calendar.current.isDateInYesterday(day) ? uiText("Yesterday") : dateFormatter.string(from: day)
             label.font = BrandTextStyle.ui.font(size: 13, weight: .bold)
-            label.textColor = BrowserLibraryStyle.foreground.withAlphaComponent(0.65)
+            label.textColor = BrowserLibraryStyle.foreground(in: self, secondary: true).withAlphaComponent(0.65)
             return cell
         }
         guard case .tab(let record) = rows[row] else { return nil }
@@ -343,13 +343,13 @@ final class BrowserArchiveCell: NSTableCellView {
         titleLabel.stringValue = record.tab.resolvedTitle ?? record.tab.url.host ?? uiText("Tab")
         detailLabel.stringValue = record.tab.url.absoluteString
         icon.image = image ?? OrbitIcon.image(sfName: "globe", pointSize: 16, accessibilityDescription: nil)
-        icon.contentTintColor = image == nil ? BrowserLibraryStyle.foreground.withAlphaComponent(0.5) : nil
+        icon.contentTintColor = image == nil ? BrowserLibraryStyle.foreground(in: self, secondary: true).withAlphaComponent(0.5) : nil
         setAccessibilityLabel(titleLabel.stringValue)
         setAccessibilityHelp(detailLabel.stringValue)
     }
     override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); updateColors() }
     private func updateColors() {
-        titleLabel.textColor = BrowserLibraryStyle.foreground
-        detailLabel.textColor = BrowserLibraryStyle.foreground.withAlphaComponent(0.55)
+        titleLabel.textColor = BrowserLibraryStyle.foreground(in: self)
+        detailLabel.textColor = BrowserLibraryStyle.foreground(in: self, secondary: true).withAlphaComponent(0.55)
     }
 }

@@ -15,7 +15,7 @@ final class BrowserLibraryRowView: NSTableRowView {
     override func mouseExited(with event: NSEvent) { hovered = false; needsDisplay = true }
     override func drawBackground(in dirtyRect: NSRect) {
         guard hovered, !isSelected else { return }
-        NSColor.labelColor.withAlphaComponent(0.07).setFill()
+        BrowserLibraryStyle.foreground(in: self).withAlphaComponent(0.07).setFill()
         NSBezierPath(roundedRect: bounds.insetBy(dx: 2, dy: 1), xRadius: 8, yRadius: 8).fill()
     }
 }

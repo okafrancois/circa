@@ -38,7 +38,7 @@ final class BrowserLibraryEmptyView: NSView {
     }
     override func viewDidChangeEffectiveAppearance() { super.viewDidChangeEffectiveAppearance(); updateColors() }
     private func updateColors() {
-        icon.contentTintColor = BrowserLibraryStyle.foreground.withAlphaComponent(0.3)
-        message.textColor = BrowserLibraryStyle.foreground.withAlphaComponent(0.55)
+        icon.contentTintColor = BrowserLibraryStyle.foreground(in: self, secondary: true).withAlphaComponent(0.3)
+        message.textColor = BrowserLibraryStyle.foreground(in: self, secondary: true).withAlphaComponent(0.55)
     }
 }

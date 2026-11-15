@@ -46,13 +46,13 @@ final class BrowserLibraryHistoryView: NSView, NSTableViewDataSource, NSTableVie
         let title = NSTextField(labelWithString: libraryText("history", "History"))
         title.font = OrbitTokens.Typography.commandBarInput
         profileLabel.font = BrandTextStyle.caption.font(size: 13)
-        profileLabel.textColor = OrbitTokens.Color.Text.secondary
+        profileLabel.textColor = BrowserLibraryStyle.foreground(in: self, secondary: true).withAlphaComponent(0.65)
         searchField.placeholderString = libraryText("searchHistory", "Search History")
         searchField.maximumRecents = 0; searchField.recentsAutosaveName = nil
         searchField.delegate = self
         searchField.setAccessibilityIdentifier("library-history-search")
         status.font = OrbitTokens.Typography.emptyStateDetail
-        status.textColor = OrbitTokens.Color.Text.secondary
+        status.textColor = BrowserLibraryStyle.foreground(in: self, secondary: true).withAlphaComponent(0.65)
         let reload = NSButton(image: OrbitIcon.image(sfName: "arrow.clockwise", pointSize: NSFont.systemFontSize, accessibilityDescription: libraryText("refresh", "Refresh")) ?? NSImage(), target: self, action: #selector(refresh))
         reload.toolTip = libraryText("refresh", "Refresh")
         reload.setAccessibilityLabel(libraryText("refresh", "Refresh"))
@@ -209,7 +209,7 @@ final class BrowserLibraryHistoryView: NSView, NSTableViewDataSource, NSTableVie
         let cell = NSTableCellView(); cell.identifier = identifier
         let label = NSTextField(labelWithString: "")
         label.font = OrbitTokens.Typography.sidebarFolderTitle
-        label.textColor = OrbitTokens.Color.Text.secondary
+        label.textColor = BrowserLibraryStyle.foreground(in: self, secondary: true).withAlphaComponent(0.65)
         label.lineBreakMode = .byTruncatingTail
         label.setAccessibilityRole(NSAccessibility.Role(rawValue: "AXHeading"))
         label.translatesAutoresizingMaskIntoConstraints = false; cell.addSubview(label); cell.textField = label
@@ -254,10 +254,10 @@ final class BrowserHistoryVisitCell: NSTableCellView {
     override init(frame: NSRect) {
         super.init(frame: frame)
         titleLabel.font = OrbitTokens.Typography.sidebarTabTitle
-        titleLabel.textColor = OrbitTokens.Color.Text.primary
+        titleLabel.textColor = BrowserLibraryStyle.foreground(in: self)
         urlLabel.font = BrandTextStyle.body.font(size: 12)
         timeLabel.font = BrandTextStyle.mono.font(size: 12)
-        for label in [urlLabel, timeLabel] { label.textColor = OrbitTokens.Color.Text.secondary }
+        for label in [urlLabel, timeLabel] { label.textColor = BrowserLibraryStyle.foreground(in: self, secondary: true).withAlphaComponent(0.65) }
         for label in [titleLabel, urlLabel, timeLabel] {
             label.maximumNumberOfLines = 1
             label.lineBreakMode = .byTruncatingTail

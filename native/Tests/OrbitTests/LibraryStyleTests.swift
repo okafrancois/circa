@@ -6,6 +6,31 @@ extension NativeWebKitTests {
 @Suite("Library page surfaces", .serialized)
 @MainActor
 struct LibraryStyleTests {
+    @Test("Library ink follows each window's painted Space, including same-appearance edits")
+    func themedInk() throws {
+        let dark = OrbitTokens.SpaceTheme(stops: [NSColor(srgbRed: 0.12, green: 0.06, blue: 0.20, alpha: 1)], mode: .light, texture: .none, textureIntensity: 0)
+        let light = OrbitTokens.SpaceTheme(stops: [NSColor(srgbRed: 0.92, green: 0.86, blue: 0.98, alpha: 1)], mode: .light, texture: .none, textureIntensity: 0)
+        let first = BrowserLibraryView(), second = BrowserLibraryView()
+        let row = BrowserDownloadRowView(id: UUID(), lifetime: UUID())
+        let field = BrowserLibrarySearchField()
+        first.body.addSubview(row); first.body.addSubview(field)
+        let other = BrowserDownloadRowView(id: UUID(), lifetime: UUID())
+        second.body.addSubview(other)
+        first.apply(theme: dark); second.apply(theme: light)
+        for appearanceName in [NSAppearance.Name.aqua, .darkAqua] {
+            let appearance = try #require(NSAppearance(named: appearanceName))
+            #expect(row.titleLabel.textColor?.resolved(for: appearance) == OrbitSpaceThemes.accent(for: dark).sidebarText.resolved(for: appearance))
+            #expect(other.titleLabel.textColor?.resolved(for: appearance) == OrbitSpaceThemes.accent(for: light).sidebarText.resolved(for: appearance))
+            first.apply(theme: light)
+            #expect(row.titleLabel.textColor?.resolved(for: appearance) == other.titleLabel.textColor?.resolved(for: appearance))
+            #expect(field.textColor?.resolved(for: appearance) == OrbitSpaceThemes.accent(for: light).sidebarSecondaryText.withAlphaComponent(0.65).resolved(for: appearance))
+            first.apply(theme: dark)
+        }
+        // Detached controls keep daylight ink even under the system's dark appearance.
+        let detached = BrowserLibrarySearchField()
+        #expect(detached.textColor?.resolved(for: NSAppearance(named: .aqua)!) == detached.textColor?.resolved(for: NSAppearance(named: .darkAqua)!))
+    }
+
     @Test("The outgoing sidebar cannot intercept Library clicks while transparent")
     func outgoingHitTesting() {
         NSApplication.shared.setActivationPolicy(.prohibited)
