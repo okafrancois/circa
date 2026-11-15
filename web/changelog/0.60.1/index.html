@@ -66,13 +66,16 @@
   <div class="release-meta"><h2><a href="#v0.60.1" aria-label="Link to version 0.60.1">0.60.1</a></h2>
   <time datetime="2026-11-03">November 3, 2026</time><span class="release-channel">Stable</span></div>
   <div class="release-copy"><h3>Pinned extension menus stay open from the floating sidebar.</h3>
-  <p class="release-counts">5 fixed</p>
+  <p class="release-counts">4 fixed · 1 smaller</p>
   <h4>Fixed</h4>
   <ul>
     <li>Opening a pinned extension from the floating sidebar now keeps the sidebar visible while its native popup takes keyboard focus. This fixes extension menus disappearing during opening, including Dashlane.</li>
     <li>Preserve the popup anchor through AppKit’s key-window handoff.</li>
     <li>Keep the sidebar open for its focused native child; ordinary hover dismissal resumes when focus returns.</li>
     <li>Continue dismissing on another window or application taking focus. Unrelated visible child windows do not hold the sidebar open.</li>
+  </ul>
+  <h4>Smaller</h4>
+  <ul>
     <li>Validation: 82 targeted tests and the full native suite (2,992 reported tests) passed. Real Chromium before/after runs reproduced the failure and verified the fix with both an MV3 fixture and the official Dashlane extension in fresh signed, confined test profiles. All four runs quit normally. Dashlane was not signed in; no personal vault was accessed.</li>
   </ul>
   <a class="release-source" href="../../changelog/0.60.1/">Release permalink ↗</a>

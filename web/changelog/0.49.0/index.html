@@ -66,13 +66,16 @@
   <div class="release-meta"><h2><a href="#v0.49.0" aria-label="Link to version 0.49.0">0.49.0</a></h2>
   <time datetime="2026-11-01">November 1, 2026</time><span class="release-channel">Stable</span></div>
   <div class="release-copy"><h3>Import compatible installed extensions into new profiles.</h3>
-  <p class="release-counts">5 new</p>
+  <p class="release-counts">4 new · 1 smaller</p>
   <h4>New</h4>
   <ul>
-    <li>Circa now imports compatible installed extensions from another browser and supported Chromium browsers into newly imported profiles.</li>
+    <li>Circa now imports compatible installed extensions from supported browsers into newly imported profiles.</li>
     <li>Restores internal Manifest V3 packages with their original identity, supported enabled or disabled state, and pin order.</li>
     <li>Keeps extensions isolated in their mapped profiles and registers them through Chromium during the import restart.</li>
-    <li>Preserves the existing optional passwords and connections step for another browser imports.</li>
+    <li>Preserves the existing optional passwords and connections step for supported imports.</li>
+  </ul>
+  <h4>Smaller</h4>
+  <ul>
     <li>Validation includes importer and recovery tests, the full native suite, Chromium product/smoke builds, and cold/warm Chromium runs with functional extension execution and a public-store package.</li>
   </ul>
   <h4>Known limits</h4>
