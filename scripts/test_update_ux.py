@@ -83,16 +83,20 @@ def clean_preferences():
         shutil.rmtree(cache, onerror=ignore_disappeared)
 
 
+CHANNEL_CASES = ('channel-stable', 'channel-opt-in', 'channel-opt-out', 'channel-tampered', 'channel-staged-opt-out')
+
+
 SIGNED_NEXT_CASES = ('signed-next', 'signed-tampered', 'signed-unsigned')
 
 
 def case_versions(name):
-    return ('2', '3') if name in SIGNED_NEXT_CASES else ('1', '2')
+    return ('2', '3') if name in (*SIGNED_NEXT_CASES, 'channel-opt-out') else ('1', '3') if name in ('channel-stable', 'channel-staged-opt-out') else ('1', '2')
 
 
 def case(work, name, evidence):
     """Invoked only under lockf by main; commands are consumed inside the PID-checked app."""
-    deadline = time.monotonic() + 52
+    started = time.monotonic()
+    deadline = started + 52
     old_version, new_version = case_versions(name)
     valid = work / ('valid-%s.xml' % new_version)
     root, app = work / 'data', work / 'installed/Orbit.app'
@@ -152,6 +156,8 @@ def case(work, name, evidence):
 
     try:
         clean_preferences()
+        if name in ('channel-opt-out', 'channel-tampered', 'channel-staged-opt-out'):
+            run('defaults', 'write', TEST_ID, 'OrbitReceiveNightlyBuilds', '-bool', 'true')
         if name == 'off':
             run('defaults', 'write', TEST_ID, 'SUAutomaticallyUpdate', '-bool', 'false')
         with log.open('w') as handle:
@@ -172,15 +178,49 @@ def case(work, name, evidence):
                 return False
 
             wait(seeded, 'seed')
+            if name in CHANNEL_CASES:
+                if name in ('channel-opt-in', 'channel-opt-out'):
+                    wait(lambda _: 'cycle-finished' in log.read_text(), 'initial channel check')
+                    time.sleep(.5)
+                if name == 'channel-opt-in':
+                    command('nightly-on')
+                    wait(lambda s: s.get('update', {}).get('nightly') is True, 'opt in')
+                if name == 'channel-staged-opt-out':
+                    wait(lambda s: s.get('update', {}).get('card') is True, 'staged nightly')
+                if name in ('channel-opt-out', 'channel-staged-opt-out'):
+                    command('nightly-off')
+                    wait(lambda s: s.get('update', {}).get('nightly') is False and not s['update']['card'], 'opt out')
+                if name == 'channel-opt-out':
+                    time.sleep(.5)
+                    cycles = log.read_text().count('cycle-finished')
+                    shutil.copyfile(work / 'channel-newer-nightly.xml', work / 'feed/appcast.xml')
+                    command('check')
+                    wait(lambda _: log.read_text().count('cycle-finished') > cycles, 'opted-out channel check')
+                if name in ('channel-stable', 'channel-opt-out', 'channel-staged-opt-out'):
+                    wait(lambda _: 'cycle-finished' in log.read_text(), 'channel check')
+                    time.sleep(1)
+                    checks['nightly_not_offered'] = not state()['update']['card']
+                    if name != 'channel-staged-opt-out':
+                        checks['no_nightly_archive_download'] = archive_requests() == 0
+                    checks['current_build_kept'] = state()['update']['version'] == old_version
+                    shutil.copyfile(work / 'channel-stable-next.xml', work / 'feed/appcast.xml')
+                    command('check')
+                elif name == 'channel-opt-in':
+                    # Capture the existing Settings row in this confined test window.
+                    nonce = command('nightly-settings')
+                    settings = wait(lambda s: s.get('commandNonce') == nonce and s.get('settingsWindowNumber'), 'settings')
+                    number = settings['settingsWindowNumber']
+                    time.sleep(.5)
+                    run('screencapture', '-x', '-o', '-l', str(number), evidence / 'settings-nightly.png')
             if name == 'manual':
                 shutil.copyfile(valid, work / 'feed/appcast.xml')
                 time.sleep(.5)  # Let Sparkle finish scheduling after the previous cycle.
                 command('check')
-            if name in ('broken', 'signed-tampered', 'signed-unsigned'):
+            if name in ('broken', 'signed-tampered', 'signed-unsigned', 'channel-tampered'):
                 wait(lambda _: 'aborted-code-' in log.read_text(), 'signature rejection')
                 checks[name.replace('-', '_') + '_has_no_card'] = not state()['update']['card']
                 checks['rejected_before_archive_download'] = name == 'broken' or archive_requests() == 0
-                shutil.copyfile(valid, work / 'feed/appcast.xml')
+                shutil.copyfile(work / 'channel-nightly.xml' if name == 'channel-tampered' else valid, work / 'feed/appcast.xml')
                 time.sleep(.5)  # Let Sparkle finish scheduling after the previous cycle.
                 command('check')
             ready = wait(lambda s: s.get('update', {}).get('card') is True, 'prepared card')
@@ -214,6 +254,17 @@ def case(work, name, evidence):
             checks['installed_requires_signed_feed'] = installed_info.get('SURequireSignedFeed') is True
             checks['session_restored'] = after['update']['tabs'] == before
             checks['no_standard_windows_after'] = not any('SU' in c or 'SPU' in c for c in after['update']['windowClasses'])
+            if name == 'channel-opt-in':
+                checks['nightly_preference_survives_update'] = after['update']['nightly'] is True
+                shutil.copyfile(work / 'channel-stable-next.xml', work / 'feed/appcast.xml')
+                time.sleep(.5)
+                command('check')
+                wait(lambda s: s.get('update', {}).get('card') is True and s['update']['pending'] == '3', 'following stable')
+                pid = state()['pid']
+                command('click')
+                stable = wait(lambda s: s.get('pid') != pid and s.get('update', {}).get('version') == '3', 'stable relaunch')
+                checks['nightly_then_stable'] = stable['update']['nightly'] is True
+                checks['stable_session_restored'] = stable['update']['tabs'] == before
             quit_app()
         if not all(checks.values()):
             raise AssertionError(checks)
@@ -243,6 +294,8 @@ def case(work, name, evidence):
         subprocess.run([LSREGISTER, '-u', str(app)], capture_output=True)
         subprocess.run(['tccutil', 'reset', 'All', TEST_ID], capture_output=True)
         clean_preferences()
+        (evidence / (name + '-timing.json')).write_text(json.dumps({
+            'guiSeconds': round(time.monotonic() - started, 3)}, indent=2) + '\n')
 
 
 AUTH_COOKIES = ('auth', 'pref', 'sid', 'auth2')
@@ -719,7 +772,7 @@ def main():
     parser.add_argument('--evidence', type=Path, default=Path('/tmp/update-ux'))
     parser.add_argument('--case')
     names = ['background', 'manual', 'quit', 'off', 'toggle-off', 'broken',
-             'signed-transition', *SIGNED_NEXT_CASES]
+             'signed-transition', *SIGNED_NEXT_CASES, *CHANNEL_CASES]
     parser.add_argument('--cases', nargs='+', default=names, choices=names + ['engine-transition', 'auth-transition'])
     parser.add_argument('--auth-expect', choices=('kept', 'lost'), default='kept',
                         help='auth-transition: the new engine keeps (default) or drops existing authentication')
@@ -819,11 +872,13 @@ try key.publicKey.rawRepresentation.base64EncodedData().write(to: URL(fileURLWit
             from sparkle_setup import ensure_sparkle
             sparkle = ensure_sparkle(json.loads((ROOT / 'release/config.json').read_text())) / 'bin/sign_update'
             builds = {}
-            for version in ('2', '3'):
+            for version in (('2', '3', '4') if any(name in CHANNEL_CASES for name in args.cases) else ('2', '3')):
                 target = work / ('target-%s/Orbit.app' % version)
                 target.parent.mkdir()
                 copy(base, target)
-                info.update(CFBundleVersion=version, CFBundleShortVersionString='0.0.' + version)
+                display_version = ({'2': '0.1.0-nightly.1', '3': '0.1.0', '4': '0.2.0-nightly.1'}[version]
+                                   if any(name in CHANNEL_CASES for name in args.cases) else '0.0.' + version)
+                info.update(CFBundleVersion=version, CFBundleShortVersionString=display_version)
                 (target / 'Contents/Info.plist').write_bytes(plistlib.dumps(info))
                 sign_chromium_bundle(target)
                 builds[version] = target
@@ -831,9 +886,9 @@ try key.publicKey.rawRepresentation.base64EncodedData().write(to: URL(fileURLWit
                 run('/usr/bin/ditto', '-c', '-k', '--keepParent', target, archive)
                 signature = subprocess.check_output([str(sparkle), '--ed-key-file', str(key), str(archive)], text=True).strip()
                 xml = ('<rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle"><channel><item>'
-                       '<sparkle:version>%s</sparkle:version><sparkle:shortVersionString>0.0.%s</sparkle:shortVersionString>'
+                       '<sparkle:version>%s</sparkle:version><sparkle:shortVersionString>%s</sparkle:shortVersionString>'
                        '<enclosure url="http://127.0.0.1:%d/update-%s.zip" type="application/octet-stream" %s/>'
-                       '</item></channel></rss>') % (version, version, server.server_port, version, signature)
+                       '</item></channel></rss>') % (version, info['CFBundleShortVersionString'], server.server_port, version, signature)
                 (work / ('unsigned-%s.xml' % version)).write_text(xml)
                 (work / ('valid-%s.xml' % version)).write_text(xml)
                 run(sparkle, '--ed-key-file', key, work / ('valid-%s.xml' % version), stdout=subprocess.DEVNULL)
@@ -841,12 +896,20 @@ try key.publicKey.rawRepresentation.base64EncodedData().write(to: URL(fileURLWit
                 path.write_text(content)
                 run(sparkle, '--ed-key-file', key, path, stdout=subprocess.DEVNULL)
                 return path.read_bytes()
+            if any(name in CHANNEL_CASES for name in args.cases):
+                def nightly_xml(version):
+                    return (work / ('unsigned-%s.xml' % version)).read_text().replace('<item>', '<item><sparkle:channel>nightly</sparkle:channel>')
+                nightly = signed_feed(work / 'channel-nightly.xml', nightly_xml('2'))
+                newer_nightly = signed_feed(work / 'channel-newer-nightly.xml', nightly_xml('4'))
+                following = (work / 'unsigned-3.xml').read_text().replace('</channel>',
+                    nightly_xml('2').split('<channel>')[1].split('</channel>')[0] + '</channel>')
+                signed_feed(work / 'channel-stable-next.xml', following)
             empty = signed_feed(work / 'empty.xml', '<rss><channel/></rss>')
             broken = signed_feed(work / 'broken.xml', re.sub(
                 r'sparkle:edSignature="[^"]+"', 'sparkle:edSignature="' + base64.b64encode(bytes(64)).decode() + '"',
                 (work / 'unsigned-2.xml').read_text()))
             # Same length, valid signature trailer: only the feed signature check can reject it.
-            tampered = (work / 'valid-3.xml').read_bytes().replace(b'0.0.3</sparkle:short', b'0.0.9</sparkle:short')
+            tampered = (work / 'valid-3.xml').read_bytes().replace(b'0.0.3</sparkle:short', b'0.0.9</sparkle:short').replace(b'0.1.0</sparkle:short', b'0.1.9</sparkle:short')
             if tampered == (work / 'valid-3.xml').read_bytes():
                 raise RuntimeError('Tampered feed fixture did not change')
             installed = work / 'installed/Orbit.app'
@@ -865,9 +928,13 @@ try key.publicKey.rawRepresentation.base64EncodedData().write(to: URL(fileURLWit
                 (work / 'requests.log').unlink(missing_ok=True)
                 packaging.prepare_synthetic_root(root, TEST_ID)
                 source = (previous if name == 'engine-transition' else legacy if name == 'signed-transition'
-                          else builds['2'] if name in SIGNED_NEXT_CASES else base)
+                          else builds['2'] if name in (*SIGNED_NEXT_CASES, 'channel-opt-out') else base)
                 copy(source, installed)
                 content = (work / ('valid-%s.xml' % case_versions(name)[1])).read_bytes()
+                if name in CHANNEL_CASES:
+                    content = empty if name == 'channel-opt-out' else nightly
+                    if name == 'channel-tampered':
+                        content = content.replace(b'>nightly<', b'>tamper!<')
                 if name == 'manual':
                     content = empty
                 if name == 'broken':

@@ -1,4 +1,4 @@
-"""Construct the stable Sparkle update feed URL."""
+"""Construct the shared signed Sparkle update feed URL."""
 import argparse
 
 

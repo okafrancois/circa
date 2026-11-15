@@ -2,8 +2,9 @@
 """Build signed Orbit releases locally; remote mutations require --publish.
 
 Every publishing run, and every non-isolated build, first passes the update preservation gate:
-the latest public release, downloaded from the public feed and verified (feed and archive
-EdDSA signatures, Developer ID team, older build), is installed in a synthetic data root and
+the newest published build for a nightly, or the latest stable and nightly for a stable
+candidate, are downloaded from the public feed and verified (feed and archive EdDSA
+signatures, Developer ID team, older build). Each is installed in a synthetic data root and
 updated to the candidate through the signed loopback update qualification of
 scripts/test_update_ux.py (auth-transition: site sign-ins and installed extensions, two
 profiles, restart, update and next update). Any failure, missing evidence, mismatched input or
@@ -50,8 +51,8 @@ def release_version(tag=None):
     if tag is None:
         result = subprocess.run(['git', '-C', str(ROOT), 'describe', '--tags', '--exact-match'], capture_output=True, text=True)
         tag = result.stdout.strip() if result.returncode == 0 else 'v0.1.0'
-    if not re.fullmatch(r'v\d+\.\d+\.\d+', tag):
-        raise ValueError('Release tag must have the form vX.Y.Z')
+    if not re.fullmatch(r'v\d+\.\d+\.\d+(?:-nightly\.[1-9]\d*)?', tag):
+        raise ValueError('Release tag must have the form vX.Y.Z or vX.Y.Z-nightly.N')
     return tag[1:]
 
 
@@ -358,10 +359,12 @@ REQUIRED_PRESERVATION_CHECKS = (
     'migration_backup_verified')
 
 
-def latest_feed_item(feed_path):
+def latest_feed_item(feed_path, channel=None):
     """The newest full archive offered by a signed feed: (build, short version, url, length, signature)."""
     items = []
     for item in ET.parse(feed_path).findall('./channel/item'):
+        if channel is not None and (item.findtext(SPARKLE + 'channel') or '') != channel:
+            continue
         enclosure = item.find('enclosure')
         if enclosure is None:
             continue
@@ -382,12 +385,14 @@ def download(url, destination):
         shutil.copyfileobj(response, output)
 
 
-def previous_release(config, work, candidate_build, fetch=download):
+def previous_release(config, work, candidate_build, fetch=download, item=None):
     """Downloads and verifies the release that installed copies run today."""
-    feed = work / 'appcast.xml'
-    fetch(update_feed_url(config['repository']), feed)
-    verify_feed_signature(feed, config['public_ed_key'])
-    build, short, url, length, signature = latest_feed_item(feed)
+    if item is None:
+        feed = work / 'appcast.xml'
+        fetch(update_feed_url(config['repository']), feed)
+        verify_feed_signature(feed, config['public_ed_key'])
+        item = latest_feed_item(feed)
+    build, short, url, length, signature = item
     expected_prefix = 'https://github.com/%s/releases/download/' % config['repository']
     if not url.startswith(expected_prefix) or not url.endswith('.zip'):
         raise ValueError('The public feed points outside this repository\'s releases')
@@ -438,16 +443,37 @@ def check_preservation_summary(summary, run_id, previous, candidate):
         raise RuntimeError('Preservation qualification ran on different application bundles')
 
 
-def qualify_preservation(config, candidate, build, output):
+def preservation_items(feed, nightly):
+    # Stable candidates must preserve data for both stable users and nightly testers.
+    newest = latest_feed_item(feed)
+    if nightly:
+        return [newest]
+    stable = latest_feed_item(feed, '')
+    channels = [item.findtext(SPARKLE + 'channel') for item in ET.parse(feed).findall('./channel/item')]
+    return [stable] + ([latest_feed_item(feed, 'nightly')] if 'nightly' in channels else [])
+
+
+def qualify_preservation(config, candidate, build, output, nightly=False):
+    feed = output / 'published-appcast.xml'
+    download(update_feed_url(config['repository']), feed)
+    verify_feed_signature(feed, config['public_ed_key'])
+    if latest_feed_item(feed)[0] >= build:
+        raise ValueError('The candidate build must be newer than every published channel')
+    for item in preservation_items(feed, nightly):
+        qualify_previous(config, candidate, build, output, item)
+    return feed
+
+
+def qualify_previous(config, candidate, build, output, item):
     """Mandatory gate: the published build updates to the candidate without losing sign-ins or
     installed extensions. Raises on any failure; there is no skip or degraded mode."""
-    evidence = output / ('preservation-' + str(build))
+    evidence = output / ('preservation-%s-from-%s' % (build, item[0]))
     if evidence.exists():
         shutil.rmtree(evidence)
     evidence.mkdir(parents=True)
     with tempfile.TemporaryDirectory(prefix='circa-preservation-') as temporary:
         work = Path(temporary)
-        previous, published = previous_release(config, work, build)
+        previous, published = previous_release(config, work, build, item=item)
         print('preservation gate: published build %d (%s) -> candidate build %d' % (
             published['build'], published['version'], build), flush=True)
         run_id = secrets.token_hex(16)
@@ -471,7 +497,13 @@ def qualify_preservation(config, candidate, build, output):
 
 def release_notes_path(version):
     release_version('v' + version)
-    path = ROOT / 'release' / 'notes' / (version + '.md')
+    directory = ROOT / 'release' / 'notes'
+    if '-nightly.' in version:
+        directory /= 'nightly'
+    path = directory / (version + '.md')
+    # Hook for the shared release-notes validator: the nightly directory is its input.
+    if '-nightly.' in version and (not path.is_file() or not path.read_text().strip()):
+        raise ValueError('Nightly release requires nonempty notes: ' + str(path))
     return path if path.is_file() else None
 
 
@@ -479,24 +511,70 @@ def publish_release(config, version, archive, dmg, appcast, deltas=(), stable_dm
     # stable_dmg is an unversioned copy, so releases/latest/download/<name>.dmg stays a fixed download link.
     repo, tag = config['repository'], 'v' + version
     notes = release_notes_path(version)
+    nightly = '-nightly.' in version
+    channel_flags = ['--prerelease', '--latest=false'] if nightly else []
     existing = subprocess.run(['gh', 'release', 'view', tag, '--repo', repo, '--json', 'isDraft'], capture_output=True, text=True)
     if existing.returncode:
-        run('gh', 'release', 'create', tag, '--repo', repo, '--verify-tag', '--draft', '--title', f"{config['name']} {version}",
+        run('gh', 'release', 'create', tag, '--repo', repo, '--verify-tag', '--draft', *channel_flags, '--title', f"{config['name']} {version}",
             *(['--notes-file', notes] if notes else ['--generate-notes']))
     elif not json.loads(existing.stdout)['isDraft']:
         raise ValueError('Refusing to mutate an already published release')
     elif notes:
         run('gh', 'release', 'edit', tag, '--repo', repo, '--notes-file', notes)
-    run('gh', 'release', 'upload', tag, '--repo', repo, '--clobber', archive, dmg, *([stable_dmg] if stable_dmg else []), appcast, *sorted(deltas))
-    run('gh', 'release', 'edit', tag, '--repo', repo, '--draft=false', '--latest')
+    run('gh', 'release', 'upload', tag, '--repo', repo, '--clobber', archive, dmg, *([stable_dmg] if stable_dmg and not nightly else []), appcast, *sorted(deltas))
+    run('gh', 'release', 'edit', tag, '--repo', repo, '--draft=false', *(channel_flags if nightly else ['--latest']))
+    if nightly:
+        publish_nightly_download(config, tag, dmg)
     feed = subprocess.run(['gh', 'release', 'view', 'update-feed', '--repo', repo, '--json', 'isDraft,isPrerelease'], capture_output=True, text=True)
     if feed.returncode:
-        run('gh', 'release', 'create', 'update-feed', '--repo', repo, '--verify-tag', '--prerelease', '--latest=false', '--title', 'Circa update feed', '--notes', 'Stable Sparkle update feed.')
+        run('gh', 'release', 'create', 'update-feed', '--repo', repo, '--verify-tag', '--prerelease', '--latest=false', '--title', 'Circa update feed', '--notes', 'Signed stable and nightly Sparkle update feed.')
     else:
         feed_info = json.loads(feed.stdout)
         if feed_info['isDraft'] or not feed_info['isPrerelease']:
             run('gh', 'release', 'edit', 'update-feed', '--repo', repo, '--draft=false', '--prerelease', '--latest=false')
     run('gh', 'release', 'upload', 'update-feed', '--repo', repo, '--clobber', appcast)
+
+
+def publish_nightly_download(config, tag, dmg):
+    repo = config['repository']
+    existing = subprocess.run(['gh', 'release', 'view', 'nightly', '--repo', repo], capture_output=True)
+    if existing.returncode:
+        run('gh', 'release', 'create', 'nightly', '--repo', repo, '--target', tag,
+            '--prerelease', '--latest=false', '--title', 'Circa Nightly', '--notes', 'Latest nightly installer for testers.')
+    else:
+        run('gh', 'release', 'edit', 'nightly', '--repo', repo, '--draft=false', '--prerelease', '--latest=false')
+    installer = Path(dmg).with_name('Circa-Nightly.dmg')
+    shutil.copyfile(dmg, installer)
+    run('gh', 'release', 'upload', 'nightly', '--repo', repo, '--clobber', installer)
+
+
+def merge_published_items(feed, previous, build, nightly):
+    """Retain both channels and their original signed archive/delta URLs across fresh runners.
+    The caller must re-sign the resulting feed before validation or publishing."""
+    ET.register_namespace('sparkle', SPARKLE[1:-1])
+    tree = ET.parse(feed)
+    channel = tree.getroot().find('channel')
+    def version(item):
+        enclosure = item.find('enclosure')
+        return item.findtext(SPARKLE + 'version') or (enclosure.get(SPARKLE + 'version') if enclosure is not None else None)
+    candidates = [item for item in channel.findall('item') if version(item) == str(build)]
+    if len(candidates) != 1:
+        raise ValueError('Generated feed must contain exactly one candidate')
+    candidate = candidates[0]
+    if (candidate.findtext(SPARKLE + 'channel') or '') != ('nightly' if nightly else ''):
+        raise ValueError('Generated candidate has the wrong update channel')
+    if previous and previous.is_file():
+        # Previously published entries are authoritative; never regenerate their URLs.
+        old = ET.parse(previous).findall('./channel/item')
+        for item in old:
+            number = version(item)
+            if number == str(build):
+                raise ValueError('Refusing to replace a published build')
+            for existing in list(channel.findall('item')):
+                if version(existing) == number:
+                    channel.remove(existing)
+            channel.append(item)
+    tree.write(feed, encoding='utf-8', xml_declaration=True)
 
 
 def main():
@@ -524,6 +602,9 @@ def main():
         raise ValueError('Release name and bundle_id must match BrowserCore/ProductIdentity.swift')
     # A qualification-only run publishes nothing; outside a tag it carries no version.
     version = release_version(args.tag) if args.tag or not args.qualify_only else '0.0.0'
+    nightly = '-nightly.' in version
+    if nightly:
+        release_notes_path(version)
     if args.qualify_only and (args.publish or args.local_test_root):
         raise ValueError('--qualify-only neither publishes nor uses an isolated test root')
     if not args.qualify_only:
@@ -551,13 +632,21 @@ def main():
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=True)
     # Isolated updater E2E builds (--local-test-root, never published) are the only exemption.
+    published_feed = None
     if args.publish or args.qualify_only or not args.local_test_root:
-        qualify_preservation(config, source, build, output)
+        published_feed = qualify_preservation(config, source, build, output, nightly=nightly)
     if args.qualify_only:
         print(json.dumps({'version': version, 'build': build, 'qualified': True, 'published': False}))
         return
     archives = output / 'archives'
     archives.mkdir(parents=True, exist_ok=True)
+    local_previous = output / 'previous-local-appcast.xml'
+    if published_feed is None and (archives / 'appcast.xml').is_file():
+        verify_feed_signature(archives / 'appcast.xml', config['public_ed_key'])
+        shutil.copyfile(archives / 'appcast.xml', local_previous)
+        published_feed = local_previous
+    if published_feed:
+        shutil.copyfile(published_feed, archives / 'appcast.xml')
     archive = archives / f"{config['name']}-{version}.zip"
     dmg = output / f"{config['name']}-{version}.dmg"
     if archive.exists() or dmg.exists():
@@ -597,16 +686,20 @@ def main():
     prefix = args.feed_url.rsplit('/', 1)[0] + '/' if args.feed_url else f"https://github.com/{config['repository']}/releases/download/v{version}/"
     run(sparkle / 'bin/generate_appcast', *signing, '--versions', str(build), '--download-url-prefix', prefix,
         '--full-release-notes-url', 'https://circabrowser.com/changelog',
-        '--delta-compression', 'lzfse', '--maximum-versions', '3', '--maximum-deltas', '5', archives)
+        *(['--channel', 'nightly'] if nightly else []),
+        '--delta-compression', 'lzfse', '--maximum-versions', '0', '--maximum-deltas', '5', archives)
     feed = archives / 'appcast.xml'
+    merge_published_items(feed, published_feed, build, nightly)
     # generate_appcast signs the feed when the new archive requires it; signing again is idempotent
     # and also covers an older feed in the archive directory.
     run(sparkle / 'bin/sign_update', *signing, feed, capture_output=True)
     validate_appcast(feed, build)
     verify_feed_signature(feed, config['public_ed_key'])
     if args.publish:
-        stable_dmg = Path(dmg).with_name(config['name'] + '.dmg')
-        shutil.copyfile(dmg, stable_dmg)
+        stable_dmg = None
+        if not nightly:
+            stable_dmg = Path(dmg).with_name(config['name'] + '.dmg')
+            shutil.copyfile(dmg, stable_dmg)
         publish_release(config, version, archive, dmg, archives / 'appcast.xml', archives.glob('*.delta'), stable_dmg)
     print(json.dumps({'version': version, 'build': build, 'zip': str(archive), 'dmg': str(dmg), 'appcast': str(archives / 'appcast.xml'), 'published': args.publish}))
 

@@ -190,6 +190,9 @@ final class OrbitUpdater: NSObject, ObservableObject {
         // The restart action just passed the freshness gate before invoking Sparkle.
         guard !isRestartingForUpdate else { return }
         isQuitting = true
+        // A preference change owns cancellation until its installer reply finishes.
+        // Quitting must not try to cancel the same installer concurrently.
+        await channelChangeTask?.value
         // A staged Sparkle installer also watches normal termination. Explicit consent
         // is required when automatic installation is off, even if staging began earlier.
         if !automaticallyUpdates {
@@ -220,10 +223,13 @@ final class OrbitUpdater: NSObject, ObservableObject {
     }
     /// Sparkle owns this preference, including changes made in its update alert. Using its key
     /// also keeps the switch persistent in synthetic bundles without constructing an updater.
+    @Published private(set) var receivesNightlyBuilds: Bool
+    var allowedUpdateChannels: Set<String> { receivesNightlyBuilds ? ["nightly"] : [] }
     @Published private(set) var automaticallyUpdates: Bool
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
+        receivesNightlyBuilds = defaults.bool(forKey: "OrbitReceiveNightlyBuilds")
         automaticallyUpdates = defaults.object(forKey: "SUAutomaticallyUpdate") as? Bool ?? true
         super.init()
         defaultsObservation = NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification, object: defaults)
@@ -235,6 +241,36 @@ final class OrbitUpdater: NSObject, ObservableObject {
 
     private func reloadPreference() {
         automaticallyUpdates = defaults.object(forKey: "SUAutomaticallyUpdate") as? Bool ?? true
+    }
+
+    private var channelChangeTask: Task<Void, Never>?
+    private var changingChannel = false
+
+    func setReceivesNightlyBuilds(_ enabled: Bool) {
+        guard receivesNightlyBuilds != enabled else { return }
+        defaults.set(enabled, forKey: "OrbitReceiveNightlyBuilds")
+        receivesNightlyBuilds = enabled
+        // Invalidate in-flight freshness replies immediately, including a staged nightly.
+        pendingRevision &+= 1
+        readyVersion = nil
+        guard !changingChannel else { return }
+        changingChannel = true
+        channelChangeTask = Task {
+            defer { changingChannel = false }
+            while stagingInProgress {
+                cancelStagingDownload?()
+                cancelStagingDownload = nil
+                if stagingInProgress { await withCheckedContinuation { stagingWaiters.append($0) } }
+            }
+            if pendingVersion != nil { await discardPendingUpdate?() }
+            pendingVersion = nil
+            readyVersion = nil
+            installPendingUpdate = nil
+            #if canImport(Sparkle)
+            channelCheckRequested = true
+            checkChangedChannel()
+            #endif
+        }
     }
 
     func setAutomaticallyUpdates(_ enabled: Bool) {
@@ -255,6 +291,14 @@ final class OrbitUpdater: NSObject, ObservableObject {
     }
 
     #if canImport(Sparkle)
+    private var channelCheckRequested = false
+    private func checkChangedChannel() {
+        guard !isQuitting, channelCheckRequested, let updater = sparkleUpdater, updater.canCheckForUpdates else { return }
+        channelCheckRequested = false
+        // Our user driver stages silently. This public check also clears a cancelled
+        // installer's skip marker, so opting back in can offer that build again.
+        updater.checkForUpdates()
+    }
     private var sparkleUpdater: SPUUpdater?
     private var userDriver: OrbitUpdateUserDriver?
     private var discarding = false
@@ -291,13 +335,14 @@ final class OrbitUpdater: NSObject, ObservableObject {
         let updater = SPUUpdater(hostBundle: .main, applicationBundle: .main, userDriver: driver, delegate: self)
         sparkleUpdater = updater
         updater.httpHeaders = ["Cache-Control": "no-cache"]
-        fetchLatestVersion = {
+        fetchLatestVersion = { [weak self] in
             guard let url = updater.feedURL else { throw URLError(.badURL) }
             var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalAndRemoteCacheData, timeoutInterval: 15)
             request.setValue("no-cache", forHTTPHeaderField: "Cache-Control")
             let (data, response) = try await URLSession.shared.data(for: request)
             guard (response as? HTTPURLResponse)?.statusCode == 200 else { throw URLError(.badServerResponse) }
-            return try OrbitUpdateFeed.latestVersion(data: data, info: Bundle.main.infoDictionary ?? [:])
+            return try OrbitUpdateFeed.latestVersion(data: data, info: Bundle.main.infoDictionary ?? [:],
+                allowedChannels: self?.allowedUpdateChannels ?? [])
         }
         downloadLatestUpdate = { [weak self] in
             self?.replacing = true
@@ -350,6 +395,8 @@ final class OrbitUpdater: NSObject, ObservableObject {
 
 #if canImport(Sparkle)
 extension OrbitUpdater: SPUUpdaterDelegate {
+    func allowedChannels(for updater: SPUUpdater) -> Set<String> { allowedUpdateChannels }
+
     func updater(_ updater: SPUUpdater, willInstallUpdateOnQuit item: SUAppcastItem,
                  immediateInstallationBlock immediateInstallHandler: @escaping () -> Void) -> Bool {
         record("prepared-in-background")
@@ -373,6 +420,12 @@ extension OrbitUpdater: SPUUpdaterDelegate {
 
     func updater(_ updater: SPUUpdater, didFinishUpdateCycleFor updateCheck: SPUUpdateCheck, error: Error?) {
         record("cycle-finished")
+        if channelCheckRequested {
+            Task {
+                try? await Task.sleep(for: .milliseconds(100))
+                checkChangedChannel()
+            }
+        }
         if resumePreparedUpdate {
             resumePreparedUpdate = false
             // Start synchronously, before Sparkle reserves a session to calculate its
@@ -401,6 +454,11 @@ extension OrbitUpdater: SPUUpdaterDelegate {
                            reply: @escaping (SPUUserUpdateChoice) -> Void) {
         record(state.stage == .installing ? "found-installing" : "found-update")
         if discarding { reply(.skip); return }
+        if let channel = item.channel, !allowedUpdateChannels.contains(channel) {
+            markPendingCancellation()
+            reply(.skip)
+            return
+        }
         if replacing && state.stage == .installing && item.versionString != newestVersion {
             discarding = true
             markPendingCancellation()

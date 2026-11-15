@@ -40,11 +40,14 @@ struct UpdateParityTests {
         <item><sparkle:version>25</sparkle:version></item>
         <item><sparkle:version>27</sparkle:version><sparkle:deltas><enclosure sparkle:version="999"/></sparkle:deltas></item>
         <item><sparkle:version>22</sparkle:version></item>
-        <item><sparkle:version>30</sparkle:version><sparkle:channel>beta</sparkle:channel></item>
+        <item><sparkle:version>30</sparkle:version><sparkle:channel>nightly</sparkle:channel></item>
         <item><sparkle:version>40</sparkle:version><sparkle:minimumSystemVersion>99.0</sparkle:minimumSystemVersion></item>
         </channel></rss>
         """
         #expect(try OrbitUpdateFeed.latestVersion(data: Data(xml.utf8)) == "27")
+        #expect(try OrbitUpdateFeed.latestVersion(data: Data(xml.utf8), allowedChannels: ["nightly"]) == "30")
+        let promoted = xml.replacingOccurrences(of: "<sparkle:version>27", with: "<sparkle:version>31")
+        #expect(try OrbitUpdateFeed.latestVersion(data: Data(promoted.utf8), allowedChannels: ["nightly"]) == "31")
         #expect(throws: (any Error).self) { try OrbitUpdateFeed.latestVersion(data: Data("broken".utf8)) }
     }
 

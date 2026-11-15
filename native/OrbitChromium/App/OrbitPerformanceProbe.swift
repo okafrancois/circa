@@ -131,6 +131,7 @@ enum OrbitPerformanceProbe {
                     "ready": application.updater.readyVersion ?? "",
                     "pending": application.updater.pendingVersion ?? "",
                     "automatic": application.updater.automaticallyUpdates,
+                    "nightly": application.updater.receivesNightlyBuilds,
                     "card": owner.sidebar.updateReady,
                     "version": Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "",
                     "tabs": snapshot.tabs.map { $0.url.absoluteString },
@@ -242,6 +243,15 @@ enum OrbitPerformanceProbe {
                     case "click":
                         if owner.sidebar.updateReady { owner.sidebar.updateCard.restart.performClick(nil) }
                     case "check": application.updater.checkForUpdates()
+                    case "nightly-on": application.updater.setReceivesNightlyBuilds(true)
+                    case "nightly-off": application.updater.setReceivesNightlyBuilds(false)
+                    case "nightly-settings":
+                        application.showSettings(section: .advanced)
+                        if let window = application.settingsWindow?.window,
+                           let rows = CGWindowListCopyWindowInfo(.optionIncludingWindow, CGWindowID(window.windowNumber)) as? [[String: Any]],
+                           rows.contains(where: { ($0[kCGWindowOwnerPID as String] as? Int32) == getpid() }) {
+                            result["settingsWindowNumber"] = window.windowNumber
+                        }
                     case "off": application.updater.setAutomaticallyUpdates(false)
                     case "on": application.updater.setAutomaticallyUpdates(true)
                     case "seed":
