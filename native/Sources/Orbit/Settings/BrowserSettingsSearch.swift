@@ -212,10 +212,10 @@ struct BrowserSettingsSearchBar: View {
     @ObservedObject var search: BrowserSettingsSearch
     var body: some View {
         HStack(spacing: 6) {
-            Image(systemName: "magnifyingglass").foregroundStyle(.secondary).accessibilityHidden(true)
+            OrbitIcon.view(sfName: "magnifyingglass", pointSize: 13).frame(width: 14, height: 14).foregroundStyle(.secondary).accessibilityHidden(true)
             BrowserSettingsSearchField(search: search)
             if !search.query.isEmpty {
-                Button { search.clear(); search.focus() } label: { Image(systemName: "xmark.circle.fill") }
+                Button { search.clear(); search.focus() } label: { OrbitIcon.view(sfName: "xmark.circle.fill", pointSize: 13).frame(width: 14, height: 14) }
                     .buttonStyle(.plain).foregroundStyle(.secondary).accessibilityLabel(uiText("Clear search"))
             } else { Text("⌘F").font(.system(size: 11)).foregroundStyle(.secondary).accessibilityHidden(true) }
         }.font(.system(size: 13)).padding(.horizontal, 9).frame(height: 30)
@@ -231,7 +231,7 @@ struct BrowserSettingsSearchResults: View {
         VStack(alignment: .leading, spacing: 10) {
             if search.matches.entries.isEmpty {
                 VStack(spacing: 8) {
-                    Image(systemName: "magnifyingglass").font(.system(size: 24)).foregroundStyle(.secondary)
+                    OrbitIcon.view(sfName: "magnifyingglass", pointSize: 24).frame(width: 26, height: 26).foregroundStyle(.secondary)
                     Text(uiText("No settings found")).font(.system(size: 15, weight: .semibold))
                     Text(uiFormat("No matches for “%@”.", search.query))
                     Text(uiText("Try a shorter word, like “downloads” or “memory”."))
@@ -250,13 +250,13 @@ struct BrowserSettingsSearchResults: View {
                             ForEach(search.matches.entries, id: \.identity) { entry in
                                 Button { search.jump(entry) } label: {
                                     HStack(spacing: 10) {
-                                        Image(systemName: entry.section.symbol).frame(width: 20).foregroundStyle(.secondary)
+                                        OrbitIcon.view(sfName: entry.section.symbol, pointSize: 13).frame(width: 20, height: 16).foregroundStyle(.secondary)
                                         VStack(alignment: .leading, spacing: 3) {
                                             Text(entry.title).font(.system(size: 13, weight: .medium))
                                             Text(entry.unavailableReason ?? (entry.section.title + (entry.group.isEmpty ? "" : " › " + entry.group))).font(.system(size: 11)).foregroundStyle(.secondary)
                                         }
                                         Spacer(minLength: 0)
-                                        Image(systemName: "chevron.right").foregroundStyle(.secondary)
+                                        OrbitIcon.view(sfName: "chevron.right", pointSize: 11).frame(width: 10, height: 12).foregroundStyle(.secondary)
                                     }.padding(.horizontal, 13).frame(maxWidth: .infinity, minHeight: 56, alignment: .leading)
                                         .background(search.selectedID == entry.identity ? Color(nsColor: .selectedContentBackgroundColor).opacity(0.12) : .clear)
                                         .contentShape(Rectangle())
