@@ -19,11 +19,30 @@ public protocol BrowserMediaSessionControlling: AnyObject {
     func tabAudioMuted() -> Bool?
     /// Identifies the current document; it changes on navigation. Nil when unknown.
     var mediaDocumentIdentity: UInt64? { get }
+    /// True when the document's media element can be driven directly, for media the engine
+    /// keeps out of its session (a muted tab's players).
+    var supportsMediaElementControl: Bool { get }
+    /// Plays, pauses or seeks the document's media element directly. Nil when unsupported, when
+    /// no element answers, or when the document changed.
+    func performMediaElementAction(_ action: BrowserMediaAction, seconds: Double) async -> BrowserMediaElementState?
 }
 
 public extension BrowserMediaSessionControlling {
     func tabAudioMuted() -> Bool? { nil }
     var mediaDocumentIdentity: UInt64? { nil }
+    var supportsMediaElementControl: Bool { false }
+    func performMediaElementAction(_ action: BrowserMediaAction, seconds: Double) async -> BrowserMediaElementState? { nil }
+}
+
+/// A media element's state right after a direct action. Non-finite values are nil.
+public struct BrowserMediaElementState: Sendable, Equatable {
+    public var paused: Bool
+    public var position: Double?
+    public var duration: Double?
+    public var playbackRate: Double?
+    public init(paused: Bool, position: Double? = nil, duration: Double? = nil, playbackRate: Double? = nil) {
+        self.paused = paused; self.position = position; self.duration = duration; self.playbackRate = playbackRate
+    }
 }
 
 /// Stable native MediaSessionAction and session-state values (Chromium mojom).
@@ -138,6 +157,11 @@ public final class BrowserBackgroundMediaSessions<Source: BrowserMediaSessionCon
         /// the engine leaves a muted tab's players out of its media session though they play on.
         var lastSession: BrowserTabMediaSession?
         var lastDocument: UInt64?
+        /// True while `lastSession` stands in for a session the engine dropped.
+        var kept = false
+        /// The element state after the last direct action on a kept session.
+        var element: BrowserMediaElementState?
+        var elementRevision: UInt64 = 0
     }
 
     private var tracked: [TabOccurrenceID: Tracked] = [:]
@@ -189,15 +213,47 @@ public final class BrowserBackgroundMediaSessions<Source: BrowserMediaSessionCon
 
     /// Engine-reported audibility and mute for one tab (from the window's media refresh).
     public func updateAudio(_ audio: BrowserMediaState, for occurrenceID: TabOccurrenceID) {
-        guard tracked[occurrenceID] != nil, tracked[occurrenceID]?.audio != audio else { return }
+        guard let item = tracked[occurrenceID], item.audio != audio else { return }
+        // A play or pause the engine reports after a direct action (the page's own, or one
+        // from elsewhere) is newer than that action's answer.
+        if item.element != nil, item.audio?.playback != audio.playback, audio.playback == .playing || audio.playback == .paused {
+            tracked[occurrenceID]?.element?.paused = audio.playback == .paused
+        }
         tracked[occurrenceID]?.audio = audio
         publish()
     }
 
-    /// Performs a media action on a tab of this window, visible or not.
+    /// Performs a media action on a tab of this window, visible or not. A kept (muted) session
+    /// is driven through its media element: the card shows the requested state at once and
+    /// settles on the element's answer, or returns to the previous state when none comes.
     @discardableResult
     public func perform(_ action: BrowserMediaAction, on occurrenceID: TabOccurrenceID, seconds: Double = 0) -> ActionResult {
-        guard let source = tracked[occurrenceID]?.source, !source.isDisposed else { return .unavailable }
+        guard let item = tracked[occurrenceID], let source = item.source, !source.isDisposed else { return .unavailable }
+        if item.kept {
+            guard let session = session(for: occurrenceID), session.actions.contains(action),
+                  action != .seek || seconds.isFinite else { return .unavailable }
+            let previous = item.element
+            var requested = previous ?? BrowserMediaElementState(paused: session.playback == .paused,
+                position: session.position, duration: session.duration, playbackRate: session.playbackRate)
+            switch action {
+            case .play: requested.paused = false
+            case .pause: requested.paused = true
+            case .seek: requested.position = seconds
+            default: return .unavailable
+            }
+            let revision = item.elementRevision &+ 1
+            tracked[occurrenceID]?.elementRevision = revision
+            tracked[occurrenceID]?.element = requested
+            publish()
+            Task { [weak self] in
+                let answer = await source.performMediaElementAction(action, seconds: seconds)
+                guard let self, let current = tracked[occurrenceID], current.generation == item.generation,
+                      current.kept, current.elementRevision == revision else { return }
+                tracked[occurrenceID]?.element = answer ?? previous
+                publish()
+            }
+            return .performed
+        }
         do {
             return try source.performMediaSessionAction(action, seconds: seconds) ? .performed : .unavailable
         } catch {
@@ -249,8 +305,9 @@ public final class BrowserBackgroundMediaSessions<Source: BrowserMediaSessionCon
     }
 
     /// The native session, or the last playing one of the same document while the tab stays
-    /// muted and its media keeps playing. A kept session offers no actions: the engine cannot
-    /// act on players outside its session.
+    /// muted and its media keeps playing (or was paused from the card). The engine cannot act on
+    /// players outside its session, so a kept session offers play, pause and seek only when the
+    /// source drives the media element directly.
     private func derivedSession(_ id: TabOccurrenceID, _ item: Tracked) -> BrowserTabMediaSession? {
         var audio = item.audio
         let muted = item.source?.tabAudioMuted() ?? audio?.isAudioMuted
@@ -264,15 +321,30 @@ public final class BrowserBackgroundMediaSessions<Source: BrowserMediaSessionCon
             let playing = session.playback == .playing
             tracked[id]?.lastSession = playing ? session : nil
             tracked[id]?.lastDocument = playing ? document : nil
+            tracked[id]?.kept = false
+            tracked[id]?.element = nil
             return session
         }
-        guard muted == true, audio?.playback != .paused, var kept = item.lastSession,
+        guard muted == true, item.element != nil || audio?.playback != .paused, var kept = item.lastSession,
               item.lastDocument == document else {
             tracked[id]?.lastSession = nil
             tracked[id]?.lastDocument = nil
+            tracked[id]?.kept = false
+            tracked[id]?.element = nil
             return nil
         }
+        tracked[id]?.kept = true
+        if let element = item.element {
+            kept.playback = element.paused ? .paused : .playing
+            kept.position = element.position ?? kept.position
+            kept.duration = element.duration ?? kept.duration
+            kept.playbackRate = element.playbackRate ?? kept.playbackRate
+        }
         kept.actions = []
+        if item.source?.supportsMediaElementControl == true {
+            kept.actions = [.play, .pause]
+            if let duration = kept.duration, duration.isFinite, duration > 0 { kept.actions.insert(.seek) }
+        }
         kept.isAudioMuted = true
         kept.isAudible = audio?.isAudible ?? audio?.isAudioPlaying ?? kept.isAudible
         return kept

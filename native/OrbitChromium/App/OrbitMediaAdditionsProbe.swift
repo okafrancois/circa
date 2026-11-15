@@ -100,10 +100,14 @@ enum OrbitMediaAdditionsProbe {
         checks["expandedHeight"] = player.card(for: id)?.bounds.height
         checks["restHeight"] = player.restingHeight
         guard let card = player.card(for: id) else { return checks }
+        func forwardKey() -> NSEvent? {
+            guard owns(window.windowNumber) else { return nil }
+            return NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [],
+                timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber, context: nil,
+                characters: "\u{f703}", charactersIgnoringModifiers: "\u{f703}", isARepeat: false, keyCode: 0)
+        }
         // Character-based keyboard seek exercises the actual native control route.
-        if owns(window.windowNumber), let key = NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [],
-            timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber, context: nil,
-            characters: "\u{f703}", charactersIgnoringModifiers: "\u{f703}", isARepeat: false, keyCode: 0) {
+        if let key = forwardKey() {
             let before = card.timeline.seek.displayed ?? 0
             card.timeline.keyDown(with: key)
             await pause(0.25)
@@ -115,6 +119,14 @@ enum OrbitMediaAdditionsProbe {
             await OrbitPerformanceProbe.evaluate(surface, "({time:media.currentTime,paused:media.paused,muted:media.muted})") ?? [:]
         }
         func item(_ id: TabOccurrenceID) -> SidebarMediaPlayerItem? { player.items.first { $0.id == id } }
+        func pageWait(_ surface: ChromiumSurface, _ seconds: Double = 2, _ test: ([String: Any]) -> Bool) async -> Bool {
+            let until = ProcessInfo.processInfo.systemUptime + seconds
+            while ProcessInfo.processInfo.systemUptime < until {
+                if test(await pageState(surface)) { return true }
+                await pause(0.05)
+            }
+            return false
+        }
         // Mute from the card: the card stays, muted, with an unmute toggle while playback goes on.
         mark("mute"); checks["muteClick"] = click(card.muteButton)
         checks["muted"] = await wait { item(id)?.isMuted == true }
@@ -128,10 +140,30 @@ enum OrbitMediaAdditionsProbe {
         checks["mutedStatus"] = card.audioStatus.stringValue
         hover(player.card(for: id)); await pause(0.1)
         capture("muted"); saveProgress()
-        mark("unmute"); checks["unmuteClick"] = click(card.muteButton)
-        checks["unmuted"] = await wait { item(id)?.isMuted == false && item(id)?.canToggle == true }
-        checks["cardAfterUnmute"] = player.card(for: id) != nil
+        // Muted transport: the engine leaves the muted player out of its session; the card drives
+        // the media element directly and follows its answer.
+        checks["mutedTransportEnabled"] = card.toggleButton.isEnabled && card.timeline.seek.canSeek
+        mark("muted-pause"); checks["mutedPauseClick"] = click(card.toggleButton)
+        checks["mutedPauseCard"] = await wait { item(id)?.toggle == .play && item(id)?.canToggle == true }
+        checks["mutedPausePage"] = await pageWait(video) { $0["paused"] as? Bool == true }
+        checks["mutedCardWhilePaused"] = player.card(for: id) != nil && item(id)?.isMuted == true
+        await pause(0.5)
+        mark("muted-play"); checks["mutedPlayClick"] = click(card.toggleButton)
+        checks["mutedPlayCard"] = await wait { item(id)?.toggle == .pause }
+        checks["mutedPlayPage"] = await pageWait(video) { $0["paused"] as? Bool == false }
+        let progress0 = card.timeline.seek.currentPosition(interpolate: true) ?? 0
+        await pause(0.6)
+        let progress1 = card.timeline.seek.currentPosition(interpolate: true) ?? 0
+        checks["mutedProgressMoves"] = progress1 - progress0 > 0.4
+        hover(player.card(for: id))
+        let seekFrom = (await pageState(video))["time"] as? Double ?? 0
+        mark("muted-seek")
+        if let key = forwardKey() { card.timeline.keyDown(with: key) }
+        checks["mutedSeekPage"] = await pageWait(video) { ($0["time"] as? Double ?? 0) >= seekFrom + 4 }
+        checks["mutedSeekCard"] = await wait { (card.timeline.seek.displayed ?? 0) >= seekFrom + 4 }
+        checks["mutedSeek"] = ["from": seekFrom, "page": (await pageState(video))["time"] ?? 0, "card": card.timeline.seek.displayed ?? 0]
         saveProgress()
+        await pause(0.8)
         // Manual PiP: eligibility, entry, engine acknowledgement, exit through the existing route.
         owner.refreshManualPiPCapabilities(force: true)
         checks["pipEligible"] = await wait { card.pipButton.isEnabled }
@@ -161,6 +193,34 @@ enum OrbitMediaAdditionsProbe {
         owner.session.selectOccurrence(blankID)
         await owner.session.waitForQueuedCommands()
         checks["cardRestored"] = await wait { player.card(for: id) != nil }
+        checks["cardRestoredMuted"] = await wait { item(id)?.isMuted == true && item(id)?.canToggle == true }
+        saveProgress()
+        // × on the muted card pauses the element and removes the card; the page playing again
+        // brings it back.
+        hover(player.card(for: id)); await pause(0.3)
+        mark("muted-close"); checks["mutedCloseClick"] = click(player.card(for: id)?.closeButton)
+        checks["mutedCloseRemovesCard"] = await wait { player.card(for: id) == nil }
+        checks["mutedClosePausesPage"] = await pageWait(video) { $0["paused"] as? Bool == true }
+        _ = await OrbitPerformanceProbe.evaluate(video, "(()=>{media.play();return {}})()")
+        checks["mutedCardReturnsOnPlay"] = await wait(3) { player.card(for: id) != nil }
+        if player.card(for: id) == nil { try? video.setAudioMuted(false); owner.siteControls.refreshMedia(video) }
+        _ = await wait(3) { player.card(for: id) != nil }
+        guard let card = player.card(for: id) else { return checks }
+        hover(card); await pause(0.3)
+        if item(id)?.isMuted == true {
+            mark("unmute"); checks["unmuteClick"] = click(card.muteButton)
+        }
+        checks["unmuted"] = await wait { item(id)?.isMuted == false && item(id)?.canToggle == true }
+        checks["cardAfterUnmute"] = player.card(for: id) != nil
+        // Unmuted transport goes through the engine session again.
+        mark("unmuted-pause"); checks["unmutedPauseClick"] = click(card.toggleButton)
+        checks["unmutedPausePage"] = await pageWait(video) { $0["paused"] as? Bool == true }
+        checks["unmutedPauseCard"] = await wait { item(id)?.toggle == .play }
+        checks["unmutedPlayClick"] = click(card.toggleButton)
+        checks["unmutedPlayPage"] = await pageWait(video) { $0["paused"] as? Bool == false }
+        let unmutedFrom = (await pageState(video))["time"] as? Double ?? 0
+        if let key = forwardKey() { card.timeline.keyDown(with: key) }
+        checks["unmutedSeekPage"] = await pageWait(video) { ($0["time"] as? Double ?? 0) >= unmutedFrom + 4 }
         saveProgress()
         // Live style: a real MediaStream has no finite duration or seek range.
         if let (live, liveID) = await open("live") {
