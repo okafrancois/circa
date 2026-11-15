@@ -65,7 +65,7 @@
   <div class="release-meta"><h2><a href="#v0.73.0-nightly.2" aria-label="Link to version 0.73.0-nightly.2">0.73.0-nightly.2</a></h2>
   <time datetime="2026-11-15">November 15, 2026</time><span class="release-channel">Nightly</span></div>
   <div class="release-copy"><h3>Search Settings, and ad blocking no longer changes files inside the app.</h3>
-  <p class="release-counts">1 new · 2 fixed</p>
+  <p class="release-counts">1 new · 3 fixed</p>
   <h4>New</h4>
   <ul>
     <li>Search Settings with Command-F. Typos are forgiven, and choosing a result takes you straight to the option.</li>
@@ -74,6 +74,7 @@
   <ul>
     <li>Ad and tracker blocking no longer changes files inside the app, preserving its security signature after browsing.</li>
     <li>Blocking works when Circa was installed by an administrator and your account cannot modify the app.</li>
+    <li>Translation checks on restored pages reuse the system language service to avoid repeatedly opening and closing its connections on macOS 27.</li>
   </ul>
   <figure class="release-media">
     <video muted loop playsinline controls preload="none" poster="../../assets/releases/0.73.0-nightly.2/settings-search.jpg" aria-label="Press Command-F in Settings to find any option.">

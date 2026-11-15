@@ -20,14 +20,12 @@ final class BrowserPageTranslation: ObservableObject {
     private var privateWindow = false
     private var usesHighFidelity = false
     private(set) var failure: (stage: String, domain: String, code: Int)?
+    let availability: BrowserTranslationAvailability
 
-    init(surface: any BrowserEngineSurface) { self.surface = surface; generation = surface.documentGeneration }
-    var isCurrent: Bool { surface.map { !$0.isDisposed && $0.documentGeneration == generation } ?? false }
-
-    private func languageAvailability() -> LanguageAvailability {
-        if #available(macOS 26.4, *) { return LanguageAvailability(preferredStrategy: usesHighFidelity ? .highFidelity : .lowLatency) }
-        return LanguageAvailability()
+    init(surface: any BrowserEngineSurface, availability: BrowserTranslationAvailability = .shared) {
+        self.surface = surface; self.availability = availability; generation = surface.documentGeneration
     }
+    var isCurrent: Bool { surface.map { !$0.isDisposed && $0.documentGeneration == generation } ?? false }
 
     func detect(privateWindow: Bool, preferred: [String] = Locale.preferredLanguages) {
         self.privateWindow = privateWindow
@@ -37,15 +35,17 @@ final class BrowserPageTranslation: ObservableObject {
                 let sample = try await surface.translationSample()
                 let language = BrowserTranslationState.detectLanguage(text: sample.text, hint: sample.language)
                 guard let source = language, let target = preferred.first else { return }
-                var availability = await languageAvailability().status(from: Locale.Language(identifier: source), to: Locale.Language(identifier: target))
-                if #available(macOS 26.4, *), availability != .installed {
-                    let installed = await LanguageAvailability(preferredStrategy: .highFidelity).status(from: Locale.Language(identifier: source), to: Locale.Language(identifier: target))
-                    if installed == .installed { usesHighFidelity = true; availability = installed }
+                var status = await availability.status(from: source, to: target, highFidelity: usesHighFidelity)
+                if availability.highFidelityAvailable, status != .installed {
+                    let installed = await availability.status(from: source, to: target, highFidelity: true)
+                    if installed == .installed { usesHighFidelity = true; status = installed }
                 }
                 guard isCurrent, !Task.isCancelled else { return }
                 state.detect(source: source, preferred: preferred,
-                             supported: availability == .installed || (!privateWindow && availability == .supported))
+                             supported: status == .installed || (!privateWindow && status == .supported))
                 onChange?()
+                // Other targets are only offered from the translation popover.
+                guard state.phase != .unavailable else { return }
                 await loadTargets()
             } catch { /* A navigation or unsupported document has no offer. */ }
         }
@@ -53,30 +53,27 @@ final class BrowserPageTranslation: ObservableObject {
 
     /// The service is authoritative; private documents expose installed pairs only.
     private func strategy(for target: String) async -> Bool? {
-        let source = Locale.Language(identifier: state.source)
-        let target = Locale.Language(identifier: target)
-        let classic: LanguageAvailability
-        if #available(macOS 26.4, *) { classic = LanguageAvailability(preferredStrategy: .lowLatency) }
-        else { classic = LanguageAvailability() }
-        let status = await classic.status(from: source, to: target)
+        let source = state.source
+        let status = await availability.status(from: source, to: target, highFidelity: false)
         if status == .installed { return false }
-        if #available(macOS 26.4, *) {
-            let high = await LanguageAvailability(preferredStrategy: .highFidelity).status(from: source, to: target)
+        if availability.highFidelityAvailable {
+            let high = await availability.status(from: source, to: target, highFidelity: true)
             if high == .installed || (!privateWindow && status == .unsupported && high == .supported) { return true }
         }
         return !privateWindow && status == .supported ? false : nil
     }
 
     func loadTargets() async {
-        var languages = await languageAvailability().supportedLanguages
-        if #available(macOS 26.4, *) {
-            languages += await LanguageAvailability(preferredStrategy: .highFidelity).supportedLanguages
+        var languages = await availability.supportedLanguages(highFidelity: false)
+        if availability.highFidelityAvailable {
+            languages += await availability.supportedLanguages(highFidelity: true)
         }
-        var supported: [String] = []
+        var seen = Set<String>(), supported: [String] = []
         for language in languages {
             guard isCurrent, !Task.isCancelled else { return }
             let identifier = language.minimalIdentifier
-            if !supported.contains(identifier), await strategy(for: identifier) != nil { supported.append(identifier) }
+            guard seen.insert(identifier).inserted else { continue }
+            if await strategy(for: identifier) != nil { supported.append(identifier) }
         }
         guard isCurrent, !Task.isCancelled else { return }
         targets = supported.sorted {
@@ -125,10 +122,13 @@ final class BrowserPageTranslation: ObservableObject {
         guard let surface, isCurrent, state.phase == .translating else { return }
         let request = revision
         var stage = "availability"
+        // The session exists once any model download finished, so recorded statuses may be stale.
+        availability.invalidateStatuses()
         do {
             if privateWindow {
-                let availability = await languageAvailability().status(from: Locale.Language(identifier: state.source), to: Locale.Language(identifier: state.target))
-                guard availability == .installed else { throw CancellationError() }
+                let status = await availability.status(from: state.source, to: state.target,
+                                                       highFidelity: usesHighFidelity, refresh: true)
+                guard status == .installed else { throw CancellationError() }
             }
             var settling = true
             while isCurrent, revision == request {

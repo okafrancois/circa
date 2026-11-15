@@ -17,7 +17,7 @@
     <category term="nightly" />
     <summary>Search Settings, and ad blocking no longer changes files inside the app.
 
-1 new · 2 fixed
+1 new · 3 fixed
 
 ## New
 
@@ -27,12 +27,13 @@
 
 - Ad and tracker blocking no longer changes files inside the app, preserving its security signature after browsing.
 - Blocking works when Circa was installed by an administrator and your account cannot modify the app.
+- Translation checks on restored pages reuse the system language service to avoid repeatedly opening and closing its connections on macOS 27.
 </summary>
     <content type="html">&lt;article class="release" id="v0.73.0-nightly.2" data-version="0.73.0-nightly.2" data-channel="nightly" data-latest="false"&gt;
   &lt;div class="release-meta"&gt;&lt;h2&gt;&lt;a href="#v0.73.0-nightly.2" aria-label="Link to version 0.73.0-nightly.2"&gt;0.73.0-nightly.2&lt;/a&gt;&lt;/h2&gt;
   &lt;time datetime="2026-11-15"&gt;November 15, 2026&lt;/time&gt;&lt;span class="release-channel"&gt;Nightly&lt;/span&gt;&lt;/div&gt;
   &lt;div class="release-copy"&gt;&lt;h3&gt;Search Settings, and ad blocking no longer changes files inside the app.&lt;/h3&gt;
-  &lt;p class="release-counts"&gt;1 new · 2 fixed&lt;/p&gt;
+  &lt;p class="release-counts"&gt;1 new · 3 fixed&lt;/p&gt;
   &lt;h4&gt;New&lt;/h4&gt;
   &lt;ul&gt;
     &lt;li&gt;Search Settings with Command-F. Typos are forgiven, and choosing a result takes you straight to the option.&lt;/li&gt;
@@ -41,6 +42,7 @@
   &lt;ul&gt;
     &lt;li&gt;Ad and tracker blocking no longer changes files inside the app, preserving its security signature after browsing.&lt;/li&gt;
     &lt;li&gt;Blocking works when Circa was installed by an administrator and your account cannot modify the app.&lt;/li&gt;
+    &lt;li&gt;Translation checks on restored pages reuse the system language service to avoid repeatedly opening and closing its connections on macOS 27.&lt;/li&gt;
   &lt;/ul&gt;
   &lt;figure class="release-media"&gt;
     &lt;video muted loop playsinline controls preload="none" poster="https://circabrowser.com/assets/releases/0.73.0-nightly.2/settings-search.jpg" aria-label="Press Command-F in Settings to find any option."&gt;
