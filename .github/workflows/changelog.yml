@@ -5,14 +5,17 @@ on:
   push:
     branches: [main]
     paths: ['web/**', 'release/notes/**', 'scripts/changelog.py', 'scripts/release_notes.py', 'scripts/test_changelog.py', 'scripts/templates/**', 'scripts/fixtures/release-notes/**', '.github/workflows/changelog.yml']
-permissions:
-  contents: read
+permissions: {}
 jobs:
   check:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-python@v7
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: '3.12'
       - run: python3 -m unittest discover -s scripts -p 'test_changelog.py'

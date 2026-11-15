@@ -334,12 +334,15 @@ final class OrbitUpdater: NSObject, ObservableObject {
         userDriver = driver
         let updater = SPUUpdater(hostBundle: .main, applicationBundle: .main, userDriver: driver, delegate: self)
         sparkleUpdater = updater
+        // Sparkle's own appcast and archive requests use its internal default session; its
+        // public API exposes headers but no session or cookie configuration.
         updater.httpHeaders = ["Cache-Control": "no-cache"]
         fetchLatestVersion = { [weak self] in
             guard let url = updater.feedURL else { throw URLError(.badURL) }
             var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalAndRemoteCacheData, timeoutInterval: 15)
             request.setValue("no-cache", forHTTPHeaderField: "Cache-Control")
-            let (data, response) = try await URLSession.shared.data(for: request)
+            request.httpShouldHandleCookies = false
+            let (data, response) = try await OrbitUpdateFeed.session.data(for: request)
             guard (response as? HTTPURLResponse)?.statusCode == 200 else { throw URLError(.badServerResponse) }
             return try OrbitUpdateFeed.latestVersion(data: data, info: Bundle.main.infoDictionary ?? [:],
                 allowedChannels: self?.allowedUpdateChannels ?? [])

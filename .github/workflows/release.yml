@@ -18,8 +18,8 @@ on:
         required: false
         default: true
         type: boolean
-permissions:
-  contents: write
+# No workflow-wide token scope: each job declares the minimum it needs.
+permissions: {}
 concurrency:
   group: orbit-release
   cancel-in-progress: false
@@ -31,17 +31,22 @@ jobs:
       (github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v'))
     runs-on: ${{ (vars.CIRCA_HOSTED_RELEASES == 'true' || (github.event_name == 'workflow_dispatch' && inputs.hosted)) && 'xcode-27' || fromJSON('["self-hosted", "macOS", "ARM64", "orbit-release"]') }}
     timeout-minutes: 90
+    # Publishing creates and edits releases and uploads assets through gh (GH_TOKEN, publish
+    # step only). Nothing pushes with git; checkout keeps no token in .git/config.
+    permissions:
+      contents: write
     steps:
       - name: Require a browser version tag
         env:
           RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
         run: '[[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-nightly\.[1-9][0-9]*)?$ ]]'
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           fetch-depth: 0
           ref: ${{ (github.event_name == 'workflow_dispatch' && !inputs.publish && github.sha) || inputs.tag || github.ref }}
           clean: false
-      - uses: actions/setup-python@v7
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         if: runner.environment == 'github-hosted'
         with:
           python-version: '3.12'
@@ -86,7 +91,7 @@ jobs:
           python3 scripts/release.py "${args[@]}"
       - name: Retain preservation evidence
         if: always() && runner.environment == 'github-hosted'
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: Circa-preservation-${{ github.run_id }}
           path: |
@@ -96,7 +101,7 @@ jobs:
           retention-days: 14
       - name: Retain verification results
         if: runner.environment == 'github-hosted' && github.event_name == 'workflow_dispatch' && !inputs.publish
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: Circa-signed-ci-verification
           path: |
