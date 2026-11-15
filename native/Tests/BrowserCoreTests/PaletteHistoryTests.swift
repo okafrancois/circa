@@ -76,6 +76,7 @@ struct PaletteHistoryTests {
         try await store.record(.init(url: plain, title: "Plain"))
         try await store.close()
         let raw = try HistoryDatabase(url: root.appendingPathComponent(profile.rawValue.uuidString).appendingPathComponent("history.sqlite"), profileID: profile)
+        try raw.discardJournalPurgeSchemaForLegacyFixture()
         for statement in ["UPDATE pages SET searchURL='google.test/' WHERE url LIKE '%xn--%'", "UPDATE pages SET searchURL='kept.test/' WHERE url NOT LIKE '%xn--%'",
                           "UPDATE identity SET version=8", "PRAGMA user_version=8"] {
             try raw.execute(statement)
