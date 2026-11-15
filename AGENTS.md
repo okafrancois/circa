@@ -38,6 +38,7 @@ Orbit is a native macOS browser: Swift/AppKit shell (`native/Sources/Orbit`) on 
 ## Releases
 - `scripts/release.py` builds, signs, notarizes (`orbit-notary` profile), packages and publishes. It runs on the self-hosted runner when a `vX.Y.Z` tag is pushed. Never trigger releases from pull requests or forks.
 - Release cadence: after merging one or more user-visible features or fixes, the PM pushes `main` and tags the next version (patch for fixes, minor for new features). Installed copies update through Sparkle.
+- Every `vX.Y.Z` tag ships with `release/notes/<version>.md`, committed before tagging: plain-language user-visible changes (what is new, where to find it, known limits). Published release notes are the source for public announcements, so list every new feature there; say so explicitly when a release only has internal fixes.
 
 ## Public repository hygiene
 - This repository is public. Tracked files (code, comments, tests, docs, commit messages) never name or describe the design reference product, its binary, symbols, addresses, assets or recordings. Write neutral facts instead: "0.12 s ease-out", not where the value came from.
