@@ -34,12 +34,13 @@ final class BrowserMeetingReminders {
         seen[reminder.key] = reminder.start
         let background = reminder.inactive()
         if reminder.sound && !background { playSound() }
-        let key = reminder.key, firedAt = ProcessInfo.processInfo.systemUptime
+        // Keep banner timing consistent with the update, even if authorization yields.
+        let key = reminder.key
+        let minutes = max(1, Int(ceil(reminder.start.timeIntervalSince(now) / 60)))
         Task { [weak self] in
             guard let self, await self.authorize(), background, let live = self.live(key), live.inactive() else { return }
             let identifier = "orbit-meeting-" + UUID().uuidString
             self.identifiers[key] = identifier
-            let minutes = max(1, Int(ceil((live.start.timeIntervalSince(now) - (ProcessInfo.processInfo.systemUptime - firedAt)) / 60)))
             await self.post(identifier, live.title, minutes, live.sound)
             // Permission/delivery may have yielded while the source was removed or disabled.
             if self.live(key) == nil { self.remove(identifier); self.identifiers[key] = nil }
