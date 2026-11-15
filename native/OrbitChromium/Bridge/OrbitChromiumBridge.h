@@ -691,7 +691,7 @@ int32_t ACRTraceEnd(uint64_t token, const char* file, orbit_trace_callback_t, vo
 int32_t ACRExtensionOptionsOpen(uint64_t token, const char* extension_id);
 int32_t ACRExtensionIncognitoSet(uint64_t profile, const char* extension_id, int32_t allowed);
 
-/* Built-in content blocking: the app bundle's ContentBlocker extension, added to --load-extension
+/* Built-in content blocking: the data-root copy of the bundled ContentBlocker extension, added to --load-extension
  * at startup (never for synthetic authentication runs). Its declarativeNetRequest rulesets start
  * disabled. Persistent profiles, plus the private channel below; all calls on UI.
  * Configure writes one profile's state: enabled 0/1, allowed hosts ("|"-joined lowercase ASCII

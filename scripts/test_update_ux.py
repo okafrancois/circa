@@ -19,6 +19,10 @@ chrome.storage marker and background/content-script operation after an ordinary 
 update and the next update, plus the candidate's private migration backup. --extensions-expect
 lost or record documents an engine that drops installed extensions.
 
+The bundle-seal case adds the two generated DNR indexes to a signed predecessor, updates
+that broken-seal host, then checks actual normal/private blocking and the installed seal.
+The bundle-seal-delta variant also offers a signed delta and records full-download fallback.
+
 Each GUI case owns the shared slot for at most 55 seconds. All archives, keys, bundles,
 preferences and synthetic data are removed. Only fixed events and result summaries survive.
 """
@@ -33,6 +37,7 @@ from pathlib import Path
 import plistlib
 import re
 import secrets
+import signal
 import shutil
 import sqlite3
 import subprocess
@@ -93,9 +98,31 @@ def case_versions(name):
     return ('2', '3') if name in (*SIGNED_NEXT_CASES, 'channel-opt-out') else ('1', '3') if name in ('channel-stable', 'channel-staged-opt-out') else ('1', '2')
 
 
+SEAL_CASES = ('bundle-seal', 'bundle-seal-delta')
+
+BUNDLE_SEAL_CHECKS = ('host_seal_broken', 'new_version', 'session_restored',
+                      'default_blocking', 'extension_available', 'normal_blocking', 'private_blocking',
+                      'indexes_outside_bundle', 'bundle_metadata_absent', 'seal_valid_after_quit')
+
+
+def break_host_seal(app):
+    """Only called on the freshly signed disposable installed fixture, never a source app."""
+    directory = app / 'Contents/Resources/ContentBlocker/_metadata/generated_indexed_rulesets'
+    directory.mkdir(parents=True, exist_ok=True)
+    for name in ('_ruleset1', '_ruleset2'):
+        (directory / name).write_bytes(b'synthetic generated ruleset\n')
+    result = subprocess.run(['codesign', '--verify', '--deep', '--strict', str(app)], capture_output=True)
+    if result.returncode == 0:
+        raise RuntimeError('Broken host seal fixture unexpectedly verifies')
+
+
 def case(work, name, evidence):
     """Invoked only under lockf by main; commands are consumed inside the PID-checked app."""
     started = time.monotonic()
+    def lease_expired(*_):
+        raise TimeoutError('55-second GUI lease')
+    signal.signal(signal.SIGALRM, lease_expired)
+    signal.alarm(55)
     deadline = started + 52
     old_version, new_version = case_versions(name)
     valid = work / ('valid-%s.xml' % new_version)
@@ -112,6 +139,11 @@ def case(work, name, evidence):
     log = work / ('run-' + name + '.log')
     processes, seen = [], []
     checks = {}
+    if name in SEAL_CASES:
+        host_verification = subprocess.run(
+            ['codesign', '--verify', '--deep', '--strict', '--verbose=4', str(app)], capture_output=True, text=True)
+        checks['host_seal_broken'] = host_verification.returncode != 0
+        (evidence / (name + '-host-codesign.log')).write_text(host_verification.stdout + host_verification.stderr)
 
     def archive_requests():
         path = work / 'requests.log'
@@ -265,7 +297,34 @@ def case(work, name, evidence):
                 stable = wait(lambda s: s.get('pid') != pid and s.get('update', {}).get('version') == '3', 'stable relaunch')
                 checks['nightly_then_stable'] = stable['update']['nightly'] is True
                 checks['stable_session_restored'] = stable['update']['tabs'] == before
+            if name in SEAL_CASES:
+                nonce = str(time.monotonic_ns())
+                payload = dict(command='content-blocking', step='seal', nonce=nonce,
+                               port=(work / 'blocker-port').read_text())
+                temporary = root / 'command.tmp'
+                temporary.write_text(json.dumps(payload))
+                temporary.replace(root / 'perf-command.json')
+                verified = wait(lambda s: s.get('commandNonce') == nonce and 'contentBlocking' in s,
+                                'normal and private blocking')['contentBlocking']
+                checks['default_blocking'] = verified.get('defaultSetting') is True
+                checks['extension_available'] = verified.get('available') is True
+                checks['normal_blocking'] = verified.get('normal') == 'CB 4/4 blocked, control loaded'
+                checks['private_blocking'] = verified.get('private') == 'CB 4/4 blocked, control loaded'
+                checks['indexes_outside_bundle'] = len(list(root.rglob('_metadata/generated_indexed_rulesets/_ruleset*'))) >= 2
             quit_app()
+        if name in SEAL_CASES:
+            checks['bundle_metadata_absent'] = not (app / 'Contents/Resources/ContentBlocker/_metadata').exists()
+            verification = subprocess.run(['codesign', '--verify', '--deep', '--strict', str(app)],
+                                          capture_output=True, text=True)
+            checks['seal_valid_after_quit'] = verification.returncode == 0
+            if name == 'bundle-seal-delta':
+                requests = (work / 'requests.log').read_text().splitlines()
+                checks['delta_requested'] = requests.count('delta') >= 1
+                (evidence / (name + '-requests.json')).write_text(json.dumps({
+                    'delta': requests.count('delta'), 'fullArchive': requests.count('archive')}, indent=2) + '\n')
+            (evidence / (name + '-codesign.log')).write_text(verification.stdout + verification.stderr)
+            for capture in (root / 'captures').glob('seal-*.png'):
+                shutil.copyfile(capture, evidence / capture.name)
         if not all(checks.values()):
             raise AssertionError(checks)
         events = [line for line in log.read_text().splitlines() if line.startswith('orbit-updater event=')]
@@ -296,6 +355,7 @@ def case(work, name, evidence):
         clean_preferences()
         (evidence / (name + '-timing.json')).write_text(json.dumps({
             'guiSeconds': round(time.monotonic() - started, 3)}, indent=2) + '\n')
+        signal.alarm(0)
 
 
 AUTH_COOKIES = ('auth', 'pref', 'sid', 'auth2')
@@ -784,12 +844,12 @@ def run_auth_transition(work, root, evidence, expect, previous, builds, feed, em
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--source-app', type=Path, default=ROOT / 'native/OrbitChromium/build/app-orbit-engine-extensions-r13/product/Orbit.app')
-    parser.add_argument('--previous-app', type=Path, help='Previous engine product for engine-transition only; never launched directly')
+    parser.add_argument('--previous-app', type=Path, help='Previous product for transition and bundle-seal cases; never launched directly')
     parser.add_argument('--evidence', type=Path, default=Path('/tmp/update-ux'))
     parser.add_argument('--case')
     names = ['background', 'manual', 'quit', 'off', 'toggle-off', 'broken',
              'signed-transition', *SIGNED_NEXT_CASES, *CHANNEL_CASES]
-    parser.add_argument('--cases', nargs='+', default=names, choices=names + ['engine-transition', 'auth-transition'])
+    parser.add_argument('--cases', nargs='+', default=names, choices=names + ['engine-transition', 'auth-transition', *SEAL_CASES])
     parser.add_argument('--auth-expect', choices=('kept', 'lost'), default='kept',
                         help='auth-transition: the new engine keeps (default) or drops existing authentication')
     parser.add_argument('--extensions-expect', choices=('kept', 'lost', 'record'),
@@ -806,7 +866,7 @@ def main():
     if args.auth_stage:
         auth_stage(args.work, args.auth_stage, args.evidence, args.auth_expect)
         return
-    transitions = [name for name in ('engine-transition', 'auth-transition') if name in args.cases]
+    transitions = [name for name in ('engine-transition', 'auth-transition', *SEAL_CASES) if name in args.cases]
     if transitions and args.previous_app is None:
         parser.error('%s requires --previous-app' % transitions[0])
     extensions_expect = args.extensions_expect or ('kept' if args.auth_expect == 'kept' else 'record')
@@ -826,7 +886,7 @@ def main():
 
             def do_GET(self):
                 with (work / 'requests.log').open('a') as handle:
-                    handle.write('archive\n' if self.path.endswith('.zip') else 'feed\n')
+                    handle.write('archive\n' if self.path.endswith('.zip') else 'delta\n' if self.path.endswith('.delta') else 'feed\n')
                 super().do_GET()
         server = ThreadingHTTPServer(('127.0.0.1', 0), functools.partial(Handler, directory=feed))
         threading.Thread(target=server.serve_forever, daemon=True).start()
@@ -835,6 +895,15 @@ def main():
         (work / 'auth-fixture.json').write_text(json.dumps({
             'base': 'http://127.0.0.1:%d' % authentication.server_port, 'second': str(uuid.uuid4()).upper()}))
         extensions_fixture.build(work, 'http://127.0.0.1:%d' % authentication.server_port)
+        blocker_server = None
+        if any(name in SEAL_CASES for name in args.cases):
+            blocker_spec = importlib.util.spec_from_file_location('blocker_smoke', ROOT / 'scripts/orbit-content-blocking-smoke.py')
+            blocker = importlib.util.module_from_spec(blocker_spec)
+            blocker_spec.loader.exec_module(blocker)
+            blocker.Fixture.log_path = work / 'blocker-requests.jsonl'
+            blocker_server = ThreadingHTTPServer(('127.0.0.1', 0), blocker.Fixture)
+            threading.Thread(target=blocker_server.serve_forever, daemon=True).start()
+            (work / 'blocker-port').write_text(str(blocker_server.server_port))
         try:
             spec = importlib.util.spec_from_file_location('orbit_app', ROOT / 'scripts/orbit-app.py')
             packaging = importlib.util.module_from_spec(spec)
@@ -857,6 +926,7 @@ try key.publicKey.rawRepresentation.base64EncodedData().write(to: URL(fileURLWit
                         SUFeedURL='http://127.0.0.1:%d/appcast.xml' % server.server_port,
                         NSAppTransportSecurity={'NSAllowsLocalNetworking': True})
             info['SURequireSignedFeed'] = True
+            info['OrbitBundleSealQualification'] = any(name in SEAL_CASES for name in args.cases)
             infofile.write_bytes(plistlib.dumps(info))
             sign_chromium_bundle(base)
             # The transition source predates SURequireSignedFeed; every other build requires it.
@@ -912,6 +982,13 @@ try key.publicKey.rawRepresentation.base64EncodedData().write(to: URL(fileURLWit
                 path.write_text(content)
                 run(sparkle, '--ed-key-file', key, path, stdout=subprocess.DEVNULL)
                 return path.read_bytes()
+            if 'bundle-seal-delta' in args.cases:
+                delta = feed / 'update-2.delta'
+                run(sparkle.parent / 'BinaryDelta', 'create', '--compression', 'lzfse', previous, builds['2'], delta)
+                signature = subprocess.check_output([str(sparkle), '--ed-key-file', str(key), str(delta)], text=True).strip()
+                enclosure = ('<sparkle:deltas><enclosure url="http://127.0.0.1:%d/update-2.delta" '
+                             'type="application/octet-stream" sparkle:deltaFrom="1" %s/></sparkle:deltas>') % (server.server_port, signature)
+                signed_feed(work / 'delta-feed.xml', (work / 'unsigned-2.xml').read_text().replace('</item>', enclosure + '</item>'))
             if any(name in CHANNEL_CASES for name in args.cases):
                 def nightly_xml(version):
                     return (work / ('unsigned-%s.xml' % version)).read_text().replace('<item>', '<item><sparkle:channel>nightly</sparkle:channel>')
@@ -943,10 +1020,14 @@ try key.publicKey.rawRepresentation.base64EncodedData().write(to: URL(fileURLWit
                     shutil.rmtree(root)
                 (work / 'requests.log').unlink(missing_ok=True)
                 packaging.prepare_synthetic_root(root, TEST_ID)
-                source = (previous if name == 'engine-transition' else legacy if name == 'signed-transition'
+                source = (previous if name in ('engine-transition', *SEAL_CASES) else legacy if name == 'signed-transition'
                           else builds['2'] if name in (*SIGNED_NEXT_CASES, 'channel-opt-out') else base)
                 copy(source, installed)
+                if name in SEAL_CASES:
+                    break_host_seal(installed)
                 content = (work / ('valid-%s.xml' % case_versions(name)[1])).read_bytes()
+                if name == 'bundle-seal-delta':
+                    content = (work / 'delta-feed.xml').read_bytes()
                 if name in CHANNEL_CASES:
                     content = empty if name == 'channel-opt-out' else nightly
                     if name == 'channel-tampered':
@@ -963,6 +1044,9 @@ try key.publicKey.rawRepresentation.base64EncodedData().write(to: URL(fileURLWit
                 run('/usr/bin/lockf', '-k', '/tmp/orbit-gui-slot.lock', sys.executable, __file__, '--case', name,
                     '--work', work, '--evidence', args.evidence)
         finally:
+            if blocker_server:
+                blocker_server.shutdown()
+                blocker_server.server_close()
             server.shutdown()
             server.server_close()
             authentication.shutdown()

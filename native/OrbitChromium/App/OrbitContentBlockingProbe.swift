@@ -13,7 +13,10 @@ enum OrbitContentBlockingProbe {
 
     static func run(_ owner: OrbitWindowController, environment: OrbitEnvironment, application: OrbitApplication,
                     command: [String: String], root: URL) async -> [String: Any] {
-        guard Bundle.main.bundleIdentifier == bundleID,
+        let sealTest = Bundle.main.bundleIdentifier == "io.github.okatech.orbit.test.update"
+            && Bundle.main.infoDictionary?["OrbitUpdaterLocalTest"] as? Bool == true
+            && Bundle.main.infoDictionary?["OrbitBundleSealQualification"] as? Bool == true
+        guard (Bundle.main.bundleIdentifier == bundleID || sealTest),
               Bundle.main.infoDictionary?["OrbitSyntheticBundle"] as? Bool == true,
               let confinement = activeSyntheticDataGuard(), (try? confinement.checkInside(root)) != nil,
               let port = command["port"].flatMap(Int.init), (1024...65535).contains(port),
@@ -117,7 +120,7 @@ enum OrbitContentBlockingProbe {
             await capture(first.window, "12-private-row-blocked")
             mark("privateException")
             let before = row?.accessibilityLabel()
-            row?.performClick(nil)
+            if owned(row?.window) { row?.performClick(nil) }
             // The row is rebuilt once the engine applied the exception.
             for _ in 0..<100 {
                 if let label = button("site-content-blocking")?.accessibilityLabel(), label != before { break }
@@ -159,6 +162,18 @@ enum OrbitContentBlockingProbe {
             return result
         }
 
+        if command["step"] == "seal" {
+            result["defaultSetting"] = environment.settings.document.profile(profile).blocksAdsAndTrackers
+            result["normal"] = await load(owner, site: "shop")
+            await capture(owner.window, "seal-normal")
+            if let window = await openPrivate() {
+                result["private"] = await load(window, site: "shop")
+                await capture(window.window, "seal-private")
+                await application.closePrivateWindows()
+            }
+            return result
+        }
+
         if command["step"] == "relaunch" {
             // After a relaunch: what the restored tab reports, then the engine's own manager page.
             result["restored"] = await report(owner)
@@ -197,7 +212,7 @@ enum OrbitContentBlockingProbe {
         result["siteRowLabel"] = row?.accessibilityLabel() ?? "missing"
         await capture(row?.window, "2-site-controls-row-on")
         await capture(owner.window, "2b-window-with-site-controls")
-        row?.performClick(nil)
+        if owned(row?.window) { row?.performClick(nil) }
         for _ in 0..<100 where button("site-content-blocking")?.accessibilityLabel() == row?.accessibilityLabel() {
             try? await Task.sleep(for: .milliseconds(30))
         }

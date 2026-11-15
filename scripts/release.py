@@ -479,7 +479,7 @@ def qualify_previous(config, candidate, build, output, item):
             published['build'], published['version'], build), flush=True)
         run_id = secrets.token_hex(16)
         previous_identity, candidate_identity = bundle_identity(previous), bundle_identity(candidate)
-        result = subprocess.run([sys.executable, str(ROOT / 'scripts/test_update_ux.py'), '--cases', 'auth-transition',
+        result = subprocess.run([sys.executable, str(ROOT / 'scripts/test_update_ux.py'), '--cases', 'auth-transition', 'bundle-seal',
                                  '--previous-app', str(previous), '--source-app', str(candidate),
                                  '--evidence', str(evidence), '--run-id', run_id, '--auth-expect', 'kept',
                                  '--extensions-expect', 'kept'])
@@ -488,12 +488,21 @@ def qualify_previous(config, candidate, build, output, item):
             raise RuntimeError('Preservation qualification did not pass (exit %d); see %s' % (result.returncode, evidence))
         summary = json.loads(summary_file.read_text())
         check_preservation_summary(summary, run_id, previous_identity, candidate_identity)
+        check_bundle_seal_summary(json.loads((evidence / 'bundle-seal.json').read_text()))
         if bundle_identity(previous) != previous_identity or bundle_identity(candidate) != candidate_identity:
             raise RuntimeError('Application bundles changed during preservation qualification')
     (evidence / 'gate.json').write_text(json.dumps({'published': published, 'candidateBuild': build, 'runID': run_id,
                                                     'checks': len(summary['checks'])}, indent=2) + '\n')
     print('preservation gate: passed %d checks' % len(summary['checks']), flush=True)
     return summary
+
+
+def check_bundle_seal_summary(checks):
+    # The updater harness launches the installed candidate, proves real normal/private
+    # blocking, quits, then strictly verifies the entire signed bundle. No skip switch.
+    from test_update_ux import BUNDLE_SEAL_CHECKS
+    if any(checks.get(name) is not True for name in BUNDLE_SEAL_CHECKS):
+        raise RuntimeError('Post-launch bundle seal qualification did not pass')
 
 
 def release_notes_path(version):

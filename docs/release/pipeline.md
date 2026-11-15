@@ -94,6 +94,15 @@
     operation must survive the same sequence, as seen by the fixture server, the engine's
     inventory and the profile files;
   - the candidate keeps a private pre-update copy of these records (see below).
+  The same qualification also runs `--cases bundle-seal`: after signing a disposable
+  predecessor, it adds the two generated blocker indexes inside its resources and requires
+  its seal to fail verification. Sparkle must still install and relaunch the candidate.
+  The candidate loads loopback ad/tracker fixtures in normal and private windows with
+  blocking enabled, quits, and must pass `codesign --verify --deep --strict`. Generated
+  indexes must exist only in the data root. Any missing check stops the release.
+  `--cases bundle-seal bundle-seal-delta` additionally offers a signed delta and records
+  delta/full archive requests. A damaged predecessor can require a full-download fallback;
+  both cases must finish with a valid replacement seal.
   The gate accepts only this run's complete result (a fixed list of required checks, a run
   nonce, digests of the exact previous and candidate bundles). A failure, missing evidence,
   mismatched input, unreachable feed or unavailable GUI session stops the release; there is no
@@ -154,6 +163,12 @@
   bundles, with the GUI slot held for each ≤55 s case. No production feed is modified.
 
 ## Content blocking rulesets
+- The bundled extension is a read-only source. Before CEF starts, the bridge stages its
+  five payload/license files under `<engine root>/ContentBlocking/v1-<SHA256>/`, publishing
+  the complete directory by atomic rename. Chromium generates and validates its indexes
+  there. Existing versions preserve their indexes; a change to any shipped byte selects a
+  new version. The manifest key, extension ID and per-profile/private settings stay unchanged.
+  Staging failure stops startup rather than loading from the signed bundle.
 - The built-in blocker ships declarativeNetRequest rulesets generated from EasyList and
   EasyPrivacy at the commit pinned in `release/content-blocking.json`. The data lives in
   `native/ThirdParty/easylist/` under its own license; the list texts are never committed.
