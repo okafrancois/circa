@@ -304,10 +304,12 @@ ORBIT-RENAME is merged: packaging uses the Orbit executable, icon and product id
 
 ## Public release notes
 
-Write concise user-facing notes in `release/notes/X.Y.Z.md` before tagging a browser release.
-The publisher uses this file for the GitHub release; older releases without a file keep generated notes.
-The website at https://circabrowser.com/changelog includes recent static notes and loads newer published
-browser releases from the public GitHub API. Drafts, prereleases and non-browser tags are excluded.
+Write structured user-facing notes in `release/notes/X.Y.Z.md` before tagging a browser release,
+following [the release note format](notes-format.md). The publisher validates them before building
+and renders the GitHub body without front matter. Run `python3 scripts/changelog.py build` and commit
+the generated complete website history, per-version pages and Atom feed with each note change.
+Optional nightly notes live in `release/notes/nightly/` and appear in their own filterable channel.
+`python3 scripts/changelog.py check` verifies freshness offline; the website needs no GitHub API.
 The app's update card links to the staged version's notes; the Release Notes command links to the running
 version. Sparkle appcasts also expose the full changelog URL.
 
