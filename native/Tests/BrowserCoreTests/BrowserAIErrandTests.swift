@@ -64,7 +64,7 @@ private actor ErrandProvider: BrowserAIProviderClient {
         #expect(prompts.allSatisfy { $0.instructions.contains("You have no tools") })
     }
 
-    @Test func navigationOrPolicyOrOwnerChangeRevokesPendingApproval() async {
+    @Test func navigationOrPolicyOrOwnerChangeRevokesPendingApproval() async throws {
         for change in 0..<3 {
             let observation = sample()
             // Use this observation's identities, never another task's target token.
@@ -74,7 +74,7 @@ private actor ErrandProvider: BrowserAIProviderClient {
                 preferences: { preferences }, ownerCurrent: { owner }, observe: { observation }, isCurrent: { _ in current },
                 execute: { _, _ in executions += 1; return true })
             errand.start(); await wait { errand.phase == .waiting }
-            let id = errand.approval!.id
+            let id = try #require(errand.approval).id
             if change == 0 { current = false }
             if change == 1 { preferences.readsCurrentTabOnRequest = false }
             if change == 2 { owner = false }
