@@ -9,6 +9,36 @@
     <name>Circa</name>
   </author>
   <entry>
+    <id>https://circabrowser.com/changelog/0.73.0-nightly.4/</id>
+    <title>0.73.0-nightly.4 — Picture-in-picture placement and toolbar polish.</title>
+    <link href="https://circabrowser.com/changelog/0.73.0-nightly.4/" />
+    <updated>2026-11-15T00:00:00Z</updated>
+    <published>2026-11-15T00:00:00Z</published>
+    <category term="nightly" />
+    <summary>Picture-in-picture placement and toolbar polish.
+
+2 fixed
+
+## Fixed
+
+- Automatic picture-in-picture now always opens at the window's top-right, even when a previous player window is reused.
+- Toolbar button hover and tooltip timing now match the rest of the interface more closely.
+</summary>
+    <content type="html">&lt;article class="release" id="v0.73.0-nightly.4" data-version="0.73.0-nightly.4" data-channel="nightly" data-latest="false"&gt;
+  &lt;div class="release-meta"&gt;&lt;h2&gt;&lt;a href="#v0.73.0-nightly.4" aria-label="Link to version 0.73.0-nightly.4"&gt;0.73.0-nightly.4&lt;/a&gt;&lt;/h2&gt;
+  &lt;time datetime="2026-11-15"&gt;November 15, 2026&lt;/time&gt;&lt;span class="release-channel"&gt;Nightly&lt;/span&gt;&lt;/div&gt;
+  &lt;div class="release-copy"&gt;&lt;h3&gt;Picture-in-picture placement and toolbar polish.&lt;/h3&gt;
+  &lt;p class="release-counts"&gt;2 fixed&lt;/p&gt;
+  &lt;h4&gt;Fixed&lt;/h4&gt;
+  &lt;ul&gt;
+    &lt;li&gt;Automatic picture-in-picture now always opens at the window&amp;#x27;s top-right, even when a previous player window is reused.&lt;/li&gt;
+    &lt;li&gt;Toolbar button hover and tooltip timing now match the rest of the interface more closely.&lt;/li&gt;
+  &lt;/ul&gt;
+  &lt;a class="release-source" href="https://circabrowser.com/changelog/0.73.0-nightly.4/"&gt;Release permalink ↗&lt;/a&gt;
+  &lt;/div&gt;
+&lt;/article&gt;</content>
+  </entry>
+  <entry>
     <id>https://circabrowser.com/changelog/0.73.0-nightly.3/</id>
     <title>0.73.0-nightly.3 — The sidebar can sit on the right, and closing a tab takes you back where you were.</title>
     <link href="https://circabrowser.com/changelog/0.73.0-nightly.3/" />
@@ -77,6 +107,11 @@
       &lt;source src="https://circabrowser.com/assets/releases/0.73.0-nightly.3/toolbar-extensions.mp4" type="video/mp4"&gt;
       &lt;a href="https://circabrowser.com/assets/releases/0.73.0-nightly.3/toolbar-extensions.mp4"&gt;Download the clip&lt;/a&gt;
     &lt;/video&gt;&lt;figcaption&gt;Pinned extensions and the full address in the optional toolbar.&lt;/figcaption&gt;&lt;/figure&gt;
+  &lt;figure class="release-media"&gt;
+    &lt;video muted loop playsinline controls preload="none" poster="https://circabrowser.com/assets/releases/0.73.0-nightly.3/automatic-pip.jpg" aria-label="Switch to another app and the video keeps playing in picture-in-picture."&gt;
+      &lt;source src="https://circabrowser.com/assets/releases/0.73.0-nightly.3/automatic-pip.mp4" type="video/mp4"&gt;
+      &lt;a href="https://circabrowser.com/assets/releases/0.73.0-nightly.3/automatic-pip.mp4"&gt;Download the clip&lt;/a&gt;
+    &lt;/video&gt;&lt;figcaption&gt;Switch to another app and the video keeps playing in picture-in-picture.&lt;/figcaption&gt;&lt;/figure&gt;
   &lt;a class="release-source" href="https://circabrowser.com/changelog/0.73.0-nightly.3/"&gt;Release permalink ↗&lt;/a&gt;
   &lt;/div&gt;
 &lt;/article&gt;</content>
