@@ -55,6 +55,10 @@ extension OrbitApplication {
                 guard windows.newWindow(id: id) != nil else { releasePrivateWindow(id); return }
                 await windows.waitForPendingCommands()
                 guard let controller = windows.windows[id] else { releasePrivateWindow(id); return }
+                // Bang aliases are app-wide preferences; private navigation stays in this domain.
+                controller.palette.bangSiteSearches = { [weak normal] in
+                    normal?.settings.document.siteSearches ?? BrowserSiteSearch.builtIns
+                }
                 controller.palette.present(.newTab)
             } catch {
                 if let lease { try? await scope.release(lease) }
