@@ -72,6 +72,11 @@
       &lt;source src="https://circabrowser.com/assets/releases/0.73.0-nightly.3/close-back.mp4" type="video/mp4"&gt;
       &lt;a href="https://circabrowser.com/assets/releases/0.73.0-nightly.3/close-back.mp4"&gt;Download the clip&lt;/a&gt;
     &lt;/video&gt;&lt;figcaption&gt;Closing a tab returns to the one you used before it.&lt;/figcaption&gt;&lt;/figure&gt;
+  &lt;figure class="release-media"&gt;
+    &lt;video muted loop playsinline controls preload="none" poster="https://circabrowser.com/assets/releases/0.73.0-nightly.3/toolbar-extensions.jpg" aria-label="Pinned extensions and the full address in the optional toolbar."&gt;
+      &lt;source src="https://circabrowser.com/assets/releases/0.73.0-nightly.3/toolbar-extensions.mp4" type="video/mp4"&gt;
+      &lt;a href="https://circabrowser.com/assets/releases/0.73.0-nightly.3/toolbar-extensions.mp4"&gt;Download the clip&lt;/a&gt;
+    &lt;/video&gt;&lt;figcaption&gt;Pinned extensions and the full address in the optional toolbar.&lt;/figcaption&gt;&lt;/figure&gt;
   &lt;a class="release-source" href="https://circabrowser.com/changelog/0.73.0-nightly.3/"&gt;Release permalink ↗&lt;/a&gt;
   &lt;/div&gt;
 &lt;/article&gt;</content>
