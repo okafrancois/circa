@@ -389,6 +389,7 @@ public final class ChromiumBrowserEngine: BrowserPrivateEngine {
     /// stays here until CEF confirms the close.
     public private(set) var liveNativeTokens: Set<UInt64> = []
     /// True from the first `shutdown()` call: the engine refuses new profiles and surfaces.
+    var calendarReadAfter: [ProfileID: [Int: Date]] = [:]
     public private(set) var isShutDown = false
     /// Result of the latest `shutdown()`; nil before the first call.
     public private(set) var shutdownOutcome: ChromiumShutdownOutcome?

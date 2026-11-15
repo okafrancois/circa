@@ -22,6 +22,7 @@ struct FavoriteTileItem: Equatable {
     var isAudioMuted: Bool?
     var unreadCount: Int?
     var showsUnreadBadge = true
+    var calendarCountdown: String?
 
     var title: String { tab.title ?? tab.pinnedURL?.host ?? tab.url.host ?? uiText("Favorite") }
     var placeholder: String {
@@ -41,6 +42,7 @@ final class FavoriteTileView: NSView {
     private let favicon = FavoriteFaviconImageView()
     private let letter = NSTextField(labelWithString: "")
     private let unread = NSView()
+    private let countdown = NSTextField(labelWithString: "")
     private var tracking: NSTrackingArea?
     private var pressPoint: NSPoint?
     private var selectionTint: NSColor?
@@ -70,7 +72,10 @@ final class FavoriteTileView: NSView {
         unread.identifier = .init("gmail-unread")
         unread.layer?.cornerRadius = 3
         unread.setAccessibilityElement(false)
-        for view in [background, favicon, letter, unread] { addSubview(view) }
+        countdown.font = .systemFont(ofSize: 10, weight: .semibold)
+        countdown.alignment = .center; countdown.wantsLayer = true; countdown.layer?.cornerRadius = 7
+        countdown.layer?.masksToBounds = true
+        for view in [background, favicon, letter, unread, countdown] { addSubview(view) }
         setAccessibilityElement(true)
         setAccessibilityRole(.button)
         update(item)
@@ -91,6 +96,9 @@ final class FavoriteTileView: NSView {
             favicon.contentTintColor = presentation?.image.isTemplate == true ? OrbitTokens.Color.Text.primary : nil
         }
         self.item = item
+        countdown.stringValue = item.calendarCountdown ?? ""; countdown.isHidden = item.calendarCountdown == nil
+        countdown.textColor = OrbitTokens.Color.Text.primary
+        countdown.layer?.backgroundColor = NSColor.controlBackgroundColor.resolvedCGColor(for: effectiveAppearance)
         unread.isHidden = !item.showsUnreadBadge || (item.unreadCount ?? 0) == 0
         favicon.isHidden = item.favicon == nil
         letter.stringValue = item.placeholder
@@ -131,10 +139,12 @@ final class FavoriteTileView: NSView {
         super.layout()
         background.frame = window == nil ? bounds : backingAlignedRect(bounds, options: .alignAllEdgesNearest)
         let size = OrbitTokens.Metrics.Sidebar.favoriteIconSize
-        let icon = NSRect(x: (bounds.width - size) / 2, y: (bounds.height - size) / 2, width: size, height: size)
+        let icon = NSRect(x: (bounds.width - size) / 2, y: (bounds.height - size) / 2 - (countdown.isHidden ? 0 : 6), width: size, height: size)
         favicon.frame = icon
         let height = max(size, ceil(letter.intrinsicContentSize.height))
-        letter.frame = NSRect(x: (bounds.width - height) / 2, y: (bounds.height - height) / 2, width: height, height: height)
+        letter.frame = NSRect(x: (bounds.width - height) / 2, y: (bounds.height - height) / 2 - (countdown.isHidden ? 0 : 6), width: height, height: height)
+        let pillWidth = min(bounds.width - 4, countdown.intrinsicContentSize.width + 8)
+        countdown.frame = .init(x: (bounds.width - pillWidth) / 2, y: bounds.height - 16, width: pillWidth, height: 14)
         unread.frame = NSRect(x: bounds.width - 12, y: 6, width: 6, height: 6)
     }
 

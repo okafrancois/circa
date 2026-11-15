@@ -9,6 +9,9 @@ final class BrowserFavoritesController<Engine: BrowserEngine> {
     weak var owner: BrowserWindowController<Engine>?
     let grid = FavoritesGridView()
     let icons: FavoriteIconPipeline<Surface>
+    let calendar = BrowserCalendarRuntime()
+    let calendarPreview = CalendarPreviewController()
+    private let calendarSession: (any BrowserCalendarWebSession)?
     let gmail = BrowserGmailRuntime()
     let gmailPreview = GmailPreviewController()
     private let gmailSession: (any BrowserGmailWebSession)?
@@ -33,8 +36,9 @@ final class BrowserFavoritesController<Engine: BrowserEngine> {
     }
     private var surfacesByTab: [TabID: WeakSurface] = [:]
 
-    init(owner: BrowserWindowController<Engine>, gmailSession: (any BrowserGmailWebSession)? = nil) {
+    init(owner: BrowserWindowController<Engine>, gmailSession: (any BrowserGmailWebSession)? = nil, calendarSession: (any BrowserCalendarWebSession)? = nil) {
         self.owner = owner
+        self.calendarSession = calendarSession ?? owner.engine as? any BrowserCalendarWebSession
         self.gmailSession = gmailSession ?? owner.engine as? any BrowserGmailWebSession
         icons = FavoriteIconPipeline<Surface>()
     }
@@ -46,7 +50,7 @@ final class BrowserFavoritesController<Engine: BrowserEngine> {
         owner.sidebar.favoritesContainer.addSubview(grid)
         grid.onDragWillBegin = { [weak self] in self?.owner?.sidebar.spaceSwipe.cancel() }
         grid.onSelect = { [weak self] id in
-            self?.gmailPreview.dismiss()
+            self?.calendarPreview.dismiss(); self?.gmailPreview.dismiss()
             self?.owner?.submitInput { controller in
                 controller.hideLibrary()
                 controller.session.selectTab(id)
@@ -58,7 +62,12 @@ final class BrowserFavoritesController<Engine: BrowserEngine> {
             }
         }
         grid.makeContextMenu = { [weak self] id in self?.contextMenu(for: id) }
-        grid.onHover = { [weak self] tile, inside in self?.gmailPreview.hover(tile, inside: inside) }
+        installCalendar()
+        grid.onHover = { [weak self] tile, inside in
+            if BrowserCalendarWebAccount(url: tile.item.tab.pinnedURL ?? tile.item.tab.url) != nil {
+                self?.calendarPreview.hover(tile, inside: inside)
+            } else { self?.gmailPreview.hover(tile, inside: inside) }
+        }
         gmail.onChange = { [weak self] in self?.render() }
         gmailPreview.onPresentationChange = { [weak owner] in owner?.windowShell.hoverHoldDidChange() }
         gmailPreview.inbox = { [weak self] in self?.gmail.states[$0]?.inbox }
@@ -117,7 +126,16 @@ final class BrowserFavoritesController<Engine: BrowserEngine> {
         }
         observer = owner.engineEventHooks.observe { [weak self] surface, event in
             guard let self, let owner = self.owner, owner.owns(surface) else { return }
+            if event == .navigationStarted, ["accounts.google.com", "calendar.google.com"].contains(surface.currentURL?.host ?? "") {
+                calendar.sessionChanged()
+            }
             let occurrence = owner.session.occurrenceID(for: surface)
+            if event == .navigationStarted || event == .navigationFinished,
+               let id = owner.session.snapshot?.tabs.first(where: { $0.occurrenceID == occurrence })?.id,
+               let tab = owner.session.organization?.tab(id),
+               let account = BrowserCalendarWebAccount(url: tab.pinnedURL ?? tab.url) {
+                calendar.sessionChanged(account)
+            }
             if event == .navigationFinished,
                let id = owner.session.snapshot?.tabs.first(where: { $0.occurrenceID == occurrence })?.id,
                let tab = owner.session.organization?.tab(id), tab.section.keepsPinnedURL,
@@ -139,6 +157,7 @@ final class BrowserFavoritesController<Engine: BrowserEngine> {
 
     func shutdown() {
         gmailRefreshTimer?.invalidate(); gmailRefreshTimer = nil
+        calendarPreview.dismiss(); calendar.clear()
         gmailPreview.dismiss(); gmail.clear()
         observer?.cancel()
         observer = nil
@@ -158,8 +177,9 @@ final class BrowserFavoritesController<Engine: BrowserEngine> {
         owner.sidebar.spaceSwipe.validate(catalog: session.catalog, active: session.snapshot?.activeSpaceID)
         owner.sidebar.prepareSpaceContentPublication(to: session.snapshot?.activeSpaceID)
         let snapshot = session.organization
-        if spaceID != snapshot?.spaceID { gmailPreview.dismiss(); spaceID = snapshot?.spaceID }
+        if spaceID != snapshot?.spaceID { calendarPreview.dismiss(); gmailPreview.dismiss(); spaceID = snapshot?.spaceID }
         if profileID != snapshot?.profileID {
+            calendarPreview.dismiss(); calendar.clear()
             gmailPreview.dismiss(); gmail.clear()
             icons.clear()
             surfacesByTab.removeAll()
@@ -171,16 +191,26 @@ final class BrowserFavoritesController<Engine: BrowserEngine> {
             if case let .tab(tab) = item { return tab }
             return nil
         } ?? []
+        let calendarAccounts = Set(tabs.filter { tab in
+            guard let profile = snapshot?.profileID else { return false }
+            return owner.settingsPreferences?.runtime.document.profile(profile).disabledLiveCalendars.contains(tab.id) != true
+        }.compactMap { BrowserCalendarWebAccount(url: $0.pinnedURL ?? $0.url) })
+        calendar.reconcile(profile: owner.isPrivateWindow ? nil : snapshot?.profileID,
+                           accounts: owner.isPrivateWindow ? [] : calendarAccounts,
+                           session: owner.isPrivateWindow ? nil : calendarSession)
+        if owner.window?.occlusionState.contains(.visible) == true && NSApp.isActive && !owner.sidebar.isPresentationHidden {
+            for account in calendarAccounts { calendar.refresh(account) }
+        }
         let ids = Set(tabs.map(\.id))
         let pinnedTabs = snapshot.map { FolderPreviewResult.ordered($0.pinned).map(\.tab) } ?? []
         let accounts = Set((tabs + pinnedTabs).compactMap { BrowserGmailAccount(url: $0.pinnedURL ?? $0.url) })
         gmail.reconcile(profile: owner.isPrivateWindow ? nil : snapshot?.profileID,
                         accounts: owner.isPrivateWindow ? [] : accounts,
                         session: owner.isPrivateWindow ? nil : gmailSession)
-        if accounts.isEmpty || owner.isPrivateWindow {
+        if (accounts.isEmpty && calendarAccounts.isEmpty) || owner.isPrivateWindow {
             gmailRefreshTimer?.invalidate(); gmailRefreshTimer = nil
         } else if gmailRefreshTimer == nil {
-            gmailRefreshTimer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in
+            gmailRefreshTimer = Timer.scheduledTimer(withTimeInterval: 15, repeats: true) { [weak self] _ in
                 MainActor.assumeIsolated {
                     guard let self, self.owner?.window?.occlusionState.contains(.visible) == true else { return }
                     self.render()
@@ -197,7 +227,7 @@ final class BrowserFavoritesController<Engine: BrowserEngine> {
             let badge = unreadBadge(for: tab)
             return FavoriteTileItem(tab: tab, favicon: icon, isLoading: surface?.navigationState.isLoading == true,
                                     isAudible: media?.isAudible ?? media?.isAudioPlaying, isAudioMuted: media?.isAudioMuted,
-                                    unreadCount: badge.count, showsUnreadBadge: badge.showsBadge)
+                                    unreadCount: badge.count, showsUnreadBadge: badge.showsBadge, calendarCountdown: calendarCountdown(tab))
         }
         grid.commandsEnabled = !owner.isPreparingForTermination && !session.isClosed
         grid.minimumTileWidth = owner.sidebar.favoriteMinimumTileWidth
@@ -205,6 +235,8 @@ final class BrowserFavoritesController<Engine: BrowserEngine> {
         grid.accent = owner.sidebar.currentThemeAccent
         grid.render(items, profileID: snapshot?.profileID)
         updatePinnedBadges()
+        calendarPreview.sidebarOnRight = gmailPreview.sidebarOnRight
+        calendarPreview.reconcile()
         gmailPreview.reconcile()
     }
 
@@ -246,7 +278,7 @@ final class BrowserFavoritesController<Engine: BrowserEngine> {
                 favicon: icons.image(for: tab, surface: surface, isOwned: { [weak owner] in owner?.owns($0) == true }),
                 isLoading: surface?.navigationState.isLoading == true,
                 isAudible: media?.isAudible ?? media?.isAudioPlaying, isAudioMuted: media?.isAudioMuted,
-                unreadCount: badge.count, showsUnreadBadge: badge.showsBadge)
+                unreadCount: badge.count, showsUnreadBadge: badge.showsBadge, calendarCountdown: calendarCountdown(tab))
         }
         grid.applySelection(items)
         updatePinnedBadges(ids)
@@ -258,7 +290,7 @@ final class BrowserFavoritesController<Engine: BrowserEngine> {
             guard ids.contains(item.tab.id), let tab = owner.session.organizationTab(item.tab.id) else { return nil }
             return FavoriteTileItem(tab: tab, favicon: item.favicon, isLoading: item.isLoading,
                 isAudible: item.isAudible, isAudioMuted: item.isAudioMuted,
-                unreadCount: item.unreadCount, showsUnreadBadge: item.showsUnreadBadge)
+                unreadCount: item.unreadCount, showsUnreadBadge: item.showsUnreadBadge, calendarCountdown: calendarCountdown(tab))
         }
         grid.applySelection(items)
     }
@@ -284,7 +316,7 @@ final class BrowserFavoritesController<Engine: BrowserEngine> {
         return captured.tab
     }
     func contextMenu(for id: TabID) -> NSMenu? {
-        gmailPreview.dismiss()
+        calendarPreview.dismiss(); gmailPreview.dismiss()
         guard let owner, let registry, let snapshot = owner.session.organization,
               let tab = snapshot.tab(id), snapshot.favorites.contains(where: { $0.node == .tab(id) }),
               let target = registry.captureTarget(windowID: owner.id) else { return nil }
@@ -317,6 +349,11 @@ final class BrowserFavoritesController<Engine: BrowserEngine> {
         let original = controller.menu.items.filter { !$0.isSeparatorItem }
         controller.menu.removeAllItems()
         controller.menu.autoenablesItems = false
+        if let account = BrowserCalendarWebAccount(url: tab.pinnedURL ?? tab.url),
+           let menu = calendarMenu(tab, account: account, gear: false) {
+            let item = NSMenuItem(title: uiText("Live Calendar"), action: nil, keyEquivalent: "")
+            item.submenu = menu; controller.menu.addItem(item)
+        }
         controller.menu.addItem(original[0])
         controller.menu.addItem(owner.tabShareMenu(for: tab))
         controller.menu.addItem(.separator())

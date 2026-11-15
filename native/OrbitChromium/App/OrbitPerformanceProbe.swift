@@ -3260,6 +3260,9 @@ extension OrbitPerformanceProbe {
         if command["step"] == "split-command-focus" {
             return await splitCommandFocus(application, owner: owner, base: base)
         }
+        if command["step"] == "calendar-preview" {
+            return await OrbitCalendarProbe.run(application, environment: environment, owner: owner, base: base, root: activeSiteSessionConfiguration()!.dataRoot, command: command)
+        }
         if command["step"] == "gmail-preview" {
             return await OrbitGmailProbe.run(application, environment: environment, owner: owner, base: base, root: activeSiteSessionConfiguration()!.dataRoot, command: command)
         }
