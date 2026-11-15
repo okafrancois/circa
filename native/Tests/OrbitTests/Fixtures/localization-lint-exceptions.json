@@ -53,7 +53,9 @@
     "\"position\""
   ],
   "Favorites/BrowserFavoritesController.swift": [
-    "\"\""
+    "\"\"",
+    "\"accounts.google.com\"",
+    "\"calendar.google.com\""
   ],
   "Sidebar/BrowserWindowController+Sidebar.swift": [],
   "Switcher/BrowserSwitcherView.swift": [

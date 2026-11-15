@@ -2182,3 +2182,23 @@
 "The media page could not be reached. Try again." = "The media page could not be reached. Try again.";
 
 "File Unavailable" = "File Unavailable";
+
+"Live Calendar" = "Live Calendar";
+
+"Create event" = "Create event";
+
+"in %dm" = "in %dm";
+
+"%dm ago" = "%dm ago";
+
+"Last fetch: %dm ago" = "Last fetch: %dm ago";
+
+"Last fetch: unavailable" = "Last fetch: unavailable";
+
+"Show Hover Preview" = "Show Hover Preview";
+
+"Show Time to Next Meeting" = "Show Time to Next Meeting";
+
+"Disable Live Calendar" = "Disable Live Calendar";
+
+"Enable Live Calendar" = "Enable Live Calendar";

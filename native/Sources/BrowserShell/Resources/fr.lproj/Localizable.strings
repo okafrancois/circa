@@ -1771,3 +1771,23 @@
 "The media page could not be reached. Try again." = "La page du média est inaccessible. Réessayez.";
 
 "File Unavailable" = "Fichier indisponible";
+
+"Live Calendar" = "Calendrier en direct";
+
+"Create event" = "Créer un événement";
+
+"in %dm" = "dans %dm";
+
+"%dm ago" = "il y a %dm";
+
+"Last fetch: %dm ago" = "Actualisation : il y a %dm";
+
+"Last fetch: unavailable" = "Actualisation indisponible";
+
+"Show Hover Preview" = "Afficher l’aperçu au survol";
+
+"Show Time to Next Meeting" = "Afficher le délai avant la prochaine réunion";
+
+"Disable Live Calendar" = "Désactiver le calendrier en direct";
+
+"Enable Live Calendar" = "Activer le calendrier en direct";

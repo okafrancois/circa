@@ -26,3 +26,10 @@ public protocol BrowserGitHubWebSession: AnyObject {
 public protocol BrowserGmailWebSession: AnyObject {
     func gmailInbox(profileID: ProfileID, account: BrowserGmailAccount) async throws -> BrowserGmailInbox
 }
+
+/// Today's primary-calendar agenda in the selected profile. No cookie or OAuth material leaves the engine.
+@MainActor
+public protocol BrowserCalendarWebSession: AnyObject {
+    func calendarAgenda(profileID: ProfileID, account: BrowserCalendarWebAccount,
+                        day: Date, timeZone: TimeZone) async throws -> BrowserCalendarWebAgenda
+}

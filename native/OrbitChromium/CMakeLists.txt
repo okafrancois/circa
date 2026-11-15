@@ -177,6 +177,7 @@ list(APPEND ORBIT_APP_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/App/EngineComposition
   "${CMAKE_CURRENT_SOURCE_DIR}/App/OrbitContentBlockingProbe.swift"
   "${CMAKE_CURRENT_SOURCE_DIR}/App/OrbitGitHubCompatibilityProbe.swift"
   "${CMAKE_CURRENT_SOURCE_DIR}/App/OrbitGmailProbe.swift"
+  "${CMAKE_CURRENT_SOURCE_DIR}/App/OrbitCalendarProbe.swift"
   "${CMAKE_CURRENT_SOURCE_DIR}/App/OrbitBrandingProbe.swift"
   "${CMAKE_CURRENT_SOURCE_DIR}/App/OrbitLocalFilesProbe.swift"
   "${CMAKE_CURRENT_SOURCE_DIR}/App/OrbitScriptingProbe.swift"
