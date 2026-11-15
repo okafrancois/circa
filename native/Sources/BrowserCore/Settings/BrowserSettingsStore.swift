@@ -166,8 +166,9 @@ public struct BrowserInteractionPreferences: Codable, Equatable, Sendable {
     /// View > Show/Hide Toolbar: an always-visible toolbar above the page.
     public var showsToolbar = false
     public var toolbarShowsFullURL = true
+    public var sidebarOnRight = false
     public init() {}
-    private enum CodingKeys: String, CodingKey { case warnBeforeQuitting, playSoundEffects, hapticFeedback, showsToolbar, toolbarShowsFullURL }
+    private enum CodingKeys: String, CodingKey { case warnBeforeQuitting, playSoundEffects, hapticFeedback, showsToolbar, toolbarShowsFullURL, sidebarOnRight }
     public init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
         warnBeforeQuitting = try values.decodeIfPresent(Bool.self, forKey: .warnBeforeQuitting) ?? true
@@ -175,6 +176,7 @@ public struct BrowserInteractionPreferences: Codable, Equatable, Sendable {
         hapticFeedback = try values.decodeIfPresent(Bool.self, forKey: .hapticFeedback) ?? true
         showsToolbar = try values.decodeIfPresent(Bool.self, forKey: .showsToolbar) ?? false
         toolbarShowsFullURL = try values.decodeIfPresent(Bool.self, forKey: .toolbarShowsFullURL) ?? true
+        sidebarOnRight = try values.decodeIfPresent(Bool.self, forKey: .sidebarOnRight) ?? false
     }
 }
 

@@ -102,6 +102,7 @@ enum BrowserCommandID: String, CaseIterable, Sendable {
     case exportOrbitNotes
     case paste
     case clearCacheAndRefresh
+    case toggleSidebarSide
     case showHideToolbar
     case previousSpace
     case light
@@ -385,6 +386,7 @@ enum OrbitCommandCatalog {
         .init(command: .exportOrbitNotes, title: "Export Circa Notes", menu: "Help", key: "", modifierMask: nil, localizesKey: true, source: "menu.declaration.95", owner: "SHELL"),
         .init(command: .paste, title: "Paste", menu: "Edit", key: "v", modifierMask: 1048576, localizesKey: true, source: "menu.declaration.96", owner: "SHELL"),
         .init(command: .clearCacheAndRefresh, title: "Clear Cache and Refresh", menu: "View", key: "", modifierMask: nil, localizesKey: true, source: "menu.declaration.97", owner: "SHELL"),
+        .init(command: .toggleSidebarSide, title: "Sidebar on Right", menu: "View", key: "", modifierMask: 0, localizesKey: true, source: "sidebar.placement", owner: "SHELL"),
         .init(command: .showHideToolbar, title: "Show/Hide Toolbar", menu: "View", key: "D", modifierMask: 1048576, localizesKey: true, source: "menu.declaration.98", owner: "THEME"),
         .init(command: .previousSpace, title: "Previous Space", menu: "Spaces", key: "\u{F702}", modifierMask: 1572864, localizesKey: true, source: "menu.declaration.99", owner: "SHELL"),
         .init(command: .light, title: "Light", menu: "", key: "", modifierMask: nil, localizesKey: true, source: "menu.declaration.100", owner: "THEME"),

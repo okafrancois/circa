@@ -234,8 +234,8 @@ final class BrowserContentCardView: NSView {
         didSet { if cornerRadius != oldValue { needsLayout = true } }
     }
 
-    /// Edge-to-edge layout: the card meets the window's top, trailing and bottom edges, so only
-    /// leading corners round and the shadow is the soft edge shadow. Off restores the spaced card.
+    /// Edge-to-edge layout rounds the sidebar-facing corners and uses the soft edge shadow.
+    /// Off restores the spaced card.
     var isFlushWithWindow = false {
         didSet {
             guard isFlushWithWindow != oldValue else { return }
@@ -244,15 +244,19 @@ final class BrowserContentCardView: NSView {
             needsLayout = true
         }
     }
+    var sidebarOnRight = false { didSet { if oldValue != sidebarOnRight { needsLayout = true } } }
+    private var sidebarCorners: CACornerMask {
+        sidebarOnRight ? [.layerMaxXMinYCorner, .layerMaxXMaxYCorner] : OrbitCornerPath.leadingCorners
+    }
     private var cardShadow: OrbitTokens.ShadowSpec {
         isFlushWithWindow ? OrbitTokens.Shadow.contentCardEdge : OrbitTokens.Shadow.contentCard
     }
     /// The page's rounded corners: with a dock beside it the page no longer meets the trailing edge.
     var pageCorners: CACornerMask {
-        isFlushWithWindow && assistantWidth == 0 ? OrbitCornerPath.leadingCorners : OrbitCornerPath.allCorners
+        isFlushWithWindow && assistantWidth == 0 ? sidebarCorners : OrbitCornerPath.allCorners
     }
     var assistantCorners: CACornerMask {
-        isFlushWithWindow ? OrbitCornerPath.leadingCorners : OrbitCornerPath.allCorners
+        isFlushWithWindow ? sidebarCorners : OrbitCornerPath.allCorners
     }
 
     init() {

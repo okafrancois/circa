@@ -294,6 +294,8 @@ enum OrbitPerformanceProbe {
                     result["branding"] = await OrbitBrandingProbe.run(application, environment: environment, owner: owner, root: root, appearance: command["appearance"] ?? "light")
                 } else if name == "pinned-tabs" {
                     result["pinnedTabs"] = await OrbitPinnedTabProbe.run(owner, store: environment.store, root: root, command: command)
+                } else if name == "sidebar-placement" {
+                    result["sidebarPlacement"] = await OrbitSidebarPlacementProbe.run(owner, command: command)
                 } else if name == "optional-toolbar" {
                     result["optionalToolbar"] = await OrbitToolbarProbe.run(owner, controllers: environment.liveControllers, command: command)
                 } else if name == "p2-split" {

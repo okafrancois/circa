@@ -85,6 +85,19 @@ final class OrbitWindowShell {
         didSet { if oldValue != showsSpaceAroundPages { applyGeometry() } }
     }
 
+    var sidebarOnRight = false {
+        didSet {
+            guard oldValue != sidebarOnRight else { return }
+            sidebarTransition = nil
+            OrbitSidebarLayerTransition(roots: sidebarAnimationRoots).cancel()
+            hoverReveal.dismiss()
+            resizeHandle.sidebarOnRight = sidebarOnRight
+            applyGeometry()
+            updateHoverRegions(force: true)
+            root?.layoutSubtreeIfNeeded()
+        }
+    }
+
     var allowsHoverReveal: () -> Bool = { true }
     var allowsResize: () -> Bool = { true }
     /// Editing inside the sidebar keeps a revealed sidebar open.
@@ -217,7 +230,7 @@ final class OrbitWindowShell {
         let sidebarTop = sidebar.topAnchor.constraint(equalTo: root.topAnchor)
         let sidebarBottom = root.bottomAnchor.constraint(equalTo: sidebar.bottomAnchor)
         let dockLeading = dockGuide.leadingAnchor.constraint(equalTo: root.leadingAnchor)
-        let cardGap = card.leadingAnchor.constraint(equalTo: dockGuide.trailingAnchor)
+        let cardGap = card.leadingAnchor.constraint(equalTo: root.leadingAnchor)
         let inset = OrbitTokens.Metrics.Content.cardInset
         let cardTop = card.topAnchor.constraint(equalTo: root.topAnchor, constant: inset)
         let cardTrailing = root.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: inset)
@@ -382,7 +395,7 @@ final class OrbitWindowShell {
         var resolved = OrbitShellGeometry.resolve(.init(
             contentSize: size, sidebarWidth: width.constant, dockProgress: CGFloat(dockProgress),
             floatProgress: CGFloat(floatProgress), usesFloatingFrame: usesFloatingFrame, isFullScreen: isFullScreen, trafficLightPitch: trafficLightPitch,
-            spaceAroundPages: showsSpaceAroundPages))
+            spaceAroundPages: showsSpaceAroundPages, sidebarOnRight: sidebarOnRight))
         if libraryVisibleWidth > 0 {
             // WindowLayoutController interpolates the document edge between sidebarPage
             // and home. It moves throughout the transition, including while Home is offscreen.
@@ -399,12 +412,13 @@ final class OrbitWindowShell {
         set(sidebarTop, resolved.sidebarFrame.minY)
         set(sidebarBottom, size.height - resolved.sidebarFrame.maxY)
         set(dockLeading, resolved.dockedColumnMinX)
-        set(cardGap, resolved.cardGap)
+        set(cardGap, resolved.cardFrame.minX)
         set(cardTop, resolved.cardFrame.minY)
         set(cardTrailing, size.width - resolved.cardFrame.maxX)
         set(cardBottom, size.height - resolved.cardFrame.maxY)
         card.cornerRadius = resolved.cardRadius
         card.isFlushWithWindow = resolved.isCardFlush
+        card.sidebarOnRight = sidebarOnRight
         loadingIndicator.place(over: resolved.cardFrame, in: size)
 
         let chrome = resolved.floatingChrome
@@ -417,11 +431,10 @@ final class OrbitWindowShell {
             floatingBackdrop.fill.offsetInWindowFill = resolved.sidebarFrame.origin
         }
 
-        let handleWidth = OrbitTokens.Metrics.Sidebar.resizeHandleWidth
         let resizable = isDocked && dockProgress >= 1 && floatProgress <= 0 && !isAnimating && allowsResize()
         resizeHandle.isHidden = !resizable
         if resizable {
-            resizeHandle.frame = rootRect(CGRect(x: width.constant - handleWidth, y: 0, width: handleWidth, height: size.height), in: size)
+            resizeHandle.frame = rootRect(OrbitShellGeometry.resizeFrame(size: size, sidebarWidth: width.constant, onRight: sidebarOnRight), in: size)
             window?.invalidateCursorRects(for: resizeHandle)
         }
 
@@ -468,7 +481,6 @@ final class OrbitWindowShell {
 
     private func updateHoverRegions(force: Bool = false) {
         guard let root else { return }
-        let height = root.bounds.height
         let edge: CGRect?
         let keep: CGRect?
         if libraryProgress > 0 || isDocked || hoverReveal.phase == .disabled {
@@ -478,9 +490,9 @@ final class OrbitWindowShell {
             // The final floating panel plus the strip between it and the window edge.
             let maxX = OrbitTokens.Metrics.Sidebar.floatingInset + (width?.constant ?? OrbitTokens.Metrics.Sidebar.widthDefault)
             edge = nil
-            keep = CGRect(x: 0, y: 0, width: maxX, height: height)
+            keep = OrbitShellGeometry.edgeRegion(size: root.bounds.size, width: maxX, onRight: sidebarOnRight)
         } else {
-            edge = CGRect(x: 0, y: 0, width: OrbitTokens.Motion.sidebarHoverEdgeTrigger, height: height)
+            edge = OrbitShellGeometry.edgeRegion(size: root.bounds.size, width: OrbitTokens.Motion.sidebarHoverEdgeTrigger, onRight: sidebarOnRight)
             keep = nil
         }
         if force { hoverTracker.update(in: root, edge: nil, keep: nil) }

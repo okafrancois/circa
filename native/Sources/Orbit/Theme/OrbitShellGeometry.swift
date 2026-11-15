@@ -27,6 +27,7 @@ struct OrbitShellGeometry: Equatable {
         /// The spaced layout (10 pt around the card, all corners rounded). The shell passes the user
         /// preference, whose default is the edge-to-edge layout.
         var spaceAroundPages = true
+        var sidebarOnRight = false
     }
 
     /// Leading edge of the docked column (−W when hidden); the card follows its trailing edge.
@@ -72,19 +73,36 @@ struct OrbitShellGeometry: Equatable {
         } else {
             sidebar = docked
         }
+        let placedSidebar = state.sidebarOnRight ? reflect(sidebar, in: size.width) : sidebar
+        let placedCard = state.sidebarOnRight ? reflect(card, in: size.width) : card
         let lights = (0..<3).map { index in
-            CGPoint(x: sidebar.minX + WindowMetrics.trafficLightFirstCenterX + CGFloat(index) * state.trafficLightPitch,
-                    y: sidebar.minY + WindowMetrics.trafficLightCenterY)
+            CGPoint(x: placedSidebar.minX + WindowMetrics.trafficLightFirstCenterX + CGFloat(index) * state.trafficLightPitch,
+                    y: placedSidebar.minY + WindowMetrics.trafficLightCenterY)
         }
         let onScreen = sidebar.maxX > 0.5 && (dock > 0.001 || float > 0.001)
         return OrbitShellGeometry(
-            dockedColumnMinX: columnMinX, cardGap: gap, sidebarFrame: sidebar, cardFrame: card,
+            dockedColumnMinX: columnMinX, cardGap: gap, sidebarFrame: placedSidebar, cardFrame: placedCard,
             cardRadius: lerp(hiddenRadius, dockedRadius, dock), isCardFlush: !spaced,
             floatingChrome: float > 0 ? max(0, min(1, 1 - dock)) : 0,
             floatingRadius: OrbitTokens.Radius.floatingSidebar * max(0, 1 - dock),
             trafficLightCenters: lights,
-            trafficLightsVisible: onScreen && lights[0].x - WindowMetrics.trafficLightDiameter / 2 > -0.5,
+            trafficLightsVisible: onScreen && lights[0].x - WindowMetrics.trafficLightDiameter / 2 > -0.5
+                && lights[2].x + WindowMetrics.trafficLightDiameter / 2 < size.width + 0.5,
             isSidebarOnScreen: onScreen)
+    }
+
+    static func reflect(_ frame: CGRect, in width: CGFloat) -> CGRect {
+        CGRect(x: width - frame.maxX, y: frame.minY, width: frame.width, height: frame.height)
+    }
+
+    static func edgeRegion(size: CGSize, width: CGFloat, onRight: Bool) -> CGRect {
+        CGRect(x: onRight ? size.width - width : 0, y: 0, width: width, height: size.height)
+    }
+
+    static func resizeFrame(size: CGSize, sidebarWidth: CGFloat, onRight: Bool) -> CGRect {
+        let handle = SidebarMetrics.resizeHandleWidth
+        let left = CGRect(x: sidebarWidth - handle, y: 0, width: handle, height: size.height)
+        return onRight ? reflect(left, in: size.width) : left
     }
 
     enum ResizeOutcome: Equatable { case width(CGFloat), collapse }

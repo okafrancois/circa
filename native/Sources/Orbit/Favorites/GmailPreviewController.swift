@@ -4,6 +4,7 @@ import BrowserCore
 /// Hover is observational: it never selects a tab, changes the responder, or marks mail as read.
 @MainActor
 final class GmailPreviewController {
+    var sidebarOnRight = false
     let view = GmailPreviewView()
     weak var anchor: NSView?
     private var tab: BrowserOrganizationTabItem?
@@ -116,7 +117,8 @@ final class GmailPreviewController {
         let anchor = tile.convert(tile.bounds, to: host)
         let width = min(GmailPreviewMetrics.width, host.bounds.width - 16)
         let height = min(view.contentHeight, host.bounds.height - 16)
-        let x = min(max(host.bounds.minX + 8, anchor.maxX - 4), host.bounds.maxX - width - 8)
+        let preferredX = sidebarOnRight ? anchor.minX - width + 4 : anchor.maxX - 4
+        let x = min(max(host.bounds.minX + 8, preferredX), host.bounds.maxX - width - 8)
         let wantedY = host.isFlipped ? anchor.maxY - 4 : anchor.minY + 4 - height
         let y = max(host.bounds.minY + 8, min(wantedY, host.bounds.maxY - height - 8))
         container.frame = .init(x: x, y: y, width: width, height: height)

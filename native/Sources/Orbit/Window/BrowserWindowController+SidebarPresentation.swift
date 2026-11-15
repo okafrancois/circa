@@ -39,6 +39,23 @@ extension BrowserWindowController {
 
     /// ⌘S: pin or hide the sidebar. Hiding from a hover-revealed sidebar is not possible: the
     /// toggle pins it, as the floating panel shows the same toggle.
+    func toggleSidebarSide() {
+        guard acceptsCommands else { return }
+        session.performWindowAction { [weak self] in
+            guard let self, !isPreparingForTermination else { return }
+            let value = !windowShell.sidebarOnRight
+            guard let runtime = settingsPreferences?.runtime else {
+                windowShell.sidebarOnRight = value
+                return
+            }
+            runtime.publishSidebarOnRight(value)
+            Task { [weak self] in
+                do { try await runtime.setSidebarOnRight(value) }
+                catch { self?.session.onError?(error) }
+            }
+        }
+    }
+
     func toggleSidebar() {
         guard acceptsCommands else { return }
         session.performWindowAction { [weak self] in

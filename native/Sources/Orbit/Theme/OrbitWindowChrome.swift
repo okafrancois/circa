@@ -139,6 +139,7 @@ final class OrbitWindowRootView: NSView {
 /// edge (+ ).
 @MainActor
 final class OrbitSidebarResizeHandle: NSView {
+    var sidebarOnRight = false
     var currentWidth: () -> CGFloat = { OrbitTokens.Metrics.Sidebar.widthDefault }
     var onResize: ((CGFloat) -> Void)?
     var onCollapse: (() -> Void)?
@@ -157,8 +158,10 @@ final class OrbitSidebarResizeHandle: NSView {
 
     override func mouseDragged(with event: NSEvent) {
         guard let start = dragStart else { return }
-        let pointer = event.locationInWindow.x
-        switch OrbitShellGeometry.resize(proposedWidth: start.width + pointer - start.x, pointerX: pointer) {
+        let x = event.locationInWindow.x
+        let pointer = sidebarOnRight ? (window?.contentView?.bounds.width ?? 0) - x : x
+        let delta = (x - start.x) * (sidebarOnRight ? -1 : 1)
+        switch OrbitShellGeometry.resize(proposedWidth: start.width + delta, pointerX: pointer) {
         case .width(let width):
             onResize?(width)
         case .collapse:

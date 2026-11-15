@@ -6,6 +6,7 @@ import BrowserShell
 /// Window-local hover intent. Rendering reads bounded memory caches; it never activates a tab.
 @MainActor
 final class RichTabPreviewController {
+    var sidebarOnRight = false
     static let dwell: TimeInterval = 0.12
     static let entryDuration: TimeInterval = 0.09
     static let exitDuration: TimeInterval = 0.08
@@ -94,7 +95,7 @@ final class RichTabPreviewController {
         view.configure(current)
         // Rows permit drawing outside their bounds; visibleRect can cover the whole viewport.
         let frame = row.convert(row.bounds.intersection(row.visibleRect), to: host)
-        view.frame = Self.frame(anchor: frame, bounds: host.bounds, flipped: host.isFlipped)
+        view.frame = Self.frame(anchor: frame, bounds: host.bounds, flipped: host.isFlipped, sidebarOnRight: sidebarOnRight)
         if view.superview !== host { host.addSubview(view, positioned: .above, relativeTo: nil) }
         if animated, !reducedMotion() {
             let fade = CABasicAnimation(keyPath: "opacity")
@@ -105,10 +106,11 @@ final class RichTabPreviewController {
         onPresentationChange?()
     }
 
-    static func frame(anchor: NSRect, bounds: NSRect, flipped: Bool) -> NSRect {
+    static func frame(anchor: NSRect, bounds: NSRect, flipped: Bool, sidebarOnRight: Bool = false) -> NSRect {
         let size = NSSize(width: min(RichTabPreviewView.size.width, max(0, bounds.width - 16)),
                           height: min(RichTabPreviewView.size.height, max(0, bounds.height - 16)))
-        let x = min(max(bounds.minX + 8, anchor.maxX + 8), bounds.maxX - size.width - 8)
+        let preferredX = sidebarOnRight ? anchor.minX - size.width - 8 : anchor.maxX + 8
+        let x = min(max(bounds.minX + 8, preferredX), bounds.maxX - size.width - 8)
         // Keep the action row beside the hovered tab so reaching it does not cross other tabs.
         let y = flipped ? anchor.maxY - size.height : anchor.minY
         return NSRect(x: x, y: max(bounds.minY + 8, min(y, bounds.maxY - size.height - 8)), width: size.width, height: size.height)
