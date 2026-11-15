@@ -112,6 +112,8 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
     var lastBoostsEnabled = true
     /// Built-in ad and tracker blocking; nil for engines without it and for private windows.
     var contentBlocking: BrowserContentBlockingCoordinator?
+    /// Private windows only: the normal environment's coordinator, which owns the private session.
+    var privateContentBlocking: BrowserContentBlockingCoordinator?
     private var history = BrowserHistoryRecorder()
     var favoriteIcons: FavoriteIconStore?
     private var cachePressure: BrowserMemoryPressure?
@@ -251,6 +253,8 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
             environment.contentBlocking = BrowserContentBlockingCoordinator(blocker: blocker,
                 isEnabled: { [weak environment] in environment?.settings.document.profile($0).blocksAdsAndTrackers ?? false },
                 exceptions: { [weak environment] in environment?.sitePreferences.contentBlockingExceptions(profileID: $0) ?? [] })
+            // Readies private filtering early: allowing it in incognito reloads the extension once.
+            if let blocking = environment.contentBlocking { Task { _ = await blocking.preparePrivateWindow() } }
         }
         BrowserPerformance.mark(.profilesBegin)
         if environment.boosts.hostOverride != nil || engine.capabilities.contains(.boosts) || environment.contentBlocking != nil {
@@ -510,6 +514,7 @@ final class BrowserEnvironment<Engine: BrowserEngine> {
         controller.translation.onPreferenceError = { [weak self] in self?.onPersistenceError?($0) }
         controller.siteControls.preferences = sitePreferences
         controller.siteControls.contentBlocking = contentBlocking
+        controller.siteControls.privateContentBlocking = privateContentBlocking
         controller.siteControls.onPreferencesChange = { [weak self] in
             guard let self else { return }
             for controller in liveControllers { controller.renderDeveloperToolbar() }

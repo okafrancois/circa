@@ -3,8 +3,9 @@
 
 Build the bundle with the test identifier lab.orbit.orbit.content-blocking, then:
   python3 scripts/orbit-content-blocking-smoke.py --app <bundle> --output /tmp/<run>
-The fixture maps two sites (news/shop.fixture.test) and known ad and tracker hosts to a loopback
-server that logs every request it receives. One GUI lease (at most 55 s) runs the probe.
+Then, on the same root, `--private` checks the private session and `--relaunch` a restart.
+The fixture maps *.fixture.test sites and known ad and tracker hosts to a loopback server that
+logs every request it receives. Each phase runs in one GUI lease of at most 55 s.
 """
 import argparse
 import importlib.util
@@ -111,6 +112,9 @@ def phase(args):
                 if args.relaunch:
                     command['step'] = 'relaunch'
                     time.sleep(4)  # The restored tab loads on its own first.
+                elif args.private:
+                    command['step'] = 'private'
+                    time.sleep(2)
                 temporary = data / 'perf-command.pending'
                 temporary.write_text(json.dumps(command)); temporary.replace(control)
                 deadline = time.monotonic() + 49
@@ -131,7 +135,55 @@ def phase(args):
     signal.alarm(0)
     checks['guiSeconds'] = round(time.monotonic() - started, 2)
     checks['clean'] = process.returncode == 0 and not owner.remaining and not owner.forced_signals
-    (root / ('verification-relaunch.json' if args.relaunch else 'verification.json')).write_text(json.dumps(checks, indent=2) + '\n')
+    (root / verification_name(args)).write_text(json.dumps(checks, indent=2) + '\n')
+
+
+def verification_name(args):
+    return 'verification-relaunch.json' if args.relaunch else 'verification-private.json' if args.private else 'verification.json'
+
+
+TRACKER_HOSTS = {'securepubads.g.doubleclick.net', 'b.scorecardresearch.com'}
+
+
+def is_tracker(request):
+    return request['host'].split(':')[0] in TRACKER_HOSTS or request['path'].startswith(('/ads/', '/analytics/'))
+
+
+def summarize_private(root):
+    """Tracker requests the server received per step; a private exception never reaches disk."""
+    checks = json.loads((root / 'verification-private.json').read_text())
+    requests = [json.loads(line) for line in (root / 'server-private.jsonl').read_text().splitlines()]
+    marks = checks.get('marks', [])
+    phases = {}
+    for index, current in enumerate(marks[:-1]):
+        start, end = current['t'], marks[index + 1]['t']
+        phases[current['step']] = sum(1 for r in requests if start <= r['t'] < end and is_tracker(r))
+    checks['serverTrackerRequestsPerStep'] = phases
+    # Nothing of the private session is written below the data root (cookies, rules, preferences).
+    leaked = []
+    for path in (root / 'data').rglob('*'):
+        try:
+            if path.is_file() and not path.is_symlink() and b'private.fixture.test' in path.read_bytes():
+                leaked.append(str(path.relative_to(root)))
+        except OSError:
+            pass
+    checks['privateHostOnDisk'] = leaked
+    (root / 'verification-private.json').write_text(json.dumps(checks, indent=2) + '\n')
+    blocked, allowed = 'CB 4/4 blocked, control loaded', 'CB 0/4 blocked, control loaded'
+    row = 'Ads & Trackers, %s'
+    expected = {'parentExceptions': ['news.fixture.test'], 'privateNewsInherited': allowed,
+                'privateNewsRow': row % 'Allowed', 'privateNewsRowEditable': False,
+                'privateBlocked': blocked, 'privateRowBefore': row % 'Blocked', 'privateRowAfter': row % 'Allowed',
+                'privateException': allowed, 'persistentExceptionsAfterPrivate': ['news.fixture.test'],
+                'privateWindowsAfterClose': 0, 'privateNewSession': blocked, 'privateParentOff': allowed,
+                'privateRowWhileParentOff': 'absent', 'privateParentOnAgain': blocked, 'privateHostOnDisk': [],
+                'serverTrackerRequestsPerStep': {'privateNewsInherited': 4, 'privateBlocked': 0, 'privateException': 4,
+                                                 'privateNewSession': 0, 'privateParentOff': 4, 'privateParentOnAgain': 0},
+                'clean': True}
+    failures = {key: checks.get(key) for key, value in expected.items() if checks.get(key) != value}
+    print(json.dumps(checks, indent=2))
+    assert not failures, failures
+    print('Private content blocking passed; %.2f s GUI lease' % checks['guiSeconds'])
 
 
 def summarize_relaunch(root):
@@ -148,15 +200,13 @@ def summarize_relaunch(root):
 def summarize(root):
     checks = json.loads((root / 'verification.json').read_text())
     requests = [json.loads(line) for line in (root / 'server.jsonl').read_text().splitlines()]
-    tracker_hosts = {'securepubads.g.doubleclick.net', 'b.scorecardresearch.com'}
-    checks['serverTrackerRequests'] = sorted({r['host'].split(':')[0] + r['path'] for r in requests
-                                              if r['host'].split(':')[0] in tracker_hosts or r['path'].startswith(('/ads/', '/analytics/'))})
+    checks['serverTrackerRequests'] = sorted({r['host'].split(':')[0] + r['path'] for r in requests if is_tracker(r)})
     (root / 'verification.json').write_text(json.dumps(checks, indent=2) + '\n')
     blocked, allowed = 'CB 4/4 blocked, control loaded', 'CB 0/4 blocked, control loaded'
     expected = {'available': True, 'defaultSetting': True, 'newsOn': blocked, 'internalExtensionListed': False,
                 'newsAllowListed': allowed, 'shopStillBlocked': blocked, 'shopOff': allowed, 'siteRowWhileOff': 'absent',
-                'shopOnAgain': blocked, 'privateBlockerAvailable': False, 'privateNews': allowed,
-                'privateSiteRow': 'absent', 'exceptions': ['news.fixture.test'], 'clean': True}
+                'shopOnAgain': blocked, 'privateBlockerAvailable': False, 'privateShop': blocked,
+                'privateSiteRow': 'Ads & Trackers, Blocked', 'exceptions': ['news.fixture.test'], 'clean': True}
     failures = {key: checks.get(key) for key, value in expected.items() if checks.get(key) != value}
     print(json.dumps(checks, indent=2))
     assert not failures, failures
@@ -169,21 +219,23 @@ def main():
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--phase', action='store_true')
     parser.add_argument('--port', type=int)
-    parser.add_argument('--relaunch', action='store_true', help='Reopen the data root of a passed run')
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument('--relaunch', action='store_true', help='Reopen the data root of a passed run')
+    group.add_argument('--private', action='store_true', help='Private session cases on the data root of a passed run')
     args = parser.parse_args()
     root = args.output.resolve()
     validation.validate_bundle(args.app.resolve(), root)
     if args.phase:
         phase(args)
         return
-    if args.relaunch:
-        assert (root / 'verification.json').exists(), 'Run the first phase on this root before --relaunch'
+    if args.relaunch or args.private:
+        assert (root / 'verification.json').exists(), 'Run the first phase on this root first'
         port = int((root / 'port.txt').read_text())
         (root / 'data/perf-state.json').unlink()
     else:
         assert not (root / 'data/perf-state.json').exists(), 'Use a fresh synthetic root'
         port = 0
-    Fixture.log_path = root / ('server-relaunch.jsonl' if args.relaunch else 'server.jsonl')
+    Fixture.log_path = root / ('server-relaunch.jsonl' if args.relaunch else 'server-private.jsonl' if args.private else 'server.jsonl')
     Fixture.log_path.write_text('')
     http = ThreadingHTTPServer(('127.0.0.1', port), Fixture)
     (root / 'port.txt').write_text(str(http.server_port))
@@ -191,10 +243,11 @@ def main():
     threading.Thread(target=http.serve_forever, daemon=True).start()
     try:
         subprocess.run(['/usr/bin/lockf', '-k', '/tmp/orbit-gui-slot.lock', sys.executable, __file__, '--app', str(args.app.resolve()),
-            '--output', str(root), '--phase', '--port', str(http.server_port)] + (['--relaunch'] if args.relaunch else []), check=True)
+            '--output', str(root), '--phase', '--port', str(http.server_port)]
+            + (['--relaunch'] if args.relaunch else ['--private'] if args.private else []), check=True)
     finally:
         http.shutdown(); http.server_close()
-    summarize_relaunch(root) if args.relaunch else summarize(root)
+    summarize_relaunch(root) if args.relaunch else summarize_private(root) if args.private else summarize(root)
 
 
 if __name__ == '__main__':

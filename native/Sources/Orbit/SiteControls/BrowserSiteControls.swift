@@ -15,6 +15,8 @@ final class BrowserSiteControls<Engine: BrowserEngine> {
     var onPreferencesChange: (() -> Void)?
     /// Built-in blocking of the window's environment; nil without it (private windows).
     var contentBlocking: BrowserContentBlockingCoordinator?
+    /// Private windows: the private session's blocking, owned by the normal environment.
+    var privateContentBlocking: BrowserContentBlockingCoordinator?
     private(set) var mediaStates: [ObjectIdentifier: BrowserMediaState] = [:]
     /// Sidebar integration hook. Unknown audibility/mute remain nil; playing is not audible.
     var onMediaStateChange: ((Surface, BrowserMediaState) -> Void)?
@@ -663,6 +665,27 @@ extension BrowserSiteControls {
                         surface.reload()
                     }
                 })
+            } else if let blocking = privateContentBlocking, blocking.blocksPrivately,
+                      let host = BrowserSitePreferenceStore.host(url) {
+                // Same row; the exception lives only as long as the private session.
+                let state = blocking.privateSiteState(host: host)
+                let row = ControlCenterSettingButton(title: uiText("Ads & Trackers"),
+                    subtitle: state.blocked ? uiText("Blocked") : uiText("Allowed"), symbol: "hand.raised.fill",
+                    identifier: "site-content-blocking", active: state.blocked) { [weak self, weak surface] in
+                    guard valid(), let self, surface != nil else { return }
+                    let current = blocking.privateSiteState(host: host)
+                    guard current.editable, blocking.setPrivateException(host: host, allowed: current.blocked) else { return }
+                    show()
+                    // The page reloads once the blocker applied the exception, still on this site.
+                    Task { [weak surface] in
+                        await blocking.synchronizePrivate(waitsForAcknowledgement: true)
+                        guard let surface, BrowserSitePreferenceStore.host(surface.navigationState.committedURL) == host else { return }
+                        surface.reload()
+                    }
+                }
+                // A parent profile's exception applies read-only.
+                row.isEnabled = state.editable
+                settings.append(row)
             }
             if model.connection == .https {
               settings.append(ControlCenterSettingButton(title: uiText("Automatic Picture-In-Picture"),
