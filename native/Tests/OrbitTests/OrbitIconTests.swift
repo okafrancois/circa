@@ -60,7 +60,7 @@ struct OrbitIconTests {
 
     @Test("Every shipped optical master and colour asset loads and rasterizes")
     func allAssetsLoad() throws {
-        #expect(OrbitIcon.templateNames.count == 118)
+        #expect(OrbitIcon.templateNames.count == 123)
         for name in OrbitIcon.templateNames {
             for size: CGFloat in [16, 20, 24] {
                 let image = try #require(OrbitIcon.image(sfName: name, pointSize: size), "Missing \(name) at \(size)")

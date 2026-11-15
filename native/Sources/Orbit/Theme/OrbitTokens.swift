@@ -816,3 +816,45 @@ extension OrbitTokens {
         public static let tooltipDelay: TimeInterval = 0.5
     }
 }
+
+// MARK: - Sidebar media player
+
+extension OrbitTokens {
+    /// The card above the sidebar footer for media still playing in a tab the user left.
+    /// Geometry is in points at a 1100 × 800 window; colours are measured on that card.
+    public enum MediaPlayer {
+        public static let collapsedHeight: CGFloat = 33
+        /// Collapsed controls row plus the hover title row.
+        public static let expandedHeight: CGFloat = 66
+        /// Vertical gap between expanded cards of a stack.
+        public static let stackGap: CGFloat = 5
+        /// The second card of a resting stack peeks this far above the front card.
+        public static let stackPeek: CGFloat = 7
+        /// The resting second card is inset this much on each side (it is the same card scaled down).
+        public static let stackInset: CGFloat = 6
+        public static let stackDimmedOpacity: CGFloat = 0.8
+        public static let cornerRadius: CGFloat = 8
+        /// Centre-to-centre distance of the five controls, centred on the card.
+        public static let controlPitch: CGFloat = 32.5
+        /// Controls-row centre above the card's bottom edge; title-row centre below its top edge.
+        public static let controlsCenterFromBottom: CGFloat = 16.5
+        public static let titleCenterFromTop: CGFloat = 16.75
+        public static let titleOriginX: CGFloat = 14.5
+        public static let titleFontSize: CGFloat = 13
+        public static let glyphSize: CGFloat = 14
+        public static let closeGlyphSize: CGFloat = 13.5
+        public static let faviconSize: CGFloat = 16
+        public static let hoverSquare: CGFloat = 24
+        /// Expansion and collapse share AppKit's default curve over 0.25 s; the title row's
+        /// opacity is the square of that progress in both directions.
+        static let expansion = OrbitAnimationTiming(duration: 0.25, x1: 0.25, y1: 0.1, x2: 0.25, y2: 1)
+
+        public static let surface = NSColor.orbitDynamic("MediaPlayer.surface", light: .orbitSRGB(0xFFFFFF, 0.92), dark: .orbitSRGB(0x000000))
+        public static let glyph = NSColor.orbitDynamic("MediaPlayer.glyph", light: .orbitSRGB(0x000000, 0.51), dark: .orbitSRGB(0xFFFFFF, 0.66))
+        public static let disabledGlyph = NSColor.orbitDynamic("MediaPlayer.disabledGlyph", light: .orbitSRGB(0x000000, 0.18), dark: .orbitSRGB(0xFFFFFF, 0.22))
+        public static var title: NSColor { Color.Text.primary }
+        public static let shadow = NSColor.orbitSRGB(0x000000, 0.14)
+        public static let shadowRadius: CGFloat = 4
+        public static let faviconShadow = NSColor.orbitSRGB(0x000000, 0.12)
+    }
+}

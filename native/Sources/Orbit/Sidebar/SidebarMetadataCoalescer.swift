@@ -79,6 +79,7 @@ extension BrowserWindowController {
         favorites.applyMetadata(ids)
         refreshSplitMetadata(ids)
         for surface in media.values where owns(surface) { siteControls.refreshMedia(surface) }
+        renderSidebarMediaPlayer()
         if let selected = session.selectedSurface, chrome.contains(ObjectIdentifier(selected)) {
             palette.renderContext()
             passwordPrompt.render()

@@ -658,6 +658,9 @@ enum OrbitPerformanceProbe {
                     result["nativePerformance"] = await OrbitEnginePerformanceProbe.run(owner, command: command, root: root)
                 } else if name == "media-session" {
                     result["mediaSession"] = await OrbitMediaSessionProbe.run(owner, command: command)
+                } else if name == "media-player" {
+                    application.confirmQuit = { .quit }
+                    result["mediaPlayer"] = await OrbitMediaPlayerProbe.run(owner, command: command, root: root, store: environment.store)
                 } else if name == "download-audio" {
                     result["downloadAudio"] = await OrbitDownloadAudioProbe.run(owner, command: command, root: root)
                 } else if name == "safe-browsing", ownsWindow(owner, bundleID: "lab.orbit.orbit.sec-safebrowsing") {
