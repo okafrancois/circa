@@ -33,6 +33,9 @@ final class BrowserPaletteController<Engine: BrowserEngine> {
     private var preparedCandidates: [BrowserPaletteRanking.PreparedCandidate] = []
     private var history: [BrowserHistorySuggestion] = []
     private var availableActions: [BrowserPaletteResult] = []
+    private var extensionObservation: BrowserExtensionObservation?
+    private var extensionProfile: ProfileID?
+    private var extensionIcons = BrowserCostCache<String, NSImage>(budget: 1024 * 1024)
     private var queryTask: Task<Void, Never>?
     var searchSuggestions = BrowserSearchSuggestions() {
         didSet {
@@ -369,13 +372,35 @@ final class BrowserPaletteController<Engine: BrowserEngine> {
 
     func waitForDeletion() async { await deletionTask?.value }
 
+    private func extensionRows() -> [BrowserPaletteResult] {
+        guard let owner, !owner.isPrivateWindow, let host = owner.engine.extensions,
+              let surface = owner.session.selectedSurface, surface.profileID == sourceContext?.profileID else { return [] }
+        if extensionProfile != surface.profileID {
+            extensionObservation?.cancel()
+            extensionObservation = nil
+            extensionProfile = surface.profileID
+            extensionIcons.removeAll()
+        }
+        if extensionObservation == nil {
+            extensionObservation = try? host.observeChanges(in: surface.profileID) { [weak self] in
+                guard let self, isPresented else { return }
+                rebuild(preserveSelection: true)
+            }
+        }
+        guard let items = try? host.installedExtensions(on: surface) else { return [] }
+        return BrowserPaletteExtensions.rows(items, isPrivate: owner.isPrivateWindow,
+            supportsActions: host.supportsDetachedActions)
+    }
+
     private func rebuild(preserveSelection: Bool) {
         guard let owner else { return }
+        let installedActions = extensionRows()
+        let actions = availableActions + (draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? [] : installedActions)
         let selectedID = preserveSelection && selectionWasMoved && results.indices.contains(selection.index) ? results[selection.index].id : nil
         let bang = inlineBang
         results = siteSearch?.results(query: draft) ?? bang.map { $0.site.results(query: $0.query, destination: $0.url) } ?? BrowserPaletteRanking.results(query: draft, mode: mode, resolver: owner.addressResolver,
                                                 candidates: opensEmptyAddress ? candidates.filter { $0.url?.absoluteString != "about:blank" } : candidates,
-                                                history: history.filter { !deletingHistory.contains($0.url.absoluteString) }, actions: opensEmptyAddress && draft.isEmpty ? [] : availableActions,
+                                                history: history.filter { !deletingHistory.contains($0.url.absoluteString) }, actions: opensEmptyAddress && draft.isEmpty ? [] : actions,
                                                 prepared: opensEmptyAddress ? preparedCandidates.filter { $0.result.url?.absoluteString != "about:blank" } : preparedCandidates)
         if siteSearch == nil, bang == nil {
             results = BrowserPaletteRanking.merging(searchSuggestions.values, into: results, engine: owner.addressResolver.searchEngine)
@@ -451,6 +476,14 @@ final class BrowserPaletteController<Engine: BrowserEngine> {
             return (BrowserPaletteRanking.canonicalURL(item.url), reference)
         }, uniquingKeysWith: { first, _ in first })
         for result in results {
+            if let encoded = result.iconPNGBase64, encoded.count < 512 * 1024 {
+                if let image = extensionIcons.value(for: encoded) { icons[result.id] = image }
+                else if let data = Data(base64Encoded: encoded),
+                        let image = BrowserIconRaster.image(data: data, pixels: 32, size: 16) {
+                    extensionIcons.insert(image, for: encoded, cost: BrowserIconRaster.cost(image) + encoded.utf8.count)
+                    icons[result.id] = image
+                }
+            }
             if case .tab(let id, let windowID, _) = result.action,
                let controller = windowID.flatMap({ registry.router.windows[$0] }) ?? (windowID == nil ? owner : nil),
                let occurrence = controller.session.organizationTab(id)?.occurrenceID,
@@ -608,6 +641,20 @@ final class BrowserPaletteController<Engine: BrowserEngine> {
                     if destination !== owner, owner.window?.isKeyWindow == true { owner.focusSelectedDocument() }
                     if destination !== owner, owner.window?.isVisible == true { destination.showWindow(nil); destination.window?.makeKeyAndOrderFront(nil); destination.focusSelectedDocument() }
                 }
+            case .extensionAction(let id):
+                await owner.session.waitForQueuedCommands()
+                guard !Task.isCancelled, isPresented, presentation == ticket, inputRevision == queryToken,
+                      !owner.isPrivateWindow, let acceptedSurface,
+                      owner.session.selectedSurface === acceptedSurface, owner.owns(acceptedSurface),
+                      let acceptedCommandTarget, let current = owner.commandState.context,
+                      acceptedCommandTarget.matches(current),
+                      extensionRows().contains(where: { $0.action == action }),
+                      owner.engine.extensions?.supportsDetachedActions == true else { return }
+                // Retire the overlay before the engine opens its independent action window.
+                dismiss(returnFocus: true)
+                do {
+                    try owner.extensionControls.performPaletteAction(extensionID: id, on: acceptedSurface)
+                } catch { owner.session.onError?(error) }
             case .command(let id):
                 let requiresOriginalSurface = id == .manageExtensions || id == .addExtension
                 guard owner.session.paletteContext?.profileID == context.profileID,
@@ -666,6 +713,10 @@ final class BrowserPaletteController<Engine: BrowserEngine> {
     }
 
     func dismiss(returnFocus: Bool = true) {
+        extensionObservation?.cancel()
+        extensionObservation = nil
+        extensionProfile = nil
+        extensionIcons.removeAll()
         skillsPopover.close(notify: false, restoreFocus: false)
         answerTransition?.cancel()
         answerTransition = nil

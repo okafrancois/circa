@@ -587,6 +587,8 @@ enum OrbitPerformanceProbe {
                             "milliseconds": (ProcessInfo.processInfo.systemUptime - start) * 1000,
                             "durableBytes": (try Data(contentsOf: destination)).count] as [String: Any]
                     } catch { result["syncIdle"] = ["failed": true] }
+                } else if name == "command-bar-extensions" {
+                    result["commandBarExtensions"] = await commandBarExtensions(owner, command: command)
                 } else if name == "command-bar", ownsWindow(owner, bundleID: "lab.orbit.orbit.perf-cmdbar") {
                     result["commandBar"] = await commandBar(owner, command: command)
                 } else if name == "benchmark" {
@@ -3995,5 +3997,42 @@ extension OrbitPerformanceProbe {
                 "visible": window.occlusionState.contains(.visible), "key": window.isKeyWindow,
                 "reducedMotion": OrbitMotionPreferences.prefersReducedMotion,
                 "pid": getpid(), "window": window.windowNumber]
+    }
+}
+
+extension OrbitPerformanceProbe {
+    /// Confined inventory endpoint; keyboard input stays in the PID-scoped driver.
+    private static func commandBarExtensions(_ owner: OrbitWindowController,
+                                             command: [String: String]) async -> [String: Any] {
+        guard ownsWindow(owner, bundleID: "lab.orbit.orbit.cmdbar-extensions"),
+              let window = owner.window else { return ["refused": true] }
+        if command["action"] == "prepare" {
+            owner.palette.dismiss()
+            window.appearance = NSAppearance(named: .aqua)
+            window.setFrame(NSRect(x: 100, y: 100, width: 1100, height: 760), display: true)
+            let url = command["url"].flatMap(URL.init(string:))
+            guard url == nil || url?.host == "127.0.0.1" else { return ["refused": true] }
+            owner.openTab(url: url)
+            await owner.session.waitForQueuedCommands()
+            window.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+        }
+        guard ownsWindow(owner, bundleID: "lab.orbit.orbit.cmdbar-extensions") else { return ["refused": true] }
+        if command["action"] == "present" { owner.palette.present(.newTab) }
+        let items = owner.session.selectedSurface.flatMap { try? owner.engine.extensions?.installedExtensions(on: $0) } ?? []
+        func geometry(_ item: NSWindow) -> [String: Any] {
+            let content = item.contentRect(forFrameRect: item.frame)
+            return ["id": item.windowNumber, "class": String(describing: type(of: item)), "title": item.title,
+                    "width": content.width, "height": content.height, "titleBar": item.frame.height - content.height,
+                    "offsetX": item.frame.minX - window.frame.minX, "offsetY": window.frame.maxY - item.frame.maxY]
+        }
+        return ["installed": items.map { ["id": $0.id, "name": $0.name, "enabled": $0.isEnabled, "options": $0.hasOptionsPage == true] },
+                "rows": owner.palette.results.map { ["title": $0.title, "icon": owner.palette.view.favicons[$0.id] != nil] },
+                "presented": owner.palette.isPresented, "pid": getpid(),
+                "sourceURL": owner.session.selectedSurface?.navigationState.url?.absoluteString ?? "none",
+                "sourceHidden": owner.session.selectedSurface?.hostView.isHiddenOrHasHiddenAncestor ?? true,
+                "keyWindow": NSApp.keyWindow?.windowNumber ?? window.windowNumber,
+                "window": window.windowNumber,
+                "visibleWindows": NSApp.windows.filter(\.isVisible).map(geometry)]
     }
 }

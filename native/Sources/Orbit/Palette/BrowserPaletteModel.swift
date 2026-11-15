@@ -1,4 +1,5 @@
 import BrowserCore
+import BrowserEngine
 import Foundation
 
 /// Result identities include the authority needed for activation, never just a URL.
@@ -9,6 +10,7 @@ enum BrowserPaletteAction: Equatable, Sendable {
     case navigate(URL)
     case tab(TabID, windowID: UUID?, spaceID: SpaceID?)
     case archive(TabID)
+    case extensionAction(String)
     case command(BrowserCommandID)
 }
 
@@ -31,11 +33,18 @@ struct BrowserPaletteResult: Identifiable, Equatable, Sendable {
     var faviconReference: URL? = nil
     var shortcut: String = ""
     var remoteSuggestion: String? = nil
+    var iconPNGBase64: String? = nil
+
+    var extensionName: String? {
+        if case .extensionAction = action { return searchAliases }
+        return nil
+    }
 
     var url: URL? {
         if case .navigate(let url) = action { return url }; return sourceURL
     }
     var symbol: String {
+        if case .extensionAction = action { return "puzzlepiece.extension" }
         if case .ask = action { return "sparkles" }
         if case .command(let id) = action { return BrowserDailyCommands.symbol(id) }
         switch section {
@@ -53,7 +62,7 @@ struct BrowserPaletteResult: Identifiable, Equatable, Sendable {
         case .tab: return uiText("Switch to Tab")
         case .archive: return uiText("Restore Tab")
         case .navigate: return section == .search ? uiText("Search") : uiText("Open")
-        case .command: return uiText("Open")
+        case .command, .extensionAction: return uiText("Open")
         case .skill, .newSkill: return uiText("Skills")
         case .ask: return uiText("Ask")
         }
@@ -404,5 +413,19 @@ enum BrowserPaletteQuestion {
         guard !value.isEmpty else { return false }
         if case .page = try? resolver.resolve(value) { return false }
         return value.hasSuffix("?") || value.range(of: "^(how|what|why|when|where|which|who|can|should|is|are|does|do)\\b", options: [.regularExpression, .caseInsensitive]) != nil
+    }
+}
+
+/// Extension rows share the command matcher and existing action section. Private engines do
+/// not host extensions, including those allowed in a persistent profile's private preference.
+enum BrowserPaletteExtensions {
+    static func rows(_ items: [BrowserExtensionSummary], isPrivate: Bool,
+                     supportsActions: Bool) -> [BrowserPaletteResult] {
+        guard !isPrivate, supportsActions else { return [] }
+        return items.filter { $0.isEnabled && $0.hasAction && $0.actionState?.isEnabled != false }.map { item in
+            .init(id: "extension-action:" + item.id, title: uiFormat("Extension · %@", item.name), detail: "",
+                  section: .commands, action: .extensionAction(item.id), searchAliases: item.name,
+                  iconPNGBase64: item.actionState?.iconPNGBase64 ?? item.iconPNGBase64)
+        }
     }
 }
