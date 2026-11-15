@@ -2774,13 +2774,89 @@ private final class SplitParityMenuCapture: NSObject {
 }
 
 extension OrbitPerformanceProbe {
+    /// A tab switched to WebKit ("Reload with WebKit") shows its WebKit address, follows a History
+    /// API navigation, opens a pinned extension's popup, and shows its Chromium address again after
+    /// "Reload with Chromium".
+    private static func webKitPopup(_ owner: OrbitWindowController, host: any BrowserExtensionHost,
+                                    item: BrowserExtensionSummary, surface: ChromiumSurface, root: URL,
+                                    bundleID: String) async -> [String: Any] {
+        guard let window = owner.window, let switching = surface.siteEngineSwitching else { return ["refused": true] }
+        var result: [String: Any] = [:]
+        func address() -> [String: Any] {
+            ["label": owner.addressField.displayLabel.stringValue, "value": owner.addressField.stringValue,
+             "engine": switching.siteEngine == .webKit ? "webkit" : "chromium",
+             "title": surface.navigationState.title ?? "", "canGoBack": surface.navigationState.canGoBack,
+             "connection": String(describing: owner.addressField.presentation?.connection ?? .unavailable)]
+        }
+        func capture(_ target: NSWindow, name: String) {
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
+            process.arguments = ["-x", "-o", "-l", String(target.windowNumber), root.appendingPathComponent(name).path]
+            try? process.run(); process.waitUntilExit()
+        }
+        do { try host.setPinned(true, extensionID: item.id, in: surface.profileID) } catch { return ["pinFailed": true] }
+        owner.setSidebarVisible(true, animated: false)
+        owner.extensionControls.render()
+        window.setFrameOrigin(NSPoint(x: 160, y: 120))
+        NSApp.activate(ignoringOtherApps: true)
+        window.makeKeyAndOrderFront(nil)
+        try? await Task.sleep(for: .milliseconds(400))
+        result["chromiumBefore"] = address()
+        guard ownsWindow(owner, bundleID: bundleID), switching.reload(with: .webKit) else { return ["switchRefused": true] }
+        for _ in 0..<200 where switching.siteEngine != .webKit || surface.navigationState.isLoading
+            || surface.navigationState.committedURL == nil {
+            try? await Task.sleep(for: .milliseconds(25))
+        }
+        try? await Task.sleep(for: .milliseconds(500))
+        result["webKit"] = address()
+        capture(window, name: "webkit-address.png")
+        // The fixture page calls history.pushState in WebKit 1.5 s after it loads.
+        try? await Task.sleep(for: .milliseconds(1800))
+        result["webKitAfterPushState"] = address()
+        guard ownsWindow(owner, bundleID: bundleID), window.isKeyWindow,
+              let button = owner.sidebar.extensionsContainer.subviews.compactMap({ $0 as? NSButton })
+                .first(where: { $0.accessibilityIdentifier() == "pinned-extension-" + item.id }),
+              button.window === window, !button.isHiddenOrHasHiddenAncestor else {
+            result["inputGuardRefused"] = true
+            return result
+        }
+        let before = Set(NSApp.windows.map(ObjectIdentifier.init))
+        button.performClick(nil)
+        var popup: NSWindow?
+        for _ in 0..<60 {
+            popup = NSApp.windows.first { !before.contains(ObjectIdentifier($0)) && $0.isVisible }
+            if popup != nil { break }
+            try? await Task.sleep(for: .milliseconds(100))
+        }
+        result["popupVisible"] = popup?.isVisible == true
+        result["popupParentIsSource"] = popup?.parent === window
+        if let popup {
+            try? await Task.sleep(for: .milliseconds(500))
+            result["popupFrame"] = NSStringFromRect(popup.frame)
+            result["anchorFrame"] = NSStringFromRect(button.window?.convertToScreen(button.convert(button.bounds, to: nil)) ?? .zero)
+            capture(window, name: "webkit-popup-window.png")
+            capture(popup, name: "webkit-popup-content.png")
+            popup.close()
+            try? await Task.sleep(for: .milliseconds(300))
+        }
+        result["engineAfterPopup"] = switching.siteEngine == .webKit ? "webkit" : "chromium"
+        guard ownsWindow(owner, bundleID: bundleID), switching.reload(with: .chromium) else { return result }
+        for _ in 0..<200 where switching.siteEngine != .chromium || surface.navigationState.isLoading {
+            try? await Task.sleep(for: .milliseconds(25))
+        }
+        try? await Task.sleep(for: .milliseconds(500))
+        result["chromiumAfter"] = address()
+        capture(window, name: "chromium-address-after.png")
+        return result
+    }
+
     /// Real actions and existing button appearance in an owned, confined test window.
     private static func extensionControls(_ application: OrbitApplication, environment: BrowserEnvironment<ChromiumBrowserEngine>,
         owner: OrbitWindowController, root: URL, command: [String: String]) async -> [String: Any] {
         let bundleID = "lab.orbit.orbit.p2-extensions"
         guard ownsWindow(owner, bundleID: bundleID), let window = owner.window,
               let host = owner.engine.extensions else { return ["refused": true] }
-        if owner.session.selectedSurface == nil || ["cancel-loading", "site-popup", "pinned-popup", "pinned-hover", "tab-registration"].contains(command["action"] ?? ""), let base = command["base"].flatMap(URL.init(string:)),
+        if owner.session.selectedSurface == nil || ["cancel-loading", "site-popup", "pinned-popup", "pinned-hover", "tab-registration", "webkit-popup"].contains(command["action"] ?? ""), let base = command["base"].flatMap(URL.init(string:)),
            base.scheme == "http", base.host == "127.0.0.1", base.user == nil, base.password == nil {
             guard ownsWindow(owner, bundleID: bundleID) else { return ["refused": true] }
             owner.submitAddress(base.absoluteString)
@@ -2788,7 +2864,7 @@ extension OrbitPerformanceProbe {
         }
         guard let surface = owner.session.selectedSurface else { return ["missingSurface": true] }
         for _ in 0..<60 where !surface.isReady { try? await Task.sleep(for: .milliseconds(50)) }
-        if ["cancel-loading", "site-popup", "pinned-popup", "pinned-hover", "tab-registration"].contains(command["action"] ?? "") {
+        if ["cancel-loading", "site-popup", "pinned-popup", "pinned-hover", "tab-registration", "webkit-popup"].contains(command["action"] ?? "") {
             for _ in 0..<100 where surface.navigationState.isLoading {
                 try? await Task.sleep(for: .milliseconds(25))
             }
@@ -2901,6 +2977,9 @@ extension OrbitPerformanceProbe {
                 capture(window, name: "pinned-popup-source.png")
                 if let popup, popup.isVisible { capture(popup, name: "pinned-popup-content.png"); popup.close() }
                 return result
+            } else if command["action"] == "webkit-popup" {
+                guard let item = items.first(where: { $0.name == "Popup Lifecycle Fixture" }) else { return ["fixtureMissing": true] }
+                return await webKitPopup(owner, host: host, item: item, surface: surface, root: root, bundleID: bundleID)
             } else if command["action"] == "pinned-hover" {
                 return await pinnedHover(owner, host: host, items: items, surface: surface, root: root,
                                          bundleID: bundleID, base: command["base"] ?? "")

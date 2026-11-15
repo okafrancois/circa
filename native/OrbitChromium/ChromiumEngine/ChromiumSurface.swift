@@ -196,8 +196,9 @@ public final class ChromiumSurface: BrowserEngineSurface {
     private var paintActivationID: UInt64 = 0
     private lazy var nativeServices = ChromiumNativePageServices(token: token, dataRoot: engine?.diagnosticDataRoot(for: profileID))
     public var nativePageServices: (any BrowserNativePageServices)? {
-        guard !isDisposed, webContent == nil, ACRNativePageServicesVersion() >= 14 else { return nil }
-        return nativeServices
+        guard !isDisposed, ACRNativePageServicesVersion() >= 14 else { return nil }
+        // A WebKit document answers for itself: address, formatter and connection security.
+        return webContent?.pageServices ?? nativeServices
     }
     private lazy var nativePerformance = ChromiumPagePerformance(token: token)
     public var pagePerformance: (any BrowserPagePerformance)? {
@@ -218,6 +219,8 @@ public final class ChromiumSurface: BrowserEngineSurface {
     public var pageZoom: Double { webContent?.surface.pageZoom ?? chromiumPageZoom }
     /// The WebKit document shown instead of the Chromium one for protected-streaming sites.
     var webContent: ChromiumWebContent?
+    /// Labels the current extension action shown over a WebKit document (`revealDocumentForExtensionAction`).
+    var extensionActionReveal: UInt64 = 0
     /// "Reload with WebKit/Chromium" for one host, kept by this tab even when it cannot be saved.
     var siteEngineOverride: (host: String, engine: BrowserSiteEngine)?
     public private(set) var isBrowserCreated = false

@@ -632,7 +632,7 @@ extension ChromiumBrowserEngine {
         surface.hostedWindowToken = token
         if activeHostedTabs[source]?.surface === surface { activeHostedTabs[source] = nil }
         // The tab the destination shows stays its active tab (Chrome inserts in the background).
-        if surface.documentView.window != nil, !surface.documentView.isHiddenOrHasHiddenAncestor { activateHostedTab(surface) }
+        if surface.documentView.window != nil, !surface.isDocumentHiddenForAction { activateHostedTab(surface) }
         runtime.trace?("hosted-tab-moved", ["token": String(surface.token), "from": String(source), "to": String(token)])
         return true
     }
@@ -741,7 +741,7 @@ extension ChromiumBrowserEngine {
         // Moved by the shell while its creation was in flight: it follows its placement now.
         followPlacementWindow(surface)
         let window = surface.hostedWindowToken
-        if surface.documentView.window != nil, !surface.documentView.isHiddenOrHasHiddenAncestor {
+        if surface.documentView.window != nil, !surface.isDocumentHiddenForAction {
             // Publishing native shell selection must precede the activation cache:
             // Chrome already reports a newly inserted tab active, even in a new profile.
             let accepted = surface.activateTab()
