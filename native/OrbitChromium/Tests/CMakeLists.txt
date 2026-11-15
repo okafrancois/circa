@@ -105,3 +105,8 @@ target_compile_options(OrbitSnapshotDecoderTests PRIVATE ${ORBIT_SWIFT_FLAGS} -p
 target_include_directories(OrbitSnapshotDecoderTests PRIVATE "${CMAKE_BINARY_DIR}/swift-modules")
 target_link_libraries(OrbitSnapshotDecoderTests PRIVATE BrowserEngine)
 set_target_properties(OrbitSnapshotDecoderTests PROPERTIES Swift_LANGUAGE_VERSION 6)
+
+add_executable(OrbitContentBlockerFilesTests ContentBlockerFilesTests.cc)
+target_include_directories(OrbitContentBlockerFilesTests PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/../Bridge")
+set_target_properties(OrbitContentBlockerFilesTests PROPERTIES CXX_STANDARD 20 CXX_STANDARD_REQUIRED ON)
+target_compile_options(OrbitContentBlockerFilesTests PRIVATE -UNDEBUG)

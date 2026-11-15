@@ -4,6 +4,7 @@
 #include "OrbitChromiumBridge.h"
 #import "OrbitApplicationLifecycle.h"
 #include "OrbitBridgeFiles.h"
+#include "OrbitContentBlockerFiles.h"
 #include "OrbitBridgePolicy.h"
 #include "OrbitCefApi.h"
 #include "OrbitExtensionPolicy.h"
@@ -234,7 +235,7 @@ struct State {
   int32_t secure_storage = ACR_SECURE_STORAGE_MOCK;
   bool safe_browsing_enabled = false;
   bool overlay_scrollbars = false;
-  // The bundled content blocker directory added to --load-extension, empty when absent.
+  // The writable data-root content blocker copy added to --load-extension, empty when absent.
   std::string content_blocking_path;
   int32_t network_policy = ACR_NETWORK_HERMETIC;
   // CHROMIUM-APP-R3: the engine root, opened once (descriptor-anchored profile operations), and
@@ -2061,9 +2062,12 @@ class App final : public CefApp, public CefBrowserProcessHandler {
     // Confined content blocking fixture: known ad and tracker hosts and two fixture sites resolve to
     // the loopback fixture server; nothing else resolves.
     if (g_state && g_state->secure_storage == ACR_SECURE_STORAGE_MOCK &&
-        [[NSBundle mainBundle].bundleIdentifier isEqualToString:@"lab.orbit.orbit.content-blocking"] &&
         [[NSBundle mainBundle].infoDictionary[@"OrbitSyntheticBundle"] boolValue] &&
-        [[NSProcessInfo processInfo].arguments containsObject:@"--orbit-content-blocking-fixture"]) {
+        (([[NSBundle mainBundle].bundleIdentifier isEqualToString:@"lab.orbit.orbit.content-blocking"] &&
+          [[NSProcessInfo processInfo].arguments containsObject:@"--orbit-content-blocking-fixture"]) ||
+         ([[NSBundle mainBundle].bundleIdentifier isEqualToString:@"io.github.okatech.orbit.test.update"] &&
+          [[NSBundle mainBundle].infoDictionary[@"OrbitUpdaterLocalTest"] boolValue] &&
+          [[NSBundle mainBundle].infoDictionary[@"OrbitBundleSealQualification"] boolValue]))) {
       command->AppendSwitchWithValue("host-resolver-rules",
           "MAP *.fixture.test 127.0.0.1, MAP *.doubleclick.net 127.0.0.1, MAP *.scorecardresearch.com 127.0.0.1, "
           "MAP *.googlesyndication.com 127.0.0.1, MAP * ~NOTFOUND, EXCLUDE 127.0.0.1");
@@ -2286,11 +2290,6 @@ extern "C" int32_t ACRRun(int argc, char* argv[], const ACRRunOptions* options,
     const char* api_key = getenv("GOOGLE_API_KEY");
     state.safe_browsing_enabled = options->safe_browsing_enabled == 1 && api_key && *api_key;
     state.overlay_scrollbars = options->overlay_scrollbars == 1;
-    if (NSString* blocker = [[NSBundle mainBundle] pathForResource:@"ContentBlocker" ofType:nil];
-        blocker && [[NSFileManager defaultManager] fileExistsAtPath:[blocker stringByAppendingPathComponent:@"manifest.json"]] &&
-        [blocker rangeOfString:@","].location == NSNotFound) {
-      state.content_blocking_path = blocker.stringByResolvingSymlinksInPath.fileSystemRepresentation;
-    }
     if (state.secure_storage == ACR_SECURE_STORAGE_KEYCHAIN) {
       if (!options->keychain_service_name || !*options->keychain_service_name
           || !options->keychain_account_name || !*options->keychain_account_name) return 64;
@@ -2331,6 +2330,14 @@ extern "C" int32_t ACRRun(int argc, char* argv[], const ACRRunOptions* options,
     // symbolic link is refused.
     state.anchor = orbit_bridge::AnchoredRoot::Open(state.root);
     if (!state.anchor) return 64;
+    if (NSString* blocker = [[NSBundle mainBundle] pathForResource:@"ContentBlocker" ofType:nil]) {
+      state.content_blocking_path = orbit_bridge::StageContentBlocker(
+          *state.anchor, blocker.stringByResolvingSymlinksInPath.fileSystemRepresentation);
+      if (state.content_blocking_path.empty()) {
+        fprintf(stderr, "acr: could not stage built-in content blocking in the engine data root\n");
+        return 73;
+      }
+    }
     state.auth_synthetic = state.secure_storage == ACR_SECURE_STORAGE_MOCK && state.network_policy == ACR_NETWORK_HERMETIC
         && orbit_auth::FreshDirectory::SyntheticRoot(*state.anchor);
     [ACRApplication sharedApplication];
