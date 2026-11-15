@@ -451,10 +451,9 @@ final class BrowserPaletteController<Engine: BrowserEngine> {
                let occurrence = controller.session.organizationTab(id)?.occurrenceID,
                let surface = controller.session.surface(for: occurrence), surface.profileID == profileID {
                 let state = surface.navigationState
+                // Only engine-decoded pixels; a page-declared favicon URL is never decoded here.
                 if let image = state.faviconImage, image.sourceURL == state.faviconURL {
                     icons[result.id] = faviconCache.image(for: image)
-                } else if let reference = state.faviconURL {
-                    icons[result.id] = faviconCache.image(for: reference)
                 }
             }
             if icons[result.id] == nil,

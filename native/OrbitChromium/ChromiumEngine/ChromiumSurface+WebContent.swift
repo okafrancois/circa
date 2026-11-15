@@ -604,7 +604,7 @@ final class ChromiumWebContentMessages: NSObject, WKScriptMessageHandler {
 }
 
 /// WebKit has no public favicon API: the icon the document declares is fetched without cookies
-/// or credentials and reduced to a PNG of at most 64 pixels (`BrowserFaviconImage`).
+/// or credentials and reduced to a PNG of at most 128 pixels (`BrowserFaviconImage`).
 enum ChromiumWebContentFavicon {
     private static let session: URLSession = {
         let configuration = URLSessionConfiguration.ephemeral
@@ -615,21 +615,17 @@ enum ChromiumWebContentFavicon {
         return URLSession(configuration: configuration)
     }()
 
-    static func load(_ url: URL) async -> BrowserFaviconImage? {
-        guard let (data, response) = try? await session.data(from: url),
-              (response as? HTTPURLResponse).map({ (200..<300).contains($0.statusCode) }) ?? false,
-              data.count <= 1_048_576 else { return nil }
-        return await Task.detached(priority: .utility) { png(from: data).flatMap { BrowserFaviconImage(sourceURL: url, png: $0) } }.value
-    }
+    static let maximumBytes = 1_048_576
 
-    private static func png(from data: Data) -> Data? {
-        guard let source = CGImageSourceCreateWithData(data as CFData, nil),
-              let image = CGImageSourceCreateThumbnailAtIndex(source, 0, [
-                kCGImageSourceCreateThumbnailFromImageAlways: true, kCGImageSourceThumbnailMaxPixelSize: 64
-              ] as CFDictionary) else { return nil }
-        let output = NSMutableData()
-        guard let destination = CGImageDestinationCreateWithData(output, "public.png" as CFString, 1, nil) else { return nil }
-        CGImageDestinationAddImage(destination, image, nil)
-        return CGImageDestinationFinalize(destination) ? output as Data : nil
+    /// The download stops at `maximumBytes`; only the shared untrusted-image gate decodes it.
+    static func load(_ url: URL) async -> BrowserFaviconImage? {
+        guard ["http", "https"].contains(url.scheme?.lowercased() ?? ""), url.user == nil, url.password == nil,
+              let (stream, response) = try? await session.bytes(from: url),
+              (response as? HTTPURLResponse).map({ (200..<300).contains($0.statusCode) }) ?? false,
+              let data = try? await BrowserUntrustedImage.collect(stream, expectedLength: response.expectedContentLength,
+                                                                  maximumBytes: maximumBytes) else { return nil }
+        return await Task.detached(priority: .utility) {
+            BrowserUntrustedImage.favicon(data, sourceURL: url, maximumBytes: maximumBytes)
+        }.value
     }
 }

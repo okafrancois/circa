@@ -498,10 +498,7 @@ struct NativeFavoritesTests {
         icons.onChange = { completions += 1; render?() }
         let image = NSImage(size: .init(width: 16, height: 16))
         var answers: [NSImage?] = [nil, image, nil]
-        icons.resolve = { _, url in
-            #expect(FavoriteIconPipeline<SiteSyntheticSurface>.inlineImage(url) == nil)
-            return answers.removeFirst()
-        }
+        icons.resolve = { _, _ in answers.removeFirst() }
         for (index, name) in ["first", "second", "third"].enumerated() {
             surface.faviconURL = URL(string: "https://icons.example.test/\(name).png")!
             surface.onChange?()
@@ -513,17 +510,18 @@ struct NativeFavoritesTests {
         #expect(answers.isEmpty)
     }
 
-    @Test("Default favicon decoder never reads file or remote URLs and rejects oversized inline data")
-    func safeInlineFavicon() {
-        typealias Pipeline = FavoriteIconPipeline<SiteSyntheticSurface>
-        #expect(Pipeline.inlineImage(URL(string: "https://icons.example.test/icon.png")!) == nil)
-        #expect(Pipeline.inlineImage(URL(fileURLWithPath: "/not-read/favicon.png")) == nil)
-        #expect(Pipeline.inlineImage(URL(string: "data:text/plain;base64,SGVsbG8=")!) == nil)
-        #expect(Pipeline.inlineImage(URL(string: "data:image/png;base64," + String(repeating: "A", count: 262_145))!) == nil)
+    @Test("Default favicon resolver shows engine pixels only and never decodes page data URLs")
+    func safeInlineFavicon() async throws {
+        let pipeline = FavoriteIconPipeline<SiteSyntheticSurface>()
+        let surface = SiteSyntheticSurface(profileID: ProfileID(), engine: nil, siteData: .init())
         let bitmap = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 2, pixelsHigh: 2, bitsPerSample: 8,
             samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
-        let data = bitmap.representation(using: .png, properties: [:])!
-        #expect(Pipeline.inlineImage(URL(string: "data:image/png;base64," + data.base64EncodedString())!) != nil)
+        let png = bitmap.representation(using: .png, properties: [:])!
+        let inline = URL(string: "data:image/png;base64," + png.base64EncodedString())!
+        #expect(await pipeline.resolve(surface, inline) == nil)
+        #expect(await pipeline.resolve(surface, URL(string: "https://icons.example.test/icon.png")!) == nil)
+        surface.faviconImage = BrowserFaviconImage(sourceURL: inline, png: png)
+        #expect(await pipeline.resolve(surface, inline) != nil)
     }
 
     @Test("A delayed favicon completion from the former profile cannot populate the new grid")

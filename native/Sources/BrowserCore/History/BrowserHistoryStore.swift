@@ -507,7 +507,7 @@ final class HistoryDatabase: @unchecked Sendable {
     var tombstoneRevision: UInt64 = 0
     var changes: Int { Int(sqlite3_changes(handle)) }
 
-    static let currentVersion = 8
+    static let currentVersion = 9
 
     init(openingURL url: URL, flags: Int32) throws {
         // Checked ancestors, single-link database/sidecars, and directory identity before/after open.
@@ -551,6 +551,7 @@ final class HistoryDatabase: @unchecked Sendable {
                         case 5: try migrateToVersionSix(profileID)
                         case 6: try migrateToVersionSeven()
                         case 7: try migrateToVersionEight()
+                        case 8: try migrateToVersionNine()
                         default: throw BrowserHistoryError.unsupportedVersion
                         }
                         migratingVersion += 1
@@ -713,6 +714,12 @@ final class HistoryDatabase: @unchecked Sendable {
             try execute("INSERT INTO historySyncVersions VALUES(?,?,?)", [.text(visit.id.uuidString),
                 .number(event.time.timeIntervalSince1970), .text(event.id.uuidString)])
         }
+    }
+
+    /// Search URLs now index the ASCII (IDNA) host. Only internationalized hosts change; the
+    /// FTS update trigger reindexes those few rows, so no rebuild is needed.
+    private func migrateToVersionNine() throws {
+        _ = try normalizeSearchURLs(where: "instr(lower(url),'xn--')>0")
     }
 
     /// Frecency is monotone in last-visit time within a fixed visit weight.
