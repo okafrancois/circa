@@ -1805,3 +1805,5 @@
 "10 minutes before" = "10 minutes avant";
 "Meeting reminder sound" = "Son de rappel de réunion";
 "Starts in %d min" = "Commence dans %d min";
+
+"Volume %ld%%" = "Volume : %ld%%";

@@ -20,6 +20,7 @@ struct SidebarMediaPlayerItem: Equatable {
     var duration: Double? = nil
     var playbackRate: Double? = nil
     var canSeek = false
+    var volume: Double? = nil
     var isMuted: Bool? = nil
     var pip: BrowserManualPiP.State = .unavailable
     var pipFailure: BrowserManualPiP.Failure = .rejected
@@ -35,6 +36,7 @@ struct SidebarMediaPlayerLayout: Equatable {
         var scale: CGFloat
         var height: CGFloat
         var opacity: CGFloat
+        var volumeHeight: CGFloat = 0
         var additionsOpacity: CGFloat = 0
         var titleOpacity: CGFloat
     }
@@ -51,11 +53,12 @@ struct SidebarMediaPlayerLayout: Equatable {
         count == 0 ? 0 : Tokens.collapsedHeight + (count > 1 ? Tokens.stackPeek : 0)
     }
 
-    static func cards(count: Int, width: CGFloat, progress: CGFloat, availableHeight: CGFloat = .infinity, focusedIndex: Int = 0) -> [Card] {
+    static func cards(count: Int, width: CGFloat, progress: CGFloat, availableHeight: CGFloat = .infinity, focusedIndex: Int = 0, volumeHeights: [CGFloat] = []) -> [Card] {
         let p = min(1, max(0, progress))
-        let bottom = expandedHeight(count: count, availableHeight: availableHeight)
+        let extras = (0..<count).map { volumeHeights.indices.contains($0) ? volumeHeights[$0] : 0 }
+        let bottom = expandedHeight(count: count, availableHeight: availableHeight) + extras.reduce(0, +)
         let heights = (0..<count).map { index -> CGFloat in
-            count > 1 && availableHeight < 253 && index != focusedIndex ? 66 : Tokens.expandedHeight
+            (count > 1 && availableHeight < 253 && index != focusedIndex ? 66 : Tokens.expandedHeight) + extras[index]
         }
         let backScale = width > 0 ? max(0, width - 2 * Tokens.stackInset) / width : 1
         func lerp(_ a: CGFloat, _ b: CGFloat) -> CGFloat { a + (b - a) * p }
@@ -78,7 +81,7 @@ struct SidebarMediaPlayerLayout: Equatable {
                                width: lerp(rest.width, expanded.width), height: lerp(rest.height, expanded.height))
             return Card(frame: frame, scale: lerp(restScale, 1),
                         height: lerp(Tokens.collapsedHeight, heights[index]),
-                        opacity: lerp(restOpacity, 1), titleOpacity: p * p)
+                        opacity: lerp(restOpacity, 1), volumeHeight: extras[index] * p, titleOpacity: p * p)
         }
     }
 
@@ -98,6 +101,7 @@ final class SidebarMediaPlayerView: NSView {
     var onNext: ((TabOccurrenceID) -> Void)?
     var onClose: ((TabOccurrenceID) -> Void)?
     var onSeek: ((TabOccurrenceID, Double) -> Void)?
+    var onVolume: ((TabOccurrenceID, Double) -> Void)?
     var onMute: ((TabOccurrenceID) -> Void)?
     var onPiP: ((TabOccurrenceID) -> Void)?
     var onInteraction: ((Bool) -> Void)?
@@ -121,8 +125,9 @@ final class SidebarMediaPlayerView: NSView {
     var availableHeight: CGFloat = .infinity
     private var focusedIndex = 0
     private var scrollOffset: CGFloat = 0
-    var expandedHeight: CGFloat { min(max(124, availableHeight), SidebarMediaPlayerLayout.expandedHeight(count: items.count, availableHeight: availableHeight)) }
-    private var contentHeight: CGFloat { SidebarMediaPlayerLayout.expandedHeight(count: items.count, availableHeight: availableHeight) }
+    private var volumeHeights: [CGFloat] { items.map { cards[$0.id]?.volumeHeight ?? 0 } }
+    var expandedHeight: CGFloat { min(max(124, availableHeight), contentHeight) }
+    private var contentHeight: CGFloat { SidebarMediaPlayerLayout.expandedHeight(count: items.count, availableHeight: availableHeight) + volumeHeights.reduce(0, +) }
     var progress: CGFloat { CGFloat(expansion.value) }
 
     override init(frame frameRect: NSRect) {
@@ -131,6 +136,7 @@ final class SidebarMediaPlayerView: NSView {
         layer?.masksToBounds = false
         isHidden = true
         expansion.onChange = { [weak self] _ in self?.layoutCards() }
+        expansion.onSettle = { [weak self] in self?.closeCollapsedVolumeRows() }
         reveal.onChange = { [weak self] _ in self?.layoutCards() }
         setAccessibilityElement(true)
         setAccessibilityRole(.group)
@@ -177,6 +183,13 @@ final class SidebarMediaPlayerView: NSView {
         card.onNext = { [weak self] in self?.onNext?($0) }
         card.onClose = { [weak self] in self?.onClose?($0) }
         card.onSeek = { [weak self] in self?.onSeek?($0, $1) }
+        card.onVolume = { [weak self] in self?.onVolume?($0, $1) }
+        card.onVolumeLayout = { [weak self] in
+            guard let self else { return }
+            onRestingHeightChange?()
+            superview?.layoutSubtreeIfNeeded()
+            layoutCards()
+        }
         card.onMute = { [weak self] in self?.onMute?($0) }
         card.onPiP = { [weak self] in self?.onPiP?($0) }
         card.onFocus = { [weak self] in self?.setHovered(true) }
@@ -193,7 +206,7 @@ final class SidebarMediaPlayerView: NSView {
     }
 
     private func layoutCards() {
-        let frames = SidebarMediaPlayerLayout.cards(count: items.count, width: bounds.width, progress: progress, availableHeight: availableHeight, focusedIndex: focusedIndex)
+        let frames = SidebarMediaPlayerLayout.cards(count: items.count, width: bounds.width, progress: progress, availableHeight: availableHeight, focusedIndex: focusedIndex, volumeHeights: volumeHeights)
         layer?.masksToBounds = contentHeight > bounds.height && isHovered
         CATransaction.begin()
         CATransaction.setDisableActions(true)
@@ -211,7 +224,7 @@ final class SidebarMediaPlayerView: NSView {
 
     /// Cards of the target state: the expanded stack while hovered, the resting deck otherwise.
     private var hotRect: CGRect {
-        let frames = SidebarMediaPlayerLayout.cards(count: items.count, width: bounds.width, progress: isHovered ? 1 : 0, availableHeight: availableHeight, focusedIndex: focusedIndex)
+        let frames = SidebarMediaPlayerLayout.cards(count: items.count, width: bounds.width, progress: isHovered ? 1 : 0, availableHeight: availableHeight, focusedIndex: focusedIndex, volumeHeights: volumeHeights)
         return frames.filter { $0.opacity > 0 }.reduce(CGRect.null) {
             $0.union($1.frame.offsetBy(dx: 0, dy: -max(0, contentHeight - bounds.height) + scrollOffset))
         }.intersection(bounds)
@@ -287,7 +300,13 @@ final class SidebarMediaPlayerView: NSView {
             expansion.animate(to: target, timing: OrbitTokens.MediaPlayer.expansion, in: self)
         } else {
             expansion.set(target)
+            closeCollapsedVolumeRows()
         }
+    }
+
+    private func closeCollapsedVolumeRows() {
+        guard !isHovered else { return }
+        for card in cards.values { card.setVolumeOpen(false, animated: false) }
     }
 
     /// Test seam: the card shown for a tab.
@@ -305,6 +324,7 @@ final class SidebarMediaPlayerCard: NSView {
     var onNext: ((TabOccurrenceID) -> Void)?
     var onClose: ((TabOccurrenceID) -> Void)?
     var onSeek: ((TabOccurrenceID, Double) -> Void)?
+    var onVolume: ((TabOccurrenceID, Double) -> Void)?
     var onMute: ((TabOccurrenceID) -> Void)?
     var onPiP: ((TabOccurrenceID) -> Void)?
     var onInteraction: ((Bool) -> Void)?
@@ -321,8 +341,12 @@ final class SidebarMediaPlayerCard: NSView {
     let previousButton = SidebarMediaPlayerButton(symbol: "backward.end.fill", pointSize: Tokens.trackSkipGlyphSize, label: uiText("Previous Track"))
     let toggleButton = SidebarMediaPlayerButton(symbol: "pause.fill", pointSize: Tokens.glyphSize, label: uiText("Pause"))
     let nextButton = SidebarMediaPlayerButton(symbol: "forward.end.fill", pointSize: Tokens.trackSkipGlyphSize, label: uiText("Next Track"))
-    /// Per-tab volume needs an engine API that does not exist yet: the control stays disabled.
     let volumeButton = SidebarMediaPlayerButton(symbol: "speaker.wave.3.fill", pointSize: Tokens.glyphSize, label: uiText("Adjust Tab Volume"))
+    let volumeSlider = SidebarMediaVolumeSlider()
+    private let volumeReveal = OrbitTimedAnimator(value: 0)
+    private(set) var isVolumeOpen = false
+    var volumeHeight: CGFloat { 33 * CGFloat(volumeReveal.value) }
+    var onVolumeLayout: (() -> Void)?
     let timeline = SidebarMediaTimeline()
     let muteButton = SidebarMediaPlayerButton(symbol: "speaker.wave.2.fill", pointSize: Tokens.utilityGlyphSize, label: uiText("Mute tab"))
     let pipButton = SidebarMediaPlayerButton(symbol: "rectangle.on.rectangle", pointSize: Tokens.utilityGlyphSize, label: uiText("Enter Picture in Picture"))
@@ -352,6 +376,24 @@ final class SidebarMediaPlayerCard: NSView {
         addSubview(plate)
         for view in [titleView, closeButton, faviconButton, previousButton, toggleButton, nextButton, volumeButton] {
             plate.addSubview(view)
+        }
+        plate.addSubview(volumeSlider)
+        volumeSlider.isHidden = true
+        volumeSlider.onInteraction = { [weak self] in self?.onInteraction?($0) }
+        volumeSlider.onChange = { [weak self] value in
+            guard let self, let id = item?.id else { return }
+            onVolume?(id, value)
+        }
+        volumeReveal.onChange = { [weak self] value in
+            guard let self else { return }
+            volumeSlider.alphaValue = value
+            volumeSlider.isHidden = value <= 0
+            onVolumeLayout?()
+        }
+        volumeButton.onPress = { [weak self] in
+            guard let self else { return }
+            onFocus?()
+            setVolumeOpen(!isVolumeOpen)
         }
         plate.addSubview(additions)
         for view in [timeline, muteButton, audioStatus, pipButton] { additions.addSubview(view) }
@@ -393,7 +435,7 @@ final class SidebarMediaPlayerCard: NSView {
         volumeButton.setAccessibilityIdentifier("sidebar-media-volume")
         closeButton.setAccessibilityIdentifier("sidebar-media-close")
         volumeButton.isEnabled = false
-        for button in [faviconButton, previousButton, toggleButton, nextButton, closeButton, muteButton, pipButton] {
+        for button in [faviconButton, previousButton, toggleButton, nextButton, closeButton, muteButton, pipButton, volumeButton] {
             button.onFocus = { [weak self] in self?.onFocus?() }
         }
         setAccessibilityElement(true)
@@ -406,7 +448,12 @@ final class SidebarMediaPlayerCard: NSView {
     func apply(_ next: SidebarMediaPlayerItem) {
         guard next != item else { return }
         if item?.trackIdentity != next.trackIdentity || item?.duration != next.duration { _ = timeline.seek.finish(cancel: true) }
+        let volumeChanged = item?.volume != next.volume
         item = next
+        volumeButton.isEnabled = next.volume != nil
+        volumeSlider.isEnabled = next.volume != nil
+        if let volume = next.volume { volumeSlider.level = volume }
+        else { setVolumeOpen(false, animated: false) }
         titleView.title = next.title
         faviconButton.favicon = next.favicon
         let pausing = next.toggle == .pause
@@ -440,14 +487,12 @@ final class SidebarMediaPlayerCard: NSView {
             next.pip == .failed ? failureHelp : pipButton.label
         pipButton.toolTip = pipHelp
         pipButton.setAccessibilityHelp(pipHelp)
-        // Future per-tab volume control replaces this status slot without changing geometry;
-        // until then the slot names the tab's audio and its help explains the missing volume.
         let status = next.pip == .failed ? uiText("PiP failed") :
-            next.isMuted == true ? uiText("Muted") : uiText("Tab audio")
+            next.isMuted == true ? uiText("Muted") : next.volume.map { String(format: uiText("Volume %ld%%"), Int(($0 * 100).rounded())) } ?? uiText("Tab audio")
         audioStatus.textColor = next.pip == .failed ? .systemRed : .secondaryLabelColor
         if audioStatus.stringValue != status {
             audioStatus.stringValue = status
-            if !OrbitMotionPreferences.prefersReducedMotion {
+            if !OrbitMotionPreferences.prefersReducedMotion && !volumeChanged {
                 audioStatus.alphaValue = 0
                 NSAnimationContext.runAnimationGroup { context in
                     context.duration = 0.08
@@ -456,15 +501,32 @@ final class SidebarMediaPlayerCard: NSView {
                 }
             } else { audioStatus.alphaValue = 1 }
         }
-        audioStatus.toolTip = uiText("Per-tab volume is unavailable")
+        audioStatus.toolTip = next.volume == nil ? uiText("Per-tab volume is unavailable") : uiText("Adjust Tab Volume")
+        updateFocusOrder()
+        setAccessibilityHelp(next.volume == nil ? pipHelp + ". " + uiText("Per-tab volume is unavailable") : pipHelp)
+        setAccessibilityLabel(next.title)
+    }
+
+    func setVolumeOpen(_ open: Bool, animated: Bool = true) {
+        isVolumeOpen = open && item?.volume != nil
+        let target = isVolumeOpen ? 1.0 : 0.0
+        if volumeReveal.target == target && volumeReveal.value == target { return }
+        if animated && !OrbitMotionPreferences.prefersReducedMotion {
+            volumeReveal.animate(to: target, timing: Tokens.volumeExpansion, in: self)
+        } else { volumeReveal.set(target) }
+        volumeButton.setAccessibilityValue(isVolumeOpen ? 1 : 0)
+        updateFocusOrder()
+    }
+
+    private func updateFocusOrder() {
         var focusOrder: [NSView] = [faviconButton]
         if timeline.seek.canSeek { focusOrder.append(timeline) }
         if muteButton.isEnabled { focusOrder.append(muteButton) }
+        if isVolumeOpen { focusOrder.append(volumeSlider) }
         if pipButton.isEnabled { focusOrder.append(pipButton) }
-        focusOrder += [closeButton, previousButton, toggleButton, nextButton].filter { $0.isEnabled }
+        focusOrder += [closeButton, previousButton, toggleButton, nextButton, volumeButton].filter { $0.isEnabled }
         for pair in zip(focusOrder, focusOrder.dropFirst()) { pair.0.nextKeyView = pair.1 }
-        setAccessibilityHelp(pipHelp + ". " + uiText("Per-tab volume is unavailable"))
-        setAccessibilityLabel(next.title)
+        focusOrder.last?.nextKeyView = focusOrder.first
     }
 
     func place(_ card: SidebarMediaPlayerLayout.Card) {
@@ -494,24 +556,27 @@ final class SidebarMediaPlayerCard: NSView {
         ring.addPath(outline)
         shadowMask.path = ring
         plate.frame = CGRect(origin: .zero, size: size)
-        let controlsY = size.height - Tokens.controlsCenterFromBottom
+        let controlsY = size.height - card.volumeHeight - Tokens.controlsCenterFromBottom
         let slot = CGSize(width: Tokens.controlPitch, height: Tokens.collapsedHeight)
         for (index, button) in [faviconButton, previousButton, toggleButton, nextButton, volumeButton].enumerated() {
             let x = SidebarMediaPlayerLayout.controlCenterX(index, width: size.width)
             button.frame = CGRect(x: x - slot.width / 2, y: controlsY - slot.height / 2, width: slot.width, height: slot.height)
         }
         let closeX = SidebarMediaPlayerLayout.controlCenterX(4, width: size.width)
-        closeButton.frame = CGRect(x: closeX - slot.width / 2, y: size.height - 66 + Tokens.titleCenterFromTop - slot.height / 2,
+        closeButton.frame = CGRect(x: closeX - slot.width / 2, y: size.height - card.volumeHeight - 66 + Tokens.titleCenterFromTop - slot.height / 2,
                                    width: slot.width, height: slot.height)
         // The title stops short of the close button's hover square.
         let titleRight = closeX - Tokens.hoverSquare / 2 - 6
-        titleView.frame = CGRect(x: Tokens.titleOriginX, y: size.height - 66, width: max(0, titleRight - Tokens.titleOriginX),
+        titleView.frame = CGRect(x: Tokens.titleOriginX, y: size.height - card.volumeHeight - 66, width: max(0, titleRight - Tokens.titleOriginX),
                                  height: Tokens.titleCenterFromTop * 2)
-        additions.frame = CGRect(x: 0, y: size.height - 124, width: size.width, height: 58)
+        additions.frame = CGRect(x: 0, y: size.height - card.volumeHeight - 124, width: size.width, height: 58)
         timeline.frame = CGRect(x: 12, y: 0, width: size.width - 24, height: 30)
         muteButton.frame = CGRect(x: 12, y: 30, width: 24, height: 28)
         audioStatus.frame = CGRect(x: 40, y: 38, width: size.width - 80, height: 14)
         pipButton.frame = CGRect(x: size.width - 36, y: 30, width: 24, height: 28)
+        volumeSlider.alphaValue = card.volumeHeight / 33
+        volumeSlider.isHidden = card.volumeHeight <= 0
+        volumeSlider.frame = CGRect(x: 8, y: size.height - 33, width: size.width - 16, height: 33)
         additions.alphaValue = card.additionsOpacity
         additions.isHidden = card.height <= 66
         titleView.alphaValue = card.titleOpacity

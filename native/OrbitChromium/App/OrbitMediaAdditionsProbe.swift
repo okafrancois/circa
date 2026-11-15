@@ -65,9 +65,19 @@ enum OrbitMediaAdditionsProbe {
             task.arguments = ["-x", "-o", "-l", String(number), output.appendingPathComponent((dark ? "dark-" : "light-") + name + ".png").path]
             try? task.run(); task.waitUntilExit()
         }
+        func movePointer(_ point: NSPoint) {
+            guard owns(window.windowNumber), window.contentView?.bounds.contains(point) == true else { return }
+            let screen = window.convertPoint(toScreen: point)
+            let global = CGPoint(x: screen.x, y: NSScreen.screens[0].frame.maxY - screen.y)
+            CGWarpMouseCursorPosition(global)
+            guard owns(window.windowNumber) else { return }
+            CGEvent(mouseEventSource: nil, mouseType: .mouseMoved, mouseCursorPosition: global,
+                    mouseButton: .left)?.postToPid(getpid())
+        }
         func hover(_ card: SidebarMediaPlayerCard?) {
             guard owns(window.windowNumber), let card else { return }
             let point = card.convert(NSPoint(x: 87, y: card.bounds.height - 16), to: nil)
+            if command["mode"] == "volume" { movePointer(point) }
             if let event = NSEvent.mouseEvent(with: .mouseMoved, location: point, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
                 windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 0, pressure: 0) { player.mouseMoved(with: event) }
         }
@@ -97,6 +107,98 @@ enum OrbitMediaAdditionsProbe {
             "playerX": rect.minX, "playerTop": window.frame.height - rect.maxY, "playerWidth": rect.width, "playerHeight": rect.height]
         try? JSONSerialization.data(withJSONObject: metadata).write(to: root.appendingPathComponent("media-ready.json"))
         _ = await wait(8, { FileManager.default.fileExists(atPath: root.appendingPathComponent("media-go").path) })
+        if command["mode"] == "volume" {
+            func item() -> SidebarMediaPlayerItem? { player.items.first { $0.id == id } }
+            guard let card = player.card(for: id) else { return ["card": false] }
+            checks["volumeCapability"] = owner.engine.capabilities.contains(.audioVolume)
+            checks["initialVolume"] = video.audioVolume
+            mark("rest"); capture("rest")
+            hover(card); await pause(0.4)
+            mark("open"); checks["openClick"] = click(card.volumeButton)
+            await pause(0.4); capture("volume-open")
+            checks["rowHeight"] = card.volumeHeight
+            checks["cardHeight"] = card.bounds.height
+            checks["sliderFrame"] = NSStringFromRect(card.volumeSlider.frame)
+            var samples: [[String: Any]] = []
+            let originalVolume = player.onVolume
+            player.onVolume = { target, level in
+                originalVolume?(target, level)
+                samples.append(["requested": level, "reported": video.audioVolume ?? -1,
+                                "muted": video.tabAudioMuted() ?? false])
+            }
+            defer { player.onVolume = originalVolume }
+            func drag(_ levels: [Double]) {
+                guard owns(window.windowNumber), card.volumeSlider.window === window else { return }
+                let slider = card.volumeSlider
+                func event(_ type: NSEvent.EventType, _ level: Double) -> NSEvent? {
+                    guard owns(window.windowNumber) else { return nil }
+                    let point = slider.convert(NSPoint(x: 10 + (slider.bounds.width - 20) * level, y: 16.5), to: nil)
+                    return NSEvent.mouseEvent(with: type, location: point, modifierFlags: [],
+                        timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
+                        context: nil, eventNumber: 0, clickCount: 1, pressure: type == .leftMouseUp ? 0 : 1)
+                }
+                guard let first = levels.first, let last = levels.last, let down = event(.leftMouseDown, first) else { return }
+                for level in levels.dropFirst() {
+                    if let next = event(.leftMouseDragged, level) { NSApp.postEvent(next, atStart: false) }
+                }
+                if let up = event(.leftMouseUp, last) { NSApp.postEvent(up, atStart: false) }
+                guard owns(window.windowNumber) else { return }
+                slider.mouseDown(with: down)
+            }
+            mark("drag-quarter"); drag([1, 0.8, 0.6, 0.4, 0.25])
+            await pause(0.25)
+            checks["quarterVolume"] = video.audioVolume
+            mark("mute"); checks["muteClick"] = click(card.muteButton)
+            checks["muted"] = await wait { item()?.isMuted == true }
+            checks["mutedVolume"] = video.audioVolume
+            await pause(0.4); capture("volume-muted")
+            mark("unmute"); checks["unmuteClick"] = click(card.muteButton)
+            checks["unmuted"] = await wait { item()?.isMuted == false }
+            checks["restoredVolume"] = video.audioVolume
+            checks["sameCardAfterUnmute"] = player.card(for: id) === card
+            _ = click(card.muteButton)
+            _ = await wait { item()?.isMuted == true }
+            mark("drag-zero"); drag([0])
+            checks["zeroStaysMuted"] = video.tabAudioMuted() == true && video.audioVolume == 0
+            mark("drag-unmutes"); drag([0.15, 0.35, 0.65])
+            checks["positiveDragUnmutes"] = await wait { item()?.isMuted == false }
+            checks["positiveVolume"] = video.audioVolume
+            await pause(0.4)
+            checks["sameCardAfterPositiveDrag"] = player.card(for: id) === card
+            mark("close"); checks["closeClick"] = click(card.volumeButton)
+            await pause(0.4)
+            checks["closedRow"] = !card.isVolumeOpen && card.bounds.height == 124
+            mark("reopen"); _ = click(card.volumeButton)
+            await pause(0.4)
+            checks["reopenLevel"] = card.volumeSlider.level
+            capture("volume-restored")
+            if owns(window.windowNumber) { window.makeFirstResponder(nil) }
+            movePointer(NSPoint(x: 600, y: 400))
+            mark("collapse"); player.setHovered(false)
+            await pause(0.4); capture("volume-collapsed")
+            owner.session.selectOccurrence(id)
+            await owner.session.waitForQueuedCommands()
+            checks["selectedCardHidden"] = await wait { player.card(for: id) == nil }
+            owner.session.selectOccurrence(blankID)
+            await owner.session.waitForQueuedCommands()
+            checks["returnedLevel"] = await wait { player.items.first { $0.id == id }?.volume == 0.65 }
+            checks["engineLevelAfterReturn"] = video.audioVolume
+            if let (audio, audioID) = await open("audio") {
+                _ = await OrbitPerformanceProbe.evaluate(audio, "(()=>{startMedia();return {}})()")
+                _ = await wait { owner.backgroundMedia.session(for: audioID)?.playback == .playing }
+                owner.session.selectOccurrence(blankID)
+                await owner.session.waitForQueuedCommands()
+                _ = await wait { player.card(for: audioID) != nil }
+                checks["otherTabDefault"] = audio.audioVolume
+                owner.setBackgroundMediaVolume(0.4, on: audioID)
+                checks["otherTabVolume"] = audio.audioVolume
+                checks["firstTabUnchanged"] = video.audioVolume
+            }
+            checks["liveSamples"] = samples
+            checks["marks"] = marks
+            checks["window"] = metadata
+            return checks
+        }
         mark("rest"); capture("rest")
         await pause(0.3)
         hover(player.card(for: id)); mark("hover")

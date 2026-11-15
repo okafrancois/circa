@@ -325,9 +325,11 @@ public final class BrowserBackgroundMediaSessions<Source: BrowserMediaSessionCon
             tracked[id]?.element = nil
             return session
         }
-        // Unmuting returns the player to the engine session asynchronously: the kept session
-        // bridges that gap (and stays controllable) instead of the card leaving and re-entering.
-        guard muted == true || (muted == false && item.kept), item.element != nil || audio?.playback != .paused,
+        // Native session changes can arrive after unmuting, including an inactive sample
+        // after the first restored session. Actual playback keeps the same card through that
+        // gap; a reported pause or a document change still ends it.
+        guard muted == true || (muted == false && item.kept) || audio?.playback == .playing,
+              item.element != nil || audio?.playback != .paused,
               var kept = item.lastSession, item.lastDocument == document else {
             tracked[id]?.lastSession = nil
             tracked[id]?.lastDocument = nil

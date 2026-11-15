@@ -864,6 +864,9 @@ extension OrbitTokens {
         /// opacity is the square of that progress in both directions.
         static let expansion = OrbitAnimationTiming(duration: 0.25, x1: 0.25, y1: 0.1, x2: 0.25, y2: 1)
 
+        /// The bottom volume row opens and closes with a finite ease over 0.23 s.
+        static let volumeExpansion = OrbitAnimationTiming(duration: 0.23, x1: 0.25, y1: 0.1, x2: 0.25, y2: 1)
+
         public static let surface = NSColor.orbitDynamic("MediaPlayer.surface", light: .orbitSRGB(0xFFFFFF, 0.92), dark: .orbitSRGB(0x000000))
         public static let glyph = NSColor.orbitDynamic("MediaPlayer.glyph", light: .orbitSRGB(0x000000, 0.51), dark: .orbitSRGB(0xFFFFFF, 0.66))
         public static let disabledGlyph = NSColor.orbitDynamic("MediaPlayer.disabledGlyph", light: .orbitSRGB(0x000000, 0.18), dark: .orbitSRGB(0xFFFFFF, 0.22))
