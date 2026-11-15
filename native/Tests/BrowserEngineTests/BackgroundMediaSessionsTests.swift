@@ -13,6 +13,8 @@ private final class FakeMediaSource: BrowserMediaSessionControlling {
     var performed: [BrowserMediaAction] = []
     var subscriptions = 0
     var finishImmediately = false
+    var muted: Bool?
+    var document: UInt64? = 1
     private var continuations: [AsyncStream<BrowserMediaSessionState>.Continuation] = []
 
     func mediaSessionState() -> BrowserMediaSessionState? { state }
@@ -29,6 +31,8 @@ private final class FakeMediaSource: BrowserMediaSessionControlling {
         performed.append(action)
         return accepts
     }
+    func tabAudioMuted() -> Bool? { muted }
+    var mediaDocumentIdentity: UInt64? { document }
     func send(_ value: BrowserMediaSessionState) {
         state = value
         for continuation in continuations { continuation.yield(value) }
@@ -92,6 +96,56 @@ struct BackgroundMediaSessionsTests {
         #expect(list.backgroundSessions(in: space, excluding: [ids[0]]).map(\.occurrenceID) == [ids[1]])
         #expect(list.backgroundSessions(in: other, excluding: [ids[0]]).map(\.occurrenceID) == [ids[2]])
         #expect(changes >= 1)
+    }
+
+    @Test("A playing tab muted from the card or elsewhere keeps its session while the engine drops it")
+    func mutedPlayingSessionStays() async throws {
+        let list = BrowserBackgroundMediaSessions<FakeMediaSource>()
+        let source = FakeMediaSource(), other = FakeMediaSource(), space = SpaceID()
+        let id = TabOccurrenceID(), otherID = TabOccurrenceID()
+        source.state = native(); other.state = native(title: "Second")
+        source.muted = false
+        let member = BrowserBackgroundMediaSessions<FakeMediaSource>.Member(source: source, occurrenceID: id, tabID: TabID(), spaceID: space)
+        list.reconcile([member])
+        await settle()
+        list.reconcile([member, .init(source: other, occurrenceID: otherID, tabID: TabID(), spaceID: space)])
+        await settle()
+        list.updateAudio(BrowserMediaState(playback: .playing, isAudible: true, isAudioMuted: false), for: id)
+        #expect(list.sessions.map(\.occurrenceID) == [id, otherID])
+
+        // The engine leaves a muted tab's players out of its media session; playback goes on.
+        source.muted = true
+        source.send(native(session: 3))
+        await settle()
+        let kept = try #require(list.session(for: id))
+        #expect(kept.isAudioMuted == true && kept.playback == .playing && kept.title == "Synthetic title")
+        #expect(kept.actions.isEmpty && kept.toggleAction == nil)
+        #expect(list.sessions.map(\.occurrenceID) == [id, otherID])
+
+        // Unmuting brings the engine session back with its actions, in the same place.
+        source.muted = false
+        source.send(native())
+        await settle()
+        #expect(list.session(for: id)?.isAudioMuted == false && list.session(for: id)?.toggleAction == .pause)
+        #expect(list.sessions.map(\.occurrenceID) == [id, otherID])
+
+        // Muted from elsewhere: only the media refresh knows the flag.
+        list.updateAudio(BrowserMediaState(playback: .playing, isAudible: true, isAudioMuted: true), for: otherID)
+        other.send(native(session: 3))
+        await settle()
+        #expect(list.session(for: otherID)?.isAudioMuted == true && list.session(for: otherID)?.title == "Second")
+
+        // Media that stops while muted, or a new document, ends the card.
+        list.updateAudio(BrowserMediaState(playback: .paused, isAudible: false, isAudioMuted: true), for: otherID)
+        #expect(list.session(for: otherID) == nil)
+        source.muted = true
+        source.send(native(session: 3))
+        await settle()
+        #expect(list.session(for: id) != nil)
+        source.document = 2
+        source.send(native(session: 3))
+        await settle()
+        #expect(list.session(for: id) == nil)
     }
 
     @Test("Changes stream into the model; ended sessions disappear and removed tabs stop")

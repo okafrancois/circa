@@ -280,6 +280,7 @@ public protocol BrowserEngineSurface: BrowserFindSurface, BrowserMediaSessionCon
     /// Selection lifecycle for the native video PiP window. The engine owns the session after
     /// entry, including its default behavior when the source tab becomes selected again.
     func updateAutomaticPictureInPicture(isSelected: Bool, allowed: Bool)
+    var manualPictureInPicture: BrowserManualPiP? { get }
     func showDeveloperPanel(_ panel: BrowserDeveloperPanel) throws
 
     // MARK: Page surfaces (CH-ESSENTIALS)
@@ -317,6 +318,7 @@ public extension BrowserEngineSurface {
         guard let services = nativePageServices else { throw BrowserEngineError.unsupportedOperation }
         return services.mediaAction(action, seconds: seconds)
     }
+    var mediaDocumentIdentity: UInt64? { documentGeneration }
     func activationPaintBarrier() -> Task<Bool, Never>? { nil }
     var passwordPrompts: (any BrowserPasswordPromptSource)? { nil }
     func setPageTintObservationEnabled(_ enabled: Bool) {}
@@ -331,6 +333,7 @@ public extension BrowserEngineSurface {
     func showDeveloperPanel(_ panel: BrowserDeveloperPanel) throws {
         try perform(panel == .elements ? .inspectElements : .showDevTools)
     }
+    var manualPictureInPicture: BrowserManualPiP? { nil }
     func updateAutomaticPictureInPicture(isSelected: Bool, allowed: Bool) {}
     func captureStateForSuspension() async -> BrowserSuspensionState? { nil }
     var isSuspended: Bool { false }

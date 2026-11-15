@@ -783,6 +783,18 @@ public final class ChromiumSurface: BrowserEngineSurface {
     }
 
     /// Executes a DevTools protocol method on this browser. Native-side only; pages never see it.
+    public lazy var manualPictureInPicture: BrowserManualPiP? = BrowserManualPiP(
+        transport: { [weak self] method, parameters in
+            guard let self else { return (false, Data()) }
+            return await self.devToolsCall(method, params: parameters, timeout: .seconds(2))
+        }, generation: { [weak self] in
+            guard let self, !self.isDisposed, self.webContent == nil else { return nil }
+            return self.documentGeneration
+        }, exit: { [weak self] in
+            guard let self, !self.isDisposed else { return }
+            ACREndPictureInPicture(self.token)
+        })
+
     public func devToolsCall(_ method: String, params: String = "", timeout: Duration = .seconds(8), wakesPage: Bool = true) async -> (Bool, Data) {
         // Page-reading features (assistant, translation, link previews, archives) never read the
         // hidden Chromium document while WebKit content is shown.
@@ -845,6 +857,14 @@ public final class ChromiumSurface: BrowserEngineSurface {
                                  camera: capture.video ? .active : .none, microphone: capture.audio ? .active : .none,
                                  isAudible: lifecycle?.audible ?? nativeAudible,
                                  isAudioMuted: muted < 0 ? nil : muted == 1, isAudioPlaying: audio)
+    }
+
+    public func tabAudioMuted() -> Bool? {
+        guard !isDisposed else { return nil }
+        if let webContent { return webContent.isAudioMuted }
+        guard isBrowserCreated else { return pendingMute }
+        let muted = ACRIsAudioMuted(token)
+        return muted < 0 ? nil : muted == 1
     }
 
     public func setAudioMuted(_ muted: Bool) throws {

@@ -1752,3 +1752,20 @@
 "Sidebar on Right" = "Barre latérale à droite";
 
 "Sidebar on Left" = "Barre latérale à gauche";
+
+// Sidebar media utilities
+"Playback position" = "Position de lecture";
+"Seeking unavailable" = "Recherche temporelle indisponible";
+"Live" = "En direct";
+"No timeline" = "Pas de chronologie";
+"Mute tab" = "Couper le son de l’onglet";
+"Unmute tab" = "Rétablir le son de l’onglet";
+"Enter Picture in Picture" = "Activer l’image dans l’image";
+"Exit Picture in Picture" = "Quitter l’image dans l’image";
+"Picture in Picture unavailable for this media" = "Image dans l’image indisponible pour ce média";
+"PiP failed" = "Échec du PiP";
+"Tab audio" = "Audio de l’onglet";
+"Per-tab volume is unavailable" = "Le volume par onglet est indisponible";
+"The page refused Picture in Picture. Try again." = "La page a refusé l’image dans l’image. Réessayez.";
+"Picture in Picture did not respond. Try again." = "L’image dans l’image n’a pas répondu. Réessayez.";
+"The media page could not be reached. Try again." = "La page du média est inaccessible. Réessayez.";

@@ -827,8 +827,8 @@ extension OrbitTokens {
     /// Geometry is in points at a 1100 × 800 window; colours are measured on that card.
     public enum MediaPlayer {
         public static let collapsedHeight: CGFloat = 33
-        /// Collapsed controls row plus the hover title row.
-        public static let expandedHeight: CGFloat = 66
+        /// Timeline and utilities above the existing title and transport rows.
+        public static let expandedHeight: CGFloat = 124
         /// Vertical gap between expanded cards of a stack.
         public static let stackGap: CGFloat = 5
         /// The second card of a resting stack peeks this far above the front card.
@@ -848,6 +848,8 @@ extension OrbitTokens {
         /// Previous/next draw larger than play/pause: ≈13×11 pt of ink on screen.
         public static let trackSkipGlyphSize: CGFloat = 14.5
         public static let closeGlyphSize: CGFloat = 13.5
+        /// Mute and Picture in Picture in the expanded utility row: ≈10.5×8 pt speaker ink.
+        public static let utilityGlyphSize: CGFloat = 10
         public static let faviconSize: CGFloat = 16
         public static let hoverSquare: CGFloat = 24
         /// Expansion and collapse share AppKit's default curve over 0.25 s; the title row's
