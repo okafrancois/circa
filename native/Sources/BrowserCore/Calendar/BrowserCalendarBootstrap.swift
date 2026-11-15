@@ -1,7 +1,8 @@
 import Foundation
 import CoreFoundation
 
-/// Optional, memory-only enrichment. The agenda remains the authority for row membership.
+/// Optional, memory-only enrichment. The agenda remains the authority for row membership;
+/// the only removal is an exact-ID row the bound account itself declined.
 public enum BrowserCalendarBootstrap {
     public static func meetingURL(_ value: String) -> URL? {
         guard value.utf8.count <= 4096, !value.contains("\\"),
@@ -37,21 +38,40 @@ public enum BrowserCalendarBootstrap {
         let primary = groups.filter { at($0, [0]) as? String == agenda.binding }
         guard primary.count == 1, let rows = at(primary[0], [1]) as? [Any], rows.count <= 2000 else { return agenda }
         var tuples: [String: (Date, Date, URL?)] = [:]
-        var ids = Set<String>()
+        var ids = Set<String>(), declined = Set<String>()
         for row in rows {
             guard let tuple = at(row, [3]) as? [Any], tuple.count > 57,
                   let id = tuple[0] as? String, !id.isEmpty, ids.insert(id).inserted else { return agenda }
+            if declinedBySelf(tuple, binding: agenda.binding) { declined.insert(id); continue }
             guard tuple[15] is NSNull else { continue }
             guard let start = epoch(at(tuple, [35, 1, 0])), let end = epoch(at(tuple, [36, 1, 0])),
                   end > start else { return agenda }
             let join = (at(tuple, [57, 0, 0, 1]) as? String).flatMap(meetingURL)
             tuples[id] = (start, end, join)
         }
-        let events = agenda.events.map { event -> BrowserCalendarWebEvent in
-            guard let id = occurrenceID(event.id), let (start, end, join) = tuples[id] else { return event }
+        let events = agenda.events.compactMap { event -> BrowserCalendarWebEvent? in
+            guard let id = occurrenceID(event.id) else { return event }
+            if declined.contains(id) { return nil }
+            guard let (start, end, join) = tuples[id] else { return event }
             return .init(id: event.id, title: event.title, start: start, end: end, joinURL: join)
         }
         return .init(events: events.sorted { $0.start < $1.start }, fetchedAt: agenda.fetchedAt, day: agenda.day, timeZone: agenda.timeZone, binding: agenda.binding)
+    }
+    /// True only when the bound account's own attendee entry says "declined".
+    /// Attendees live at tuple[20]; each entry holds its address at [0] and the
+    /// response at [5] (0 no response, 1 declined, 2 tentative, 3 accepted).
+    /// The current user is the single entry whose address equals the verified
+    /// calendar binding. Anything missing, ambiguous or malformed keeps the event.
+    static func declinedBySelf(_ tuple: [Any], binding: String) -> Bool {
+        guard !binding.isEmpty, tuple.count > 20, let attendees = tuple[20] as? [Any],
+              attendees.count <= 5000 else { return false }
+        let own = attendees.compactMap { $0 as? [Any] }.filter { entry in
+            guard let address = entry.first as? String else { return false }
+            return address.compare(binding, options: [.caseInsensitive, .literal]) == .orderedSame
+        }
+        guard own.count == 1, own[0].count > 5, let status = own[0][5] as? NSNumber,
+              CFGetTypeID(status) != CFBooleanGetTypeID() else { return false }
+        return status.doubleValue == 1
     }
     private static func at(_ value: Any, _ indices: [Int]) -> Any? {
         var cursor: Any = value
