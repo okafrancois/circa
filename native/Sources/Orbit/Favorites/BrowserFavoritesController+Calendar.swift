@@ -27,6 +27,29 @@ extension BrowserFavoritesController {
               let updated = current.tab(tab.id), BrowserCalendarWebAccount(url: updated.pinnedURL ?? updated.url) == account else { return false }
         return owner.settingsPreferences?.runtime.document.profile(current.profileID).disabledLiveCalendars.contains(tab.id) != true
     }
+    func renderCalendarReminder(_ tabs: [BrowserOrganizationTabItem]) {
+        guard let owner, let profile = owner.session.organization?.profileID else { return }
+        let candidates = tabs.compactMap { tab -> (BrowserOrganizationTabItem, BrowserCalendarWebAccount, BrowserCalendarWebAgenda, BrowserCalendarWebEvent)? in
+            guard let account = BrowserCalendarWebAccount(url: tab.pinnedURL ?? tab.url), calendarPermitted(tab, account),
+                  let profile = owner.session.organization?.profileID,
+                  owner.settingsPreferences?.runtime.document.profile(profile).hiddenCalendarMeetingLinks.contains(tab.id) != true,
+                  let agenda = calendar.agendas[account], let event = agenda.nextMeeting(at: calendar.now()) else { return nil }
+            return (tab, account, agenda, event)
+        }
+        guard let (tab, account, agenda, event) = candidates.min(by: { $0.3.start < $1.3.start }), calendar.online else {
+            owner.sidebar.presentCalendarReminder(id: nil, title: nil, join: nil); return
+        }
+        owner.sidebar.presentCalendarReminder(id: "\(tab.id)-\(agenda.binding)-\(event.id)", title: event.title) { [weak self] in
+            guard let self, self.calendar.online, self.calendarPermitted(tab, account),
+                  self.owner?.session.organization?.profileID == profile,
+                  self.owner?.settingsPreferences?.runtime.document.profile(profile).hiddenCalendarMeetingLinks.contains(tab.id) != true,
+                  let current = self.calendar.agendas[account], current.binding == agenda.binding,
+                  current.nextMeeting(at: self.calendar.now()) == event,
+                  let url = event.joinURL, BrowserCalendarBootstrap.meetingURL(url.absoluteString) == url else { return false }
+            self.owner?.session.openTab(url: url)
+            return true
+        }
+    }
     func calendarCountdown(_ tab: BrowserOrganizationTabItem) -> String? {
         guard let account = BrowserCalendarWebAccount(url: tab.pinnedURL ?? tab.url), calendarPermitted(tab, account),
               let owner, let profile = owner.session.organization?.profileID,
@@ -57,26 +80,37 @@ extension BrowserFavoritesController {
             self?.calendarPreview.dismiss(); self?.calendar.refresh(account)
         }.isEnabled = enabled
         let settings = owner.settingsPreferences?.runtime.document.profile(profile)
-        func preference(_ title: String, _ choice: Int, checked: Bool) {
-            action(title) { [weak self] in
+        @discardableResult func preference(_ title: String, _ choice: Int, checked: Bool) -> NSMenuItem {
+            let item = action(title) { [weak self] in
                 guard let self, let runtime = self.owner?.settingsPreferences?.runtime else { return }
                 Task { @MainActor [weak self] in
                     do {
                         try await runtime.updateProfile(profile) { settings in
                             let key: WritableKeyPath<BrowserProfileSettings, Set<TabID>> = choice == 0 ? \.hiddenCalendarPreviews
-                                : choice == 1 ? \.hiddenCalendarCountdowns : \.disabledLiveCalendars
+                                : choice == 1 ? \.hiddenCalendarCountdowns : choice == 3 ? \.hiddenCalendarMeetingLinks : \.disabledLiveCalendars
                             if settings[keyPath: key].contains(tab.id) { settings[keyPath: key].remove(tab.id) }
                             else { settings[keyPath: key].insert(tab.id) }
                         }
                         self?.calendarPreview.dismiss(); self?.render()
                     } catch { /* Leave the saved preference unchanged on failure. */ }
                 }
-            }.state = checked ? .on : .off
+            }
+            item.state = checked ? .on : .off
+            return item
         }
         menu.addItem(.separator())
         if !gear {
             preference(uiText("Show Hover Preview"), 0, checked: settings?.hiddenCalendarPreviews.contains(tab.id) != true)
             preference(uiText("Show Time to Next Meeting"), 1, checked: settings?.hiddenCalendarCountdowns.contains(tab.id) != true)
+            let parent = NSMenuItem(title: uiText("Show Next Meeting Link"), action: nil, keyEquivalent: "")
+            let submenu = NSMenu(); submenu.autoenablesItems = false
+            let hidden = settings?.hiddenCalendarMeetingLinks.contains(tab.id) == true
+            for (title, checked) in [(uiText("3 minutes before"), !hidden), (uiText("Never"), hidden)] {
+                let item = preference(title, 3, checked: checked)
+                item.isEnabled = !checked
+                menu.removeItem(item); submenu.addItem(item)
+            }
+            parent.submenu = submenu; menu.addItem(parent)
         }
         preference(enabled ? uiText("Disable Live Calendar") : uiText("Enable Live Calendar"), 2, checked: false)
         return menu

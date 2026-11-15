@@ -60,7 +60,7 @@ public enum BrowserSyncMapping {
         for profile in session.profiles {
             result.entries[id("profile", profile.id.rawValue)] = try fields(profile)
             // Extension installation and pinning belong to this machine.
-            result.entries[id("profileSettings", profile.id.rawValue)] = try fields(settings.profile(profile.id), excluding: ["extensionPinOrder", "hiddenGmailBadges", "disabledLiveCalendars", "hiddenCalendarPreviews", "hiddenCalendarCountdowns"])
+            result.entries[id("profileSettings", profile.id.rawValue)] = try fields(settings.profile(profile.id), excluding: ["extensionPinOrder", "hiddenGmailBadges", "disabledLiveCalendars", "hiddenCalendarPreviews", "hiddenCalendarCountdowns", "hiddenCalendarMeetingLinks"])
             result.entries[id("archiveSettings", profile.id.rawValue)] = ["threshold": try BrowserSyncReplica.encodeValue(session.organization.archivePolicy.threshold(for: profile.id))]
         }
         for space in session.spaces {

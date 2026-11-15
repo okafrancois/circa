@@ -65,7 +65,15 @@ enum OrbitCalendarProbe {
             await wait { !surface.navigationState.isLoading && surface.navigationState.committedURL?.path == "/seed" }
             guard let id = owner.session.organization?.selectedTab?.id else { return ["missingTab": true] }
             owner.session.addToFavorites([id]); await settle()
+            await wait { surface.navigationState.faviconImage != nil }
+            if let pixels = surface.navigationState.faviconImage, let image = await pixels.nativeImage() {
+                owner.favorites.icons.memoryCache.put(image, profile: surface.profileID,
+                    home: URL(string: "https://calendar.google.com/calendar/r")!)
+            }
             owner.session.editPinnedURL(id, to: URL(string: "https://calendar.google.com/calendar/r")!); await settle()
+            if let profile = owner.session.organization?.profileID {
+                try await owner.settingsPreferences?.runtime.updateProfile(profile) { $0.hiddenCalendarMeetingLinks.insert(id) }
+            }
             owner.favorites.render()
             let account = BrowserCalendarWebAccount(url: URL(string: "https://calendar.google.com/calendar/u/0/r")!)!
             owner.palette.dismiss()
@@ -76,7 +84,8 @@ enum OrbitCalendarProbe {
             let agenda = owner.favorites.calendar.agendas[account]
             checks["plainFavoriteBinding"] = owner.session.organization?.tab(id).map { owner.favorites.calendarPermitted($0, account) } == true
             checks["profileCookieAgenda"] = agenda?.events.count == 3
-            checks["startOnlyFallback"] = agenda?.events.allSatisfy { $0.end == nil && $0.joinURL == nil } == true
+            checks["durationBinding"] = agenda?.events.map { $0.end?.timeIntervalSince($0.start) ?? 0 } == [2700, 3600, 5400]
+            checks["meetingBinding"] = agenda?.events.filter { $0.joinURL != nil }.count == 1
             for path in ["notes", "tasks"] {
                 owner.session.openTab(url: base.appendingPathComponent(path)); await settle()
                 if let extra = owner.session.organization?.selectedTab?.id { owner.session.addToFavorites([extra]); await settle() }
@@ -87,6 +96,7 @@ enum OrbitCalendarProbe {
             await wait({ NSApp.isActive && window.isKeyWindow && !owner.palette.isPresented }, seconds: 2)
             owner.favorites.render(); window.contentView?.layoutSubtreeIfNeeded()
             guard let tile = owner.favorites.grid.tiles.first(where: { $0.item.tab.id == id }) else { return ["missingTile": true] }
+            checks["calendarFavicon"] = tile.item.favicon != nil
             checks["countdown"] = tile.item.calendarCountdown != nil
             let selected = owner.session.organization?.selectedTab?.id
             let responder = window.firstResponder
@@ -124,12 +134,35 @@ enum OrbitCalendarProbe {
             try? await Task.sleep(for: .milliseconds(300))
             checks["leaveDismisses"] = !owner.favorites.calendarPreview.isPresented
             capture("calendar-countdown")
+            checks["reminderPreferenceHidden"] = owner.sidebar.calendarReminder.isHidden
+            guard owns() else { return ["ownershipLost": true] }
+            if let profile = owner.session.organization?.profileID {
+                try await owner.settingsPreferences?.runtime.updateProfile(profile) { $0.hiddenCalendarMeetingLinks.remove(id) }
+            }
+            owner.favorites.render()
+            try? await Task.sleep(for: .milliseconds(600))
+            checks["reminder"] = !owner.sidebar.calendarReminder.isHidden
+            capture("calendar-reminder")
+            try? await Task.sleep(for: .seconds(1))
+            guard owns() else { return ["ownershipLost": true] }
+            owner.sidebar.calendarReminder.join.performClick(nil)
+            await settle()
+            checks["joinNormalTab"] = owner.session.organization?.selectedTab?.url == agenda?.events.first?.joinURL
+            try? await Task.sleep(for: .milliseconds(600))
+            capture("calendar-joined")
+            try? await Task.sleep(for: .seconds(2))
             let requests = source.requests
             owner.favorites.calendar.refresh(account)
             checks["refreshBudget"] = requests == source.requests
             let otherProfile = await environment.store.createProfile(name: "Synthetic isolated calendar")
             do { _ = try await owner.engine.calendarAgendaFixture(profileID: otherProfile, account: account, day: Date(), timeZone: .current, origin: base); checks["profileIsolation"] = false }
             catch { checks["profileIsolation"] = true }
+            let staleJoin = owner.sidebar.calendarReminder.onJoin
+            owner.favorites.calendar.now = { (agenda?.fetchedAt ?? Date()).addingTimeInterval(120) }
+            checks["staleJoinRejected"] = staleJoin?() == false
+            owner.favorites.calendar.now = Date.init
+            owner.favorites.calendar.sessionChanged(account)
+            checks["sessionJoinRejected"] = staleJoin?() == false
             let newSpace = try await environment.store.createSpace(name: "Synthetic empty context", profileID: otherProfile)
             owner.session.activateSpace(newSpace); await settle(); owner.favorites.render()
             checks["profileSwitchClearsAgenda"] = owner.favorites.calendar.agendas.isEmpty && !owner.favorites.calendarPreview.isPresented
