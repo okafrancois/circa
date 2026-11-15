@@ -302,5 +302,16 @@ private struct OriginalMemoryIndex: Sendable {
 extension HistoryDatabase {
     func discardSuggestionSchemaForLegacyFixture() throws {
         try execute("DROP INDEX IF EXISTS pages_weight_last")
+        try discardJournalPurgeSchemaForLegacyFixture()
+    }
+
+    /// Removes the version-nine journal index objects so a fixture can claim an older version.
+    func discardJournalPurgeSchemaForLegacyFixture() throws {
+        try execute("DROP TABLE IF EXISTS historySyncBatchVisits")
+        try execute("DROP TABLE IF EXISTS historySyncRetired")
+        try execute("DROP INDEX IF EXISTS historySyncVisit")
+        if try scalarInt("SELECT COUNT(*) FROM pragma_table_info('historySyncEvents') WHERE name='visit'") == 1 {
+            try execute("ALTER TABLE historySyncEvents DROP COLUMN visit")
+        }
     }
 }

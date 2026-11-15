@@ -257,7 +257,7 @@ struct OrbitImportR3Tests {
         }
         try await expectHistoryIntact(fixture)
         try one.write(to: first); try two.write(to: second)
-        for damage in [["DROP TABLE titleWords"], ["PRAGMA user_version=9"], ["UPDATE identity SET version=3"],
+        for damage in [["DROP TABLE titleWords"], ["PRAGMA user_version=\(HistoryDatabase.currentVersion + 1)"], ["UPDATE identity SET version=3"],
                        ["INSERT INTO identity VALUES('00000000-0000-0000-0000-000000000000', 5)"]] {
             try sqlite(first.path, damage)
             #expect(throws: ArcImportError.backupInvalid) {

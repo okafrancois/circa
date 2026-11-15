@@ -313,7 +313,7 @@ final class BrowserHistoryRecorder {
         // Deleted pages disappear from keystroke results before the write starts.
         let wasWarm = beginBulkMutation(for: profileID)
         defer { endBulkMutation(for: profileID, rebuild: wasWarm) }
-        return try await access(profileID: profileID, disabled: 0) { store in
+        let count = try await access(profileID: profileID, disabled: 0) { store in
             let count = try await store.delete(deletion)
             if case .checkpointDeferred = await store.maintenanceStatus {
                 publishIssue(.checkpointDeferred, for: profileID)
@@ -322,6 +322,18 @@ final class BrowserHistoryRecorder {
             }
             return count
         }
+        // The engine's own history goes too, at the next launch (it holds those files open).
+        // Narrower deletions leave the engine's history as is (see the history purge notes).
+        if case .all = deletion, isPersistent(profileID) { scheduleEngineHistoryPurge(profileID) }
+        return count
+    }
+
+    /// Records that the engine's history files of `profileID` must be deleted before the engine
+    /// opens it again. A failure never fails the user's deletion; it is reported without paths.
+    func scheduleEngineHistoryPurge(_ profileID: ProfileID) {
+        guard let directory else { return }
+        do { try BrowserEngineHistoryPurge.schedule(profileID, dataRoot: directory.deletingLastPathComponent()) }
+        catch { Self.logger.error("engine history purge could not be scheduled: \(String(describing: error), privacy: .public)") }
     }
 
     func deleteSuggestions(for profileID: ProfileID, url: URL) async throws -> Int {
@@ -344,6 +356,8 @@ final class BrowserHistoryRecorder {
         let profile = resolveProfile(profileID)
         guard directory != nil, profile.profileID == profileID, profile.persistence == .persistent,
               let directory else { return }
+        // Engine removal deletes the whole engine profile; this covers a removal that fails.
+        scheduleEngineHistoryPurge(profileID)
         // Keep the tombstone even if cleanup fails. An explicit cleanup retry is still allowed.
         removedProfiles.insert(profileID)
         indexGenerations[profileID, default: 0] &+= 1

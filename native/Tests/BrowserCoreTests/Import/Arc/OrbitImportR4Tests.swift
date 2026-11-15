@@ -269,6 +269,7 @@ struct OrbitImportR4Tests {
             "DROP INDEX IF EXISTS pages_weight_last",
             "DROP TABLE historySyncEvents", "DROP TABLE historySyncBatches",
             "DROP TABLE historySyncState", "DROP TABLE historySyncVersions",
+            "DROP TABLE historySyncBatchVisits", "DROP TABLE historySyncRetired",
             "DROP TRIGGER pages_update", "DROP TRIGGER titleWords_update",
             "CREATE TRIGGER pages_update AFTER UPDATE ON pages BEGIN INSERT INTO search(search,rowid,searchURL,searchTitle) VALUES('delete',old.id,old.searchURL,old.searchTitle); INSERT INTO search(rowid,searchURL,searchTitle) VALUES(new.id,new.searchURL,new.searchTitle); END",
             "CREATE TRIGGER titleWords_update AFTER UPDATE ON pages BEGIN INSERT INTO titleWords(titleWords,rowid,searchTitle) VALUES('delete',old.id,old.searchTitle); INSERT INTO titleWords(rowid,searchTitle) VALUES(new.id,new.searchTitle); END",

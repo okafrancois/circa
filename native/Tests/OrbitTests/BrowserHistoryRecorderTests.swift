@@ -56,6 +56,22 @@ struct BrowserHistoryRecorderTests {
         print("FAVICON_STATE_BENCHMARK samples=\(iterations) pngBytes=\(png.count) beforeMainMicroseconds=\(oldTime) afterMainMicroseconds=\(newTime) beforeMainCPUMicroseconds=\(oldCPU) afterMainCPUMicroseconds=\(newCPU)")
     }
 
+    @Test("Clearing all history schedules the engine history purge; narrower deletions do not")
+    func engineHistoryPurgeScheduling() async throws {
+        let data = URL(fileURLWithPath: "/private/tmp/history-engine-purge-\(UUID())")
+        defer { try? FileManager.default.removeItem(at: data) }
+        let recorder = BrowserHistoryRecorder(directory: data.appendingPathComponent("History", isDirectory: true),
+                                              resolveProfile: { .init(profileID: $0, persistence: .persistent) })
+        let profile = ProfileID()
+        let visits = ["a", "b"].map { BrowserHistoryVisit(url: URL(string: "https://synthetic.test/\($0)")!) }
+        #expect(try await recorder.importDocument(BrowserHistoryDocument(profileID: profile, visits: visits)) == 2)
+        #expect(try await recorder.delete(for: profile, .visit(visits[0].id)) == 1)
+        #expect(try BrowserEngineHistoryPurge.pendingProfiles(dataRoot: data).isEmpty)
+        #expect(try await recorder.delete(for: profile, .all) == 1)
+        #expect(try BrowserEngineHistoryPurge.pendingProfiles(dataRoot: data) == [profile])
+        try await recorder.close()
+    }
+
     @Test("Deletion drains visits that are still queued for write before mutating the database")
     func queuedWriteThenDelete() async throws {
         let root = URL(fileURLWithPath: "/private/tmp", isDirectory: true).appendingPathComponent("orbit-library-r2-queued-\(UUID())")
