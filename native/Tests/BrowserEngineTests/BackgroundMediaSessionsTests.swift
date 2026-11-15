@@ -195,8 +195,12 @@ struct BackgroundMediaSessionsTests {
         list.updateAudio(BrowserMediaState(playback: .playing, isAudible: false, isAudioMuted: true), for: id)
         #expect(list.session(for: id)?.playback == .playing && list.session(for: id)?.toggleAction == .pause)
 
-        // Unmuting hands control back to the engine session.
+        // Unmuting: the card stays, unmuted and controllable, until the engine session returns,
+        // which then takes control back.
         source.muted = false
+        source.send(native(session: 3))
+        await settle()
+        #expect(list.session(for: id)?.isAudioMuted == false && list.session(for: id)?.toggleAction == .pause)
         source.send(native())
         await settle()
         #expect(list.perform(.pause, on: id) == .performed && source.performed == [.pause])

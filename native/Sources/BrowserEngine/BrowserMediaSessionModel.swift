@@ -305,7 +305,7 @@ public final class BrowserBackgroundMediaSessions<Source: BrowserMediaSessionCon
     }
 
     /// The native session, or the last playing one of the same document while the tab stays
-    /// muted and its media keeps playing (or was paused from the card). The engine cannot act on
+    /// muted (or was just unmuted) and its media keeps playing (or was paused from the card). The engine cannot act on
     /// players outside its session, so a kept session offers play, pause and seek only when the
     /// source drives the media element directly.
     private func derivedSession(_ id: TabOccurrenceID, _ item: Tracked) -> BrowserTabMediaSession? {
@@ -325,8 +325,10 @@ public final class BrowserBackgroundMediaSessions<Source: BrowserMediaSessionCon
             tracked[id]?.element = nil
             return session
         }
-        guard muted == true, item.element != nil || audio?.playback != .paused, var kept = item.lastSession,
-              item.lastDocument == document else {
+        // Unmuting returns the player to the engine session asynchronously: the kept session
+        // bridges that gap (and stays controllable) instead of the card leaving and re-entering.
+        guard muted == true || (muted == false && item.kept), item.element != nil || audio?.playback != .paused,
+              var kept = item.lastSession, item.lastDocument == document else {
             tracked[id]?.lastSession = nil
             tracked[id]?.lastDocument = nil
             tracked[id]?.kept = false
@@ -345,7 +347,7 @@ public final class BrowserBackgroundMediaSessions<Source: BrowserMediaSessionCon
             kept.actions = [.play, .pause]
             if let duration = kept.duration, duration.isFinite, duration > 0 { kept.actions.insert(.seek) }
         }
-        kept.isAudioMuted = true
+        kept.isAudioMuted = muted ?? true
         kept.isAudible = audio?.isAudible ?? audio?.isAudioPlaying ?? kept.isAudible
         return kept
     }

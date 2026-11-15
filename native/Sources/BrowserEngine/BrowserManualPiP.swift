@@ -44,9 +44,12 @@ public final class BrowserManualPiP {
               generation() == document, revision == self.revision,
               result["exceptionDetails"] == nil,
               (result["result"] as? [String: Any])?["value"] as? Bool == true else {
-            if revision == self.revision { target = nil; state = .unavailable }
+            // A cancelled query (a click on the PiP control cancels the pending one) learned
+            // nothing: the last known target stays usable.
+            if revision == self.revision, !Task.isCancelled { target = nil; state = .unavailable }
             return
         }
+        guard !Task.isCancelled else { return }
         target = (context, document)
         if state != .failed { state = .ready }
     }

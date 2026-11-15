@@ -24,9 +24,14 @@ enum OrbitMediaAdditionsProbe {
             }
             return true
         }
-        guard let window = owner.window, owns(window.windowNumber), let base = command["url"].flatMap(URL.init(string:)),
-              let output = command["output"].map({ URL(fileURLWithPath: $0) }),
-              let space = owner.session.snapshot?.activeSpaceID, let profile = owner.session.activeProfileID else { return ["refused": true] }
+        guard let window = owner.window else { return ["refused": "window"] }
+        window.orderFrontRegardless()
+        guard await wait(3, { owns(window.windowNumber) }) else { return ["refused": "ownership", "bundle": Bundle.main.bundleIdentifier ?? ""] }
+        guard let base = command["url"].flatMap(URL.init(string:)), let output = command["output"].map({ URL(fileURLWithPath: $0) }) else {
+            return ["refused": "command"]
+        }
+        _ = await wait(5) { owner.session.snapshot?.activeSpaceID != nil && owner.session.activeProfileID != nil }
+        guard let space = owner.session.snapshot?.activeSpaceID, let profile = owner.session.activeProfileID else { return ["refused": "session"] }
         let dark = command["appearance"] == "dark"
         var checks: [String: Any] = [:]
         var marks: [[String: Any]] = []
@@ -170,6 +175,7 @@ enum OrbitMediaAdditionsProbe {
         mark("pip-request"); checks["pipClick"] = click(card.pipButton)
         checks["pipActive"] = await wait(4) { video.pagePerformance?.lifecycle()?.pictureInPicture == true }
         checks["cardHiddenInPiP"] = await wait(2) { player.card(for: id) == nil }
+        checks["pipAdapter"] = "\(String(describing: video.manualPictureInPicture?.state)) \(String(describing: video.manualPictureInPicture?.failure))"
         mark("pip-active")
         let pipWindows: [NSWindow] = await {
             _ = await wait(2, { NSApp.windows.contains { $0 !== window && $0.isVisible && $0.frame.width >= 150 && $0.level == .floating && !$0.styleMask.contains(.titled) } })
@@ -212,14 +218,16 @@ enum OrbitMediaAdditionsProbe {
         }
         checks["unmuted"] = await wait { item(id)?.isMuted == false && item(id)?.canToggle == true }
         checks["cardAfterUnmute"] = player.card(for: id) != nil
+        checks["cardReplacedOnUnmute"] = player.card(for: id) !== card
         // Unmuted transport goes through the engine session again.
-        mark("unmuted-pause"); checks["unmutedPauseClick"] = click(card.toggleButton)
+        hover(player.card(for: id)); await pause(0.2)
+        mark("unmuted-pause"); checks["unmutedPauseClick"] = click(player.card(for: id)?.toggleButton)
         checks["unmutedPausePage"] = await pageWait(video) { $0["paused"] as? Bool == true }
         checks["unmutedPauseCard"] = await wait { item(id)?.toggle == .play }
-        checks["unmutedPlayClick"] = click(card.toggleButton)
+        checks["unmutedPlayClick"] = click(player.card(for: id)?.toggleButton)
         checks["unmutedPlayPage"] = await pageWait(video) { $0["paused"] as? Bool == false }
         let unmutedFrom = (await pageState(video))["time"] as? Double ?? 0
-        if let key = forwardKey() { card.timeline.keyDown(with: key) }
+        if let key = forwardKey() { player.card(for: id)?.timeline.keyDown(with: key) }
         checks["unmutedSeekPage"] = await pageWait(video) { ($0["time"] as? Double ?? 0) >= unmutedFrom + 4 }
         saveProgress()
         // Live style: a real MediaStream has no finite duration or seek range.

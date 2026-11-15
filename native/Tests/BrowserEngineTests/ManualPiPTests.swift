@@ -15,6 +15,7 @@ import Testing
         func call(_ method: String, _ parameters: String) async -> (Bool, Data) {
             let params = (try? JSONSerialization.jsonObject(with: Data(parameters.utf8)) as? [String: Any]) ?? [:]
             calls.append((method, params))
+            if Task.isCancelled { return (false, Data()) }
             let result: [String: Any]
             switch method {
             case "Page.getFrameTree": result = ["frameTree": ["frame": ["id": "main"], "childFrames": [["frame": ["id": "cross-origin"]]]]]
@@ -63,6 +64,23 @@ import Testing
         #expect(fake.exits == 1 && pip.state == .active)
         pip.acknowledge(active: false)
         #expect(pip.state == .unavailable)
+        task.cancel()
+        await task.value
+    }
+    @Test func cancelledQueryKeepsTheKnownTarget() async {
+        let fake = FakeTransport(), pip: BrowserManualPiP
+        pip = fake.adapter()
+        await pip.refresh()
+        #expect(pip.state == .ready)
+        // The click on the PiP control cancels the periodic query still in flight.
+        let query = Task { await pip.refresh() }
+        query.cancel()
+        await query.value
+        #expect(pip.state == .ready)
+        let task = Task { await pip.toggle() }
+        while pip.state != .requesting { await Task.yield() }
+        pip.acknowledge(active: true)
+        #expect(pip.state == .active)
         task.cancel()
         await task.value
     }
