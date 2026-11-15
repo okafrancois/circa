@@ -23,6 +23,13 @@ public enum BrowserMemorySaverSetting: String, Codable, CaseIterable, Sendable {
     }
 }
 
+public enum BrowserCalendarReminderTime: String, Codable, CaseIterable, Sendable {
+    case twoMinutes, fiveMinutes, tenMinutes, never
+    public var interval: TimeInterval? {
+        switch self { case .twoMinutes: 120; case .fiveMinutes: 300; case .tenMinutes: 600; case .never: nil }
+    }
+}
+
 public struct BrowserProfileSettings: Codable, Equatable, Sendable {
     public var searchEngine: SearchEngine = .google
     public var showSearchSuggestions = true
@@ -32,13 +39,17 @@ public struct BrowserProfileSettings: Codable, Equatable, Sendable {
     public var disabledLiveCalendars: Set<TabID> = []
     public var hiddenCalendarPreviews: Set<TabID> = []
     public var hiddenCalendarMeetingLinks: Set<TabID> = []
+    public var calendarReminderTimes: [TabID: BrowserCalendarReminderTime] = [:]
+    public func calendarReminderTime(for tab: TabID) -> BrowserCalendarReminderTime {
+        hiddenCalendarMeetingLinks.contains(tab) ? .never : calendarReminderTimes[tab] ?? .fiveMinutes
+    }
     public var hiddenCalendarCountdowns: Set<TabID> = []
     public var hiddenGmailBadges: Set<TabID> = []
     /// Built-in ad and tracker blocking, on by default.
     public var blocksAdsAndTrackers = true
     public init() {}
     private enum CodingKeys: String, CodingKey {
-        case disabledLiveCalendars, hiddenCalendarPreviews, hiddenCalendarCountdowns, hiddenCalendarMeetingLinks
+        case disabledLiveCalendars, hiddenCalendarPreviews, hiddenCalendarCountdowns, hiddenCalendarMeetingLinks, calendarReminderTimes
         case showSearchSuggestions, searchEngine, opensPinnedLinksInPeek, shiftClickOpensPeek, extensionPinOrder, hiddenGmailBadges, blocksAdsAndTrackers
     }
     public init(from decoder: Decoder) throws {
@@ -51,6 +62,7 @@ public struct BrowserProfileSettings: Codable, Equatable, Sendable {
         disabledLiveCalendars = try values.decodeIfPresent(Set<TabID>.self, forKey: .disabledLiveCalendars) ?? []
         hiddenCalendarPreviews = try values.decodeIfPresent(Set<TabID>.self, forKey: .hiddenCalendarPreviews) ?? []
         hiddenCalendarMeetingLinks = try values.decodeIfPresent(Set<TabID>.self, forKey: .hiddenCalendarMeetingLinks) ?? []
+        calendarReminderTimes = try values.decodeIfPresent([TabID: BrowserCalendarReminderTime].self, forKey: .calendarReminderTimes) ?? [:]
         hiddenCalendarCountdowns = try values.decodeIfPresent(Set<TabID>.self, forKey: .hiddenCalendarCountdowns) ?? []
         hiddenGmailBadges = try values.decodeIfPresent(Set<TabID>.self, forKey: .hiddenGmailBadges) ?? []
         blocksAdsAndTrackers = try values.decodeIfPresent(Bool.self, forKey: .blocksAdsAndTrackers) ?? true
@@ -171,17 +183,19 @@ public struct BrowserSpaceSettings: Codable, Equatable, Sendable {
 public struct BrowserInteractionPreferences: Codable, Equatable, Sendable {
     public var warnBeforeQuitting = true
     public var playSoundEffects = true
+    public var meetingReminderSound = true
     public var hapticFeedback = true
     /// View > Show/Hide Toolbar: an always-visible toolbar above the page.
     public var showsToolbar = false
     public var toolbarShowsFullURL = true
     public var sidebarOnRight = false
     public init() {}
-    private enum CodingKeys: String, CodingKey { case warnBeforeQuitting, playSoundEffects, hapticFeedback, showsToolbar, toolbarShowsFullURL, sidebarOnRight }
+    private enum CodingKeys: String, CodingKey { case warnBeforeQuitting, playSoundEffects, meetingReminderSound, hapticFeedback, showsToolbar, toolbarShowsFullURL, sidebarOnRight }
     public init(from decoder: Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
         warnBeforeQuitting = try values.decodeIfPresent(Bool.self, forKey: .warnBeforeQuitting) ?? true
         playSoundEffects = try values.decodeIfPresent(Bool.self, forKey: .playSoundEffects) ?? true
+        meetingReminderSound = try values.decodeIfPresent(Bool.self, forKey: .meetingReminderSound) ?? true
         hapticFeedback = try values.decodeIfPresent(Bool.self, forKey: .hapticFeedback) ?? true
         showsToolbar = try values.decodeIfPresent(Bool.self, forKey: .showsToolbar) ?? false
         toolbarShowsFullURL = try values.decodeIfPresent(Bool.self, forKey: .toolbarShowsFullURL) ?? true

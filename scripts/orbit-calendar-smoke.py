@@ -25,7 +25,7 @@ class Fixture(BaseHTTPRequestHandler):
     def log_message(self, *_):
         pass
 
-    starts = [(datetime.datetime.now().astimezone() + datetime.timedelta(minutes=m)).replace(second=0, microsecond=0) for m in [3, 65, 125]]
+    starts = [(datetime.datetime.now().astimezone() + datetime.timedelta(minutes=m)).replace(second=0, microsecond=0) for m in [2, 3, 125]]
     counts = {}
     titles = ['📅 Kickoff meeting', 'Design workshop', 'Focus time']
 
@@ -50,7 +50,7 @@ class Fixture(BaseHTTPRequestHandler):
                 t[0] = f'fixture{i}'
                 t[35] = [None, [start.timestamp() * 1000]]
                 t[36] = [None, [(start + datetime.timedelta(minutes=[45, 60, 90][i])).timestamp() * 1000]]
-                t[57] = [[[1, 'https://meet.google.com/abc-defg-hij']]] if i == 0 else []
+                t[57] = [[[1, 'https://meet.google.com/abc-defg-hij']]] if i < 2 else []
                 tuples.append([None, None, None, t])
             bootstrap = [None] * 40
             bootstrap[39] = [None, [['fixture@example.invalid', tuples]]]
@@ -113,7 +113,7 @@ def phase(args):
                         raise TimeoutError('Synthetic startup')
                     time.sleep(.05)
                 nonce = str(time.monotonic_ns())
-                control.write_text(json.dumps({'command': 'window-freeze-2', 'step': 'calendar-preview', 'base': f'http://127.0.0.1:{args.port}', 'nonce': nonce, 'appearance': args.appearance}))
+                control.write_text(json.dumps({'command': 'window-freeze-2', 'step': 'calendar-preview', 'base': f'http://127.0.0.1:{args.port}', 'nonce': nonce, 'appearance': args.appearance, 'notifications': 'yes' if args.notifications else 'no'}))
                 deadline = time.monotonic() + 35
                 while time.monotonic() < deadline:
                     if not args.no_record and recording is None and (data / 'calendar-window.txt').exists():
@@ -146,6 +146,11 @@ def phase(args):
                 process.wait(timeout=4)
     signal.alarm(0)
     report = {'result': checks, 'guiSeconds': time.monotonic() - started, 'cleanShutdown': process.returncode == 0 and not owner.remaining and not owner.forced_signals}
+    if args.notifications:
+        notification = data / 'calendar-notification-result.json'
+        report['notification'] = json.loads(notification.read_text()) if notification.exists() else {'missing': True}
+        checks['systemNotificationDelivered'] = report['notification'].get('delivered', 0) > 0
+        checks['passed'] = checks.get('passed', False) and checks['systemNotificationDelivered']
     (root / 'verification.json').write_text(json.dumps(report, indent=2))
     assert checks.get('passed') and report['cleanShutdown'], report
     print(json.dumps(report))
@@ -156,6 +161,7 @@ def main():
     parser.add_argument('--app', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--phase', action='store_true')
+    parser.add_argument('--notifications', action='store_true')
     parser.add_argument('--no-record', action='store_true')
     parser.add_argument('--port', type=int)
     parser.add_argument('--appearance', default='light', choices=['light', 'dark'])
@@ -169,7 +175,7 @@ def main():
     server = ThreadingHTTPServer(('127.0.0.1', 0), Fixture)
     thread = threading.Thread(target=server.serve_forever, daemon=True); thread.start()
     try:
-        subprocess.run(['/usr/bin/lockf', '-k', '/tmp/orbit-gui-slot.lock', sys.executable, __file__, '--app', str(args.app.resolve()), '--output', str(args.output.resolve()), '--phase', '--port', str(server.server_port), '--appearance', args.appearance] + (['--no-record'] if args.no_record else []), check=True)
+        subprocess.run(['/usr/bin/lockf', '-k', '/tmp/orbit-gui-slot.lock', sys.executable, __file__, '--app', str(args.app.resolve()), '--output', str(args.output.resolve()), '--phase', '--port', str(server.server_port), '--appearance', args.appearance] + (['--no-record'] if args.no_record else []) + (['--notifications'] if args.notifications else []), check=True)
     finally:
         server.shutdown(); server.server_close(); thread.join()
         (args.output / 'fixture-requests.json').write_text(json.dumps(Fixture.counts, indent=2))

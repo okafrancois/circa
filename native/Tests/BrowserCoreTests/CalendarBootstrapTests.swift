@@ -53,12 +53,32 @@ struct CalendarBootstrapTests {
         let result = BrowserCalendarBootstrap.enrich(agenda(), json: try payload([tuple("one", join: "https://example.invalid")]))
         #expect(result.events[0].end != nil && result.events[0].joinURL == nil)
     }
+    @Test func reminderTimingAndPreferenceMigration() throws {
+        let id = TabID(), now = self.now
+        var settings = BrowserProfileSettings()
+        #expect(settings.calendarReminderTime(for: id) == .fiveMinutes)
+        settings.hiddenCalendarMeetingLinks.insert(id)
+        #expect(settings.calendarReminderTime(for: id) == .never)
+        settings.hiddenCalendarMeetingLinks.remove(id)
+        settings.calendarReminderTimes[id] = .tenMinutes
+        let restored = try JSONDecoder().decode(BrowserProfileSettings.self, from: JSONEncoder().encode(settings))
+        #expect(restored.calendarReminderTime(for: id) == .tenMinutes)
+        #expect(try JSONDecoder().decode(BrowserInteractionPreferences.self, from: Data("{}".utf8)).meetingReminderSound)
+        for time in BrowserCalendarReminderTime.allCases {
+            let boundary = time.interval ?? 120
+            let agenda = BrowserCalendarWebAgenda(events: [.init(id: "fixture", title: "Invented", start: now.addingTimeInterval(boundary), joinURL: URL(string: "https://meet.google.com/abc-defg-hij"))], fetchedAt: now, day: now, timeZone: .gmt, binding: "fixture")
+            #expect((agenda.nextMeeting(at: now, reminderTime: time) != nil) == (time != .never))
+            #expect(agenda.nextMeeting(at: now.addingTimeInterval(-0.01), reminderTime: time) == nil)
+            if time == .tenMinutes { #expect(agenda.nextMeeting(at: now, reminderTime: .fiveMinutes) == nil) }
+            if time == .fiveMinutes { #expect(agenda.nextMeeting(at: now, reminderTime: .twoMinutes) == nil) }
+        }
+    }
     @Test func reminderFreshnessAndWindow() throws {
         let a = BrowserCalendarBootstrap.enrich(agenda(), json: try payload([tuple("one")]))
         #expect(a.nextMeeting(at: now) != nil)
         #expect(a.nextMeeting(at: now.addingTimeInterval(120)) == nil)
         #expect(a.nextMeeting(at: now.addingTimeInterval(-1)) == nil)
-        let future = BrowserCalendarWebAgenda(events: [.init(id: "later", title: "Later", start: now.addingTimeInterval(181), joinURL: URL(string: "https://meet.google.com/abc-defg-hij"))], fetchedAt: now, day: now, timeZone: .gmt, binding: "fixture")
+        let future = BrowserCalendarWebAgenda(events: [.init(id: "later", title: "Later", start: now.addingTimeInterval(301), joinURL: URL(string: "https://meet.google.com/abc-defg-hij"))], fetchedAt: now, day: now, timeZone: .gmt, binding: "fixture")
         #expect(future.nextMeeting(at: now) == nil)
     }
 }

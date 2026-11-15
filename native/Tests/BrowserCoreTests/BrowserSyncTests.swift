@@ -30,6 +30,16 @@ struct BrowserSyncTests {
                 archive: [], archivePolicy: .init()))
     }
 
+    @Test func calendarTimingRemainsDeviceLocalInBothMappings() throws {
+        let session = document()
+        let baseline = try BrowserSyncMapping.project(session: session, settings: .init())
+        var settings = BrowserSettingsDocument(), profileSettings = BrowserProfileSettings()
+        profileSettings.calendarReminderTimes[first] = .tenMinutes
+        settings.profiles[profile] = profileSettings
+        #expect(try BrowserSyncMapping.project(session: session, settings: settings) == baseline)
+        #expect(try LegacySyncMapping.project(session: session, settings: settings) == baseline)
+    }
+
     func project(_ document: BrowserSessionDocument) throws -> BrowserSyncProjection {
         try BrowserSyncMapping.project(session: document, settings: .init())
     }

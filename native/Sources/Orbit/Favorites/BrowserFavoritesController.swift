@@ -10,6 +10,7 @@ final class BrowserFavoritesController<Engine: BrowserEngine> {
     let grid = FavoritesGridView()
     let icons: FavoriteIconPipeline<Surface>
     let calendar = BrowserCalendarRuntime()
+    let calendarReminderOwner = UUID()
     let calendarPreview = CalendarPreviewController()
     private let calendarSession: (any BrowserCalendarWebSession)?
     let gmail = BrowserGmailRuntime()
@@ -159,6 +160,7 @@ final class BrowserFavoritesController<Engine: BrowserEngine> {
         gmailRefreshTimer?.invalidate(); gmailRefreshTimer = nil
         owner?.sidebar.presentCalendarReminder(id: nil, title: nil, join: nil)
         calendarPreview.dismiss(); calendar.clear()
+        BrowserMeetingReminders.shared.update(owner: calendarReminderOwner, reminder: nil, now: Date())
         gmailPreview.dismiss(); gmail.clear()
         observer?.cancel()
         observer = nil
@@ -181,6 +183,7 @@ final class BrowserFavoritesController<Engine: BrowserEngine> {
         if spaceID != snapshot?.spaceID { calendarPreview.dismiss(); gmailPreview.dismiss(); spaceID = snapshot?.spaceID }
         if profileID != snapshot?.profileID {
             calendarPreview.dismiss(); calendar.clear()
+            BrowserMeetingReminders.shared.update(owner: calendarReminderOwner, reminder: nil, now: Date())
             gmailPreview.dismiss(); gmail.clear()
             icons.clear()
             surfacesByTab.removeAll()
@@ -199,9 +202,7 @@ final class BrowserFavoritesController<Engine: BrowserEngine> {
         calendar.reconcile(profile: owner.isPrivateWindow ? nil : snapshot?.profileID,
                            accounts: owner.isPrivateWindow ? [] : calendarAccounts,
                            session: owner.isPrivateWindow ? nil : calendarSession)
-        if owner.window?.occlusionState.contains(.visible) == true && NSApp.isActive && !owner.sidebar.isPresentationHidden {
-            for account in calendarAccounts { calendar.refresh(account) }
-        }
+        for account in calendarAccounts { calendar.refresh(account) }
         let ids = Set(tabs.map(\.id))
         let pinnedTabs = snapshot.map { FolderPreviewResult.ordered($0.pinned).map(\.tab) } ?? []
         let accounts = Set((tabs + pinnedTabs).compactMap { BrowserGmailAccount(url: $0.pinnedURL ?? $0.url) })
@@ -213,7 +214,7 @@ final class BrowserFavoritesController<Engine: BrowserEngine> {
         } else if gmailRefreshTimer == nil {
             gmailRefreshTimer = Timer.scheduledTimer(withTimeInterval: 15, repeats: true) { [weak self] _ in
                 MainActor.assumeIsolated {
-                    guard let self, self.owner?.window?.occlusionState.contains(.visible) == true else { return }
+                    guard let self, self.owner?.session.isClosed == false else { return }
                     self.render()
                 }
             }

@@ -526,6 +526,9 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
                 liveToggle(uiFormat("Play %@ sound effects", applicationName), value: runtime.document.interaction.playSoundEffects,
                            identifier: "settings-sound-effects", icon: "speaker.wave.2", save: model.setPlaySoundEffects)
                 rule
+                liveToggle("Meeting reminder sound", value: runtime.document.interaction.meetingReminderSound,
+                           identifier: "settings-meeting-reminder-sound", icon: "speaker.wave.2", save: model.setMeetingReminderSound)
+                rule
                 liveToggle("Haptic feedback for tab organization and resizing", value: runtime.document.interaction.hapticFeedback,
                            identifier: "settings-reorder-haptics", icon: "hand.raised", save: model.setHapticFeedback)
             }
