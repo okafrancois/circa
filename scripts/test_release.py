@@ -12,6 +12,9 @@ from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).parent))
 import release
 import local_signing
+import release_notes
+
+NOTE_FIXTURE = Path(__file__).parent / 'fixtures/release-notes/1.2.3.md'
 
 
 class ReleaseTests(unittest.TestCase):
@@ -35,6 +38,32 @@ class ReleaseTests(unittest.TestCase):
             self.assertEqual(fingerprint, 'A' * 40)
             self.assertEqual(sorted(p.name for p in directory.iterdir()), before)
 
+    def test_all_release_notes_are_valid(self):
+        notes = release_notes.load_all(release.ROOT)
+        self.assertTrue(any(note.version == '0.1.0' for note in notes))
+        self.assertTrue(any(note.version == '0.71.2' for note in notes))
+
+    def test_missing_or_invalid_notes_stop_before_building(self):
+        with patch.object(release, 'run') as run, patch.object(release, 'release_notes_path', return_value=None):
+            with self.assertRaises(ValueError):
+                release.publish_release(self.config, '1.2.3', Path('app.zip'), Path('app.dmg'), Path('appcast.xml'))
+            run.assert_not_called()
+        with patch.object(sys, 'argv', ['release.py', '--tag', 'v0.71.2']), \
+                patch.object(release, 'load_all', side_effect=ValueError('Invalid editorial note')), \
+                patch.object(release, 'run') as run, patch.object(release, 'require_notary_profile') as notary:
+            with self.assertRaisesRegex(ValueError, 'Invalid editorial note'):
+                release.main()
+            run.assert_not_called()
+            notary.assert_not_called()
+
+    def test_published_release_bodies_are_immutable(self):
+        with patch.object(release, 'release_notes_path', return_value=NOTE_FIXTURE), \
+                patch.object(release.subprocess, 'run', return_value=SimpleNamespace(returncode=0, stdout='{"isDraft":false}')), \
+                patch.object(release, 'run') as run:
+            with self.assertRaisesRegex(ValueError, 'already published'):
+                release.publish_release(self.config, '1.2.3', Path('app.zip'), Path('app.dmg'), Path('appcast.xml'))
+            run.assert_not_called()
+
     def test_versions_are_semantic_and_builds_are_numeric(self):
         self.assertEqual(release.release_version('v0.1.0'), '0.1.0')
         for tag in ['0.1.0', 'v1.2', 'v1.2.3-rc1', 'main']:
@@ -55,7 +84,8 @@ class ReleaseTests(unittest.TestCase):
         commands = []
         def fake_run(*args, **kwargs):
             commands.append(list(map(str, args)))
-        with patch.object(release.subprocess, 'run', side_effect=responses), patch.object(release, 'run', side_effect=fake_run):
+        with patch.object(release, 'release_notes_path', return_value=NOTE_FIXTURE), \
+                patch.object(release.subprocess, 'run', side_effect=responses), patch.object(release, 'run', side_effect=fake_run):
             release.publish_release(self.config, '1.2.3', Path('app.zip'), Path('app.dmg'), Path('appcast.xml'))
         publish_edit = next(command for command in commands if command[:3] == ['gh', 'release', 'edit'])
         feed_create = next(command for command in commands if command[:4] == ['gh', 'release', 'create', 'update-feed'])
@@ -71,23 +101,33 @@ class ReleaseTests(unittest.TestCase):
             root = Path(temporary)
             notes = root / 'release/notes/1.2.3.md'
             notes.parent.mkdir(parents=True)
-            notes.write_text('A user-facing change.\n')
+            notes.write_text(NOTE_FIXTURE.read_text())
             commands = []
+            bodies = []
+            def record(*args, **kwargs):
+                commands.append(list(map(str, args)))
+                if '--notes-file' in args:
+                    bodies.append(Path(args[args.index('--notes-file') + 1]).read_text())
             responses = [SimpleNamespace(returncode=1), SimpleNamespace(returncode=1)]
             with patch.object(release, 'ROOT', root), patch.object(release.subprocess, 'run', side_effect=responses), \
-                    patch.object(release, 'run', side_effect=lambda *args, **kwargs: commands.append(list(map(str, args)))):
+                    patch.object(release, 'run', side_effect=record):
                 release.publish_release(self.config, '1.2.3', Path('app.zip'), Path('app.dmg'), Path('appcast.xml'))
                 self.assertEqual(release.release_notes_path('1.2.3'), notes)
                 with self.assertRaises(ValueError):
                     release.release_notes_path('1.2.3/../../other')
             create = next(command for command in commands if command[:3] == ['gh', 'release', 'create'])
-            self.assertEqual(create[-2:], ['--notes-file', str(notes)])
+            self.assertEqual(create[-2], '--notes-file')
+            self.assertNotEqual(create[-1], str(notes))
+            self.assertEqual(bodies, [release_notes.github_body(release_notes.load(notes))])
+            self.assertNotIn('date:', bodies[0])
+            self.assertIn('1 new · 1 faster · 1 fixed', bodies[0])
             self.assertNotIn('--generate-notes', create)
 
     def test_publish_uploads_unversioned_stable_dmg(self):
         responses = [SimpleNamespace(returncode=1), SimpleNamespace(returncode=1)]
         commands = []
-        with patch.object(release.subprocess, 'run', side_effect=responses), \
+        with patch.object(release, 'release_notes_path', return_value=NOTE_FIXTURE), \
+                patch.object(release.subprocess, 'run', side_effect=responses), \
                 patch.object(release, 'run', side_effect=lambda *args, **kwargs: commands.append(list(map(str, args)))):
             release.publish_release(self.config, '1.2.3', Path('app.zip'), Path('app.dmg'), Path('appcast.xml'),
                                     stable_dmg=Path('Circa.dmg'))

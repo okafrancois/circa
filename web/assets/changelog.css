@@ -41,7 +41,7 @@
 .release:nth-child(4n+3) { --c: var(--sun); }
 .release:nth-child(4n+4) { --c: var(--aurora); }
 .release:first-child::before { width: 30px; height: 30px; left: -48px; top: 2px; }
-.release:first-child .release-meta h2::after { content: "Latest"; display: inline-block; margin-left: 10px; vertical-align: middle; font: 500 10px/1 var(--mono); letter-spacing: .12em; text-transform: uppercase; background: var(--ink); color: var(--paper); border-radius: 99px; padding: 5px 9px; }
+.release[data-latest="true"] .release-meta h2::after { content: "Latest"; display: inline-block; margin-left: 10px; vertical-align: middle; font: 500 10px/1 var(--mono); letter-spacing: .12em; text-transform: uppercase; background: var(--ink); color: var(--paper); border-radius: 99px; padding: 5px 9px; }
 .release-meta h2 { margin: 0; font-family: var(--display); font-weight: 800; font-size: clamp(26px, 2.2vw, 34px); letter-spacing: -.04em; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .release-meta time { display: block; margin-top: 8px; font-family: var(--mono); font-size: 11px; letter-spacing: .1em; text-transform: uppercase; opacity: .65; }
 .release-copy { max-width: 680px; overflow-wrap: anywhere; font-size: 16.5px; line-height: 1.55; }
@@ -75,3 +75,21 @@
   .version-nav nav { display: flex; flex-wrap: wrap; gap: 4px 6px; }
 }
 @media (max-width: 680px) { .release-copy { font-size: 15px; } .timeline { padding-left: 36px; } .release::before { left: -36px; } .release:first-child::before { left: -40px; } .timeline::before { left: 10px; } }
+
+/* Structured notes use the existing timeline, typography and palette. */
+.release[hidden], .version-nav nav a[hidden] { display: none; }
+.version-nav nav#versions { max-height: 55vh; overflow-y: auto; }
+.release-filter { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 16px; border: 0; padding: 0; margin: 0; }
+.release-filter legend { margin-bottom: 10px; font-weight: 600; }
+.release-filter input { accent-color: var(--cobalt); }
+.release-layout:has(#channel-stable:checked) [data-channel="nightly"],
+.release-layout:has(#channel-nightly:checked) [data-channel="stable"] { display: none; }
+.release-copy h4 { margin: 20px 0 8px; font-size: 18px; }
+.release-counts, .release-engine, .release-channel { font-size: 14px; }
+.release-channel { display: block; margin-top: 8px; }
+.release-media { margin: 24px 0; }
+.release-media video { width: 100%; height: auto; display: block; }
+.release-media figcaption { margin-top: 8px; font-size: 14px; }
+.latest-banner { margin: 0 0 28px; }
+.latest-banner a { border-bottom: 2px solid currentColor; }
+@media (max-width: 680px) { .release-filter { margin-bottom: 28px; } }

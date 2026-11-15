@@ -31,6 +31,7 @@ from orbit_bundle_policy import set_helper_bundle_identifiers, validate_bundle_c
 from local_signing import configured_identity
 from product_identity import BUNDLE_ID, DISPLAY_NAME, PRODUCT_NAME
 from update_feed import update_feed_url
+from release_notes import load, load_all, github_body
 
 
 def run(*arguments, **kwargs):
@@ -479,14 +480,20 @@ def publish_release(config, version, archive, dmg, appcast, deltas=(), stable_dm
     # stable_dmg is an unversioned copy, so releases/latest/download/<name>.dmg stays a fixed download link.
     repo, tag = config['repository'], 'v' + version
     notes = release_notes_path(version)
+    if notes is None:
+        raise ValueError('A structured release note is required for ' + version)
+    note = load(notes, ROOT)
     existing = subprocess.run(['gh', 'release', 'view', tag, '--repo', repo, '--json', 'isDraft'], capture_output=True, text=True)
-    if existing.returncode:
-        run('gh', 'release', 'create', tag, '--repo', repo, '--verify-tag', '--draft', '--title', f"{config['name']} {version}",
-            *(['--notes-file', notes] if notes else ['--generate-notes']))
-    elif not json.loads(existing.stdout)['isDraft']:
+    if not existing.returncode and not json.loads(existing.stdout)['isDraft']:
         raise ValueError('Refusing to mutate an already published release')
-    elif notes:
-        run('gh', 'release', 'edit', tag, '--repo', repo, '--notes-file', notes)
+    with tempfile.TemporaryDirectory(prefix='circa-release-notes-') as temporary:
+        rendered = Path(temporary) / 'notes.md'
+        rendered.write_text(github_body(note), encoding='utf-8')
+        if existing.returncode:
+            run('gh', 'release', 'create', tag, '--repo', repo, '--verify-tag', '--draft', '--title', f"{config['name']} {version}",
+                '--notes-file', rendered)
+        else:
+            run('gh', 'release', 'edit', tag, '--repo', repo, '--notes-file', rendered)
     run('gh', 'release', 'upload', tag, '--repo', repo, '--clobber', archive, dmg, *([stable_dmg] if stable_dmg else []), appcast, *sorted(deltas))
     run('gh', 'release', 'edit', tag, '--repo', repo, '--draft=false', '--latest')
     feed = subprocess.run(['gh', 'release', 'view', 'update-feed', '--repo', repo, '--json', 'isDraft,isPrerelease'], capture_output=True, text=True)
@@ -526,7 +533,11 @@ def main():
     version = release_version(args.tag) if args.tag or not args.qualify_only else '0.0.0'
     if args.qualify_only and (args.publish or args.local_test_root):
         raise ValueError('--qualify-only neither publishes nor uses an isolated test root')
+    # Validate the entire editorial history before any downloads, signing or builds.
+    load_all(ROOT)
     if not args.qualify_only:
+        if not args.local_test_root and release_notes_path(version) is None:
+            raise ValueError('A structured release note is required for ' + version)
         require_notary_profile(config)
     if not config['public_ed_key']:
         raise ValueError('Configure public_ed_key before preparing signed update releases')
