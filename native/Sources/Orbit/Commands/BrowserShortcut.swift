@@ -205,9 +205,13 @@ final class BrowserCommandKeyboard {
         }
     }
 
-    static func permitsCurrentMenuEvent() -> Bool {
-        guard let event = NSApp?.currentEvent, event.type == .keyDown else { return true }
-        let input = NSApp.keyWindow?.firstResponder as? NSTextInputClient
+    /// Whether a menu item may validate or run now. Only key-equivalent matching is gated: a
+    /// key that cannot be a shortcut (composition, dead keys) stays with text input. A click,
+    /// Return in an open menu or an Accessibility press always runs, even when a stale
+    /// non-shortcut key (the Escape that closed a panel, that Return) is `NSApp.currentEvent`.
+    static func permitsCurrentMenuEvent(firstResponder: @autoclosure () -> NSResponder? = NSApp?.keyWindow?.firstResponder) -> Bool {
+        guard let event = BrowserKeyEquivalentMenu.matchingEvent, event.type == .keyDown else { return true }
+        let input = firstResponder() as? NSTextInputClient
         return BrowserShortcut.input(event, isComposing: input?.hasMarkedText() == true) != nil
     }
 

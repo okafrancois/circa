@@ -46,7 +46,7 @@ final class BrowserCommandMenus<Window: AnyObject>: NSObject, NSMenuItemValidati
     /// Context menus use the same item configuration and a target captured before opening.
     /// The owner must retain this controller for as long as AppKit retains the displayed menu.
     func makeContextMenu(commands: [BrowserCommandID]) -> NSMenu {
-        let menu = NSMenu()
+        let menu = BrowserKeyEquivalentMenu()
         for id in commands {
             guard isAvailableInMenus(id), let definition = registry.definition(id) else { continue }
             let shortcut = definition.shortcuts.first
@@ -195,7 +195,8 @@ final class BrowserCommandMenus<Window: AnyObject>: NSObject, NSMenuItemValidati
             let probe = NSMenuItem(title: menuItem.title, action: selector, keyEquivalent: "")
             return window.responds(to: selector) && window.validateUserInterfaceItem(probe)
         }
-        guard BrowserCommandKeyboard.permitsCurrentMenuEvent(), !nativeTextOwnsCurrentKey(menuItem) else { return false }
+        guard BrowserCommandKeyboard.permitsCurrentMenuEvent(firstResponder: keyWindowProvider()?.firstResponder),
+              !nativeTextOwnsCurrentKey(menuItem) else { return false }
         return registry.isEnabled(id, target: target)
     }
 
@@ -205,7 +206,7 @@ final class BrowserCommandMenus<Window: AnyObject>: NSObject, NSMenuItemValidati
             NSApp.sendAction(selector, to: window, from: sender)
             return
         }
-        guard BrowserCommandKeyboard.permitsCurrentMenuEvent() else { return }
+        guard BrowserCommandKeyboard.permitsCurrentMenuEvent(firstResponder: keyWindowProvider()?.firstResponder) else { return }
         registry.dispatch(id, origin: target == nil ? .menu : .contextMenu, target: target)
     }
 
@@ -257,8 +258,9 @@ final class BrowserCommandMenus<Window: AnyObject>: NSObject, NSMenuItemValidati
 
     /// ⌘←/⌘→ also serialize Go Back/Forward (hidden aliases). In a native text view they
     /// move the insertion point; the disabled item lets the event reach the field editor.
+    /// Only while that key is being matched: choosing Back from the menu still works.
     private func nativeTextOwnsCurrentKey(_ item: NSMenuItem) -> Bool {
-        guard let event = NSApp?.currentEvent, event.type == .keyDown, event.charactersIgnoringModifiers == item.keyEquivalent,
+        guard let event = BrowserKeyEquivalentMenu.matchingEvent, event.type == .keyDown, event.charactersIgnoringModifiers == item.keyEquivalent,
               item.keyEquivalentModifierMask == [.command], ["\u{F702}", "\u{F703}"].contains(item.keyEquivalent) else { return false }
         return BrowserCommandTextInput.isEditing(keyWindowProvider()?.firstResponder)
     }

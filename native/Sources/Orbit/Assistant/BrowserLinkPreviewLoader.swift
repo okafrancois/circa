@@ -16,15 +16,17 @@ struct BrowserLinkPreviewDocument: Equatable, Sendable {
 final class BrowserLinkPreviewLoader {
     nonisolated static let maximumBytes = 262_144
     private let session: URLSession
+    private let requestTimeout: TimeInterval
 
-    init(configuration: URLSessionConfiguration = .ephemeral) {
+    init(configuration: URLSessionConfiguration = .ephemeral, requestTimeout: TimeInterval = 5, resourceTimeout: TimeInterval = 8) {
         configuration.httpShouldSetCookies = false
         configuration.httpCookieStorage = nil
         configuration.urlCredentialStorage = nil
         configuration.urlCache = nil
         configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
-        configuration.timeoutIntervalForRequest = 5
-        configuration.timeoutIntervalForResource = 8
+        configuration.timeoutIntervalForRequest = requestTimeout
+        configuration.timeoutIntervalForResource = resourceTimeout
+        self.requestTimeout = requestTimeout
         session = URLSession(configuration: configuration, delegate: LinkPreviewTransport(), delegateQueue: nil)
     }
     deinit { session.invalidateAndCancel() }
@@ -40,12 +42,11 @@ final class BrowserLinkPreviewLoader {
         for _ in 0..<5 {
             try Task.checkCancellation()
             guard Self.validURL(next), allowed(next), visited.insert(next).inserted else { throw CancellationError() }
-            var request = URLRequest(url: next, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: 5)
+            var request = URLRequest(url: next, cachePolicy: .reloadIgnoringLocalCacheData, timeoutInterval: requestTimeout)
             request.httpShouldHandleCookies = false
             request.setValue("text/html,application/xhtml+xml", forHTTPHeaderField: "Accept")
-            let (bytes, response) = try await session.bytes(for: request)
-            defer { bytes.task.cancel() }
-            guard allowed(next), let response = response as? HTTPURLResponse else { throw CancellationError() }
+            let (response, data) = try await exchange(request, allowed: allowed)
+            guard allowed(next) else { throw CancellationError() }
             if [301, 302, 303, 307, 308].contains(response.statusCode),
                let location = response.value(forHTTPHeaderField: "Location"),
                let redirected = URL(string: location, relativeTo: next)?.absoluteURL {
@@ -53,18 +54,7 @@ final class BrowserLinkPreviewLoader {
                 next = redirected
                 continue
             }
-            guard response.statusCode == 200, let mime = response.mimeType,
-                  ["text/html", "application/xhtml+xml"].contains(mime),
-                  response.expectedContentLength <= Self.maximumBytes else { throw BrowserAIError.failed }
-            var data = Data()
-            for try await byte in bytes {
-                guard data.count < Self.maximumBytes else { throw BrowserAIError.failed }
-                data.append(byte)
-                if data.count % 1024 == 0 {
-                    try Task.checkCancellation()
-                    guard allowed(next) else { throw CancellationError() }
-                }
-            }
+            guard Self.acceptsBody(response) else { throw BrowserAIError.failed }
             try Task.checkCancellation()
             guard allowed(next) else { throw CancellationError() }
             let payload = data
@@ -73,6 +63,26 @@ final class BrowserLinkPreviewLoader {
             return .init(title: document.title, description: document.description, text: document.text, url: next)
         }
         throw BrowserAIError.failed
+    }
+
+    nonisolated static func acceptsBody(_ response: HTTPURLResponse) -> Bool {
+        response.statusCode == 200 && ["text/html", "application/xhtml+xml"].contains(response.mimeType ?? "")
+            && response.expectedContentLength <= maximumBytes
+    }
+
+    /// One request, driven entirely by URLSession delegate callbacks on the session's own
+    /// queue. Completion never waits for the Swift cooperative pool: `URLSession.bytes(for:)`
+    /// needs that pool to make progress while the resource timeout runs, so a saturated pool
+    /// turned a prompt answer into a timeout. Task cancellation cancels the transfer at once.
+    private func exchange(_ request: URLRequest, allowed: @escaping @MainActor (URL) -> Bool) async throws -> (HTTPURLResponse, Data) {
+        let task = session.dataTask(with: request)
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                task.delegate = LinkPreviewExchange(limit: Self.maximumBytes, url: request.url!, allowed: allowed,
+                                                     continuation: continuation)
+                task.resume()
+            }
+        } onCancel: { task.cancel() }
     }
 
     nonisolated static func parse(_ data: Data) -> BrowserLinkPreviewDocument? {
@@ -114,6 +124,90 @@ final class BrowserLinkPreviewLoader {
 private final class LinkPreviewTransport: NSObject, URLSessionTaskDelegate, Sendable {
     func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse,
                     newRequest request: URLRequest, completionHandler: @escaping @Sendable (URLRequest?) -> Void) { completionHandler(nil) }
+    func urlSession(_ session: URLSession, task: URLSessionTask, didReceive challenge: URLAuthenticationChallenge,
+                    completionHandler: @escaping @Sendable (URLSession.AuthChallengeDisposition, URLCredential?) -> Void) {
+        completionHandler(challenge.protectionSpace.authenticationMethod == NSURLAuthenticationMethodServerTrust
+            ? .performDefaultHandling : .cancelAuthenticationChallenge, nil)
+    }
+}
+
+/// Per-request delegate. Every callback runs on the session's serial delegate queue. A body
+/// is only accepted for a 200 HTML response within the size limit; any other response ends
+/// the exchange before its body is read, and the loader applies its policy to that response.
+/// Redirects are never followed here: the loader revalidates the target first.
+private final class LinkPreviewExchange: NSObject, URLSessionDataDelegate, @unchecked Sendable {
+    private let limit: Int
+    private let url: URL
+    private let allowed: @MainActor (URL) -> Bool
+    private var continuation: CheckedContinuation<(HTTPURLResponse, Data), Error>?
+    private var response: HTTPURLResponse?
+    private var body = Data()
+
+    init(limit: Int, url: URL, allowed: @escaping @MainActor (URL) -> Bool,
+         continuation: CheckedContinuation<(HTTPURLResponse, Data), Error>) {
+        self.limit = limit
+        self.url = url
+        self.allowed = allowed
+        self.continuation = continuation
+    }
+
+    /// Policy belongs to the main actor. Recheck before accepting headers and every body
+    /// chunk without scheduling work on the cooperative pool that the transport avoids.
+    private func isAllowed() -> Bool {
+        if Thread.isMainThread { return MainActor.assumeIsolated { allowed(url) } }
+        return DispatchQueue.main.sync { MainActor.assumeIsolated { allowed(url) } }
+    }
+
+    private func finish(_ result: Result<(HTTPURLResponse, Data), Error>) {
+        guard let continuation else { return }
+        self.continuation = nil
+        continuation.resume(with: result)
+    }
+
+    func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive response: URLResponse,
+                    completionHandler: @escaping @Sendable (URLSession.ResponseDisposition) -> Void) {
+        guard isAllowed() else {
+            finish(.failure(CancellationError()))
+            return completionHandler(.cancel)
+        }
+        guard let response = response as? HTTPURLResponse else {
+            finish(.failure(CancellationError()))
+            return completionHandler(.cancel)
+        }
+        self.response = response
+        guard BrowserLinkPreviewLoader.acceptsBody(response) else {
+            finish(.success((response, Data())))
+            return completionHandler(.cancel)
+        }
+        completionHandler(.allow)
+    }
+
+    func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
+        guard continuation != nil else { return }
+        guard isAllowed() else {
+            finish(.failure(CancellationError()))
+            return dataTask.cancel()
+        }
+        guard body.count + data.count <= limit else {
+            finish(.failure(BrowserAIError.failed))
+            return dataTask.cancel()
+        }
+        body.append(data)
+    }
+
+    func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+        if let error {
+            finish(.failure((error as? URLError)?.code == .cancelled ? CancellationError() : error))
+        } else if let response {
+            finish(.success((response, body)))
+        } else {
+            finish(.failure(BrowserAIError.failed))
+        }
+    }
+
+    func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse,
+                    newRequest request: URLRequest, completionHandler: @escaping @Sendable (URLRequest?) -> Void) { completionHandler(nil) }
+
     func urlSession(_ session: URLSession, task: URLSessionTask, didReceive challenge: URLAuthenticationChallenge,
                     completionHandler: @escaping @Sendable (URLSession.AuthChallengeDisposition, URLCredential?) -> Void) {
         completionHandler(challenge.protectionSpace.authenticationMethod == NSURLAuthenticationMethodServerTrust

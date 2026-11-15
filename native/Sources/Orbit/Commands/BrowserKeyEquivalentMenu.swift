@@ -11,7 +11,15 @@ final class BrowserKeyEquivalentMenu: NSMenu {
     /// Diagnostics: browser, rejected (known binding refused), native or unhandled.
     var onKeyEquivalentResult: ((NSEvent, String) -> Void)?
 
+    /// The key event AppKit is matching against this menu's key equivalents, for the duration
+    /// of that match only. Every other activation of an item (a click, Return in an open menu,
+    /// an Accessibility press) runs with no matching event, whatever `NSApp.currentEvent` holds.
+    private(set) static var matchingEvent: NSEvent?
+
     override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        let outer = Self.matchingEvent
+        Self.matchingEvent = event
+        defer { Self.matchingEvent = outer }
         if let handled = routeKeyEquivalent?(event) {
             onKeyEquivalentResult?(event, handled ? "browser" : "rejected")
             return handled

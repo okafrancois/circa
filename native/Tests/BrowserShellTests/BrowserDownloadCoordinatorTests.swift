@@ -774,11 +774,42 @@ struct BrowserDownloadCoordinatorTests {
     }
 }
 
+/// One coalescing window at a time, ended by the test instead of a wall-clock sleep.
+@MainActor
+private final class ProgressWindow {
+    private var waiting: [CheckedContinuation<Void, Error>] = []
+    private(set) var opened = 0
+    var isPending: Bool { !waiting.isEmpty }
+    func wait() async throws {
+        opened += 1
+        try await withCheckedThrowingContinuation { waiting.append($0) }
+    }
+    func elapse() {
+        let ended = waiting
+        waiting.removeAll()
+        ended.forEach { $0.resume() }
+    }
+}
+
 extension BrowserDownloadCoordinatorTests {
+    /// Yields the main actor until `condition` holds; bounded, so a missing delivery fails.
+    private func eventually(_ what: String, _ condition: () -> Bool) async {
+        let deadline = ContinuousClock.now + .seconds(10)
+        while !condition() {
+            guard ContinuousClock.now < deadline else {
+                Issue.record("timed out waiting for \(what)")
+                return
+            }
+            await Task.yield()
+        }
+    }
+
     @Test("Progress deltas coalesce items while final outcomes and removals publish immediately")
     func progressDeltas() async throws {
-        let coordinator = BrowserDownloadCoordinator()
+        let window = ProgressWindow()
+        let coordinator = BrowserDownloadCoordinator(progressDelay: { try await window.wait() })
         defer { coordinator.shutdown() }
+        defer { window.elapse() }
         var deltas: [BrowserDownloadCoordinator.Delta] = []
         coordinator.onDelta = { deltas.append($0) }
         let a = try register(coordinator, DownloadTransfer())
@@ -789,9 +820,14 @@ extension BrowserDownloadCoordinatorTests {
             _ = report(a, sequence: UInt64(sequence), received: Int64(sequence))
             _ = report(b, sequence: UInt64(sequence), received: Int64(sequence))
         }
+        // Model reads stay exact while every byte-only report waits for one shared window.
         #expect(deltas.isEmpty)
         #expect(try value(coordinator, a).receivedBytes == 50)
-        try await Task.sleep(for: .milliseconds(150))
+        await eventually("a coalescing window") { window.isPending }
+        #expect(window.opened == 1)
+        #expect(deltas.isEmpty)
+        window.elapse()
+        await eventually("the coalesced delta") { deltas.count == 1 }
         #expect(deltas.count == 1 && deltas[0].changed.count == 2)
         #expect(deltas[0].changed.allSatisfy { $0.receivedBytes == 50 })
         #expect(!deltas[0].historyChanged)
@@ -800,13 +836,20 @@ extension BrowserDownloadCoordinatorTests {
         #expect(deltas.last?.changed.first?.state == .complete && deltas.last?.historyChanged == true)
         try coordinator.remove(in: value(coordinator, a).context)
         #expect(deltas.last?.removed == [a.key])
+        // The window opened by a's byte-only report 51 now ends with b's progress only:
+        // a's final outcome and removal discarded its pending progress.
+        _ = report(b, sequence: 51, received: 51)
         let count = deltas.count
-        try await Task.sleep(for: .milliseconds(150))
-        #expect(deltas.dropFirst(count).allSatisfy { $0.changed.allSatisfy { $0.key != a.key } })
-        _ = report(b, sequence: 51, state: .failed, received: 50, failure: .network)
+        await eventually("the second coalescing window") { window.isPending }
+        window.elapse()
+        await eventually("b's coalesced delta") { deltas.count > count }
+        #expect(deltas.count == count + 1)
+        #expect(deltas.dropFirst(count).allSatisfy { $0.changed.map(\.key) == [b.key] && $0.changed[0].receivedBytes == 51 })
+        _ = report(b, sequence: 52, state: .failed, received: 51, failure: .network)
         #expect(deltas.last?.changed.first?.state == .failed)
         let c = try register(coordinator, DownloadTransfer())
         _ = report(c, state: .cancelled)
         #expect(deltas.last?.changed.first?.state == .cancelled)
+        #expect(window.opened == 2)
     }
 }

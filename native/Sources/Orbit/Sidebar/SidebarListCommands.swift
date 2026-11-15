@@ -215,7 +215,7 @@ enum SidebarCommandHub {
                   registry.router.windows[controller.id] === controller,
                   let target = registry.captureTarget(windowID: controller.id) else { return nil }
             let menus = BrowserCommandMenus(registry: registry, target: target)
-            let menu = NSMenu()
+            let menu = BrowserKeyEquivalentMenu()
             for group in groups {
                 let items = menus.makeContextMenu(commands: group).items
                 if !items.isEmpty && !menu.items.isEmpty { menu.addItem(.separator()) }

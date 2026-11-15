@@ -488,5 +488,109 @@ struct NativeKeyboardRoutingTests {
         #expect(escape.modifierMask == nil)
         #expect(escape.shortcut == .init(key: "\u{1b}", modifiers: []))
     }
+
+    private static func setCurrentEvent(_ event: NSEvent?) {
+        NSApp.perform(Selector(("_setCurrentEvent:")), with: event)
+    }
+
+    private func menuItem(_ id: BrowserCommandID, in menu: NSMenu) -> (menu: NSMenu, index: Int)? {
+        for (index, item) in menu.items.enumerated() {
+            if item.identifier?.rawValue == id.rawValue { return (menu, index) }
+            if let submenu = item.submenu, let found = menuItem(id, in: submenu) { return found }
+        }
+        return nil
+    }
+
+    /// Keys that are not shortcuts on their own: the Return that chose an item in an open menu,
+    /// the Escape that closed the Command Bar, a dead key, and a letter typed during composition.
+    private func nonShortcutKeys() throws -> [NSEvent] {
+        try [event("\r", code: 36, flags: []), event("\u{1b}", code: 53, flags: []),
+             #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 1, windowNumber: 0,
+                                       context: nil, characters: "", charactersIgnoringModifiers: "", isARepeat: false, keyCode: 33)),
+             event("k", code: 40, flags: [])]
+    }
+
+    @Test("Menu items chosen with the keyboard or Accessibility run while a non-shortcut key is current")
+    func menuActivationIgnoresTheCurrentKeyEvent() async throws {
+        NSApplication.shared.setActivationPolicy(.prohibited)
+        let router = router()
+        defer { router.shutdown() }
+        let registry = try BrowserCommandRegistry(router: router, state: { $0?.state ?? .init() })
+        try registry.register(.showHideSidebar) { $0.received.append(.showHideSidebar); _ = $1 }
+        router.newWindow()
+        await router.waitForPendingCommands()
+        let host = NSWindow(contentRect: .init(x: 0, y: 0, width: 400, height: 200),
+                            styleMask: [.titled], backing: .buffered, defer: true)
+        host.isReleasedWhenClosed = false
+        defer { host.close() }
+        let field = NSTextView(frame: .init(x: 0, y: 0, width: 400, height: 200))
+        host.contentView = field
+        #expect(host.makeFirstResponder(field))
+        field.setMarkedText("k", selectedRange: NSRange(location: 1, length: 0), replacementRange: NSRange(location: NSNotFound, length: 0))
+        #expect(field.hasMarkedText())
+        let menus = BrowserCommandMenus(registry: registry, keyWindow: { host })
+        let bar = menus.makeMenuBar()
+        let found = try #require(menuItem(.showHideSidebar, in: bar))
+        let item = try #require(found.menu.item(at: found.index))
+        let previous = NSApp.currentEvent
+        defer { Self.setCurrentEvent(previous) }
+        for key in try nonShortcutKeys() {
+            Self.setCurrentEvent(key)
+            // NSMenu performs the chosen item through this entry point for a keyboard choice
+            // (Return in an open menu) and for an Accessibility press.
+            // Opening the menu (keyboard or Accessibility) validates its items with this event current.
+            found.menu.update()
+            #expect(item.isEnabled && menus.validateMenuItem(item), "disabled while key \(key.keyCode) is current")
+            let before = router.selectedWindow?.received.count ?? 0
+            found.menu.performActionForItem(at: found.index)
+            await router.waitForPendingCommands()
+            #expect(router.selectedWindow?.received.count == before + 1, "dropped while key \(key.keyCode) is current")
+        }
+        #expect(router.selectedWindow?.received == Array(repeating: .showHideSidebar, count: 4))
+        #expect(!host.isVisible)
+    }
+
+    @Test("Key-equivalent matching still refuses a composing field while menu choices run")
+    func keyEquivalentGuardStaysScoped() async throws {
+        NSApplication.shared.setActivationPolicy(.prohibited)
+        let router = router()
+        defer { router.shutdown() }
+        let registry = try BrowserCommandRegistry(router: router, state: { $0?.state ?? .init() })
+        try registry.register(.showHideSidebar) { $0.received.append(.showHideSidebar); _ = $1 }
+        router.newWindow()
+        await router.waitForPendingCommands()
+        let host = NSWindow(contentRect: .init(x: 0, y: 0, width: 400, height: 200),
+                            styleMask: [.titled], backing: .buffered, defer: true)
+        host.isReleasedWhenClosed = false
+        defer { host.close() }
+        let field = NSTextView(frame: .init(x: 0, y: 0, width: 400, height: 200))
+        host.contentView = field
+        #expect(host.makeFirstResponder(field))
+        let menus = BrowserCommandMenus(registry: registry, keyWindow: { host })
+        let bar = menus.makeMenuBar()
+        let shortcut = try event("s", code: 1)
+        let previous = NSApp.currentEvent
+        defer { Self.setCurrentEvent(previous) }
+        // While a field composes, ⌘S belongs to the input method, not to the menu.
+        field.setMarkedText("k", selectedRange: NSRange(location: 1, length: 0), replacementRange: NSRange(location: NSNotFound, length: 0))
+        Self.setCurrentEvent(shortcut)
+        _ = bar.performKeyEquivalent(with: shortcut)
+        await router.waitForPendingCommands()
+        #expect(router.selectedWindow?.received.isEmpty == true)
+        field.unmarkText()
+        Self.setCurrentEvent(shortcut)
+        #expect(bar.performKeyEquivalent(with: shortcut))
+        await router.waitForPendingCommands()
+        #expect(router.selectedWindow?.received == [.showHideSidebar])
+        // After the key-equivalent pass ends, the same composition no longer gates menu choices.
+        field.setMarkedText("k", selectedRange: NSRange(location: 1, length: 0), replacementRange: NSRange(location: NSNotFound, length: 0))
+        // The refused key pass left the item disabled; opening the menu revalidates it first.
+        let found = try #require(menuItem(.showHideSidebar, in: bar))
+        found.menu.update()
+        #expect(found.menu.item(at: found.index)?.isEnabled == true)
+        found.menu.performActionForItem(at: found.index)
+        await router.waitForPendingCommands()
+        #expect(router.selectedWindow?.received == [.showHideSidebar, .showHideSidebar])
+    }
 }
 }
