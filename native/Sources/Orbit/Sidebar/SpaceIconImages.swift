@@ -25,6 +25,9 @@ enum SpaceIconImages {
     private static let templates = NSCache<NSString, NSImage>()
     private static let tinted = NSCache<NSString, NSImage>()
     private static let graphemes = NSCache<NSString, NSImage>()
+    /// Tab rows, favorites and activity snapshots compare icons by identity; one shared,
+    /// never-mutated instance per symbol keeps their change guards effective.
+    private static let symbolTabIcons = NSCache<NSString, NSImage>()
 
     /// Explicit artwork prevents NSAlert from substituting the application's default icon.
     static func removalIcon(_ choice: BrowserSpaceIcon, appearance: NSAppearance = .current) -> NSImage {
@@ -56,7 +59,12 @@ enum SpaceIconImages {
         guard let choice, choice != .none else { return nil }
         if case .planet(let variant) = choice { return planet(variant) }
         if case .systemSymbol(let name) = choice {
-            return OrbitIcon.image(sfName: name, pointSize: 16, accessibilityDescription: nil)
+            let key = name as NSString
+            if let image = symbolTabIcons.object(forKey: key) { return image }
+            guard let image = OrbitIcon.image(sfName: name, pointSize: 16, accessibilityDescription: nil) else { return nil }
+            symbolTabIcons.countLimit = 128
+            symbolTabIcons.setObject(image, forKey: key)
+            return image
         }
         guard case .grapheme(let value) = choice else { return nil }
         let key = "tab:" + value as NSString
