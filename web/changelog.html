@@ -98,6 +98,7 @@
 <a href="#v0.65.0" data-channel="stable" data-version="0.65.0">0.65.0</a>
 <a href="#v0.64.0" data-channel="stable" data-version="0.64.0">0.64.0</a>
 <a href="#v0.63.1" data-channel="stable" data-version="0.63.1">0.63.1</a>
+<a href="#v0.63.0" data-channel="stable" data-version="0.63.0">0.63.0</a>
 <a href="#v0.62.3" data-channel="stable" data-version="0.62.3">0.62.3</a>
 <a href="#v0.62.2" data-channel="stable" data-version="0.62.2">0.62.2</a>
 <a href="#v0.62.1" data-channel="stable" data-version="0.62.1">0.62.1</a>
@@ -151,6 +152,7 @@
 <a href="#v0.34.1" data-channel="stable" data-version="0.34.1">0.34.1</a>
 <a href="#v0.34.0" data-channel="stable" data-version="0.34.0">0.34.0</a>
 <a href="#v0.33.2" data-channel="stable" data-version="0.33.2">0.33.2</a>
+<a href="#v0.33.1" data-channel="stable" data-version="0.33.1">0.33.1</a>
 <a href="#v0.33.0" data-channel="stable" data-version="0.33.0">0.33.0</a>
 <a href="#v0.32.0" data-channel="stable" data-version="0.32.0">0.32.0</a>
 <a href="#v0.31.0" data-channel="stable" data-version="0.31.0">0.31.0</a>
@@ -235,23 +237,24 @@
   <div class="release-meta"><h2><a href="#v0.71.2" aria-label="Link to version 0.71.2">0.71.2</a></h2>
   <time datetime="2026-11-15">November 15, 2026</time><span class="release-channel">Stable</span></div>
   <div class="release-copy"><h3>Security and privacy fixes with less battery use.</h3>
-  <p class="release-counts">5 fixed · 2 smaller</p>
+  <p class="release-counts">4 fixed · 3 smaller</p>
   <h4>Fixed</h4>
   <ul>
-    <li>This release hardens security and privacy and makes Circa lighter on battery. There are no new features. Clear History now erases everything. Clearing your history also removes the deleted pages from the iCloud sync journal and from the synced copies in iCloud. &quot;All Time&quot; and removing a profile also wipe the engine&#x27;s own internal history files the next time Circa starts.</li>
+    <li>Clearing your history also removes the deleted pages from the iCloud sync journal and from the synced copies in iCloud. &quot;All Time&quot; and removing a profile also wipe the engine&#x27;s own internal history files the next time Circa starts.</li>
     <li>Icons from websites are checked more strictly before they are displayed, so a malicious page can no longer use an unusual image format to reach the system&#x27;s image decoder.</li>
     <li>Look-alike addresses in the command bar suggestions now show in their real form. An address that imitates another one with foreign letters (for example a Cyrillic &quot;а&quot; in place of a Latin &quot;a&quot;) shows as <code>xn--…</code>. Normal international addresses such as <code>münchen.de</code> still display normally.</li>
     <li>The app is signed with narrower system permissions: the main process now refuses to load code that is not signed by Circa, and only the engine processes that need it keep the exceptions.</li>
-    <li>Deleting history entries is faster on large histories.</li>
   </ul>
   <h4>Smaller</h4>
   <ul>
     <li>iCloud sync no longer checks in every 5 seconds. It runs when something changes, when iCloud pushes a change, when you come back to Circa, and every 10 minutes as a safety net. This saves battery and disk writes when you are idle. A change made on another Mac can take up to 10 minutes to arrive if its push notification is missed.</li>
     <li>Swiping between Spaces with a textured theme repaints much less, and tabs with a custom symbol icon no longer rebuild the sidebar on every update.</li>
+    <li>Deleting history entries is faster on large histories.</li>
   </ul>
   <h4>Known limits</h4>
   <ul>
-    <li>deleting a time range or a single site does not yet clear the engine&#x27;s internal history, only Circa&#x27;s own. After this update, the history database cannot be opened by older Circa versions.</li>
+    <li>Deleting a time range or a single site does not yet clear the engine&#x27;s internal history, only Circa&#x27;s own.</li>
+    <li>After this update, the history database cannot be opened by older Circa versions.</li>
   </ul>
   <a class="release-source" href="changelog/0.71.2/">Release permalink ↗</a>
   </div>
@@ -275,7 +278,7 @@
   <p class="release-counts">3 new</p>
   <h4>New</h4>
   <ul>
-    <li>Media keeps its controls when you leave its tab. When a tab you switched away from is still playing sound, a small player card appears at the bottom of the sidebar with the site icon, previous, play/pause and next. Hover it to see the tab title and a close button: closing the card pauses the media and keeps the tab, and clicking the site icon takes you back to the tab.</li>
+    <li>When a tab you switched away from is still playing sound, a small player card appears at the bottom of the sidebar with the site icon, previous, play/pause and next. Hover it to see the tab title and a close button: closing the card pauses the media and keeps the tab, and clicking the site icon takes you back to the tab.</li>
     <li>Several players stack into one card and fan out on hover, newest on top.</li>
     <li>A player paused from its page stays with its controls greyed out, and the card follows you across Spaces. Videos that go into automatic Picture in Picture keep using Picture in Picture instead.</li>
   </ul>
@@ -314,12 +317,12 @@
   <div class="release-meta"><h2><a href="#v0.70.1" aria-label="Link to version 0.70.1">0.70.1</a></h2>
   <time datetime="2026-11-15">November 15, 2026</time><span class="release-channel">Stable</span></div>
   <div class="release-copy"><h3>Use Touch ID as a passkey option on this Mac.</h3>
-  <p class="release-counts">1 new · 1 fixed</p>
+  <p class="release-counts">1 new · 1 smaller</p>
   <h4>New</h4>
   <ul>
     <li>Circa can now offer Touch ID as a passkey option on this Mac: when a site asks to create or use a passkey, choose this Mac and confirm with Touch ID. Security keys and phone sign-in keep working.</li>
   </ul>
-  <h4>Fixed</h4>
+  <h4>Smaller</h4>
   <ul>
     <li>The engine is updated to r23 for this; Chromium stays on 158.0.8127.37.</li>
   </ul>
@@ -335,14 +338,14 @@
   <div class="release-meta"><h2><a href="#v0.70.0" aria-label="Link to version 0.70.0">0.70.0</a></h2>
   <time datetime="2026-11-14">November 14, 2026</time><span class="release-channel">Stable</span></div>
   <div class="release-copy"><h3>Built-in blocking, Appearance settings and protected streaming.</h3>
-  <p class="release-counts">3 new · 1 fixed</p>
+  <p class="release-counts">3 new · 1 smaller</p>
   <h4>New</h4>
   <ul>
     <li>Circa now blocks ads and trackers by itself, with no extension to install. Blocking is on by default for every profile, uses the EasyList and EasyPrivacy filter lists, and leaves Safe Browsing untouched. Turn it off for a whole profile in Settings &gt; General, or allow a single site from the site controls next to the address bar: the page reloads with ads allowed, and the exception covers its subdomains.</li>
     <li>Settings gain an Appearance category right after General, gathering Space theme colours, animations, tab hover previews, space around pages, overlay scrollbars, dot Space icons and the app icon; Advanced keeps the technical options.</li>
     <li>Netflix, Disney+, Max, Prime Video and Apple TV+ now open in a WebKit tab with Apple FairPlay, so protected streams these services refuse in Chromium can play; sign in once there, because those tabs keep their own cookies, and extensions and the ad blocker do not run in them. View &gt; Reload with WebKit or Reload with Chromium switches any site and is remembered per site.</li>
   </ul>
-  <h4>Fixed</h4>
+  <h4>Smaller</h4>
   <ul>
     <li>Releases also check passkey support before publishing, ready for system passkeys once Apple grants the browser entitlement; security keys and phone sign-in keep working.</li>
   </ul>
@@ -358,11 +361,17 @@
   <div class="release-meta"><h2><a href="#v0.69.2" aria-label="Link to version 0.69.2">0.69.2</a></h2>
   <time datetime="2026-11-14">November 14, 2026</time><span class="release-channel">Stable</span></div>
   <div class="release-copy"><h3>Updates check that sign-ins and installed extensions survive.</h3>
-  <p class="release-counts">3 fixed</p>
+  <p class="release-counts">1 fixed · 1 smaller</p>
   <h4>Fixed</h4>
   <ul>
-    <li>Updates now have to prove that site sign-ins and installed extensions survive before a release can be published. The check runs a real signed update from the current public release, then verifies two profiles through restarts and a following update, including extension settings, permissions and stored data.</li>
     <li>Circa also keeps a private copy of cookie databases and extension registration/preferences before a different build first opens existing profiles. Copies stay on your Mac, are limited to three build changes and 30 days, and are never restored automatically.</li>
+  </ul>
+  <h4>Smaller</h4>
+  <ul>
+    <li>Updates now have to prove that site sign-ins and installed extensions survive before a release can be published. The check runs a real signed update from the current public release, then verifies two profiles through restarts and a following update, including extension settings, permissions and stored data.</li>
+  </ul>
+  <h4>Known limits</h4>
+  <ul>
     <li>This release retains the r22 engine from 0.69.1. It preserves remaining sessions and extensions, but cannot recreate sessions or extension registrations already removed by 0.69.0.</li>
   </ul>
   <a class="release-source" href="changelog/0.69.2/">Release permalink ↗</a>
@@ -389,10 +398,13 @@
   <div class="release-meta"><h2><a href="#v0.69.0" aria-label="Link to version 0.69.0">0.69.0</a></h2>
   <time datetime="2026-11-14">November 14, 2026</time><span class="release-channel">Stable</span></div>
   <div class="release-copy"><h3>Circa now runs on the supported Chromium 158 engine branch.</h3>
-  <p class="release-counts">2 new</p>
+  <p class="release-counts">1 new · 1 smaller</p>
   <h4>New</h4>
   <ul>
     <li>Circa now runs on the supported Chromium 158 engine branch, with Chromium 158.0.8127.37 and CEF 8127.</li>
+  </ul>
+  <h4>Smaller</h4>
+  <ul>
     <li>The migration preserves Circa&#x27;s native window integration, extension hosts, developer tools and permission controls while keeping the engine ready for future security updates.</li>
   </ul>
   <p class="release-engine">Engine / bundled components: Chromium 158.0.8127.37; maintained engine r21</p>
@@ -492,15 +504,16 @@
   <div class="release-meta"><h2><a href="#v0.67.0" aria-label="Link to version 0.67.0">0.67.0</a></h2>
   <time datetime="2026-11-12">November 12, 2026</time><span class="release-channel">Stable</span></div>
   <div class="release-copy"><h3>Circa is lighter on your Mac.</h3>
-  <p class="release-counts">1 new · 2 smaller</p>
+  <p class="release-counts">1 new · 3 smaller</p>
   <h4>New</h4>
   <ul>
     <li>Tabs you have not looked at for a while are paused until you come back to them, except pages that play audio, are in a call, or can send you notifications.</li>
   </ul>
   <h4>Smaller</h4>
   <ul>
-    <li>Circa is lighter on your Mac. With iCloud sync on, the browser no longer spends CPU re-checking your whole history every few seconds while you are idle, and typing in a password field no longer keeps a timer running in the background.</li>
-    <li>Launch is faster when you use several profiles, because a profile&#x27;s extensions start only when you open one of its Spaces. Your history database is much smaller after a one-time upgrade on first launch, the session is saved to disk less often, and the sidebar no longer redraws everything when a Favorite or a Split tab changes its title.</li>
+    <li>With iCloud sync on, the browser no longer spends CPU re-checking your whole history every few seconds while you are idle, and typing in a password field no longer keeps a timer running in the background.</li>
+    <li>Launch is faster when you use several profiles, because a profile&#x27;s extensions start only when you open one of its Spaces.</li>
+    <li>Your history database is much smaller after a one-time upgrade on first launch, the session is saved to disk less often, and the sidebar no longer redraws everything when a Favorite or a Split tab changes its title.</li>
   </ul>
   <a class="release-source" href="changelog/0.67.0/">Release permalink ↗</a>
   </div>
@@ -588,10 +601,9 @@
   <div class="release-meta"><h2><a href="#v0.66.1" aria-label="Link to version 0.66.1">0.66.1</a></h2>
   <time datetime="2026-11-10">November 10, 2026</time><span class="release-channel">Stable</span></div>
   <div class="release-copy"><h3>Security hardening for XML content.</h3>
-  <p class="release-counts">2 fixed</p>
+  <p class="release-counts">1 fixed</p>
   <h4>Fixed</h4>
   <ul>
-    <li>Security hardening for XML content.</li>
     <li>XSLT transformations are disabled while the browser engine update is being prepared. XML documents that depend on an XSLT stylesheet now display their original XML content.</li>
   </ul>
   <h4>Known limits</h4>
@@ -605,7 +617,7 @@
   <div class="release-meta"><h2><a href="#v0.66.0" aria-label="Link to version 0.66.0">0.66.0</a></h2>
   <time datetime="2026-11-07">November 7, 2026</time><span class="release-channel">Stable</span></div>
   <div class="release-copy"><h3>Optional tab previews and docked developer tools.</h3>
-  <p class="release-counts">2 new · 3 fixed</p>
+  <p class="release-counts">2 new · 2 fixed</p>
   <h4>New</h4>
   <ul>
     <li>Tab hover previews are now off by default. Enable “Show tab hover previews” in Advanced Settings; changes apply immediately and your choice is remembered after restarting.</li>
@@ -613,7 +625,6 @@
   </ul>
   <h4>Fixed</h4>
   <ul>
-    <li>Optional tab previews and docked developer tools.</li>
     <li>The fullscreen exit reminder now disappears automatically without leaving fullscreen.</li>
     <li>Picture in Picture’s return-to-tab button selects and brings forward the original page. Closing Picture in Picture keeps the current tab selected.</li>
   </ul>
@@ -625,14 +636,16 @@
   <div class="release-meta"><h2><a href="#v0.65.0" aria-label="Link to version 0.65.0">0.65.0</a></h2>
   <time datetime="2026-11-07">November 7, 2026</time><span class="release-channel">Stable</span></div>
   <div class="release-copy"><h3>Rich tab previews, with sharp Retina thumbnails.</h3>
-  <p class="release-counts">6 new</p>
+  <p class="release-counts">4 new</p>
   <h4>New</h4>
   <ul>
-    <li>Rich tab previews, with sharp Retina thumbnails.</li>
     <li>Hover over a sidebar tab to see its cached page preview and title without switching pages.</li>
     <li>Pin or unpin the tab, add it to Favorites, open it in Split View, or open the Assistant with that tab as context. The Assistant action never sends a message automatically.</li>
     <li>Previews appear quickly and switch immediately as you move between tabs. Reduced Motion skips the preview animations.</li>
     <li>Thumbnails use the display&#x27;s backing resolution for crisp text on Retina screens.</li>
+  </ul>
+  <h4>Known limits</h4>
+  <ul>
     <li>Hovering does not load sleeping tabs. When no valid cached image is available, the card shows the tab&#x27;s icon and title.</li>
   </ul>
   <a class="release-source" href="changelog/0.65.0/">Release permalink ↗</a>
@@ -642,10 +655,9 @@
   <div class="release-meta"><h2><a href="#v0.64.0" aria-label="Link to version 0.64.0">0.64.0</a></h2>
   <time datetime="2026-11-06">November 6, 2026</time><span class="release-channel">Stable</span></div>
   <div class="release-copy"><h3>Native overlay scrollbars for web pages.</h3>
-  <p class="release-counts">5 new</p>
+  <p class="release-counts">4 new</p>
   <h4>New</h4>
   <ul>
-    <li>Native overlay scrollbars for web pages.</li>
     <li>Added “Overlay scrollbars on web pages” in Advanced Settings, off by default.</li>
     <li>When enabled, thin native scrollbars float over page content and fade away when idle, including on sites that style their own scrollbars.</li>
     <li>Restart Circa after changing the option. Turning it off restores the usual system and website presentation.</li>
@@ -658,27 +670,48 @@
   <div class="release-meta"><h2><a href="#v0.63.1" aria-label="Link to version 0.63.1">0.63.1</a></h2>
   <time datetime="2026-11-06">November 6, 2026</time><span class="release-channel">Stable</span></div>
   <div class="release-copy"><h3>Edge-to-edge pages and quieter sidebar controls.</h3>
-  <p class="release-counts">6 fixed</p>
+  <p class="release-counts">2 new · 2 fixed · 1 smaller</p>
+  <h4>New</h4>
+  <ul>
+    <li>Pages now reach the window edges by default. Turn on “Space around pages” in Advanced Settings to restore the previous margins.</li>
+    <li>Added “Use dots for Space icons” in Advanced Settings. Turning it off restores your chosen icons.</li>
+  </ul>
   <h4>Fixed</h4>
   <ul>
-    <li>Edge-to-edge pages and quieter sidebar controls.</li>
-    <li>Pages now reach the window edges by default. Turn on “Space around pages” in Advanced Settings to restore the previous margins.</li>
     <li>Pinned extension icons follow the address field’s hover state and remain visible while their popup is open.</li>
-    <li>Added “Use dots for Space icons” in Advanced Settings. Turning it off restores your chosen icons.</li>
-    <li>Space dots form a compact group, while chosen icons keep their existing spacing.</li>
     <li>The fullscreen sidebar button’s hover background aligns with the address field and Favorites.</li>
   </ul>
+  <h4>Smaller</h4>
+  <ul>
+    <li>Space dots form a compact group, while chosen icons keep their existing spacing.</li>
+  </ul>
   <a class="release-source" href="changelog/0.63.1/">Release permalink ↗</a>
+  </div>
+</article>
+<article class="release" id="v0.63.0" data-version="0.63.0" data-channel="stable" data-latest="false">
+  <div class="release-meta"><h2><a href="#v0.63.0" aria-label="Link to version 0.63.0">0.63.0</a></h2>
+  <time datetime="2026-11-06">November 6, 2026</time><span class="release-channel">Stable</span></div>
+  <div class="release-copy"><h3>Pages reach the window edges with optional spacing.</h3>
+  <p class="release-counts">2 new · 1 fixed</p>
+  <h4>New</h4>
+  <ul>
+    <li>Pages now reach the window edges by default. Enable Space around pages in Advanced Settings to restore the previous margins.</li>
+    <li>Use dots for Space icons in Advanced Settings replaces Space icons with dots without changing your saved icon choices.</li>
+  </ul>
+  <h4>Fixed</h4>
+  <ul>
+    <li>Pinned extension buttons follow the address field&#x27;s hover state and remain visible while their popup is open. Navigation clears stale hover state.</li>
+  </ul>
+  <a class="release-source" href="changelog/0.63.0/">Release permalink ↗</a>
   </div>
 </article>
 <article class="release" id="v0.62.3" data-version="0.62.3" data-channel="stable" data-latest="false">
   <div class="release-meta"><h2><a href="#v0.62.3" aria-label="Link to version 0.62.3">0.62.3</a></h2>
   <time datetime="2026-11-06">November 6, 2026</time><span class="release-channel">Stable</span></div>
   <div class="release-copy"><h3>Lighter toolbar icons and clearer Favorites.</h3>
-  <p class="release-counts">4 fixed</p>
-  <h4>Fixed</h4>
+  <p class="release-counts">3 smaller</p>
+  <h4>Smaller</h4>
   <ul>
-    <li>Lighter toolbar icons and clearer Favorites.</li>
     <li>Refined back, forward, reload and sidebar icons with thinner rounded strokes.</li>
     <li>Aligned the sidebar button with the address field in full screen.</li>
     <li>Added subtle rounded borders to inactive Favorites while keeping the selected outline.</li>
@@ -690,10 +723,9 @@
   <div class="release-meta"><h2><a href="#v0.62.2" aria-label="Link to version 0.62.2">0.62.2</a></h2>
   <time datetime="2026-11-06">November 6, 2026</time><span class="release-channel">Stable</span></div>
   <div class="release-copy"><h3>Fix password import from CSV files.</h3>
-  <p class="release-counts">3 fixed</p>
+  <p class="release-counts">2 fixed</p>
   <h4>Fixed</h4>
   <ul>
-    <li>Fix password import from CSV files.</li>
     <li>Site addresses without a trailing slash, with mixed capitalization or with a default port now import and verify correctly.</li>
     <li>Reimporting the same credentials recognizes entries already in the password store.</li>
   </ul>
@@ -704,10 +736,9 @@
   <div class="release-meta"><h2><a href="#v0.62.1" aria-label="Link to version 0.62.1">0.62.1</a></h2>
   <time datetime="2026-11-05">November 5, 2026</time><span class="release-channel">Stable</span></div>
   <div class="release-copy"><h3>Restore camera and microphone access for website calls on macOS.</h3>
-  <p class="release-counts">3 fixed</p>
+  <p class="release-counts">2 fixed</p>
   <h4>Fixed</h4>
   <ul>
-    <li>Restore camera and microphone access for website calls on macOS.</li>
     <li>Signed builds now declare the camera and audio-input capabilities required by macOS Hardened Runtime.</li>
     <li>Website permission choices and macOS privacy permissions continue to control access.</li>
   </ul>
@@ -718,10 +749,9 @@
   <div class="release-meta"><h2><a href="#v0.62.0" aria-label="Link to version 0.62.0">0.62.0</a></h2>
   <time datetime="2026-11-05">November 5, 2026</time><span class="release-channel">Stable</span></div>
   <div class="release-copy"><h3>More consistent haptic feedback when organizing tabs and resizing the sidebar.</h3>
-  <p class="release-counts">5 new</p>
+  <p class="release-counts">4 new</p>
   <h4>New</h4>
   <ul>
-    <li>More consistent haptic feedback when organizing tabs and resizing the sidebar.</li>
     <li>The existing Settings switch now covers tab organization and resizing.</li>
     <li>Valid sidebar, folder and split drop-target transitions trigger native alignment feedback.</li>
     <li>Crossing the sidebar collapse threshold also triggers feedback.</li>
@@ -734,10 +764,9 @@
   <div class="release-meta"><h2><a href="#v0.61.2" aria-label="Link to version 0.61.2">0.61.2</a></h2>
   <time datetime="2026-11-05">November 5, 2026</time><span class="release-channel">Stable</span></div>
   <div class="release-copy"><h3>Circa improves enforcement of the sites you exclude from AI page access.</h3>
-  <p class="release-counts">3 fixed</p>
+  <p class="release-counts">2 fixed</p>
   <h4>Fixed</h4>
   <ul>
-    <li>Circa improves enforcement of the sites you exclude from AI page access.</li>
     <li>Keeps your AI site exclusions effective across additional host name formats.</li>
     <li>Preserves existing browsing data and settings.</li>
   </ul>
@@ -764,7 +793,7 @@
   <div class="release-meta"><h2><a href="#v0.61.0" aria-label="Link to version 0.61.0">0.61.0</a></h2>
   <time datetime="2026-11-04">November 4, 2026</time><span class="release-channel">Stable</span></div>
   <div class="release-copy"><h3>Circa now has a public changelog.</h3>
-  <p class="release-counts">6 new · 1 fixed</p>
+  <p class="release-counts">5 new · 1 fixed · 1 smaller</p>
   <h4>New</h4>
   <ul>
     <li>Circa now has a public changelog at <a href="https://circabrowser.com/changelog">https://circabrowser.com/changelog</a>.</li>
@@ -772,11 +801,14 @@
     <li>Open Release Notes from the update card to read about the version ready to install, before restarting.</li>
     <li>The Release Notes command opens the notes for the version currently installed.</li>
     <li>Future published releases appear on the changelog automatically. Recent notes remain readable if GitHub is unavailable.</li>
-    <li>Release download statistics are available in GitHub Actions through the Release download statistics workflow. These are file download counts, including repeat downloads and automatic updates, not unique users or installations.</li>
   </ul>
   <h4>Fixed</h4>
   <ul>
     <li>History is easier to scan: page titles, addresses and visit times have separate fields, and its controls fit narrow panels. Existing history data, search and deletion actions are preserved.</li>
+  </ul>
+  <h4>Smaller</h4>
+  <ul>
+    <li>Release download statistics are available in GitHub Actions through the Release download statistics workflow. These are file download counts, including repeat downloads and automatic updates, not unique users or installations.</li>
   </ul>
   <a class="release-source" href="changelog/0.61.0/">Release permalink ↗</a>
   </div>
@@ -809,13 +841,16 @@
   <div class="release-meta"><h2><a href="#v0.60.1" aria-label="Link to version 0.60.1">0.60.1</a></h2>
   <time datetime="2026-11-03">November 3, 2026</time><span class="release-channel">Stable</span></div>
   <div class="release-copy"><h3>Pinned extension menus stay open from the floating sidebar.</h3>
-  <p class="release-counts">5 fixed</p>
+  <p class="release-counts">4 fixed · 1 smaller</p>
   <h4>Fixed</h4>
   <ul>
     <li>Opening a pinned extension from the floating sidebar now keeps the sidebar visible while its native popup takes keyboard focus. This fixes extension menus disappearing during opening, including Dashlane.</li>
     <li>Preserve the popup anchor through AppKit’s key-window handoff.</li>
     <li>Keep the sidebar open for its focused native child; ordinary hover dismissal resumes when focus returns.</li>
     <li>Continue dismissing on another window or application taking focus. Unrelated visible child windows do not hold the sidebar open.</li>
+  </ul>
+  <h4>Smaller</h4>
+  <ul>
     <li>Validation: 82 targeted tests and the full native suite (2,992 reported tests) passed. Real Chromium before/after runs reproduced the failure and verified the fix with both an MV3 fixture and the official Dashlane extension in fresh signed, confined test profiles. All four runs quit normally. Dashlane was not signed in; no personal vault was accessed.</li>
   </ul>
   <a class="release-source" href="changelog/0.60.1/">Release permalink ↗</a>
@@ -825,12 +860,15 @@
   <div class="release-meta"><h2><a href="#v0.60.0" aria-label="Link to version 0.60.0">0.60.0</a></h2>
   <time datetime="2026-11-03">November 3, 2026</time><span class="release-channel">Stable</span></div>
   <div class="release-copy"><h3>Circa now includes a complete French interface.</h3>
-  <p class="release-counts">6 new</p>
+  <p class="release-counts">3 new · 3 smaller</p>
   <h4>New</h4>
   <ul>
     <li>Circa now includes a complete French interface, including menus, Settings, browser actions, import messages and AI features. It follows the language selected for the app in macOS and keeps English as the fallback.</li>
     <li>Added French translations and plural rules, with format and regional-language validation.</li>
     <li>Adjusted French animation labels to fit their existing controls and completed the website-data Settings label.</li>
+  </ul>
+  <h4>Smaller</h4>
+  <ul>
     <li>Published a complete default keyboard shortcut reference linked from the README.</li>
     <li>Added invented desktop-browser bookmark export compatibility tests; bookmark parsing behavior is unchanged.</li>
     <li>Validation: the full native suite passed (2,990 reported tests), followed by 13 localization/text tests after the final resource corrections. A GitHub-hosted Chromium build and confined French product run passed; the final run completed 36 checks with normal shutdown.</li>
@@ -858,10 +896,9 @@
   <div class="release-meta"><h2><a href="#v0.59.1" aria-label="Link to version 0.59.1">0.59.1</a></h2>
   <time datetime="2026-11-03">November 3, 2026</time><span class="release-channel">Stable</span></div>
   <div class="release-copy"><h3>Fixed keyboard focus after adding a split from the Command Bar.</h3>
-  <p class="release-counts">2 fixed</p>
+  <p class="release-counts">1 fixed</p>
   <h4>Fixed</h4>
   <ul>
-    <li>Fixed keyboard focus after adding a split from the Command Bar.</li>
     <li>After choosing Add Right Split, Add Left Split, Add Top Split, Add Bottom Split or Add Split View, you can immediately type the new pane’s address and press Return. Accepting the previous command no longer transfers focus back to the web page.</li>
   </ul>
   <a class="release-source" href="changelog/0.59.1/">Release permalink ↗</a>
@@ -871,10 +908,9 @@
   <div class="release-meta"><h2><a href="#v0.59.0" aria-label="Link to version 0.59.0">0.59.0</a></h2>
   <time datetime="2026-11-03">November 3, 2026</time><span class="release-channel">Stable</span></div>
   <div class="release-copy"><h3>Gmail previews are now available for Favorites and pinned tabs.</h3>
-  <p class="release-counts">6 new</p>
+  <p class="release-counts">5 new</p>
   <h4>New</h4>
   <ul>
-    <li>Gmail previews are now available for Favorites and pinned tabs.</li>
     <li>Hover a Gmail tab to preview unread senders, subjects and message snippets without switching tabs.</li>
     <li>Open a message or compose a new email directly from the preview.</li>
     <li>Show or hide the unread indicator from the tab context menu; the preference is saved separately for each profile.</li>
@@ -887,13 +923,15 @@
 <article class="release" id="v0.58.2" data-version="0.58.2" data-channel="stable" data-latest="false">
   <div class="release-meta"><h2><a href="#v0.58.2" aria-label="Link to version 0.58.2">0.58.2</a></h2>
   <time datetime="2026-11-03">November 3, 2026</time><span class="release-channel">Stable</span></div>
-  <div class="release-copy"><h3>Fixes sidebar move Undo and Redo.</h3>
-  <p class="release-counts">3 fixed</p>
+  <div class="release-copy"><h3>Undo restores sidebar moves and live folders are easier to recognize.</h3>
+  <p class="release-counts">1 fixed · 1 smaller</p>
   <h4>Fixed</h4>
   <ul>
-    <li>Fixes sidebar move Undo and Redo when an unrelated native Undo group is still open. GitHub live folders now display the GitHub mark inside the folder, including while dragging.</li>
-    <li>Also updates the contributor guide, README demo and website link previews.</li>
-    <li><strong>Full Changelog</strong>: <a href="https://github.com/okafrancois/circa/compare/v0.58.1...v0.58.2">https://github.com/okafrancois/circa/compare/v0.58.1...v0.58.2</a></li>
+    <li>Undo after moving sidebar items returns them to the correct place.</li>
+  </ul>
+  <h4>Smaller</h4>
+  <ul>
+    <li>GitHub live folders show a GitHub icon so they are distinct from ordinary folders.</li>
   </ul>
   <a class="release-source" href="changelog/0.58.2/">Release permalink ↗</a>
   </div>
@@ -901,11 +939,11 @@
 <article class="release" id="v0.58.1" data-version="0.58.1" data-channel="stable" data-latest="false">
   <div class="release-meta"><h2><a href="#v0.58.1" aria-label="Link to version 0.58.1">0.58.1</a></h2>
   <time datetime="2026-11-03">November 3, 2026</time><span class="release-channel">Stable</span></div>
-  <div class="release-copy"><h3>Circa 0.58.1 release.</h3>
-  <p class="release-counts">Known limits</p>
-  <h4>Known limits</h4>
+  <div class="release-copy"><h3>Closing an extension popup no longer crashes the browser.</h3>
+  <p class="release-counts">1 fixed</p>
+  <h4>Fixed</h4>
   <ul>
-    <li><strong>Full Changelog</strong>: <a href="https://github.com/okafrancois/circa/compare/v0.58.0...v0.58.1">https://github.com/okafrancois/circa/compare/v0.58.0...v0.58.1</a></li>
+    <li>Cancelling an extension popup defers its cleanup safely, preventing a crash when closing popups such as a password manager&#x27;s.</li>
   </ul>
   <p class="release-engine">Engine / bundled components: maintained engine r15</p>
   <a class="release-source" href="changelog/0.58.1/">Release permalink ↗</a>
@@ -914,11 +952,12 @@
 <article class="release" id="v0.58.0" data-version="0.58.0" data-channel="stable" data-latest="false">
   <div class="release-meta"><h2><a href="#v0.58.0" aria-label="Link to version 0.58.0">0.58.0</a></h2>
   <time datetime="2026-11-02">November 2, 2026</time><span class="release-channel">Stable</span></div>
-  <div class="release-copy"><h3>Circa 0.58.0 release.</h3>
-  <p class="release-counts">Known limits</p>
-  <h4>Known limits</h4>
+  <div class="release-copy"><h3>Run a browser Errand with approval for each page action.</h3>
+  <p class="release-counts">2 new</p>
+  <h4>New</h4>
   <ul>
-    <li><strong>Full Changelog</strong>: <a href="https://github.com/okafrancois/circa/compare/v0.57.0...v0.58.0">https://github.com/okafrancois/circa/compare/v0.57.0...v0.58.0</a></li>
+    <li>Use Start Errand to describe a browser task. Its pages stay together in an Errand folder, with progress in the assistant and a Stop Errand control.</li>
+    <li>Review and approve each proposed page opening, click or text entry before it runs. Stopping the Errand or taking over its page cancels pending actions.</li>
   </ul>
   <a class="release-source" href="changelog/0.58.0/">Release permalink ↗</a>
   </div>
@@ -926,11 +965,15 @@
 <article class="release" id="v0.57.0" data-version="0.57.0" data-channel="stable" data-latest="false">
   <div class="release-meta"><h2><a href="#v0.57.0" aria-label="Link to version 0.57.0">0.57.0</a></h2>
   <time datetime="2026-11-02">November 2, 2026</time><span class="release-channel">Stable</span></div>
-  <div class="release-copy"><h3>Circa 0.57.0 release.</h3>
-  <p class="release-counts">Known limits</p>
-  <h4>Known limits</h4>
+  <div class="release-copy"><h3>Generate JavaScript for a Boost after reviewing its code.</h3>
+  <p class="release-counts">1 new · 1 fixed</p>
+  <h4>New</h4>
   <ul>
-    <li><strong>Full Changelog</strong>: <a href="https://github.com/okafrancois/circa/compare/v0.56.0...v0.57.0">https://github.com/okafrancois/circa/compare/v0.56.0...v0.57.0</a></li>
+    <li>Choose Generate JavaScript in a Boost&#x27;s Code editor to draft a site customization with your Chat model. Review or edit the code before enabling it explicitly.</li>
+  </ul>
+  <h4>Fixed</h4>
+  <ul>
+    <li>Rejected or cancelled drafts preserve the previous saved code and its permissions. Changes to the page, Boost or access settings revoke a pending draft.</li>
   </ul>
   <a class="release-source" href="changelog/0.57.0/">Release permalink ↗</a>
   </div>
@@ -938,11 +981,13 @@
 <article class="release" id="v0.56.0" data-version="0.56.0" data-channel="stable" data-latest="false">
   <div class="release-meta"><h2><a href="#v0.56.0" aria-label="Link to version 0.56.0">0.56.0</a></h2>
   <time datetime="2026-11-02">November 2, 2026</time><span class="release-channel">Stable</span></div>
-  <div class="release-copy"><h3>Circa 0.56.0 release.</h3>
-  <p class="release-counts">Known limits</p>
-  <h4>Known limits</h4>
+  <div class="release-copy"><h3>Reuse AI prompts with profile-specific Skills.</h3>
+  <p class="release-counts">3 new</p>
+  <h4>New</h4>
   <ul>
-    <li><strong>Full Changelog</strong>: <a href="https://github.com/okafrancois/circa/compare/v0.55.0...v0.56.0">https://github.com/okafrancois/circa/compare/v0.55.0...v0.56.0</a></li>
+    <li>Open Skills in the assistant or Command Bar to summarize a tab, compare selected tabs, extract a table as CSV or draft a reply to selected text.</li>
+    <li>Create and edit your own Skills with a name, prompt and choice of context. Skills stay separate by profile and sync with iCloud when enabled.</li>
+    <li>Choosing a Skill fills the prompt and context for you to review before sending. AI page-access and site restrictions still apply.</li>
   </ul>
   <a class="release-source" href="changelog/0.56.0/">Release permalink ↗</a>
   </div>
@@ -1012,12 +1057,15 @@
   <div class="release-meta"><h2><a href="#v0.52.0" aria-label="Link to version 0.52.0">0.52.0</a></h2>
   <time datetime="2026-11-02">November 2, 2026</time><span class="release-channel">Stable</span></div>
   <div class="release-copy"><h3>Tidy Today suggests ways to organize tabs in a Space.</h3>
-  <p class="release-counts">4 new</p>
+  <p class="release-counts">3 new</p>
   <h4>New</h4>
   <ul>
     <li>Optional <strong>Tidy Today</strong> suggests ways to organize tabs in the current Space. Enable it in Settings → AI → Helpers, choose a ready Quick model, then use <strong>Tidy</strong> beside the Today divider.</li>
-    <li>Suggestions never move or archive tabs until you click an action. <strong>Make Folder</strong> groups the selected tabs into a folder in Pinned; <strong>another browserhive</strong> archives the proposed tabs. Both use native Undo.</li>
+    <li>Suggestions never move or archive tabs until you click an action. <strong>Make Folder</strong> groups the selected tabs into a folder in Pinned; <strong>Archive</strong> archives the proposed tabs. Both use native Undo.</li>
     <li>Suggestions use only known tab titles, hosts and identities for up to 40 eligible Today tabs. Page contents are not read for this helper.</li>
+  </ul>
+  <h4>Known limits</h4>
+  <ul>
     <li>AI remains off by default. Site exclusions, private-window restrictions and the existing privacy and provider settings apply.</li>
   </ul>
   <a class="release-source" href="changelog/0.52.0/">Release permalink ↗</a>
@@ -1027,12 +1075,15 @@
   <div class="release-meta"><h2><a href="#v0.51.0" aria-label="Link to version 0.51.0">0.51.0</a></h2>
   <time datetime="2026-11-02">November 2, 2026</time><span class="release-channel">Stable</span></div>
   <div class="release-copy"><h3>Optional AI tidying for pinned tab titles and downloads.</h3>
-  <p class="release-counts">5 new</p>
+  <p class="release-counts">3 new</p>
   <h4>New</h4>
   <ul>
     <li>Optional AI tidying shortens newly pinned tab titles and suggests clearer names for completed downloads. Enable <strong>Tidy titles and downloads</strong> in Settings → AI → Helpers, and choose a ready Quick model.</li>
     <li>Hover a generated tab title to restore its original name. Download feedback includes Undo, and the Library follows the file&#x27;s current name.</li>
     <li>Title suggestions use the known page title; download suggestions use the original filename. File contents are not sent to the model.</li>
+  </ul>
+  <h4>Known limits</h4>
+  <ul>
     <li>Custom titles and existing pins stay unchanged. Download renaming preserves the extension and file attributes, refuses filename collisions and leaves changed or missing files alone.</li>
     <li>AI remains off by default. The existing page-access, site, private-window and provider settings apply.</li>
   </ul>
@@ -1043,14 +1094,19 @@
   <div class="release-meta"><h2><a href="#v0.50.0" aria-label="Link to version 0.50.0">0.50.0</a></h2>
   <time datetime="2026-11-01">November 1, 2026</time><span class="release-channel">Stable</span></div>
   <div class="release-copy"><h3>Two AI helpers are now available in Settings &gt; AI &gt; Helpers.</h3>
-  <p class="release-counts">5 new</p>
+  <p class="release-counts">2 new · 1 smaller</p>
   <h4>New</h4>
   <ul>
-    <li>Two AI helpers are now available in Settings &gt; AI &gt; Helpers:</li>
     <li>Ask in Find: enter a question ending in <code>?</code>, then press Return or Ask. Read a short streamed answer and jump to a validated passage on the page.</li>
     <li>Writing help: select text in a supported editable field to improve it, fix spelling and grammar, shorten it, or translate it. Preview the draft, then choose Replace or Insert Below. Native Undo restores the original text. Ask opens the command bar with the selection ready to edit.</li>
-    <li>The existing AI, private-window and page/site access settings apply. Writing help currently supports editable fields in the main page; embedded-frame editors and password fields are excluded.</li>
+  </ul>
+  <h4>Smaller</h4>
+  <ul>
     <li>This release also bounds cumulative streamed output bytes, including Unicode combining sequences.</li>
+  </ul>
+  <h4>Known limits</h4>
+  <ul>
+    <li>The existing AI, private-window and page/site access settings apply. Writing help currently supports editable fields in the main page; embedded-frame editors and password fields are excluded.</li>
   </ul>
   <a class="release-source" href="changelog/0.50.0/">Release permalink ↗</a>
   </div>
@@ -1058,14 +1114,16 @@
 <article class="release" id="v0.49.1" data-version="0.49.1" data-channel="stable" data-latest="false">
   <div class="release-meta"><h2><a href="#v0.49.1" aria-label="Link to version 0.49.1">0.49.1</a></h2>
   <time datetime="2026-11-01">November 1, 2026</time><span class="release-channel">Stable</span></div>
-  <div class="release-copy"><h3>Fixes three issues in the AI assistant.</h3>
-  <p class="release-counts">5 fixed</p>
+  <div class="release-copy"><h3>The assistant&#x27;s empty state, corners and context icon display correctly.</h3>
+  <p class="release-counts">3 fixed · 1 smaller</p>
   <h4>Fixed</h4>
   <ul>
-    <li>Fixes three issues in the AI assistant:</li>
     <li>Removes the empty-state heading and suggested-question cards.</li>
     <li>Keeps the assistant card corners aligned with the page in fullscreen, after reopening the panel, and when returning to a normal window.</li>
     <li>Restores the context button&#x27;s native @ symbol instead of an opaque square.</li>
+  </ul>
+  <h4>Smaller</h4>
+  <ul>
     <li>Validation includes native tests, Chromium product/smoke builds, and confined light/dark fullscreen, reopening and restoration checks.</li>
   </ul>
   <a class="release-source" href="changelog/0.49.1/">Release permalink ↗</a>
@@ -1075,13 +1133,16 @@
   <div class="release-meta"><h2><a href="#v0.49.0" aria-label="Link to version 0.49.0">0.49.0</a></h2>
   <time datetime="2026-11-01">November 1, 2026</time><span class="release-channel">Stable</span></div>
   <div class="release-copy"><h3>Import compatible installed extensions into new profiles.</h3>
-  <p class="release-counts">5 new</p>
+  <p class="release-counts">4 new · 1 smaller</p>
   <h4>New</h4>
   <ul>
-    <li>Circa now imports compatible installed extensions from another browser and supported Chromium browsers into newly imported profiles.</li>
+    <li>Circa now imports compatible installed extensions from supported browsers into newly imported profiles.</li>
     <li>Restores internal Manifest V3 packages with their original identity, supported enabled or disabled state, and pin order.</li>
     <li>Keeps extensions isolated in their mapped profiles and registers them through Chromium during the import restart.</li>
-    <li>Preserves the existing optional passwords and connections step for another browser imports.</li>
+    <li>Preserves the existing optional passwords and connections step for supported imports.</li>
+  </ul>
+  <h4>Smaller</h4>
+  <ul>
     <li>Validation includes importer and recovery tests, the full native suite, Chromium product/smoke builds, and cold/warm Chromium runs with functional extension execution and a public-store package.</li>
   </ul>
   <h4>Known limits</h4>
@@ -1131,15 +1192,21 @@
   <div class="release-meta"><h2><a href="#v0.47.0" aria-label="Link to version 0.47.0">0.47.0</a></h2>
   <time datetime="2026-11-01">November 1, 2026</time><span class="release-channel">Stable</span></div>
   <div class="release-copy"><h3>Native sidebar backgrounds and easier Split View.</h3>
-  <p class="release-counts">6 new</p>
+  <p class="release-counts">4 new · 1 fixed · 1 smaller</p>
   <h4>New</h4>
   <ul>
     <li>Sidebar backgrounds now use native macOS translucency. The Frost switch is removed, and saved Frost values no longer change interface controls.</li>
-    <li>Peek controls keep circular backgrounds, and Settings category labels retain their bottom padding.</li>
     <li>Drag one sidebar tab onto another to create a Split View. Peek gains Split button feedback, with a four-pane limit and minimum pane widths.</li>
     <li>Web fullscreen displays an Escape notice. Native-window fullscreen remains independent.</li>
     <li>AI provider foundation and Settings are available, off by default. Assistant and helper features remain hidden while they are being built.</li>
-    <li>another browserhive preview close and Library hide behavior has additional regression and stress coverage.</li>
+  </ul>
+  <h4>Fixed</h4>
+  <ul>
+    <li>Peek controls keep circular backgrounds, and Settings category labels retain their bottom padding.</li>
+  </ul>
+  <h4>Smaller</h4>
+  <ul>
+    <li>Archive preview close and Library hide behavior has additional regression and stress coverage.</li>
   </ul>
   <a class="release-source" href="changelog/0.47.0/">Release permalink ↗</a>
   </div>
@@ -1147,11 +1214,11 @@
 <article class="release" id="v0.46.3" data-version="0.46.3" data-channel="stable" data-latest="false">
   <div class="release-meta"><h2><a href="#v0.46.3" aria-label="Link to version 0.46.3">0.46.3</a></h2>
   <time datetime="2026-10-31">October 31, 2026</time><span class="release-channel">Stable</span></div>
-  <div class="release-copy"><h3>Circa 0.46.3 release.</h3>
-  <p class="release-counts">Known limits</p>
-  <h4>Known limits</h4>
+  <div class="release-copy"><h3>Sidebar clicks recover after dragging a tab.</h3>
+  <p class="release-counts">1 fixed</p>
+  <h4>Fixed</h4>
   <ul>
-    <li><strong>Full Changelog</strong>: <a href="https://github.com/okafrancois/circa/compare/v0.46.2...v0.46.3">https://github.com/okafrancois/circa/compare/v0.46.2...v0.46.3</a></li>
+    <li>Dragging a tab to another window or out into its own window no longer leaves stale rows covering other tabs. A press whose release was taken by a drag or menu no longer blocks the next click.</li>
   </ul>
   <a class="release-source" href="changelog/0.46.3/">Release permalink ↗</a>
   </div>
@@ -1159,11 +1226,12 @@
 <article class="release" id="v0.46.2" data-version="0.46.2" data-channel="stable" data-latest="false">
   <div class="release-meta"><h2><a href="#v0.46.2" aria-label="Link to version 0.46.2">0.46.2</a></h2>
   <time datetime="2026-10-31">October 31, 2026</time><span class="release-channel">Stable</span></div>
-  <div class="release-copy"><h3>Circa 0.46.2 release.</h3>
-  <p class="release-counts">Known limits</p>
-  <h4>Known limits</h4>
+  <div class="release-copy"><h3>Sidebar rows no longer swallow clicks.</h3>
+  <p class="release-counts">2 fixed</p>
+  <h4>Fixed</h4>
   <ul>
-    <li><strong>Full Changelog</strong>: <a href="https://github.com/okafrancois/circa/compare/v0.46.1...v0.46.2">https://github.com/okafrancois/circa/compare/v0.46.1...v0.46.2</a></li>
+    <li>Hidden or fading sidebar rows no longer intercept clicks intended for visible tabs. A click also reaches its tab when the row is rebuilt during the press.</li>
+    <li>Selecting a detached page presents it again, and a visible tab discarded by the engine wakes when focused.</li>
   </ul>
   <a class="release-source" href="changelog/0.46.2/">Release permalink ↗</a>
   </div>
@@ -1171,11 +1239,11 @@
 <article class="release" id="v0.46.1" data-version="0.46.1" data-channel="stable" data-latest="false">
   <div class="release-meta"><h2><a href="#v0.46.1" aria-label="Link to version 0.46.1">0.46.1</a></h2>
   <time datetime="2026-10-31">October 31, 2026</time><span class="release-channel">Stable</span></div>
-  <div class="release-copy"><h3>Circa 0.46.1 release.</h3>
-  <p class="release-counts">Known limits</p>
-  <h4>Known limits</h4>
+  <div class="release-copy"><h3>This release contains only internal fixes.</h3>
+  <p class="release-counts">1 smaller</p>
+  <h4>Smaller</h4>
   <ul>
-    <li><strong>Full Changelog</strong>: <a href="https://github.com/okafrancois/circa/compare/v0.46.0...v0.46.1">https://github.com/okafrancois/circa/compare/v0.46.0...v0.46.1</a></li>
+    <li>This release contains only internal fixes.</li>
   </ul>
   <a class="release-source" href="changelog/0.46.1/">Release permalink ↗</a>
   </div>
@@ -1183,11 +1251,12 @@
 <article class="release" id="v0.46.0" data-version="0.46.0" data-channel="stable" data-latest="false">
   <div class="release-meta"><h2><a href="#v0.46.0" aria-label="Link to version 0.46.0">0.46.0</a></h2>
   <time datetime="2026-10-31">October 31, 2026</time><span class="release-channel">Stable</span></div>
-  <div class="release-copy"><h3>Circa 0.46.0 release.</h3>
-  <p class="release-counts">Known limits</p>
-  <h4>Known limits</h4>
+  <div class="release-copy"><h3>Control browser windows and tabs with AppleScript.</h3>
+  <p class="release-counts">2 new</p>
+  <h4>New</h4>
   <ul>
-    <li><strong>Full Changelog</strong>: <a href="https://github.com/okafrancois/orbit-browser/compare/v0.45.0...v0.46.0">https://github.com/okafrancois/orbit-browser/compare/v0.45.0...v0.46.0</a></li>
+    <li>Circa&#x27;s AppleScript dictionary lets scripts list windows and tabs, open pages, change an address, select, reload and close tabs.</li>
+    <li>Scripted JavaScript is available only through its explicit permission setting. Private-window contents are redacted from scripting replies.</li>
   </ul>
   <a class="release-source" href="changelog/0.46.0/">Release permalink ↗</a>
   </div>
@@ -1195,11 +1264,11 @@
 <article class="release" id="v0.45.0" data-version="0.45.0" data-channel="stable" data-latest="false">
   <div class="release-meta"><h2><a href="#v0.45.0" aria-label="Link to version 0.45.0">0.45.0</a></h2>
   <time datetime="2026-10-31">October 31, 2026</time><span class="release-channel">Stable</span></div>
-  <div class="release-copy"><h3>Circa 0.45.0 release.</h3>
-  <p class="release-counts">Known limits</p>
-  <h4>Known limits</h4>
+  <div class="release-copy"><h3>Follow downloads from the sidebar.</h3>
+  <p class="release-counts">1 new</p>
+  <h4>New</h4>
   <ul>
-    <li><strong>Full Changelog</strong>: <a href="https://github.com/okafrancois/orbit-browser/compare/v0.44.1...v0.45.0">https://github.com/okafrancois/orbit-browser/compare/v0.44.1...v0.45.0</a></li>
+    <li>A sidebar footer badge shows download activity, with a completion preview and a recent-downloads list on hover. macOS also receives the transfer&#x27;s progress.</li>
   </ul>
   <a class="release-source" href="changelog/0.45.0/">Release permalink ↗</a>
   </div>
@@ -1207,11 +1276,12 @@
 <article class="release" id="v0.44.1" data-version="0.44.1" data-channel="stable" data-latest="false">
   <div class="release-meta"><h2><a href="#v0.44.1" aria-label="Link to version 0.44.1">0.44.1</a></h2>
   <time datetime="2026-10-31">October 31, 2026</time><span class="release-channel">Stable</span></div>
-  <div class="release-copy"><h3>Circa 0.44.1 release.</h3>
-  <p class="release-counts">Known limits</p>
-  <h4>Known limits</h4>
+  <div class="release-copy"><h3>Duplicated tabs load their restored page.</h3>
+  <p class="release-counts">2 fixed</p>
+  <h4>Fixed</h4>
   <ul>
-    <li><strong>Full Changelog</strong>: <a href="https://github.com/okafrancois/orbit-browser/compare/v0.44.0...v0.44.1">https://github.com/okafrancois/orbit-browser/compare/v0.44.0...v0.44.1</a></li>
+    <li>A duplicated tab now loads its restored history entry instead of remaining on an uninitialized page.</li>
+    <li>Text transformations route correctly to editable web content.</li>
   </ul>
   <a class="release-source" href="changelog/0.44.1/">Release permalink ↗</a>
   </div>
@@ -1219,11 +1289,15 @@
 <article class="release" id="v0.44.0" data-version="0.44.0" data-channel="stable" data-latest="false">
   <div class="release-meta"><h2><a href="#v0.44.0" aria-label="Link to version 0.44.0">0.44.0</a></h2>
   <time datetime="2026-10-30">October 30, 2026</time><span class="release-channel">Stable</span></div>
-  <div class="release-copy"><h3>Circa 0.44.0 release.</h3>
-  <p class="release-counts">Known limits</p>
-  <h4>Known limits</h4>
+  <div class="release-copy"><h3>Sidebar clicks keep the page you just selected.</h3>
+  <p class="release-counts">1 new · 1 fixed</p>
+  <h4>New</h4>
   <ul>
-    <li><strong>Full Changelog</strong>: <a href="https://github.com/okafrancois/orbit-browser/compare/v0.43.0...v0.44.0">https://github.com/okafrancois/orbit-browser/compare/v0.43.0...v0.44.0</a></li>
+    <li>Command-Z can reopen a closed browser window.</li>
+  </ul>
+  <h4>Fixed</h4>
+  <ul>
+    <li>Older queued activations no longer replace a newer tab selection. Sidebar click order and double-click rename handling are more reliable.</li>
   </ul>
   <a class="release-source" href="changelog/0.44.0/">Release permalink ↗</a>
   </div>
@@ -1231,11 +1305,12 @@
 <article class="release" id="v0.43.0" data-version="0.43.0" data-channel="stable" data-latest="false">
   <div class="release-meta"><h2><a href="#v0.43.0" aria-label="Link to version 0.43.0">0.43.0</a></h2>
   <time datetime="2026-10-30">October 30, 2026</time><span class="release-channel">Stable</span></div>
-  <div class="release-copy"><h3>Circa 0.43.0 release.</h3>
-  <p class="release-counts">Known limits</p>
-  <h4>Known limits</h4>
+  <div class="release-copy"><h3>Ready updates install directly from the sidebar.</h3>
+  <p class="release-counts">2 new</p>
+  <h4>New</h4>
   <ul>
-    <li><strong>Full Changelog</strong>: <a href="https://github.com/okafrancois/orbit-browser/compare/v0.42.1...v0.43.0">https://github.com/okafrancois/orbit-browser/compare/v0.42.1...v0.43.0</a></li>
+    <li>Updates download and prepare in the background. The sidebar restart card installs the staged update without extra updater windows.</li>
+    <li>Task Manager, trace recording and extension Options commands now open their native engine tools.</li>
   </ul>
   <a class="release-source" href="changelog/0.43.0/">Release permalink ↗</a>
   </div>
@@ -1243,24 +1318,25 @@
 <article class="release" id="v0.42.1" data-version="0.42.1" data-channel="stable" data-latest="false">
   <div class="release-meta"><h2><a href="#v0.42.1" aria-label="Link to version 0.42.1">0.42.1</a></h2>
   <time datetime="2026-10-30">October 30, 2026</time><span class="release-channel">Stable</span></div>
-  <div class="release-copy"><h3>Circa 0.42.1 release.</h3>
-  <p class="release-counts">Known limits</p>
-  <h4>Known limits</h4>
+  <div class="release-copy"><h3>The browser engine includes a Chromium security update.</h3>
+  <p class="release-counts">1 fixed</p>
+  <h4>Fixed</h4>
   <ul>
-    <li><strong>Full Changelog</strong>: <a href="https://github.com/okafrancois/orbit-browser/compare/v0.42.0...v0.42.1">https://github.com/okafrancois/orbit-browser/compare/v0.42.0...v0.42.1</a></li>
+    <li>The maintained engine is updated to Chromium 156.0.8078.84.</li>
   </ul>
-  <p class="release-engine">Engine / bundled components: maintained engine r14</p>
+  <p class="release-engine">Engine / bundled components: Chromium 156.0.8078.84; maintained engine r14</p>
   <a class="release-source" href="changelog/0.42.1/">Release permalink ↗</a>
   </div>
 </article>
 <article class="release" id="v0.42.0" data-version="0.42.0" data-channel="stable" data-latest="false">
   <div class="release-meta"><h2><a href="#v0.42.0" aria-label="Link to version 0.42.0">0.42.0</a></h2>
   <time datetime="2026-10-30">October 30, 2026</time><span class="release-channel">Stable</span></div>
-  <div class="release-copy"><h3>Circa 0.42.0 release.</h3>
-  <p class="release-counts">Known limits</p>
-  <h4>Known limits</h4>
+  <div class="release-copy"><h3>Meeting links open in regular tabs.</h3>
+  <p class="release-counts">2 fixed</p>
+  <h4>Fixed</h4>
   <ul>
-    <li><strong>Full Changelog</strong>: <a href="https://github.com/okafrancois/orbit-browser/compare/v0.41.0...v0.42.0">https://github.com/okafrancois/orbit-browser/compare/v0.41.0...v0.42.0</a></li>
+    <li>Meeting links open as normal tabs in the most recent Space instead of entering automatic Picture in Picture handling.</li>
+    <li>Automatic Picture in Picture respects your opt-out choices.</li>
   </ul>
   <a class="release-source" href="changelog/0.42.0/">Release permalink ↗</a>
   </div>
@@ -1268,11 +1344,13 @@
 <article class="release" id="v0.41.0" data-version="0.41.0" data-channel="stable" data-latest="false">
   <div class="release-meta"><h2><a href="#v0.41.0" aria-label="Link to version 0.41.0">0.41.0</a></h2>
   <time datetime="2026-10-30">October 30, 2026</time><span class="release-channel">Stable</span></div>
-  <div class="release-copy"><h3>Circa 0.41.0 release.</h3>
-  <p class="release-counts">Known limits</p>
-  <h4>Known limits</h4>
+  <div class="release-copy"><h3>More menu commands work and window actions stay responsive.</h3>
+  <p class="release-counts">3 fixed</p>
+  <h4>Fixed</h4>
   <ul>
-    <li><strong>Full Changelog</strong>: <a href="https://github.com/okafrancois/orbit-browser/compare/v0.40.0...v0.41.0">https://github.com/okafrancois/orbit-browser/compare/v0.40.0...v0.41.0</a></li>
+    <li>Text editing, spelling and transformation commands now route to the active editor. Network Inspector, build information copying and revealing browser data also work from their menus.</li>
+    <li>Window activation and queued Space changes no longer get stuck in a loop. Closing a window is more reliable, and opening the Library retires a pending floating sidebar reveal.</li>
+    <li>Unsupported menu actions are hidden.</li>
   </ul>
   <a class="release-source" href="changelog/0.41.0/">Release permalink ↗</a>
   </div>
@@ -1280,11 +1358,13 @@
 <article class="release" id="v0.40.0" data-version="0.40.0" data-channel="stable" data-latest="false">
   <div class="release-meta"><h2><a href="#v0.40.0" aria-label="Link to version 0.40.0">0.40.0</a></h2>
   <time datetime="2026-10-30">October 30, 2026</time><span class="release-channel">Stable</span></div>
-  <div class="release-copy"><h3>Circa 0.40.0 release.</h3>
-  <p class="release-counts">Known limits</p>
-  <h4>Known limits</h4>
+  <div class="release-copy"><h3>Automatic updates wait until your browsing is unattended.</h3>
+  <p class="release-counts">3 new</p>
+  <h4>New</h4>
   <ul>
-    <li><strong>Full Changelog</strong>: <a href="https://github.com/okafrancois/orbit-browser/compare/v0.39.0...v0.40.0">https://github.com/okafrancois/orbit-browser/compare/v0.39.0...v0.40.0</a></li>
+    <li>Automatic updates wait for an unattended session and check for unsaved page input before restarting. Transient windows are restored afterward.</li>
+    <li>Open Release Notes to see What&#x27;s New, and find the Chromium version in the browser&#x27;s version information.</li>
+    <li>Localhost pages can use Developer Mode automatically.</li>
   </ul>
   <a class="release-source" href="changelog/0.40.0/">Release permalink ↗</a>
   </div>
@@ -1292,11 +1372,18 @@
 <article class="release" id="v0.39.0" data-version="0.39.0" data-channel="stable" data-latest="false">
   <div class="release-meta"><h2><a href="#v0.39.0" aria-label="Link to version 0.39.0">0.39.0</a></h2>
   <time datetime="2026-10-30">October 30, 2026</time><span class="release-channel">Stable</span></div>
-  <div class="release-copy"><h3>Circa 0.39.0 release.</h3>
-  <p class="release-counts">Known limits</p>
-  <h4>Known limits</h4>
+  <div class="release-copy"><h3>Create more kinds of Split View and customize site searches.</h3>
+  <p class="release-counts">4 new · 1 fixed</p>
+  <h4>New</h4>
   <ul>
-    <li><strong>Full Changelog</strong>: <a href="https://github.com/okafrancois/orbit-browser/compare/v0.38.0...v0.39.0">https://github.com/okafrancois/orbit-browser/compare/v0.38.0...v0.39.0</a></li>
+    <li>Use Option-click and directional split commands to add pages beside or above one another. Split panes support duplication and mute actions.</li>
+    <li>Add and edit Site Search shortcuts, and choose Perplexity as a profile&#x27;s search engine.</li>
+    <li>Copy links without trackers and duplicate folders with their contents.</li>
+    <li>Command-E cycles pinned extensions, and Little windows use the current extension inventory.</li>
+  </ul>
+  <h4>Fixed</h4>
+  <ul>
+    <li>Duplicating a tab preserves its browsing history. Local file access is remembered when a saved tab is reopened.</li>
   </ul>
   <a class="release-source" href="changelog/0.39.0/">Release permalink ↗</a>
   </div>
@@ -1304,11 +1391,19 @@
 <article class="release" id="v0.38.0" data-version="0.38.0" data-channel="stable" data-latest="false">
   <div class="release-meta"><h2><a href="#v0.38.0" aria-label="Link to version 0.38.0">0.38.0</a></h2>
   <time datetime="2026-10-30">October 30, 2026</time><span class="release-channel">Stable</span></div>
-  <div class="release-copy"><h3>Circa 0.38.0 release.</h3>
-  <p class="release-counts">Known limits</p>
-  <h4>Known limits</h4>
+  <div class="release-copy"><h3>Open local files and revisit pages from navigation menus.</h3>
+  <p class="release-counts">4 new · 2 fixed</p>
+  <h4>New</h4>
   <ul>
-    <li><strong>Full Changelog</strong>: <a href="https://github.com/okafrancois/orbit-browser/compare/v0.37.1...v0.38.0">https://github.com/okafrancois/orbit-browser/compare/v0.37.1...v0.38.0</a></li>
+    <li>Use Open File to open local documents and PDFs. The address field displays the selected file&#x27;s name.</li>
+    <li>Back and Forward have navigation history menus, including an option to open a history entry in a background tab.</li>
+    <li>Safe Browsing is available as an opt-in setting with your own Google API key, stored on this Mac. Restart after changing it.</li>
+    <li>Archive options include Never, separate Little window timing and Clear Archive in the Library. Restored tabs return to their intended location.</li>
+  </ul>
+  <h4>Fixed</h4>
+  <ul>
+    <li>Pinned tabs retain their saved page identity and cached icons. Imported single-color themes display correctly.</li>
+    <li>The address field uses the committed page address and its actual connection security. External links reuse Little windows, and expired Little pages are archived.</li>
   </ul>
   <a class="release-source" href="changelog/0.38.0/">Release permalink ↗</a>
   </div>
@@ -1316,11 +1411,12 @@
 <article class="release" id="v0.37.1" data-version="0.37.1" data-channel="stable" data-latest="false">
   <div class="release-meta"><h2><a href="#v0.37.1" aria-label="Link to version 0.37.1">0.37.1</a></h2>
   <time datetime="2026-10-30">October 30, 2026</time><span class="release-channel">Stable</span></div>
-  <div class="release-copy"><h3>Circa 0.37.1 release.</h3>
-  <p class="release-counts">Known limits</p>
-  <h4>Known limits</h4>
+  <div class="release-copy"><h3>One-time website permissions stay one-time.</h3>
+  <p class="release-counts">2 fixed</p>
+  <h4>Fixed</h4>
   <ul>
-    <li><strong>Full Changelog</strong>: <a href="https://github.com/okafrancois/orbit-browser/compare/v0.37.0...v0.37.1">https://github.com/okafrancois/orbit-browser/compare/v0.37.0...v0.37.1</a></li>
+    <li>Temporary website permission grants no longer become lasting permissions. Not Now defers a prompt without saving a choice.</li>
+    <li>A failed setup import no longer leaves a staged password import waiting for the next launch.</li>
   </ul>
   <a class="release-source" href="changelog/0.37.1/">Release permalink ↗</a>
   </div>
@@ -1328,24 +1424,28 @@
 <article class="release" id="v0.37.0" data-version="0.37.0" data-channel="stable" data-latest="false">
   <div class="release-meta"><h2><a href="#v0.37.0" aria-label="Link to version 0.37.0">0.37.0</a></h2>
   <time datetime="2026-10-30">October 30, 2026</time><span class="release-channel">Stable</span></div>
-  <div class="release-copy"><h3>Circa 0.37.0 release.</h3>
-  <p class="release-counts">Known limits</p>
-  <h4>Known limits</h4>
+  <div class="release-copy"><h3>Import saved passwords into the correct profiles.</h3>
+  <p class="release-counts">1 new · 1 fixed</p>
+  <h4>New</h4>
   <ul>
-    <li><strong>Full Changelog</strong>: <a href="https://github.com/okafrancois/orbit-browser/compare/v0.36.0...v0.37.0">https://github.com/okafrancois/orbit-browser/compare/v0.36.0...v0.37.0</a></li>
+    <li>Browser imports can place saved passwords into their mapped profiles during restart, with recovery if the import is interrupted.</li>
   </ul>
-  <p class="release-engine">Engine / bundled components: maintained engine r13</p>
+  <h4>Fixed</h4>
+  <ul>
+    <li>The browser engine includes Chromium 156.0.8078.80 security updates.</li>
+  </ul>
+  <p class="release-engine">Engine / bundled components: Chromium 156.0.8078.80; maintained engine r13</p>
   <a class="release-source" href="changelog/0.37.0/">Release permalink ↗</a>
   </div>
 </article>
 <article class="release" id="v0.36.0" data-version="0.36.0" data-channel="stable" data-latest="false">
   <div class="release-meta"><h2><a href="#v0.36.0" aria-label="Link to version 0.36.0">0.36.0</a></h2>
   <time datetime="2026-10-30">October 30, 2026</time><span class="release-channel">Stable</span></div>
-  <div class="release-copy"><h3>Circa 0.36.0 release.</h3>
-  <p class="release-counts">Known limits</p>
-  <h4>Known limits</h4>
+  <div class="release-copy"><h3>The browser is now called Circa.</h3>
+  <p class="release-counts">1 smaller</p>
+  <h4>Smaller</h4>
   <ul>
-    <li><strong>Full Changelog</strong>: <a href="https://github.com/okafrancois/orbit-browser/compare/v0.35.0...v0.36.0">https://github.com/okafrancois/orbit-browser/compare/v0.35.0...v0.36.0</a></li>
+    <li>The visible product name is now Circa across the interface, with bold system titles.</li>
   </ul>
   <a class="release-source" href="changelog/0.36.0/">Release permalink ↗</a>
   </div>
@@ -1353,11 +1453,16 @@
 <article class="release" id="v0.35.0" data-version="0.35.0" data-channel="stable" data-latest="false">
   <div class="release-meta"><h2><a href="#v0.35.0" aria-label="Link to version 0.35.0">0.35.0</a></h2>
   <time datetime="2026-10-30">October 30, 2026</time><span class="release-channel">Stable</span></div>
-  <div class="release-copy"><h3>Circa 0.35.0 release.</h3>
-  <p class="release-counts">Known limits</p>
-  <h4>Known limits</h4>
+  <div class="release-copy"><h3>Choose a download folder and get search suggestions as you type.</h3>
+  <p class="release-counts">2 new · 1 fixed</p>
+  <h4>New</h4>
   <ul>
-    <li><strong>Full Changelog</strong>: <a href="https://github.com/okafrancois/orbit-browser/compare/v0.34.3...v0.35.0">https://github.com/okafrancois/orbit-browser/compare/v0.34.3...v0.35.0</a></li>
+    <li>Settings lets you choose the default download folder or turn on Ask where to save each file.</li>
+    <li>The Command Bar offers remote search suggestions and a Delete Suggestion action. Control them with Show search suggestions in Settings.</li>
+  </ul>
+  <h4>Fixed</h4>
+  <ul>
+    <li>Local browser imports remain usable offline and handle newer cookie stores and large sources more reliably.</li>
   </ul>
   <a class="release-source" href="changelog/0.35.0/">Release permalink ↗</a>
   </div>
@@ -1365,11 +1470,11 @@
 <article class="release" id="v0.34.3" data-version="0.34.3" data-channel="stable" data-latest="false">
   <div class="release-meta"><h2><a href="#v0.34.3" aria-label="Link to version 0.34.3">0.34.3</a></h2>
   <time datetime="2026-10-30">October 30, 2026</time><span class="release-channel">Stable</span></div>
-  <div class="release-copy"><h3>Circa 0.34.3 release.</h3>
-  <p class="release-counts">Known limits</p>
-  <h4>Known limits</h4>
+  <div class="release-copy"><h3>Downloaded files receive macOS safety checks.</h3>
+  <p class="release-counts">1 fixed</p>
+  <h4>Fixed</h4>
   <ul>
-    <li><strong>Full Changelog</strong>: <a href="https://github.com/okafrancois/orbit-browser/compare/v0.34.2...v0.34.3">https://github.com/okafrancois/orbit-browser/compare/v0.34.2...v0.34.3</a></li>
+    <li>Downloads now carry macOS quarantine information so Gatekeeper can check files when you open them.</li>
   </ul>
   <a class="release-source" href="changelog/0.34.3/">Release permalink ↗</a>
   </div>
@@ -1377,11 +1482,11 @@
 <article class="release" id="v0.34.2" data-version="0.34.2" data-channel="stable" data-latest="false">
   <div class="release-meta"><h2><a href="#v0.34.2" aria-label="Link to version 0.34.2">0.34.2</a></h2>
   <time datetime="2026-10-30">October 30, 2026</time><span class="release-channel">Stable</span></div>
-  <div class="release-copy"><h3>Circa 0.34.2 release.</h3>
-  <p class="release-counts">Known limits</p>
-  <h4>Known limits</h4>
+  <div class="release-copy"><h3>Pinned tabs show when you have left their saved page.</h3>
+  <p class="release-counts">1 fixed</p>
+  <h4>Fixed</h4>
   <ul>
-    <li><strong>Full Changelog</strong>: <a href="https://github.com/okafrancois/orbit-browser/compare/v0.34.1...v0.34.2">https://github.com/okafrancois/orbit-browser/compare/v0.34.1...v0.34.2</a></li>
+    <li>A pinned tab&#x27;s away state appears only when you browse away from its saved address. Hover controls, open-pin cards and action buttons follow the tab&#x27;s current state.</li>
   </ul>
   <a class="release-source" href="changelog/0.34.2/">Release permalink ↗</a>
   </div>
@@ -1389,11 +1494,15 @@
 <article class="release" id="v0.34.1" data-version="0.34.1" data-channel="stable" data-latest="false">
   <div class="release-meta"><h2><a href="#v0.34.1" aria-label="Link to version 0.34.1">0.34.1</a></h2>
   <time datetime="2026-10-30">October 30, 2026</time><span class="release-channel">Stable</span></div>
-  <div class="release-copy"><h3>Circa 0.34.1 release.</h3>
-  <p class="release-counts">Known limits</p>
-  <h4>Known limits</h4>
+  <div class="release-copy"><h3>Space and folder conversion stays in sync across windows.</h3>
+  <p class="release-counts">1 fixed · 1 smaller</p>
+  <h4>Fixed</h4>
   <ul>
-    <li><strong>Full Changelog</strong>: <a href="https://github.com/okafrancois/orbit-browser/compare/v0.34.0...v0.34.1">https://github.com/okafrancois/orbit-browser/compare/v0.34.0...v0.34.1</a></li>
+    <li>Converting between a Space and a folder updates other live windows correctly.</li>
+  </ul>
+  <h4>Smaller</h4>
+  <ul>
+    <li>Onboarding copy uses the same system typography as the rest of the interface.</li>
   </ul>
   <a class="release-source" href="changelog/0.34.1/">Release permalink ↗</a>
   </div>
@@ -1401,11 +1510,12 @@
 <article class="release" id="v0.34.0" data-version="0.34.0" data-channel="stable" data-latest="false">
   <div class="release-meta"><h2><a href="#v0.34.0" aria-label="Link to version 0.34.0">0.34.0</a></h2>
   <time datetime="2026-10-30">October 30, 2026</time><span class="release-channel">Stable</span></div>
-  <div class="release-copy"><h3>Circa 0.34.0 release.</h3>
-  <p class="release-counts">Known limits</p>
-  <h4>Known limits</h4>
+  <div class="release-copy"><h3>Background tabs sleep when too many pages are kept live.</h3>
+  <p class="release-counts">2 smaller</p>
+  <h4>Smaller</h4>
   <ul>
-    <li><strong>Full Changelog</strong>: <a href="https://github.com/okafrancois/orbit-browser/compare/v0.33.2...v0.34.0">https://github.com/okafrancois/orbit-browser/compare/v0.33.2...v0.34.0</a></li>
+    <li>Circa keeps up to 12 live background tabs by default and puts eligible older tabs to sleep when that budget is exceeded. Visible pages, Split View and protected activity are spared; memory pressure can tighten the budget.</li>
+    <li>Choosing Never for Memory Saver disables these automatic tab discards.</li>
   </ul>
   <a class="release-source" href="changelog/0.34.0/">Release permalink ↗</a>
   </div>
@@ -1413,23 +1523,51 @@
 <article class="release" id="v0.33.2" data-version="0.33.2" data-channel="stable" data-latest="false">
   <div class="release-meta"><h2><a href="#v0.33.2" aria-label="Link to version 0.33.2">0.33.2</a></h2>
   <time datetime="2026-10-30">October 30, 2026</time><span class="release-channel">Stable</span></div>
-  <div class="release-copy"><h3>Circa 0.33.2 release.</h3>
-  <p class="release-counts">Known limits</p>
-  <h4>Known limits</h4>
+  <div class="release-copy"><h3>This release contains only internal fixes.</h3>
+  <p class="release-counts">1 smaller</p>
+  <h4>Smaller</h4>
   <ul>
-    <li><strong>Full Changelog</strong>: <a href="https://github.com/okafrancois/orbit-browser/compare/v0.33.1...v0.33.2">https://github.com/okafrancois/orbit-browser/compare/v0.33.1...v0.33.2</a></li>
+    <li>This release contains only internal fixes.</li>
   </ul>
   <a class="release-source" href="changelog/0.33.2/">Release permalink ↗</a>
+  </div>
+</article>
+<article class="release" id="v0.33.1" data-version="0.33.1" data-channel="stable" data-latest="false">
+  <div class="release-meta"><h2><a href="#v0.33.1" aria-label="Link to version 0.33.1">0.33.1</a></h2>
+  <time datetime="2026-10-30">October 30, 2026</time><span class="release-channel">Stable</span></div>
+  <div class="release-copy"><h3>Tab menus regain their actions and the interface uses system text.</h3>
+  <p class="release-counts">2 fixed · 1 smaller</p>
+  <h4>Fixed</h4>
+  <ul>
+    <li>Tab context menus again include Pin Tab, Reset Tab to Original URL, Close Tab, archive actions, Copy Link as Markdown and New Folder with Selection.</li>
+    <li>Setup shows the correct default-browser state, and the sidebar update card and Space name display more consistently.</li>
+  </ul>
+  <h4>Smaller</h4>
+  <ul>
+    <li>Browser controls return to system typography, and translucent sidebar tint adapts to the Space gradient.</li>
+  </ul>
+  <a class="release-source" href="changelog/0.33.1/">Release permalink ↗</a>
   </div>
 </article>
 <article class="release" id="v0.33.0" data-version="0.33.0" data-channel="stable" data-latest="false">
   <div class="release-meta"><h2><a href="#v0.33.0" aria-label="Link to version 0.33.0">0.33.0</a></h2>
   <time datetime="2026-10-30">October 30, 2026</time><span class="release-channel">Stable</span></div>
-  <div class="release-copy"><h3>Circa 0.33.0 release.</h3>
-  <p class="release-counts">Known limits</p>
-  <h4>Known limits</h4>
+  <div class="release-copy"><h3>Set up your browser with a new first-launch welcome flow.</h3>
+  <p class="release-counts">4 new · 1 fixed · 1 smaller</p>
+  <h4>New</h4>
   <ul>
-    <li><strong>Full Changelog</strong>: <a href="https://github.com/okafrancois/orbit-browser/compare/v0.32.0...v0.33.0">https://github.com/okafrancois/orbit-browser/compare/v0.32.0...v0.33.0</a></li>
+    <li>First launch guides you through importing browser data, choosing Favorites, iCloud sync, a Space theme and your default browser. Interrupted setup can resume; existing installations skip it.</li>
+    <li>Change tab icons and edit a pinned page&#x27;s saved address from its context menu.</li>
+    <li>Export a Space into a folder or turn a folder into a Space from their menus.</li>
+    <li>Choose an application icon for the Dock and Finder from the icon chooser in Settings.</li>
+  </ul>
+  <h4>Fixed</h4>
+  <ul>
+    <li>Link-routing rules can be edited inline and deleted immediately. Split dividers show clearer hover feedback and resize panes live.</li>
+  </ul>
+  <h4>Smaller</h4>
+  <ul>
+    <li>Settings, floating panels, interface icons and typography have a refreshed appearance. Space themes gain a Frost sidebar option.</li>
   </ul>
   <a class="release-source" href="changelog/0.33.0/">Release permalink ↗</a>
   </div>
@@ -1437,11 +1575,12 @@
 <article class="release" id="v0.32.0" data-version="0.32.0" data-channel="stable" data-latest="false">
   <div class="release-meta"><h2><a href="#v0.32.0" aria-label="Link to version 0.32.0">0.32.0</a></h2>
   <time datetime="2026-10-30">October 30, 2026</time><span class="release-channel">Stable</span></div>
-  <div class="release-copy"><h3>Circa 0.32.0 release.</h3>
-  <p class="release-counts">Known limits</p>
-  <h4>Known limits</h4>
+  <div class="release-copy"><h3>Keyboard input and pending updates recover reliably.</h3>
+  <p class="release-counts">2 fixed</p>
+  <h4>Fixed</h4>
   <ul>
-    <li><strong>Full Changelog</strong>: <a href="https://github.com/okafrancois/orbit-browser/compare/v0.31.0...v0.32.0">https://github.com/okafrancois/orbit-browser/compare/v0.31.0...v0.32.0</a></li>
+    <li>The engine releases Secure Input when the app deactivates.</li>
+    <li>A newly prepared update no longer disappears when another installer finishes or changes state.</li>
   </ul>
   <p class="release-engine">Engine / bundled components: maintained engine r12</p>
   <a class="release-source" href="changelog/0.32.0/">Release permalink ↗</a>
@@ -1450,11 +1589,15 @@
 <article class="release" id="v0.31.0" data-version="0.31.0" data-channel="stable" data-latest="false">
   <div class="release-meta"><h2><a href="#v0.31.0" aria-label="Link to version 0.31.0">0.31.0</a></h2>
   <time datetime="2026-10-30">October 30, 2026</time><span class="release-channel">Stable</span></div>
-  <div class="release-copy"><h3>Circa 0.31.0 release.</h3>
-  <p class="release-counts">Known limits</p>
-  <h4>Known limits</h4>
+  <div class="release-copy"><h3>Restart into a ready update from the sidebar.</h3>
+  <p class="release-counts">1 new · 1 fixed</p>
+  <h4>New</h4>
   <ul>
-    <li><strong>Full Changelog</strong>: <a href="https://github.com/okafrancois/orbit-browser/compare/v0.30.1...v0.31.0">https://github.com/okafrancois/orbit-browser/compare/v0.30.1...v0.31.0</a></li>
+    <li>A sidebar update card offers Restart and Update when an update is ready. Automatic checks keep pending updates current.</li>
+  </ul>
+  <h4>Fixed</h4>
+  <ul>
+    <li>Switching between light and dark Space themes avoids flashes and keeps text and selection highlights readable during the transition.</li>
   </ul>
   <a class="release-source" href="changelog/0.31.0/">Release permalink ↗</a>
   </div>
@@ -1462,11 +1605,11 @@
 <article class="release" id="v0.30.1" data-version="0.30.1" data-channel="stable" data-latest="false">
   <div class="release-meta"><h2><a href="#v0.30.1" aria-label="Link to version 0.30.1">0.30.1</a></h2>
   <time datetime="2026-10-30">October 30, 2026</time><span class="release-channel">Stable</span></div>
-  <div class="release-copy"><h3>Circa 0.30.1 release.</h3>
-  <p class="release-counts">Known limits</p>
-  <h4>Known limits</h4>
+  <div class="release-copy"><h3>Leaving Circa releases Secure Input correctly.</h3>
+  <p class="release-counts">1 fixed</p>
+  <h4>Fixed</h4>
   <ul>
-    <li><strong>Full Changelog</strong>: <a href="https://github.com/okafrancois/orbit-browser/compare/v0.30.0...v0.30.1">https://github.com/okafrancois/orbit-browser/compare/v0.30.0...v0.30.1</a></li>
+    <li>Secure Input is released when Circa or its window loses focus, so password entry does not interfere with keyboard input elsewhere on your Mac.</li>
   </ul>
   <a class="release-source" href="changelog/0.30.1/">Release permalink ↗</a>
   </div>
@@ -1474,11 +1617,16 @@
 <article class="release" id="v0.30.0" data-version="0.30.0" data-channel="stable" data-latest="false">
   <div class="release-meta"><h2><a href="#v0.30.0" aria-label="Link to version 0.30.0">0.30.0</a></h2>
   <time datetime="2026-10-30">October 30, 2026</time><span class="release-channel">Stable</span></div>
-  <div class="release-copy"><h3>Circa 0.30.0 release.</h3>
-  <p class="release-counts">Known limits</p>
-  <h4>Known limits</h4>
+  <div class="release-copy"><h3>Collapse pinned tabs by clicking the Space name.</h3>
+  <p class="release-counts">2 new · 1 fixed</p>
+  <h4>New</h4>
   <ul>
-    <li><strong>Full Changelog</strong>: <a href="https://github.com/okafrancois/orbit-browser/compare/v0.29.1...v0.30.0">https://github.com/okafrancois/orbit-browser/compare/v0.29.1...v0.30.0</a></li>
+    <li>Click a Space&#x27;s name to collapse or expand its pinned section.</li>
+    <li>Little windows can send a page to a Space in another profile.</li>
+  </ul>
+  <h4>Fixed</h4>
+  <ul>
+    <li>Little window toolbar controls show the right cursor and copy the current address. Website notification registration works correctly on macOS.</li>
   </ul>
   <a class="release-source" href="changelog/0.30.0/">Release permalink ↗</a>
   </div>
@@ -1486,11 +1634,12 @@
 <article class="release" id="v0.29.1" data-version="0.29.1" data-channel="stable" data-latest="false">
   <div class="release-meta"><h2><a href="#v0.29.1" aria-label="Link to version 0.29.1">0.29.1</a></h2>
   <time datetime="2026-10-30">October 30, 2026</time><span class="release-channel">Stable</span></div>
-  <div class="release-copy"><h3>Circa 0.29.1 release.</h3>
-  <p class="release-counts">Known limits</p>
-  <h4>Known limits</h4>
+  <div class="release-copy"><h3>Standalone windows keep a valid page after Space changes.</h3>
+  <p class="release-counts">2 fixed</p>
+  <h4>Fixed</h4>
   <ul>
-    <li><strong>Full Changelog</strong>: <a href="https://github.com/okafrancois/orbit-browser/compare/v0.29.0...v0.29.1">https://github.com/okafrancois/orbit-browser/compare/v0.29.0...v0.29.1</a></li>
+    <li>Removing a Space no longer leaves a standalone window without a valid selection. Boost edits remain usable after sync, and Never Translate This Site applies across windows.</li>
+    <li>Tab sleep checks the page&#x27;s native activity state, and tabs discarded by the engine are reflected correctly in the browser.</li>
   </ul>
   <a class="release-source" href="changelog/0.29.1/">Release permalink ↗</a>
   </div>
@@ -1498,11 +1647,12 @@
 <article class="release" id="v0.29.0" data-version="0.29.0" data-channel="stable" data-latest="false">
   <div class="release-meta"><h2><a href="#v0.29.0" aria-label="Link to version 0.29.0">0.29.0</a></h2>
   <time datetime="2026-10-30">October 30, 2026</time><span class="release-channel">Stable</span></div>
-  <div class="release-copy"><h3>Circa 0.29.0 release.</h3>
-  <p class="release-counts">Known limits</p>
-  <h4>Known limits</h4>
+  <div class="release-copy"><h3>Import another browser from a native picker.</h3>
+  <p class="release-counts">2 new</p>
+  <h4>New</h4>
   <ul>
-    <li><strong>Full Changelog</strong>: <a href="https://github.com/okafrancois/orbit-browser/compare/v0.28.2...v0.29.0">https://github.com/okafrancois/orbit-browser/compare/v0.28.2...v0.29.0</a></li>
+    <li>Choose Import from Another Browser to select a source browser and profile, review available data, then use Import and Restart to bring it into a new profile.</li>
+    <li>Restore and Restart can return to the session saved before the import, replacing later session edits and removing the imported profile.</li>
   </ul>
   <a class="release-source" href="changelog/0.29.0/">Release permalink ↗</a>
   </div>
@@ -1510,11 +1660,11 @@
 <article class="release" id="v0.28.2" data-version="0.28.2" data-channel="stable" data-latest="false">
   <div class="release-meta"><h2><a href="#v0.28.2" aria-label="Link to version 0.28.2">0.28.2</a></h2>
   <time datetime="2026-10-30">October 30, 2026</time><span class="release-channel">Stable</span></div>
-  <div class="release-copy"><h3>Circa 0.28.2 release.</h3>
-  <p class="release-counts">Known limits</p>
-  <h4>Known limits</h4>
+  <div class="release-copy"><h3>Tab previews use images sized for their destination.</h3>
+  <p class="release-counts">1 smaller</p>
+  <h4>Smaller</h4>
   <ul>
-    <li><strong>Full Changelog</strong>: <a href="https://github.com/okafrancois/orbit-browser/compare/v0.28.1...v0.28.2">https://github.com/okafrancois/orbit-browser/compare/v0.28.1...v0.28.2</a></li>
+    <li>Tab-switcher thumbnails and developer toolbar tint sample images at the size they need instead of processing full-size page captures.</li>
   </ul>
   <a class="release-source" href="changelog/0.28.2/">Release permalink ↗</a>
   </div>
@@ -1522,11 +1672,11 @@
 <article class="release" id="v0.28.1" data-version="0.28.1" data-channel="stable" data-latest="false">
   <div class="release-meta"><h2><a href="#v0.28.1" aria-label="Link to version 0.28.1">0.28.1</a></h2>
   <time datetime="2026-10-29">October 29, 2026</time><span class="release-channel">Stable</span></div>
-  <div class="release-copy"><h3>Circa 0.28.1 release.</h3>
-  <p class="release-counts">Known limits</p>
-  <h4>Known limits</h4>
+  <div class="release-copy"><h3>Tab switches reveal the incoming page at its first drawn frame.</h3>
+  <p class="release-counts">1 fixed</p>
+  <h4>Fixed</h4>
   <ul>
-    <li><strong>Full Changelog</strong>: <a href="https://github.com/okafrancois/orbit-browser/compare/v0.28.0...v0.28.1">https://github.com/okafrancois/orbit-browser/compare/v0.28.0...v0.28.1</a></li>
+    <li>The outgoing tab&#x27;s image is released when the newly selected tab submits its first frame, avoiding an unnecessary hold over ready content.</li>
   </ul>
   <a class="release-source" href="changelog/0.28.1/">Release permalink ↗</a>
   </div>
@@ -1534,11 +1684,11 @@
 <article class="release" id="v0.28.0" data-version="0.28.0" data-channel="stable" data-latest="false">
   <div class="release-meta"><h2><a href="#v0.28.0" aria-label="Link to version 0.28.0">0.28.0</a></h2>
   <time datetime="2026-10-29">October 29, 2026</time><span class="release-channel">Stable</span></div>
-  <div class="release-copy"><h3>Circa 0.28.0 release.</h3>
-  <p class="release-counts">Known limits</p>
-  <h4>Known limits</h4>
+  <div class="release-copy"><h3>Picture in Picture shows video controls on hover.</h3>
+  <p class="release-counts">1 new</p>
+  <h4>New</h4>
   <ul>
-    <li><strong>Full Changelog</strong>: <a href="https://github.com/okafrancois/orbit-browser/compare/v0.27.2...v0.28.0">https://github.com/okafrancois/orbit-browser/compare/v0.27.2...v0.28.0</a></li>
+    <li>Hover over automatic video Picture in Picture to reveal its playback controls.</li>
   </ul>
   <p class="release-engine">Engine / bundled components: maintained engine r11</p>
   <a class="release-source" href="changelog/0.28.0/">Release permalink ↗</a>
@@ -1547,11 +1697,11 @@
 <article class="release" id="v0.27.2" data-version="0.27.2" data-channel="stable" data-latest="false">
   <div class="release-meta"><h2><a href="#v0.27.2" aria-label="Link to version 0.27.2">0.27.2</a></h2>
   <time datetime="2026-10-29">October 29, 2026</time><span class="release-channel">Stable</span></div>
-  <div class="release-copy"><h3>Circa 0.27.2 release.</h3>
-  <p class="release-counts">Known limits</p>
-  <h4>Known limits</h4>
+  <div class="release-copy"><h3>Inactive profiles and icon caches use less memory.</h3>
+  <p class="release-counts">1 smaller</p>
+  <h4>Smaller</h4>
   <ul>
-    <li><strong>Full Changelog</strong>: <a href="https://github.com/okafrancois/orbit-browser/compare/v0.27.1...v0.27.2">https://github.com/okafrancois/orbit-browser/compare/v0.27.1...v0.27.2</a></li>
+    <li>Icon caches now have limits, and history memory for idle profiles is released when it is no longer needed.</li>
   </ul>
   <a class="release-source" href="changelog/0.27.2/">Release permalink ↗</a>
   </div>
@@ -1559,11 +1709,11 @@
 <article class="release" id="v0.27.1" data-version="0.27.1" data-channel="stable" data-latest="false">
   <div class="release-meta"><h2><a href="#v0.27.1" aria-label="Link to version 0.27.1">0.27.1</a></h2>
   <time datetime="2026-10-29">October 29, 2026</time><span class="release-channel">Stable</span></div>
-  <div class="release-copy"><h3>Circa 0.27.1 release.</h3>
-  <p class="release-counts">Known limits</p>
-  <h4>Known limits</h4>
+  <div class="release-copy"><h3>Switching Spaces redraws fewer icons during the slide.</h3>
+  <p class="release-counts">1 smaller</p>
+  <h4>Smaller</h4>
   <ul>
-    <li><strong>Full Changelog</strong>: <a href="https://github.com/okafrancois/orbit-browser/compare/v0.27.0...v0.27.1">https://github.com/okafrancois/orbit-browser/compare/v0.27.0...v0.27.1</a></li>
+    <li>Space transitions reuse the moving sidebar&#x27;s drawn content while keeping controls aligned with their visible positions.</li>
   </ul>
   <a class="release-source" href="changelog/0.27.1/">Release permalink ↗</a>
   </div>
@@ -1571,11 +1721,11 @@
 <article class="release" id="v0.27.0" data-version="0.27.0" data-channel="stable" data-latest="false">
   <div class="release-meta"><h2><a href="#v0.27.0" aria-label="Link to version 0.27.0">0.27.0</a></h2>
   <time datetime="2026-10-29">October 29, 2026</time><span class="release-channel">Stable</span></div>
-  <div class="release-copy"><h3>Circa 0.27.0 release.</h3>
-  <p class="release-counts">Known limits</p>
-  <h4>Known limits</h4>
+  <div class="release-copy"><h3>Rename a Boost from its editor.</h3>
+  <p class="release-counts">1 new</p>
+  <h4>New</h4>
   <ul>
-    <li><strong>Full Changelog</strong>: <a href="https://github.com/okafrancois/orbit-browser/compare/v0.26.2...v0.27.0">https://github.com/okafrancois/orbit-browser/compare/v0.26.2...v0.27.0</a></li>
+    <li>Choose Rename this Boost to edit its title, then use Done to save or Cancel to keep the old name.</li>
   </ul>
   <a class="release-source" href="changelog/0.27.0/">Release permalink ↗</a>
   </div>
@@ -1583,11 +1733,11 @@
 <article class="release" id="v0.26.2" data-version="0.26.2" data-channel="stable" data-latest="false">
   <div class="release-meta"><h2><a href="#v0.26.2" aria-label="Link to version 0.26.2">0.26.2</a></h2>
   <time datetime="2026-10-29">October 29, 2026</time><span class="release-channel">Stable</span></div>
-  <div class="release-copy"><h3>Circa 0.26.2 release.</h3>
-  <p class="release-counts">Known limits</p>
-  <h4>Known limits</h4>
+  <div class="release-copy"><h3>Selecting a tab updates fewer sidebar rows.</h3>
+  <p class="release-counts">1 smaller</p>
+  <h4>Smaller</h4>
   <ul>
-    <li><strong>Full Changelog</strong>: <a href="https://github.com/okafrancois/orbit-browser/compare/v0.26.1...v0.26.2">https://github.com/okafrancois/orbit-browser/compare/v0.26.1...v0.26.2</a></li>
+    <li>Selecting tabs, Favorites and split panes updates only affected sidebar rows instead of refreshing the whole list.</li>
   </ul>
   <a class="release-source" href="changelog/0.26.2/">Release permalink ↗</a>
   </div>
@@ -1595,11 +1745,11 @@
 <article class="release" id="v0.26.1" data-version="0.26.1" data-channel="stable" data-latest="false">
   <div class="release-meta"><h2><a href="#v0.26.1" aria-label="Link to version 0.26.1">0.26.1</a></h2>
   <time datetime="2026-10-29">October 29, 2026</time><span class="release-channel">Stable</span></div>
-  <div class="release-copy"><h3>Circa 0.26.1 release.</h3>
-  <p class="release-counts">Known limits</p>
-  <h4>Known limits</h4>
+  <div class="release-copy"><h3>An interrupted import no longer blocks the next launch.</h3>
+  <p class="release-counts">1 fixed</p>
+  <h4>Fixed</h4>
   <ul>
-    <li><strong>Full Changelog</strong>: <a href="https://github.com/okafrancois/orbit-browser/compare/v0.26.0...v0.26.1">https://github.com/okafrancois/orbit-browser/compare/v0.26.0...v0.26.1</a></li>
+    <li>If an import is interrupted, startup lets you restore your previous data or continue without the incomplete import before opening browser profiles.</li>
   </ul>
   <a class="release-source" href="changelog/0.26.1/">Release permalink ↗</a>
   </div>
@@ -1607,11 +1757,15 @@
 <article class="release" id="v0.26.0" data-version="0.26.0" data-channel="stable" data-latest="false">
   <div class="release-meta"><h2><a href="#v0.26.0" aria-label="Link to version 0.26.0">0.26.0</a></h2>
   <time datetime="2026-10-29">October 29, 2026</time><span class="release-channel">Stable</span></div>
-  <div class="release-copy"><h3>Circa 0.26.0 release.</h3>
-  <p class="release-counts">Known limits</p>
-  <h4>Known limits</h4>
+  <div class="release-copy"><h3>Choose another translation language or exclude a site.</h3>
+  <p class="release-counts">1 new · 1 smaller</p>
+  <h4>New</h4>
   <ul>
-    <li><strong>Full Changelog</strong>: <a href="https://github.com/okafrancois/orbit-browser/compare/v0.25.2...v0.26.0">https://github.com/okafrancois/orbit-browser/compare/v0.25.2...v0.26.0</a></li>
+    <li>The translation Options menu offers Choose Another Language, Never Translate This Site and Language Settings. Site choices stay separate for each profile.</li>
+  </ul>
+  <h4>Smaller</h4>
+  <ul>
+    <li>Background tab title and address changes update only the sidebar rows that need them.</li>
   </ul>
   <a class="release-source" href="changelog/0.26.0/">Release permalink ↗</a>
   </div>
@@ -1619,11 +1773,12 @@
 <article class="release" id="v0.25.2" data-version="0.25.2" data-channel="stable" data-latest="false">
   <div class="release-meta"><h2><a href="#v0.25.2" aria-label="Link to version 0.25.2">0.25.2</a></h2>
   <time datetime="2026-10-29">October 29, 2026</time><span class="release-channel">Stable</span></div>
-  <div class="release-copy"><h3>Circa 0.25.2 release.</h3>
-  <p class="release-counts">Known limits</p>
-  <h4>Known limits</h4>
+  <div class="release-copy"><h3>The Command Bar does less work with a large history.</h3>
+  <p class="release-counts">2 smaller</p>
+  <h4>Smaller</h4>
   <ul>
-    <li><strong>Full Changelog</strong>: <a href="https://github.com/okafrancois/orbit-browser/compare/v0.25.1...v0.25.2">https://github.com/okafrancois/orbit-browser/compare/v0.25.1...v0.25.2</a></li>
+    <li>Command Bar ranking and suggestion updates avoid unnecessary work as your history grows.</li>
+    <li>Space switcher icons skip repaints when their appearance has not changed.</li>
   </ul>
   <a class="release-source" href="changelog/0.25.2/">Release permalink ↗</a>
   </div>
@@ -1631,11 +1786,11 @@
 <article class="release" id="v0.25.1" data-version="0.25.1" data-channel="stable" data-latest="false">
   <div class="release-meta"><h2><a href="#v0.25.1" aria-label="Link to version 0.25.1">0.25.1</a></h2>
   <time datetime="2026-10-29">October 29, 2026</time><span class="release-channel">Stable</span></div>
-  <div class="release-copy"><h3>Circa 0.25.1 release.</h3>
-  <p class="release-counts">Known limits</p>
-  <h4>Known limits</h4>
+  <div class="release-copy"><h3>Idle iCloud sync writes less data to disk.</h3>
+  <p class="release-counts">1 smaller</p>
+  <h4>Smaller</h4>
   <ul>
-    <li><strong>Full Changelog</strong>: <a href="https://github.com/okafrancois/orbit-browser/compare/v0.25.0...v0.25.1">https://github.com/okafrancois/orbit-browser/compare/v0.25.0...v0.25.1</a></li>
+    <li>An idle sync updates a small clock record instead of rewriting the whole saved sync state.</li>
   </ul>
   <a class="release-source" href="changelog/0.25.1/">Release permalink ↗</a>
   </div>
@@ -1643,11 +1798,15 @@
 <article class="release" id="v0.25.0" data-version="0.25.0" data-channel="stable" data-latest="false">
   <div class="release-meta"><h2><a href="#v0.25.0" aria-label="Link to version 0.25.0">0.25.0</a></h2>
   <time datetime="2026-10-29">October 29, 2026</time><span class="release-channel">Stable</span></div>
-  <div class="release-copy"><h3>Circa 0.25.0 release.</h3>
-  <p class="release-counts">Known limits</p>
-  <h4>Known limits</h4>
+  <div class="release-copy"><h3>Drag a tab out into its own window.</h3>
+  <p class="release-counts">1 new · 1 fixed</p>
+  <h4>New</h4>
   <ul>
-    <li><strong>Full Changelog</strong>: <a href="https://github.com/okafrancois/orbit-browser/compare/v0.24.1...v0.25.0">https://github.com/okafrancois/orbit-browser/compare/v0.24.1...v0.25.0</a></li>
+    <li>Drag a sidebar tab outside its window to create a standalone window. Its placement is remembered for later sessions.</li>
+  </ul>
+  <h4>Fixed</h4>
+  <ul>
+    <li>Setting Circa as the default browser works in released copies without requiring development files.</li>
   </ul>
   <a class="release-source" href="changelog/0.25.0/">Release permalink ↗</a>
   </div>
@@ -1655,11 +1814,11 @@
 <article class="release" id="v0.24.1" data-version="0.24.1" data-channel="stable" data-latest="false">
   <div class="release-meta"><h2><a href="#v0.24.1" aria-label="Link to version 0.24.1">0.24.1</a></h2>
   <time datetime="2026-10-29">October 29, 2026</time><span class="release-channel">Stable</span></div>
-  <div class="release-copy"><h3>Circa 0.24.1 release.</h3>
-  <p class="release-counts">Known limits</p>
-  <h4>Known limits</h4>
+  <div class="release-copy"><h3>Switching back to a live tab avoids a white flash.</h3>
+  <p class="release-counts">1 fixed</p>
+  <h4>Fixed</h4>
   <ul>
-    <li><strong>Full Changelog</strong>: <a href="https://github.com/okafrancois/orbit-browser/compare/v0.24.0...v0.24.1">https://github.com/okafrancois/orbit-browser/compare/v0.24.0...v0.24.1</a></li>
+    <li>The outgoing page stays visible until the newly selected live tab is ready to draw.</li>
   </ul>
   <a class="release-source" href="changelog/0.24.1/">Release permalink ↗</a>
   </div>
@@ -1667,11 +1826,13 @@
 <article class="release" id="v0.24.0" data-version="0.24.0" data-channel="stable" data-latest="false">
   <div class="release-meta"><h2><a href="#v0.24.0" aria-label="Link to version 0.24.0">0.24.0</a></h2>
   <time datetime="2026-10-29">October 29, 2026</time><span class="release-channel">Stable</span></div>
-  <div class="release-copy"><h3>Circa 0.24.0 release.</h3>
-  <p class="release-counts">Known limits</p>
-  <h4>Known limits</h4>
+  <div class="release-copy"><h3>Large Libraries and sleeping tabs use fewer resources.</h3>
+  <p class="release-counts">3 smaller</p>
+  <h4>Smaller</h4>
   <ul>
-    <li><strong>Full Changelog</strong>: <a href="https://github.com/okafrancois/orbit-browser/compare/v0.23.1...v0.24.0">https://github.com/okafrancois/orbit-browser/compare/v0.23.1...v0.24.0</a></li>
+    <li>Long Downloads, Media, History and folder-preview lists reuse the rows and thumbnails near the visible area instead of keeping every item onscreen in memory.</li>
+    <li>Background tabs sleep after an hour of inactivity, with their last page image kept visible until restored content paints.</li>
+    <li>Startup defers hidden controls, and sync, snapshots and download processing move more work away from the main thread.</li>
   </ul>
   <a class="release-source" href="changelog/0.24.0/">Release permalink ↗</a>
   </div>
@@ -1679,11 +1840,12 @@
 <article class="release" id="v0.23.1" data-version="0.23.1" data-channel="stable" data-latest="false">
   <div class="release-meta"><h2><a href="#v0.23.1" aria-label="Link to version 0.23.1">0.23.1</a></h2>
   <time datetime="2026-10-29">October 29, 2026</time><span class="release-channel">Stable</span></div>
-  <div class="release-copy"><h3>Circa 0.23.1 release.</h3>
-  <p class="release-counts">Known limits</p>
-  <h4>Known limits</h4>
+  <div class="release-copy"><h3>Idle browsing does less sync and disk work.</h3>
+  <p class="release-counts">2 smaller</p>
+  <h4>Smaller</h4>
   <ul>
-    <li><strong>Full Changelog</strong>: <a href="https://github.com/okafrancois/orbit-browser/compare/v0.23.0...v0.23.1">https://github.com/okafrancois/orbit-browser/compare/v0.23.0...v0.23.1</a></li>
+    <li>Turning off sync stops its scheduler. Idle archive reads, session saves and unchanged favicons avoid repeated processing and disk writes.</li>
+    <li>Automatic update checks start after the first window is ready, and background retries use fewer timers.</li>
   </ul>
   <a class="release-source" href="changelog/0.23.1/">Release permalink ↗</a>
   </div>
@@ -1691,11 +1853,11 @@
 <article class="release" id="v0.23.0" data-version="0.23.0" data-channel="stable" data-latest="false">
   <div class="release-meta"><h2><a href="#v0.23.0" aria-label="Link to version 0.23.0">0.23.0</a></h2>
   <time datetime="2026-10-29">October 29, 2026</time><span class="release-channel">Stable</span></div>
-  <div class="release-copy"><h3>Circa 0.23.0 release.</h3>
-  <p class="release-counts">Known limits</p>
-  <h4>Known limits</h4>
+  <div class="release-copy"><h3>Space themes have more consistent colors, grain and transitions.</h3>
+  <p class="release-counts">1 fixed</p>
+  <h4>Fixed</h4>
   <ul>
-    <li><strong>Full Changelog</strong>: <a href="https://github.com/okafrancois/orbit-browser/compare/v0.22.3...v0.23.0">https://github.com/okafrancois/orbit-browser/compare/v0.22.3...v0.23.0</a></li>
+    <li>Theme colors, radial gradients and grain strength render consistently, with readable foreground text and a coordinated cross-fade when the theme changes.</li>
   </ul>
   <a class="release-source" href="changelog/0.23.0/">Release permalink ↗</a>
   </div>
@@ -1703,11 +1865,11 @@
 <article class="release" id="v0.22.3" data-version="0.22.3" data-channel="stable" data-latest="false">
   <div class="release-meta"><h2><a href="#v0.22.3" aria-label="Link to version 0.22.3">0.22.3</a></h2>
   <time datetime="2026-10-29">October 29, 2026</time><span class="release-channel">Stable</span></div>
-  <div class="release-copy"><h3>Circa 0.22.3 release.</h3>
-  <p class="release-counts">Known limits</p>
-  <h4>Known limits</h4>
+  <div class="release-copy"><h3>Switching Spaces reuses cached page previews.</h3>
+  <p class="release-counts">1 smaller</p>
+  <h4>Smaller</h4>
   <ul>
-    <li><strong>Full Changelog</strong>: <a href="https://github.com/okafrancois/orbit-browser/compare/v0.22.2...v0.22.3">https://github.com/okafrancois/orbit-browser/compare/v0.22.2...v0.22.3</a></li>
+    <li>Space switches reuse validated sidebar preview images from a bounded cache instead of preparing them again each time.</li>
   </ul>
   <a class="release-source" href="changelog/0.22.3/">Release permalink ↗</a>
   </div>
@@ -1715,11 +1877,11 @@
 <article class="release" id="v0.22.2" data-version="0.22.2" data-channel="stable" data-latest="false">
   <div class="release-meta"><h2><a href="#v0.22.2" aria-label="Link to version 0.22.2">0.22.2</a></h2>
   <time datetime="2026-10-29">October 29, 2026</time><span class="release-channel">Stable</span></div>
-  <div class="release-copy"><h3>Circa 0.22.2 release.</h3>
-  <p class="release-counts">Known limits</p>
-  <h4>Known limits</h4>
+  <div class="release-copy"><h3>Page translations survive moves between windows.</h3>
+  <p class="release-counts">1 fixed</p>
+  <h4>Fixed</h4>
   <ul>
-    <li><strong>Full Changelog</strong>: <a href="https://github.com/okafrancois/orbit-browser/compare/v0.22.1...v0.22.2">https://github.com/okafrancois/orbit-browser/compare/v0.22.1...v0.22.2</a></li>
+    <li>Moving a live tab to another window keeps its translation state. Use Original also restores text that has been detached from the page.</li>
   </ul>
   <a class="release-source" href="changelog/0.22.2/">Release permalink ↗</a>
   </div>
@@ -1727,11 +1889,11 @@
 <article class="release" id="v0.22.1" data-version="0.22.1" data-channel="stable" data-latest="false">
   <div class="release-meta"><h2><a href="#v0.22.1" aria-label="Link to version 0.22.1">0.22.1</a></h2>
   <time datetime="2026-10-29">October 29, 2026</time><span class="release-channel">Stable</span></div>
-  <div class="release-copy"><h3>Circa 0.22.1 release.</h3>
-  <p class="release-counts">Known limits</p>
-  <h4>Known limits</h4>
+  <div class="release-copy"><h3>Space themes display their full color strength.</h3>
+  <p class="release-counts">1 fixed</p>
+  <h4>Fixed</h4>
   <ul>
-    <li><strong>Full Changelog</strong>: <a href="https://github.com/okafrancois/orbit-browser/compare/v0.22.0...v0.22.1">https://github.com/okafrancois/orbit-browser/compare/v0.22.0...v0.22.1</a></li>
+    <li>Themes render with opaque colors at full strength. The Liquid Glass and Frosted options are removed while existing theme data is preserved.</li>
   </ul>
   <a class="release-source" href="changelog/0.22.1/">Release permalink ↗</a>
   </div>
@@ -1739,11 +1901,11 @@
 <article class="release" id="v0.22.0" data-version="0.22.0" data-channel="stable" data-latest="false">
   <div class="release-meta"><h2><a href="#v0.22.0" aria-label="Link to version 0.22.0">0.22.0</a></h2>
   <time datetime="2026-10-29">October 29, 2026</time><span class="release-channel">Stable</span></div>
-  <div class="release-copy"><h3>Circa 0.22.0 release.</h3>
-  <p class="release-counts">Known limits</p>
-  <h4>Known limits</h4>
+  <div class="release-copy"><h3>Translate a page on your Mac and return to its original text.</h3>
+  <p class="release-counts">1 new</p>
+  <h4>New</h4>
   <ul>
-    <li><strong>Full Changelog</strong>: <a href="https://github.com/okafrancois/orbit-browser/compare/v0.21.0...v0.22.0">https://github.com/okafrancois/orbit-browser/compare/v0.21.0...v0.22.0</a></li>
+    <li>Use the translation offer in the address field to translate a page on device. Choose Use Original to restore its original text.</li>
   </ul>
   <a class="release-source" href="changelog/0.22.0/">Release permalink ↗</a>
   </div>
@@ -1751,11 +1913,12 @@
 <article class="release" id="v0.21.0" data-version="0.21.0" data-channel="stable" data-latest="false">
   <div class="release-meta"><h2><a href="#v0.21.0" aria-label="Link to version 0.21.0">0.21.0</a></h2>
   <time datetime="2026-10-29">October 29, 2026</time><span class="release-channel">Stable</span></div>
-  <div class="release-copy"><h3>Circa 0.21.0 release.</h3>
-  <p class="release-counts">Known limits</p>
-  <h4>Known limits</h4>
+  <div class="release-copy"><h3>Edit a Boost&#x27;s CSS and JavaScript directly.</h3>
+  <p class="release-counts">2 new</p>
+  <h4>New</h4>
   <ul>
-    <li><strong>Full Changelog</strong>: <a href="https://github.com/okafrancois/orbit-browser/compare/v0.20.2...v0.21.0">https://github.com/okafrancois/orbit-browser/compare/v0.20.2...v0.21.0</a></li>
+    <li>The Boost Code editor now supports CSS and JavaScript. JavaScript requires explicit confirmation before it is enabled for a site.</li>
+    <li>The Boost header menu offers Reset all Edits, Delete this Boost and All Boosts.</li>
   </ul>
   <a class="release-source" href="changelog/0.21.0/">Release permalink ↗</a>
   </div>
@@ -1763,11 +1926,11 @@
 <article class="release" id="v0.20.2" data-version="0.20.2" data-channel="stable" data-latest="false">
   <div class="release-meta"><h2><a href="#v0.20.2" aria-label="Link to version 0.20.2">0.20.2</a></h2>
   <time datetime="2026-10-29">October 29, 2026</time><span class="release-channel">Stable</span></div>
-  <div class="release-copy"><h3>Circa 0.20.2 release.</h3>
-  <p class="release-counts">Known limits</p>
-  <h4>Known limits</h4>
+  <div class="release-copy"><h3>Returning to a video tab closes its automatic Picture in Picture.</h3>
+  <p class="release-counts">1 fixed</p>
+  <h4>Fixed</h4>
   <ul>
-    <li><strong>Full Changelog</strong>: <a href="https://github.com/okafrancois/orbit-browser/compare/v0.20.1...v0.20.2">https://github.com/okafrancois/orbit-browser/compare/v0.20.1...v0.20.2</a></li>
+    <li>Selecting the original video tab closes automatic Picture in Picture and continues playback inside the page.</li>
   </ul>
   <a class="release-source" href="changelog/0.20.2/">Release permalink ↗</a>
   </div>
@@ -1775,11 +1938,11 @@
 <article class="release" id="v0.20.1" data-version="0.20.1" data-channel="stable" data-latest="false">
   <div class="release-meta"><h2><a href="#v0.20.1" aria-label="Link to version 0.20.1">0.20.1</a></h2>
   <time datetime="2026-10-29">October 29, 2026</time><span class="release-channel">Stable</span></div>
-  <div class="release-copy"><h3>Circa 0.20.1 release.</h3>
-  <p class="release-counts">Known limits</p>
-  <h4>Known limits</h4>
+  <div class="release-copy"><h3>Pinned extension badges follow the active tab.</h3>
+  <p class="release-counts">1 fixed</p>
+  <h4>Fixed</h4>
   <ul>
-    <li><strong>Full Changelog</strong>: <a href="https://github.com/okafrancois/orbit-browser/compare/v0.20.0...v0.20.1">https://github.com/okafrancois/orbit-browser/compare/v0.20.0...v0.20.1</a></li>
+    <li>Pinned extensions keep their visibility and display the active tab&#x27;s badge state. Pin and Unpin menus remain available.</li>
   </ul>
   <a class="release-source" href="changelog/0.20.1/">Release permalink ↗</a>
   </div>
@@ -1787,11 +1950,12 @@
 <article class="release" id="v0.20.0" data-version="0.20.0" data-channel="stable" data-latest="false">
   <div class="release-meta"><h2><a href="#v0.20.0" aria-label="Link to version 0.20.0">0.20.0</a></h2>
   <time datetime="2026-10-29">October 29, 2026</time><span class="release-channel">Stable</span></div>
-  <div class="release-copy"><h3>Circa 0.20.0 release.</h3>
-  <p class="release-counts">Known limits</p>
-  <h4>Known limits</h4>
+  <div class="release-copy"><h3>Sync saved passwords and move live tabs between windows.</h3>
+  <p class="release-counts">2 new</p>
+  <h4>New</h4>
   <ul>
-    <li><strong>Full Changelog</strong>: <a href="https://github.com/okafrancois/orbit-browser/compare/v0.19.0...v0.20.0">https://github.com/okafrancois/orbit-browser/compare/v0.19.0...v0.20.0</a></li>
+    <li>Saved passwords sync through encrypted iCloud records when sync is enabled, keeping credentials separate for each profile.</li>
+    <li>Drag a sidebar tab to another window or Space in the same profile to move its live page without reloading it.</li>
   </ul>
   <p class="release-engine">Engine / bundled components: maintained engine r10</p>
   <a class="release-source" href="changelog/0.20.0/">Release permalink ↗</a>
@@ -1800,11 +1964,11 @@
 <article class="release" id="v0.19.0" data-version="0.19.0" data-channel="stable" data-latest="false">
   <div class="release-meta"><h2><a href="#v0.19.0" aria-label="Link to version 0.19.0">0.19.0</a></h2>
   <time datetime="2026-10-29">October 29, 2026</time><span class="release-channel">Stable</span></div>
-  <div class="release-copy"><h3>Circa 0.19.0 release.</h3>
-  <p class="release-counts">Known limits</p>
-  <h4>Known limits</h4>
+  <div class="release-copy"><h3>Browsing history can follow you through iCloud.</h3>
+  <p class="release-counts">1 new</p>
+  <h4>New</h4>
   <ul>
-    <li><strong>Full Changelog</strong>: <a href="https://github.com/okafrancois/orbit-browser/compare/v0.18.0...v0.19.0">https://github.com/okafrancois/orbit-browser/compare/v0.18.0...v0.19.0</a></li>
+    <li>With iCloud sync enabled, browsing history syncs through your private iCloud database, including records of deleted visits.</li>
   </ul>
   <a class="release-source" href="changelog/0.19.0/">Release permalink ↗</a>
   </div>
@@ -1812,11 +1976,11 @@
 <article class="release" id="v0.18.0" data-version="0.18.0" data-channel="stable" data-latest="false">
   <div class="release-meta"><h2><a href="#v0.18.0" aria-label="Link to version 0.18.0">0.18.0</a></h2>
   <time datetime="2026-10-29">October 29, 2026</time><span class="release-channel">Stable</span></div>
-  <div class="release-copy"><h3>Circa 0.18.0 release.</h3>
-  <p class="release-counts">Known limits</p>
-  <h4>Known limits</h4>
+  <div class="release-copy"><h3>Sync your Spaces and tabs through iCloud.</h3>
+  <p class="release-counts">1 new</p>
+  <h4>New</h4>
   <ul>
-    <li><strong>Full Changelog</strong>: <a href="https://github.com/okafrancois/orbit-browser/compare/v0.17.2...v0.18.0">https://github.com/okafrancois/orbit-browser/compare/v0.17.2...v0.18.0</a></li>
+    <li>Turn on Sync with iCloud in Settings to keep browser organization in your private iCloud account. Your local data stays on this Mac when you sign out.</li>
   </ul>
   <a class="release-source" href="changelog/0.18.0/">Release permalink ↗</a>
   </div>
@@ -1824,11 +1988,11 @@
 <article class="release" id="v0.17.2" data-version="0.17.2" data-channel="stable" data-latest="false">
   <div class="release-meta"><h2><a href="#v0.17.2" aria-label="Link to version 0.17.2">0.17.2</a></h2>
   <time datetime="2026-10-29">October 29, 2026</time><span class="release-channel">Stable</span></div>
-  <div class="release-copy"><h3>Circa 0.17.2 release.</h3>
-  <p class="release-counts">Known limits</p>
-  <h4>Known limits</h4>
+  <div class="release-copy"><h3>Archiving and Undo always leave a page selected.</h3>
+  <p class="release-counts">1 fixed</p>
+  <h4>Fixed</h4>
   <ul>
-    <li><strong>Full Changelog</strong>: <a href="https://github.com/okafrancois/orbit-browser/compare/v0.17.1...v0.17.2">https://github.com/okafrancois/orbit-browser/compare/v0.17.1...v0.17.2</a></li>
+    <li>Archiving a tab, restoring it or undoing the archive now selects a valid page instead of leaving the window without one.</li>
   </ul>
   <a class="release-source" href="changelog/0.17.2/">Release permalink ↗</a>
   </div>
@@ -1836,11 +2000,17 @@
 <article class="release" id="v0.17.1" data-version="0.17.1" data-channel="stable" data-latest="false">
   <div class="release-meta"><h2><a href="#v0.17.1" aria-label="Link to version 0.17.1">0.17.1</a></h2>
   <time datetime="2026-10-29">October 29, 2026</time><span class="release-channel">Stable</span></div>
-  <div class="release-copy"><h3>Circa 0.17.1 release.</h3>
-  <p class="release-counts">Known limits</p>
-  <h4>Known limits</h4>
+  <div class="release-copy"><h3>Boost editors stay with the Space and page they belong to.</h3>
+  <p class="release-counts">3 fixed · 1 smaller</p>
+  <h4>Fixed</h4>
   <ul>
-    <li><strong>Full Changelog</strong>: <a href="https://github.com/okafrancois/orbit-browser/compare/v0.17.0...v0.17.1">https://github.com/okafrancois/orbit-browser/compare/v0.17.0...v0.17.1</a></li>
+    <li>Opening Boosts, changing Spaces and closing previews no longer leave a stale editor attached to another page. Finishing Zap returns focus to the document.</li>
+    <li>Back, Forward and form navigation preserve the page&#x27;s navigation details.</li>
+    <li>Space symbol icons draw upright, and the switcher&#x27;s hover label shows the Space name and shortcut.</li>
+  </ul>
+  <h4>Smaller</h4>
+  <ul>
+    <li>The Command Bar uses a blurred translucent background.</li>
   </ul>
   <p class="release-engine">Engine / bundled components: maintained engine r9</p>
   <a class="release-source" href="changelog/0.17.1/">Release permalink ↗</a>
@@ -1849,11 +2019,15 @@
 <article class="release" id="v0.17.0" data-version="0.17.0" data-channel="stable" data-latest="false">
   <div class="release-meta"><h2><a href="#v0.17.0" aria-label="Link to version 0.17.0">0.17.0</a></h2>
   <time datetime="2026-10-29">October 29, 2026</time><span class="release-channel">Stable</span></div>
-  <div class="release-copy"><h3>Circa 0.17.0 release.</h3>
-  <p class="release-counts">Known limits</p>
-  <h4>Known limits</h4>
+  <div class="release-copy"><h3>Open saved Boosts from the Library and site controls.</h3>
+  <p class="release-counts">1 new · 1 fixed</p>
+  <h4>New</h4>
   <ul>
-    <li><strong>Full Changelog</strong>: <a href="https://github.com/okafrancois/orbit-browser/compare/v0.16.2...v0.17.0">https://github.com/okafrancois/orbit-browser/compare/v0.16.2...v0.17.0</a></li>
+    <li>Opening a Boost in the Library shows its editor over the page. Site controls also offer Boost and capture actions.</li>
+  </ul>
+  <h4>Fixed</h4>
+  <ul>
+    <li>Window positions restore correctly, and Find regains keyboard focus after the sidebar has been hidden.</li>
   </ul>
   <a class="release-source" href="changelog/0.17.0/">Release permalink ↗</a>
   </div>
@@ -1861,11 +2035,11 @@
 <article class="release" id="v0.16.2" data-version="0.16.2" data-channel="stable" data-latest="false">
   <div class="release-meta"><h2><a href="#v0.16.2" aria-label="Link to version 0.16.2">0.16.2</a></h2>
   <time datetime="2026-10-28">October 28, 2026</time><span class="release-channel">Stable</span></div>
-  <div class="release-copy"><h3>Circa 0.16.2 release.</h3>
-  <p class="release-counts">Known limits</p>
-  <h4>Known limits</h4>
+  <div class="release-copy"><h3>Picture in Picture keeps its controls out of the way.</h3>
+  <p class="release-counts">1 fixed</p>
+  <h4>Fixed</h4>
   <ul>
-    <li><strong>Full Changelog</strong>: <a href="https://github.com/okafrancois/orbit-browser/compare/v0.16.1...v0.16.2">https://github.com/okafrancois/orbit-browser/compare/v0.16.1...v0.16.2</a></li>
+    <li>Automatic video Picture in Picture has a plain surface while it is at rest.</li>
   </ul>
   <p class="release-engine">Engine / bundled components: maintained engine r8</p>
   <a class="release-source" href="changelog/0.16.2/">Release permalink ↗</a>
@@ -1874,11 +2048,16 @@
 <article class="release" id="v0.16.1" data-version="0.16.1" data-channel="stable" data-latest="false">
   <div class="release-meta"><h2><a href="#v0.16.1" aria-label="Link to version 0.16.1">0.16.1</a></h2>
   <time datetime="2026-10-28">October 28, 2026</time><span class="release-channel">Stable</span></div>
-  <div class="release-copy"><h3>Circa 0.16.1 release.</h3>
-  <p class="release-counts">Known limits</p>
-  <h4>Known limits</h4>
+  <div class="release-copy"><h3>Work with three split panes and close individual panes.</h3>
+  <p class="release-counts">1 new · 2 fixed</p>
+  <h4>New</h4>
   <ul>
-    <li><strong>Full Changelog</strong>: <a href="https://github.com/okafrancois/orbit-browser/compare/v0.16.0...v0.16.1">https://github.com/okafrancois/orbit-browser/compare/v0.16.0...v0.16.1</a></li>
+    <li>Split View supports three panes and controls to close an individual pane.</li>
+  </ul>
+  <h4>Fixed</h4>
+  <ul>
+    <li>Allowing a website notification prompt shows its follow-up correctly.</li>
+    <li>The address in a Little window can be edited, and split headers follow the window&#x27;s appearance.</li>
   </ul>
   <a class="release-source" href="changelog/0.16.1/">Release permalink ↗</a>
   </div>
@@ -1886,11 +2065,12 @@
 <article class="release" id="v0.16.0" data-version="0.16.0" data-channel="stable" data-latest="false">
   <div class="release-meta"><h2><a href="#v0.16.0" aria-label="Link to version 0.16.0">0.16.0</a></h2>
   <time datetime="2026-10-28">October 28, 2026</time><span class="release-channel">Stable</span></div>
-  <div class="release-copy"><h3>Circa 0.16.0 release.</h3>
-  <p class="release-counts">Known limits</p>
-  <h4>Known limits</h4>
+  <div class="release-copy"><h3>Customize websites with Boosts and keep videos in view.</h3>
+  <p class="release-counts">2 new</p>
+  <h4>New</h4>
   <ul>
-    <li><strong>Full Changelog</strong>: <a href="https://github.com/okafrancois/orbit-browser/compare/v0.15.0...v0.16.0">https://github.com/okafrancois/orbit-browser/compare/v0.15.0...v0.16.0</a></li>
+    <li>Create a Boost to change a site&#x27;s colors, fonts and text size, or use Zap to hide page elements. Find saved Boosts in the Library; they stay separate for each profile.</li>
+    <li>Enable Picture in Picture when you leave a video tab in Settings to keep a playing video visible while you browse elsewhere.</li>
   </ul>
   <a class="release-source" href="changelog/0.16.0/">Release permalink ↗</a>
   </div>
@@ -1898,11 +2078,11 @@
 <article class="release" id="v0.15.0" data-version="0.15.0" data-channel="stable" data-latest="false">
   <div class="release-meta"><h2><a href="#v0.15.0" aria-label="Link to version 0.15.0">0.15.0</a></h2>
   <time datetime="2026-10-28">October 28, 2026</time><span class="release-channel">Stable</span></div>
-  <div class="release-copy"><h3>Circa 0.15.0 release.</h3>
-  <p class="release-counts">Known limits</p>
-  <h4>Known limits</h4>
+  <div class="release-copy"><h3>Choose Space icons and themes from anchored pickers.</h3>
+  <p class="release-counts">1 fixed</p>
+  <h4>Fixed</h4>
   <ul>
-    <li><strong>Full Changelog</strong>: <a href="https://github.com/okafrancois/orbit-browser/compare/v0.14.0...v0.15.0">https://github.com/okafrancois/orbit-browser/compare/v0.14.0...v0.15.0</a></li>
+    <li>Space icon and theme pickers have refined layouts and stay anchored to their controls.</li>
   </ul>
   <p class="release-engine">Engine / bundled components: maintained engine r7</p>
   <a class="release-source" href="changelog/0.15.0/">Release permalink ↗</a>
@@ -1911,11 +2091,11 @@
 <article class="release" id="v0.14.0" data-version="0.14.0" data-channel="stable" data-latest="false">
   <div class="release-meta"><h2><a href="#v0.14.0" aria-label="Link to version 0.14.0">0.14.0</a></h2>
   <time datetime="2026-10-28">October 28, 2026</time><span class="release-channel">Stable</span></div>
-  <div class="release-copy"><h3>Circa 0.14.0 release.</h3>
-  <p class="release-counts">Known limits</p>
-  <h4>Known limits</h4>
+  <div class="release-copy"><h3>Save and update passwords from a native prompt.</h3>
+  <p class="release-counts">1 new</p>
+  <h4>New</h4>
   <ul>
-    <li><strong>Full Changelog</strong>: <a href="https://github.com/okafrancois/orbit-browser/compare/v0.13.1...v0.14.0">https://github.com/okafrancois/orbit-browser/compare/v0.13.1...v0.14.0</a></li>
+    <li>When a website offers a password to save or update, a native prompt lets you confirm it for the current profile.</li>
   </ul>
   <a class="release-source" href="changelog/0.14.0/">Release permalink ↗</a>
   </div>
@@ -1923,11 +2103,11 @@
 <article class="release" id="v0.13.1" data-version="0.13.1" data-channel="stable" data-latest="false">
   <div class="release-meta"><h2><a href="#v0.13.1" aria-label="Link to version 0.13.1">0.13.1</a></h2>
   <time datetime="2026-10-28">October 28, 2026</time><span class="release-channel">Stable</span></div>
-  <div class="release-copy"><h3>Circa 0.13.1 release.</h3>
-  <p class="release-counts">Known limits</p>
-  <h4>Known limits</h4>
+  <div class="release-copy"><h3>Mouse wheels scroll pages and sidebar lists reliably.</h3>
+  <p class="release-counts">1 fixed</p>
+  <h4>Fixed</h4>
   <ul>
-    <li><strong>Full Changelog</strong>: <a href="https://github.com/okafrancois/orbit-browser/compare/v0.13.0...v0.13.1">https://github.com/okafrancois/orbit-browser/compare/v0.13.0...v0.13.1</a></li>
+    <li>Mouse-wheel input reaches the page and sidebar lists even while native gesture handling is active.</li>
   </ul>
   <a class="release-source" href="changelog/0.13.1/">Release permalink ↗</a>
   </div>
@@ -1935,11 +2115,11 @@
 <article class="release" id="v0.13.0" data-version="0.13.0" data-channel="stable" data-latest="false">
   <div class="release-meta"><h2><a href="#v0.13.0" aria-label="Link to version 0.13.0">0.13.0</a></h2>
   <time datetime="2026-10-28">October 28, 2026</time><span class="release-channel">Stable</span></div>
-  <div class="release-copy"><h3>Circa 0.13.0 release.</h3>
-  <p class="release-counts">Known limits</p>
-  <h4>Known limits</h4>
+  <div class="release-copy"><h3>This release contains only internal fixes.</h3>
+  <p class="release-counts">1 smaller</p>
+  <h4>Smaller</h4>
   <ul>
-    <li><strong>Full Changelog</strong>: <a href="https://github.com/okafrancois/orbit-browser/compare/v0.12.0...v0.13.0">https://github.com/okafrancois/orbit-browser/compare/v0.12.0...v0.13.0</a></li>
+    <li>This release contains only internal fixes.</li>
   </ul>
   <p class="release-engine">Engine / bundled components: maintained engine r6</p>
   <a class="release-source" href="changelog/0.13.0/">Release permalink ↗</a>
@@ -1948,11 +2128,11 @@
 <article class="release" id="v0.12.0" data-version="0.12.0" data-channel="stable" data-latest="false">
   <div class="release-meta"><h2><a href="#v0.12.0" aria-label="Link to version 0.12.0">0.12.0</a></h2>
   <time datetime="2026-10-28">October 28, 2026</time><span class="release-channel">Stable</span></div>
-  <div class="release-copy"><h3>Circa 0.12.0 release.</h3>
-  <p class="release-counts">Known limits</p>
-  <h4>Known limits</h4>
+  <div class="release-copy"><h3>Manage saved passwords separately for each profile.</h3>
+  <p class="release-counts">1 new</p>
+  <h4>New</h4>
   <ul>
-    <li><strong>Full Changelog</strong>: <a href="https://github.com/okafrancois/orbit-browser/compare/v0.11.0...v0.12.0">https://github.com/okafrancois/orbit-browser/compare/v0.11.0...v0.12.0</a></li>
+    <li>Open Manage Passwords to view the active profile&#x27;s saved passwords. Password storage and autofill stay tied to that profile.</li>
   </ul>
   <a class="release-source" href="changelog/0.12.0/">Release permalink ↗</a>
   </div>
@@ -1960,11 +2140,11 @@
 <article class="release" id="v0.11.0" data-version="0.11.0" data-channel="stable" data-latest="false">
   <div class="release-meta"><h2><a href="#v0.11.0" aria-label="Link to version 0.11.0">0.11.0</a></h2>
   <time datetime="2026-10-28">October 28, 2026</time><span class="release-channel">Stable</span></div>
-  <div class="release-copy"><h3>Circa 0.11.0 release.</h3>
-  <p class="release-counts">Known limits</p>
-  <h4>Known limits</h4>
+  <div class="release-copy"><h3>Sleeping tabs keep their browsing history.</h3>
+  <p class="release-counts">1 fixed</p>
+  <h4>Fixed</h4>
   <ul>
-    <li><strong>Full Changelog</strong>: <a href="https://github.com/okafrancois/orbit-browser/compare/v0.10.2...v0.11.0">https://github.com/okafrancois/orbit-browser/compare/v0.10.2...v0.11.0</a></li>
+    <li>Returning to a tab after its renderer has been put to sleep preserves the tab&#x27;s Back and Forward history.</li>
   </ul>
   <p class="release-engine">Engine / bundled components: maintained engine r5</p>
   <a class="release-source" href="changelog/0.11.0/">Release permalink ↗</a>
@@ -1973,11 +2153,11 @@
 <article class="release" id="v0.10.2" data-version="0.10.2" data-channel="stable" data-latest="false">
   <div class="release-meta"><h2><a href="#v0.10.2" aria-label="Link to version 0.10.2">0.10.2</a></h2>
   <time datetime="2026-10-28">October 28, 2026</time><span class="release-channel">Stable</span></div>
-  <div class="release-copy"><h3>Circa 0.10.2 release.</h3>
-  <p class="release-counts">Known limits</p>
-  <h4>Known limits</h4>
+  <div class="release-copy"><h3>Promoting Peek reveals the page cleanly.</h3>
+  <p class="release-counts">1 fixed</p>
+  <h4>Fixed</h4>
   <ul>
-    <li><strong>Full Changelog</strong>: <a href="https://github.com/okafrancois/orbit-browser/compare/v0.10.1...v0.10.2">https://github.com/okafrancois/orbit-browser/compare/v0.10.1...v0.10.2</a></li>
+    <li>When you promote a Peek preview to a tab, its page appears as the backdrop and preview controls disappear together.</li>
   </ul>
   <a class="release-source" href="changelog/0.10.2/">Release permalink ↗</a>
   </div>
@@ -1985,11 +2165,20 @@
 <article class="release" id="v0.10.1" data-version="0.10.1" data-channel="stable" data-latest="false">
   <div class="release-meta"><h2><a href="#v0.10.1" aria-label="Link to version 0.10.1">0.10.1</a></h2>
   <time datetime="2026-10-28">October 28, 2026</time><span class="release-channel">Stable</span></div>
-  <div class="release-copy"><h3>Circa 0.10.1 release.</h3>
-  <p class="release-counts">Known limits</p>
-  <h4>Known limits</h4>
+  <div class="release-copy"><h3>Find downloads and archived tabs in dated Library groups.</h3>
+  <p class="release-counts">1 new · 2 fixed · 1 smaller</p>
+  <h4>New</h4>
   <ul>
-    <li><strong>Full Changelog</strong>: <a href="https://github.com/okafrancois/orbit-browser/compare/v0.10.0...v0.10.1">https://github.com/okafrancois/orbit-browser/compare/v0.10.0...v0.10.1</a></li>
+    <li>The Library&#x27;s Downloads and Archived Tabs categories group entries by date and provide archive search and filtering.</li>
+  </ul>
+  <h4>Fixed</h4>
+  <ul>
+    <li>Moving a page from a Little window to the main window shows the live page immediately.</li>
+    <li>Tab suspension preserves pending navigation safely.</li>
+  </ul>
+  <h4>Smaller</h4>
+  <ul>
+    <li>Sidebar and preview updates do less work, and preview images are decoded away from the main thread.</li>
   </ul>
   <a class="release-source" href="changelog/0.10.1/">Release permalink ↗</a>
   </div>
@@ -1997,11 +2186,19 @@
 <article class="release" id="v0.10.0" data-version="0.10.0" data-channel="stable" data-latest="false">
   <div class="release-meta"><h2><a href="#v0.10.0" aria-label="Link to version 0.10.0">0.10.0</a></h2>
   <time datetime="2026-10-28">October 28, 2026</time><span class="release-channel">Stable</span></div>
-  <div class="release-copy"><h3>Circa 0.10.0 release.</h3>
-  <p class="release-counts">Known limits</p>
-  <h4>Known limits</h4>
+  <div class="release-copy"><h3>Assign a separate browser profile to a Space.</h3>
+  <p class="release-counts">1 new · 1 fixed · 1 smaller</p>
+  <h4>New</h4>
   <ul>
-    <li><strong>Full Changelog</strong>: <a href="https://github.com/okafrancois/orbit-browser/compare/v0.9.0...v0.10.0">https://github.com/okafrancois/orbit-browser/compare/v0.9.0...v0.10.0</a></li>
+    <li>Use Set Profile or Change Profile in a Space&#x27;s menu to choose its browsing data. A warning explains that accounts, Favorites and extensions may differ before you switch.</li>
+  </ul>
+  <h4>Fixed</h4>
+  <ul>
+    <li>Little windows keep their dark surfaces when opened from a light Space.</li>
+  </ul>
+  <h4>Smaller</h4>
+  <ul>
+    <li>The Space switcher and website permission prompts have more coordinated hover and dismissal transitions.</li>
   </ul>
   <a class="release-source" href="changelog/0.10.0/">Release permalink ↗</a>
   </div>
@@ -2009,11 +2206,12 @@
 <article class="release" id="v0.9.0" data-version="0.9.0" data-channel="stable" data-latest="false">
   <div class="release-meta"><h2><a href="#v0.9.0" aria-label="Link to version 0.9.0">0.9.0</a></h2>
   <time datetime="2026-10-28">October 28, 2026</time><span class="release-channel">Stable</span></div>
-  <div class="release-copy"><h3>Circa 0.9.0 release.</h3>
-  <p class="release-counts">Known limits</p>
-  <h4>Known limits</h4>
+  <div class="release-copy"><h3>Browse downloaded media and Spaces in the Library.</h3>
+  <p class="release-counts">2 new</p>
+  <h4>New</h4>
   <ul>
-    <li><strong>Full Changelog</strong>: <a href="https://github.com/okafrancois/orbit-browser/compare/v0.8.0...v0.9.0">https://github.com/okafrancois/orbit-browser/compare/v0.8.0...v0.9.0</a></li>
+    <li>The Library gains a Media grid for downloaded images and videos, and tiles for your Spaces.</li>
+    <li>Split View has grouped sidebar rows and pane headers with actions for the focused page.</li>
   </ul>
   <a class="release-source" href="changelog/0.9.0/">Release permalink ↗</a>
   </div>
@@ -2021,11 +2219,13 @@
 <article class="release" id="v0.8.0" data-version="0.8.0" data-channel="stable" data-latest="false">
   <div class="release-meta"><h2><a href="#v0.8.0" aria-label="Link to version 0.8.0">0.8.0</a></h2>
   <time datetime="2026-10-28">October 28, 2026</time><span class="release-channel">Stable</span></div>
-  <div class="release-copy"><h3>Circa 0.8.0 release.</h3>
-  <p class="release-counts">Known limits</p>
-  <h4>Known limits</h4>
+  <div class="release-copy"><h3>Save pages with the browser&#x27;s native download handling.</h3>
+  <p class="release-counts">3 fixed</p>
+  <h4>Fixed</h4>
   <ul>
-    <li><strong>Full Changelog</strong>: <a href="https://github.com/okafrancois/orbit-browser/compare/v0.7.0...v0.8.0">https://github.com/okafrancois/orbit-browser/compare/v0.7.0...v0.8.0</a></li>
+    <li>Save Page As uses the engine&#x27;s native page-saving support.</li>
+    <li>Document shortcuts act on the correct page, including in auxiliary windows.</li>
+    <li>The developer toolbar prefers a website&#x27;s declared theme color when choosing its tint.</li>
   </ul>
   <p class="release-engine">Engine / bundled components: maintained engine r4</p>
   <a class="release-source" href="changelog/0.8.0/">Release permalink ↗</a>
@@ -2034,11 +2234,20 @@
 <article class="release" id="v0.7.0" data-version="0.7.0" data-channel="stable" data-latest="false">
   <div class="release-meta"><h2><a href="#v0.7.0" aria-label="Link to version 0.7.0">0.7.0</a></h2>
   <time datetime="2026-10-28">October 28, 2026</time><span class="release-channel">Stable</span></div>
-  <div class="release-copy"><h3>Circa 0.7.0 release.</h3>
-  <p class="release-counts">Known limits</p>
-  <h4>Known limits</h4>
+  <div class="release-copy"><h3>Open links in a compact Little window and move them into a Space.</h3>
+  <p class="release-counts">2 new · 1 fixed · 1 smaller</p>
+  <h4>New</h4>
   <ul>
-    <li><strong>Full Changelog</strong>: <a href="https://github.com/okafrancois/orbit-browser/compare/v0.6.1...v0.7.0">https://github.com/okafrancois/orbit-browser/compare/v0.6.1...v0.7.0</a></li>
+    <li>Little windows have a compact address input, toolbar and Space chooser. Hand their page to a Space when you want to keep browsing in the main window.</li>
+    <li>Auto-Archive settings offer delay choices and let you apply a change to the current profile or all profiles.</li>
+  </ul>
+  <h4>Fixed</h4>
+  <ul>
+    <li>A download whose filename becomes taken during the transfer is saved with a numbered name instead of losing the file.</li>
+  </ul>
+  <h4>Smaller</h4>
+  <ul>
+    <li>The developer toolbar follows the page&#x27;s background color.</li>
   </ul>
   <a class="release-source" href="changelog/0.7.0/">Release permalink ↗</a>
   </div>
@@ -2046,11 +2255,12 @@
 <article class="release" id="v0.6.1" data-version="0.6.1" data-channel="stable" data-latest="false">
   <div class="release-meta"><h2><a href="#v0.6.1" aria-label="Link to version 0.6.1">0.6.1</a></h2>
   <time datetime="2026-10-28">October 28, 2026</time><span class="release-channel">Stable</span></div>
-  <div class="release-copy"><h3>Circa 0.6.1 release.</h3>
-  <p class="release-counts">Known limits</p>
-  <h4>Known limits</h4>
+  <div class="release-copy"><h3>The address field follows your Space and developer tools.</h3>
+  <p class="release-counts">2 fixed</p>
+  <h4>Fixed</h4>
   <ul>
-    <li><strong>Full Changelog</strong>: <a href="https://github.com/okafrancois/orbit-browser/compare/v0.6.0...v0.6.1">https://github.com/okafrancois/orbit-browser/compare/v0.6.0...v0.6.1</a></li>
+    <li>Developer Mode’s toolbar has refined icons, typography and site controls.</li>
+    <li>The address field resizes as you switch Spaces, keeps pinned extension controls, and shows the page&#x27;s connection status.</li>
   </ul>
   <a class="release-source" href="changelog/0.6.1/">Release permalink ↗</a>
   </div>
@@ -2058,11 +2268,11 @@
 <article class="release" id="v0.6.0" data-version="0.6.0" data-channel="stable" data-latest="false">
   <div class="release-meta"><h2><a href="#v0.6.0" aria-label="Link to version 0.6.0">0.6.0</a></h2>
   <time datetime="2026-10-28">October 28, 2026</time><span class="release-channel">Stable</span></div>
-  <div class="release-copy"><h3>Circa 0.6.0 release.</h3>
-  <p class="release-counts">Known limits</p>
-  <h4>Known limits</h4>
+  <div class="release-copy"><h3>Creating a Space has a clearer setup page.</h3>
+  <p class="release-counts">1 fixed</p>
+  <h4>Fixed</h4>
   <ul>
-    <li><strong>Full Changelog</strong>: <a href="https://github.com/okafrancois/orbit-browser/compare/v0.5.1...v0.6.0">https://github.com/okafrancois/orbit-browser/compare/v0.5.1...v0.6.0</a></li>
+    <li>The sidebar&#x27;s Create a Space page now coordinates its name, theme and transition as it appears.</li>
   </ul>
   <a class="release-source" href="changelog/0.6.0/">Release permalink ↗</a>
   </div>
@@ -2070,11 +2280,12 @@
 <article class="release" id="v0.5.1" data-version="0.5.1" data-channel="stable" data-latest="false">
   <div class="release-meta"><h2><a href="#v0.5.1" aria-label="Link to version 0.5.1">0.5.1</a></h2>
   <time datetime="2026-10-28">October 28, 2026</time><span class="release-channel">Stable</span></div>
-  <div class="release-copy"><h3>Circa 0.5.1 release.</h3>
-  <p class="release-counts">Known limits</p>
-  <h4>Known limits</h4>
+  <div class="release-copy"><h3>Downloads remain available after you close their source tab.</h3>
+  <p class="release-counts">2 fixed</p>
+  <h4>Fixed</h4>
   <ul>
-    <li><strong>Full Changelog</strong>: <a href="https://github.com/okafrancois/orbit-browser/compare/v0.5.0...v0.5.1">https://github.com/okafrancois/orbit-browser/compare/v0.5.0...v0.5.1</a></li>
+    <li>Download history survives restarting the browser, and failed downloads can be retried after their source tab closes.</li>
+    <li>Incomplete downloads stay separate from the finished file until the transfer completes.</li>
   </ul>
   <a class="release-source" href="changelog/0.5.1/">Release permalink ↗</a>
   </div>
@@ -2082,11 +2293,16 @@
 <article class="release" id="v0.5.0" data-version="0.5.0" data-channel="stable" data-latest="false">
   <div class="release-meta"><h2><a href="#v0.5.0" aria-label="Link to version 0.5.0">0.5.0</a></h2>
   <time datetime="2026-10-28">October 28, 2026</time><span class="release-channel">Stable</span></div>
-  <div class="release-copy"><h3>Circa 0.5.0 release.</h3>
-  <p class="release-counts">Known limits</p>
-  <h4>Known limits</h4>
+  <div class="release-copy"><h3>Page and tab menu actions now do what they say.</h3>
+  <p class="release-counts">2 new · 1 fixed</p>
+  <h4>New</h4>
   <ul>
-    <li><strong>Full Changelog</strong>: <a href="https://github.com/okafrancois/orbit-browser/compare/v0.4.1...v0.5.0">https://github.com/okafrancois/orbit-browser/compare/v0.4.1...v0.5.0</a></li>
+    <li>Save a page with Save Page As, share its address, or copy its link as Markdown from the browser&#x27;s commands.</li>
+    <li>Tab menus can archive tabs above or below a selection and mute a tab.</li>
+  </ul>
+  <h4>Fixed</h4>
+  <ul>
+    <li>Commands that are not available are hidden instead of offering actions that do nothing.</li>
   </ul>
   <a class="release-source" href="changelog/0.5.0/">Release permalink ↗</a>
   </div>
@@ -2094,11 +2310,11 @@
 <article class="release" id="v0.4.1" data-version="0.4.1" data-channel="stable" data-latest="false">
   <div class="release-meta"><h2><a href="#v0.4.1" aria-label="Link to version 0.4.1">0.4.1</a></h2>
   <time datetime="2026-10-28">October 28, 2026</time><span class="release-channel">Stable</span></div>
-  <div class="release-copy"><h3>Circa 0.4.1 release.</h3>
-  <p class="release-counts">Known limits</p>
-  <h4>Known limits</h4>
+  <div class="release-copy"><h3>Peek opens from the link you selected.</h3>
+  <p class="release-counts">1 fixed</p>
+  <h4>Fixed</h4>
   <ul>
-    <li><strong>Full Changelog</strong>: <a href="https://github.com/okafrancois/orbit-browser/compare/v0.4.0...v0.4.1">https://github.com/okafrancois/orbit-browser/compare/v0.4.0...v0.4.1</a></li>
+    <li>A link preview now grows from the link&#x27;s position on the page instead of an unrelated point in the window.</li>
   </ul>
   <a class="release-source" href="changelog/0.4.1/">Release permalink ↗</a>
   </div>
@@ -2106,11 +2322,15 @@
 <article class="release" id="v0.4.0" data-version="0.4.0" data-channel="stable" data-latest="false">
   <div class="release-meta"><h2><a href="#v0.4.0" aria-label="Link to version 0.4.0">0.4.0</a></h2>
   <time datetime="2026-10-28">October 28, 2026</time><span class="release-channel">Stable</span></div>
-  <div class="release-copy"><h3>Circa 0.4.0 release.</h3>
-  <p class="release-counts">Known limits</p>
-  <h4>Known limits</h4>
+  <div class="release-copy"><h3>Search a specific site from the Command Bar.</h3>
+  <p class="release-counts">1 new · 1 fixed</p>
+  <h4>New</h4>
   <ul>
-    <li><strong>Full Changelog</strong>: <a href="https://github.com/okafrancois/orbit-browser/compare/v0.3.0...v0.4.0">https://github.com/okafrancois/orbit-browser/compare/v0.3.0...v0.4.0</a></li>
+    <li>Use Tab to search a supported site directly from the Command Bar.</li>
+  </ul>
+  <h4>Fixed</h4>
+  <ul>
+    <li>Command Bar ranking better matches your query and recognizes addresses entered without a scheme such as <a href="https://">https://</a>.</li>
   </ul>
   <a class="release-source" href="changelog/0.4.0/">Release permalink ↗</a>
   </div>
@@ -2118,11 +2338,13 @@
 <article class="release" id="v0.3.0" data-version="0.3.0" data-channel="stable" data-latest="false">
   <div class="release-meta"><h2><a href="#v0.3.0" aria-label="Link to version 0.3.0">0.3.0</a></h2>
   <time datetime="2026-10-28">October 28, 2026</time><span class="release-channel">Stable</span></div>
-  <div class="release-copy"><h3>Circa 0.3.0 release.</h3>
-  <p class="release-counts">Known limits</p>
-  <h4>Known limits</h4>
+  <div class="release-copy"><h3>Settings changes take effect as you make them.</h3>
+  <p class="release-counts">3 new</p>
+  <h4>New</h4>
   <ul>
-    <li><strong>Full Changelog</strong>: <a href="https://github.com/okafrancois/orbit-browser/compare/v0.2.0...v0.3.0">https://github.com/okafrancois/orbit-browser/compare/v0.2.0...v0.3.0</a></li>
+    <li>Settings switches for automatic updates, quit warnings, sound effects and tab-reordering haptics now control their corresponding behavior.</li>
+    <li>More Settings opens the active profile’s engine settings for downloads, languages and site options.</li>
+    <li>Capture lets you drag over part of a page to take a screenshot; press Escape to cancel.</li>
   </ul>
   <a class="release-source" href="changelog/0.3.0/">Release permalink ↗</a>
   </div>
@@ -2130,11 +2352,16 @@
 <article class="release" id="v0.2.0" data-version="0.2.0" data-channel="stable" data-latest="false">
   <div class="release-meta"><h2><a href="#v0.2.0" aria-label="Link to version 0.2.0">0.2.0</a></h2>
   <time datetime="2026-10-28">October 28, 2026</time><span class="release-channel">Stable</span></div>
-  <div class="release-copy"><h3>Circa 0.2.0 release.</h3>
-  <p class="release-counts">Known limits</p>
-  <h4>Known limits</h4>
+  <div class="release-copy"><h3>Create a Space directly from the sidebar.</h3>
+  <p class="release-counts">1 new · 2 fixed</p>
+  <h4>New</h4>
   <ul>
-    <li><strong>Full Changelog</strong>: <a href="https://github.com/okafrancois/orbit-browser/compare/v0.1.1...v0.2.0">https://github.com/okafrancois/orbit-browser/compare/v0.1.1...v0.2.0</a></li>
+    <li>Move past the last Space in the sidebar to create another one, choose its name and theme, and keep its tabs together.</li>
+  </ul>
+  <h4>Fixed</h4>
+  <ul>
+    <li>Command Bar suggestions show clearer row actions and avoid repeated entries for the same configured host.</li>
+    <li>Circa can now be selected as the default browser in macOS.</li>
   </ul>
   <a class="release-source" href="changelog/0.2.0/">Release permalink ↗</a>
   </div>
@@ -2142,11 +2369,11 @@
 <article class="release" id="v0.1.1" data-version="0.1.1" data-channel="stable" data-latest="false">
   <div class="release-meta"><h2><a href="#v0.1.1" aria-label="Link to version 0.1.1">0.1.1</a></h2>
   <time datetime="2026-10-28">October 28, 2026</time><span class="release-channel">Stable</span></div>
-  <div class="release-copy"><h3>Circa 0.1.1 release.</h3>
-  <p class="release-counts">Known limits</p>
-  <h4>Known limits</h4>
+  <div class="release-copy"><h3>Address field icons stay neutral as you browse.</h3>
+  <p class="release-counts">1 fixed</p>
+  <h4>Fixed</h4>
   <ul>
-    <li><strong>Full Changelog</strong>: <a href="https://github.com/okafrancois/orbit-browser/compare/v0.1.0...v0.1.1">https://github.com/okafrancois/orbit-browser/compare/v0.1.0...v0.1.1</a></li>
+    <li>Icons in the address field no longer pick up unwanted color from their surroundings.</li>
   </ul>
   <a class="release-source" href="changelog/0.1.1/">Release permalink ↗</a>
   </div>
@@ -2154,11 +2381,12 @@
 <article class="release" id="v0.1.0" data-version="0.1.0" data-channel="stable" data-latest="false">
   <div class="release-meta"><h2><a href="#v0.1.0" aria-label="Link to version 0.1.0">0.1.0</a></h2>
   <time datetime="2026-10-28">October 28, 2026</time><span class="release-channel">Stable</span></div>
-  <div class="release-copy"><h3>Circa 0.1.0 release.</h3>
-  <p class="release-counts">Known limits</p>
-  <h4>Known limits</h4>
+  <div class="release-copy"><h3>Organize your browsing with Spaces, pinned tabs and Split View.</h3>
+  <p class="release-counts">2 new</p>
+  <h4>New</h4>
   <ul>
-    <li><strong>Full Changelog</strong>: <a href="https://github.com/okafrancois/orbit-browser/commits/v0.1.0">https://github.com/okafrancois/orbit-browser/commits/v0.1.0</a></li>
+    <li>The first public preview brings a native macOS browser with a vertical sidebar, Spaces, separate profiles and pinned tabs.</li>
+    <li>Keep pages side by side in Split View, or preview a link in Peek without leaving your current page.</li>
   </ul>
   <p class="release-engine">Engine / bundled components: maintained engine r3; Sparkle 2.10.1</p>
   <a class="release-source" href="changelog/0.1.0/">Release permalink ↗</a>

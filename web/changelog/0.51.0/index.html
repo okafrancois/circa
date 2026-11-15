@@ -66,12 +66,15 @@
   <div class="release-meta"><h2><a href="#v0.51.0" aria-label="Link to version 0.51.0">0.51.0</a></h2>
   <time datetime="2026-11-02">November 2, 2026</time><span class="release-channel">Stable</span></div>
   <div class="release-copy"><h3>Optional AI tidying for pinned tab titles and downloads.</h3>
-  <p class="release-counts">5 new</p>
+  <p class="release-counts">3 new</p>
   <h4>New</h4>
   <ul>
     <li>Optional AI tidying shortens newly pinned tab titles and suggests clearer names for completed downloads. Enable <strong>Tidy titles and downloads</strong> in Settings → AI → Helpers, and choose a ready Quick model.</li>
     <li>Hover a generated tab title to restore its original name. Download feedback includes Undo, and the Library follows the file&#x27;s current name.</li>
     <li>Title suggestions use the known page title; download suggestions use the original filename. File contents are not sent to the model.</li>
+  </ul>
+  <h4>Known limits</h4>
+  <ul>
     <li>Custom titles and existing pins stay unchanged. Download renaming preserves the extension and file attributes, refuses filename collisions and leaves changed or missing files alone.</li>
     <li>AI remains off by default. The existing page-access, site, private-window and provider settings apply.</li>
   </ul>

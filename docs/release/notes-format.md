@@ -121,6 +121,8 @@ item counts, nonempty sections, and the engine/components line. Front matter is
 never sent to GitHub. It still refuses to edit already published release bodies.
 The hosted build runs the release tests, changelog tests, and freshness check.
 
-Historical releases with only a “Full Changelog” link retain that link under
-`Known limits`, without invented feature summaries. Published GitHub bodies are
-left untouched; this conversion changes only the repository sources and website.
+Historical notes summarize user-visible changes from the git history between
+adjacent tags, including menu and Settings changes. Omit compare links and generic
+release titles. If that history contains no user-visible change, use one `Smaller`
+item saying that the release contains only internal fixes. Published GitHub bodies
+are left untouched; backfills change only the repository sources and website.

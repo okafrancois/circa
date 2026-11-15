@@ -65,11 +65,13 @@
 <div class="timeline"><p class="latest-banner"><a href="../0.72.0/">Latest is 0.72.0</a></p><article class="release" id="v0.24.0" data-version="0.24.0" data-channel="stable" data-latest="false">
   <div class="release-meta"><h2><a href="#v0.24.0" aria-label="Link to version 0.24.0">0.24.0</a></h2>
   <time datetime="2026-10-29">October 29, 2026</time><span class="release-channel">Stable</span></div>
-  <div class="release-copy"><h3>Circa 0.24.0 release.</h3>
-  <p class="release-counts">Known limits</p>
-  <h4>Known limits</h4>
+  <div class="release-copy"><h3>Large Libraries and sleeping tabs use fewer resources.</h3>
+  <p class="release-counts">3 smaller</p>
+  <h4>Smaller</h4>
   <ul>
-    <li><strong>Full Changelog</strong>: <a href="https://github.com/okafrancois/orbit-browser/compare/v0.23.1...v0.24.0">https://github.com/okafrancois/orbit-browser/compare/v0.23.1...v0.24.0</a></li>
+    <li>Long Downloads, Media, History and folder-preview lists reuse the rows and thumbnails near the visible area instead of keeping every item onscreen in memory.</li>
+    <li>Background tabs sleep after an hour of inactivity, with their last page image kept visible until restored content paints.</li>
+    <li>Startup defers hidden controls, and sync, snapshots and download processing move more work away from the main thread.</li>
   </ul>
   <a class="release-source" href="../../changelog/0.24.0/">Release permalink ↗</a>
   </div>

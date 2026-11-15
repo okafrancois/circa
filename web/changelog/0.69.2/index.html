@@ -66,11 +66,17 @@
   <div class="release-meta"><h2><a href="#v0.69.2" aria-label="Link to version 0.69.2">0.69.2</a></h2>
   <time datetime="2026-11-14">November 14, 2026</time><span class="release-channel">Stable</span></div>
   <div class="release-copy"><h3>Updates check that sign-ins and installed extensions survive.</h3>
-  <p class="release-counts">3 fixed</p>
+  <p class="release-counts">1 fixed · 1 smaller</p>
   <h4>Fixed</h4>
   <ul>
-    <li>Updates now have to prove that site sign-ins and installed extensions survive before a release can be published. The check runs a real signed update from the current public release, then verifies two profiles through restarts and a following update, including extension settings, permissions and stored data.</li>
     <li>Circa also keeps a private copy of cookie databases and extension registration/preferences before a different build first opens existing profiles. Copies stay on your Mac, are limited to three build changes and 30 days, and are never restored automatically.</li>
+  </ul>
+  <h4>Smaller</h4>
+  <ul>
+    <li>Updates now have to prove that site sign-ins and installed extensions survive before a release can be published. The check runs a real signed update from the current public release, then verifies two profiles through restarts and a following update, including extension settings, permissions and stored data.</li>
+  </ul>
+  <h4>Known limits</h4>
+  <ul>
     <li>This release retains the r22 engine from 0.69.1. It preserves remaining sessions and extensions, but cannot recreate sessions or extension registrations already removed by 0.69.0.</li>
   </ul>
   <a class="release-source" href="../../changelog/0.69.2/">Release permalink ↗</a>
