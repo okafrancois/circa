@@ -8,7 +8,10 @@ import ChromiumEngine
 enum OrbitToolbarProbe {
     static let bundleID = "lab.orbit.orbit.toolbar"
 
-    static func run(_ owner: OrbitWindowController, command: [String: String]) async -> [String: Any] {
+    /// `controllers` are all live windows: a menu command targets the router's selected window,
+    /// which a restored session may resolve to another window than `owner`.
+    static func run(_ owner: OrbitWindowController, controllers: [OrbitWindowController],
+                    command: [String: String]) async -> [String: Any] {
         guard Bundle.main.bundleIdentifier == bundleID,
               Bundle.main.infoDictionary?["OrbitSyntheticBundle"] as? Bool == true,
               let configuration = activeSiteSessionConfiguration(), configuration.syntheticGuard != nil,
@@ -39,7 +42,6 @@ enum OrbitToolbarProbe {
             }) == true })?.submenu,
                let index = menu.items.firstIndex(where: { $0.identifier?.rawValue == BrowserCommandID.showHideToolbar.rawValue }) {
                 menu.performActionForItem(at: index)
-                await owner.session.waitForPendingCommands()
             }
         case "dismiss":
             owner.palette.dismiss()
@@ -53,6 +55,8 @@ enum OrbitToolbarProbe {
             try? await Task.sleep(for: .milliseconds(300))
         default: break
         }
+        // Settle every window's queue, not only the owner's: the command may run in another one.
+        for controller in controllers { await controller.session.waitForPendingCommands() }
         window.contentView?.layoutSubtreeIfNeeded()
         func screenRect(_ view: NSView) -> [String: Double] {
             let rect = window.convertToScreen(view.convert(view.bounds, to: nil))
@@ -61,6 +65,10 @@ enum OrbitToolbarProbe {
         let toolbar = owner.optionalToolbar
         return ["pid": Int(getpid()), "windowNumber": window.windowNumber, "window": screenRect(window.contentView!),
                 "screenHeight": screen.frame.height, "toolbarVisible": owner.isToolbarVisible,
+                "windowCount": controllers.count, "ownerIsKey": NSApp.keyWindow === window,
+                "allToolbarsVisible": controllers.map(\.isToolbarVisible),
+                "documentShowsToolbar": owner.settingsPreferences?.runtime.document.interaction.showsToolbar ?? false,
+                "addressHovered": toolbar.address.pillOpacity > 0,
                 "header": owner.contentCard.header === toolbar, "card": screenRect(owner.contentCard),
                 "address": screenRect(toolbar.address), "site": screenRect(toolbar.site), "split": screenRect(toolbar.split),
                 "back": screenRect(toolbar.back),

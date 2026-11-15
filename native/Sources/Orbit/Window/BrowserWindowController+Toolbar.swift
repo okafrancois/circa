@@ -10,11 +10,13 @@ extension BrowserWindowController {
         session.performWindowAction { [weak self] in
             guard let self, !isPreparingForTermination else { return }
             let visible = !isToolbarVisible
-            guard let runtime = settingsPreferences?.runtime, !runtime.isUnavailable else {
+            guard let runtime = settingsPreferences?.runtime else {
                 setToolbarVisible(visible)
                 return
             }
-            // Every window follows the published document; a failed write reverts it.
+            // Publish before anything renders: every window, this one included, re-applies the
+            // settings document. Persistence follows; a failed write reverts to the saved choice.
+            runtime.publishShowsToolbar(visible)
             setToolbarVisible(visible)
             Task { [weak self] in
                 do { try await runtime.setShowsToolbar(visible) }

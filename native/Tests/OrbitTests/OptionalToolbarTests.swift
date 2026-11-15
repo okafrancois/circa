@@ -181,6 +181,44 @@ struct NativeOptionalToolbarTests {
         }
     }
 
+    @Test("A restored shown toolbar hides at once and a window render before the save cannot bring it back")
+    func restoredHide() async throws {
+        let environment = BrowserEnvironment(engine: PeekSyntheticEngine())
+        // A previous session saved the toolbar as shown; the window opens with it.
+        try await environment.settings.setShowsToolbar(true)
+        let window = try await makeWindow(environment)
+        defer { window.session.close(); window.window?.close() }
+        #expect(window.isToolbarVisible && window.contentCard.header === window.optionalToolbar)
+        window.toggleToolbar()
+        await window.session.waitForQueuedCommands()
+        // Any session render re-applies the settings document; it must already hold the new choice.
+        window.settingsPreferences?.renderSession(in: window)
+        #expect(!window.isToolbarVisible)
+        #expect(!environment.settings.document.interaction.showsToolbar)
+        await settle(window)
+        #expect(!window.isToolbarVisible && window.contentCard.header == nil)
+        #expect(await environment.settings.store.snapshot().interaction.showsToolbar == false)
+        window.toggleToolbar()
+        await window.session.waitForQueuedCommands()
+        window.settingsPreferences?.renderSession(in: window)
+        #expect(window.isToolbarVisible)
+        await settle(window)
+        #expect(await environment.settings.store.snapshot().interaction.showsToolbar)
+    }
+
+    @Test("Without durable settings the toolbar choice still holds for the session")
+    func unavailableSettings() async throws {
+        let environment = BrowserEnvironment(engine: PeekSyntheticEngine())
+        environment.settings = BrowserSettingsRuntime(store: BrowserSettingsStore.unavailable())
+        environment.settings.onChange = { [weak environment] in environment?.settingsDidChange() }
+        let window = try await makeWindow(environment)
+        defer { window.session.close(); window.window?.close() }
+        window.toggleToolbar()
+        await settle(window)
+        window.settingsPreferences?.renderSession(in: window)
+        #expect(window.isToolbarVisible && window.contentCard.header === window.optionalToolbar)
+    }
+
     @Test("Developer Mode takes precedence and restoring ordinary mode brings the optional row back")
     func developerPrecedence() async throws {
         let environment = BrowserEnvironment(engine: PeekSyntheticEngine())

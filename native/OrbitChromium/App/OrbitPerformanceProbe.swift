@@ -292,7 +292,7 @@ enum OrbitPerformanceProbe {
                 } else if name == "pinned-tabs" {
                     result["pinnedTabs"] = await OrbitPinnedTabProbe.run(owner, store: environment.store, root: root, command: command)
                 } else if name == "optional-toolbar" {
-                    result["optionalToolbar"] = await OrbitToolbarProbe.run(owner, command: command)
+                    result["optionalToolbar"] = await OrbitToolbarProbe.run(owner, controllers: environment.liveControllers, command: command)
                 } else if name == "p2-split" {
                     result["splitParity"] = await splitParity(application, owner: owner, root: root, command: command)
                 } else if name == "split-divider" {

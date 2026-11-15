@@ -37,11 +37,21 @@ final class BrowserSettingsRuntime: ObservableObject {
         await refresh()
     }
 
-    /// Publishes the choice to every window at once, then persists it; a failed write reverts.
-    func setShowsToolbar(_ visible: Bool) async throws {
+    /// Publishes the toolbar choice to every window synchronously. Window renders re-apply the
+    /// document, so it must hold the new choice before any of them runs.
+    func publishShowsToolbar(_ visible: Bool) {
+        guard document.interaction.showsToolbar != visible else { return }
         document.interaction.showsToolbar = visible
         onChange?()
-        try await updateInteraction { $0.showsToolbar = visible }
+    }
+
+    /// Publishes, then persists without re-reading: a later toggle published meanwhile is kept.
+    /// A failed write reloads the durable document; unavailable settings keep the session choice.
+    func setShowsToolbar(_ visible: Bool) async throws {
+        publishShowsToolbar(visible)
+        guard !isUnavailable else { return }
+        do { try await store.updateInteraction { $0.showsToolbar = visible } }
+        catch { await refresh(); throw error }
     }
 
     func setOpensExternalLinksInQuickWindow(_ value: Bool) async throws {
