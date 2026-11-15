@@ -415,6 +415,25 @@ def cookie_store_summary(root):
     return summary
 
 
+def stage_diagnostics(work, lines):
+    """Bounded diagnostics of one synthetic stage, enough to tell a stalled page from a stalled
+    command or engine: extension/engine notes, extension and authentication fixture requests
+    (phase, profile and path only; never cookies or their statuses) and the end of the run log."""
+    notes = [line[:300] for line in lines if any(word in line for word in ('acr:', 'xtension', 'rx', 'CRX'))]
+    requests = (work / 'ext-requests.log').read_text().splitlines() if (work / 'ext-requests.log').exists() else []
+    authentication = []
+    if (work / 'auth.log').exists():
+        for line in (work / 'auth.log').read_text(errors='replace').splitlines():
+            try:
+                entry = json.loads(line)
+            except ValueError:
+                continue
+            authentication.append(' '.join(str(entry.get(key, '?')) for key in ('phase', 'profile', 'path')))
+    tail = [line[:300] for line in lines[-80:]]
+    return '\n'.join(notes[-200:] + ['requests:'] + requests[-100:] + ['authentication requests:']
+                     + authentication[-60:] + ['log tail:'] + tail) + '\n'
+
+
 def auth_stage(work, stage, evidence, expect):
     """One GUI session under lockf (at most 55 s including quit); see main for the sequence."""
     deadline = time.monotonic() + 52
@@ -623,10 +642,7 @@ def auth_stage(work, stage, evidence, expect):
                 'installed_build': plistlib.loads((app / 'Contents/Info.plist').read_bytes()).get('CFBundleVersion')}
             (work / 'auth-results.json').write_text(json.dumps(results, indent=2) + '\n')
             (evidence / (stage + '-events.log')).write_text('\n'.join(events) + '\n')
-            # Engine diagnostics of the synthetic run (extension loading/updates), bounded.
-            notes = [line[:300] for line in lines if any(word in line for word in ('acr:', 'xtension', 'rx', 'CRX'))]
-            requests = (work / 'ext-requests.log').read_text().splitlines() if (work / 'ext-requests.log').exists() else []
-            (evidence / (stage + '-diagnostics.log')).write_text('\n'.join(notes[-200:] + ['requests:'] + requests[-100:]) + '\n')
+            (evidence / (stage + '-diagnostics.log')).write_text(stage_diagnostics(work, lines))
         last = state()
         (evidence / (stage + '-last-state.json')).write_text(json.dumps(
             {key: last.get(key) for key in ('pid', 'update', 'auth', 'commandNonce')}, indent=2) + '\n')
