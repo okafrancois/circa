@@ -117,8 +117,46 @@ final class OrbitUnsavedInputGuard: NSObject {
 }
 
 final class OrbitBrowserWindow: NSWindow {
+    private weak var middleClickTarget: NSView?
+
     override func sendEvent(_ event: NSEvent) {
         OrbitUnsavedInputGuard.keyDown(in: self, event: event)
+        // AppKit routes auxiliary buttons to the first responder. Sidebar middle clicks
+        // instead belong to the row under the press, through its matching release.
+        if [.otherMouseDown, .otherMouseUp, .otherMouseDragged].contains(event.type),
+           event.buttonNumber == 2, event.window === self {
+            switch event.type {
+            case .otherMouseDown:
+                middleClickTarget = nil
+                if let root = contentView {
+                    var hit = root.hitTest(root.convert(event.locationInWindow, from: nil))
+                    while let view = hit {
+                        if let row = view as? SidebarListRow {
+                            middleClickTarget = row
+                            row.otherMouseDown(with: event)
+                            return
+                        }
+                        if view is BrowserSidebarView {
+                            middleClickTarget = view
+                            return
+                        }
+                        hit = view.superview
+                    }
+                }
+            case .otherMouseUp:
+                if let target = middleClickTarget {
+                    middleClickTarget = nil
+                    (target as? SidebarListRow)?.otherMouseUp(with: event)
+                    return
+                }
+            case .otherMouseDragged:
+                if let target = middleClickTarget {
+                    (target as? SidebarListRow)?.otherMouseDragged(with: event)
+                    return
+                }
+            default: break
+            }
+        }
         super.sendEvent(event)
     }
 
