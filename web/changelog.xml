@@ -9,6 +9,47 @@
     <name>Circa</name>
   </author>
   <entry>
+    <id>https://circabrowser.com/changelog/0.74.0-nightly.2/</id>
+    <title>0.74.0-nightly.2 — Private windows open faster with blocking built into the engine.</title>
+    <link href="https://circabrowser.com/changelog/0.74.0-nightly.2/" />
+    <updated>2026-11-15T00:00:00Z</updated>
+    <published>2026-11-15T00:00:00Z</published>
+    <category term="nightly" />
+    <summary>Private windows open faster with blocking built into the engine.
+
+2 fixed · 1 smaller
+
+## Fixed
+
+- Private windows open faster: built-in ad and tracker blocking is now configured inside the engine, without a hidden startup page.
+- The built-in blocker no longer appears on the engine's extensions page.
+
+## Smaller
+
+- The engine gains detached extension popups and per-tab volume, groundwork for upcoming features.
+
+Engine / bundled components: Chromium 158.0.8127.37; maintained engine r24
+</summary>
+    <content type="html">&lt;article class="release" id="v0.74.0-nightly.2" data-version="0.74.0-nightly.2" data-channel="nightly" data-latest="false"&gt;
+  &lt;div class="release-meta"&gt;&lt;h2&gt;&lt;a href="#v0.74.0-nightly.2" aria-label="Link to version 0.74.0-nightly.2"&gt;0.74.0-nightly.2&lt;/a&gt;&lt;/h2&gt;
+  &lt;time datetime="2026-11-15"&gt;November 15, 2026&lt;/time&gt;&lt;span class="release-channel"&gt;Nightly&lt;/span&gt;&lt;/div&gt;
+  &lt;div class="release-copy"&gt;&lt;h3&gt;Private windows open faster with blocking built into the engine.&lt;/h3&gt;
+  &lt;p class="release-counts"&gt;2 fixed · 1 smaller&lt;/p&gt;
+  &lt;h4&gt;Fixed&lt;/h4&gt;
+  &lt;ul&gt;
+    &lt;li&gt;Private windows open faster: built-in ad and tracker blocking is now configured inside the engine, without a hidden startup page.&lt;/li&gt;
+    &lt;li&gt;The built-in blocker no longer appears on the engine&amp;#x27;s extensions page.&lt;/li&gt;
+  &lt;/ul&gt;
+  &lt;h4&gt;Smaller&lt;/h4&gt;
+  &lt;ul&gt;
+    &lt;li&gt;The engine gains detached extension popups and per-tab volume, groundwork for upcoming features.&lt;/li&gt;
+  &lt;/ul&gt;
+  &lt;p class="release-engine"&gt;Engine / bundled components: Chromium 158.0.8127.37; maintained engine r24&lt;/p&gt;
+  &lt;a class="release-source" href="https://circabrowser.com/changelog/0.74.0-nightly.2/"&gt;Release permalink ↗&lt;/a&gt;
+  &lt;/div&gt;
+&lt;/article&gt;</content>
+  </entry>
+  <entry>
     <id>https://circabrowser.com/changelog/0.74.0-nightly.1/</id>
     <title>0.74.0-nightly.1 — Live Calendar skips meetings you declined.</title>
     <link href="https://circabrowser.com/changelog/0.74.0-nightly.1/" />
