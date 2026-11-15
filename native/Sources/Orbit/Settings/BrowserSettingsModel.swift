@@ -26,6 +26,7 @@ struct BrowserSettingsPermissionRow: Identifiable {
 @MainActor
 final class BrowserSettingsModel<Engine: BrowserEngine>: ObservableObject {
     let environment: BrowserEnvironment<Engine>
+    let search = BrowserSettingsSearch()
     let runtime: BrowserSettingsRuntime
     let shortcuts: [BrowserCommandDefinition]
     let defaultBrowser: BrowserDefaultBrowserService

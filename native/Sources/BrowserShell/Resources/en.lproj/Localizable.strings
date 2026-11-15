@@ -2120,3 +2120,27 @@
 "Receive nightly builds" = "Receive nightly builds";
 
 "New features first, with less stability. Turning this off keeps your build until a newer stable release." = "New features first, with less stability. Turning this off keeps your build until a newer stable release.";
+
+"Search Settings" = "Search Settings";
+
+"Clear search" = "Clear search";
+
+"No settings found" = "No settings found";
+
+"Closest matches for “%@”" = "Closest matches for “%@”";
+
+"%ld results across Settings" = "%ld results across Settings";
+
+"No matches for “%@”." = "No matches for “%@”.";
+
+"Try a shorter word, like “downloads” or “memory”." = "Try a shorter word, like “downloads” or “memory”.";
+
+"Back to results" = "Back to results";
+
+"Turn on AI to use this setting." = "Turn on AI to use this setting.";
+
+"Turn on Safe Browsing to use this setting." = "Turn on Safe Browsing to use this setting.";
+
+"Use AI in Circa" = "Use AI in Circa";
+
+"Enable Boosts on websites" = "Enable Boosts on websites";

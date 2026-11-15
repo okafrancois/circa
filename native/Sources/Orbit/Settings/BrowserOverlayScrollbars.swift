@@ -53,5 +53,6 @@ struct BrowserOverlayScrollbarsSettingsRow<Engine: BrowserEngine>: View {
                     .accessibilityIdentifier("settings-overlay-scrollbars-state")
             }
         }.padding(.horizontal, 14).padding(.vertical, 8).frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+            .settingsSearchItem(uiText("Overlay scrollbars on web pages"), section: .appearance, id: "settings-overlay-scrollbars")
     }
 }

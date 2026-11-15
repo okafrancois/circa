@@ -31,7 +31,7 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
     @State private var renamingProfile: BrowserProfile?
 
     var body: some View {
-        ScrollView {
+        BrowserSettingsSearchScroll {
             VStack(alignment: .leading, spacing: 10) {
                 if model.settingsSection != .profiles && model.settingsSection != .links && model.settingsSection != .about {
                     HStack(spacing: 8) {
@@ -138,7 +138,7 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
                         Spacer()
                         OrbitIcon.view(sfName: "chevron.right", pointSize: 14).frame(width: 14, height: 14)
                     }.padding(.horizontal, 13).padding(.vertical, 9).contentShape(Rectangle())
-                }.buttonStyle(.plain).accessibilityIdentifier("settings-open-profiles")
+                }.buttonStyle(.plain).accessibilityIdentifier("settings-open-profiles").settingsSearchItem(uiText("Profile Settings"), section: .general, id: "settings-open-profiles")
             }
             panel {
                 settingRow("Save downloads to") {
@@ -183,7 +183,7 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
             panel {
                 Toggle(uiText("Links from other apps open in Little Circa"), isOn: Binding(get: { runtime.document.opensExternalLinksInQuickWindow }, set: { value in
                     model.perform { try await runtime.setOpensExternalLinksInQuickWindow(value) }
-                })).toggleStyle(SettingsSwitchStyle()).padding(.horizontal, 13).padding(.vertical, 9).accessibilityIdentifier("settings-external-little-orbit")
+                })).toggleStyle(SettingsSwitchStyle()).padding(.horizontal, 13).padding(.vertical, 9).accessibilityIdentifier("settings-external-little-orbit").settingsSearchItem(uiText("Links from other apps open in Little Circa"), section: .links, id: "settings-external-little-orbit")
                 if let profile = model.selectedProfileID {
                     rule
                     Toggle(isOn: Binding(get: { runtime.document.profile(profile).opensPinnedLinksInPeek }, set: { value in
@@ -191,11 +191,11 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
                     })) {
                         SettingsRowLabel(title: uiText("Open a Peek window when clicking on links to other sites"),
                             subtitle: uiText("Note: This only affects Favorites and Pinned tabs"))
-                    }.toggleStyle(SettingsSwitchStyle()).padding(.horizontal, 13).padding(.vertical, 9).accessibilityIdentifier("settings-pinned-peek")
+                    }.toggleStyle(SettingsSwitchStyle()).padding(.horizontal, 13).padding(.vertical, 9).accessibilityIdentifier("settings-pinned-peek").settingsSearchItem(uiText("Open a Peek window when clicking on links to other sites"), section: .links, id: "settings-pinned-peek")
                     rule
                     Toggle(uiText("Open a Peek window when clicking on links with Shift held"), isOn: Binding(get: { runtime.document.profile(profile).shiftClickOpensPeek }, set: { value in
                         model.perform { try await model.updateProfile(profile) { $0.shiftClickOpensPeek = value } }
-                    })).toggleStyle(SettingsSwitchStyle()).padding(.horizontal, 13).padding(.vertical, 9).accessibilityIdentifier("settings-shift-peek")
+                    })).toggleStyle(SettingsSwitchStyle()).padding(.horizontal, 13).padding(.vertical, 9).accessibilityIdentifier("settings-shift-peek").settingsSearchItem(uiText("Open a Peek window when clicking on links with Shift held"), section: .links, id: "settings-shift-peek")
                 }
             }
             panel {
@@ -242,7 +242,7 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
                                 if newProfileName == name { newProfileName = ""; showsNewProfile = false }
                             }
                         }.disabled(newProfileName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                            .accessibilityIdentifier("settings-create-profile")
+                            .accessibilityIdentifier("settings-create-profile").settingsSearchItem(uiText("New Profile"), section: .profiles, id: "settings-create-profile")
                     }
                 } else {
                     Button {
@@ -254,7 +254,7 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
                             Spacer(minLength: 0)
                         }.padding(.horizontal, 8).padding(.vertical, 9).contentShape(Rectangle())
                     }.buttonStyle(.plain).foregroundStyle(.secondary)
-                        .accessibilityIdentifier("settings-new-profile")
+                        .accessibilityIdentifier("settings-new-profile").settingsSearchItem(uiText("New Profile"), section: .profiles, id: "settings-new-profile")
                 }
             }.frame(width: 150)
                 .onAppear { if model.focusNewProfile { showsNewProfile = true; newProfileFocused = true; model.focusNewProfile = false } }
@@ -268,7 +268,7 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
                         BrowserSettingsThemeSwatch(theme: profileTheme(profile)).scaleEffect(1.65).frame(width: 30, height: 30)
                         Text(entry.name).font(Font(BrandTextStyle.title.font(size: 25))).kerning(BrandTextStyle.title.tracking(size: 25))
                         Spacer()
-                        Button(uiText("Rename")) { renamingProfile = entry }.accessibilityIdentifier("settings-rename-profile")
+                        Button(uiText("Rename")) { renamingProfile = entry }.accessibilityIdentifier("settings-rename-profile").settingsSearchItem(uiText("Rename"), section: .profiles, id: "settings-rename-profile")
                     }
                     panel {
                         settingRow("Search engine") {
@@ -312,7 +312,7 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
                                 }
                             }
                             Spacer(minLength: 0)
-                            Button(uiText("Edit…")) { model.navigate(to: .spaces) }.accessibilityIdentifier("settings-edit-spaces")
+                            Button(uiText("Edit…")) { model.navigate(to: .spaces) }.accessibilityIdentifier("settings-edit-spaces").settingsSearchItem(uiText("Spaces"), section: .profiles, id: "settings-edit-spaces")
                         }.padding(.horizontal, 14).padding(.vertical, 8).frame(minHeight: 62)
                     }
                     panel {
@@ -337,14 +337,14 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
                                 let name = newSpaceName
                                 model.perform { try await model.createSpace(name: name, profile: profile); newSpaceName = "" }
                             }.disabled(newSpaceName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                                .accessibilityIdentifier("settings-create-space")
+                                .accessibilityIdentifier("settings-create-space").settingsSearchItem(uiText("Create Space"), section: .profiles, id: "settings-profile-create-space")
                         }
                     }
                     HStack {
                         Button(uiText("Delete Profile…"), role: .destructive) { deleteProfile(entry) }.settingsDestructive()
                             .disabled(model.profileRemovalUnavailableReason != nil)
                             .help(model.profileRemovalUnavailableReason ?? uiText("Delete this Profile"))
-                            .accessibilityIdentifier("settings-delete-profile")
+                            .accessibilityIdentifier("settings-delete-profile").settingsSearchItem(uiText("Delete this Profile"), section: .profiles, id: "settings-delete-profile")
                     }
                     if let reason = model.profileRemovalUnavailableReason {
                         Text(reason).font(Font(BrandFonts.ui(12))).foregroundStyle(.secondary)
@@ -367,7 +367,7 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
             panel {
                 Toggle(uiText("Links from other apps open in Little Circa"), isOn: Binding(get: { runtime.document.opensExternalLinksInQuickWindow }, set: { value in
                     model.perform { try await runtime.setOpensExternalLinksInQuickWindow(value) }
-                })).toggleStyle(SettingsSwitchStyle()).padding(12).accessibilityIdentifier("settings-external-little-orbit")
+                })).toggleStyle(SettingsSwitchStyle()).padding(12).accessibilityIdentifier("settings-external-little-orbit").settingsSearchItem(uiText("Links from other apps open in Little Circa"), section: .links, id: "settings-external-little-orbit")
             }
             HStack {
                 SettingsGroupLabel(title: uiText("Peek"))
@@ -381,11 +381,11 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
                     })) {
                         SettingsRowLabel(title: uiText("Open a Peek window when clicking on links to other sites"),
                             subtitle: uiText("Note: This only affects Favorites and Pinned tabs"))
-                    }.padding(12).accessibilityIdentifier("settings-pinned-peek")
+                    }.padding(12).accessibilityIdentifier("settings-pinned-peek").settingsSearchItem(uiText("Open a Peek window when clicking on links to other sites"), section: .links, id: "settings-pinned-peek")
                     rule
                     Toggle(uiText("Open a Peek window when clicking on links with Shift held"), isOn: Binding(get: { runtime.document.profile(profile).shiftClickOpensPeek }, set: { value in
                         model.perform { try await model.updateProfile(profile) { $0.shiftClickOpensPeek = value } }
-                    })).padding(12).accessibilityIdentifier("settings-shift-peek")
+                    })).padding(12).accessibilityIdentifier("settings-shift-peek").settingsSearchItem(uiText("Open a Peek window when clicking on links with Shift held"), section: .links, id: "settings-shift-peek")
                 }.toggleStyle(SettingsSwitchStyle())
             }
             panel {
@@ -474,7 +474,7 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
                 liveToggle("Use dots for Space icons", value: runtime.document.usesDotsForSpaceIcons,
                            identifier: "settings-space-icon-dots", save: runtime.setUsesDotsForSpaceIcons)
             }
-            BrowserSettingsIconGrid()
+            BrowserSettingsIconGrid().settingsSearchItem(uiText("App Icon"), section: .appearance, id: "settings-app-icon")
         }
     }
 
@@ -499,7 +499,7 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
                   Toggle(BrowserSettingsRuntime.enablesBoostsTitle, isOn: Binding(
                     get: { runtime.document.enablesBoostsOnWebsites },
                     set: { value in model.perform { try await runtime.setEnablesBoostsOnWebsites(value) } }
-                )).toggleStyle(SettingsSwitchStyle()).accessibilityIdentifier("settings-enables-boosts")
+                )).toggleStyle(SettingsSwitchStyle()).accessibilityIdentifier("settings-enables-boosts").settingsSearchItem(uiText("Enable Boosts on websites you visit"), section: .advanced, id: "settings-enables-boosts")
                 }.padding(.horizontal, 13).padding(.vertical, 9).frame(minHeight: 38)
             }
             panel {
@@ -588,6 +588,7 @@ struct BrowserOrbitSettingsPanes<Engine: BrowserEngine>: View {
             Spacer(minLength: 8); control()
         }
             .padding(.horizontal, 13).padding(.vertical, 9).frame(minHeight: 38)
+            .settingsSearchTarget(BrowserSettingsSearchEntry.rowID(uiText(title)))
     }
     private func liveToggle(_ title: String, value: Bool, identifier: String, icon: String? = nil,
                             save: @escaping (Bool) async throws -> Void) -> some View {
@@ -639,7 +640,7 @@ private struct BrowserSyncSettingsRow: View {
                 Spacer()
                 Toggle(uiText("Sync with iCloud"), isOn: Binding(get: { runtime.enabled }, set: save))
                     .labelsHidden().toggleStyle(SettingsSwitchControlStyle()).controlSize(.small)
-                    .disabled(!runtime.available).accessibilityIdentifier("settings-icloud-sync")
+                    .disabled(!runtime.available).accessibilityIdentifier("settings-icloud-sync").settingsSearchItem(uiText("Sync with iCloud"), section: .general, id: "settings-sync")
         }
         .padding(.horizontal, 14).padding(.vertical, 8).frame(minHeight: 50).frame(maxWidth: .infinity, alignment: .leading)
         .background(OrbitSettingsStyle.panel, in: RoundedRectangle(cornerRadius: 12))
