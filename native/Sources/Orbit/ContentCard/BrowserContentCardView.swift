@@ -8,16 +8,16 @@ final class BrowserContentCardView: NSView {
     private let assistantClip = NSView()
     private var assistantContentWidth: CGFloat = 0
     private let assistantGrip = BrowserAssistantResizeGrip()
-    private var assistantWidth: CGFloat = 0
+    private(set) var assistantWidth: CGFloat = 0
     private var pageTrailing: NSLayoutConstraint?
     private var clipTrailing: NSLayoutConstraint?
-    private var assistantAnimation: Task<Void, Never>?
+    let assistantTicker = OrbitFrameTicker()
     /// The dock's sibling card: Space fill aligned to the window, opaque tint, same edge and shadow as the page.
     private let assistantSurface = OrbitThemeFillView()
     private let assistantTint = NSView()
     private let assistantEdge = OrbitSurfaceBackgroundView(cornerRadius: OrbitTokens.Radius.contentCard)
     func setAssistant(_ view: NSView?, width: CGFloat) {
-        assistantAnimation?.cancel()
+        assistantTicker.stop()
         let target = view == nil ? 0 : min(480, max(300, width))
         if let view {
             assistant?.removeFromSuperview()
@@ -40,30 +40,25 @@ final class BrowserContentCardView: NSView {
         let duration = reduced ? 0.15 : view == nil ? 0.24 : 0.38
         updateAssistantLayout()
         assistant?.layoutSubtreeIfNeeded()
-        assistantAnimation = Task { [weak self] in
-            // Initial hosting layout must finish before the first animation interval begins.
-            let start = CACurrentMediaTime()
-            while let self, !Task.isCancelled {
-                let fraction = min(1, (CACurrentMediaTime() - start) / duration)
-                if reduced {
-                    assistantWidth = view == nil ? initial : target
-                    assistant?.alphaValue = view == nil ? 1 - fraction : fraction
-                } else {
-                    assistantWidth = initial + (target - initial) * BrowserAssistantMotion.progress(fraction, opening: view != nil)
+        // Initial hosting layout must finish before the first animation interval begins.
+        assistantTicker.run(duration: duration, in: self) { [weak self] fraction in
+            guard let self else { return }
+            if reduced {
+                assistantWidth = view == nil ? initial : target
+                assistant?.alphaValue = view == nil ? 1 - fraction : fraction
+            } else {
+                assistantWidth = initial + (target - initial) * BrowserAssistantMotion.progress(fraction, opening: view != nil)
+            }
+            updateAssistantLayout()
+            if fraction >= 1 {
+                assistantWidth = target
+                if view == nil {
+                    assistant?.removeFromSuperview(); assistant = nil
+                    assistantClip.removeFromSuperview(); assistantGrip.removeFromSuperview()
+                    assistantEdge.removeFromSuperview()
                 }
+                assistant?.alphaValue = 1
                 updateAssistantLayout()
-                if fraction >= 1 {
-                    assistantWidth = target
-                    if view == nil {
-                        assistant?.removeFromSuperview(); assistant = nil
-                        assistantClip.removeFromSuperview(); assistantGrip.removeFromSuperview()
-                        assistantEdge.removeFromSuperview()
-                    }
-                    assistant?.alphaValue = 1
-                    updateAssistantLayout()
-                    return
-                }
-                try? await Task.sleep(for: .milliseconds(16))
             }
         }
     }
@@ -90,7 +85,7 @@ final class BrowserContentCardView: NSView {
     }
     func resizeAssistant(by delta: CGFloat) {
         guard assistant != nil else { return }
-        assistantAnimation?.cancel()
+        assistantTicker.stop()
         assistantWidth = min(480, max(300, assistantWidth - delta))
         assistantContentWidth = assistantWidth
         updateAssistantLayout()
