@@ -24,6 +24,13 @@ enum BrowserAssistantRichText {
     private static let open: Character = "\u{E000}", close: Character = "\u{E001}"
 
     static func blocks(_ message: BrowserAIMessage) -> [Block] {
+        var cache: [String: [Run]] = [:]
+        return blocks(message, inlineCache: &cache)
+    }
+
+    /// `inlineCache` keeps the inline markdown of paragraphs that did not change between two parses of
+    /// a streaming answer. Citation markers are resolved after the cache, so cached runs stay valid.
+    static func blocks(_ message: BrowserAIMessage, inlineCache: inout [String: [Run]]) -> [Block] {
         var citations: [BrowserAICitation] = []
         var source = ""
         for segment in BrowserAICitation.segments(message) {
@@ -34,10 +41,17 @@ enum BrowserAssistantRichText {
                 citations.append(citation)
             }
         }
-        return blocks(source, citations: citations)
+        return blocks(source, citations: citations, cache: &inlineCache)
     }
 
-    private static func blocks(_ source: String, citations: [BrowserAICitation]) -> [Block] {
+    private static func blocks(_ source: String, citations: [BrowserAICitation], cache: inout [String: [Run]]) -> [Block] {
+        var used: [String: [Run]] = [:]
+        func inline(_ text: String, _ citations: [BrowserAICitation]) -> [Run] {
+            let runs = used[text] ?? cache[text] ?? markdown(text)
+            used[text] = runs
+            return runs.flatMap { split($0, citations) }
+        }
+        defer { cache = used }
         var result: [Block] = []
         var paragraph: [String] = []
         var fence: [String]?
@@ -70,13 +84,14 @@ enum BrowserAssistantRichText {
         return result
     }
 
-    private static func inline(_ text: String, _ citations: [BrowserAICitation]) -> [Run] {
+    /// Inline markdown runs before citation markers are resolved.
+    private static func markdown(_ text: String) -> [Run] {
         let parsed = try? AttributedString(markdown: text, options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace))
-        guard let parsed else { return split(Run(text: text), citations) }
-        return parsed.runs.flatMap { run -> [Run] in
+        guard let parsed else { return [Run(text: text)] }
+        return parsed.runs.map { run -> Run in
             let intent = run.inlinePresentationIntent ?? []
-            return split(Run(text: String(parsed[run.range].characters), bold: intent.contains(.stronglyEmphasized),
-                             italic: intent.contains(.emphasized), code: intent.contains(.code)), citations)
+            return Run(text: String(parsed[run.range].characters), bold: intent.contains(.stronglyEmphasized),
+                       italic: intent.contains(.emphasized), code: intent.contains(.code))
         }
     }
 
@@ -171,6 +186,41 @@ enum BrowserAssistantRichText {
         return result
     }
 
+    /// The smallest edit that turns `old` into `new`: the range of `old` to replace and the range of
+    /// `new` that replaces it, outside a common prefix and suffix of equal characters and attributes.
+    /// Nil when both are equal.
+    static func changedRange(old: NSAttributedString, new: NSAttributedString) -> (old: NSRange, new: NSRange)? {
+        let oldText = old.string as NSString, newText = new.string as NSString
+        let oldLength = oldText.length, newLength = newText.length
+        var a = [unichar](repeating: 0, count: oldLength), b = [unichar](repeating: 0, count: newLength)
+        oldText.getCharacters(&a, range: NSRange(location: 0, length: oldLength))
+        newText.getCharacters(&b, range: NSRange(location: 0, length: newLength))
+        let limit = min(oldLength, newLength)
+        func same(_ i: Int, _ j: Int, _ ri: inout NSRange, _ rj: inout NSRange) -> Bool {
+            (old.attributes(at: i, effectiveRange: &ri) as NSDictionary).isEqual(to: new.attributes(at: j, effectiveRange: &rj))
+        }
+        var prefix = 0
+        while prefix < limit, a[prefix] == b[prefix] { prefix += 1 }
+        var index = 0
+        while index < prefix {
+            var ri = NSRange(), rj = NSRange()
+            guard same(index, index, &ri, &rj) else { prefix = index; break }
+            index = min(ri.location + ri.length, rj.location + rj.length)
+        }
+        var suffix = 0
+        while suffix < limit - prefix, a[oldLength - 1 - suffix] == b[newLength - 1 - suffix] { suffix += 1 }
+        var back = 0
+        while back < suffix {
+            let i = oldLength - 1 - back, j = newLength - 1 - back
+            var ri = NSRange(), rj = NSRange()
+            guard same(i, j, &ri, &rj) else { suffix = back; break }
+            back += min(i - ri.location, j - rj.location) + 1
+        }
+        if prefix == oldLength, prefix == newLength { return nil }
+        return (NSRange(location: prefix, length: oldLength - prefix - suffix),
+                NSRange(location: prefix, length: newLength - prefix - suffix))
+    }
+
     /// The range that just arrived, when the new text continues what was already shown.
     static func arrivingRange(old: String, new: String) -> NSRange? {
         let oldText = old as NSString, newText = new as NSString
@@ -181,6 +231,9 @@ enum BrowserAssistantRichText {
 
 /// A 17 pt rounded citation pill, drawn from the palette, that flows inside the text.
 final class BrowserAssistantCitationAttachment: NSTextAttachment {
+    /// Two pills that draw the same compare equal, so an unchanged pill never forces new layout.
+    private var appearance: [AnyHashable] = []
+
     @MainActor
     init(number: Int, palette: BrowserAssistantPalette, highlighted: Bool, fillFraction: CGFloat? = nil) {
         super.init(data: nil, ofType: nil)
@@ -190,6 +243,7 @@ final class BrowserAssistantCitationAttachment: NSTextAttachment {
         let size = NSSize(width: max(17, ceil(label.size().width) + 8), height: 17)
         let fraction = min(1, max(0, fillFraction ?? (highlighted ? 1 : 0)))
         let fill = palette.wash.blended(withFraction: fraction, of: palette.strong) ?? palette.wash
+        appearance = [number, highlighted, fraction, fill, highlighted ? palette.onStrong : palette.accentInk]
         // Drawn with a small margin so neighbouring glyphs keep their distance from the pill.
         let canvas = NSSize(width: size.width + 2, height: size.height)
         image = NSImage(size: canvas, flipped: false) { _ in
@@ -202,6 +256,12 @@ final class BrowserAssistantCitationAttachment: NSTextAttachment {
         bounds = NSRect(x: 0, y: -2.5, width: canvas.width, height: canvas.height)
     }
     required init?(coder: NSCoder) { nil }
+
+    override func isEqual(_ object: Any?) -> Bool {
+        guard let other = object as? BrowserAssistantCitationAttachment else { return false }
+        return other === self || other.appearance == appearance
+    }
+    override var hash: Int { appearance.hashValue }
 }
 
 /// Selectable answer text with real inline citation pills. Provenance stays out of the clipboard.
@@ -212,32 +272,12 @@ struct BrowserAssistantAnswerText: NSViewRepresentable {
     @Environment(\.assistantPalette) private var palette
     @Environment(\.accessibilityReduceMotion) private var systemReduced
 
-    func makeNSView(context: Context) -> TextView {
-        let view = TextView(usingTextLayoutManager: false)
-        view.textContainer?.replaceLayoutManager(BrowserAssistantAnswerLayoutManager())
-        view.isEditable = false
-        view.isSelectable = true
-        view.drawsBackground = false
-        view.isRichText = true
-        view.importsGraphics = false
-        view.textContainerInset = .zero
-        view.textContainer?.lineFragmentPadding = 0
-        view.textContainer?.widthTracksTextView = true
-        view.isVerticallyResizable = false
-        view.isHorizontallyResizable = false
-        view.setAccessibilityIdentifier("assistant-answer")
-        return view
-    }
+    func makeNSView(context: Context) -> TextView { TextView.make() }
 
     func updateNSView(_ view: TextView, context: Context) {
-        let citations = Dictionary(BrowserAICitation.parse(message).map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
-        view.citations = citations
         view.open = open
-        view.activeCitation = activeCitation
-        view.palette = palette
-        view.selectedTextAttributes = [.backgroundColor: palette.wash, .foregroundColor: palette.ink]
-        view.reduced = systemReduced || OrbitMotionPreferences.prefersReducedMotion
-        view.update(blocks: BrowserAssistantRichText.blocks(message), animated: message.state == .streaming)
+        view.update(message: message, palette: palette, activeCitation: activeCitation,
+                    reduced: systemReduced || OrbitMotionPreferences.prefersReducedMotion)
     }
 
     func sizeThatFits(_ proposal: ProposedViewSize, nsView view: TextView, context: Context) -> CGSize? {
@@ -247,69 +287,127 @@ struct BrowserAssistantAnswerText: NSViewRepresentable {
 
     @MainActor
     final class TextView: NSTextView {
-        var citations: [String: BrowserAICitation] = [:]
+        private(set) var citations: [String: BrowserAICitation] = [:]
         var open: ((BrowserAICitation) -> Void)?
-        var palette: BrowserAssistantPalette?
-        var reduced = false
-        var activeCitation: String? { didSet { if activeCitation != oldValue { render(animated: false) } } }
+        private(set) var palette: BrowserAssistantPalette?
+        private(set) var reduced = false
+        private(set) var activeCitation: String?
         private var hoveredCitation: String? { didSet { if hoveredCitation != oldValue { animateCitationHover() } } }
         private var hoverFractions: [String: CGFloat] = [:]
-        private var hoverAnimation: Task<Void, Never>?
+        let hoverTicker = OrbitFrameTicker()
+        private var message: BrowserAIMessage?
         private var blocks: [BrowserAssistantRichText.Block] = []
+        /// Inline markdown already parsed for this answer, by paragraph source.
+        private var inlineCache: [String: [BrowserAssistantRichText.Run]] = [:]
+        /// The attributed text last handed to the storage, before AppKit fixes its attributes.
+        private var rendered = NSAttributedString()
         private var arriving: [(range: NSRange, start: CFTimeInterval)] = []
-        private var fade: Task<Void, Never>?
+        /// Start of the text that may still carry a fade colour.
+        private var fadedFrom: Int?
+        let fadeTicker = OrbitFrameTicker()
         private var trackingZone: NSTrackingArea?
 
-        func update(blocks: [BrowserAssistantRichText.Block], animated: Bool) {
-            self.blocks = blocks
-            render(animated: animated)
+        static func make() -> TextView {
+            let view = TextView(usingTextLayoutManager: false)
+            view.textContainer?.replaceLayoutManager(BrowserAssistantAnswerLayoutManager())
+            view.isEditable = false
+            view.isSelectable = true
+            view.drawsBackground = false
+            view.isRichText = true
+            view.importsGraphics = false
+            view.textContainerInset = .zero
+            view.textContainer?.lineFragmentPadding = 0
+            view.textContainer?.widthTracksTextView = true
+            view.isVerticallyResizable = false
+            view.isHorizontallyResizable = false
+            view.setAccessibilityIdentifier("assistant-answer")
+            return view
+        }
+
+        /// Only an answer whose content, palette or active citation changed is parsed and laid out again.
+        func update(message: BrowserAIMessage, palette: BrowserAssistantPalette, activeCitation: String?, reduced: Bool) {
+            self.reduced = reduced
+            var changed = false
+            if palette != self.palette {
+                self.palette = palette
+                selectedTextAttributes = [.backgroundColor: palette.wash, .foregroundColor: palette.ink]
+                changed = true
+            }
+            if message != self.message {
+                if message.id != self.message?.id { inlineCache = [:] }
+                self.message = message
+                citations = Dictionary(BrowserAICitation.parse(message).map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+                blocks = BrowserAssistantRichText.blocks(message, inlineCache: &inlineCache)
+                changed = true
+            }
+            if activeCitation != self.activeCitation {
+                self.activeCitation = activeCitation
+                changed = true
+            }
+            if changed { render(animated: message.state == .streaming) }
         }
 
         private func render(animated: Bool) {
             guard let palette, let storage = textStorage else { return }
             let next = BrowserAssistantRichText.attributed(blocks, palette: palette, activeCitation: activeCitation,
                                                            hoveredCitation: hoveredCitation, hoverFractions: hoverFractions)
-            if storage.isEqual(to: next) { return }
             let previous = storage.string
+            let edit: (old: NSRange, new: NSRange)?
+            if rendered.length == storage.length {
+                edit = BrowserAssistantRichText.changedRange(old: rendered, new: next)
+            } else {
+                edit = (NSRange(location: 0, length: storage.length), NSRange(location: 0, length: next.length))
+            }
+            rendered = next
+            guard let edit else { return }
             let selection = selectedRanges
-            storage.setAttributedString(next)
+            // Only the changed run is replaced, so AppKit keeps the layout of the text before it.
+            storage.replaceCharacters(in: edit.old, with: next.attributedSubstring(from: edit.new))
             selectedRanges = selection.map { value in
                 let range = value.rangeValue
                 return NSValue(range: range.location + range.length <= storage.length ? range : NSRange(location: storage.length, length: 0))
             }
             if animated, let range = BrowserAssistantRichText.arrivingRange(old: previous, new: storage.string) {
-                arriving.append((range, CACurrentMediaTime()))
+                arriving.append((range, fadeTicker.clock()))
             }
-            applyFade()
+            applyFade(at: fadeTicker.clock())
         }
 
-        /// Arriving text fades in with no layout change, 0.12 s linear (0.15 s under Reduce Motion).
-        private func applyFade() {
-            guard let storage = textStorage else { return }
+        /// Arriving text fades in with no layout change, 0.12 s linear (0.15 s under Reduce Motion). The fade
+        /// is drawn with temporary colours, which only invalidate display.
+        func applyFade(at now: CFTimeInterval) {
+            guard let storage = textStorage, let manager = layoutManager else { return }
             let duration = reduced ? 0.15 : 0.12
-            let now = CACurrentMediaTime()
             arriving.removeAll { now - $0.start >= duration }
-            for item in arriving where item.range.location + item.range.length <= storage.length {
+            arriving.removeAll { $0.range.location + $0.range.length > storage.length }
+            if arriving.isEmpty {
+                if let start = fadedFrom, start < storage.length {
+                    manager.removeTemporaryAttribute(.foregroundColor, forCharacterRange: NSRange(location: start, length: storage.length - start))
+                }
+                fadedFrom = nil
+                fadeTicker.stop()
+                return
+            }
+            for item in arriving {
                 let alpha = CGFloat((now - item.start) / duration)
+                fadedFrom = min(fadedFrom ?? item.range.location, item.range.location)
                 storage.enumerateAttribute(.foregroundColor, in: item.range) { value, range, _ in
                     guard let color = value as? NSColor else { return }
-                    storage.addAttribute(.foregroundColor, value: color.withAlphaComponent(alpha), range: range)
+                    manager.addTemporaryAttribute(.foregroundColor, value: color.withAlphaComponent(alpha), forCharacterRange: range)
                 }
             }
-            guard !arriving.isEmpty, fade == nil else { return }
-            fade = Task { [weak self] in
-                while let self, !Task.isCancelled, !self.arriving.isEmpty {
-                    try? await Task.sleep(for: .milliseconds(16))
-                    guard !Task.isCancelled else { return }
-                    self.render(animated: false)
-                }
-                self?.fade = nil
+            guard !fadeTicker.isRunning else { return }
+            fadeTicker.start(in: self) { [weak self] time in
+                guard let self else { return false }
+                applyFade(at: time)
+                return !arriving.isEmpty
             }
         }
 
         func height(forWidth width: CGFloat) -> CGFloat {
             guard let container = textContainer, let manager = layoutManager else { return 0 }
-            container.containerSize = NSSize(width: width, height: .greatestFiniteMagnitude)
+            let size = NSSize(width: width, height: .greatestFiniteMagnitude)
+            if container.containerSize != size { container.containerSize = size }
             manager.ensureLayout(for: container)
             return ceil(manager.usedRect(for: container).height)
         }
@@ -322,28 +420,20 @@ struct BrowserAssistantAnswerText: NSViewRepresentable {
         }
 
         private func animateCitationHover() {
-            hoverAnimation?.cancel()
             let initial = hoverFractions
             let target = hoveredCitation
             let ids = Set(initial.keys).union(target.map { [$0] } ?? [])
-            let start = CACurrentMediaTime()
             let duration = reduced ? 0.15 : 0.12
-            hoverAnimation = Task { [weak self] in
-                while let self, !Task.isCancelled {
-                    let time = min(1, (CACurrentMediaTime() - start) / duration)
-                    let progress = reduced ? time : BrowserAssistantMotion.citationHoverProgress(time)
-                    for id in ids {
-                        let from = initial[id] ?? 0
-                        let to: CGFloat = id == target ? 1 : 0
-                        hoverFractions[id] = from + (to - from) * progress
-                    }
-                    render(animated: false)
-                    if time >= 1 {
-                        hoverFractions = target.map { [$0: 1] } ?? [:]
-                        return
-                    }
-                    try? await Task.sleep(for: .milliseconds(16))
+            hoverTicker.run(duration: duration, in: self) { [weak self] time in
+                guard let self else { return }
+                let progress = reduced ? time : BrowserAssistantMotion.citationHoverProgress(time)
+                for id in ids {
+                    let from = initial[id] ?? 0
+                    let to: CGFloat = id == target ? 1 : 0
+                    hoverFractions[id] = from + (to - from) * progress
                 }
+                render(animated: false)
+                if time >= 1 { hoverFractions = target.map { [$0: 1] } ?? [:] }
             }
         }
 

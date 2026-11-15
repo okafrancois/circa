@@ -10,7 +10,7 @@ import Observation
 @MainActor
 final class BrowserPaletteController<Engine: BrowserEngine> {
     private let skillsPopover = BrowserAssistantPopover()
-    private var answerTransition: Task<Void, Never>?
+    let answerTransition = OrbitFrameTicker()
     private var isMovingAnswer = false
     private var answerHost: NSView?
     private weak var owner: BrowserWindowController<Engine>?
@@ -718,8 +718,7 @@ final class BrowserPaletteController<Engine: BrowserEngine> {
         extensionProfile = nil
         extensionIcons.removeAll()
         skillsPopover.close(notify: false, restoreFocus: false)
-        answerTransition?.cancel()
-        answerTransition = nil
+        answerTransition.stop()
         isMovingAnswer = false
         view.alphaValue = 1
         view.scroll.alphaValue = 1
@@ -810,17 +809,11 @@ extension BrowserPaletteController {
         answerHost = host
         host.isHidden = true
         view.panel.addSubview(host)
-        answerTransition = Task { [weak self, weak host, weak conversation] in
+        let duration = OrbitMotionPreferences.prefersReducedMotion ? 0.15 : 0.12
+        answerTransition.run(duration: duration, in: view) { [weak self, weak host, weak conversation] fraction in
             guard let self, let host, let conversation else { return }
-            let start = CACurrentMediaTime()
-            let duration = OrbitMotionPreferences.prefersReducedMotion ? 0.15 : 0.12
-            while !Task.isCancelled {
-                let fraction = min(1, (CACurrentMediaTime() - start) / duration)
-                view.scroll.alphaValue = 1 - fraction
-                if fraction >= 1 { break }
-                try? await Task.sleep(for: .milliseconds(16))
-            }
-            guard !Task.isCancelled else { return }
+            view.scroll.alphaValue = 1 - fraction
+            guard fraction >= 1 else { return }
             view.scroll.isHidden = true
             view.scroll.alphaValue = 1
             host.isHidden = false
@@ -843,19 +836,13 @@ extension BrowserPaletteController {
     private func continueAnswer() {
         guard !isMovingAnswer, let owner else { return }
         isMovingAnswer = true
-        answerTransition?.cancel()
+        answerTransition.stop()
         if owner.assistantHost == nil { owner.toggleAssistant() }
-        answerTransition = Task { [weak self] in
+        let duration = OrbitMotionPreferences.prefersReducedMotion ? 0.15 : 0.2
+        answerTransition.run(duration: duration, in: view) { [weak self] fraction in
             guard let self else { return }
-            let start = CACurrentMediaTime()
-            let duration = OrbitMotionPreferences.prefersReducedMotion ? 0.15 : 0.2
-            while !Task.isCancelled {
-                let fraction = min(1, (CACurrentMediaTime() - start) / duration)
-                view.alphaValue = 1 - BrowserAssistantMotion.progress(fraction, opening: false)
-                if fraction >= 1 { break }
-                try? await Task.sleep(for: .milliseconds(16))
-            }
-            guard !Task.isCancelled else { return }
+            view.alphaValue = 1 - BrowserAssistantMotion.progress(fraction, opening: false)
+            guard fraction >= 1 else { return }
             dismiss(returnFocus: false)
         }
     }

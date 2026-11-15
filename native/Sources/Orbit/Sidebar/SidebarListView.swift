@@ -70,8 +70,8 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
     private var todayAccessory: NSHostingView<AnyView>?
     var todayGroupingTabs: [TabID] = []
     var todayArchivingTabs: Set<TabID> = []
-    private var todayAccessoryHeight: CGFloat = 0
-    private var todayAccessoryTask: Task<Void, Never>?
+    private(set) var todayAccessoryHeight: CGFloat = 0
+    let todayAccessoryTicker = OrbitFrameTicker()
     private let gapPlaceholder = OrbitSurfaceBackgroundView(cornerRadius: OrbitTokens.Radius.tabRow)
     let animator = SidebarListAnimator()
 
@@ -907,7 +907,7 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
     func setTodayTidyAvailable(_ available: Bool) { tidyAvailable = available; refreshClear() }
 
     func showTodayAccessory(_ content: AnyView?, height: CGFloat) {
-        todayAccessoryTask?.cancel()
+        todayAccessoryTicker.stop()
         if let content {
             if let todayAccessory { todayAccessory.rootView = content }
             else {
@@ -921,28 +921,24 @@ final class SidebarListView: SidebarFlippedView, SidebarRowEventHandler, NSDragg
         let target = content == nil ? 0 : max(0, height)
         let initial = todayAccessoryHeight
         if target == initial { refreshClear(); return }
-        let start = ProcessInfo.processInfo.systemUptime
-        todayAccessoryTask = Task { [weak self] in
-            while let self, !Task.isCancelled {
-                let t = min(1, (ProcessInfo.processInfo.systemUptime - start) / 0.34)
-                let nextHeight = initial + (target - initial) * (OrbitMotionPreferences.prefersReducedMotion ? 1 : BrowserAssistantMotion.progress(t, opening: true))
-                let difference = nextHeight - todayAccessoryHeight
-                todayAccessoryHeight = nextHeight
-                // Accessory layout must not stop a concurrent folder move or archive departure.
-                for row in displayedLayout.rows where row.section == .today {
-                    animator.offset(.node(row.node), by: difference)
-                }
-                animator.offset(.newTab, by: difference)
-                resolveLayouts()
-                materialize(at: animator.now)
-                positionViews(at: animator.now)
-                onLayoutChange?()
-                if t >= 1 || OrbitMotionPreferences.prefersReducedMotion {
-                    if content == nil { todayAccessory?.removeFromSuperview(); todayAccessory = nil }
-                    refreshClear()
-                    return
-                }
-                try? await Task.sleep(for: .milliseconds(16))
+        todayAccessoryTicker.run(duration: 0.34, in: self) { [weak self] t in
+            guard let self else { return }
+            let nextHeight = initial + (target - initial) * (OrbitMotionPreferences.prefersReducedMotion ? 1 : BrowserAssistantMotion.progress(t, opening: true))
+            let difference = nextHeight - todayAccessoryHeight
+            todayAccessoryHeight = nextHeight
+            // Accessory layout must not stop a concurrent folder move or archive departure.
+            for row in displayedLayout.rows where row.section == .today {
+                animator.offset(.node(row.node), by: difference)
+            }
+            animator.offset(.newTab, by: difference)
+            resolveLayouts()
+            materialize(at: animator.now)
+            positionViews(at: animator.now)
+            onLayoutChange?()
+            if t >= 1 || OrbitMotionPreferences.prefersReducedMotion {
+                todayAccessoryTicker.stop()
+                if content == nil { todayAccessory?.removeFromSuperview(); todayAccessory = nil }
+                refreshClear()
             }
         }
     }

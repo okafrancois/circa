@@ -5,25 +5,19 @@ import BrowserShell
 @MainActor
 final class BrowserPaletteView: NSView, NSTextFieldDelegate, NSTableViewDataSource, NSTableViewDelegate {
     weak var answerView: NSView?
-    private var answerHeight: CGFloat?
-    private var answerAnimation: Task<Void, Never>?
+    private(set) var answerHeight: CGFloat?
+    let answerTicker = OrbitFrameTicker()
     func updateAnswerHeight(text: String) {
         let width = max(100, panel.bounds.width - 86)
         let rect = (text as NSString).boundingRect(with: NSSize(width: width, height: 10000), options: [.usesLineFragmentOrigin, .usesFontLeading], attributes: [.font: NSFont.systemFont(ofSize: 13)])
         let target = min(min(520, bounds.height - 100), max(230, ceil(rect.height) + 170))
         let initial = answerHeight ?? panel.frame.height
-        answerAnimation?.cancel()
-        let start = CACurrentMediaTime()
         let reduced = OrbitMotionPreferences.prefersReducedMotion
-        answerAnimation = Task { [weak self] in
-            while let self, !Task.isCancelled {
-                let fraction = min(1, (CACurrentMediaTime() - start) / (reduced ? 0.15 : 0.34))
-                answerHeight = reduced ? target : initial + (target - initial) * BrowserAssistantMotion.progress(fraction, opening: true)
-                needsLayout = true
-                layoutSubtreeIfNeeded()
-                if fraction >= 1 { return }
-                try? await Task.sleep(for: .milliseconds(16))
-            }
+        answerTicker.run(duration: reduced ? 0.15 : 0.34, in: self) { [weak self] fraction in
+            guard let self else { return }
+            answerHeight = reduced ? target : initial + (target - initial) * BrowserAssistantMotion.progress(fraction, opening: true)
+            needsLayout = true
+            layoutSubtreeIfNeeded()
         }
     }
     let input: NSTextField = PaletteInputField()
@@ -80,7 +74,7 @@ final class BrowserPaletteView: NSView, NSTextFieldDelegate, NSTableViewDataSour
     override var isHidden: Bool {
         didSet {
             if isHidden {
-                answerAnimation?.cancel()
+                answerTicker.stop()
                 answerHeight = nil
                 infoPopover.close()
                 panel.layer?.removeAnimation(forKey: "palette.scoped-search")
