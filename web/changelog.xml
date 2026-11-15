@@ -9,6 +9,46 @@
     <name>Circa</name>
   </author>
   <entry>
+    <id>https://circabrowser.com/changelog/0.73.0-nightly.1/</id>
+    <title>0.73.0-nightly.1 — Close tabs with a middle click and see unread counts on every Favorite.</title>
+    <link href="https://circabrowser.com/changelog/0.73.0-nightly.1/" />
+    <updated>2026-11-15T00:00:00Z</updated>
+    <published>2026-11-15T00:00:00Z</published>
+    <category term="nightly" />
+    <summary>Close tabs with a middle click and see unread counts on every Favorite.
+
+2 new
+
+## New
+
+- Close a sidebar tab with a middle click. Shift-Command-T brings it back.
+- Favorites now show an unread dot for any web app that puts a count in its page title, not only Gmail. Right-click a Favorite to hide it.
+</summary>
+    <content type="html">&lt;article class="release" id="v0.73.0-nightly.1" data-version="0.73.0-nightly.1" data-channel="nightly" data-latest="false"&gt;
+  &lt;div class="release-meta"&gt;&lt;h2&gt;&lt;a href="#v0.73.0-nightly.1" aria-label="Link to version 0.73.0-nightly.1"&gt;0.73.0-nightly.1&lt;/a&gt;&lt;/h2&gt;
+  &lt;time datetime="2026-11-15"&gt;November 15, 2026&lt;/time&gt;&lt;span class="release-channel"&gt;Nightly&lt;/span&gt;&lt;/div&gt;
+  &lt;div class="release-copy"&gt;&lt;h3&gt;Close tabs with a middle click and see unread counts on every Favorite.&lt;/h3&gt;
+  &lt;p class="release-counts"&gt;2 new&lt;/p&gt;
+  &lt;h4&gt;New&lt;/h4&gt;
+  &lt;ul&gt;
+    &lt;li&gt;Close a sidebar tab with a middle click. Shift-Command-T brings it back.&lt;/li&gt;
+    &lt;li&gt;Favorites now show an unread dot for any web app that puts a count in its page title, not only Gmail. Right-click a Favorite to hide it.&lt;/li&gt;
+  &lt;/ul&gt;
+  &lt;figure class="release-media"&gt;
+    &lt;video muted loop playsinline controls preload="none" poster="https://circabrowser.com/assets/releases/0.73.0-nightly.1/middle-click-close.jpg" aria-label="Middle-click a sidebar tab to close it."&gt;
+      &lt;source src="https://circabrowser.com/assets/releases/0.73.0-nightly.1/middle-click-close.mp4" type="video/mp4"&gt;
+      &lt;a href="https://circabrowser.com/assets/releases/0.73.0-nightly.1/middle-click-close.mp4"&gt;Download the clip&lt;/a&gt;
+    &lt;/video&gt;&lt;figcaption&gt;Middle-click a sidebar tab to close it.&lt;/figcaption&gt;&lt;/figure&gt;
+  &lt;figure class="release-media"&gt;
+    &lt;video muted loop playsinline controls preload="none" poster="https://circabrowser.com/assets/releases/0.73.0-nightly.1/favorite-unread-badges.jpg" aria-label="Favorites show an unread dot when the page title has a count."&gt;
+      &lt;source src="https://circabrowser.com/assets/releases/0.73.0-nightly.1/favorite-unread-badges.mp4" type="video/mp4"&gt;
+      &lt;a href="https://circabrowser.com/assets/releases/0.73.0-nightly.1/favorite-unread-badges.mp4"&gt;Download the clip&lt;/a&gt;
+    &lt;/video&gt;&lt;figcaption&gt;Favorites show an unread dot when the page title has a count.&lt;/figcaption&gt;&lt;/figure&gt;
+  &lt;a class="release-source" href="https://circabrowser.com/changelog/0.73.0-nightly.1/"&gt;Release permalink ↗&lt;/a&gt;
+  &lt;/div&gt;
+&lt;/article&gt;</content>
+  </entry>
+  <entry>
     <id>https://circabrowser.com/changelog/0.72.0/</id>
     <title>0.72.0 — Try new features first with nightly builds.</title>
     <link href="https://circabrowser.com/changelog/0.72.0/" />
