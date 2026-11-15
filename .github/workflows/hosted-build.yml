@@ -6,22 +6,24 @@ on:
     paths: ['native/**', 'scripts/**', 'release/**', '.github/workflows/hosted-build.yml']
   pull_request:
     paths: ['native/**', 'scripts/**', 'release/**', '.github/workflows/hosted-build.yml']
-permissions:
-  contents: read
+permissions: {}
 concurrency:
   group: hosted-build-${{ github.ref }}
   cancel-in-progress: true
 jobs:
   build:
     runs-on: xcode-27
+    permissions:
+      contents: read
     timeout-minutes: 75
     env:
       CMAKE_BUILD_PARALLEL_LEVEL: '2'
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
+          persist-credentials: false
           fetch-depth: 0
-      - uses: actions/setup-python@v7
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: '3.12'
       - name: Verify Apple Silicon and build tools
@@ -52,7 +54,7 @@ jobs:
         run: python3 scripts/release.py --qualify-only --skip-build --output "$RUNNER_TEMP/preservation"
       - name: Retain the preservation evidence
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: Circa-preservation-${{ github.sha }}
           path: |
@@ -65,13 +67,13 @@ jobs:
           ENGINE_FLAVOR=$(python3 -c 'import json; print(json.load(open("release/config.json"))["cef_flavor"])')
           ditto -c -k --keepParent "native/OrbitChromium/build/app-$ENGINE_FLAVOR/product/Orbit.app" "$RUNNER_TEMP/Circa-unsigned.zip"
           ditto -c -k --keepParent "native/OrbitChromium/build/app-$ENGINE_FLAVOR/smoke/Orbit.app" "$RUNNER_TEMP/Circa-smoke-unsigned.zip"
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: Circa-unsigned-${{ github.sha }}
           path: ${{ runner.temp }}/Circa-unsigned.zip
           retention-days: 3
       - name: Retain the confined test executable separately
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: Circa-smoke-unsigned-${{ github.sha }}
           path: ${{ runner.temp }}/Circa-smoke-unsigned.zip

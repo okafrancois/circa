@@ -41,7 +41,7 @@ struct BrowserLinkPreviewTests {
         defer { server.stop() }
         let port = try await server.start()
         let base = URL(string: "http://127.0.0.1:\(port)")!
-        let loader = BrowserLinkPreviewLoader()
+        let loader = BrowserLinkPreviewLoader(destinations: .fixture(port))
         let page = try await loader.load(base.appendingPathComponent("article"), allowed: { _ in true })
         #expect(page.title == "Public page" && page.text == "Useful text.")
         let sent = try #require(server.requests.first)
@@ -67,7 +67,7 @@ struct BrowserLinkPreviewTests {
         let server = try LinkPreviewFixtureServer()
         defer { server.stop() }
         let port = try await server.start()
-        let loader = BrowserLinkPreviewLoader()
+        let loader = BrowserLinkPreviewLoader(destinations: .fixture(port))
         let load = Task { try await loader.load(URL(string: "http://127.0.0.1:\(port)/held")!, allowed: { _ in true }) }
         try await server.waitForRequest(path: "/held")
         load.cancel()
@@ -79,16 +79,17 @@ struct BrowserLinkPreviewTests {
         let server = try LinkPreviewFixtureServer()
         defer { server.releaseHeld(); server.stop() }
         let port = try await server.start()
-        let loader = BrowserLinkPreviewLoader(requestTimeout: 1, resourceTimeout: 2)
+        let loader = BrowserLinkPreviewLoader(requestTimeout: 1, resourceTimeout: 2, destinations: .fixture(port))
         var checks = 0
         await #expect(throws: CancellationError.self) {
             try await loader.load(URL(string: "http://127.0.0.1:\(port)/stream-held")!, allowed: { _ in
                 checks += 1
-                // Permit the request and headers, then revoke when the first body chunk arrives.
-                return checks < 3
+                // Permit the request (before and after resolution) and headers, then revoke
+                // when the first body chunk arrives.
+                return checks < 4
             })
         }
-        #expect(checks == 3)
+        #expect(checks == 4)
         #expect(server.requests.map(\.path) == ["/stream-held"])
     }
 
@@ -105,10 +106,108 @@ struct BrowserLinkPreviewTests {
             for _ in 0..<width { Task.detached { usleep(2_000_000) } }
             usleep(50_000)
         }
-        let loader = BrowserLinkPreviewLoader(requestTimeout: 1, resourceTimeout: 1)
+        let loader = BrowserLinkPreviewLoader(requestTimeout: 1, resourceTimeout: 1, destinations: .fixture(port))
         let page = try await loader.load(URL(string: "http://127.0.0.1:\(port)/article")!, allowed: { _ in true })
         #expect(page.title == "Public page")
     }
+}
+
+@Suite("Link summary destinations", .serialized)
+struct BrowserLinkPreviewDestinationTests {
+    @Test(arguments: [
+        ("https://example.com/a", true), ("http://93.184.216.34/", true), ("http://[2606:4700::1111]/", true),
+        ("http://8.8.8.8/", true), ("https://xn--bcher-kva.example/", true), ("http://172.32.0.1/", true),
+        ("http://100.128.0.1/", true), ("http://[::ffff:8.8.8.8]/", true),
+        ("http://localhost/", false), ("http://LOCALHOST./", false), ("http://api.localhost:8080/", false),
+        ("http://printer.local/", false), ("http://router.home.arpa/", false), ("http://intranet/", false),
+        ("http://nas.lan/", false), ("http://db.internal/", false),
+        ("http://127.0.0.1/", false), ("http://127.8.9.10/", false), ("http://127.1/", false),
+        ("http://2130706433/", false), ("http://0x7f.1/", false), ("http://0.0.0.0/", false),
+        ("http://10.1.2.3/", false), ("http://172.16.0.1/", false), ("http://172.31.255.255/", false),
+        ("http://192.168.1.1/", false), ("http://169.254.169.254/latest/meta-data", false),
+        ("http://100.64.0.1/", false), ("http://100.127.255.255/", false), ("http://224.0.0.1/", false),
+        ("http://255.255.255.255/", false), ("http://198.18.0.1/", false),
+        ("http://[::1]/", false), ("http://[::]/", false), ("http://[fe80::1]/", false), ("http://[fd12:3456::1]/", false),
+        ("http://[fc00::1]/", false), ("http://[ff02::1]/", false), ("http://[::ffff:127.0.0.1]/", false),
+        ("http://[::ffff:10.0.0.1]/", false), ("http://[64:ff9b::a9fe:a9fe]/", false), ("http://[2002:c0a8:0101::1]/", false),
+    ])
+    func hostTable(raw: String, permitted: Bool) throws {
+        let url = try #require(URL(string: raw))
+        #expect(BrowserLinkPreviewDestinations.publicInternet.permitsLiteral(url) == permitted, "\(raw)")
+    }
+
+    @Test func resolvedAddressesMustAllBePublic() throws {
+        let table: [String: [String]] = [
+            "public.test": ["93.184.216.34", "2606:2800:220:1:248:1893:25c8:1946"],
+            "rebind.test": ["93.184.216.34", "10.0.0.7"], "loopback.test": ["127.0.0.1"],
+            "metadata.test": ["169.254.169.254"], "ula.test": ["fd00::5"], "scoped.test": ["fe80::1%en0"],
+            "empty.test": [],
+        ]
+        let destinations = BrowserLinkPreviewDestinations(resolve: { table[$0] })
+        #expect(destinations.permitsResolved(try #require(URL(string: "https://public.test/x"))))
+        for host in ["rebind.test", "loopback.test", "metadata.test", "ula.test", "scoped.test", "empty.test", "missing.test"] {
+            #expect(!destinations.permitsResolved(try #require(URL(string: "https://\(host)/x"))), "\(host)")
+        }
+        #expect(destinations.permits(remoteAddress: "93.184.216.34", port: 443))
+        #expect(!destinations.permits(remoteAddress: "127.0.0.1", port: 443))
+        #expect(!destinations.permits(remoteAddress: "fe80::1%lo0", port: 443))
+    }
+
+    @Test @MainActor func loopbackIsRefusedBeforeAnyRequest() async throws {
+        let server = try LinkPreviewFixtureServer()
+        defer { server.stop() }
+        let port = try await server.start()
+        let loader = BrowserLinkPreviewLoader()
+        for host in ["127.0.0.1", "localhost", "[::ffff:127.0.0.1]"] {
+            await #expect(throws: CancellationError.self) {
+                try await loader.load(URL(string: "http://\(host):\(port)/article")!, allowed: { _ in true })
+            }
+        }
+        // A name that resolves to loopback is refused after resolution.
+        let resolving = BrowserLinkPreviewLoader(destinations: .init(resolve: { _ in ["127.0.0.1"] }))
+        await #expect(throws: CancellationError.self) {
+            try await resolving.load(URL(string: "http://fixture.example:\(port)/article")!, allowed: { _ in true })
+        }
+        #expect(server.requests.isEmpty)
+    }
+
+    @Test @MainActor func redirectToLoopbackIsRefused() async throws {
+        let site = try LinkPreviewFixtureServer()
+        let intranet = try LinkPreviewFixtureServer()
+        defer { site.stop(); intranet.stop() }
+        let port = try await site.start()
+        let internalPort = try await intranet.start()
+        site.redirects = [
+            "/to-loopback": "http://127.0.0.1:\(internalPort)/article",
+            "/to-localhost": "http://localhost:\(internalPort)/article",
+            "/to-metadata": "http://169.254.169.254/latest/meta-data",
+        ]
+        let loader = BrowserLinkPreviewLoader(destinations: .fixture(port))
+        for path in ["/to-loopback", "/to-localhost", "/to-metadata"] {
+            await #expect(throws: CancellationError.self) {
+                try await loader.load(URL(string: "http://127.0.0.1:\(port)\(path)")!, allowed: { _ in true })
+            }
+        }
+        #expect(site.requests.map(\.path) == ["/to-loopback", "/to-localhost", "/to-metadata"])
+        #expect(intranet.requests.isEmpty)
+    }
+
+    @Test @MainActor func reachedAddressIsVerifiedBeforeTheBodyIsUsed() async throws {
+        let server = try LinkPreviewFixtureServer()
+        defer { server.stop() }
+        let port = try await server.start()
+        // The URL passes the pre-request checks, but the connection lands on loopback.
+        let loader = BrowserLinkPreviewLoader(destinations: .init(trustedEndpoints: ["127.0.0.1:\(port)"], trustedConnections: []))
+        await #expect(throws: CancellationError.self) {
+            try await loader.load(URL(string: "http://127.0.0.1:\(port)/article")!, allowed: { _ in true })
+        }
+        #expect(server.requests.map(\.path) == ["/article"])
+    }
+}
+
+private extension BrowserLinkPreviewDestinations {
+    /// The loopback fixture stands in for a public web server; nothing else on loopback is trusted.
+    static func fixture(_ port: UInt16) -> Self { .init(trustedEndpoints: ["127.0.0.1:\(port)"]) }
 }
 
 /// Loopback-only HTTP fixture (127.0.0.1, ephemeral port). Every wait is bounded and fails
@@ -132,6 +231,12 @@ private final class LinkPreviewFixtureServer: @unchecked Sendable {
     }
     private var hook: (@Sendable () -> Void)?
     var requests: [Request] { lock.withLock { stored } }
+    /// Path → absolute Location answered with 302.
+    var redirects: [String: String] {
+        get { lock.withLock { redirectTable } }
+        set { lock.withLock { redirectTable = newValue } }
+    }
+    private var redirectTable: [String: String] = [:]
     func reset() { lock.withLock { stored = [] } }
 
     init() throws {
@@ -229,6 +334,11 @@ private final class LinkPreviewFixtureServer: @unchecked Sendable {
                 return self.hook
             }
             hook?()
+            if let target = lock.withLock({ redirectTable[path] }) {
+                let response = "HTTP/1.1 302 Found\r\nLocation: \(target)\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                connection.send(content: Data(response.utf8), completion: .contentProcessed { _ in connection.cancel() })
+                return
+            }
             // `/held` answers nothing until released or cancelled: a transfer in flight.
             if path == "/held" { held = connection; return }
             if path == "/stream-held" {

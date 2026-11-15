@@ -33,6 +33,18 @@ struct UpdateParityTests {
         }
     }
 
+    @Test("Feed checks use an isolated session without cookies, credentials or cache")
+    func isolatedFeedSession() {
+        let configuration = OrbitUpdateFeed.session.configuration
+        #expect(configuration.httpCookieStorage == nil)
+        #expect(!configuration.httpShouldSetCookies)
+        #expect(configuration.httpCookieAcceptPolicy == .never)
+        #expect(configuration.urlCredentialStorage == nil)
+        #expect(configuration.urlCache == nil)
+        #expect(configuration.requestCachePolicy == .reloadIgnoringLocalAndRemoteCacheData)
+        #expect(OrbitUpdateFeed.session !== URLSession.shared)
+    }
+
     @Test("An unsorted feed selects the newest full build and ignores nested delta sources and channels")
     func appcast() throws {
         let xml = """

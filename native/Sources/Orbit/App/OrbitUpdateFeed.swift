@@ -4,6 +4,21 @@ import Foundation
 /// A freshness hint only. Sparkle still selects compatible updates, verifies signatures,
 /// downloads archives and installs them. Nested delta versions must never become candidates.
 enum OrbitUpdateFeed {
+    /// Feed checks carry no cookies, credentials or cache: nothing the app stored for other
+    /// requests reaches the update host, and nothing the update host sets is kept.
+    static func sessionConfiguration() -> URLSessionConfiguration {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.httpCookieStorage = nil
+        configuration.httpShouldSetCookies = false
+        configuration.httpCookieAcceptPolicy = .never
+        configuration.urlCredentialStorage = nil
+        configuration.urlCache = nil
+        configuration.requestCachePolicy = .reloadIgnoringLocalAndRemoteCacheData
+        return configuration
+    }
+
+    static let session = URLSession(configuration: sessionConfiguration())
+
     /// Returns the signed feed bytes when the embedded Sparkle feed signature matches `publicKey`.
     /// The trailer is the one written by sign_update and generate_appcast; nothing may follow it.
     static func verifiedContent(_ data: Data, publicKey: String) throws -> Data {
