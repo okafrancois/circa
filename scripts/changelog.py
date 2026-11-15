@@ -111,7 +111,7 @@ def atom(notes):
         add(entry, 'summary', github_body(note))
         add(entry, 'content', article(note, SITE + '/', False), type='html')
     ET.indent(feed, space='  ')
-    return ET.tostring(feed, encoding='unicode', xml_declaration=True) + '\n'
+    return ET.tostring(feed, encoding='utf-8', xml_declaration=True).decode('utf-8') + '\n'
 
 
 def outputs(root=ROOT):

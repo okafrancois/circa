@@ -144,6 +144,7 @@ class SiteTests(unittest.TestCase):
         self.assertEqual(entries[1].find('a:id', ns).text, 'https://circabrowser.com/changelog/1.2.3/')
         self.assertIn('<strong>new feature</strong>', entries[1].find('a:content', ns).text)
         self.assertIn('https://circabrowser.com/assets/releases/', entries[0].find('a:content', ns).text)
+        self.assertTrue(output.startswith("<?xml version='1.0' encoding='utf-8'?>\n"))
         self.assertEqual(output, changelog.outputs(self.root)['web/changelog.xml'])
 
     def test_check_detects_stale_missing_and_obsolete_outputs_without_writing(self):
