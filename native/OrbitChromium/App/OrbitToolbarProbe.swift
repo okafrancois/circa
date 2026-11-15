@@ -37,6 +37,9 @@ enum OrbitToolbarProbe {
                 await waitForPage(owner, url: url)
             }
         case "toggle":
+            // In-process shortcut only. The menu drops the action while NSApp.currentEvent is a
+            // stale non-shortcut keyDown (for example the Escape that closed the Command Bar), so
+            // GUI validation should click the real View menu instead.
             if let menu = NSApp.mainMenu?.items.first(where: { $0.submenu?.items.contains(where: {
                 $0.identifier?.rawValue == BrowserCommandID.showHideToolbar.rawValue
             }) == true })?.submenu,
