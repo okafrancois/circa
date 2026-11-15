@@ -36,6 +36,7 @@ final class SidebarExtensionStrip: SidebarFlippedView {
         pinnedButtons = buttons
         for button in buttons {
             if button.superview !== self { addSubview(button) }
+            (button as? SiteControlButton)?.toolbarForeground = nil
             (button as? SiteControlButton)?.usesURLPillStyle = true
             button.image?.size = NSSize(width: 16, height: 16)
         }

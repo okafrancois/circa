@@ -6,6 +6,8 @@ import BrowserCore
 /// share a clipped presentation group; selection replaces known text without a blank frame.
 @MainActor
 final class OrbitLocationField: NSTextField {
+    var contextMenuBuilder: (() -> NSMenu?)?
+    override func menu(for event: NSEvent) -> NSMenu? { contextMenuBuilder?() ?? super.menu(for: event) }
     /// AppKit's optical frame outsets can extend into adjacent address accessories.
     var textCursorRect: NSRect {
         guard let superview else { return visibleRect }

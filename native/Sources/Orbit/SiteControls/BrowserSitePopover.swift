@@ -6,6 +6,11 @@ final class SiteControlButton: NSButton {
     var onPress: (() -> Void)?
     var contextMenuBuilder: (() -> NSMenu?)?
     override func menu(for event: NSEvent) -> NSMenu? { contextMenuBuilder?() ?? super.menu(for: event) }
+    var toolbarForeground: NSColor? { didSet { wantsLayer = true; updatePillHover(); updateTrackingAreas() } }
+    var toolbarHelp: (String, String?)?
+    private let toolbarFill: CALayer = { let layer = CALayer(); layer.opacity = 0; return layer }()
+    private var toolbarTooltip: BrowserToolbarTooltip?
+    private var toolbarHelpTask: Task<Void, Never>?
     var usesURLPillStyle = false {
         didSet { wantsLayer = true; layer?.cornerRadius = 6; updatePillHover() }
     }
@@ -14,21 +19,63 @@ final class SiteControlButton: NSButton {
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
         if let pillHoverArea { removeTrackingArea(pillHoverArea) }
-        guard usesURLPillStyle else { return }
+        guard usesURLPillStyle || toolbarForeground != nil else { return }
         let area = NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeInActiveApp, .inVisibleRect],
                                   owner: self, userInfo: nil)
         addTrackingArea(area)
         pillHoverArea = area
     }
-    override func mouseEntered(with event: NSEvent) { isPillHovered = true; updatePillHover() }
-    override func mouseExited(with event: NSEvent) { isPillHovered = false; updatePillHover() }
-    override var isHighlighted: Bool { didSet { updatePillHover() } }
+    override func mouseEntered(with event: NSEvent) {
+        isPillHovered = true; updatePillHover()
+        guard toolbarForeground != nil, let toolbarHelp else { return }
+        toolbarHelpTask?.cancel()
+        toolbarHelpTask = Task { [weak self] in
+            do { try await Task.sleep(for: .seconds(0.6)) } catch { return }
+            guard let self, isPillHovered, !isHighlighted, let root = window?.contentView else { return }
+            let tip = BrowserToolbarTooltip(name: toolbarHelp.0, shortcut: toolbarHelp.1)
+            let anchor = convert(bounds, to: root)
+            let y = root.isFlipped ? anchor.maxY - 2 : anchor.minY - tip.frame.height + 2
+            tip.setFrameOrigin(NSPoint(x: min(root.bounds.maxX - tip.frame.width - 4, max(4, anchor.midX + 9)), y: y))
+            root.addSubview(tip)
+            toolbarTooltip = tip
+        }
+    }
+    override func mouseExited(with event: NSEvent) { isPillHovered = false; dismissToolbarHelp(); updatePillHover() }
+    override func viewWillMove(toWindow newWindow: NSWindow?) { dismissToolbarHelp(); super.viewWillMove(toWindow: newWindow) }
+    private func dismissToolbarHelp() {
+        toolbarHelpTask?.cancel(); toolbarHelpTask = nil
+        toolbarTooltip?.removeFromSuperview(); toolbarTooltip = nil
+    }
+    override var isHighlighted: Bool { didSet { if isHighlighted { dismissToolbarHelp() }; updatePillHover() } }
+    override func layout() { super.layout(); updatePillHover() }
     override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
         updatePillHover()
     }
     private func updatePillHover() {
-        guard usesURLPillStyle else { return }
+        if let toolbarForeground {
+            if toolbarFill.superlayer == nil { layer?.insertSublayer(toolbarFill, at: 0) }
+            layer?.backgroundColor = nil
+            CATransaction.begin(); CATransaction.setDisableActions(true)
+            toolbarFill.cornerRadius = 6
+            toolbarFill.frame = CGRect(x: (bounds.width - 32) / 2, y: (bounds.height - 24) / 2, width: 32, height: 24)
+            toolbarFill.backgroundColor = toolbarForeground.cgColor
+            let target: Float = isHighlighted ? 0.096 : isPillHovered ? 0.073 : 0
+            let current = toolbarFill.presentation()?.opacity ?? toolbarFill.opacity
+            let changed = toolbarFill.opacity != target
+            toolbarFill.opacity = target
+            CATransaction.commit()
+            if changed, window?.isVisible == true, !OrbitMotionPreferences.prefersReducedMotion {
+                let fade = CABasicAnimation(keyPath: "opacity")
+                fade.fromValue = current; fade.toValue = target
+                fade.duration = isPillHovered && !isHighlighted ? 0.15 : 0.1
+                fade.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+                toolbarFill.add(fade, forKey: "opacity")
+            }
+            return
+        }
+        toolbarFill.removeFromSuperlayer()
+        guard usesURLPillStyle else { layer?.backgroundColor = nil; return }
         let fill = isPillHovered || isHighlighted ? OrbitTokens.Color.State.sidebarItemHovered : .clear
         layer?.backgroundColor = fill.resolvedCGColor(for: effectiveAppearance)
     }

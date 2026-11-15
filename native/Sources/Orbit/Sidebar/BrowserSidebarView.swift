@@ -1553,7 +1553,7 @@ final class SidebarToolbarRow: SidebarFlippedView {
         let compactChanged = layoutState?.isCompact != toolbar.isCompact
         layoutState = toolbar
         let size = OrbitTokens.Metrics.Toolbar.buttonHitSize
-        let centers = [toolbar.sidebarToggleCenterX, toolbar.backCenterX, toolbar.forwardCenterX, toolbar.reloadCenterX]
+        let centers = [showsNavigation ? toolbar.sidebarToggleCenterX : 90, toolbar.backCenterX, toolbar.forwardCenterX, toolbar.reloadCenterX]
         for (index, (button, center)) in zip(buttons, centers).enumerated() {
             let hidden = center == nil || (index > 0 && !showsNavigation)
             if button.isHidden != hidden { button.isHidden = hidden }
@@ -1583,6 +1583,8 @@ final class SidebarToolbarRow: SidebarFlippedView {
 
 @MainActor
 final class SidebarAddressField: SidebarFlippedView {
+    var contextMenuBuilder: (() -> NSMenu?)?
+    override func menu(for event: NSEvent) -> NSMenu? { contextMenuBuilder?() ?? super.menu(for: event) }
     private let background = OrbitSurfaceBackgroundView(cornerRadius: OrbitTokens.Radius.addressField)
     /// URL text followed by extension actions, copy link and the site control center.
     let extensions = SidebarExtensionStrip()

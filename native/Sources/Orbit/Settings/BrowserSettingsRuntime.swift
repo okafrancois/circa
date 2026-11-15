@@ -54,6 +54,19 @@ final class BrowserSettingsRuntime: ObservableObject {
         catch { await refresh(); throw error }
     }
 
+    func publishToolbarShowsFullURL(_ value: Bool) {
+        guard document.interaction.toolbarShowsFullURL != value else { return }
+        document.interaction.toolbarShowsFullURL = value
+        onChange?()
+    }
+
+    func setToolbarShowsFullURL(_ value: Bool) async throws {
+        publishToolbarShowsFullURL(value)
+        guard !isUnavailable else { return }
+        do { try await store.updateInteraction { $0.toolbarShowsFullURL = value } }
+        catch { await refresh(); throw error }
+    }
+
     func setOpensExternalLinksInQuickWindow(_ value: Bool) async throws {
         do { try await store.setOpensExternalLinksInQuickWindow(value) }
         catch { await refresh(); throw error }
@@ -164,6 +177,7 @@ final class BrowserWindowSettings {
         owner.sidebar.onReorderSnap = { [weak runtime] in runtime?.feedback.reorderSnapped() }
         owner.windowShell.showsSpaceAroundPages = runtime.document.showsSpaceAroundPages
         if !runtime.document.showsTabHoverPreviews { owner.richTabPreview.dismiss() }
+        owner.optionalToolbar.address.showsFullURL = runtime.document.interaction.toolbarShowsFullURL
         owner.setToolbarVisible(runtime.document.interaction.showsToolbar)
         guard let profileID = owner.session.activeProfileID else { return }
         let settings = runtime.document.profile(profileID)

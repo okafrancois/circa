@@ -137,6 +137,7 @@ final class BrowserWindowController<Engine: BrowserEngine>: NSWindowController, 
     let mediaPlayerState = SidebarMediaPlayerState()
     let developerToolbar = BrowserDeveloperToolbar()
     let optionalToolbar = BrowserOptionalToolbar()
+    var toolbarAddressMenuOwner: AnyObject?
     var developerToolbarProfile: ProfileID?
     weak var pageTintSurface: Surface?
     lazy var sharing = BrowserSharingController(owner: self)
